@@ -6,6 +6,7 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 Closure events below record forge state, not a verified fix or a new sound result.
 
+- **Issue #426** (closed): Deadline-evidence stimulus binding; closure records forge state, not a fresh timing verdict.
 - **Issue #573** (closed): Duplicate checkpoint-write guard telemetry; canonical finding #571 remains open.
 - **Issue #575** (closed): Duplicate Python-deletion guard telemetry; canonical finding #572 remains open.
 - **Issue #576** (closed): Duplicate literal-body-path guard telemetry; canonical finding #574 remains open.

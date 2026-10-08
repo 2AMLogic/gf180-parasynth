@@ -3,104 +3,121 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery.
 
 <!-- guide:plan-body:start -->
-## Sound delivery
-
-The model increments in PR #549 (cutoff correction) and PR #554 (cymbal coupling) have merged. RTL correction PR #555 remains in changes-requested; coupling tasks #552 and #553 remain open. No new measurement, RTL equivalence verdict, image or physical capture was produced by this Guide cycle.
-
-No issue currently carries `loom:building`. Sound qualification needs a continuous owner; the unclaimed sound queue and capability holds need operator attention. Cymbal task #369's sweep relapsed into an insta-crash quarantine on 2026-10-08; the daemon recorded a 7200-second pause and an environment/configuration diagnosis to investigate. Its older dependency #432 is closed, but that does not release the quarantine. Building labels alone would not prove liveness; orphan recovery found no orphaned tasks.
-
 ## Operator Attention: Merge-Risk-Hold Pileup
 
-- **PR #504**: Attack-context re-bind path; Judge-approved, operator hold.
-- **PR #561**: Between-recording calibration and ranking; Judge-approved, operator hold. Calibration remains REFUSED in its proposal.
+Judge-approved PRs stuck under a `loom:operator` merge-risk hold — implementation work is done, only a human merge decision is missing.
+
+- **#504**: Reachable attack-context re-bind path for Builders (#502)
+- **#561**: gate-379: between-recording bar rule v2 (REFUSED, isolated), current-main ranking, controls
 
 ## Operator Priority
 
-None currently labelled `loom:operator-priority`.
+Issues the operator starred (`loom:operator-priority`); land these first.
+
+_None._
 
 ## Ready
 
-Approved, unblocked issues excluding operator-only and building claims, and excluding #502 because its approved closing PR is awaiting merge. An existing implementation PR must be handled before commissioning duplicate work.
+Human-approved issues ready for implementation (`loom:issue`).
 
-- **#107**: Differential partial decay; implementation PR #377 is blocked.
-- **#247**: Above-Nyquist glide mismatch; model increment merged, RTL capability still needed.
-- **#257**: Resonance-keyed cutoff correction; RTL PR #555 needs changes and hardware capability.
-- **#306**: Held-note timing; PR #563 needs changes and live hardware capability.
-- **#369**: Across-knob cymbal qualification; capability required.
-- **#379**: All-sixteen-sound gate and ranking; partial PR #561 awaits an operator decision.
-- **#426**: Deadline evidence binding; carries an operator label.
-- **#521**: Detector coverage; PR #534 needs changes and reference capability.
-- **#522**: Corpus-path resolver; PR #535 is blocked after the Doctor-cycle cap.
+- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
+- **#247**: Model/RTL mismatch: glide between increments >= 2^23 (register-legal, above Nyquist) diverges after ~7 frames
+- **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
+- **#283**: trials: check-receipt accepts a receipt with a required child deleted (including zero required children -> PASS)
+- **#288**: midi_session: refuse real sessions when an internal fault-injection set is non-empty
+- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
+- **#321**: NUMERIC-CONTRACT: sections 5.1 and 5.2 never recorded revision 9's registers, and still specify wave[k] as 3 bits where 6.4 defines nine codes
+- **#337**: Sound: mono character — oscillator mixtures, drift, drive/resonance, envelope response; M1A as a phase-aware question
+- **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
+- **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
+- **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first
+- **#521**: Detector coverage matrix + bounded first validation experiment (#158)
+- **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
+- **#556**: [sound] MA and RS: noise-voice centroid and flatness trajectories fail the gate (35.5x, 20.6x; 9.0x and 7.9x farther than real MARS takes)
+- **#557**: [sound] BD: missing pitch drop (pitch_shape 22.2x; about 230 cents)
+- **#558**: [sound] toms and congas: pitch trajectory and strike impulse fail the gate (MC 19.4x, LC 16.4x, LT 14.8x, MT 10.5x, HC 8.7x, HT 8.0x)
+- **#564**: Collect the 57 in-file tests that pytest never runs (excitation_energy, dc_blocker, discrimination_*)
+- **#565**: Refuse to report 'routed' from an incomplete nextpnr log (fpga/scripts/report.sh + fpga/Makefile)
+- **#568**: synth_count.sh prints blank cell counts and exits 0 when yosys fails
 
 ## In Progress
 
-None currently labelled `loom:building`.
+Issues currently being built (`loom:building`).
+
+_None._
 
 ## PRs Awaiting Review
 
-None currently labelled `loom:review-requested`.
+PRs waiting on Judge (`loom:review-requested`).
+
+_None._
 
 ## Approved (Awaiting Merge)
 
-- **PR #504**: Attack-context re-bind path (operator hold).
-- **PR #561**: Gate calibration and ranking (operator hold).
+PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
+
+- **#504**: Reachable attack-context re-bind path for Builders (#502)
+- **#561**: gate-379: between-recording bar rule v2 (REFUSED, isolated), current-main ranking, controls
 
 ## Proposed
 
-Curated work awaiting or already carrying separate lifecycle decisions: #33, #107, #124, #138, #152, #158, #162, #163, #205, #208, #220, #247, #257, #282, #283, #285, #288, #306, #310, #334, #335, #336, #337, #338, #353, #369, #379, #426, #502, #510, #521, #522, #557. This list does not confer approval or release a hold.
+Issues carrying `loom:curated`.
+
+- **#33**: The joined chip does not fit in one quarter slot — two slots, or cut something *(curated)*
+- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay *(curated)*
+- **#124**: Build a pedalboard-backed reference rig, with the same qualification discipline as the dawdreamer one *(curated)*
+- **#138**: We already have a discriminator at balanced accuracy 1.000 — the open question is what it is NOT measuring *(curated)*
+- **#158**: Validate the judge: perturbation ladders on real recordings, synthetic fixtures with exact answers, and unit tests for the acceptance policy *(curated)*
+- **#162**: The bass drum's entire attack is 18-23 dB short across 170-678 Hz *(curated)*
+- **#205**: Lane E: PULSE2X=1 Arty build with its own fit/timing/warning qualification *(curated)*
+- **#208**: Record the first qualified R0 physical I2S capture on the Arty *(curated)*
+- **#220**: modal_fixed's floored biquad settles into a DC pedestal that grows as resonator state shrinks — blocks #21's BD excitation-shape fix *(curated)*
+- **#247**: Model/RTL mismatch: glide between increments >= 2^23 (register-legal, above Nyquist) diverges after ~7 frames *(curated)*
+- **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place *(curated)*
+- **#282**: Epic: great-sounding mono Moog-like synth and complete 808 kit (plan098) *(curated)*
+- **#283**: trials: check-receipt accepts a receipt with a required child deleted (including zero required children -> PASS) *(curated)*
+- **#285**: CLAUDE.md headless rule: say how to wait on jobs longer than one foreground call (10 min cap) *(curated)*
+- **#288**: midi_session: refuse real sessions when an internal fault-injection set is non-empty *(curated)*
+- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms) *(curated)*
+- **#310**: Sweep hygiene: a killed sweep leaves its nohup'd heavy job running, and nothing reaps or surfaces it *(curated)*
+- **#321**: NUMERIC-CONTRACT: sections 5.1 and 5.2 never recorded revision 9's registers, and still specify wave[k] as 3 bits where 6.4 defines nine codes *(curated)*
+- **#334**: Sound: shared tom/conga body-spectrum failures — test a common cause before tuning six presets *(curated)*
+- **#335**: Sound: cowbell partial balance (2.82x tolerance) — local voicing repair *(curated)*
+- **#336**: Sound: rimshot spectrum, maracas envelope/band balance, and hat/cymbal qualification — cover every advertised drum *(curated)*
+- **#337**: Sound: mono character — oscillator mixtures, drift, drive/resonance, envelope response; M1A as a phase-aware question *(curated)*
+- **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement *(curated)*
+- **#353**: Harvest the finished half-slot route: one command, four files, one DAG node *(curated)*
+- **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY *(curated)*
+- **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first *(curated)*
+- **#502**: A Builder cannot re-bind the attack-context evidence: workflow_dispatch is 403 for the agent token *(curated)*
+- **#510**: Ship the cymbal DC coupling: register contract, RTL, and the I2S carry-through #165 did not trigger *(curated)*
+- **#521**: Detector coverage matrix + bounded first validation experiment (#158) *(curated)*
+- **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader *(curated)*
+- **#556**: [sound] MA and RS: noise-voice centroid and flatness trajectories fail the gate (35.5x, 20.6x; 9.0x and 7.9x farther than real MARS takes) *(curated)*
+- **#557**: [sound] BD: missing pitch drop (pitch_shape 22.2x; about 230 cents) *(curated)*
+- **#558**: [sound] toms and congas: pitch trajectory and strike impulse fail the gate (MC 19.4x, LC 16.4x, LT 14.8x, MT 10.5x, HC 8.7x, HT 8.0x) *(curated)*
+- **#564**: Collect the 57 in-file tests that pytest never runs (excitation_energy, dc_blocker, discrimination_*) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#564**: Collect currently undiscovered measurement tests.
-- **#565**: Refuse incomplete nextpnr logs as routing evidence.
-- **#568**: Refuse blank synthesis cell counts after yosys failure.
-- **#569**: Consolidate duplicated file-hash helpers.
-
-## Auditor findings
-
-- **#567**: Python runtime capability request; validation remains unavailable on this host.
-- **#570–#572**: Stash, checkpoint-write and Python-deletion guard findings.
-- **#574**: Retain the guard that catches a literal file path used as a comment body.
-
-These findings do not establish instrument defects or authorize guard changes.
+- **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)*
 
 ## Epics
 
-- **#282**: Mono Moog-like synth and complete 808 kit. Still open; model improvements and physical delivery are separate obligations.
-- **#158**: Validate the measurement judge. Still open; its ground-truth and perturbation increments have landed, coverage PR #534 remains open.
-
-No `loom:epic-phase` issues were returned; a phase-completion percentage cannot be derived from that label set.
+- **#158**: Validate the judge: perturbation ladders on real recordings, synthetic fixtures with exact answers, and unit tests for the acceptance policy
+- **#282**: Epic: great-sounding mono Moog-like synth and complete 808 kit (plan098)
 
 ## Backlog Balance
 
-| Category | Count |
-|---|---:|
-| Open issues | 90 |
-| Goal-advancing tier | 26 |
-| Goal-supporting tier | 9 |
-| Maintenance tier | 5 |
-| Approved issues missing a tier | 0 |
-| Ready by lifecycle labels, excluding approved closing PRs | 9 |
-| Building claims | 0 |
-| PRs awaiting Judge | 0 |
+| Tier | Count |
+|------|-------|
+| Operator merge-risk holds | 2 |
+| Operator priority | 0 |
+| Ready (`loom:issue`) | 19 |
+| In Progress (`loom:building`) | 0 |
+| PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 2 |
-
-Tier counts cover all open issues, including held and unapproved work; they are not counts of executable work.
-
-## Dependency holds
-
-- **#510**: #551 closed; #552 and #553 remain open. Keep blocked.
-- **#369**: #432 closed; current daemon quarantine and reference/build capability requirements remain. Keep blocked.
-- **#310**: Upstream rjwalters/loom#9160 remains open. Its park record does not yet name the cross-repo blocker in a parseable field.
-- **#122**: Reference rig #124 remains open.
-- **#33**: Deferred behind sound milestone #282.
-- **#23**: Silicon work #33 remains open.
-- **#220**: Corpus/listening capability needed for the remaining residual bounds.
-- **#213**: Operator hold digest; no dependency release inferred.
-- **PR #535**: Doctor-cycle cap requires human attention.
-- **PR #377**: Build-box/corpus/Vivado qualification remains pending.
-
-## Overlaps for Curator
-
-The newer sound tasks #558 and #556 share voice families with #334 and #336 respectively. Keep the issues open for scope consolidation; shared voices alone do not establish duplication or completion.
+| Curated | 34 |
+| Architect / Hermit proposals | 1 |
+| Active epics | 2 |
 <!-- guide:plan-body:end -->
