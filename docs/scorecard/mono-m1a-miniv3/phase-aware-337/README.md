@@ -306,8 +306,17 @@ darkens the upper partials and makes the odd partials swing with ψ.
      register images, and RTL and production-path ladder verification at
      `gain` 42 598 with explicit sample counts. That runs on the build box;
   3. registering the M1A drive in `docs/sensitivity/registry.json` under the
-     sweep convention. This needs a prediction made independently of this
-     measurement, and none exists yet.
+     sweep convention. **This was due when the proposal was made, and it is not
+     done: drive 0.25 is unqualified under that convention, and this PR does not
+     claim otherwise.** `rg -n 'm1a|drive' docs/sensitivity/registry.json`
+     finds nothing. Two things block registering it now. `tools/sensitivity.py`
+     reads only integer constants (`verilog-parameter`, `python-constant`) and
+     fixed-width tables, while M1A's drive is a float keyword in
+     `tools/mono_m1a_score.py` with its measurements in JSON. And the gate needs
+     a shape prediction made independently of the measurement, and none exists:
+     writing one after seeing this result would be the retrofit the convention
+     warns about. So the gate cannot be run on this candidate yet, and promotion
+     (step 2) must not proceed until it can.
 - **The pristine test is still open.** The frozen fresh-capture rule above
   (Mini V3, MIDI 43 phase cycle) needs the macOS plugin rig.
 - **Phase behaviour itself is unmet.** The shipping model's oscillators are

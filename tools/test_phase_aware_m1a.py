@@ -139,3 +139,102 @@ def test_injected_zero_metric_turns_the_control_red(monkeypatch):
     monkeypatch.setattr(m, "phase_aware_errors", lambda a, b: {h: 0. for h in m.PARTIALS})
     report = m.synthetic_control()
     assert sum(not v["ok"] for v in report.values()) >= 3
+
+
+# ---- invalid measurements REFUSE (review of #583: NaN defeated every guard) ----
+NAN = float("nan")
+
+
+def test_select_refuses_nan_candidate():
+    """Defeating input: a NaN candidate used to be chosen with no violations."""
+    with pytest.raises(m.Refused):
+        m.select({.75: _row(3.8), .25: _row(NAN)})
+    for key in ("brightness_db", "reference_brightness_db"):
+        with pytest.raises(m.Refused):
+            m.select({.75: _row(3.8), .25: {**_row(1.6), key: NAN}})
+    with pytest.raises(m.Refused):
+        m.select({.75: _row(NAN), .25: _row(1.6)})            # NaN baseline
+    with pytest.raises(m.Refused):
+        m.select({.75: _row(3.8), .25: _row(math.inf)})
+
+
+def _stats(e_conf, e_43, bright, n=8, cells=23):
+    return {"e_conf_db": e_conf, "e_43_db": e_43, "brightness_db": bright,
+            "n_included": n, "cells_within_tol": cells, "max_abs_db": 1.}
+
+
+def test_confirm_refuses_nan_candidate():
+    """Defeating input: NaN E_conf, E_43 and brightness returned CONFIRMED."""
+    base = _stats(3., 3., -9., cells=8)
+    assert m.confirm(base, _stats(.5, .3, -9., cells=23), -9.)[0] == "CONFIRMED"
+    with pytest.raises(m.Refused):
+        m.confirm(base, _stats(NAN, .3, NAN, cells=23), -9.)
+    for bad in (_stats(NAN, .3, -9.), _stats(.5, NAN, -9.), _stats(.5, .3, NAN)):
+        with pytest.raises(m.Refused):
+            m.confirm(base, bad, -9.)
+        with pytest.raises(m.Refused):
+            m.confirm(bad, _stats(.5, .3, -9.), -9.)
+    with pytest.raises(m.Refused):
+        m.confirm(base, _stats(.5, .3, -9.), NAN)
+
+
+def test_preservation_refuses_non_finite_graded_error():
+    prop = lambda e: {"valid": True, "value": e, "reference": 0., "error": e, "tolerance": 3.}
+    ok = {"Gain": prop(-1.)}
+    with pytest.raises(m.Refused):
+        m.preservation_violations(ok, {"Gain": prop(NAN)})
+    with pytest.raises(m.Refused):
+        m.preservation_violations({"Gain": prop(NAN)}, ok)
+
+
+def _record(**over):
+    p = {"Gain": {"valid": True, "value": -26.02076}, "Envelope attack": {"valid": False, "value": None}}
+    return {**p, **over}
+
+
+def test_baseline_record_check_refuses():
+    m.check_baseline_record(_record(), _record())                              # reproduces
+    with pytest.raises(m.Refused):                                             # NaN recorded value
+        m.check_baseline_record(_record(), _record(Gain={"valid": True, "value": NAN}))
+    with pytest.raises(m.Refused):                                             # NaN measured value
+        m.check_baseline_record(_record(Gain={"valid": True, "value": NAN}), _record())
+    with pytest.raises(m.Refused):                                             # perturbed baseline
+        m.check_baseline_record(_record(Gain={"valid": True, "value": -26.0}), _record())
+    with pytest.raises(m.Refused):                                             # validity flipped
+        m.check_baseline_record(_record(**{"Envelope attack": {"valid": True, "value": 1.}}), _record())
+    with pytest.raises(m.Refused):                                             # non-bool flag
+        m.check_baseline_record(_record(), _record(Gain={"valid": "yes", "value": -26.02076}))
+    with pytest.raises(m.Refused):                                             # property missing
+        m.check_baseline_record({"Gain": _record()["Gain"]}, _record())
+
+
+def test_matched_render_refuses_psi_miss(monkeypatch):
+    """The 5 degree psi-match precondition fires on a 6 degree miss and not on 4."""
+    import numpy as np
+    monkeypatch.setattr(m, "matched_patch", lambda drive, vol: {"mix": (0, 1.)})
+    monkeypatch.setattr(m.bass, "load_reference", lambda: (None, np.zeros(4)))
+    monkeypatch.setattr(m.d, "EVENTS", [0])
+    monkeypatch.setattr(m.d, "phase_for", lambda patch, e, psi: 0)
+    monkeypatch.setattr(m.d, "render", lambda *a, **k: np.zeros(4, dtype=np.int16))
+    monkeypatch.setattr(m.d, "wrap", lambda x: x)
+    monkeypatch.setattr(m.d, "pcm_sha", lambda x: "sha")
+    monkeypatch.setattr(m.d, "partials", lambda *a, **k: {})
+    for miss, refused in ((6., True), (4., False)):
+        monkeypatch.setattr(m.d, "relative_phase", lambda a, b, e, miss=miss: {"psi_deg": 10. + miss})
+        if refused:
+            with pytest.raises(m.Refused):
+                m.matched_render(.25, 1., [{"psi_deg": 10.}])
+        else:
+            assert m.matched_render(.25, 1., [{"psi_deg": 10.}])[0]["psi_error_deg"] == pytest.approx(4.)
+
+
+def test_main_exit_2_on_refusal_and_report_untouched(monkeypatch, tmp_path, capsys):
+    """The documented exit-2 contract, through main(): a failed control REFUSES
+    before any render and writes no report."""
+    bad = {"x": {"expected": 1., "got": 0., "ok": False}}
+    monkeypatch.setattr(m, "synthetic_control", lambda: bad)
+    monkeypatch.setattr(m, "OUT", tmp_path / "out")
+    monkeypatch.setattr(m.sys, "argv", ["phase_aware_m1a.py"])
+    assert m.main() == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert not (tmp_path / "out").exists()

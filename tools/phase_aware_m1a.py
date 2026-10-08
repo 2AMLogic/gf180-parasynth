@@ -55,6 +55,16 @@ class Refused(bass.Refused):
 
 
 # ---------------------------------------------------------------- pure rules
+def finite(what, value):
+    """A measurement that is not a finite real number REFUSES: every comparison
+    below is False against NaN, so an unvalidated NaN passes whichever guard
+    asks 'is it worse than'."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)) \
+            or not math.isfinite(value):
+        raise Refused(f"{what} is {value!r}, not a finite number")
+    return float(value)
+
+
 def ratio_curves(summary):
     """{hk: 18-bin ratio curve in dB}; summary has partials.hk.binned_dbfs."""
     p = summary["partials"]
@@ -123,6 +133,11 @@ def preservation_violations(base_props, cand_props):
     out = []
     for name, prop in base_props.items():
         cand = cand_props[name]
+        if name in dx.GRADED:
+            for side, p in (("baseline", prop), ("candidate", cand)):
+                if p.get("valid"):
+                    finite(f"{side} {name} error", p.get("error"))
+                    finite(f"{side} {name} tolerance", p.get("tolerance"))
         if bool(prop.get("valid")) != bool(cand.get("valid")):
             out.append(f"{name}: validity {prop.get('valid')} -> {cand.get('valid')}")
         elif name in dx.GRADED and dx.passes(prop) and not dx.passes(cand):
@@ -133,6 +148,9 @@ def preservation_violations(base_props, cand_props):
 def select(rows, baseline_drive=BASELINE):
     """rows: {drive: {'max_error_db', 'violations', 'brightness_db'}} plus
     'reference_brightness_db' on every row. Returns (choice or None, reasons)."""
+    for drive, row in rows.items():
+        for key in ("max_error_db", "brightness_db", "reference_brightness_db"):
+            finite(f"drive {drive} {key}", row.get(key))
     base = rows[baseline_drive]
     reasons, eligible = {}, {}
     for drive, row in rows.items():
@@ -164,6 +182,14 @@ def confirmation_stats(errors, include):
 
 def confirm(base, cand, ref_brightness):
     """base/cand: confirmation_stats + 'brightness_db'. Returns verdict, failures."""
+    for side, st in (("baseline", base), ("candidate", cand)):
+        for key in ("e_conf_db", "e_43_db", "brightness_db"):
+            finite(f"confirmation {side} {key}", st.get(key))
+        if finite(f"confirmation {side} cells_within_tol", st.get("cells_within_tol")) < 0:
+            raise Refused(f"confirmation {side} cells_within_tol is negative")
+        if st.get("n_included", 1) < 1:
+            raise Refused(f"confirmation {side} has no included cells")
+    finite("confirmation reference brightness", ref_brightness)
     failures = []
     if cand["e_conf_db"] > base["e_conf_db"] - MIN_GAIN_DB:
         failures.append(f"E_conf {cand['e_conf_db']:.3f} dB is not <= baseline {base['e_conf_db']:.3f} - {MIN_GAIN_DB}")
@@ -174,6 +200,26 @@ def confirm(base, cand, ref_brightness):
     if not brightness_ok(cand["brightness_db"], base["brightness_db"], ref_brightness):
         failures.append(f"darker than baseline and reference by > {BRIGHT_TOL_DB} dB")
     return ("CONFIRMED" if not failures else "NOT CONFIRMED"), failures
+
+
+def check_baseline_record(measured_props, record_props):
+    """The current engine must reproduce the committed M1A record. REFUSES on a
+    property that is missing, whose validity flag differs, or whose recorded or
+    measured value is not finite (a NaN makes every difference test False)."""
+    for name, prop in record_props.items():
+        if name not in measured_props:
+            raise Refused(f"baseline has no property {name} that results/M1A.json records")
+        got = measured_props[name]
+        if not isinstance(prop.get("valid"), bool) or not isinstance(got.get("valid"), bool):
+            raise Refused(f"baseline {name}: validity flag is not a bool")
+        if prop["valid"] != got["valid"]:
+            raise Refused(f"baseline {name} validity {got['valid']} does not reproduce results/M1A.json's "
+                          f"{prop['valid']}")
+        if prop["valid"]:
+            want = finite(f"results/M1A.json {name} value", prop.get("value"))
+            have = finite(f"baseline {name} value", got.get("value"))
+            if abs(have - want) > 1e-6:
+                raise Refused(f"baseline {name} does not reproduce results/M1A.json")
 
 
 # ------------------------------------------------------ known-answer control
@@ -337,9 +383,7 @@ def main():
         if dx.pcm_sha(base_pcm) != dx.pcm_sha(committed):
             raise Refused("baseline render does not reproduce the committed m1a-model.wav")
         base_measured = bass.compare_audio(base_pcm.astype(np.float64) / 32768, reference)
-        for name, prop in record["diagnostics"]["properties"].items():
-            if prop.get("valid") and abs(base_measured["properties"][name]["value"] - prop["value"]) > 1e-6:
-                raise Refused(f"baseline {name} does not reproduce results/M1A.json")
+        check_baseline_record(base_measured["properties"], record["diagnostics"]["properties"])
         base_rms = [e["rms_dbfs"]["model"] for e in base_measured["events"]]
 
         # ---- development + selection
