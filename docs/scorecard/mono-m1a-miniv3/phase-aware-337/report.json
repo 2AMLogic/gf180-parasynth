@@ -1,0 +1,612 @@
+{
+ "schema": "m1a-phase-aware-337-v1",
+ "source_commit": "4de76f081e17394ce233a5fe167a5599e9429cbc",
+ "worktree_dirty": false,
+ "source_sha256": {
+  "tools/phase_aware_m1a.py": "1b1e03f15a7b5bd4e074b3f9b65b01bb548b254daeb50bdb3a6c9373e9748ec1",
+  "tools/measure_m1a_drive.py": "c6dc5463113298e8925ca2f22c2de4ac2bd9f584f3ac3731585eee1b10bbc8a4",
+  "tools/analyse_m1a_phase_cycle.py": "1d3ecc6e197c9fe62950eb6991e66ff384e8a5524c459a61916059aeed8d1317",
+  "tools/diagnose_m1a_harmonic_phase.py": "3b37f36173533eeef31606f6d7f411a15fb9cf5105170982757d51ac05827143",
+  "tools/mono_m1a_score.py": "c756bc81291cbb364681c1f9f3750b22cf1acad622c23a7f2c062a862b250b9a",
+  "model/voice_fx.py": "a19ef99b338c73e04c5bfd09eef2ba4a938acc11f4372a94874363f92c897e70",
+  "model/fixed.py": "eec1c66158a611dc480212de6977d644fddf196331c00ac38f673b24f7f257b3",
+  "model/audio_measure.py": "9ad2c9f238ba3149e52ae31f12030d7f8208d1914b17bdf2a33cbcb46fba452f"
+ },
+ "preconditions": {
+  "baseline_reproduces_committed_audio": true,
+  "baseline_reproduces_record": true,
+  "baseline_reproduces_phase_cycle_model": true,
+  "baseline_matched_reproduces_218": true
+ },
+ "data_status": {
+  "development": "#219 MIDI 36 phase cycle; inspected; selection is a fit by construction",
+  "confirmation": "frozen M1A phrase, phase-matched; not used for selection; not pristine (baseline matched errors and candidates' locked-phase errors were published earlier)"
+ },
+ "reference_take_noise_db": {
+  "h2": 0.41606267032575894,
+  "h3": 0.004023609941227494,
+  "h4": 0.5389476469904371,
+  "h5": 0.01056442224062375,
+  "h6": 0.5616475069694112,
+  "h7": 0.018055791568763822,
+  "h8": 0.7222894887713572,
+  "h9": 0.05179316945992859,
+  "h10": 0.7996473138154583,
+  "h11": 0.0858309382212891,
+  "h12": 0.6689251446153565
+ },
+ "reference_brightness_db": -0.46696662957563007,
+ "development": {
+  "0.75": {
+   "drive": 0.75,
+   "vol": 0.283930805016087,
+   "vol_register_q15": 9304,
+   "compensation_db": 0.0,
+   "ladder_gain_register": 127795,
+   "phrase_pcm_sha256": "ec9c1c201acc98e41939c9e29d9c4e92632fad4d492fa94588ada2f8b61be511",
+   "phrase_clipping": {
+    "peak_dbfs": -17.08031769131596,
+    "rail_fraction_pct": 0.0
+   },
+   "moving_phase_pcm_sha256": "8d6cdfeaebdea4a7bb1eb6f0e981cd4e17e0b0972265919067c7da8029381838",
+   "moving_phase_drift_hz": -0.25749208186565054,
+   "moving_phase_refused_windows": 0,
+   "phase_aware_error_db": {
+    "h2": 0.4469703339943604,
+    "h3": 1.6309636864929522,
+    "h4": 2.110182662464062,
+    "h5": 3.0175007929338213,
+    "h6": 2.0698190882363536,
+    "h7": 3.8076171980965916,
+    "h8": 2.263286878654812,
+    "h9": 3.1680174455684735,
+    "h10": 2.143728397768092,
+    "h11": 2.2431951271182844,
+    "h12": 2.318463002295964
+   },
+   "max_error_db": 3.8076171980965916,
+   "mean_error_db": 2.292704055783979,
+   "worst_partial": "h7",
+   "odd_range_mean_db": 10.14062092257617,
+   "psi_mean_ratio_db": {
+    "h2": -3.2291667555721837,
+    "h3": -9.8381383005682,
+    "h4": -9.954073978019078,
+    "h5": -15.861927466445959,
+    "h6": -15.173572469801389,
+    "h7": -20.699264457422633,
+    "h8": -19.5601644082645,
+    "h9": -24.41448863067421,
+    "h10": -23.420897105470456,
+    "h11": -27.74468844005762,
+    "h12": -26.892744707600823
+   },
+   "brightness_db": -1.1459735065077723,
+   "reference_brightness_db": -0.46696662957563007,
+   "properties": {
+    "Pitch": {
+     "valid": true,
+     "value": -0.05059,
+     "reference": 0.0,
+     "error": -0.05059,
+     "tolerance": 1.0
+    },
+    "Harmonic shape": {
+     "valid": true,
+     "value": 19.82331,
+     "reference": 0.0,
+     "error": 19.82331,
+     "tolerance": 1.0
+    },
+    "Envelope attack": {
+     "valid": false,
+     "value": null,
+     "reference": null,
+     "error": null,
+     "tolerance": 5.0
+    },
+    "Envelope release": {
+     "valid": true,
+     "value": 126.10417,
+     "reference": 117.625,
+     "error": 8.47917,
+     "tolerance": 20.0
+    },
+    "Gain": {
+     "valid": true,
+     "value": -26.02076,
+     "reference": -24.97715,
+     "error": -1.04361,
+     "tolerance": 3.0
+    },
+    "Filter envelope": {
+     "valid": false,
+     "value": null,
+     "reference": null,
+     "error": null,
+     "tolerance": null
+    },
+    "Clipping": {
+     "valid": true,
+     "value": 0.0,
+     "reference": 0.0,
+     "error": 0.0,
+     "tolerance": 0.01
+    }
+   },
+   "harmonic_shape_db_official": 19.82331,
+   "violations": []
+  },
+  "0.5": {
+   "drive": 0.5,
+   "vol": 0.4015647270712152,
+   "vol_register_q15": 13158,
+   "compensation_db": 3.0108608833725428,
+   "ladder_gain_register": 85197,
+   "phrase_pcm_sha256": "f2c952bf7e2b210e2e677441d8200c35101f6794a3ce544b6803b7b01f8319f7",
+   "phrase_clipping": {
+    "peak_dbfs": -17.101176731145017,
+    "rail_fraction_pct": 0.0
+   },
+   "moving_phase_pcm_sha256": "7ca4716ca8c415e66379e659dad846c369be9d65c00de176a1094e8f948f2ae3",
+   "moving_phase_drift_hz": -0.25749206875932423,
+   "moving_phase_refused_windows": 0,
+   "phase_aware_error_db": {
+    "h2": 0.25018686074623037,
+    "h3": 0.6672114409599182,
+    "h4": 0.777108039920157,
+    "h5": 1.1314684780445272,
+    "h6": 0.8391558422243538,
+    "h7": 1.7054098838290959,
+    "h8": 0.820138212610844,
+    "h9": 1.843008658531766,
+    "h10": 0.7261617674867545,
+    "h11": 1.4657782642042014,
+    "h12": 0.9416366892808551
+   },
+   "max_error_db": 1.843008658531766,
+   "mean_error_db": 1.0152058307126095,
+   "worst_partial": "h9",
+   "odd_range_mean_db": 5.964715127930786,
+   "psi_mean_ratio_db": {
+    "h2": -3.037411781211251,
+    "h3": -9.758877304576913,
+    "h4": -9.297810432007559,
+    "h5": -15.104480930984316,
+    "h6": -13.961517665646305,
+    "h7": -19.5703457434495,
+    "h8": -18.24426115131046,
+    "h9": -23.580793532732272,
+    "h10": -22.194808077153375,
+    "h11": -27.274077480981184,
+    "h12": -25.76757428724313
+   },
+   "brightness_db": -0.7980091941673102,
+   "reference_brightness_db": -0.46696662957563007,
+   "properties": {
+    "Pitch": {
+     "valid": true,
+     "value": -0.04938,
+     "reference": 0.0,
+     "error": -0.04938,
+     "tolerance": 1.0
+    },
+    "Harmonic shape": {
+     "valid": true,
+     "value": 20.48224,
+     "reference": 0.0,
+     "error": 20.48224,
+     "tolerance": 1.0
+    },
+    "Envelope attack": {
+     "valid": false,
+     "value": null,
+     "reference": null,
+     "error": null,
+     "tolerance": 5.0
+    },
+    "Envelope release": {
+     "valid": true,
+     "value": 126.14583,
+     "reference": 117.625,
+     "error": 8.52083,
+     "tolerance": 20.0
+    },
+    "Gain": {
+     "valid": true,
+     "value": -25.92331,
+     "reference": -24.97715,
+     "error": -0.94616,
+     "tolerance": 3.0
+    },
+    "Filter envelope": {
+     "valid": false,
+     "value": null,
+     "reference": null,
+     "error": null,
+     "tolerance": null
+    },
+    "Clipping": {
+     "valid": true,
+     "value": 0.0,
+     "reference": 0.0,
+     "error": 0.0,
+     "tolerance": 0.01
+    }
+   },
+   "harmonic_shape_db_official": 20.48224,
+   "violations": []
+  },
+  "0.25": {
+   "drive": 0.25,
+   "vol": 0.7758202461292272,
+   "vol_register_q15": 25422,
+   "compensation_db": 8.730971903335936,
+   "ladder_gain_register": 42598,
+   "phrase_pcm_sha256": "94ef0177f7b5af36a8ed309224ec175f0627ef0d264043553d74c049cb686927",
+   "phrase_clipping": {
+    "peak_dbfs": -16.911508649398307,
+    "rail_fraction_pct": 0.0
+   },
+   "moving_phase_pcm_sha256": "fbd4b2304cf648a0a73f4a6b724aa3bbfddd0dd0514f8fe5d19ac05dc520ddd0",
+   "moving_phase_drift_hz": -0.2574920439147301,
+   "moving_phase_refused_windows": 0,
+   "phase_aware_error_db": {
+    "h2": 0.1892247853523601,
+    "h3": 0.2694484612189934,
+    "h4": 0.24916171089396114,
+    "h5": 0.2905285700538313,
+    "h6": 0.2576126036665232,
+    "h7": 0.1473379930720005,
+    "h8": 0.3791115204005291,
+    "h9": 0.5126071189485966,
+    "h10": 1.003660094731707,
+    "h11": 1.1268318228339225,
+    "h12": 1.5979522854449912
+   },
+   "max_error_db": 1.5979522854449912,
+   "mean_error_db": 0.5475888151470378,
+   "worst_partial": "h12",
+   "odd_range_mean_db": 1.6791803861472197,
+   "psi_mean_ratio_db": {
+    "h2": -2.964653424335591,
+    "h3": -9.706783071834828,
+    "h4": -9.021648995109146,
+    "h5": -14.661026706617434,
+    "h6": -13.26974752474046,
+    "h7": -18.58710526889154,
+    "h8": -17.13657166455954,
+    "h9": -22.257562289874457,
+    "h10": -20.815846886267522,
+    "h11": -25.93248753572614,
+    "h12": -24.450349068678747
+   },
+   "brightness_db": -0.5929522142058339,
+   "reference_brightness_db": -0.46696662957563007,
+   "properties": {
+    "Pitch": {
+     "valid": true,
+     "value": -0.05034,
+     "reference": 0.0,
+     "error": -0.05034,
+     "tolerance": 1.0
+    },
+    "Harmonic shape": {
+     "valid": true,
+     "value": 22.62709,
+     "reference": 0.0,
+     "error": 22.62709,
+     "tolerance": 1.0
+    },
+    "Envelope attack": {
+     "valid": false,
+     "value": null,
+     "reference": null,
+     "error": null,
+     "tolerance": 5.0
+    },
+    "Envelope release": {
+     "valid": true,
+     "value": 126.16667,
+     "reference": 117.625,
+     "error": 8.54167,
+     "tolerance": 20.0
+    },
+    "Gain": {
+     "valid": true,
+     "value": -25.60626,
+     "reference": -24.68083,
+     "error": -0.92543,
+     "tolerance": 3.0
+    },
+    "Filter envelope": {
+     "valid": false,
+     "value": null,
+     "reference": null,
+     "error": null,
+     "tolerance": null
+    },
+    "Clipping": {
+     "valid": true,
+     "value": 0.0,
+     "reference": 0.0,
+     "error": 0.0,
+     "tolerance": 0.01
+    }
+   },
+   "harmonic_shape_db_official": 22.62709,
+   "violations": []
+  }
+ },
+ "selection": {
+  "choice": "0.25",
+  "ineligible_because": {
+   "0.5": [],
+   "0.25": []
+  }
+ },
+ "confirmation": {
+  "verdict": "CONFIRMED",
+  "failures": [],
+  "reference": [
+   {
+    "psi_deg": 156.22481103351356,
+    "conditioning_db": {
+     "h2": -13.697674094632152,
+     "h4": -0.7700280566979008,
+     "h6": -4.685415599814346,
+     "h8": -3.4147700342353966,
+     "h10": -1.2990905657037684,
+     "h12": -9.888592311683219
+    },
+    "include": {
+     "h2": false,
+     "h3": true,
+     "h4": true,
+     "h5": true,
+     "h6": true,
+     "h7": true,
+     "h8": true,
+     "h9": true,
+     "h10": true,
+     "h11": true,
+     "h12": false
+    }
+   },
+   {
+    "psi_deg": -53.41271927483935,
+    "conditioning_db": {
+     "h2": -0.978579585828086,
+     "h4": -4.493768228417403,
+     "h6": -15.308807699681475,
+     "h8": -10.7620574047544,
+     "h10": -3.235392546160707,
+     "h12": -0.5260183374144879
+    },
+    "include": {
+     "h2": true,
+     "h3": true,
+     "h4": true,
+     "h5": true,
+     "h6": false,
+     "h7": true,
+     "h8": false,
+     "h9": true,
+     "h10": true,
+     "h11": true,
+     "h12": true
+    }
+   },
+   {
+    "psi_deg": 42.60992497933873,
+    "conditioning_db": {
+     "h2": -0.6153478977607092,
+     "h4": -2.661719357695493,
+     "h6": -7.134269030094482,
+     "h8": -21.55412904936716,
+     "h10": -10.920668704261228,
+     "h12": -4.245644823245042
+    },
+    "include": {
+     "h2": true,
+     "h3": true,
+     "h4": true,
+     "h5": true,
+     "h6": false,
+     "h7": true,
+     "h8": false,
+     "h9": true,
+     "h10": false,
+     "h11": true,
+     "h12": true
+    }
+   }
+  ],
+  "reference_brightness_db": -0.29702999169993505,
+  "baseline": {
+   "n_included": 26,
+   "e_conf_db": 2.681194856694765,
+   "e_43_db": 2.552270583058446,
+   "cells_within_tol": 8,
+   "max_abs_db": 8.678184345309262,
+   "brightness_db": -0.976486273974731,
+   "errors_db": [
+    {
+     "h2": -0.8148267671789124,
+     "h3": 0.4053931326869247,
+     "h4": -0.35109084711649796,
+     "h5": -2.0057304328364705,
+     "h6": -1.753290512387995,
+     "h7": -3.1795581523337937,
+     "h8": -2.146670312703346,
+     "h9": -1.3910482955448202,
+     "h10": -1.6916732966716204,
+     "h11": -1.7226436478341434,
+     "h12": -5.030453544001453
+    },
+    {
+     "h2": -0.3243687537544775,
+     "h3": -5.65817137129288,
+     "h4": -3.2194404260860807,
+     "h5": -0.05221147072165344,
+     "h6": 2.1828252532000754,
+     "h7": 1.0097164304444206,
+     "h8": -5.659683581230283,
+     "h9": 0.8548264924040225,
+     "h10": -3.003438820256264,
+     "h11": 0.8395603580527293,
+     "h12": -2.159482152814771
+    },
+    {
+     "h2": -0.45973228047520637,
+     "h3": 0.1034186187038948,
+     "h4": -2.6622171350496995,
+     "h5": -1.4310820505354247,
+     "h6": -2.5440194281372293,
+     "h7": -2.662186759155812,
+     "h8": 10.520599296554181,
+     "h9": -1.5602392349323786,
+     "h10": -7.310187937093211,
+     "h11": -2.055632183377192,
+     "h12": -8.678184345309262
+    }
+   ],
+   "renders": [
+    {
+     "osc2_phase": 9116559,
+     "psi_error_deg": 0.13542546355415652,
+     "pcm_sha256": "87fc08f9daf3ac0c748941146e4aed18d4eef1e6fb4c948cde55111fb0a5c5a9"
+    },
+    {
+     "osc2_phase": 8925119,
+     "psi_error_deg": 0.16956700192605467,
+     "pcm_sha256": "5b13818fa36d2c27c3b0dce030bc7dcae51d2d54352ddf61ccc0da0955978e66"
+    },
+    {
+     "osc2_phase": 8740505,
+     "psi_error_deg": 0.13528076948270495,
+     "pcm_sha256": "9f703b18a5c29171179d6ea349f994c7ecda0a977c513b2e7f6a76d0b7fb66dd"
+    }
+   ]
+  },
+  "candidate": {
+   "n_included": 26,
+   "e_conf_db": 0.5581714999081735,
+   "e_43_db": 0.33374511397501305,
+   "cells_within_tol": 23,
+   "max_abs_db": 1.7394012315230363,
+   "brightness_db": -0.41267054161491534,
+   "errors_db": [
+    {
+     "h2": -0.0851959340282189,
+     "h3": -0.25896586402671673,
+     "h4": -0.16361408203322902,
+     "h5": -0.2646486504223269,
+     "h6": -0.11275562433872821,
+     "h7": 0.14678705041430362,
+     "h8": 0.36014118004716167,
+     "h9": 0.28498963975316727,
+     "h10": 0.8911756266104831,
+     "h11": 1.2268993988028498,
+     "h12": 1.619493812614703
+    },
+    {
+     "h2": -0.04623230548221813,
+     "h3": -0.3969112739785903,
+     "h4": -0.3717739902884425,
+     "h5": -0.6519646429177737,
+     "h6": -0.781881214031543,
+     "h7": 0.06605740221987944,
+     "h8": -0.5802428244504156,
+     "h9": -0.06504702646693161,
+     "h10": -0.39398647769889195,
+     "h11": -0.1684701720950521,
+     "h12": -0.2954998975174199
+    },
+    {
+     "h2": -0.09114533366547001,
+     "h3": -0.2524429976979228,
+     "h4": -0.20533801141533203,
+     "h5": -0.13435066309489763,
+     "h6": -0.1757873050715233,
+     "h7": -0.18357709981718173,
+     "h8": 2.0721498354676697,
+     "h9": 0.387306298141457,
+     "h10": 1.3367436094146434,
+     "h11": 1.0237029514954017,
+     "h12": 1.7394012315230363
+    }
+   ],
+   "drive": 0.25,
+   "renders": [
+    {
+     "osc2_phase": 9116559,
+     "psi_error_deg": 0.05942421344070681,
+     "pcm_sha256": "99f28f6953dca54a4aeda4c3b5ad875541d23a733c07bb5c26fb7ca96d39b212"
+    },
+    {
+     "osc2_phase": 8925119,
+     "psi_error_deg": 0.08988006933918768,
+     "pcm_sha256": "1e593c9f7595217ed752834a23c112673997263369d11a77c1393a7bf9e52605"
+    },
+    {
+     "osc2_phase": 8740505,
+     "psi_error_deg": 0.059704710495310565,
+     "pcm_sha256": "717a094c897f9d9194538fcf43f067e969004ba592cbc3b330e2de3dd8053573"
+    }
+   ]
+  }
+ },
+ "synthetic_control": {
+  "identical -> 0 on every partial": {
+   "expected": 0.0,
+   "got": 0.0,
+   "ok": true
+  },
+  "persistent +2 dB on odd h7 -> E_h7 = 2": {
+   "expected": 2.0,
+   "got": 1.9999999999999984,
+   "ok": true
+  },
+  "persistent +2 dB on odd h7 leaves h5 at 0": {
+   "expected": 0.0,
+   "got": 0.0,
+   "ok": true
+  },
+  "h1 -1 dB -> every odd ratio +1": {
+   "expected": 1.0,
+   "got": 1.0,
+   "ok": true
+  },
+  "psi relabelled 60 deg -> h2 error > 3 dB": {
+   "expected": 1.0,
+   "got": 1.0,
+   "ok": true
+  },
+  "psi relabelled 60 deg leaves odd h3 at 0": {
+   "expected": 0.0,
+   "got": 0.0,
+   "ok": true
+  },
+  "conditioning in phase = 0 dB": {
+   "expected": 0.0,
+   "got": 0.0,
+   "ok": true
+  },
+  "conditioning quadrature = -3.0103 dB": {
+   "expected": -3.0102999566398116,
+   "got": -3.0102999566398116,
+   "ok": true
+  },
+  "conditioning antiphase = -inf (excluded)": {
+   "expected": 1.0,
+   "got": 1.0,
+   "ok": true
+  },
+  "brightness of one partial at -6 dB": {
+   "expected": -6.0,
+   "got": -6.0,
+   "ok": true
+  }
+ }
+}

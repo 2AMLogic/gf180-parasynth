@@ -186,3 +186,166 @@ Oscillator drift amount, resonance and drive at resonant settings, the envelope
 response and other mixtures are all outside this one question. The three clean
 F1 passes are untouched: F1 sets its own drive 1.0 and resonance 0 and does not
 read the M1A patch. Their qualification is not extended to any resonant setting.
+
+---
+
+## Results (written after the run; nothing above was changed)
+
+**Selection: drive 0.25. Confirmation on the frozen phrase, phase-matched:
+CONFIRMED.** Every rule passed and none failed. The record is `report.json`,
+written from clean commit `4de76f0` (`worktree_dirty: false`). One process
+ran for 3 min 38 s.
+
+**In sound terms:** the M1A round bass already sounds like the Mini V3 once the
+two oscillators are compared at the same relative phase. That holds if the
+ladder input drive is 0.25 instead of 0.75, with the level compensated in the
+patch. At 0.75 the model's upper partials (h5–h12) sit 1.5–2.2 dB too dark on
+average over the phase cycle, and they swing about 10 dB with phase where the
+Mini V3's swing 0.4–2.2 dB. At 0.25 both quantities sit within the reference's
+own take-to-take spread, for h2 through h9. **This does not reach the RTL or
+the image.** The patch is unchanged (see "What this does not do").
+
+### Preconditions (all held)
+
+- The current selected engine reproduces the committed `m1a-model.wav`
+  bit-exactly.
+- The baseline properties equal `results/M1A.json` to within 1e-6.
+- The baseline moving-phase curves equal #219's exactly.
+- All three of the baseline's phase-matched renders reproduce #218's PCM
+  hashes.
+- The known-answer control passed 10/10.
+- Matched ψ errors were 0.14 / 0.17 / 0.14° for the baseline and
+  0.06 / 0.09 / 0.06° for the candidate, against the 5° limit.
+
+The development numbers recomputed on the current engine equal the diagnostic
+period's legacy-report numbers to the stated precision (3.81 / 1.84 / 1.60).
+
+### Development: MIDI 36 phase cycle (selection; a fit by construction)
+
+| | 0.75 (baseline) | 0.50 | 0.25 | reference take A vs B |
+|---|---:|---:|---:|---:|
+| phase-aware E, max over h2–h12 (dB) | 3.81 (h7) | 1.84 (h9) | **1.60** (h12) | 0.80 (h10) |
+| mean over h2–h12 (dB) | 2.29 | 1.02 | **0.55** | — |
+| E for h2 … h9 (dB) | 0.45–3.81 | 0.25–1.84 | **0.15–0.51** | 0.00–0.72 |
+| E for h10 / h11 / h12 (dB) | 2.14 / 2.24 / 2.32 | 0.73 / 1.47 / 0.94 | 1.00 / 1.13 / 1.60 | 0.80 / 0.09 / 0.67 |
+| mean odd ψ-range h5–h11 (ref 1.43 dB) | 10.14 | 5.96 | 1.68 | — |
+| brightness h2–h12 re h1 (ref −0.47 dB) | −1.15 | −0.80 | −0.59 | — |
+| vol (Q0.15) / compensation | 9304 / 0 | 13158 / +3.01 dB | 25422 / +8.73 dB | — |
+| ladder `gain` register | 127 795 | 85 197 | 42 598 | — |
+
+Selection rules on the official phrase, both candidates:
+
+- Pitch −0.05 c, Envelope release +8.5 ms, Gain −0.95 / −0.93 dB and
+  Clipping 0 % all still pass, and no property changes validity.
+- Peak is −16.9 dBFS for drive 0.25.
+- Neither candidate is darker than the baseline; both are brighter, toward the
+  reference.
+
+Both candidates were eligible. The rule chooses the lowest maximum, which is
+0.25. **What still fails in development:** h10–h12 at 0.25 are 0.9–1.6 dB too
+bright on the ψ mean (+0.92 / +1.05 / +1.56 dB). That exceeds the reference's
+own spread on those partials.
+
+### Confirmation: frozen phrase, each event at its measured reference ψ (not used for selection)
+
+Excluded as notches by the reference-only rule (c < −6 dB), fixed before the
+run:
+
+- 36 @0.1 (ψ = +156.2°): h2, h12
+- 43 @2.1 (ψ = −53.4°): h6, h8
+- 36 @4.1 (ψ = +42.6°): h6, h8, h10
+
+That leaves 26 of 33 cells.
+
+| | baseline 0.75 | candidate 0.25 | rule |
+|---|---:|---:|---|
+| E_conf, RMS over 26 included cells (dB) | 2.68 | **0.56** | 1. ≤ baseline − 0.5 ✓ |
+| E_43, MIDI 43 alone, a note not used in selection (dB) | 2.55 | **0.33** | 2. < baseline ✓ |
+| included cells within 1 dB | 8 / 26 | **23 / 26** | 3. no decrease ✓ |
+| brightness h2–h12 re h1 (reference −0.30 dB) | −0.98 | −0.41 | 4. not darker than both ✓ |
+| max \|error\| over included cells (dB) | 8.68 | 1.74 | (reported) |
+| *descriptive, not the rule:* all 33 cells, RMS / max (dB) | 3.57 / 10.52 | 0.73 / 2.07 | — |
+
+The 33-cell row shows that the verdict does not depend on the notch exclusion.
+#218 left the 36 @4.1 h8 cell unresolved at +10.52 dB after phase matching. At
+drive 0.25 it is +2.07 dB. That cell is excluded by the rule; it is quoted here
+only because #218 named it.
+
+**What still fails on confirmation:** three included cells exceed 1 dB, and all
+are upper partials on MIDI 36, too bright:
+
+- 36 @0.1 h11: +1.23 dB
+- 36 @4.1 h11: +1.02 dB
+- 36 @4.1 h12: +1.74 dB
+
+The development overshoot on h10–h12 does the same thing. On MIDI 43, every
+included cell is within 0.78 dB.
+
+### Effect, mechanism, and their status (verification rule 7)
+
+The measured effect: changing only the ladder input drive from 0.75 to 0.25,
+with level compensated in the patch, cuts the phase-matched harmonic error on
+the frozen phrase from 2.68 to 0.56 dB RMS.
+<!-- claim: grep="cuts the phase-matched harmonic error" in=docs/scorecard/mono-m1a-miniv3/phase-aware-337/README.md note="effect; report.json confirmation.baseline/candidate.e_conf_db" -->
+
+The mechanism: the model's ladder input stage is driven harder than the Mini
+V3's equivalent stage at this patch. That excess nonlinearity is what both
+darkens the upper partials and makes the odd partials swing with ψ.
+<!-- claim: grep="driven harder than the Mini V3" in=docs/scorecard/mono-m1a-miniv3/phase-aware-337/README.md mechanism=inferred note="only drive was varied, so the drive register is measured to carry the effect; that the Mini V3 has a correspondingly lighter input stage is a reading of that, not a measurement of the Mini" -->
+
+### What this does not do, and what remains
+
+- **Nothing is promoted.** The official phase-blind M1A rubric scores drive
+  0.25 *worse*, at 22.63 dB against 19.82, with six per-cell regressions
+  (unchanged from `../drive-experiment/`). It compares the locked model at
+  ψ ≈ 1–9° with the reference at +156 / −53 / +43°. Promotion needs the
+  following, in order:
+  1. a **separate rubric change** that makes M1A's harmonic score phase-aware,
+     tested against harmful counterexamples (plan098 §7);
+  2. the patch identity (`vol` 25422, `drive` 0.25), regenerated default
+     register images, and RTL and production-path ladder verification at
+     `gain` 42 598 with explicit sample counts. That runs on the build box;
+  3. registering the M1A drive in `docs/sensitivity/registry.json` under the
+     sweep convention. This needs a prediction made independently of this
+     measurement, and none exists yet.
+- **The pristine test is still open.** The frozen fresh-capture rule above
+  (Mini V3, MIDI 43 phase cycle) needs the macOS plugin rig.
+- **Phase behaviour itself is unmet.** The shipping model's oscillators are
+  locked, so ψ ≈ 1–9° at every note, while the Mini V3's free-run 3.49 c apart.
+  That is why the locked model loses the official score. Drive does not address
+  it. Oscillator drift is a contract choice (DR 0019). Whether to make the
+  model's octave free-run is a separate question.
+- **Out of scope and untouched:** resonance and drive at resonant settings,
+  envelope response and other mixtures. The F1 passes are not extended.
+
+### Known blind spots (verification rule 8, form 2)
+
+- **E_k and the brightness guard see only h1–h12.** A candidate that added
+  content above h12, or inharmonic content such as aliasing, would pass them
+  unseen. No such input was constructed. Lowering drive reduces rather than
+  adds nonlinear products, and Clipping stays at 0 %.
+- **The notch criterion is linear.** It uses the open-filter controls' linear
+  sum, and the full patch passes through the nonlinear ladder, where notch
+  depth can differ. The 33-cell row above shows the verdict does not depend
+  on the exclusion.
+- **The control does not exercise ψ estimation.** It uses analytic ψ-binned
+  curves, not renders, so the estimators (#219's ψ, #218's projections) are
+  taken as they were qualified there. The guard against their failure is the
+  baseline-reproduction preconditions above.
+
+### Wrong-then-right (this task): 2, none in a reported number
+
+1. The first draft of the pre-registration cited the drive experiment as
+   "#283". That issue number was never checked. It was removed before the
+   commit.
+2. The first test written for confirmation rule 3 used an input that did not
+   exercise the rule: the candidate *gained* in-band cells. The test failed,
+   and the input was rebuilt so that rule 3 alone fires.
+
+## Reproduce
+
+```sh
+.venv/bin/python tools/phase_aware_m1a.py            # ~4 min, one process; REFUSES (exit 2) on any precondition
+.venv/bin/python tools/phase_aware_m1a.py --control  # known-answer control only
+.venv/bin/python -m pytest -q tools/test_phase_aware_m1a.py
+```
