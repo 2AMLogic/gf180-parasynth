@@ -6,6 +6,7 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 Closure events below record forge state, not a verified fix or a new sound result.
 
+- **Issue #623** (closed): Nightly sound-report red: CP (clap) decay tau, T20 and attack outside tolerance, two of them locks
 - **Issue #610** (closed): Follow-on from PR #604: preserve measurement errors and corrupt RTL anchors
 - **PR #613**: Preserve corrupt anchors and measurement error types (#610)
 - **PR #614**: [#152] Residual drum DC: offset-vs-skirt apparatus + dev-condition run (partial; confirm batch pending, #152 stays open)
