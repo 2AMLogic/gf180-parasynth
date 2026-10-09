@@ -1,0 +1,375 @@
+{
+ "selection": {
+  "BP": {
+   "pitch_shape_reduction_median": -0.2653,
+   "pitch_shape_improved_frac": 0.3333,
+   "violations": {
+    "LT25": [
+     "flatness 1.40->1.87"
+    ],
+    "LT75": [
+     "flatness 0.62->0.85"
+    ],
+    "MC25": [
+     "decay 2.87->7.86"
+    ]
+   },
+   "peak_change_db": {
+    "LT25": 0.82,
+    "LT75": 0.82,
+    "HT25": 0.24,
+    "HT75": 0.41,
+    "MC25": -0.12,
+    "MC75": -0.1
+   },
+   "n": 6,
+   "admissible": false
+  },
+  "BP+X4": {
+   "pitch_shape_reduction_median": 0.1968,
+   "pitch_shape_improved_frac": 0.5,
+   "violations": {
+    "LT25": [
+     "flatness 1.40->1.69",
+     "decay 10.14->11.94"
+    ],
+    "LT75": [
+     "decay 8.44->11.13"
+    ],
+    "MC75": [
+     "decay 0.87->1.15"
+    ]
+   },
+   "peak_change_db": {
+    "LT25": 0.3,
+    "LT75": 0.4,
+    "HT25": 0.1,
+    "HT75": 0.32,
+    "MC25": -0.17,
+    "MC75": -0.16
+   },
+   "n": 6,
+   "admissible": false
+  }
+ },
+ "confirmation": {
+  "BP": {
+   "pitch_shape_reduction_median": -0.5299,
+   "pitch_shape_improved_frac": 0.5,
+   "violations": {
+    "LT00": [
+     "flatness 1.18->1.76"
+    ],
+    "MT75": [
+     "decay 0.44->3.08"
+    ],
+    "MT10": [
+     "decay 0.91->4.43"
+    ],
+    "LC00": [
+     "flatness 7.82->9.74",
+     "attack 1.23->1.55",
+     "decay 2.69->12.08",
+     "modulation 14.10->19.69"
+    ],
+    "LC25": [
+     "flatness 7.88->10.14",
+     "decay 2.75->12.01",
+     "modulation 16.37->19.01"
+    ],
+    "LC75": [
+     "decay 2.17->8.23",
+     "modulation 1.40->2.27"
+    ],
+    "LC10": [
+     "attack 0.77->1.02",
+     "decay 2.07->34.25",
+     "modulation 1.68->25.04"
+    ],
+    "MC00": [
+     "decay 3.69->9.77"
+    ],
+    "HC00": [
+     "decay 1.01->1.24"
+    ],
+    "HC25": [
+     "decay 0.79->1.21"
+    ],
+    "HC75": [
+     "decay 0.60->0.82"
+    ],
+    "HC10": [
+     "attack 0.42->0.82"
+    ]
+   },
+   "peak_change_db": {
+    "LT00": 0.81,
+    "LT10": 0.85,
+    "MT00": 0.36,
+    "MT25": 0.38,
+    "MT75": 0.5,
+    "MT10": 0.55,
+    "HT00": 0.18,
+    "HT10": 0.45,
+    "LC00": 0.04,
+    "LC25": 0.03,
+    "LC75": 0.02,
+    "LC10": 0.0,
+    "MC00": -0.12,
+    "MC10": -0.11,
+    "HC00": -0.12,
+    "HC25": -0.12,
+    "HC75": -0.11,
+    "HC10": -0.1
+   },
+   "n": 18,
+   "confirmed": false,
+   "role": "not selected: reported, not confirmable"
+  },
+  "BP+X4": {
+   "pitch_shape_reduction_median": 0.4558,
+   "pitch_shape_improved_frac": 0.7778,
+   "violations": {
+    "LT00": [
+     "flatness 1.18->1.48",
+     "decay 10.57->12.15"
+    ],
+    "LT10": [
+     "decay 3.35->4.70"
+    ],
+    "HT10": [
+     "decay 2.97->3.75"
+    ],
+    "LC00": [
+     "flatness 7.82->9.01",
+     "attack 1.23->1.69"
+    ],
+    "LC25": [
+     "flatness 7.88->8.86"
+    ],
+    "LC75": [
+     "decay 2.17->2.76"
+    ],
+    "MC00": [
+     "decay 3.69->4.17"
+    ],
+    "MC10": [
+     "impulse 2.95->3.44",
+     "decay 2.53->2.99"
+    ],
+    "HC00": [
+     "decay 1.01->1.29"
+    ],
+    "HC25": [
+     "decay 0.79->1.28"
+    ],
+    "HC75": [
+     "decay 0.60->0.77"
+    ],
+    "HC10": [
+     "attack 0.42->0.82"
+    ]
+   },
+   "peak_change_db": {
+    "LT00": 0.29,
+    "LT10": 0.48,
+    "MT00": 0.11,
+    "MT25": 0.13,
+    "MT75": 0.32,
+    "MT10": 0.39,
+    "HT00": 0.06,
+    "HT10": 0.37,
+    "LC00": -0.1,
+    "LC25": -0.1,
+    "LC75": -0.09,
+    "LC10": -0.08,
+    "MC00": -0.18,
+    "MC10": -0.14,
+    "HC00": -0.15,
+    "HC25": -0.15,
+    "HC75": -0.13,
+    "HC10": -0.12
+   },
+   "n": 18,
+   "confirmed": false,
+   "role": "not selected: reported, not confirmable"
+  }
+ },
+ "attribution": {
+  "shipped+take_floor+0dB": {
+   "n": 30,
+   "within_bar": {
+    "impulse": 20,
+    "pitch_shape": 6
+   },
+   "shipped_within_bar": {
+    "impulse": 0,
+    "pitch_shape": 6
+   }
+  },
+  "shipped+take_floor-20dB": {
+   "n": 30,
+   "within_bar": {
+    "impulse": 21,
+    "pitch_shape": 6
+   },
+   "shipped_within_bar": {
+    "impulse": 0,
+    "pitch_shape": 6
+   }
+  }
+ },
+ "chosen": null,
+ "post_hoc": {
+  "development/tom": {
+   "n": 4,
+   "BP": {
+    "pitch_shape_improved": 0,
+    "pitch_shape_reduction_median": -1.8288,
+    "decay_ratio_x_median": 0.8246,
+    "decay_worse_than_x1.1_plus": 0
+   },
+   "BP+X4": {
+    "pitch_shape_improved": 1,
+    "pitch_shape_reduction_median": -0.1357,
+    "decay_ratio_x_median": 1.0951,
+    "decay_worse_than_x1.1_plus": 2
+   },
+   "twin-BP": {
+    "pitch_shape_improved": 2,
+    "pitch_shape_reduction_median": 0.2085,
+    "decay_ratio_x_median": 1.2927,
+    "decay_worse_than_x1.1_plus": 2
+   },
+   "impulse_within_bar": {
+    "shipped": 0,
+    "shipped-via-take-rate": 2
+   }
+  },
+  "development/conga": {
+   "n": 2,
+   "BP": {
+    "pitch_shape_improved": 2,
+    "pitch_shape_reduction_median": 0.6041,
+    "decay_ratio_x_median": 1.8433,
+    "decay_worse_than_x1.1_plus": 1
+   },
+   "BP+X4": {
+    "pitch_shape_improved": 2,
+    "pitch_shape_reduction_median": 0.5952,
+    "decay_ratio_x_median": 1.0547,
+    "decay_worse_than_x1.1_plus": 1
+   },
+   "twin-BP": {
+    "pitch_shape_improved": 2,
+    "pitch_shape_reduction_median": 0.5889,
+    "decay_ratio_x_median": 1.0245,
+    "decay_worse_than_x1.1_plus": 0
+   },
+   "impulse_within_bar": {
+    "shipped": 0,
+    "shipped-via-take-rate": 2
+   }
+  },
+  "untouched/tom": {
+   "n": 8,
+   "BP": {
+    "pitch_shape_improved": 1,
+    "pitch_shape_reduction_median": -2.627,
+    "decay_ratio_x_median": 1.0064,
+    "decay_worse_than_x1.1_plus": 2
+   },
+   "BP+X4": {
+    "pitch_shape_improved": 4,
+    "pitch_shape_reduction_median": 0.0139,
+    "decay_ratio_x_median": 0.9598,
+    "decay_worse_than_x1.1_plus": 3
+   },
+   "twin-BP": {
+    "pitch_shape_improved": 6,
+    "pitch_shape_reduction_median": 0.1548,
+    "decay_ratio_x_median": 0.9554,
+    "decay_worse_than_x1.1_plus": 3
+   },
+   "impulse_within_bar": {
+    "shipped": 0,
+    "shipped-via-take-rate": 4
+   }
+  },
+  "untouched/conga": {
+   "n": 10,
+   "BP": {
+    "pitch_shape_improved": 8,
+    "pitch_shape_reduction_median": 0.4868,
+    "decay_ratio_x_median": 2.0901,
+    "decay_worse_than_x1.1_plus": 8
+   },
+   "BP+X4": {
+    "pitch_shape_improved": 10,
+    "pitch_shape_reduction_median": 0.6232,
+    "decay_ratio_x_median": 1.1576,
+    "decay_worse_than_x1.1_plus": 6
+   },
+   "twin-BP": {
+    "pitch_shape_improved": 10,
+    "pitch_shape_reduction_median": 0.6182,
+    "decay_ratio_x_median": 0.9969,
+    "decay_worse_than_x1.1_plus": 2
+   },
+   "impulse_within_bar": {
+    "shipped": 0,
+    "shipped-via-take-rate": 8
+   }
+  },
+  "seen-in-diagnosis/tom": {
+   "n": 3,
+   "BP": {
+    "pitch_shape_improved": 1,
+    "pitch_shape_reduction_median": -4.1587,
+    "decay_ratio_x_median": 0.8068,
+    "decay_worse_than_x1.1_plus": 1
+   },
+   "BP+X4": {
+    "pitch_shape_improved": 1,
+    "pitch_shape_reduction_median": -0.1047,
+    "decay_ratio_x_median": 1.0843,
+    "decay_worse_than_x1.1_plus": 1
+   },
+   "twin-BP": {
+    "pitch_shape_improved": 2,
+    "pitch_shape_reduction_median": 0.2292,
+    "decay_ratio_x_median": 1.1973,
+    "decay_worse_than_x1.1_plus": 2
+   },
+   "impulse_within_bar": {
+    "shipped": 0,
+    "shipped-via-take-rate": 2
+   }
+  },
+  "seen-in-diagnosis/conga": {
+   "n": 3,
+   "BP": {
+    "pitch_shape_improved": 2,
+    "pitch_shape_reduction_median": 0.6223,
+    "decay_ratio_x_median": 4.9959,
+    "decay_worse_than_x1.1_plus": 3
+   },
+   "BP+X4": {
+    "pitch_shape_improved": 3,
+    "pitch_shape_reduction_median": 0.6314,
+    "decay_ratio_x_median": 2.0185,
+    "decay_worse_than_x1.1_plus": 3
+   },
+   "twin-BP": {
+    "pitch_shape_improved": 3,
+    "pitch_shape_reduction_median": 0.6322,
+    "decay_ratio_x_median": 1.0276,
+    "decay_worse_than_x1.1_plus": 1
+   },
+   "impulse_within_bar": {
+    "shipped": 0,
+    "shipped-via-take-rate": 3
+   }
+  }
+ }
+}
