@@ -167,7 +167,8 @@ verify:
 	  "$(PY) tools/probes/estimator_fixtures.py" \
 	  "$(PY) tools/probes/estimator_domains.py" \
 	  "$(PY) tools/probes/verify_109_claims.py" \
-	  "$(PY) tools/sensitivity.py check"
+	  "$(PY) tools/sensitivity.py check" \
+	  "$(PY) tools/check_iverilog_generate_case_string.py"
 
 ## Fast sound-development checks, separate from the broad repository suite.
 ## A valid M5A mismatch remains a passing verification job: this checks that
@@ -568,7 +569,10 @@ controls:
 	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused" \
-	  "$(PY) tools/probes/permitted_differences.py --controls"
+	  "$(PY) tools/probes/permitted_differences.py --controls" \
+	  "$(PY) tools/check_iverilog_generate_case_string.py --inject NO_IVERILOG --expect refused" \
+	  "$(PY) tools/check_iverilog_generate_case_string.py --inject BROKEN_REPRO --expect refused" \
+	  "$(PY) tools/check_iverilog_generate_case_string.py --inject GARBAGE --expect refused"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q
