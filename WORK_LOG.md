@@ -2,6 +2,31 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-09
+
+Closure events below record forge state, not a verified fix or a new sound result.
+
+- **Issue #610** (closed): Follow-on from PR #604: preserve measurement errors and corrupt RTL anchors
+- **PR #613**: Preserve corrupt anchors and measurement error types (#610)
+- **PR #614**: [#152] Residual drum DC: offset-vs-skirt apparatus + dev-condition run (partial; confirm batch pending, #152 stays open)
+- **Issue #608** (closed): File the Icarus Verilog generate-case-over-string-parameter bug upstream (the -g2005 workaround is unfiled)
+- **PR #612**: [#608] Icarus generate-case string-param upstream report + guard
+- **Issue #611** (closed): Follow-on from PR #607: qualify lead-drive refusal controls and preserve experiment limits
+- **PR #616**: [#611] Lead-drive refusal controls (baseline mismatch, unchanged audio), NaN fix, README correction
+- **PR #606**: Full-performance suite with seeded-defect controls (#338)
+- **PR #607**: [#337] Lead ladder drive: saw 0.50 confirmed on untouched note (still failing), pulse no candidate
+- **Issue #600** (closed): Measurement catches that turn bugs into 'estimator refused' (sound_report.m_noise_share, moog_probe.scan, 11 more)
+- **PR #604**: Measurement catches no longer turn bugs into 'estimator refused' (#600)
+- **PR #601**: [#557] BD pitch envelope: pre-tuning freeze (conditions, metric, min-improvement rule, preservation limits)
+- **Issue #568** (closed): synth_count.sh prints blank cell counts and exits 0 when yosys fails
+- **PR #596**: [#568] synth_count: refuse instead of printing blank cell counts
+- **Issue #564** (closed): Collect the 57 in-file tests that pytest never runs (excitation_energy, dc_blocker, discrimination_*)
+- **PR #590**: Collect the 57 in-file tests pytest never ran, with a collection-inventory guard (#564)
+- **PR #597**: [#556] MA/RS stage-attribution instrument (measurement only, no repair)
+- **PR #589**: #558 toms/congas vs the gate: negative under the frozen rule; post-hoc, a BP numerator cuts conga pitch_shape (waiting on #350); impulse moves with the gate's rate path (#588); no sound change
+- **PR #587**: [#557] BD pitch-trajectory estimator, qualification and baseline script (instrument only)
+- **PR #586**: Envelope response: prior-note attack shortening is not residual envelope level (#337)
+
 ### 2026-10-08
 
 Closure events below record forge state, not a verified fix or a new sound result.
