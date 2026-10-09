@@ -21,12 +21,8 @@ _None._
 Human-approved issues ready for implementation (`loom:issue`).
 
 - **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
-- **#247**: Model/RTL mismatch: glide between increments >= 2^23 (register-legal, above Nyquist) diverges after ~7 frames
 - **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
-- **#283**: trials: check-receipt accepts a receipt with a required child deleted (including zero required children -> PASS)
-- **#288**: midi_session: refuse real sessions when an internal fault-injection set is non-empty
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
-- **#321**: NUMERIC-CONTRACT: sections 5.1 and 5.2 never recorded revision 9's registers, and still specify wave[k] as 3 bits where 6.4 defines nine codes
 - **#337**: Sound: mono character — oscillator mixtures, drift, drive/resonance, envelope response; M1A as a phase-aware question
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
@@ -44,7 +40,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#247**: Model/RTL mismatch: glide between increments >= 2^23 (register-legal, above Nyquist) diverges after ~7 frames
 
 ## PRs Awaiting Review
 
@@ -75,12 +71,9 @@ Issues carrying `loom:curated`.
 - **#247**: Model/RTL mismatch: glide between increments >= 2^23 (register-legal, above Nyquist) diverges after ~7 frames *(curated)*
 - **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place *(curated)*
 - **#282**: Epic: great-sounding mono Moog-like synth and complete 808 kit (plan098) *(curated)*
-- **#283**: trials: check-receipt accepts a receipt with a required child deleted (including zero required children -> PASS) *(curated)*
 - **#285**: CLAUDE.md headless rule: say how to wait on jobs longer than one foreground call (10 min cap) *(curated)*
-- **#288**: midi_session: refuse real sessions when an internal fault-injection set is non-empty *(curated)*
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms) *(curated)*
 - **#310**: Sweep hygiene: a killed sweep leaves its nohup'd heavy job running, and nothing reaps or surfaces it *(curated)*
-- **#321**: NUMERIC-CONTRACT: sections 5.1 and 5.2 never recorded revision 9's registers, and still specify wave[k] as 3 bits where 6.4 defines nine codes *(curated)*
 - **#334**: Sound: shared tom/conga body-spectrum failures — test a common cause before tuning six presets *(curated)*
 - **#335**: Sound: cowbell partial balance (2.82x tolerance) — local voicing repair *(curated)*
 - **#336**: Sound: rimshot spectrum, maracas envelope/band balance, and hat/cymbal qualification — cover every advertised drum *(curated)*
@@ -97,6 +90,7 @@ Issues carrying `loom:curated`.
 - **#557**: [sound] BD: missing pitch drop (pitch_shape 22.2x; about 230 cents) *(curated)*
 - **#558**: [sound] toms and congas: pitch trajectory and strike impulse fail the gate (MC 19.4x, LC 16.4x, LT 14.8x, MT 10.5x, HC 8.7x, HT 8.0x) *(curated)*
 - **#564**: Collect the 57 in-file tests that pytest never runs (excitation_energy, dc_blocker, discrimination_*) *(curated)*
+- **#565**: Refuse to report 'routed' from an incomplete nextpnr log (fpga/scripts/report.sh + fpga/Makefile) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -113,11 +107,11 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 2 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 19 |
-| In Progress (`loom:building`) | 0 |
+| Ready (`loom:issue`) | 15 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 2 |
-| Curated | 34 |
+| Curated | 32 |
 | Architect / Hermit proposals | 1 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
