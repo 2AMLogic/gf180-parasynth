@@ -185,6 +185,26 @@ def test_unsatisfiable_gate_is_reported_not_passed(record):
     assert bp.satisfiable(record, b)["satisfiable"] is False
 
 
+@pytest.mark.parametrize("sr", [48000, 44100])
+def test_onset_phase_alone_cannot_satisfy_the_rule(record, sr):
+    """Rule 8, the input that could defeat the primary metric: #558 found the
+    gate's pitch_shape reads onset phase.  glide_cents does too (~10.5 cents at
+    48k, ~6.6 at 44.1k on a CONSTANT-pitch tone, closed-form signals written
+    here), so a phase-only change must stay below the rule's apparatus part
+    even with a zero recording spread."""
+    import math
+    import numpy as np
+    import pitch_trajectory as pt
+    t = np.arange(sr) / sr
+    g = {}
+    for name, ph in (("sin", 0.0), ("cos", math.pi / 2)):
+        y = np.concatenate([np.zeros(sr // 100), np.sin(2 * np.pi * 49.4 * t + ph) * np.exp(-t / 0.142)])
+        g[name] = pt.glide_cents(pt.trajectory(0.5 * y, sr, 52.0))
+    phase_only = abs(g["cos"] - g["sin"])
+    assert phase_only > 3.0, "the phase effect vanished: re-measure and update the record"
+    assert phase_only < bp.minimum_improvement_cents(record, {"recording_glide_spread_cents": 0.0})
+
+
 def test_cli_refuses_missing_baseline(tmp_path, capsys):
     assert bp.main(["min-improvement", "--baseline", str(tmp_path / "none.json")]) == 2
     assert "REFUSED" in capsys.readouterr().out
