@@ -545,6 +545,13 @@ def regen() -> int:
     if p0["sources_dirty"]:
         raise Refused("regen needs a clean tools/ and model/: commit first, so every record names a real commit")
     D = "docs/scorecard/chcp-559"
+    # Shared recordings first, in this one process: two streams writing and
+    # reading the same cache file at once could read a half-written array.
+    import chcp_559_select as sel
+    cp_snl(N_REC)
+    for f in sel.CPT_F_HZ:
+        cpt_tail_tap(f, sel.CPT_Q, sel.CPT_EXC_ATT, N_REC)
+    print("shared recordings cached", flush=True)
     me = [sys.executable, str(pathlib.Path(__file__).resolve())]
     conf = lambda snd, name, cand: [*me, "confirm", "--sound", snd, "--sweep", f"{D}/{snd.lower()}-sweep-dev.json",
                                     "--cand", json.dumps(cand), "--out", f"{D}/{snd.lower()}-confirm-{name}.json"]
