@@ -84,3 +84,60 @@ def test_summarise_known_answer():
     s = L.summarise(ev)
     assert s["max_abs"] == 4.0 and s["mean_signed"] == 0.0
     assert s["rms"] == pytest.approx(math.sqrt(12.5)) and s["pitch_abs"] == 0.2
+
+
+# ---------------------------------------------- apparatus-precondition controls
+KEYS = ("Harmonic shape", "Foldback energy", "Gain", "Pitch")
+RECS = {c: {k: {"value": v} for k, v in zip(KEYS, (7.0, 2.0, -18.0, 0.1))}
+        for c in ("M5A", "M5B")}
+
+
+def fake(sha, **over):
+    m = {k: {"value": RECS["M5A"][k]["value"]} for k in KEYS}
+    for k, v in over.items():
+        m[k.replace("_", " ")] = {"value": v}
+    return {"metrics": m, "_sha": sha}
+
+
+def pre(a=None, b=None, probe=None):
+    return L.establish_preconditions(a or fake("A"), b or fake("B"),
+                                     probe or fake("P"), load_record=lambda c: RECS[c])
+
+
+def test_preconditions_positive_leg_passes():
+    r = pre()
+    assert r["baseline_matches_records"] and r["drive_changes_audio"]
+    assert r["baseline_sha"] == "A" and r["drive0.5_sha"] == "P"
+    # a deviation inside RECORD_TOL is accepted (the guard is not trivially strict)
+    assert pre(a=fake("A", Gain=-18.0 + L.RECORD_TOL / 2))
+
+
+@pytest.mark.parametrize("which", ["a", "b"])
+@pytest.mark.parametrize("key", ["Harmonic_shape", "Foldback_energy", "Gain", "Pitch"])
+def test_baseline_mismatch_is_refused_for_every_metric_and_case(which, key):
+    bad = fake("A" if which == "a" else "B", **{key: RECS["M5A"][key.replace("_", " ")]["value"] + 0.1})
+    with pytest.raises(L.Refused, match="baseline M5[AB] .* != record"):
+        pre(**{which: bad})
+
+
+def test_baseline_mismatch_just_over_tolerance_is_refused():
+    with pytest.raises(L.Refused, match="baseline"):
+        pre(a=fake("A", Gain=-18.0 + 2 * L.RECORD_TOL))
+
+
+def test_baseline_nan_is_refused_not_passed():
+    # NaN > tol is False: a naive comparison guard would silently accept it
+    with pytest.raises(L.Refused):
+        pre(a=fake("A", Gain=float("nan")))
+
+
+def test_unchanged_candidate_audio_is_refused():
+    with pytest.raises(L.Refused, match="did not change the audio"):
+        pre(probe=fake("A"))
+
+
+def test_unchanged_audio_refused_even_when_metrics_differ():
+    # same bytes, different metrics dict: the SHA is the evidence, not metrics
+    with pytest.raises(L.Refused, match="did not change the audio"):
+        pre(probe=fake("A", Gain=-30.0))
+

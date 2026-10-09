@@ -142,10 +142,15 @@ def render(case, drive, vol_db=0.0, vol_wave=None):
         sc._voice_patch, sc._patch_for_wave = orig_voice, orig_wave
 
 
-def check_record(case, result):
-    rec = json.loads((ROOT / f"docs/scorecard/results/{case}.json").read_text())["metrics"]
+def _load_record(case):
+    return json.loads((ROOT / f"docs/scorecard/results/{case}.json").read_text())["metrics"]
+
+
+def check_record(case, result, load_record=_load_record):
+    rec = load_record(case)
     for k in ("Harmonic shape", "Foldback energy", "Gain", "Pitch"):
-        if abs(result["metrics"][k]["value"] - rec[k]["value"]) > RECORD_TOL:
+        # `not (<= tol)`, not `> tol`: NaN must be refused, not pass
+        if not abs(result["metrics"][k]["value"] - rec[k]["value"]) <= RECORD_TOL:
             raise Refused(f"baseline {case} {k} {result['metrics'][k]['value']} != record {rec[k]['value']}")
 
 
@@ -153,16 +158,22 @@ def officials(result):
     return {k: round(v["value"], 4) for k, v in result["metrics"].items()}
 
 
+def establish_preconditions(base_m5a, base_m5b, probe, load_record=_load_record):
+    """Apparatus preconditions; raises Refused (never returns data) on failure.
+    Injectable inputs so tests can feed the exact defeating cases."""
+    check_record("M5A", base_m5a, load_record)
+    check_record("M5B", base_m5b, load_record)
+    if probe["_sha"] == base_m5a["_sha"]:
+        raise Refused("drive change did not change the audio: apparatus does not apply drive")
+    return {"baseline_matches_records": True, "drive_changes_audio": True,
+            "baseline_sha": base_m5a["_sha"], "drive0.5_sha": probe["_sha"]}
+
+
 def main():
     run = {"preconditions": {}, "development": {}, "confirmation": {}}
     base_m5a, base_m5b = render("M5A", BASE_DRIVE), render("M5B", BASE_DRIVE)
-    check_record("M5A", base_m5a)
-    check_record("M5B", base_m5b)
     probe = render("M5A", 0.5)
-    if probe["_sha"] == base_m5a["_sha"]:
-        raise Refused("drive change did not change the audio: apparatus does not apply drive")
-    run["preconditions"] = {"baseline_matches_records": True, "drive_changes_audio": True,
-                            "baseline_sha": base_m5a["_sha"], "drive0.5_sha": probe["_sha"]}
+    run["preconditions"] = establish_preconditions(base_m5a, base_m5b, probe)
     run["development"]["baseline"] = {w: summarise(_events(base_m5a, w)) for w in WAVES}
     run["development"]["baseline_official"] = officials(base_m5a)
     run["confirmation"]["baseline"] = {w: summarise(_events(base_m5b, w, CONFIRM_MIDI)) for w in WAVES}
