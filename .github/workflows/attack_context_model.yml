@@ -3,10 +3,12 @@ name: attack-context-model
 on:
   workflow_dispatch:
   push:
-    branches: [measure/mono-attack-model-context]
+    branches: [measure/mono-attack-model-context, 'feature/issue-*']
     paths:
       - '.github/workflows/attack_context_model.yml'
       - 'tools/compare_mono_attack_context.py'
+      - 'tools/measure_mono_m5a_reference.py'
+      - 'tools/measure_mono_attack_context.py'
       - 'model/**'
 
 permissions:
