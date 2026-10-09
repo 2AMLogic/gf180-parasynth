@@ -115,7 +115,18 @@ properties of the M5 cases must not change validity (checked in the report).
 
 ---
 
-## Results (written after the run; nothing above was changed)
+## Results (written after the run)
+
+Correction (#611): the original wording here said nothing above was changed.
+That was wrong. The results commit (4928743) revised one pre-registered
+sentence: the "same operator and same session" claim for M5A/M5B was unverified
+and was replaced by "same patch settings (per the frozen manifests' patch
+records; not re-audited here)". No rule, candidate, tolerance or threshold
+changed. A separate #611 change (after the run) made the baseline-record check
+refuse a NaN deviation, which the earlier `> tol` form would have accepted;
+this run's baseline deviations were finite and within 5e-3, so the reported
+numbers are unaffected, but the run was not repeated. The refusal paths now
+have injected-defect controls in `tools/test_lead_drive_337.py`.
 
 Record: `report.json`, from commit `f31cc09` (`worktree_dirty: false`), one
 process of 2 min 8 s, `nice`'d, on the selected engine. Preconditions held: the
