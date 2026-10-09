@@ -19,7 +19,7 @@ section 4 on `origin/main`, and the baseline below reproduces that section exact
 |---|---|---|---|
 | LC, MC, HC | pitch_shape 16.4 / 19.4 / 8.7x | **About 60 % of it is the circuit's band-pass numerator.** Our all-pole mode has a sin-phase onset and the bridged-T has a cos-phase one, and the gate reads that phase as roughly 37 cents of onset "pitch". This was confirmed on 10 of 10 untouched conga conditions (below). The remaining 3-21x is not explained. | **Blocked by #350.** On the fixed-point bank the numerator lowers the mode's state into the modal deadband, and `decay` breaks on 6 of 10 untouched congas. #351 found the same thing on body spectrum. |
 | LT, MT, HT | pitch_shape 3.0 / 1.0 / 1.2x | The numerator is not the lever. In the float twin it gives a median -15 % on untouched toms, and on the fixed-point bank LT gets worse (3.3 -> 6.4). The 808's LT reads 74 cents at onset and ours reads 35 (`baseline.json`). The size and time constant of this unit's diode drop are **not tested** here. | No candidate. |
-| all six (and BD) | impulse 3.8-5.0x | **The gate's rate path, not the strike.** The 808 takes are 44.1 kHz and the gate resamples them to 48 kHz, which leaves resampler images in an otherwise empty band above 2 kHz. Our render is native 48 kHz and has no such images. Passing the *same* shipped render through the take's own rate brings `impulse` within its bar on 21 of 30 conditions (0 of 30 as it stands). | Not a sound repair. It goes to the gate as a rubric issue (separate experiment). |
+| all six (and BD) | impulse 3.8-5.0x | **The gate's rate path, not the strike.** The 808 takes are 44.1 kHz and the gate resamples them to 48 kHz, which leaves resampler images in an otherwise empty band above 2 kHz. Our render is native 48 kHz and has no such images. Passing the *same* shipped render through the take's own rate brings `impulse` within its bar on 21 of 30 conditions (0 of 30 as it stands). | Not a sound repair. It goes to the gate as a rubric issue, #588 (separate experiment). |
 | LT (also MT) | modulation 14.8x (4.8x) | **Pointer only:** the 808's toms carry H2..H4 at -33 to -41 dB re H1, and ours sit below -80 dB. A quadratic term that puts H2 at the 808's level halves LT's figure (14.85 -> 7.54) on the seen target, with no other feature moving (`harmonics.json`). | Not tested as a candidate. |
 
 ## 1. Baseline, reproduced (`baseline.json`)
@@ -165,7 +165,7 @@ GF180_TR808_FISCHER=$R $P -m pytest -q tools/probes/test_tom_conga_gate.py
 ## 8. Next steps (not done here)
 
 - **#350:** fix the modal deadband, then re-run `run` unchanged. The conga numerator is the candidate waiting on it.
-- **Gate rubric (new issue):** put candidates through the target's rate path, or band-limit the impulse body term. Either needs its own
+- **Gate rubric (#588):** put candidates through the target's rate path, or band-limit the impulse body term. Either needs its own
   experiment with harmful counterexamples, such as a real body click that must still fail. Also say in the gate's doc that pitch_shape
   reads onset phase.
 - **Toms:**
