@@ -125,7 +125,8 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     # GitHub-hosted (free on a public repo) since the 2026-09-30 Blacksmith
-    # outage and the operator's move of every public repo off Blacksmith (D5).
+    # outage and the operator's move of every public repo off Blacksmith
+    # (2am `docs/ci.md` §"Blacksmith: decided 2026-09-28, retire").
     runs-on: ubuntu-24.04
     # 30 was already marginal before the claim-checker steps below: the two
     # runs on this PR took 14m39s and 27m20s, so the job's own variance nearly
@@ -486,8 +487,9 @@ jobs:
   # Gated on `changes` like every other suite job (#457): tools/ is always
   # `full`, so an edit to a tool or its test always runs this. GitHub-hosted
   # since the operator's 2026-09-30 move of every public repo off Blacksmith
-  # (D5); the 60-minute cap is ~2.9x the ~21 min measured on Blacksmith, the
-  # same kind of headroom the `python` job's 70 gives over its hosted max.
+  # (2am `docs/ci.md` §"Blacksmith: decided 2026-09-28, retire"); the
+  # 60-minute cap is ~2.9x the ~21 min measured on Blacksmith, the same kind
+  # of headroom the `python` job's 70 gives over its hosted max.
   tools:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}

@@ -81,7 +81,8 @@ on:
 jobs:
   acceptance:
     # GitHub-hosted (free on a public repo) since the 2026-09-30 Blacksmith
-    # outage and the operator's move of every public repo off Blacksmith (D5).
+    # outage and the operator's move of every public repo off Blacksmith
+    # (2am `docs/ci.md` §"Blacksmith: decided 2026-09-28, retire").
     # The header's measurement is why the cap moves with it: on the hosted
     # class this job ran 8.9 / 15.3 / 20.0 min (min/median/max, n=51) and 20%
     # of runs hit the old 20-minute cap, while the Blacksmith worst case was
