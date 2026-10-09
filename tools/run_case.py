@@ -3438,10 +3438,12 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
         held = json.loads(dest.read_text())
     except (OSError, ValueError) as e:
         # Unreadable is not "not an anchor": it may BE an anchor (a 25-minute
-        # RTL run) that is merely damaged, and the caller is about to write.
-        # An integrated-rtl result may repair it; a model result must not (#610).
-        if res.get("engine") == "integrated-rtl":
-            return dest
+        # RTL run) that is merely damaged, and the caller is about to write, so
+        # a model result must not overwrite it (#610). An integrated-rtl result
+        # returned `dest` above, but that only SELECTS the destination: the
+        # write path (`write_result`) then runs `carry_rubric_history`, which
+        # refuses the corrupt record too, so no engine repairs it. Restoring it
+        # from git is the only repair, by design.
         raise Refused(f"{dest} is present but unreadable ({type(e).__name__}: {e}); "
                       f"it may be an integrated-rtl anchor, so a {res.get('engine')} "
                       f"result will not overwrite it. Restore it from git.")
@@ -3454,6 +3456,22 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
           f"{twin.relative_to(dest.parent.parent) if dest.parent.parent in twin.parents else twin}"
           f" rather than replacing it. Neither is discarded.")
     return twin
+
+
+def write_result(case: dict, dest: pathlib.Path, res: dict, *,
+                 carry_history: bool = True) -> pathlib.Path:
+    """The batch write path, in the order it must run: choose WHERE
+    (`result_destination`), carry the record's earlier scores
+    (`carry_rubric_history`), and only then write. Returns the path written.
+
+    Both guards raise `Refused` before a byte changes, so a corrupt existing
+    record is never overwritten by any engine (#600, #610). A `Refused` is not
+    caught here; inside `--batch` it ends the run (#615)."""
+    dest = result_destination(dest, res)
+    if carry_history:
+        carry_rubric_history(case, dest, res)
+    dest.write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
+    return dest
 
 
 def carry_rubric_history(case: dict, dest: pathlib.Path, res: dict) -> None:
@@ -4220,10 +4238,7 @@ def main(argv=None) -> int:
         injected_verdicts[cid] = (state, worst, why, res.get("note", ""))
         res.setdefault("provenance", {})["outcome_code"] = OUTCOME_CODE[state]
         if not a.dry_run:
-            dest = result_destination(outdir / f"{cid}.json", res)
-            if not a.inject:
-                carry_rubric_history(c, dest, res)
-            dest.write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
+            write_result(c, outdir / f"{cid}.json", res, carry_history=not a.inject)
         states[state] = states.get(state, 0) + 1
         code = max(code, OUTCOME_CODE[state])
         if "traceback" in res:

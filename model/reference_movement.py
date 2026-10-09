@@ -280,7 +280,8 @@ def stage_plugins(devices, cache):
             except NotImplementedError as e:
                 print(f"  {name}: NOT ANSWERABLE -- {type(e).__name__}: {e}", flush=True)
                 rows.append(dict(device=name, status="not-answerable",
-                                 error_type=type(e).__name__, why=str(e)))
+                                 error_type=type(e).__name__,
+                                 why=f"{type(e).__name__}: {e}"))
                 break
             env = am.analytic_envelope(y)
             e = am.envelope_ripple_db(env, SR, lp_hz=LP_HZ)
