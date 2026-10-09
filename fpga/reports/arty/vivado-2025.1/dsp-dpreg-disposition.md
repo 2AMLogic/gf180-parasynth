@@ -361,7 +361,10 @@ Per the house rule — a workaround or tool defect is a deliverable:
    literals selects no branch, the mux output stays X ("No generate items
    found" debug note); the identical source elaborates correctly under
    `-g2005`. Workaround here: compile with `-g2005`. Candidate upstream:
-   steveicarus/iverilog.
+   steveicarus/iverilog. **Status: not yet filed; awaiting an operator.** The
+   ready-to-paste report is `docs/upstream/iverilog-generate-case-string-param.md`
+   (issue #608); `tools/check_iverilog_generate_case_string.py` reports
+   whether the defect is still present on the installed simulator.
 2. **Vivado 2025.1 DPREG-4 message could state the checker's bounds.** All
    13 warnings quote the same paragraph for two structurally different
    situations (a genuinely unconstrained dynamic OPMODE vs a same-net-paired
