@@ -335,7 +335,8 @@
   "limits_of_this_split": [
    "Accent levels with a reference cannot be held out (two levels exist, both used); the held-out accent evidence is MARS cells A01/E05/F06 plus one reference-less model condition at 2.0.",
    "Retrigger has no recording on either corpus (single hits only). Retrigger conditions therefore carry no pass bar on glide: a bar there would be calibrated on our own model.",
-   "MARS DECAY letters are not mapped to our DECAY knob; the accent metric is a within-cell difference so that unmapped offset cancels to first order. That cancellation is an assumption, labelled here."
+   "MARS DECAY letters are not mapped to our DECAY knob; the accent metric is a within-cell difference so that unmapped offset cancels to first order. That cancellation is an assumption, labelled here.",
+   "The axis-held-out guard is satisfied on ACCENT only by MARS cells A01/E05/F06 (cell, not level) and by U-R300-D50-A2, a reference-less condition with no bar: the new accent LEVEL measures nothing against the 808. The guard does not require a held-out value to sit on a condition that carries a bar; this is stated rather than enforced (PR #601 review, rule 8)."
   ]
  },
  "primary_metric": {
@@ -349,12 +350,37 @@
   "applies_to": "Fischer conditions",
   "aggregate": "median over UNTOUCHED Fischer conditions of |d_c|",
   "improvement": "aggregate(shipped) - aggregate(candidate), in cents",
-  "pass": "improvement >= minimum_improvement (below), AND the per_condition_no_worsening guard holds on every untouched Fischer condition; raw d_c for every condition is reported beside any ratio",
+  "pass": "improvement >= minimum_improvement (below), AND the per_condition_no_worsening guard holds on every MEASURED untouched Fischer condition (refused_readings below), AND no candidate refusal; raw d_c for every condition, and the excluded list, are reported beside any ratio",
   "why_glide": "glide_cents is early-window minus late-window of ONE trajectory, so a constant tuning shift cannot move it (qualified in tools/test_pitch_trajectory.py), and both windows start after 10 ms, so the 4 ms attack retune cannot be read as glide",
   "onset_phase_known_answer": {
-   "finding": "glide_cents reads onset phase: a constant-pitch decaying sinusoid (tau 142 ms, f0 49.4 and 52.0 Hz) reads 10.4-10.5 cents more glide with a cos-phase onset than a sin-phase one at 48 kHz, 6.6 cents at 44.1 kHz. Same class as #558's finding for the gate's pitch_shape (~37 cents).",
-   "consequence": "below the per-reading floor (13.9) and well below the frozen minimum improvement (2 x 13.9 + spread), so an onset-phase change ALONE cannot satisfy the rule. A candidate that changes the resonator's numerator or onset phase must still report this term beside its improvement.",
+   "finding": "glide_cents reads onset phase: a constant-pitch decaying sinusoid (true glide 0) reads up to 17.5 cents more glide with a cos-phase onset than a sin-phase one. Worst cell: DECAY knob 1.0 (Q 5.2, tau ~33 ms), 49.4 Hz, 48 kHz. At knob 5 (tau ~142 ms) it is 10.4 cents at 48 kHz and 6.6 at 44.1 kHz, the figure the first version of this record stated as if it were the worst case. Swept by tools/bd_glide_phase_sweep.py over BD_DECAY_Q's knobs (0, 1, 2.5, 5, 7.5, 9, 10), f0 45/49.4/55 Hz, 48 and 44.1 kHz; knob 0 refuses (refused_readings). Same class as #558's finding for the gate's pitch_shape (~37 cents).",
+   "worst_cents": 17.5,
+   "worst_at": {
+    "sr": 48000,
+    "decay_knob": 1.0,
+    "f0_hz": 49.4
+   },
+   "margin_x": 1.59,
+   "consequence": "every measurable cell is below the rule's apparatus part, 2 x 13.9 = 27.8 cents, so an onset-phase change ALONE cannot satisfy the rule; the margin is 27.8 / 17.5 = 1.6x, not the 2.6x the knob-5 figure implied. The worst cell exceeds the single-reading floor (13.9), so a candidate that changes the resonator's numerator or onset phase must report this term beside its improvement.",
    "test": "tools/test_bd_pitch_predeclaration.py::test_onset_phase_alone_cannot_satisfy_the_rule"
+  },
+  "refused_readings": {
+   "why": "glide_cents REFUSES when the ring has died before LATE_WINDOW_S (80-130 ms). At DECAY knob 0 (Q 2.3, tau ~15 ms) the closed-form known answer refuses at 48 and 44.1 kHz and at 45/49.4/55 Hz, and two untouched Fischer conditions sit at knob 0. Declared here, before candidates exist, so that what a refusal does to the median is not chosen afterwards (PR #601 review).",
+   "reading": "only a finite real number is a reading. A Refused, None, NaN, inf, bool or string (even \"0\") is REFUSED. A refusal is NEVER converted to a number: never a 0-cent reading, never a 0-cent |d_c|.",
+   "exclude": "a condition whose REFERENCE or SHIPPED reading is REFUSED is excluded from BOTH the shipped and the candidate median (the two medians are always over the same set), and is listed by id with the side that refused.",
+   "candidate_refusal": "a condition whose reference and shipped readings are measured but whose CANDIDATE reading is REFUSED is a FAILURE of the candidate (it made a measurable trajectory unmeasurable). It is not excluded and no candidate median is formed.",
+   "min_measured_conditions": 6,
+   "min_measured_why": "8 untouched Fischer conditions minus the 2 predicted to refuse. Losing any further condition means the aggregate rests on a set nobody declared before candidates existed.",
+   "held_out_after_exclusion": "the measured set must still contain a TONE value and a DECAY value that development never used (with the 2 predicted refusals excluded, DECAY stays held out through 75 and 10, TONE through 75, 00 and 10).",
+   "too_few_outcome": "REFUSED: no improvement is claimed, pass or fail, and the result is reported as REFUSED with the excluded list. It is NEVER a pass. The minimum is not lowered to admit a result.",
+   "predicted_refusals": [
+    "U-F-T50-D00",
+    "U-F-T00-D00"
+   ],
+   "prediction_basis": "closed-form known answer only (no Fischer or MARS file was read). Whether the 808's own knob-0 recordings refuse is unknown until the baseline runs; if they measure, the conditions are included only if ours measures too.",
+   "implemented_by": "tools/bd_pitch_predeclaration.py::primary_aggregate",
+   "known_answer": "tools/test_bd_pitch_predeclaration.py::test_glide_refuses_at_decay_knob_0",
+   "controls": "tools/test_bd_pitch_predeclaration.py::test_control_refused_rule_removed_is_caught, test_control_refusal_read_as_zero_reading_breaks_the_known_answer, test_control_refusal_read_as_zero_error_breaks_the_known_answer"
   }
  },
  "minimum_improvement": {
