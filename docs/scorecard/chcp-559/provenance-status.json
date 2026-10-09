@@ -1,0 +1,33 @@
+{
+ "about": "Labels on the records in this directory, NOT results. Written by hand at the #595 review (2026-10-09) so that no record is read as clean evidence while its own provenance fields say it cannot be reproduced. The result JSONs are left exactly as their runs wrote them. Regenerate with `python3 tools/probes/chcp_559.py audit`; tools/probes/test_chcp_559.py fails if an unreproducible record is missing from this list. Remove an entry only when the build-box rerun (README, 'Build-box rerun request') has replaced the record with a clean one.",
+ "records": {
+  "ch-sweep-dev.json": {
+   "status": "UNREPRODUCIBLE",
+   "why": "Rendered on a dirty tree: model_sha16 730264ba1988eb1d was never committed (commit 460d0628 holds 76bf5af0763581c3). No engine_fingerprint, probe_sha16, measure_sha16 or sources_moved_during_run recorded. docs/sensitivity/ch-hp-q.json, hat-bp-q.json and chcp559-sweeps.txt derive from it."
+  },
+  "ch-confirm-hpq05.json": {
+   "status": "UNREPRODUCIBLE -- the PR's headline CH figure",
+   "why": "Written by the probe version that took provenance at the END of the run. Its .log shows the run started on model 50d295f6859e9c13 / engine ceecf14933fddc78; the .json names model 136fbadcc3a8a3ff / engine 21e3c4db24e21db4. The model file changed mid-run and the JSON does not say so. 50d295f6 was never committed. The confirm guard that admitted it compared a reconstruction of the sweep's engine from its nominal commit, not the engine the sweep ran on."
+  },
+  "ch-confirm-hpq05-bpq3.json": {
+   "status": "UNREPRODUCIBLE",
+   "why": "Dirty tree (commit 460d0628 + uncommitted edits); probe_sha16 moved during the run (bc259ba4 -> 35e194b1). Its CONFIRM medians for the SHIPPED kit match ch-confirm-hpq05.json exactly (Judge supplementary check), which makes the headline number likely, not established."
+  },
+  "cp-sweep-dev.json": {
+   "status": "UNREPRODUCIBLE",
+   "why": "Dirty tree at b10a6e8f; no engine/probe/measurement hash, no start/end comparison."
+  },
+  "cpt-sweep-dev.json": {
+   "status": "UNREPRODUCIBLE",
+   "why": "Dirty tree at 460d0628 with model 50d295f6859e9c13, never committed; no engine/probe/measurement hash, no start/end comparison."
+  },
+  "check-fast.json": {
+   "status": "UNREPRODUCIBLE",
+   "why": "Carries no provenance fields at all."
+  },
+  "cp-tail.json": {
+   "status": "CLEAN-BUT-INCOMPLETE",
+   "why": "Clean commit 23e49751, nothing moved during the run. Lacks only measure_sha16, a field added after it was written, so the gate/loader source it measured with is not hashed."
+  }
+ }
+}

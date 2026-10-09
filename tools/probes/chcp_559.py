@@ -213,6 +213,76 @@ def engine_fingerprint(dx=None) -> str:
     return h.hexdigest()[:16]
 
 
+# engine_fingerprint_at(commit) was REMOVED (#595 review): it rebuilt a sweep's
+# fingerprint from the sweep's nominal commit, so a sweep rendered on an
+# UNCOMMITTED model (ch-sweep-dev.json: model 730264ba, never committed) was
+# checked against the committed 76bf5af0 instead, and it read TODAY's fixed.py
+# and modal_fixed.py for both sides. The confirm guard now compares the
+# provenance the sweep RECORDED (check_sweep_compatible) and refuses when it is
+# absent.
+
+#: Measurement and selection code outside this probe that a record's numbers
+#: depend on: the gate's features and bars, the reference loader, the d12a
+#: metrics. probe_sha16 covers chcp_559.py and chcp_559_select.py; this covers
+#: the rest, so a changed measurement is a changed provenance.
+MEASURE_FILES = ("tools/perceptual_gate.py", "tools/run_case.py", "tools/clap_d12a_probe.py")
+
+#: What must be equal between a DEV sweep and the CONFIRM run that confirms its
+#: selection, and between the start and the end of any run.
+PROVENANCE_KEYS = ("model_sha16", "engine_fingerprint", "probe_sha16", "measure_sha16")
+#: Every field a record must carry to be judged at all (absent is a refusal).
+REQUIRED_FIELDS = ("commit", "sources_dirty", "sources_moved_during_run", *PROVENANCE_KEYS)
+
+
+def record_provenance_problems(rec: dict) -> list:
+    """Why a committed record cannot be reproduced from the source it names
+    ([] = it can). A record is reproducible only if it was written from a
+    clean, committed tree whose sources did not move during the run, and it
+    carries every provenance field. Absent is a problem, not a pass."""
+    probs = []
+    for k in REQUIRED_FIELDS:
+        if k not in rec:
+            probs.append(f"no {k} recorded")
+    if rec.get("sources_dirty") is True:
+        probs.append("rendered on a dirty tools/ or model/ (the named commit is not the source)")
+    if rec.get("sources_moved_during_run"):
+        probs.append(f"sources moved during the run: {rec['sources_moved_during_run']}")
+    if rec.get("provenance_ok") is False:
+        probs.append("the run itself flagged provenance_ok: false")
+    return probs
+
+
+def check_sweep_compatible(sw: dict, now: dict, name: str = "the sweep") -> None:
+    """REFUSE a confirmation unless the DEV sweep is reproducible and was
+    rendered and measured by exactly the sources this run will use. Called
+    before any CONFIRM render. Compares what the sweep RECORDED; nothing is
+    reconstructed from its commit."""
+    probs = record_provenance_problems(sw)
+    if probs:
+        raise Refused(f"{name} has unreproducible provenance: {'; '.join(probs)}")
+    if now.get("sources_dirty"):
+        raise Refused("confirm needs a clean tools/ and model/: a confirmation from a dirty tree names no source")
+    diff = {k: [sw.get(k), now.get(k)] for k in PROVENANCE_KEYS if sw.get(k) != now.get(k)}
+    if diff:
+        raise Refused(f"{name} was rendered/measured by different sources than this run: {diff}")
+
+
+def provenance_verdict(prov0: dict, prov1: dict) -> tuple:
+    """(moved, ok) for a run whose provenance was taken at START (prov0) and END
+    (prov1). Any difference means the sources the record names are not provably
+    the ones that produced it, so the record is flagged and the run exits
+    nonzero. A dirty start tree is flagged too (ok False) but is not 'moved'."""
+    moved = {k: [prov0.get(k), prov1.get(k)] for k in set(prov0) | set(prov1) if prov0.get(k) != prov1.get(k)}
+    return moved, (not moved and not prov0.get("sources_dirty"))
+
+
+#: The name 2a4f1d3a's controls call; one guard, not two.
+check_sweep_provenance = check_sweep_compatible
+
+#: Exit status for a run that completed but whose sources moved under it.
+EXIT_PROVENANCE_MOVED = 3
+
+
 def render_block(sound: str, kit: list, hit: int, accent: float = 1.0, seconds: float = 2.2) -> np.ndarray:
     """One hit through the REAL DrumsFx and output stage, exactly as
     run_case.render_drum_solo does it, with `kit` in place of the shipped
@@ -536,7 +606,8 @@ def regen() -> int:
     conf = lambda snd, name, cand: [*me, "confirm", "--sound", snd, "--sweep", f"{D}/{snd.lower()}-sweep-dev.json",
                                     "--cand", json.dumps(cand), "--out", f"{D}/{snd.lower()}-confirm-{name}.json"]
     streams = {
-        "A": [("cp-tail", [*me, "cp-tail", "--out", f"{D}/cp-tail.json"]),
+        "A": [("check-fast", [*me, "check-fast", "--out", f"{D}/check-fast.json"]),
+              ("cp-tail", [*me, "cp-tail", "--out", f"{D}/cp-tail.json"]),
               ("baseline", [*me, "baseline", "--out", f"{D}/baseline.json"]),
               ("cp-sweep", [*me, "cp-sweep", "--out", f"{D}/cp-sweep-dev.json"])]
              + [(f"cp-frontier-{i}", conf("CP", f"frontier-{c['family']}", c)) for i, c in enumerate(CP_FRONTIER[:2])],
@@ -574,8 +645,39 @@ def regen() -> int:
     if {k: p0[k] for k in p0 if k != "sources_dirty"} != {k: p1[k] for k in p1 if k != "sources_dirty"}:
         print(f"REGEN: sources moved during the run {p0} -> {p1}", flush=True)
         return 1
-    print(f"REGEN OK at {p0['commit'][:12]}: streams {status}, tables exit {r.returncode}", flush=True)
-    return r.returncode
+    if r.returncode:
+        print(f"REGEN: tables exit {r.returncode}", flush=True)
+        return r.returncode
+    au = audit()
+    bad = {n: x for n, x in au["records"].items() if x}
+    if bad or au["clean_commits"] != [p0["commit"]]:
+        print(f"REGEN: audit failed: unreproducible {bad}; clean commits {au['clean_commits']}", flush=True)
+        return 1
+    print(f"REGEN OK at {p0['commit'][:12]}: streams {status}, tables exit 0, audit "
+          f"{len(au['records'])}/{len(au['records'])} clean at one commit", flush=True)
+    return 0
+
+
+RECORD_DIR = "docs/scorecard/chcp-559"
+#: The hand-maintained list of records known to be unreproducible, with why.
+#: Not a result: a label on results, so the result JSON is never edited by hand.
+STATUS_SIDECAR = "provenance-status.json"
+
+
+def audit(record_dir: pathlib.Path | None = None) -> dict:
+    """Every record in docs/scorecard/chcp-559, judged by its OWN provenance
+    fields: {name: [problems]} plus the set of commits the clean ones name.
+    The rerun's acceptance is: no problems, and exactly one commit."""
+    d = record_dir or (ROOT / RECORD_DIR)
+    out, commits = {}, set()
+    for p in sorted(d.glob("*.json")):
+        if p.name == STATUS_SIDECAR:
+            continue
+        rec = json.loads(p.read_text())
+        out[p.name] = record_provenance_problems(rec)
+        if not out[p.name]:
+            commits.add(rec["commit"])
+    return {"records": out, "clean_commits": sorted(commits)}
 
 
 def _provenance() -> dict:
@@ -583,36 +685,15 @@ def _provenance() -> dict:
     git = lambda *x: subprocess.run(["git", *x], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     probe = hashlib.sha256(b"".join((ROOT / "tools" / "probes" / f).read_bytes()
                                     for f in ("chcp_559.py", "chcp_559_select.py"))).hexdigest()[:16]
+    measure = hashlib.sha256(b"".join((ROOT / f).read_bytes() for f in MEASURE_FILES)).hexdigest()[:16]
     return {"model_sha16": model_sha(), "engine_fingerprint": engine_fingerprint(), "probe_sha16": probe,
-            "commit": git("rev-parse", "HEAD"),
+            "measure_sha16": measure, "commit": git("rev-parse", "HEAD"),
             "sources_dirty": bool(git("status", "--porcelain", "--", "tools", "model"))}
-
-
-PROVENANCE_KEYS = ("model_sha16", "engine_fingerprint", "probe_sha16", "commit", "sources_dirty",
-                   "sources_moved_during_run")
-
-
-def check_sweep_provenance(sw: dict, now: dict, name="the sweep") -> None:
-    """Refuse a DEV sweep that was not rendered by exactly this tree's engine
-    and selection/measurement code, from clean sources. Compares what the sweep
-    RECORDED, never one reconstructed from its nominal commit: a dirty sweep
-    names a commit whose sources it did not run (#595). Raises before any
-    confirm render."""
-    missing = [k for k in PROVENANCE_KEYS if k not in sw]
-    if missing:
-        raise Refused(f"{name} records no {missing}: its provenance is unknown, re-run it")
-    if sw["sources_dirty"]:
-        raise Refused(f"{name} was rendered from a dirty tree; its commit does not name its sources")
-    if sw["sources_moved_during_run"]:
-        raise Refused(f"{name} had sources change during its run: {sw['sources_moved_during_run']}")
-    for k in ("model_sha16", "engine_fingerprint", "probe_sha16"):
-        if sw[k] != now[k]:
-            raise Refused(f"{name} was rendered with a different {k} ({sw[k]}, this tree {now[k]})")
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("cmd", choices=("refs", "baseline", "check-fast", "check-cpt", "cp-tail", "cp-sweep", "cpt-sweep", "ch-sweep", "confirm", "tables", "regen"))
+    ap.add_argument("cmd", choices=("refs", "baseline", "check-fast", "check-cpt", "cp-tail", "cp-sweep", "cpt-sweep", "ch-sweep", "confirm", "tables", "regen", "audit"))
     ap.add_argument("--refs", type=pathlib.Path, default=None)
     ap.add_argument("--sweep", type=pathlib.Path, default=None, help="confirm: the sweep JSON whose selection to confirm")
     ap.add_argument("--sound", choices=("CH", "CP"), default=None)
@@ -622,6 +703,14 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=pathlib.Path, default=None)
     a = ap.parse_args(argv)
     refs = a.refs or default_refs()
+    if a.cmd == "audit":
+        r = audit()
+        for name, probs in r["records"].items():
+            print(f"{'CLEAN' if not probs else 'UNREPRODUCIBLE'}  {name}" + "".join(f"\n    - {p}" for p in probs))
+        bad = [n for n, p in r["records"].items() if p]
+        print(f"AUDIT: {len(r['records']) - len(bad)}/{len(r['records'])} clean; clean records name commits "
+              f"{[c[:12] for c in r['clean_commits']]}", flush=True)
+        return 1 if bad or len(r["clean_commits"]) > 1 else 0
     if a.cmd == "regen":
         try:
             check_refs(refs)
@@ -649,6 +738,10 @@ def main(argv=None) -> int:
             import chcp_559_select as sel
             ch = json.loads((ROOT / "docs/scorecard/chcp-559/ch-sweep-dev.json").read_text())
             cp = json.loads((ROOT / "docs/scorecard/chcp-559/cp-sweep-dev.json").read_text())
+            for nm, rec in (("ch-sweep-dev.json", ch), ("cp-sweep-dev.json", cp)):
+                probs = record_provenance_problems(rec)
+                if probs:
+                    raise Refused(f"tables from {nm} would derive from an unreproducible sweep: {'; '.join(probs)}")
             txt = sel.sensitivity_tables(ch, cp)
             outp = ROOT / "docs/sensitivity/chcp559-sweeps.txt"
             outp.write_text(txt)
@@ -677,7 +770,7 @@ def main(argv=None) -> int:
                 chosen = {"cand": want, "override_of": (sw["result"].get("selected") or {}).get("label")}
             if not chosen:
                 raise Refused(f"{a.sweep} selected nothing on DEV: there is nothing to confirm")
-            check_sweep_provenance(sw, _provenance(), a.sweep)
+            check_sweep_compatible(sw, prov0, str(a.sweep))   # before any render
             res = sel.confirm(a.sound, chosen["cand"], refs)
         else:
             import chcp_559_select as sel
@@ -690,16 +783,22 @@ def main(argv=None) -> int:
         print(f"REFUSED: {e}", flush=True)
         return 2
     prov1 = _provenance()
-    moved = {k: [prov0[k], prov1[k]] for k in prov0 if prov0[k] != prov1[k]}
+    moved, ok = provenance_verdict(prov0, prov1)
     if moved:
-        print(f"WARNING: sources changed during the run: {moved}; the record says so", flush=True)
-    res = {"cmd": a.cmd, **prov0, "sources_moved_during_run": moved,
-           "refs_sha256": hashes, "conditions": {"dev": conditions("dev"),
+        # The record is still written (that the sources moved is evidence),
+        # but it says so in a field every reader checks, and the run exits
+        # nonzero so a regen stream stops. The first version wrote the END
+        # provenance with exit 0: ch-confirm-hpq05.json names model 136fbadc
+        # while its log shows the run started on 50d295f6 (#595 review).
+        print(f"PROVENANCE MOVED: sources changed during the run: {moved}; record flagged, exit "
+              f"{EXIT_PROVENANCE_MOVED}", flush=True)
+    res = {"cmd": a.cmd, **prov0, "sources_moved_during_run": moved, "provenance_end": prov1,
+           "provenance_ok": ok, "refs_sha256": hashes, "conditions": {"dev": conditions("dev"),
            "confirm": conditions("confirm")}, "result": res}
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(pg._r(res), indent=1, default=float) + "\n")
-    return 0
+    return EXIT_PROVENANCE_MOVED if moved else 0
 
 
 if __name__ == "__main__":

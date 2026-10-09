@@ -109,6 +109,7 @@
   "summary": "As predicted: 8.87 (shipped, Q 2.5), 7.32, 6.32, 5.62, 5.21 (Q 0.5); Q 0.5 and 0.7 are within 10 %. Every other CH feature also improves or holds at Q 0.5 (centroid 3.18 -> 1.17, spec_peak 3.33 -> 2.58, attack 1.31 -> 1.03; ch-sweep-dev.json). The shipped value sits at the worst end. The disabled candidate kit_808_candidate_559() carries Q 0.5; kit_808() still ships 2.5."
  },
  "limits": [
+  "PROVISIONAL (#595 review): derived from docs/scorecard/chcp-559/ch-sweep-dev.json, which was rendered on an uncommitted model (730264ba) from a dirty tree and records no engine/probe/measurement hash, so these values are not reproducible from any commit. See docs/scorecard/chcp-559/provenance-status.json; replaced by the build-box rerun.",
   "DEV only; the selected point's CONFIRM result is docs/scorecard/chcp-559/ch-confirm-hpq05.json.",
   "The ratio is to the #379 WEAK bar, which ranks; no calibrated between-recording bar exists (gate-379 section 8), so fidelity qualification is REFUSED whatever this record says.",
   "f0 was held at 11.7 kHz by design; a 10 kHz / Q 0.5 exploration at the default strike read 5.62 against 6.08 at 11.7 kHz (not on this grid, not used to select)."

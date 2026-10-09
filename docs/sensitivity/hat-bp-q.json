@@ -81,6 +81,7 @@
   "summary": "2.38 (Q 2), 2.46 (Q 3), 3.09 (Q 4), 5.21 (Q 6, shipped). Stage 2 selected Q 3 on CH (tied with Q 2 within the 5 % tie band, smaller change). NOT carried: read after selection on voices never used to select, OH improves (worst 4.40 -> 3.01, flatness 3.75 -> 1.98) but CY regresses (worst 7.86 -> 8.82: spec +0.87, centroid +0.96, decay +0.42 bar), so it fails #559's shared-voice preservation and stays at 60."
  },
  "limits": [
+  "PROVISIONAL (#595 review): derived from docs/scorecard/chcp-559/ch-sweep-dev.json, which was rendered on an uncommitted model (730264ba) from a dirty tree and records no engine/probe/measurement hash, so these values are not reproducible from any commit. See docs/scorecard/chcp-559/provenance-status.json; replaced by the build-box rerun.",
   "NO PREDICTION BLOCK, deliberately. The committed sentence ('flatness falls as Q falls from 6') states a direction, not runs; translating it after the measurement would be a prediction written after the result.",
   "Measured at CH_HP_Q_X10 = 5 (stage 1's selection), not at the shipped 25.",
   "The CY regression may be because CY's own constants (PEAK_CYS/CYD, CY_HI_Q) were fitted around Q 6; that is an untested reading, and it is why this record does not say Q 6 is right either."

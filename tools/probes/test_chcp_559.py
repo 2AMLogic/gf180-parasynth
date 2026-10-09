@@ -139,8 +139,8 @@ def test_regressions_control():
 
 # ---- the confirm precondition (#595) -----------------------------------------
 def _good_prov():
-    return {"model_sha16": "m", "engine_fingerprint": "e", "probe_sha16": "p", "commit": "c",
-            "sources_dirty": False, "sources_moved_during_run": {}}
+    return {"model_sha16": "m", "engine_fingerprint": "e", "probe_sha16": "p", "measure_sha16": "q",
+            "commit": "c", "sources_dirty": False, "sources_moved_during_run": {}}
 
 
 def test_sweep_provenance_accepts_a_matching_clean_sweep():
@@ -153,6 +153,7 @@ def test_sweep_provenance_accepts_a_matching_clean_sweep():
     ("engine_fingerprint", "other"),                      # changed imported engine dependency
     ("probe_sha16", "other"),                             # changed selection/measurement code
     ("model_sha16", "other"),
+    ("measure_sha16", "other"),                           # changed gate/loader/metrics code
 ])
 def test_sweep_provenance_refuses_each_defeating_input(field, value):
     sw = _good_prov()
@@ -161,9 +162,144 @@ def test_sweep_provenance_refuses_each_defeating_input(field, value):
         c.check_sweep_provenance(sw, _good_prov())
 
 
-@pytest.mark.parametrize("field", c.PROVENANCE_KEYS)
+@pytest.mark.parametrize("field", c.REQUIRED_FIELDS)
 def test_sweep_provenance_refuses_absent_records(field):
     sw = _good_prov()
     del sw[field]
     with pytest.raises(c.Refused):
         c.check_sweep_provenance(sw, _good_prov())
+
+
+# ---- provenance: what a record names must be what produced it (#595 review) ----
+_SRC = ("model/drums_fx.py", "model/fixed.py", "model/modal_fixed.py", "tools/probes/chcp_559.py",
+        "tools/probes/chcp_559_select.py", *c.MEASURE_FILES)
+
+
+def _tree(tmp_path, monkeypatch):
+    """A copy of every source the provenance hashes, with c.ROOT pointed at it,
+    so a test can edit a source the way a mid-run edit would."""
+    for rel in _SRC:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes((c.ROOT / rel).read_bytes())
+    monkeypatch.setattr(c, "ROOT", tmp_path)
+    return tmp_path
+
+
+def _clean(prov: dict) -> dict:
+    return {**prov, "commit": "f" * 40, "sources_dirty": False, "sources_moved_during_run": {},
+            "provenance_ok": True}
+
+
+def test_model_file_changed_mid_run_is_flagged_not_clean(tmp_path, monkeypatch):
+    """THE defeating input of ch-confirm-hpq05.json: the model file changed
+    while the run was going. Provenance taken at start and end must differ, the
+    verdict must not be ok, and model_sha16 must be among what moved."""
+    root = _tree(tmp_path, monkeypatch)
+    p0 = c._provenance()
+    with open(root / "model/drums_fx.py", "a") as fh:
+        fh.write("\n# edited while a run was rendering\n")
+    p1 = c._provenance()
+    moved, ok = c.provenance_verdict(p0, p1)
+    assert not ok and "model_sha16" in moved, moved
+    assert c.provenance_verdict(p0, dict(p0)) == ({}, not p0["sources_dirty"])
+
+
+def test_main_flags_record_and_exits_nonzero_when_sources_move(tmp_path, monkeypatch):
+    """End to end through main(): the record is written, says provenance_ok
+    false, carries the END provenance, and the exit is nonzero (the first
+    version wrote end-state provenance with exit 0)."""
+    p0 = {"model_sha16": "a" * 16, "engine_fingerprint": "e" * 16, "probe_sha16": "p" * 16,
+          "measure_sha16": "m" * 16, "commit": "f" * 40, "sources_dirty": False}
+    seq = iter([p0, {**p0, "model_sha16": "b" * 16}])
+    monkeypatch.setattr(c, "_provenance", lambda: next(seq))
+    monkeypatch.setattr(c, "check_refs", lambda refs: {})
+    out = tmp_path / "r.json"
+    assert c.main(["refs", "--out", str(out)]) == c.EXIT_PROVENANCE_MOVED
+    rec = __import__("json").loads(out.read_text())
+    assert rec["provenance_ok"] is False and rec["provenance_end"]["model_sha16"] == "b" * 16
+    assert rec["sources_moved_during_run"] == {"model_sha16": ["a" * 16, "b" * 16]}
+    assert c.record_provenance_problems(rec)
+
+
+def test_main_unmoved_clean_run_is_ok():
+    """Stays green: same provenance at start and end on a clean tree."""
+    p0 = {"model_sha16": "a" * 16, "engine_fingerprint": "e" * 16, "probe_sha16": "p" * 16,
+          "measure_sha16": "m" * 16, "commit": "f" * 40, "sources_dirty": False}
+    assert c.provenance_verdict(p0, dict(p0)) == ({}, True)
+
+
+def test_committed_dirty_sweep_is_refused_for_confirmation():
+    """The real defeating input: the committed ch-sweep-dev.json (dirty tree,
+    uncommitted model 730264ba, no engine fingerprint, no probe hash). The old
+    guard let it through by reconstructing its engine from the nominal commit."""
+    import json
+    sw = json.loads((c.ROOT / "docs/scorecard/chcp-559/ch-sweep-dev.json").read_text())
+    now = _clean(c._provenance())
+    with pytest.raises(c.Refused, match="unreproducible"):
+        c.check_sweep_compatible(sw, now)
+
+
+def test_sweep_compatibility_controls():
+    now = _clean(c._provenance())
+    c.check_sweep_compatible(dict(now), now)          # stays green: identical clean provenance
+    cases = {
+        "dirty sweep": ({**now, "sources_dirty": True}, now, "dirty"),
+        "moved sweep": ({**now, "sources_moved_during_run": {"model_sha16": ["a", "b"]}}, now, "moved"),
+        "absent field": ({k: v for k, v in now.items() if k != "measure_sha16"}, now, "no measure_sha16"),
+        "flagged sweep": ({**now, "provenance_ok": False}, now, "provenance_ok"),
+        "dirty confirm tree": (now, {**now, "sources_dirty": True}, "clean tools"),
+        "changed engine": ({**now, "engine_fingerprint": "0" * 16}, now, "engine_fingerprint"),
+        "changed probe/selection": ({**now, "probe_sha16": "0" * 16}, now, "probe_sha16"),
+        "changed measurement": ({**now, "measure_sha16": "0" * 16}, now, "measure_sha16"),
+        "changed model file": ({**now, "model_sha16": "0" * 16}, now, "model_sha16"),
+    }
+    for label, (sw, cur, why) in cases.items():
+        with pytest.raises(c.Refused, match=why):
+            c.check_sweep_compatible(sw, cur)
+        assert label
+
+
+def test_engine_dependency_and_measurement_edits_move_provenance(tmp_path, monkeypatch):
+    """An edit to an imported engine dependency (fixed.py) moves the engine
+    fingerprint, and an edit to the gate (perceptual_gate.py) moves
+    measure_sha16, so check_sweep_compatible sees both."""
+    root = _tree(tmp_path, monkeypatch)
+    p0 = c._provenance()
+    with open(root / "model/fixed.py", "a") as fh:
+        fh.write("\n# changed dependency\n")
+    p1 = c._provenance()
+    assert p1["engine_fingerprint"] != p0["engine_fingerprint"]
+    with open(root / "tools/perceptual_gate.py", "a") as fh:
+        fh.write("\n# changed measurement\n")
+    p2 = c._provenance()
+    assert p2["measure_sha16"] != p1["measure_sha16"]
+    with pytest.raises(c.Refused, match="engine_fingerprint"):
+        c.check_sweep_compatible(_clean(p0), _clean(p1))
+    with pytest.raises(c.Refused, match="measure_sha16"):
+        c.check_sweep_compatible(_clean(p1), _clean(p2))
+
+
+def test_confirm_refuses_before_rendering(monkeypatch):
+    """The refusal happens before sel.confirm renders anything."""
+    called = []
+    monkeypatch.setattr(sel, "confirm", lambda *a, **k: called.append(a) or {})
+    monkeypatch.setattr(c, "check_refs", lambda refs: {})
+    monkeypatch.setattr(c, "_provenance", lambda: _clean({"model_sha16": "a" * 16, "engine_fingerprint": "e" * 16,
+                                                         "probe_sha16": "p" * 16, "measure_sha16": "m" * 16}))
+    rc = c.main(["confirm", "--sound", "CH", "--sweep", str(c.ROOT / "docs/scorecard/chcp-559/ch-sweep-dev.json"),
+                 "--cand", '{"hpq": 0.5, "bpq": 6.0}'])
+    assert rc == 2 and not called
+
+
+def test_every_unreproducible_record_is_labelled_in_the_sidecar():
+    """A record whose own fields show it cannot be reproduced must be listed in
+    provenance-status.json as not clean, so no reader takes it for clean
+    evidence. Not defeated by: a record whose fields lie about the tree it came
+    from -- no check here can see that; the build-box rerun from a clean clone
+    is what removes it."""
+    import json
+    side = json.loads((c.ROOT / c.RECORD_DIR / c.STATUS_SIDECAR).read_text())["records"]
+    au = c.audit()
+    for name, probs in au["records"].items():
+        if probs:
+            assert name in side and side[name]["status"] != "clean", f"{name} is unreproducible but unlabelled"
