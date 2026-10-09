@@ -124,7 +124,7 @@ def refuse_on_wire_noise(sim, rc=0, err=""):
     is absent. On a quiet runner none of this triggers; every assertion
     below runs at full strictness."""
     if sim.drops or sim.errs:
-        pytest.skip(f"apparatus noise on the wire: errs={sim.errs[:3]} "
+        pytest.skip(f"apparatus noise on the wire: errs={sim.errors[:3]} "
                     f"drops={sim.drops}")
     if rc != 0 and any(sig in err for sig in NOISE_SIGNATURES):
         pytest.skip(f"apparatus noise: host scheduling refused the run: "
@@ -240,7 +240,7 @@ def test_hold_frames_changes_the_scheduled_gate_off(sim, capsys):
         deltas[hold] = ((off[0][0] - on[0][0]) & 0xFFFF) if (on and off) else None
         if sim.drops or sim.errs or (rc != 0 and
                                      any(sig in err for sig in NOISE_SIGNATURES)):
-            noisy = (hold, sim.drops, sim.errs[:2], err.strip()[-160:])
+            noisy = (hold, sim.drops, sim.errors[:2], err.strip()[-160:])
             break
     if noisy:
         pytest.skip(f"apparatus noise on the wire: {noisy}")
@@ -488,10 +488,15 @@ def _inject_from_env(monkeypatch):
 
         monkeypatch.setattr(uh.Bridge, "send", send)
     elif inject == "wrong-due":
-        orig = uh.plan_show
+        # #306: this used to wrap `plan_show`, which the LIVE held path never
+        # calls -- the mutation never activated, and the control was "caught"
+        # only because the live path itself held 3155 frames for 1920. With
+        # the hold repaired that showed up as a control that could not fail.
+        # It now mutates the planner the live path does use, and counts.
+        orig = uh.Bridge._plan_after_gate_off
 
-        def plan_show(commands, **kw):
-            rows = orig(commands, **kw)
+        def plan_after(self, ev_cmds, **kw):
+            rows = orig(self, ev_cmds, **kw)
             for row in rows:
                 if row.kind == "event" and uh.decode_reg_frame(row.packet[3:9])[2] == A_GATE_OFF:
                     due = row.due + 160
@@ -499,12 +504,16 @@ def _inject_from_env(monkeypatch):
                     row.packet = uh.pkt_event(due & 0xFFFF, flag, sec, addr, data)
                     row.due = due
                     row.apply_frame = due
+                    APPLIED["wrong-due"] = APPLIED.get("wrong-due", 0) + 1
             return rows
 
-        monkeypatch.setattr(uh, "plan_show", plan_show)
+        monkeypatch.setattr(uh.Bridge, "_plan_after_gate_off", plan_after)
     elif inject:
         pytest.skip(f"unknown inject {inject!r}")
     return inject
+
+
+APPLIED: dict = {}
 
 
 @pytest.mark.parametrize("inject_name", ["drop-gate-off", "wrong-due"])
@@ -526,6 +535,9 @@ def test_control_held_note_catches_mutations(sim, capsys, monkeypatch, inject_na
         if rc == 0:
             problems.append("MISMATCH: main returned 0 with the gate-off dropped")
     elif inject == "wrong-due":
+        # condition 2 (docs/verification-rules.md rule 5): the mutant must
+        # have EXECUTED, or nothing below means anything
+        assert APPLIED.get("wrong-due") == 1, "NO VERDICT: the wrong-due mutation never ran"
         if rc != 0:
             problems.append(f"MISMATCH: main reported failure (exit {rc})")
         if ons and offs:

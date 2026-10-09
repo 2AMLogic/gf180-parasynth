@@ -396,22 +396,64 @@ on both channels), so a left/right swap is **unobservable**. The record reports
 `channel-identity: UNOBSERVABLE` rather than PASS. A missing, inverted or
 foreign channel *is* seen.
 
-**Held notes: the release is NOT compared.** The reference was rendered from
-the CLI's dry-run schedule, which holds the note for 1,920 frames (40 ms).
-The live CLI anchors the note-off to the *observed* gate frame (a STATUS
-minus its round trip) and, driven against the repository's scripted device
-(simulation evidence, not hardware), plans a hold of **3,121 frames: 1,201
-frames, 25.0 ms, longer** than the reference's. The device then fires the
-note-off 3,155 frames after the gate, 34 frames past the host's own plan.
+**Held notes: the release is NOT compared** unless a live-schedule reference
+binds it, and none exists yet. The committed reference was rendered from the
+CLI's dry-run schedule, which holds the note for 1,920 frames (40 ms).
 
-The analysis reads the planned hold from each take's host log
-(`hold_offset_frames`, `hold_offset_ms`). It never fits the offset from audio
-and never widens a tolerance to absorb it. When the offset is not zero:
+*History (legacy logs).* Before #306 the live CLI anchored the note-off to an
+*estimated* gate frame -- the ACK read from a 20 ms read loop, then a STATUS
+minus its round trip -- and added 500 frames of planning slack to it. Driven
+against the repository's scripted device (simulation evidence, not hardware)
+it planned a hold of **3,121 frames: 1,201 frames, 25.0 ms, longer** than the
+reference's, and the device fired the note-off 3,155 frames after the gate. The
+decomposition was measured (`fpga/reports/hold-timing-306-baseline.json`): the
+gate's ACK was read 768 frames after the device accepted it, the STATUS-minus-
+RTT estimate put the gate 735 frames late, and the slack added 500. That path
+is kept verbatim as the injected control `HOLD_ACK_DRAIN`.
+
+*Now (#306).* The live CLI sends one burst with a STATUS query immediately
+before and immediately after the gate write. The two replies name the device
+frames those queries were accepted in, which bound the gate's apply frame from
+both sides (`uart_host.gate_bracket`, derivation in its docstring). The
+gate-off is due at the bracket's midpoint plus the requested hold, with no
+added slack. The device's own answer to the gate-off packet decides the
+deadline: an ACK means it lands at its due, ERR 3 means it was late. The host
+log's `hold_timing` record carries the requested hold, the bracket, the
+estimate, the per-run bound and the verdict. It is labelled a **bracketed
+estimate**, because the host never observes the gate's frame. Declared domain:
+a per-run bound of at most 8 frames, and holds from `hold_min_frames()` (97 at
+115,200 baud) to 30,720 frames. Anything else is REFUSED, and the note is
+released first. On the scripted device, the three pinned held commands now
+hold 1,920 frames for 1,920 with a bound of ±2. Delays up to 16 ms each way,
+counter wraps, the shortest hold and a 24,000-frame hold were not used to
+select the approach, and every one delivers the request exactly
+(`fpga/hold_timing.py table --set untouched`). The scripted device does not
+model USB packetisation. If the burst is split on a real link, the bracket
+widens and the host refuses the hold rather than reporting it.
+
+The analysis reads each take's hold from its host log (`hold_offset_frames`,
+`hold_offset_ms`): from the `hold_timing` record when present, otherwise the
+planner's prediction (legacy logs). It never fits the offset from audio and
+never widens a tolerance to absorb it. A record that disagrees with its own log
+is REFUSED: a due that is not the event row's, a bound over the declared
+maximum, or a verdict other than `WITHIN_BOUND`. So is an event row whose
+packet bytes carry a different due from the one the row claims, which is the
+deceptive-log control `HOLD_FORGED_LOG`. A held take's release is compared
+only when `release_qualification` holds. That needs a reference whose identity
+carries `schedule.kind = "live"`, the live bytes' hash, the requested hold and
+a release tolerance at least as wide as the host's bound. The hash must be a
+real sha256 digest (64 lowercase hex, not all zeros), must equal the record's
+own `replayed_stimulus_sha256`, and must differ from the pinned dry-run
+command's `cmds_sha256`. A record marked `synthetic` never qualifies outside
+the tests. **Equal planned holds are not enough, and neither is the label.**
+A dry-run reference relabelled `live` with an all-zero hash qualified until
+PR #563's review; it is now a negative control. Otherwise, including at a zero
+offset:
 
 - every waveform comparison ends before the earlier of the two releases, less a
   96-frame planned-versus-device margin, and the take records
   `release_compared: false` together with the excluded interval
-  (`coverage.excluded_s`);
+  (`coverage.excluded_s`) and why (`coverage.excluded_why`);
 - a scored interval shorter than 20 ms is **not evaluated**. The record lists
   the properties under `not_evaluated` rather than passing them. For the
   pinned 40 ms hold this applies to **five** properties on every held-note take
@@ -425,10 +467,19 @@ and never widens a tolerance to absorb it. When the offset is not zero:
 - the stuck-output check still runs over the whole take. It shows that the note
   **ended**. It does not show that the release timing or shape matches.
 
-A passing session therefore does not claim that any release was compared.
-Comparing it exactly needs a reference rendered from the validated live
-schedule, which is follow-up work. The 25 ms difference is between two planned
-timelines and is not yet a measurement of physical output latency.
+A passing session therefore does not claim that any release was compared. The
+comparison itself is tested on synthetic captures (`tools/test_r0_capture.py`)
+against a reference that carries the hash of the CLI's real live bytes in both
+identity fields but still holds the dry-run render's audio. It is marked
+`synthetic`, so the production path refuses it. That is also the gate's
+defeating input, kept as a test that records it as BLIND: the identity is
+hashes in a JSON record, and nothing re-derives the audio from the bytes. Only
+a re-render closes that gap. A release moved 5 ms early fails there,
+and passes unnoticed against the dry-run references, which is what the binding
+buys. **NOT EVALUATED, and why:** no live-schedule reference has been rendered.
+Rendering one replays the live bytes through the UART RTL on the build box
+(`fpga/hold_timing.py rtl`). Until it exists, and until #208's physical
+acquisition, held-note release timing and shape on hardware are unverified.
 
 **What a PASS can and cannot mean.** Neither a WAV file nor a programmer log
 proves where it came from. The claim T-PHYSICAL can support is narrower: an

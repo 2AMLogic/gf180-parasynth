@@ -542,7 +542,91 @@ def host_log_problems(plan) -> list:
             need = "apply_frame" if kind == "write" else "due"
             if not isinstance(r.get(need), int):
                 probs.append(f"row {i} ({kind}): `{need}` missing or not an integer")
+    if not probs:
+        probs += event_packet_problems(plan) + hold_timing_problems(plan)
     return probs[:5] + ([f"... {len(probs) - 5} more"] if len(probs) > 5 else [])
+
+
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+
+
+def _is_int(x) -> bool:
+    return isinstance(x, int) and not isinstance(x, bool)
+
+
+def live_identity_problems(rec: dict, *, allow_synthetic: bool = False) -> list:
+    """Why a reference record's `schedule.kind == "live"` label is not backed
+    by its own replay identity (PR #563). A live render (r0_reference.py
+    render --schedule live) hashes the bytes it REPLAYED through the RTL into
+    BOTH `replayed_stimulus_sha256` and `schedule.live_cmds_sha256`, and
+    those bytes carry the gate bracket's STATUS queries, so they are never
+    the pinned dry-run command's (`cmds_sha256`). A label is cheap; these
+    three hashes are what a relabelled dry-run render cannot all satisfy.
+
+    Defeating input (rule 8), shipped as a test: a record whose hashes are
+    copied from a GENUINE live run onto a dry-run render's audio satisfies
+    every check here -- the wav is not re-derived from the bytes. Only a
+    re-render closes that; such records are marked `synthetic` (the unit
+    fixture is one) and refused unless `allow_synthetic`."""
+    sched = rec.get("schedule") or {}
+    live = sched.get("live_cmds_sha256")
+    replayed = rec.get("replayed_stimulus_sha256")
+    probs = []
+    if not allow_synthetic and ("synthetic" in sched or "synthetic" in rec):
+        probs.append("the live reference is declared synthetic (a test fixture, not a "
+                     "rendered live schedule)")
+    if not (isinstance(live, str) and _SHA256_HEX.fullmatch(live)) or live == "0" * 64:
+        probs.append(f"schedule.live_cmds_sha256 {live!r} is not a sha256 digest")
+    elif replayed != live:
+        probs.append(f"schedule.live_cmds_sha256 {live[:12]} is not the record's replayed "
+                     f"stimulus {str(replayed)[:12]}: the label is not the replay")
+    elif live == rec.get("cmds_sha256"):
+        probs.append("the replayed stimulus is the pinned dry-run command's bytes, not "
+                     "a live schedule")
+    return probs
+
+
+def release_qualification(ref: dict, host_plan: dict | None, *,
+                          allow_synthetic: bool = False) -> tuple:
+    """(qualified, why) -- may this held take's RELEASE be compared?
+
+    Only against a reference rendered from a LIVE schedule that binds the
+    host's own hold record: its identity must carry `schedule.kind == "live"`,
+    a live-bytes hash that IS the record's replayed stimulus and is not the
+    dry-run's (`live_identity_problems`), and a `hold_timing` naming the same
+    requested hold and bound as the host log. Two planned holds that merely
+    match are NOT enough (#306): a dry-run reference's hold is the planner's,
+    and a matching number in the host log says nothing about what the board
+    applied. Nor is the label alone (PR #563): a dry-run reference relabelled
+    `live` with an all-zero hash qualified until the hash was bound. No such
+    reference exists yet (rendering one is the build box's job), so today
+    every held take's release is NOT EVALUATED, and says so."""
+    rec = (ref or {}).get("record") or {}
+    sched = rec.get("schedule")
+    ht = (host_plan or {}).get("hold_timing")
+    if not isinstance(sched, dict) or sched.get("kind") != "live":
+        return False, ("release NOT EVALUATED: the reference is the dry-run schedule's, "
+                       "not a live schedule bound to this take's hold record")
+    if not isinstance(ht, dict):
+        return False, ("release NOT EVALUATED: the host log carries no hold record "
+                       "(a legacy log: its hold is the planner's)")
+    ident = live_identity_problems(rec, allow_synthetic=allow_synthetic)
+    if ident:
+        return False, "release NOT EVALUATED: " + "; ".join(ident)
+    bind = sched.get("hold_timing") or {}
+    tol = sched.get("release_tolerance_frames")
+    if not (_is_int(tol) and _is_int(bind.get("requested_hold_frames"))):
+        return False, ("release NOT EVALUATED: the live reference does not bind its "
+                       "hold and release tolerance")
+    if bind["requested_hold_frames"] != ht.get("requested_hold_frames"):
+        return False, (f"release NOT EVALUATED: the live reference holds "
+                       f"{bind['requested_hold_frames']} frames, the host log requested "
+                       f"{ht.get('requested_hold_frames')}")
+    if not _is_int(ht.get("hold_bound_frames")) or ht["hold_bound_frames"] > tol:
+        return False, (f"release NOT EVALUATED: the host's hold bound "
+                       f"{ht.get('hold_bound_frames')} exceeds the reference's release "
+                       f"tolerance {tol}")
+    return True, "the live-schedule reference binds this take's hold record"
 
 
 def check_session(bundle: pathlib.Path, s: dict, manifest: dict, *,
@@ -628,15 +712,87 @@ def check_session(bundle: pathlib.Path, s: dict, manifest: dict, *,
 
 def planned_hold(plan: dict | None) -> int | None:
     """A held-note command's hold, in device frames, as its own host log
-    planned it: the gate-off event's due minus the last live write's apply
-    frame. None for commands that are not live-writes-then-one-event."""
+    planned it. None for commands that are not live-writes-then-one-event.
+
+    A log with a `hold_timing` record (#306) carries the host's bracketed
+    hold: the gate-off due minus the gate's ESTIMATED apply frame, with a
+    bound. It is used only when it agrees with the log's own event row
+    (`hold_timing_problems` refuses a log where it does not). A legacy log
+    has only the planner's prediction: the gate-off's due minus the last
+    live write's PLANNED apply frame -- a plan, never an observation (on the
+    scripted device the live path's plan was 34 frames off the device)."""
     if not plan:
         return None
     ev = [r for r in plan.get("rows", []) if r.get("kind") == "event"]
     live = [r for r in plan.get("rows", []) if r.get("kind") == "write"]
     if len(ev) != 1 or not live:
         return None
+    ht = plan.get("hold_timing")
+    if isinstance(ht, dict) and isinstance(ht.get("gate_apply_estimate"), int):
+        return int(ev[0]["due"]) - int(ht["gate_apply_estimate"])
     return int(ev[0]["due"]) - int(live[-1]["apply_frame"])
+
+
+def hold_timing_problems(plan: dict | None) -> list:
+    """The held note's timing record, checked against the log it sits in.
+    A record whose due is not the event row's due, whose bound exceeds the
+    declared maximum, or whose verdict is not WITHIN_BOUND cannot vouch for
+    a hold. Absent record: nothing to check (a legacy log)."""
+    ht = (plan or {}).get("hold_timing")
+    if ht is None:
+        return []
+    if not isinstance(ht, dict):
+        return ["`hold_timing` is not an object"]
+    probs = []
+    ev = [r for r in plan.get("rows", []) if r.get("kind") == "event"]
+    for k in ("requested_hold_frames", "gate_apply_estimate", "gate_off_due",
+              "hold_bound_frames", "declared_max_bound_frames"):
+        if not isinstance(ht.get(k), int):
+            probs.append(f"hold_timing.{k} missing or not an integer")
+    b = ht.get("gate_apply_bounds")
+    if not (isinstance(b, list) and len(b) == 2 and all(isinstance(x, int) for x in b)):
+        probs.append("hold_timing.gate_apply_bounds missing or malformed")
+    if probs:
+        return probs
+    if ht.get("verdict") != "WITHIN_BOUND":
+        probs.append(f"hold_timing verdict {ht.get('verdict')!r}: the host did not "
+                     f"establish the hold ({ht.get('reason')})")
+    if not ev or ht["gate_off_due"] != ev[0].get("due"):
+        probs.append(f"hold_timing names gate-off due {ht['gate_off_due']}, the log's "
+                     f"event row {ev[0].get('due') if ev else None}")
+    if not b[0] <= ht["gate_apply_estimate"] <= b[1]:
+        probs.append("hold_timing's estimate lies outside its own bracket")
+    if ht["hold_bound_frames"] > ht["declared_max_bound_frames"]:
+        probs.append(f"hold_timing bound {ht['hold_bound_frames']} exceeds the declared "
+                     f"{ht['declared_max_bound_frames']}")
+    if ht["gate_off_due"] - ht["gate_apply_estimate"] != ht["requested_hold_frames"]:
+        probs.append("hold_timing's due is not estimate + requested hold")
+    return probs
+
+
+def event_packet_problems(plan: dict | None) -> list:
+    """A scheduled event's `due` is a claim; its packet is what went down the
+    wire. The packet carries the low 16 bits of the absolute due, the row
+    the due rebased by `base_send_frame`. A row whose claim is not its own
+    bytes is a deceptive log (#306 HOLD_FORGED_LOG) and is refused."""
+    probs = []
+    base = int((plan or {}).get("base_send_frame", 0) or 0)
+    for i, r in enumerate((plan or {}).get("rows", [])):
+        if r.get("kind") != "event" or not isinstance(r.get("due"), int):
+            continue
+        try:
+            pkt = bytes.fromhex(r.get("packet", ""))
+        except ValueError:
+            probs.append(f"row {i}: packet is not hex")
+            continue
+        if len(pkt) != 10:
+            probs.append(f"row {i}: event packet is {len(pkt)} bytes, not 10")
+            continue
+        wire = pkt[1] | (pkt[2] << 8)
+        if wire != (r["due"] + base) & 0xFFFF:
+            probs.append(f"row {i}: the packet carries due {wire}, the row claims "
+                         f"{(r['due'] + base) & 0xFFFF}")
+    return probs
 
 
 def command_identity(plan_ref: dict | None, plan_cap: dict) -> list:
@@ -771,22 +927,28 @@ def calibrate(ref, cal, cap, sr=SR) -> dict:
 
 
 def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
-                 hold_offset=None, capb_all=None) -> dict:
+                 hold_offset=None, capb_all=None, release=(False, None)) -> dict:
     """Every property of one take. `frozen` = {rho, gain}; d_t is estimated
     here from the declared window only.
 
     `hold_offset`: frames by which this take's host log planned a different
-    hold from the reference's. uart_host anchors a held note's gate-off to an
-    OBSERVED gate frame (a STATUS minus its round trip); on the scripted
-    device its live path plans 3121 frames against the dry-run's 1920 --
-    1201 frames, 25 ms -- and the device fires 34 frames later still. The
-    offset is read from the host log, never fitted from audio and never
-    absorbed by a tolerance. When it is not zero the waveform comparisons
+    hold from the reference's (`planned_hold`). Before #306 the live CLI
+    dated the gate from an ACK drain and a STATUS minus its round trip; on
+    the scripted device it planned 3121 frames against the dry-run's 1920 --
+    1201 frames, 25 ms -- and the device fired 34 frames later still. Since
+    #306 a live log carries a bracketed `hold_timing` record and plans the
+    requested hold (offset 0). The offset is read from the host log, never
+    fitted from audio and never absorbed by a tolerance. When it is not zero the waveform comparisons
     end before the earlier release (less HOLD_UNCERTAINTY_FRAMES), the take
     records `release_compared: false` and the excluded interval, and an
     interval shorter than MIN_SCORED_S is NOT EVALUATED rather than passed.
     The stuck-output check covers the whole take: it shows the note ended,
-    not that the release matches."""
+    not that the release matches.
+
+    `release` = `release_qualification(...)` (#306): a held take (one with a
+    `hold_offset`, zero included) has its release compared ONLY when that
+    says so. Equal planned holds alone no longer turn `release_compared`
+    true."""
     out = {"id": take["id"], "command_id": take["command_id"], "fails": {}, "metrics": {}}
     F = out["fails"]
     M = out["metrics"]
@@ -878,7 +1040,12 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
                             f"{want:.1f} dBFS is predicted; ").strip()
     # residual over the evaluation region (after the calibration window)
     e1_full = e1
-    if hold_offset:
+    held = hold_offset is not None
+    release_ok, release_why = release if release else (False, None)
+    if held and release_ok:
+        M["release_compared"] = True
+        M["release_qualified"] = release_why
+    if held and not release_ok:
         # the host's own timing record says this take's release is planned
         # `hold_offset` frames away from the reference's; the waveform
         # comparisons end before the EARLIER of the two releases, less the
@@ -891,11 +1058,15 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
         M["release_compared"] = False
         if rel is not None:
             e1 = min(e1, int(d + rel / rho))
+    why = None
+    if e1 < e1_full:
+        why = ("release not compared: the host planned a different hold from the "
+               "reference's" if hold_offset else
+               (release_why or "release not compared"))
     M["coverage"] = {"scored_s": [round(e0 / sr, 4), round(e1 / sr, 4)],
                      "excluded_s": ([round(e1 / sr, 4), round(e1_full / sr, 4)]
                                     if e1 < e1_full else None),
-                     "excluded_why": ("release not compared: the host planned a different "
-                                      "hold from the reference's" if e1 < e1_full else None)}
+                     "excluded_why": why}
     scored = (e1 - e0) >= MIN_SCORED_S * sr
     M["waveform_scored"] = bool(scored)
     if not scored:
@@ -994,7 +1165,7 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
     pb, cb_ = block_rms(p[evf]), block_rms(A[evf])
     n = min(pb.size, cb_.size)
     pb, cb_ = pb[:n], cb_[:n]
-    if hold_offset and n:
+    if held and not release_ok and n:
         from scipy.ndimage import maximum_filter1d
         w = 2 * int(math.ceil((abs(hold_offset) + HOLD_UNCERTAINTY_FRAMES) / BLOCK)) + 1
         pb = maximum_filter1d(pb, size=w, mode="nearest")
@@ -1071,6 +1242,7 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
             bundle / s["image"]["program_transcript"])
         dac = s["interface"]["dac_channels"]
         takes, refs, caps, capb, hold_offsets = s["takes"], {}, {}, {}, {}
+        release_q = {}
         seen_logs = {}
         dt = s.get("detect_transcript", "detect.txt")
         rec["inputs_sha256"][dt] = sha256_file(bundle / dt)
@@ -1112,6 +1284,8 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 h_cap, h_ref = planned_hold(host_plan), refs[tk["command_id"]].get("hold")
                 if h_cap is not None and h_ref is not None:
                     hold_offsets[tk["id"]] = h_cap - h_ref
+                    release_q[tk["id"]] = release_qualification(
+                        refs[tk["command_id"]], host_plan, allow_synthetic=allow_synthetic)
                 if diff:
                     raise Refused(f"take {tk['id']} is not the released command "
                                   f"{tk['command_id']}: " + "; ".join(diff))
@@ -1150,7 +1324,8 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 continue
             results.append(analyse_take(tk, refs[tk["command_id"]], caps[tk["id"]], dac,
                                         frozen, floor, hold_offset=hold_offsets.get(tk["id"]),
-                                        capb_all=capb[tk["id"]]))
+                                        capb_all=capb[tk["id"]],
+                                        release=release_q.get(tk["id"], (False, None))))
         # repeat-take stability, on the reference timeline
         by_cmd = {}
         for t, tk in zip(results, [*[x for x in takes if x["command_id"] == "silence"],
@@ -1163,7 +1338,8 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
             x = refs[cmd]["xb"]
             a, b = sounding_extent(x)
             b = min(b, len(x) - int(END_GUARD_S * SR))
-            if any(hold_offsets.get(k["id"]) for _, k in lst) and refs[cmd].get("hold"):
+            if (any(k["id"] in hold_offsets and not release_q[k["id"]][0] for _, k in lst)
+                    and refs[cmd].get("hold")):
                 # the holds were planned differently: compare up to the release
                 b = min(b, int(np.flatnonzero(refs[cmd]["x"])[0]) + int(refs[cmd]["hold"]) - BLOCK)
             (t0, k0) = lst[0]

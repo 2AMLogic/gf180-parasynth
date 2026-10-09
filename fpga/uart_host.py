@@ -284,6 +284,48 @@ SEND_GATE_FRAMES = 120             # the send gate: send once the first due is a
                                    # queued event: margin and queue depth are
                                    # coupled, and the preflight holds both.
 
+# ---- the held-note hold (#306) ----------------------------------------------
+# A held note's gate-on is a LIVE write: the device applies it at its
+# acceptance frame + 1, and nothing on the wire timestamps that frame (an ACK
+# means "accepted into a queue", not "applied in frame N"). The gate-off is a
+# SCHEDULED event, which lands in exactly its due frame. So the hold the
+# musician gets is (gate-off due) - (gate apply frame), and the host must
+# know the second number to choose the first.
+#
+# The host no longer estimates it from an ACK drain and a STATUS minus its
+# round trip (the historical path, kept as the HOLD_ACK_DRAIN control: on the
+# scripted device it planned 3121 frames for a 1920-frame request and the
+# device held 3155). It BRACKETS it on the device's own timeline instead: a
+# STATUS query goes on the wire immediately before the gate write and another
+# immediately after it, in the same burst. Each STATUS reply carries the
+# device frame in which that query was ACCEPTED, so with the gate's 8 bytes
+# between them the gate's acceptance is bounded from both sides by device
+# frames -- no host clock, no USB latency, no read-loop granularity enters
+# the arithmetic (`gate_bracket` below has the derivation).
+#
+# THE DECLARED DOMAIN, fixed before any candidate was evaluated:
+#   * a per-run bound is DERIVED (`gate_bracket`) from the two STATUS frames,
+#     the byte time at +-HOLD_BAUD_TOLERANCE and the contract's +-1 frame on a
+#     live write's apply frame. It is reported, never assumed;
+#   * HOLD_BOUND_MAX_FRAMES is the widest per-run bound the host accepts. A
+#     gapless wire gives 1-2 frames of acceptance bracket plus the contract's
+#     +-1 apply jitter; 8 frames (0.17 ms, under two byte times) admits a
+#     sub-byte stall between the three packets and nothing more. A wider
+#     bracket means the bytes did not go out as one burst, and the hold is
+#     REFUSED (after the note is released -- see `_release_now`);
+#   * the hold itself must lie in [hold_min_frames(baud), HOLD_MAX_FRAMES]:
+#     below the minimum the gate-off packet cannot be accepted before its own
+#     due even on a zero-latency link; above the maximum its due leaves the
+#     16-bit wrap window. Both REFUSE before a byte is sent;
+#   * the gate-off's own acceptance is the DEVICE's verdict: ACK means it was
+#     queued ahead of its due and lands exactly there; ERR 3 (late) means the
+#     deadline was missed -- the device still releases the note one frame
+#     later, loudly, and the host REFUSES the hold.
+HOLD_BOUND_MAX_FRAMES = 8
+HOLD_BAUD_TOLERANCE = 0.02          # sender baud vs nominal, either way
+LIVE_APPLY_JITTER_FRAMES = 1        # the contract: live write at accept+1, +-1
+HOLD_MAX_FRAMES = WRAP_HALF - 2048  # the gate-off due stays wrap-safe
+
 
 class Refused(Exception):
     """A first-class outcome, distinct from pass and fail: the link, the
@@ -347,6 +389,7 @@ class DevicePacket:
     drops: int = -1
     errs: int = -1
     flags: int = -1
+    end: int = -1                   # offset just past this packet in the scanned buffer
 
     def describe(self) -> str:
         if self.kind == "ack":
@@ -383,6 +426,8 @@ def scan_packets(buf: bytes) -> tuple:
             out.append(DevicePacket("boot")); i += 1; consumed = i
         else:
             i += 1
+            continue
+        out[-1].end = i
     return out, consumed
 
 
@@ -415,6 +460,74 @@ def byte_cycles(baud: int) -> int:
     re-synchronises at every start bit, so the difference never accumulates."""
     div = (CLK_HZ + baud // 2) // baud
     return BITS_PER_BYTE * div
+
+
+def _byte_frames(baud: int, tolerance: float = 0.0) -> tuple:
+    """(shortest, longest) duration of one 8N1 byte on the device's RX, in
+    frames, for a sender whose baud is within +-tolerance of `baud`."""
+    nominal = BITS_PER_BYTE * SR / baud
+    return nominal / (1 + tolerance), nominal / (1 - tolerance)
+
+
+def gate_bracket(pre_frame: int, post_frame: int, *, baud: int = DEFAULT_BAUD,
+                 gate_bytes: int = 8, query_bytes: int = 2) -> dict:
+    """The device frame a live gate write applies in, bracketed by the STATUS
+    replies to the queries sent immediately before (`pre_frame`) and after
+    (`post_frame`) it in one burst. Frames are the 16-bit STATUS values.
+
+    Derivation (device time t in frames; STATUS reports the frame REGISTER,
+    audio frame + 1, sampled when the query is ACCEPTED):
+
+      query-before accepted at t_p, with floor(t_p) + 1 = pre_frame
+      gate accepted at t_g     >= t_p + gate_bytes  * b_min   (its bytes follow)
+      query-after  accepted t_q >= t_g + query_bytes * b_min  (and so on)
+      with floor(t_q) + 1 = post_frame
+
+    Every packet is accepted at the same point of its last byte, so the
+    differences are whole byte times when the burst is gapless and LONGER
+    when it is not -- a gap can only widen the bracket, never move the truth
+    outside it. Hence t_g in [pre - 1 + 8 b_min, post - 2 b_min), the gate's
+    acceptance frame A = floor(t_g) in [A_lo, A_hi], and its apply frame
+    A + 1 +- LIVE_APPLY_JITTER_FRAMES.
+
+    The estimate is the bracket's midpoint and `bound` is the largest
+    distance from it to either end: |true apply - estimate| <= bound.
+
+    REFUSES (Refused) a bracket the protocol cannot produce: the two
+    queries less than the gate's bytes apart on the device (a frozen or
+    forged counter), or further apart than the wrap window can order."""
+    import math
+    span = (post_frame - pre_frame) & 0xFFFF
+    if span >= WRAP_HALF:
+        raise Refused(f"the gate's STATUS bracket runs backwards (f{pre_frame} -> "
+                      f"f{post_frame}): the device's frame counter cannot be ordered")
+    b_min, _b_max = _byte_frames(baud, HOLD_BAUD_TOLERANCE)
+    a_lo = math.floor(-1 + gate_bytes * b_min)            # relative to pre_frame
+    a_hi = math.ceil(span - query_bytes * b_min) - 1
+    if a_hi < a_lo:
+        raise Refused(f"the gate's STATUS bracket is {span} frames wide, less than "
+                      f"the {gate_bytes + query_bytes} bytes it must contain: the "
+                      "device's frame counter did not advance at the wire's rate")
+    g_lo = pre_frame + a_lo + 1 - LIVE_APPLY_JITTER_FRAMES
+    g_hi = pre_frame + a_hi + 1 + LIVE_APPLY_JITTER_FRAMES
+    est = (g_lo + g_hi + 1) // 2
+    return {"apply_lo": g_lo, "apply_hi": g_hi, "estimate": est,
+            "bound": max(est - g_lo, g_hi - est), "span": span}
+
+
+def hold_min_frames(baud: int = DEFAULT_BAUD) -> int:
+    """The shortest hold the protocol can deliver on a ZERO-latency link.
+
+    After the gate is accepted (t_g), the query behind it takes 2 bytes, its
+    8-byte STATUS reply must reach the host before the gate-off's due can be
+    chosen, and the gate-off's own 10-byte event packet must then be accepted
+    at least MIN_LEAD_FRAMES before its due: 20 byte times at the slowest
+    tolerated baud. The due is the gate's ESTIMATED apply frame + hold, so the
+    estimate's own worst case (HOLD_BOUND_MAX_FRAMES) is added. Any real link
+    latency comes on top, and is caught by the device's own late ERR."""
+    import math
+    _b_min, b_max = _byte_frames(baud, HOLD_BAUD_TOLERANCE)
+    return math.ceil(20 * b_max) + 1 + MIN_LEAD_FRAMES + HOLD_BOUND_MAX_FRAMES
 
 
 def plan(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int = 0,
@@ -807,6 +920,7 @@ class Bridge:
         self.lead_frames = None
         self.status_round_trip_s = None
         self.acks_seen = 0
+        self.hold_timing = None          # #306: the held note's timing record
         self._run_ack_base = 0
         self._run_acks_expected = 0
         # R1 (#279): refuse to start over events or writes an earlier session
@@ -820,12 +934,15 @@ class Bridge:
         retried and stale replies are never re-served."""
         while True:
             pkts, consumed = scan_packets(self.buf)
-            self.buf = self.buf[consumed:]
-            # every consumed packet is a delivery and is counted BEFORE the
-            # first match returns: returning mid-scan dropped the rest of the
-            # chunk from the counts, so a burst whose ACKs arrived four to a
-            # read counted one in four (#281: 48 of 190 on a real-time pty;
-            # SimSerial delivers one ACK per read and could not show it)
+            # every consumed packet is a delivery and is counted: returning
+            # mid-scan used to drop the rest of the chunk from the counts, so
+            # a burst whose ACKs arrived four to a read counted one in four
+            # (#281: 48 of 190 on a real-time pty; SimSerial delivers one ACK
+            # per read and could not show it). Consumption stops AT the
+            # match: packets behind it stay buffered (and are counted when
+            # they are consumed), because two STATUS replies can share one
+            # read -- the held note's gate bracket asks two questions back to
+            # back, and a USB latency timer batches the answers (#306).
             match = None
             for p in pkts:
                 if p.kind == "ack":
@@ -834,15 +951,23 @@ class Bridge:
                     self.boots_seen += 1
                 elif p.kind == "err":
                     self.device_errors.append((p.code, p.info))
-                if match is None and p.kind in kinds:
+                if p.kind in kinds:
                     match = p
+                    break
+            self.buf = self.buf[(match.end if match is not None else consumed):]
             if match is not None:
                 return match
             now = self.clock.monotonic()
             if now >= deadline:
                 return None
             self.ser.timeout = min(0.05, max(0.005, deadline - now))
-            chunk = self.ser.read(8)          # a STATUS packet is 8 bytes
+            # read what has ARRIVED, not a fixed 8: pyserial's read(8) blocks
+            # until 8 bytes or the timeout, so the last 2-6 bytes of a reply
+            # waited out the whole 50 ms window (#306: a 1920-frame hold missed
+            # its gate-off deadline on a real-time pty). Endpoints without
+            # `in_waiting` (SimSerial) keep the historical 8.
+            waiting = getattr(self.ser, "in_waiting", None)
+            chunk = self.ser.read(8 if waiting is None else max(1, int(waiting)))
             if chunk:
                 self.buf += chunk
 
@@ -997,9 +1122,268 @@ class Bridge:
                       f"{row.packet.hex()} -> applies f{row.apply_frame}")
         return rows
 
+    def _drain_counted(self) -> None:
+        """Discard the receive buffer, counting what it delivered first (the
+        same bookkeeping `status()` does before a fresh question)."""
+        pkts, _n = scan_packets(self.buf)
+        self.acks_seen += sum(1 for q in pkts if q.kind == "ack")
+        self.boots_seen += sum(1 for q in pkts if q.kind == "boot")
+        self.device_errors += [(q.code, q.info) for q in pkts if q.kind == "err"]
+        self.buf = b""
+
+    def _release_now(self, marker: tuple) -> None:
+        """Send the note-off as a LIVE write, now. Used on every refusal after
+        the gate may have landed: a refused hold must never leave a note
+        sounding (a gate-off that is not sent is a note that never ends)."""
+        self.ser.write(pkt_write(*marker[1:5]))
+        self.ser.flush()
+
     def _run_with_hold(self, commands: list, *, baud: int, quiet: bool,
                        hold_frames: int) -> list:
-        """A scheduled note-off anchors to the OBSERVED gate, not a
+        """The held note, with its hold BRACKETED on the device's timeline
+        (#306; the historical path is `_run_with_hold_historical`, kept as
+        the HOLD_ACK_DRAIN control).
+
+        1. REFUSE, before a byte is sent, a hold the protocol cannot deliver:
+           shorter than `hold_min_frames(baud)` or longer than HOLD_MAX_FRAMES.
+        2. Send the live writes as ONE burst with a STATUS query immediately
+           before and immediately after the note-on's GATE_ON write (found by
+           register identity, not position).
+        3. The two STATUS replies name the frames those queries were accepted
+           in; `gate_bracket` turns them into the gate's apply-frame interval,
+           its midpoint and the per-run bound. A bound over
+           HOLD_BOUND_MAX_FRAMES is REFUSED (the note is released first).
+        4. The gate-off event is due at estimate + hold EXACTLY -- no planning
+           slack is added to it -- and any phrase follows it.
+        5. The device's answer to the gate-off packet is the deadline's
+           verdict: ACK = queued ahead of its due (the contract lands it there
+           exactly); ERR 3 = late (the device releases one frame late) ->
+           REFUSED.
+
+        `self.hold_timing` records all of it, labelled as a bracketed
+        estimate: the host never observes the gate's frame directly."""
+        if "HOLD_ACK_DRAIN" in INJECT_BUGS:
+            return self._run_with_hold_historical(commands, baud=baud, quiet=quiet,
+                                                  hold_frames=hold_frames)
+        import synth_top_model as stm
+        hold = int(hold_frames)
+        hmin = hold_min_frames(baud)
+        if hold <= 0:
+            raise Refused(f"hold_frames {hold} is not a hold")
+        if hold < hmin:
+            raise Refused(f"hold_frames {hold} is shorter than the {hmin}-frame minimum "
+                          f"this link can deliver at {baud} baud: the gate-off packet "
+                          "cannot be accepted before its own due (hold_min_frames)")
+        if hold > HOLD_MAX_FRAMES:
+            raise Refused(f"hold_frames {hold} exceeds {HOLD_MAX_FRAMES}: the gate-off "
+                          "due would leave the 16-bit wrap window")
+        mi = next(i for i, c in enumerate(commands) if c[0] == "gate-off")
+        live_cmds, marker, rest = commands[:mi], commands[mi], commands[mi + 1:]
+        gates = [i for i, c in enumerate(live_cmds)
+                 if c[0] == "write" and c[2] == 0 and c[3] == stm.A_GATE_ON]
+        if len(gates) != 1:
+            raise Refused(f"{len(gates)} voice GATE_ON writes in the live setup: the "
+                          "hold needs exactly one gate to measure from")
+        gi = gates[0]
+        bracketed = (live_cmds[:gi] + [("status",), live_cmds[gi], ("status",)]
+                     + live_cmds[gi + 1:])
+        anchor = self.status()
+        self.origin = origin = anchor.frame
+        round_trip = self.status_round_trip_s or 0.0
+        self.lead_frames = lead = (MIN_LEAD_FRAMES + int(round_trip * SR) + 1)
+        rows_live = plan(bracketed, baud=baud, start_frame=lead, anchor_frame=origin)
+        verdict = preflight(rows_live, baud=baud)
+        if verdict["verdict"] != "FEASIBLE":
+            raise Refused(verdict["reason"])
+        timing = {"schema": "hold-timing/1", "requested_hold_frames": hold,
+                  "hold_min_frames": hmin, "declared_max_bound_frames": HOLD_BOUND_MAX_FRAMES,
+                  "gate_apply_kind": "bracketed estimate (STATUS before/after the "
+                                     "gate write); not an observed frame",
+                  "verdict": "REFUSED", "reason": "incomplete"}
+        self.hold_timing = timing
+        self._drain_counted()
+        boots0, errs0, acks_burst0 = self.boots_seen, len(self.device_errors), self.acks_seen
+        n_writes = sum(1 for r in rows_live if r.kind == "write")
+        self.send(rows_live, paced=False)
+        deadline = self.clock.monotonic() + 10.0
+        pre = self._take({"status"}, deadline)
+        post = self._take({"status"}, deadline) if pre is not None else None
+        # every live write's ACK, before the gate-off's answer is read: a
+        # write queued behind the gate must not be mistaken for it
+        while (post is not None and self.acks_seen - acks_burst0 < n_writes
+               and len(self.device_errors) == errs0):
+            if self._take({"ack", "err"}, deadline) is None:
+                break
+        if pre is None or post is None:
+            self._release_now(marker)
+            timing["reason"] = "the gate's STATUS bracket was not answered"
+            raise Refused(timing["reason"] + "; the note was released")
+        if self.acks_seen - acks_burst0 < n_writes and len(self.device_errors) == errs0:
+            self._release_now(marker)
+            timing["reason"] = (f"{self.acks_seen - acks_burst0} of {n_writes} live "
+                                "writes were ACKed")
+            raise Refused(timing["reason"] + "; the note was released")
+        if self.boots_seen != boots0:
+            timing["reason"] = "the device reset during the live setup (BOOT on the wire)"
+            raise Refused(timing["reason"])
+        if len(self.device_errors) != errs0:
+            self._release_now(marker)
+            errs = self.device_errors[errs0:]
+            timing["reason"] = (f"the device reported {errs} during the live setup: "
+                                "the gate may not be the one bracketed")
+            raise Refused(timing["reason"] + "; the note was released")
+        try:
+            br = gate_bracket(pre.frame, post.frame, baud=baud)
+        except Refused as exc:
+            self._release_now(marker)
+            timing["reason"] = str(exc)
+            raise Refused(f"{exc}; the note was released") from None
+        # place the bracket on the plan's (anchor-relative, unmasked) timeline
+        d = (pre.frame - origin) & 0xFFFF
+        pre_u = origin + (d if d < WRAP_HALF else d - 0x10000)
+        shift = pre_u - pre.frame
+        g_lo, g_hi, g_est = br["apply_lo"] + shift, br["apply_hi"] + shift, br["estimate"] + shift
+        due = g_est + hold
+        timing.update({"status_frames": [pre.frame, post.frame],
+                       "gate_apply_bounds": [g_lo, g_hi], "gate_apply_estimate": g_est,
+                       "hold_bound_frames": br["bound"], "gate_off_due": due,
+                       "planned_hold_frames": due - g_est,
+                       "delivered_hold_bounds": [due - g_hi, due - g_lo]})
+        if br["bound"] > HOLD_BOUND_MAX_FRAMES:
+            self._release_now(marker)
+            timing["reason"] = (f"the gate's apply frame is known only to +-{br['bound']} "
+                                f"frames (STATUS f{pre.frame} -> f{post.frame}, "
+                                f"{br['span']} frames for 10 bytes), wider than the "
+                                f"declared {HOLD_BOUND_MAX_FRAMES}: the bytes did not "
+                                "go out as one burst")
+            raise Refused(timing["reason"] + "; the note was released")
+        # the gate-off's packet leaves after post's 8-byte reply arrives
+        origin2 = pre_u + br["span"]           # the post-gate STATUS frame, unmasked
+        reply_frames = int(_byte_frames(baud, HOLD_BAUD_TOLERANCE)[1] * 8) + 1
+        lead2 = reply_frames + MIN_LEAD_FRAMES
+        gate_off = ("event", due - origin2, *marker[1:5])
+        rows = list(rows_live)
+        min_phrase = min((c[1] for c in rest), default=None)
+        offset = 0 if min_phrase is None else max(0, (due + 1) - (origin2 + min_phrase))
+        ev_cmds = [gate_off] + [("event", c[1] + offset, *c[2:]) for c in rest]
+        needs_flow = False
+        if rest and not rolling_needed(ev_cmds):
+            probe = self._plan_after_gate_off(ev_cmds, baud=baud, lead=lead2,
+                                              origin=origin2, marker=marker)
+            needs_flow = (preflight(rows_live + probe, baud=baud).get("mode") == "watermark"
+                          and "WATERMARK_PRELOAD" not in INJECT_BUGS)
+        if needs_flow or rolling_needed(ev_cmds):
+            # a musical-length phrase behind the gate-off: the gate-off is
+            # musical t=0 and the rest rolls from there. Its acceptance is
+            # policed by the roller (a due that died is REFUSED there) and by
+            # main()'s final error check; the record says so.
+            # the bracket's two STATUS queries are answered, not ACKed
+            self._run_acks_expected = sum(1 for r in rows_live if r.kind != "status")
+            ev_abs = [(origin2 + c[1], c) for c in ev_cmds]
+            self.performance_origin = origin2 & 0xFFFF
+            timing.update(verdict="UNCONFIRMED", reason="the gate-off rides the rolling "
+                          "phrase sender; its acceptance is checked there, not here")
+            rows += self._roll_events(ev_abs, baud=baud, quiet=quiet)
+            if not quiet:
+                for row in rows:
+                    print(f"  send f{row.send_frame:<6} {row.kind:<7} "
+                          f"{row.packet.hex()} -> applies f{row.apply_frame}")
+            return rows
+        rows_ev = self._plan_after_gate_off(ev_cmds, baud=baud, lead=lead2,
+                                            origin=origin2, marker=marker)
+        verdict = preflight(rows + rows_ev, baud=baud)
+        if verdict["verdict"] != "FEASIBLE":
+            self._release_now(marker)
+            timing["reason"] = verdict["reason"]
+            raise Refused(f"{verdict['reason']}; the note was released")
+        self._run_acks_expected = len(rows) - 2 + len(rows_ev)   # STATUS gets no ACK
+        acks0, errs0 = self.acks_seen, len(self.device_errors)
+        wire = rows_ev
+        if "HOLD_FORGED_LOG" in INJECT_BUGS:
+            # the deceptive log: the rows (and so the capture and the record)
+            # keep the correct due; the packet on the wire is 600 frames later
+            r0 = rows_ev[0]
+            late = Placed(r0.index, r0.kind, pkt_event((r0.due + 600) & 0xFFFF,
+                                                       *marker[1:5]),
+                          r0.send_frame, r0.end_cycle, r0.accept_frame, r0.due,
+                          r0.apply_frame)
+            wire = [late] + rows_ev[1:]
+        self.send(wire, paced=False)
+        # the device's verdict on the gate-off packet (the first one sent)
+        deadline = self.clock.monotonic() + 5.0
+        verdict_pkt = None
+        while verdict_pkt is None:
+            if len(self.device_errors) > errs0:
+                verdict_pkt = ("err", self.device_errors[errs0])
+            elif self.acks_seen > acks0:
+                verdict_pkt = ("ack", None)
+            elif self._take({"ack", "err"}, deadline) is None:
+                break
+        if verdict_pkt is None:
+            timing["reason"] = "the device never answered the gate-off packet"
+            self._release_now(marker)
+            raise Refused(timing["reason"] + "; the note was released")
+        if verdict_pkt[0] == "err":
+            code, info = verdict_pkt[1]
+            timing["reason"] = (f"the device answered the gate-off with ERR "
+                                f"{ERR_NAMES.get(code, code)} (code {code}): the "
+                                f"{hold}-frame deadline was missed on this link")
+            if code != ERR_DUE:
+                self._release_now(marker)
+            # ERR 3: the device executes a late event in the next frame, so
+            # the note is already released -- loudly, and late
+            raise Refused(timing["reason"])
+        timing.update(verdict="WITHIN_BOUND", reason=(
+            f"gate-off ACKed ahead of its due; hold {hold} +- {br['bound']} frames"))
+        rows += rows_ev
+        if not quiet:
+            for row in rows:
+                print(f"  send f{row.send_frame:<6} {row.kind:<7} "
+                      f"{row.packet.hex()} -> applies f{row.apply_frame}")
+        return rows
+
+    def _plan_after_gate_off(self, ev_cmds: list, *, baud: int, lead: int,
+                             origin: int, marker: tuple) -> list:
+        """Plan the gate-off (at its exact due) and the phrase behind it.
+        The gate-off is never shifted; the phrase moves later in whole
+        frames, spacing intact, until every one of its events carries
+        PLAN_SLACK_FRAMES over its acceptance. A gate-off the plan cannot
+        land is a missed deadline: the note is released and REFUSED."""
+        head, tail = ev_cmds[:1], ev_cmds[1:]
+        shift = PLAN_SLACK_FRAMES if tail else 0
+        for _ in range(400):
+            cmds = head + [("event", c[1] + shift, *c[2:]) for c in tail]
+            try:
+                rows = plan(cmds, baud=baud, start_frame=lead, anchor_frame=origin)
+            except ValueError as exc:
+                if "event 0:" in str(exc) or not tail:
+                    self._release_now(marker)
+                    self.hold_timing["reason"] = f"the gate-off cannot be planned: {exc}"
+                    raise Refused(f"the gate-off cannot land at its due on this link "
+                                  f"({exc}); the note was released") from None
+                if "acceptance" not in str(exc):
+                    raise
+                shift += 256
+                continue
+            slack = min(((r.due - r.accept_frame) for r in rows[1:]),
+                        default=PLAN_SLACK_FRAMES)
+            if slack >= PLAN_SLACK_FRAMES:
+                return rows
+            shift += PLAN_SLACK_FRAMES - slack
+        self._release_now(marker)
+        raise Refused("could not plan the phrase behind the gate-off within 400 "
+                      "shifts; the note was released")
+
+    def _run_with_hold_historical(self, commands: list, *, baud: int, quiet: bool,
+                                  hold_frames: int) -> list:
+        """HISTORICAL (pre-#306), kept verbatim as the HOLD_ACK_DRAIN control.
+        On the scripted device it planned 3121 frames for a 1920-frame request
+        and the device held 3155: the ACK loop below waits in 20 ms windows
+        for a STATUS that never comes (+768 frames), STATUS-minus-RTT then
+        dates the gate from that late read (+735 against the true gate), and
+        plan_shifted adds PLAN_SLACK_FRAMES to the gate-off (+500).
+
+        A scheduled note-off anchors to the OBSERVED gate, not a
         prediction: the live writes go first, the gate-on's ACK is waited for
         (the device ACKs every accepted packet), a fresh STATUS names the
         frame the gate actually landed in, and only then is the gate-off
@@ -1064,7 +1448,8 @@ class Bridge:
             # gate-off event is musical t=0 (it IS the hold's deadline), and
             # the rest rolls from there. Live rows are already counted; the
             # roller adds its own windows to the expected-ACK total.
-            self._run_acks_expected = len(rows_live)
+            # the bracket's two STATUS queries are answered, not ACKed
+            self._run_acks_expected = sum(1 for r in rows_live if r.kind != "status")
             ev_abs = [(origin2 + c[1], c) for c in ev_cmds]
             self.performance_origin = origin2 & 0xFFFF
             rows_ev = self._roll_events(ev_abs, baud=baud, quiet=quiet)
@@ -1686,8 +2071,23 @@ def _row_expect(r):
     return {"flag": flag, "sec": sec, "addr": addr, "data": data}
 
 
+def _rebased_hold_timing(rec: dict | None, base: int) -> dict | None:
+    """The held note's timing record on the capture's timeline (frame 0 =
+    the first send), every frame field shifted by the same `base` as the
+    rows, so a reader compares like with like."""
+    if not rec:
+        return None
+    out = dict(rec)
+    for k in ("gate_apply_estimate", "gate_off_due"):
+        if isinstance(out.get(k), int):
+            out[k] = out[k] - base
+    if isinstance(out.get("gate_apply_bounds"), list):
+        out["gate_apply_bounds"] = [int(x) - base for x in out["gate_apply_bounds"]]
+    return out
+
+
 def write_capture(prefix: str, rows: list, *, origin: int,
-                  baud: int = DEFAULT_BAUD) -> str:
+                  baud: int = DEFAULT_BAUD, hold_timing: dict | None = None) -> str:
     """The exact bytes the tool emits, in plan order, with the schedule the
     planner gave them: `<prefix>.cmds` in the RTL bench's S-line format and
     `<prefix>.plan.json` with every row (rebased so frame 0 is the first
@@ -1717,6 +2117,10 @@ def write_capture(prefix: str, rows: list, *, origin: int,
                   "due": (r.due - base) if r.due >= 0 else -1,
                   "apply_frame": r.apply_frame - base} for r in rows],
     }
+    if hold_timing:
+        # #306: a held note's hold is a bracketed ESTIMATE with a bound, and
+        # says so; the rows above are the plan, this is what the host knew
+        record["hold_timing"] = _rebased_hold_timing(hold_timing, base)
     with open(plan_path, "w") as fh:
         json.dump(record, fh, indent=2)
         fh.write("\n")
@@ -1948,7 +2352,8 @@ def main(argv=None, *, bridge_factory=None) -> int:
         print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
         return 2
     if a.capture:
-        write_capture(a.capture, rows, origin=bridge.origin, baud=a.baud)
+        write_capture(a.capture, rows, origin=bridge.origin, baud=a.baud,
+                      hold_timing=getattr(bridge, "hold_timing", None))
     last = max(r.apply_frame for r in rows)
     end = bridge.wait_until(last + 64)
     acked = bridge.acks_seen - bridge._run_ack_base

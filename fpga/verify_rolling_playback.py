@@ -115,10 +115,14 @@ def intended(fixture: str, preset: str | None = None,
 
 # ---- one run of the real CLI on the simulated device --------------------------
 class Harness:
-    def __init__(self, epoch: int = 0):
+    def __init__(self, epoch: int = 0, *, reply_delay_s: float = 0.0,
+                 tx_delay_s: float = 0.0):
+        # the two transport latencies (#306): device -> host replies and
+        # host -> device bytes. Both default to zero, the historical harness.
         self.clock = dev.SimClock()
-        self.sim = dev.UartDeviceSim(epoch_frame=epoch, clock=self.clock)
-        self.ser = dev.SimSerial(self.sim)
+        self.sim = dev.UartDeviceSim(epoch_frame=epoch, clock=self.clock,
+                                     reply_delay_s=reply_delay_s)
+        self.ser = dev.SimSerial(self.sim, tx_delay_s=tx_delay_s)
         self.bridge = None
 
     def factory(self, _port, baud):
@@ -232,6 +236,39 @@ def _unwrap_offsets(got_frames: list, truth: list) -> list:
     return sorted({g - t for g, t in zip(got_frames, truth)})
 
 
+def held_hold_check(sim, bridge, requested: int) -> dict:
+    """Requested versus DELIVERED hold of a held note (#306), from the
+    device's executed writes by register identity on its unwrapped timeline:
+    the one voice GATE_ON and the one voice GATE_OFF. The host's per-run
+    bound (`bridge.hold_timing`) is the tolerance; with no record the
+    declared maximum is, and the missing record is itself a problem."""
+    import synth_top_model as stm
+    # the held note's gate-on is the one LIVE voice GATE_ON (a phrase's own
+    # gates are scheduled events); its gate-off is the first voice GATE_OFF
+    # executed after it (the phrase is placed after the hold)
+    on = [f for w, f in zip(sim.writes, sim.write_frames)
+          if w[2] == 0 and w[3] == stm.A_GATE_ON and w[5] == "live"]
+    off = [f for w, f in zip(sim.writes, sim.write_frames)
+           if w[2] == 0 and w[3] == stm.A_GATE_OFF and on and f > on[0]]
+    out = {"hold_requested": requested}
+    if sim.resets or len(on) != 1 or not off:
+        out["hold_problem"] = (f"REFUSED: the device log names {len(on)} live gate-on "
+                               f"and {len(off)} later gate-off writes (resets "
+                               f"{sim.resets}): the delivered hold is ambiguous")
+        return out
+    rec = getattr(bridge, "hold_timing", None) or {}
+    bound = rec.get("hold_bound_frames")
+    out["hold_delivered"] = off[0] - on[0]
+    out["hold_bound"] = bound
+    lim = bound if isinstance(bound, int) else uh.HOLD_BOUND_MAX_FRAMES
+    if abs(out["hold_delivered"] - requested) > lim:
+        out["hold_problem"] = (f"held note: the device held {out['hold_delivered']} "
+                               f"frames for {requested} (bound +-{lim})")
+    elif bound is None:
+        out["hold_problem"] = "held note: the host recorded no hold bound"
+    return out
+
+
 def check(run: dict) -> dict:
     """Compare what the device executed with the fixture's intent."""
     h, want = run["h"], run["want"]
@@ -316,7 +353,13 @@ def check(run: dict) -> dict:
         if [g[1:] for g in got[:nh]] != want["held"]:
             res["reasons"].append("the held note's gate-off is not the first "
                                   "timed write")
+        # NOTE: `got[0][0]` is the gate-off's distance from the performance
+        # origin the host chose, NOT the hold. The hold is checked below from
+        # the device's own gate writes (#306).
         res["hold_frames_observed"] = got[0][0] if got else None
+        res.update(held_hold_check(sim, bridge, run.get("hold_frames", 1920)))
+        if res.get("hold_problem"):
+            res["reasons"].append(res["hold_problem"])
         got = got[nh:]
         if got:
             base_g, base_e = got[0][0], exp[0][0]
