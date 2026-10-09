@@ -6,6 +6,13 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 Closure events below record forge state, not a verified fix or a new sound result.
 
+- **PR #583**: M1A phase-aware drive question; drive 0.25 confirmed at matched phase but not promoted; partial #337.
+- **PR #581**: Bind trial-receipt membership to the recorded registry and refuse empty required membership.
+- **PR #580**: Record revision 9 registers and the 4-bit wave code in the numeric contract.
+- **PR #579**: Refuse real MIDI sessions when an internal injection set is non-empty.
+- **Issue #283** (closed): Trial receipt accepted deleted or empty required-child membership; PR #581.
+- **Issue #321** (closed): Revision 9 registers and wave-code width were missing from the numeric contract; PR #580.
+- **Issue #288** (closed): Real MIDI sessions did not refuse an active internal injection set; PR #579.
 - **Issue #426** (closed): Deadline-evidence stimulus binding; closure records forge state, not a fresh timing verdict.
 - **Issue #573** (closed): Duplicate checkpoint-write guard telemetry; canonical finding #571 remains open.
 - **Issue #575** (closed): Duplicate Python-deletion guard telemetry; canonical finding #572 remains open.
