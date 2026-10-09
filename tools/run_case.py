@@ -3462,10 +3462,14 @@ def carry_rubric_history(case: dict, dest: pathlib.Path, res: dict) -> None:
     import scorecard
     old = None
     if dest.exists():
+        # A record that is present but unreadable is REFUSED, not read as "no
+        # earlier record": that dropped its rubric_history and the write that
+        # follows then overwrote it (#600).
         try:
             old = json.loads(dest.read_text())
-        except Exception:
-            old = None
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise Refused(f"{dest} is present but unreadable ({type(e).__name__}: "
+                          f"{e}); its rubric_history would be lost. Restore it from git.")
     history = list((old or {}).get("rubric_history") or [])
     if old is not None:
         before, after = scorecard.evaluate(case, old), scorecard.evaluate(case, res)
