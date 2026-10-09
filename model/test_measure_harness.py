@@ -341,3 +341,47 @@ def test_assert_precondition_control_refuses_a_nan_difference(measured, referenc
     `assert_precondition` fails every case here."""
     with pytest.raises(SystemExit, match="REFUSED"):
         mh.assert_precondition(measured, reference, tol=1e300, what="test")
+
+
+def _one(tmp_path, exc):
+    def classify(path):
+        return dict(voice="X", refs=["placeholder"])
+
+    def read_candidate(path):
+        raise exc
+
+    return mh.descent_test(_make_candidate_files(tmp_path, ["a.wav"]), classify,
+                           lambda p: (np.zeros(4), 48000), _prepare_noop,
+                           read_candidate=read_candidate)[0]
+
+
+def test_a_reader_bug_is_not_reported_as_an_unreadable_file(tmp_path):
+    """#610 start-red: a TypeError in the reader read as status=unreadable."""
+    r = _one(tmp_path, TypeError("read_candidate() got an unexpected argument"))
+    assert r["status"] == "error" and r["error_type"] == "TypeError"
+    assert "TypeError" in r["why"]
+
+
+def test_an_unreadable_file_keeps_its_exception_type(tmp_path):
+    r = _one(tmp_path, OSError("truncated file"))
+    assert r["status"] == "unreadable" and r["error_type"] == "OSError"
+    assert "truncated file" in r["why"]
+
+
+def test_a_reader_bug_raising_valueerror_is_still_unreadable_known_gap(tmp_path):
+    """Rule 8: the input that defeats `_DATA_ERRORS`, pinned as an accepted limit.
+
+    A BUG in the reader that raises ValueError (here a shape mismatch) is
+    indistinguishable by `status` from a bad file: both are "unreadable". The
+    mitigation is `error_type`/`why`, which a reader of the rows uses to tell
+    them apart. If this test starts failing because the classification was
+    narrowed, that is an improvement: update it and the comment on
+    `_DATA_ERRORS`."""
+    (tmp_path / "bug").mkdir()
+    (tmp_path / "bad").mkdir()
+    bug = _one(tmp_path / "bug", ValueError("could not broadcast input array "
+                                             "from shape (3,) into shape (2,)"))
+    bad = _one(tmp_path / "bad", OSError("Error opening 'a.wav': truncated"))
+    assert bug["status"] == bad["status"] == "unreadable"   # the known gap
+    assert bug["error_type"] == "ValueError" and bad["error_type"] == "OSError"
+    assert bug["why"].startswith("ValueError:")              # the mitigation
