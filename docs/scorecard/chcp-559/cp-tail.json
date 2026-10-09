@@ -1,5 +1,11 @@
 {
  "cmd": "cp-tail",
+ "model_sha16": "136fbadcc3a8a3ff",
+ "engine_fingerprint": "900c575a2c90c164",
+ "probe_sha16": "2642ed50ac87f6de",
+ "commit": "23e49751d9ff8d29007e40de767b5e967d1db4f1",
+ "sources_dirty": false,
+ "sources_moved_during_run": {},
  "refs_sha256": {
   "ch8/CH.WAV": "c9f30ff2b4d73b03f41960e504e03c54e9a59697af666fe4d155bab9cd1ccae6",
   "cp8/CP.WAV": "376429bb81cb48d1f392a11cd066c32ffb7883d445b2488704ea52e46bb08286",
