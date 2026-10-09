@@ -241,3 +241,40 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def _excess_trajectory():
+    t = np.arange(40) * 0.004
+    return t, 0.3 * np.exp(-t / 0.02)
+
+
+def test_a_bug_in_the_fit_raises_rather_than_reading_as_no_fit(monkeypatch):
+    """#600: `_fit_exponential` caught `Exception` around both fits, so a bug
+    (a changed signature, a TypeError in the model lambda) returned the same
+    all-None dict as a fit that legitimately failed to converge."""
+    import scipy.optimize as so
+
+    def broken(*a, **k):
+        raise TypeError("injected: curve_fit() got an unexpected keyword")
+
+    monkeypatch.setattr(so, "curve_fit", broken)
+    t, e = _excess_trajectory()
+    try:
+        P._fit_exponential(t, e)
+    except TypeError:
+        return
+    raise AssertionError("a TypeError inside the fit was swallowed as 'no fit'")
+
+
+def test_a_fit_that_does_not_converge_is_still_a_no_fit(monkeypatch):
+    """The legitimate refusal: curve_fit raises RuntimeError when it exhausts
+    maxfev. That must stay a None result, not a crash."""
+    import scipy.optimize as so
+
+    def no_converge(*a, **k):
+        raise RuntimeError("Optimal parameters not found: maxfev exceeded")
+
+    monkeypatch.setattr(so, "curve_fit", no_converge)
+    t, e = _excess_trajectory()
+    out = P._fit_exponential(t, e)
+    assert out["tau_ms"] is None and out["shape"] is None

@@ -443,3 +443,69 @@ def test_the_nightly_gate_decides_on_the_reports_exit_status_not_on_its_text():
     for decide_by_grep in ("grep -q", "grep -iq", "if grep", "if ! grep"):
         assert decide_by_grep not in step, (
             f"the gate decides with `{decide_by_grep}` over the report text")
+
+
+# ===========================================================================
+# #600: a bug in a measurement must not print as "the estimator refused"
+# ===========================================================================
+REFUSED = "the estimator refused"
+
+
+def _noise_share_only(monkeypatch, signal):
+    """Run the real harness (`sr.run`) over ONLY the SD noise-share property,
+    with the drum render replaced by `signal` so this costs milliseconds.
+    Returns that property's Result."""
+    props = [p for p in sr.build_properties()
+             if p.voice == "SD" and p.name == "noise share"]
+    assert len(props) == 1, "the SD noise-share property was renamed or removed"
+    monkeypatch.setattr(sr, "build_properties", lambda: props)
+    monkeypatch.setattr(sr, "_solo", lambda ctx, voice: signal)
+    out, _ = sr.run()
+    assert len(out) == 1
+    return out[0]
+
+
+def _damped_hit(seconds=0.4, seed=0):
+    t = np.arange(int(seconds * SR)) / SR
+    rng = np.random.default_rng(seed)
+    body = np.exp(-t / 0.05) * (np.sin(2 * np.pi * 175 * t) + 0.5 * np.sin(2 * np.pi * 340 * t))
+    return 0.5 * (body + 0.3 * np.exp(-t / 0.03) * rng.standard_normal(len(t)))
+
+
+def test_a_crashing_noise_share_reports_the_exception_not_a_refusal(monkeypatch):
+    """The control #600 asked for. `m_noise_share` used to wrap the call in
+    `except Exception: return None`, which pre-empted the harness's own
+    `type(e).__name__: e` branch -- so an ImportError, a changed signature or a
+    bad `bands` argument all printed `NOT MEASURABLE -- the estimator refused`,
+    indistinguishable from a real refusal on a degenerate hit."""
+    import drum_fit
+
+    def broken(*a, **k):
+        raise TypeError("injected: noise_share() got an unexpected argument")
+
+    monkeypatch.setattr(drum_fit, "noise_share", broken)
+    r = _noise_share_only(monkeypatch, _damped_hit())
+    assert r.measured is None and not r.ok
+    assert "TypeError" in r.why, f"the exception type was swallowed: why={r.why!r}"
+    assert r.why != REFUSED, "a crash in the measurement printed as a refusal"
+    assert "NOT MEASURABLE -- TypeError" in r.sentence()
+
+
+def test_noise_share_measures_a_real_hit(monkeypatch):
+    """The positive leg: the property, through the same harness and the same
+    stub render, yields a finite percentage -- so the test above is reaching
+    the code that ships, not a path that always fails."""
+    r = _noise_share_only(monkeypatch, _damped_hit())
+    assert r.measured is not None, f"no value on a clean hit: {r.why!r}"
+    assert np.isfinite(r.measured) and 0.0 <= r.measured <= 100.0
+    assert r.why != REFUSED
+
+
+def test_a_silent_hit_is_a_refusal_not_a_nan_value(monkeypatch):
+    """The legitimate refusal. `drum_fit.noise_share` signals a window with no
+    energy by returning share=NaN; that is the estimator declining, and must
+    print as such rather than reaching the lock comparison as a NaN that fails
+    every tolerance with no reason given."""
+    r = _noise_share_only(monkeypatch, np.zeros(int(0.4 * SR)))
+    assert r.measured is None, f"a silent hit was reported as a value: {r.measured!r}"
+    assert r.why == REFUSED

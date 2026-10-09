@@ -187,21 +187,49 @@ def peak_shape(x: np.ndarray, sr: int) -> dict:
                 Q=float(fpk / bw) if bw and np.isfinite(bw) and bw > 0 else float("nan"))
 
 
-def scan(setdir: str, n_harm: int = 8) -> list:
-    rows = []
+class ScanRefused(Exception):
+    """The capture set is not the set the caller thinks it is. `skipped` lists
+    (file, reason) for every WAV that could not be used."""
+
+    def __init__(self, msg: str, skipped: list):
+        super().__init__(msg)
+        self.skipped = skipped
+
+
+def scan(setdir: str, n_harm: int = 8, expect: int | None = None) -> list:
+    """Harmonic fingerprint of every WAV in `setdir` -- or REFUSE.
+
+    #600: this used to `continue` past any file that failed to read or was
+    under half a second, so a damaged set yielded fewer rows and no error, and
+    every "N of M" printed afterwards was over a denominator nobody chose. Now
+    any skipped file, an empty set, or fewer usable rows than `expect` raises
+    ScanRefused. `expect` exists because a file missing from disk is invisible
+    to a scan of what is on disk; the caller must say how many there are."""
+    rows, skipped = [], []
     for p in sorted(glob.glob(os.path.join(setdir, "*.wav"))):
+        name = os.path.basename(p)
         try:
             sr, x = wavfile.read(p)
-        except Exception:
+        except (ValueError, OSError, EOFError) as e:
+            skipped.append((name, f"unreadable: {type(e).__name__}: {e}"))
             continue
         x = x.astype(float)
         if x.ndim > 1:
             x = x.mean(1)
         if len(x) < sr // 2:
+            skipped.append((name, f"{len(x) / sr:.3f} s, under the 0.5 s minimum"))
             continue
         x /= max(abs(x).max(), 1.0)
         h = harmonics(x, sr, n_harm)
-        rows.append((os.path.basename(p), sr, len(x) / sr, h))
+        rows.append((name, sr, len(x) / sr, h))
+    problems = [f"{n}: {why}" for n, why in skipped]
+    if not rows:
+        problems.append(f"no usable recording in {setdir}")
+    if expect is not None and len(rows) < expect:
+        problems.append(f"{len(rows)} usable recordings, {expect} expected")
+    if problems:
+        raise ScanRefused(f"{len(skipped)} file(s) skipped in {setdir}; "
+                          + "; ".join(problems), skipped)
     return rows
 
 
@@ -210,6 +238,8 @@ def main(argv=None) -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--set", default="/tmp/legowelt")
     ap.add_argument("--res", type=float, default=1.25)
+    ap.add_argument("--expect", type=int, default=None,
+                    help="number of recordings the set holds; fewer usable is REFUSED")
     a = ap.parse_args(argv)
 
     print("== what a ladder's self-oscillation LOOKS like (our model, DR 0001) ==")
@@ -267,10 +297,22 @@ def main(argv=None) -> int:
           ", ".join(f"{ours[f]['h3']:+.0f}" for f in sorted(ours)) + " dB.")
 
     if not os.path.isdir(a.set):
+        if a.expect is not None:
+            # #600: --expect says the set exists; an absent directory is the
+            # whole set missing, the input a per-file guard cannot see.
+            print(f"\nREFUSED: {a.set} not found but --expect {a.expect} was given; "
+                  f"0 of {a.expect} recordings available.")
+            return 2
         print(f"\n{a.set} not found; skipping the recordings.")
         return 0
 
-    rows = scan(a.set)
+    try:
+        rows = scan(a.set, expect=a.expect)
+    except ScanRefused as e:
+        print(f"\nREFUSED: {e}")
+        print("  The recordings were not read as a whole set, so no count or")
+        print("  admission result over them would mean anything.")
+        return 2
     print(f"\n== {len(rows)} recordings scanned ==")
     pure = sorted(rows, key=lambda r: r[3]["h2"])
     print("  the 10 purest tones in the set (lowest h2):")
