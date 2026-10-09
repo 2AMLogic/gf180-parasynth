@@ -12,8 +12,16 @@ expected vs observed coverage, verdict, evidence level and controls. The
 receipts and their artifacts go into receipts.tgz; every RTL run identity is
 copied out beside it so fpga/release/r1_candidate.py can bind it to the
 candidate's sources. The domain tests are run here too and recorded by exit
-status. Nothing is typed by hand: a missing receipt is a missing row, which
-the scorecard reports as NO VERDICT.
+status. Nothing is typed by hand.
+
+A missing receipt is never silently absent (#609). Every expected (trial, mode)
+in ROWS that has no baseline receipt gets an explicit row with verdict
+NO VERDICT, receipt_valid false and missing true, and the harvester exits
+non-zero. The scorecard then cannot read that row's gate as PASS: gate_verdict
+needs every row PASS, and trust_rows turns receipt_valid false into NO VERDICT.
+This matters because a gate with SOME rows present would otherwise read PASS on
+less evidence. For example, T-LIVE-MIDI rtl present with sim absent used to give
+playability PASS.
 """
 from __future__ import annotations
 
@@ -103,6 +111,17 @@ def coverage_text(child: dict) -> str:
     return "; ".join(bits)
 
 
+def missing_row(t: str, mode: str) -> dict:
+    """The row for an expected run with no baseline receipt: counted invalid,
+    never PASS, so neither the exit code nor the scorecard can pass it."""
+    gate, workload, level, ident = ROWS[(t, mode)]
+    return {"name": f"{t} {mode}", "gate": gate, "workload": workload, "level": level,
+            "identity": f"no receipt; {ident}", "verdict": "NO VERDICT",
+            "verdict_reasons": ["MISSING: no baseline receipt for this expected run"],
+            "receipt": None, "receipt_valid": False, "missing": True, "execution": None,
+            "coverage": "no receipt", "children": {}, "controls": {}, "control_reasons": {}}
+
+
 def harvest(runs: Path, to: Path) -> dict:
     receipts = sorted((runs / "trials").rglob("receipt.json"))
     rows = []
@@ -128,6 +147,8 @@ def harvest(runs: Path, to: Path) -> dict:
             "controls": {c["id"]: bool(c.get("caught")) for c in rec["controls"]},
             "control_reasons": {c["id"]: c.get("reasons", [])[:2] for c in rec["controls"]},
         })
+    seen = {r["name"] for r in rows}
+    rows += [missing_row(t, mode) for (t, mode) in ROWS if f"{t} {mode}" not in seen]
     dom = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
                           "fpga/release/test_release_domain.py", "fpga/release/test_r1_candidate.py",
                           # the record/view binding tests depend on THIS summary; the
