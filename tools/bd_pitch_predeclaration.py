@@ -1,0 +1,431 @@
+#!/usr/bin/env python3
+"""Validator for the BD pitch-envelope pre-tuning freeze (#557, acceptance 3).
+
+    tools/bd_pitch_predeclaration.py check [--record PATH]
+    tools/bd_pitch_predeclaration.py min-improvement --baseline build/bd-pitch-baseline.json
+
+The record (`docs/bd-pitch-predeclaration.json`) is committed BEFORE any repair
+candidate is proposed, rendered or measured.  This file checks that the record
+is the kind of thing that can constrain a later selection, and REFUSES rather
+than answers when it cannot:
+
+  * every condition is spelled in a vocabulary the repository already has --
+    Fischer codes from `tools/perceptual_gate.py:CODES` / `TWO_KNOB`, MARS file
+    names that match `tools/measure_repeatability.py:CUR_RE`, model accents from
+    `model/tom_drop_fit.py:ACCENT_MAP` and DECAY knobs inside
+    `model/drums_fx.py:BD_DECAY_Q`'s table.  Constants are read with `ast`
+    from the source, not imported, so nothing here can drift from what ships
+    and nothing here executes those modules;
+  * DEVELOPMENT and UNTOUCHED are disjoint, and every axis (TONE, DECAY,
+    accent, retrigger) has at least one untouched value that development never
+    saw -- a held-out set that repeats development's values on an axis holds
+    nothing out on it;
+  * every metric function and every preservation probe names a file that
+    exists and a symbol that is defined in it (`path::symbol`);
+  * the minimum-improvement rule is a FORMULA over named terms, at least one
+    of which is a measured apparatus floor quoted verbatim from its source
+    document and one of which is read from the baseline JSON at use -- never a
+    bare constant;
+  * no parameter is proposed, and so no sensitivity-registry record claims
+    this issue.  If one is proposed later it must name its registry record.
+
+Exit codes follow the repository's verifier convention: 0 clean, 1 the record
+violates a rule (each violation printed), 2 REFUSED (a precondition such as the
+record or the baseline JSON is absent / not trustworthy).
+
+Guard and the input that defeats it (docs/verification-rules.md rule 8):
+`check` cannot tell whether the conditions were frozen BEFORE candidates were
+looked at -- a record written after a selection passes it identically.  Only
+git history can show that (the record's commit must precede any candidate
+commit), so the record carries `frozen_against` and the PR that adds it
+contains no candidate.  `check` also cannot tell whether a quoted floor is the
+RIGHT floor; it only proves the number is the one the cited document states.
+"""
+from __future__ import annotations
+
+import argparse
+import ast
+import functools
+import json
+import math
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+RECORD = ROOT / "docs" / "bd-pitch-predeclaration.json"
+AXES = ("tone", "decay", "accent", "retrigger")
+MARS_TONES = tuple(f"{i:02d}" for i in range(1, 7))   # 6 TONE positions (measure_repeatability s"grid")
+MARS_DECAYS = tuple("ABCDEF")                           # 6 DECAY letters, same source
+
+
+class Refused(RuntimeError):
+    """A precondition failed; nothing was checked or evaluated."""
+
+
+# ------------------------------------------------------------ source reading -
+@functools.lru_cache(maxsize=None)
+def _text(path: pathlib.Path) -> str:
+    return path.read_text()
+
+
+@functools.lru_cache(maxsize=None)
+def _module_constant(rel: str, name: str):
+    """A top-level literal assignment `name = <literal>` in ROOT/rel, by ast.
+    re.compile("...") yields its pattern string."""
+    tree = ast.parse(_text(ROOT / rel))
+    for node in tree.body:
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = [t for t in node.targets if isinstance(t, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            targets = [node.target]
+        if any(t.id == name for t in targets):
+            v = node.value
+            if (isinstance(v, ast.Call) and getattr(v.func, "attr", "") == "compile"
+                    and v.args and isinstance(v.args[0], ast.Constant)):
+                return v.args[0].value
+            return ast.literal_eval(v)
+    raise KeyError(f"{rel} defines no top-level literal {name}")
+
+
+def symbol_defined(path: pathlib.Path, symbol: str) -> bool:
+    """`def symbol`, `class symbol`, or a top-level `symbol =` in the file."""
+    if not path.is_file():
+        return False
+    text = _text(path)
+    s = re.escape(symbol)
+    return bool(re.search(rf"^[ \t]*(?:async[ \t]+)?(?:def|class)[ \t]+{s}\b", text, re.M)
+                or re.search(rf"^{s}\s*[:=]", text, re.M))
+
+
+def probe_exists(ref: str) -> str | None:
+    """None if `path` or `path::symbol` resolves, else the reason it does not."""
+    path, _, sym = ref.partition("::")
+    p = ROOT / path
+    if not p.is_file():
+        return f"file {path} does not exist"
+    if sym and not symbol_defined(p, sym):
+        return f"{path} defines no {sym}"
+    return None
+
+
+# ------------------------------------------------------------- vocabularies --
+@functools.lru_cache(maxsize=None)
+def vocab() -> dict:
+    codes = tuple(_module_constant("tools/perceptual_gate.py", "CODES"))
+    two = _module_constant("tools/perceptual_gate.py", "TWO_KNOB")
+    q = _module_constant("model/drums_fx.py", "BD_DECAY_Q")
+    return {
+        "fischer_codes": codes,
+        "fischer_prefix": two["BD"],                     # "bd8/BD"
+        # perceptual_gate.CODES comment: 0.0, 2.5, 5.0, 7.5, 10.0 in that order
+        "fischer_knob": dict(zip(codes, (0.0, 2.5, 5.0, 7.5, 10.0))),
+        "ref_main": _module_constant("model/drum_verify.py", "REF_MAIN")["BD"][0],
+        "mars_re": re.compile(_module_constant("tools/measure_repeatability.py", "CUR_RE")),
+        "accent_map": _module_constant("model/tom_drop_fit.py", "ACCENT_MAP"),
+        "decay_knob_range": (min(q), max(q)),
+        "registry": _module_constant_json("docs/sensitivity/registry.json", "records"),
+    }
+
+
+def _module_constant_json(rel: str, key: str):
+    return json.loads((ROOT / rel).read_text())[key]
+
+
+# ---------------------------------------------------------------- the check --
+def axis_values(c: dict) -> dict:
+    """The value a condition takes on each axis, as a hashable."""
+    ref = c.get("reference") or {}
+    m = c.get("model") or {}
+    acc = m.get("accent")
+    return {"tone": (ref.get("corpus"), c.get("tone")),
+            "decay": (ref.get("corpus"), c.get("decay"), m.get("decay_knob")),
+            "accent": tuple(acc) if isinstance(acc, list) else acc,
+            "retrigger": m.get("retrigger_ms")}
+
+
+def condition_key(c: dict) -> tuple:
+    ref = c.get("reference") or {}
+    return (json.dumps(ref, sort_keys=True),) + tuple(axis_values(c)[a] for a in AXES)
+
+
+def _check_condition(c: dict, V: dict) -> list:
+    out, cid = [], c.get("id", "<no id>")
+    ref, m = c.get("reference") or {}, c.get("model") or {}
+    corpus = ref.get("corpus")
+    k = m.get("decay_knob")
+    lo, hi = V["decay_knob_range"]
+    if not isinstance(k, (int, float)) or not lo <= k <= hi:
+        out.append(f"{cid}: model.decay_knob {k!r} outside BD_DECAY_Q's table {lo}..{hi}")
+    r = m.get("retrigger_ms")
+    if r is not None and not (isinstance(r, (int, float)) and r > 0):
+        out.append(f"{cid}: model.retrigger_ms must be null or > 0, got {r!r}")
+    acc = m.get("accent")
+    if corpus == "fischer":
+        t, d = c.get("tone"), c.get("decay")
+        if t not in V["fischer_codes"] or d not in V["fischer_codes"]:
+            out.append(f"{cid}: Fischer tone/decay {t!r}/{d!r} not in perceptual_gate.CODES")
+        else:
+            want = f"{V['fischer_prefix']}{t}{d}.WAV"
+            if ref.get("file") != want:
+                out.append(f"{cid}: Fischer file {ref.get('file')!r} is not {want!r}")
+            if isinstance(k, (int, float)) and k != V["fischer_knob"][d]:
+                out.append(f"{cid}: decay code {d} is knob {V['fischer_knob'][d]}, record says {k}")
+        if acc != 1.0:
+            out.append(f"{cid}: Fischer has no accent axis; model accent must be 1.0, got {acc!r}")
+    elif corpus == "mars":
+        files = ref.get("files") or {}
+        if not isinstance(acc, list) or len(acc) != len(files) or not files:
+            out.append(f"{cid}: MARS condition needs one model accent per accent file")
+        for i, (letter, name) in enumerate(sorted(files.items())):
+            mt = V["mars_re"].match(name or "")
+            if not mt:
+                out.append(f"{cid}: {name!r} does not match measure_repeatability.CUR_RE")
+                continue
+            if mt.group("accent") != letter:
+                out.append(f"{cid}: {name!r} is accent {mt.group('accent')}, keyed {letter}")
+            if mt.group("decay") != c.get("decay") or mt.group("tone") != c.get("tone"):
+                out.append(f"{cid}: {name!r} is not decay {c.get('decay')} tone {c.get('tone')}")
+            if mt.group("decay") not in MARS_DECAYS or mt.group("tone") not in MARS_TONES:
+                out.append(f"{cid}: {name!r} outside the 6 DECAY x 6 TONE grid")
+            if letter not in V["accent_map"]:
+                out.append(f"{cid}: accent {letter} not in tom_drop_fit.ACCENT_MAP")
+            elif isinstance(acc, list) and i < len(acc) and acc[i] != V["accent_map"][letter]:
+                out.append(f"{cid}: accent {letter} maps to {V['accent_map'][letter]}, record says {acc[i]}")
+    elif corpus is None:
+        if r is None:
+            out.append(f"{cid}: a condition with no reference must be a retrigger condition")
+        if acc not in V["accent_map"].values():
+            out.append(f"{cid}: model accent {acc!r} not one of tom_drop_fit.ACCENT_MAP's")
+    else:
+        out.append(f"{cid}: unknown reference corpus {corpus!r}")
+    return out
+
+
+SAFE_FUNCS = {"max": max, "min": min}
+
+
+def _formula_names(expr: str) -> set:
+    tree = ast.parse(expr, mode="eval")
+    names = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name) and n.id not in SAFE_FUNCS:
+            names.add(n.id)
+        elif not isinstance(n, (ast.Expression, ast.BinOp, ast.Add, ast.Mult, ast.Sub,
+                                ast.Constant, ast.Call, ast.Name, ast.Load)):
+            raise ValueError(f"formula uses {type(n).__name__}; only + - * max min allowed")
+    return names
+
+
+def eval_formula(expr: str, values: dict) -> float:
+    _formula_names(expr)                         # whitelist first
+    return float(eval(compile(ast.parse(expr, mode="eval"), "<rule>", "eval"),
+                      {"__builtins__": {}, **SAFE_FUNCS}, dict(values)))
+
+
+def _check_rule(name: str, rule, out: list):
+    """A rule is a formula over named, sourced terms; never a bare number."""
+    if not isinstance(rule, dict) or not isinstance(rule.get("formula"), str):
+        out.append(f"{name}: bare constant {rule!r}; must be {{formula, terms}} over measured terms")
+        return
+    try:
+        used = _formula_names(rule["formula"])
+    except (SyntaxError, ValueError) as e:
+        out.append(f"{name}: formula unparsable: {e}")
+        return
+    terms = {t.get("name"): t for t in rule.get("terms", [])}
+    if not used:
+        out.append(f"{name}: formula {rule['formula']!r} names no term: a bare constant")
+    for u in used - set(terms):
+        out.append(f"{name}: formula uses {u}, which is not a declared term")
+    for t in terms.values():
+        if t.get("name") not in used:
+            out.append(f"{name}: term {t.get('name')} declared but unused by the formula")
+        if "quote" in t:
+            src = ROOT / t.get("source", "")
+            if not src.is_file():
+                out.append(f"{name}: term {t['name']} cites missing {t.get('source')}")
+            elif t["quote"] not in _text(src):
+                out.append(f"{name}: term {t['name']}: {t['quote']!r} not found in {t['source']}")
+            elif not re.search(rf"(?<![\d.]){re.escape(str(t.get('value')))}(?![\d])", t["quote"]):
+                out.append(f"{name}: term {t['name']} value {t.get('value')} is not the quoted number")
+        elif "baseline_key" in t:
+            prod = ROOT / t.get("producer", "")
+            if not prod.is_file() or f'"{t["baseline_key"]}"' not in _text(prod):
+                out.append(f"{name}: {t.get('producer')} does not produce {t['baseline_key']!r}")
+        elif "computed" in t:
+            # evaluated at use by an existing probe, e.g. the gate's own
+            # target-against-itself floor for one feature at one condition
+            if (why := probe_exists(t["computed"])):
+                out.append(f"{name}: term {t['name']}: {why}")
+        elif "json" in t:
+            p = ROOT / t["json"]
+            try:
+                v = json.loads(p.read_text())
+                for k in t["path"]:
+                    v = v[k]
+            except (OSError, KeyError, TypeError, ValueError):
+                out.append(f"{name}: term {t['name']}: {t['json']}:{t.get('path')} unreadable")
+                continue
+            if v != t.get("value"):
+                out.append(f"{name}: term {t['name']} says {t.get('value')}, {t['json']} says {v}")
+        else:
+            out.append(f"{name}: term {t.get('name')} has no source (quote / baseline_key / json)")
+    return terms
+
+
+def check(rec: dict) -> list:
+    """Every rule the record violates, as strings.  [] means clean."""
+    out = []
+    V = vocab()
+    conds = rec.get("conditions") or {}
+    dev, unt = conds.get("development") or [], conds.get("untouched") or []
+    if not dev or not unt:
+        out.append("conditions: development and untouched must both be non-empty")
+    ids = [c.get("id") for c in dev + unt]
+    if len(ids) != len(set(ids)):
+        out.append(f"conditions: duplicate ids {sorted({i for i in ids if ids.count(i) > 1})}")
+    for c in dev + unt:
+        out += _check_condition(c, V)
+    kd = {condition_key(c): c.get("id") for c in dev}
+    for c in unt:
+        if condition_key(c) in kd:
+            out.append(f"overlap: untouched {c.get('id')} is development {kd[condition_key(c)]}")
+    for a in AXES:
+        dv = {axis_values(c)[a] for c in dev}
+        new = {axis_values(c)[a] for c in unt} - dv
+        if not new:
+            out.append(f"axis {a}: no untouched value that development does not also use")
+    if not any((c.get("reference") or {}).get("file") == V["ref_main"] for c in dev):
+        out.append(f"development must contain the gate's own BD target {V['ref_main']}")
+
+    pm = rec.get("primary_metric") or {}
+    for f in pm.get("functions", []):
+        if (why := probe_exists(f)):
+            out.append(f"primary_metric: {why}")
+    if not pm.get("functions"):
+        out.append("primary_metric: names no estimator function")
+    for s in rec.get("secondary_metrics", []):
+        for f in s.get("functions", []):
+            if (why := probe_exists(f)):
+                out.append(f"secondary_metric {s.get('name')}: {why}")
+        if "guard" in s:
+            _check_rule(f"secondary_metric {s.get('name')} guard", s["guard"], out)
+
+    terms = _check_rule("minimum_improvement", rec.get("minimum_improvement"), out) or {}
+    if not any("quote" in t for t in terms.values()):
+        out.append("minimum_improvement: no measured apparatus-floor term (quoted from its source)")
+    if not any("baseline_key" in t for t in terms.values()):
+        out.append("minimum_improvement: no term read from the baseline JSON (recording spread)")
+
+    props = rec.get("preservation") or []
+    names = {p.get("property") for p in props}
+    for need in rec.get("required_properties", []):
+        if need not in names:
+            out.append(f"preservation: required property {need} has no limit")
+    for p in props:
+        if not p.get("probes"):
+            out.append(f"preservation {p.get('property')}: no probe")
+        for ref in p.get("probes", []) + p.get("must_still_pass", []):
+            if (why := probe_exists(ref)):
+                out.append(f"preservation {p.get('property')}: {why}")
+        lim = p.get("limit")
+        if isinstance(lim, dict) and lim.get("bit_exact") is True:
+            # zero tolerance is a statement, not a bare constant; its fallback
+            # (if shared arithmetic is changed on purpose) must still be a rule
+            _check_rule(f"preservation {p.get('property')} fallback", lim.get("fallback"), out)
+        else:
+            _check_rule(f"preservation {p.get('property')} limit", lim, out)
+        if not (isinstance(lim, dict) and lim.get("relation")):
+            out.append(f"preservation {p.get('property')}: limit states no relation "
+                       "(what is compared with what)")
+
+    params = rec.get("parameters_proposed")
+    if params is None:
+        out.append("parameters_proposed: must be stated (an empty list is a statement)")
+    elif not params:
+        if rec.get("sensitivity_registry_entries_added"):
+            out.append("no parameter proposed, yet registry entries are claimed")
+        hits = [r for r in V["registry"] if "bd-pitch" in r or "557" in r]
+        if hits:
+            out.append(f"no parameter proposed, yet the registry carries {hits}")
+    else:
+        for prm in params:
+            if prm.get("registry_record") not in V["registry"]:
+                out.append(f"parameter {prm.get('name')}: no sensitivity-registry record")
+    return out
+
+
+# ------------------------------------------------ evaluation at use (later) --
+def load_baseline(path: pathlib.Path) -> dict:
+    if not path.is_file():
+        raise Refused(f"baseline JSON {path} is absent: run tools/bd_pitch_baseline.py on the "
+                      "build box first (docs/bd-pitch-baseline-request.md)")
+    b = json.loads(path.read_text())
+    prov = b.get("provenance") or {}
+    if not prov.get("commit") or prov.get("sources_dirty") is not False:
+        raise Refused(f"baseline {path} has no commit or was produced from dirty sources")
+    return b
+
+
+def minimum_improvement_cents(rec: dict, baseline: dict | None) -> float:
+    """The frozen rule evaluated: quoted terms from the record, baseline terms
+    from the baseline JSON.  REFUSES without a finite baseline value."""
+    rule = rec["minimum_improvement"]
+    vals = {}
+    for t in rule["terms"]:
+        if "baseline_key" in t:
+            if baseline is None:
+                raise Refused(f"{t['name']} is read from the baseline JSON, and there is none")
+            v = baseline.get(t["baseline_key"])
+            if not isinstance(v, (int, float)) or not math.isfinite(v):
+                raise Refused(f"baseline {t['baseline_key']} = {v!r} is not a finite number")
+            vals[t["name"]] = float(v)
+        else:
+            vals[t["name"]] = float(t["value"])
+    return eval_formula(rule["formula"], vals)
+
+
+def satisfiable(rec: dict, baseline: dict) -> dict:
+    """Run the gate against the current state before trusting it (CLAUDE.md):
+    an improvement larger than the whole present deficit cannot be shown."""
+    need = minimum_improvement_cents(rec, baseline)
+    deficit = abs(float(baseline["pairs"]["fischer_vs_ours"]["glide_deficit_cents"]))
+    return {"min_improvement_cents": need, "current_deficit_cents": deficit,
+            "satisfiable": need < deficit}
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("check")
+    c.add_argument("--record", type=pathlib.Path, default=RECORD)
+    m = sub.add_parser("min-improvement")
+    m.add_argument("--record", type=pathlib.Path, default=RECORD)
+    m.add_argument("--baseline", type=pathlib.Path, required=True)
+    a = ap.parse_args(argv)
+    try:
+        if not a.record.is_file():
+            raise Refused(f"record {a.record} is absent")
+        rec = json.loads(a.record.read_text())
+        if a.cmd == "check":
+            bad = check(rec)
+            for b in bad:
+                print(f"VIOLATION {b}")
+            print("CLEAN" if not bad else f"FAIL ({len(bad)} violation(s))")
+            return 1 if bad else 0
+        s = satisfiable(rec, load_baseline(a.baseline))
+        print(json.dumps(s, indent=1))
+        if not s["satisfiable"]:
+            print("REFUSED: the frozen minimum improvement exceeds the present deficit; the "
+                  "defect is not resolvable above the floor. Do not loosen the rule.")
+            return 2
+        return 0
+    except Refused as e:
+        print(f"REFUSED: {e}")
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
