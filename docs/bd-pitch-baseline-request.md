@@ -87,6 +87,15 @@ candidate existed and before the real-recording baseline ran. It holds:
   120 ms and at DECAY 10, and accent 2.0.
 - **Primary metric.** The median over untouched Fischer conditions of
   |`glide_cents`(808) - `glide_cents`(ours)|.
+- **Refused readings (PR #601 review).** `glide_cents` REFUSES at DECAY knob 0
+  (tau about 15 ms: the ring is gone by the 80 to 130 ms late window), and two
+  untouched Fischer conditions sit there. The record now fixes the rule before
+  candidates exist, and `primary_aggregate` implements it. A refusal is never
+  a number. A condition whose reference or shipped reading refuses is excluded
+  from both medians and listed. A candidate refusal where shipped measured is a
+  candidate FAILURE. Fewer than 6 measured conditions, or a measured set that
+  no longer holds out a TONE and a DECAY value, gives REFUSED, never a pass.
+  The two knob-0 refusals are predicted from the closed-form signal only.
 - **Minimum improvement.** The formula is
   `2 * max(13.9, 8.5, 12) + recording_glide_spread_cents`. The three floors
   are quoted from this document, and the checker verifies the quotes. The
@@ -111,14 +120,18 @@ Stated limits of the split:
 
 Start red: before the record existed, the suite gave 25 errors, 1 failure
 and 1 pass. Against `tools/stubs/bd_pitch_predeclaration_stub.py`, which
-accepts everything, it gives 26 failures and 3 passes. The 3 passes are
-record-content assertions that a permissive validator cannot fail. Real
-validator: 29 pass. Each injected control is caught for its own reason:
+accepts everything and folds a refusal into the median as 0 cents, it gives
+44 failures and 3 passes. The 3 passes are record-content assertions that a
+permissive validator cannot fail. Real validator: 47 pass. The refused-reading
+tests were first run against the record without the rule: 19 failed. Each injected control is caught for its own reason:
 overlap, an axis not held out, a missing probe file or symbol, a dropped
 property, a bare constant (number, string, or a formula with no terms), a
 rule without the baseline spread, a floor not found in its cited document,
 off-vocabulary conditions, a MARS name not matching `CUR_RE`, and a registry
-claim without a parameter.
+claim without a parameter, a removed refused-reading rule, an unsatisfiable
+or malformed measured-condition minimum, a too-few outcome that does not
+refuse, and a refusal read as a 0-cent reading or as a 0-cent error (both
+move the known-answer medians).
 
 ### Wrong-then-right (this pass)
 
@@ -135,16 +148,27 @@ claim without a parameter.
 3. **Onset phase (measured).** #558 found the gate's `pitch_shape` reads onset
    phase. The same check on `glide_cents`, using a constant-pitch 49.4 Hz
    decaying sinusoid with sin-phase versus cos-phase onset, reads
-   10.4 to 10.5 cents of spurious glide at 48 kHz and 6.6 at 44.1 kHz. That is
+   10.4 to 10.5 cents of spurious glide at 48 kHz and 6.6 at 44.1 kHz at
+   DECAY knob 5. **That was not the worst case.** The Judge swept the DECAY
+   range, and `tools/bd_glide_phase_sweep.py` reproduces it: the worst is
+   17.5 cents at knob 1.0 (tau about 33 ms), 49.4 Hz, 48 kHz. That is still
    below the rule's apparatus part (27.8 cents), so onset phase alone cannot
-   pass the rule. This is now a test.
+   pass the rule, but the margin is 1.6x, not 2.6x. It is also above the
+   single-reading floor of 13.9. The test now covers every BD_DECAY_Q knob,
+   three pitches and both rates, and pins the stated worst case.
+5. **Refused readings (caught in review).** The record said what a refused
+   retrigger reading means, but not a refused Fischer one. The same sweep
+   showed knob 0 refuses, and two untouched Fischer conditions are at knob 0.
+   Fixed by the refused-readings rule above.
 4. **Citations.** Every cited file and symbol was re-checked against
    `origin/main` after it advanced. None was missing.
 
-Rate: 3 corrections to the record before freezing (1-3), plus the check in
-4, which needed no change. Item 1 was caught by checking against the rule,
-item 2 by reading a newly merged sibling, and item 3 by a known-answer
-signal.
+Rate: 3 corrections to the record before the first review (1-3), plus the
+check in 4, which needed no change. Item 1 was caught by checking against the
+rule, item 2 by reading a newly merged sibling, and item 3 by a known-answer
+signal. Review then found two more (3's worst case and 5), both from the same
+known-answer signal swept across DECAY rather than read at one knob. That is
+5 corrections in total, 2 of them found by the reviewer.
 
 ## Not done (needs a human/coordinator decision or the box)
 

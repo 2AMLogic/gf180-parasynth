@@ -27,7 +27,13 @@ than answers when it cannot:
     document and one of which is read from the baseline JSON at use -- never a
     bare constant;
   * no parameter is proposed, and so no sensitivity-registry record claims
-    this issue.  If one is proposed later it must name its registry record.
+    this issue.  If one is proposed later it must name its registry record;
+  * the primary aggregate declares what a REFUSED Fischer reading does
+    (`primary_metric.refused_readings`), and its measured-condition minimum is
+    satisfiable after the predicted refusals.  `primary_aggregate` applies
+    that rule at use: a refusal is never a number, a reference/shipped
+    refusal is excluded from both medians and listed, a candidate refusal is a
+    FAILURE, and too few measured conditions REFUSE (never pass).
 
 Exit codes follow the repository's verifier convention: 0 clean, 1 the record
 violates a rule (each violation printed), 2 REFUSED (a precondition such as the
@@ -275,6 +281,50 @@ def _check_rule(name: str, rule, out: list):
     return terms
 
 
+REFUSED_RULE_FIELDS = ("reading", "exclude", "candidate_refusal", "min_measured_conditions",
+                       "held_out_after_exclusion", "too_few_outcome", "predicted_refusals",
+                       "implemented_by", "known_answer")
+
+
+def untouched_fischer(rec: dict) -> list:
+    return [c for c in (rec.get("conditions") or {}).get("untouched") or []
+            if (c.get("reference") or {}).get("corpus") == "fischer"]
+
+
+def _check_refused_rule(rec: dict) -> list:
+    """The primary aggregate must say, BEFORE candidates exist, what a REFUSED
+    Fischer reading does (PR #601 review): glide_cents refuses at DECAY knob 0,
+    and two untouched Fischer conditions sit there."""
+    out = []
+    rr = (rec.get("primary_metric") or {}).get("refused_readings")
+    if not isinstance(rr, dict):
+        return ["primary_metric: no refused_readings rule; a REFUSED Fischer reading's "
+                "effect on the median would be chosen after candidates exist"]
+    for f in REFUSED_RULE_FIELDS:
+        if f not in rr:
+            out.append(f"primary_metric.refused_readings: missing {f}")
+    ids = {c.get("id") for c in untouched_fischer(rec)}
+    n = len(ids)
+    k = rr.get("min_measured_conditions")
+    if not isinstance(k, int) or isinstance(k, bool) or not 1 <= k <= n:
+        out.append(f"primary_metric.refused_readings: min_measured_conditions {k!r} must be an "
+                   f"integer in 1..{n} (the untouched Fischer conditions)")
+    pred = rr.get("predicted_refusals") or []
+    for p in pred:
+        if p not in ids:
+            out.append(f"primary_metric.refused_readings: predicted refusal {p} is not an "
+                       "untouched Fischer condition")
+    if isinstance(k, int) and n - len(set(pred) & ids) < k:
+        out.append(f"primary_metric.refused_readings: unsatisfiable -- {n} conditions minus "
+                   f"{len(pred)} predicted refusals leaves fewer than min_measured_conditions {k}")
+    if "REFUSE" not in str(rr.get("too_few_outcome", "")):
+        out.append("primary_metric.refused_readings: too_few_outcome must REFUSE (never pass)")
+    for ref in (rr.get("implemented_by"), rr.get("known_answer")):
+        if isinstance(ref, str) and (why := probe_exists(ref)):
+            out.append(f"primary_metric.refused_readings: {why}")
+    return out
+
+
 def check(rec: dict) -> list:
     """Every rule the record violates, as strings.  [] means clean."""
     out = []
@@ -306,6 +356,7 @@ def check(rec: dict) -> list:
             out.append(f"primary_metric: {why}")
     if not pm.get("functions"):
         out.append("primary_metric: names no estimator function")
+    out += _check_refused_rule(rec)
     for s in rec.get("secondary_metrics", []):
         for f in s.get("functions", []):
             if (why := probe_exists(f)):
@@ -385,6 +436,76 @@ def minimum_improvement_cents(rec: dict, baseline: dict | None) -> float:
         else:
             vals[t["name"]] = float(t["value"])
     return eval_formula(rule["formula"], vals)
+
+
+SIDES = ("reference", "shipped", "candidate")
+
+
+def _measured(x):
+    """A glide reading as a float, or None if it is REFUSED.  Only a finite
+    real number is a reading: a Refused, None, NaN, inf, bool or a string
+    (even "0") is a refusal.  A refusal is NEVER converted to a number."""
+    if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x):
+        return None
+    return float(x)
+
+
+def primary_aggregate(rec: dict, readings: dict) -> dict:
+    """The frozen primary aggregate with the frozen REFUSED rule applied.
+
+    `readings` maps every untouched Fischer condition id to
+    {"reference": r, "shipped": s, "candidate": c}, each a glide_cents value or
+    a refusal (anything `_measured` rejects).  d = reference - ours.
+
+      * reference or shipped REFUSED -> condition excluded from BOTH medians,
+        listed with the side that refused;
+      * reference and shipped measured, candidate REFUSED -> verdict FAILURE
+        (the candidate destroyed a measurable trajectory); no median is formed
+        for the candidate, so a refusal cannot become a 0-cent |d|;
+      * fewer than min_measured_conditions measured, or the measured set no
+        longer holds out a TONE and a DECAY value development never used ->
+        Refused (no claim either way; never a pass).
+    """
+    import statistics
+    rr = (rec.get("primary_metric") or {}).get("refused_readings")
+    if not isinstance(rr, dict) or not isinstance(rr.get("min_measured_conditions"), int):
+        raise Refused("the record declares no refused_readings rule; the aggregate cannot be formed")
+    conds = {c["id"]: c for c in untouched_fischer(rec)}
+    if set(readings) != set(conds):
+        raise Refused(f"readings must cover exactly the untouched Fischer conditions: missing "
+                      f"{sorted(set(conds) - set(readings))}, unknown {sorted(set(readings) - set(conds))}")
+    measured, excluded, cand_refused = [], [], []
+    for cid in sorted(conds):
+        r = {s: _measured((readings[cid] or {}).get(s)) for s in SIDES}
+        bad = [s for s in ("reference", "shipped") if r[s] is None]
+        if bad:
+            excluded.append({"id": cid, "refused": bad})
+            continue
+        if r["candidate"] is None:
+            cand_refused.append(cid)
+        measured.append((cid, r))
+    k = rr["min_measured_conditions"]
+    if len(measured) < k:
+        raise Refused(f"only {len(measured)} untouched Fischer condition(s) measurable "
+                      f"(< {k}); excluded {excluded}")
+    dev = (rec.get("conditions") or {}).get("development") or []
+    for axis in ("tone", "decay"):
+        dv = {axis_values(c)[axis] for c in dev}
+        if not {axis_values(conds[cid])[axis] for cid, _ in measured} - dv:
+            raise Refused(f"after exclusion the measured set holds out no {axis} value; "
+                          f"excluded {excluded}")
+    out = {"measured": [cid for cid, _ in measured], "excluded": excluded,
+           "candidate_refused": cand_refused,
+           "shipped_median": statistics.median(abs(r["reference"] - r["shipped"])
+                                               for _, r in measured)}
+    if cand_refused:
+        out.update(verdict="FAILURE", candidate_median=None, improvement=None)
+        return out
+    out["candidate_median"] = statistics.median(abs(r["reference"] - r["candidate"])
+                                                for _, r in measured)
+    out["improvement"] = out["shipped_median"] - out["candidate_median"]
+    out["verdict"] = "EVALUATED"
+    return out
 
 
 def satisfiable(rec: dict, baseline: dict) -> dict:

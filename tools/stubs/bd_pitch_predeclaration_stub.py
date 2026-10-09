@@ -21,6 +21,21 @@ def minimum_improvement_cents(rec, baseline):
     return 0.0
 
 
+def primary_aggregate(rec, readings):
+    """The injected bug the review named: a refusal silently read as 0 cents,
+    every condition counted, nothing excluded, never refuses."""
+    import statistics
+
+    def num(x):
+        return x if isinstance(x, (int, float)) and x == x else 0.0
+    ship = [abs(num(r.get("reference")) - num(r.get("shipped"))) for r in readings.values()]
+    cand = [abs(num(r.get("reference")) - num(r.get("candidate"))) for r in readings.values()]
+    s, c = statistics.median(ship), statistics.median(cand)
+    return {"measured": sorted(readings), "excluded": [], "candidate_refused": [],
+            "shipped_median": s, "candidate_median": c, "improvement": s - c,
+            "verdict": "EVALUATED"}
+
+
 def satisfiable(rec, baseline):
     return {"satisfiable": True}
 
