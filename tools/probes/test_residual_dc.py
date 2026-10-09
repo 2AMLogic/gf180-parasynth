@@ -343,3 +343,99 @@ def test_the_bus_surrogate_is_bit_exact_against_the_shipped_coupling():
     assert not d0.any() and b0.any()          # the CH lives on the BODY bus; dmix is trivially exact
     wrong = dx.DcBlockFx(dx.COUPLE_K - 1, in_bits=dx.BODY_BITS)
     assert not np.array_equal(np.array([wrong.step(int(v)) for v in b0], np.int64), b1)
+
+
+def test_bus_variants_carry_an_own_baseline_bound_for_every_variant():
+    import drums_fx as dx
+    c = dict(seconds=0.30, gain=0.45, vel=1.0)
+    R.render_bus("CH", 0, c["seconds"], c["gain"], c["vel"])
+    R.render_bus("CH", 1, c["seconds"], c["gain"], c["vel"])
+    got = R.bus_variants("CH", c, 0, dx.SR)
+    assert set(got["bounds"]) == {n for n, _ in got["rows"]}
+    assert all(math.isfinite(b) for b in got["bounds"].values()), got["bounds"]
+
+
+def test_h_ch2_refuses_a_surrogate_without_own_bounds():
+    """A record from the old one-sided rule (no `bounds`) must not be re-read as support."""
+    row = _ch(5.0, 11.5, 11.5)
+    del row["bv"]["bounds"]
+    assert _h2(row).startswith("NO VERDICT"), _h2(row)
+
+
+# ---- --verdict: the per-subject ending is produced by the tool, not typed ----------
+def _rec(cond, rows, commit="a" * 40, dirty=False, limits=None):
+    return dict(schema=R.ROWS_SCHEMA, condition=cond, commit=commit, dirty=dirty,
+                limits=limits if limits is not None else R._jsonable(R.declared_limits()), rows=rows)
+
+
+def _vrow(voice, label, mean_frac=0.0, reason=None):
+    return dict(voice=voice, label=label, mean_frac=mean_frac, detail=dict(reason=reason))
+
+
+def _write(tmp_path, *recs):
+    paths = []
+    for i, r in enumerate(recs):
+        p = tmp_path / f"r{i}.json"
+        p.write_text(json.dumps(r))
+        paths.append(str(p))
+    return paths
+
+
+def test_verdict_cli_produces_each_subjects_ending(tmp_path, capsys):
+    dev = _rec("dev", [_vrow("RS", "SKIRT"), _vrow("CH", "OFFSET", .001), _vrow("BD", "MIXED")])
+    con = _rec("confirm", [_vrow("RS", "SKIRT"), _vrow("CH", "MIXED")])
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 0
+    out = capsys.readouterr().out
+    lines = {ln.split()[0]: ln for ln in out.splitlines() if ln.startswith("  ") and ln.split()[0] in ("RS", "CH", "BD")}
+    assert "NO STANDING OFFSET" in lines["RS"]
+    assert "NO VERDICT" in lines["CH"] and "NOT revisited" in lines["CH"]       # class flipped
+    assert "NO VERDICT" in lines["BD"] and "confirm has no row" in lines["BD"]   # not run in confirm
+    _, ends, _ = R.verdicts([dev, con])
+    assert ends["RS"] == R.subject_verdict({"dev": dev["rows"][0], "confirm": con["rows"][0]})
+
+
+@pytest.mark.parametrize("make,why", [
+    (lambda: [_rec("dev", []), _rec("dev", [])], "per condition"),
+    (lambda: [_rec("dev", []), _rec("confirm", [], dirty=True)], "dirty"),
+    (lambda: [_rec("dev", []), _rec("confirm", [], commit="b" * 40)], "different commits"),
+    (lambda: [_rec("dev", []), _rec("confirm", [], limits=dict(R._jsonable(R.declared_limits()), S_OFFSET_MIN=7.0))],
+     "limits differ"),
+    (lambda: [_rec("dev", [])], "per condition"),
+], ids=["same-condition-twice", "dirty", "mixed-commits", "revisited-limits", "confirm-missing"])
+def test_verdict_refuses_records_it_cannot_combine(tmp_path, capsys, make, why):
+    """Each guard's defeating input: two dev records, a dirty render, records
+    from two commits, a record taken after a limit was moved, a lone record."""
+    assert R.main(["--verdict", *_write(tmp_path, *make())]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and why in out, out
+
+
+def test_screen_rows_out_round_trips_into_verdict(tmp_path, monkeypatch):
+    """--screen --rows-out writes what --verdict reads (no render: voice_row stubbed)."""
+    monkeypatch.setattr(R, "voice_row", lambda v, c: dict(_vrow(v, "SKIRT"), cond=c, n_clip=0, raw_label="SKIRT",
+                                                          means=[float("nan")], peak_dbfs=-14.0))
+    monkeypatch.setattr(R, "fmt_row", lambda r: r["voice"])
+    monkeypatch.setattr(R, "provenance", lambda c: "prov")
+    p = {c: str(tmp_path / f"{c}.json") for c in R.CONDITIONS}
+    for c in R.CONDITIONS:
+        R.screen(c, ("RS", "HT"), p[c])
+    recs = [json.loads(pathlib.Path(p[c]).read_text()) for c in R.CONDITIONS]
+    assert all(r["schema"] == R.ROWS_SCHEMA and r["limits"] == R._jsonable(R.declared_limits()) for r in recs)
+    for r in recs:                       # the worktree may be dirty while testing: that guard is tested above
+        r["dirty"] = False
+    status, ends, why = R.verdicts(recs)
+    assert status == "OK" and ends["RS"].startswith("NO STANDING OFFSET"), (status, ends, why)
+
+
+def test_an_all_refused_screen_exits_2_not_0(monkeypatch):
+    """run_all.py must not read an all-REFUSED batch as green. Defeater of the
+    guard: one answered row among refusals is evidence, so exit 0."""
+    def row(label):
+        return lambda v, c: dict(_vrow(v, label, reason="r"), cond=c, n_clip=0, raw_label=label,
+                                 means=[0.0], peak_dbfs=-14.0)
+    monkeypatch.setattr(R, "fmt_row", lambda r: r["voice"])
+    monkeypatch.setattr(R, "provenance", lambda c: "prov")
+    monkeypatch.setattr(R, "voice_row", row("REFUSED"))
+    assert R.main(["--screen", "--voices", "RS,HT"]) == 2
+    monkeypatch.setattr(R, "voice_row", lambda v, c: row("REFUSED" if v == "RS" else "SKIRT")(v, c))
+    assert R.main(["--screen", "--voices", "RS,HT"]) == 0

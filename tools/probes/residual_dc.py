@@ -4,7 +4,8 @@
     python3 tools/probes/residual_dc.py --declared      the limits + frozen conditions
     python3 tools/probes/residual_dc.py --controls      MOVED/BLIND: properties x defects
     python3 tools/probes/residual_dc.py --reference     what an external recording can say
-    python3 tools/probes/residual_dc.py --screen  [--condition dev|confirm] [--voices A,B]
+    python3 tools/probes/residual_dc.py --screen  [--condition dev|confirm] [--voices A,B] [--rows-out F.json]
+    python3 tools/probes/residual_dc.py --verdict DEV.json CONFIRM.json   per-subject ending (subject_verdict)
     python3 tools/probes/residual_dc.py --detail  [--condition dev|confirm]   CH / RS / BD / HT
     python3 tools/probes/residual_dc.py --batch-spec    the tools/run_all.py job list
     python3 -m pytest tools/probes/test_residual_dc.py -q
@@ -629,7 +630,25 @@ def render_bus(sound, enable, seconds, gain, vel):
 
 SCALES = (1, 8, 64)
 CH_SURR_TOL_DB = 1.0       # H_CH2: integer surrogate vs the production render
-CH_REACH_TOL_DB = 1.0      # H_CH2: x64 attenuation within this of the steady bound
+# H_CH2: a variant "reaches" when its attenuation is within this of the steady
+# bound computed on ITS OWN baseline -- TWO-SIDED. CHANGED AFTER THE DEV ROW WAS
+# READ (#614 review): the first rule was one-sided against the PRODUCTION bound,
+# and a variant that moves its own baseline cleared it (21.22 vs 11.66 dB). The
+# tolerance value is unchanged; the comparison it applies to is. Confirm is the
+# first data this form of the rule sees.
+CH_REACH_TOL_DB = 1.0
+
+
+def steady_bound_db(seg, sr, k):
+    """Sub-20 Hz attenuation the implemented discrete one-pole (pole 1 - 2^-K)
+    would give in steady state on `seg`'s own spectrum: -10 log10 of the
+    |H|^2-weighted share of the 0-20 Hz energy. A bound for THAT baseline only."""
+    p, f = onesided(np.asarray(seg, float), sr)
+    m = f < 20.0
+    a = 1.0 - 2.0 ** -k
+    z = np.exp(-1j * 2 * np.pi * f[m] / sr)
+    h2 = np.abs((1 - z) / (1 - a * z)) ** 2
+    return -10 * math.log10(float((p[m] * h2).sum()) / (float(p[m].sum()) + 1e-30) + 1e-30)
 
 
 def integer_scale_probe(x, i0, sr, k, scales=SCALES):
@@ -664,7 +683,10 @@ def bus_variants(sound, c, i0, sr, scales=(1, 8, 64)):
 
     The surrogate is only used if its production variant is BIT-EXACT against
     the model's own A_COUPLE=1 render (`exact`); otherwise the caller must
-    REFUSE it. Returns dict(exact, rows=[(label, attenuation_dB)])."""
+    REFUSE it. Each variant changes its own BASELINE as well as its blocked
+    side, so each carries the steady bound of its own baseline (`bounds`), and
+    only that bound is a valid comparison for its attenuation.
+    Returns dict(exact, rows=[(label, attenuation_dB)], bounds={label: dB})."""
     import drums_fx as dx
     d0, b0, g = _BUSES[(sound, 0, c["seconds"], c["gain"], c["vel"])]
     d1, b1, _ = _BUSES[(sound, 1, c["seconds"], c["gain"], c["vel"])]
@@ -679,11 +701,13 @@ def bus_variants(sound, c, i0, sr, scales=(1, 8, 64)):
     def att(base, cand):
         return (band_db(window_slice(base, i0, sr), sr, 0.0, 20.0)
                 - band_db(window_slice(cand, i0, sr), sr, 0.0, 20.0))
-    rows = [("production", att(acc(d0, b0), acc(dm, bd))),
-            ("float-out", att((d0 * g + b0 * g) / 32768.0, (dm * g + bd * g) / 32768.0))]
+    pairs = [("production", acc(d0, b0), acc(dm, bd)),
+             ("float-out", (d0 * g + b0 * g) / 32768.0, (dm * g + bd * g) / 32768.0)]
     for sc in scales[1:]:
-        rows.append((f"buses x{sc}", att(acc(d0, b0, sc), acc(dm, bd, sc))))
-    return dict(exact=exact, rows=rows)
+        pairs.append((f"buses x{sc}", acc(d0, b0, sc), acc(dm, bd, sc)))
+    rows = [(n, att(b, c)) for n, b, c in pairs]
+    bounds = {n: steady_bound_db(window_slice(b, i0, sr), sr, dx.COUPLE_K) for n, b, _ in pairs}
+    return dict(exact=exact, rows=rows, bounds=bounds)
 
 
 def window_slice(x, i0, sr):
@@ -716,7 +740,37 @@ def fmt_row(r):
             f"peak {r['peak_dbfs']:.1f} dBFS  clip {r['n_clip']}  raw={r['raw_label']}")
 
 
-def screen(cond_name, voices=SCREEN_VOICES):
+DECLARED = ("ANALYSIS_S", "STABILITY_S", "BETA_OFFSET_MIN", "BETA_SKIRT_MAX", "BETA_STABLE_TOL",
+            "S_SKIRT_MAX", "S_OFFSET_MIN", "TAIL_RING_MAX", "MIN_PEAK_LSB", "RES_MARGIN_DB",
+            "OFFSET_PEAK_FRAC", "HF_ADDED_DB", "HF_FLAT_DB", "CH_REST_TOL_DB", "CH_SHORTFALL_MIN_DB",
+            "CH_REACH_TOL_DB")
+ROWS_SCHEMA = "residual-dc-screen-rows/1"
+
+
+def declared_limits():
+    return {k: globals()[k] for k in DECLARED} | {"CONDITIONS": CONDITIONS}
+
+
+def _jsonable(o):
+    if isinstance(o, dict):
+        return {str(k): _jsonable(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_jsonable(v) for v in o]
+    if isinstance(o, np.generic):
+        return o.item()
+    return o
+
+
+def rows_record(cond_name, rows):
+    """What `--screen --rows-out` writes: the rows plus what a later reader
+    must check before combining two of them (commit, dirty, limits)."""
+    return dict(schema=ROWS_SCHEMA, condition=cond_name, commit=git("rev-parse", "HEAD"),
+                dirty=bool(git("status", "--porcelain")), limits=_jsonable(declared_limits()),
+                rows=_jsonable(rows))
+
+
+def screen(cond_name, voices=SCREEN_VOICES, rows_out=None):
+    rec_head = rows_record(cond_name, [])            # provenance read BEFORE any output is written
     print(provenance(cond_name))
     print("\nNON-CY SCREEN (uncoupled production baseline; class from beta AND S; nothing here is a sound verdict)")
     rows = []
@@ -724,7 +778,54 @@ def screen(cond_name, voices=SCREEN_VOICES):
         r = voice_row(v, cond_name)
         rows.append(r)
         print(fmt_row(r), flush=True)
+    if rows_out:
+        p = pathlib.Path(rows_out)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(dict(rec_head, rows=_jsonable(rows)), indent=1))
     return rows
+
+
+def all_refused(rows):
+    """True for an empty screen or one where every row REFUSED: no evidence,
+    which `run_all.py` must not read as a pass (exit 2 = did not run)."""
+    return not rows or all(r["label"] == "REFUSED" for r in rows)
+
+
+def verdicts(records):
+    """Per-subject ending from two `rows_record`s, one per declared condition.
+    Returns (status, {voice: ending}, reasons). status is REFUSED when the two
+    records cannot be combined:
+
+      - the conditions are not exactly {dev, confirm}, once each
+      - either record is not from a clean commit, or they are from different commits
+      - either record's declared limits differ from this module's (limits are
+        not revisited after confirm is read; a record taken under other limits
+        is a different experiment)
+
+    A voice present in only one record ends NO VERDICT (that condition has no row)."""
+    reasons = []
+    conds = [r.get("condition") for r in records]
+    if sorted(conds) != sorted(CONDITIONS) or any(r.get("schema") != ROWS_SCHEMA for r in records):
+        reasons.append(f"need one {ROWS_SCHEMA} record per condition {sorted(CONDITIONS)}, got {conds}")
+    if any(r.get("dirty", True) for r in records):
+        reasons.append("a record was rendered from a dirty tree: not reproducible from a commit")
+    if len({r.get("commit") for r in records}) != 1:
+        reasons.append(f"records come from different commits: {[r.get('commit', '?')[:12] for r in records]}")
+    want = _jsonable(declared_limits())
+    bad = [r.get("condition") for r in records if r.get("limits") != want]
+    if bad:
+        reasons.append(f"declared limits differ from this module's in {bad}")
+    if reasons:
+        return "REFUSED", {}, reasons
+    by = {r["condition"]: {row["voice"]: row for row in r["rows"]} for r in records}
+    voices = [v for v in SCREEN_VOICES if any(v in by[c] for c in by)]
+    voices += sorted({v for c in by for v in by[c]} - set(voices))
+    out = {}
+    for v in voices:
+        missing = [c for c in sorted(by) if v not in by[c]]
+        out[v] = (f"NO VERDICT ({', '.join(missing)} has no row for {v})" if missing
+                  else subject_verdict({c: by[c][v] for c in sorted(by)}))
+    return "OK", out, []
 
 
 def _sub20_atten_db(base, cand, i0, sr):
@@ -746,12 +847,8 @@ def detail_row(sound, cond_name):
     wb, wc = window_slice(ob, i0, sr), window_slice(oc, i0, sr)
     measured = _sub20_atten_db(ob, oc, i0, sr)
     # STEADY bound: |H|^2 of the implemented discrete one-pole on the baseline spectrum
-    p, f = onesided(wb, sr)
-    m = f < 20.0
     a = 1.0 - 2.0 ** -k
-    z = np.exp(-1j * 2 * np.pi * f[m] / sr)
-    h2 = np.abs((1 - z) / (1 - a * z)) ** 2
-    steady = -10 * math.log10(float((p[m] * h2).sum()) / (float(p[m].sum()) + 1e-30) + 1e-30)
+    steady = steady_bound_db(wb, sr, k)
     # FROM REST: an independent float one-pole (scipy) run causally over the baseline
     # raw bus -- not the integer DcBlockFx -- then the same window. No truncation LSB.
     yf = lfilter([1.0, -1.0], [1.0, -a], np.asarray(rb, float))
@@ -783,8 +880,40 @@ def fmt_detail(r):
             f"mid {b['mid']:+7.2f}  HF {b['hf']:+7.2f} dB   peak {r['peak_delta_db']:+.2f} dB   "
             f"clip base/coupled {r['clip'][0]}/{r['clip'][1]}\n"
             f"      bus-level surrogate (bit-exact vs production: {r['bv']['exact']}): "
-            + "  ".join(f"{n} {a:.2f} dB" for n, a in r["bv"]["rows"]) + f"   window mean {r['mean_lsb']:+.3f} LSB\n"
+            + "  ".join(f"{n} {a:.2f} dB (own bound {r['bv']['bounds'][n]:.2f})" for n, a in r["bv"]["rows"])
+            + f"   window mean {r['mean_lsb']:+.3f} LSB\n"
             f"      HF share change {r['hf_share_delta']:+.2f} pp -> read as {r['hf_kind']}")
+
+
+def reach_kind(att, own_bound, tol=CH_REACH_TOL_DB):
+    """REACHES | SHORT | OVERSHOOTS, against the variant's OWN steady bound."""
+    if att > own_bound + tol:
+        return "OVERSHOOTS"
+    return "REACHES" if att >= own_bound - tol else "SHORT"
+
+
+def _h_ch2(bv):
+    """H_CH2 verdict from a `bus_variants` result. Each variant is compared ONLY
+    with the steady bound of its own baseline, two-sided. A variant that
+    OVERSHOOTS its own bound is not like-for-like (a causal one-pole does not
+    beat its steady-state attenuation), so it supports nothing; if no variant
+    reaches and one overshoots, the answer is NO VERDICT, not NOT SUPPORTED."""
+    if not bv["exact"]:
+        return "NO VERDICT: the bus-level surrogate is not bit-exact against the A_COUPLE=1 render; it is not what ships"
+    if "bounds" not in bv:
+        return "NO VERDICT: variants carry no own-baseline bound; the production bound is not a valid comparison"
+    att, own = dict(bv["rows"]), bv["bounds"]
+    kinds = {n: reach_kind(a, own[n]) for n, a in bv["rows"] if n != "production"}
+    xs = max((n for n in kinds if n.startswith("buses x")), key=lambda n: int(n[7:]), default=None)
+    desc = ", ".join(f"{n} {att[n]:.2f} dB vs own bound {own[n]:.2f} ({kinds.get(n, 'baseline')})"
+                     for n, _ in bv["rows"])
+    if kinds.get("float-out") == "REACHES":
+        return f"SUPPORTED by intervention (output truncation): {desc}"
+    if xs and kinds[xs] == "REACHES":
+        return f"SUPPORTED by intervention (bus-level integer resolution): {desc}"
+    if "OVERSHOOTS" in kinds.values():
+        return f"NO VERDICT: a variant overshoots its own steady bound by > {CH_REACH_TOL_DB} dB (not like-for-like): {desc}"
+    return f"NOT SUPPORTED: no variant reaches its own steady bound: {desc}"
 
 
 def hypotheses(rows):
@@ -805,22 +934,9 @@ def hypotheses(rows):
             v = f"NOT SUPPORTED: from-rest prediction differs from measured by {close:.2f} dB (> {CH_REST_TOL_DB})"
         out.append(("H_CH  attenuation < steady bound because the causal blocker starts from rest", v))
     if ch and ch["label"] != "REFUSED" and "bv" in ch:
-        bv = ch["bv"]
-        r_ = dict(bv["rows"])
-        bound = ch["steady_db"]
-        if not bv["exact"]:
-            v = "NO VERDICT: the bus-level surrogate is not bit-exact against the A_COUPLE=1 render; it is not what ships"
-        elif r_["float-out"] >= bound - CH_REACH_TOL_DB:
-            v = (f"SUPPORTED by intervention (output truncation): production {r_['production']:.2f} dB, "
-                 f"same blocked buses without the output >>15 floor {r_['float-out']:.2f} dB (against that variant's OWN "
-                 f"baseline: the floor's bias leaves both sides), steady bound {bound:.2f} dB")
-        elif r_[f"buses x{max(int(n[7:]) for n, _ in bv['rows'] if n.startswith('buses x'))}"] >= bound - CH_REACH_TOL_DB:
-            v = (f"SUPPORTED by intervention (bus-level integer resolution): production {r_['production']:.2f} dB; "
-                 f"float-out {r_['float-out']:.2f} dB does not reach the bound {bound:.2f} dB but louder buses do")
-        else:
-            v = ("NOT SUPPORTED: neither removing output truncation nor louder buses reach the bound: "
-                 + ", ".join(f"{n} {a:.2f}" for n, a in bv["rows"]) + f"; bound {bound:.2f} dB")
-        out.append(("H_CH2 (post-hoc, formed after the dev row: confirm is its only test) "
+        v = _h_ch2(ch["bv"])
+        out.append(("H_CH2 (post-hoc, formed after the dev row; rule revised to own-baseline two-sided after "
+                    "the dev row too: confirm is its only test) "
                     "the shortfall is an integer quantiser, not the filter", v))
     rs = rows.get("RS")
     if rs:
@@ -869,12 +985,18 @@ def detail(cond_name, voices=SUBJECTS + CONTROLS):
     return rows
 
 
+def rows_path(cond):
+    return f"build/residual-dc-screen-{cond}.json"
+
+
 def batch_spec():
     py = "python3 tools/probes/residual_dc.py"
-    jobs = [f"{py} --screen --condition dev", f"{py} --screen --condition confirm",
+    jobs = [f"{py} --screen --condition dev --rows-out {rows_path('dev')}",
+            f"{py} --screen --condition confirm --rows-out {rows_path('confirm')}",
             f"{py} --detail --condition dev", f"{py} --detail --condition confirm"]
     return ('python3 tools/run_all.py --jobs 2 --timeout 3600 --json build/residual-dc-batch.json \\\n    '
-            + " \\\n    ".join(f'"{j}"' for j in jobs))
+            + " \\\n    ".join(f'"{j}"' for j in jobs)
+            + f" \\\n  && {py} --verdict {rows_path('dev')} {rows_path('confirm')}")
 
 
 def main(argv=None):
@@ -883,12 +1005,24 @@ def main(argv=None):
         ap.add_argument("--" + flag, action="store_true")
     ap.add_argument("--condition", choices=sorted(CONDITIONS), default="dev")
     ap.add_argument("--voices", default=None)
+    ap.add_argument("--rows-out", default=None, help="with --screen: write the rows as JSON for --verdict")
+    ap.add_argument("--verdict", nargs="+", metavar="ROWS_JSON",
+                    help="per-subject ending from one --rows-out record per condition (dev and confirm)")
     a = ap.parse_args(argv)
     vs = tuple(a.voices.split(",")) if a.voices else None
+    if a.verdict:
+        recs = [json.loads(pathlib.Path(p).read_text()) for p in a.verdict]
+        status, ends, why = verdicts(recs)
+        print(f"PER-SUBJECT ENDING from {', '.join(a.verdict)}")
+        if status == "REFUSED":
+            print("REFUSED: " + "; ".join(why))
+            return 2
+        for v, e in ends.items():
+            print(f"  {v:3s} {e}")
+        print("  (sound fidelity for every subject: capability REFUSED until a verified DC-coupled reference exists)")
+        return 0
     if a.declared:
-        for k in ("ANALYSIS_S", "STABILITY_S", "BETA_OFFSET_MIN", "BETA_SKIRT_MAX", "BETA_STABLE_TOL",
-                  "S_SKIRT_MAX", "S_OFFSET_MIN", "TAIL_RING_MAX", "MIN_PEAK_LSB", "RES_MARGIN_DB",
-                  "OFFSET_PEAK_FRAC", "HF_ADDED_DB", "HF_FLAT_DB", "CH_REST_TOL_DB", "CH_SHORTFALL_MIN_DB"):
+        for k in DECLARED:
             print(f"{k} = {globals()[k]}")
         print("CONDITIONS =", json.dumps(CONDITIONS))
     if a.controls:
@@ -899,13 +1033,16 @@ def main(argv=None):
     if a.reference:
         g = reference_gate()
         print(json.dumps(g, indent=1))
+    rc = 0
     if a.screen:
-        screen(a.condition, vs or SCREEN_VOICES)
+        if all_refused(screen(a.condition, vs or SCREEN_VOICES, a.rows_out)):
+            print("NO EVIDENCE: every row REFUSED (exit 2)")
+            rc = 2
     if a.detail:
         detail(a.condition, vs or (SUBJECTS + CONTROLS))
     if a.__dict__["batch_spec"]:
         print(batch_spec())
-    return 0
+    return rc
 
 
 if __name__ == "__main__":
