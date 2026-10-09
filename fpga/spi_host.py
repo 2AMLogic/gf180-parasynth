@@ -431,7 +431,14 @@ class MusicHost:
     # so they never enter `nominal` (#598: a completed tom bend ends at
     # f0*(1+excess*e^-3), and reading that back as the next hit's tuning made
     # nominal pitch walk).
-    NOMINAL_EXEMPT_TAGS = frozenset({"tom-bend", "bd-attack-hot", "bd-attack-restore"})
+    TRANSIENT_DRUM_TAGS = frozenset({"tom-bend", "bd-attack-hot", "bd-attack-restore"})
+    NOMINAL_EXEMPT_TAGS = TRANSIENT_DRUM_TAGS
+    # Drum writes that ARE the musician's tuning (or plain device state the
+    # nominal may carry). Every SEC_DRUM tag must be in exactly one of these two
+    # sets: `_put` refuses an unclassified tag, so a new generated transient
+    # cannot silently become nominal by being left off the exempt list.
+    NOMINAL_DRUM_TAGS = frozenset({"kit", "accent", "stops-on", "stops-off",
+                                   "knob-decay", "select", "retune"})
 
     def __init__(self, patch: dict = None, kit: list = None, *, stop_hold: int = 2,
                  coef_seq: bool = True, keyhost: vf.KeyHost = None):
@@ -452,6 +459,9 @@ class MusicHost:
         self.w.append(Write(int(frame), int(flag) & 1, int(sec), int(addr) & 0xFF,
                             int(data) & 0xFFFFFFFF, tag, anchor))
         if sec == SEC_DRUM:
+            if tag not in self.TRANSIENT_DRUM_TAGS and tag not in self.NOMINAL_DRUM_TAGS:
+                raise ValueError(f"drum write tag {tag!r} is neither transient nor "
+                                 "nominal: classify it in MusicHost (#598)")
             self.image[int(addr) & 0xFF] = int(data) & 0xFFFFFFFF
             if tag not in self.NOMINAL_EXEMPT_TAGS:
                 self.nominal[int(addr) & 0xFF] = int(data) & 0xFFFFFFFF

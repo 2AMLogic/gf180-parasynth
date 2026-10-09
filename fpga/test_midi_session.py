@@ -375,3 +375,79 @@ def test_the_verifier_can_still_construct_a_session_with_injection():
     s = ms.MidiSession(dev.SimSerial(dev.UartDeviceSim(clock=clock)), clock=clock,
                        image="tree", inject={"FUTURE_CONTROL", "DROP_NOTE_OFF"})
     assert s.inject == {"FUTURE_CONTROL", "DROP_NOTE_OFF"}
+
+
+# ---- #598: a refused hit rolls back the nominal tuning as well as the image -----
+TOM_PAIRS = [("LT", "LC"), ("MT", "MC"), ("HT", "HC")]
+
+
+def refused_select_then_hit(stop: str, alt: str, inject=frozenset()) -> list:
+    """Hit `alt` (forcing a select on the circuit loaded as `stop`) and have it
+    refused for queue pressure by the session's own admission check; then hit
+    `stop`. Returns the reasons it is wrong, empty when right.
+
+    The refusal is produced by the production check (the queue limit is set to
+    zero for that one hit), not by stubbing `_schedule`. The expected bend is
+    computed independently, from the image's preset and drums_fx, not read back
+    from the host."""
+    import drums_fx as dx
+    import live_midi_contract as lmc
+    note = {snd: n for n, snd in sorted(ms.DRUM_MAP.items(), reverse=True)}
+    presets = __import__("uart_host").image_sound_presets("tree")
+    clock = dev.SimClock()
+    sim = dev.UartDeviceSim(clock=clock)
+    s = ms.MidiSession(dev.SimSerial(sim), clock=clock, image="tree", inject=inject)
+    s.start()
+    assert s.position[stop] == stop                # the precondition: kit loads `stop`
+    bad = []
+    t = clock.t + 0.01
+    s.service(t)
+    saved = lmc.HOST_QUEUE_MAX_PACKETS
+    lmc.HOST_QUEUE_MAX_PACKETS = 0
+    try:
+        s.feed(t, bytes((0x99, note[alt], 100)))
+    finally:
+        lmc.HOST_QUEUE_MAX_PACKETS = saved
+    if [r.category for r in s.refusals] != ["queue-pressure"]:
+        return [f"precondition: expected one queue-pressure refusal, got "
+                f"{[r.category for r in s.refusals]}"]           # REFUSED, not a result
+    if s.position[stop] != stop:
+        bad.append(f"position rolled to {s.position[stop]}")
+    drum_regs = {a for a, _ in presets[stop]} | {a for a, _ in presets[alt]}
+    split = sorted(a for a in drum_regs if s.mh.nominal.get(a) != s.mh.image.get(a))
+    if split:
+        bad.append(f"nominal != image after the refusal at regs {split}")
+    off = sorted(a for a, v in presets[stop] if s.mh.nominal.get(a) != v)
+    if off:
+        bad.append(f"nominal holds {alt}'s tuning at regs {off}")
+    t += 0.03
+    s.service(t)
+    s.feed(t, bytes((0x99, note[stop], 100)))
+    s.close()
+    if len(s.refusals) != 1:
+        return bad + [f"precondition: the second hit was refused "
+                      f"({[r.category for r in s.refusals]})"]
+    mode = {"LT": dx.M_LT, "MT": dx.M_MT, "HT": dx.M_HT}[stop]
+    (a1r, a1), (a2r, a2), (_ampr, amp) = presets[stop][:3]
+    f0, q = dx.poles_from_regs(a1, a2)
+    want = [(a, v) for _, a, v in dx.tom_pitch_drop_writes(
+        0, mode, f0, q, amp / float(1 << 15), 0.6 + 0.8 * 99 / 126.0)]
+    got = [(w[3], w[4]) for w in sim.writes
+           if w[5] == "event" and w[2] == 1 and w[3] in (a1r, a2r)]
+    if got != want:
+        bad.append(f"bend after the refusal is not {stop}'s: first got {got[:2]}, "
+                   f"want {want[:2]}")
+    return bad
+
+
+@pytest.mark.parametrize("stop,alt", TOM_PAIRS)
+def test_a_refused_select_rolls_back_nominal_and_the_next_bend_is_unchanged(stop, alt):
+    assert refused_select_then_hit(stop, alt) == []
+
+
+@pytest.mark.parametrize("stop,alt", TOM_PAIRS)
+def test_control_image_only_rollback_turns_the_refusal_test_red(stop, alt):
+    # rule 8: the pre-fix rollback (image only) must be caught, for its own reason
+    bad = refused_select_then_hit(stop, alt, inject={"IMAGE_ONLY_ROLLBACK"})
+    assert any("nominal" in b for b in bad), bad
+    assert not any(b.startswith("precondition") for b in bad), bad

@@ -263,3 +263,57 @@ def test_control_rebuild_leak_turns_the_rebuild_test_red():
     bad = sum(g != expected_bend(g[0][0], dx.M_LT, 1.0, kit[base], kit[base + 1], kit[base + 2])
               for g in got)
     assert bad > 0
+
+
+# ---- the tag allowlist fails safe (#598, judge's non-blocking note) ------------
+def test_drum_tag_sets_are_disjoint():
+    assert not (sh.MusicHost.TRANSIENT_DRUM_TAGS & sh.MusicHost.NOMINAL_DRUM_TAGS)
+
+
+def test_an_unclassified_drum_tag_is_refused_not_counted_as_nominal():
+    # the input that defeated a bare exempt-list: a new generated transient
+    h = sh.MusicHost().load(0)
+    a = dx.A_MODE + dx.M_LT * dx.MODE_STRIDE
+    before = dict(h.nominal)
+    with pytest.raises(ValueError, match="neither transient nor nominal"):
+        h.drum(100, a, 12345, tag="tom-bend-v2")
+    assert h.nominal == before
+
+
+def _literal_drum_tags():
+    """Every tag passed to a drum write in the shipped fpga/*.py sources,
+    read statically so paths no test exercises are covered too. A tag that is
+    not a string literal is reported as None (it cannot be classified here)."""
+    import ast
+    import glob
+    here = os.path.dirname(os.path.abspath(__file__))
+    found = {}
+    for path in sorted(glob.glob(os.path.join(here, "*.py"))):
+        if os.path.basename(path).startswith("test_"):
+            continue
+        tree = ast.parse(open(path).read(), path)
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "drum"):
+                continue
+            kw = [k.value for k in node.keywords if k.arg == "tag"]
+            where = f"{os.path.basename(path)}:{node.lineno}"
+            if not kw:
+                found.setdefault("", []).append(where)
+                continue
+            lits = [n.value for n in ast.walk(kw[0])
+                    if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+            if isinstance(kw[0], ast.Constant) or isinstance(kw[0], ast.IfExp):
+                for v in lits:
+                    found.setdefault(v, []).append(where)
+            else:
+                found.setdefault(None, []).append(where)
+    return found
+
+
+def test_every_shipped_drum_tag_is_classified():
+    found = _literal_drum_tags()
+    assert "tom-bend" in found and "select" in found        # the scan sees both kinds
+    known = sh.MusicHost.TRANSIENT_DRUM_TAGS | sh.MusicHost.NOMINAL_DRUM_TAGS
+    unclassified = {t: w for t, w in found.items() if t not in known}
+    assert not unclassified, unclassified
