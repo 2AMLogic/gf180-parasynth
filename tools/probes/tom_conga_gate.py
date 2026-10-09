@@ -54,6 +54,14 @@ class Refused(RuntimeError):
     pass
 
 
+#: Rule 5 controls: defects a judge or fixture of this shape plausibly has,
+#: reinstated on demand; each must turn a named known answer red
+#: (test_tom_conga_gate.py::test_injection_*). "allpole-stub" is the start-red
+#: stub of the H1 fixture: it ignores the numerator it is given.
+INJECTIONS = ("no-preserve", "no-peak", "confirm-reads-all", "allpole-stub")
+INJECT: set = set()
+
+
 # ---------------------------------------------------------------------------
 # corpus
 # ---------------------------------------------------------------------------
@@ -182,6 +190,50 @@ def render(sound: str, ratio: float = 1.0, kind: str | None = None) -> tuple:
     return out, dx.SR
 
 
+def render_twin(sound: str, ratio: float = 1.0, numer=(1.0,)) -> tuple:
+    """POST-HOC DIAGNOSTIC, not a candidate: a FLOAT twin of the tom voice --
+    the same host writes (retune, diode-drop staircase, frame by frame), the
+    same 0.1 ms exciter, the same poles, but a float recursion with a chosen
+    numerator. It separates the MECHANISM (does a DC zero move the gate the
+    way the 808 does?) from the fixed-point bank's deadband (#350), which
+    #351 found breaks the numerator on the shipped engine. Its RAW form is
+    checked against the shipped render (`test_twin_raw_tracks_the_engine`)."""
+    import drums_fx as dx
+    import run_case as rc
+    n = int(rc.SOLO_SECONDS.get(sound, 2.2) * dx.SR)
+    kit = dict(dx.kit_with_sounds(sound))
+    m = _circuit(sound)
+    f0, q, _ = dx.TOM_PRESET[sound]
+    if ratio != 1.0:
+        for a, v in dx.mode_writes(m, f0 * ratio, q * ratio, dx.AMP_TOM[sound], dx.RAW):
+            kit[a] = v
+    hit = rc.DRUM_SOLO_HIT_FRAME
+    base = dx.A_MODE + m * dx.MODE_STRIDE
+    a1 = np.zeros(n)
+    a2 = np.zeros(n)
+    cur = {base: kit[base], base + 1: kit[base + 1]}
+    ev = sorted((f, a, v) for f, a, v in dx.hit_writes([(hit, dx.SOUND_STOP[sound], 1.0)],
+                                                       sorted(kit.items())) if a in cur)
+    k = 0
+    for i in range(n):
+        while k < len(ev) and ev[k][0] <= i:
+            cur[ev[k][1]] = ev[k][2]
+            k += 1
+        a1[i] = dx.s26(cur[base]) / (1 << 24)
+        a2[i] = dx.s26(cur[base + 1]) / (1 << 24)
+    x = np.zeros(n)
+    t = np.arange(n - hit)
+    x[hit:] = np.exp(-t / (0.1e-3 * dx.SR))
+    xn = lfilter(list(numer), [1.0], x)
+    y = np.zeros(n)
+    y1 = y2 = 0.0
+    for i in range(n):
+        v = xn[i] + a1[i] * y1 + a2[i] * y2
+        y[i] = v
+        y2, y1 = y1, v
+    return y / np.abs(y).max() * 0.5, dx.SR
+
+
 # ---------------------------------------------------------------------------
 # measurement helpers
 # ---------------------------------------------------------------------------
@@ -302,7 +354,7 @@ def resonator(f0: float, tau: float, numer=(1.0,), seconds=1.0, sr=48000, lead=4
 def ka_pitch_onset(f0: float, tau: float, numer, sound: str = "LC") -> dict:
     """The gate's pitch trajectory and impulse statistic for a known resonator,
     analysed against ITSELF as the target (no corpus: the plan is its own)."""
-    y = resonator(f0, tau, numer)
+    y = resonator(f0, tau, (1.0,) if "allpole-stub" in INJECT else numer)
     yc = pg.condition(y, 48000, side="ka")
     plan = pg.plan_from_target(yc, sound)
     a = pg.analyse(yc, plan)
@@ -373,11 +425,79 @@ def run(refs: pathlib.Path, prereg: dict, sounds=None, codes=None) -> dict:
     return {"rows": rows}
 
 
+def harmonics(y) -> dict:
+    """H2..H4 in dB re H1, from 20 to 300 ms of a conditioned signal."""
+    a, b = pg._LEAD + int(0.02 * pg.SR), pg._LEAD + int(0.3 * pg.SR)
+    seg = y[a:b]
+    S = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), 1 << 18))
+    f = np.fft.rfftfreq(1 << 18, 1 / pg.SR)
+    f0 = float(f[np.argmax(np.where((f > 40) & (f < 600), S, 0))])
+    lv = [20 * math.log10(S[(f > k * f0 * 0.95) & (f < k * f0 * 1.05)].max()) for k in (1, 2, 3, 4)]
+    return {"f0": f0, "H2_H4_db_re_H1": [x - lv[0] for x in lv[1:]]}
+
+
+def h2_response(refs: pathlib.Path, hashes=None) -> dict:
+    """POST-HOC DIAGNOSTIC (H4, untested as a candidate): the 808's toms carry
+    H2..H4 at -33..-41 dB and ours at < -80; do the gate's failing features move
+    when a quadratic term puts H2 at the 808's level? On the TUNING 5.0 targets
+    only, which were seen in diagnosis, so this is a pointer, not evidence."""
+    out = {}
+    for s in FAMILY:
+        rel = pg.target_rel(s)
+        x, sr = load_checked(refs, rel, hashes)
+        T = pg.Target(x, sr, s, rel)
+        b = pg.bar_for(s, refs, T)["bar"]
+        y, ysr = pg.render_ours(s)
+        y = np.asarray(y, dtype=np.float64)
+        row = {"harmonics_808": harmonics(T.y), "harmonics_ours": harmonics(pg.condition(y, ysr))}
+        if s in ("LT", "MT", "HT"):
+            pk = float(np.abs(y).max())
+            for h2 in (None, -37.0, -57.0):
+                z = y if h2 is None else y + 2 * 10 ** (h2 / 20) / pk * y * y
+                row[f"H2 {h2}"] = score(T, b, z, ysr, "h2")["ratio"]
+        out[s] = row
+        print(s, json.dumps(_json(row))[:400], flush=True)
+    return out
+
+
+def twin(refs: pathlib.Path, prereg: dict, sounds=None, codes=None) -> dict:
+    """The float twin, RAW and with the band-pass numerator, on every
+    condition. Post-hoc: added after `run` showed BP failing on the fixed-point
+    engine; it selects nothing and confirms nothing."""
+    hashes = prereg["corpus"]["sha256_16"]
+    rows = {}
+    for s in sounds or FAMILY:
+        x50, sr50 = load_checked(refs, take_rel(s, "50"), hashes)
+        f50 = take_f0(pg.Target(x50, sr50, s, take_rel(s, "50")))
+        for c in codes or pg.CODES:
+            rel = take_rel(s, c)
+            x, sr = load_checked(refs, rel, hashes)
+            T = pg.Target(x, sr, s, rel)
+            b = bar_for_take(s, rel, refs, T, hashes)
+            ratio = 1.0 if c == "50" else take_f0(T) / f50
+            row = {"take": rel, "split": prereg["split_of"][f"{s}{c}"], "tuning_ratio": ratio, "variants": {}}
+            for name, numer in (("twin-RAW", (1.0,)), ("twin-BP", (1.0, 0.0, -1.0))):
+                row["variants"][name] = score(T, b["bar"], *render_twin(s, ratio, numer), f"{name} {s}{c}")
+            # the RATE PATH: the shipped render, unchanged, through the take's own
+            # rate (48 k -> 44.1 k; the gate then brings it back to 48 k exactly as
+            # it does every Fischer take). Nothing is added to the signal.
+            y, ysr = render(s, ratio)
+            row["variants"]["shipped-via-take-rate"] = score(T, b["bar"], _to(y, ysr, sr), sr, f"rate {s}{c}")
+            row["variants"]["shipped"] = score(T, b["bar"], y, ysr, f"shipped {s}{c}")
+            rows[f"{s}{c}"] = row
+            print(f"{s}{c} [{row['split']}] " + " | ".join(
+                f"{k}: ps {v['ratio']['pitch_shape']:.2f} decay {v['ratio']['decay']:.2f} imp {v['ratio']['impulse']:.2f} "
+                f"worst {v['worst']:.1f}({v['worst_feature']})" for k, v in row["variants"].items()), flush=True)
+    return {"rows": rows, "post_hoc": True}
+
+
 # ---------------------------------------------------------------------------
 # judge: the frozen rules
 # ---------------------------------------------------------------------------
 def _violations(base: dict, cand: dict, rule: dict) -> list:
     out = []
+    if "no-preserve" in INJECT:
+        return out
     for f in pg.FEATURES:
         if f in rule["targets"]:
             continue
@@ -394,7 +514,8 @@ def judge(record: dict, prereg: dict) -> dict:
     res = {"selection": {}, "confirmation": {}, "attribution": {}}
     rows = record["rows"]
     dev = [k for k, r in rows.items() if r["split"] == "development"]
-    unt = [k for k, r in rows.items() if r["split"] == "untouched"]
+    unt = [k for k, r in rows.items() if r["split"] == "untouched"
+           or ("confirm-reads-all" in INJECT and r["split"] == "development")]
 
     def summarise(keys, name):
         red, viol, peak = [], {}, {}
@@ -403,7 +524,7 @@ def judge(record: dict, prereg: dict) -> dict:
             red.append(1 - c["ratio"]["pitch_shape"] / b["ratio"]["pitch_shape"])
             v = _violations(b, c, rule)
             dp = 20 * math.log10(rows[k]["peak_fs"][name] / rows[k]["peak_fs"]["shipped"])
-            if abs(dp) > rule["peak_db"]:
+            if abs(dp) > rule["peak_db"] and "no-peak" not in INJECT:
                 v.append(f"peak {dp:+.2f} dB")
             if v:
                 viol[k] = v
@@ -457,13 +578,16 @@ def _json(o):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("diagnose", "run"):
+    for name in ("diagnose", "run", "twin"):
         p = sub.add_parser(name)
         p.add_argument("--refs", type=pathlib.Path, required=True)
         p.add_argument("--sounds", nargs="*", default=None)
         p.add_argument("--out", type=pathlib.Path, required=True)
-        if name == "run":
+        if name in ("run", "twin"):
             p.add_argument("--codes", nargs="*", default=None)
+    h = sub.add_parser("harmonics")
+    h.add_argument("--refs", type=pathlib.Path, required=True)
+    h.add_argument("--out", type=pathlib.Path, required=True)
     k = sub.add_parser("knownanswer")
     k.add_argument("--out", type=pathlib.Path, required=True)
     j = sub.add_parser("judge")
@@ -473,13 +597,18 @@ def main(argv=None) -> int:
     try:
         if a.cmd == "knownanswer":
             res = knownanswer()
+        elif a.cmd == "harmonics":
+            res = h2_response(a.refs, load_prereg()["corpus"]["sha256_16"])
+            res["provenance"] = provenance(a.refs)
         elif a.cmd == "judge":
             res = judge(json.loads(a.record.read_text()), load_prereg())
             print(json.dumps(_json(res), indent=1))
         else:
             pr = load_prereg()
             res = (diagnose(a.refs, a.sounds or list(FAMILY), pr["corpus"]["sha256_16"])
-                   if a.cmd == "diagnose" else run(a.refs, pr, a.sounds, a.codes))
+                   if a.cmd == "diagnose" else
+                   run(a.refs, pr, a.sounds, a.codes) if a.cmd == "run" else
+                   twin(a.refs, pr, a.sounds, a.codes))
             res["provenance"] = provenance(a.refs)
     except (Refused, pg.Refused) as e:
         print("REFUSED:", e)
