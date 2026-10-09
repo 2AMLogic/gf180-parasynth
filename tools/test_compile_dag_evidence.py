@@ -59,3 +59,38 @@ def test_text_evidence_can_declare_what_makes_it_a_pass(tmp_path, requires, expe
     p.write_text("ROUTED 0 DRC violations")
     ok, _ = cd.run_evidence("CTL", {"evidence_file": str(p), "evidence_requires": requires})
     assert ok is expected
+
+
+# ---------------------------------------------------------------------------
+# #600: a corrupt results file is not "no evidence yet"
+# ---------------------------------------------------------------------------
+def test_a_corrupt_results_file_refuses_rather_than_reading_as_empty(tmp_path, monkeypatch):
+    """`load_results` used to return {} on any exception, so a truncated
+    dag-results.json made every node look unrun -- and `--run` then wrote the
+    partial results over it, deleting the slow nodes' stamps."""
+    p = tmp_path / "dag-results.json"
+    p.write_text('{"M1": {"passed": true, "sha": "abc"')          # truncated
+    monkeypatch.setattr(cd, "RESULTS", p)
+    with pytest.raises(SystemExit) as e:
+        cd.load_results()
+    assert "dag-results.json" in str(e.value)
+
+
+def test_a_results_file_that_is_not_an_object_refuses(tmp_path, monkeypatch):
+    """The input that defeats a parse-only check: valid JSON of the wrong
+    shape. `.get(nid)` on a list would raise far from the cause."""
+    p = tmp_path / "dag-results.json"
+    p.write_text("[]")
+    monkeypatch.setattr(cd, "RESULTS", p)
+    with pytest.raises(SystemExit):
+        cd.load_results()
+
+
+def test_an_absent_results_file_is_still_no_evidence(tmp_path, monkeypatch):
+    monkeypatch.setattr(cd, "RESULTS", tmp_path / "absent.json")
+    assert cd.load_results() == {}
+
+
+def test_the_committed_results_file_loads():
+    """Run the gate against the current state before committing it."""
+    assert isinstance(cd.load_results(), dict)
