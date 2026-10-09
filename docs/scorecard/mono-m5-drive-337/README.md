@@ -40,7 +40,7 @@ Drift: #586 found the frozen notes give 0 usable windows. All three stay open.
   records), so it is not an independent condition and is reported but not
   counted.
 - Not pristine: M5B's MIDI 72 is a different note, but the same patch family,
-  same reference instrument, same operator and same session as M5A. It tests
+  same reference instrument and same patch settings as M5A (per the frozen manifests' patch records; not re-audited here). It tests
   generalisation across pitch, not across patches.
 
 ## The question (one)
@@ -112,3 +112,103 @@ The three clean F1 passes use their own drive 1.0 and resonance 0 and do not
 read the M5 patch. They are untouched and not extrapolated to any resonant
 setting. M1A's selected patch is untouched. Pitch, Clipping and the envelope
 properties of the M5 cases must not change validity (checked in the report).
+
+---
+
+## Results (written after the run; nothing above was changed)
+
+Record: `report.json`, from commit `f31cc09` (`worktree_dirty: false`), one
+process of 2 min 8 s, `nice`'d, on the selected engine. Preconditions held: the
+drive-0.75 baseline reproduced the Harmonic shape, Foldback, Gain and Pitch of
+`results/M5A.json` and `results/M5B.json` to 5e-3, and a drive change changed
+the rendered audio (SHA differs).
+
+**Saw lead: drive 0.50 chosen on M5A and CONFIRMED on M5B MIDI 72, a note not
+used to choose it. Pulse lead: no candidate eligible; stays at 0.75.**
+
+### Saw (development M5A MIDI 84 + 96; confirmation M5B MIDI 72)
+
+| | baseline 0.75 | drive 0.50 | drive 0.25 |
+|---|---:|---:|---:|
+| dev max abs error (dB) | 7.56 | **4.64** | UNREACHABLE |
+| dev RMS error (dB) | 4.52 | **3.27** | |
+| dev mean signed error (dB, negative = dark) | -4.09 | -2.69 | |
+| dev model level (dBFS) | -18.34 | -18.34 | |
+| dev max excess alias (dB) | 2.21 | 2.31 | |
+| compensation / effective vol | 0 / 0.427 | +2.73 dB / 0.585 | needs vol > 1.0 |
+| **confirmation max abs error (dB)** | 5.51 | **4.43** | |
+| **confirmation RMS error (dB)** | 4.45 | **2.92** | |
+| confirmation mean signed error (dB) | -4.23 | -2.58 | |
+| confirmation model level (dBFS) | -17.08 | -17.41 | |
+| confirmation max excess alias (dB) | 1.45 | 1.84 | |
+
+All seven rules passed on both sets. 0.25 was declared unreachable because
+the one-pass level compensation would need `vol` above 1.0, so it could only
+have been compared by being quieter.
+
+### Pulse (development M5A; nothing to confirm)
+
+| | baseline 0.75 | drive 0.50 | drive 0.25 |
+|---|---:|---:|---:|
+| max abs error (dB) | 5.32 | 5.43 | 8.49 |
+| RMS error (dB) | 3.20 | 3.79 | 5.15 |
+| mean signed error (dB) | -2.98 | -3.61 | -4.73 |
+| max excess alias (dB) | 10.27 | 7.81 | 1.82 |
+
+Both candidates fail rules 2, 3 and 4. Lowering drive makes the pulse
+**darker**, the opposite of the saw. The alias falls (10.3 to 1.8 dB at 0.25),
+but only because the output is darker, which rule 4 exists to refuse.
+
+### In sound terms
+
+The saw lead's upper partials are 4.1 dB too dark on average at drive 0.75 on
+the M5A notes. At 0.50, with level held, they are 2.7 dB too dark. The effect
+holds at MIDI 72 (4.2 to 2.6 dB). That is a real improvement and **still a
+fail**: the official limit is 1 dB per partial and the best saw error is 4.4 dB.
+<!-- claim: grep="real improvement and" in=docs/scorecard/mono-m5-drive-337/README.md note="effect; report.json confirmation.saw.summary vs confirmation.baseline.saw" -->
+
+If the saw were given 0.50 and the pulse kept 0.75, the official Harmonic
+shape of M5A would move from 7.56 to 5.32 dB, and the maximum would then be a
+**pulse** cell. That is arithmetic on the report's per-wave maxima (saw 4.64,
+pulse 5.32), not a re-scored run. Both leads would still fail the 1 dB limit.
+
+### What this does not establish
+
+- **Mechanism: not tested.** Only drive was varied. Why saw wants less input
+  drive and pulse wants more is a reading, not a measurement. One candidate
+  reading is that the pulse's missing brightness has a different source (its
+  duty/spectrum, tracked by `../pulse-cutoff-347/`), which drive cannot fix
+  and which the saw does not share. This is unverified.
+- **Per-waveform drive is a patch change the RTL may not support as such.** A
+  saw segment with drive 0.50 and a pulse segment with 0.75 means different
+  `gain` register words per wave. Whether the production path and default
+  register images express that was not checked.
+- **The 'official' numbers in `report.json` under `confirmation.saw.official`
+  mix the two waveforms:** that render applied drive 0.50 to the pulse too,
+  uncompensated, so its Gain and Foldback entries describe the pulse at a
+  rejected setting. Only the `summary` blocks are the rule inputs. The envelope
+  release of the saw render moved 1213 to 1188 ms in that run (limit 125 ms);
+  attack 8.9 to 9.1 ms. Neither is judged here.
+- Only one confirmation note (MIDI 72, 11 cells). The 72-vs-84 behaviour
+  agreed in sign and size, which is evidence of consistency, not a fresh
+  patch or a fresh capture.
+- Measured against Mini V3 software, not hardware. Drive 0.50 is a model-side
+  setting that this comparison does not map to any Mini V3 control.
+
+### Next, in order (none done here)
+
+1. Decide whether the lead saw may carry its own drive. If yes: new default
+   register image words, then RTL and production-path ladder verification at
+   the new `gain` word with explicit sample counts (**build box**), and a
+   registry entry for the drive in `docs/sensitivity/registry.json` with a
+   prediction made independently of this measurement.
+2. The remaining saw error (4.4 dB, dark) and the pulse darkness are not
+   drive. They are the unmet lead requirement, left visible.
+
+### Wrong-then-right
+
+Zero corrected measurements in a reported number. One design correction before
+any result: the first instrument draft scaled `vol` for both waveforms at once,
+which could have pushed the pulse segment's volume past 1.0 unchecked while
+measuring the saw; it was changed to scale only the waveform under test and to
+check reachability explicitly before rendering.
