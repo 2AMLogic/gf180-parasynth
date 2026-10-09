@@ -196,9 +196,9 @@ def render_twin(sound: str, ratio: float = 1.0, numer=(1.0,)) -> tuple:
     """POST-HOC DIAGNOSTIC, not a candidate: a FLOAT twin of the tom voice --
     the same host writes (retune, diode-drop staircase, frame by frame), the
     same 0.1 ms exciter, the same poles, but a float recursion with a chosen
-    numerator. It separates the MECHANISM (does a DC zero move the gate the
-    way the 808 does?) from the fixed-point bank's deadband (#350), which
-    #351 found breaks the numerator on the shipped engine. Its RAW form is
+    numerator. It asks the MECHANISM question (does a DC zero move the gate
+    the way the 808 does?) without the fixed-point arithmetic, where #351
+    found the deadband (#350) breaks the numerator. Its RAW form is
     checked against the shipped render on the gate's pitch_shape
     (`test_twin_raw_tracks_the_engine`, which needs the corpus); the
     `twin-no-host-writes` injection, a twin that drops the frame-by-frame host
