@@ -1,0 +1,8 @@
+{
+ "status": "REFUSED",
+ "dc": "REFUSED",
+ "root": null,
+ "reasons": [
+  "no reference directory (GF180_TR808_REFS unset or missing; tried /tmp/tr808-ref, /home/ubuntu/dev/refs)"
+ ]
+}

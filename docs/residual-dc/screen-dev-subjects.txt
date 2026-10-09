@@ -1,4 +1,4 @@
-commit 23c68eca669c-dirty  SR 48000  condition dev {'seconds': 2.4, 'gain': 0.45, 'vel': 1.0}  analysis 2.0s onset-aligned  K 10 (7.460 Hz)
+commit 6955b713dac6-dirty  SR 48000  condition dev {'seconds': 2.4, 'gain': 0.45, 'vel': 1.0}  analysis 2.0s onset-aligned  K 10 (7.460 Hz)
 production init: DrumsFx().couple_en = 0 (A_COUPLE=0x30; the enable is OFF after reset and nothing in the shipped writes sets it); the '+coupling' column writes A_COUPLE=1 at frame 0 -- a DIAGNOSTIC TOGGLE, an experiment, not a production state
 reference: REFUSED dc-inference=REFUSED no reference directory (GF180_TR808_REFS unset or missing; tried /tmp/tr808-ref, /home/ubuntu/dev/refs)
 

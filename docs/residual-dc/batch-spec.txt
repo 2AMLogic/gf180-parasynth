@@ -1,0 +1,5 @@
+python3 tools/run_all.py --jobs 2 --timeout 3600 --json build/residual-dc-batch.json \
+    "python3 tools/probes/residual_dc.py --screen --condition dev" \
+    "python3 tools/probes/residual_dc.py --screen --condition confirm" \
+    "python3 tools/probes/residual_dc.py --detail --condition dev" \
+    "python3 tools/probes/residual_dc.py --detail --condition confirm"
