@@ -39,8 +39,8 @@ LEGACY = FPGA / "testdata/legacy_report.sh"
 OK = {"nextpnr": {"returncode": 0}, "after": []}
 
 
-def synth_log(drop=(), reorder=False):
-    """SYNTHETIC nextpnr-shaped log. `drop` removes named parts."""
+def synth_log(drop=(), reorder=False, sequence=None):
+    """SYNTHETIC nextpnr-shaped log. `drop` removes named parts; `sequence` overrides."""
     parts = {
         "util": ["Info: Device utilisation:",
                  "Info: \t          TRELLIS_IO:      18/    197     9%",
@@ -55,6 +55,8 @@ def synth_log(drop=(), reorder=False):
     order = ["util", "pfmax", "route", "rfmax", "delay", "done"]
     if reorder:  # the only Max frequency lines come BEFORE the route marker
         order = ["util", "pfmax", "route", "delay", "done"]
+    if sequence is not None:
+        order = list(sequence)
     return "\n".join(l for k in order if k not in drop for l in parts[k]) + "\n"
 
 
@@ -128,6 +130,37 @@ def test_incomplete_log_with_exit_zero_is_refused(name, log, marker):
     v = pr.classify(log, OK)
     assert v.state == pr.REFUSED, name
     assert marker in " ".join(v.reasons), (name, v.reasons)
+
+
+def test_utilisation_only_after_route_marker_is_refused_for_order():
+    """The ONLY defect is order: a populated utilisation block, the route marker
+    and a Max frequency line after it are all present, but the utilisation block
+    comes after 'Routing complete.' (e.g. a log stitched from two runs)."""
+    log = synth_log(sequence=("pfmax", "route", "rfmax", "util", "delay", "done"))
+    v = pr.classify(log, OK)
+    assert v.state == pr.REFUSED
+    assert "(order)" in " ".join(v.reasons), v.reasons
+
+
+def test_evaluate_empty_bitstream_is_refused(tmp_path):
+    """Complete log + OK status + a 0-byte bitstream must not be ROUTED."""
+    (tmp_path / "ecp5_pnr.log").write_text(synth_log())
+    (tmp_path / "ecp5_pnr.status.json").write_text(json.dumps(OK))
+    (tmp_path / "ecp5.bit").write_bytes(b"")
+    v, text = pr.evaluate("ecp5", "ulx3s_top", tmp_path)
+    assert v.state == pr.REFUSED and "ecp5.bit missing or empty" in v.reasons[0]
+    assert "RESULT: routed." not in text
+    (tmp_path / "ecp5.bit").write_bytes(b"x")   # same inputs, non-empty: the control's twin
+    assert pr.evaluate("ecp5", "ulx3s_top", tmp_path)[0].state == pr.ROUTED
+
+
+def test_refused_report_does_not_label_an_fmax_as_post_route_result():
+    log = synth_log(drop=("route", "rfmax", "delay", "done"))   # placement estimate only
+    v = pr.classify(log, OK)
+    text = pr.render("ecp5", "ulx3s_top", log, "", None, v)
+    assert v.state == pr.REFUSED
+    assert "post-route RESULT" not in text and "ESTIMATE:" not in text
+    assert "suppressed" in text
 
 
 def test_real_log_truncated_or_stripped_is_refused():
@@ -244,6 +277,8 @@ FAKE_PACK = '''#!{py}
 import os, sys
 if os.environ.get("FAKE_PACK") == "fail" and os.path.basename(sys.argv[0]) in os.environ.get("FAKE_PACK_WHICH", "").split(","):
     sys.exit(3)
+if os.environ.get("FAKE_PACK") == "silent" and os.path.basename(sys.argv[0]) in os.environ.get("FAKE_PACK_WHICH", "").split(","):
+    sys.exit(0)   # claims success, writes nothing
 for p in sys.argv[1:]:
     if p.endswith((".bit", ".bin")) or p.endswith("icetime.txt"): open(p, "w").write("BITS" * 4)
 '''
@@ -328,6 +363,33 @@ def test_make_ecp5_missing_tool_fails_and_keeps_report(rig, tmp_path):
                        capture_output=True, text=True)
     assert r.returncode != 0 and rep.read_text() == "OLD\n"
     assert "REFUSED" in r.stderr
+
+
+@pytest.mark.parametrize("target,packer,bit,report,stale", [
+    ("ecp5", "ecppack", "ecp5.bit", "ecp5_25f.txt", ("ecp5.config",)),
+    ("ice40", "icepack", "ice40.bin", "ice40_up5k.txt", ("ice40.asc", "ice40_icetime.txt")),
+])
+def test_make_silent_packer_beside_stale_bitstream_fails(rig, target, packer, bit, report, stale):
+    """THE STALE-ARTEFACT CONTROL. nextpnr succeeds, the packer exits 0 and
+    writes NOTHING, and an old bitstream sits in the build dir. Without the
+    pre-run delete in cmd_run, the old file's size is reported as this run's
+    and make exits 0 (Judge mutation on PR #594: reproduced red, see PR body)."""
+    run, _, build, reports = rig
+    build.mkdir(exist_ok=True), reports.mkdir(exist_ok=True)
+    (build / bit).write_bytes(b"old-bitstream-19byt")
+    for name in stale:
+        (build / name).write_text("old")
+    (build / f"{target}_pnr.log").write_text(synth_log())
+    (build / f"{target}_pnr.status.json").write_text(json.dumps(OK))
+    rep = reports / report
+    rep.write_bytes(b"OLD COMMITTED REPORT\n")
+    os.utime(rep, (1, 1))
+    r = run(target, FAKE_PACK="silent", FAKE_PACK_WHICH=packer)
+    assert r.returncode != 0, (r.stdout, r.stderr)
+    assert rep.read_bytes() == b"OLD COMMITTED REPORT\n"
+    assert f"{bit} missing or empty" in r.stderr, r.stderr
+    assert "RESULT: routed." not in r.stdout
+    assert not (build / bit).exists()
 
 
 def test_make_ice40_fake_icetime_failure_fails_visibly(rig):

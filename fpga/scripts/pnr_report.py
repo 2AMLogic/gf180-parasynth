@@ -30,6 +30,8 @@ Subcommands:
           no-fit): a refused or failed run never replaces a committed report.
   report  re-derive the report from the files `run` left in the build dir
           (what report.sh used to do). No recorded status means REFUSED.
+          It TRUSTS the status.json/log of the last `run`, which need not be
+          the current build: use `run` for any verdict you intend to quote.
 """
 from __future__ import annotations
 
@@ -225,7 +227,11 @@ def render(target, top, log, stat_text, bit_path, verdict):
           "  ESTIMATE) and once after \"Routing complete.\" (the RESULT). Both are shown",
           "  so nobody quotes the estimate by accident."]
     mf = [l for l in lines if MAXF.search(l)]
-    if mf:
+    if mf and verdict.state != ROUTED:
+        # Without a routed verdict the last Max frequency line may be the
+        # placement estimate; labelling it "post-route RESULT" invites quoting it.
+        o.append("   (suppressed: no routed verdict, so no Fmax figure is a RESULT)")
+    elif mf:
         o.append(_info(mf[0]).replace("   ", "   post-placement ESTIMATE: ", 1))
         o.append(_info(mf[-1]).replace("   ", "   post-route RESULT      : ", 1))
     o += ["", "  worst cross-domain delays (unconstrained I/O paths):"]
