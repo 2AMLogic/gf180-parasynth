@@ -1,0 +1,9 @@
+commit cae21c566571  SR 48000  condition dev {'seconds': 2.4, 'gain': 0.45, 'vel': 1.0}  analysis 2.0s onset-aligned  K 10 (7.460 Hz)
+production init: DrumsFx().couple_en = 0 (A_COUPLE=0x30; the enable is OFF after reset and nothing in the shipped writes sets it); the '+coupling' column writes A_COUPLE=1 at frame 0 -- a DIAGNOSTIC TOGGLE, an experiment, not a production state
+reference: REFUSED dc-inference=REFUSED no reference directory (GF180_TR808_REFS unset or missing; tried /tmp/tr808-ref, /home/ubuntu/dev/refs)
+
+NON-CY SCREEN (uncoupled production baseline; class from beta AND S; nothing here is a sound verdict)
+  CH  OFFSET beta 0.973  S    8.33  sub20  -102.4 dBFS (+30 over floor)  mean/peak  -0.00 %  ring 0.00 %  peak -14.2 dBFS  clip 0  raw=OFFSET
+  RS  SKIRT  beta 0.379  S    0.99  sub20   -59.0 dBFS (+73 over floor)  mean/peak  +0.07 %  ring 0.00 %  peak -14.3 dBFS  clip 0  raw=SKIRT
+  BD  MIXED  beta 0.433  S   14.18  sub20   -51.8 dBFS (+80 over floor)  mean/peak  -0.48 %  ring 0.00 %  peak -12.9 dBFS  clip 0  raw=MIXED
+  HT  SKIRT  beta 0.358  S    0.25  sub20   -61.2 dBFS (+71 over floor)  mean/peak  +0.02 %  ring 0.00 %  peak -13.0 dBFS  clip 0  raw=SKIRT
