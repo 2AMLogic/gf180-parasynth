@@ -27,6 +27,9 @@ Secrets must stay outside every repository and worktree, including ignored
 `.env`, `.loom-local`, logs and artifacts. Use owner-only user credential files
 or an OS credential store; reference them without copying values. Never print
 secrets. `.gitignore` is insufficient. See [credential policy](docs/credential-storage.md).
+Task credentials (cloud tokens, SSH keys) follow a reference-by-name convention:
+look up `./.loom/credentials.md` (names only) before asking the operator for
+anything but a name — see [`.loom/docs/credentials.md`](docs/credentials.md).
 
 ## What is Loom?
 
@@ -78,12 +81,12 @@ Agents coordinate through labels. See `.github/labels.yml` for full definitions.
 **Epic Lifecycle**: `loom:epic` → phased `loom:architect` + `loom:epic-phase`
 child issues.
 
-**Escape-hatch / status labels**: `loom:blocked` (implementation blocked, needs
-help), `loom:operator-only` (requires human action outside automation —
-credentials, infra, hardware; skipped by autonomous dispatch), `loom:abort`
-(signal to abort in-flight work for this issue, returns to `loom:issue`),
-`loom:urgent`. Priority axis: `tier:goal-advancing` / `tier:goal-supporting` /
-`tier:maintenance`.
+**Escape-hatch / status labels**: `loom:blocked` (needs help),
+`loom:operator-only` (human action outside automation: credentials, infra,
+hardware; dispatch skips it), `loom:abort` (abort in-flight work, returns to
+`loom:issue`). `loom:operator-priority`: the operator's star, land it first;
+human-only, not a hold. Priority axis: `tier:goal-advancing` /
+`tier:goal-supporting` / `tier:maintenance`.
 
 ### REST vs GraphQL for forge queries
 
@@ -116,11 +119,13 @@ second copy can go missing its pre-claim guard.
 - Loom-managed worktrees are auto-removed when their PR merges; user-provisioned
   worktrees are never touched — set `LOOM_PRESERVE_WORKTREE=1` to disable
   cleanup for a session.
+- A live `.loom/locks/issue-<N>/owner.json` means a sweep owns issue N — do
+  not claim it (`worktree.sh` enforces this).
 
 ### Merging PRs
 
 **Never use `gh pr merge`** — always use `./.loom/scripts/merge-pr.sh <PR_NUMBER>`
-instead (`--auto` to queue until checks pass, `--dry-run` to preview). `gh pr
+instead (`--auto` to wait then merge, `--dry-run` to preview). `gh pr
 merge` attempts a local checkout that fails when the PR branch is linked to a
 worktree; the script merges via the forge API directly and handles worktree
 cleanup automatically. A `PreToolUse` hook redirects `gh pr merge` calls to
@@ -128,9 +133,9 @@ this script.
 
 ### CI is dumb and reliable, on purpose
 
-Prefer a slow correct job to a clever fast one. **Never cancel verification of a
-distinct commit** — superseding is for PR branches; every default-branch commit
-is distinct work. Path-filtering is an optimisation, not a correctness tool. One
+Prefer a slow correct job to a clever fast one. **Never cancel a distinct commit's
+run once started**; the default branch supersedes only pending runs (no verdict).
+Path-filtering is an optimisation, not a correctness tool. One
 mechanism per behaviour: two that both cancel, skip or retry will surprise
 someone. A check that *cannot run* must never look like one that passed. Rules +
 the incidents behind them: [`.loom/docs/ci-principles.md`](docs/ci-principles.md).
