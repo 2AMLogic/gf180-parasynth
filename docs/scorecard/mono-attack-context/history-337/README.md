@@ -77,3 +77,63 @@ build-box work.
 3. Defeating inputs: NaN sample, all-zero pre-onset, window that would include
    the onset (injected `end_offset=0`), hash mismatch. Each must REFUSE or move
    the number as stated, in tests.
+
+## Result (instrument: `tools/envelope_history_337.py`, tests: `tools/test_envelope_history_337.py`)
+
+**REFUTED. Residual envelope level does not explain the shortening, and no
+restart-from-level candidate is built. The unmet requirement stays open.**
+
+Effect (measured, 36 renders, medians of three; attack in ms):
+
+| wave | context | 5 ms scorer | 1 ms | pre-onset residual |
+| --- | --- | ---: | ---: | --- |
+| saw | isolated84 / delayed84_at4p1 / at5p7 | 7.33 / 8.29 / 8.54 | 7.40 / 7.90 / 7.81 | exact digital zero |
+| saw | repeat84_gap3p4 / from72_gap3p4 / repeat84_gap5 | 3.10 / 3.21 / 3.56 | 1.96 / 1.92 / 1.94 | exact digital zero |
+| pulse | isolated84 / delayed84_at4p1 / at5p7 | 7.46 / 7.96 / 8.31 | 7.40 / 7.60 / 7.44 | exact digital zero |
+| pulse | repeat84_gap3p4 / from72_gap3p4 / repeat84_gap5 | 2.88 / 2.85 / 3.38 | 1.69 / 1.67 / 1.67 | exact digital zero |
+
+All 36 residuals are floor-limited: the audio is exactly 0.0 for at least the
+whole 40 ms window, in the history contexts as in the others (the earlier note's
+release ends at about 2.31 s and the plugin is exactly silent from there to the
+4.10 s or 5.70 s note-on). The gate needed history residual >= -30 dB and a 20 dB
+contrast; it got -120 against -120.
+
+Second effect, from the resolution check: the shortening is not an artefact of the
+5 ms window. At 1 ms the warm attack is about 1.7-2.0 ms against 7.4-7.9 ms cold,
+a larger contrast than the scorer reports. The warm onset reaches 0.9 of held level
+by about 2 ms; the cold onset is still at 0.8 at 7 ms. Both begin at the same sample
+offset (0.44 ms) after the note-on.
+
+Limits, stated as a separate sentence from the effect (rule 7). The refutation is
+of an audible residual in the output. It does not exclude internal plugin state that
+is not audible while the voice is silent. The mechanism for the difference is
+still `unverified`: the data distinguish "a note has already sounded in this
+session" from "none has", and cannot say whether 4 s or 20 s of idle changes it
+(the longest idle tested is 5.6 s before). The model's attack is 8.5-8.8 ms in every
+context, so it matches the cold condition (error +0.2 to +1.4 ms) and misses the
+warm one by 5.0-5.9 ms, unchanged from `../model/README.md`.
+
+Guard adversaries (rule 8): an all-zero file is REFUSED rather than read as
+"below -30 dB" (`test_all_silent_file_is_refused_not_refuted`); a window that reaches
+the onset, a NaN, too little lead-in and a hash mismatch each REFUSE; a late onset
+index is not silent (`test_wrong_onset_moves_the_number_start_red`); a known -20 dB
+residual reads -20.0 +-0.1; and the instrument sees a real residual in the frozen
+earlier-note release (`test_positive_control_on_real_audio_sees_the_previous_release`).
+The adversary that remains is the one the refutation depends on: REFUTED is also the
+verdict for any file whose pre-onset audio is exactly zero. That is stated in
+the result above and is why the zero-run length is reported, not only the verdict.
+
+What this does not change: no sound, engine, RTL or image changed. Nothing here
+reaches the hardware. Wrong-then-right: 0 corrected measurements; 1 test
+(the real-audio positive control) was specified against the wrong held-level
+window and corrected before the result was recorded.
+
+## What a next step would need
+
+A mechanism that is not envelope level. Candidates are mechanisms in the Mini V3
+that depend on a previous note having sounded (voice or oscillator start-up,
+VCA/filter smoothing). Choosing between them needs a new reference capture with
+idle times well beyond 5.6 s and a second note shortly after the first, which needs
+the macOS plugin rig; neither this host nor the build box has it. The shorter route
+is to ask whether an attack that depends on note history is a Mini V3 property the
+product needs at all (an operator ruling).
