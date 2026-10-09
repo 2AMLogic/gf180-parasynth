@@ -460,6 +460,31 @@ def h2_response(refs: pathlib.Path, hashes=None) -> dict:
     return out
 
 
+def ratepath16(refs: pathlib.Path) -> dict:
+    """CLASS SEARCH for the rate-path finding, all sixteen gate sounds at their
+    gate targets: `impulse` (strike, body and ratio) for the shipped render at
+    its native 48 kHz and the SAME render through the target's own rate. A
+    48 kHz target is a no-op round trip, and is reported as such."""
+    out = {}
+    for s in pg.SOUNDS16:
+        rel = pg.target_rel(s)
+        x, sr = load_checked(refs, rel)
+        T = pg.Target(x, sr, s, rel)
+        b = pg.bar_for(s, refs, T)["bar"]
+        y, ysr = pg.render_ours(s)
+        y = np.asarray(y, dtype=np.float64)
+        row = {"target_sr": sr, "target_impulse_db": T.a["impulse"].tolist()}
+        for name, (z, zs) in (("native", (y, ysr)), ("via-take-rate", (_to(y, ysr, sr) if sr != ysr else y, sr))):
+            a_ = pg.analyse(pg.condition(z, zs, side=name), T.plan)
+            row[name] = {"impulse_db": a_["impulse"].tolist(),
+                         "impulse_ratio": score(T, b, z, zs, name)["ratio"]["impulse"]}
+        out[s] = row
+        print(s, sr, "target", np.round(T.a["impulse"], 1), "| native", np.round(row["native"]["impulse_db"], 1),
+              f"x{row['native']['impulse_ratio']:.2f}", "| via take rate", np.round(row["via-take-rate"]["impulse_db"], 1),
+              f"x{row['via-take-rate']['impulse_ratio']:.2f}", flush=True)
+    return out
+
+
 def twin(refs: pathlib.Path, prereg: dict, sounds=None, codes=None) -> dict:
     """The float twin, RAW and with the band-pass numerator, on every
     condition. Post-hoc: added after `run` showed BP failing on the fixed-point
@@ -619,6 +644,9 @@ def main(argv=None) -> int:
     h = sub.add_parser("harmonics")
     h.add_argument("--refs", type=pathlib.Path, required=True)
     h.add_argument("--out", type=pathlib.Path, required=True)
+    r16 = sub.add_parser("ratepath16")
+    r16.add_argument("--refs", type=pathlib.Path, required=True)
+    r16.add_argument("--out", type=pathlib.Path, required=True)
     k = sub.add_parser("knownanswer")
     k.add_argument("--out", type=pathlib.Path, required=True)
     j = sub.add_parser("judge")
@@ -631,6 +659,9 @@ def main(argv=None) -> int:
             res = knownanswer()
         elif a.cmd == "harmonics":
             res = h2_response(a.refs, load_prereg()["corpus"]["sha256_16"])
+            res["provenance"] = provenance(a.refs)
+        elif a.cmd == "ratepath16":
+            res = ratepath16(a.refs)
             res["provenance"] = provenance(a.refs)
         elif a.cmd == "judge":
             rec = json.loads(a.record.read_text())
