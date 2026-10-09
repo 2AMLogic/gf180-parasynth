@@ -1,0 +1,3702 @@
+{
+ "rows": {
+  "LT00": {
+   "take": "lt8/LT00.WAV",
+   "split": "untouched",
+   "tuning_ratio": 0.9208,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 10.6618,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 3.1758,
+      "spec_peak": 3.1182,
+      "centroid": 10.4064,
+      "flatness": 1.1773,
+      "impulse": 9.4502,
+      "attack": 1.3628,
+      "decay": 10.6618,
+      "modulation": 10.4778,
+      "pitch": 0.7178,
+      "pitch_shape": 3.3355
+     },
+     "d": {
+      "spec": 0.0588,
+      "spec_peak": 0.536,
+      "centroid": 1.232,
+      "flatness": 0.8385,
+      "impulse": 48.438,
+      "attack": 1.3628,
+      "decay": 12.3174,
+      "modulation": 31.0371,
+      "pitch": 34.491,
+      "pitch_shape": 25.5056
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 16.4533,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 2.3222,
+      "spec_peak": 0.8019,
+      "centroid": 4.4618,
+      "flatness": 1.4391,
+      "impulse": 9.9157,
+      "attack": 0.2997,
+      "decay": 16.4533,
+      "modulation": 10.7534,
+      "pitch": 0.7327,
+      "pitch_shape": 0.9301
+     },
+     "d": {
+      "spec": 0.043,
+      "spec_peak": 0.1378,
+      "centroid": 0.5282,
+      "flatness": 1.025,
+      "impulse": 50.8238,
+      "attack": 0.2997,
+      "decay": 19.0082,
+      "modulation": 31.8535,
+      "pitch": 35.2086,
+      "pitch_shape": 7.112
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 10.5665,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 3.1945,
+      "spec_peak": 3.1176,
+      "centroid": 10.404,
+      "flatness": 1.1818,
+      "impulse": 1.2434,
+      "attack": 1.3628,
+      "decay": 10.5665,
+      "modulation": 7.9004,
+      "pitch": 0.7153,
+      "pitch_shape": 3.3217
+     },
+     "d": {
+      "spec": 0.0591,
+      "spec_peak": 0.5359,
+      "centroid": 1.2317,
+      "flatness": 0.8418,
+      "impulse": 6.3733,
+      "attack": 1.3628,
+      "decay": 12.2073,
+      "modulation": 23.4023,
+      "pitch": 34.3709,
+      "pitch_shape": 25.4001
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 10.5662,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 3.1963,
+      "spec_peak": 3.1179,
+      "centroid": 10.4062,
+      "flatness": 1.1824,
+      "impulse": 4.1892,
+      "attack": 1.3628,
+      "decay": 10.5662,
+      "modulation": 7.9007,
+      "pitch": 0.7153,
+      "pitch_shape": 3.3218
+     },
+     "d": {
+      "spec": 0.0591,
+      "spec_peak": 0.536,
+      "centroid": 1.232,
+      "flatness": 0.8422,
+      "impulse": 21.4719,
+      "attack": 1.3628,
+      "decay": 12.2069,
+      "modulation": 23.4031,
+      "pitch": 34.3709,
+      "pitch_shape": 25.4006
+     }
+    }
+   }
+  },
+  "LT25": {
+   "take": "lt8/LT25.WAV",
+   "split": "development",
+   "tuning_ratio": 0.9463,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 10.252,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 2.9801,
+      "spec_peak": 3.0258,
+      "centroid": 10.0415,
+      "flatness": 1.3943,
+      "impulse": 9.3022,
+      "attack": 1.4484,
+      "decay": 10.252,
+      "modulation": 10.0492,
+      "pitch": 0.7235,
+      "pitch_shape": 3.4361
+     },
+     "d": {
+      "spec": 0.0572,
+      "spec_peak": 0.53,
+      "centroid": 1.1971,
+      "flatness": 0.9933,
+      "impulse": 43.43,
+      "attack": 1.4484,
+      "decay": 11.7953,
+      "modulation": 29.779,
+      "pitch": 34.7647,
+      "pitch_shape": 26.2304
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 16.0456,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 2.1642,
+      "spec_peak": 0.8039,
+      "centroid": 4.2366,
+      "flatness": 1.6404,
+      "impulse": 9.2166,
+      "attack": 0.2311,
+      "decay": 16.0456,
+      "modulation": 9.5048,
+      "pitch": 0.7329,
+      "pitch_shape": 0.8163
+     },
+     "d": {
+      "spec": 0.0415,
+      "spec_peak": 0.1408,
+      "centroid": 0.5051,
+      "flatness": 1.1687,
+      "impulse": 43.0303,
+      "attack": 0.2311,
+      "decay": 18.4611,
+      "modulation": 28.1656,
+      "pitch": 35.2151,
+      "pitch_shape": 6.2317
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 10.1393,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 3.0046,
+      "spec_peak": 3.0248,
+      "centroid": 10.0381,
+      "flatness": 1.3949,
+      "impulse": 0.8424,
+      "attack": 1.4484,
+      "decay": 10.1393,
+      "modulation": 8.2848,
+      "pitch": 0.7264,
+      "pitch_shape": 3.4555
+     },
+     "d": {
+      "spec": 0.0577,
+      "spec_peak": 0.5298,
+      "centroid": 1.1967,
+      "flatness": 0.9938,
+      "impulse": 3.9331,
+      "attack": 1.4484,
+      "decay": 11.6656,
+      "modulation": 24.5504,
+      "pitch": 34.9014,
+      "pitch_shape": 26.3787
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 10.139,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 3.0063,
+      "spec_peak": 3.0251,
+      "centroid": 10.0407,
+      "flatness": 1.3958,
+      "impulse": 3.5562,
+      "attack": 1.4484,
+      "decay": 10.139,
+      "modulation": 8.2854,
+      "pitch": 0.7264,
+      "pitch_shape": 3.4556
+     },
+     "d": {
+      "spec": 0.0577,
+      "spec_peak": 0.5299,
+      "centroid": 1.197,
+      "flatness": 0.9944,
+      "impulse": 16.6033,
+      "attack": 1.4484,
+      "decay": 11.6652,
+      "modulation": 24.5522,
+      "pitch": 34.9014,
+      "pitch_shape": 26.3793
+     }
+    }
+   }
+  },
+  "LT50": {
+   "take": "lt8/LT50.WAV",
+   "split": "seen-in-diagnosis",
+   "tuning_ratio": 1.0,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 16.6388,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 2.6523,
+      "spec_peak": 2.8809,
+      "centroid": 8.4583,
+      "flatness": 0.6382,
+      "impulse": 11.6235,
+      "attack": 1.2117,
+      "decay": 6.9062,
+      "modulation": 16.6388,
+      "pitch": 0.3686,
+      "pitch_shape": 2.9566
+     },
+     "d": {
+      "spec": 0.0579,
+      "spec_peak": 0.5056,
+      "centroid": 1.1469,
+      "flatness": 0.908,
+      "impulse": 49.5449,
+      "attack": 1.2117,
+      "decay": 10.3474,
+      "modulation": 30.0459,
+      "pitch": 35.2849,
+      "pitch_shape": 26.5927
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 16.4404,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 1.9533,
+      "spec_peak": 0.8544,
+      "centroid": 3.7089,
+      "flatness": 0.8009,
+      "impulse": 10.0244,
+      "attack": 0.4125,
+      "decay": 11.1471,
+      "modulation": 16.4404,
+      "pitch": 0.3687,
+      "pitch_shape": 0.9382
+     },
+     "d": {
+      "spec": 0.0427,
+      "spec_peak": 0.1499,
+      "centroid": 0.5029,
+      "flatness": 1.1395,
+      "impulse": 42.729,
+      "attack": 0.4125,
+      "decay": 16.7013,
+      "modulation": 29.6877,
+      "pitch": 35.2983,
+      "pitch_shape": 8.4386
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 14.8468,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 2.6725,
+      "spec_peak": 2.8794,
+      "centroid": 8.4585,
+      "flatness": 0.6373,
+      "impulse": 1.4481,
+      "attack": 1.2117,
+      "decay": 6.8438,
+      "modulation": 14.8468,
+      "pitch": 0.3685,
+      "pitch_shape": 2.9563
+     },
+     "d": {
+      "spec": 0.0584,
+      "spec_peak": 0.5053,
+      "centroid": 1.1469,
+      "flatness": 0.9068,
+      "impulse": 6.1727,
+      "attack": 1.2117,
+      "decay": 10.2538,
+      "modulation": 26.8099,
+      "pitch": 35.2775,
+      "pitch_shape": 26.5906
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 14.848,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 2.6749,
+      "spec_peak": 2.8797,
+      "centroid": 8.4608,
+      "flatness": 0.6377,
+      "impulse": 4.7953,
+      "attack": 1.2117,
+      "decay": 6.8435,
+      "modulation": 14.848,
+      "pitch": 0.3685,
+      "pitch_shape": 2.9564
+     },
+     "d": {
+      "spec": 0.0584,
+      "spec_peak": 0.5054,
+      "centroid": 1.1473,
+      "flatness": 0.9073,
+      "impulse": 20.4401,
+      "attack": 1.2117,
+      "decay": 10.2534,
+      "modulation": 26.8121,
+      "pitch": 35.2775,
+      "pitch_shape": 26.5912
+     }
+    }
+   }
+  },
+  "LT75": {
+   "take": "lt8/LT75.WAV",
+   "split": "development",
+   "tuning_ratio": 1.0524,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 8.7483,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 2.3562,
+      "spec_peak": 3.7507,
+      "centroid": 7.2617,
+      "flatness": 0.6196,
+      "impulse": 6.4063,
+      "attack": 0.833,
+      "decay": 8.5208,
+      "modulation": 8.7483,
+      "pitch": 0.4032,
+      "pitch_shape": 2.1866
+     },
+     "d": {
+      "spec": 0.0532,
+      "spec_peak": 0.4947,
+      "centroid": 1.1835,
+      "flatness": 0.7499,
+      "impulse": 69.5612,
+      "attack": 0.8943,
+      "decay": 8.999,
+      "modulation": 30.7278,
+      "pitch": 36.6404,
+      "pitch_shape": 33.6812
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 14.2288,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 1.7037,
+      "spec_peak": 1.27,
+      "centroid": 2.7358,
+      "flatness": 0.7089,
+      "impulse": 4.5853,
+      "attack": 0.4307,
+      "decay": 14.2288,
+      "modulation": 8.6301,
+      "pitch": 0.4032,
+      "pitch_shape": 1.2443
+     },
+     "d": {
+      "spec": 0.0385,
+      "spec_peak": 0.1675,
+      "centroid": 0.4459,
+      "flatness": 0.8581,
+      "impulse": 49.7884,
+      "attack": 0.4624,
+      "decay": 15.0273,
+      "modulation": 30.3125,
+      "pitch": 36.636,
+      "pitch_shape": 19.1661
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 8.4404,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 2.3723,
+      "spec_peak": 3.7489,
+      "centroid": 7.2575,
+      "flatness": 0.6188,
+      "impulse": 1.5742,
+      "attack": 0.8255,
+      "decay": 8.4404,
+      "modulation": 7.8238,
+      "pitch": 0.4023,
+      "pitch_shape": 2.18
+     },
+     "d": {
+      "spec": 0.0536,
+      "spec_peak": 0.4945,
+      "centroid": 1.1828,
+      "flatness": 0.749,
+      "impulse": 17.0932,
+      "attack": 0.8863,
+      "decay": 8.9141,
+      "modulation": 27.4804,
+      "pitch": 36.5549,
+      "pitch_shape": 33.5786
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 8.4401,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 2.3739,
+      "spec_peak": 3.7493,
+      "centroid": 7.2593,
+      "flatness": 0.6193,
+      "impulse": 2.7908,
+      "attack": 0.8255,
+      "decay": 8.4401,
+      "modulation": 7.8251,
+      "pitch": 0.4023,
+      "pitch_shape": 2.18
+     },
+     "d": {
+      "spec": 0.0536,
+      "spec_peak": 0.4946,
+      "centroid": 1.1831,
+      "flatness": 0.7497,
+      "impulse": 30.3028,
+      "attack": 0.8863,
+      "decay": 8.9138,
+      "modulation": 27.4848,
+      "pitch": 36.5549,
+      "pitch_shape": 33.5793
+     }
+    }
+   }
+  },
+  "LT10": {
+   "take": "lt8/LT10.WAV",
+   "split": "untouched",
+   "tuning_ratio": 1.1215,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 17.4679,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.917,
+      "spec_peak": 2.0782,
+      "centroid": 8.7006,
+      "flatness": 1.2507,
+      "impulse": 17.4679,
+      "attack": 1.0288,
+      "decay": 3.4014,
+      "modulation": 4.0621,
+      "pitch": 0.3317,
+      "pitch_shape": 2.7776
+     },
+     "d": {
+      "spec": 0.0478,
+      "spec_peak": 0.4725,
+      "centroid": 1.1491,
+      "flatness": 1.1154,
+      "impulse": 52.4037,
+      "attack": 1.1289,
+      "decay": 6.3059,
+      "modulation": 31.4427,
+      "pitch": 37.4781,
+      "pitch_shape": 46.4445
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 15.2962,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.3657,
+      "spec_peak": 0.6057,
+      "centroid": 2.7314,
+      "flatness": 1.2626,
+      "impulse": 15.2962,
+      "attack": 0.8803,
+      "decay": 6.1722,
+      "modulation": 4.4108,
+      "pitch": 0.332,
+      "pitch_shape": 1.7799
+     },
+     "d": {
+      "spec": 0.0341,
+      "spec_peak": 0.1377,
+      "centroid": 0.3608,
+      "flatness": 1.1261,
+      "impulse": 45.8886,
+      "attack": 0.9659,
+      "decay": 11.4426,
+      "modulation": 34.1421,
+      "pitch": 37.5086,
+      "pitch_shape": 29.7612
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 8.6966,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 1.9171,
+      "spec_peak": 2.0751,
+      "centroid": 8.6966,
+      "flatness": 1.2502,
+      "impulse": 4.6465,
+      "attack": 1.0299,
+      "decay": 3.3514,
+      "modulation": 3.8332,
+      "pitch": 0.3336,
+      "pitch_shape": 2.7907
+     },
+     "d": {
+      "spec": 0.0478,
+      "spec_peak": 0.4718,
+      "centroid": 1.1486,
+      "flatness": 1.115,
+      "impulse": 13.9395,
+      "attack": 1.1302,
+      "decay": 6.213,
+      "modulation": 29.6708,
+      "pitch": 37.692,
+      "pitch_shape": 46.6637
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 9.362,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.9185,
+      "spec_peak": 2.0768,
+      "centroid": 8.6992,
+      "flatness": 1.2513,
+      "impulse": 9.362,
+      "attack": 1.0299,
+      "decay": 3.3512,
+      "modulation": 3.8338,
+      "pitch": 0.3336,
+      "pitch_shape": 2.7908
+     },
+     "d": {
+      "spec": 0.0479,
+      "spec_peak": 0.4722,
+      "centroid": 1.149,
+      "flatness": 1.1161,
+      "impulse": 28.0859,
+      "attack": 1.1302,
+      "decay": 6.2127,
+      "modulation": 29.6756,
+      "pitch": 37.692,
+      "pitch_shape": 46.6645
+     }
+    }
+   }
+  },
+  "MT00": {
+   "take": "mt8/MT00.WAV",
+   "split": "untouched",
+   "tuning_ratio": 0.9228,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 12.0037,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 2.8321,
+      "spec_peak": 3.7849,
+      "centroid": 10.0515,
+      "flatness": 2.5058,
+      "impulse": 12.0037,
+      "attack": 2.5454,
+      "decay": 7.0507,
+      "modulation": 11.4458,
+      "pitch": 0.0778,
+      "pitch_shape": 0.9992
+     },
+     "d": {
+      "spec": 0.0667,
+      "spec_peak": 0.4879,
+      "centroid": 1.5266,
+      "flatness": 1.2365,
+      "impulse": 36.0111,
+      "attack": 2.5454,
+      "decay": 12.7648,
+      "modulation": 35.414,
+      "pitch": 3.6755,
+      "pitch_shape": 14.3928
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 14.0506,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.9735,
+      "spec_peak": 1.0962,
+      "centroid": 3.5188,
+      "flatness": 1.1066,
+      "impulse": 14.0506,
+      "attack": 0.9445,
+      "decay": 5.0795,
+      "modulation": 11.4034,
+      "pitch": 0.0911,
+      "pitch_shape": 1.0016
+     },
+     "d": {
+      "spec": 0.0465,
+      "spec_peak": 0.1413,
+      "centroid": 0.5344,
+      "flatness": 0.5461,
+      "impulse": 42.1519,
+      "attack": 0.9445,
+      "decay": 9.1962,
+      "modulation": 35.2828,
+      "pitch": 4.3037,
+      "pitch_shape": 14.4266
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 11.289,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 2.8394,
+      "spec_peak": 3.7837,
+      "centroid": 10.046,
+      "flatness": 2.5027,
+      "impulse": 0.8631,
+      "attack": 2.5454,
+      "decay": 7.0461,
+      "modulation": 11.289,
+      "pitch": 0.0779,
+      "pitch_shape": 1.0344
+     },
+     "d": {
+      "spec": 0.0669,
+      "spec_peak": 0.4877,
+      "centroid": 1.5258,
+      "flatness": 1.235,
+      "impulse": 2.5892,
+      "attack": 2.5454,
+      "decay": 12.7565,
+      "modulation": 34.9289,
+      "pitch": 3.6786,
+      "pitch_shape": 14.899
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 11.2897,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 2.841,
+      "spec_peak": 3.7841,
+      "centroid": 10.0488,
+      "flatness": 2.5052,
+      "impulse": 5.5414,
+      "attack": 2.5454,
+      "decay": 7.0487,
+      "modulation": 11.2897,
+      "pitch": 0.0779,
+      "pitch_shape": 1.0344
+     },
+     "d": {
+      "spec": 0.0669,
+      "spec_peak": 0.4878,
+      "centroid": 1.5262,
+      "flatness": 1.2362,
+      "impulse": 16.6242,
+      "attack": 2.5454,
+      "decay": 12.7612,
+      "modulation": 34.9311,
+      "pitch": 3.6787,
+      "pitch_shape": 14.8989
+     }
+    }
+   }
+  },
+  "MT25": {
+   "take": "mt8/MT25.WAV",
+   "split": "untouched",
+   "tuning_ratio": 0.9471,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 12.0759,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 2.6239,
+      "spec_peak": 3.6913,
+      "centroid": 9.9193,
+      "flatness": 2.4475,
+      "impulse": 11.1329,
+      "attack": 2.5712,
+      "decay": 6.7055,
+      "modulation": 12.0759,
+      "pitch": 0.0588,
+      "pitch_shape": 0.9113
+     },
+     "d": {
+      "spec": 0.0655,
+      "spec_peak": 0.4744,
+      "centroid": 1.495,
+      "flatness": 1.2034,
+      "impulse": 33.3987,
+      "attack": 2.5712,
+      "decay": 12.0764,
+      "modulation": 36.3632,
+      "pitch": 2.7773,
+      "pitch_shape": 13.0934
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 13.2554,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.7891,
+      "spec_peak": 1.2996,
+      "centroid": 3.3291,
+      "flatness": 1.0548,
+      "impulse": 13.2554,
+      "attack": 0.8823,
+      "decay": 4.3731,
+      "modulation": 12.0297,
+      "pitch": 0.086,
+      "pitch_shape": 0.8709
+     },
+     "d": {
+      "spec": 0.0446,
+      "spec_peak": 0.167,
+      "centroid": 0.5018,
+      "flatness": 0.5186,
+      "impulse": 39.7663,
+      "attack": 0.8823,
+      "decay": 7.8758,
+      "modulation": 36.2241,
+      "pitch": 4.0613,
+      "pitch_shape": 12.5132
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 11.9658,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 2.6268,
+      "spec_peak": 3.6894,
+      "centroid": 9.9121,
+      "flatness": 2.4436,
+      "impulse": 0.8593,
+      "attack": 2.5812,
+      "decay": 6.7016,
+      "modulation": 11.9658,
+      "pitch": 0.0541,
+      "pitch_shape": 0.895
+     },
+     "d": {
+      "spec": 0.0655,
+      "spec_peak": 0.4742,
+      "centroid": 1.494,
+      "flatness": 1.2015,
+      "impulse": 2.578,
+      "attack": 2.5812,
+      "decay": 12.0693,
+      "modulation": 36.032,
+      "pitch": 2.5531,
+      "pitch_shape": 12.8594
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 11.9655,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 2.6284,
+      "spec_peak": 3.6898,
+      "centroid": 9.9149,
+      "flatness": 2.446,
+      "impulse": 4.6517,
+      "attack": 2.5812,
+      "decay": 6.7041,
+      "modulation": 11.9655,
+      "pitch": 0.0541,
+      "pitch_shape": 0.8951
+     },
+     "d": {
+      "spec": 0.0656,
+      "spec_peak": 0.4742,
+      "centroid": 1.4944,
+      "flatness": 1.2027,
+      "impulse": 13.9551,
+      "attack": 2.5812,
+      "decay": 12.0739,
+      "modulation": 36.0309,
+      "pitch": 2.5531,
+      "pitch_shape": 12.8606
+     }
+    }
+   }
+  },
+  "MT50": {
+   "take": "mt8/MT50.WAV",
+   "split": "seen-in-diagnosis",
+   "tuning_ratio": 1.0,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 11.2369,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 2.2624,
+      "spec_peak": 3.2695,
+      "centroid": 10.5355,
+      "flatness": 1.9763,
+      "impulse": 11.2369,
+      "attack": 2.1537,
+      "decay": 2.1086,
+      "modulation": 4.8245,
+      "pitch": 0.0362,
+      "pitch_shape": 0.9696
+     },
+     "d": {
+      "spec": 0.0613,
+      "spec_peak": 0.461,
+      "centroid": 1.4229,
+      "flatness": 1.1903,
+      "impulse": 33.7106,
+      "attack": 2.9634,
+      "decay": 3.0215,
+      "modulation": 30.7007,
+      "pitch": 3.4936,
+      "pitch_shape": 10.8847
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 10.2818,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.5013,
+      "spec_peak": 0.8995,
+      "centroid": 3.1028,
+      "flatness": 0.815,
+      "impulse": 10.2818,
+      "attack": 0.586,
+      "decay": 2.5247,
+      "modulation": 4.8278,
+      "pitch": 0.0567,
+      "pitch_shape": 1.0931
+     },
+     "d": {
+      "spec": 0.0407,
+      "spec_peak": 0.1268,
+      "centroid": 0.419,
+      "flatness": 0.4908,
+      "impulse": 30.8454,
+      "attack": 0.8063,
+      "decay": 3.6176,
+      "modulation": 30.7219,
+      "pitch": 5.4705,
+      "pitch_shape": 12.2706
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 10.5279,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 2.2661,
+      "spec_peak": 3.268,
+      "centroid": 10.5279,
+      "flatness": 1.9731,
+      "impulse": 0.7906,
+      "attack": 2.1537,
+      "decay": 2.0838,
+      "modulation": 4.8413,
+      "pitch": 0.0352,
+      "pitch_shape": 0.975
+     },
+     "d": {
+      "spec": 0.0614,
+      "spec_peak": 0.4608,
+      "centroid": 1.4218,
+      "flatness": 1.1883,
+      "impulse": 2.3719,
+      "attack": 2.9634,
+      "decay": 2.9859,
+      "modulation": 30.8077,
+      "pitch": 3.398,
+      "pitch_shape": 10.9454
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 10.531,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 2.2673,
+      "spec_peak": 3.2683,
+      "centroid": 10.531,
+      "flatness": 1.9749,
+      "impulse": 4.3225,
+      "attack": 2.1537,
+      "decay": 2.0838,
+      "modulation": 4.8412,
+      "pitch": 0.0352,
+      "pitch_shape": 0.975
+     },
+     "d": {
+      "spec": 0.0614,
+      "spec_peak": 0.4609,
+      "centroid": 1.4223,
+      "flatness": 1.1895,
+      "impulse": 12.9676,
+      "attack": 2.9634,
+      "decay": 2.9859,
+      "modulation": 30.8074,
+      "pitch": 3.3981,
+      "pitch_shape": 10.9452
+     }
+    }
+   }
+  },
+  "MT75": {
+   "take": "mt8/MT75.WAV",
+   "split": "untouched",
+   "tuning_ratio": 1.0681,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 15.0153,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.8712,
+      "spec_peak": 3.2602,
+      "centroid": 11.5821,
+      "flatness": 3.2431,
+      "impulse": 15.0153,
+      "attack": 0.7289,
+      "decay": 0.4405,
+      "modulation": 2.8982,
+      "pitch": 0.0472,
+      "pitch_shape": 1.0442
+     },
+     "d": {
+      "spec": 0.0567,
+      "spec_peak": 0.4135,
+      "centroid": 1.3813,
+      "flatness": 1.3967,
+      "impulse": 45.046,
+      "attack": 2.8062,
+      "decay": 0.6802,
+      "modulation": 23.8453,
+      "pitch": 5.4387,
+      "pitch_shape": 14.1857
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 9.3397,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.1914,
+      "spec_peak": 0.8468,
+      "centroid": 2.9766,
+      "flatness": 1.0979,
+      "impulse": 9.3397,
+      "attack": 0.2307,
+      "decay": 0.3607,
+      "modulation": 2.8865,
+      "pitch": 0.0613,
+      "pitch_shape": 0.9863
+     },
+     "d": {
+      "spec": 0.0361,
+      "spec_peak": 0.1074,
+      "centroid": 0.355,
+      "flatness": 0.4728,
+      "impulse": 28.0191,
+      "attack": 0.8882,
+      "decay": 0.5569,
+      "modulation": 23.7494,
+      "pitch": 7.0621,
+      "pitch_shape": 13.3988
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 11.5749,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 1.8758,
+      "spec_peak": 3.258,
+      "centroid": 11.5749,
+      "flatness": 3.2394,
+      "impulse": 0.898,
+      "attack": 0.7289,
+      "decay": 0.4418,
+      "modulation": 2.899,
+      "pitch": 0.0484,
+      "pitch_shape": 1.0568
+     },
+     "d": {
+      "spec": 0.0568,
+      "spec_peak": 0.4133,
+      "centroid": 1.3805,
+      "flatness": 1.3952,
+      "impulse": 2.694,
+      "attack": 2.8062,
+      "decay": 0.6822,
+      "modulation": 23.8524,
+      "pitch": 5.5813,
+      "pitch_shape": 14.3571
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 11.5785,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 1.8768,
+      "spec_peak": 3.2584,
+      "centroid": 11.5785,
+      "flatness": 3.2418,
+      "impulse": 4.9104,
+      "attack": 0.7289,
+      "decay": 0.4418,
+      "modulation": 2.8991,
+      "pitch": 0.0484,
+      "pitch_shape": 1.0568
+     },
+     "d": {
+      "spec": 0.0568,
+      "spec_peak": 0.4133,
+      "centroid": 1.3809,
+      "flatness": 1.3962,
+      "impulse": 14.7313,
+      "attack": 2.8062,
+      "decay": 0.6823,
+      "modulation": 23.8525,
+      "pitch": 5.5813,
+      "pitch_shape": 14.3571
+     }
+    }
+   }
+  },
+  "MT10": {
+   "take": "mt8/MT10.WAV",
+   "split": "untouched",
+   "tuning_ratio": 1.1387,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 4.7867,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 1.5888,
+      "spec_peak": 2.3352,
+      "centroid": 4.7867,
+      "flatness": 3.637,
+      "impulse": 3.0277,
+      "attack": 0.8682,
+      "decay": 0.9593,
+      "modulation": 3.476,
+      "pitch": 0.0332,
+      "pitch_shape": 1.1553
+     },
+     "d": {
+      "spec": 0.0549,
+      "spec_peak": 0.3672,
+      "centroid": 1.4593,
+      "flatness": 1.9053,
+      "impulse": 42.0704,
+      "attack": 4.0732,
+      "decay": 1.0295,
+      "modulation": 19.4898,
+      "pitch": 3.8767,
+      "pitch_shape": 20.7898
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 3.4829,
+     "worst_feature": "modulation",
+     "ratio": {
+      "spec": 1.0668,
+      "spec_peak": 1.1238,
+      "centroid": 1.5639,
+      "flatness": 1.1397,
+      "impulse": 3.0451,
+      "attack": 0.3328,
+      "decay": 0.4556,
+      "modulation": 3.4829,
+      "pitch": 0.0398,
+      "pitch_shape": 0.7263
+     },
+     "d": {
+      "spec": 0.0368,
+      "spec_peak": 0.1767,
+      "centroid": 0.4768,
+      "flatness": 0.597,
+      "impulse": 42.3121,
+      "attack": 1.5615,
+      "decay": 0.4889,
+      "modulation": 19.5283,
+      "pitch": 4.651,
+      "pitch_shape": 13.0693
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 4.7818,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 1.5966,
+      "spec_peak": 2.3335,
+      "centroid": 4.7818,
+      "flatness": 3.638,
+      "impulse": 1.1659,
+      "attack": 0.8682,
+      "decay": 0.912,
+      "modulation": 3.4803,
+      "pitch": 0.033,
+      "pitch_shape": 1.1536
+     },
+     "d": {
+      "spec": 0.0551,
+      "spec_peak": 0.3669,
+      "centroid": 1.4578,
+      "flatness": 1.9058,
+      "impulse": 16.2001,
+      "attack": 4.0732,
+      "decay": 0.9787,
+      "modulation": 19.5137,
+      "pitch": 3.8546,
+      "pitch_shape": 20.7583
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 4.7831,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 1.5978,
+      "spec_peak": 2.3338,
+      "centroid": 4.7831,
+      "flatness": 3.6406,
+      "impulse": 1.9603,
+      "attack": 0.8682,
+      "decay": 0.912,
+      "modulation": 3.4803,
+      "pitch": 0.033,
+      "pitch_shape": 1.1536
+     },
+     "d": {
+      "spec": 0.0552,
+      "spec_peak": 0.3669,
+      "centroid": 1.4582,
+      "flatness": 1.9071,
+      "impulse": 27.239,
+      "attack": 4.0732,
+      "decay": 0.9788,
+      "modulation": 19.5137,
+      "pitch": 3.8546,
+      "pitch_shape": 20.7597
+     }
+    }
+   }
+  },
+  "HT00": {
+   "take": "ht8/HT00.WAV",
+   "split": "untouched",
+   "tuning_ratio": 0.9077,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 9.8768,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 2.5653,
+      "spec_peak": 3.8217,
+      "centroid": 8.1371,
+      "flatness": 2.716,
+      "impulse": 9.8768,
+      "attack": 2.4805,
+      "decay": 8.9657,
+      "modulation": null,
+      "pitch": 0.3049,
+      "pitch_shape": 0.7147
+     },
+     "d": {
+      "spec": 0.0742,
+      "spec_peak": 0.3929,
+      "centroid": 1.5036,
+      "flatness": 1.8025,
+      "impulse": 29.6304,
+      "attack": 4.3426,
+      "decay": 8.4128,
+      "modulation": null,
+      "pitch": 18.1219,
+      "pitch_shape": 18.7356
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 12.2082,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.7962,
+      "spec_peak": 0.8358,
+      "centroid": 2.9793,
+      "flatness": 1.0729,
+      "impulse": 12.2082,
+      "attack": 0.5584,
+      "decay": 9.7896,
+      "modulation": null,
+      "pitch": 0.2917,
+      "pitch_shape": 0.7439
+     },
+     "d": {
+      "spec": 0.052,
+      "spec_peak": 0.0859,
+      "centroid": 0.5505,
+      "flatness": 0.7121,
+      "impulse": 36.6245,
+      "attack": 0.9776,
+      "decay": 9.1859,
+      "modulation": null,
+      "pitch": 17.3395,
+      "pitch_shape": 19.502
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 8.9544,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 2.5699,
+      "spec_peak": 3.8196,
+      "centroid": 8.1332,
+      "flatness": 2.7147,
+      "impulse": 0.5642,
+      "attack": 2.4805,
+      "decay": 8.9544,
+      "modulation": null,
+      "pitch": 0.3016,
+      "pitch_shape": 0.7609
+     },
+     "d": {
+      "spec": 0.0744,
+      "spec_peak": 0.3927,
+      "centroid": 1.5029,
+      "flatness": 1.8016,
+      "impulse": 1.6925,
+      "attack": 4.3426,
+      "decay": 8.4022,
+      "modulation": null,
+      "pitch": 17.9259,
+      "pitch_shape": 19.9464
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 8.958,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 2.5712,
+      "spec_peak": 3.8198,
+      "centroid": 8.1359,
+      "flatness": 2.7165,
+      "impulse": 5.3617,
+      "attack": 2.4805,
+      "decay": 8.958,
+      "modulation": null,
+      "pitch": 0.3016,
+      "pitch_shape": 0.7609
+     },
+     "d": {
+      "spec": 0.0744,
+      "spec_peak": 0.3927,
+      "centroid": 1.5034,
+      "flatness": 1.8028,
+      "impulse": 16.0851,
+      "attack": 4.3426,
+      "decay": 8.4055,
+      "modulation": null,
+      "pitch": 17.9259,
+      "pitch_shape": 19.9464
+     }
+    }
+   }
+  },
+  "HT25": {
+   "take": "ht8/HT25.WAV",
+   "split": "development",
+   "tuning_ratio": 0.939,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 9.5119,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 2.3611,
+      "spec_peak": 3.6727,
+      "centroid": 7.822,
+      "flatness": 2.6821,
+      "impulse": 9.5119,
+      "attack": 1.7356,
+      "decay": 8.7706,
+      "modulation": null,
+      "pitch": 0.3118,
+      "pitch_shape": 0.5169
+     },
+     "d": {
+      "spec": 0.0688,
+      "spec_peak": 0.3775,
+      "centroid": 1.4577,
+      "flatness": 1.7555,
+      "impulse": 28.5358,
+      "attack": 3.0385,
+      "decay": 8.4023,
+      "modulation": null,
+      "pitch": 18.5343,
+      "pitch_shape": 13.5471
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 11.8175,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.6093,
+      "spec_peak": 0.8425,
+      "centroid": 2.5903,
+      "flatness": 1.0358,
+      "impulse": 11.8175,
+      "attack": 0.2059,
+      "decay": 8.9493,
+      "modulation": null,
+      "pitch": 0.2644,
+      "pitch_shape": 0.5241
+     },
+     "d": {
+      "spec": 0.0469,
+      "spec_peak": 0.0866,
+      "centroid": 0.4827,
+      "flatness": 0.6779,
+      "impulse": 35.4525,
+      "attack": 0.3604,
+      "decay": 8.5735,
+      "modulation": null,
+      "pitch": 15.714,
+      "pitch_shape": 13.7365
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 8.759,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 2.3687,
+      "spec_peak": 3.6705,
+      "centroid": 7.8184,
+      "flatness": 2.6814,
+      "impulse": 0.7371,
+      "attack": 1.7356,
+      "decay": 8.759,
+      "modulation": null,
+      "pitch": 0.3119,
+      "pitch_shape": 0.5303
+     },
+     "d": {
+      "spec": 0.0691,
+      "spec_peak": 0.3773,
+      "centroid": 1.4571,
+      "flatness": 1.755,
+      "impulse": 2.2112,
+      "attack": 3.0385,
+      "decay": 8.3911,
+      "modulation": null,
+      "pitch": 18.5356,
+      "pitch_shape": 13.8991
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 8.7626,
+     "worst_feature": "decay",
+     "ratio": {
+      "spec": 2.37,
+      "spec_peak": 3.6707,
+      "centroid": 7.8212,
+      "flatness": 2.6832,
+      "impulse": 5.2488,
+      "attack": 1.7356,
+      "decay": 8.7626,
+      "modulation": null,
+      "pitch": 0.3119,
+      "pitch_shape": 0.5303
+     },
+     "d": {
+      "spec": 0.0691,
+      "spec_peak": 0.3773,
+      "centroid": 1.4576,
+      "flatness": 1.7561,
+      "impulse": 15.7464,
+      "attack": 3.0385,
+      "decay": 8.3946,
+      "modulation": null,
+      "pitch": 18.5356,
+      "pitch_shape": 13.8991
+     }
+    }
+   }
+  },
+  "HT50": {
+   "take": "ht8/HT50.WAV",
+   "split": "seen-in-diagnosis",
+   "tuning_ratio": 1.0,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 10.2863,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.8344,
+      "spec_peak": 2.6651,
+      "centroid": 8.0196,
+      "flatness": 3.1916,
+      "impulse": 10.2863,
+      "attack": 0.8644,
+      "decay": 7.2468,
+      "modulation": null,
+      "pitch": 0.1407,
+      "pitch_shape": 1.1203
+     },
+     "d": {
+      "spec": 0.0631,
+      "spec_peak": 0.3456,
+      "centroid": 1.4544,
+      "flatness": 1.7576,
+      "impulse": 30.8588,
+      "attack": 1.729,
+      "decay": 8.9309,
+      "modulation": null,
+      "pitch": 15.6801,
+      "pitch_shape": 17.1979
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 8.7187,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.2251,
+      "spec_peak": 0.7689,
+      "centroid": 2.5836,
+      "flatness": 1.2381,
+      "impulse": 8.7187,
+      "attack": 0.1646,
+      "decay": 5.9113,
+      "modulation": null,
+      "pitch": 0.1051,
+      "pitch_shape": 0.8635
+     },
+     "d": {
+      "spec": 0.0421,
+      "spec_peak": 0.0997,
+      "centroid": 0.4685,
+      "flatness": 0.6818,
+      "impulse": 26.1561,
+      "attack": 0.3292,
+      "decay": 7.285,
+      "modulation": null,
+      "pitch": 11.71,
+      "pitch_shape": 13.2568
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 8.0099,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 1.8368,
+      "spec_peak": 2.6641,
+      "centroid": 8.0099,
+      "flatness": 3.1917,
+      "impulse": 0.8283,
+      "attack": 0.8644,
+      "decay": 7.2394,
+      "modulation": null,
+      "pitch": 0.1413,
+      "pitch_shape": 1.1594
+     },
+     "d": {
+      "spec": 0.0632,
+      "spec_peak": 0.3454,
+      "centroid": 1.4526,
+      "flatness": 1.7576,
+      "impulse": 2.4849,
+      "attack": 1.729,
+      "decay": 8.9217,
+      "modulation": null,
+      "pitch": 15.751,
+      "pitch_shape": 17.7982
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 8.0158,
+     "worst_feature": "centroid",
+     "ratio": {
+      "spec": 1.8379,
+      "spec_peak": 2.6642,
+      "centroid": 8.0158,
+      "flatness": 3.1936,
+      "impulse": 4.9366,
+      "attack": 0.8644,
+      "decay": 7.2425,
+      "modulation": null,
+      "pitch": 0.1413,
+      "pitch_shape": 1.1594
+     },
+     "d": {
+      "spec": 0.0632,
+      "spec_peak": 0.3455,
+      "centroid": 1.4537,
+      "flatness": 1.7587,
+      "impulse": 14.8099,
+      "attack": 1.729,
+      "decay": 8.9256,
+      "modulation": null,
+      "pitch": 15.751,
+      "pitch_shape": 17.7982
+     }
+    }
+   }
+  },
+  "HT75": {
+   "take": "ht8/HT75.WAV",
+   "split": "development",
+   "tuning_ratio": 1.0722,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 13.5616,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.5143,
+      "spec_peak": 1.8268,
+      "centroid": 3.145,
+      "flatness": 3.1567,
+      "impulse": 13.5616,
+      "attack": 2.0416,
+      "decay": 5.7951,
+      "modulation": null,
+      "pitch": 0.1942,
+      "pitch_shape": 0.6825
+     },
+     "d": {
+      "spec": 0.063,
+      "spec_peak": 0.2898,
+      "centroid": 1.5882,
+      "flatness": 2.2705,
+      "impulse": 40.6849,
+      "attack": 2.0416,
+      "decay": 12.5243,
+      "modulation": null,
+      "pitch": 18.3699,
+      "pitch_shape": 12.0665
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 12.2022,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.0598,
+      "spec_peak": 1.265,
+      "centroid": 1.1796,
+      "flatness": 0.9502,
+      "impulse": 12.2022,
+      "attack": 0.9614,
+      "decay": 3.6388,
+      "modulation": null,
+      "pitch": 0.1787,
+      "pitch_shape": 0.8787
+     },
+     "d": {
+      "spec": 0.0441,
+      "spec_peak": 0.2007,
+      "centroid": 0.5957,
+      "flatness": 0.6834,
+      "impulse": 36.6065,
+      "attack": 0.9614,
+      "decay": 7.864,
+      "modulation": null,
+      "pitch": 16.9002,
+      "pitch_shape": 15.5341
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 5.4927,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.5156,
+      "spec_peak": 1.8256,
+      "centroid": 3.1417,
+      "flatness": 3.1549,
+      "impulse": 5.4927,
+      "attack": 2.0453,
+      "decay": 5.2686,
+      "modulation": null,
+      "pitch": 0.1922,
+      "pitch_shape": 0.6726
+     },
+     "d": {
+      "spec": 0.0631,
+      "spec_peak": 0.2896,
+      "centroid": 1.5865,
+      "flatness": 2.2692,
+      "impulse": 16.4782,
+      "attack": 2.0453,
+      "decay": 11.3863,
+      "modulation": null,
+      "pitch": 18.1835,
+      "pitch_shape": 11.8907
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 9.5589,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.5168,
+      "spec_peak": 1.8257,
+      "centroid": 3.1442,
+      "flatness": 3.1567,
+      "impulse": 9.5589,
+      "attack": 2.0453,
+      "decay": 5.2687,
+      "modulation": null,
+      "pitch": 0.1922,
+      "pitch_shape": 0.6726
+     },
+     "d": {
+      "spec": 0.0631,
+      "spec_peak": 0.2896,
+      "centroid": 1.5878,
+      "flatness": 2.2705,
+      "impulse": 28.6766,
+      "attack": 2.0453,
+      "decay": 11.3865,
+      "modulation": null,
+      "pitch": 18.1835,
+      "pitch_shape": 11.8903
+     }
+    }
+   }
+  },
+  "HT10": {
+   "take": "ht8/HT10.WAV",
+   "split": "untouched",
+   "tuning_ratio": 1.1312,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 10.6306,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.557,
+      "spec_peak": 1.9929,
+      "centroid": 3.581,
+      "flatness": 3.6689,
+      "impulse": 10.6306,
+      "attack": 1.5609,
+      "decay": 2.9658,
+      "modulation": null,
+      "pitch": 0.1992,
+      "pitch_shape": 0.8976
+     },
+     "d": {
+      "spec": 0.0668,
+      "spec_peak": 0.3195,
+      "centroid": 1.7959,
+      "flatness": 2.596,
+      "impulse": 31.8918,
+      "attack": 1.5609,
+      "decay": 6.9038,
+      "modulation": null,
+      "pitch": 18.8404,
+      "pitch_shape": 15.8757
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 13.4032,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.0942,
+      "spec_peak": 1.5177,
+      "centroid": 1.791,
+      "flatness": 1.2515,
+      "impulse": 13.4032,
+      "attack": 1.1455,
+      "decay": 3.7969,
+      "modulation": null,
+      "pitch": 0.1949,
+      "pitch_shape": 0.6694
+     },
+     "d": {
+      "spec": 0.0469,
+      "spec_peak": 0.2433,
+      "centroid": 0.8982,
+      "flatness": 0.8855,
+      "impulse": 40.2097,
+      "attack": 1.1455,
+      "decay": 8.8383,
+      "modulation": null,
+      "pitch": 18.4332,
+      "pitch_shape": 11.8402
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 4.7203,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.5586,
+      "spec_peak": 1.9899,
+      "centroid": 3.5779,
+      "flatness": 3.666,
+      "impulse": 4.7203,
+      "attack": 1.5609,
+      "decay": 2.9682,
+      "modulation": null,
+      "pitch": 0.1991,
+      "pitch_shape": 0.8968
+     },
+     "d": {
+      "spec": 0.0669,
+      "spec_peak": 0.319,
+      "centroid": 1.7944,
+      "flatness": 2.594,
+      "impulse": 14.1608,
+      "attack": 1.5609,
+      "decay": 6.9094,
+      "modulation": null,
+      "pitch": 18.8334,
+      "pitch_shape": 15.8619
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 8.646,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.5597,
+      "spec_peak": 1.9932,
+      "centroid": 3.5801,
+      "flatness": 3.6678,
+      "impulse": 8.646,
+      "attack": 1.5609,
+      "decay": 2.9692,
+      "modulation": null,
+      "pitch": 0.1991,
+      "pitch_shape": 0.8969
+     },
+     "d": {
+      "spec": 0.0669,
+      "spec_peak": 0.3196,
+      "centroid": 1.7955,
+      "flatness": 2.5953,
+      "impulse": 25.9381,
+      "attack": 1.5609,
+      "decay": 6.9116,
+      "modulation": null,
+      "pitch": 18.8334,
+      "pitch_shape": 15.8642
+     }
+    }
+   }
+  },
+  "LC00": {
+   "take": "lc8/LC00.WAV",
+   "split": "untouched",
+   "tuning_ratio": 0.9218,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 35.8226,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 5.0283,
+      "spec_peak": 2.5488,
+      "centroid": 25.7891,
+      "flatness": 7.8669,
+      "impulse": 35.8226,
+      "attack": 1.2296,
+      "decay": 2.8128,
+      "modulation": 14.0825,
+      "pitch": 3.1089,
+      "pitch_shape": 33.2956
+     },
+     "d": {
+      "spec": 0.0437,
+      "spec_peak": 0.2767,
+      "centroid": 0.7654,
+      "flatness": 0.6836,
+      "impulse": 107.4677,
+      "attack": 2.1641,
+      "decay": 1.1258,
+      "modulation": 8.3743,
+      "pitch": 137.7118,
+      "pitch_shape": 26.4835
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 35.8884,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 3.9567,
+      "spec_peak": 1.4136,
+      "centroid": 13.6633,
+      "flatness": 8.937,
+      "impulse": 35.8884,
+      "attack": 1.7049,
+      "decay": 1.1855,
+      "modulation": 4.2943,
+      "pitch": 3.109,
+      "pitch_shape": 9.6602
+     },
+     "d": {
+      "spec": 0.0344,
+      "spec_peak": 0.1535,
+      "centroid": 0.4055,
+      "flatness": 0.7766,
+      "impulse": 107.6651,
+      "attack": 3.0005,
+      "decay": 0.4745,
+      "modulation": 2.5537,
+      "pitch": 137.7166,
+      "pitch_shape": 7.6838
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 33.128,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 5.0049,
+      "spec_peak": 2.5476,
+      "centroid": 25.7532,
+      "flatness": 7.8119,
+      "impulse": 0.54,
+      "attack": 1.2269,
+      "decay": 2.6942,
+      "modulation": 14.0983,
+      "pitch": 3.1112,
+      "pitch_shape": 33.128
+     },
+     "d": {
+      "spec": 0.0435,
+      "spec_peak": 0.2766,
+      "centroid": 0.7643,
+      "flatness": 0.6788,
+      "impulse": 1.6201,
+      "attack": 2.1593,
+      "decay": 1.0784,
+      "modulation": 8.3837,
+      "pitch": 137.814,
+      "pitch_shape": 26.3502
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 33.1299,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 5.009,
+      "spec_peak": 2.5479,
+      "centroid": 25.7678,
+      "flatness": 7.8214,
+      "impulse": 4.6933,
+      "attack": 1.2269,
+      "decay": 2.6944,
+      "modulation": 14.0986,
+      "pitch": 3.1112,
+      "pitch_shape": 33.1299
+     },
+     "d": {
+      "spec": 0.0436,
+      "spec_peak": 0.2766,
+      "centroid": 0.7647,
+      "flatness": 0.6796,
+      "impulse": 14.0799,
+      "attack": 2.1593,
+      "decay": 1.0784,
+      "modulation": 8.3839,
+      "pitch": 137.814,
+      "pitch_shape": 26.3517
+     }
+    }
+   }
+  },
+  "LC25": {
+   "take": "lc8/LC25.WAV",
+   "split": "untouched",
+   "tuning_ratio": 0.9457,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 35.0512,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 4.9804,
+      "spec_peak": 2.4961,
+      "centroid": 25.9818,
+      "flatness": 7.9188,
+      "impulse": 35.0512,
+      "attack": 1.691,
+      "decay": 3.0198,
+      "modulation": 16.3523,
+      "pitch": 3.1089,
+      "pitch_shape": 33.9058
+     },
+     "d": {
+      "spec": 0.044,
+      "spec_peak": 0.2703,
+      "centroid": 0.765,
+      "flatness": 0.6866,
+      "impulse": 105.1537,
+      "attack": 2.9762,
+      "decay": 1.2156,
+      "modulation": 10.0716,
+      "pitch": 137.7074,
+      "pitch_shape": 26.9197
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 35.1186,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 3.9143,
+      "spec_peak": 1.3857,
+      "centroid": 13.8426,
+      "flatness": 8.8178,
+      "impulse": 35.1186,
+      "attack": 1.7662,
+      "decay": 0.9165,
+      "modulation": 3.6179,
+      "pitch": 3.109,
+      "pitch_shape": 10.5297
+     },
+     "d": {
+      "spec": 0.0346,
+      "spec_peak": 0.1501,
+      "centroid": 0.4076,
+      "flatness": 0.7646,
+      "impulse": 105.3557,
+      "attack": 3.1084,
+      "decay": 0.3689,
+      "modulation": 2.2283,
+      "pitch": 137.7113,
+      "pitch_shape": 8.3601
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 33.7739,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 4.9721,
+      "spec_peak": 2.4947,
+      "centroid": 25.9391,
+      "flatness": 7.8684,
+      "impulse": 0.5645,
+      "attack": 1.691,
+      "decay": 2.7508,
+      "modulation": 16.3693,
+      "pitch": 3.1113,
+      "pitch_shape": 33.7739
+     },
+     "d": {
+      "spec": 0.044,
+      "spec_peak": 0.2701,
+      "centroid": 0.7637,
+      "flatness": 0.6823,
+      "impulse": 1.6935,
+      "attack": 2.9762,
+      "decay": 1.1073,
+      "modulation": 10.0821,
+      "pitch": 137.8136,
+      "pitch_shape": 26.8149
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 33.7759,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 4.9761,
+      "spec_peak": 2.4949,
+      "centroid": 25.9537,
+      "flatness": 7.8782,
+      "impulse": 4.3678,
+      "attack": 1.691,
+      "decay": 2.751,
+      "modulation": 16.3697,
+      "pitch": 3.1113,
+      "pitch_shape": 33.7759
+     },
+     "d": {
+      "spec": 0.044,
+      "spec_peak": 0.2702,
+      "centroid": 0.7641,
+      "flatness": 0.6831,
+      "impulse": 13.1034,
+      "attack": 2.9762,
+      "decay": 1.1074,
+      "modulation": 10.0823,
+      "pitch": 137.8136,
+      "pitch_shape": 26.8166
+     }
+    }
+   }
+  },
+  "LC50": {
+   "take": "lc8/LC50.WAV",
+   "split": "seen-in-diagnosis",
+   "tuning_ratio": 1.0,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 34.2322,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.7411,
+      "spec_peak": 1.8265,
+      "centroid": 4.9306,
+      "flatness": 3.1885,
+      "impulse": 34.2322,
+      "attack": 0.4401,
+      "decay": 1.3001,
+      "modulation": 4.1982,
+      "pitch": 1.4198,
+      "pitch_shape": 16.4355
+     },
+     "d": {
+      "spec": 0.0559,
+      "spec_peak": 0.252,
+      "centroid": 0.7827,
+      "flatness": 0.7567,
+      "impulse": 102.6966,
+      "attack": 1.2441,
+      "decay": 1.4867,
+      "modulation": 10.6358,
+      "pitch": 137.6368,
+      "pitch_shape": 28.3701
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 34.3014,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.4423,
+      "spec_peak": 1.0844,
+      "centroid": 2.793,
+      "flatness": 3.3803,
+      "impulse": 34.3014,
+      "attack": 1.1222,
+      "decay": 0.6912,
+      "modulation": 0.6649,
+      "pitch": 1.4198,
+      "pitch_shape": 6.0448
+     },
+     "d": {
+      "spec": 0.0463,
+      "spec_peak": 0.1496,
+      "centroid": 0.4433,
+      "flatness": 0.8022,
+      "impulse": 102.9042,
+      "attack": 3.1726,
+      "decay": 0.7904,
+      "modulation": 1.6845,
+      "pitch": 137.6373,
+      "pitch_shape": 10.4343
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 16.4482,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.7362,
+      "spec_peak": 1.8257,
+      "centroid": 4.9247,
+      "flatness": 3.1824,
+      "impulse": 0.5213,
+      "attack": 0.4375,
+      "decay": 1.2202,
+      "modulation": 4.2132,
+      "pitch": 1.4195,
+      "pitch_shape": 16.4482
+     },
+     "d": {
+      "spec": 0.0558,
+      "spec_peak": 0.2519,
+      "centroid": 0.7817,
+      "flatness": 0.7553,
+      "impulse": 1.564,
+      "attack": 1.2369,
+      "decay": 1.3954,
+      "modulation": 10.6738,
+      "pitch": 137.6099,
+      "pitch_shape": 28.3919
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 16.4492,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.7373,
+      "spec_peak": 1.8259,
+      "centroid": 4.9273,
+      "flatness": 3.1869,
+      "impulse": 4.9693,
+      "attack": 0.4375,
+      "decay": 1.2204,
+      "modulation": 4.2134,
+      "pitch": 1.4195,
+      "pitch_shape": 16.4492
+     },
+     "d": {
+      "spec": 0.0558,
+      "spec_peak": 0.2519,
+      "centroid": 0.7821,
+      "flatness": 0.7563,
+      "impulse": 14.9079,
+      "attack": 1.2369,
+      "decay": 1.3955,
+      "modulation": 10.6741,
+      "pitch": 137.6099,
+      "pitch_shape": 28.3937
+     }
+    }
+   }
+  },
+  "LC75": {
+   "take": "lc8/LC75.WAV",
+   "split": "untouched",
+   "tuning_ratio": 1.0559,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 8.9707,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.8367,
+      "spec_peak": 1.2711,
+      "centroid": 2.6887,
+      "flatness": 1.8504,
+      "impulse": 6.9879,
+      "attack": 1.07,
+      "decay": 2.2889,
+      "modulation": 1.4085,
+      "pitch": 1.4597,
+      "pitch_shape": 8.9707
+     },
+     "d": {
+      "spec": 0.0646,
+      "spec_peak": 0.2275,
+      "centroid": 0.8885,
+      "flatness": 1.2561,
+      "impulse": 114.8764,
+      "attack": 1.07,
+      "decay": 2.402,
+      "modulation": 7.8021,
+      "pitch": 137.6947,
+      "pitch_shape": 31.6794
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 6.9829,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.568,
+      "spec_peak": 1.1059,
+      "centroid": 1.5952,
+      "flatness": 1.4576,
+      "impulse": 6.9829,
+      "attack": 0.9734,
+      "decay": 0.9573,
+      "modulation": 0.6671,
+      "pitch": 1.4597,
+      "pitch_shape": 4.0481
+     },
+     "d": {
+      "spec": 0.0552,
+      "spec_peak": 0.1979,
+      "centroid": 0.5271,
+      "flatness": 0.9894,
+      "impulse": 114.7929,
+      "attack": 0.9734,
+      "decay": 1.0046,
+      "modulation": 3.6951,
+      "pitch": 137.6966,
+      "pitch_shape": 14.2955
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 8.9763,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.8302,
+      "spec_peak": 1.2694,
+      "centroid": 2.6859,
+      "flatness": 1.8422,
+      "impulse": 0.982,
+      "attack": 1.07,
+      "decay": 2.1739,
+      "modulation": 1.4021,
+      "pitch": 1.4594,
+      "pitch_shape": 8.9763
+     },
+     "d": {
+      "spec": 0.0644,
+      "spec_peak": 0.2272,
+      "centroid": 0.8875,
+      "flatness": 1.2505,
+      "impulse": 16.1433,
+      "attack": 1.07,
+      "decay": 2.2813,
+      "modulation": 7.7665,
+      "pitch": 137.6664,
+      "pitch_shape": 31.6994
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 8.9769,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.8311,
+      "spec_peak": 1.2695,
+      "centroid": 2.687,
+      "flatness": 1.8443,
+      "impulse": 1.8019,
+      "attack": 1.07,
+      "decay": 2.1741,
+      "modulation": 1.4022,
+      "pitch": 1.4594,
+      "pitch_shape": 8.9769
+     },
+     "d": {
+      "spec": 0.0644,
+      "spec_peak": 0.2272,
+      "centroid": 0.8879,
+      "flatness": 1.2519,
+      "impulse": 29.6219,
+      "attack": 1.07,
+      "decay": 2.2815,
+      "modulation": 7.767,
+      "pitch": 137.6664,
+      "pitch_shape": 31.7013
+     }
+    }
+   }
+  },
+  "LC10": {
+   "take": "lc8/LC10.WAV",
+   "split": "untouched",
+   "tuning_ratio": 1.1211,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 36.5323,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.6639,
+      "spec_peak": 1.3019,
+      "centroid": 2.019,
+      "flatness": 3.1028,
+      "impulse": 36.5323,
+      "attack": 0.7732,
+      "decay": 2.2443,
+      "modulation": 1.6672,
+      "pitch": 1.3258,
+      "pitch_shape": 7.3802
+     },
+     "d": {
+      "spec": 0.0741,
+      "spec_peak": 0.2617,
+      "centroid": 1.2262,
+      "flatness": 1.5406,
+      "impulse": 109.597,
+      "attack": 0.7732,
+      "decay": 0.6752,
+      "modulation": 0.7783,
+      "pitch": 137.6609,
+      "pitch_shape": 36.9453
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 36.506,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.4437,
+      "spec_peak": 1.4906,
+      "centroid": 1.3839,
+      "flatness": 2.0483,
+      "impulse": 36.506,
+      "attack": 0.9206,
+      "decay": 2.1685,
+      "modulation": 1.6675,
+      "pitch": 1.3258,
+      "pitch_shape": 4.0176
+     },
+     "d": {
+      "spec": 0.0643,
+      "spec_peak": 0.2996,
+      "centroid": 0.8405,
+      "flatness": 1.017,
+      "impulse": 109.518,
+      "attack": 0.9206,
+      "decay": 0.6524,
+      "modulation": 0.7784,
+      "pitch": 137.6598,
+      "pitch_shape": 20.1122
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 7.3807,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.6586,
+      "spec_peak": 1.2989,
+      "centroid": 2.0181,
+      "flatness": 3.0915,
+      "impulse": 5.1253,
+      "attack": 0.7732,
+      "decay": 2.0735,
+      "modulation": 1.6774,
+      "pitch": 1.3257,
+      "pitch_shape": 7.3807
+     },
+     "d": {
+      "spec": 0.0738,
+      "spec_peak": 0.2611,
+      "centroid": 1.2257,
+      "flatness": 1.5351,
+      "impulse": 15.3759,
+      "attack": 0.7732,
+      "decay": 0.6238,
+      "modulation": 0.783,
+      "pitch": 137.649,
+      "pitch_shape": 36.9482
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 9.3448,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.6596,
+      "spec_peak": 1.3019,
+      "centroid": 2.0186,
+      "flatness": 3.0943,
+      "impulse": 9.3448,
+      "attack": 0.7732,
+      "decay": 2.0735,
+      "modulation": 1.6777,
+      "pitch": 1.3257,
+      "pitch_shape": 7.3811
+     },
+     "d": {
+      "spec": 0.0739,
+      "spec_peak": 0.2617,
+      "centroid": 1.226,
+      "flatness": 1.5364,
+      "impulse": 28.0343,
+      "attack": 0.7732,
+      "decay": 0.6238,
+      "modulation": 0.7832,
+      "pitch": 137.649,
+      "pitch_shape": 36.9503
+     }
+    }
+   }
+  },
+  "MC00": {
+   "take": "mc8/MC00.WAV",
+   "split": "untouched",
+   "tuning_ratio": 0.922,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 60.274,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 3.6292,
+      "spec_peak": 4.8171,
+      "centroid": 29.3421,
+      "flatness": 32.0682,
+      "impulse": 26.5601,
+      "attack": 0.3036,
+      "decay": 3.5477,
+      "modulation": null,
+      "pitch": 0.1711,
+      "pitch_shape": 60.274
+     },
+     "d": {
+      "spec": 0.0358,
+      "spec_peak": 0.2894,
+      "centroid": 1.2199,
+      "flatness": 1.8177,
+      "impulse": 79.6803,
+      "attack": 0.3036,
+      "decay": 0.5243,
+      "modulation": null,
+      "pitch": 6.7099,
+      "pitch_shape": 23.2291
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 26.476,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.0354,
+      "spec_peak": 1.1811,
+      "centroid": 4.3495,
+      "flatness": 9.081,
+      "impulse": 26.476,
+      "attack": 0.254,
+      "decay": 3.6454,
+      "modulation": null,
+      "pitch": 0.1712,
+      "pitch_shape": 20.3003
+     },
+     "d": {
+      "spec": 0.0102,
+      "spec_peak": 0.071,
+      "centroid": 0.1808,
+      "flatness": 0.5147,
+      "impulse": 79.428,
+      "attack": 0.254,
+      "decay": 0.5388,
+      "modulation": null,
+      "pitch": 6.7119,
+      "pitch_shape": 7.8235
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 60.169,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 3.6406,
+      "spec_peak": 4.815,
+      "centroid": 29.2935,
+      "flatness": 32.0469,
+      "impulse": 0.5978,
+      "attack": 0.3038,
+      "decay": 3.6882,
+      "modulation": null,
+      "pitch": 0.1716,
+      "pitch_shape": 60.169
+     },
+     "d": {
+      "spec": 0.0359,
+      "spec_peak": 0.2893,
+      "centroid": 1.2179,
+      "flatness": 1.8165,
+      "impulse": 1.7934,
+      "attack": 0.3038,
+      "decay": 0.5451,
+      "modulation": null,
+      "pitch": 6.7295,
+      "pitch_shape": 23.1886
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 60.1767,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 3.6447,
+      "spec_peak": 4.8223,
+      "centroid": 29.3262,
+      "flatness": 32.0639,
+      "impulse": 4.2559,
+      "attack": 0.3038,
+      "decay": 3.6882,
+      "modulation": null,
+      "pitch": 0.1716,
+      "pitch_shape": 60.1767
+     },
+     "d": {
+      "spec": 0.0359,
+      "spec_peak": 0.2897,
+      "centroid": 1.2192,
+      "flatness": 1.8175,
+      "impulse": 12.7676,
+      "attack": 0.3038,
+      "decay": 0.5451,
+      "modulation": null,
+      "pitch": 6.7295,
+      "pitch_shape": 23.1915
+     }
+    }
+   }
+  },
+  "MC25": {
+   "take": "mc8/MC25.WAV",
+   "split": "development",
+   "tuning_ratio": 0.9431,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 62.1178,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 3.5114,
+      "spec_peak": 5.0029,
+      "centroid": 29.4982,
+      "flatness": 32.1582,
+      "impulse": 18.634,
+      "attack": 0.4027,
+      "decay": 2.7323,
+      "modulation": null,
+      "pitch": 0.171,
+      "pitch_shape": 62.1178
+     },
+     "d": {
+      "spec": 0.0351,
+      "spec_peak": 0.3006,
+      "centroid": 1.2133,
+      "flatness": 1.7436,
+      "impulse": 76.7672,
+      "attack": 0.4027,
+      "decay": 0.4028,
+      "modulation": null,
+      "pitch": 6.7055,
+      "pitch_shape": 23.4458
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 21.8253,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 0.9442,
+      "spec_peak": 1.1796,
+      "centroid": 4.5056,
+      "flatness": 8.7309,
+      "impulse": 18.5726,
+      "attack": 0.4956,
+      "decay": 2.7582,
+      "modulation": null,
+      "pitch": 0.171,
+      "pitch_shape": 21.8253
+     },
+     "d": {
+      "spec": 0.0094,
+      "spec_peak": 0.0709,
+      "centroid": 0.1853,
+      "flatness": 0.4734,
+      "impulse": 76.5142,
+      "attack": 0.4956,
+      "decay": 0.4066,
+      "modulation": null,
+      "pitch": 6.7044,
+      "pitch_shape": 8.2378
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 61.945,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 3.5224,
+      "spec_peak": 5.007,
+      "centroid": 29.4416,
+      "flatness": 32.1245,
+      "impulse": 0.3367,
+      "attack": 0.4027,
+      "decay": 2.8669,
+      "modulation": null,
+      "pitch": 0.1722,
+      "pitch_shape": 61.945
+     },
+     "d": {
+      "spec": 0.0352,
+      "spec_peak": 0.3009,
+      "centroid": 1.211,
+      "flatness": 1.7418,
+      "impulse": 1.387,
+      "attack": 0.4027,
+      "decay": 0.4226,
+      "modulation": null,
+      "pitch": 6.7514,
+      "pitch_shape": 23.3805
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 61.9531,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 3.5266,
+      "spec_peak": 5.0146,
+      "centroid": 29.4749,
+      "flatness": 32.1419,
+      "impulse": 2.7907,
+      "attack": 0.4027,
+      "decay": 2.8669,
+      "modulation": null,
+      "pitch": 0.1722,
+      "pitch_shape": 61.9531
+     },
+     "d": {
+      "spec": 0.0352,
+      "spec_peak": 0.3013,
+      "centroid": 1.2124,
+      "flatness": 1.7427,
+      "impulse": 11.4969,
+      "attack": 0.4027,
+      "decay": 0.4226,
+      "modulation": null,
+      "pitch": 6.7514,
+      "pitch_shape": 23.3836
+     }
+    }
+   }
+  },
+  "MC50": {
+   "take": "mc8/MC50.WAV",
+   "split": "seen-in-diagnosis",
+   "tuning_ratio": 1.0,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 25.169,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.17,
+      "spec_peak": 3.2664,
+      "centroid": 13.7593,
+      "flatness": 12.9211,
+      "impulse": 25.169,
+      "attack": 0.3813,
+      "decay": 0.3847,
+      "modulation": null,
+      "pitch": 0.0663,
+      "pitch_shape": 19.4379
+     },
+     "d": {
+      "spec": 0.0355,
+      "spec_peak": 0.2654,
+      "centroid": 1.2131,
+      "flatness": 1.6628,
+      "impulse": 75.507,
+      "attack": 0.3813,
+      "decay": 0.1194,
+      "modulation": null,
+      "pitch": 6.7248,
+      "pitch_shape": 24.3961
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 25.1591,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 0.286,
+      "spec_peak": 0.903,
+      "centroid": 2.2721,
+      "flatness": 3.5903,
+      "impulse": 25.1591,
+      "attack": 0.0399,
+      "decay": 0.3953,
+      "modulation": null,
+      "pitch": 0.0663,
+      "pitch_shape": 7.6643
+     },
+     "d": {
+      "spec": 0.0087,
+      "spec_peak": 0.0734,
+      "centroid": 0.2003,
+      "flatness": 0.462,
+      "impulse": 75.4773,
+      "attack": 0.0399,
+      "decay": 0.1227,
+      "modulation": null,
+      "pitch": 6.7243,
+      "pitch_shape": 9.6194
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 19.4178,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.171,
+      "spec_peak": 3.2546,
+      "centroid": 13.7303,
+      "flatness": 12.9059,
+      "impulse": 0.7207,
+      "attack": 0.3813,
+      "decay": 0.2493,
+      "modulation": null,
+      "pitch": 0.0663,
+      "pitch_shape": 19.4178
+     },
+     "d": {
+      "spec": 0.0355,
+      "spec_peak": 0.2645,
+      "centroid": 1.2105,
+      "flatness": 1.6609,
+      "impulse": 2.1622,
+      "attack": 0.3813,
+      "decay": 0.0774,
+      "modulation": null,
+      "pitch": 6.7204,
+      "pitch_shape": 24.3709
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 19.4205,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.1725,
+      "spec_peak": 3.2596,
+      "centroid": 13.7453,
+      "flatness": 12.9124,
+      "impulse": 4.4944,
+      "attack": 0.3813,
+      "decay": 0.2493,
+      "modulation": null,
+      "pitch": 0.0663,
+      "pitch_shape": 19.4205
+     },
+     "d": {
+      "spec": 0.0356,
+      "spec_peak": 0.2649,
+      "centroid": 1.2119,
+      "flatness": 1.6617,
+      "impulse": 13.4831,
+      "attack": 0.3813,
+      "decay": 0.0774,
+      "modulation": null,
+      "pitch": 6.7204,
+      "pitch_shape": 24.3743
+     }
+    }
+   }
+  },
+  "MC75": {
+   "take": "mc8/MC75.WAV",
+   "split": "development",
+   "tuning_ratio": 1.0675,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 17.154,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 0.8222,
+      "spec_peak": 2.6437,
+      "centroid": 5.3813,
+      "flatness": 5.5902,
+      "impulse": 17.154,
+      "attack": 0.3824,
+      "decay": 0.8156,
+      "modulation": null,
+      "pitch": 0.0595,
+      "pitch_shape": 10.455
+     },
+     "d": {
+      "spec": 0.0431,
+      "spec_peak": 0.2515,
+      "centroid": 1.176,
+      "flatness": 1.7099,
+      "impulse": 68.4076,
+      "attack": 0.3824,
+      "decay": 0.4573,
+      "modulation": null,
+      "pitch": 6.7201,
+      "pitch_shape": 27.0047
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 17.2008,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 0.2839,
+      "spec_peak": 0.7999,
+      "centroid": 0.9544,
+      "flatness": 1.9338,
+      "impulse": 17.2008,
+      "attack": 0.1035,
+      "decay": 0.8478,
+      "modulation": null,
+      "pitch": 0.0595,
+      "pitch_shape": 4.922
+     },
+     "d": {
+      "spec": 0.0149,
+      "spec_peak": 0.0761,
+      "centroid": 0.2086,
+      "flatness": 0.5915,
+      "impulse": 68.594,
+      "attack": 0.1035,
+      "decay": 0.4753,
+      "modulation": null,
+      "pitch": 6.7201,
+      "pitch_shape": 12.7131
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 10.4499,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 0.825,
+      "spec_peak": 2.6419,
+      "centroid": 5.3779,
+      "flatness": 5.5869,
+      "impulse": 0.4119,
+      "attack": 0.3824,
+      "decay": 0.8666,
+      "modulation": null,
+      "pitch": 0.0595,
+      "pitch_shape": 10.4499
+     },
+     "d": {
+      "spec": 0.0433,
+      "spec_peak": 0.2513,
+      "centroid": 1.1753,
+      "flatness": 1.7089,
+      "impulse": 1.6428,
+      "attack": 0.3824,
+      "decay": 0.4859,
+      "modulation": null,
+      "pitch": 6.7242,
+      "pitch_shape": 26.9915
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 10.4513,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 0.826,
+      "spec_peak": 2.642,
+      "centroid": 5.377,
+      "flatness": 5.59,
+      "impulse": 2.788,
+      "attack": 0.3824,
+      "decay": 0.8666,
+      "modulation": null,
+      "pitch": 0.0595,
+      "pitch_shape": 10.4513
+     },
+     "d": {
+      "spec": 0.0433,
+      "spec_peak": 0.2513,
+      "centroid": 1.1751,
+      "flatness": 1.7098,
+      "impulse": 11.1182,
+      "attack": 0.3824,
+      "decay": 0.4859,
+      "modulation": null,
+      "pitch": 6.7242,
+      "pitch_shape": 26.9952
+     }
+    }
+   }
+  },
+  "MC10": {
+   "take": "mc8/MC10.WAV",
+   "split": "untouched",
+   "tuning_ratio": 1.1365,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 21.3623,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 0.8291,
+      "spec_peak": 2.984,
+      "centroid": 4.8005,
+      "flatness": 11.4032,
+      "impulse": 21.3623,
+      "attack": 0.2577,
+      "decay": 2.5137,
+      "modulation": null,
+      "pitch": 0.0621,
+      "pitch_shape": 6.7154
+     },
+     "d": {
+      "spec": 0.0409,
+      "spec_peak": 0.245,
+      "centroid": 1.1594,
+      "flatness": 1.6101,
+      "impulse": 64.087,
+      "attack": 0.2577,
+      "decay": 0.7091,
+      "modulation": null,
+      "pitch": 6.7327,
+      "pitch_shape": 31.6687
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 21.316,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 0.3029,
+      "spec_peak": 1.0386,
+      "centroid": 0.8599,
+      "flatness": 4.354,
+      "impulse": 21.316,
+      "attack": 0.1871,
+      "decay": 2.6141,
+      "modulation": null,
+      "pitch": 0.0621,
+      "pitch_shape": 3.7676
+     },
+     "d": {
+      "spec": 0.0149,
+      "spec_peak": 0.0853,
+      "centroid": 0.2077,
+      "flatness": 0.6148,
+      "impulse": 63.948,
+      "attack": 0.1871,
+      "decay": 0.7374,
+      "modulation": null,
+      "pitch": 6.7327,
+      "pitch_shape": 17.7672
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 11.3999,
+     "worst_feature": "flatness",
+     "ratio": {
+      "spec": 0.8296,
+      "spec_peak": 2.9821,
+      "centroid": 4.7983,
+      "flatness": 11.3999,
+      "impulse": 0.5253,
+      "attack": 0.2577,
+      "decay": 2.5268,
+      "modulation": null,
+      "pitch": 0.0619,
+      "pitch_shape": 6.7161
+     },
+     "d": {
+      "spec": 0.0409,
+      "spec_peak": 0.2449,
+      "centroid": 1.1589,
+      "flatness": 1.6097,
+      "impulse": 1.576,
+      "attack": 0.2577,
+      "decay": 0.7128,
+      "modulation": null,
+      "pitch": 6.7082,
+      "pitch_shape": 31.6718
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 11.4056,
+     "worst_feature": "flatness",
+     "ratio": {
+      "spec": 0.8303,
+      "spec_peak": 2.9821,
+      "centroid": 4.7969,
+      "flatness": 11.4056,
+      "impulse": 2.9497,
+      "attack": 0.2577,
+      "decay": 2.5268,
+      "modulation": null,
+      "pitch": 0.0619,
+      "pitch_shape": 6.7169
+     },
+     "d": {
+      "spec": 0.041,
+      "spec_peak": 0.2449,
+      "centroid": 1.1586,
+      "flatness": 1.6105,
+      "impulse": 8.8491,
+      "attack": 0.2577,
+      "decay": 0.7128,
+      "modulation": null,
+      "pitch": 6.7082,
+      "pitch_shape": 31.6758
+     }
+    }
+   }
+  },
+  "HC00": {
+   "take": "hc8/HC00.WAV",
+   "split": "untouched",
+   "tuning_ratio": 0.9096,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 39.2436,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.8527,
+      "spec_peak": 5.3502,
+      "centroid": 8.9394,
+      "flatness": 9.3672,
+      "impulse": 18.1233,
+      "attack": 0.7819,
+      "decay": 1.0068,
+      "modulation": null,
+      "pitch": 0.9515,
+      "pitch_shape": 39.2436
+     },
+     "d": {
+      "spec": 0.0511,
+      "spec_peak": 0.2491,
+      "centroid": 1.0913,
+      "flatness": 1.5741,
+      "impulse": 54.37,
+      "attack": 0.7819,
+      "decay": 2.1464,
+      "modulation": null,
+      "pitch": 53.0663,
+      "pitch_shape": 18.777
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 18.0994,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.0503,
+      "spec_peak": 2.7953,
+      "centroid": 2.2953,
+      "flatness": 4.3508,
+      "impulse": 18.0994,
+      "attack": 0.6181,
+      "decay": 1.2993,
+      "modulation": null,
+      "pitch": 0.9515,
+      "pitch_shape": 11.5084
+     },
+     "d": {
+      "spec": 0.029,
+      "spec_peak": 0.1302,
+      "centroid": 0.2802,
+      "flatness": 0.7311,
+      "impulse": 54.2983,
+      "attack": 0.6181,
+      "decay": 2.7699,
+      "modulation": null,
+      "pitch": 53.0663,
+      "pitch_shape": 5.5065
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 39.125,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.8578,
+      "spec_peak": 5.3476,
+      "centroid": 8.9383,
+      "flatness": 9.3434,
+      "impulse": 0.4767,
+      "attack": 0.7819,
+      "decay": 1.0106,
+      "modulation": null,
+      "pitch": 0.9521,
+      "pitch_shape": 39.125
+     },
+     "d": {
+      "spec": 0.0512,
+      "spec_peak": 0.249,
+      "centroid": 1.0911,
+      "flatness": 1.5701,
+      "impulse": 1.43,
+      "attack": 0.7819,
+      "decay": 2.1544,
+      "modulation": null,
+      "pitch": 53.102,
+      "pitch_shape": 18.7203
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 39.1354,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.859,
+      "spec_peak": 5.3475,
+      "centroid": 8.9339,
+      "flatness": 9.3465,
+      "impulse": 4.2539,
+      "attack": 0.7819,
+      "decay": 1.0119,
+      "modulation": null,
+      "pitch": 0.9521,
+      "pitch_shape": 39.1354
+     },
+     "d": {
+      "spec": 0.0513,
+      "spec_peak": 0.249,
+      "centroid": 1.0906,
+      "flatness": 1.5706,
+      "impulse": 12.7618,
+      "attack": 0.7819,
+      "decay": 2.1571,
+      "modulation": null,
+      "pitch": 53.102,
+      "pitch_shape": 18.7253
+     }
+    }
+   }
+  },
+  "HC25": {
+   "take": "hc8/HC25.WAV",
+   "split": "untouched",
+   "tuning_ratio": 0.9393,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 39.5792,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 2.0106,
+      "spec_peak": 5.336,
+      "centroid": 9.0239,
+      "flatness": 9.1453,
+      "impulse": 17.2201,
+      "attack": 0.4602,
+      "decay": 0.7855,
+      "modulation": null,
+      "pitch": 0.9511,
+      "pitch_shape": 39.5792
+     },
+     "d": {
+      "spec": 0.0584,
+      "spec_peak": 0.2474,
+      "centroid": 1.1015,
+      "flatness": 1.5583,
+      "impulse": 51.6602,
+      "attack": 0.4602,
+      "decay": 1.6526,
+      "modulation": null,
+      "pitch": 53.0491,
+      "pitch_shape": 18.9666
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 17.1559,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.2234,
+      "spec_peak": 2.9556,
+      "centroid": 2.424,
+      "flatness": 4.0697,
+      "impulse": 17.1559,
+      "attack": 0.5825,
+      "decay": 1.3049,
+      "modulation": null,
+      "pitch": 0.9511,
+      "pitch_shape": 12.1851
+     },
+     "d": {
+      "spec": 0.0355,
+      "spec_peak": 0.137,
+      "centroid": 0.2959,
+      "flatness": 0.6934,
+      "impulse": 51.4678,
+      "attack": 0.5825,
+      "decay": 2.7451,
+      "modulation": null,
+      "pitch": 53.0491,
+      "pitch_shape": 5.8392
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 39.3391,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 2.0114,
+      "spec_peak": 5.3307,
+      "centroid": 9.0217,
+      "flatness": 9.1359,
+      "impulse": 0.4754,
+      "attack": 0.4602,
+      "decay": 0.7856,
+      "modulation": null,
+      "pitch": 0.9529,
+      "pitch_shape": 39.3391
+     },
+     "d": {
+      "spec": 0.0584,
+      "spec_peak": 0.2471,
+      "centroid": 1.1013,
+      "flatness": 1.5567,
+      "impulse": 1.4263,
+      "attack": 0.4602,
+      "decay": 1.6526,
+      "modulation": null,
+      "pitch": 53.1487,
+      "pitch_shape": 18.8516
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 39.35,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 2.0127,
+      "spec_peak": 5.3372,
+      "centroid": 9.0172,
+      "flatness": 9.1389,
+      "impulse": 3.7901,
+      "attack": 0.4602,
+      "decay": 0.7868,
+      "modulation": null,
+      "pitch": 0.9529,
+      "pitch_shape": 39.35
+     },
+     "d": {
+      "spec": 0.0584,
+      "spec_peak": 0.2474,
+      "centroid": 1.1007,
+      "flatness": 1.5572,
+      "impulse": 11.3702,
+      "attack": 0.4602,
+      "decay": 1.6551,
+      "modulation": null,
+      "pitch": 53.1487,
+      "pitch_shape": 18.8568
+     }
+    }
+   }
+  },
+  "HC50": {
+   "take": "hc8/HC50.WAV",
+   "split": "seen-in-diagnosis",
+   "tuning_ratio": 1.0,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 15.3858,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 1.0479,
+      "spec_peak": 0.9259,
+      "centroid": 1.6191,
+      "flatness": 2.5246,
+      "impulse": 15.3858,
+      "attack": 0.6285,
+      "decay": 0.334,
+      "modulation": null,
+      "pitch": 0.4364,
+      "pitch_shape": 8.7347
+     },
+     "d": {
+      "spec": 0.0623,
+      "spec_peak": 0.2448,
+      "centroid": 1.112,
+      "flatness": 1.4656,
+      "impulse": 46.8824,
+      "attack": 0.6937,
+      "decay": 1.0669,
+      "modulation": null,
+      "pitch": 53.0408,
+      "pitch_shape": 19.746
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 15.4227,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 0.6573,
+      "spec_peak": 0.4862,
+      "centroid": 0.4466,
+      "flatness": 1.1513,
+      "impulse": 15.4227,
+      "attack": 0.4033,
+      "decay": 0.6868,
+      "modulation": null,
+      "pitch": 0.4364,
+      "pitch_shape": 3.0286
+     },
+     "d": {
+      "spec": 0.0391,
+      "spec_peak": 0.1285,
+      "centroid": 0.3067,
+      "flatness": 0.6684,
+      "impulse": 46.9951,
+      "attack": 0.4452,
+      "decay": 2.194,
+      "modulation": null,
+      "pitch": 53.0408,
+      "pitch_shape": 6.8466
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 8.7295,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.0489,
+      "spec_peak": 0.9254,
+      "centroid": 1.6178,
+      "flatness": 2.5212,
+      "impulse": 0.4153,
+      "attack": 0.6285,
+      "decay": 0.3395,
+      "modulation": null,
+      "pitch": 0.4364,
+      "pitch_shape": 8.7295
+     },
+     "d": {
+      "spec": 0.0624,
+      "spec_peak": 0.2446,
+      "centroid": 1.1111,
+      "flatness": 1.4637,
+      "impulse": 1.2654,
+      "attack": 0.6937,
+      "decay": 1.0845,
+      "modulation": null,
+      "pitch": 53.0313,
+      "pitch_shape": 19.7341
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 8.732,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.0494,
+      "spec_peak": 0.9254,
+      "centroid": 1.6175,
+      "flatness": 2.5217,
+      "impulse": 3.7541,
+      "attack": 0.6285,
+      "decay": 0.34,
+      "modulation": null,
+      "pitch": 0.4364,
+      "pitch_shape": 8.732
+     },
+     "d": {
+      "spec": 0.0624,
+      "spec_peak": 0.2446,
+      "centroid": 1.1109,
+      "flatness": 1.464,
+      "impulse": 11.4393,
+      "attack": 0.6937,
+      "decay": 1.0863,
+      "modulation": null,
+      "pitch": 53.0313,
+      "pitch_shape": 19.7399
+     }
+    }
+   }
+  },
+  "HC75": {
+   "take": "hc8/HC75.WAV",
+   "split": "untouched",
+   "tuning_ratio": 1.0727,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 7.2399,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.177,
+      "spec_peak": 1.5625,
+      "centroid": 2.2914,
+      "flatness": 3.4196,
+      "impulse": 4.3199,
+      "attack": 0.3228,
+      "decay": 0.6462,
+      "modulation": null,
+      "pitch": 0.5793,
+      "pitch_shape": 7.2399
+     },
+     "d": {
+      "spec": 0.0572,
+      "spec_peak": 0.2722,
+      "centroid": 1.4314,
+      "flatness": 1.9145,
+      "impulse": 44.3986,
+      "attack": 0.9517,
+      "decay": 0.8879,
+      "modulation": null,
+      "pitch": 53.0404,
+      "pitch_shape": 22.1092
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 4.3052,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 0.6992,
+      "spec_peak": 1.1825,
+      "centroid": 0.9005,
+      "flatness": 1.2784,
+      "impulse": 4.3052,
+      "attack": 0.3606,
+      "decay": 0.7899,
+      "modulation": null,
+      "pitch": 0.5793,
+      "pitch_shape": 3.0897
+     },
+     "d": {
+      "spec": 0.034,
+      "spec_peak": 0.206,
+      "centroid": 0.5625,
+      "flatness": 0.7157,
+      "impulse": 44.2474,
+      "attack": 1.0631,
+      "decay": 1.0854,
+      "modulation": null,
+      "pitch": 53.0405,
+      "pitch_shape": 9.4351
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 7.2359,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.172,
+      "spec_peak": 1.5584,
+      "centroid": 2.2921,
+      "flatness": 3.4161,
+      "impulse": 0.1451,
+      "attack": 0.3228,
+      "decay": 0.6017,
+      "modulation": null,
+      "pitch": 0.5792,
+      "pitch_shape": 7.2359
+     },
+     "d": {
+      "spec": 0.0569,
+      "spec_peak": 0.2715,
+      "centroid": 1.4318,
+      "flatness": 1.9125,
+      "impulse": 1.4915,
+      "attack": 0.9517,
+      "decay": 0.8267,
+      "modulation": null,
+      "pitch": 53.0352,
+      "pitch_shape": 22.0969
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 7.238,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.1724,
+      "spec_peak": 1.5597,
+      "centroid": 2.2912,
+      "flatness": 3.4166,
+      "impulse": 1.2948,
+      "attack": 0.3228,
+      "decay": 0.6023,
+      "modulation": null,
+      "pitch": 0.5792,
+      "pitch_shape": 7.238
+     },
+     "d": {
+      "spec": 0.057,
+      "spec_peak": 0.2717,
+      "centroid": 1.4313,
+      "flatness": 1.9128,
+      "impulse": 13.3075,
+      "attack": 0.9517,
+      "decay": 0.8275,
+      "modulation": null,
+      "pitch": 53.0352,
+      "pitch_shape": 22.1033
+     }
+    }
+   }
+  },
+  "HC10": {
+   "take": "hc8/HC10.WAV",
+   "split": "untouched",
+   "tuning_ratio": 1.131,
+   "variants": {
+    "twin-RAW": {
+     "verdict": "FAIL",
+     "worst": 8.2999,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.459,
+      "spec_peak": 1.9261,
+      "centroid": 2.9989,
+      "flatness": 4.2389,
+      "impulse": 4.9832,
+      "attack": 0.4263,
+      "decay": 0.7995,
+      "modulation": null,
+      "pitch": 0.5794,
+      "pitch_shape": 8.2999
+     },
+     "d": {
+      "spec": 0.0731,
+      "spec_peak": 0.3241,
+      "centroid": 1.8702,
+      "flatness": 2.1706,
+      "impulse": 50.6248,
+      "attack": 1.257,
+      "decay": 1.0935,
+      "modulation": null,
+      "pitch": 53.0417,
+      "pitch_shape": 25.3706
+     }
+    },
+    "twin-BP": {
+     "verdict": "FAIL",
+     "worst": 5.0003,
+     "worst_feature": "impulse",
+     "ratio": {
+      "spec": 0.9777,
+      "spec_peak": 1.5641,
+      "centroid": 1.7346,
+      "flatness": 1.6039,
+      "impulse": 5.0003,
+      "attack": 0.8243,
+      "decay": 0.5664,
+      "modulation": null,
+      "pitch": 0.5794,
+      "pitch_shape": 4.1889
+     },
+     "d": {
+      "spec": 0.049,
+      "spec_peak": 0.2631,
+      "centroid": 1.0817,
+      "flatness": 0.8213,
+      "impulse": 50.7978,
+      "attack": 2.4303,
+      "decay": 0.7747,
+      "modulation": null,
+      "pitch": 53.0418,
+      "pitch_shape": 12.8042
+     }
+    },
+    "shipped-via-take-rate": {
+     "verdict": "FAIL",
+     "worst": 8.2894,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.4664,
+      "spec_peak": 1.9182,
+      "centroid": 2.9971,
+      "flatness": 4.237,
+      "impulse": 1.2051,
+      "attack": 0.4237,
+      "decay": 0.8392,
+      "modulation": null,
+      "pitch": 0.5795,
+      "pitch_shape": 8.2894
+     },
+     "d": {
+      "spec": 0.0735,
+      "spec_peak": 0.3227,
+      "centroid": 1.8691,
+      "flatness": 2.1696,
+      "impulse": 12.2422,
+      "attack": 1.2491,
+      "decay": 1.1478,
+      "modulation": null,
+      "pitch": 53.0549,
+      "pitch_shape": 25.3384
+     }
+    },
+    "shipped": {
+     "verdict": "FAIL",
+     "worst": 8.2917,
+     "worst_feature": "pitch_shape",
+     "ratio": {
+      "spec": 1.4671,
+      "spec_peak": 1.9195,
+      "centroid": 2.9968,
+      "flatness": 4.2376,
+      "impulse": 2.2368,
+      "attack": 0.4237,
+      "decay": 0.8395,
+      "modulation": null,
+      "pitch": 0.5795,
+      "pitch_shape": 8.2917
+     },
+     "d": {
+      "spec": 0.0735,
+      "spec_peak": 0.3229,
+      "centroid": 1.8689,
+      "flatness": 2.1699,
+      "impulse": 22.7237,
+      "attack": 1.2491,
+      "decay": 1.1483,
+      "modulation": null,
+      "pitch": 53.0549,
+      "pitch_shape": 25.3455
+     }
+    }
+   }
+  }
+ },
+ "post_hoc": true,
+ "provenance": {
+  "commit": "87d54bf5976b23d1b37a76d0cf4f94822b2d5f66",
+  "model_tools_dirty": false,
+  "origin_main": "cd066543744827276c5dbcb2f381991199fb038e",
+  "prereg_sha256_16": "b60c35fab40769a8",
+  "refs": "/tmp/refs558/sounds-tr808-fischer"
+ }
+}

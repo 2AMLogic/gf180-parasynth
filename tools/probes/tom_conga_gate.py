@@ -560,6 +560,37 @@ def judge(record: dict, prereg: dict) -> dict:
     return res
 
 
+def post_hoc(run_rec: dict, twin_rec: dict) -> dict:
+    """POST-HOC tables from `twin` (selects and confirms nothing): how often the
+    float twin's band-pass, the fixed-point candidates and the rate path move
+    each feature, per split and per position (tom / conga)."""
+    out = {}
+    for split in ("development", "untouched", "seen-in-diagnosis"):
+        for pos, names in (("tom", ("LT", "MT", "HT")), ("conga", ("LC", "MC", "HC"))):
+            keys = [k for k, r in run_rec["rows"].items() if r["split"] == split and k[:2] in names]
+            if not keys:
+                continue
+            cell = {"n": len(keys)}
+            for var, src, base in (("BP", run_rec, "shipped"), ("BP+X4", run_rec, "shipped"),
+                                   ("twin-BP", twin_rec, "twin-RAW")):
+                rs = [1 - src["rows"][k]["variants"][var]["ratio"]["pitch_shape"]
+                      / src["rows"][k]["variants"][base]["ratio"]["pitch_shape"] for k in keys]
+                dec = [src["rows"][k]["variants"][var]["ratio"]["decay"]
+                       / src["rows"][k]["variants"][base]["ratio"]["decay"] for k in keys]
+                cell[var] = {"pitch_shape_improved": sum(r > 0 for r in rs),
+                             "pitch_shape_reduction_median": statistics.median(rs),
+                             "decay_ratio_x_median": statistics.median(dec),
+                             "decay_worse_than_x1.1_plus": sum(
+                                 src["rows"][k]["variants"][var]["ratio"]["decay"]
+                                 > 1.10 * src["rows"][k]["variants"][base]["ratio"]["decay"] + 0.10
+                                 for k in keys)}
+            cell["impulse_within_bar"] = {
+                v: sum(twin_rec["rows"][k]["variants"][v]["ratio"]["impulse"] <= 1.0 for k in keys)
+                for v in ("shipped", "shipped-via-take-rate")}
+            out[f"{split}/{pos}"] = cell
+    return out
+
+
 def _json(o):
     if isinstance(o, (bool, np.bool_)):
         return bool(o)
@@ -592,6 +623,7 @@ def main(argv=None) -> int:
     k.add_argument("--out", type=pathlib.Path, required=True)
     j = sub.add_parser("judge")
     j.add_argument("record", type=pathlib.Path)
+    j.add_argument("--twin", type=pathlib.Path, default=None, help="add the post-hoc tables from `twin`")
     j.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     try:
@@ -601,7 +633,10 @@ def main(argv=None) -> int:
             res = h2_response(a.refs, load_prereg()["corpus"]["sha256_16"])
             res["provenance"] = provenance(a.refs)
         elif a.cmd == "judge":
-            res = judge(json.loads(a.record.read_text()), load_prereg())
+            rec = json.loads(a.record.read_text())
+            res = judge(rec, load_prereg())
+            if a.twin:
+                res["post_hoc"] = post_hoc(rec, json.loads(a.twin.read_text()))
             print(json.dumps(_json(res), indent=1))
         else:
             pr = load_prereg()
