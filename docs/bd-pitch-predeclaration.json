@@ -353,19 +353,32 @@
   "pass": "improvement >= minimum_improvement (below), AND the per_condition_no_worsening guard holds on every MEASURED untouched Fischer condition (refused_readings below), AND no candidate refusal; raw d_c for every condition, and the excluded list, are reported beside any ratio",
   "why_glide": "glide_cents is early-window minus late-window of ONE trajectory, so a constant tuning shift cannot move it (qualified in tools/test_pitch_trajectory.py), and both windows start after 10 ms, so the 4 ms attack retune cannot be read as glide",
   "onset_phase_known_answer": {
-   "finding": "glide_cents reads onset phase: a constant-pitch decaying sinusoid (true glide 0) reads up to 17.5 cents more glide with a cos-phase onset than a sin-phase one. Worst cell: DECAY knob 1.0 (Q 5.2, tau ~33 ms), 49.4 Hz, 48 kHz. At knob 5 (tau ~142 ms) it is 10.4 cents at 48 kHz and 6.6 at 44.1 kHz, the figure the first version of this record stated as if it were the worst case. Swept by tools/bd_glide_phase_sweep.py over BD_DECAY_Q's knobs (0, 1, 2.5, 5, 7.5, 9, 10), f0 45/49.4/55 Hz, 48 and 44.1 kHz; knob 0 refuses (refused_readings). Same class as #558's finding for the gate's pitch_shape (~37 cents).",
-   "worst_cents": 17.5,
-   "worst_at": {
-    "sr": 48000,
-    "decay_knob": 1.0,
-    "f0_hz": 49.4
+   "finding": "glide_cents reads onset phase: a constant-pitch decaying sinusoid (true glide 0) reads a different glide with a cos-phase onset than a sin-phase one. The figure depends on WHERE the grid looks, and two earlier versions of this record each took a coarse grid's worst cell as the worst case (knob 5, then knob 1.0 at three pitches). tools/bd_glide_phase_sweep.py now fixes the grid: f0 40 to 65 Hz in 0.5 Hz steps at 48 and 44.1 kHz over every DECAY knob the record's conditions use (0, 2.5, 5, 7.5, 10; read from this record), plus an edge scan of knobs 0.0 to 1.5 in 0.1 steps at 48 kHz. Same class as #558's finding for the gate's pitch_shape (~37 cents).",
+   "declared_knobs": {
+    "worst_cents": 13.63,
+    "worst_at": {
+     "sr": 48000,
+     "decay_knob": 2.5,
+     "f0_hz": 51.5
+    },
+    "margin_x": 2.04,
+    "consequence": "at the knobs the declared conditions use, every measurable cell is below the rule's apparatus part, 2 x 13.9 = 27.8 cents, so an onset-phase change ALONE cannot satisfy the rule there; margin 27.8 / 13.63 = 2.0x. The worst cell is about the single-reading floor (13.9), so a candidate that changes the resonator's numerator or onset phase must report this term beside its improvement."
    },
-   "margin_x": 1.59,
-   "consequence": "every measurable cell is below the rule's apparatus part, 2 x 13.9 = 27.8 cents, so an onset-phase change ALONE cannot satisfy the rule; the margin is 27.8 / 17.5 = 1.6x, not the 2.6x the knob-5 figure implied. The worst cell exceeds the single-reading floor (13.9), so a candidate that changes the resonator's numerator or onset phase must report this term beside its improvement.",
-   "test": "tools/test_bd_pitch_predeclaration.py::test_onset_phase_alone_cannot_satisfy_the_rule"
+   "edge_scan": {
+    "worst_cents": 34.21,
+    "worst_at": {
+     "sr": 48000,
+     "decay_knob": 0.6,
+     "f0_hz": 52.0
+    },
+    "exceeds_apparatus_part": true,
+    "consequence": "the range-wide worst EXCEEDS 27.8 cents: between refusal and a short decay (knobs about 0.5 to 0.7) onset phase alone moves a zero-glide reading by more than the rule's apparatus part. No declared condition is at those knobs, so the freeze's claim is scoped to the declared knobs above; a candidate that moves the decay mapping toward them must re-run the edge scan first."
+   },
+   "not_refused_but_wrong": "glide_cents' MIN_FRAMES floor accepts readings that are wrong by tens of cents just above the refusal threshold: a zero-glide tone reads -68.2 (sin onset) / -34.0 (cos onset) cents at knob 0.6, 52 Hz, 48 kHz, and at knob 0, f0 40 to 43.5 Hz (8 of 51 pitches) it reads +76 to +97 cents instead of refusing. The precondition is asserted too loosely; to be filed as a tool-defect follow-up, not fixed in this freeze.",
+   "test": "tools/test_bd_pitch_predeclaration.py::test_onset_phase_alone_cannot_satisfy_the_rule_at_declared_knobs"
   },
   "refused_readings": {
-   "why": "glide_cents REFUSES when the ring has died before LATE_WINDOW_S (80-130 ms). At DECAY knob 0 (Q 2.3, tau ~15 ms) the closed-form known answer refuses at 48 and 44.1 kHz and at 45/49.4/55 Hz, and two untouched Fischer conditions sit at knob 0. Declared here, before candidates exist, so that what a refusal does to the median is not chosen afterwards (PR #601 review).",
+   "why": "glide_cents REFUSES when the ring has died before LATE_WINDOW_S (80-130 ms). At DECAY knob 0 (Q 2.3, tau ~15 ms) the closed-form known answer refuses at 48 and 44.1 kHz for every pitch from 44 to 65 Hz (and at 44.1 kHz for all 40 to 65 Hz), and two untouched Fischer conditions sit at knob 0. Below 44 Hz at 48 kHz it does NOT refuse and reads wrongly (not_refused_but_wrong). Declared here, before candidates exist, so that what a refusal does to the median is not chosen afterwards (PR #601 review).",
    "reading": "only a finite real number is a reading. A Refused, None, NaN, inf, bool or string (even \"0\") is REFUSED. A refusal is NEVER converted to a number: never a 0-cent reading, never a 0-cent |d_c|.",
    "exclude": "a condition whose REFERENCE or SHIPPED reading is REFUSED is excluded from BOTH the shipped and the candidate median (the two medians are always over the same set), and is listed by id with the side that refused.",
    "candidate_refusal": "a condition whose reference and shipped readings are measured but whose CANDIDATE reading is REFUSED is a FAILURE of the candidate (it made a measurable trajectory unmeasurable). It is not excluded and no candidate median is formed.",
@@ -380,7 +393,8 @@
    "prediction_basis": "closed-form known answer only (no Fischer or MARS file was read). Whether the 808's own knob-0 recordings refuse is unknown until the baseline runs; if they measure, the conditions are included only if ours measures too.",
    "implemented_by": "tools/bd_pitch_predeclaration.py::primary_aggregate",
    "known_answer": "tools/test_bd_pitch_predeclaration.py::test_glide_refuses_at_decay_knob_0",
-   "controls": "tools/test_bd_pitch_predeclaration.py::test_control_refused_rule_removed_is_caught, test_control_refusal_read_as_zero_reading_breaks_the_known_answer, test_control_refusal_read_as_zero_error_breaks_the_known_answer"
+   "controls": "tools/test_bd_pitch_predeclaration.py::test_control_refused_rule_removed_is_caught, test_control_refusal_read_as_zero_reading_breaks_the_known_answer, test_control_refusal_read_as_zero_error_breaks_the_known_answer",
+   "min_measured_derivation": "min_measured_conditions == (untouched Fischer conditions) - len(predicted_refusals); enforced by check(), so lowering the minimum alone fails it."
   }
  },
  "minimum_improvement": {
@@ -413,7 +427,7 @@
     "why": "how far two real 808 recordings disagree on the glide; read at use from the committed baseline JSON, never typed in"
    }
   ],
-  "unsatisfiable_outcome": "If this exceeds the present |glide_deficit_cents| (tools/bd_pitch_baseline.py output, fischer_vs_ours), `tools/bd_pitch_predeclaration.py min-improvement` REFUSES: the defect is not resolvable above apparatus + recording variability at this estimator. That is a publishable result (acceptance bullet 7). The rule is NOT loosened to admit a repair."
+  "unsatisfiable_outcome": "The rule is satisfiable only if it does not exceed the SHIPPED median |d_c| over the frozen measured untouched Fischer conditions (a perfect candidate reads the reference; pass is `improvement >= minimum`, so equality is satisfiable). `tools/bd_pitch_predeclaration.py min-improvement --baseline B --readings R` evaluates exactly that and REFUSES when it fails: the defect is not resolvable above apparatus + recording variability at this estimator, a publishable result (acceptance bullet 7). Without --readings it prints the threshold and the baseline's one development take as a diagnostic and REFUSES to claim satisfiability, because that take (the gate's own BD target) is in DEVELOPMENT, a different statistic from the one acceptance uses. The rule is NOT loosened to admit a repair."
  },
  "secondary_metrics": [
   {

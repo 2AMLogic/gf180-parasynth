@@ -2,7 +2,7 @@
 """Known-answer sweep of `pitch_trajectory.glide_cents` over the BD DECAY range
 (#557 freeze, PR #601 review).
 
-    python3 tools/bd_glide_phase_sweep.py            # table, 48 kHz and 44.1 kHz
+    python3 tools/bd_glide_phase_sweep.py            # worst cell: record knobs, edge scan
 
 The signal is CLOSED FORM and independent of our model: a constant-pitch
 decaying sinusoid  0.5 * sin(2 pi f0 t + phi) * exp(-t / tau)  after 10 ms of
@@ -18,10 +18,11 @@ BD_DECAY_Q table (read by ast, interpolated geometrically exactly as
 Each reading is either a finite float or the string "REFUSED: <reason>"; this
 file never turns a refusal into a number.  The Judge's scratch sweep
 (/tmp/judge601/phase_sweep.py, Q in {2.3, 5.2, 22.3, 63, 84}) is the basis;
-this version sweeps knobs, so the record's DECAY conditions are covered by name.
+this version sweeps the record's own knobs on a 0.5 Hz pitch grid plus an edge scan.
 """
 from __future__ import annotations
 
+import json
 import math
 import pathlib
 import sys
@@ -34,10 +35,25 @@ import pitch_trajectory as pt                     # noqa: E402
 import bd_pitch_predeclaration as bp              # noqa: E402  (ast reader only)
 
 F_REF = 52.0
-F0S = (45.0, 49.4, 55.0)
 RATES = (48000, 44100)
-# BD_DECAY_Q's own knots plus the record's Fischer knobs 2.5 and 7.5
-KNOBS = (0.0, 1.0, 2.5, 5.0, 7.5, 9.0, 10.0)
+# The grid is part of the tool, not of whoever ran it last: the first two
+# versions of the record each read a coarse grid's worst cell as the worst case
+# (PR #601 review).  Pitches: the whole BD range in 0.5 Hz steps, which is as
+# fine as the reviewer's scan.  Knobs of the DECLARED conditions are read from
+# the record (never typed here); the EDGE scan is separate and covers the
+# knobs between refusal and measurability, where the reading is worst.
+F0S = tuple(float(f) for f in np.arange(40.0, 65.0 + 1e-9, 0.5))
+EDGE_KNOBS = tuple(round(float(k), 1) for k in np.arange(0.0, 1.5 + 1e-9, 0.1))
+EDGE_F0S = F0S
+EDGE_RATES = (48000,)
+
+
+def record_knobs() -> tuple:
+    """Every DECAY knob a condition in the frozen record uses, development and
+    untouched, read from the record."""
+    rec = json.loads(bp.RECORD.read_text())
+    conds = rec["conditions"]["development"] + rec["conditions"]["untouched"]
+    return tuple(sorted({float(c["model"]["decay_knob"]) for c in conds}))
 
 
 def bd_q(knob: float) -> float:
@@ -71,21 +87,28 @@ def cell(sr: int, knob: float, f0: float) -> dict:
             "refused": not ok}
 
 
-def sweep(rates=RATES, knobs=KNOBS, f0s=F0S) -> list:
+def sweep(rates=RATES, knobs=None, f0s=F0S) -> list:
+    """Cells over the record's own knobs by default."""
+    knobs = record_knobs() if knobs is None else knobs
     return [cell(sr, k, f) for sr in rates for k in knobs for f in f0s]
 
 
-def main() -> int:
-    rows = sweep()
-    for r in rows:
-        v = f"{r['phase_only']:6.2f} c" if not r["refused"] else \
-            (r["sin"] if isinstance(r["sin"], str) else r["cos"])
-        print(f"{r['sr']:5d} knob={r['knob']:4.1f} Q={r['q']:5.1f} f0={r['f0']:4.1f} "
-              f"tau={r['tau_ms']:6.1f}ms phase_only={v}")
+def edge_sweep() -> list:
+    """Knobs between refusal and the record's lowest measurable knob."""
+    return sweep(EDGE_RATES, EDGE_KNOBS, EDGE_F0S)
+
+
+def worst(rows: list):
     live = [r for r in rows if not r["refused"]]
-    w = max(live, key=lambda r: r["phase_only"])
-    print(f"worst phase_only {w['phase_only']:.2f} cents at {w['sr']} Hz, knob {w['knob']}, "
-          f"f0 {w['f0']}; refused cells: {sum(r['refused'] for r in rows)}")
+    return max(live, key=lambda r: r["phase_only"]) if live else None
+
+
+def main() -> int:
+    for name, rows in (("record knobs", sweep()), ("edge scan", edge_sweep())):
+        w = worst(rows)
+        print(f"{name}: {len(rows)} cells, {sum(r['refused'] for r in rows)} refused; " +
+              (f"worst phase_only {w['phase_only']:.2f} cents at {w['sr']} Hz, knob {w['knob']}, "
+               f"f0 {w['f0']}" if w else "no measurable cell"))
     return 0
 
 

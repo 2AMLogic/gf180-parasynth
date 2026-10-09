@@ -2,7 +2,7 @@
 """Validator for the BD pitch-envelope pre-tuning freeze (#557, acceptance 3).
 
     tools/bd_pitch_predeclaration.py check [--record PATH]
-    tools/bd_pitch_predeclaration.py min-improvement --baseline build/bd-pitch-baseline.json
+    tools/bd_pitch_predeclaration.py min-improvement --baseline build/bd-pitch-baseline.json [--readings R.json]
 
 The record (`docs/bd-pitch-predeclaration.json`) is committed BEFORE any repair
 candidate is proposed, rendered or measured.  This file checks that the record
@@ -317,6 +317,10 @@ def _check_refused_rule(rec: dict) -> list:
     if isinstance(k, int) and n - len(set(pred) & ids) < k:
         out.append(f"primary_metric.refused_readings: unsatisfiable -- {n} conditions minus "
                    f"{len(pred)} predicted refusals leaves fewer than min_measured_conditions {k}")
+    if isinstance(k, int) and not isinstance(k, bool) and k != n - len(set(pred) & ids):
+        out.append(f"primary_metric.refused_readings: min_measured_conditions {k} is not its "
+                   f"derivation {n} untouched Fischer conditions - {len(set(pred) & ids)} "
+                   "predicted refusals; a minimum lowered to admit a result is the pathology")
     if "REFUSE" not in str(rr.get("too_few_outcome", "")):
         out.append("primary_metric.refused_readings: too_few_outcome must REFUSE (never pass)")
     for ref in (rr.get("implemented_by"), rr.get("known_answer")):
@@ -413,29 +417,52 @@ def load_baseline(path: pathlib.Path) -> dict:
     if not path.is_file():
         raise Refused(f"baseline JSON {path} is absent: run tools/bd_pitch_baseline.py on the "
                       "build box first (docs/bd-pitch-baseline-request.md)")
-    b = json.loads(path.read_text())
+    try:
+        b = json.loads(path.read_text())
+    except ValueError as e:
+        raise Refused(f"baseline {path} is not valid JSON: {e}")
+    if not isinstance(b, dict) or not isinstance(b.get("provenance") or {}, dict):
+        raise Refused(f"baseline {path} is not a JSON object with a provenance object")
     prov = b.get("provenance") or {}
     if not prov.get("commit") or prov.get("sources_dirty") is not False:
         raise Refused(f"baseline {path} has no commit or was produced from dirty sources")
     return b
 
 
+def _finite(x) -> bool:
+    """A real, finite number.  bool is an int subclass and a str is coerced by
+    float(): neither is a measurement, so neither is accepted."""
+    return not isinstance(x, bool) and isinstance(x, (int, float)) and math.isfinite(x)
+
+
 def minimum_improvement_cents(rec: dict, baseline: dict | None) -> float:
     """The frozen rule evaluated: quoted terms from the record, baseline terms
-    from the baseline JSON.  REFUSES without a finite baseline value."""
-    rule = rec["minimum_improvement"]
+    from the baseline JSON.  REFUSES without a finite, non-negative baseline
+    value (a spread is a distance) and when the evaluated threshold is not a
+    finite non-negative number: a negative threshold admits worsening sound
+    under `improvement >= minimum_improvement`."""
+    try:
+        rule = rec["minimum_improvement"]
+        terms = rule["terms"]
+    except (KeyError, TypeError) as e:
+        raise Refused(f"the record has no evaluable minimum_improvement rule: {e!r}")
     vals = {}
-    for t in rule["terms"]:
+    for t in terms:
         if "baseline_key" in t:
             if baseline is None:
                 raise Refused(f"{t['name']} is read from the baseline JSON, and there is none")
-            v = baseline.get(t["baseline_key"])
-            if not isinstance(v, (int, float)) or not math.isfinite(v):
-                raise Refused(f"baseline {t['baseline_key']} = {v!r} is not a finite number")
+            v = baseline.get(t["baseline_key"]) if isinstance(baseline, dict) else None
+            if not _finite(v) or v < 0:
+                raise Refused(f"baseline {t['baseline_key']} = {v!r} is not a finite "
+                              "non-negative number")
             vals[t["name"]] = float(v)
         else:
             vals[t["name"]] = float(t["value"])
-    return eval_formula(rule["formula"], vals)
+    need = eval_formula(rule["formula"], vals)
+    if not _finite(need) or need < 0:
+        raise Refused(f"the evaluated minimum improvement {need!r} is not a finite "
+                      "non-negative number")
+    return need
 
 
 SIDES = ("reference", "shipped", "candidate")
@@ -508,13 +535,42 @@ def primary_aggregate(rec: dict, readings: dict) -> dict:
     return out
 
 
-def satisfiable(rec: dict, baseline: dict) -> dict:
-    """Run the gate against the current state before trusting it (CLAUDE.md):
-    an improvement larger than the whole present deficit cannot be shown."""
+def one_take_diagnostic(rec: dict, baseline: dict) -> dict:
+    """The baseline JSON's ONE pair (fischer_vs_ours, the gate's own BD target,
+    which the record puts in DEVELOPMENT) against the threshold.  This is NOT
+    satisfiability: acceptance uses the untouched median, a different statistic
+    (PR #601 review: a deficit of 20 dev / 100 untouched and the reverse give
+    opposite answers).  Reported as information only."""
     need = minimum_improvement_cents(rec, baseline)
-    deficit = abs(float(baseline["pairs"]["fischer_vs_ours"]["glide_deficit_cents"]))
-    return {"min_improvement_cents": need, "current_deficit_cents": deficit,
-            "satisfiable": need < deficit}
+    try:
+        deficit = baseline["pairs"]["fischer_vs_ours"]["glide_deficit_cents"]
+    except (KeyError, TypeError) as e:
+        raise Refused(f"baseline has no pairs.fischer_vs_ours.glide_deficit_cents: {e!r}")
+    if not _finite(deficit):
+        raise Refused(f"baseline glide_deficit_cents = {deficit!r} is not a finite number")
+    deficit = abs(float(deficit))
+    return {"scope": "one_take_diagnostic_not_satisfiability", "min_improvement_cents": need,
+            "development_take_deficit_cents": deficit, "take_reaches_threshold": need <= deficit}
+
+
+def satisfiable(rec: dict, baseline: dict, readings: dict) -> dict:
+    """Run the gate against the current state before trusting it (CLAUDE.md),
+    on the statistic acceptance uses: the SHIPPED median over the frozen
+    measured untouched Fischer conditions, same exclusions and holdout rules.
+    The largest improvement any candidate can show is a candidate that reads
+    exactly the reference (candidate median 0), so it is that median; the pass
+    rule is `improvement >= minimum`, hence `<=` here.  `readings` is the same
+    shape primary_aggregate takes; only reference and shipped are used."""
+    need = one_take_diagnostic(rec, baseline)["min_improvement_cents"]   # also validates the baseline
+    if not isinstance(readings, dict) or not all(isinstance(v, dict) for v in readings.values()):
+        raise Refused("readings must map each untouched Fischer id to {reference, shipped}")
+    perfect = {cid: {"reference": r.get("reference"), "shipped": r.get("shipped"),
+                     "candidate": r.get("reference")} for cid, r in readings.items()}
+    agg = primary_aggregate(rec, perfect)
+    best = agg["shipped_median"]
+    return {"min_improvement_cents": need, "max_possible_improvement_cents": best,
+            "measured": agg["measured"], "excluded": agg["excluded"],
+            "satisfiable": need <= best}
 
 
 def main(argv=None) -> int:
@@ -525,6 +581,9 @@ def main(argv=None) -> int:
     m = sub.add_parser("min-improvement")
     m.add_argument("--record", type=pathlib.Path, default=RECORD)
     m.add_argument("--baseline", type=pathlib.Path, required=True)
+    m.add_argument("--readings", type=pathlib.Path, default=None,
+                   help="JSON {untouched Fischer id: {reference, shipped}} of glide_cents "
+                        "readings; without it satisfiability is NOT established")
     a = ap.parse_args(argv)
     try:
         if not a.record.is_file():
@@ -536,11 +595,25 @@ def main(argv=None) -> int:
                 print(f"VIOLATION {b}")
             print("CLEAN" if not bad else f"FAIL ({len(bad)} violation(s))")
             return 1 if bad else 0
-        s = satisfiable(rec, load_baseline(a.baseline))
+        baseline = load_baseline(a.baseline)
+        if a.readings is None:
+            print(json.dumps(one_take_diagnostic(rec, baseline), indent=1))
+            print("REFUSED: satisfiability is over the untouched median and no untouched "
+                  "readings were given (--readings); the one-take figure above is not that "
+                  "statistic, so no claim either way.")
+            return 2
+        if not a.readings.is_file():
+            raise Refused(f"readings JSON {a.readings} is absent")
+        try:
+            readings = json.loads(a.readings.read_text())
+        except ValueError as e:
+            raise Refused(f"readings {a.readings} is not valid JSON: {e}")
+        s = satisfiable(rec, baseline, readings)
         print(json.dumps(s, indent=1))
         if not s["satisfiable"]:
-            print("REFUSED: the frozen minimum improvement exceeds the present deficit; the "
-                  "defect is not resolvable above the floor. Do not loosen the rule.")
+            print("REFUSED: the frozen minimum improvement exceeds the largest improvement the "
+                  "untouched median can show; the defect is not resolvable above the floor. "
+                  "Do not loosen the rule.")
             return 2
         return 0
     except Refused as e:

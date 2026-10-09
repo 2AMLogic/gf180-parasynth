@@ -180,52 +180,197 @@ def test_rule_evaluates_the_declared_formula(record):
     assert got == pytest.approx(2 * 13.9 + 10.0)
 
 
-def test_unsatisfiable_gate_is_reported_not_passed(record):
-    """Run the gate against a state before trusting it: a present deficit
-    smaller than the required improvement cannot show an improvement."""
-    b = {"recording_glide_spread_cents": 10.0,
-         "pairs": {"fischer_vs_ours": {"glide_deficit_cents": 20.0}}}
-    assert bp.satisfiable(record, b)["satisfiable"] is False
+def _baseline(spread=10.0, deficit=100.0):
+    return {"provenance": {"commit": "abc", "sources_dirty": False},
+            "recording_glide_spread_cents": spread,
+            "pairs": {"fischer_vs_ours": {"glide_deficit_cents": deficit}}}
+
+
+def _cli(tmp_path, baseline, readings=None, capsys=None):
+    bpath = tmp_path / "b.json"
+    bpath.write_text(json.dumps(baseline))
+    argv = ["min-improvement", "--baseline", str(bpath)]
+    if readings is not None:
+        rpath = tmp_path / "r.json"
+        rpath.write_text(json.dumps(readings))
+        argv += ["--readings", str(rpath)]
+    code = bp.main(argv)
+    return code, capsys.readouterr().out
+
+
+# The Judge's exact inputs (PR #601 review, item 1): each used to exit 0 with a
+# usable threshold or "satisfiable".
+@pytest.mark.parametrize("spread,deficit", [
+    (-100, 100), (-5, 100), (10, float("inf")), (True, 100), (10, "100"), (10, True),
+    (float("nan"), 100), ("10", 100), (None, 100), (10, None)])
+def test_cli_refuses_invalid_baseline_numbers(tmp_path, capsys, record, spread, deficit):
+    code, out = _cli(tmp_path, _baseline(spread, deficit), _readings(record), capsys)
+    assert code == 2 and "REFUSED" in out, out
+    code, out = _cli(tmp_path, _baseline(spread, deficit), None, capsys)
+    assert code == 2 and "REFUSED" in out, out
+
+
+@pytest.mark.parametrize("bl", [[], "x", {"provenance": []}, {"provenance": {"commit": "a", "sources_dirty": False}}])
+def test_cli_refuses_malformed_baseline_without_traceback(tmp_path, capsys, bl):
+    code, out = _cli(tmp_path, bl, None, capsys)
+    assert code == 2 and "REFUSED" in out, out
+
+
+def test_negative_evaluated_threshold_is_refused(record):
+    bad = copy.deepcopy(record)
+    bad["minimum_improvement"]["formula"] = "recording_glide_spread_cents - 1000"
+    with pytest.raises(bp.Refused, match="non-negative"):
+        bp.minimum_improvement_cents(bad, {"recording_glide_spread_cents": 10.0})
+
+
+def _untouched_readings(record, dev_deficit, unt_deficit):
+    """Reference 100, shipped 100 - deficit.  Item 2's construction: the
+    baseline's one take is the DEVELOPMENT BD target; the untouched Fischer
+    conditions are what acceptance takes the median over."""
+    return {c["id"]: {"reference": 100.0, "shipped": 100.0 - unt_deficit, "candidate": 100.0}
+            for c in bp.untouched_fischer(record)}
+
+
+def test_satisfiable_follows_the_untouched_median_not_the_development_take(record):
+    """Threshold with spread 10 is 37.8.  Development take 20, untouched 100:
+    the experiment IS satisfiable.  Development 100, untouched 20: it is NOT."""
+    b = _baseline(spread=10.0, deficit=20.0)
+    ok = bp.satisfiable(record, b, _untouched_readings(record, 20.0, 100.0))
+    assert ok["satisfiable"] is True and ok["min_improvement_cents"] == pytest.approx(37.8)
+    b = _baseline(spread=10.0, deficit=100.0)
+    no = bp.satisfiable(record, b, _untouched_readings(record, 100.0, 20.0))
+    assert no["satisfiable"] is False
+    assert bp.satisfiable(record, b, _untouched_readings(record, 100.0, 20.0))["max_possible_improvement_cents"] == pytest.approx(20.0)
+
+
+def test_satisfiable_at_equality(record):
+    need = bp.minimum_improvement_cents(record, _baseline(spread=10.0))
+    at = bp.satisfiable(record, _baseline(spread=10.0), _untouched_readings(record, 0, need))
+    assert at["satisfiable"] is True, "pass is improvement >= minimum: equality satisfies it"
+    below = bp.satisfiable(record, _baseline(spread=10.0), _untouched_readings(record, 0, need - 0.5))
+    assert below["satisfiable"] is False
+
+
+def test_satisfiable_uses_the_frozen_exclusions(record):
+    rd = _untouched_readings(record, 0, 100.0)
+    for i in D00:
+        rd[i]["shipped"] = R
+    got = bp.satisfiable(record, _baseline(), rd)
+    assert sorted(e["id"] for e in got["excluded"]) == sorted(D00) and len(got["measured"]) == 6
+    for i in D00 + ("U-F-T75-D50",):
+        rd[i]["shipped"] = R
+    with pytest.raises(bp.Refused, match="measurable"):
+        bp.satisfiable(record, _baseline(), rd)
+
+
+def test_cli_without_readings_does_not_claim_satisfiability(tmp_path, capsys, record):
+    """The one-take figure is information, not the acceptance statistic: whatever
+    it says, the CLI must not answer 'satisfiable' either way."""
+    for deficit in (20.0, 100.0):
+        code, out = _cli(tmp_path, _baseline(10.0, deficit), None, capsys)
+        assert code == 2 and "REFUSED" in out and "not_satisfiability" in out, out
+        assert '"satisfiable"' not in out
+
+
+def test_cli_with_readings_answers_on_the_untouched_median(tmp_path, capsys, record):
+    code, out = _cli(tmp_path, _baseline(10.0, 20.0), _untouched_readings(record, 20.0, 100.0), capsys)
+    assert code == 0 and '"satisfiable": true' in out, out
+    code, out = _cli(tmp_path, _baseline(10.0, 100.0), _untouched_readings(record, 100.0, 20.0), capsys)
+    assert code == 2 and '"satisfiable": false' in out, out
 
 
 @pytest.fixture(scope="module")
-def phase_sweep():
-    """Closed-form constant-pitch tones over BD_DECAY_Q's knobs, 3 pitches,
-    2 rates (tools/bd_glide_phase_sweep.py; true glide is zero)."""
+def sweep_mod():
     import bd_glide_phase_sweep as sw
-    return sw.sweep()
+    return sw
 
 
-def test_onset_phase_alone_cannot_satisfy_the_rule(record, phase_sweep):
+@pytest.fixture(scope="module")
+def phase_sweep(sweep_mod):
+    """Closed-form constant-pitch tones (true glide zero) over the record's own
+    DECAY knobs, f0 40 to 65 Hz in 0.5 Hz steps, both rates.  The grid is the
+    tool's (tools/bd_glide_phase_sweep.py), so a coarse one cannot set the worst
+    case again."""
+    return sweep_mod.sweep()
+
+
+@pytest.fixture(scope="module")
+def edge_sweep(sweep_mod):
+    return sweep_mod.edge_sweep()
+
+
+def test_sweep_grid_is_not_coarse(sweep_mod, record):
+    """The input that defeated the first two versions: a grid too coarse to see
+    the worst cell.  Pin the resolution the reviewer's finer scan had."""
+    f = sweep_mod.F0S
+    assert f[0] <= 40.0 and f[-1] >= 65.0 and max(b - a for a, b in zip(f, f[1:])) <= 0.5
+    assert max(b - a for a, b in zip(sweep_mod.EDGE_F0S, sweep_mod.EDGE_F0S[1:])) <= 0.5
+    ek = sweep_mod.EDGE_KNOBS
+    assert ek[0] == 0.0 and ek[-1] >= 1.5 and max(b - a for a, b in zip(ek, ek[1:])) <= 0.1 + 1e-9
+    assert set(sweep_mod.record_knobs()) == {0.0, 2.5, 5.0, 7.5, 10.0}, "read from the record"
+    assert set(sweep_mod.RATES) == {48000, 44100}
+
+
+def test_onset_phase_alone_cannot_satisfy_the_rule_at_declared_knobs(record, phase_sweep, sweep_mod):
     """Rule 8, the input that could defeat the primary metric: #558 found the
-    gate's pitch_shape reads onset phase.  glide_cents does too, worst at
-    DECAY knob 1.0 (tau ~33 ms, 48 kHz), not at knob 5 where the first version
-    of this test looked.  Every measurable cell must stay below the rule's
+    gate's pitch_shape reads onset phase.  glide_cents does too.  At every knob
+    a declared condition uses, every measurable cell must stay below the rule's
     apparatus part (spread 0), and the worst must be the figure the record
     states, so record and measurement cannot drift apart."""
     floor = bp.minimum_improvement_cents(record, {"recording_glide_spread_cents": 0.0})
     live = [r for r in phase_sweep if not r["refused"]]
-    assert {r["knob"] for r in live} >= {1.0, 2.5, 5.0, 7.5, 10.0}
+    assert {r["knob"] for r in live} >= {2.5, 5.0, 7.5, 10.0}
     for r in live:
         assert r["phase_only"] < floor, r
-    worst = max(live, key=lambda r: r["phase_only"])
-    assert worst["phase_only"] > 3.0, "the phase effect vanished: re-measure and update the record"
-    ka = record["primary_metric"]["onset_phase_known_answer"]
-    assert worst["phase_only"] == pytest.approx(ka["worst_cents"], abs=0.5)
-    assert (worst["sr"], worst["knob"]) == (ka["worst_at"]["sr"], ka["worst_at"]["decay_knob"])
-    assert floor / worst["phase_only"] == pytest.approx(ka["margin_x"], abs=0.05)
+    w = sweep_mod.worst(phase_sweep)
+    assert w["phase_only"] > 3.0, "the phase effect vanished: re-measure and update the record"
+    ka = record["primary_metric"]["onset_phase_known_answer"]["declared_knobs"]
+    assert w["phase_only"] == pytest.approx(ka["worst_cents"], abs=0.01)
+    assert (w["sr"], w["knob"], w["f0"]) == (ka["worst_at"]["sr"], ka["worst_at"]["decay_knob"],
+                                              ka["worst_at"]["f0_hz"])
+    assert floor / w["phase_only"] == pytest.approx(ka["margin_x"], abs=0.01)
+
+
+def test_edge_scan_worst_exceeds_the_apparatus_part_and_is_recorded(record, edge_sweep, sweep_mod):
+    """The range-wide claim is NOT 'below the rule': near the refusal edge onset
+    phase alone moves a zero-glide reading by more than 27.8 cents.  The record
+    states that figure; this pins it to the measurement."""
+    floor = bp.minimum_improvement_cents(record, {"recording_glide_spread_cents": 0.0})
+    w = sweep_mod.worst(edge_sweep)
+    ek = record["primary_metric"]["onset_phase_known_answer"]["edge_scan"]
+    assert w["phase_only"] > floor and ek["exceeds_apparatus_part"] is True
+    assert w["phase_only"] == pytest.approx(ek["worst_cents"], abs=0.01)
+    assert (w["sr"], w["knob"], w["f0"]) == (ek["worst_at"]["sr"], ek["worst_at"]["decay_knob"],
+                                              ek["worst_at"]["f0_hz"])
+    declared = set(sweep_mod.record_knobs())
+    assert not declared & {r["knob"] for r in edge_sweep if r["knob"] != 0.0}, \
+        "the edge scan must cover knobs the declared conditions do NOT use"
+
+
+def test_glide_cents_accepts_wrong_readings_just_above_the_refusal_edge(edge_sweep):
+    """Finding for a tool follow-up, pinned so it cannot be forgotten or
+    silently fixed unnoticed: a zero-glide tone at DECAY knob 0.6, 52 Hz,
+    48 kHz is NOT refused and reads tens of cents of glide."""
+    cells = [r for r in edge_sweep if r["knob"] == 0.6 and r["f0"] == 52.0 and r["sr"] == 48000]
+    assert len(cells) == 1 and not cells[0]["refused"]
+    assert abs(cells[0]["sin"]) > 50.0 and abs(cells[0]["cos"]) > 25.0, cells[0]
 
 
 def test_glide_refuses_at_decay_knob_0(record, phase_sweep):
     """Known answer (PR #601 review): at DECAY knob 0 (Q 2.3, tau ~15 ms) the
-    ring is ~-46 dB by the 80-130 ms late window, so glide_cents must REFUSE at
-    both rates and every pitch -- never return a number.  The record's
-    predicted_refusals must be exactly the untouched Fischer conditions at a
-    knob where the closed form refuses."""
+    ring is ~-46 dB by the 80-130 ms late window, so glide_cents must REFUSE --
+    never return a number -- at every pitch from 44 Hz up at 48 kHz and at every
+    pitch at 44.1 kHz.  Below 44 Hz at 48 kHz it does not refuse (and reads
+    wrongly); that is recorded, not hidden.  The record's predicted_refusals must
+    be exactly the untouched Fischer conditions at a knob where it refuses."""
     refusing = {r["knob"] for r in phase_sweep if r["refused"]}
     assert refusing == {0.0}, refusing
-    assert all(isinstance(r["sin"], str) and isinstance(r["cos"], str)
-               for r in phase_sweep if r["knob"] == 0.0)
+    k0 = [r for r in phase_sweep if r["knob"] == 0.0]
+    assert all(r["refused"] for r in k0 if r["sr"] == 44100 or r["f0"] >= 44.0)
+    assert all(isinstance(r["sin"], str) or isinstance(r["cos"], str) for r in k0 if r["refused"])
+    leak = [r for r in k0 if not r["refused"]]
+    assert leak and all(r["sr"] == 48000 and r["f0"] < 44.0 for r in leak)
+    assert all(abs(r["sin"]) > 50.0 and abs(r["cos"]) > 50.0 for r in leak), "reads wrongly, not zero"
     want = {c["id"] for c in bp.untouched_fischer(record) if c["model"]["decay_knob"] in refusing}
     assert want == {"U-F-T50-D00", "U-F-T00-D00"}
     assert set(record["primary_metric"]["refused_readings"]["predicted_refusals"]) == want
@@ -336,6 +481,26 @@ def test_lost_decay_holdout_refuses(record):
     gone = D00 + ("U-F-T50-D75", "U-F-T50-D10", "U-F-T10-D10")
     with pytest.raises(bp.Refused, match="holds out no decay"):
         bp.primary_aggregate(rec, _readings(rec, refuse=gone))
+
+
+def test_lost_tone_holdout_refuses(record):
+    """TONE twin of test_lost_decay_holdout_refuses (the loop over axes had one
+    branch uncovered): lose every held-out TONE value (75, 00, 10); the
+    remaining tone-50 conditions hold nothing out on TONE."""
+    rec = copy.deepcopy(record)
+    rec["primary_metric"]["refused_readings"]["min_measured_conditions"] = 1
+    gone = D00 + ("U-F-T75-D50", "U-F-T00-D50", "U-F-T10-D50", "U-F-T10-D10")
+    with pytest.raises(bp.Refused, match="holds out no tone"):
+        bp.primary_aggregate(rec, _readings(rec, refuse=gone))
+
+
+def test_control_min_measured_lowered_below_its_derivation_is_caught(record):
+    """Rule 8: lowering the minimum alone used to pass check() and every test,
+    contradicting 'the minimum is not lowered to admit a result'."""
+    for k in (1, 5):
+        bad = copy.deepcopy(record)
+        bad["primary_metric"]["refused_readings"]["min_measured_conditions"] = k
+        assert _caught(bp.check(bad), "is not its derivation")
 
 
 def test_readings_must_cover_every_untouched_fischer_condition(record):
