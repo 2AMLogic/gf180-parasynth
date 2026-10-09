@@ -31,7 +31,9 @@ import audio_measure as am      # noqa: E402
 import promoted_measures as pm  # noqa: E402
 import promoted_bands as pb     # noqa: E402
 
-REFS = pathlib.Path(os.environ.get("GF180_TR808_REFS", pathlib.Path.home() / "dev/refs/sounds-tr808-fischer"))
+import run_case as rc       # noqa: E402
+
+REFS = rc.configured_refs()  # the Fischer repo root, <REFS>/bd8/... (#522)
 OUT = ROOT / "docs" / "promoted-bands-results.json"
 #: per-voice search band for the dominant partial: 40 Hz to the corpus module's
 #: own one-octave-above-range fmax (test_discrimination.TUNING_FMAX).

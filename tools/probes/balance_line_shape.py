@@ -167,10 +167,8 @@ class Refused(Exception):
 
 
 def refdir() -> pathlib.Path:
-    for var in ("GF180_TR808_REFS", "TR808_REFS"):
-        if os.environ.get(var):
-            return pathlib.Path(os.environ[var])
-    return pathlib.Path("/tmp/tr808-ref")
+    import run_case as rc
+    return rc.configured_refs()
 
 
 def damped(f, tau, amp, n, sr, phase=0.0, onset=0):
@@ -443,7 +441,7 @@ def _real_records(d):
     run_case's OWN load/render/prepare chain."""
     if not d.exists():
         raise Refused(f"reference corpus not at {d} -- clone "
-                      f"tidalcycles/sounds-tr808-fischer or set GF180_TR808_REFS")
+                      f"tidalcycles/sounds-tr808-fischer or point GF180_TR808_REFS at it")
     for label, op in OPS.items():
         voice = label.split()[0]
         if not (d / RC.REF_MAIN[voice][0]).exists():

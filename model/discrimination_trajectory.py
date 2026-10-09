@@ -186,7 +186,9 @@ def sentences(r: dict, top: int = 4) -> list:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--refs", default="/tmp/tr808-ref")
+    sys.path.insert(0, os.path.join(HERE, "..", "tools"))
+    import run_case
+    ap.add_argument("--refs", default=str(run_case.configured_refs()))
     ap.add_argument("--sounds", choices=("8", "16"), default="16")
     ap.add_argument("--arm", default="ours")
     ap.add_argument("--top", type=int, default=3)
