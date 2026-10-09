@@ -6,35 +6,43 @@ modal arithmetic is #220/#350; toms and congas are #558/#591-#593. Nothing
 here repairs any of them.
 
 Regenerate: `python3 tools/probes/residual_dc.py --screen|--detail|--controls|--reference`.
-Controls: `python3 -m pytest tools/probes/test_residual_dc.py -q` (42 tests).
+Controls: `python3 -m pytest tools/probes/test_residual_dc.py -q` (53 tests).
+Per-subject ending: `python3 tools/probes/residual_dc.py --verdict DEV.json CONFIRM.json`, reading the
+`--screen --rows-out` records of both conditions (refuses a missing/duplicate condition, a dirty
+record, mixed commits or moved limits; exit 2).
 
 ## Status: PARTIAL, and the missing part is stated, not hidden
 
 | item | state |
 |---|---|
-| apparatus qualified on constant-offset / short-burst / zero-mean / added-HF ground truth, MOVED/BLIND matrix | **done**, `controls-matrix.txt`, 42 passing |
-| start-red record | **done**, `red-start.txt` (estimator stubbed to NaN, fixtures executed, assertions failed) |
-| dev condition, CH / RS / BD / HT | **done**, `screen-dev-subjects.txt`, `detail-dev.txt` |
+| apparatus qualified on constant-offset / short-burst / zero-mean / added-HF ground truth, MOVED/BLIND matrix | **done**, `controls-matrix.txt`, 53 passing |
+| start-red record | **done**, `red-start.txt` (estimator stubbed to NaN, fixtures executed, assertions failed); `red-h-ch2.txt` (the H_CH2 defeater against the one-sided rule) |
+| dev condition, CH / RS / BD / HT | **done**, `screen-dev-subjects.txt` / `.json`, `detail-dev.txt`, rendered from clean commit `cae21c566571` |
+| per-subject ending produced by the tool | **done**: `--verdict`; on the dev record alone it REFUSES (confirm missing), as it must |
 | dev condition, the other 11 non-CY voices | **NO VERDICT: not run on this host** (batch below) |
 | confirm condition (untouched), all voices | **NO VERDICT: not run on this host** (batch below) |
 | external reference comparison | **REFUSED**: no corpus on this host, and see "What recordings can establish" |
 | `make verify`, `make controls` | **NO VERDICT: not run** (host rules); pending on the build box |
 
-Pending batch (build box, `--jobs 2`; also `docs/residual-dc/batch-spec.txt`):
+Pending batch (build box, `--jobs 2`; also `docs/residual-dc/batch-spec.txt`). The last
+line produces every subject's ending from the two screen records:
 
 ```
 python3 tools/run_all.py --jobs 2 --timeout 3600 --json build/residual-dc-batch.json \
-    "python3 tools/probes/residual_dc.py --screen --condition dev" \
-    "python3 tools/probes/residual_dc.py --screen --condition confirm" \
+    "python3 tools/probes/residual_dc.py --screen --condition dev --rows-out build/residual-dc-screen-dev.json" \
+    "python3 tools/probes/residual_dc.py --screen --condition confirm --rows-out build/residual-dc-screen-confirm.json" \
     "python3 tools/probes/residual_dc.py --detail --condition dev" \
-    "python3 tools/probes/residual_dc.py --detail --condition confirm"
+    "python3 tools/probes/residual_dc.py --detail --condition confirm" \
+  && python3 tools/probes/residual_dc.py --verdict build/residual-dc-screen-dev.json build/residual-dc-screen-confirm.json
 make verify && make controls
 ```
 
-## Declared before any model or corpus datum was read
+## Declared before any datum from THIS probe was read
 
 `python3 tools/probes/residual_dc.py --declared` prints every limit. They landed
-in the commit with the stubbed estimator. Frozen conditions: `dev` (2.4 s,
+in the commit with the stubbed estimator. The class limits were placed from the
+**prior** `dc_blocker.py --screen` beta values for these same voices (CH 0.97,
+RS 0.38, ...), so `dev` is not a fully clean test of them; `confirm` is. Frozen conditions: `dev` (2.4 s,
 gain 0.45, velocity 1.0) and `confirm` (4.8 s, gain 0.75, velocity 0.6). Confirm
 was **not** run; limits are not to be revisited after it is read. A class that
 differs between the two is reported as NO VERDICT, not tuned.
@@ -84,17 +92,31 @@ voice.** BD's -0.17 dB HF is a loss, not a gain.
   from rest predicts 11.66 dB, 6.63 dB away from the render (H_CH, predeclared
   tolerance 1.0 dB, NOT SUPPORTED).
 
-**Mechanism hypothesis (evidence: intervention on a surrogate, not hardware):**
-H_CH2 -- the shortfall is an integer quantiser. The surrogate re-blocks the
-pre-coupling buses with `DcBlockFx` at the declared widths and is **bit-exact**
-against the model's own A_COUPLE = 1 buses (asserted in a test, with a
-wrong-corner defeater). On that surrogate, removing the output stage's `>> 15`
-floor lifts the attenuation from 5.03 to 21.22 dB, and louder buses (x8, x64)
-give 15.35 and 21.21 dB. H_CH2 was formed **after** reading the dev row, so
-`confirm` is its only test. Its comparison changes the baseline too (the floor's
-bias leaves both sides), so 21.22 dB is not comparable to the 11.66 dB bound;
-what carries the inference is the 4x gap between the arithmetics. It says
-nothing about audibility: the residual is below 1 LSB.
+**Mechanism hypothesis (evidence: intervention on a surrogate, not hardware):
+H_CH2 is NO VERDICT on dev.** The hypothesis is that the shortfall is an integer
+quantiser. The surrogate re-blocks the pre-coupling buses with `DcBlockFx` at the
+declared widths and is **bit-exact** against the model's own A_COUPLE = 1 buses.
+A test asserts that, with a wrong-corner defeater. Removing the output stage's
+`>> 15` floor gives 21.22 dB of attenuation, and louder buses (x8, x64) give
+15.35 and 21.21 dB.
+
+Each variant changes its own baseline, so its attenuation can only be compared
+with the steady-state bound computed on **that variant's own baseline**. Those
+bounds are 11.58, 11.57 and 11.58 dB. Every variant **overshoots** its own bound
+by about 10 dB, and a causal one-pole does not beat its steady-state
+attenuation. So the variants are not like-for-like, and they support nothing.
+
+The first rule was one-sided and compared against the *production* bound
+(`float-out >= 11.66 - 1`). The #614 review found it read this exact row as
+SUPPORTED, which the paragraph that used to stand here had already called an
+invalid comparison. That rule was satisfied by the input that defeats it
+(rule 8). `test_h_ch2_defeater_a_variant_that_moves_its_own_baseline_is_not_support`
+now carries both defeating inputs, and was committed red (`red-h-ch2.txt`).
+
+The rule is now two-sided against the own bound (`reach_kind`, tolerance
+unchanged at 1.0 dB). **It was changed after the dev row was read**, so `confirm`
+is the first data it sees. The CH shortfall's mechanism is open; it is routed to
+#618. Nothing here bears on audibility: the residual is below 1 LSB.
 
 ## What recordings can establish, and what their coupling prevents
 
@@ -116,9 +138,11 @@ refusal until a verified reference exists.**
 
 ## Per-subject ending
 
+Typed from the dev rows here; once the batch runs, the ending is the `--verdict` output, not this table.
+
 | subject | ending |
 |---|---|
-| CH | dev: OFFSET-like but 0.00 % of peak: no defect established. **NO VERDICT** until `confirm` runs. Fidelity: capability REFUSED. |
+| CH | dev: OFFSET-like but 0.00 % of peak: no defect established. **NO VERDICT** until `confirm` runs. Shortfall mechanism: NO VERDICT (#618). Fidelity: capability REFUSED. |
 | RS | dev: SKIRT: no standing offset, nothing a DC blocker can remove. **NO VERDICT** until `confirm`. Fidelity: capability REFUSED. Brightness: #556. |
 | BD (control) | dev: MIXED, offset and skirt not separable. No defect established. |
 | HT (control) | dev: SKIRT. No defect established. |
@@ -126,7 +150,7 @@ refusal until a verified reference exists.**
 
 ## Wrong-then-right count
 
-Six, all caught by a control, guard or predeclared test, none by inspection:
+Seven. Six were caught by a control, guard or predeclared test; #7 was caught by review, not by inspection:
 
 1. 1 % envelope floor: a brick-wall at 20 Hz leaks 2.2 % of peak into a fixture's tail (offset fixture refused as "still sounding").
 2. The brick-wall extent also read a pulse's own sinc ringing as sounding; replaced by a time-domain tail-ring test.
@@ -134,6 +158,7 @@ Six, all caught by a control, guard or predeclared test, none by inspection:
 4. The inherited explanation of the shortfall (the filter's start-up tail, `dc_blocker.py`'s `steadystate_...` docstring) is not supported for CH by an independent float prediction (6.63 dB off).
 5. First surrogate (integer blocker on the *summed* bus) gave 20.86 dB against production's 5.03: its own fidelity guard refused it. Replaced by the bit-exact per-bus surrogate.
 6. My wrong-corner defeater ran on the CH's `dmix` bus, which is all zeros, so it was trivially exact. Moved to the body bus.
+7. H_CH2 read SUPPORTED on a one-sided comparison against the production bound. Against each variant's own bound, every variant overshoots by about 10 dB, so the reading is NO VERDICT. The Judge caught it (#614 review). The rule now ships with that defeating input.
 
 ## Class search (conditioning, window and DC assumptions)
 
@@ -149,12 +174,12 @@ a list of sites, not a finding. The whole-clip-mean form is the one
 `condition_meansub` was retired for. Recommended follow-up: one issue to audit
 the drum-facing ones (`drum_verify.py`, `discrimination_features.py`) for
 trailing-silence sensitivity using `p_pad_invariant` / `p_lead_silence_invariant`
-as the fixture pattern.
+as the fixture pattern. **Filed: #617.**
 
 Related, unowned as far as this search found: the output stage's `>> 15` floor
-leaves a sub-LSB bias that a pre-output blocker cannot remove (H_CH2, pending
-`confirm`). It is an arithmetic matter adjacent to #220/#350 but not inside
-either brief; not duplicated here.
+may leave a sub-LSB bias that a pre-output blocker cannot remove (H_CH2, pending
+`confirm`, and now NO VERDICT on dev). It is an arithmetic matter adjacent to #220/#350 but not inside
+either brief. **Filed: #618.**
 
 ## Registry
 
