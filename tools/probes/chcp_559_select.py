@@ -60,6 +60,28 @@ CONFIRMATION (CONFIRM only, after selection, no retuning): the selected
   relative to the shipped kit on the same conditions, the objective improves on
   >= 5 of the 6 accent-1 offsets, and (g1) holds on CONFIRM.
 
+AMENDMENT 1 -- CP-T, ADDED AFTER the CP-P/CP-X DEV results (which selected
+NOTHING: every decay gain failed (g1) on CENTROID, +0.4 to +2.6 bar) and
+BEFORE any CP-T point was rendered. Disclosed as post-hoc: its existence was
+prompted by DEV results, so CONFIRM is the only evidence for it that was not
+looked at. Measured before writing it: tanh does NOT darken our tail (the
+band-pass tap's centroid is 1878 Hz linear, 1889 Hz after tanh; the take's
+tail reads ~1220 Hz) -- the "distortion makes the tail bright" reading is
+REFUTED, and a RAW (all-pole) mode on noise at 1.0-1.3 kHz, Q 0.7, has the
+take's tail centroid (1085-1300 Hz).
+  CP-T  EXPERIMENT (needs one more path AND one more mode: a block change).
+        The bursts keep P_CPOUT (tanh, E_CPBURST alone); the TAIL gets its own
+        path: noise -> RAW mode CPT_F_HZ, Q CPT_Q -> LIN x E_CPTAIL -> mix.
+        Prototyped EXACTLY in the real block for a CP-solo render by borrowing
+        the RS circuit's idle slots (P_RS1X, P_RS1OUT, M_RS1); `check-cpt`
+        asserts bit-identity of the fast path against that real-block render.
+        Grid: CPT_F_HZ x CPT_TAU_MS x CPT_DB, where CPT_DB is the tail's RMS at
+        its fire re the SHIPPED tail's (0.22 x rms(tanh tap)).
+        Same selection rule, objective and confirmation as the others.
+  Prediction: decay improves AND centroid no longer regresses (the take's
+        tail is dark); attack is not repaired by the tail (it lives in
+        1.5-4 kHz in the first 30 ms).
+
 PREDICTIONS (stated before the sweep, from the diagnosis above, not from DEV
 grid numbers):
   CH-1  flatness falls monotonically from Q 2.5 to about Q 0.7 and flattens
@@ -88,6 +110,11 @@ CP_TAU_MS = (80, 120, 160, 200, 250, 315, 400)
 CP_PEAK_DB = (0.0, -4.0, -8.0, -12.0, -16.0)
 CPX_TAU_MS = (250, 315, 400)
 CPX_DB = (-12.0, -17.0, -22.0)
+CPT_F_HZ = (1000.0, 1300.0)
+CPT_Q = 0.7
+CPT_EXC_ATT = 2
+CPT_TAU_MS = (80, 120, 160, 250, 315)
+CPT_DB = (0.0, -6.0, -12.0)
 REGRESS_BAR = 0.25
 TIE_REL = 0.05
 CONFIRM_REL = 0.25
@@ -149,6 +176,9 @@ def eval_cp(y, refs, ref12) -> dict:
 
 def cp_render(cand: dict, hit: int, accent: float) -> np.ndarray:
     dx = c._dx()
+    if cand["family"] == "T":
+        peak = c.cpt_peak_for_db(cand["f_hz"], CPT_Q, CPT_EXC_ATT, cand["db"])
+        return c.cpt_fast(cand["f_hz"], CPT_Q, CPT_EXC_ATT, peak, cand["tau_ms"] * 1e-3, hit, accent)
     if cand["family"] == "X":
         n = hit - c.BASE_HIT + int(2.2 * dx.SR)
         ex = cpx_extra(cand["tau_ms"], cand["db"], hit, accent, n)
@@ -190,6 +220,8 @@ def d12a_counts(rows: list) -> dict:
 def _label(cand: dict) -> str:
     if cand.get("family") == "X":
         return f"X slow{cand['tau_ms']}ms@{cand['db']:+.0f}dB"
+    if cand.get("family") == "T":
+        return f"T dark{cand['f_hz']:.0f}Hz tail{cand['tau_ms']}ms@{cand['db']:+.0f}dB"
     if "tau_ms" in cand:
         return f"P tail{cand['tau_ms']}ms@{cand['peak_db']:+.0f}dB"
     return f"CH hpQ{cand['hpq']} bpQ{cand['bpq']}"
@@ -204,12 +236,18 @@ def _summ(sound, base_rows, rows, cand) -> dict:
     return s
 
 
-def cp_sweep(refs) -> dict:
+def cp_sweep(refs, families: str = "PX") -> dict:
     dx = c._dx()
     ref12 = _d12a_ref(refs)
     conds = c.conditions("dev")
-    cands = [{"family": "P", "tau_ms": t, "peak_db": p} for t in CP_TAU_MS for p in CP_PEAK_DB]
-    cands += [{"family": "X", "tau_ms": t, "db": d} for t in CPX_TAU_MS for d in CPX_DB]
+    cands = []
+    if "P" in families:
+        cands += [{"family": "P", "tau_ms": t, "peak_db": p} for t in CP_TAU_MS for p in CP_PEAK_DB]
+    if "X" in families:
+        cands += [{"family": "X", "tau_ms": t, "db": d} for t in CPX_TAU_MS for d in CPX_DB]
+    if "T" in families:
+        cands += [{"family": "T", "f_hz": f, "tau_ms": t, "db": d}
+                  for f in CPT_F_HZ for t in CPT_TAU_MS for d in CPT_DB]
     base = {"family": "P", "tau_ms": SHIPPED["CP_TAU_MS"], "peak_db": SHIPPED["CP_PEAK_DB"]}
     base_rows = [eval_cp(cp_render(base, h, a), refs, ref12) for h, a in conds]
     b = _summ("CP", base_rows, base_rows, base)
@@ -242,8 +280,8 @@ def cp_sweep(refs) -> dict:
 def _change_size(cand: dict) -> float:
     if "tau_ms" in cand and cand.get("family") == "P":
         return abs(math.log(cand["tau_ms"] / SHIPPED["CP_TAU_MS"])) + abs(cand["peak_db"]) / 20
-    if cand.get("family") == "X":
-        return 99.0 + abs(math.log(cand["tau_ms"] / 315))
+    if cand.get("family") in ("X", "T"):
+        return 99.0 + abs(math.log(cand["tau_ms"] / SHIPPED["CP_TAU_MS"])) + abs(cand["db"]) / 20
     return abs(math.log(cand["hpq"] / SHIPPED["CH_HPQ"])) + abs(math.log(cand["bpq"] / SHIPPED["CH_BPQ"]))
 
 
@@ -253,7 +291,7 @@ def choose(cands: list, base: dict):
         return None
     best = min(s["objective"] for s in ok)
     tied = [s for s in ok if s["objective"] <= best * (1 + TIE_REL)]
-    tied.sort(key=lambda s: (s["cand"].get("family") == "X", _change_size(s["cand"])))
+    tied.sort(key=lambda s: (s["cand"].get("family") in ("X", "T"), _change_size(s["cand"])))
     return {"label": tied[0]["label"], "cand": tied[0]["cand"], "objective": tied[0]["objective"],
             "best_objective_any": best, "tied": [s["label"] for s in tied]}
 
@@ -320,9 +358,15 @@ def confirm(sound: str, cand: dict, refs) -> dict:
     better = sum(1 for i in range(n1) if one(cr[i]) < one(br[i]))
     ob, oc = objective(sound, br), objective(sound, cr)
     reg = regressions(br, cr)
+    # ADDED AFTER THE FREEZE, before any CONFIRM render, as disclosure only
+    # (rule 8: a median over conditions is the aggregate that would hide one
+    # condition's regression). Reported per condition; it can only expose.
+    per_cond_reg = [{"cond": list(k), "regressions": regressions([br[i]], [cr[i]])}
+                    for i, k in enumerate(conds) if regressions([br[i]], [cr[i]])]
     ok = (oc <= ob * (1 - CONFIRM_REL)) and better >= n1 - 1 and not reg
     res = {"candidate": _label(cand), "objective_shipped": ob, "objective_candidate": oc,
            "relative_change": oc / ob - 1, "better_on": f"{better}/{n1}", "regressions": reg,
+           "per_condition_regressions_DISCLOSURE": per_cond_reg,
            "median_ratios_shipped": _median_ratios(br), "median_ratios_candidate": _median_ratios(cr),
            "per_condition": [{"cond": list(k), "shipped": br[i]["ratios"], "candidate": cr[i]["ratios"]}
                              for i, k in enumerate(conds)],
@@ -334,14 +378,55 @@ def confirm(sound: str, cand: dict, refs) -> dict:
                                      for i, k in enumerate(conds)]
     print(f"CONFIRM {sound} {_label(cand)}: objective {ob:.2f} -> {oc:.2f} ({oc / ob - 1:+.0%}), better on "
           f"{better}/{n1}, regressions {reg or 'none'} -> {'CONFIRMED' if ok else 'NOT CONFIRMED'}", flush=True)
+    for pc in per_cond_reg:
+        print(f"   per-condition regression (disclosure) at {pc['cond']}: {pc['regressions']}", flush=True)
     print(f"   shipped   {_fmtm(res['median_ratios_shipped'])}", flush=True)
     print(f"   candidate {_fmtm(res['median_ratios_candidate'])}", flush=True)
     return res
 
 
+def sensitivity_tables(ch: dict, cp: dict) -> str:
+    """The DEV sweeps as `tools/sensitivity.py` fixed-width tables: one dial per
+    table, the others held at the values the header names. Objectives are the
+    selection objectives (median over DEV of the ratio to the WEAK bar)."""
+    chr_, cpr = ch["result"], cp["result"]
+    sel_hpq = chr_["selected_stage1"]["cand"]["hpq"] if chr_.get("selected_stage1") else SHIPPED["CH_HPQ"]
+    L = ["Issue #559 DEV sweeps -- written by `python3 tools/probes/chcp_559.py tables`.",
+         f"provenance: CH sweep commit {ch.get('commit', '?')[:12]} model {ch.get('model_sha16')}; "
+         f"CP sweep commit {cp.get('commit', '?')[:12]} model {cp.get('model_sha16')}",
+         "Grids, rules and predictions: tools/probes/chcp_559_select.py docstring (committed before the sweep).",
+         "Objective: median over the 5 DEV conditions of the ratio to the #379 WEAK bar (lower is better).", ""]
+    L += ["ch_hp_q -- CH flatness ratio against the CH high-pass Q x10 (f0 11.7 kHz, hat band-pass Q 6)",
+          "CH_HP_Q_X10 flatness_ratio worst_median"]
+    for s in sorted(chr_["stage1"], key=lambda s: s["cand"]["hpq"]):
+        L.append(f"{round(s['cand']['hpq'] * 10)} {s['objective']:.3f} {max(s['median_ratios'].values()):.3f}")
+    L += ["", f"ch_bp_q -- CH flatness ratio against the hats' 7.1 kHz band-pass Q x10 (CH high-pass Q {sel_hpq})",
+          "HAT_BP_Q_X10 flatness_ratio worst_median"]
+    for s in sorted(chr_["stage2"], key=lambda s: s["cand"]["bpq"]):
+        L.append(f"{round(s['cand']['bpq'] * 10)} {s['objective']:.3f} {max(s['median_ratios'].values()):.3f}")
+    sel = cpr.get("selected") or {"cand": {"family": "P", "tau_ms": SHIPPED["CP_TAU_MS"],
+                                            "peak_db": SHIPPED["CP_PEAK_DB"]}}
+    pk = sel["cand"].get("peak_db", SHIPPED["CP_PEAK_DB"])
+    tau = sel["cand"].get("tau_ms", SHIPPED["CP_TAU_MS"])
+    P = [s for s in cpr["candidates"] if s["cand"]["family"] == "P"]
+    L += ["", f"cp_tail_tau -- CP max(decay, attack) ratio against the tail tau in ms (tail peak {pk:+.0f} dB re 0.22)",
+          "CP_TAIL_TAU_MS objective_ratio decay_ratio attack_ratio"]
+    for s in sorted((s for s in P if s["cand"]["peak_db"] == pk), key=lambda s: s["cand"]["tau_ms"]):
+        m = s["median_ratios"]
+        L.append(f"{s['cand']['tau_ms']} {s['objective']:.3f} {m['decay']:.3f} {m['attack']:.3f}")
+    L += ["", f"cp_tail_peak -- CP max(decay, attack) ratio against the tail peak in dB re 0.22 (tail tau {tau} ms)",
+          "CP_TAIL_PEAK_DB objective_ratio decay_ratio attack_ratio"]
+    for s in sorted((s for s in P if s["cand"]["tau_ms"] == tau), key=lambda s: s["cand"]["peak_db"]):
+        m = s["median_ratios"]
+        L.append(f"{round(s['cand']['peak_db'])} {s['objective']:.3f} {m['decay']:.3f} {m['attack']:.3f}")
+    return "\n".join(L) + "\n"
+
+
 def run(cmd: str, refs, cand: dict | None = None) -> dict:
     if cmd == "cp-sweep":
         return cp_sweep(refs)
+    if cmd == "cpt-sweep":
+        return cp_sweep(refs, "T")
     if cmd == "ch-sweep":
         return ch_sweep(refs)
     raise ValueError(cmd)

@@ -67,6 +67,11 @@ sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "model")]
 import perceptual_gate as pg  # noqa: E402
 
 CACHE = ROOT / "build" / "probes" / "chcp559"
+#: One recording covers every DEV and CONFIRM strike plus a 2.2 s render
+#: (30167 - 480 + 105600 = 135287 frames). A recorded sequence is generated
+#: from reset frame by frame and depends on no hit, so a shorter render's is an
+#: exact PREFIX of it; check-fast / check-cpt assert the result bit for bit.
+N_REC = 136000
 
 # ---------------------------------------------------------------------------
 # the references, pinned
@@ -200,10 +205,13 @@ def cp_snl(n: int) -> np.ndarray:
     """tanh(band-passed noise tap) per frame, from the real block with the CP
     circuit loaded and no hit. Cached by model hash and length."""
     dx = _dx()
+    if n > N_REC:
+        raise Refused(f"a {n}-frame render is longer than the {N_REC}-frame recording")
     CACHE.mkdir(parents=True, exist_ok=True)
-    p = CACHE / f"cp_snl_{model_sha()}_{n}.npy"
+    p = CACHE / f"cp_snl_{model_sha()}_{N_REC}.npy"
     if p.exists():
-        return np.load(p)
+        return np.load(p)[:n]
+    n_req, n = n, N_REC
     rec = []
 
     class Rec(dx.DrumsFx):
@@ -219,7 +227,7 @@ def cp_snl(n: int) -> np.ndarray:
         raise Refused(f"expected exactly one NL_TANH path per frame (the clap's), got {len(rec)} in {n}")
     s = np.asarray(rec, dtype=np.int64)
     np.save(p, s)
-    return s
+    return s[:n_req]
 
 
 def env_trace(kit: list, e: int, stop: int, hit: int, accent: float, n: int) -> np.ndarray:
@@ -274,6 +282,95 @@ def cp_kit(tail_tau=None, tail_peak=None, final_tau=None, kit=None) -> list:
                                   period=dx.CP_PERIOD, final_tau=final_tau):
             img[a] = v
     return sorted(img.items())
+
+
+# ---- CP-T: a separately filtered tail (EXPERIMENT: needs a block change) ----
+def cpt_kit(f_hz: float, q: float, exc_att: int, tail_peak: float, tail_tau_s: float) -> list:
+    """A CP-SOLO prototype image of the separately filtered tail. It BORROWS
+    the RS circuit's idle slots (P_RS1X, P_RS1OUT, M_RS1 -- RAW, index 14 >=
+    NUMS), so it is only valid while RS/CL is not struck: the shipped block has
+    no spare path or mode (N_PATH 23 and N_MODES 16 are full). The bursts keep
+    P_CPOUT alone; the tail is noise -> RAW mode -> LIN x E_CPTAIL -> mix."""
+    dx = _dx()
+    img = dict(dx.kit_with_sounds("CP"))
+    img[dx.A_PATH + dx.P_CPOUT] = dx.path_word(dx.SRC_TAP + dx.M_CPBP, dx.E_CPBURST, nl=dx.NL_TANH,
+                                               dest=dx.DEST_MIX)
+    for a, v in dx.mode_writes(dx.M_RS1, f_hz, q, 0.0, dx.RAW):
+        img[a] = v
+    img[dx.A_PATH + dx.P_RS1X] = dx.path_word(dx.SRC_NOISE, dx.ENV_FULL, att=exc_att, dest=dx.M_RS1)
+    img[dx.A_PATH + dx.P_RS1OUT] = dx.path_word(dx.SRC_TAP + dx.M_RS1, dx.E_CPTAIL, nl=dx.NL_LIN,
+                                                dest=dx.DEST_MIX)
+    if not 0 < tail_peak <= 1.0:
+        raise Refused(f"CP-T tail peak {tail_peak:.3f} is outside the envelope's full scale")
+    for a, v in dx.env_writes(dx.E_CPTAIL, dx.CP, tail_tau_s, tail_peak):
+        img[a] = v
+    return sorted(img.items())
+
+
+def cpt_tail_tap(f_hz: float, q: float, exc_att: int, n: int) -> np.ndarray:
+    """The CP-T tail path's nonlinearity output per frame (LIN: the RAW mode's
+    tap), from the real block with no hit. Independent of every envelope."""
+    dx = _dx()
+    if n > N_REC:
+        raise Refused(f"a {n}-frame render is longer than the {N_REC}-frame recording")
+    CACHE.mkdir(parents=True, exist_ok=True)
+    p = CACHE / f"cpt_tap_{model_sha()}_{f_hz:.0f}_{q}_{exc_att}_{N_REC}.npy"
+    if p.exists():
+        return np.load(p)[:n]
+    n_req, n = n, N_REC
+    rec = []
+
+    class Rec(dx.DrumsFx):
+        def frame(self):
+            self._calls = []
+            r = super().frame()
+            if len(self._calls) != dx.N_PATH:
+                raise Refused(f"expected one nonlinearity call per path, got {len(self._calls)}")
+            rec.append(self._calls[dx.P_RS1OUT])
+            return r
+
+        def _nonlinear(self, x, nl):
+            y = super()._nonlinear(x, nl)
+            self._calls.append(y)
+            return y
+
+    Rec().play([(0, a, v) for a, v in cpt_kit(f_hz, q, exc_att, 0.5, 0.08)], n)
+    s = np.asarray(rec, dtype=np.int64)
+    np.save(p, s)
+    return s[:n_req]
+
+
+def cpt_fast(f_hz, q, exc_att, tail_peak, tail_tau_s, hit, accent=1.0, seconds=2.2) -> np.ndarray:
+    dx = _dx()
+    n = hit - BASE_HIT + int(seconds * dx.SR)
+    kit = cpt_kit(f_hz, q, exc_att, tail_peak, tail_tau_s)
+    sb, st = cp_snl(n), cpt_tail_tap(f_hz, q, exc_att, n)
+    eb = env_trace(kit, dx.E_CPBURST, dx.CP, hit, accent, n)
+    et = env_trace(kit, dx.E_CPTAIL, dx.CP, hit, accent, n)
+    dmix = ((sb * eb) >> 15) + ((st * et) >> 15)
+    g = dx.accent_reg(0.45)
+    out = dx.output_fx(np.zeros(n), 0, dmix, g, np.zeros(n, dtype=np.int64), g)
+    return np.asarray(out, dtype=np.float64)[hit - BASE_HIT:] / 32768.0
+
+
+def cpt_peak_for_db(f_hz, q, exc_att, db, n=N_REC) -> float:
+    """The tail envelope peak that puts the CP-T tail's RMS at its fire `db`
+    re the SHIPPED tail's (0.22 x rms of the tanh tap)."""
+    sb, st = cp_snl(n), cpt_tail_tap(f_hz, q, exc_att, n)
+    return 0.22 * float(np.std(sb)) / float(np.std(st)) * 10 ** (db / 20)
+
+
+def check_cpt(f_hz=1300.0, q=0.7, exc_att=2) -> dict:
+    """REFUSE unless the CP-T fast path is the real block on the borrowed-slot image."""
+    peak = cpt_peak_for_db(f_hz, q, exc_att, -6.0)
+    hit = BASE_HIT + DEV_OFFSETS[1]
+    full = render_block("CP", cpt_kit(f_hz, q, exc_att, peak, 0.160), hit, 1.0)
+    fast = cpt_fast(f_hz, q, exc_att, peak, 0.160, hit, 1.0)
+    nd = int(np.sum(full != fast))
+    print(f"check-cpt {f_hz:.0f} Hz Q{q} att{exc_att} peak {peak:.3f}: {nd} of {len(full)} samples differ", flush=True)
+    if nd:
+        raise Refused(f"CP-T fast path differs from the real block ({nd} samples)")
+    return {"f_hz": f_hz, "q": q, "exc_att": exc_att, "peak": peak, "samples": len(full), "differing": nd}
 
 
 def check_fast() -> dict:
@@ -385,7 +482,7 @@ def cmd_baseline(refs, out):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("cmd", choices=("refs", "baseline", "check-fast", "cp-tail", "cp-sweep", "ch-sweep", "confirm"))
+    ap.add_argument("cmd", choices=("refs", "baseline", "check-fast", "check-cpt", "cp-tail", "cp-sweep", "cpt-sweep", "ch-sweep", "confirm", "tables"))
     ap.add_argument("--refs", type=pathlib.Path, default=None)
     ap.add_argument("--sweep", type=pathlib.Path, default=None, help="confirm: the sweep JSON whose selection to confirm")
     ap.add_argument("--sound", choices=("CH", "CP"), default=None)
@@ -400,6 +497,17 @@ def main(argv=None) -> int:
             res = cmd_baseline(refs, a.out)
         elif a.cmd == "check-fast":
             res = check_fast()
+        elif a.cmd == "check-cpt":
+            res = check_cpt()
+        elif a.cmd == "tables":
+            import chcp_559_select as sel
+            ch = json.loads((ROOT / "docs/scorecard/chcp-559/ch-sweep-dev.json").read_text())
+            cp = json.loads((ROOT / "docs/scorecard/chcp-559/cp-sweep-dev.json").read_text())
+            txt = sel.sensitivity_tables(ch, cp)
+            outp = ROOT / "docs/sensitivity/chcp559-sweeps.txt"
+            outp.write_text(txt)
+            print(txt)
+            res = {"written": str(outp.relative_to(ROOT))}
         elif a.cmd == "cp-tail":
             ka = known_answer_tail()
             print("known answer:", ka, flush=True)
@@ -423,7 +531,9 @@ def main(argv=None) -> int:
         else:
             import chcp_559_select as sel
             if a.cmd == "cp-sweep":
-                res0 = check_fast()           # the fast path is the block, on THIS model, or no sweep
+                check_fast()                  # the fast path is the block, on THIS model, or no sweep
+            if a.cmd == "cpt-sweep":
+                check_cpt()
             res = sel.run(a.cmd, refs)
     except Refused as e:
         print(f"REFUSED: {e}", flush=True)
