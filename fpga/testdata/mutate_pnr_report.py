@@ -9,7 +9,7 @@ import subprocess, sys
 from pathlib import Path
 WT = Path(__file__).resolve().parents[2]
 PY = sys.argv[sys.argv.index("--python") + 1] if "--python" in sys.argv else sys.executable
- SRC = WT / "fpga/scripts/pnr_report.py"
+SRC = WT / "fpga/scripts/pnr_report.py"
 ORIG = SRC.read_text()
 UNLINK = '''    for name in (*TARGETS[a.target]["stale"], log_p.name, st_p.name, console.name,
                  f"{a.target}_refused.txt", f"{a.target}_nofit.txt"):
@@ -32,6 +32,7 @@ M = {
  "non-zero rc treated as no-fit": [("return Verdict(REFUSED, why + [f\"nextpnr exited {rc} without", "return Verdict(NOFIT, why + [f\"nextpnr exited {rc} without")],
  "new: render Fmax on unrouted reports": [("if mf and verdict.state != ROUTED:", "if False:")],
 }
+bad = []
 try:
     for name, subs in M.items():
         s = ORIG
@@ -43,5 +44,10 @@ try:
                             str(WT / "fpga/test_pnr_report.py")], capture_output=True, text=True, cwd=WT)
         fails = [l.split(" - ")[0] for l in r.stdout.splitlines() if l.startswith("FAILED")]
         print(f"{'KILLED ' if r.returncode else 'SURVIVED'} {name}" + (f"  <- {fails[0]}" if fails else ""))
+        if r.returncode == 0 and not name.startswith("J-equivalent"):
+            bad.append(name)
 finally:
     SRC.write_text(ORIG)
+if bad:
+    print("UNEXPECTED SURVIVORS: " + "; ".join(bad))
+sys.exit(1 if bad else 0)
