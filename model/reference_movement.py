@@ -242,6 +242,15 @@ RATES_S = (0.4, 1.6, 4.0)   # slow enough that the step rate lands under LP_HZ
 
 
 # Expected "this device cannot be built here" failures.
+#
+# Known adversary (docs/verification-rules.md rule 8), accepted deliberately:
+# an ImportError from OUR code inside _build (e.g. `from x import renamed`
+# after a refactor) is still classed status="unavailable" / "NOT AVAILABLE",
+# indistinguishable by status from a plugin that is not installed. The
+# mitigation is `error_type` and `why` ("ImportError: cannot import name ...")
+# on the row and in the printed line; a missing plugin shows up as
+# FileNotFoundError or ModuleNotFoundError. Pinned by
+# test_an_import_error_from_our_own_code_is_still_unavailable_known_gap.
 _UNAVAILABLE = (ImportError, FileNotFoundError, NotImplementedError)
 
 

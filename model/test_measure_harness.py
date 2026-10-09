@@ -366,3 +366,22 @@ def test_an_unreadable_file_keeps_its_exception_type(tmp_path):
     r = _one(tmp_path, OSError("truncated file"))
     assert r["status"] == "unreadable" and r["error_type"] == "OSError"
     assert "truncated file" in r["why"]
+
+
+def test_a_reader_bug_raising_valueerror_is_still_unreadable_known_gap(tmp_path):
+    """Rule 8: the input that defeats `_DATA_ERRORS`, pinned as an accepted limit.
+
+    A BUG in the reader that raises ValueError (here a shape mismatch) is
+    indistinguishable by `status` from a bad file: both are "unreadable". The
+    mitigation is `error_type`/`why`, which a reader of the rows uses to tell
+    them apart. If this test starts failing because the classification was
+    narrowed, that is an improvement: update it and the comment on
+    `_DATA_ERRORS`."""
+    (tmp_path / "bug").mkdir()
+    (tmp_path / "bad").mkdir()
+    bug = _one(tmp_path / "bug", ValueError("could not broadcast input array "
+                                             "from shape (3,) into shape (2,)"))
+    bad = _one(tmp_path / "bad", OSError("Error opening 'a.wav': truncated"))
+    assert bug["status"] == bad["status"] == "unreadable"   # the known gap
+    assert bug["error_type"] == "ValueError" and bad["error_type"] == "OSError"
+    assert bug["why"].startswith("ValueError:")              # the mitigation

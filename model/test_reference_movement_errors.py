@@ -28,3 +28,20 @@ def test_a_build_bug_is_not_reported_as_unavailable(monkeypatch, capsys):
     rows, out = _run(monkeypatch, KeyError("param 265"), capsys)
     assert rows[0]["status"] == "error" and rows[0]["error_type"] == "KeyError"
     assert "NOT AVAILABLE" not in out and "KeyError" in out
+
+
+def test_an_import_error_from_our_own_code_is_still_unavailable_known_gap(monkeypatch, capsys):
+    """Rule 8: the input that defeats `_UNAVAILABLE`, pinned as an accepted limit.
+
+    An ImportError from a refactor in OUR code is still reported as
+    unavailable / "NOT AVAILABLE", the same status as a plugin that is not
+    installed. The mitigation is that `error_type` and `why` carry the type
+    and message, in the row and in the printed line. If this starts failing
+    because the classification was narrowed, update it and the comment on
+    `_UNAVAILABLE`."""
+    rows, out = _run(monkeypatch,
+                     ImportError("cannot import name 'renamed_name' from 'am'"), capsys)
+    assert rows[0]["status"] == "unavailable"                 # the known gap
+    assert rows[0]["error_type"] == "ImportError"             # the mitigation
+    assert "ImportError: cannot import name 'renamed_name'" in rows[0]["why"]
+    assert "ImportError: cannot import name 'renamed_name'" in out

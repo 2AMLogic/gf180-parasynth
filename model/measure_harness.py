@@ -221,6 +221,15 @@ def _default_read_candidate(path: pathlib.Path) -> tuple[np.ndarray, int]:
 
 # Exceptions that mean "this file's data cannot be read" (soundfile's
 # LibsndfileError is a RuntimeError). Everything else from a reader is a bug.
+#
+# Known adversary (docs/verification-rules.md rule 8), accepted deliberately:
+# a BUG in the reader that raises ValueError (a shape mismatch in np.asarray,
+# int() on a bad string) or RuntimeError (RecursionError included) is still
+# classed status="unreadable". The type is not narrowed because a pluggable
+# `read_candidate` may legitimately signal bad data with either. The
+# mitigation is `error_type`, recorded on every row: a reader tells
+# "unreadable/ValueError" from "unreadable/OSError" by it. Pinned by
+# test_a_reader_bug_raising_valueerror_is_still_unreadable_known_gap.
 _DATA_ERRORS = (OSError, EOFError, ValueError, RuntimeError)
 
 
