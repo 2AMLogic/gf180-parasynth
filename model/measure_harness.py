@@ -219,6 +219,11 @@ def _default_read_candidate(path: pathlib.Path) -> tuple[np.ndarray, int]:
     return np.asarray(x, dtype=np.float64), int(sr)
 
 
+# Exceptions that mean "this file's data cannot be read" (soundfile's
+# LibsndfileError is a RuntimeError). Everything else from a reader is a bug.
+_DATA_ERRORS = (OSError, EOFError, ValueError, RuntimeError)
+
+
 def descent_test(candidates: pathlib.Path,
                  classify: Callable[[pathlib.Path], dict | None],
                  read_ref: Callable[[pathlib.Path], tuple[np.ndarray, int]],
@@ -288,8 +293,19 @@ def descent_test(candidates: pathlib.Path,
             continue
         try:
             x, sr = read_candidate(path)
+        except _DATA_ERRORS as e:
+            # The FILE is bad (truncated, wrong format): unavailable data.
+            out.append(dict(info, file=path.name, status="unreadable",
+                            error_type=type(e).__name__,
+                            why=f"{type(e).__name__}: {e}"))
+            continue
         except Exception as e:  # noqa: BLE001 -- report, do not crash the sweep
-            out.append(dict(info, file=path.name, status="unreadable", why=str(e)))
+            # Anything else (TypeError, NameError, KeyError...) is a bug in the
+            # reader, not a property of the file; it must not read as
+            # "unreadable file" (#610).
+            out.append(dict(info, file=path.name, status="error",
+                            error_type=type(e).__name__,
+                            why=f"{type(e).__name__}: {e}"))
             continue
 
         val = None

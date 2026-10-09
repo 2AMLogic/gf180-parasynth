@@ -48,9 +48,17 @@ def test_a_model_result_replaces_a_model_result(tmp_path):
     assert rc.result_destination(dest, _record("fixed-model")) == dest
 
 
-def test_an_unreadable_record_is_not_treated_as_an_anchor(tmp_path):
-    """A corrupt file must not become an unremovable block on re-measuring a
-    case: `tools/scorecard.py` already reports it as a no-verdict."""
+def test_a_model_result_does_not_overwrite_a_corrupt_record(tmp_path):
+    """#610: a damaged file may be an anchor; fall-back-to-dest overwrote it."""
+    import pytest
     dest = tmp_path / "E1A.json"
     dest.write_text("{not json")
-    assert rc.result_destination(dest, _record("fixed-model")) == dest
+    with pytest.raises(rc.Refused, match="unreadable"):
+        rc.result_destination(dest, _record("fixed-model"))
+    assert dest.read_text() == "{not json"
+
+
+def test_an_anchor_may_repair_a_corrupt_record(tmp_path):
+    dest = tmp_path / "E1A.json"
+    dest.write_text("{not json")
+    assert rc.result_destination(dest, _record("integrated-rtl")) == dest

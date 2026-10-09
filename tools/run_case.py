@@ -3436,8 +3436,15 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
         return dest
     try:
         held = json.loads(dest.read_text())
-    except (OSError, ValueError):
-        return dest
+    except (OSError, ValueError) as e:
+        # Unreadable is not "not an anchor": it may BE an anchor (a 25-minute
+        # RTL run) that is merely damaged, and the caller is about to write.
+        # An integrated-rtl result may repair it; a model result must not (#610).
+        if res.get("engine") == "integrated-rtl":
+            return dest
+        raise Refused(f"{dest} is present but unreadable ({type(e).__name__}: {e}); "
+                      f"it may be an integrated-rtl anchor, so a {res.get('engine')} "
+                      f"result will not overwrite it. Restore it from git.")
     if held.get("engine") != "integrated-rtl":
         return dest
     twin = dest.parent / MODEL_TWIN_DIR / dest.name

@@ -341,3 +341,28 @@ def test_assert_precondition_control_refuses_a_nan_difference(measured, referenc
     `assert_precondition` fails every case here."""
     with pytest.raises(SystemExit, match="REFUSED"):
         mh.assert_precondition(measured, reference, tol=1e300, what="test")
+
+
+def _one(tmp_path, exc):
+    def classify(path):
+        return dict(voice="X", refs=["placeholder"])
+
+    def read_candidate(path):
+        raise exc
+
+    return mh.descent_test(_make_candidate_files(tmp_path, ["a.wav"]), classify,
+                           lambda p: (np.zeros(4), 48000), _prepare_noop,
+                           read_candidate=read_candidate)[0]
+
+
+def test_a_reader_bug_is_not_reported_as_an_unreadable_file(tmp_path):
+    """#610 start-red: a TypeError in the reader read as status=unreadable."""
+    r = _one(tmp_path, TypeError("read_candidate() got an unexpected argument"))
+    assert r["status"] == "error" and r["error_type"] == "TypeError"
+    assert "TypeError" in r["why"]
+
+
+def test_an_unreadable_file_keeps_its_exception_type(tmp_path):
+    r = _one(tmp_path, OSError("truncated file"))
+    assert r["status"] == "unreadable" and r["error_type"] == "OSError"
+    assert "truncated file" in r["why"]
