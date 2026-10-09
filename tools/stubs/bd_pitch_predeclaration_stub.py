@@ -36,7 +36,7 @@ def primary_aggregate(rec, readings):
             "verdict": "EVALUATED"}
 
 
-def satisfiable(rec, baseline):
+def satisfiable(rec, baseline, readings=None):
     return {"satisfiable": True}
 
 

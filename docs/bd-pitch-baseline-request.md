@@ -99,9 +99,19 @@ candidate existed and before the real-recording baseline ran. It holds:
 - **Minimum improvement.** The formula is
   `2 * max(13.9, 8.5, 12) + recording_glide_spread_cents`. The three floors
   are quoted from this document, and the checker verifies the quotes. The
-  spread is read from the baseline JSON when the rule is used. If that sum
-  exceeds the present deficit, `min-improvement` REFUSES. The rule is not
-  loosened in that case.
+  spread is read from the baseline JSON when the rule is used. Every baseline
+  value must be a finite real number (not a bool or a string), the spread
+  must not be negative, and the evaluated threshold must be finite and above
+  zero. Anything else REFUSES with exit 2.
+- **Satisfiability.** This is judged on the statistic that acceptance uses:
+  the shipped median |d| over the measured untouched Fischer set, with the
+  same exclusions, floor and holdout as `primary_aggregate`. The two share
+  `_measured_set`. The test is satisfiable iff shipped median >= threshold,
+  and equality counts because the pass rule is `>=`. If it fails,
+  `min-improvement --readings` REFUSES, and the rule is not loosened. The
+  baseline's `glide_deficit_cents` is one development take (BD5050). It is
+  reported as a diagnostic and decides nothing. Without untouched readings,
+  `min-improvement` REFUSES to claim satisfiability either way.
 - **Preservation.** Each limit names a probe or test in the repository: decay,
   level, attack, click, tail/DC, the other 15 voices (bit-exact) and settled
   pitch.
@@ -121,9 +131,15 @@ Stated limits of the split:
 Start red: before the record existed, the suite gave 25 errors, 1 failure
 and 1 pass. Against `tools/stubs/bd_pitch_predeclaration_stub.py`, which
 accepts everything and folds a refusal into the median as 0 cents, it gives
-44 failures and 3 passes. The 3 passes are record-content assertions that a
-permissive validator cannot fail. Real validator: 47 pass. The refused-reading
-tests were first run against the record without the rule: 19 failed. Each injected control is caught for its own reason:
+72 failures and 10 passes. Three of the passes are record-content assertions
+that a permissive validator cannot fail. The other 7 test
+`tools/bd_glide_phase_sweep.py`, which the stub does not replace. Each of that
+tool's guards was removed in turn in a scratch copy, and each removal turned
+its control red (`tools/bd_pitch_predeclaration_mutants.py`). Real validator:
+82 pass. The refused-reading tests were first run against the record without
+the rule: 19 failed. The third review's satisfiability and input-validation
+controls were written first and run against the unfixed validator: 23 of 23
+failed. Each injected control is caught for its own reason:
 overlap, an axis not held out, a missing probe file or symbol, a dropped
 property, a bare constant (number, string, or a formula with no terms), a
 rule without the baseline spread, a floor not found in its cited document,
@@ -131,7 +147,17 @@ off-vocabulary conditions, a MARS name not matching `CUR_RE`, and a registry
 claim without a parameter, a removed refused-reading rule, an unsatisfiable
 or malformed measured-condition minimum, a too-few outcome that does not
 refuse, and a refusal read as a 0-cent reading or as a 0-cent error (both
-move the known-answer medians).
+move the known-answer medians). The list continues with the following:
+- a measured-condition floor below its derivation;
+- a lost TONE holdout and a lost DECAY holdout;
+- a finite reading at an unqualified knob;
+- the coarse-grid worst case;
+- each of the Judge's four malformed baselines (negative spread, infinite
+  deficit, bool spread, string deficit);
+- missing or malformed baseline fields;
+- a non-positive threshold;
+- a one-take deficit that decides satisfiability, in both directions;
+- a strict `>` where the pass rule admits equality.
 
 ### Wrong-then-right (this pass)
 
@@ -149,26 +175,56 @@ move the known-answer medians).
    phase. The same check on `glide_cents`, using a constant-pitch 49.4 Hz
    decaying sinusoid with sin-phase versus cos-phase onset, reads
    10.4 to 10.5 cents of spurious glide at 48 kHz and 6.6 at 44.1 kHz at
-   DECAY knob 5. **That was not the worst case.** The Judge swept the DECAY
-   range, and `tools/bd_glide_phase_sweep.py` reproduces it: the worst is
-   17.5 cents at knob 1.0 (tau about 33 ms), 49.4 Hz, 48 kHz. That is still
-   below the rule's apparatus part (27.8 cents), so onset phase alone cannot
-   pass the rule, but the margin is 1.6x, not 2.6x. It is also above the
-   single-reading floor of 13.9. The test now covers every BD_DECAY_Q knob,
-   three pitches and both rates, and pins the stated worst case.
-5. **Refused readings (caught in review).** The record said what a refused
-   retrigger reading means, but not a refused Fischer one. The same sweep
-   showed knob 0 refuses, and two untouched Fischer conditions are at knob 0.
-   Fixed by the refused-readings rule above.
+   DECAY knob 5. That was first stated as the worst case.
 4. **Citations.** Every cited file and symbol was re-checked against
    `origin/main` after it advanced. None was missing.
+5. **Refused readings (caught in review 1).** The record said what a refused
+   retrigger reading means, but not a refused Fischer one. The Judge's sweep
+   showed knob 0 refuses, and two untouched Fischer conditions are at knob 0.
+   Fixed by the refused-readings rule above.
+6. **Onset-phase worst case, first correction (caught in review 1).** The
+   Judge swept Q over BD_DECAY_Q's knots: 17.5 cents at knob 1.0, 49.4 Hz,
+   48 kHz, margin 1.6x. That was stated as the worst case. It was wrong too.
+7. **Onset-phase worst case, second correction (caught in review 2).** The
+   17.5 c figure came from the coarse grid of 7 knobs x 3 pitches. On a finer
+   grid the Judge found 34.2 c at knob 0.6, 52 Hz, 48 kHz. That is ABOVE the
+   rule's apparatus part (27.8 c), so the record's range-wide claim was false.
+   The claim is now scoped to the DECAY knobs the record's Fischer conditions
+   use (2.5, 5, 7.5, 10; knob 0 is unqualified). On f0 40 to 65 Hz in 0.5 Hz
+   steps at both rates, the worst is 13.63 c (knob 2.5, 51.5 Hz, 48 kHz),
+   which gives a margin of 2.04x. Over the untouched knobs alone the worst is
+   10.67 c. The record states the range-wide worst, 34.21 c, as exceeding the
+   apparatus part. The grid resolution is now part of
+   `tools/bd_glide_phase_sweep.py` and of the test, which rejects a coarser
+   grid and any claimed worst below the swept one. Edge finding, filed as
+   #602 and not fixed here: just above its refusal threshold `glide_cents`
+   answers instead of refusing. A true-zero glide reads -68 c at knob 0.6, and
+   +76 to +97 c on the 8 knob-0 cells where it answers. The `MIN_FRAMES`
+   precondition is asserted too loosely. Knob 0 is therefore excluded by knob
+   (`unqualified_knobs`), whatever it reads.
+8. **`min-improvement` input validation (caught in review 2).** A negative
+   spread produced a threshold of -72.2 with exit 0. An infinite deficit
+   counted as satisfiable. A bool spread and a string deficit were coerced.
+   Each now REFUSES with exit 2, and the Judge's four inputs are controls.
+9. **Satisfiability statistic (caught in review 2).** `satisfiable` compared
+   the threshold against the baseline's one development take (BD5050), not
+   the untouched shipped median that acceptance uses. Two synthetic cases
+   showed the failure in both directions. It also used a strict `<` where the
+   pass rule is `>=`. The check now uses the shared measured set, and equality
+   passes.
+10. **A control that could not fail (caught by running it).** After knob 0
+   became excluded by knob, the 0-cent-error control moved to U-F-T50-D75.
+   That condition's |d| is the smallest in the set, so zeroing it moves
+   neither median, and the control went green when it should have gone red.
+   It now uses U-F-T10-D50, which sits above both medians.
 
-Rate: 3 corrections to the record before the first review (1-3), plus the
-check in 4, which needed no change. Item 1 was caught by checking against the
-rule, item 2 by reading a newly merged sibling, and item 3 by a known-answer
-signal. Review then found two more (3's worst case and 5), both from the same
-known-answer signal swept across DECAY rather than read at one knob. That is
-5 corrections in total, 2 of them found by the reviewer.
+Rate: 3 corrections before the first review (1-3), plus the check in 4, which
+needed no change. Review then found 5 more (5-9). Items 5-7 came from the same
+closed-form known-answer signal swept more finely each time; this is the third
+time a reviewer's sweep corrected the onset-phase claim (3, 6 and 7). Items 8
+and 9 came from running the CLI on adversarial inputs. Item 10 was caught by
+running the control. In total, 9 corrections were made to the record or its
+tooling, 5 of them found by the reviewer.
 
 ## Not done (needs a human/coordinator decision or the box)
 

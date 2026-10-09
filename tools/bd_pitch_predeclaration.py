@@ -29,8 +29,10 @@ than answers when it cannot:
   * no parameter is proposed, and so no sensitivity-registry record claims
     this issue.  If one is proposed later it must name its registry record;
   * the primary aggregate declares what a REFUSED Fischer reading does
-    (`primary_metric.refused_readings`), and its measured-condition minimum is
-    satisfiable after the predicted refusals.  `primary_aggregate` applies
+    (`primary_metric.refused_readings`), its measured-condition minimum is
+    exactly the untouched Fischer count minus the predicted refusals (not
+    lowerable), and the predicted refusals are exactly the conditions at the
+    declared `unqualified_knobs`.  `primary_aggregate` applies
     that rule at use: a refusal is never a number, a reference/shipped
     refusal is excluded from both medians and listed, a candidate refusal is a
     FAILURE, and too few measured conditions REFUSE (never pass).
@@ -314,9 +316,27 @@ def _check_refused_rule(rec: dict) -> list:
         if p not in ids:
             out.append(f"primary_metric.refused_readings: predicted refusal {p} is not an "
                        "untouched Fischer condition")
+    # The excluded set is fixed by the estimator's qualification, not chosen:
+    # every untouched Fischer condition at an unqualified knob, and no other.
+    uq = rr.get("unqualified_knobs")
+    if not isinstance(uq, list):
+        out.append("primary_metric.refused_readings: unqualified_knobs must be a list (the DECAY "
+                   "knobs where glide_cents is not qualified; readings there are excluded)")
+    else:
+        at_uq = {c.get("id") for c in untouched_fischer(rec)
+                 if (c.get("model") or {}).get("decay_knob") in uq}
+        if set(pred) != at_uq:
+            out.append(f"primary_metric.refused_readings: predicted_refusals {sorted(pred)} are not "
+                       f"the untouched Fischer conditions at unqualified knobs {sorted(at_uq)}")
     if isinstance(k, int) and n - len(set(pred) & ids) < k:
         out.append(f"primary_metric.refused_readings: unsatisfiable -- {n} conditions minus "
                    f"{len(pred)} predicted refusals leaves fewer than min_measured_conditions {k}")
+    # Pinned to its derivation (rule 8: lowering it to 1 must not pass): the
+    # floor is every untouched Fischer condition minus the predicted refusals.
+    elif isinstance(k, int) and k != n - len(set(pred) & ids):
+        out.append(f"primary_metric.refused_readings: min_measured_conditions {k} is not its "
+                   f"derivation {n} untouched Fischer conditions - {len(set(pred) & ids)} "
+                   f"predicted refusals = {n - len(set(pred) & ids)}")
     if "REFUSE" not in str(rr.get("too_few_outcome", "")):
         out.append("primary_metric.refused_readings: too_few_outcome must REFUSE (never pass)")
     for ref in (rr.get("implemented_by"), rr.get("known_answer")):
@@ -409,33 +429,58 @@ def check(rec: dict) -> list:
 
 
 # ------------------------------------------------ evaluation at use (later) --
+def _load_json(path: pathlib.Path, what: str):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError) as e:
+        raise Refused(f"{what} {path} is not valid JSON: {e}")
+
+
 def load_baseline(path: pathlib.Path) -> dict:
     if not path.is_file():
         raise Refused(f"baseline JSON {path} is absent: run tools/bd_pitch_baseline.py on the "
                       "build box first (docs/bd-pitch-baseline-request.md)")
-    b = json.loads(path.read_text())
+    b = _load_json(path, "baseline")
+    if not isinstance(b, dict):
+        raise Refused(f"baseline {path} is not a JSON object")
     prov = b.get("provenance") or {}
-    if not prov.get("commit") or prov.get("sources_dirty") is not False:
+    if not isinstance(prov, dict) or not prov.get("commit") or prov.get("sources_dirty") is not False:
         raise Refused(f"baseline {path} has no commit or was produced from dirty sources")
     return b
 
 
+def _number(v, what: str, nonneg: bool = False) -> float:
+    """A baseline/record value as a float, or Refused.  Only a finite real
+    number is a value: bool (True is an int in Python), strings (even "100"),
+    None, NaN and inf are not.  `nonneg` for magnitudes (a spread)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        raise Refused(f"{what} = {v!r} is not a finite number")
+    if nonneg and v < 0:
+        raise Refused(f"{what} = {v!r} is negative; it is a magnitude")
+    return float(v)
+
+
 def minimum_improvement_cents(rec: dict, baseline: dict | None) -> float:
     """The frozen rule evaluated: quoted terms from the record, baseline terms
-    from the baseline JSON.  REFUSES without a finite baseline value."""
+    from the baseline JSON.  REFUSES without a finite, non-negative baseline
+    value, and REFUSES an evaluated threshold that is not finite and > 0 (a
+    threshold at or below zero would admit a worsening as an improvement)."""
     rule = rec["minimum_improvement"]
     vals = {}
     for t in rule["terms"]:
         if "baseline_key" in t:
-            if baseline is None:
+            if not isinstance(baseline, dict):
                 raise Refused(f"{t['name']} is read from the baseline JSON, and there is none")
-            v = baseline.get(t["baseline_key"])
-            if not isinstance(v, (int, float)) or not math.isfinite(v):
-                raise Refused(f"baseline {t['baseline_key']} = {v!r} is not a finite number")
-            vals[t["name"]] = float(v)
+            vals[t["name"]] = _number(baseline.get(t["baseline_key"]),
+                                      f"baseline {t['baseline_key']}", nonneg=True)
         else:
-            vals[t["name"]] = float(t["value"])
-    return eval_formula(rule["formula"], vals)
+            vals[t["name"]] = _number(t.get("value"), f"record term {t.get('name')}", nonneg=True)
+    need = eval_formula(rule["formula"], vals)
+    if isinstance(need, bool) or not isinstance(need, (int, float)) or not math.isfinite(need) \
+            or need <= 0:
+        raise Refused(f"evaluated minimum-improvement threshold {need!r} is not a finite "
+                      "positive number")
+    return float(need)
 
 
 SIDES = ("reference", "shipped", "candidate")
@@ -450,39 +495,37 @@ def _measured(x):
     return float(x)
 
 
-def primary_aggregate(rec: dict, readings: dict) -> dict:
-    """The frozen primary aggregate with the frozen REFUSED rule applied.
-
-    `readings` maps every untouched Fischer condition id to
-    {"reference": r, "shipped": s, "candidate": c}, each a glide_cents value or
-    a refusal (anything `_measured` rejects).  d = reference - ours.
-
-      * reference or shipped REFUSED -> condition excluded from BOTH medians,
-        listed with the side that refused;
-      * reference and shipped measured, candidate REFUSED -> verdict FAILURE
-        (the candidate destroyed a measurable trajectory); no median is formed
-        for the candidate, so a refusal cannot become a 0-cent |d|;
-      * fewer than min_measured_conditions measured, or the measured set no
-        longer holds out a TONE and a DECAY value development never used ->
-        Refused (no claim either way; never a pass).
-    """
-    import statistics
+def _measured_set(rec: dict, readings: dict) -> tuple:
+    """The measured untouched Fischer set under the frozen refused-readings
+    rule, shared by acceptance (`primary_aggregate`) and the satisfiability
+    check (`satisfiable`) so the two can never use different exclusions.
+    Returns (measured [(id, {side: float|None})], excluded); REFUSES when the
+    rule is absent, the readings do not cover exactly the set, too few are
+    measured, or a held-out axis is lost."""
     rr = (rec.get("primary_metric") or {}).get("refused_readings")
     if not isinstance(rr, dict) or not isinstance(rr.get("min_measured_conditions"), int):
         raise Refused("the record declares no refused_readings rule; the aggregate cannot be formed")
     conds = {c["id"]: c for c in untouched_fischer(rec)}
-    if set(readings) != set(conds):
+    if not isinstance(readings, dict) or set(readings) != set(conds):
+        got = set(readings) if isinstance(readings, dict) else set()
         raise Refused(f"readings must cover exactly the untouched Fischer conditions: missing "
-                      f"{sorted(set(conds) - set(readings))}, unknown {sorted(set(readings) - set(conds))}")
-    measured, excluded, cand_refused = [], [], []
+                      f"{sorted(set(conds) - got)}, unknown {sorted(got - set(conds))}")
+    measured, excluded = [], []
+    uq = rr.get("unqualified_knobs")
+    if not isinstance(uq, list):
+        raise Refused("the record declares no unqualified_knobs; the aggregate cannot be formed")
     for cid in sorted(conds):
-        r = {s: _measured((readings[cid] or {}).get(s)) for s in SIDES}
+        if (conds[cid].get("model") or {}).get("decay_knob") in uq:
+            # the estimator is not qualified here: a number it returns is not
+            # a reading (fine-grid known answer, tools/bd_glide_phase_sweep.py)
+            excluded.append({"id": cid, "refused": ["unqualified_knob"]})
+            continue
+        row = readings[cid] if isinstance(readings[cid], dict) else {}
+        r = {s: _measured(row.get(s)) for s in SIDES}
         bad = [s for s in ("reference", "shipped") if r[s] is None]
         if bad:
             excluded.append({"id": cid, "refused": bad})
             continue
-        if r["candidate"] is None:
-            cand_refused.append(cid)
         measured.append((cid, r))
     k = rr["min_measured_conditions"]
     if len(measured) < k:
@@ -494,6 +537,32 @@ def primary_aggregate(rec: dict, readings: dict) -> dict:
         if not {axis_values(conds[cid])[axis] for cid, _ in measured} - dv:
             raise Refused(f"after exclusion the measured set holds out no {axis} value; "
                           f"excluded {excluded}")
+    return measured, excluded
+
+
+def primary_aggregate(rec: dict, readings: dict) -> dict:
+    """The frozen primary aggregate with the frozen REFUSED rule applied.
+
+    `readings` maps every untouched Fischer condition id to
+    {"reference": r, "shipped": s, "candidate": c}, each a glide_cents value or
+    a refusal (anything `_measured` rejects).  d = reference - ours.
+
+      * a condition at one of `unqualified_knobs` is excluded whatever it
+        reads: at DECAY knob 0 glide_cents refuses on 94 of 102 fine-grid
+        cells and the 8 it answers read 76-97 cents for a true-zero glide
+        (PR #601 second review), so a number there is not a reading;
+      * reference or shipped REFUSED -> condition excluded from BOTH medians,
+        listed with the side that refused;
+      * reference and shipped measured, candidate REFUSED -> verdict FAILURE
+        (the candidate destroyed a measurable trajectory); no median is formed
+        for the candidate, so a refusal cannot become a 0-cent |d|;
+      * fewer than min_measured_conditions measured, or the measured set no
+        longer holds out a TONE and a DECAY value development never used ->
+        Refused (no claim either way; never a pass).
+    """
+    import statistics
+    measured, excluded = _measured_set(rec, readings)
+    cand_refused = [cid for cid, r in measured if r["candidate"] is None]
     out = {"measured": [cid for cid, _ in measured], "excluded": excluded,
            "candidate_refused": cand_refused,
            "shipped_median": statistics.median(abs(r["reference"] - r["shipped"])
@@ -508,13 +577,48 @@ def primary_aggregate(rec: dict, readings: dict) -> dict:
     return out
 
 
-def satisfiable(rec: dict, baseline: dict) -> dict:
-    """Run the gate against the current state before trusting it (CLAUDE.md):
-    an improvement larger than the whole present deficit cannot be shown."""
+def satisfiable(rec: dict, baseline: dict, readings: dict | None = None) -> dict:
+    """Run the gate against the current state before trusting it (CLAUDE.md).
+
+    The acceptance statistic is the SHIPPED median |d| over the measured
+    untouched Fischer set (`_measured_set`: same exclusions, floor and holdout
+    as `primary_aggregate`).  A candidate's median is >= 0, so the largest
+    improvement any candidate can show is that shipped median, and the frozen
+    pass rule is `improvement >= minimum_improvement`: satisfiable iff
+    shipped_median >= threshold (equality admitted).
+
+    The baseline's `pairs.fischer_vs_ours.glide_deficit_cents` is ONE take
+    (REF_MAIN BD5050), a DEVELOPMENT condition.  It is validated and reported
+    as `development_take_diagnostic` only; it never decides satisfiability.
+    Without untouched `readings` (id -> {reference, shipped}) satisfiability
+    is None: not claimed either way (PR #601 third review)."""
     need = minimum_improvement_cents(rec, baseline)
-    deficit = abs(float(baseline["pairs"]["fischer_vs_ours"]["glide_deficit_cents"]))
-    return {"min_improvement_cents": need, "current_deficit_cents": deficit,
-            "satisfiable": need < deficit}
+    pair = ((baseline.get("pairs") or {}) if isinstance(baseline.get("pairs"), dict) else {}) \
+        .get("fischer_vs_ours")
+    if not isinstance(pair, dict):
+        raise Refused("baseline pairs.fischer_vs_ours.glide_deficit_cents is missing")
+    deficit = _number(pair.get("glide_deficit_cents"),
+                      "baseline pairs.fischer_vs_ours.glide_deficit_cents")
+    out = {"min_improvement_cents": need,
+           "pass_rule": "improvement >= min_improvement_cents",
+           "development_take_diagnostic": {
+               "glide_deficit_cents": deficit,
+               "note": "one take (REF_MAIN BD5050, a DEVELOPMENT condition); not the acceptance "
+                       "statistic, so it decides nothing about satisfiability"}}
+    if readings is None:
+        out.update(satisfiable=None,
+                   reason="no shipped readings on the untouched Fischer set: experiment-wide "
+                          "satisfiability is not claimed either way")
+        return out
+    measured, excluded = _measured_set(rec, readings)
+    import statistics
+    ship = statistics.median(abs(r["reference"] - r["shipped"]) for _, r in measured)
+    out.update(statistic="shipped median |reference - shipped| over the measured untouched "
+                         "Fischer set (primary_aggregate's exclusions)",
+               shipped_median=ship, max_possible_improvement=ship,
+               measured=[cid for cid, _ in measured], excluded=excluded,
+               satisfiable=ship >= need)
+    return out
 
 
 def main(argv=None) -> int:
@@ -525,22 +629,34 @@ def main(argv=None) -> int:
     m = sub.add_parser("min-improvement")
     m.add_argument("--record", type=pathlib.Path, default=RECORD)
     m.add_argument("--baseline", type=pathlib.Path, required=True)
+    m.add_argument("--readings", type=pathlib.Path,
+                   help="JSON: untouched Fischer id -> {reference, shipped} glide_cents readings")
     a = ap.parse_args(argv)
     try:
         if not a.record.is_file():
             raise Refused(f"record {a.record} is absent")
-        rec = json.loads(a.record.read_text())
+        rec = _load_json(a.record, "record")
         if a.cmd == "check":
             bad = check(rec)
             for b in bad:
                 print(f"VIOLATION {b}")
             print("CLEAN" if not bad else f"FAIL ({len(bad)} violation(s))")
             return 1 if bad else 0
-        s = satisfiable(rec, load_baseline(a.baseline))
+        readings = None
+        if a.readings is not None:
+            if not a.readings.is_file():
+                raise Refused(f"readings {a.readings} is absent")
+            readings = _load_json(a.readings, "readings")
+        s = satisfiable(rec, load_baseline(a.baseline), readings)
         print(json.dumps(s, indent=1))
+        if s["satisfiable"] is None:
+            print("REFUSED: experiment-wide satisfiability needs shipped readings on the untouched "
+                  "Fischer set (--readings); the development take's deficit cannot decide it.")
+            return 2
         if not s["satisfiable"]:
-            print("REFUSED: the frozen minimum improvement exceeds the present deficit; the "
-                  "defect is not resolvable above the floor. Do not loosen the rule.")
+            print("REFUSED: the frozen minimum improvement exceeds the shipped median over the "
+                  "untouched set; the defect is not resolvable above the floor. Do not loosen "
+                  "the rule.")
             return 2
         return 0
     except Refused as e:
