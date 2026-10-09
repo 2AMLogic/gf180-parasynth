@@ -288,21 +288,43 @@ def test_the_scale_probe_is_flat_where_the_mean_is_resolvable():
     assert max(att) - min(att) < 1.5, att
 
 
-def _ch(production, floatout, x64, exact=True, bound=11.7):
+def _ch(production, floatout, x64, exact=True, bound=11.7, own=None):
+    """`own` = each variant's steady-state bound on ITS OWN baseline. Default:
+    the variant did not move its baseline, so its bound is the production one."""
     rows = [("production", production), ("float-out", floatout), ("buses x8", x64), ("buses x64", x64)]
+    own = dict({n: bound for n, _ in rows}, **(own or {}))
     return dict(label="OFFSET", beta=.97, S=40.0, reason=None, steady_db=bound, measured_db=production,
-                rest_db=bound, bv=dict(exact=exact, rows=rows))
+                rest_db=bound, bv=dict(exact=exact, rows=rows, bounds=own))
 
 
 def _h2(row):
     return [v for h, v in R.hypotheses({"CH": row}) if h.startswith("H_CH2")][0]
 
 
-def test_h_ch2_distinguishes_its_four_outcomes():
-    assert _h2(_ch(5.0, 21.0, 21.0)).startswith("SUPPORTED by intervention (output truncation)")
-    assert _h2(_ch(5.0, 6.0, 15.0)).startswith("SUPPORTED by intervention (bus-level")
+def test_h_ch2_distinguishes_its_outcomes():
+    assert _h2(_ch(5.0, 11.5, 6.0)).startswith("SUPPORTED by intervention (output truncation)")
+    assert _h2(_ch(5.0, 6.0, 11.9)).startswith("SUPPORTED by intervention (bus-level")
     assert _h2(_ch(5.0, 6.0, 6.0)).startswith("NOT SUPPORTED")
-    assert _h2(_ch(5.0, 21.0, 21.0, exact=False)).startswith("NO VERDICT")
+    assert _h2(_ch(5.0, 11.5, 11.5, exact=False)).startswith("NO VERDICT")
+
+
+def test_h_ch2_defeater_a_variant_that_moves_its_own_baseline_is_not_support():
+    """RULE 8, the input that defeated the first rule (#614 review). The dev
+    record had float-out 21.22 dB against a production bound of 11.66 dB, and a
+    one-sided `>= bound - tol` read that as SUPPORTED. But removing the output
+    floor changes the variant's BASELINE too, so its attenuation is only
+    comparable to the steady bound computed on its own baseline.
+
+    (a) the variant clears the production bound but falls short of its own:
+        the quantiser was not the whole story -> must NOT read SUPPORTED.
+    (b) the variant overshoots its own bound by far more than the tolerance:
+        a filter does not beat its own steady-state bound, so the variant is not
+        like-for-like -> must NOT read SUPPORTED either."""
+    short_of_own = _ch(5.0, 21.2, 21.2, own={"float-out": 30.0, "buses x8": 30.0, "buses x64": 30.0})
+    assert not _h2(short_of_own).startswith("SUPPORTED"), _h2(short_of_own)
+    overshoot = _ch(5.0, 21.2, 21.2)                     # own bounds == 11.7
+    assert not _h2(overshoot).startswith("SUPPORTED"), _h2(overshoot)
+    assert _h2(overshoot).startswith("NO VERDICT"), _h2(overshoot)
 
 
 def test_the_bus_surrogate_is_bit_exact_against_the_shipped_coupling():
