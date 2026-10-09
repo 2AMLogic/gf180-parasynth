@@ -35,3 +35,10 @@ FAILED tools/probes/test_residual_dc.py::test_subject_verdict_refuses_unless_bot
 FAILED tools/probes/test_residual_dc.py::test_subject_verdict_refuses_unless_both_declared_conditions_are_present[confirm-only]
 FAILED tools/probes/test_residual_dc.py::test_subject_verdict_refuses_unless_both_declared_conditions_are_present[dev-plus-undeclared]
 34 failed, 55 passed, 2 deselected in 4.43s
+
+# class-search instance (reference manifest), before the fix
+# python3 -m pytest tools/probes/test_residual_dc.py -q -k malformed_manifest
+FAILED tools/probes/test_residual_dc.py::test_reference_gate_refuses_a_malformed_manifest[bool-rate]
+FAILED tools/probes/test_residual_dc.py::test_reference_gate_refuses_a_malformed_manifest[manifest-is-list]
+FAILED tools/probes/test_residual_dc.py::test_reference_gate_refuses_a_malformed_manifest[file-entry-not-object]
+3 failed, 1 passed, 94 deselected in 0.29s

@@ -556,3 +556,18 @@ def test_verdict_refuses_a_record_that_is_not_a_json_object(tmp_path, capsys, te
     pathlib.Path(paths[1]).write_text(text)
     assert R.main(["--verdict", *paths]) == 2
     assert "REFUSED" in capsys.readouterr().out
+
+
+# Class search for the review's NaN/provenance finding: the manifest is the other
+# JSON consumption boundary. bool is an int subclass, so `"sample_rate": true`
+# satisfied isinstance(..., int); a non-object manifest or file entry raised.
+@pytest.mark.parametrize("manifest", [
+    lambda m: dict(m, sample_rate=True), lambda m: dict(m, sample_rate=48000.5),
+    lambda m: [m], lambda m: dict(m, files=["BD.wav"]),
+], ids=["bool-rate", "fractional-rate", "manifest-is-list", "file-entry-not-object"])
+def test_reference_gate_refuses_a_malformed_manifest(tmp_path, manifest):
+    root = pathlib.Path(_corpus(tmp_path))
+    m = json.loads((root / "manifest.json").read_text())
+    (root / "manifest.json").write_text(json.dumps(manifest(m)))
+    g = R.reference_gate(str(root), environ={})
+    assert g["status"] == "REFUSED" and g["dc"] == "REFUSED" and g["reasons"], g
