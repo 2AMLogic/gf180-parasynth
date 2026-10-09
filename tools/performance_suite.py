@@ -36,15 +36,19 @@ Independence from the model under test. The controls here are driven by
 `reference_render`, an additive/noise performer written for this file that
 shares no code with model/voice_fx.py or model/drums_fx.py, plus defects
 injected into ITS schedule or output. The thresholds are stated tolerances, not
-fitted to the voice. `--backend model` renders the same schedule through the
-fixed-point voice/drums; that is a HEAVY run for the AWS build box (see the
-PR) and has not been run on a full phrase here.
+fitted to the voice. `--backend model` is an UNRUN, per-note-reset approximation
+of the instrument (see `model_render`), not the production-path gate: this file
+is apparatus scaffolding and #338 stays open until it drives the continuous
+schedule through the shipped mixer. `--matrix` prints which property each seeded
+defect moves and which stay blind.
 
 What each guard cannot see, so a reader does not over-trust a PASS: timing is
 audio-onset based with ~1 ms resolution; the stuck test is only made where a
 gap leaves room (>= 25 ms after the allowance) -- each phrase carries gaps and
 a final tail, and a phrase with none is REFUSED; automation is tested on the
-named events only.
+named events only. A note held past gate-off is always red, but when the next
+onset is masked by it the report is often "timing +N ms" on that next event
+rather than "stuck": the diagnosis can be the neighbour's, the verdict is not.
 """
 from __future__ import annotations
 
@@ -66,8 +70,11 @@ ONSET_FLOOR_REL = 0.1                 # ... and >= 10% of the event's own peak
 PRESENT_DBFS = -50.0
 HEADROOM_DBFS = -1.0
 RAIL = 0.999
-FLAT_RUN = 4                          # identical-magnitude samples at the peak
+FLAT_RUN = 4                          # samples in a plateau at the peak
 FLAT_PEAK_MIN = 0.3
+FLAT_LEVEL = 0.98                     # plateau sits within 2% of the peak ...
+FLAT_STEP_REL = 1e-3                  # ... successive samples differ by <= 0.1% of peak ...
+FLAT_KNEE = 2.5                       # ... and entered/left by a step >= 2.5x its largest inner step
 DROPOUT_BLOCK = 240                   # 5 ms
 DROPOUT_DB = -12.0
 HELD_SETTLE_S = 0.05
@@ -123,9 +130,7 @@ def phrases() -> dict:
         automation=({"kind": "centroid", "events": tuple(range(0, 12, 2)), "direction": 1,
                      "min_ratio": 1.5, "of": "note"},))
     repeated = Phrase("repeated_notes", 3.0, _notes([55], 0.2, 0.3, 0.18, n=8), release_s=0.3)
-    dense = Phrase("dense", 3.0, _notes([48, 60, 55, 63], 0.2, 0.1, 0.055, n=16)
-                   + tuple(Event(0.2 + 0.1 * i + 0.05, "drum", drum="hh", ring_s=0.05)
-                           for i in range(0)), release_s=0.3)
+    dense = Phrase("dense", 3.0, _notes([48, 60, 55, 63], 0.2, 0.1, 0.055, n=16), release_s=0.3)
     dense_drums = Phrase("dense_drums", 2.2, tuple(
         Event(0.2 + 0.1 * i, "drum", drum=["bd", "sd", "hh"][i % 3], ring_s=0.3) for i in range(14)))
     return {p.name: p for p in (bass, lead, drums, mixed, repeated, dense, dense_drums)}
@@ -198,7 +203,7 @@ def reference_render(phrase: Phrase, *, defect: str = "", seed: int = 7) -> np.n
                 sig = np.diff(rng.standard_normal(m + 1)) * np.exp(-t / 0.025) * 0.4
             sig = sig * np.minimum(t / 0.001, 1.0)
             if defect == "stuck" and e.drum == "bd" and not notes:
-                sig = np.sin(2 * np.pi * 45 * t) * 1.0         # drum rings forever
+                sig = np.sin(2 * np.pi * 45 * t) * 0.05         # rings forever, BELOW the headroom guard
             out[a:a + m] += 0.25 * sig[:n - a]
     if defect == "clip":
         out = np.clip(out * 4.0, -1.0, 1.0)
@@ -272,6 +277,62 @@ def _centroid(seg: np.ndarray) -> float:
     return float((f * s).sum() / max(s.sum(), 1e-30))
 
 
+def flat_top_run(x: np.ndarray, peak: float) -> int:
+    """Longest PLATEAU at the peak, 0 if none reaches FLAT_RUN samples.
+
+    A plateau is a run of samples within FLAT_LEVEL of the peak whose successive
+    differences are <= FLAT_STEP_REL of the peak AND which is entered or left
+    by a step of at least FLAT_KNEE times its largest inner step (and above
+    FLAT_STEP_REL * peak). The knee condition is what separates a clipper from
+    smooth curvature: a sine's crest also spends many samples within 2% of its
+    maximum, but its steps shrink gradually toward the crest, so the step that
+    leaves the run is at most ~(k+1)/k times the largest inside it, never
+    2.5x. A clipper's inner steps are ~0 and its knee is abrupt, at any
+    fundamental. Cannot see: a clip so shallow its knee is under the step
+    floor (inaudible; the headroom guard still applies)."""
+    d = np.diff(x)
+    still = (np.abs(d) <= FLAT_STEP_REL * peak) & (np.abs(x[:-1]) >= FLAT_LEVEL * peak) \
+        & (np.abs(x[1:]) >= FLAT_LEVEL * peak)
+    floor = FLAT_STEP_REL * peak
+    best = i = 0
+    n = len(still)
+    while i < n:
+        if not still[i]:
+            i += 1
+            continue
+        j = i
+        while j < n and still[j]:
+            j += 1
+        knee = max(floor, FLAT_KNEE * float(np.max(np.abs(d[i:j]))))
+        entered = i > 0 and abs(d[i - 1]) > knee
+        left = j < len(d) and abs(d[j]) > knee
+        if (entered or left) and j - i + 1 >= FLAT_RUN:
+            best = max(best, j - i + 1)
+        i = j
+    return best
+
+
+PROPERTIES = ("timing", "presence", "headroom", "dropout", "release", "automation")
+
+
+def failed_property(msg: str) -> str:
+    """Which property a failure message belongs to. Unclassifiable text is an
+    error, not a default: a new check must say which property it decides."""
+    if msg.startswith(("headroom:", "clipping:")):
+        return "headroom"
+    if msg.startswith("timing:"):
+        return "timing"
+    if msg.startswith("dropout:"):
+        return "dropout"
+    if msg.startswith(("release:", "stuck:")):
+        return "release"
+    if msg.startswith("automation:"):
+        return "automation"
+    if "inaudible" in msg or "no onset" in msg:
+        return "presence"
+    raise ValueError(f"failure message belongs to no property: {msg!r}")
+
+
 def evaluate(x, phrase: Phrase) -> dict:
     x = preconditions(x, phrase)
     env = _env(x)
@@ -288,12 +349,8 @@ def evaluate(x, phrase: Phrase) -> dict:
     if rail:
         fails.append(f"clipping: {rail} samples at the rail")
     if peak > FLAT_PEAK_MIN:
-        hit = np.abs(x) >= 0.98 * peak
-        run = best = 0
-        for v in hit:
-            run = run + 1 if v else 0
-            best = max(best, run)
-        if best >= FLAT_RUN and np.count_nonzero(hit) > 0:
+        best = flat_top_run(x, peak)
+        if best:
             info["flat_run"] = best
             fails.append(f"clipping: flat-topped run of {best} samples at the peak")
     # ---- per event
@@ -304,7 +361,6 @@ def evaluate(x, phrase: Phrase) -> dict:
         t = e.onset_s
         nxt = evs[i + 1].onset_s if i + 1 < len(evs) else phrase.duration_s
         lo, hi = max(0, fr(t - 0.01)), min(len(env), fr(nxt - 0.005 if i + 1 < len(evs) else nxt))
-        pk = float(env[fr(t):min(len(env), fr(t) + 400)].max()) if fr(t) < len(env) else 0.0
         pk = float(env[lo:hi].max()) if hi > lo else 0.0
         rec = {"i": i, "kind": e.kind, "peak_dbfs": round(_db(pk), 1)}
         if _db(pk) < PRESENT_DBFS:
@@ -393,13 +449,23 @@ def evaluate(x, phrase: Phrase) -> dict:
             if not mono or ratio < au["min_ratio"]:
                 fails.append(f"automation: {au['kind']} {[round(v) for v in vals]} did not move "
                              f"{'up' if d > 0 else 'down'} by >= {au['min_ratio']}x")
+    bad = {failed_property(f) for f in fails}
     return {"phrase": phrase.name, "verdict": "FAIL" if fails else "PASS",
-            "failures": fails, "info": info}
+            "failures": fails, "info": info,
+            "props": {k: ("FAIL" if k in bad else "ok") for k in PROPERTIES}}
 
 
 def run_suite(render, names=None) -> list[dict]:
+    """Run the named phrases (all if `names` is None). An unknown name or an
+    empty selection raises Refused: skipping requested work must not read as a pass."""
+    known = phrases()
+    if names is not None:
+        unknown = [n for n in names if n not in known]
+        if unknown or not names:
+            raise Refused(f"unknown or empty phrase selection {list(names)!r}: "
+                          f"{unknown or 'nothing requested'} (known: {sorted(known)})")
     out = []
-    for name, ph in phrases().items():
+    for name, ph in known.items():
         if names and name not in names:
             continue
         try:
@@ -411,15 +477,38 @@ def run_suite(render, names=None) -> list[dict]:
 
 def worst(results) -> str:
     v = {r["verdict"] for r in results}
-    return "REFUSED" if "REFUSED" in v else "FAIL" if "FAIL" in v else "PASS"
+    return "REFUSED" if "REFUSED" in v or not v else "FAIL" if "FAIL" in v else "PASS"
+
+
+def defect_matrix(names=None) -> dict:
+    """Properties x defects. For every seeded defect (and "" = clean), the set of
+    properties that went red on ANY phrase. A property absent from a defect's
+    row is BLIND to that defect; present is MOVED. Machine-readable so a reader
+    sees what each check cannot see, not only what it caught
+    (docs/verification-rules.md rule 4)."""
+    m = {}
+    for d in ("",) + DEFECTS:
+        res = run_suite(lambda p, d=d: reference_render(p, defect=d), names)
+        if d == "silent":
+            m[d] = {"verdict": worst(res), "moved": [], "blind": list(PROPERTIES)}
+            continue
+        moved = sorted({k for r in res for k, v in r["props"].items() if v == "FAIL"})
+        m[d] = {"verdict": worst(res), "moved": moved,
+                "blind": [k for k in PROPERTIES if k not in moved]}
+    return m
 
 
 # ------------------------------------------------------------------ model backend (heavy)
 def model_render(phrase: Phrase, engine: str = "r1") -> np.ndarray:
     """Render the schedule through the fixed-point voice / drums. HEAVY: a real
-    phrase is minutes of simulation; run on the build box. Notes are rendered
-    one voice call each and summed at their onsets (it does not exercise mono
-    retrigger inside one voice run); drums go through DrumsFx in one pass."""
+    phrase is minutes of simulation; run on the build box.
+
+    NOT the production path, so a PASS here is not the #338 instrument gate:
+    each note gets a freshly reset voice, summed at its onset (no continuous
+    mono state or retrigger), and the drums are mixed against a zero voice with
+    the voice added afterwards in floating point (not the combined production
+    mixer). Wiring the continuous schedule through the shipped mixer is the open
+    part of #338."""
     root = pathlib.Path(__file__).resolve().parents[1]
     sys.path[:0] = [str(root / "model"), str(root / "tools")]
     import drums_fx as dx
@@ -458,13 +547,22 @@ def main(argv=None) -> int:
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--phrase", action="append")
     ap.add_argument("--out", type=pathlib.Path)
+    ap.add_argument("--matrix", action="store_true",
+                    help="print the properties x seeded-defects MOVED/BLIND matrix as JSON")
     a = ap.parse_args(argv)
+    if a.matrix:
+        print(json.dumps(defect_matrix(), indent=1))
+        return 0
     if a.inject and a.backend != "reference":
         print("REFUSED: --inject seeds the reference performer only", file=sys.stderr)
         return 2
     render = (lambda p: reference_render(p, defect=a.inject)) if a.backend == "reference" \
         else model_render
-    res = run_suite(render, a.phrase)
+    try:
+        res = run_suite(render, a.phrase)
+    except Refused as r:
+        print(f"REFUSED: {r}", file=sys.stderr)
+        return 2
     for r in res:
         print(f"{r['verdict']:8s} {r['phrase']}")
         for f in r["failures"]:

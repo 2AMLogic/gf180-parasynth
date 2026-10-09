@@ -149,3 +149,100 @@ def test_cli_exit_codes(tmp_path):
     out = tmp_path / "r.json"
     ps.main(["--out", str(out), "--phrase", "bass"])
     assert '"PASS"' in out.read_text()
+
+
+# ---------------------------------------------------------------- review #606 controls
+def _sine_phrase(midi):
+    return ps.Phrase("clean_sine", 1.0, (ps.Event(0.2, "note", 0.3, midi),), release_s=0.35)
+
+
+def _sine(midi, amp, clip=None):
+    t = np.arange(SR) / SR - 0.2
+    f = 440.0 * 2 ** ((midi - 69) / 12)
+    x = amp * np.sin(2 * np.pi * f * t) * np.clip(t / 0.003, 0, 1) * np.exp(-np.maximum(t - 0.3, 0) / 0.04)
+    return x if clip is None else np.clip(x, -clip, clip)
+
+
+@pytest.mark.parametrize("midi", [24, 36, 48, 60, 72, 84, 96])
+@pytest.mark.parametrize("amp", [0.35, 0.5, 0.8])
+def test_clean_sine_is_not_flat_topped_across_the_playing_range(midi, amp):
+    """Known answer: a clean sine has no plateau (issue: 261.6 Hz at 0.5 was flagged)."""
+    r = ps.evaluate(_sine(midi, amp), _sine_phrase(midi))
+    assert not any("clipping" in f for f in r["failures"]), (midi, amp, r["failures"])
+
+
+@pytest.mark.parametrize("midi", [24, 36, 60, 84])
+def test_below_rail_clip_of_the_same_sine_is_flat_topped(midi):
+    """Paired mutant: the identical sine clipped at 0.4 of 0.5 (below the rail) must be red."""
+    r = ps.evaluate(_sine(midi, 0.5, clip=0.4), _sine_phrase(midi))
+    assert any("flat-topped" in f for f in r["failures"]), (midi, r["failures"])
+
+
+@pytest.mark.parametrize("argv", [["--phrase", "typo"], ["--phrase", "typo", "--expect-fail"],
+                                  ["--phrase", "bass", "--phrase", "typo"],
+                                  ["--phrase", "bass", "--phrase", "typo", "--expect-fail"],
+                                  ["--inject", "clip", "--phrase", "typo", "--expect-fail"]])
+def test_unknown_phrase_is_refused_not_passed(argv):
+    assert ps.main(argv) == 2
+
+
+def test_empty_population_is_never_a_pass():
+    assert ps.worst([]) == "REFUSED"
+    with pytest.raises(ps.Refused):
+        ps.run_suite(lambda p: ps.reference_render(p), [])
+    with pytest.raises(ps.Refused):
+        ps.run_suite(lambda p: ps.reference_render(p), ["typo"])
+
+
+def test_stuck_drum_is_caught_by_the_drum_stuck_check_itself():
+    """The seeded drone sits below the headroom guard, so only `stuck: drum` can catch it."""
+    r = verdicts("stuck", ["drums"])["drums"]
+    assert not any(f.startswith(("headroom", "clipping")) for f in r["failures"]), r["failures"]
+    assert any(f.startswith("stuck: drum") for f in r["failures"]), r["failures"]
+
+
+# defect -> properties it must move (intended); the full published matrix is pinned in MATRIX
+INTENDED = {
+    "clip": {"headroom"}, "soft_clip": {"headroom"}, "dropout": {"dropout"},
+    "stuck": {"release"}, "late_one": {"timing"}, "late_all": {"timing"},
+    "missing": {"presence"}, "legato": {"presence"}, "frozen_automation": {"automation"},
+    "truncate": {"release"}, "quiet": {"presence"},
+}
+# MOVED set per defect on the reference performer, collateral included. BLIND is the
+# complement within ps.PROPERTIES. Any change here is a change in what a check can see.
+MATRIX = {
+    "": set(),
+    "clip": {"headroom", "release"},
+    "soft_clip": {"headroom", "presence", "release"},
+    "dropout": {"dropout"},
+    "stuck": {"automation", "presence", "release", "timing"},
+    "late_one": {"presence", "timing"},
+    "late_all": {"release", "timing"},
+    "missing": {"automation", "presence"},
+    "legato": {"presence"},
+    "frozen_automation": {"automation"},
+    "truncate": {"release"},
+    "quiet": {"automation", "presence"},
+    "silent": set(),                     # REFUSED: no property is judged
+}
+
+
+def test_properties_by_defects_matrix_is_published_and_pinned():
+    m = ps.defect_matrix()
+    assert {k: set(v["moved"]) for k, v in m.items()} == MATRIX
+    assert m[""]["verdict"] == "PASS" and m["silent"]["verdict"] == "REFUSED"
+    for d, want in INTENDED.items():
+        assert want <= set(m[d]["moved"]), (d, "intended property did not move", m[d])
+        assert set(m[d]["moved"]) | set(m[d]["blind"]) == set(ps.PROPERTIES)
+        assert not set(m[d]["moved"]) & set(m[d]["blind"])
+    for prop in ps.PROPERTIES:                     # every property is exercised by some defect
+        assert any(prop in m[d]["moved"] for d in INTENDED), prop
+
+
+def test_every_failure_message_belongs_to_a_property():
+    for d in ps.DEFECTS:
+        for r in verdicts(d).values():
+            for f in (r["failures"] if r["verdict"] == "FAIL" else ()):
+                ps.failed_property(f)
+    with pytest.raises(ValueError):
+        ps.failed_property("something new")
