@@ -275,9 +275,13 @@ def test_an_unclassified_drum_tag_is_refused_not_counted_as_nominal():
     h = sh.MusicHost().load(0)
     a = dx.A_MODE + dx.M_LT * dx.MODE_STRIDE
     before = dict(h.nominal)
+    image, writes = dict(h.image), list(h.w)
     with pytest.raises(ValueError, match="neither transient nor nominal"):
         h.drum(100, a, 12345, tag="tom-bend-v2")
     assert h.nominal == before
+    # a refused write must not survive in what schedule() lays out, either
+    assert h.image == image
+    assert h.w == writes
 
 
 def _literal_drum_tags():

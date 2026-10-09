@@ -456,12 +456,15 @@ class MusicHost:
 
     # -- primitives
     def _put(self, frame, flag, sec, addr, data, tag="", anchor=False):
+        # classify BEFORE mutating: a refused write must leave no trace in the
+        # list `schedule()` lays out, nor in image/nominal
+        if sec == SEC_DRUM and (tag not in self.TRANSIENT_DRUM_TAGS
+                                and tag not in self.NOMINAL_DRUM_TAGS):
+            raise ValueError(f"drum write tag {tag!r} is neither transient nor "
+                             "nominal: classify it in MusicHost (#598)")
         self.w.append(Write(int(frame), int(flag) & 1, int(sec), int(addr) & 0xFF,
                             int(data) & 0xFFFFFFFF, tag, anchor))
         if sec == SEC_DRUM:
-            if tag not in self.TRANSIENT_DRUM_TAGS and tag not in self.NOMINAL_DRUM_TAGS:
-                raise ValueError(f"drum write tag {tag!r} is neither transient nor "
-                                 "nominal: classify it in MusicHost (#598)")
             self.image[int(addr) & 0xFF] = int(data) & 0xFFFFFFFF
             if tag not in self.NOMINAL_EXEMPT_TAGS:
                 self.nominal[int(addr) & 0xFF] = int(data) & 0xFFFFFFFF
