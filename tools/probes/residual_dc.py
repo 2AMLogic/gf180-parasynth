@@ -505,3 +505,324 @@ def print_matrix(rows):
     print("%-40s" % "defect \\ property" + " ".join("%-20s" % n for n in names))
     for d, r in rows.items():
         print("%-40s" % d + " ".join("%-20s" % r[n] for n in names))
+
+
+# ===========================================================================
+# External reference gate. What a recording can and cannot establish.
+# ===========================================================================
+REFS_ENV = "GF180_TR808_REFS"
+REFS_FALLBACKS = ("/tmp/tr808-ref", str(pathlib.Path.home() / "dev" / "refs"))
+
+
+def reference_gate(path=None, environ=None):
+    """Assert the reference apparatus at the point of use. Returns a dict:
+
+      status  REFUSED | AVAILABLE
+      dc      REFUSED | PERMITTED   (may the recording's DC be read?)
+      reasons list of strings
+
+    The manifest schema is THIS PROBE'S requirement, not the corpus's: a
+    manifest.json with `files: [{name, sha256}]`, `sample_rate`, and
+    `capture_coupling` in {"ac", "dc"}. A corpus whose manifest lacks them is
+    REFUSED here, and the fix is to add the declaration, not to relax this.
+
+    **A capture that is AC-coupled or does not say cannot establish absence of
+    DC.** Its zero mean is the capture chain's, so `dc` is REFUSED: a recording
+    lacking an offset is not evidence the machine lacks one."""
+    environ = os.environ if environ is None else environ
+    cands = [path] if path else [environ.get(REFS_ENV), *REFS_FALLBACKS]
+    cands = [c for c in cands if c]
+    root = next((pathlib.Path(c) for c in cands if pathlib.Path(c).is_dir()), None)
+    if root is None:
+        return dict(status="REFUSED", dc="REFUSED", root=None,
+                    reasons=[f"no reference directory ({REFS_ENV} unset or missing; tried "
+                             f"{', '.join(cands) or 'nothing'})"])
+    mf = root / "manifest.json"
+    if not mf.is_file():
+        return dict(status="REFUSED", dc="REFUSED", root=str(root),
+                    reasons=[f"{mf} absent: no manifest, no hashes, no provenance"])
+    try:
+        m = json.loads(mf.read_text())
+    except Exception as e:                                   # noqa: BLE001
+        return dict(status="REFUSED", dc="REFUSED", root=str(root), reasons=[f"manifest unreadable: {e}"])
+    reasons = []
+    files = m.get("files")
+    if not isinstance(files, list) or not files:
+        reasons.append("manifest lists no files")
+    else:
+        for f in files:
+            fp = root / str(f.get("name", ""))
+            if not fp.is_file():
+                reasons.append(f"{f.get('name')}: listed but missing")
+            elif hashlib.sha256(fp.read_bytes()).hexdigest() != f.get("sha256"):
+                reasons.append(f"{f.get('name')}: sha256 does not match the manifest")
+    if not isinstance(m.get("sample_rate"), int) or m["sample_rate"] <= 0:
+        reasons.append("manifest declares no sample_rate")
+    coupling = m.get("capture_coupling")
+    if coupling not in ("ac", "dc"):
+        reasons.append("manifest does not declare capture_coupling (ac|dc)")
+    if reasons:
+        return dict(status="REFUSED", dc="REFUSED", root=str(root), reasons=reasons)
+    if coupling == "ac":
+        return dict(status="AVAILABLE", dc="REFUSED", root=str(root), sample_rate=m["sample_rate"],
+                    reasons=["capture is AC-coupled: its absence of DC is the capture chain's, "
+                             "so no raw-DC inference is permitted (shape/band comparison only)"])
+    return dict(status="AVAILABLE", dc="PERMITTED", root=str(root), sample_rate=m["sample_rate"], reasons=[])
+
+
+# ===========================================================================
+# The model: production baseline, raw bus, clamped output
+# ===========================================================================
+LEAD = LEAD_FRAMES
+
+
+def git(*a):
+    try:
+        return subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:                                        # noqa: BLE001
+        return "?"
+
+
+def provenance(cond_name=None):
+    import drums_fx as dx
+    dirty = "-dirty" if git("status", "--porcelain") else ""
+    c = CONDITIONS.get(cond_name or "dev")
+    init = dx.DrumsFx().couple_en
+    ref = reference_gate()
+    return (f"commit {git('rev-parse', '--short=12', 'HEAD')}{dirty}  SR {dx.SR}  "
+            f"condition {cond_name or '-'} {c}  analysis {ANALYSIS_S:.1f}s onset-aligned  "
+            f"K {dx.COUPLE_K} ({corner_hz(dx.COUPLE_K, dx.SR):.3f} Hz)\\n"
+            f"production init: DrumsFx().couple_en = {init} (A_COUPLE=0x{dx.A_COUPLE:02X}; the enable "
+            f"is OFF after reset and nothing in the shipped writes sets it); the '+coupling' column "
+            f"writes A_COUPLE=1 at frame 0 -- a DIAGNOSTIC TOGGLE, an experiment, not a production state\\n"
+            f"reference: {ref['status']} dc-inference={ref['dc']} {'; '.join(ref['reasons'])}")
+
+
+_MEMO = {}
+
+
+def render_bus(sound, enable, seconds, gain, vel):
+    """(raw_bus int64, out int16, n_clip). raw = the bus sum BEFORE the output
+    stage's clamp; out = the clamped int16 the block emits. Deterministic and
+    integer, so memoised."""
+    key = (sound, int(enable), seconds, gain, vel)
+    if key in _MEMO:
+        return _MEMO[key]
+    import drums_fx as dx
+    n = int(round(seconds * dx.SR))
+    kit = dx.kit_with_sounds(sound)
+    w = dx.hit_writes([(LEAD, dx.SOUND_STOP[sound], vel)], kit)
+    if enable:
+        w = sorted(list(w) + [(0, dx.A_COUPLE, 1)], key=lambda t: t[0])
+    d = dx.DrumsFx()
+    dmix, body = d.play(w, n)
+    assert d.couple_en == int(bool(enable)), (d.couple_en, enable)   # the toggle is the toggle
+    g = dx.accent_reg(gain)
+    raw = (np.asarray(dmix, np.int64) * g + np.asarray(body, np.int64) * g) >> 15
+    out = dx.output_fx(np.zeros(n), 0, dmix, g, body, g)
+    n_clip = int(((raw > 32767) | (raw < -32768)).sum())
+    _MEMO[key] = (raw, out, n_clip)
+    return _MEMO[key]
+
+
+def window_slice(x, i0, sr):
+    return np.asarray(x, float)[i0:i0 + int(round(ANALYSIS_S * sr))]
+
+
+def voice_row(sound, cond_name):
+    """The uncoupled production baseline's classification, both signals."""
+    import drums_fx as dx
+    c = CONDITIONS[cond_name]
+    raw, out, n_clip = render_bus(sound, 0, c["seconds"], c["gain"], c["vel"])
+    fc = corner_hz(dx.COUPLE_K, dx.SR)
+    lo, do = classify(out, dx.SR, fc)
+    lr, dr = classify(raw, dx.SR, fc)
+    i0 = onset_index(out)
+    seg = window_slice(out, i0, dx.SR)
+    pk = float(np.abs(seg).max()) or 1.0
+    return dict(voice=sound, cond=cond_name, label=lo, detail=do, raw_label=lr, n_clip=n_clip,
+                means=window_means(out, dx.SR), mean_frac=float(seg.mean()) / pk,
+                peak_dbfs=20 * math.log10(pk / FS + 1e-30))
+
+
+def fmt_row(r):
+    d = r["detail"]
+    if r["label"] == "REFUSED":
+        return f"  {r['voice']:3s} REFUSED  {d.get('reason')}   (peak {r['peak_dbfs']:.1f} dBFS, clip {r['n_clip']})"
+    return (f"  {r['voice']:3s} {r['label']:6s} beta {d['beta']:.3f}  S {d['flat']:7.2f}  "
+            f"sub20 {d['sub20_db']:7.1f} dBFS (+{d['margin_db']:.0f} over floor)  "
+            f"mean/peak {100 * r['mean_frac']:+6.2f} %  ring {100 * d['tail_ring']:.2f} %  "
+            f"peak {r['peak_dbfs']:.1f} dBFS  clip {r['n_clip']}  raw={r['raw_label']}")
+
+
+def screen(cond_name, voices=SCREEN_VOICES):
+    print(provenance(cond_name))
+    print("\nNON-CY SCREEN (uncoupled production baseline; class from beta AND S; nothing here is a sound verdict)")
+    rows = []
+    for v in voices:
+        r = voice_row(v, cond_name)
+        rows.append(r)
+        print(fmt_row(r), flush=True)
+    return rows
+
+
+def _sub20_atten_db(base, cand, i0, sr):
+    return (band_db(window_slice(base, i0, sr), sr, 0.0, 20.0)
+            - band_db(window_slice(cand, i0, sr), sr, 0.0, 20.0))
+
+
+def detail_row(sound, cond_name):
+    """Uncoupled vs production-register coupled, on the SAME absolute window."""
+    import drums_fx as dx
+    from scipy.signal import lfilter
+    c = CONDITIONS[cond_name]
+    sr = dx.SR
+    rb, ob, nb = render_bus(sound, 0, c["seconds"], c["gain"], c["vel"])
+    rc, oc, nc = render_bus(sound, 1, c["seconds"], c["gain"], c["vel"])
+    i0 = onset_index(ob)                                   # ONE onset for both sides
+    k = dx.COUPLE_K
+    fc = corner_hz(k, sr)
+    wb, wc = window_slice(ob, i0, sr), window_slice(oc, i0, sr)
+    measured = _sub20_atten_db(ob, oc, i0, sr)
+    # STEADY bound: |H|^2 of the implemented discrete one-pole on the baseline spectrum
+    p, f = onesided(wb, sr)
+    m = f < 20.0
+    a = 1.0 - 2.0 ** -k
+    z = np.exp(-1j * 2 * np.pi * f[m] / sr)
+    h2 = np.abs((1 - z) / (1 - a * z)) ** 2
+    steady = -10 * math.log10(float((p[m] * h2).sum()) / (float(p[m].sum()) + 1e-30) + 1e-30)
+    # FROM REST: an independent float one-pole (scipy) run causally over the baseline
+    # raw bus -- not the integer DcBlockFx -- then the same window. No truncation LSB.
+    yf = lfilter([1.0, -1.0], [1.0, -a], np.asarray(rb, float))
+    yf = np.clip(yf, -32768, 32767)
+    rest = _sub20_atten_db(ob, yf, i0, sr)
+    bands = {n: band_db(wc, sr, *BANDS[n]) - band_db(wb, sr, *BANDS[n]) for n in BANDS}
+    kind, d_hf, d_sh = share_change_kind(wb, wc, sr)
+    cls_b = classify(ob, sr, fc)
+    return dict(voice=sound, cond=cond_name, steady_db=steady, rest_db=rest, measured_db=measured,
+                bands_db=bands, hf_kind=kind, hf_share_delta=d_sh, clip=(nb, nc),
+                peak_delta_db=20 * math.log10((np.abs(wc).max() + 1e-9) / (np.abs(wb).max() + 1e-9)),
+                label=cls_b[0], beta=cls_b[1].get("beta"), S=cls_b[1].get("flat"),
+                reason=cls_b[1].get("reason"),
+                sub20_base_db=band_db(wb, sr, 0.0, 20.0), sub20_coupled_db=band_db(wc, sr, 0.0, 20.0))
+
+
+def fmt_detail(r):
+    b = r["bands_db"]
+    lab = f"{r['label']}" + (f" ({r['reason']})" if r["label"] == "REFUSED" else
+                             f" beta {r['beta']:.3f} S {r['S']:.2f}")
+    return (f"  {r['voice']:3s} [{lab}]\n"
+            f"      sub-20 attenuation  steady-state bound {r['steady_db']:6.2f} dB   "
+            f"causal-from-rest (float one-pole) {r['rest_db']:6.2f} dB   "
+            f"measured (production A_COUPLE=1) {r['measured_db']:6.2f} dB\n"
+            f"      absolute band change  sub20 {b['sub20']:+7.2f}  body {b['body']:+7.2f}  "
+            f"mid {b['mid']:+7.2f}  HF {b['hf']:+7.2f} dB   peak {r['peak_delta_db']:+.2f} dB   "
+            f"clip base/coupled {r['clip'][0]}/{r['clip'][1]}\n"
+            f"      HF share change {r['hf_share_delta']:+.2f} pp -> read as {r['hf_kind']}")
+
+
+def hypotheses(rows):
+    """H_CH and H_RS as predeclared tests. Each states what it establishes."""
+    out = []
+    ch = rows.get("CH")
+    if ch:
+        short = ch["steady_db"] - ch["measured_db"]
+        close = abs(ch["rest_db"] - ch["measured_db"])
+        if ch["label"] == "REFUSED":
+            v = f"NO VERDICT (class REFUSED: {ch['reason']})"
+        elif short < CH_SHORTFALL_MIN_DB:
+            v = f"NOT APPLICABLE: shortfall {short:.2f} dB < {CH_SHORTFALL_MIN_DB} dB, nothing to explain"
+        elif close <= CH_REST_TOL_DB:
+            v = (f"CONSISTENT: shortfall {short:.2f} dB vs steady bound; float causal-from-rest prediction "
+                 f"within {close:.2f} dB of measured. (A prediction that fits; not an intervention.)")
+        else:
+            v = f"NOT SUPPORTED: from-rest prediction differs from measured by {close:.2f} dB (> {CH_REST_TOL_DB})"
+        out.append(("H_CH  attenuation < steady bound because the causal blocker starts from rest", v))
+    rs = rows.get("RS")
+    if rs:
+        if rs["label"] == "REFUSED":
+            v = f"NO VERDICT (class REFUSED: {rs['reason']})"
+        elif rs["label"] == "SKIRT":
+            v = (f"SUPPORTED as a measurement: S {rs['S']:.2f} (flat = 1), beta {rs['beta']:.3f}: the 0-20 Hz band "
+                 f"is the skirt of a finite burst; steady bound {rs['steady_db']:.2f} dB.")
+        else:
+            v = f"NOT SUPPORTED: class {rs['label']} (S {rs['S']:.2f}, beta {rs['beta']:.3f})"
+        out.append(("H_RS  sub-20 Hz energy is largely the onset skirt", v))
+    return out
+
+
+def subject_verdict(rows_by_cond):
+    """Per-subject ending, from the baseline rows of BOTH conditions. Never a
+    sound-fidelity claim: that is a capability refusal while no DC-coupled
+    reference exists."""
+    labs = {c: r["label"] for c, r in rows_by_cond.items()}
+    if "REFUSED" in labs.values():
+        why = "; ".join(f"{c}: {r['detail'].get('reason')}" for c, r in rows_by_cond.items() if r["label"] == "REFUSED")
+        return f"NO VERDICT (apparatus REFUSED: {why})"
+    if len(set(labs.values())) != 1:
+        return f"NO VERDICT (class differs across predeclared conditions: {labs}); limits NOT revisited"
+    lab = next(iter(labs.values()))
+    if lab == "SKIRT":
+        return "NO STANDING OFFSET ESTABLISHED: sub-20 Hz energy is onset skirt in both conditions; a DC blocker cannot remove it"
+    if lab == "MIXED":
+        return "MIXED in both conditions: offset vs skirt not separable by the two statistics; no defect established"
+    if all(abs(r["mean_frac"]) >= OFFSET_PEAK_FRAC for r in rows_by_cond.values()):
+        return ("MODEL-SIDE STANDING OFFSET in both conditions (|mean|/peak >= "
+                f"{100 * OFFSET_PEAK_FRAC:.0f} %); SOUND-FIDELITY DEFECT: capability REFUSED (no DC-coupled reference)")
+    return "OFFSET-like but |mean|/peak below the declared magnitude: no defect established"
+
+
+def detail(cond_name, voices=SUBJECTS + CONTROLS):
+    print(provenance(cond_name))
+    print("\nDETAIL: subjects CH, RS; controls BD, HT (diagnostic coupling toggle = experiment)")
+    rows = {}
+    for v in voices:
+        rows[v] = detail_row(v, cond_name)
+        print(fmt_detail(rows[v]), flush=True)
+    print("\nHYPOTHESES (predeclared limits; status labelled)")
+    for h, v in hypotheses(rows):
+        print(f"  {h}\n      -> {v}")
+    return rows
+
+
+def batch_spec():
+    py = "python3 tools/probes/residual_dc.py"
+    jobs = [f"{py} --screen --condition dev", f"{py} --screen --condition confirm",
+            f"{py} --detail --condition dev", f"{py} --detail --condition confirm"]
+    return ('python3 tools/run_all.py --jobs 2 --timeout 3600 --json build/residual-dc-batch.json \\\n    '
+            + " \\\n    ".join(f'"{j}"' for j in jobs))
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    for flag in ("declared", "controls", "reference", "screen", "detail", "batch-spec"):
+        ap.add_argument("--" + flag, action="store_true")
+    ap.add_argument("--condition", choices=sorted(CONDITIONS), default="dev")
+    ap.add_argument("--voices", default=None)
+    a = ap.parse_args(argv)
+    vs = tuple(a.voices.split(",")) if a.voices else None
+    if a.declared:
+        for k in ("ANALYSIS_S", "STABILITY_S", "BETA_OFFSET_MIN", "BETA_SKIRT_MAX", "BETA_STABLE_TOL",
+                  "S_SKIRT_MAX", "S_OFFSET_MIN", "TAIL_RING_MAX", "MIN_PEAK_LSB", "RES_MARGIN_DB",
+                  "OFFSET_PEAK_FRAC", "HF_ADDED_DB", "HF_FLAT_DB", "CH_REST_TOL_DB", "CH_SHORTFALL_MIN_DB"):
+            print(f"{k} = {globals()[k]}")
+        print("CONDITIONS =", json.dumps(CONDITIONS))
+    if a.controls:
+        rows = controls_matrix()
+        print_matrix(rows)
+        bad = [d for d, r in rows.items() if d != "(clean)" and "MOVED" not in r.values()]
+        return 1 if bad or any(v == "RED" for v in rows["(clean)"].values()) else 0
+    if a.reference:
+        g = reference_gate()
+        print(json.dumps(g, indent=1))
+    if a.screen:
+        screen(a.condition, vs or SCREEN_VOICES)
+    if a.detail:
+        detail(a.condition, vs or (SUBJECTS + CONTROLS))
+    if a.__dict__["batch_spec"]:
+        print(batch_spec())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

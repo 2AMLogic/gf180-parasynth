@@ -159,3 +159,96 @@ def test_mixed_is_reported_not_forced():
     label, d = R.classify(x, SR, FC)
     assert label in ("MIXED", "OFFSET", "REFUSED"), (label, d)
     assert label != "SKIRT", d
+
+
+# ---- the reference gate: REFUSED is an outcome, and each guard has its defeater ----
+def _corpus(tmp, coupling="dc", corrupt=False, drop_sr=False, drop_file=False):
+    import hashlib
+    f = tmp / "BD.wav"
+    f.write_bytes(b"RIFFfake")
+    h = hashlib.sha256(b"RIFFfake").hexdigest()
+    if corrupt:
+        h = "0" * 64
+    m = {"files": [{"name": "BD.wav", "sha256": h}], "sample_rate": 48000}
+    if coupling:
+        m["capture_coupling"] = coupling
+    if drop_sr:
+        del m["sample_rate"]
+    if drop_file:
+        f.unlink()
+    (tmp / "manifest.json").write_text(json.dumps(m))
+    return str(tmp)
+
+
+def test_reference_gate_refuses_when_there_is_no_corpus(tmp_path):
+    g = R.reference_gate(str(tmp_path / "nope"), environ={})
+    assert g["status"] == "REFUSED" and g["dc"] == "REFUSED"
+
+
+def test_reference_gate_refuses_without_a_manifest(tmp_path):
+    assert R.reference_gate(str(tmp_path), environ={})["status"] == "REFUSED"
+
+
+@pytest.mark.parametrize("kw", [dict(corrupt=True), dict(drop_sr=True), dict(drop_file=True),
+                                dict(coupling=None)], ids=["bad-hash", "no-rate", "missing-file", "no-coupling"])
+def test_reference_gate_refuses_each_defeating_manifest(tmp_path, kw):
+    g = R.reference_gate(_corpus(tmp_path, **kw), environ={})
+    assert g["status"] == "REFUSED" and g["reasons"], g
+
+
+def test_an_ac_coupled_capture_is_available_but_never_proves_absence_of_dc(tmp_path):
+    g = R.reference_gate(_corpus(tmp_path, coupling="ac"), environ={})
+    assert g["status"] == "AVAILABLE" and g["dc"] == "REFUSED", g
+
+
+def test_only_a_declared_dc_coupled_verified_capture_permits_a_dc_reading(tmp_path):
+    g = R.reference_gate(_corpus(tmp_path, coupling="dc"), environ={})
+    assert g["status"] == "AVAILABLE" and g["dc"] == "PERMITTED", g
+
+
+# ---- the ending logic, on constructed rows (no render) ------------------------------
+def _row(label, mean_frac=0.0, reason=None):
+    return dict(label=label, mean_frac=mean_frac, detail=dict(reason=reason))
+
+
+def test_verdict_never_claims_a_sound_defect_without_a_reference():
+    v = R.subject_verdict({"dev": _row("OFFSET", .1), "confirm": _row("OFFSET", .1)})
+    assert "capability REFUSED" in v and "STANDING OFFSET" in v
+
+
+def test_verdict_is_no_verdict_when_a_condition_refuses_or_the_conditions_disagree():
+    assert R.subject_verdict({"dev": _row("REFUSED", reason="x"), "confirm": _row("OFFSET", .1)}).startswith("NO VERDICT")
+    v = R.subject_verdict({"dev": _row("OFFSET", .1), "confirm": _row("SKIRT")})
+    assert v.startswith("NO VERDICT") and "NOT revisited" in v
+
+
+def test_a_small_offset_is_not_a_defect_by_the_declared_magnitude():
+    v = R.subject_verdict({"dev": _row("OFFSET", .001), "confirm": _row("OFFSET", .001)})
+    assert "no defect established" in v
+
+
+def test_skirt_in_both_conditions_establishes_no_offset():
+    v = R.subject_verdict({"dev": _row("SKIRT"), "confirm": _row("SKIRT")})
+    assert v.startswith("NO STANDING OFFSET")
+
+
+def test_hypotheses_refuse_on_a_refused_class_and_do_not_fit_a_bad_prediction():
+    base = dict(label="OFFSET", beta=.97, S=40.0, reason=None, steady_db=11.7, measured_db=5.0)
+    ok = R.hypotheses({"CH": dict(base, rest_db=5.4)})[0][1]
+    assert ok.startswith("CONSISTENT")
+    bad = R.hypotheses({"CH": dict(base, rest_db=9.0)})[0][1]
+    assert bad.startswith("NOT SUPPORTED")
+    ref = R.hypotheses({"CH": dict(base, label="REFUSED", reason="r", rest_db=5.0)})[0][1]
+    assert ref.startswith("NO VERDICT")
+    na = R.hypotheses({"CH": dict(base, measured_db=11.0, rest_db=11.0)})[0][1]
+    assert na.startswith("NOT APPLICABLE")
+
+
+def test_the_toggle_in_the_render_is_the_register_the_model_ships():
+    """Check that the thing tested is the thing that ships: the production
+    register at reset is 0, and the enable writes go through DrumsFx.write."""
+    import drums_fx as dx
+    assert dx.DrumsFx().couple_en == 0
+    d = dx.DrumsFx()
+    d.write(dx.A_COUPLE, 1)
+    assert d.couple_en == 1
