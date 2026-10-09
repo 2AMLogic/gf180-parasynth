@@ -337,7 +337,8 @@ verify-full:
 ##   the correct one. Measured both ways with verify_synth_top.py --rtl against
 ##   the pre-integration drum section: 124 of 256 before, 156 of 256 after, no
 ##   overrun either way. verify_synth_top.py prints a NOTE whenever the strobe is
-##   past 128. The control still fires against i2s_tx on its own bench.
+##   past 128. The control fires on rtl-sketch/verify_i2s_tx.py instead (listed
+##   below), whose bench strobes at cycle 20 so the right channel is observable.
 ##
 ##   VOICE_MIX_SAT -- the voice's pre-ladder mixer never reaches its rail on this
 ##   patch, so the control is silent here. It is verify_voice.py's (BUGS) and
@@ -505,6 +506,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject VOICE_OUT_SAT --expect-fail --outdir build/top-outsat" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail --outdir build/top-i2sshift" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject I2S_DELAY --expect-fail --outdir build/top-i2sdelay" \
+	  "$(PY) rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail --outdir build/i2s-swap" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_ADDR7 --expect-fail --outdir build/top-addr7" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_DATA24 --expect-fail --outdir build/top-data24" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_NOSEC --expect-fail --outdir build/top-nosec" \

@@ -78,9 +78,17 @@ jobs:
           python rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail
           python rtl-sketch/verify_synth_top.py --inject VOICE_DRUM_CLAMP16    --expect-fail
           python rtl-sketch/verify_synth_top.py --inject I2S_SHIFT             --expect-fail
-          python rtl-sketch/verify_synth_top.py --inject I2S_SWAP              --expect-fail
+          python rtl-sketch/verify_synth_top.py --inject I2S_DELAY             --expect-fail
           python rtl-sketch/verify_synth_top.py --inject MODAL_NUM_HOLD        --expect-fail
           python rtl-sketch/verify_synth_top.py --inject DRUM_ENV_FLOOR        --expect-fail
+      # I2S_SWAP is BLIND at the whole chip (the core strobes past cycle 127, so a
+      # swapped right channel is bit-identical -- see the Makefile's controls
+      # target, #619). It is not listed above as a control that fires. The right
+      # channel is covered by i2s_tx's own bench, which strobes early enough.
+      - name: the right channel -- i2s_tx on its own bench (#619)
+        run: |
+          python rtl-sketch/verify_i2s_tx.py
+          python rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail
       # The build/report-tool half of docs/verification-rules.md rule 5 (#245).
       # Pure Python: it stages a copy of an archived ORFS run and drives the
       # shipped summarize.py, so no EDA tool is needed. Its X-propagation
