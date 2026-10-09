@@ -135,3 +135,35 @@ def test_regressions_control():
     assert sel.regressions(base, worse) and "spec" in sel.regressions(base, worse)[0]
     crossed = [{"ratios": {"spec": 2.0, "attack": 1.05, "decay": 5.0}}]
     assert "crossed" in sel.regressions(base, crossed)[0]
+
+
+# ---- the confirm precondition (#595) -----------------------------------------
+def _good_prov():
+    return {"model_sha16": "m", "engine_fingerprint": "e", "probe_sha16": "p", "commit": "c",
+            "sources_dirty": False, "sources_moved_during_run": {}}
+
+
+def test_sweep_provenance_accepts_a_matching_clean_sweep():
+    c.check_sweep_provenance(_good_prov(), _good_prov())
+
+
+@pytest.mark.parametrize("field,value", [
+    ("sources_dirty", True),                              # dirty sweep, nominal commit would match
+    ("sources_moved_during_run", {"model_sha16": ["a", "b"]}),
+    ("engine_fingerprint", "other"),                      # changed imported engine dependency
+    ("probe_sha16", "other"),                             # changed selection/measurement code
+    ("model_sha16", "other"),
+])
+def test_sweep_provenance_refuses_each_defeating_input(field, value):
+    sw = _good_prov()
+    sw[field] = value
+    with pytest.raises(c.Refused):
+        c.check_sweep_provenance(sw, _good_prov())
+
+
+@pytest.mark.parametrize("field", c.PROVENANCE_KEYS)
+def test_sweep_provenance_refuses_absent_records(field):
+    sw = _good_prov()
+    del sw[field]
+    with pytest.raises(c.Refused):
+        c.check_sweep_provenance(sw, _good_prov())

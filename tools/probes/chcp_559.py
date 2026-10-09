@@ -213,26 +213,6 @@ def engine_fingerprint(dx=None) -> str:
     return h.hexdigest()[:16]
 
 
-def engine_fingerprint_at(commit: str) -> str:
-    """engine_fingerprint() of model/drums_fx.py as it was at `commit`."""
-    import importlib.util
-    import subprocess
-    import tempfile
-    src = subprocess.run(["git", "show", f"{commit}:model/drums_fx.py"], cwd=ROOT,
-                         capture_output=True, text=True, check=True).stdout
-    with tempfile.TemporaryDirectory() as td:
-        p = pathlib.Path(td) / "drums_fx_at.py"
-        p.write_text(src)
-        spec = importlib.util.spec_from_file_location("drums_fx_at", p)
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules["drums_fx_at"] = mod          # dataclasses resolve their module by name
-        try:
-            spec.loader.exec_module(mod)
-            return engine_fingerprint(mod)
-        finally:
-            sys.modules.pop("drums_fx_at", None)
-
-
 def render_block(sound: str, kit: list, hit: int, accent: float = 1.0, seconds: float = 2.2) -> np.ndarray:
     """One hit through the REAL DrumsFx and output stage, exactly as
     run_case.render_drum_solo does it, with `kit` in place of the shipped
@@ -608,6 +588,28 @@ def _provenance() -> dict:
             "sources_dirty": bool(git("status", "--porcelain", "--", "tools", "model"))}
 
 
+PROVENANCE_KEYS = ("model_sha16", "engine_fingerprint", "probe_sha16", "commit", "sources_dirty",
+                   "sources_moved_during_run")
+
+
+def check_sweep_provenance(sw: dict, now: dict, name="the sweep") -> None:
+    """Refuse a DEV sweep that was not rendered by exactly this tree's engine
+    and selection/measurement code, from clean sources. Compares what the sweep
+    RECORDED, never one reconstructed from its nominal commit: a dirty sweep
+    names a commit whose sources it did not run (#595). Raises before any
+    confirm render."""
+    missing = [k for k in PROVENANCE_KEYS if k not in sw]
+    if missing:
+        raise Refused(f"{name} records no {missing}: its provenance is unknown, re-run it")
+    if sw["sources_dirty"]:
+        raise Refused(f"{name} was rendered from a dirty tree; its commit does not name its sources")
+    if sw["sources_moved_during_run"]:
+        raise Refused(f"{name} had sources change during its run: {sw['sources_moved_during_run']}")
+    for k in ("model_sha16", "engine_fingerprint", "probe_sha16"):
+        if sw[k] != now[k]:
+            raise Refused(f"{name} was rendered with a different {k} ({sw[k]}, this tree {now[k]})")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("cmd", choices=("refs", "baseline", "check-fast", "check-cpt", "cp-tail", "cp-sweep", "cpt-sweep", "ch-sweep", "confirm", "tables", "regen"))
@@ -675,13 +677,7 @@ def main(argv=None) -> int:
                 chosen = {"cand": want, "override_of": (sw["result"].get("selected") or {}).get("label")}
             if not chosen:
                 raise Refused(f"{a.sweep} selected nothing on DEV: there is nothing to confirm")
-            if sw.get("model_sha16") != model_sha():
-                now = engine_fingerprint()
-                then = engine_fingerprint_at(sw["commit"])
-                print(f"model file changed since the sweep ({sw.get('model_sha16')} -> {model_sha()}); "
-                      f"engine+images fingerprint at {sw['commit'][:12]} {then}, now {now}", flush=True)
-                if then != now:
-                    raise Refused(f"{a.sweep} was swept on an engine/image that differs from this tree's")
+            check_sweep_provenance(sw, _provenance(), a.sweep)
             res = sel.confirm(a.sound, chosen["cand"], refs)
         else:
             import chcp_559_select as sel
