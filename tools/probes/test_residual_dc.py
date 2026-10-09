@@ -439,3 +439,111 @@ def test_an_all_refused_screen_exits_2_not_0(monkeypatch):
     assert R.main(["--screen", "--voices", "RS,HT"]) == 2
     monkeypatch.setattr(R, "voice_row", lambda v, c: row("REFUSED" if v == "RS" else "SKIRT")(v, c))
     assert R.main(["--screen", "--voices", "RS,HT"]) == 0
+
+
+# ---- --verdict: provenance and numeric fields are validated where the JSON is read --
+# Judge review of ba62bc8: two absent / null / "?" commits compared equal, and a NaN
+# mean_frac fell through to "below the declared magnitude". Each defeating input
+# below must REFUSE (exit 2), never produce an ending.
+def _offset_pair(dev_kw=None, con_kw=None, mean_frac=0.1):
+    dev = _rec("dev", [_vrow("CH", "OFFSET", mean_frac)])
+    con = _rec("confirm", [_vrow("CH", "OFFSET", mean_frac)])
+    for r, kw in ((dev, dev_kw or {}), (con, con_kw or {})):
+        for k, v in kw.items():
+            if v is _ABSENT:
+                r.pop(k, None)
+            else:
+                r[k] = v
+    return dev, con
+
+
+_ABSENT = object()
+
+
+@pytest.mark.parametrize("commit", [_ABSENT, None, "", "?", "a" * 12, "g" * 40, "A" * 40, 40, ["a" * 40]],
+                         ids=["absent", "null", "empty", "git-failure-sentinel", "short", "non-hex",
+                              "uppercase", "int", "list"])
+def test_verdict_refuses_matching_but_invalid_commits(tmp_path, capsys, commit):
+    """Two records with the SAME invalid commit agree with each other and with
+    nothing: provenance is checked per record before the records are compared."""
+    dev, con = _offset_pair({"commit": commit}, {"commit": commit})
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "commit" in out and "STANDING OFFSET" not in out, out
+
+
+@pytest.mark.parametrize("dirty", [_ABSENT, None, 0, "false"], ids=["absent", "null", "int-zero", "string"])
+def test_verdict_refuses_a_dirty_flag_that_is_not_the_boolean_false(tmp_path, capsys, dirty):
+    dev, con = _offset_pair({"dirty": dirty}, {"dirty": dirty})
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 2
+    assert "dirty" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "+inf", "-inf"])
+@pytest.mark.parametrize("where", ["both", "dev", "confirm"])
+def test_verdict_refuses_a_non_finite_mean_frac(tmp_path, capsys, bad, where):
+    """json.loads accepts NaN/Infinity. NaN compares False with every threshold,
+    so it read as 'below the declared magnitude'; +/-inf read as a defect."""
+    dev, con = _offset_pair()
+    for r in ((dev, con) if where == "both" else (dev,) if where == "dev" else (con,)):
+        r["rows"][0]["mean_frac"] = bad
+    paths = _write(tmp_path, dev, con)
+    assert any(t in pathlib.Path(paths[0 if where != "confirm" else 1]).read_text()
+               for t in ("NaN", "Infinity"))                        # the JSON really carries it
+    assert R.main(["--verdict", *paths]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "mean_frac" in out and "no defect established" not in out, out
+
+
+@pytest.mark.parametrize("bad", [_ABSENT, None, True, "0.1", [0.1]],
+                         ids=["absent", "null", "bool", "string", "list"])
+def test_verdict_refuses_a_mean_frac_that_is_not_a_real_number(tmp_path, capsys, bad):
+    """json `true` is a bool, and abs(True) = 1 clears every magnitude threshold."""
+    dev, con = _offset_pair()
+    for r in (dev, con):
+        if bad is _ABSENT:
+            r["rows"][0].pop("mean_frac")
+        else:
+            r["rows"][0]["mean_frac"] = bad
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 2
+    assert "mean_frac" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("row", [dict(voice="CH", label="OFFSETT", mean_frac=0.1, detail={}),
+                                 dict(voice="CH", label=None, mean_frac=0.1, detail={}),
+                                 dict(label="OFFSET", mean_frac=0.1, detail={}),
+                                 dict(voice="CH", label="OFFSET", mean_frac=0.1, detail=None),
+                                 "CH"],
+                         ids=["unknown-label", "null-label", "no-voice", "null-detail", "not-a-row"])
+def test_verdict_refuses_a_malformed_row(tmp_path, capsys, row):
+    dev, con = _offset_pair()
+    dev["rows"] = [row]
+    con["rows"] = [row]
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+
+
+def test_a_refused_row_needs_no_finite_mean_frac():
+    """A row the apparatus REFUSED (e.g. non-finite samples) carries no magnitude
+    that can reach an ending, so its NaN does not refuse the whole record."""
+    dev, con = _offset_pair()
+    dev["rows"].append(_vrow("RS", "REFUSED", float("nan"), reason="non-finite samples"))
+    con["rows"].append(_vrow("RS", "SKIRT"))
+    status, ends, why = R.verdicts([dev, con])
+    assert status == "OK" and ends["RS"].startswith("NO VERDICT"), (status, ends, why)
+
+
+def test_the_valid_pair_still_produces_its_ending(tmp_path, capsys):
+    """Control for the controls: the unmodified pair is not refused."""
+    assert R.main(["--verdict", *_write(tmp_path, *_offset_pair())]) == 0
+    assert "STANDING OFFSET" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("rows_by_cond", [{}, {"dev": _row("OFFSET", .1)}, {"confirm": _row("OFFSET", .1)},
+                                          {"dev": _row("OFFSET", .1), "other": _row("OFFSET", .1)}],
+                         ids=["empty", "dev-only", "confirm-only", "dev-plus-undeclared"])
+def test_subject_verdict_refuses_unless_both_declared_conditions_are_present(rows_by_cond):
+    """Agreement among the labels supplied is not agreement across conditions:
+    one row agrees with itself, and no rows agree vacuously."""
+    v = R.subject_verdict(rows_by_cond)
+    assert v.startswith("REFUSED") and "STANDING OFFSET" not in v, v
