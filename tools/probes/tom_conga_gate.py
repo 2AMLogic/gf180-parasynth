@@ -58,7 +58,9 @@ class Refused(RuntimeError):
 #: reinstated on demand; each must turn a named known answer red
 #: (test_tom_conga_gate.py::test_injection_*). "allpole-stub" is the start-red
 #: stub of the H1 fixture: it ignores the numerator it is given.
-INJECTIONS = ("no-preserve", "no-peak", "confirm-reads-all", "allpole-stub")
+#: "twin-no-host-writes" is a float twin that drops the host's frame-by-frame
+#: writes (the diode-drop staircase), so it no longer tracks the engine.
+INJECTIONS = ("no-preserve", "no-peak", "confirm-reads-all", "allpole-stub", "twin-no-host-writes")
 INJECT: set = set()
 
 
@@ -197,7 +199,13 @@ def render_twin(sound: str, ratio: float = 1.0, numer=(1.0,)) -> tuple:
     numerator. It separates the MECHANISM (does a DC zero move the gate the
     way the 808 does?) from the fixed-point bank's deadband (#350), which
     #351 found breaks the numerator on the shipped engine. Its RAW form is
-    checked against the shipped render (`test_twin_raw_tracks_the_engine`)."""
+    checked against the shipped render on the gate's pitch_shape
+    (`test_twin_raw_tracks_the_engine`, which needs the corpus); the
+    `twin-no-host-writes` injection, a twin that drops the frame-by-frame host
+    writes, must turn that test red.
+
+    It does NOT separate the deadband from the fixed-point BP+X4 candidate's
+    other difference, the x4 exciter scaling: the twin has neither."""
     import drums_fx as dx
     import run_case as rc
     n = int(rc.SOLO_SECONDS.get(sound, 2.2) * dx.SR)
@@ -214,6 +222,8 @@ def render_twin(sound: str, ratio: float = 1.0, numer=(1.0,)) -> tuple:
     cur = {base: kit[base], base + 1: kit[base + 1]}
     ev = sorted((f, a, v) for f, a, v in dx.hit_writes([(hit, dx.SOUND_STOP[sound], 1.0)],
                                                        sorted(kit.items())) if a in cur)
+    if "twin-no-host-writes" in INJECT:
+        ev = []
     k = 0
     for i in range(n):
         while k < len(ev) and ev[k][0] <= i:
@@ -283,15 +293,48 @@ def score(T, bar, y, ysr, label) -> dict:
 
 
 def git(*a) -> str:
-    return subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    p = subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True)
+    if p.returncode != 0:
+        raise Refused(f"git {' '.join(a)} failed ({p.returncode}): {p.stderr.strip()}")
+    return p.stdout.strip()
 
 
-def provenance(refs: pathlib.Path) -> dict:
+#: What a record's numbers depend on: the code (model/, tools/) and the frozen
+#: pre-registration this probe reads. The records it WRITES live beside
+#: prereg.json and are deliberately not in scope, so regenerating one record
+#: does not block the next.
+DIRTY_SCOPE = ("model", "tools", str(PREREG.relative_to(ROOT)))
+
+
+def provenance(refs: pathlib.Path | None) -> dict:
+    """Provenance read at the START of a measuring command (#589 review: it was
+    read when the run finished, so run.json/twin.json named a commit neither ran
+    from). REFUSES on a dirty model/, tools/ or prereg.json: a record has to name
+    a commit that reproduces it. The modules the measurement uses are imported
+    here, so the code that runs is the code this commit + clean flag describe
+    even if the tree is edited mid-run."""
+    import drums_fx  # noqa: F401
+    import run_case  # noqa: F401
+    dirty = git("status", "--porcelain", "--", *DIRTY_SCOPE)
+    if dirty:
+        raise Refused("uncommitted changes in " + ", ".join(DIRTY_SCOPE)
+                      + "; commit first so the record names the code that produced it:\n" + dirty)
     return {"commit": git("rev-parse", "HEAD"),
-            "model_tools_dirty": bool(git("status", "--porcelain", "--", "model", "tools")),
+            "model_tools_dirty": False,
+            "read_at": "start",
             "origin_main": git("rev-parse", "origin/main"),
             "prereg_sha256_16": sha16(PREREG) if PREREG.exists() else None,
-            "refs": str(refs)}
+            "refs": None if refs is None else str(refs)}
+
+
+def close_provenance(prov: dict) -> dict:
+    """Re-read HEAD and the dirty flag when the run ends. It does not replace
+    the start record; it says whether the checkout moved under the run."""
+    end = git("rev-parse", "HEAD")
+    prov["commit_at_end"] = end
+    prov["head_moved_during_run"] = end != prov["commit"]
+    prov["dirty_at_end"] = bool(git("status", "--porcelain", "--", *DIRTY_SCOPE))
+    return prov
 
 
 # ---------------------------------------------------------------------------
@@ -655,14 +698,13 @@ def main(argv=None) -> int:
     j.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     try:
+        prov = None if a.cmd == "judge" else provenance(getattr(a, "refs", None))
         if a.cmd == "knownanswer":
             res = knownanswer()
         elif a.cmd == "harmonics":
             res = h2_response(a.refs, load_prereg()["corpus"]["sha256_16"])
-            res["provenance"] = provenance(a.refs)
         elif a.cmd == "ratepath16":
             res = ratepath16(a.refs)
-            res["provenance"] = provenance(a.refs)
         elif a.cmd == "judge":
             rec = json.loads(a.record.read_text())
             res = judge(rec, load_prereg())
@@ -675,7 +717,8 @@ def main(argv=None) -> int:
                    if a.cmd == "diagnose" else
                    run(a.refs, pr, a.sounds, a.codes) if a.cmd == "run" else
                    twin(a.refs, pr, a.sounds, a.codes))
-            res["provenance"] = provenance(a.refs)
+        if prov is not None:
+            res["provenance"] = close_provenance(prov)
     except (Refused, pg.Refused) as e:
         print("REFUSED:", e)
         return 2

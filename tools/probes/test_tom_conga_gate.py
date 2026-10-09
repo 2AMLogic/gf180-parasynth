@@ -1,13 +1,14 @@
 """Known answers and controls for tools/probes/tom_conga_gate.py (#558).
 
 The model-independent tests (float resonators, the judge's frozen rules) run
-anywhere. The two that need the Fischer corpus read GF180_TR808_FISCHER (the
+anywhere. The tests that need the Fischer corpus read GF180_TR808_FISCHER (the
 checkout of tidalcycles/sounds-tr808-fischer at 85fbecf) and are SKIPPED with
 that reason when it is absent -- a skip, never a pass.
 """
 from __future__ import annotations
 
 import copy
+import json
 import os
 import pathlib
 import sys
@@ -173,16 +174,93 @@ def test_refuses_a_different_corpus(tmp_path):
         tc.load_checked(tmp_path, "lt8/LT50.WAV", None)
 
 
+#: The float twin's RAW form must give the gate's pitch_shape the shipped engine
+#: gives, or the twin-BP vs twin-RAW attribution says nothing about the engine.
+#: twin.json's worst case over all 30 conditions is 0.229 (HC25). LT00 carries
+#: the diode-drop staircase (the conga modes have no per-frame host writes), so
+#: it is the row the `twin-no-host-writes` injection turns red (3.34 -> 6.10).
+TWIN_TOL = 0.25
+TWIN_ROWS = (("LT", "00"), ("HC", "25"), ("MC", "00"))
+
+
+@needs_refs
+def test_twin_raw_tracks_the_engine():
+    refs = pathlib.Path(REFS)
+    hashes = tc.load_prereg()["corpus"]["sha256_16"]
+    for s, c in TWIN_ROWS:
+        rel = tc.take_rel(s, c)
+        x50, sr50 = tc.load_checked(refs, tc.take_rel(s, "50"), hashes)
+        f50 = tc.take_f0(pg.Target(x50, sr50, s, tc.take_rel(s, "50")))
+        x, sr = tc.load_checked(refs, rel, hashes)
+        T = pg.Target(x, sr, s, rel)
+        bar = tc.bar_for_take(s, rel, refs, T, hashes)["bar"]
+        ratio = tc.take_f0(T) / f50
+        ship = tc.score(T, bar, *tc.render(s, ratio), "shipped")["ratio"]["pitch_shape"]
+        twin = tc.score(T, bar, *tc.render_twin(s, ratio), "twin-RAW")["ratio"]["pitch_shape"]
+        assert abs(twin - ship) <= TWIN_TOL, f"{s}{c}: twin-RAW {twin:.3f} vs shipped {ship:.3f}"
+
+
+# ---- provenance is read at the start, and a dirty tree is REFUSED ----
+def _fake_git(state):
+    def g(*a):
+        if a[:2] == ("rev-parse", "HEAD"):
+            return state["head"]
+        if a[:1] == ("rev-parse",):
+            return "origin-main-sha"
+        if a[:1] == ("status",):
+            state["status_scope"] = a[3:]
+            return state["dirty"]
+        raise AssertionError(a)
+    return g
+
+
+def test_dirty_tree_is_refused_before_any_measurement(monkeypatch, tmp_path):
+    """The defeating input for a provenance read: a record that ran from
+    uncommitted code. It must REFUSE (exit 2), write nothing, and never start
+    the measurement."""
+    state = {"head": "A", "dirty": " M tools/probes/tom_conga_gate.py"}
+    monkeypatch.setattr(tc, "git", _fake_git(state))
+    ran = []
+    monkeypatch.setattr(tc, "knownanswer", lambda: ran.append(1) or {})
+    out = tmp_path / "ka.json"
+    assert tc.main(["knownanswer", "--out", str(out)]) == 2
+    assert not ran and not out.exists()
+    # the scope includes the pre-registration the probe reads, not only code
+    assert "model" in state["status_scope"] and "tools" in state["status_scope"]
+    assert any(p.endswith("prereg.json") for p in state["status_scope"])
+
+
+def test_provenance_names_the_commit_the_run_started_from(monkeypatch, tmp_path):
+    """The defeating input for an end-of-run read (what run.json and twin.json
+    have): HEAD moves while the run is in progress."""
+    state = {"head": "A", "dirty": ""}
+    monkeypatch.setattr(tc, "git", _fake_git(state))
+
+    def work():
+        state["head"] = "B"          # a commit lands mid-run
+        state["dirty"] = " M model/drums_fx.py"
+        return {}
+    monkeypatch.setattr(tc, "knownanswer", work)
+    out = tmp_path / "ka.json"
+    assert tc.main(["knownanswer", "--out", str(out)]) == 0
+    p = json.loads(out.read_text())["provenance"]
+    assert p["commit"] == "A" and p["read_at"] == "start" and p["model_tools_dirty"] is False
+    assert p["commit_at_end"] == "B" and p["head_moved_during_run"] and p["dirty_at_end"]
+
+
 # ---- rule 5: every injection turns its known answer red ----
 INJECTED = {"no-preserve": test_judge_rejects_a_win_bought_with_decay,
             "no-peak": test_judge_rejects_a_win_bought_with_silence,
             "confirm-reads-all": test_judge_confirmation_reads_untouched_only,
-            "allpole-stub": lambda: test_dc_zero_onset_reads_a_pitch_excess("MC")}
+            "allpole-stub": lambda: test_dc_zero_onset_reads_a_pitch_excess("MC"),
+            "twin-no-host-writes": test_twin_raw_tracks_the_engine}
 
 
 @pytest.mark.parametrize("name", tc.INJECTIONS)
 def test_injection_turns_its_known_answer_red(name):
     assert name in INJECTED, f"injection {name} has no known answer to redden"
+    if name == "twin-no-host-writes" and not REFS:
+        pytest.skip("GF180_TR808_FISCHER (the Fischer corpus) not set")
     tc.INJECT.add(name)
     try:
         with pytest.raises(AssertionError):
