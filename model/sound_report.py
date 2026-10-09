@@ -262,13 +262,17 @@ def m_noise_share(voice, bands):
     """Share of the hit that is NOT the fitted damped modes, as a percentage.
     `drum_fit.noise_share` -- validated against known truth, and the
     replacement for the withdrawn windowed energy split (drum-verification 8.0,
-    which read 1.2 % where the truth was 18.6 %)."""
+    which read 1.2 % where the truth was 18.6 %).
+
+    No `try` here, deliberately (#600). An exception -- an ImportError of
+    drum_fit, a changed signature, a bad `bands` -- propagates to `run()`,
+    which records it as `type(e).__name__: e`. The one legitimate refusal is
+    drum_fit's own: a window with no energy returns share=NaN, and that, and
+    only that, becomes None ("the estimator refused")."""
     def f(ctx):
         import drum_fit
-        try:
-            return 100.0 * drum_fit.noise_share(_solo(ctx, voice), SR, bands)["share"]
-        except Exception:
-            return None
+        share = drum_fit.noise_share(_solo(ctx, voice), SR, bands)["share"]
+        return None if not np.isfinite(share) else 100.0 * share
     return f
 
 
