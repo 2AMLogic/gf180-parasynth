@@ -93,7 +93,7 @@ Effect (measured, 36 renders, medians of three; attack in ms):
 | pulse | repeat84_gap3p4 / from72_gap3p4 / repeat84_gap5 | 2.88 / 2.85 / 3.38 | 1.69 / 1.67 / 1.67 | exact digital zero |
 
 All 36 residuals are floor-limited: the audio is exactly 0.0 for at least the
-whole 40 ms window, in the history contexts as in the others (the earlier note's
+whole 40 ms window, in the history contexts as in the others (exactly zero for at least 1.79 s before the target in every history render; the earlier note's
 release ends at about 2.31 s and the plugin is exactly silent from there to the
 4.10 s or 5.70 s note-on). The gate needed history residual >= -30 dB and a 20 dB
 contrast; it got -120 against -120.
