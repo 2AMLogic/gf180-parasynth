@@ -47,9 +47,12 @@ def test_each_property_catches_at_least_one_defect():
     rows = R.controls_matrix()
     rows.pop("(clean)")
     dead = [n for n, _ in R.PROPERTIES if all(r[n] != "MOVED" for r in rows.values())]
-    # polarity and zero-mean are guarded by construction (|X0|^2); the others
-    # must each be moved by some defect. The exemptions are explicit.
-    assert set(dead) <= {"polarity", "zero-mean!=OFFSET"}, dead
+    # EXEMPT, stated: polarity and zero-mean are guarded by construction
+    # (|X0|^2 is sign-blind; a zero-mean burst has nothing for a defect to
+    # erase); burst->SKIRT is a direction none of the five defects attacks
+    # (a 10 ms pulse has ~no mean to subtract) -- it is held by the closed-form
+    # tests above instead. Anything else dead is a test that tests nothing.
+    assert set(dead) <= {"polarity", "zero-mean!=OFFSET", "burst->SKIRT"}, dead
 
 
 def test_the_mean_subtracting_conditioner_is_the_named_wrong_one():
@@ -116,11 +119,12 @@ def test_refuses_when_the_voice_is_still_sounding_at_the_window_end():
 
 
 def test_refuses_sub20_energy_that_does_not_clear_the_quantisation_floor():
-    """Defeating input: a 1 LSB offset under a ring. The offset is real and the
-    classification would read as OFFSET; it is at the instrument's resolution."""
-    x = R.tone_burst(SR)
-    x = R._q(x + 1.0 / R.FS)
-    label, d = R.classify(x, SR, FC)
+    """Defeating input: a zero-mean 33 LSB burst. It clears the silence guard
+    (peak >= 16 LSB) and has nothing in 0-20 Hz; a classifier that answered
+    would be reading rounding residue. (A constant offset cannot defeat this
+    guard: even 1 LSB held for 2 s is 41 dB over the white floor, because all
+    of it lands in one bin. Tried; stated rather than constructed.)"""
+    label, d = R.classify(R.fx_zero_mean(amp=0.001), SR, FC)
     assert label == "REFUSED" and "quantisation floor" in d["reason"], (label, d)
 
 

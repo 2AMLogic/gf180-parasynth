@@ -83,8 +83,7 @@ BETA_STABLE_TOL = 0.10    # |beta(1.0 s) - beta(2.0 s)| above this -> REFUSED
 # infinitely short. A standing offset is S = 2n-1 = 79; 8 is ~10 % of that.
 S_SKIRT_MAX = 2.0
 S_OFFSET_MIN = 8.0
-EXTENT_FLOOR_FRAC = 0.01  # >= 20 Hz envelope: still "sounding" above 1 % of peak
-EXTENT_MAX_FRAC = 0.90    # sounding past 90 % of the window -> window-dependent
+TAIL_RING_MAX = 0.05      # the last 10 % of the window may ring at <= 5 % of peak
 MIN_PEAK_LSB = 16.0       # a clip peaking below this is silence for this purpose
 MIN_BINS_BELOW_FC = 4     # band resolution at use
 MIN_BINS_SUB20 = 10
@@ -185,8 +184,6 @@ class Estimator:
 
 
 def _stats_of(seg, sr, fc, i0=0):
-    nan = float('nan')  # STUB (red start)
-    return dict(n=len(seg), n20=int((np.fft.rfftfreq(len(seg), 1.0/sr) < 20).sum()), nfc=int((np.fft.rfftfreq(len(seg), 1.0/sr) < fc).sum()), phi=nan, flat=nan, beta=nan, sub20_db=nan, onset=i0, peak_lsb=nan)
     p, f = onesided(seg, sr)
     m20 = f < 20.0
     sub = float(p[m20].sum())
@@ -203,18 +200,20 @@ class Refused(Exception):
     """The apparatus cannot answer. A first-class outcome, not a failure."""
 
 
-def sounding_extent(seg, sr):
-    """Samples from the window start to the last point the >= 20 Hz content
-    exceeds 1 % of its own peak. Brick-wall in the same FFT the bands are read
-    from (stateless: a causal filter would add the very tail under test)."""
-    X = np.fft.rfft(seg)
-    X[np.fft.rfftfreq(len(seg), 1.0 / sr) < 20.0] = 0.0
-    a = np.abs(np.fft.irfft(X, n=len(seg)))
-    pk = float(a.max())
+def tail_ring_frac(seg, tail=0.10):
+    """Std of the LAST `tail` of the window (linear trend removed) over the
+    window's peak. A voice still ringing at the window end is not finished,
+    and beta/S then depend on where the window was cut. Time-domain on
+    purpose: the first version brick-wall filtered at 20 Hz and read the
+    pulse's own sinc ringing as 'sounding' (wrong-then-right #2)."""
+    seg = np.asarray(seg, float)
+    pk = float(np.abs(seg).max())
     if pk <= 0:
-        return 0
-    idx = np.nonzero(a > EXTENT_FLOOR_FRAC * pk)[0]
-    return int(idx[-1]) + 1
+        return 0.0
+    t = seg[int(len(seg) * (1.0 - tail)):]
+    n = np.arange(len(t))
+    r = t - np.polyval(np.polyfit(n, t, 1), n)
+    return float(r.std()) / pk
 
 
 REAL = Estimator()
@@ -236,10 +235,11 @@ def classify(x, sr, fc, est: Estimator = REAL):
     if st["nfc"] < MIN_BINS_BELOW_FC or st["n20"] < MIN_BINS_SUB20:
         return "REFUSED", dict(reason=f"band resolution: {st['nfc']} bins below fc, "
                                       f"{st['n20']} below 20 Hz", **st)
-    ext = sounding_extent(seg, sr)
-    if ext > EXTENT_MAX_FRAC * len(seg):
-        return "REFUSED", dict(reason=f"still sounding at {ext / sr:.2f} s of a "
-                                      f"{len(seg) / sr:.2f} s window", **st)
+    ring = tail_ring_frac(est.prep(seg))
+    st["tail_ring"] = ring
+    if ring > TAIL_RING_MAX:
+        return "REFUSED", dict(reason=f"still sounding at the window end: last 10 % rings at "
+                                      f"{100 * ring:.1f} % of peak (limit {100 * TAIL_RING_MAX:.0f} %)", **st)
     floor = quantisation_floor_db(sr)
     st["margin_db"] = st["sub20_db"] - floor
     if st["margin_db"] < RES_MARGIN_DB:
@@ -252,7 +252,6 @@ def classify(x, sr, fc, est: Estimator = REAL):
         return "REFUSED", dict(reason=f"beta moves {h['beta']:.2f} -> {st['beta']:.2f} with the window", **st)
     off = st["beta"] >= BETA_OFFSET_MIN and st["flat"] >= S_OFFSET_MIN
     skirt = st["beta"] <= BETA_SKIRT_MAX and st["flat"] <= S_SKIRT_MAX
-    st["ext_ms"] = 1e3 * ext / sr
     return ("OFFSET" if off else "SKIRT" if skirt else "MIXED"), st
 
 
@@ -466,8 +465,9 @@ def p_scale_invariant(est):
 
 
 def p_rate_invariant(est):
-    """Same analogue signal at 96 kHz, corner given in Hz: same class."""
-    return _cls(est, fx_offset(96000), 96000) == "OFFSET" and _cls(est, fx_skirt(96000), 96000) == "SKIRT"
+    """Same analogue signal at 8 and 96 kHz, corner given in Hz: same class."""
+    return all(_cls(est, fx_offset(sr), sr) == "OFFSET" and _cls(est, fx_skirt(sr), sr) == "SKIRT"
+               for sr in (8000, 96000))
 
 
 PROPERTIES = (
