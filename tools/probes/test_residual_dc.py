@@ -547,3 +547,12 @@ def test_subject_verdict_refuses_unless_both_declared_conditions_are_present(row
     one row agrees with itself, and no rows agree vacuously."""
     v = R.subject_verdict(rows_by_cond)
     assert v.startswith("REFUSED") and "STANDING OFFSET" not in v, v
+
+
+@pytest.mark.parametrize("text", ["{not json", "[1, 2]", "null"], ids=["unparseable", "list", "null"])
+def test_verdict_refuses_a_record_that_is_not_a_json_object(tmp_path, capsys, text):
+    dev, con = _offset_pair()
+    paths = _write(tmp_path, dev, con)
+    pathlib.Path(paths[1]).write_text(text)
+    assert R.main(["--verdict", *paths]) == 2
+    assert "REFUSED" in capsys.readouterr().out

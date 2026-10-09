@@ -53,6 +53,7 @@ import json
 import math
 import os
 import pathlib
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -791,6 +792,50 @@ def all_refused(rows):
     return not rows or all(r["label"] == "REFUSED" for r in rows)
 
 
+_SHA = re.compile(r"[0-9a-f]{40}")
+LABELS = ("OFFSET", "SKIRT", "MIXED", "REFUSED")
+
+
+def valid_commit(c):
+    """A full lowercase 40-hex SHA, as `git rev-parse HEAD` prints. Rejects
+    absent/None/""/the "?" failure sentinel, abbreviations and non-strings."""
+    return isinstance(c, str) and _SHA.fullmatch(c) is not None
+
+
+def finite_real(x):
+    """A JSON number that is finite. bool is excluded: abs(True) == 1."""
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+
+
+def row_problems(rows):
+    """Why a record's rows cannot reach an ending, validated at the JSON
+    consumption boundary. Verdict-bearing fields: voice, label, detail and --
+    for any row that is not REFUSED -- mean_frac (finite real). A REFUSED row's
+    magnitude cannot reach an ending (subject_verdict stops at the refusal)."""
+    if not isinstance(rows, list):
+        return [f"rows is not a list: {type(rows).__name__}"]
+    out = []
+    voices = []
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            out.append(f"row {i} is not an object")
+            continue
+        v = row.get("voice")
+        if not isinstance(v, str) or not v:
+            out.append(f"row {i} has no voice")
+        voices.append(v)
+        if row.get("label") not in LABELS:
+            out.append(f"row {i} ({v}) label {row.get('label')!r} not one of {LABELS}")
+        if not isinstance(row.get("detail"), dict):
+            out.append(f"row {i} ({v}) detail is not an object")
+        if row.get("label") != "REFUSED" and not finite_real(row.get("mean_frac")):
+            out.append(f"row {i} ({v}) mean_frac {row.get('mean_frac')!r} is not a finite real number")
+    dup = sorted({v for v in voices if isinstance(v, str) and voices.count(v) > 1})
+    if dup:
+        out.append(f"duplicate rows for {dup}")
+    return out
+
+
 def verdicts(records):
     """Per-subject ending from two `rows_record`s, one per declared condition.
     Returns (status, {voice: ending}, reasons). status is REFUSED when the two
@@ -802,19 +847,37 @@ def verdicts(records):
         not revisited after confirm is read; a record taken under other limits
         is a different experiment)
 
+      - either record's commit is not a full 40-hex SHA (absent, null, empty, or
+        the "?" that `git()` emits on failure never qualifies -- two missing
+        commits agree with each other and with nothing)
+      - either record has a malformed row, or a non-REFUSED row whose mean_frac
+        is not a finite real number (json.loads accepts NaN/Infinity; NaN fails
+        every threshold comparison and would read as "below the magnitude")
+
     A voice present in only one record ends NO VERDICT (that condition has no row)."""
+    if not isinstance(records, (list, tuple)) or not all(isinstance(r, dict) for r in records):
+        return "REFUSED", {}, ["each record must be a JSON object"]
     reasons = []
     conds = [r.get("condition") for r in records]
-    if sorted(conds) != sorted(CONDITIONS) or any(r.get("schema") != ROWS_SCHEMA for r in records):
+    if (sorted(map(str, conds)) != sorted(CONDITIONS) or len(conds) != len(CONDITIONS)
+            or any(r.get("schema") != ROWS_SCHEMA for r in records)):
         reasons.append(f"need one {ROWS_SCHEMA} record per condition {sorted(CONDITIONS)}, got {conds}")
-    if any(r.get("dirty", True) for r in records):
-        reasons.append("a record was rendered from a dirty tree: not reproducible from a commit")
-    if len({r.get("commit") for r in records}) != 1:
-        reasons.append(f"records come from different commits: {[r.get('commit', '?')[:12] for r in records]}")
+    if any(r.get("dirty", True) is not False for r in records):
+        reasons.append("a record was rendered from a dirty tree (or carries no boolean dirty=false): "
+                       "not reproducible from a commit")
+    commits = [r.get("commit") for r in records]
+    invalid = [r.get("condition") for r in records if not valid_commit(r.get("commit"))]
+    if invalid:
+        reasons.append(f"record(s) {invalid} carry no valid source commit (need 40 lowercase hex): "
+                       f"{[repr(c)[:14] for c in commits]}")
+    elif len(set(commits)) != 1:
+        reasons.append(f"records come from different commits: {[c[:12] for c in commits]}")
     want = _jsonable(declared_limits())
     bad = [r.get("condition") for r in records if r.get("limits") != want]
     if bad:
         reasons.append(f"declared limits differ from this module's in {bad}")
+    for r in records:
+        reasons += [f"{r.get('condition')}: {p}" for p in row_problems(r.get("rows"))]
     if reasons:
         return "REFUSED", {}, reasons
     by = {r["condition"]: {row["voice"]: row for row in r["rows"]} for r in records}
@@ -954,7 +1017,11 @@ def hypotheses(rows):
 def subject_verdict(rows_by_cond):
     """Per-subject ending, from the baseline rows of BOTH conditions. Never a
     sound-fidelity claim: that is a capability refusal while no DC-coupled
-    reference exists."""
+    reference exists. REFUSED unless exactly the declared conditions are
+    present: one row agrees with itself and no rows agree vacuously."""
+    if not isinstance(rows_by_cond, dict) or sorted(rows_by_cond) != sorted(CONDITIONS):
+        got = sorted(rows_by_cond) if isinstance(rows_by_cond, dict) else type(rows_by_cond).__name__
+        return f"REFUSED (need one row per declared condition {sorted(CONDITIONS)}, got {got})"
     labs = {c: r["label"] for c, r in rows_by_cond.items()}
     if "REFUSED" in labs.values():
         why = "; ".join(f"{c}: {r['detail'].get('reason')}" for c, r in rows_by_cond.items() if r["label"] == "REFUSED")
@@ -1011,8 +1078,11 @@ def main(argv=None):
     a = ap.parse_args(argv)
     vs = tuple(a.voices.split(",")) if a.voices else None
     if a.verdict:
-        recs = [json.loads(pathlib.Path(p).read_text()) for p in a.verdict]
-        status, ends, why = verdicts(recs)
+        try:
+            recs = [json.loads(pathlib.Path(p).read_text()) for p in a.verdict]
+        except (OSError, ValueError) as e:
+            recs, load_err = None, f"cannot read a record: {e}"
+        status, ends, why = verdicts(recs) if recs is not None else ("REFUSED", {}, [load_err])
         print(f"PER-SUBJECT ENDING from {', '.join(a.verdict)}")
         if status == "REFUSED":
             print("REFUSED: " + "; ".join(why))
