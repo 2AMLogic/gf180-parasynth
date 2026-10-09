@@ -83,3 +83,19 @@ def test_main_exits_nonzero_and_prints_refused(tmp_path, capsys):
     rc = mp.main(["--set", str(tmp_path)])
     assert rc != 0
     assert "REFUSED" in capsys.readouterr().out
+
+
+def test_main_refuses_an_absent_set_when_expect_is_given(tmp_path, capsys):
+    """The defeating input for --expect: the whole directory is missing, which
+    used to return 0 before scan() ran. Zero of three captures is a refusal."""
+    rc = mp.main(["--set", str(tmp_path / "missing"), "--expect", "3"])
+    assert rc == 2
+    assert "REFUSED" in capsys.readouterr().out
+
+
+def test_main_still_skips_an_absent_set_without_expect(tmp_path, capsys):
+    """Default policy: no --expect means no claim a set exists, so skipping is
+    the intended, stated behaviour (positive leg of the control above)."""
+    rc = mp.main(["--set", str(tmp_path / "missing")])
+    assert rc == 0
+    assert "skipping the recordings" in capsys.readouterr().out

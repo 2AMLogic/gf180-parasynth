@@ -297,6 +297,12 @@ def main(argv=None) -> int:
           ", ".join(f"{ours[f]['h3']:+.0f}" for f in sorted(ours)) + " dB.")
 
     if not os.path.isdir(a.set):
+        if a.expect is not None:
+            # #600: --expect says the set exists; an absent directory is the
+            # whole set missing, the input a per-file guard cannot see.
+            print(f"\nREFUSED: {a.set} not found but --expect {a.expect} was given; "
+                  f"0 of {a.expect} recordings available.")
+            return 2
         print(f"\n{a.set} not found; skipping the recordings.")
         return 0
 
