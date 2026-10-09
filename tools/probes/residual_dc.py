@@ -547,18 +547,24 @@ def reference_gate(path=None, environ=None):
         m = json.loads(mf.read_text())
     except Exception as e:                                   # noqa: BLE001
         return dict(status="REFUSED", dc="REFUSED", root=str(root), reasons=[f"manifest unreadable: {e}"])
+    if not isinstance(m, dict):
+        return dict(status="REFUSED", dc="REFUSED", root=str(root), reasons=["manifest is not a JSON object"])
     reasons = []
     files = m.get("files")
     if not isinstance(files, list) or not files:
         reasons.append("manifest lists no files")
     else:
         for f in files:
+            if not isinstance(f, dict):
+                reasons.append(f"file entry {f!r} is not an object")
+                continue
             fp = root / str(f.get("name", ""))
             if not fp.is_file():
                 reasons.append(f"{f.get('name')}: listed but missing")
             elif hashlib.sha256(fp.read_bytes()).hexdigest() != f.get("sha256"):
                 reasons.append(f"{f.get('name')}: sha256 does not match the manifest")
-    if not isinstance(m.get("sample_rate"), int) or m["sample_rate"] <= 0:
+    sr = m.get("sample_rate")
+    if not isinstance(sr, int) or isinstance(sr, bool) or sr <= 0:      # bool is an int subclass
         reasons.append("manifest declares no sample_rate")
     coupling = m.get("capture_coupling")
     if coupling not in ("ac", "dc"):

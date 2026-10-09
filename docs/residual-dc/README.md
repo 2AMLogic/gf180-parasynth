@@ -6,17 +6,19 @@ modal arithmetic is #220/#350; toms and congas are #558/#591-#593. Nothing
 here repairs any of them.
 
 Regenerate: `python3 tools/probes/residual_dc.py --screen|--detail|--controls|--reference`.
-Controls: `python3 -m pytest tools/probes/test_residual_dc.py -q` (53 tests).
+Controls: `python3 -m pytest tools/probes/test_residual_dc.py -q` (98 tests).
 Per-subject ending: `python3 tools/probes/residual_dc.py --verdict DEV.json CONFIRM.json`, reading the
 `--screen --rows-out` records of both conditions (refuses a missing/duplicate condition, a dirty
-record, mixed commits or moved limits; exit 2).
+record, a record without a valid 40-hex source commit, mixed commits, moved limits, a malformed
+row, or a non-REFUSED row whose `mean_frac` is not a finite real; exit 2). Each guard's defeating
+inputs are permanent tests; `red-verdict-guards.txt` records them failing before the fix.
 
 ## Status: PARTIAL, and the missing part is stated, not hidden
 
 | item | state |
 |---|---|
-| apparatus qualified on constant-offset / short-burst / zero-mean / added-HF ground truth, MOVED/BLIND matrix | **done**, `controls-matrix.txt`, 53 passing |
-| start-red record | **done**, `red-start.txt` (estimator stubbed to NaN, fixtures executed, assertions failed); `red-h-ch2.txt` (the H_CH2 defeater against the one-sided rule) |
+| apparatus qualified on constant-offset / short-burst / zero-mean / added-HF ground truth, MOVED/BLIND matrix | **done**, `controls-matrix.txt`, 98 passing |
+| start-red record | **done**, `red-start.txt` (estimator stubbed to NaN, fixtures executed, assertions failed); `red-h-ch2.txt` (the H_CH2 defeater against the one-sided rule); `red-verdict-guards.txt` (the `--verdict` provenance / non-finite / singleton defeaters) |
 | dev condition, CH / RS / BD / HT | **done**, `screen-dev-subjects.txt` / `.json`, `detail-dev.txt`, rendered from clean commit `cae21c566571` |
 | per-subject ending produced by the tool | **done**: `--verdict`; on the dev record alone it REFUSES (confirm missing), as it must |
 | dev condition, the other 11 non-CY voices | **NO VERDICT: not run on this host** (batch below) |
@@ -150,7 +152,7 @@ Typed from the dev rows here; once the batch runs, the ending is the `--verdict`
 
 ## Wrong-then-right count
 
-Seven. Six were caught by a control, guard or predeclared test; #7 was caught by review, not by inspection:
+Eight. Six were caught by a control, guard or predeclared test; #7 and #8 were caught by review, not by inspection:
 
 1. 1 % envelope floor: a brick-wall at 20 Hz leaks 2.2 % of peak into a fixture's tail (offset fixture refused as "still sounding").
 2. The brick-wall extent also read a pulse's own sinc ringing as sounding; replaced by a time-domain tail-ring test.
@@ -159,6 +161,7 @@ Seven. Six were caught by a control, guard or predeclared test; #7 was caught by
 5. First surrogate (integer blocker on the *summed* bus) gave 20.86 dB against production's 5.03: its own fidelity guard refused it. Replaced by the bit-exact per-bus surrogate.
 6. My wrong-corner defeater ran on the CH's `dmix` bus, which is all zeros, so it was trivially exact. Moved to the body bus.
 7. H_CH2 read SUPPORTED on a one-sided comparison against the production bound. Against each variant's own bound, every variant overshoots by about 10 dB, so the reading is NO VERDICT. The Judge caught it (#614 review). The rule now ships with that defeating input.
+8. `--verdict` accepted two records with absent, null or `"?"` commits as "the same commit", and read a NaN `mean_frac` as "below the declared magnitude" (exit 0, a negative finding). The Judge caught both (#614 review of `ba62bc8`). Provenance and verdict-bearing fields are now validated where the JSON is read, and invalid input REFUSES (exit 2).
 
 ## Class search (conditioning, window and DC assumptions)
 
@@ -180,6 +183,24 @@ Related, unowned as far as this search found: the output stage's `>> 15` floor
 may leave a sub-LSB bias that a pre-output blocker cannot remove (H_CH2, pending
 `confirm`, and now NO VERDICT on dev). It is an arithmetic matter adjacent to #220/#350 but not inside
 either brief. **Filed: #618.**
+
+### Class search: guards on imported JSON (#614 review of `ba62bc8`)
+
+`rg -n 'mean_frac|r.get\("commit"\)|isfinite|\.get\("' tools/probes/residual_dc.py`, plus
+`rg -n 'json.loads|isinstance\(.*int\)'`. The file has two JSON consumption boundaries:
+
+- `--verdict` records (`verdicts`, `subject_verdict`): the two reviewed defects, plus three more of
+  the same shape fixed with them. `dirty` was truthiness-tested, so `null`/`0` passed as clean.
+  `mean_frac: true` cleared the magnitude threshold, since `abs(True) == 1`. And `subject_verdict` checked
+  agreement only among the labels supplied, so a singleton or an empty input passed.
+- the reference manifest (`reference_gate`): `isinstance(sample_rate, int)` accepted JSON `true`,
+  because bool is an int subclass. A non-object manifest or file entry raised instead of refusing.
+  Fixed, with defeaters (red first, in `red-verdict-guards.txt`).
+
+The only other `isfinite` is `classify`'s sample check, which already refuses non-finite audio.
+The remaining `.get(` sites read dicts this module built in-process (`classify` details,
+`bus_variants`, `hypotheses` rows). No JSON reaches them, so they are not this class.
+I did not search outside this file.
 
 ## Registry
 
