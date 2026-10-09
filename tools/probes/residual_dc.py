@@ -599,6 +599,7 @@ def provenance(cond_name=None):
 
 
 _MEMO = {}
+_BUSES = {}
 
 
 def render_bus(sound, enable, seconds, gain, vel):
@@ -622,6 +623,7 @@ def render_bus(sound, enable, seconds, gain, vel):
     out = dx.output_fx(np.zeros(n), 0, dmix, g, body, g)
     n_clip = int(((raw > 32767) | (raw < -32768)).sum())
     _MEMO[key] = (raw, out, n_clip)
+    _BUSES[key] = (np.asarray(dmix, np.int64), np.asarray(body, np.int64), g)
     return _MEMO[key]
 
 
@@ -649,6 +651,39 @@ def integer_scale_probe(x, i0, sr, k, scales=SCALES):
         b = band_db(window_slice(y, i0, sr).astype(float), sr, 0.0, 20.0)
         res.append((sc, a - b))
     return res
+
+
+def bus_variants(sound, c, i0, sr, scales=(1, 8, 64)):
+    """Re-run the production coupling on the PRE-blocker buses, in three
+    arithmetics, to say WHICH quantiser limits the attenuation:
+
+      production   bus blockers (MIX_BITS / BODY_BITS), then `(d*g + b*g) >> 15`
+      float-out    the same blocked buses, output NOT truncated (acc / 2^15)
+      xS           buses multiplied by an exact integer S (a louder signal at
+                   the same quantisation), production arithmetic
+
+    The surrogate is only used if its production variant is BIT-EXACT against
+    the model's own A_COUPLE=1 render (`exact`); otherwise the caller must
+    REFUSE it. Returns dict(exact, rows=[(label, attenuation_dB)])."""
+    import drums_fx as dx
+    d0, b0, g = _BUSES[(sound, 0, c["seconds"], c["gain"], c["vel"])]
+    d1, b1, _ = _BUSES[(sound, 1, c["seconds"], c["gain"], c["vel"])]
+    f1, f2 = dx.DcBlockFx(dx.COUPLE_K, in_bits=dx.MIX_BITS), dx.DcBlockFx(dx.COUPLE_K, in_bits=dx.BODY_BITS)
+    dm = np.array([f1.step(int(v)) for v in d0], np.int64)
+    bd = np.array([f2.step(int(v)) for v in b0], np.int64)
+    exact = bool(np.array_equal(dm, d1) and np.array_equal(bd, b1))
+
+    def acc(d, b, sc=1):
+        return ((d * sc * g + b * sc * g) >> 15).astype(float)
+
+    def att(base, cand):
+        return (band_db(window_slice(base, i0, sr), sr, 0.0, 20.0)
+                - band_db(window_slice(cand, i0, sr), sr, 0.0, 20.0))
+    rows = [("production", att(acc(d0, b0), acc(dm, bd))),
+            ("float-out", att((d0 * g + b0 * g) / 32768.0, (dm * g + bd * g) / 32768.0))]
+    for sc in scales[1:]:
+        rows.append((f"buses x{sc}", att(acc(d0, b0, sc), acc(dm, bd, sc))))
+    return dict(exact=exact, rows=rows)
 
 
 def window_slice(x, i0, sr):
@@ -723,7 +758,7 @@ def detail_row(sound, cond_name):
     yf = np.clip(yf, -32768, 32767)
     rest = _sub20_atten_db(ob, yf, i0, sr)
     bands = {n: band_db(wc, sr, *BANDS[n]) - band_db(wb, sr, *BANDS[n]) for n in BANDS}
-    scale = integer_scale_probe(rb, i0, sr, k)
+    bv = bus_variants(sound, c, i0, sr)
     mean_lsb = float(np.asarray(wb, float).mean())
     kind, d_hf, d_sh = share_change_kind(wb, wc, sr)
     cls_b = classify(ob, sr, fc)
@@ -732,7 +767,7 @@ def detail_row(sound, cond_name):
                 peak_delta_db=20 * math.log10((np.abs(wc).max() + 1e-9) / (np.abs(wb).max() + 1e-9)),
                 label=cls_b[0], beta=cls_b[1].get("beta"), S=cls_b[1].get("flat"),
                 reason=cls_b[1].get("reason"),
-                scale=scale, mean_lsb=mean_lsb,
+                bv=bv, mean_lsb=mean_lsb,
                 sub20_base_db=band_db(wb, sr, 0.0, 20.0), sub20_coupled_db=band_db(wc, sr, 0.0, 20.0))
 
 
@@ -747,8 +782,8 @@ def fmt_detail(r):
             f"      absolute band change  sub20 {b['sub20']:+7.2f}  body {b['body']:+7.2f}  "
             f"mid {b['mid']:+7.2f}  HF {b['hf']:+7.2f} dB   peak {r['peak_delta_db']:+.2f} dB   "
             f"clip base/coupled {r['clip'][0]}/{r['clip'][1]}\n"
-            f"      integer blocker vs input scale (exact x s): "
-            + "  ".join(f"x{sc}: {a:.2f} dB" for sc, a in r["scale"]) + f"   window mean {r['mean_lsb']:+.3f} LSB\n"
+            f"      bus-level surrogate (bit-exact vs production: {r['bv']['exact']}): "
+            + "  ".join(f"{n} {a:.2f} dB" for n, a in r["bv"]["rows"]) + f"   window mean {r['mean_lsb']:+.3f} LSB\n"
             f"      HF share change {r['hf_share_delta']:+.2f} pp -> read as {r['hf_kind']}")
 
 
@@ -769,22 +804,24 @@ def hypotheses(rows):
         else:
             v = f"NOT SUPPORTED: from-rest prediction differs from measured by {close:.2f} dB (> {CH_REST_TOL_DB})"
         out.append(("H_CH  attenuation < steady bound because the causal blocker starts from rest", v))
-    if ch and ch["label"] != "REFUSED" and "scale" in ch:
-        sc = dict(ch["scale"])
-        surr = abs(sc[1] - ch["measured_db"])
-        reach = ch["steady_db"] - sc[max(sc)]
-        if surr > CH_SURR_TOL_DB:
-            v = (f"NO VERDICT: the integer surrogate (x1) is {surr:.2f} dB from the production render "
-                 f"(> {CH_SURR_TOL_DB}); it is not the thing that ships")
-        elif reach <= CH_REACH_TOL_DB and sc[1] < sc[max(sc)] - CH_REACH_TOL_DB:
-            v = (f"SUPPORTED by intervention: x1 {sc[1]:.2f} dB (= production), x{max(sc)} {sc[max(sc)]:.2f} dB, "
-                 f"steady bound {ch['steady_db']:.2f} dB -- attenuation depends on scale, which an LTI "
-                 f"filter cannot do; window mean {ch['mean_lsb']:+.3f} LSB is below the integer "
-                 f"estimator's 1 LSB resolution")
+    if ch and ch["label"] != "REFUSED" and "bv" in ch:
+        bv = ch["bv"]
+        r_ = dict(bv["rows"])
+        bound = ch["steady_db"]
+        if not bv["exact"]:
+            v = "NO VERDICT: the bus-level surrogate is not bit-exact against the A_COUPLE=1 render; it is not what ships"
+        elif r_["float-out"] >= bound - CH_REACH_TOL_DB:
+            v = (f"SUPPORTED by intervention (output truncation): production {r_['production']:.2f} dB, "
+                 f"same blocked buses without the output >>15 floor {r_['float-out']:.2f} dB (against that variant's OWN "
+                 f"baseline: the floor's bias leaves both sides), steady bound {bound:.2f} dB")
+        elif r_[f"buses x{max(int(n[7:]) for n, _ in bv['rows'] if n.startswith('buses x'))}"] >= bound - CH_REACH_TOL_DB:
+            v = (f"SUPPORTED by intervention (bus-level integer resolution): production {r_['production']:.2f} dB; "
+                 f"float-out {r_['float-out']:.2f} dB does not reach the bound {bound:.2f} dB but louder buses do")
         else:
-            v = (f"NOT SUPPORTED: x1 {sc[1]:.2f}, x{max(sc)} {sc[max(sc)]:.2f}, bound {ch['steady_db']:.2f} dB")
+            v = ("NOT SUPPORTED: neither removing output truncation nor louder buses reach the bound: "
+                 + ", ".join(f"{n} {a:.2f}" for n, a in bv["rows"]) + f"; bound {bound:.2f} dB")
         out.append(("H_CH2 (post-hoc, formed after the dev row: confirm is its only test) "
-                    "shortfall is the integer blocker's 1 LSB mean resolution", v))
+                    "the shortfall is an integer quantiser, not the filter", v))
     rs = rows.get("RS")
     if rs:
         if rs["label"] == "REFUSED":

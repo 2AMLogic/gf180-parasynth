@@ -286,3 +286,38 @@ def test_the_scale_probe_is_flat_where_the_mean_is_resolvable():
     x = _sub_lsb_mean_signal(mean=20.0)
     att = [a for _, a in R.integer_scale_probe(x, 0, SR, dx.COUPLE_K)]
     assert max(att) - min(att) < 1.5, att
+
+
+def _ch(production, floatout, x64, exact=True, bound=11.7):
+    rows = [("production", production), ("float-out", floatout), ("buses x8", x64), ("buses x64", x64)]
+    return dict(label="OFFSET", beta=.97, S=40.0, reason=None, steady_db=bound, measured_db=production,
+                rest_db=bound, bv=dict(exact=exact, rows=rows))
+
+
+def _h2(row):
+    return [v for h, v in R.hypotheses({"CH": row}) if h.startswith("H_CH2")][0]
+
+
+def test_h_ch2_distinguishes_its_four_outcomes():
+    assert _h2(_ch(5.0, 21.0, 21.0)).startswith("SUPPORTED by intervention (output truncation)")
+    assert _h2(_ch(5.0, 6.0, 15.0)).startswith("SUPPORTED by intervention (bus-level")
+    assert _h2(_ch(5.0, 6.0, 6.0)).startswith("NOT SUPPORTED")
+    assert _h2(_ch(5.0, 21.0, 21.0, exact=False)).startswith("NO VERDICT")
+
+
+def test_the_bus_surrogate_is_bit_exact_against_the_shipped_coupling():
+    """Check that the thing tested is the thing that ships: a short render with
+    the CH, buses re-blocked by DcBlockFx at the declared widths, must equal the
+    A_COUPLE=1 buses exactly."""
+    import drums_fx as dx
+    c = dict(seconds=0.30, gain=0.45, vel=1.0)
+    R.render_bus("CH", 0, c["seconds"], c["gain"], c["vel"])
+    R.render_bus("CH", 1, c["seconds"], c["gain"], c["vel"])
+    got = R.bus_variants("CH", c, 0, dx.SR)
+    assert got["exact"] is True
+    # and the guard has a defeater: a surrogate at the wrong corner is not exact
+    d0, b0, g = R._BUSES[("CH", 0, c["seconds"], c["gain"], c["vel"])]
+    _, b1, _ = R._BUSES[("CH", 1, c["seconds"], c["gain"], c["vel"])]
+    assert not d0.any() and b0.any()          # the CH lives on the BODY bus; dmix is trivially exact
+    wrong = dx.DcBlockFx(dx.COUPLE_K - 1, in_bits=dx.BODY_BITS)
+    assert not np.array_equal(np.array([wrong.step(int(v)) for v in b0], np.int64), b1)
