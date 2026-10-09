@@ -30,9 +30,9 @@ def _bin(tmp_path, yosys_body=None):
     d = tmp_path / "bin"
     d.mkdir()
     (d / "python3").symlink_to(sys.executable)
-    # What the OLD shell script needed, so its failures below are its own and
-    # not "grep: not found". The new tool needs none of these.
-    for t in ("dirname", "grep", "awk", "tail", "rm"):
+    # The shim needs dirname; the red run against the OLD script also linked
+    # grep awk tail rm so its failures were its own, not "grep: not found".
+    for t in ("dirname",):
         (d / t).symlink_to(shutil.which(t))
     if yosys_body is not None:
         y = d / "yosys"
