@@ -252,3 +252,37 @@ def test_the_toggle_in_the_render_is_the_register_the_model_ships():
     d = dx.DrumsFx()
     d.write(dx.A_COUPLE, 1)
     assert d.couple_en == 1
+
+
+# ---- the integer-resolution intervention, on ground truth ---------------------------
+def _sub_lsb_mean_signal(mean=0.27, amp=40.0, f0=11700.0, sr=SR, seconds=2.4):
+    n = np.arange(int(seconds * sr))
+    return np.floor(amp * np.sin(2 * np.pi * f0 * n / sr + 0.3) + mean + 0.5).astype(np.int64)
+
+
+def test_the_scale_probe_separates_an_integer_resolution_limit_from_a_linear_one():
+    """GROUND TRUTH: a 0.27 LSB mean under an 11.7 kHz ring. A float LTI
+    blocker attenuates it by the same amount at any scale; the integer one
+    cannot see a sub-LSB mean until acc crosses 2^K."""
+    import drums_fx as dx
+    from scipy.signal import lfilter
+    x = _sub_lsb_mean_signal()
+    assert abs(float(x.mean()) - 0.27) < 0.02                   # the construction holds
+    a = 1.0 - 2.0 ** -dx.COUPLE_K
+    lin = []
+    for sc in R.SCALES:
+        y = lfilter([1.0, -1.0], [1.0, -a], x * sc)
+        lin.append(R.band_db((x * sc)[:96000].astype(float), SR, 0, 20) - R.band_db(y[:96000], SR, 0, 20))
+    assert max(lin) - min(lin) < 0.05, lin                      # LTI: scale-free
+    integ = [att for _, att in R.integer_scale_probe(x, 0, SR, dx.COUPLE_K)]
+    assert integ[-1] - integ[0] > 3.0, integ                    # integer: scale-DEPENDENT
+    assert integ[-1] > lin[0] - 1.0, (integ, lin)               # and approaches the LTI answer
+
+
+def test_the_scale_probe_is_flat_where_the_mean_is_resolvable():
+    """Defeater of the 'always scale-dependent' reading: a 20 LSB mean is far
+    above the integer estimator's resolution; scale must then not matter much."""
+    import drums_fx as dx
+    x = _sub_lsb_mean_signal(mean=20.0)
+    att = [a for _, a in R.integer_scale_probe(x, 0, SR, dx.COUPLE_K)]
+    assert max(att) - min(att) < 1.5, att

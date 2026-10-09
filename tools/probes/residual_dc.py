@@ -591,10 +591,10 @@ def provenance(cond_name=None):
     ref = reference_gate()
     return (f"commit {git('rev-parse', '--short=12', 'HEAD')}{dirty}  SR {dx.SR}  "
             f"condition {cond_name or '-'} {c}  analysis {ANALYSIS_S:.1f}s onset-aligned  "
-            f"K {dx.COUPLE_K} ({corner_hz(dx.COUPLE_K, dx.SR):.3f} Hz)\\n"
+            f"K {dx.COUPLE_K} ({corner_hz(dx.COUPLE_K, dx.SR):.3f} Hz)\n"
             f"production init: DrumsFx().couple_en = {init} (A_COUPLE=0x{dx.A_COUPLE:02X}; the enable "
             f"is OFF after reset and nothing in the shipped writes sets it); the '+coupling' column "
-            f"writes A_COUPLE=1 at frame 0 -- a DIAGNOSTIC TOGGLE, an experiment, not a production state\\n"
+            f"writes A_COUPLE=1 at frame 0 -- a DIAGNOSTIC TOGGLE, an experiment, not a production state\n"
             f"reference: {ref['status']} dc-inference={ref['dc']} {'; '.join(ref['reasons'])}")
 
 
@@ -623,6 +623,32 @@ def render_bus(sound, enable, seconds, gain, vel):
     n_clip = int(((raw > 32767) | (raw < -32768)).sum())
     _MEMO[key] = (raw, out, n_clip)
     return _MEMO[key]
+
+
+SCALES = (1, 8, 64)
+CH_SURR_TOL_DB = 1.0       # H_CH2: integer surrogate vs the production render
+CH_REACH_TOL_DB = 1.0      # H_CH2: x64 attenuation within this of the steady bound
+
+
+def integer_scale_probe(x, i0, sr, k, scales=SCALES):
+    """Sub-20 Hz attenuation of the integer blocker (`DcBlockFx`, bit for bit)
+    on `x * s` for each integer scale `s`, from rest, on one fixed window.
+
+    An LTI filter's attenuation does not depend on the signal's scale. The
+    integer loop `y = x - floor(acc / 2^K)` estimates the mean as an INTEGER,
+    so a mean below 1 LSB is invisible to it until `acc` crosses 2^K, and its
+    attenuation DOES depend on scale. Scaling the input by an exact integer
+    adds no quantisation: it is an intervention, not a re-render. Returns
+    [(scale, attenuation_dB)]."""
+    import drums_fx as dx
+    x = np.asarray(x, np.int64)
+    res = []
+    for sc in scales:
+        y = dx.dc_block(x * sc, k)
+        a = band_db(window_slice(x * sc, i0, sr).astype(float), sr, 0.0, 20.0)
+        b = band_db(window_slice(y, i0, sr).astype(float), sr, 0.0, 20.0)
+        res.append((sc, a - b))
+    return res
 
 
 def window_slice(x, i0, sr):
@@ -697,6 +723,8 @@ def detail_row(sound, cond_name):
     yf = np.clip(yf, -32768, 32767)
     rest = _sub20_atten_db(ob, yf, i0, sr)
     bands = {n: band_db(wc, sr, *BANDS[n]) - band_db(wb, sr, *BANDS[n]) for n in BANDS}
+    scale = integer_scale_probe(rb, i0, sr, k)
+    mean_lsb = float(np.asarray(wb, float).mean())
     kind, d_hf, d_sh = share_change_kind(wb, wc, sr)
     cls_b = classify(ob, sr, fc)
     return dict(voice=sound, cond=cond_name, steady_db=steady, rest_db=rest, measured_db=measured,
@@ -704,6 +732,7 @@ def detail_row(sound, cond_name):
                 peak_delta_db=20 * math.log10((np.abs(wc).max() + 1e-9) / (np.abs(wb).max() + 1e-9)),
                 label=cls_b[0], beta=cls_b[1].get("beta"), S=cls_b[1].get("flat"),
                 reason=cls_b[1].get("reason"),
+                scale=scale, mean_lsb=mean_lsb,
                 sub20_base_db=band_db(wb, sr, 0.0, 20.0), sub20_coupled_db=band_db(wc, sr, 0.0, 20.0))
 
 
@@ -718,6 +747,8 @@ def fmt_detail(r):
             f"      absolute band change  sub20 {b['sub20']:+7.2f}  body {b['body']:+7.2f}  "
             f"mid {b['mid']:+7.2f}  HF {b['hf']:+7.2f} dB   peak {r['peak_delta_db']:+.2f} dB   "
             f"clip base/coupled {r['clip'][0]}/{r['clip'][1]}\n"
+            f"      integer blocker vs input scale (exact x s): "
+            + "  ".join(f"x{sc}: {a:.2f} dB" for sc, a in r["scale"]) + f"   window mean {r['mean_lsb']:+.3f} LSB\n"
             f"      HF share change {r['hf_share_delta']:+.2f} pp -> read as {r['hf_kind']}")
 
 
@@ -738,6 +769,22 @@ def hypotheses(rows):
         else:
             v = f"NOT SUPPORTED: from-rest prediction differs from measured by {close:.2f} dB (> {CH_REST_TOL_DB})"
         out.append(("H_CH  attenuation < steady bound because the causal blocker starts from rest", v))
+    if ch and ch["label"] != "REFUSED" and "scale" in ch:
+        sc = dict(ch["scale"])
+        surr = abs(sc[1] - ch["measured_db"])
+        reach = ch["steady_db"] - sc[max(sc)]
+        if surr > CH_SURR_TOL_DB:
+            v = (f"NO VERDICT: the integer surrogate (x1) is {surr:.2f} dB from the production render "
+                 f"(> {CH_SURR_TOL_DB}); it is not the thing that ships")
+        elif reach <= CH_REACH_TOL_DB and sc[1] < sc[max(sc)] - CH_REACH_TOL_DB:
+            v = (f"SUPPORTED by intervention: x1 {sc[1]:.2f} dB (= production), x{max(sc)} {sc[max(sc)]:.2f} dB, "
+                 f"steady bound {ch['steady_db']:.2f} dB -- attenuation depends on scale, which an LTI "
+                 f"filter cannot do; window mean {ch['mean_lsb']:+.3f} LSB is below the integer "
+                 f"estimator's 1 LSB resolution")
+        else:
+            v = (f"NOT SUPPORTED: x1 {sc[1]:.2f}, x{max(sc)} {sc[max(sc)]:.2f}, bound {ch['steady_db']:.2f} dB")
+        out.append(("H_CH2 (post-hoc, formed after the dev row: confirm is its only test) "
+                    "shortfall is the integer blocker's 1 LSB mean resolution", v))
     rs = rows.get("RS")
     if rs:
         if rs["label"] == "REFUSED":
