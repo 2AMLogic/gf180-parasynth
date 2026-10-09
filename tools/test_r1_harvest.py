@@ -46,6 +46,17 @@ def receipt(trial="T-DEADLINE", mode="sim", candidate="baseline"):
             "children": [], "controls": []}
 
 
+def put_all(runs, skip=()):
+    """A valid-shaped baseline receipt for every expected (trial, mode) in ROWS."""
+    for t, mode in h.ROWS:
+        if (t, mode) not in skip:
+            put(runs, f"{t}/{mode}", receipt(t, mode))
+
+
+def expected():
+    return {f"{t} {mode}" for t, mode in h.ROWS}
+
+
 def put(runs, name, body):
     d = runs / "trials" / name
     d.mkdir(parents=True)
@@ -56,14 +67,17 @@ def put(runs, name, body):
 @pytest.fixture
 def fake(monkeypatch):
     """Domain pytest answers PASS; check-receipt answers `valid` unless real=True."""
-    state = SimpleNamespace(valid=True, real=False)
+    state = SimpleNamespace(valid=True, real=False, outputs=[])
 
     def run(cmd, *a, **k):
         if "pytest" in cmd:
             return subprocess.CompletedProcess(cmd, 0, "1 passed\n", "")
         if "check-receipt" in cmd and not state.real:
             return subprocess.CompletedProcess(cmd, 0 if state.valid else 1, "", "")
-        return _real_run(cmd, *a, **k)
+        r = _real_run(cmd, *a, **k)
+        if "check-receipt" in cmd:
+            state.outputs.append((r.stdout or "") + (r.stderr or ""))
+        return r
     monkeypatch.setattr(h.subprocess, "run", run)
     return state
 
@@ -75,32 +89,36 @@ def go(tmp_path, capsys):
     return rc, {r["name"]: r for r in summary["runs"]}
 
 
-def test_valid_receipt_is_receipt_valid_true_and_exits_zero(tmp_path, capsys, fake):
-    put(tmp_path / "runs", "T-DEADLINE/a", receipt())
+def test_valid_receipts_are_receipt_valid_true_and_exit_zero(tmp_path, capsys, fake):
+    put_all(tmp_path / "runs")
     rc, rows = go(tmp_path, capsys)
-    assert rows["T-DEADLINE sim"]["receipt_valid"] is True
+    assert all(rows[n]["receipt_valid"] is True and not rows[n].get("missing")
+               for n in expected())
     assert rc == 0
 
 
 def test_a_receipt_the_real_checker_rejects_is_listed_invalid_and_exits_nonzero(
         tmp_path, capsys, fake):
     fake.real = True                       # the shipped check-receipt, not a stub
-    put(tmp_path / "runs", "T-DEADLINE/a", receipt())   # unhashed, unprovenanced
+    put_all(tmp_path / "runs")             # unhashed, unprovenanced
     rc, rows = go(tmp_path, capsys)
-    assert "T-DEADLINE sim" in rows, "an invalid receipt was DROPPED"
-    assert rows["T-DEADLINE sim"]["receipt_valid"] is False
+    # invalid BY THE SHIPPED CHECKER: it ran and said REJECTED, it did not crash
+    assert fake.outputs and all("REJECTED" in o for o in fake.outputs), fake.outputs
+    for n in expected():
+        # carried as its own row with its receipt, not dropped and re-added as missing
+        assert rows[n].get("receipt") and not rows[n].get("missing"), f"{n} was DROPPED"
+        assert rows[n]["receipt_valid"] is False
     assert rc != 0
 
 
 def test_one_invalid_receipt_among_valid_ones_still_fails_the_run(
         tmp_path, capsys, monkeypatch, fake):
-    put(tmp_path / "runs", "T-DEADLINE/a", receipt())
-    put(tmp_path / "runs", "T-LIVE-MIDI/a", receipt("T-LIVE-MIDI", "sim"))
+    put_all(tmp_path / "runs")
 
     def run(cmd, *a, **k):
         if "pytest" in cmd:
             return subprocess.CompletedProcess(cmd, 0, "ok\n", "")
-        return subprocess.CompletedProcess(cmd, 1 if "T-LIVE-MIDI" in cmd[-1] else 0, "", "")
+        return subprocess.CompletedProcess(cmd, 1 if "T-LIVE-MIDI/sim" in cmd[-1] else 0, "", "")
     monkeypatch.setattr(h.subprocess, "run", run)
     rc, rows = go(tmp_path, capsys)
     assert rows["T-DEADLINE sim"]["receipt_valid"] is True
@@ -123,26 +141,50 @@ def test_a_receipt_missing_required_fields_is_refused_not_skipped(tmp_path, caps
         h.main(["--runs", str(tmp_path / "runs"), "--to", str(tmp_path / "out")])
 
 
-def test_a_run_dir_with_no_receipt_is_a_missing_row_never_a_valid_one(tmp_path, capsys, fake):
-    put(tmp_path / "runs", "T-DEADLINE/a", receipt())
+def _assert_missing(row):
+    assert row.get("missing") is True and row["receipt"] is None
+    assert row["receipt_valid"] is False and row["verdict"] == "NO VERDICT"
+
+
+def test_a_partially_missing_trial_is_an_explicit_missing_row_and_fails_the_run(
+        tmp_path, capsys, fake):
+    """The input that defeated the first version (#628 review): T-LIVE-MIDI rtl
+    present, T-LIVE-MIDI sim absent. That used to yield no sim row, exit 0, and
+    a playability gate of PASS on half its evidence."""
+    put_all(tmp_path / "runs", skip={("T-LIVE-MIDI", "sim")})
     (tmp_path / "runs" / "trials" / "T-LIVE-MIDI" / "empty").mkdir(parents=True)
     rc, rows = go(tmp_path, capsys)
-    assert not any(n.startswith("T-LIVE-MIDI") for n in rows)   # scorecard reports NO VERDICT
-    assert rc == 0                                              # by design: absence is not invalid
+    assert rows["T-LIVE-MIDI rtl"]["receipt_valid"] is True
+    _assert_missing(rows["T-LIVE-MIDI sim"])
+    assert rc != 0
+    # and the scorecard that consumes these rows cannot read the gate as PASS
+    import r1_scorecard as r1s
+    play = [r for r in rows.values() if r["gate"] == "playability"]
+    assert r1s.gate_verdict(play) != "PASS"
+    trust = r1s.trust_rows({"runs": list(rows.values())})
+    assert r1s.gate_verdict(trust) != "PASS"
+
+
+def test_a_wholly_missing_trial_is_a_missing_row_per_expected_mode(tmp_path, capsys, fake):
+    put_all(tmp_path / "runs", skip={("T-LIVE-MIDI", "sim"), ("T-LIVE-MIDI", "rtl")})
+    rc, rows = go(tmp_path, capsys)
+    _assert_missing(rows["T-LIVE-MIDI sim"])
+    _assert_missing(rows["T-LIVE-MIDI rtl"])
+    assert rc != 0
 
 
 def test_the_domain_test_row_has_receipt_valid_null_and_is_not_counted_valid(
         tmp_path, capsys, fake):
-    put(tmp_path / "runs", "T-DEADLINE/a", receipt())
+    put_all(tmp_path / "runs")
     rc, rows = go(tmp_path, capsys)
     dom = rows["supported domain + session start (unit)"]
     assert dom["receipt_valid"] is None
-    assert [r for r in rows.values() if r["receipt_valid"] is True] == [rows["T-DEADLINE sim"]]
+    assert {n for n, r in rows.items() if r["receipt_valid"] is True} == expected()
 
 
 def test_a_failing_domain_test_row_is_fail_but_null_does_not_set_the_exit_code(
         tmp_path, capsys, monkeypatch, fake):
-    put(tmp_path / "runs", "T-DEADLINE/a", receipt())
+    put_all(tmp_path / "runs")
 
     def run(cmd, *a, **k):
         if "pytest" in cmd:
@@ -155,7 +197,10 @@ def test_a_failing_domain_test_row_is_fail_but_null_does_not_set_the_exit_code(
     assert rc == 0     # recorded by exit status, carried to the scorecard; not a receipt verdict
 
 
-def test_non_baseline_candidate_receipts_are_not_rows(tmp_path, capsys, fake):
-    put(tmp_path / "runs", "T-DEADLINE/a", receipt(candidate="late160"))
+def test_non_baseline_candidate_receipts_do_not_stand_in_for_baseline(
+        tmp_path, capsys, fake):
+    put_all(tmp_path / "runs", skip={("T-DEADLINE", "sim")})
+    put(tmp_path / "runs", "T-DEADLINE/late160", receipt(candidate="late160"))
     rc, rows = go(tmp_path, capsys)
-    assert "T-DEADLINE sim" not in rows
+    _assert_missing(rows["T-DEADLINE sim"])
+    assert rc != 0

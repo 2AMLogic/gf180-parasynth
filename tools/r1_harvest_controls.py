@@ -41,6 +41,13 @@ MUTANTS = {
     "NULL_COUNTED_VALID": (
         '"receipt_valid": None,', '"receipt_valid": True,',
         "test_the_domain_test_row_has_receipt_valid_null_and_is_not_counted_valid"),
+    "MISSING_CHECK_REMOVED": (
+        'rows += [missing_row(t, mode) for (t, mode) in ROWS if f"{t} {mode}" not in seen]',
+        "rows += []",
+        "test_a_partially_missing_trial_is_an_explicit_missing_row_and_fails_the_run"),
+    "MISSING_NOT_INVALID": (
+        '"receipt_valid": False, "missing": True,', '"receipt_valid": None, "missing": True,',
+        "test_a_partially_missing_trial_is_an_explicit_missing_row_and_fails_the_run"),
 }
 
 

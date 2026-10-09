@@ -20,7 +20,11 @@ Gate verdicts are derived here from those rows, not typed:
                   no pass fraction is presented as quality
   physical        BLOCKED: the R1 image is published (fpga/release/r1-2025.1.json,
                   #280) but not programmed; no capture (#208)
-A gate with any row that is not PASS is not PASS. Missing rows are NO VERDICT.
+A gate with any row that is not PASS is not PASS. A gate with NO rows is NO
+VERDICT; this file does not itself know which rows a gate should have. A run
+missing from a gate that has others is caught upstream: tools/r1_harvest.py
+emits an explicit NO VERDICT row with receipt_valid false for every expected
+run that has no receipt (#609).
 """
 from __future__ import annotations
 
