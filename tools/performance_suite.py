@@ -600,8 +600,11 @@ def model_render(phrase: Phrase, engine: str = "r1") -> np.ndarray:
         voice = mp.make_voice(engine)
         voice.reset()
         dur = e.gate_s + phrase.release_s
-        patch = mp.held_patch(amp=(0.004, 0.05, 1.0, 0.04), cutoff=(
-            _control_at(phrase, "cutoff", e.onset_s, 4000.0), 20000))
+        fc = _control_at(phrase, "cutoff", e.onset_s, 4000.0)
+        # (start, end) of the filter envelope; sustain 1.0 holds the END value, so
+        # both must be the commanded cutoff or the control is silently ignored
+        # (first model run: centroid flat at ~208 Hz with end=20000).
+        patch = mp.held_patch(amp=(0.004, 0.05, 1.0, 0.04), cutoff=(fc, fc))
         y = np.asarray(voice.run(voice.note_on(e.midi, dur, gate=e.gate_s, **patch)), float) / 32768.0
         a = int(round(e.onset_s * SR))
         out[a:a + len(y)] += y[:n - a]
