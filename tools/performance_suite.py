@@ -29,7 +29,11 @@ EVENT SCHEDULE that was sent to the instrument, it checks, per phrase:
 Three verdicts, never two: PASS, FAIL, and REFUSED. REFUSED means a
 precondition of the apparatus failed (non-finite or silent audio, audio shorter
 than the schedule, events closer than MIN_IOI_S, a schedule with no event whose
-release tail can be judged) and NOTHING is reported about the sound. The CLI
+release tail can be judged, an automation declaration that cannot be evaluated
+as written -- any event ID out of range or negative, fewer than two distinct
+IDs, an unknown kind, a direction other than +/-1, a min_ratio that is not
+finite and > 1, a window that overlaps the next onset or is silent) and NOTHING
+is reported about the sound. A declaration is never narrowed to its valid part. The CLI
 exit codes are 0 / 1 / 2.
 
 Independence from the model under test. The controls here are driven by
@@ -257,6 +261,11 @@ def preconditions(x, phrase: Phrase) -> np.ndarray:
     if not phrase.events:
         raise Refused("empty schedule")
     evs = phrase.events
+    odd = sorted({e.kind for e in evs} - {"note", "drum"})
+    if odd:
+        # anything not "note" would otherwise be judged as a drum, silently
+        # dropping the note-only dropout and truncation checks
+        raise Refused(f"event kinds {odd} are not 'note' or 'drum'")
     if any(b.onset_s - a.onset_s < MIN_IOI_S for a, b in zip(evs, evs[1:])):
         raise Refused(f"events closer than {MIN_IOI_S}s cannot be resolved")
     if any(e.onset_s < 0.05 or e.onset_s + (e.gate_s or 0) > phrase.duration_s for e in evs):
@@ -267,7 +276,71 @@ def preconditions(x, phrase: Phrase) -> np.ndarray:
     tail_end = last.onset_s + (last.gate_s + phrase.release_s if last.kind == "note" else last.ring_s)
     if tail_end + 0.02 > phrase.duration_s:
         raise Refused("phrase ends before the last event's release tail can be judged")
+    for j, au in enumerate(phrase.automation):
+        _check_automation(j, au, phrase)
     return x
+
+
+AUTO_SKIP_S = 0.03                    # automation window starts 30 ms after the found onset ...
+AUTO_WIN_S = 0.08                     # ... and lasts 80 ms
+AUTO_KINDS = ("centroid", "rms")
+AUTO_KEYS = {"kind", "events", "direction", "min_ratio"}
+AUTO_OPTIONAL = {"of"}
+
+
+def _late_tol(e: Event) -> float:
+    """Allowed lateness. An energy onset of a low note cannot resolve better
+    than a quarter period of its fundamental (the first quarter cycle carries
+    almost no energy), so the note allowance grows by that much."""
+    return LATE_TOL_S + (0.25 / (440.0 * 2 ** ((e.midi - 69) / 12)) if e.kind == "note" else 0.0)
+
+
+def _check_automation(j: int, au, phrase: Phrase) -> None:
+    """REFUSE a declaration that cannot be evaluated as written. Never narrow
+    it to the part that can: a declaration with one bad ID is a wrong
+    declaration, and measuring the rest would report on a move nobody asked
+    about (review #606: (), (0,), (100, 101) all PASSED a frozen sweep)."""
+    where = f"automation declaration {j}"
+    if not isinstance(au, dict):
+        raise Refused(f"{where}: not a dict: {au!r}")
+    missing, extra = AUTO_KEYS - set(au), set(au) - AUTO_KEYS - AUTO_OPTIONAL
+    if missing or extra:
+        raise Refused(f"{where}: missing keys {sorted(missing)}, unknown keys {sorted(extra)}")
+    if au["kind"] not in AUTO_KINDS:
+        raise Refused(f"{where}: kind {au['kind']!r} not one of {AUTO_KINDS}")
+    d = au["direction"]
+    if isinstance(d, bool) or d not in (1, -1):
+        raise Refused(f"{where}: direction {d!r} must be +1 or -1")
+    r = au["min_ratio"]
+    if isinstance(r, bool) or not isinstance(r, (int, float)) or not math.isfinite(r) or r <= 1.0:
+        raise Refused(f"{where}: min_ratio {r!r} must be finite and > 1 (else the ratio test is vacuous)")
+    ids = au["events"]
+    evs = phrase.events
+    if not isinstance(ids, (tuple, list)):
+        raise Refused(f"{where}: events {ids!r} is not a sequence of event IDs")
+    bad = [k for k in ids if isinstance(k, bool) or not isinstance(k, (int, np.integer))
+           or not 0 <= k < len(evs)]
+    if bad:
+        raise Refused(f"{where}: event IDs {bad!r} are not integer IDs in 0..{len(evs) - 1}; "
+                      f"the declaration is refused, not narrowed")
+    if len(ids) < 2:
+        raise Refused(f"{where}: {len(ids)} event(s); a move needs at least two")
+    if any(b <= a for a, b in zip(ids, ids[1:])):
+        raise Refused(f"{where}: event IDs {list(ids)} must be distinct and in schedule order")
+    of = au.get("of")
+    if of is not None:
+        if of not in ("note", "drum"):
+            raise Refused(f"{where}: of={of!r} must be 'note' or 'drum'")
+        wrong = [k for k in ids if evs[k].kind != of]
+        if wrong:
+            raise Refused(f"{where}: events {wrong} are not {of}s")
+    for k in ids:
+        e = evs[k]
+        end = e.onset_s + _late_tol(e) + AUTO_SKIP_S + AUTO_WIN_S
+        nxt = evs[k + 1].onset_s if k + 1 < len(evs) else phrase.duration_s
+        if end > nxt:
+            raise Refused(f"{where}: event {k}'s measurement window (to {end:.3f}s at the late "
+                          f"limit) runs past the next onset/phrase end at {nxt:.3f}s")
 
 
 def _centroid(seg: np.ndarray) -> float:
@@ -386,10 +459,7 @@ def evaluate(x, phrase: Phrase) -> dict:
         rec["onset_found"] = True
         rec["lateness_ms"] = round(late * 1000, 1)
         onsets.append(found)
-        # An energy onset of a low note cannot resolve better than a quarter
-        # period of its fundamental (the first quarter cycle carries almost no
-        # energy), so the late allowance for notes grows by that much.
-        late_tol = LATE_TOL_S + (0.25 / (440.0 * 2 ** ((e.midi - 69) / 12)) if e.kind == "note" else 0.0)
+        late_tol = _late_tol(e)
         rec["late_allowed_ms"] = round(late_tol * 1000, 1)
         if late > late_tol or late < -EARLY_TOL_S:
             fails.append(f"timing: event {i} ({e.kind}@{t:.3f}s) {late*1000:+.1f} ms "
@@ -431,24 +501,33 @@ def evaluate(x, phrase: Phrase) -> dict:
     if judged_tails == 0 and not fails:
         raise Refused("no event had a gap long enough to judge its release tail")
     # ---- automation
-    for au in phrase.automation:
-        ids = [k for k in au["events"] if k < len(evs)]
+    # Declarations were validated in preconditions(); every ID is in range,
+    # there are >= 2 of them, and each nominal window fits before the next onset.
+    for j, au in enumerate(phrase.automation):
+        ids = list(au["events"])
         vals = []
+        missing = [k for k in ids if onsets[k] is None]
+        for k in missing:
+            fails.append(f"automation: event {k} missing, move cannot be measured")
+        if missing:
+            continue                    # already red; a partial move is not measured
         for k in ids:
-            if onsets[k] is None:
-                fails.append(f"automation: event {k} missing, move cannot be measured")
-                continue
-            a = onsets[k] * FRAME + int(0.03 * SR)
-            seg = x[a:a + int(0.08 * SR)]
-            vals.append(_centroid(seg) if au["kind"] == "centroid" else float(np.sqrt(np.mean(seg ** 2))))
-        if len(vals) >= 2:
-            d = au["direction"]
-            mono = all(d * (b - a) >= -0.05 * abs(a) for a, b in zip(vals, vals[1:]))
-            ratio = vals[-1] / vals[0] if d > 0 else vals[0] / vals[-1]
-            info.setdefault("automation", []).append([round(v, 1) for v in vals])
-            if not mono or ratio < au["min_ratio"]:
-                fails.append(f"automation: {au['kind']} {[round(v) for v in vals]} did not move "
-                             f"{'up' if d > 0 else 'down'} by >= {au['min_ratio']}x")
+            a = onsets[k] * FRAME + int(AUTO_SKIP_S * SR)
+            seg = x[a:a + int(AUTO_WIN_S * SR)]
+            if len(seg) < int(AUTO_WIN_S * SR):
+                raise Refused(f"automation declaration {j}: event {k}'s window runs off the record")
+            v = _centroid(seg) if au["kind"] == "centroid" else float(np.sqrt(np.mean(seg ** 2)))
+            if not (math.isfinite(v) and v > 0.0):
+                raise Refused(f"automation declaration {j}: event {k}'s window is silent "
+                              f"({au['kind']} = {v!r}), nothing to measure")
+            vals.append(v)
+        d = au["direction"]
+        mono = all(d * (b - a) >= -0.05 * abs(a) for a, b in zip(vals, vals[1:]))
+        ratio = vals[-1] / vals[0] if d > 0 else vals[0] / vals[-1]
+        info.setdefault("automation", []).append([round(v, 1) for v in vals])
+        if not mono or ratio < au["min_ratio"]:
+            fails.append(f"automation: {au['kind']} {[round(v) for v in vals]} did not move "
+                         f"{'up' if d > 0 else 'down'} by >= {au['min_ratio']}x")
     bad = {failed_property(f) for f in fails}
     return {"phrase": phrase.name, "verdict": "FAIL" if fails else "PASS",
             "failures": fails, "info": info,

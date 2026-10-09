@@ -6,6 +6,7 @@ voice and drum models, so these are not decision-record tests of our own model.
 """
 from __future__ import annotations
 
+import dataclasses
 import pathlib
 import sys
 
@@ -246,3 +247,113 @@ def test_every_failure_message_belongs_to_a_property():
                 ps.failed_property(f)
     with pytest.raises(ValueError):
         ps.failed_property("something new")
+
+
+# ------------------------------------------- review #606 (2nd): automation declarations
+# An automation declaration that cannot be evaluated must be REFUSED, never
+# narrowed to the IDs that happen to be valid and never skipped into an "ok".
+# Every row below PASSED with props["automation"] == "ok" at 300f9ac9 against
+# the frozen-automation mutant, which the valid declaration catches.
+def _with_automation(**over):
+    ph = PH["mixed_automation"]
+    au = dict(ph.automation[0])
+    au.update(over)
+    for k in [k for k, v in au.items() if v is _DROP]:
+        del au[k]
+    return dataclasses.replace(ph, automation=(au,))
+
+
+_DROP = object()
+_FROZEN = ps.reference_render(PH["mixed_automation"], defect="frozen_automation")
+_CLEAN = ps.reference_render(PH["mixed_automation"])
+
+DEFEATING_DECLARATIONS = {
+    "no events": dict(events=()),                          # Judge repro
+    "one event": dict(events=(0,)),                        # Judge repro
+    "all out of range": dict(events=(100, 101)),           # Judge repro
+    "mixed valid/invalid": dict(events=(0, 2, 100)),       # must not be narrowed to (0, 2)
+    "negative id": dict(events=(-2, 0, 2)),                # -2 would silently index from the end
+    "only negative": dict(events=(-4, -2)),
+    "duplicate id": dict(events=(0, 0)),                   # two values, one event
+    "out of order": dict(events=(4, 2, 0)),
+    "bool id": dict(events=(False, True)),
+    "float id": dict(events=(0.0, 2.0)),
+    "events not a sequence": dict(events=2),
+    "id is a drum, declared of note": dict(events=(0, 1)),
+    "unknown kind": dict(kind="brightness"),               # used to fall through to RMS
+    "direction zero": dict(direction=0),                   # makes the monotone test vacuous
+    "direction two": dict(direction=2),
+    "min_ratio one": dict(min_ratio=1.0),                  # ratio test vacuous
+    "min_ratio nan": dict(min_ratio=float("nan")),         # ratio < nan is always False
+    "min_ratio inf": dict(min_ratio=float("inf")),
+    "missing min_ratio": dict(min_ratio=_DROP),
+    "missing direction": dict(direction=_DROP),
+    "unknown key": dict(min_ratoi=1.5),
+    "unknown of": dict(of="voice"),
+}
+
+
+@pytest.mark.parametrize("label", sorted(DEFEATING_DECLARATIONS))
+@pytest.mark.parametrize("audio", ["frozen", "clean"])
+def test_unevaluable_automation_declaration_is_refused(label, audio):
+    ph = _with_automation(**DEFEATING_DECLARATIONS[label])
+    x = _FROZEN if audio == "frozen" else _CLEAN
+    with pytest.raises(ps.Refused, match="automation"):
+        ps.evaluate(x, ph)
+
+
+def test_judge_repro_reports_refused_through_the_suite_path():
+    """The exact Judge #606 repro, read the way a caller reads it."""
+    for ids in ((), (0,), (100, 101)):
+        ph = dataclasses.replace(PH["mixed_automation"], automation=({
+            "kind": "centroid", "events": ids, "direction": 1, "min_ratio": 1.5,
+        },))
+        with pytest.raises(ps.Refused):
+            ps.evaluate(_FROZEN, ph)
+
+
+def test_valid_declaration_still_fails_frozen_and_passes_clean():
+    ph = PH["mixed_automation"]
+    f = ps.evaluate(_FROZEN, ph)
+    assert f["verdict"] == "FAIL" and f["props"]["automation"] == "FAIL", f["failures"]
+    c = ps.evaluate(_CLEAN, ph)
+    assert c["verdict"] == "PASS" and c["props"]["automation"] == "ok", c["failures"]
+    assert len(c["info"]["automation"][0]) == len(ph.automation[0]["events"])
+
+
+def test_two_valid_events_is_the_minimum_that_is_evaluated():
+    ph = _with_automation(events=(0, 10))
+    assert ps.evaluate(_FROZEN, ph)["props"]["automation"] == "FAIL"
+    assert ps.evaluate(_CLEAN, ph)["props"]["automation"] == "ok"
+
+
+def test_window_that_overlaps_the_next_event_is_refused():
+    """The 30-110 ms centroid window must sit before the next onset, or it measures a neighbour."""
+    ev = (ps.Event(0.3, "note", 0.25, 40), ps.Event(0.36, "note", 0.25, 40),
+          ps.Event(0.9, "note", 0.25, 40))
+    ph = ps.Phrase("tight", 1.6, ev, release_s=0.3,
+                   automation=({"kind": "centroid", "events": (0, 2), "direction": 1, "min_ratio": 1.5},))
+    with pytest.raises(ps.Refused, match="window"):
+        ps.evaluate(ps.reference_render(ph), ph)
+
+
+def test_silent_measurement_window_is_refused_not_measured():
+    """A window with no energy has no centroid; 0 Hz must not enter a ratio."""
+    ph = PH["mixed_automation"]
+    x = _CLEAN.copy()
+    on = ps.evaluate(_CLEAN, ph)["info"]["events"][2]
+    a = int(round((ph.events[2].onset_s + on["lateness_ms"] / 1000) * SR))
+    x[a + int(0.02 * SR):a + int(0.12 * SR)] = 0.0
+    with pytest.raises(ps.Refused, match="automation"):
+        ps.evaluate(x, ph)
+
+
+def test_unknown_event_kind_is_refused_not_judged_as_a_drum():
+    """Same shape found by the #606 search: kind 'Note' fell through to the drum
+    branch, skipping the note-only dropout and truncation checks."""
+    ph = PH["bass"]
+    x = ps.reference_render(ph, defect="dropout")
+    assert ps.evaluate(x, ph)["props"]["dropout"] == "FAIL"
+    bad = dataclasses.replace(ph, events=tuple(dataclasses.replace(e, kind="Note") for e in ph.events))
+    with pytest.raises(ps.Refused, match="kinds"):
+        ps.evaluate(x, bad)
