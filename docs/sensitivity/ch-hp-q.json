@@ -1,0 +1,116 @@
+{
+ "schema": "sensitivity-sweep-v1",
+ "id": "ch-hp-q",
+ "parameter": {
+  "name": "CH_HP_Q_X10",
+  "source": "model/drums_fx.py",
+  "kind": "python-constant",
+  "what": "issue #559: the CH high-pass's Q x10 (M_CHHP, f0 held at 11.7 kHz, which R153/R155/C72/C73 fix under any equal-C Sallen-Key reading). The shipped Q 2.5 is reference 11's [inferred] topology reading. M_CHHP is shared with the cymbal's short high band (E_CYS)."
+ },
+ "objective": {
+  "name": "CH flatness ratio to the #379 WEAK bar",
+  "units": "ratio to bar",
+  "lower_is_better": true,
+  "why": "#559's named CH failure: worst feature 9.3x (gate-379 section 4) is flatness. The ratio is to the take played x1.0628 (WEAK), a ranking bar, not a calibrated between-recording one."
+ },
+ "grid": {
+  "stated_before_results": true,
+  "values": [
+   5,
+   7,
+   10,
+   15,
+   25
+  ],
+  "range_basis": [
+   "25 ships. 5 (Q 0.5) bounds the low side: below it a 2-pole high-pass is overdamped and its corner response no longer changes shape. The skirt diagnosis (1/3-octave, 0-60 ms: ours 5-10 dB short below 6 kHz, 2-6 dB hot above 12 kHz) said the resonant bump is the excess, so the grid spans 0.5 to the shipped 2.5.",
+   "Committed in tools/probes/chcp_559_select.py (module docstring and grid constants, committed in b10a6e8f before any DEV point was rendered)"
+  ],
+  "held_fixed": {
+   "HAT_BP_Q_X10": 60,
+   "CH_HP_F0_HZ": 11700
+  }
+ },
+ "decision_rule": {
+  "stated_before_results": true,
+  "flat_within_relative": 0.1,
+  "why": "the gate's own resolution, not the spread of these data: a candidate is only told apart from another if the gap is a meaningful fraction of the 808's own one-step distance (the WEAK bar). At the ratios swept here (2 to 27) one bar is 4 to 50 % of the value; 10 % is the low end of that, so two points closer than 10 % are within the gate's own step and cannot justify a choice. Stated in this record before it was checked, from the decision's granularity."
+ },
+ "evidence": {
+  "artifact": "docs/sensitivity/chcp559-sweeps.txt",
+  "format": "fixed-width-table",
+  "table": "ch_hp_q",
+  "value_column": "CH_HP_Q_X10",
+  "objective_column": "flatness_ratio",
+  "held_fixed": {
+   "HAT_BP_Q_X10": 60
+  },
+  "regenerate": "python3 tools/probes/chcp_559.py ch-sweep|cp-sweep, then python3 tools/probes/chcp_559.py tables",
+  "instrument": "tools/probes/chcp_559.py through tools/perceptual_gate.py UNCHANGED (#379 gate, WEAK bar, single Fischer take); objective = median over the 5 frozen DEV strikes (480, 23110, 25283, 25409, 28527 frames) of the ratio to the bar. CH renders: the real DrumsFx block. CP renders: the exact fast path, asserted bit-identical to the real block (check-fast)."
+ },
+ "points": [
+  {
+   "value": 5,
+   "objective": 5.208
+  },
+  {
+   "value": 7,
+   "objective": 5.621
+  },
+  {
+   "value": 10,
+   "objective": 6.319
+  },
+  {
+   "value": 15,
+   "objective": 7.324
+  },
+  {
+   "value": 25,
+   "objective": 8.872
+  }
+ ],
+ "prediction": {
+  "runs": [
+   [
+    5,
+    7
+   ],
+   [
+    10
+   ],
+   [
+    15
+   ],
+   [
+    25
+   ]
+  ],
+  "basis": "The committed sentence (CH-1, PREDICTIONS, b10a6e8f): 'flatness falls monotonically from Q 2.5 to about Q 0.7 and flattens below (the ~12 dB/oct skirt below f0 does not depend on Q; only the resonant bump does)'. Translated to runs under the 10 % rule mechanically: Q 0.5 and 0.7 one run, each step above it separate. The translation was written down after the measurement; the sentence it translates was not.",
+  "independent_of_measurement": true
+ },
+ "verdict": {
+  "state": "MIXED",
+  "runs": [
+   [
+    5,
+    7
+   ],
+   [
+    10
+   ],
+   [
+    15
+   ],
+   [
+    25
+   ]
+  ],
+  "summary": "As predicted: 8.87 (shipped, Q 2.5), 7.32, 6.32, 5.62, 5.21 (Q 0.5); Q 0.5 and 0.7 are within 10 %. Every other CH feature also improves or holds at Q 0.5 (centroid 3.18 -> 1.17, spec_peak 3.33 -> 2.58, attack 1.31 -> 1.03; ch-sweep-dev.json). The shipped value sits at the worst end. The disabled candidate kit_808_candidate_559() carries Q 0.5; kit_808() still ships 2.5."
+ },
+ "limits": [
+  "DEV only; the selected point's CONFIRM result is docs/scorecard/chcp-559/ch-confirm-hpq05.json.",
+  "The ratio is to the #379 WEAK bar, which ranks; no calibrated between-recording bar exists (gate-379 section 8), so fidelity qualification is REFUSED whatever this record says.",
+  "f0 was held at 11.7 kHz by design; a 10 kHz / Q 0.5 exploration at the default strike read 5.62 against 6.08 at 11.7 kHz (not on this grid, not used to select)."
+ ]
+}

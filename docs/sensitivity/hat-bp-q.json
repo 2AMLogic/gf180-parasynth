@@ -1,0 +1,88 @@
+{
+ "schema": "sensitivity-sweep-v1",
+ "id": "hat-bp-q",
+ "parameter": {
+  "name": "HAT_BP_Q_X10",
+  "source": "model/drums_fx.py",
+  "kind": "python-constant",
+  "what": "issue #559: the hats' shared 7.1 kHz band-pass Q x10 (M_HATBP), read by CH, OH and the cymbal's high band, as IC3's one stage is on the machine. The shipped Q 6 is reference 10's bridged-T reading of R58/R59, which omits the stage's input C11/R55 network [inferred]."
+ },
+ "objective": {
+  "name": "CH flatness ratio to the #379 WEAK bar",
+  "units": "ratio to bar",
+  "lower_is_better": true,
+  "why": "#559's named CH failure: worst feature 9.3x (gate-379 section 4) is flatness. The ratio is to the take played x1.0628 (WEAK), a ranking bar, not a calibrated between-recording one."
+ },
+ "grid": {
+  "stated_before_results": true,
+  "values": [
+   20,
+   30,
+   40,
+   60
+  ],
+  "range_basis": [
+   "60 ships. 20 (Q 2) bounds the low side, where the band is wider than an octave and stops being the 7.1 kHz band at all. Swept at the CH high-pass Q 0.5 selected in stage 1 (sequential, one dial at a time).",
+   "Committed in tools/probes/chcp_559_select.py (module docstring and grid constants, committed in b10a6e8f before any DEV point was rendered)"
+  ],
+  "held_fixed": {
+   "CH_HP_Q_X10": 5
+  }
+ },
+ "decision_rule": {
+  "stated_before_results": true,
+  "flat_within_relative": 0.1,
+  "why": "the gate's own resolution, not the spread of these data: a candidate is only told apart from another if the gap is a meaningful fraction of the 808's own one-step distance (the WEAK bar). At the ratios swept here (2 to 27) one bar is 4 to 50 % of the value; 10 % is the low end of that, so two points closer than 10 % are within the gate's own step and cannot justify a choice. Stated in this record before it was checked, from the decision's granularity."
+ },
+ "evidence": {
+  "artifact": "docs/sensitivity/chcp559-sweeps.txt",
+  "format": "fixed-width-table",
+  "table": "ch_bp_q",
+  "value_column": "HAT_BP_Q_X10",
+  "objective_column": "flatness_ratio",
+  "held_fixed": {
+   "CH_HP_Q_X10": 5
+  },
+  "regenerate": "python3 tools/probes/chcp_559.py ch-sweep|cp-sweep, then python3 tools/probes/chcp_559.py tables",
+  "instrument": "tools/probes/chcp_559.py through tools/perceptual_gate.py UNCHANGED (#379 gate, WEAK bar, single Fischer take); objective = median over the 5 frozen DEV strikes (480, 23110, 25283, 25409, 28527 frames) of the ratio to the bar. CH renders: the real DrumsFx block. CP renders: the exact fast path, asserted bit-identical to the real block (check-fast)."
+ },
+ "points": [
+  {
+   "value": 20,
+   "objective": 2.385
+  },
+  {
+   "value": 30,
+   "objective": 2.457
+  },
+  {
+   "value": 40,
+   "objective": 3.085
+  },
+  {
+   "value": 60,
+   "objective": 5.208
+  }
+ ],
+ "verdict": {
+  "state": "MIXED",
+  "runs": [
+   [
+    20,
+    30
+   ],
+   [
+    40
+   ],
+   [
+    60
+   ]
+  ],
+  "summary": "2.38 (Q 2), 2.46 (Q 3), 3.09 (Q 4), 5.21 (Q 6, shipped). Stage 2 selected Q 3 on CH (tied with Q 2 within the 5 % tie band, smaller change). NOT carried: read after selection on voices never used to select, OH improves (worst 4.40 -> 3.01, flatness 3.75 -> 1.98) but CY regresses (worst 7.86 -> 8.82: spec +0.87, centroid +0.96, decay +0.42 bar), so it fails #559's shared-voice preservation and stays at 60."
+ },
+ "limits": [
+  "NO PREDICTION BLOCK, deliberately. The committed sentence ('flatness falls as Q falls from 6') states a direction, not runs; translating it after the measurement would be a prediction written after the result.",
+  "Measured at CH_HP_Q_X10 = 5 (stage 1's selection), not at the shipped 25.",
+  "The CY regression may be because CY's own constants (PEAK_CYS/CYD, CY_HI_Q) were fitted around Q 6; that is an untested reading, and it is why this record does not say Q 6 is right either."
+ ]
+}

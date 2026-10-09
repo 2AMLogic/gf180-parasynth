@@ -62,7 +62,7 @@ import sys
 import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "model")]
+sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "model"), str(ROOT / "audition")]
 
 import perceptual_gate as pg  # noqa: E402
 
@@ -185,6 +185,52 @@ def _dx():
 
 def model_sha() -> str:
     return hashlib.sha256((ROOT / "model" / "drums_fx.py").read_bytes()).hexdigest()[:16]
+
+
+#: Source that a render here executes or builds candidate kits with. kit_808,
+#: preset_writes and kit_with_sounds are NOT here by design: their only effect
+#: on a render is the register images, which are hashed directly below (a
+#: source hash would refuse a behaviour-preserving refactor of them, #559).
+ENGINE_NAMES = ("EnvFx", "DrumsFx", "output_fx", "lfsr_frame", "rate_reg", "peak_reg", "accent_reg",
+                "amp_reg", "mode_regs", "mode_writes", "env_writes", "env_ctl", "path_word", "hit_writes")
+
+
+def engine_fingerprint(dx=None) -> str:
+    """What a render here depends on: the engine's source (the classes and
+    functions above, plus model/fixed.py and model/modal_fixed.py whole) and
+    the register images every sound the probe touches is rendered from. A
+    file hash refuses on an unrelated edit to drums_fx.py; this refuses on any
+    edit that could move a sample here, including a changed kit_808()."""
+    import inspect
+    dx = dx or _dx()
+    h = hashlib.sha256()
+    for name in ENGINE_NAMES:
+        h.update(inspect.getsource(getattr(dx, name)).encode())
+    for f in ("fixed.py", "modal_fixed.py"):
+        h.update((ROOT / "model" / f).read_bytes())
+    for s in ("CH", "CP", "OH", "CY", "MA", "RS"):
+        h.update(repr(dx.kit_with_sounds(s)).encode())
+    return h.hexdigest()[:16]
+
+
+def engine_fingerprint_at(commit: str) -> str:
+    """engine_fingerprint() of model/drums_fx.py as it was at `commit`."""
+    import importlib.util
+    import subprocess
+    import tempfile
+    src = subprocess.run(["git", "show", f"{commit}:model/drums_fx.py"], cwd=ROOT,
+                         capture_output=True, text=True, check=True).stdout
+    with tempfile.TemporaryDirectory() as td:
+        p = pathlib.Path(td) / "drums_fx_at.py"
+        p.write_text(src)
+        spec = importlib.util.spec_from_file_location("drums_fx_at", p)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["drums_fx_at"] = mod          # dataclasses resolve their module by name
+        try:
+            spec.loader.exec_module(mod)
+            return engine_fingerprint(mod)
+        finally:
+            sys.modules.pop("drums_fx_at", None)
 
 
 def render_block(sound: str, kit: list, hit: int, accent: float = 1.0, seconds: float = 2.2) -> np.ndarray:
@@ -480,15 +526,106 @@ def cmd_baseline(refs, out):
     return res
 
 
+#: The best point of each CP family on DEV that the frozen rule did NOT select
+#: (each regressed another feature). Run on CONFIRM as DIAGNOSTIC evidence of
+#: the trade-off only -- never a selection, never promoted.
+CP_FRONTIER = ({"family": "P", "tau_ms": 160, "peak_db": -8.0},
+               {"family": "X", "tau_ms": 250, "db": -22.0},
+               {"family": "T", "f_hz": 1300.0, "tau_ms": 160, "db": -12.0})
+
+
+def regen() -> int:
+    """Every record in docs/scorecard/chcp-559 from ONE clean, committed tree.
+    REFUSES on a dirty tools/ or model/. Three independent streams run as
+    parallel processes (each sequential inside); every step's own exit status
+    is recorded, and the evidence tables are written only if every sweep
+    passed. One process per stream, so at most three cores."""
+    import subprocess
+    p0 = _provenance()
+    if p0["sources_dirty"]:
+        raise Refused("regen needs a clean tools/ and model/: commit first, so every record names a real commit")
+    D = "docs/scorecard/chcp-559"
+    me = [sys.executable, str(pathlib.Path(__file__).resolve())]
+    conf = lambda snd, name, cand: [*me, "confirm", "--sound", snd, "--sweep", f"{D}/{snd.lower()}-sweep-dev.json",
+                                    "--cand", json.dumps(cand), "--out", f"{D}/{snd.lower()}-confirm-{name}.json"]
+    streams = {
+        "A": [("cp-tail", [*me, "cp-tail", "--out", f"{D}/cp-tail.json"]),
+              ("baseline", [*me, "baseline", "--out", f"{D}/baseline.json"]),
+              ("cp-sweep", [*me, "cp-sweep", "--out", f"{D}/cp-sweep-dev.json"])]
+             + [(f"cp-frontier-{i}", conf("CP", f"frontier-{c['family']}", c)) for i, c in enumerate(CP_FRONTIER[:2])],
+        "B": [("cpt-sweep", [*me, "cpt-sweep", "--out", f"{D}/cpt-sweep-dev.json"]),
+              ("cpt-frontier", [*me, "confirm", "--sound", "CP", "--sweep", f"{D}/cpt-sweep-dev.json", "--cand",
+                                json.dumps(CP_FRONTIER[2]), "--out", f"{D}/cp-confirm-frontier-T.json"])],
+        "C": [("ch-sweep", [*me, "ch-sweep", "--out", f"{D}/ch-sweep-dev.json"]),
+              ("ch-confirm-hpq05", conf("CH", "hpq05", {"hpq": 0.5, "bpq": 6.0})),
+              ("ch-confirm-hpq05-bpq3", conf("CH", "hpq05-bpq3", {"hpq": 0.5, "bpq": 3.0}))],
+    }
+    drivers = []
+    for name, steps in streams.items():
+        script = ("import subprocess, sys, json\nres = {}\n"
+                  f"for label, cmd in {steps!r}:\n"
+                  f"    with open('{D}/' + label + '.log', 'w') as fh:\n"
+                  "        r = subprocess.run(cmd, cwd=" + repr(str(ROOT)) + ", stdout=fh, stderr=subprocess.STDOUT)\n"
+                  "    res[label] = r.returncode\n"
+                  "    print(label, r.returncode, flush=True)\n"
+                  "    if r.returncode != 0:\n"
+                  "        break\n"
+                  "print('STREAM', json.dumps(res), flush=True)\n"
+                  "sys.exit(max(res.values()) if res else 2)\n")
+        drivers.append((name, subprocess.Popen([sys.executable, "-c", script], cwd=ROOT, stdout=subprocess.PIPE,
+                                               text=True)))
+    status = {}
+    for name, pr in drivers:
+        out, _ = pr.communicate()
+        status[name] = pr.returncode
+        print(f"stream {name} exit {pr.returncode}\n{out}", flush=True)
+    if any(status.values()):
+        print(f"REGEN INCOMPLETE: {status}; tables not written", flush=True)
+        return 1
+    r = subprocess.run([*me, "tables"], cwd=ROOT)
+    p1 = _provenance()
+    if {k: p0[k] for k in p0 if k != "sources_dirty"} != {k: p1[k] for k in p1 if k != "sources_dirty"}:
+        print(f"REGEN: sources moved during the run {p0} -> {p1}", flush=True)
+        return 1
+    print(f"REGEN OK at {p0['commit'][:12]}: streams {status}, tables exit {r.returncode}", flush=True)
+    return r.returncode
+
+
+def _provenance() -> dict:
+    import subprocess
+    git = lambda *x: subprocess.run(["git", *x], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    probe = hashlib.sha256(b"".join((ROOT / "tools" / "probes" / f).read_bytes()
+                                    for f in ("chcp_559.py", "chcp_559_select.py"))).hexdigest()[:16]
+    return {"model_sha16": model_sha(), "engine_fingerprint": engine_fingerprint(), "probe_sha16": probe,
+            "commit": git("rev-parse", "HEAD"),
+            "sources_dirty": bool(git("status", "--porcelain", "--", "tools", "model"))}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("cmd", choices=("refs", "baseline", "check-fast", "check-cpt", "cp-tail", "cp-sweep", "cpt-sweep", "ch-sweep", "confirm", "tables"))
+    ap.add_argument("cmd", choices=("refs", "baseline", "check-fast", "check-cpt", "cp-tail", "cp-sweep", "cpt-sweep", "ch-sweep", "confirm", "tables", "regen"))
     ap.add_argument("--refs", type=pathlib.Path, default=None)
     ap.add_argument("--sweep", type=pathlib.Path, default=None, help="confirm: the sweep JSON whose selection to confirm")
     ap.add_argument("--sound", choices=("CH", "CP"), default=None)
+    ap.add_argument("--cand", default=None,
+                    help="confirm: a candidate from the sweep's grid as JSON, in place of its 'selected' "
+                         "(used when a shared voice blocks the selection; must be a swept point)")
     ap.add_argument("--out", type=pathlib.Path, default=None)
     a = ap.parse_args(argv)
     refs = a.refs or default_refs()
+    if a.cmd == "regen":
+        try:
+            check_refs(refs)
+            return regen()
+        except Refused as e:
+            print(f"REFUSED: {e}", flush=True)
+            return 2
+    # Provenance is taken BEFORE any work and checked again after. The first
+    # version took it at the end, so two sweeps recorded the model file as it
+    # was when they FINISHED, after mid-run edits, not the one they imported
+    # (wrong-then-right, #559). A run whose sources moved under it writes a
+    # record that says so instead of a clean one.
+    prov0 = _provenance()
     try:
         hashes = check_refs(refs)
         if a.cmd == "refs":
@@ -523,10 +660,21 @@ def main(argv=None) -> int:
                 raise Refused("confirm needs --sweep <the DEV sweep JSON> and --sound")
             sw = json.loads(a.sweep.read_text())
             chosen = sw["result"].get("selected")
+            if a.cand:
+                want = json.loads(a.cand)
+                swept = [x["cand"] for k in ("candidates", "stage1", "stage2") for x in sw["result"].get(k, [])]
+                if want not in swept:
+                    raise Refused(f"--cand {want} is not a point the DEV sweep measured")
+                chosen = {"cand": want, "override_of": (sw["result"].get("selected") or {}).get("label")}
             if not chosen:
                 raise Refused(f"{a.sweep} selected nothing on DEV: there is nothing to confirm")
             if sw.get("model_sha16") != model_sha():
-                raise Refused(f"{a.sweep} was swept on model {sw.get('model_sha16')}, this tree is {model_sha()}")
+                now = engine_fingerprint()
+                then = engine_fingerprint_at(sw["commit"])
+                print(f"model file changed since the sweep ({sw.get('model_sha16')} -> {model_sha()}); "
+                      f"engine+images fingerprint at {sw['commit'][:12]} {then}, now {now}", flush=True)
+                if then != now:
+                    raise Refused(f"{a.sweep} was swept on an engine/image that differs from this tree's")
             res = sel.confirm(a.sound, chosen["cand"], refs)
         else:
             import chcp_559_select as sel
@@ -538,10 +686,11 @@ def main(argv=None) -> int:
     except Refused as e:
         print(f"REFUSED: {e}", flush=True)
         return 2
-    import subprocess
-    git = lambda *x: subprocess.run(["git", *x], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-    res = {"cmd": a.cmd, "model_sha16": model_sha(), "commit": git("rev-parse", "HEAD"),
-           "sources_dirty": bool(git("status", "--porcelain", "--", "tools", "model")),
+    prov1 = _provenance()
+    moved = {k: [prov0[k], prov1[k]] for k in prov0 if prov0[k] != prov1[k]}
+    if moved:
+        print(f"WARNING: sources changed during the run: {moved}; the record says so", flush=True)
+    res = {"cmd": a.cmd, **prov0, "sources_moved_during_run": moved,
            "refs_sha256": hashes, "conditions": {"dev": conditions("dev"),
            "confirm": conditions("confirm")}, "result": res}
     if a.out:

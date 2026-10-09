@@ -30,7 +30,14 @@ FILES = ["docs/sensitivity/registry.json",
          # issue #551's record: COUPLE_K, a python-constant in the drum model
          "docs/sensitivity/coupling-k.json",
          "docs/sensitivity/coupling-k-sweep.txt",
-         "model/drums_fx.py"]
+         "model/drums_fx.py",
+         # issue #559's four records: the hats' two filter Qs and the clap tail's
+         # tau and level, all python-constants in the drum model, one artefact
+         "docs/sensitivity/ch-hp-q.json",
+         "docs/sensitivity/hat-bp-q.json",
+         "docs/sensitivity/cp-tail-tau.json",
+         "docs/sensitivity/cp-tail-peak.json",
+         "docs/sensitivity/chcp559-sweeps.txt"]
 
 
 @pytest.fixture
@@ -373,6 +380,57 @@ def test_a_move_to_an_unswept_value_is_red(repo):
 def test_an_unchanged_tree_prices_nothing(repo):
     code, text = run(repo, changed_since="HEAD")
     assert code == 0 and "FLAT-MOVE" not in text and "PRICED" not in text
+
+
+def _repo_without(root, line):
+    """A repo whose base commit lacks `line` in the drum model; the working
+    tree (the branch) has it back."""
+    src = root / "model/drums_fx.py"
+    text = src.read_text()
+    assert f"\n{line}\n" in text
+    src.write_text(text.replace(f"\n{line}\n", "\n"))
+    for a in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-qm", "base"]):
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *a], cwd=root,
+                       check=True, capture_output=True)
+    src.write_text(text)
+    return root
+
+
+def test_a_parameter_new_since_the_ref_is_noted_not_refused(root):
+    """#559: registering a parameter in the change that introduces its constant
+    REFUSED (`found 0 declarations ... at origin/main`), so CI's
+    `--changed-since origin/main` could never pass such a PR."""
+    repo = _repo_without(root, "CH_HP_Q_X10 = 25")
+    code, text = run(repo, changed_since="HEAD")
+    assert code == 0, text
+    assert "NEW ch-hp-q" in text and "PRICED" not in text
+
+
+def test_a_rename_that_hides_a_value_change_is_shown_not_priced(root):
+    """Rule 8's defeating input for the guard above: rename the constant at the
+    ref and change its value on the branch. It cannot be priced (there is no
+    old value under this name), so the gate must at least SAY so."""
+    src = root / "model/drums_fx.py"
+    text = src.read_text()
+    src.write_text(text.replace("\nCH_HP_Q_X10 = 25\n", "\nCH_HIGHPASS_Q_X10 = 25\n"))
+    for a in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-qm", "base"]):
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *a], cwd=root,
+                       check=True, capture_output=True)
+    src.write_text(text.replace("\nCH_HP_Q_X10 = 25\n", "\nCH_HP_Q_X10 = 5\n"))
+    code, out = run(root, changed_since="HEAD")
+    assert code == 0 and "NEW ch-hp-q" in out and "a rename also reads this way" in out
+
+
+def test_an_ambiguous_parameter_at_the_ref_still_refuses(root):
+    src = root / "model/drums_fx.py"
+    text = src.read_text()
+    src.write_text(text.replace("\nCH_HP_Q_X10 = 25\n", "\nCH_HP_Q_X10 = 25\nCH_HP_Q_X10 = 25\n"))
+    for a in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-qm", "base"]):
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *a], cwd=root,
+                       check=True, capture_output=True)
+    src.write_text(text)
+    code, out = run(root, changed_since="HEAD")
+    assert code == 2 and "found 2 declarations" in out
 
 
 def test_an_unresolvable_ref_refuses_rather_than_passing_quietly(repo):

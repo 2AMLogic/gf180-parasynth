@@ -397,28 +397,30 @@ def sensitivity_tables(ch: dict, cp: dict) -> str:
          "Grids, rules and predictions: tools/probes/chcp_559_select.py docstring (committed before the sweep).",
          "Objective: median over the 5 DEV conditions of the ratio to the #379 WEAK bar (lower is better).", ""]
     L += ["ch_hp_q -- CH flatness ratio against the CH high-pass Q x10 (f0 11.7 kHz, hat band-pass Q 6)",
-          "CH_HP_Q_X10 flatness_ratio worst_median"]
+          "CH_HP_Q_X10 HAT_BP_Q_X10 flatness_ratio worst_median"]
     for s in sorted(chr_["stage1"], key=lambda s: s["cand"]["hpq"]):
-        L.append(f"{round(s['cand']['hpq'] * 10)} {s['objective']:.3f} {max(s['median_ratios'].values()):.3f}")
+        L.append(f"{round(s['cand']['hpq'] * 10)} {round(s['cand']['bpq'] * 10)} {s['objective']:.3f} "
+                 f"{max(s['median_ratios'].values()):.3f}")
     L += ["", f"ch_bp_q -- CH flatness ratio against the hats' 7.1 kHz band-pass Q x10 (CH high-pass Q {sel_hpq})",
-          "HAT_BP_Q_X10 flatness_ratio worst_median"]
+          "HAT_BP_Q_X10 CH_HP_Q_X10 flatness_ratio worst_median"]
     for s in sorted(chr_["stage2"], key=lambda s: s["cand"]["bpq"]):
-        L.append(f"{round(s['cand']['bpq'] * 10)} {s['objective']:.3f} {max(s['median_ratios'].values()):.3f}")
+        L.append(f"{round(s['cand']['bpq'] * 10)} {round(s['cand']['hpq'] * 10)} {s['objective']:.3f} "
+                 f"{max(s['median_ratios'].values()):.3f}")
     sel = cpr.get("selected") or {"cand": {"family": "P", "tau_ms": SHIPPED["CP_TAU_MS"],
                                             "peak_db": SHIPPED["CP_PEAK_DB"]}}
     pk = sel["cand"].get("peak_db", SHIPPED["CP_PEAK_DB"])
     tau = sel["cand"].get("tau_ms", SHIPPED["CP_TAU_MS"])
     P = [s for s in cpr["candidates"] if s["cand"]["family"] == "P"]
     L += ["", f"cp_tail_tau -- CP max(decay, attack) ratio against the tail tau in ms (tail peak {pk:+.0f} dB re 0.22)",
-          "CP_TAIL_TAU_MS objective_ratio decay_ratio attack_ratio"]
+          "CP_TAIL_TAU_MS CP_TAIL_PEAK_DB objective_ratio decay_ratio attack_ratio"]
     for s in sorted((s for s in P if s["cand"]["peak_db"] == pk), key=lambda s: s["cand"]["tau_ms"]):
         m = s["median_ratios"]
-        L.append(f"{s['cand']['tau_ms']} {s['objective']:.3f} {m['decay']:.3f} {m['attack']:.3f}")
+        L.append(f"{s['cand']['tau_ms']} {round(pk)} {s['objective']:.3f} {m['decay']:.3f} {m['attack']:.3f}")
     L += ["", f"cp_tail_peak -- CP max(decay, attack) ratio against the tail peak in dB re 0.22 (tail tau {tau} ms)",
-          "CP_TAIL_PEAK_DB objective_ratio decay_ratio attack_ratio"]
+          "CP_TAIL_PEAK_DB CP_TAIL_TAU_MS objective_ratio decay_ratio attack_ratio"]
     for s in sorted((s for s in P if s["cand"]["tau_ms"] == tau), key=lambda s: s["cand"]["peak_db"]):
         m = s["median_ratios"]
-        L.append(f"{round(s['cand']['peak_db'])} {s['objective']:.3f} {m['decay']:.3f} {m['attack']:.3f}")
+        L.append(f"{round(s['cand']['peak_db'])} {tau} {s['objective']:.3f} {m['decay']:.3f} {m['attack']:.3f}")
     return "\n".join(L) + "\n"
 
 

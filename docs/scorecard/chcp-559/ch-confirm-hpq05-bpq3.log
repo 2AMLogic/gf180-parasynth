@@ -1,0 +1,12 @@
+model file changed since the sweep (730264ba1988eb1d -> 136fbadcc3a8a3ff); engine+images fingerprint at 460d0628210d 900c575a2c90c164, now 900c575a2c90c164
+CONFIRM CH CH hpQ0.5 bpQ3.0: objective 8.07 -> 2.43 (-70%), better on 6/6, regressions ['attack 0.92->1.72'] -> NOT CONFIRMED
+   per-condition regression (disclosure) at [8356, 1.0]: ['attack 0.74->1.87']
+   per-condition regression (disclosure) at [13651, 1.0]: ['attack 1.01->1.27']
+   per-condition regression (disclosure) at [18519, 1.0]: ['attack 0.55->2.93']
+   per-condition regression (disclosure) at [28791, 1.0]: ['attack 0.82->1.84']
+   per-condition regression (disclosure) at [30167, 1.0]: ['attack 1.06->1.59']
+   per-condition regression (disclosure) at [8356, 2.0]: ['attack 0.74->1.87']
+   shipped   spec=2.26 spec_peak=2.73 centroid=2.79 flatness=8.07 impulse=0.39 attack=0.92 decay=3.06
+   candidate spec=2.04 spec_peak=2.15 centroid=0.96 flatness=2.43 impulse=0.46 attack=1.72 decay=2.99
+WARNING: sources changed during the run: {'probe_sha16': ['bc259ba48c9a4ff7', '35e194b1916f9b45']}; the record says so
+exit 0
