@@ -29,9 +29,13 @@ than answers when it cannot:
   * no parameter is proposed, and so no sensitivity-registry record claims
     this issue.  If one is proposed later it must name its registry record;
   * the primary aggregate declares what a REFUSED Fischer reading does
-    (`primary_metric.refused_readings`), and its measured-condition minimum is
-    satisfiable after the predicted refusals.  `primary_aggregate` applies
-    that rule at use: a refusal is never a number, a reference/shipped
+    (`primary_metric.refused_readings`), its measured-condition minimum is
+    derived from the predicted refusals, and those are exactly the conditions
+    at the declared `unqualified_knobs` (DECAY knob 0, where glide_cents can
+    answer wrongly, #602).  `measured_set` -- shared by `primary_aggregate`
+    and `satisfiable` -- applies that rule at use: a condition at an
+    unqualified knob is excluded whatever it reads, a refusal is never a
+    number, a reference/shipped
     refusal is excluded from both medians and listed, a candidate refusal is a
     FAILURE, and too few measured conditions REFUSE (never pass).
 
@@ -314,6 +318,21 @@ def _check_refused_rule(rec: dict) -> list:
         if p not in ids:
             out.append(f"primary_metric.refused_readings: predicted refusal {p} is not an "
                        "untouched Fischer condition")
+    # The excluded set is fixed by the estimator's qualification, not chosen:
+    # every untouched Fischer condition at an unqualified DECAY knob, and no
+    # other (PR #601 review, #602: at knob 0 glide_cents can ANSWER, wrongly).
+    uq = rr.get("unqualified_knobs")
+    if not isinstance(uq, list) or not all(_finite(x) for x in uq):
+        out.append("primary_metric.refused_readings: unqualified_knobs must be a list of DECAY "
+                   "knobs (where glide_cents is not qualified; conditions there are excluded "
+                   "whatever they read)")
+    else:
+        at_uq = {c.get("id") for c in untouched_fischer(rec)
+                 if (c.get("model") or {}).get("decay_knob") in uq}
+        if set(pred) != at_uq or len(pred) != len(set(pred)):
+            out.append(f"primary_metric.refused_readings: predicted_refusals {sorted(pred)} are not "
+                       f"exactly the untouched Fischer conditions at unqualified knobs "
+                       f"{sorted(at_uq)}")
     if isinstance(k, int) and n - len(set(pred) & ids) < k:
         out.append(f"primary_metric.refused_readings: unsatisfiable -- {n} conditions minus "
                    f"{len(pred)} predicted refusals leaves fewer than min_measured_conditions {k}")
@@ -477,39 +496,47 @@ def _measured(x):
     return float(x)
 
 
-def primary_aggregate(rec: dict, readings: dict) -> dict:
-    """The frozen primary aggregate with the frozen REFUSED rule applied.
+def measured_set(rec: dict, readings: dict) -> tuple:
+    """(measured, excluded): the ONE definition of which untouched Fischer
+    conditions enter the medians, shared by primary_aggregate and satisfiable
+    so the two cannot drift.  `measured` is [(id, {side: float|None})].
 
-    `readings` maps every untouched Fischer condition id to
-    {"reference": r, "shipped": s, "candidate": c}, each a glide_cents value or
-    a refusal (anything `_measured` rejects).  d = reference - ours.
-
-      * reference or shipped REFUSED -> condition excluded from BOTH medians,
-        listed with the side that refused;
-      * reference and shipped measured, candidate REFUSED -> verdict FAILURE
-        (the candidate destroyed a measurable trajectory); no median is formed
-        for the candidate, so a refusal cannot become a 0-cent |d|;
-      * fewer than min_measured_conditions measured, or the measured set no
-        longer holds out a TONE and a DECAY value development never used ->
-        Refused (no claim either way; never a pass).
-    """
-    import statistics
+      * a condition at one of `refused_readings.unqualified_knobs` is excluded
+        WHATEVER it reads (reason "unqualified_knob") -- glide_cents at DECAY
+        knob 0 can answer +76..+97 c on a constant-pitch tone (#602), and an
+        answer there is not a measurement;
+      * otherwise reference or shipped REFUSED -> excluded, listing the side;
+      * fewer than min_measured_conditions measured, or no held-out TONE /
+        DECAY value left -> Refused.
+    Every malformed input (non-dict readings or entries, wrong ids) REFUSES."""
     rr = (rec.get("primary_metric") or {}).get("refused_readings")
-    if not isinstance(rr, dict) or not isinstance(rr.get("min_measured_conditions"), int):
+    if (not isinstance(rr, dict) or not isinstance(rr.get("min_measured_conditions"), int)
+            or isinstance(rr.get("min_measured_conditions"), bool)):
         raise Refused("the record declares no refused_readings rule; the aggregate cannot be formed")
+    uq = rr.get("unqualified_knobs")
+    if not isinstance(uq, list) or not all(_finite(x) for x in uq):
+        raise Refused("the record declares no unqualified_knobs list; the aggregate cannot be formed")
     conds = {c["id"]: c for c in untouched_fischer(rec)}
+    if not isinstance(readings, dict):
+        raise Refused(f"readings must be a JSON object keyed by condition id, got "
+                      f"{type(readings).__name__}")
     if set(readings) != set(conds):
         raise Refused(f"readings must cover exactly the untouched Fischer conditions: missing "
                       f"{sorted(set(conds) - set(readings))}, unknown {sorted(set(readings) - set(conds))}")
-    measured, excluded, cand_refused = [], [], []
+    bad_rows = sorted(cid for cid, v in readings.items() if not isinstance(v, dict))
+    if bad_rows:
+        raise Refused(f"readings entries must be objects {{reference, shipped, candidate}}; "
+                      f"not an object: {bad_rows}")
+    measured, excluded = [], []
     for cid in sorted(conds):
-        r = {s: _measured((readings[cid] or {}).get(s)) for s in SIDES}
+        if (conds[cid].get("model") or {}).get("decay_knob") in uq:
+            excluded.append({"id": cid, "refused": ["unqualified_knob"]})
+            continue
+        r = {s: _measured(readings[cid].get(s)) for s in SIDES}
         bad = [s for s in ("reference", "shipped") if r[s] is None]
         if bad:
             excluded.append({"id": cid, "refused": bad})
             continue
-        if r["candidate"] is None:
-            cand_refused.append(cid)
         measured.append((cid, r))
     k = rr["min_measured_conditions"]
     if len(measured) < k:
@@ -521,6 +548,30 @@ def primary_aggregate(rec: dict, readings: dict) -> dict:
         if not {axis_values(conds[cid])[axis] for cid, _ in measured} - dv:
             raise Refused(f"after exclusion the measured set holds out no {axis} value; "
                           f"excluded {excluded}")
+    return measured, excluded
+
+
+def primary_aggregate(rec: dict, readings: dict) -> dict:
+    """The frozen primary aggregate with the frozen REFUSED rule applied.
+
+    `readings` maps every untouched Fischer condition id to
+    {"reference": r, "shipped": s, "candidate": c}, each a glide_cents value or
+    a refusal (anything `_measured` rejects).  d = reference - ours.
+    Which conditions enter is `measured_set` (shared with `satisfiable`):
+
+      * a condition at an unqualified DECAY knob is excluded whatever it reads;
+      * reference or shipped REFUSED -> condition excluded from BOTH medians,
+        listed with the side that refused;
+      * reference and shipped measured, candidate REFUSED -> verdict FAILURE
+        (the candidate destroyed a measurable trajectory); no median is formed
+        for the candidate, so a refusal cannot become a 0-cent |d|;
+      * fewer than min_measured_conditions measured, or the measured set no
+        longer holds out a TONE and a DECAY value development never used ->
+        Refused (no claim either way; never a pass).
+    """
+    import statistics
+    measured, excluded = measured_set(rec, readings)
+    cand_refused = [cid for cid, r in measured if r["candidate"] is None]
     out = {"measured": [cid for cid, _ in measured], "excluded": excluded,
            "candidate_refused": cand_refused,
            "shipped_median": statistics.median(abs(r["reference"] - r["shipped"])
@@ -560,16 +611,15 @@ def satisfiable(rec: dict, baseline: dict, readings: dict) -> dict:
     The largest improvement any candidate can show is a candidate that reads
     exactly the reference (candidate median 0), so it is that median; the pass
     rule is `improvement >= minimum`, hence `<=` here.  `readings` is the same
-    shape primary_aggregate takes; only reference and shipped are used."""
+    shape primary_aggregate takes; only reference and shipped are used.  The
+    conditions are chosen by `measured_set`, the same function the aggregate
+    uses, so satisfiability and acceptance cannot be over different sets."""
+    import statistics
     need = one_take_diagnostic(rec, baseline)["min_improvement_cents"]   # also validates the baseline
-    if not isinstance(readings, dict) or not all(isinstance(v, dict) for v in readings.values()):
-        raise Refused("readings must map each untouched Fischer id to {reference, shipped}")
-    perfect = {cid: {"reference": r.get("reference"), "shipped": r.get("shipped"),
-                     "candidate": r.get("reference")} for cid, r in readings.items()}
-    agg = primary_aggregate(rec, perfect)
-    best = agg["shipped_median"]
+    measured, excluded = measured_set(rec, readings)
+    best = statistics.median(abs(r["reference"] - r["shipped"]) for _, r in measured)
     return {"min_improvement_cents": need, "max_possible_improvement_cents": best,
-            "measured": agg["measured"], "excluded": agg["excluded"],
+            "measured": [cid for cid, _ in measured], "excluded": excluded,
             "satisfiable": need <= best}
 
 

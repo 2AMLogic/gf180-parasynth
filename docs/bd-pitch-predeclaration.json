@@ -374,26 +374,30 @@
     "exceeds_apparatus_part": true,
     "consequence": "the range-wide worst EXCEEDS 27.8 cents: between refusal and a short decay (knobs about 0.5 to 0.7) onset phase alone moves a zero-glide reading by more than the rule's apparatus part. No declared condition is at those knobs, so the freeze's claim is scoped to the declared knobs above; a candidate that moves the decay mapping toward them must re-run the edge scan first."
    },
-   "not_refused_but_wrong": "glide_cents' MIN_FRAMES floor accepts readings that are wrong by tens of cents just above the refusal threshold: a zero-glide tone reads -68.2 (sin onset) / -34.0 (cos onset) cents at knob 0.6, 52 Hz, 48 kHz, and at knob 0, f0 40 to 43.5 Hz (8 of 51 pitches) it reads +76 to +97 cents instead of refusing. The precondition is asserted too loosely; to be filed as a tool-defect follow-up, not fixed in this freeze.",
+   "not_refused_but_wrong": "glide_cents' MIN_FRAMES floor accepts readings that are wrong by tens of cents just above the refusal threshold: a zero-glide tone reads -68.2 (sin onset) / -34.0 (cos onset) cents at knob 0.6, 52 Hz, 48 kHz, and at knob 0, f0 40 to 43.5 Hz (8 of 51 pitches) it reads +76 to +97 cents instead of refusing. The precondition is asserted too loosely; filed as #602 (tool defect, not fixed in this freeze). #602 also reports an F_REF bias of up to 15.7 cents within 48-56 Hz at the declared knobs, which the 13.9-cent steady-tone floor does not cover. The knob-0 half is closed for this freeze by refused_readings.unqualified_knobs: a knob-0 condition is excluded whatever it reads.",
    "test": "tools/test_bd_pitch_predeclaration.py::test_onset_phase_alone_cannot_satisfy_the_rule_at_declared_knobs"
   },
   "refused_readings": {
-   "why": "glide_cents REFUSES when the ring has died before LATE_WINDOW_S (80-130 ms). At DECAY knob 0 (Q 2.3, tau ~15 ms) the closed-form known answer refuses at 48 and 44.1 kHz for every pitch from 44 to 65 Hz (and at 44.1 kHz for all 40 to 65 Hz), and two untouched Fischer conditions sit at knob 0. Below 44 Hz at 48 kHz it does NOT refuse and reads wrongly (not_refused_but_wrong). Declared here, before candidates exist, so that what a refusal does to the median is not chosen afterwards (PR #601 review).",
+   "why": "glide_cents REFUSES when the ring has died before LATE_WINDOW_S (80-130 ms). At DECAY knob 0 (Q 2.3, tau ~15 ms) the closed-form known answer refuses at 48 and 44.1 kHz for every pitch from 44 to 65 Hz (and at 44.1 kHz for all 40 to 65 Hz), and two untouched Fischer conditions sit at knob 0. Below 44 Hz at 48 kHz it does NOT refuse and reads wrongly (not_refused_but_wrong, #602), so knob 0 is declared unqualified (unqualified_knobs) rather than trusted to refuse. Declared here, before candidates exist, so that what a refusal does to the median is not chosen afterwards (PR #601 review).",
    "reading": "only a finite real number is a reading. A Refused, None, NaN, inf, bool or string (even \"0\") is REFUSED. A refusal is NEVER converted to a number: never a 0-cent reading, never a 0-cent |d_c|.",
-   "exclude": "a condition whose REFERENCE or SHIPPED reading is REFUSED is excluded from BOTH the shipped and the candidate median (the two medians are always over the same set), and is listed by id with the side that refused.",
+   "exclude": "a condition at an unqualified knob (unqualified_knobs) is excluded from BOTH medians whatever it reads, listed with reason unqualified_knob. Otherwise a condition whose REFERENCE or SHIPPED reading is REFUSED is excluded from BOTH the shipped and the candidate median (the two medians are always over the same set), and is listed by id with the side that refused. One function (tools/bd_pitch_predeclaration.py::measured_set) decides this for both the aggregate and the satisfiability check.",
    "candidate_refusal": "a condition whose reference and shipped readings are measured but whose CANDIDATE reading is REFUSED is a FAILURE of the candidate (it made a measurable trajectory unmeasurable). It is not excluded and no candidate median is formed.",
    "min_measured_conditions": 6,
-   "min_measured_why": "8 untouched Fischer conditions minus the 2 predicted to refuse. Losing any further condition means the aggregate rests on a set nobody declared before candidates existed.",
+   "min_measured_why": "8 untouched Fischer conditions minus the 2 at the unqualified knob 0. Losing any further condition means the aggregate rests on a set nobody declared before candidates existed.",
    "held_out_after_exclusion": "the measured set must still contain a TONE value and a DECAY value that development never used (with the 2 predicted refusals excluded, DECAY stays held out through 75 and 10, TONE through 75, 00 and 10).",
    "too_few_outcome": "REFUSED: no improvement is claimed, pass or fail, and the result is reported as REFUSED with the excluded list. It is NEVER a pass. The minimum is not lowered to admit a result.",
+   "unqualified_knobs": [
+    0.0
+   ],
+   "unqualified_why": "glide_cents is not qualified at DECAY knob 0: on a constant-pitch tone (true glide 0) it refuses from 44 Hz up at 48 kHz but ANSWERS +76 to +97 cents at 40 to 43.5 Hz (#602), and a real knob-0 take with a longer ring than the model's Q 2.3 sits in the knob 0.5-0.7 regime where it answers tens of cents wrong. A reading there is therefore not a measurement whether or not it refuses. Every untouched Fischer condition at an unqualified knob is EXCLUDED from both medians whatever its readings say, listed with reason unqualified_knob (PR #601 review). check() requires predicted_refusals to be exactly those conditions.",
    "predicted_refusals": [
     "U-F-T50-D00",
     "U-F-T00-D00"
    ],
-   "prediction_basis": "closed-form known answer only (no Fischer or MARS file was read). Whether the 808's own knob-0 recordings refuse is unknown until the baseline runs; if they measure, the conditions are included only if ours measures too.",
-   "implemented_by": "tools/bd_pitch_predeclaration.py::primary_aggregate",
+   "prediction_basis": "the 2 exclusions are not predictions of refusal but the declared consequence of unqualified_knobs: U-F-T50-D00 and U-F-T00-D00 are the untouched Fischer conditions at DECAY knob 0, and they are excluded whether the 808's or our knob-0 readings refuse or measure. The closed-form known answer (no Fischer or MARS file read) shows knob 0 mostly refuses and, where it answers, answers wrongly (#602).",
+   "implemented_by": "tools/bd_pitch_predeclaration.py::measured_set",
    "known_answer": "tools/test_bd_pitch_predeclaration.py::test_glide_refuses_at_decay_knob_0",
-   "controls": "tools/test_bd_pitch_predeclaration.py::test_control_refused_rule_removed_is_caught, test_control_refusal_read_as_zero_reading_breaks_the_known_answer, test_control_refusal_read_as_zero_error_breaks_the_known_answer",
+   "controls": "tools/test_bd_pitch_predeclaration.py::test_control_refused_rule_removed_is_caught, test_control_refusal_read_as_zero_reading_breaks_the_known_answer, test_control_refusal_read_as_zero_error_breaks_the_known_answer, test_control_answering_knob0_reading_is_excluded, test_control_unqualified_knobs_removed_is_caught, test_control_predicted_refusals_not_the_unqualified_set_is_caught, test_non_dict_reading_entry_refuses; mutation controls: tools/bd_pitch_predeclaration_mutants.py",
    "min_measured_derivation": "min_measured_conditions == (untouched Fischer conditions) - len(predicted_refusals); enforced by check(), so lowering the minimum alone fails it."
   }
  },

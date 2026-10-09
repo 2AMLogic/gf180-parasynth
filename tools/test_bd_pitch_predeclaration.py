@@ -15,6 +15,9 @@ injected into a COPY of the real record and must be caught for its own reason
   refused         the refused-reading rule removed / unsatisfiable / not
                   refusing, and a refusal folded into the median as a 0-cent
                   reading or a 0-cent error (both move the known answer)
+  unqualified     an ANSWERING knob-0 reading admitted to the medians (#602),
+                  unqualified_knobs removed, or predicted_refusals not exactly
+                  the conditions at the unqualified knobs
 
 START RED: BPP_IMPL=bd_pitch_predeclaration_stub PYTHONPATH=tools/stubs runs
 this file against a stub that accepts everything; every control fails.
@@ -373,7 +376,8 @@ def test_glide_refuses_at_decay_knob_0(record, phase_sweep):
     assert all(abs(r["sin"]) > 50.0 and abs(r["cos"]) > 50.0 for r in leak), "reads wrongly, not zero"
     want = {c["id"] for c in bp.untouched_fischer(record) if c["model"]["decay_knob"] in refusing}
     assert want == {"U-F-T50-D00", "U-F-T00-D00"}
-    assert set(record["primary_metric"]["refused_readings"]["predicted_refusals"]) == want
+    rr = record["primary_metric"]["refused_readings"]
+    assert rr["unqualified_knobs"] == [0.0] and set(rr["predicted_refusals"]) == want
 
 
 # ---------------------------------- REFUSED Fischer readings in the aggregate
@@ -400,30 +404,48 @@ def _readings(record, refuse=(), cand_refuse=()):
 D00 = ("U-F-T50-D00", "U-F-T00-D00")
 
 
-def _known_answer(record):
-    """Expected result with D00 refused on ours: those two excluded and listed,
-    medians over the other six only.  Refusal read as a 0-cent READING puts
-    |d| = 100 in twice, refusal read as a 0-cent ERROR puts |d| = 0 in twice;
-    either shifts both medians by more than 5 cents with these values."""
+Q = "U-F-T75-D50"   # a QUALIFIED untouched condition (knob 5), used by the controls
+
+
+def _floor5(record):
+    """A copy with the count floor at 5, so that one QUALIFIED refusal beyond
+    the two knob-0 exclusions still evaluates.  The refusal controls must be
+    aimed at a qualified condition: D00 is excluded by unqualified_knobs
+    whatever it reads, so a bug that folds a D00 refusal into a number can no
+    longer move anything (PR #601 review, item 4)."""
+    rec = copy.deepcopy(record)
+    rec["primary_metric"]["refused_readings"]["min_measured_conditions"] = 5
+    return rec
+
+
+def _known_answer(record, gone=D00):
+    """Expected result with `gone` refused on ours: those excluded and listed,
+    medians over the rest only.  Refusal read as a 0-cent READING puts
+    |d| = 100 in, refusal read as a 0-cent ERROR puts |d| = 0 in; either moves
+    both medians with these values."""
     import statistics
-    keep = [n for n, c in enumerate(bp.untouched_fischer(record)) if c["id"] not in D00]
-    assert len(keep) == 6
+    keep = [n for n, c in enumerate(bp.untouched_fischer(record)) if c["id"] not in gone]
+    assert len(keep) == 8 - len(gone)
     return (statistics.median(SHIP_D[n] for n in keep),
             statistics.median(CAND_D[n] for n in keep))
 
 
-def _known_answer_holds(record, readings=None) -> bool:
-    ship, cand = _known_answer(record)
-    got = bp.primary_aggregate(record, readings or _readings(record, refuse=D00))
+def _known_answer_holds(record, readings=None, gone=D00) -> bool:
+    ship, cand = _known_answer(record, gone)
+    got = bp.primary_aggregate(record, readings or _readings(record, refuse=gone))
     return (got["verdict"] == "EVALUATED"
-            and sorted(e["id"] for e in got["excluded"]) == sorted(D00)
-            and len(got["measured"]) == 6
+            and sorted(e["id"] for e in got["excluded"]) == sorted(gone)
+            and len(got["measured"]) == 8 - len(gone)
             and got["shipped_median"] == pytest.approx(ship)
             and got["candidate_median"] == pytest.approx(cand))
 
 
 def test_refused_reading_is_excluded_and_listed(record):
     assert _known_answer_holds(record)
+    rec = _floor5(record)
+    assert _known_answer_holds(rec, gone=D00 + (Q,))
+    got = bp.primary_aggregate(rec, _readings(rec, refuse=D00 + (Q,)))
+    assert {"id": Q, "refused": ["shipped"]} in got["excluded"]
 
 
 def _zero_reading(x):
@@ -432,21 +454,101 @@ def _zero_reading(x):
 
 
 def test_control_refusal_read_as_zero_reading_breaks_the_known_answer(record, monkeypatch):
+    rec, gone = _floor5(record), D00 + (Q,)
+    assert _known_answer_holds(rec, gone=gone)                 # green before the bug ...
     monkeypatch.setattr(bp, "_measured", _zero_reading)
-    ship, cand = _known_answer(record)
-    got = bp.primary_aggregate(record, _readings(record, refuse=D00))
-    assert got["shipped_median"] != pytest.approx(ship)       # the medians move ...
+    ship, cand = _known_answer(rec, gone)
+    got = bp.primary_aggregate(rec, _readings(rec, refuse=gone))
+    assert got["shipped_median"] != pytest.approx(ship)       # ... the medians move ...
     assert got["candidate_median"] != pytest.approx(cand)
-    assert not _known_answer_holds(record)                     # ... so the test goes red
+    assert not _known_answer_holds(rec, gone=gone)             # ... so the test goes red
 
 
 def test_control_refusal_read_as_zero_error_breaks_the_known_answer(record):
     """Injected bug B: a refusal turned into a 0-cent |d| (ours set equal to the
-    reference) before the aggregate sees it."""
-    rd = _readings(record, refuse=D00)
+    reference) before the aggregate sees it, on a QUALIFIED condition."""
+    rec, gone = _floor5(record), D00 + (Q,)
+    rd = _readings(rec, refuse=gone)
+    rd[Q]["shipped"] = rd[Q]["candidate"] = REF
+    assert not _known_answer_holds(rec, rd, gone=gone)
+
+
+# The reviewer's closed-form constant-pitch tone at knob 0 (true glide 0):
+# 42 Hz sin onset reads +81.13 c, 43.5 Hz cos onset +96.80 c (#602).
+K0_REF, K0_SHIP = 81.13, 96.80
+
+
+def _answering_knob0(record):
+    rd = _readings(record)
     for i in D00:
-        rd[i]["shipped"] = rd[i]["candidate"] = REF
-    assert not _known_answer_holds(record, rd)
+        rd[i] = {"reference": K0_REF, "shipped": K0_SHIP, "candidate": K0_REF}
+    return rd
+
+
+def test_control_answering_knob0_reading_is_excluded(record):
+    """PR #601 review blocker: at DECAY knob 0 glide_cents can ANSWER, wrongly.
+    A finite knob-0 pair must still be excluded, listed as unqualified_knob,
+    from the aggregate AND from satisfiability (one shared measured_set).
+    On 324728db the aggregate measured all 8 conditions here."""
+    rd = _answering_knob0(record)
+    got = bp.primary_aggregate(record, rd)
+    assert sorted(got["measured"]) == sorted(set(rd) - set(D00)), got["measured"]
+    assert sorted(got["excluded"], key=lambda e: e["id"]) == sorted(
+        ({"id": i, "refused": ["unqualified_knob"]} for i in D00), key=lambda e: e["id"])
+    import statistics
+    keep = [n for n, c in enumerate(bp.untouched_fischer(record)) if c["id"] not in D00]
+    assert got["shipped_median"] == pytest.approx(statistics.median(SHIP_D[n] for n in keep))
+    sat = bp.satisfiable(record, _baseline(), {i: {"reference": r["reference"],
+                                                    "shipped": r["shipped"]} for i, r in rd.items()})
+    assert sorted(e["id"] for e in sat["excluded"]) == sorted(D00)
+    assert sorted(sat["measured"]) == sorted(got["measured"])
+
+
+def test_satisfiable_and_aggregate_share_one_measured_set(record, monkeypatch):
+    """Item 3: the two cannot drift because both call measured_set."""
+    calls = []
+    real = bp.measured_set
+    monkeypatch.setattr(bp, "measured_set", lambda *a: calls.append(1) or real(*a))
+    bp.primary_aggregate(record, _readings(record))
+    bp.satisfiable(record, _baseline(), _readings(record))
+    assert len(calls) == 2
+
+
+def test_control_unqualified_knobs_removed_is_caught(record):
+    bad = copy.deepcopy(record)
+    del bad["primary_metric"]["refused_readings"]["unqualified_knobs"]
+    assert _caught(bp.check(bad), "unqualified_knobs must be a list")
+    with pytest.raises(bp.Refused, match="unqualified_knobs"):
+        bp.primary_aggregate(bad, _answering_knob0(bad))
+
+
+@pytest.mark.parametrize("pred,uq", [
+    (["U-F-T50-D00"], [0.0]),                              # one knob-0 condition dropped
+    (["U-F-T50-D00", "U-F-T00-D00", Q], [0.0]),            # a qualified one added
+    (["U-F-T50-D00", "U-F-T00-D00"], [2.5]),               # the knob changed, not the list
+    (["U-F-T50-D00", "U-F-T00-D00"], []),                  # nothing declared unqualified
+])
+def test_control_predicted_refusals_not_the_unqualified_set_is_caught(record, pred, uq):
+    bad = copy.deepcopy(record)
+    rr = bad["primary_metric"]["refused_readings"]
+    rr["predicted_refusals"], rr["unqualified_knobs"] = pred, uq
+    assert _caught(bp.check(bad), "exactly the untouched Fischer conditions at unqualified knobs")
+
+
+@pytest.mark.parametrize("entry", [[100.0, 90.0, 95.0], "100", None, 100.0])
+def test_non_dict_reading_entry_refuses(record, entry):
+    """A malformed entry REFUSES (no AttributeError) from primary_aggregate
+    called directly, not only through satisfiable."""
+    rd = _readings(record)
+    rd[Q] = entry
+    with pytest.raises(bp.Refused, match="not an object"):
+        bp.primary_aggregate(record, rd)
+
+
+@pytest.mark.parametrize("readings", [[], "x", None])
+def test_non_dict_readings_refuse(record, readings):
+    with pytest.raises(bp.Refused, match="JSON object"):
+        bp.primary_aggregate(record, readings)
 
 
 def test_candidate_refusal_where_shipped_measured_is_a_failure(record):
@@ -461,10 +563,12 @@ def test_candidate_refusal_where_shipped_measured_is_a_failure(record):
 
 @pytest.mark.parametrize("bad", [None, float("nan"), float("inf"), "0", "0.0", True])
 def test_non_finite_or_non_number_reading_is_a_refusal(record, bad):
-    rd = _readings(record)
+    rec = _floor5(record)
+    rd = _readings(rec)
     rd["U-F-T50-D75"]["shipped"] = bad
-    got = bp.primary_aggregate(record, rd)
-    assert [e["id"] for e in got["excluded"]] == ["U-F-T50-D75"]
+    got = bp.primary_aggregate(rec, rd)
+    assert {"id": "U-F-T50-D75", "refused": ["shipped"]} in got["excluded"]
+    assert "U-F-T50-D75" not in got["measured"] and len(got["measured"]) == 5
 
 
 def test_too_few_measured_refuses_never_passes(record):

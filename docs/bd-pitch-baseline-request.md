@@ -95,7 +95,18 @@ candidate existed and before the real-recording baseline ran. It holds:
   from both medians and listed. A candidate refusal where shipped measured is a
   candidate FAILURE. Fewer than 6 measured conditions, or a measured set that
   no longer holds out a TONE and a DECAY value, gives REFUSED, never a pass.
-  The two knob-0 refusals are predicted from the closed-form signal only.
+- **DECAY knob 0 is unqualified (PR #601 fourth review, #602).** Knob 0 does
+  not reliably refuse. On a constant-pitch tone (true glide 0) at 48 kHz,
+  40 to 43.5 Hz, `glide_cents` ANSWERS +76 to +97 cents. If both sides
+  answered, the earlier rule admitted those readings into both medians. The
+  record now declares `refused_readings.unqualified_knobs: [0.0]`. A condition
+  at that knob (`U-F-T50-D00`, `U-F-T00-D00`) is excluded whatever it reads,
+  and is listed with reason `unqualified_knob`. `check()` requires
+  `predicted_refusals` to be exactly those conditions, so the 6-condition
+  minimum is still derived, not chosen. One function, `measured_set`, picks the
+  conditions for both `primary_aggregate` and the satisfiability check, so the
+  two cannot drift. A malformed readings entry (not an object) REFUSES rather
+  than raising.
 - **Minimum improvement.** The formula is
   `2 * max(13.9, 8.5, 12) + recording_glide_spread_cents`. The three floors
   are quoted from this document, and the checker verifies the quotes. The
@@ -168,8 +179,10 @@ move the known-answer medians).
    27.8; the freeze's claim is scoped to the declared knobs. The same scan
    shows `glide_cents` does not refuse a zero-glide tone at knob 0.6 (it reads
    -68 / -34 cents), nor at knob 0 below 44 Hz at 48 kHz (+76 to +97 cents).
-   Its `MIN_FRAMES` precondition is too loose; to be filed as a follow-up, not
-   fixed here.
+   Its `MIN_FRAMES` precondition is too loose. This is filed as #602 and not
+   fixed here. #602 also reports an `F_REF` bias of up to 15.7 cents within
+   48 to 56 Hz at the declared knobs, which the 13.9-cent steady-tone floor
+   does not cover. The knob-0 half is closed for this freeze by item 7.
 4. **Refused readings (caught in review).** The record said what a refused
    retrigger reading means, but not a refused Fischer one. The same sweep
    showed knob 0 refuses (from 44 Hz up at 48 kHz, everywhere at 44.1 kHz), and
@@ -183,18 +196,30 @@ move the known-answer medians).
    uses the untouched median (a development deficit of 20 with untouched 100,
    and the reverse, each gave the wrong answer). Fixed at point of use with the
    reviewer's exact inputs as controls; `<` became `<=` to match the pass rule.
+7. **Knob-0 readings admitted (caught in review).** Item 4 treated knob 0 as a
+   knob that refuses. It refuses only from 44 Hz up. Below that it answers
+   wrongly, and the record's own `prediction_basis` said such readings were
+   included when both sides measured. The two knob-0 conditions are now
+   excluded by declaration (`unqualified_knobs`), whatever they read. The
+   reviewer's +81.13 / +96.80 cent pair is the control, and it fails on the
+   previous head.
 
 Rate: 3 corrections to the record before the first review (1-3), plus the
 citation check (5), which needed no change. Review then caught three more
 rounds: the refused-reading rule (4), the onset-phase worst case twice (3: a
 single knob, then a coarse grid), and the baseline-number and satisfiability
-defects (6). That is 7 wrong-then-right corrections in total, 4 of them found
-by the reviewer, three of them the same mistake (a coarse sample read as the
-worst case). Mutation controls for this round, run on a copy of the tree
-(9 mutations, each turned the suite red): bool accepted as a number, negative
-spread, negative threshold, non-finite deficit, `<` at equality,
-satisfiability from the development take, the minimum-count derivation
-unchecked, the TONE holdout branch removed, and a 5 Hz pitch grid.
+defects (6), and then the admitted knob-0 readings (7). That is 8
+wrong-then-right corrections in total, 5 of them found by the reviewer. Three
+were the same mistake (a coarse sample read as the worst case). The mutation
+controls are committed as `tools/bd_pitch_predeclaration_mutants.py`. It runs
+on a scratch copy of the tree and removes one guard per mutant. All 12 mutants
+turn their focused controls red. Nine are from the third round: bool accepted
+as a number, negative spread, negative threshold, non-finite deficit, `<` at
+equality, satisfiability from the development take, the minimum-count
+derivation unchecked, the TONE holdout branch removed, and a 5 Hz pitch grid.
+Three are from the fourth round: a knob-0 condition admitted, `predicted_refusals`
+not tied to `unqualified_knobs`, and the non-object readings-entry guard
+removed.
 
 ## Not done (needs a human/coordinator decision or the box)
 

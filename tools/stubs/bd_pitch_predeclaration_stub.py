@@ -21,6 +21,11 @@ def minimum_improvement_cents(rec, baseline):
     return 0.0
 
 
+def measured_set(rec, readings):
+    """Stub: every condition measured, nothing excluded, never refuses."""
+    return [(i, r) for i, r in sorted(readings.items())], []
+
+
 def primary_aggregate(rec, readings):
     """The injected bug the review named: a refusal silently read as 0 cents,
     every condition counted, nothing excluded, never refuses."""
