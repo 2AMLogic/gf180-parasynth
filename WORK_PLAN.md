@@ -21,30 +21,36 @@ _None._
 
 ## Ready
 
-Human-approved issues ready for implementation (`loom:issue`).
+Human-approved, unblocked issues carrying `loom:issue`. Some already have implementation PRs in review or under operator holds; check the PR lane before claiming them.
 
 - **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
+- **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first
+- **#502**: A Builder cannot re-bind the attack-context evidence: workflow_dispatch is 403 for the agent token
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158)
 - **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
+- **#565**: Refuse to report 'routed' from an incomplete nextpnr log (fpga/scripts/report.sh + fpga/Makefile)
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
+- **#619**: Nightly controls requires I2S_SWAP detection despite declared blind timing
+- **#622**: Nightly reference-freshness gate is unsatisfiable: tests a docs path that has never existed
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#324**: R1 capture inputs: R1-bound references and commands for the physical capture procedure
+_None._
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
 - **#595**: [#559] CH/CP: CH hp-Q candidate PROVISIONAL (clean rerun pending, disabled); CP not repairable by tail tunables
+- **#642**: Qualify the modal-bank floor deadband across production tails: REFUSED on external grounding (#350)
 
 ## Approved (Awaiting Merge)
 
@@ -83,6 +89,7 @@ Issues carrying `loom:curated`.
 - **#336**: Sound: rimshot spectrum, maracas envelope/band balance, and hat/cymbal qualification — cover every advertised drum *(curated)*
 - **#337**: Sound: mono character — oscillator mixtures, drift, drive/resonance, envelope response; M1A as a phase-aware question *(curated)*
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement *(curated)*
+- **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails *(curated)*
 - **#353**: Harvest the finished half-slot route: one command, four files, one DAG node *(curated)*
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY *(curated)*
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first *(curated)*
@@ -119,11 +126,11 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 5 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 10 |
-| In Progress (`loom:building`) | 1 |
-| PRs awaiting review | 1 |
+| Ready (`loom:issue`) | 15 |
+| In Progress (`loom:building`) | 0 |
+| PRs awaiting review | 2 |
 | Approved PRs awaiting merge | 5 |
-| Curated | 39 |
+| Curated | 40 |
 | Architect / Hermit proposals | 5 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
