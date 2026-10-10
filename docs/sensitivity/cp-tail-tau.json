@@ -1,0 +1,111 @@
+{
+ "schema": "sensitivity-sweep-v1",
+ "id": "cp-tail-tau",
+ "parameter": {
+  "name": "CP_TAIL_TAU_MS",
+  "source": "model/drums_fx.py",
+  "kind": "python-constant",
+  "what": "issue #559: the clap tail's amplitude time constant in ms (E_CPTAIL RATE). Ships 80, plan084's one-record measurement on 80-200 ms. The take's own tail has two slopes (83 ms on 0.08-0.2 s, 315 ms on 0.3-1.2 s; cp-tail.json)."
+ },
+ "objective": {
+  "name": "CP max(decay, attack) ratio to the #379 WEAK bar",
+  "units": "ratio to bar",
+  "lower_is_better": true,
+  "why": "#559's named CP failures: decay 15.9x and attack 6.2x (gate-379 section 4); the larger of the two, so neither can hide behind the other."
+ },
+ "grid": {
+  "stated_before_results": true,
+  "values": [
+   80,
+   120,
+   160,
+   200,
+   250,
+   315,
+   400
+  ],
+  "range_basis": [
+   "80 ships; 400 brackets the take's measured late slope (315 ms) from above. The slice is at the shipped tail level; the full 7 x 5 grid with the level is in docs/scorecard/chcp-559/cp-sweep-dev.json.",
+   "Committed in tools/probes/chcp_559_select.py (module docstring and grid constants, committed in b10a6e8f before any DEV point was rendered)"
+  ],
+  "held_fixed": {
+   "CP_TAIL_PEAK_DB": 0
+  }
+ },
+ "decision_rule": {
+  "stated_before_results": true,
+  "flat_within_relative": 0.1,
+  "why": "the gate's own resolution, not the spread of these data: a candidate is only told apart from another if the gap is a meaningful fraction of the 808's own one-step distance (the WEAK bar). At the ratios swept here (2 to 27) one bar is 4 to 50 % of the value; 10 % is the low end of that, so two points closer than 10 % are within the gate's own step and cannot justify a choice. Stated in this record before it was checked, from the decision's granularity."
+ },
+ "evidence": {
+  "artifact": "docs/sensitivity/chcp559-sweeps.txt",
+  "format": "fixed-width-table",
+  "table": "cp_tail_tau",
+  "value_column": "CP_TAIL_TAU_MS",
+  "objective_column": "objective_ratio",
+  "held_fixed": {
+   "CP_TAIL_PEAK_DB": 0
+  },
+  "regenerate": "python3 tools/probes/chcp_559.py ch-sweep|cp-sweep, then python3 tools/probes/chcp_559.py tables",
+  "instrument": "tools/probes/chcp_559.py through tools/perceptual_gate.py UNCHANGED (#379 gate, WEAK bar, single Fischer take); objective = median over the 5 frozen DEV strikes (480, 23110, 25283, 25409, 28527 frames) of the ratio to the bar. CH renders: the real DrumsFx block. CP renders: the exact fast path, asserted bit-identical to the real block (check-fast)."
+ },
+ "points": [
+  {
+   "value": 80,
+   "objective": 15.893
+  },
+  {
+   "value": 120,
+   "objective": 9.106
+  },
+  {
+   "value": 160,
+   "objective": 9.921
+  },
+  {
+   "value": 200,
+   "objective": 14.96
+  },
+  {
+   "value": 250,
+   "objective": 20.746
+  },
+  {
+   "value": 315,
+   "objective": 23.862
+  },
+  {
+   "value": 400,
+   "objective": 27.143
+  }
+ ],
+ "verdict": {
+  "state": "MIXED",
+  "runs": [
+   [
+    80
+   ],
+   [
+    120,
+    160
+   ],
+   [
+    200
+   ],
+   [
+    250
+   ],
+   [
+    315
+   ],
+   [
+    400
+   ]
+  ],
+  "summary": "U-shaped: 15.89 (80, shipped), 9.11 (120), 9.92 (160), 14.96, 20.75, 23.86, 27.14 (400). No point is a candidate: every decay improvement in the 2-D grid worsens the CP centroid past the frozen rule (+0.4 to +2.6 bar), because our tail carries the bursts' spectrum (centroid ~1830 Hz) where the take's is dark (~1220 Hz)."
+ },
+ "limits": [
+  "NO PREDICTION BLOCK, deliberately: the committed CP-P prediction ('decay improves with tau ... the best P point is long and LOW') does not hold on this slice (U-shaped at the shipped level) and is recorded as FAILED rather than rewritten.",
+  "One slice of a 2-D grid; the dial is not separable from CP_TAIL_PEAK_DB (cp-tail-peak)."
+ ]
+}

@@ -1,0 +1,1454 @@
+{
+ "cmd": "cpt-sweep",
+ "model_sha16": "50d295f6859e9c13",
+ "commit": "460d0628210dccaffbd4b3e270db841196b095e8",
+ "sources_dirty": true,
+ "refs_sha256": {
+  "ch8/CH.WAV": "c9f30ff2b4d73b03f41960e504e03c54e9a59697af666fe4d155bab9cd1ccae6",
+  "cp8/CP.WAV": "376429bb81cb48d1f392a11cd066c32ffb7883d445b2488704ea52e46bb08286",
+  "sd8/SD5050.WAV": "6dcbf8acd5cee6d6b7955d26c6b57d8ca413f1ae1c7caafaaec780d83f08d712"
+ },
+ "conditions": {
+  "dev": [
+   [
+    480,
+    1.0
+   ],
+   [
+    23110,
+    1.0
+   ],
+   [
+    25283,
+    1.0
+   ],
+   [
+    25409,
+    1.0
+   ],
+   [
+    28527,
+    1.0
+   ]
+  ],
+  "confirm": [
+   [
+    4355,
+    1.0
+   ],
+   [
+    8356,
+    1.0
+   ],
+   [
+    13651,
+    1.0
+   ],
+   [
+    18519,
+    1.0
+   ],
+   [
+    28791,
+    1.0
+   ],
+   [
+    30167,
+    1.0
+   ],
+   [
+    4355,
+    0.5
+   ],
+   [
+    8356,
+    2.0
+   ]
+  ]
+ },
+ "result": {
+  "baseline": {
+   "label": "P tail80ms@+0dB",
+   "cand": {
+    "family": "P",
+    "tau_ms": 80,
+    "peak_db": 0.0
+   },
+   "objective": 15.8926,
+   "median_ratios": {
+    "spec": 2.4358,
+    "spec_peak": 1.7444,
+    "centroid": 3.6661,
+    "flatness": 2.7798,
+    "impulse": 0.9327,
+    "attack": 7.1106,
+    "decay": 15.8926,
+    "modulation": 2.0071
+   },
+   "regressions": [],
+   "per_condition_worst": [
+    15.893,
+    15.331,
+    15.949,
+    15.771,
+    16.292
+   ],
+   "d12a": {
+    "ratio_pass": 5,
+    "decay_pass": 5,
+    "n": 5
+   }
+  },
+  "candidates": [
+   {
+    "label": "T dark1000Hz tail80ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 80,
+     "db": 0.0
+    },
+    "objective": 18.0317,
+    "median_ratios": {
+     "spec": 2.8043,
+     "spec_peak": 1.8497,
+     "centroid": 4.6904,
+     "flatness": 2.1115,
+     "impulse": 0.9099,
+     "attack": 6.7856,
+     "decay": 18.0317,
+     "modulation": 3.1617
+    },
+    "regressions": [
+     "spec 2.44->2.80",
+     "centroid 3.67->4.69",
+     "decay 15.89->18.03",
+     "modulation 2.01->3.16"
+    ],
+    "per_condition_worst": [
+     16.389,
+     18.69,
+     17.448,
+     18.032,
+     18.213
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3835,
+    "ineligible": [
+     "spec 2.44->2.80",
+     "centroid 3.67->4.69",
+     "decay 15.89->18.03",
+     "modulation 2.01->3.16"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail80ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 80,
+     "db": -6.0
+    },
+    "objective": 17.205,
+    "median_ratios": {
+     "spec": 2.5428,
+     "spec_peak": 1.5458,
+     "centroid": 4.1424,
+     "flatness": 2.6109,
+     "impulse": 1.0167,
+     "attack": 6.5209,
+     "decay": 17.205,
+     "modulation": 2.8603
+    },
+    "regressions": [
+     "centroid 3.67->4.14",
+     "impulse crossed 1.0 (0.93->1.02)",
+     "decay 15.89->17.20",
+     "modulation 2.01->2.86"
+    ],
+    "per_condition_worst": [
+     17.205,
+     16.573,
+     17.335,
+     17.14,
+     17.733
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3353,
+    "ineligible": [
+     "centroid 3.67->4.14",
+     "impulse crossed 1.0 (0.93->1.02)",
+     "decay 15.89->17.20",
+     "modulation 2.01->2.86",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail80ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 80,
+     "db": -12.0
+    },
+    "objective": 19.2,
+    "median_ratios": {
+     "spec": 2.6353,
+     "spec_peak": 1.5592,
+     "centroid": 3.7304,
+     "flatness": 3.4217,
+     "impulse": 1.011,
+     "attack": 6.4755,
+     "decay": 19.2,
+     "modulation": 2.8235
+    },
+    "regressions": [
+     "flatness 2.78->3.42",
+     "impulse crossed 1.0 (0.93->1.01)",
+     "decay 15.89->19.20",
+     "modulation 2.01->2.82"
+    ],
+    "per_condition_worst": [
+     19.2,
+     18.579,
+     19.324,
+     19.117,
+     19.728
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3247,
+    "ineligible": [
+     "flatness 2.78->3.42",
+     "impulse crossed 1.0 (0.93->1.01)",
+     "decay 15.89->19.20",
+     "modulation 2.01->2.82",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail120ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 120,
+     "db": 0.0
+    },
+    "objective": 15.4099,
+    "median_ratios": {
+     "spec": 4.2912,
+     "spec_peak": 2.0506,
+     "centroid": 4.4369,
+     "flatness": 2.939,
+     "impulse": 0.859,
+     "attack": 6.1814,
+     "decay": 15.4099,
+     "modulation": 3.2629
+    },
+    "regressions": [
+     "spec 2.44->4.29",
+     "spec_peak 1.74->2.05",
+     "centroid 3.67->4.44",
+     "modulation 2.01->3.26"
+    ],
+    "per_condition_worst": [
+     15.056,
+     15.693,
+     15.264,
+     15.41,
+     15.466
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3991,
+    "ineligible": [
+     "spec 2.44->4.29",
+     "spec_peak 1.74->2.05",
+     "centroid 3.67->4.44",
+     "modulation 2.01->3.26"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail120ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 120,
+     "db": -6.0
+    },
+    "objective": 14.0202,
+    "median_ratios": {
+     "spec": 2.6103,
+     "spec_peak": 1.5323,
+     "centroid": 4.0437,
+     "flatness": 1.6926,
+     "impulse": 0.8514,
+     "attack": 6.1173,
+     "decay": 14.0202,
+     "modulation": 2.9186
+    },
+    "regressions": [
+     "centroid 3.67->4.04",
+     "modulation 2.01->2.92"
+    ],
+    "per_condition_worst": [
+     12.324,
+     14.613,
+     13.095,
+     14.02,
+     14.266
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3431,
+    "ineligible": [
+     "centroid 3.67->4.04",
+     "modulation 2.01->2.92"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail120ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 120,
+     "db": -12.0
+    },
+    "objective": 13.7352,
+    "median_ratios": {
+     "spec": 2.2504,
+     "spec_peak": 1.5564,
+     "centroid": 3.9132,
+     "flatness": 2.308,
+     "impulse": 0.9311,
+     "attack": 6.1555,
+     "decay": 13.7352,
+     "modulation": 2.7363
+    },
+    "regressions": [
+     "modulation 2.01->2.74"
+    ],
+    "per_condition_worst": [
+     13.735,
+     12.853,
+     13.999,
+     13.666,
+     14.548
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 3,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3246,
+    "ineligible": [
+     "modulation 2.01->2.74",
+     "d12a decay 3 < 5"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail160ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 160,
+     "db": 0.0
+    },
+    "objective": 13.7679,
+    "median_ratios": {
+     "spec": 6.0786,
+     "spec_peak": 2.1701,
+     "centroid": 4.2846,
+     "flatness": 3.9814,
+     "impulse": 0.8365,
+     "attack": 6.1304,
+     "decay": 13.7679,
+     "modulation": 3.2491
+    },
+    "regressions": [
+     "spec 2.44->6.08",
+     "spec_peak 1.74->2.17",
+     "centroid 3.67->4.28",
+     "flatness 2.78->3.98",
+     "modulation 2.01->3.25"
+    ],
+    "per_condition_worst": [
+     13.653,
+     13.944,
+     13.676,
+     13.768,
+     13.816
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4049,
+    "ineligible": [
+     "spec 2.44->6.08",
+     "spec_peak 1.74->2.17",
+     "centroid 3.67->4.28",
+     "flatness 2.78->3.98",
+     "modulation 2.01->3.25",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail160ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 160,
+     "db": -6.0
+    },
+    "objective": 12.9532,
+    "median_ratios": {
+     "spec": 3.3013,
+     "spec_peak": 1.599,
+     "centroid": 3.9092,
+     "flatness": 2.1233,
+     "impulse": 0.8462,
+     "attack": 6.1087,
+     "decay": 12.9532,
+     "modulation": 2.9482
+    },
+    "regressions": [
+     "spec 2.44->3.30",
+     "modulation 2.01->2.95"
+    ],
+    "per_condition_worst": [
+     11.628,
+     13.483,
+     12.546,
+     13.12,
+     12.953
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.346,
+    "ineligible": [
+     "spec 2.44->3.30",
+     "modulation 2.01->2.95"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail160ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 160,
+     "db": -12.0
+    },
+    "objective": 11.1355,
+    "median_ratios": {
+     "spec": 2.1514,
+     "spec_peak": 1.5551,
+     "centroid": 3.862,
+     "flatness": 1.8103,
+     "impulse": 0.8836,
+     "attack": 6.1071,
+     "decay": 11.1355,
+     "modulation": 2.7196
+    },
+    "regressions": [
+     "modulation 2.01->2.72"
+    ],
+    "per_condition_worst": [
+     9.825,
+     11.553,
+     10.224,
+     11.136,
+     11.477
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3246,
+    "ineligible": [
+     "modulation 2.01->2.72"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail250ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 250,
+     "db": 0.0
+    },
+    "objective": 19.2562,
+    "median_ratios": {
+     "spec": 15.6648,
+     "spec_peak": 2.501,
+     "centroid": 3.8275,
+     "flatness": 7.2699,
+     "impulse": 0.8452,
+     "attack": 6.0837,
+     "decay": 19.2562,
+     "modulation": 3.212
+    },
+    "regressions": [
+     "spec 2.44->15.66",
+     "spec_peak 1.74->2.50",
+     "flatness 2.78->7.27",
+     "decay 15.89->19.26",
+     "modulation 2.01->3.21"
+    ],
+    "per_condition_worst": [
+     18.106,
+     18.516,
+     19.318,
+     19.256,
+     19.554
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4174,
+    "ineligible": [
+     "spec 2.44->15.66",
+     "spec_peak 1.74->2.50",
+     "flatness 2.78->7.27",
+     "decay 15.89->19.26",
+     "modulation 2.01->3.21",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail250ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 250,
+     "db": -6.0
+    },
+    "objective": 14.142,
+    "median_ratios": {
+     "spec": 9.5573,
+     "spec_peak": 1.9313,
+     "centroid": 3.3531,
+     "flatness": 5.4817,
+     "impulse": 0.8488,
+     "attack": 6.0934,
+     "decay": 14.142,
+     "modulation": 3.0149
+    },
+    "regressions": [
+     "spec 2.44->9.56",
+     "flatness 2.78->5.48",
+     "modulation 2.01->3.01"
+    ],
+    "per_condition_worst": [
+     12.878,
+     13.291,
+     14.211,
+     14.142,
+     14.49
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3523,
+    "ineligible": [
+     "spec 2.44->9.56",
+     "flatness 2.78->5.48",
+     "modulation 2.01->3.01",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail250ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 250,
+     "db": -12.0
+    },
+    "objective": 8.5768,
+    "median_ratios": {
+     "spec": 3.7848,
+     "spec_peak": 1.5514,
+     "centroid": 3.5141,
+     "flatness": 2.6503,
+     "impulse": 0.8607,
+     "attack": 6.1119,
+     "decay": 8.5768,
+     "modulation": 2.7074
+    },
+    "regressions": [
+     "spec 2.44->3.78",
+     "modulation 2.01->2.71"
+    ],
+    "per_condition_worst": [
+     8.434,
+     8.543,
+     8.577,
+     8.711,
+     8.679
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3246,
+    "ineligible": [
+     "spec 2.44->3.78",
+     "modulation 2.01->2.71",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail315ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 315,
+     "db": 0.0
+    },
+    "objective": 22.486,
+    "median_ratios": {
+     "spec": 22.0514,
+     "spec_peak": 2.6293,
+     "centroid": 3.7431,
+     "flatness": 8.3075,
+     "impulse": 0.8408,
+     "attack": 6.0756,
+     "decay": 22.486,
+     "modulation": 3.2026
+    },
+    "regressions": [
+     "spec 2.44->22.05",
+     "spec_peak 1.74->2.63",
+     "flatness 2.78->8.31",
+     "decay 15.89->22.49",
+     "modulation 2.01->3.20"
+    ],
+    "per_condition_worst": [
+     21.362,
+     22.19,
+     22.544,
+     22.486,
+     22.757
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4207,
+    "ineligible": [
+     "spec 2.44->22.05",
+     "spec_peak 1.74->2.63",
+     "flatness 2.78->8.31",
+     "decay 15.89->22.49",
+     "modulation 2.01->3.20",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail315ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 315,
+     "db": -6.0
+    },
+    "objective": 17.5545,
+    "median_ratios": {
+     "spec": 14.1238,
+     "spec_peak": 2.0514,
+     "centroid": 3.1896,
+     "flatness": 6.7149,
+     "impulse": 0.8502,
+     "attack": 6.0828,
+     "decay": 17.5545,
+     "modulation": 3.0311
+    },
+    "regressions": [
+     "spec 2.44->14.12",
+     "spec_peak 1.74->2.05",
+     "flatness 2.78->6.71",
+     "decay 15.89->17.55",
+     "modulation 2.01->3.03"
+    ],
+    "per_condition_worst": [
+     16.287,
+     16.726,
+     17.622,
+     17.555,
+     17.884
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3539,
+    "ineligible": [
+     "spec 2.44->14.12",
+     "spec_peak 1.74->2.05",
+     "flatness 2.78->6.71",
+     "decay 15.89->17.55",
+     "modulation 2.01->3.03",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1000Hz tail315ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1000.0,
+     "tau_ms": 315,
+     "db": -12.0
+    },
+    "objective": 11.7502,
+    "median_ratios": {
+     "spec": 5.9477,
+     "spec_peak": 1.5613,
+     "centroid": 3.2284,
+     "flatness": 3.7901,
+     "impulse": 0.859,
+     "attack": 6.1403,
+     "decay": 11.7502,
+     "modulation": 2.7134
+    },
+    "regressions": [
+     "spec 2.44->5.95",
+     "flatness 2.78->3.79",
+     "modulation 2.01->2.71"
+    ],
+    "per_condition_worst": [
+     10.435,
+     10.883,
+     11.819,
+     11.75,
+     12.104
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3246,
+    "ineligible": [
+     "spec 2.44->5.95",
+     "flatness 2.78->3.79",
+     "modulation 2.01->2.71",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail80ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 80,
+     "db": 0.0
+    },
+    "objective": 17.1939,
+    "median_ratios": {
+     "spec": 2.7577,
+     "spec_peak": 1.8412,
+     "centroid": 3.5738,
+     "flatness": 2.2783,
+     "impulse": 0.8928,
+     "attack": 6.853,
+     "decay": 17.1939,
+     "modulation": 3.1667
+    },
+    "regressions": [
+     "spec 2.44->2.76",
+     "decay 15.89->17.19",
+     "modulation 2.01->3.17"
+    ],
+    "per_condition_worst": [
+     15.888,
+     18.005,
+     16.36,
+     17.194,
+     17.436
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4064,
+    "ineligible": [
+     "spec 2.44->2.76",
+     "decay 15.89->17.19",
+     "modulation 2.01->3.17"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail80ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 80,
+     "db": -6.0
+    },
+    "objective": 17.5758,
+    "median_ratios": {
+     "spec": 2.4652,
+     "spec_peak": 1.5237,
+     "centroid": 3.0966,
+     "flatness": 2.8711,
+     "impulse": 0.9096,
+     "attack": 6.5885,
+     "decay": 17.5758,
+     "modulation": 2.9174
+    },
+    "regressions": [
+     "decay 15.89->17.58",
+     "modulation 2.01->2.92"
+    ],
+    "per_condition_worst": [
+     17.576,
+     16.938,
+     17.674,
+     17.479,
+     18.075
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3468,
+    "ineligible": [
+     "decay 15.89->17.58",
+     "modulation 2.01->2.92",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail80ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 80,
+     "db": -12.0
+    },
+    "objective": 19.4608,
+    "median_ratios": {
+     "spec": 2.5672,
+     "spec_peak": 1.5393,
+     "centroid": 2.8334,
+     "flatness": 3.52,
+     "impulse": 1.0036,
+     "attack": 6.494,
+     "decay": 19.4608,
+     "modulation": 2.882
+    },
+    "regressions": [
+     "flatness 2.78->3.52",
+     "impulse crossed 1.0 (0.93->1.00)",
+     "decay 15.89->19.46",
+     "modulation 2.01->2.88"
+    ],
+    "per_condition_worst": [
+     19.461,
+     18.849,
+     19.553,
+     19.352,
+     19.927
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3334,
+    "ineligible": [
+     "flatness 2.78->3.52",
+     "impulse crossed 1.0 (0.93->1.00)",
+     "decay 15.89->19.46",
+     "modulation 2.01->2.88",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail120ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 120,
+     "db": 0.0
+    },
+    "objective": 15.3258,
+    "median_ratios": {
+     "spec": 4.2782,
+     "spec_peak": 2.0108,
+     "centroid": 3.3533,
+     "flatness": 2.2725,
+     "impulse": 0.8918,
+     "attack": 6.1338,
+     "decay": 15.3258,
+     "modulation": 3.312
+    },
+    "regressions": [
+     "spec 2.44->4.28",
+     "spec_peak 1.74->2.01",
+     "modulation 2.01->3.31"
+    ],
+    "per_condition_worst": [
+     14.493,
+     15.644,
+     15.038,
+     15.326,
+     15.403
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4258,
+    "ineligible": [
+     "spec 2.44->4.28",
+     "spec_peak 1.74->2.01",
+     "modulation 2.01->3.31"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail120ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 120,
+     "db": -6.0
+    },
+    "objective": 13.5481,
+    "median_ratios": {
+     "spec": 2.6495,
+     "spec_peak": 1.5528,
+     "centroid": 2.9149,
+     "flatness": 1.7376,
+     "impulse": 0.8584,
+     "attack": 6.1566,
+     "decay": 13.5481,
+     "modulation": 2.9677
+    },
+    "regressions": [
+     "modulation 2.01->2.97"
+    ],
+    "per_condition_worst": [
+     11.575,
+     14.152,
+     12.413,
+     13.548,
+     13.816
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3565,
+    "ineligible": [
+     "modulation 2.01->2.97"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail120ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 120,
+     "db": -12.0
+    },
+    "objective": 14.3088,
+    "median_ratios": {
+     "spec": 2.1616,
+     "spec_peak": 1.5342,
+     "centroid": 2.7724,
+     "flatness": 2.5486,
+     "impulse": 0.9158,
+     "attack": 6.2047,
+     "decay": 14.3088,
+     "modulation": 2.8383
+    },
+    "regressions": [
+     "modulation 2.01->2.84"
+    ],
+    "per_condition_worst": [
+     14.309,
+     13.416,
+     14.54,
+     14.218,
+     15.075
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 3,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3348,
+    "ineligible": [
+     "modulation 2.01->2.84",
+     "d12a decay 3 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail160ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 160,
+     "db": 0.0
+    },
+    "objective": 13.7675,
+    "median_ratios": {
+     "spec": 5.776,
+     "spec_peak": 2.0941,
+     "centroid": 3.2881,
+     "flatness": 3.003,
+     "impulse": 0.8852,
+     "attack": 5.9915,
+     "decay": 13.7675,
+     "modulation": 3.301
+    },
+    "regressions": [
+     "spec 2.44->5.78",
+     "spec_peak 1.74->2.09",
+     "modulation 2.01->3.30"
+    ],
+    "per_condition_worst": [
+     13.502,
+     14.013,
+     13.62,
+     13.768,
+     13.86
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.433,
+    "ineligible": [
+     "spec 2.44->5.78",
+     "spec_peak 1.74->2.09",
+     "modulation 2.01->3.30",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail160ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 160,
+     "db": -6.0
+    },
+    "objective": 12.559,
+    "median_ratios": {
+     "spec": 3.3745,
+     "spec_peak": 1.5756,
+     "centroid": 2.8113,
+     "flatness": 1.8145,
+     "impulse": 0.8604,
+     "attack": 6.1023,
+     "decay": 12.559,
+     "modulation": 2.9928
+    },
+    "regressions": [
+     "spec 2.44->3.37",
+     "modulation 2.01->2.99"
+    ],
+    "per_condition_worst": [
+     10.878,
+     13.226,
+     11.967,
+     12.777,
+     12.559
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3601,
+    "ineligible": [
+     "spec 2.44->3.37",
+     "modulation 2.01->2.99"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail160ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 160,
+     "db": -12.0
+    },
+    "objective": 11.1005,
+    "median_ratios": {
+     "spec": 2.1433,
+     "spec_peak": 1.5324,
+     "centroid": 2.6585,
+     "flatness": 2.0381,
+     "impulse": 0.8595,
+     "attack": 6.1485,
+     "decay": 11.1005,
+     "modulation": 2.8199
+    },
+    "regressions": [
+     "modulation 2.01->2.82"
+    ],
+    "per_condition_worst": [
+     10.668,
+     11.486,
+     11.004,
+     11.1,
+     11.687
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3353,
+    "ineligible": [
+     "modulation 2.01->2.82"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail250ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 250,
+     "db": 0.0
+    },
+    "objective": 20.7034,
+    "median_ratios": {
+     "spec": 15.5075,
+     "spec_peak": 2.4702,
+     "centroid": 3.2172,
+     "flatness": 5.8498,
+     "impulse": 0.884,
+     "attack": 5.8342,
+     "decay": 20.7034,
+     "modulation": 3.2626
+    },
+    "regressions": [
+     "spec 2.44->15.51",
+     "spec_peak 1.74->2.47",
+     "flatness 2.78->5.85",
+     "decay 15.89->20.70",
+     "modulation 2.01->3.26"
+    ],
+    "per_condition_worst": [
+     19.711,
+     20.059,
+     20.761,
+     20.703,
+     21.013
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4484,
+    "ineligible": [
+     "spec 2.44->15.51",
+     "spec_peak 1.74->2.47",
+     "flatness 2.78->5.85",
+     "decay 15.89->20.70",
+     "modulation 2.01->3.26",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail250ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 250,
+     "db": -6.0
+    },
+    "objective": 16.3047,
+    "median_ratios": {
+     "spec": 9.6363,
+     "spec_peak": 1.9293,
+     "centroid": 2.6532,
+     "flatness": 4.4671,
+     "impulse": 0.8654,
+     "attack": 5.9754,
+     "decay": 16.3047,
+     "modulation": 3.0544
+    },
+    "regressions": [
+     "spec 2.44->9.64",
+     "flatness 2.78->4.47",
+     "decay 15.89->16.30",
+     "modulation 2.01->3.05"
+    ],
+    "per_condition_worst": [
+     15.152,
+     15.517,
+     16.374,
+     16.305,
+     16.663
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3678,
+    "ineligible": [
+     "spec 2.44->9.64",
+     "flatness 2.78->4.47",
+     "decay 15.89->16.30",
+     "modulation 2.01->3.05",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail250ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 250,
+     "db": -12.0
+    },
+    "objective": 10.8426,
+    "median_ratios": {
+     "spec": 4.3251,
+     "spec_peak": 1.5611,
+     "centroid": 2.3653,
+     "flatness": 2.3722,
+     "impulse": 0.8491,
+     "attack": 6.0962,
+     "decay": 10.8426,
+     "modulation": 2.7984
+    },
+    "regressions": [
+     "spec 2.44->4.33",
+     "modulation 2.01->2.80"
+    ],
+    "per_condition_worst": [
+     9.607,
+     9.986,
+     10.913,
+     10.843,
+     11.219
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3363,
+    "ineligible": [
+     "spec 2.44->4.33",
+     "modulation 2.01->2.80",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail315ms@+0dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 315,
+     "db": 0.0
+    },
+    "objective": 23.8269,
+    "median_ratios": {
+     "spec": 21.8699,
+     "spec_peak": 2.611,
+     "centroid": 3.2742,
+     "flatness": 6.7354,
+     "impulse": 0.868,
+     "attack": 6.1011,
+     "decay": 23.8269,
+     "modulation": 3.2527
+    },
+    "regressions": [
+     "spec 2.44->21.87",
+     "spec_peak 1.74->2.61",
+     "flatness 2.78->6.74",
+     "decay 15.89->23.83",
+     "modulation 2.01->3.25"
+    ],
+    "per_condition_worst": [
+     22.868,
+     23.231,
+     23.88,
+     23.827,
+     24.102
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4525,
+    "ineligible": [
+     "spec 2.44->21.87",
+     "spec_peak 1.74->2.61",
+     "flatness 2.78->6.74",
+     "decay 15.89->23.83",
+     "modulation 2.01->3.25",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail315ms@-6dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 315,
+     "db": -6.0
+    },
+    "objective": 19.6478,
+    "median_ratios": {
+     "spec": 14.2166,
+     "spec_peak": 2.0281,
+     "centroid": 2.6969,
+     "flatness": 5.5269,
+     "impulse": 0.8673,
+     "attack": 5.9764,
+     "decay": 19.6478,
+     "modulation": 3.0733
+    },
+    "regressions": [
+     "spec 2.44->14.22",
+     "spec_peak 1.74->2.03",
+     "flatness 2.78->5.53",
+     "decay 15.89->19.65",
+     "modulation 2.01->3.07"
+    ],
+    "per_condition_worst": [
+     18.503,
+     18.89,
+     19.714,
+     19.648,
+     19.983
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3699,
+    "ineligible": [
+     "spec 2.44->14.22",
+     "spec_peak 1.74->2.03",
+     "flatness 2.78->5.53",
+     "decay 15.89->19.65",
+     "modulation 2.01->3.07",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "T dark1300Hz tail315ms@-12dB",
+    "cand": {
+     "family": "T",
+     "f_hz": 1300.0,
+     "tau_ms": 315,
+     "db": -12.0
+    },
+    "objective": 14.2796,
+    "median_ratios": {
+     "spec": 6.3735,
+     "spec_peak": 1.5838,
+     "centroid": 2.2894,
+     "flatness": 3.3316,
+     "impulse": 0.8463,
+     "attack": 6.0855,
+     "decay": 14.2796,
+     "modulation": 2.7952
+    },
+    "regressions": [
+     "spec 2.44->6.37",
+     "flatness 2.78->3.33",
+     "modulation 2.01->2.80"
+    ],
+    "per_condition_worst": [
+     13.034,
+     13.442,
+     14.349,
+     14.28,
+     14.642
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3366,
+    "ineligible": [
+     "spec 2.44->6.37",
+     "flatness 2.78->3.33",
+     "modulation 2.01->2.80",
+     "d12a decay 0 < 5"
+    ]
+   }
+  ],
+  "selected": null
+ }
+}

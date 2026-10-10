@@ -1,0 +1,1988 @@
+{
+ "cmd": "cp-sweep",
+ "model_sha16": "76bf5af0763581c3",
+ "commit": "b10a6e8f0c452f1974424b240b0c555f9242560c",
+ "sources_dirty": true,
+ "refs_sha256": {
+  "ch8/CH.WAV": "c9f30ff2b4d73b03f41960e504e03c54e9a59697af666fe4d155bab9cd1ccae6",
+  "cp8/CP.WAV": "376429bb81cb48d1f392a11cd066c32ffb7883d445b2488704ea52e46bb08286",
+  "sd8/SD5050.WAV": "6dcbf8acd5cee6d6b7955d26c6b57d8ca413f1ae1c7caafaaec780d83f08d712"
+ },
+ "conditions": {
+  "dev": [
+   [
+    480,
+    1.0
+   ],
+   [
+    23110,
+    1.0
+   ],
+   [
+    25283,
+    1.0
+   ],
+   [
+    25409,
+    1.0
+   ],
+   [
+    28527,
+    1.0
+   ]
+  ],
+  "confirm": [
+   [
+    4355,
+    1.0
+   ],
+   [
+    8356,
+    1.0
+   ],
+   [
+    13651,
+    1.0
+   ],
+   [
+    18519,
+    1.0
+   ],
+   [
+    28791,
+    1.0
+   ],
+   [
+    30167,
+    1.0
+   ],
+   [
+    4355,
+    0.5
+   ],
+   [
+    8356,
+    2.0
+   ]
+  ]
+ },
+ "result": {
+  "baseline": {
+   "label": "P tail80ms@+0dB",
+   "cand": {
+    "family": "P",
+    "tau_ms": 80,
+    "peak_db": 0.0
+   },
+   "objective": 15.8926,
+   "median_ratios": {
+    "spec": 2.4358,
+    "spec_peak": 1.7444,
+    "centroid": 3.6661,
+    "flatness": 2.7798,
+    "impulse": 0.9327,
+    "attack": 7.1106,
+    "decay": 15.8926,
+    "modulation": 2.0071
+   },
+   "regressions": [],
+   "per_condition_worst": [
+    15.893,
+    15.331,
+    15.949,
+    15.771,
+    16.292
+   ],
+   "d12a": {
+    "ratio_pass": 5,
+    "decay_pass": 5,
+    "n": 5
+   }
+  },
+  "candidates": [
+   {
+    "label": "P tail80ms@+0dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 80,
+     "peak_db": 0.0
+    },
+    "objective": 15.8926,
+    "median_ratios": {
+     "spec": 2.4358,
+     "spec_peak": 1.7444,
+     "centroid": 3.6661,
+     "flatness": 2.7798,
+     "impulse": 0.9327,
+     "attack": 7.1106,
+     "decay": 15.8926,
+     "modulation": 2.0071
+    },
+    "regressions": [],
+    "per_condition_worst": [
+     15.893,
+     15.331,
+     15.949,
+     15.771,
+     16.292
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4247,
+    "ineligible": []
+   },
+   {
+    "label": "P tail80ms@-4dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 80,
+     "peak_db": -4.0
+    },
+    "objective": 16.8382,
+    "median_ratios": {
+     "spec": 2.2975,
+     "spec_peak": 1.5145,
+     "centroid": 3.4108,
+     "flatness": 3.1297,
+     "impulse": 0.9817,
+     "attack": 6.3323,
+     "decay": 16.8382,
+     "modulation": 1.695
+    },
+    "regressions": [
+     "flatness 2.78->3.13",
+     "decay 15.89->16.84"
+    ],
+    "per_condition_worst": [
+     16.838,
+     16.213,
+     16.905,
+     16.713,
+     17.301
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3878,
+    "ineligible": [
+     "flatness 2.78->3.13",
+     "decay 15.89->16.84",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail80ms@-8dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 80,
+     "peak_db": -8.0
+    },
+    "objective": 17.9664,
+    "median_ratios": {
+     "spec": 2.3561,
+     "spec_peak": 1.5285,
+     "centroid": 3.1723,
+     "flatness": 3.4101,
+     "impulse": 1.0323,
+     "attack": 6.1988,
+     "decay": 17.9664,
+     "modulation": 1.4981
+    },
+    "regressions": [
+     "flatness 2.78->3.41",
+     "impulse crossed 1.0 (0.93->1.03)",
+     "decay 15.89->17.97"
+    ],
+    "per_condition_worst": [
+     17.966,
+     17.318,
+     18.024,
+     17.817,
+     18.454
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3645,
+    "ineligible": [
+     "flatness 2.78->3.41",
+     "impulse crossed 1.0 (0.93->1.03)",
+     "decay 15.89->17.97",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail80ms@-12dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 80,
+     "peak_db": -12.0
+    },
+    "objective": 19.1418,
+    "median_ratios": {
+     "spec": 2.4651,
+     "spec_peak": 1.5498,
+     "centroid": 2.941,
+     "flatness": 3.6513,
+     "impulse": 1.032,
+     "attack": 6.1836,
+     "decay": 19.1418,
+     "modulation": 1.3856
+    },
+    "regressions": [
+     "flatness 2.78->3.65",
+     "impulse crossed 1.0 (0.93->1.03)",
+     "decay 15.89->19.14"
+    ],
+    "per_condition_worst": [
+     19.142,
+     18.484,
+     19.178,
+     18.973,
+     19.575
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3499,
+    "ineligible": [
+     "flatness 2.78->3.65",
+     "impulse crossed 1.0 (0.93->1.03)",
+     "decay 15.89->19.14",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail80ms@-16dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 80,
+     "peak_db": -16.0
+    },
+    "objective": 20.2301,
+    "median_ratios": {
+     "spec": 2.6,
+     "spec_peak": 1.5674,
+     "centroid": 2.7636,
+     "flatness": 3.7547,
+     "impulse": 1.0512,
+     "attack": 6.136,
+     "decay": 20.2301,
+     "modulation": 1.3269
+    },
+    "regressions": [
+     "flatness 2.78->3.75",
+     "impulse crossed 1.0 (0.93->1.05)",
+     "decay 15.89->20.23"
+    ],
+    "per_condition_worst": [
+     20.23,
+     19.6,
+     20.265,
+     20.065,
+     20.614
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3406,
+    "ineligible": [
+     "flatness 2.78->3.75",
+     "impulse crossed 1.0 (0.93->1.05)",
+     "decay 15.89->20.23",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail120ms@+0dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 120,
+     "peak_db": 0.0
+    },
+    "objective": 9.1064,
+    "median_ratios": {
+     "spec": 3.6411,
+     "spec_peak": 1.8534,
+     "centroid": 4.5921,
+     "flatness": 2.0697,
+     "impulse": 0.9167,
+     "attack": 6.1356,
+     "decay": 9.1064,
+     "modulation": 2.3139
+    },
+    "regressions": [
+     "spec 2.44->3.64",
+     "centroid 3.67->4.59",
+     "modulation 2.01->2.31"
+    ],
+    "per_condition_worst": [
+     9.072,
+     8.72,
+     9.295,
+     9.106,
+     9.629
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4403,
+    "ineligible": [
+     "spec 2.44->3.64",
+     "centroid 3.67->4.59",
+     "modulation 2.01->2.31"
+    ]
+   },
+   {
+    "label": "P tail120ms@-4dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 120,
+     "peak_db": -4.0
+    },
+    "objective": 10.1894,
+    "median_ratios": {
+     "spec": 2.7284,
+     "spec_peak": 1.6388,
+     "centroid": 4.3632,
+     "flatness": 2.2197,
+     "impulse": 0.9234,
+     "attack": 6.1456,
+     "decay": 10.1894,
+     "modulation": 1.8739
+    },
+    "regressions": [
+     "spec 2.44->2.73",
+     "centroid 3.67->4.36"
+    ],
+    "per_condition_worst": [
+     10.159,
+     9.644,
+     10.458,
+     10.189,
+     10.863
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3976,
+    "ineligible": [
+     "spec 2.44->2.73",
+     "centroid 3.67->4.36"
+    ]
+   },
+   {
+    "label": "P tail120ms@-8dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 120,
+     "peak_db": -8.0
+    },
+    "objective": 11.8144,
+    "median_ratios": {
+     "spec": 2.1733,
+     "spec_peak": 1.5213,
+     "centroid": 4.0755,
+     "flatness": 2.5326,
+     "impulse": 0.9152,
+     "attack": 6.1566,
+     "decay": 11.8144,
+     "modulation": 1.5856
+    },
+    "regressions": [
+     "centroid 3.67->4.08"
+    ],
+    "per_condition_worst": [
+     11.814,
+     10.931,
+     12.051,
+     11.743,
+     12.506
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3708,
+    "ineligible": [
+     "centroid 3.67->4.08"
+    ]
+   },
+   {
+    "label": "P tail120ms@-12dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 120,
+     "peak_db": -12.0
+    },
+    "objective": 13.6191,
+    "median_ratios": {
+     "spec": 2.0444,
+     "spec_peak": 1.5429,
+     "centroid": 3.7234,
+     "flatness": 3.0163,
+     "impulse": 0.9714,
+     "attack": 6.1184,
+     "decay": 13.6191,
+     "modulation": 1.426
+    },
+    "regressions": [],
+    "per_condition_worst": [
+     13.619,
+     12.735,
+     13.864,
+     13.521,
+     14.439
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 3,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3538,
+    "ineligible": [
+     "d12a decay 3 < 5"
+    ]
+   },
+   {
+    "label": "P tail120ms@-16dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 120,
+     "peak_db": -16.0
+    },
+    "objective": 15.5838,
+    "median_ratios": {
+     "spec": 2.1577,
+     "spec_peak": 1.5568,
+     "centroid": 3.3792,
+     "flatness": 3.4266,
+     "impulse": 1.0042,
+     "attack": 6.1172,
+     "decay": 15.5838,
+     "modulation": 1.3476
+    },
+    "regressions": [
+     "flatness 2.78->3.43",
+     "impulse crossed 1.0 (0.93->1.00)"
+    ],
+    "per_condition_worst": [
+     15.584,
+     14.659,
+     15.78,
+     15.449,
+     16.378
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.343,
+    "ineligible": [
+     "flatness 2.78->3.43",
+     "impulse crossed 1.0 (0.93->1.00)",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail160ms@+0dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 160,
+     "peak_db": 0.0
+    },
+    "objective": 9.9211,
+    "median_ratios": {
+     "spec": 4.9427,
+     "spec_peak": 1.9193,
+     "centroid": 4.9684,
+     "flatness": 2.1601,
+     "impulse": 0.913,
+     "attack": 6.0538,
+     "decay": 9.9211,
+     "modulation": 2.4391
+    },
+    "regressions": [
+     "spec 2.44->4.94",
+     "centroid 3.67->4.97",
+     "modulation 2.01->2.44"
+    ],
+    "per_condition_worst": [
+     9.423,
+     9.544,
+     9.998,
+     9.921,
+     10.362
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.446,
+    "ineligible": [
+     "spec 2.44->4.94",
+     "centroid 3.67->4.97",
+     "modulation 2.01->2.44",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail160ms@-4dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 160,
+     "peak_db": -4.0
+    },
+    "objective": 7.7671,
+    "median_ratios": {
+     "spec": 3.6845,
+     "spec_peak": 1.7169,
+     "centroid": 4.7541,
+     "flatness": 2.1032,
+     "impulse": 0.9089,
+     "attack": 6.1157,
+     "decay": 7.7671,
+     "modulation": 1.9516
+    },
+    "regressions": [
+     "spec 2.44->3.68",
+     "centroid 3.67->4.75"
+    ],
+    "per_condition_worst": [
+     7.767,
+     7.827,
+     7.751,
+     7.633,
+     8.143
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4013,
+    "ineligible": [
+     "spec 2.44->3.68",
+     "centroid 3.67->4.75"
+    ]
+   },
+   {
+    "label": "P tail160ms@-8dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 160,
+     "peak_db": -8.0
+    },
+    "objective": 7.3496,
+    "median_ratios": {
+     "spec": 2.4692,
+     "spec_peak": 1.5204,
+     "centroid": 4.474,
+     "flatness": 2.2563,
+     "impulse": 0.918,
+     "attack": 6.1165,
+     "decay": 7.3496,
+     "modulation": 1.6247
+    },
+    "regressions": [
+     "centroid 3.67->4.47"
+    ],
+    "per_condition_worst": [
+     7.35,
+     6.531,
+     7.726,
+     7.319,
+     8.38
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.373,
+    "ineligible": [
+     "centroid 3.67->4.47"
+    ]
+   },
+   {
+    "label": "P tail160ms@-12dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 160,
+     "peak_db": -12.0
+    },
+    "objective": 9.6363,
+    "median_ratios": {
+     "spec": 1.9719,
+     "spec_peak": 1.5368,
+     "centroid": 4.1181,
+     "flatness": 2.6535,
+     "impulse": 0.9193,
+     "attack": 6.0996,
+     "decay": 9.6363,
+     "modulation": 1.4419
+    },
+    "regressions": [
+     "centroid 3.67->4.12"
+    ],
+    "per_condition_worst": [
+     9.636,
+     8.612,
+     10.026,
+     9.588,
+     10.749
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3552,
+    "ineligible": [
+     "centroid 3.67->4.12"
+    ]
+   },
+   {
+    "label": "P tail160ms@-16dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 160,
+     "peak_db": -16.0
+    },
+    "objective": 12.1967,
+    "median_ratios": {
+     "spec": 1.9653,
+     "spec_peak": 1.555,
+     "centroid": 3.7508,
+     "flatness": 3.0955,
+     "impulse": 0.9809,
+     "attack": 6.1051,
+     "decay": 12.1967,
+     "modulation": 1.3494
+    },
+    "regressions": [
+     "flatness 2.78->3.10"
+    ],
+    "per_condition_worst": [
+     12.197,
+     11.135,
+     12.542,
+     12.11,
+     13.272
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.344,
+    "ineligible": [
+     "flatness 2.78->3.10",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail200ms@+0dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 200,
+     "peak_db": 0.0
+    },
+    "objective": 14.96,
+    "median_ratios": {
+     "spec": 7.9306,
+     "spec_peak": 2.0974,
+     "centroid": 5.4394,
+     "flatness": 2.6919,
+     "impulse": 0.8971,
+     "attack": 6.0041,
+     "decay": 14.96,
+     "modulation": 2.5792
+    },
+    "regressions": [
+     "spec 2.44->7.93",
+     "spec_peak 1.74->2.10",
+     "centroid 3.67->5.44",
+     "modulation 2.01->2.58"
+    ],
+    "per_condition_worst": [
+     14.087,
+     14.301,
+     15.038,
+     14.96,
+     15.374
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4521,
+    "ineligible": [
+     "spec 2.44->7.93",
+     "spec_peak 1.74->2.10",
+     "centroid 3.67->5.44",
+     "modulation 2.01->2.58",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail200ms@-4dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 200,
+     "peak_db": -4.0
+    },
+    "objective": 12.2009,
+    "median_ratios": {
+     "spec": 5.588,
+     "spec_peak": 1.8429,
+     "centroid": 5.2571,
+     "flatness": 2.3784,
+     "impulse": 0.9109,
+     "attack": 6.0148,
+     "decay": 12.2009,
+     "modulation": 2.0404
+    },
+    "regressions": [
+     "spec 2.44->5.59",
+     "centroid 3.67->5.26"
+    ],
+    "per_condition_worst": [
+     11.22,
+     11.452,
+     12.278,
+     12.201,
+     12.627
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4051,
+    "ineligible": [
+     "spec 2.44->5.59",
+     "centroid 3.67->5.26",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail200ms@-8dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 200,
+     "peak_db": -8.0
+    },
+    "objective": 8.9928,
+    "median_ratios": {
+     "spec": 3.6064,
+     "spec_peak": 1.5201,
+     "centroid": 4.9733,
+     "flatness": 2.1917,
+     "impulse": 0.9084,
+     "attack": 6.1025,
+     "decay": 8.9928,
+     "modulation": 1.6702
+    },
+    "regressions": [
+     "spec 2.44->3.61",
+     "centroid 3.67->4.97"
+    ],
+    "per_condition_worst": [
+     8.597,
+     8.664,
+     9.072,
+     8.993,
+     9.42
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3754,
+    "ineligible": [
+     "spec 2.44->3.61",
+     "centroid 3.67->4.97",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail200ms@-12dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 200,
+     "peak_db": -12.0
+    },
+    "objective": 6.7601,
+    "median_ratios": {
+     "spec": 2.2358,
+     "spec_peak": 1.5345,
+     "centroid": 4.6017,
+     "flatness": 2.338,
+     "impulse": 0.9142,
+     "attack": 6.1046,
+     "decay": 6.7601,
+     "modulation": 1.4562
+    },
+    "regressions": [
+     "centroid 3.67->4.60"
+    ],
+    "per_condition_worst": [
+     6.788,
+     6.756,
+     6.76,
+     6.581,
+     7.388
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 2,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3567,
+    "ineligible": [
+     "centroid 3.67->4.60",
+     "d12a decay 2 < 5"
+    ]
+   },
+   {
+    "label": "P tail200ms@-16dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 200,
+     "peak_db": -16.0
+    },
+    "objective": 6.5836,
+    "median_ratios": {
+     "spec": 1.8716,
+     "spec_peak": 1.5525,
+     "centroid": 4.231,
+     "flatness": 2.6896,
+     "impulse": 0.9426,
+     "attack": 6.0958,
+     "decay": 6.5049,
+     "modulation": 1.3518
+    },
+    "regressions": [
+     "centroid 3.67->4.23"
+    ],
+    "per_condition_worst": [
+     6.505,
+     6.096,
+     6.89,
+     6.584,
+     7.855
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3449,
+    "ineligible": [
+     "centroid 3.67->4.23"
+    ]
+   },
+   {
+    "label": "P tail250ms@+0dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 250,
+     "peak_db": 0.0
+    },
+    "objective": 20.7461,
+    "median_ratios": {
+     "spec": 13.7696,
+     "spec_peak": 2.2612,
+     "centroid": 5.9083,
+     "flatness": 3.6473,
+     "impulse": 0.8454,
+     "attack": 5.9777,
+     "decay": 20.7461,
+     "modulation": 2.7328
+    },
+    "regressions": [
+     "spec 2.44->13.77",
+     "spec_peak 1.74->2.26",
+     "centroid 3.67->5.91",
+     "flatness 2.78->3.65",
+     "decay 15.89->20.75",
+     "modulation 2.01->2.73"
+    ],
+    "per_condition_worst": [
+     19.876,
+     20.145,
+     20.816,
+     20.746,
+     21.105
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4583,
+    "ineligible": [
+     "spec 2.44->13.77",
+     "spec_peak 1.74->2.26",
+     "centroid 3.67->5.91",
+     "flatness 2.78->3.65",
+     "decay 15.89->20.75",
+     "modulation 2.01->2.73",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail250ms@-4dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 250,
+     "peak_db": -4.0
+    },
+    "objective": 18.1478,
+    "median_ratios": {
+     "spec": 10.6089,
+     "spec_peak": 2.0392,
+     "centroid": 5.7868,
+     "flatness": 3.2986,
+     "impulse": 0.8966,
+     "attack": 6.0094,
+     "decay": 18.1478,
+     "modulation": 2.1399
+    },
+    "regressions": [
+     "spec 2.44->10.61",
+     "spec_peak 1.74->2.04",
+     "centroid 3.67->5.79",
+     "flatness 2.78->3.30",
+     "decay 15.89->18.15"
+    ],
+    "per_condition_worst": [
+     17.151,
+     17.445,
+     18.223,
+     18.148,
+     18.532
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4091,
+    "ineligible": [
+     "spec 2.44->10.61",
+     "spec_peak 1.74->2.04",
+     "centroid 3.67->5.79",
+     "flatness 2.78->3.30",
+     "decay 15.89->18.15",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail250ms@-8dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 250,
+     "peak_db": -8.0
+    },
+    "objective": 15.0066,
+    "median_ratios": {
+     "spec": 6.9581,
+     "spec_peak": 1.7,
+     "centroid": 5.586,
+     "flatness": 2.7819,
+     "impulse": 0.8994,
+     "attack": 6.0227,
+     "decay": 15.0066,
+     "modulation": 1.7227
+    },
+    "regressions": [
+     "spec 2.44->6.96",
+     "centroid 3.67->5.59"
+    ],
+    "per_condition_worst": [
+     13.908,
+     14.223,
+     15.083,
+     15.007,
+     15.403
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3779,
+    "ineligible": [
+     "spec 2.44->6.96",
+     "centroid 3.67->5.59",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail250ms@-12dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 250,
+     "peak_db": -12.0
+    },
+    "objective": 11.4999,
+    "median_ratios": {
+     "spec": 4.0011,
+     "spec_peak": 1.5436,
+     "centroid": 5.2647,
+     "flatness": 2.3882,
+     "impulse": 0.9129,
+     "attack": 6.0934,
+     "decay": 11.4999,
+     "modulation": 1.4763
+    },
+    "regressions": [
+     "spec 2.44->4.00",
+     "centroid 3.67->5.26"
+    ],
+    "per_condition_worst": [
+     10.395,
+     10.67,
+     11.578,
+     11.5,
+     11.899
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3583,
+    "ineligible": [
+     "spec 2.44->4.00",
+     "centroid 3.67->5.26",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail250ms@-16dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 250,
+     "peak_db": -16.0
+    },
+    "objective": 7.9904,
+    "median_ratios": {
+     "spec": 2.5409,
+     "spec_peak": 1.5496,
+     "centroid": 4.8653,
+     "flatness": 2.4142,
+     "impulse": 0.9201,
+     "attack": 6.0957,
+     "decay": 7.9904,
+     "modulation": 1.3539
+    },
+    "regressions": [
+     "centroid 3.67->4.87"
+    ],
+    "per_condition_worst": [
+     7.996,
+     7.984,
+     7.99,
+     7.84,
+     8.661
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3459,
+    "ineligible": [
+     "centroid 3.67->4.87",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail315ms@+0dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 315,
+     "peak_db": 0.0
+    },
+    "objective": 23.8623,
+    "median_ratios": {
+     "spec": 19.6728,
+     "spec_peak": 2.3886,
+     "centroid": 6.0757,
+     "flatness": 4.1661,
+     "impulse": 0.8171,
+     "attack": 5.9281,
+     "decay": 23.8623,
+     "modulation": 2.815
+    },
+    "regressions": [
+     "spec 2.44->19.67",
+     "spec_peak 1.74->2.39",
+     "centroid 3.67->6.08",
+     "flatness 2.78->4.17",
+     "decay 15.89->23.86",
+     "modulation 2.01->2.82"
+    ],
+    "per_condition_worst": [
+     23.015,
+     23.304,
+     23.926,
+     23.862,
+     24.184
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4616,
+    "ineligible": [
+     "spec 2.44->19.67",
+     "spec_peak 1.74->2.39",
+     "centroid 3.67->6.08",
+     "flatness 2.78->4.17",
+     "decay 15.89->23.86",
+     "modulation 2.01->2.82",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail315ms@-4dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 315,
+     "peak_db": -4.0
+    },
+    "objective": 21.4119,
+    "median_ratios": {
+     "spec": 15.2509,
+     "spec_peak": 2.1523,
+     "centroid": 5.9843,
+     "flatness": 3.8692,
+     "impulse": 0.7825,
+     "attack": 6.0013,
+     "decay": 21.4119,
+     "modulation": 2.1951
+    },
+    "regressions": [
+     "spec 2.44->15.25",
+     "spec_peak 1.74->2.15",
+     "centroid 3.67->5.98",
+     "flatness 2.78->3.87",
+     "decay 15.89->21.41"
+    ],
+    "per_condition_worst": [
+     20.426,
+     20.742,
+     21.483,
+     21.412,
+     21.769
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4111,
+    "ineligible": [
+     "spec 2.44->15.25",
+     "spec_peak 1.74->2.15",
+     "centroid 3.67->5.98",
+     "flatness 2.78->3.87",
+     "decay 15.89->21.41",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail315ms@-8dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 315,
+     "peak_db": -8.0
+    },
+    "objective": 18.3709,
+    "median_ratios": {
+     "spec": 10.7686,
+     "spec_peak": 1.839,
+     "centroid": 5.8504,
+     "flatness": 3.432,
+     "impulse": 0.8445,
+     "attack": 6.0089,
+     "decay": 18.3709,
+     "modulation": 1.7523
+    },
+    "regressions": [
+     "spec 2.44->10.77",
+     "centroid 3.67->5.85",
+     "flatness 2.78->3.43",
+     "decay 15.89->18.37"
+    ],
+    "per_condition_worst": [
+     17.271,
+     17.615,
+     18.445,
+     18.371,
+     18.748
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3792,
+    "ineligible": [
+     "spec 2.44->10.77",
+     "centroid 3.67->5.85",
+     "flatness 2.78->3.43",
+     "decay 15.89->18.37",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail315ms@-12dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 315,
+     "peak_db": -12.0
+    },
+    "objective": 14.9113,
+    "median_ratios": {
+     "spec": 6.2117,
+     "spec_peak": 1.558,
+     "centroid": 5.6075,
+     "flatness": 2.7616,
+     "impulse": 0.904,
+     "attack": 6.0839,
+     "decay": 14.9113,
+     "modulation": 1.4871
+    },
+    "regressions": [
+     "spec 2.44->6.21",
+     "centroid 3.67->5.61"
+    ],
+    "per_condition_worst": [
+     13.735,
+     14.099,
+     14.987,
+     14.911,
+     15.298
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3591,
+    "ineligible": [
+     "spec 2.44->6.21",
+     "centroid 3.67->5.61",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail315ms@-16dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 315,
+     "peak_db": -16.0
+    },
+    "objective": 11.2454,
+    "median_ratios": {
+     "spec": 3.6084,
+     "spec_peak": 1.5481,
+     "centroid": 5.245,
+     "flatness": 2.485,
+     "impulse": 0.9129,
+     "attack": 6.0969,
+     "decay": 11.2454,
+     "modulation": 1.3558
+    },
+    "regressions": [
+     "spec 2.44->3.61",
+     "centroid 3.67->5.24"
+    ],
+    "per_condition_worst": [
+     10.644,
+     10.685,
+     11.319,
+     11.245,
+     11.628
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3464,
+    "ineligible": [
+     "spec 2.44->3.61",
+     "centroid 3.67->5.24",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail400ms@+0dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 400,
+     "peak_db": 0.0
+    },
+    "objective": 27.1434,
+    "median_ratios": {
+     "spec": 28.308,
+     "spec_peak": 2.524,
+     "centroid": 6.2191,
+     "flatness": 4.5711,
+     "impulse": 0.7738,
+     "attack": 5.6983,
+     "decay": 27.1434,
+     "modulation": 2.9009
+    },
+    "regressions": [
+     "spec 2.44->28.31",
+     "spec_peak 1.74->2.52",
+     "centroid 3.67->6.22",
+     "flatness 2.78->4.57",
+     "decay 15.89->27.14",
+     "modulation 2.01->2.90"
+    ],
+    "per_condition_worst": [
+     27.44,
+     29.004,
+     28.308,
+     28.412,
+     27.831
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.465,
+    "ineligible": [
+     "spec 2.44->28.31",
+     "spec_peak 1.74->2.52",
+     "centroid 3.67->6.22",
+     "flatness 2.78->4.57",
+     "decay 15.89->27.14",
+     "modulation 2.01->2.90",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail400ms@-4dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 400,
+     "peak_db": -4.0
+    },
+    "objective": 24.909,
+    "median_ratios": {
+     "spec": 22.9458,
+     "spec_peak": 2.3386,
+     "centroid": 6.1434,
+     "flatness": 4.3865,
+     "impulse": 0.7797,
+     "attack": 5.9922,
+     "decay": 24.909,
+     "modulation": 2.2536
+    },
+    "regressions": [
+     "spec 2.44->22.95",
+     "spec_peak 1.74->2.34",
+     "centroid 3.67->6.14",
+     "flatness 2.78->4.39",
+     "decay 15.89->24.91"
+    ],
+    "per_condition_worst": [
+     24.01,
+     24.286,
+     24.974,
+     24.909,
+     25.23
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4132,
+    "ineligible": [
+     "spec 2.44->22.95",
+     "spec_peak 1.74->2.34",
+     "centroid 3.67->6.14",
+     "flatness 2.78->4.39",
+     "decay 15.89->24.91",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail400ms@-8dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 400,
+     "peak_db": -8.0
+    },
+    "objective": 22.0323,
+    "median_ratios": {
+     "spec": 16.9113,
+     "spec_peak": 2.02,
+     "centroid": 6.0462,
+     "flatness": 4.0412,
+     "impulse": 0.7994,
+     "attack": 6.012,
+     "decay": 22.0323,
+     "modulation": 1.7852
+    },
+    "regressions": [
+     "spec 2.44->16.91",
+     "spec_peak 1.74->2.02",
+     "centroid 3.67->6.05",
+     "flatness 2.78->4.04",
+     "decay 15.89->22.03"
+    ],
+    "per_condition_worst": [
+     21.135,
+     21.308,
+     22.103,
+     22.032,
+     22.386
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.3806,
+    "ineligible": [
+     "spec 2.44->16.91",
+     "spec_peak 1.74->2.02",
+     "centroid 3.67->6.05",
+     "flatness 2.78->4.04",
+     "decay 15.89->22.03",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail400ms@-12dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 400,
+     "peak_db": -12.0
+    },
+    "objective": 18.669,
+    "median_ratios": {
+     "spec": 9.9889,
+     "spec_peak": 1.6362,
+     "centroid": 5.8919,
+     "flatness": 3.411,
+     "impulse": 0.8122,
+     "attack": 6.0631,
+     "decay": 18.669,
+     "modulation": 1.4985
+    },
+    "regressions": [
+     "spec 2.44->9.99",
+     "centroid 3.67->5.89",
+     "flatness 2.78->3.41",
+     "decay 15.89->18.67"
+    ],
+    "per_condition_worst": [
+     17.931,
+     18.027,
+     18.742,
+     18.669,
+     19.037
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.36,
+    "ineligible": [
+     "spec 2.44->9.99",
+     "centroid 3.67->5.89",
+     "flatness 2.78->3.41",
+     "decay 15.89->18.67",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "P tail400ms@-16dB",
+    "cand": {
+     "family": "P",
+     "tau_ms": 400,
+     "peak_db": -16.0
+    },
+    "objective": 15.0364,
+    "median_ratios": {
+     "spec": 5.6694,
+     "spec_peak": 1.5467,
+     "centroid": 5.6199,
+     "flatness": 2.7892,
+     "impulse": 0.9033,
+     "attack": 6.0868,
+     "decay": 15.0364,
+     "modulation": 1.3583
+    },
+    "regressions": [
+     "spec 2.44->5.67",
+     "centroid 3.67->5.62"
+    ],
+    "per_condition_worst": [
+     14.627,
+     14.739,
+     15.109,
+     15.036,
+     15.406
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.347,
+    "ineligible": [
+     "spec 2.44->5.67",
+     "centroid 3.67->5.62",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "X slow250ms@-12dB",
+    "cand": {
+     "family": "X",
+     "tau_ms": 250,
+     "db": -12.0
+    },
+    "objective": 9.7007,
+    "median_ratios": {
+     "spec": 4.4846,
+     "spec_peak": 1.9014,
+     "centroid": 5.0748,
+     "flatness": 2.1663,
+     "impulse": 0.9118,
+     "attack": 6.7737,
+     "decay": 9.7007,
+     "modulation": 2.392
+    },
+    "regressions": [
+     "spec 2.44->4.48",
+     "centroid 3.67->5.07",
+     "modulation 2.01->2.39"
+    ],
+    "per_condition_worst": [
+     9.234,
+     9.192,
+     9.802,
+     9.701,
+     10.204
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4583,
+    "ineligible": [
+     "spec 2.44->4.48",
+     "centroid 3.67->5.07",
+     "modulation 2.01->2.39",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "X slow250ms@-17dB",
+    "cand": {
+     "family": "X",
+     "tau_ms": 250,
+     "db": -17.0
+    },
+    "objective": 7.0287,
+    "median_ratios": {
+     "spec": 3.073,
+     "spec_peak": 1.8097,
+     "centroid": 4.6816,
+     "flatness": 2.1259,
+     "impulse": 0.9128,
+     "attack": 7.0287,
+     "decay": 6.9731,
+     "modulation": 2.2307
+    },
+    "regressions": [
+     "spec 2.44->3.07",
+     "centroid 3.67->4.68"
+    ],
+    "per_condition_worst": [
+     6.973,
+     7.029,
+     6.883,
+     7.992,
+     7.37
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4436,
+    "ineligible": [
+     "spec 2.44->3.07",
+     "centroid 3.67->4.68"
+    ]
+   },
+   {
+    "label": "X slow250ms@-22dB",
+    "cand": {
+     "family": "X",
+     "tau_ms": 250,
+     "db": -22.0
+    },
+    "objective": 7.0491,
+    "median_ratios": {
+     "spec": 2.3818,
+     "spec_peak": 1.7493,
+     "centroid": 4.2912,
+     "flatness": 2.3103,
+     "impulse": 0.9084,
+     "attack": 7.0491,
+     "decay": 5.9893,
+     "modulation": 2.1347
+    },
+    "regressions": [
+     "centroid 3.67->4.29"
+    ],
+    "per_condition_worst": [
+     6.224,
+     7.049,
+     6.219,
+     8.346,
+     7.376
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4353,
+    "ineligible": [
+     "centroid 3.67->4.29"
+    ]
+   },
+   {
+    "label": "X slow315ms@-12dB",
+    "cand": {
+     "family": "X",
+     "tau_ms": 315,
+     "db": -12.0
+    },
+    "objective": 12.6385,
+    "median_ratios": {
+     "spec": 5.895,
+     "spec_peak": 1.9177,
+     "centroid": 5.3983,
+     "flatness": 2.4502,
+     "impulse": 0.9041,
+     "attack": 6.5904,
+     "decay": 12.6385,
+     "modulation": 2.4151
+    },
+    "regressions": [
+     "spec 2.44->5.89",
+     "centroid 3.67->5.40",
+     "modulation 2.01->2.42"
+    ],
+    "per_condition_worst": [
+     11.718,
+     11.969,
+     12.74,
+     12.638,
+     13.126
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4591,
+    "ineligible": [
+     "spec 2.44->5.89",
+     "centroid 3.67->5.40",
+     "modulation 2.01->2.42",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "X slow315ms@-17dB",
+    "cand": {
+     "family": "X",
+     "tau_ms": 315,
+     "db": -17.0
+    },
+    "objective": 8.6032,
+    "median_ratios": {
+     "spec": 3.8253,
+     "spec_peak": 1.8083,
+     "centroid": 4.9833,
+     "flatness": 2.1541,
+     "impulse": 0.9183,
+     "attack": 6.9065,
+     "decay": 8.6032,
+     "modulation": 2.2437
+    },
+    "regressions": [
+     "spec 2.44->3.83",
+     "centroid 3.67->4.98"
+    ],
+    "per_condition_worst": [
+     8.585,
+     8.603,
+     8.701,
+     8.597,
+     9.106
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.444,
+    "ineligible": [
+     "spec 2.44->3.83",
+     "centroid 3.67->4.98"
+    ]
+   },
+   {
+    "label": "X slow315ms@-22dB",
+    "cand": {
+     "family": "X",
+     "tau_ms": 315,
+     "db": -22.0
+    },
+    "objective": 7.0389,
+    "median_ratios": {
+     "spec": 2.6496,
+     "spec_peak": 1.7615,
+     "centroid": 4.5233,
+     "flatness": 2.1753,
+     "impulse": 0.9221,
+     "attack": 7.0389,
+     "decay": 6.5081,
+     "modulation": 2.1432
+    },
+    "regressions": [
+     "centroid 3.67->4.52"
+    ],
+    "per_condition_worst": [
+     6.528,
+     7.039,
+     6.251,
+     8.184,
+     7.376
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4356,
+    "ineligible": [
+     "centroid 3.67->4.52"
+    ]
+   },
+   {
+    "label": "X slow400ms@-12dB",
+    "cand": {
+     "family": "X",
+     "tau_ms": 400,
+     "db": -12.0
+    },
+    "objective": 16.0603,
+    "median_ratios": {
+     "spec": 8.9379,
+     "spec_peak": 1.9886,
+     "centroid": 5.7025,
+     "flatness": 2.9838,
+     "impulse": 0.8626,
+     "attack": 6.509,
+     "decay": 16.0603,
+     "modulation": 2.4374
+    },
+    "regressions": [
+     "spec 2.44->8.94",
+     "centroid 3.67->5.70",
+     "modulation 2.01->2.44"
+    ],
+    "per_condition_worst": [
+     15.283,
+     15.411,
+     16.159,
+     16.06,
+     16.528
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4599,
+    "ineligible": [
+     "spec 2.44->8.94",
+     "centroid 3.67->5.70",
+     "modulation 2.01->2.44",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "X slow400ms@-17dB",
+    "cand": {
+     "family": "X",
+     "tau_ms": 400,
+     "db": -17.0
+    },
+    "objective": 11.8078,
+    "median_ratios": {
+     "spec": 5.3929,
+     "spec_peak": 1.8068,
+     "centroid": 5.341,
+     "flatness": 2.3629,
+     "impulse": 0.9073,
+     "attack": 6.7741,
+     "decay": 11.8078,
+     "modulation": 2.257
+    },
+    "regressions": [
+     "spec 2.44->5.39",
+     "centroid 3.67->5.34"
+    ],
+    "per_condition_worst": [
+     11.49,
+     11.539,
+     11.911,
+     11.808,
+     12.297
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 0,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4445,
+    "ineligible": [
+     "spec 2.44->5.39",
+     "centroid 3.67->5.34",
+     "d12a decay 0 < 5"
+    ]
+   },
+   {
+    "label": "X slow400ms@-22dB",
+    "cand": {
+     "family": "X",
+     "tau_ms": 400,
+     "db": -22.0
+    },
+    "objective": 8.2959,
+    "median_ratios": {
+     "spec": 3.6831,
+     "spec_peak": 1.7608,
+     "centroid": 4.908,
+     "flatness": 2.179,
+     "impulse": 0.9223,
+     "attack": 7.0287,
+     "decay": 8.2959,
+     "modulation": 2.1519
+    },
+    "regressions": [
+     "spec 2.44->3.68",
+     "centroid 3.67->4.91"
+    ],
+    "per_condition_worst": [
+     8.43,
+     8.296,
+     8.151,
+     8.115,
+     8.92
+    ],
+    "d12a": {
+     "ratio_pass": 5,
+     "decay_pass": 5,
+     "n": 5
+    },
+    "rail_acc2": 0,
+    "peak_acc2": 0.4359,
+    "ineligible": [
+     "spec 2.44->3.68",
+     "centroid 3.67->4.91"
+    ]
+   }
+  ],
+  "selected": null
+ }
+}

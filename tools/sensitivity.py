@@ -241,7 +241,11 @@ def shipped_value(rec: dict, root: Path = ROOT, overrides: dict | None = None) -
 
 
 def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
-    """The parameter's value at a git ref, or None if the file is not there."""
+    """The parameter's value at a git ref, or None if it did not exist there:
+    the file is absent, or the file is there and declares the parameter ZERO
+    times (#559: a parameter registered in the same change that introduces its
+    constant, which REFUSED every PR that did so). Two or more declarations
+    still refuse -- that is ambiguity, not absence."""
     p = rec["parameter"]
     r = subprocess.run(["git", "show", f"{ref}:{p['source']}"],
                        cwd=root, capture_output=True, text=True)
@@ -249,8 +253,11 @@ def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
         if "exists on disk, but not in" in r.stderr or "does not exist" in r.stderr:
             return None
         raise Refused(f"cannot read {p['source']} at {ref}: {r.stderr.strip()}")
-    return parse_parameter(r.stdout, p["name"], f"{p['source']}@{ref}",
-                           p.get("kind", "verilog-parameter"))
+    kind = p.get("kind", "verilog-parameter")
+    if kind in KIND_PATTERN and not re.findall(KIND_PATTERN[kind].format(name=re.escape(p["name"])),
+                                               r.stdout, re.MULTILINE):
+        return None
+    return parse_parameter(r.stdout, p["name"], f"{p['source']}@{ref}", kind)
 
 
 # --------------------------------------------------------------------------
@@ -441,7 +448,14 @@ def run_check(root: Path = ROOT, changed_since: str | None = None,
     if changed_since is not None:
         for rec, row in zip(records, rows):
             was = value_at_ref(rec, changed_since, root)
-            if was is None or was == row["ships"]:
+            if was is None:
+                # Said out loud, because a RENAMED constant reads the same way:
+                # a value change hidden by a rename is not priced, only shown.
+                print(f"NEW {row['id']}: {rec['parameter']['name']} is not declared in "
+                      f"{rec['parameter']['source']} at {changed_since}, so there is no move to "
+                      f"price (a rename also reads this way -- check the diff)", file=out)
+                continue
+            if was == row["ships"]:
                 continue
             name = rec["parameter"]["name"]
             if not row["ships_on_grid"]:
