@@ -87,7 +87,7 @@ Every (render x 16 modes) cell ends as exactly one status, and `reconcile` asser
   - all of these reach the body bus.
 - **Tap-only modes** (RS 14/15, CL 15, `amp = 0`): state residual only. The bus residual is REFUSED, because the
   path to the bus is a nonlinear VCA.
-- **Always-driven filters** (modes 0, 4, 5, 6): the squares and noise never stop, so there is no free tail. These
+- **Always-driven filters** (modes 0, 4 and 6, the hat, clap and cymbal band-passes, in every sound): the squares and noise never stop, so there is no free tail. These
   are REFUSED in every render, and they are visible in the tables, not dropped.
 - **NO-TAIL** is the SD noise filter and the non-modal voices whose float state is under 1 LSB when the drive stops.
 
