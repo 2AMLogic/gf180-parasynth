@@ -51,8 +51,7 @@ it as unknown, not as a no.
 
 The two private copies are the same shape as this issue in a second form: a
 function copied as "identical on both sides" that stopped being identical to
-the one it copied when #132 changed the original. They are filed separately
-(see the PR for #163).
+the one it copied when #132 changed the original. Filed as #636.
 
 ## Everything else the search matched
 
@@ -114,4 +113,4 @@ effect on a known-answer fixture: a constant 1.0e-4 of peak, worth at most
 0.22 % of any metric's tolerance (CH band energy, 0.0066 dB of 3.0 dB). That is
 small on that fixture. It has not been measured on the real references, whose
 converter offset is 0.1 to 0.4 % of peak, so it is an open item and not a
-clearance. It is filed separately.
+clearance. Filed as #637.
