@@ -89,7 +89,7 @@ OUT_BASE = ROOT / "build" / "trials"
 # cannot be re-derived and are refused.
 RECEIPT_SCHEMA = "trial-receipt/2"
 # The keys of a child's spec that its interpreter reads; recorded in the receipt.
-INTERPRETER_KEYS = ("interpret", "token_prefix", "fixtures", "rtl_reuse")
+INTERPRETER_KEYS = ("interpret", "token_prefix", "fixtures", "rtl_reuse", "image_id")
 REUSE_FLAG = "--reuse-rtl-if-identical"
 
 
@@ -544,6 +544,13 @@ def interpret_physical_capture_record(spec, run, out, role):
         return _result(NO_VERDICT, [err], caught=nv_caught)
     verdict = rec.get("verdict")
     takes = rec.get("takes") or []
+    want_img = spec.get("image_id")
+    if want_img and rec.get("image_id") != want_img:
+        # a record of the OTHER image (or of none) answers a different
+        # question: never this mode's PASS, FAIL or anything else (#324)
+        return _result(NO_VERDICT, [f"the record is for image {rec.get('image_id')!r}, this mode "
+                                    f"asks about {want_img!r}"], caught=nv_caught,
+                       metrics={"image_id": rec.get("image_id")})
     have = {}
     for t in takes:
         have[t.get("command_id")] = have.get(t.get("command_id"), 0) + 1
@@ -603,6 +610,34 @@ def interpret_capture_controls_record(spec, run, out, role):
     return _result(FAIL if caught else NO_VERDICT, reasons, metrics=metrics, caught=caught, **cov)
 
 
+def interpret_cross_image_record(spec, run, out, role):
+    """tools/r0_capture.py cross-image-controls writes <out>/cross-image.json:
+    material of the OTHER image presented to this image's capture procedure,
+    each case REFUSED for its declared cause (labels alone do not pass). Caught
+    only with every case that ran as declared, at least one refusal case, the
+    record naming this mode's image, and exit 0. What could not run is carried
+    in the metrics (`not_run`), never counted as caught."""
+    rec, err = _load_json(out / "cross-image.json")
+    if rec is None:
+        return _result(NO_VERDICT, [err], caught=False if role == "control" else None)
+    cases = rec.get("cases") or {}
+    metrics = {"image": rec.get("image"), "not_run": rec.get("not_run"),
+               "cases": {k: v.get("outcome") for k, v in cases.items()}}
+    cov = dict(expected={"image": spec.get("image_id"), "cases": ">0 refusals"},
+               observed={"image": rec.get("image"), "cases": len(cases)})
+    caught = (bool(rec.get("all_caught")) and run["rc"] == 0 and bool(cases)
+              and rec.get("image") == spec.get("image_id")
+              and any(c.get("expect") == "REFUSED" for c in cases.values()))
+    missed = [f"{k}: {v.get('outcome')}" for k, v in cases.items() if not v.get("caught")]
+    reasons = ([f"every cross-image case REFUSED for its declared cause "
+                f"({len(cases)} ran; not run: {sorted(rec.get('not_run') or {})})"] if caught else
+               [f"NOT caught (exit {run['rc']}, image {rec.get('image')!r})"] + missed)
+    if role != "control":
+        return _result(NO_VERDICT, ["a controls record is not a product verdict"] + reasons,
+                       metrics=metrics, **cov)
+    return _result(FAIL if caught else NO_VERDICT, reasons, metrics=metrics, caught=caught, **cov)
+
+
 INTERPRETERS = {
     "live_midi_record": interpret_live_midi_record,
     "deadline_record": interpret_deadline_record,
@@ -611,6 +646,7 @@ INTERPRETERS = {
     "held_note_record": interpret_held_note_record,
     "physical_capture_record": interpret_physical_capture_record,
     "capture_controls_record": interpret_capture_controls_record,
+    "cross_image_record": interpret_cross_image_record,
 }
 
 

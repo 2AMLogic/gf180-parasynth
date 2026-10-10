@@ -4,6 +4,12 @@
     python tools/r0_capture.py analyse  --bundle captures/r0 [--out DIR]
     python tools/r0_capture.py synth    --out DIR [--defect NAME]      # a synthetic session
     python tools/r0_capture.py controls --out DIR [--analyser stub]    # every defect, one matrix
+    python tools/r0_capture.py cross-image-controls --out DIR          # R0 <-> R1 must REFUSE
+
+    # R1 (#324): every subcommand takes --image r1 (default r0). The R1 procedure is
+    # docs/capture-r1.md; its bundle is R1_CAPTURE_BUNDLE (default captures/r1), its
+    # references fpga/release/evidence/r1-reference, its manifest fpga/release/r1-2025.1.json.
+    python tools/r0_capture.py analyse --image r1 --bundle captures/r1
 
 The operator procedure is docs/capture-r0.md. The reference is
 fpga/release/evidence/r0-reference/ (tools/r0_reference.py: the published
@@ -63,9 +69,36 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import r0_reference as rr                                     # noqa: E402
 
-REFERENCES = ROOT / "fpga" / "release" / "evidence" / "r0-reference"
+REFERENCES = rr.IMAGES["r0"]["refdir"]
 DEFAULT_BUNDLE = ROOT / "captures" / "r0"
 SESSION_SCHEMA = "r0-capture-session/1"
+# One session schema per image: an R0 session file is not an R1 one by shape.
+SESSION_SCHEMAS = {"r0": SESSION_SCHEMA, "r1": "r1-capture-session/1"}
+BUNDLE_ENV = {"r0": "R0_CAPTURE_BUNDLE", "r1": "R1_CAPTURE_BUNDLE"}
+BUNDLE_DIR = {"r0": "r0", "r1": "r1"}
+# What each image's step-5 manifest check prints (fpga/release/release_manifest.py,
+# fpga/release/r1_release.py): the transcript's first block must be THIS one.
+MANIFEST_CHECK = {"r0": "release_manifest: BOUND", "r1": "r1_release: BOUND"}
+PROCEDURE_DOC = {"r0": "docs/capture-r0.md", "r1": "docs/capture-r1.md"}
+
+
+def default_bundle(image: str = "r0") -> pathlib.Path:
+    """The bundle directory for an image: ITS environment variable, else ITS
+    default. The variables are separate on purpose: an R0 bundle exported for
+    R0 must never become the R1 bundle."""
+    return pathlib.Path(os.environ.get(BUNDLE_ENV[image], ROOT / "captures" / BUNDLE_DIR[image]))
+
+
+def resolve_image(image, manifest_path, refdir) -> tuple:
+    """(manifest, refdir) for a request. The manifest DECLARES its image; an
+    explicit `image` that disagrees REFUSES (a caller's label is not a
+    binding). The default references are the declared image's own."""
+    path = manifest_path if manifest_path is not None else rr.IMAGES[image or "r0"]["manifest"]
+    manifest = rr.load_manifest(path)
+    if image is not None and manifest["image_id"] != image:
+        raise Refused(f"image {image} was requested but the manifest {path} declares "
+                      f"image {manifest['image_id']}")
+    return manifest, (refdir if refdir is not None else rr.IMAGES[manifest["image_id"]]["refdir"])
 RECORD_SCHEMA = "r0-capture-analysis/1"
 SR = 48000
 PASS, FAIL, REFUSED = "PASS", "FAIL", "REFUSED"
@@ -434,7 +467,8 @@ def programming_attempts(text: str) -> list:
     return out
 
 
-def transcript_problems(text: str, bitstream_sha256: str, *, synthetic_ok=False) -> list:
+def transcript_problems(text: str, bitstream_sha256: str, *, synthetic_ok=False,
+                        manifest: dict | None = None) -> list:
     """docs/capture-r0.md step 5, read as COMMAND BLOCKS -- each result bound
     to its own command, never a tail or a count of `exit 0` lines (#299 B1,
     then C1: a failed programmer followed by a stray `exit 0` was accepted).
@@ -454,6 +488,9 @@ def transcript_problems(text: str, bitstream_sha256: str, *, synthetic_ok=False)
     Refused: no attempt; a block that is not a complete attempt (a bare
     `exit 0`, a manifest re-run, an attempt without the image digest or the
     programmer line); lines after the last exit (truncated); SYNTHETIC."""
+    iid = (manifest or {}).get("image_id", "r0")
+    label = (manifest or {}).get("label", "R0")
+    check_line = MANIFEST_CHECK[iid]
     probs = []
     if not synthetic_ok and "SYNTHETIC" in text:
         probs.append("program transcript is SYNTHETIC: no board was programmed")
@@ -464,17 +501,18 @@ def transcript_problems(text: str, bitstream_sha256: str, *, synthetic_ok=False)
     if not blocks:
         return probs + ["program transcript: no command block (no `exit N` line)"]
     m_lines, m_exit = blocks[0]
-    if not any(ln.startswith("release_manifest: BOUND") for ln in m_lines):
-        probs.append("program transcript: the first block is not `release_manifest: BOUND`")
+    if not any(ln.startswith(check_line) for ln in m_lines):
+        probs.append(f"program transcript: the first block is not `{check_line}` "
+                     f"({label}'s manifest check)")
     if m_exit != 0:
-        probs.append(f"program transcript: release_manifest exited {m_exit}, not 0")
+        probs.append(f"program transcript: the manifest check exited {m_exit}, not 0")
     if len(blocks) < 2:
         return probs + ["program transcript: no openFPGALoader programming attempt"]
     for i, (lines, code) in enumerate(blocks[1:]):
         shas = [j for j, ln in enumerate(lines) if _SHA_LINE.match(ln)]
         ver = [j for j, ln in enumerate(lines) if ln.startswith("openFPGALoader v")]
         what = f"block {i + 2} (exit {code})"
-        if any(ln.startswith("release_manifest:") for ln in lines):
+        if any(ln.startswith(("release_manifest:", "r1_release:")) for ln in lines):
             probs.append(f"program transcript: {what} re-runs the manifest check")
         if not ver:
             probs.append(f"program transcript: {what} is not a programming attempt (no "
@@ -487,7 +525,7 @@ def transcript_problems(text: str, bitstream_sha256: str, *, synthetic_ok=False)
             continue
         dig = _SHA_LINE.match(lines[shas[0]]).group(1)
         if dig != bitstream_sha256:
-            probs.append(f"program transcript: {what}: arty.bit hashes {dig[:12]}, not R0's "
+            probs.append(f"program transcript: {what}: arty.bit hashes {dig[:12]}, not {label}'s "
                          f"{bitstream_sha256[:12]}")
         if shas[0] > ver[0]:
             probs.append(f"program transcript: {what}: the shasum line follows the programmer")
@@ -548,8 +586,14 @@ def host_log_problems(plan) -> list:
 def check_session(bundle: pathlib.Path, s: dict, manifest: dict, *,
                   synthetic_ok: bool = False) -> list:
     probs = []
-    if s.get("schema") != SESSION_SCHEMA:
-        probs.append(f"session schema {s.get('schema')!r} is not {SESSION_SCHEMA}")
+    iid, label = manifest["image_id"], manifest["label"]
+    if s.get("schema") != SESSION_SCHEMAS[iid]:
+        probs.append(f"session schema {s.get('schema')!r} is not {label}'s "
+                     f"{SESSION_SCHEMAS[iid]}")
+    sid = s.get("image_id", "r0" if s.get("schema") == SESSION_SCHEMA else None)
+    if sid != iid:
+        probs.append(f"session.image_id {sid!r} is not {label}'s ({iid!r}): this is not a "
+                     f"{label} capture session")
     for sec, keys in SESSION_REQUIRED.items():
         d = s.get(sec)
         if not isinstance(d, dict):
@@ -562,13 +606,13 @@ def check_session(bundle: pathlib.Path, s: dict, manifest: dict, *,
     want = manifest["image"]["bitstream_sha256"]
     if img.get("bitstream_sha256") and img["bitstream_sha256"] != want:
         probs.append(f"session.image.bitstream_sha256 {img['bitstream_sha256'][:12]} is not "
-                     f"R0's {want[:12]}")
+                     f"{label}'s {want[:12]}")
     t = img.get("program_transcript")
     if t and not ((bundle / t).is_file() and (bundle / t).stat().st_size > 0):
         probs.append(f"programming transcript {t} missing or empty")
     elif t:
         probs += transcript_problems((bundle / t).read_text(errors="replace"), want,
-                                     synthetic_ok=synthetic_ok)
+                                     synthetic_ok=synthetic_ok, manifest=manifest)
     if img.get("readback") is True:
         probs.append("session.image.readback is true, but the procedure has no readback step: "
                      "a programming transcript is not a readback")
@@ -614,7 +658,7 @@ def check_session(bundle: pathlib.Path, s: dict, manifest: dict, *,
             probs.append(f"take id {tk.get('id')!r} repeated")
         ids.add(tk.get("id"))
         if tk.get("command_id") not in known:
-            probs.append(f"take {tk.get('id')}: command {tk.get('command_id')!r} is not an R0 "
+            probs.append(f"take {tk.get('id')}: command {tk.get('command_id')!r} is not an {label} "
                          f"release command (known: {sorted(known)})")
         if tk.get("command_id") not in (None, "silence") and not tk.get("host_capture"):
             probs.append(f"take {tk.get('id')}: host_capture missing (uart_host --capture)")
@@ -1030,8 +1074,9 @@ def _pitch(take, x_raw, A_raw, d, rho, M, F, sr=SR):
                               "clock ratio")
 
 
-def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
-            manifest_path=rr.MANIFEST, *, allow_synthetic: bool = False) -> dict:
+def analyse(bundle: pathlib.Path, refdir: pathlib.Path | None = None,
+            manifest_path=None, *, allow_synthetic: bool = False,
+            image: str | None = None) -> dict:
     """The whole session -> a record with verdict PASS / FAIL / REFUSED.
 
     `allow_synthetic` is for the synthetic-defect controls and the tests
@@ -1039,15 +1084,19 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
     session is REFUSED as a physical capture (#299 B1: `synth` output placed
     where the operator's bundle goes had made T-PHYSICAL PASS, exit 0)."""
     rec = {"schema": RECORD_SCHEMA, "criterion": CRITERION, "limits": LIMITS,
+           "image_id": image or "r0",
            "bundle": str(bundle), "references": str(refdir), "inputs_sha256": {},
            "verdict": REFUSED, "reasons": [], "takes": [], "properties": {}}
     try:
-        manifest = rr.load_manifest(manifest_path)
+        manifest, refdir = resolve_image(image, manifest_path, refdir)
+        rec["image_id"] = manifest["image_id"]
+        rec["references"] = str(refdir)
+        rec["manifest_sha256"] = manifest["manifest_sha256"]
         sp = bundle / "session.json"
         if not sp.is_file():
             rec["operator_blocked"] = True
             raise Refused(f"operator-blocked: no capture session at {sp} (the rig has not "
-                          "been recorded; docs/capture-r0.md)")
+                          f"been recorded; {PROCEDURE_DOC[manifest['image_id']]})")
         try:
             s = json.loads(sp.read_text())
         except ValueError as exc:
@@ -1074,7 +1123,7 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
         seen_logs = {}
         dt = s.get("detect_transcript", "detect.txt")
         rec["inputs_sha256"][dt] = sha256_file(bundle / dt)
-        for cmd in sorted({tk["command_id"] for tk in takes} - {"silence"}):
+        for cmd in sorted({tk["command_id"] for tk in takes}):
             bad = rr.reference_problems(refdir, cmd, manifest)
             if bad:
                 raise Refused("the reference is not the release's: " + "; ".join(bad))
@@ -1211,7 +1260,8 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
             structured[prop] = {"verdict": props[prop], "evaluated_on": on,
                                 "not_evaluated_on": off}
         structured["channel-identity"]["why"] = (
-            "R0 is dual-mono (rtl-sketch/i2s_tx.v sends one sample on both channels); a "
+            f"{manifest['label']} is dual-mono (rtl-sketch/i2s_tx.v sends one sample on both "
+            "channels); a "
             "left/right swap cannot be seen in the audio")
         props = structured
         rec["properties"] = props
@@ -1265,6 +1315,10 @@ SYNTH_TAKES = (("silence-1", "silence"), ("demo-1", "demo"), ("tone-1", "held-m5
                ("pulse-1", "held-m5a-pulse"), ("held-1", "held-default"),
                ("phrase-1", "phrase-m5a"), ("drums-1", "bar808-full"), ("demo-2", "demo"),
                ("held-2", "held-default"))
+# R1 has no `play --fixture m5a` (it sends no patch image; fpga/release/R1.md):
+# the same phrase is the pinned `run --note 45 --fixture m5a`, command `run-m5a`.
+IMAGE_TAKES = {"r0": SYNTH_TAKES,
+               "r1": tuple((t, "run-m5a" if c == "phrase-m5a" else c) for t, c in SYNTH_TAKES)}
 # defect -> (the property that must FAIL, the take it is applied to)
 DEFECTS = {
     "delay-slip": ("timing", "demo-2"),
@@ -1358,9 +1412,11 @@ def write_capture_wav(path, y: np.ndarray, sr=SR) -> None:
         w.writeframes(b)
 
 
-def synth_session(out: pathlib.Path, *, refdir=REFERENCES, defect=None, seed=1,
-                  takes=SYNTH_TAKES, manifest_path=rr.MANIFEST) -> pathlib.Path:
-    manifest = rr.load_manifest(manifest_path)
+def synth_session(out: pathlib.Path, *, refdir=None, defect=None, seed=1,
+                  takes=None, manifest_path=None, image=None) -> pathlib.Path:
+    manifest, refdir = resolve_image(image, manifest_path, refdir)
+    iid = manifest["image_id"]
+    takes = takes if takes is not None else IMAGE_TAKES[iid]
     out.mkdir(parents=True, exist_ok=True)
     (out / "takes").mkdir(exist_ok=True)
     (out / "host").mkdir(exist_ok=True)
@@ -1386,10 +1442,11 @@ def synth_session(out: pathlib.Path, *, refdir=REFERENCES, defect=None, seed=1,
     # and marked SYNTHETIC, which the real path refuses
     (out / "program.txt").write_text(
         "SYNTHETIC: no board was programmed\n"
-        "release_manifest: BOUND -- synthetic session\nexit 0\n"
+        f"{MANIFEST_CHECK[iid]} -- synthetic session\nexit 0\n"
         f"{manifest['image']['bitstream_sha256']}  {manifest['image']['bitstream']}\n"
         "openFPGALoader v0.0.0-synthetic\nSYNTHETIC: nothing was loaded\nexit 0\n")
-    s = {"schema": SESSION_SCHEMA, "synthetic": {"defect": defect, "seed": seed, **CLEAN},
+    s = {"schema": SESSION_SCHEMAS[iid], "image_id": iid,
+         "synthetic": {"defect": defect, "seed": seed, **CLEAN},
          "image": {"bitstream_sha256": manifest["image"]["bitstream_sha256"],
                    "programmer": "synthetic", "program_transcript": "program.txt",
                    "readback": False},
@@ -1397,7 +1454,9 @@ def synth_session(out: pathlib.Path, *, refdir=REFERENCES, defect=None, seed=1,
          "dac": {"model": "synthetic", "wiring": "synthetic"},
          "interface": {"model": "synthetic", "sample_rate": SR, "dac_channels": [3, 4],
                        "gain": "fixed", "processing": "none", "recorder": "synthetic"},
-         "calibration": {"take": "demo-1"}, "takes": tlist}
+         "calibration": {"take": ("demo-1" if any(t[0] == "demo-1" for t in takes) else
+                                  next(t[0] for t in takes if t[1] != "silence"))},
+         "takes": tlist}
     (out / "session.json").write_text(json.dumps(s, indent=1) + "\n")
     return out
 
@@ -1407,18 +1466,19 @@ PROCEDURE_TAKES = SYNTH_TAKES
 RECORDER = "sox -D -t coreaudio M4 -b 24 takes/<id>.wav trim 0 <seconds>"
 
 
-def new_session(bundle: pathlib.Path, manifest_path=rr.MANIFEST) -> pathlib.Path:
+def new_session(bundle: pathlib.Path, manifest_path=None, *, image=None) -> pathlib.Path:
     """The session.json skeleton the operator completes. Everything the
     procedure fixes is filled in; everything only the operator can know is
     left empty, and `analyse` REFUSES until it is filled."""
-    manifest = rr.load_manifest(manifest_path)
+    manifest, _ = resolve_image(image, manifest_path, None)
+    iid = manifest["image_id"]
     p = bundle / "session.json"
     if p.exists():
         raise Refused(f"{p} exists; a session is never overwritten")
     bundle.mkdir(parents=True, exist_ok=True)
     (bundle / "takes").mkdir(exist_ok=True)
     (bundle / "host").mkdir(exist_ok=True)
-    s = {"schema": SESSION_SCHEMA,
+    s = {"schema": SESSION_SCHEMAS[iid], "image_id": iid,
          "operator": "", "date": datetime.date.today().isoformat(),
          "image": {"bitstream_sha256": manifest["image"]["bitstream_sha256"],
                    "bitstream": manifest["image"]["bitstream"],
@@ -1441,12 +1501,12 @@ def new_session(bundle: pathlib.Path, manifest_path=rr.MANIFEST) -> pathlib.Path
                     "host_capture": None if cmd == "silence" else f"host/{tid}",
                     "command": (None if cmd == "silence" else
                                 manifest["commands"][cmd]["command"]),
-                    "started": ""} for tid, cmd in PROCEDURE_TAKES]}
+                    "started": ""} for tid, cmd in IMAGE_TAKES[iid]]}
     p.write_text(json.dumps(s, indent=1) + "\n")
     return p
 
 
-def stub_analyse(bundle, refdir=REFERENCES, manifest_path=rr.MANIFEST) -> dict:
+def stub_analyse(bundle, refdir=REFERENCES, manifest_path=None) -> dict:
     """The starting stub: right interface, no behaviour. Every control must be
     NOT caught against it (docs/verification-rules.md rule 1)."""
     return {"schema": RECORD_SCHEMA, "verdict": PASS, "reasons": [], "takes": [],
@@ -1458,19 +1518,21 @@ def _pv(v):
     return v.get("verdict") if isinstance(v, dict) else v
 
 
-def _run(analyser, bundle, refdir):
+def _run(analyser, bundle, refdir, image="r0"):
     if analyser is analyse:
-        return analyse(bundle, refdir, allow_synthetic=True)
+        return analyse(bundle, refdir, allow_synthetic=True, image=image)
     return analyser(bundle, refdir)
 
 
-def run_controls(out: pathlib.Path, *, refdir=REFERENCES, analyser=analyse,
-                 defects=None) -> dict:
+def run_controls(out: pathlib.Path, *, refdir=None, analyser=analyse,
+                 defects=None, image="r0") -> dict:
     """The clean synthetic session must PASS with its known answers recovered;
     each defect must FAIL with its own property among the failures; the swap
     must be reported, honestly, as unobservable (BLIND)."""
-    res = {"clean": None, "defects": {}, "matrix": {}}
-    clean = _run(analyser, synth_session(out / "clean", refdir=refdir), refdir)
+    res = {"clean": None, "defects": {}, "matrix": {}, "image": image}
+    refdir = refdir if refdir is not None else rr.IMAGES[image]["refdir"]
+    clean = _run(analyser, synth_session(out / "clean", refdir=refdir, image=image), refdir,
+                 image)
     # the known answers are REQUIRED: a clean run with no calibration record
     # (the stub's) recovered nothing and is not fine (#299 N1)
     ok_clean = clean["verdict"] == PASS and bool(clean.get("calibration"))
@@ -1485,7 +1547,8 @@ def run_controls(out: pathlib.Path, *, refdir=REFERENCES, analyser=analyse,
     all_ok = ok_clean
     for name in (defects or DEFECTS):
         prop, _ = DEFECTS[name]
-        r = _run(analyser, synth_session(out / name, refdir=refdir, defect=name), refdir)
+        r = _run(analyser, synth_session(out / name, refdir=refdir, defect=name, image=image),
+                 refdir, image)
         failed = {p for p, v in (r.get("properties") or {}).items() if _pv(v) == "FAIL"}
         res["matrix"][name] = {p: ("MOVED" if p in failed else "BLIND") for p in PROPERTIES}
         if prop is None:
@@ -1500,6 +1563,146 @@ def run_controls(out: pathlib.Path, *, refdir=REFERENCES, analyser=analyse,
                                 "reasons": r["reasons"][:4]}
         all_ok &= caught
     res["all_caught"] = bool(all_ok)
+    return res
+
+
+# ---- the cross-image controls (#324) --------------------------------------
+CROSS_TAKES = (("silence-1", "silence"), ("tone-1", "held-m5a-saw"))
+
+
+def relabel_reference_set(src: pathlib.Path, dst: pathlib.Path, manifest: dict) -> pathlib.Path:
+    """Copy a reference set and rewrite its LABELS -- schema, image id, release
+    and image identity -- to `manifest`'s image, leaving the measured content
+    (pinned command bytes, RTL source hashes, audio) as it was. This is the
+    input that defeats a check which only reads labels; the guards must refuse
+    it on the content."""
+    shutil.copytree(src, dst)
+    for f in sorted(dst.glob("*.json")):
+        if f.name.endswith(".plan.json"):
+            continue
+        rec = json.loads(f.read_text())
+        rec["schema"] = rr.IMAGES[manifest["image_id"]]["ref_schema"]
+        rec["image_id"] = manifest["image_id"]
+        if rec.get("command_id") != "silence":
+            rec["release"] = manifest["release"]
+            rec["image"] = {k: manifest["image"][k] for k in ("bitstream_sha256",
+                                                              "routed_dcp_sha256",
+                                                              "source_commit")}
+        f.write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n")
+    return dst
+
+
+def _have_set(d: pathlib.Path) -> bool:
+    return all((d / f"{k}.json").is_file() for k in ("silence", "held-m5a-saw"))
+
+
+def _case(expect, rec, needles, why):
+    """One control's outcome. `caught` needs the declared verdict AND a reason
+    that names the declared cause: a refusal for some other reason (an
+    unreadable file, a missing take) is not a catch."""
+    text = " ".join(rec["reasons"]) if rec.get("reasons") else ""
+    caught = rec["verdict"] == expect and all(any(n in text for n in alts) for alts in needles)
+    return {"expect": expect, "verdict": rec["verdict"], "caught": bool(caught),
+            "outcome": (f"{expect} as declared" if caught else f"NOT {expect} as declared"),
+            "reasons": rec["reasons"][:3], "why": why}
+
+
+def cross_image_controls(out: pathlib.Path, *, image: str = "r0") -> dict:
+    """The procedure for `image` must REFUSE material that belongs to the other
+    image, and the refusal must be for that reason. Cases (X = this image, Y =
+    the other):
+
+      other-references          Y's real reference set, X's session
+      other-labels              X's own bytes under Y's labels (a label check passes it)
+      other-labels-same-bytes   Y's real bytes under X's labels (a label check passes it)
+      other-session             a session stamped Y, X's procedure
+      other-transcript          X's session with Y's programming transcript
+      own-references-accepted   X's real set is accepted (the twin: the guard is not
+                                a refusal of everything)
+
+    A case that needs Y's or X's REAL reference set when none is committed is
+    listed under `not_run` with its reason, never silently counted as caught.
+    R1's set is rendered on the build box (docs/capture-r1.md)."""
+    out.mkdir(parents=True, exist_ok=True)
+    other = "r1" if image == "r0" else "r0"
+    mx = rr.load_manifest(rr.IMAGES[image]["manifest"])
+    my = rr.load_manifest(rr.IMAGES[other]["manifest"])
+    own, theirs = rr.IMAGES[image]["refdir"], rr.IMAGES[other]["refdir"]
+    audio = REFERENCES if _have_set(REFERENCES) else (own if _have_set(own) else theirs)
+    cases, not_run = {}, {}
+
+    def session_x(name, **kw):
+        return synth_session(out / name, refdir=audio, takes=CROSS_TAKES,
+                             manifest_path=rr.IMAGES[image]["manifest"], **kw)
+
+    def run(bundle, refs):
+        return analyse(bundle, refs, image=image, allow_synthetic=True)
+
+    # 1. the other image's real references
+    if _have_set(theirs):
+        cases["other-references"] = _case(REFUSED, run(session_x("c1"), theirs),
+                                          [["the reference is not the release's"],
+                                           ["rendered for bitstream", "schema"]],
+                                          f"{my['label']}'s reference set under the "
+                                          f"{mx['label']} procedure")
+    else:
+        not_run["other-references"] = f"no {my['label']} reference set is committed ({theirs})"
+    # 2. X's own bytes wearing Y's labels
+    if _have_set(own):
+        lab = relabel_reference_set(own, out / "labels-of-other", my)
+        cases["other-labels"] = _case(REFUSED, run(session_x("c2"), lab),
+                                      [["the reference is not the release's"],
+                                       ["schema", "image"]],
+                                      f"{mx['label']} bytes labelled {my['label']}")
+    else:
+        not_run["other-labels"] = f"no {mx['label']} reference set is committed ({own})"
+    # 3. Y's real bytes wearing X's labels
+    if _have_set(theirs):
+        lab = relabel_reference_set(theirs, out / "labels-of-this", mx)
+        cases["other-labels-same-bytes"] = _case(REFUSED, run(session_x("c3"), lab),
+                                                 [["the reference is not the release's"],
+                                                  ["bytes differ", "sources"]],
+                                                 f"{my['label']} bytes labelled {mx['label']}")
+    else:
+        not_run["other-labels-same-bytes"] = (f"no {my['label']} reference set is committed "
+                                              f"({theirs})")
+    # 4. a session of the other image
+    sy = synth_session(out / "c4", refdir=audio, takes=CROSS_TAKES,
+                       manifest_path=rr.IMAGES[other]["manifest"])
+    cases["other-session"] = _case(REFUSED, run(sy, audio if _have_set(audio) else own),
+                                   [["capture metadata incomplete"],
+                                    [f"{mx['label']}'s"]],
+                                   f"a {my['label']} session under the {mx['label']} procedure")
+    # 5. this image's session carrying the other image's programming transcript
+    sx = session_x("c5")
+    t_other = (f"{MANIFEST_CHECK[other]} -- control\nexit 0\n"
+               f"{my['image']['bitstream_sha256']}  {my['image']['bitstream']}\n"
+               "openFPGALoader v1.1.1\nDone\nexit 0\n")
+    (sx / "program.txt").write_text(t_other)
+    cases["other-transcript"] = _case(REFUSED, run(sx, audio if _have_set(audio) else own),
+                                      [["program transcript"], [f"not {mx['label']}'s"]],
+                                      f"a {my['label']} programming transcript in a "
+                                      f"{mx['label']} session")
+    # 6. the twin: X's own set is accepted by the reference check
+    if _have_set(own):
+        probs = [w for k in [*mx["commands"], "silence"]
+                 for w in rr.reference_problems(own, k, mx)]
+        cases["own-references-accepted"] = {
+            "expect": "ACCEPTED", "verdict": "ACCEPTED" if not probs else REFUSED,
+            "caught": not probs, "outcome": ("ACCEPTED as declared" if not probs
+                                             else "NOT ACCEPTED"),
+            "reasons": probs[:3], "why": f"{mx['label']}'s own reference set"}
+    else:
+        not_run["own-references-accepted"] = f"no {mx['label']} reference set is committed ({own})"
+    refusals = [c for c in cases.values() if c["expect"] == REFUSED]
+    res = {"image": image, "cases": cases, "not_run": not_run,
+           "all_caught": bool(refusals) and all(c["caught"] for c in cases.values()),
+           "note": ("a case in not_run did NOT run; the control claims nothing about it"
+                    if not_run else "every case ran")}
+    shutil.rmtree(out / "labels-of-other", ignore_errors=True)
+    shutil.rmtree(out / "labels-of-this", ignore_errors=True)
+    for n in ("c1", "c2", "c3", "c4", "c5"):
+        shutil.rmtree(out / n, ignore_errors=True)
     return res
 
 
@@ -1519,26 +1722,36 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    img_kw = dict(choices=sorted(rr.IMAGES), default="r0",
+                  help="which published image's procedure (default r0)")
     a1 = sub.add_parser("analyse")
-    a1.add_argument("--bundle", type=pathlib.Path,
-                    default=pathlib.Path(os.environ.get("R0_CAPTURE_BUNDLE", DEFAULT_BUNDLE)))
-    a1.add_argument("--references", type=pathlib.Path, default=REFERENCES)
+    a1.add_argument("--image", **img_kw)
+    a1.add_argument("--bundle", type=pathlib.Path, default=None,
+                    help="default: R0_CAPTURE_BUNDLE / R1_CAPTURE_BUNDLE, else captures/r0 / r1")
+    a1.add_argument("--references", type=pathlib.Path, default=None)
     a1.add_argument("--out", type=pathlib.Path, default=None)
     a2 = sub.add_parser("synth")
+    a2.add_argument("--image", **img_kw)
     a2.add_argument("--out", type=pathlib.Path, required=True)
     a2.add_argument("--defect", choices=sorted(DEFECTS), default=None)
-    a2.add_argument("--references", type=pathlib.Path, default=REFERENCES)
+    a2.add_argument("--references", type=pathlib.Path, default=None)
     a4 = sub.add_parser("new-session")
-    a4.add_argument("--bundle", type=pathlib.Path,
-                    default=pathlib.Path(os.environ.get("R0_CAPTURE_BUNDLE", DEFAULT_BUNDLE)))
+    a4.add_argument("--image", **img_kw)
+    a4.add_argument("--bundle", type=pathlib.Path, default=None)
     a3 = sub.add_parser("controls")
+    a3.add_argument("--image", **img_kw)
     a3.add_argument("--out", type=pathlib.Path, required=True)
-    a3.add_argument("--references", type=pathlib.Path, default=REFERENCES)
+    a3.add_argument("--references", type=pathlib.Path, default=None)
     a3.add_argument("--analyser", choices=("real", "stub"), default="real")
+    a5 = sub.add_parser("cross-image-controls")
+    a5.add_argument("--image", **img_kw)
+    a5.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
+    if getattr(a, "bundle", None) is None and hasattr(a, "bundle"):
+        a.bundle = default_bundle(a.image)
     if a.cmd == "new-session":
         try:
-            p = new_session(a.bundle)
+            p = new_session(a.bundle, image=a.image)
         except Refused as exc:
             print(f"r0_capture: REFUSED -- {exc}")
             return 2
@@ -1546,13 +1759,25 @@ def main(argv=None) -> int:
               "and board.power (analyse refuses until they are filled)")
         return 0
     if a.cmd == "synth":
-        p = synth_session(a.out, refdir=a.references, defect=a.defect)
-        print(f"r0_capture: synthetic session ({a.defect or 'clean'}) at {p}")
+        p = synth_session(a.out, refdir=a.references, defect=a.defect, image=a.image)
+        print(f"r0_capture: synthetic {a.image.upper()} session ({a.defect or 'clean'}) at {p}")
         return 0
+    if a.cmd == "cross-image-controls":
+        a.out.mkdir(parents=True, exist_ok=True)
+        res = cross_image_controls(a.out / "sessions", image=a.image)
+        (a.out / "cross-image.json").write_text(json.dumps(res, indent=1, default=str) + "\n")
+        shutil.rmtree(a.out / "sessions", ignore_errors=True)
+        for name, c in res["cases"].items():
+            print(f"  {name:<26} {c['outcome']:<28} ({c['why']}) {c['reasons'][:1]}")
+        for name, why in res["not_run"].items():
+            print(f"  {name:<26} NOT RUN -- {why}")
+        print(f"r0_capture cross-image-controls ({a.image}): "
+              + ("ALL CAUGHT" if res["all_caught"] else "NOT ALL CAUGHT"))
+        return 0 if res["all_caught"] else 1
     if a.cmd == "controls":
         a.out.mkdir(parents=True, exist_ok=True)
         try:
-            res = run_controls(a.out / "sessions", refdir=a.references,
+            res = run_controls(a.out / "sessions", refdir=a.references, image=a.image,
                                analyser=stub_analyse if a.analyser == "stub" else analyse)
         except Refused as exc:
             res = {"all_caught": False, "refused": str(exc)}
@@ -1573,6 +1798,7 @@ def main(argv=None) -> int:
         try:
             out.mkdir(parents=True, exist_ok=True)
             _write_atomic(dest, {"schema": RECORD_SCHEMA, "verdict": ERROR,
+                                 "image_id": a.image,
                                  "reasons": ["in progress: the analysis did not finish"],
                                  "started_at": datetime.datetime.now(
                                      datetime.timezone.utc).isoformat()})
@@ -1582,10 +1808,10 @@ def main(argv=None) -> int:
                   f"{dest}: {type(exc).__name__}: {exc}")
             return 3
     try:
-        rec = analyse(a.bundle, a.references)
+        rec = analyse(a.bundle, a.references, image=a.image)
     except BaseException as exc:                     # noqa: BLE001 -- see ERROR
         import traceback
-        rec = {"schema": RECORD_SCHEMA, "verdict": ERROR,
+        rec = {"schema": RECORD_SCHEMA, "verdict": ERROR, "image_id": a.image,
                "reasons": [f"execution error (no verdict): {type(exc).__name__}: {exc}"],
                "traceback": traceback.format_exc().splitlines()[-20:]}
     rec["analysed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
