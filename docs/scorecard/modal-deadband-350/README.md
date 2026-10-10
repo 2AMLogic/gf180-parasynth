@@ -37,8 +37,10 @@ Files in this directory:
 
 `confirm.json` was produced by `--table confirm`, which **refuses** unless `freeze.json` is committed and still
 matches the thresholds, grids and the hashes of `modal_deadband.py`, `modal_fixed.py`, `drums_fx.py` and
-`run_case.py`. Git history carries the order: freeze `f5a0cdd`, dev `72a6b60`, confirm `044925d`. Nothing in the
-module changed after the freeze. A post-hoc edit to a threshold, a grid or the apparatus makes the confirmation
+`run_case.py`. Git history carries the order: freeze `f5a0cdd`, dev `72a6b60`, confirm `044925d`. **The module
+did change after the freeze** (`modal_deadband.py` is now `c650f71d…`, the freeze pins `97baa382…`: shadow hook,
+shadow guard, capture gates), so `--table confirm` currently refuses on this tree and the committed tables are
+provisional until regenerated (see "Records pending regeneration" below). A post-hoc edit to a threshold, a grid or the apparatus makes the confirmation
 command refuse (`test_confirmation_refuses_without_a_committed_matching_freeze`).
 
 ## The known answer (AC1)
