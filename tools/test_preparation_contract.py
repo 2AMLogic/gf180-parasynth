@@ -183,11 +183,13 @@ def test_an_unusable_sample_rate_is_refused(sr):
 
 def test_a_side_prepared_without_the_guaranteed_lead_is_refused():
     """(b) #101's exact values. The reference prepared the pre-#132 way keeps
-    0.16 ms of lead (7 samples at 44.1 kHz); our render, which begins in 10 ms
+    0.16 ms of lead (7 samples at 44.1 kHz, then the strike's zero first
+    sample); our render, which begins in 10 ms
     of silence, keeps 1.00 ms. Both are refused, and so is the pair."""
     ref_y = _prepare_pre_132(_reference(), 44100)
     ours_y = _prepare_pre_132(_ours(), 48000)
-    assert rc._onset_index(ref_y) == 7                          # 0.16 ms at 44.1 kHz
+    # 7 samples of silence (0.16 ms at 44.1 kHz) + the strike's own zero first sample
+    assert rc._onset_index(ref_y) == 8
     assert rc._onset_index(ours_y) == 48                        # 1.00 ms at 48 kHz
     with pytest.raises(pc.Refused) as e:
         pc.check_prepared_pair(Side("reference", ref_y, 44100), Side("ours", ours_y, 48000))
@@ -281,6 +283,14 @@ def test_the_refusal_is_run_case_refused():
     record (`run_case.run_one`, `score_drum_i2s.main`). A different exception
     type would surface as a traceback instead of a first-class outcome."""
     assert pc.Refused is rc.Refused
+
+
+def test_the_silence_floor_is_audio_measures():
+    """Restated in the contract to avoid an import-time dependency on
+    `model/`; pinned here so the two cannot drift."""
+    import inspect
+    from audio_measure import is_silent
+    assert inspect.signature(is_silent).parameters["floor"].default == pc.SILENCE_FLOOR
 
 
 # ===========================================================================
@@ -438,7 +448,6 @@ def test_the_boundary_control_turns_red_under_the_pre_132_clamp(monkeypatch):
     contract bypassed, the same trimmed/padded pair must exceed the bound --
     otherwise the bound above could not see the defect it exists for."""
     monkeypatch.setattr(rc, "prepare", lambda x, sr, *, side="": _prepare_pre_132(x, sr))
-    monkeypatch.setattr(rc, "assert_prepared_pair", lambda *a, **k: None, raising=False)
     monkeypatch.setattr(pc, "check_prepared_pair", lambda *a, **k: {})
     hit = _known_answer_hit()
     padded = np.concatenate([np.zeros(int(0.010 * SR)), hit])

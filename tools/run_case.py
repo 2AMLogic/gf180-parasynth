@@ -154,6 +154,7 @@ import refprofile as rp                                              # noqa: E40
 import mono_m5a_score as mono_m5a                                    # noqa: E402
 import provenance                                                    # noqa: E402
 import partial_trajectory as PT                                      # noqa: E402
+import preparation_contract as prep_contract                         # noqa: E402
 
 CASES_CSV = ROOT / "docs" / "scorecard" / "cases.csv"
 RESULTS = ROOT / "docs" / "scorecard" / "results"
@@ -1531,10 +1532,13 @@ def highpass(y, sr: int, hz: float, order: int = 4) -> np.ndarray:
 # go stale, and this one gained eight entries while this runner was being written.
 REF_MAIN = dv.REF_MAIN
 
-class Refused(Exception):
-    """A precondition of the apparatus failed. REFUSED is a first-class
-    outcome here, distinct from pass and from fail: the case is written as a
-    no-verdict carrying this reason, and never as a number."""
+#: A precondition of the apparatus failed. REFUSED is a first-class outcome
+#: here, distinct from pass and from fail: the case is written as a no-verdict
+#: carrying this reason, and never as a number. Defined in
+#: `preparation_contract` (#163) so that the pair-site contract raises THIS
+#: class, which every caller of `drum_measurements` already turns into a
+#: REFUSED record; `rc.Refused` is the same object it always was to them.
+Refused = prep_contract.Refused
 
 
 def load_reference(voice: str, refdir: pathlib.Path, inject: str = "") -> tuple:
@@ -3619,6 +3623,16 @@ def drum_measurements(voice: str, ours_x, ours_sr: int, ref_x, ref_sr: int,
     # was need opposite responses.
     ref_y = prepare(ref_x, ref_sr, side=f"the reference recording {rel}")
     ours_y = prepare(ours_x, ours_sr, side=f"our {voice} render")
+    # #163: the two calls above READ as symmetric, and #101, #160 F2 and #161
+    # were three comparisons that read exactly that way and were not. So the
+    # pair asserts the state `prepare` left both sides in -- rates windowed
+    # alike in samples, the guaranteed lead on each side, finite, not silent --
+    # and REFUSES, naming every violating field, before any metric runs. It
+    # compares apparatus state only: first sample, peak and length are the
+    # sounds' own and legitimately differ. tools/preparation_contract.py.
+    prep_contract.check_prepared_pair(
+        prep_contract.Side(f"the reference recording {rel}", ref_y, ref_sr),
+        prep_contract.Side(f"our {voice} render", ours_y, ours_sr))
     ref, ours = (ref_y, ref_sr), (ours_y, ours_sr)
     windowing = {"ours": lead_report(ours_x, ours_sr),
                  "reference": lead_report(ref_x, ref_sr)}
