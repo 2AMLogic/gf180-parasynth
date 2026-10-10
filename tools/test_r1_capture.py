@@ -524,3 +524,8 @@ def test_t_physical_cross_image_control_is_caught_through_the_trial(tmp_path):
     assert rec["execution"]["status"] == "complete", rec["execution"]
     assert rec["controls"][0]["caught"] is True, rec["controls"][0]["reasons"]
     assert rec["verdict"] == trial.NO_VERDICT          # never PASS before a capture exists
+    # the receipt re-derives from its own recorded evidence and interpreter spec: the
+    # image the control asks about must be IN that record (the 15-minute R0 trial test
+    # found it was not: caught True re-derived to caught False)
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
+    assert ok, problems

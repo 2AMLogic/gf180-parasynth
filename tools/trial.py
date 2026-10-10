@@ -89,7 +89,7 @@ OUT_BASE = ROOT / "build" / "trials"
 # cannot be re-derived and are refused.
 RECEIPT_SCHEMA = "trial-receipt/2"
 # The keys of a child's spec that its interpreter reads; recorded in the receipt.
-INTERPRETER_KEYS = ("interpret", "token_prefix", "fixtures", "rtl_reuse")
+INTERPRETER_KEYS = ("interpret", "token_prefix", "fixtures", "rtl_reuse", "image_id")
 REUSE_FLAG = "--reuse-rtl-if-identical"
 
 
