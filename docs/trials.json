@@ -946,7 +946,8 @@
     "rig": "Adafruit PCM5102 breakout (#6250) on Pmod JA -> MOTU M4 line inputs 3/4, 48 kHz, fixed gain, no processing",
     "reference": "fpga/release/evidence/r0-reference (tools/r0_reference.py: the image's RTL at its UART pins, driven by the release CLI's pinned bytes)",
     "procedure": "docs/capture-r0.md",
-    "bundle": "R0_CAPTURE_BUNDLE, default captures/r0: session.json, raw takes, host logs, programming transcript"
+    "bundle": "R0_CAPTURE_BUNDLE, default captures/r0: session.json, raw takes, host logs, programming transcript",
+   "r1": "mode capture-r1 asks the same question of the R1 image (fpga/release/r1-2025.1.json, bitstream 544499e2..., source commit 6864435, procedure docs/capture-r1.md, bundle R1_CAPTURE_BUNDLE default captures/r1, references fpga/release/evidence/r1-reference). The two modes refuse each other's references, sessions and transcripts"
    },
    "dag_nodes": ["I2"],
    "preservation": ["T-RELEASE-BOUND", "T-PLAY-DIGITAL"],
@@ -966,8 +967,9 @@
        "id": "r0-capture",
        "property": "the physical capture session, analysed against the R0 reference under the frozen declared alignment; NO VERDICT (operator-blocked) until the rig has been recorded",
        "checker": "tools/r0_capture.py",
-       "args": ["analyse", "--out", "{out}"],
+       "args": ["analyse", "--image", "r0", "--out", "{out}"],
        "interpret": "physical_capture_record",
+       "image_id": "r0",
        "fixtures": ["silence", "held-m5a-saw", "held-default", "bar808-full", "demo"]
       }
      ],
@@ -976,11 +978,58 @@
        "id": "synthetic-defects",
        "intended_reason": "synthetic sessions made from the R0 reference through a known analog path: the clean one PASSes with its injected delay, gain and clock recovered; a timing slip, a gain change, clock drift, noise, a dropout, clipping, stuck output, a pitch error and three routing faults (missing, inverted and foreign channel) each FAIL for their own property; a left/right swap is reported UNOBSERVABLE, because R0 is dual-mono",
        "checker": "tools/r0_capture.py",
-       "args": ["controls", "--out", "{out}"],
+       "args": ["controls", "--image", "r0", "--out", "{out}"],
        "interpret": "capture_controls_record"
+      },
+      {
+       "id": "cross-image-refusal",
+       "intended_reason": "material of the OTHER image presented to the R0 procedure is REFUSED for its declared cause, not scored: a session stamped R1, R0's bytes under R1's labels (a label-only check passes them), a programming transcript of R1's image. R1's reference set is not needed: the cases that would need it are listed as not run",
+       "checker": "tools/r0_capture.py",
+       "args": ["cross-image-controls", "--image", "r0", "--out", "{out}"],
+       "interpret": "cross_image_record",
+       "image_id": "r0"
       }
      ],
      "_controls": "The control needs no hardware, so it runs with or without a capture session. The required child is NO VERDICT (operator-blocked) until docs/capture-r0.md has been carried out, so the trial cannot PASS before then. --as-candidate is not meaningful here: the control is a suite, not one known-bad DUT."
+    },
+    "capture-r1": {
+     "timeout_s": 1800,
+     "tools": [],
+     "requires": [
+      "tools/r0_capture.py",
+      "tools/r0_reference.py",
+      "fpga/release/r1-2025.1.json",
+      "fpga/release/r1-candidate.json"
+     ],
+     "required": [
+      {
+       "id": "r1-capture",
+       "property": "the physical R1 capture session, analysed against the R1 reference (rendered from R1's frozen sources, bound to R1's manifest) under the frozen declared alignment; NO VERDICT (operator-blocked) until the rig has been recorded, and NO VERDICT for an R0 bundle or an R0 reference",
+       "checker": "tools/r0_capture.py",
+       "args": ["analyse", "--image", "r1", "--out", "{out}"],
+       "interpret": "physical_capture_record",
+       "image_id": "r1",
+       "fixtures": ["silence", "held-m5a-saw", "held-default", "bar808-full", "demo"]
+      }
+     ],
+     "controls": [
+      {
+       "id": "cross-image-refusal",
+       "intended_reason": "material of the OTHER image presented to the R1 procedure is REFUSED for its declared cause, not scored: R0's reference set, R0's bytes under R1's labels (a label-only check passes them), a session stamped R0, a programming transcript of R0's image",
+       "checker": "tools/r0_capture.py",
+       "args": ["cross-image-controls", "--image", "r1", "--out", "{out}"],
+       "interpret": "cross_image_record",
+       "image_id": "r1"
+      },
+      {
+       "id": "synthetic-defects",
+       "intended_reason": "as the R0 mode's, made from the R1 reference through the same known analog path. REFUSED (so NOT caught) until the R1 reference set has been rendered on the build box and committed (docs/capture-r1.md): the mode cannot PASS before then",
+       "checker": "tools/r0_capture.py",
+       "args": ["controls", "--image", "r1", "--out", "{out}"],
+       "interpret": "capture_controls_record"
+      }
+     ],
+     "_controls": "The cross-image control needs no hardware and no R1 reference set. The synthetic-defect control needs the R1 reference set (rendered on the build box); until it is committed that control is REFUSED and not caught, so this mode cannot PASS. The required child is NO VERDICT (operator-blocked) until docs/capture-r1.md has been carried out. The required child reads R1_CAPTURE_BUNDLE (default captures/r1), never R0_CAPTURE_BUNDLE."
     }
    }
   }

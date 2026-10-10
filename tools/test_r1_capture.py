@@ -287,16 +287,25 @@ def test_image_argument_must_agree_with_the_manifest(tmp_path):
 
 
 # ---- the controls: refusal is itself a tested outcome -------------------------
+CASES_RUN = {"r1": {"other-references", "other-labels-same-bytes", "other-session",
+                    "other-transcript"},
+             "r0": {"other-labels", "other-session", "other-transcript",
+                    "own-references-accepted"}}
+
+
 @pytest.mark.parametrize("image", ["r0", "r1"])
 def test_cross_image_controls_are_caught_for_each_procedure(tmp_path, image):
     res = rc.cross_image_controls(tmp_path, image=image)
     assert res["image"] == image
     assert res["all_caught"], json.dumps(res["cases"], indent=1)
-    names = set(res["cases"])
-    assert {"other-references", "other-labels-same-bytes", "other-session"} <= names
+    assert set(res["cases"]) >= CASES_RUN[image], (set(res["cases"]), res["not_run"])
     for name, c in res["cases"].items():
-        assert c["verdict"] == rc.REFUSED, (name, c)
-        assert c["caught"] and c["outcome"] == "REFUSED as declared", (name, c)
+        assert c["caught"], (name, c)
+        if c["expect"] == rc.REFUSED:
+            assert c["verdict"] == rc.REFUSED and c["outcome"] == "REFUSED as declared", (name, c)
+    # what could not run is SAID, not counted: R1's set is rendered on the build box
+    if image == "r1":
+        assert "own-references-accepted" in res["not_run"]
 
 
 def test_the_cross_image_control_can_fail_when_the_guard_is_weakened(tmp_path, monkeypatch):
@@ -462,19 +471,42 @@ def test_t_physical_r1_without_a_capture_is_operator_blocked(tmp_path, monkeypat
     assert "operator-blocked" in child["reasons"][0]
 
 
-def test_t_physical_r1_given_an_r0_bundle_is_no_verdict(tmp_path, monkeypatch):
+@pytest.fixture(scope="module")
+def r0_clean(tmp_path_factory):
+    return rc.synth_session(tmp_path_factory.mktemp("r0full") / "clean")
+
+
+def test_t_physical_r1_given_an_r0_bundle_is_no_verdict(r0_clean, tmp_path, monkeypatch):
+    """An R0 bundle that passes every R0 check (synthetic markers removed, a
+    good R0 transcript: the metadata of a real R0 capture) put where the R1
+    bundle goes. It must not be scored, and the reason must be the image --
+    not 'synthetic', which would be the right answer for the wrong reason."""
     import trial
-    d = _small_session(tmp_path, "r0s", "r0")
+    from test_r0_capture import _as_real
+    d = _as_real(r0_clean, tmp_path)
     child = _required_only(tmp_path, monkeypatch, "capture-r1", "R1_CAPTURE_BUNDLE", d)
     assert child["verdict"] == trial.NO_VERDICT
-    assert "R1" in child["reasons"][0]
+    assert "synthetic" not in child["reasons"][0]
+    assert "R1" in child["reasons"][0] and "capture metadata" in child["reasons"][0]
+    # and the same bundle, the R0 mode, gets past the metadata (twin: it is a good R0 bundle)
+    rec = rc.analyse(d, image="r0")
+    assert "capture metadata" not in " ".join(rec["reasons"]), rec["reasons"]
 
 
-def test_t_physical_r0_given_an_r1_bundle_is_no_verdict(tmp_path, monkeypatch):
+def test_t_physical_r0_given_an_r1_bundle_is_no_verdict(r0_clean, tmp_path, monkeypatch):
+    """The other direction: the same bundle re-stamped as R1's by every
+    session field (schema, image id, bitstream digest)."""
     import trial
-    d = _small_session(tmp_path, "r1s", "r1", refdir=R0_REFS)
+    from test_r0_capture import _as_real
+    d = _as_real(r0_clean, tmp_path)
+    p = d / "session.json"
+    s = json.loads(p.read_text())
+    s["schema"], s["image_id"] = rc.SESSION_SCHEMAS["r1"], "r1"
+    s["image"]["bitstream_sha256"] = R1_BITSTREAM
+    p.write_text(json.dumps(s))
     child = _required_only(tmp_path, monkeypatch, "capture", "R0_CAPTURE_BUNDLE", d)
     assert child["verdict"] == trial.NO_VERDICT
+    assert "capture metadata" in child["reasons"][0] and "R0" in child["reasons"][0]
 
 
 def test_t_physical_cross_image_control_is_caught_through_the_trial(tmp_path):

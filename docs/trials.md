@@ -130,7 +130,7 @@ Rules (amended after review, plan085 §3):
 | T-PULSE2X-IMAGE | Is a PULSE2X=1 image qualified (fit, timing, deadline, I²S)? | FAIL | #205 |
 | T-CLAP-L2 | Is D12A's late energy repaired in the shipping model and RTL? | in progress (#261 → D) | run_case D12A + model→RTL→I²S |
 | T-LIVE-MIDI | Does a MIDI controller drive the image with bounded latency and no stuck notes? | not started | new; sim first |
-| T-PHYSICAL | Does the board's line output match the digital prediction (gain, latency, noise, repeatability)? | registered; NO VERDICT (operator-blocked) until the rig is recorded | `tools/r0_capture.py` against `tools/r0_reference.py`; procedure `docs/capture-r0.md`; #208 |
+| T-PHYSICAL | Does the board's line output match the digital prediction (gain, latency, noise, repeatability)? | registered; NO VERDICT (operator-blocked) until the rig is recorded | `tools/r0_capture.py` against `tools/r0_reference.py`; procedure `docs/capture-r0.md`; #208. Mode `capture-r1` asks the same of the R1 image (`docs/capture-r1.md`, #324); the two modes refuse each other's references, sessions and transcripts, and R1 is NO VERDICT until its references are rendered and a bundle is recorded |
 | T-MEASURE-QUAL-* | A FAMILY of bounded tasks, one estimator each, starting with one qualified measurement and the known-unqualified clap timing; not a prerequisite for shipping L2 | NO VERDICT (#115) | known-answer suite per estimator |
 | T-BOARD-INTEGRITY | Is the scorecard internally consistent and bound to its records? | PASS | `tools/scorecard.py --check` |
 | T-BOARD-COVERAGE | How many cases have a valid measurement? (a count, not a pass) | 20 / 100 | scorecard |

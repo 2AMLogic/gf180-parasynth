@@ -145,7 +145,13 @@ jobs:
         run: python tools/trial_env.py bootstrap --no-toolchain
       - name: the committed R0 reference set is the release's
         run: python tools/r0_reference.py check fpga/release/evidence/r0-reference
+      - name: the shipped host emits R1's pinned command bytes under --image r1 (#324)
+        run: python tools/r0_reference.py --image r1 bytes
+      - name: R0 and R1 refuse each other's references, sessions and transcripts (#324)
+        run: |
+          python tools/r0_capture.py cross-image-controls --image r1 --out build/cross-r1
+          python tools/r0_capture.py cross-image-controls --image r0 --out build/cross-r0
       - name: capture analysis tests, and T-PHYSICAL end to end without a capture
         # the last test runs the registered trial through tools/trial.py and
         # asserts NO VERDICT (operator-blocked) with every synthetic defect caught
-        run: python -m pytest tools/test_r0_capture.py -q
+        run: python -m pytest tools/test_r0_capture.py tools/test_r1_capture.py -q
