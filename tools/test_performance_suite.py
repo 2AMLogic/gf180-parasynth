@@ -357,3 +357,23 @@ def test_unknown_event_kind_is_refused_not_judged_as_a_drum():
     bad = dataclasses.replace(ph, events=tuple(dataclasses.replace(e, kind="Note") for e in ph.events))
     with pytest.raises(ps.Refused, match="kinds"):
         ps.evaluate(x, bad)
+
+
+def test_model_render_cutoff_control_reaches_the_patch(monkeypatch):
+    """Wrong-then-right (#338): model_render passed cutoff=(fc, 20000); with
+    sustain 1.0 the filter envelope held 20000, so every commanded cutoff was
+    ignored and the automation check saw a flat centroid. Both ends must be the
+    commanded cutoff. Cheap: captures the patch, no render of consequence."""
+    import mono_artifact_probe as mp
+    seen = []
+    real = mp.held_patch
+
+    def spy(**kw):
+        seen.append(kw["cutoff"])
+        return real(**kw)
+
+    monkeypatch.setattr(mp, "held_patch", spy)
+    ph = ps.phrases()["mixed_automation"]
+    ps.model_render(dataclasses.replace(ph, duration_s=1.0, events=ph.events[:1], controls=ph.controls[:1]))
+    assert seen and all(lo == hi for lo, hi in seen), seen
+    assert seen[0][0] == ph.controls[0][2]
