@@ -423,7 +423,7 @@ def test_a_trimmed_and_a_padded_copy_of_one_hit_compare_as_identical(voice):
     when a record supplies 5 ms of pre-onset, so the padded side gets one and
     the trimmed side does not -- a constant 1.0e-4 of peak here. Worst effect
     over these four plans: CH band energy 0.0066 dB against 3.0 dB (0.22 %).
-    The reinstated pre-#132 clamp moves LC body spectrum 1.56 dB of 3.0 (52 %),
+    The reinstated pre-#132 clamp moves LC body spectrum 1.25 dB of 3.0 (42 %),
     which is the control below."""
     hit = _known_answer_hit()
     assert 0 < rc._onset_index(hit) < int(5e-3 * SR)            # real pre-onset samples
