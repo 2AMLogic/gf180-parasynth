@@ -11,6 +11,7 @@ Judge-approved PRs stuck under a `loom:operator` merge-risk hold — implementat
 - **#561**: gate-379: between-recording bar rule v2 (REFUSED, isolated), current-main ranking, controls
 - **#594**: fpga: refuse 'routed' from an incomplete nextpnr log (#565)
 - **#624**: Nightly controls: replace blind I2S_SWAP with discriminating serializer bench
+- **#633**: Replace unsatisfiable nightly reference-freshness check (#622)
 
 ## Operator Priority
 
@@ -25,6 +26,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
+- **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158)
 - **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
@@ -35,18 +37,13 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
-- **#152**: Residual drum DC coupling: qualify non-cymbal defects before proposing a repair
-- **#557**: [sound] BD: missing pitch drop (pitch_shape 22.2x; about 230 cents)
-- **#558**: [sound] toms and congas: pitch trajectory and strike impulse fail the gate (MC 19.4x, LC 16.4x, LT 14.8x, MT 10.5x, HC 8.7x, HT 8.0x)
-- **#609**: Test and inject-control tools/r1_harvest.py: the R1 receipt_valid verdict has no test
-- **#620**: Vacuous-pass guard audit: standing check for verdicts that pass on an empty population
+_None._
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
 - **#595**: [#559] CH/CP: CH hp-Q candidate PROVISIONAL (clean rerun pending, disabled); CP not repairable by tail tunables
-- **#628**: test: cover r1_harvest receipt_valid verdict with injected controls
 
 ## Approved (Awaiting Merge)
 
@@ -56,7 +53,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#561**: gate-379: between-recording bar rule v2 (REFUSED, isolated), current-main ranking, controls
 - **#594**: fpga: refuse 'routed' from an incomplete nextpnr log (#565)
 - **#624**: Nightly controls: replace blind I2S_SWAP with discriminating serializer bench
-- **#627**: tools: vacuous_guard_audit, a standing check for verdicts that pass on an empty population
+- **#633**: Replace unsatisfiable nightly reference-freshness check (#622)
 
 ## Proposed
 
@@ -96,15 +93,16 @@ Issues carrying `loom:curated`.
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate *(curated)*
 - **#565**: Refuse to report 'routed' from an incomplete nextpnr log (fpga/scripts/report.sh + fpga/Makefile) *(curated)*
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning *(curated)*
-- **#609**: Test and inject-control tools/r1_harvest.py: the R1 receipt_valid verdict has no test *(curated)*
+- **#622**: Nightly reference-freshness gate is unsatisfiable: tests a docs path that has never existed *(curated)*
+- **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
+- **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)*
 - **#599**: Single git-state reader: collapse ~20 private git() provenance helpers onto tools/provenance.py with one failure encoding *(architect)*
+- **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)*
 - **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(architect)*
 - **#629**: check_workflows.py: assert paths named in workflows and Makefiles exist (standing guard for the #622 class) *(architect)*
-- **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)*
-- **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)*
 
 ## Epics
 
@@ -115,13 +113,13 @@ Issues carrying `loom:curated`.
 
 | Tier | Count |
 |------|-------|
-| Operator merge-risk holds | 4 |
+| Operator merge-risk holds | 5 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 8 |
-| In Progress (`loom:building`) | 5 |
-| PRs awaiting review | 2 |
+| Ready (`loom:issue`) | 9 |
+| In Progress (`loom:building`) | 0 |
+| PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 5 |
-| Curated | 35 |
+| Curated | 36 |
 | Architect / Hermit proposals | 5 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
