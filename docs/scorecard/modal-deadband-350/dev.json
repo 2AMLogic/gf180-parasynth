@@ -1,0 +1,3167 @@
+{
+ "condition": "dev",
+ "reconcile": {
+  "renders": 15,
+  "cells": 240,
+  "by_status": {
+   "MEASURED": 18,
+   "NO-TAIL": 3,
+   "NOT-DRIVEN": 174,
+   "REFUSED": 45
+  }
+ },
+ "tables": [
+  {
+   "voice": {
+    "sound": "BD",
+    "accent": 0.5,
+    "peak_int16": 3701,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 37,
+    "tail_fixed_int16_mean": -37.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 37.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "REFUSED",
+     "reason": "fixed: the record ends before the decay does: only 1211.8 ms follow the -25 dB point and a T20 of 1034.2 ms needs 2068.3 ms after it, so the backward integral is reporting the cut and not the decay"
+    }
+   },
+   "rows": [
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 217,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 2331102.8,
+     "state_residual_peak_lsb": 23894.15,
+     "state_residual_mean_lsb": -23892.98,
+     "float_end_peak_lsb": 1.238,
+     "fixed_end_peak_lsb": 23893,
+     "tail": {
+      "kind": "stuck",
+      "value": -23893
+     },
+     "departure_ms": 590.0,
+     "float_level_at_departure_lsb": 44649.5,
+     "bus_residual_peak_lsb": 80.004,
+     "bus_residual_mean_lsb": -80.0,
+     "bus_residual_dbfs": -70.31,
+     "int16_residual_peak_lsb": 36.0027,
+     "int16_residual_dbfs": -59.18
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 0.5,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  },
+  {
+   "voice": {
+    "sound": "BD",
+    "accent": 1.0,
+    "peak_int16": 7395,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 37,
+    "tail_fixed_int16_mean": -37.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 37.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 348.52,
+     "t20_float_ms": 330.92,
+     "delta_ms": 17.604,
+     "delta_pct": 5.32
+    }
+   },
+   "rows": [
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 217,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 4668763.8,
+     "state_residual_peak_lsb": 23895.31,
+     "state_residual_mean_lsb": -23892.97,
+     "float_end_peak_lsb": 2.479,
+     "fixed_end_peak_lsb": 23893,
+     "tail": {
+      "kind": "stuck",
+      "value": -23893
+     },
+     "departure_ms": 750.0,
+     "float_level_at_departure_lsb": 28978.4,
+     "bus_residual_peak_lsb": 80.008,
+     "bus_residual_mean_lsb": -80.0,
+     "bus_residual_dbfs": -70.31,
+     "int16_residual_peak_lsb": 36.0044,
+     "int16_residual_dbfs": -59.18
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 1.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": true
+  },
+  {
+   "voice": {
+    "sound": "BD",
+    "accent": 2.0,
+    "peak_int16": 14786,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 37,
+    "tail_fixed_int16_mean": -37.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 37.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 334.36,
+     "t20_float_ms": 330.91,
+     "delta_ms": 3.456,
+     "delta_pct": 1.044
+    }
+   },
+   "rows": [
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 217,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 9344292.0,
+     "state_residual_peak_lsb": 23897.62,
+     "state_residual_mean_lsb": -23892.93,
+     "float_end_peak_lsb": 4.961,
+     "fixed_end_peak_lsb": 23893,
+     "tail": {
+      "kind": "stuck",
+      "value": -23893
+     },
+     "departure_ms": 850.0,
+     "float_level_at_departure_lsb": 28678.6,
+     "bus_residual_peak_lsb": 80.015,
+     "bus_residual_mean_lsb": -80.0,
+     "bus_residual_dbfs": -70.31,
+     "int16_residual_peak_lsb": 36.0079,
+     "int16_residual_dbfs": -59.18
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "BD",
+     "accent": 2.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  },
+  {
+   "voice": {
+    "sound": "SD",
+    "accent": 0.5,
+    "peak_int16": 3403,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 6,
+    "tail_fixed_int16_mean": -6.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 6.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "REFUSED",
+     "reason": "fixed: the record ends before the decay does: only 1504.8 ms follow the -25 dB point and a T20 of 1888.8 ms needs 3777.5 ms after it, so the backward integral is reporting the cut and not the decay"
+    }
+   },
+   "rows": [
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NO-TAIL",
+     "reason": "float state is below 1 LSB when the drive stops",
+     "tail_start_ms": 280.0
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 175,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 681397.3,
+     "state_residual_peak_lsb": 1947.0,
+     "state_residual_mean_lsb": -1947.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 1947,
+     "tail": {
+      "kind": "stuck",
+      "value": -1947
+     },
+     "departure_ms": 210.0,
+     "float_level_at_departure_lsb": 1178.4,
+     "bus_residual_peak_lsb": 6.0,
+     "bus_residual_mean_lsb": -6.0,
+     "bus_residual_dbfs": -92.81,
+     "int16_residual_peak_lsb": 2.7001,
+     "int16_residual_dbfs": -81.68
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 581,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 147652.5,
+     "state_residual_peak_lsb": 515.0,
+     "state_residual_mean_lsb": -515.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 515,
+     "tail": {
+      "kind": "stuck",
+      "value": -515
+     },
+     "departure_ms": 80.0,
+     "float_level_at_departure_lsb": 258.8,
+     "bus_residual_peak_lsb": 5.0,
+     "bus_residual_mean_lsb": -5.0,
+     "bus_residual_dbfs": -94.39,
+     "int16_residual_peak_lsb": 2.2501,
+     "int16_residual_dbfs": -83.27
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 0.5,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  },
+  {
+   "voice": {
+    "sound": "SD",
+    "accent": 1.0,
+    "peak_int16": 6813,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 4,
+    "tail_fixed_int16_mean": -4.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 4.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 71.39,
+     "t20_float_ms": 69.54,
+     "delta_ms": 1.848,
+     "delta_pct": 2.658
+    }
+   },
+   "rows": [
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NO-TAIL",
+     "reason": "float state is below 1 LSB when the drive stops",
+     "tail_start_ms": 300.0
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 175,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 1364482.5,
+     "state_residual_peak_lsb": 2.0,
+     "state_residual_mean_lsb": -2.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 2,
+     "tail": {
+      "kind": "stuck",
+      "value": -2
+     },
+     "departure_ms": 220.0,
+     "float_level_at_departure_lsb": 1605.0,
+     "bus_residual_peak_lsb": 1.0,
+     "bus_residual_mean_lsb": -1.0,
+     "bus_residual_dbfs": -108.37,
+     "int16_residual_peak_lsb": 0.45,
+     "int16_residual_dbfs": -97.24
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 581,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 295585.2,
+     "state_residual_peak_lsb": 516.0,
+     "state_residual_mean_lsb": -516.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 516,
+     "tail": {
+      "kind": "stuck",
+      "value": -516
+     },
+     "departure_ms": 80.0,
+     "float_level_at_departure_lsb": 518.1,
+     "bus_residual_peak_lsb": 5.0,
+     "bus_residual_mean_lsb": -5.0,
+     "bus_residual_dbfs": -94.39,
+     "int16_residual_peak_lsb": 2.2501,
+     "int16_residual_dbfs": -83.27
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 1.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": true
+  },
+  {
+   "voice": {
+    "sound": "SD",
+    "accent": 2.0,
+    "peak_int16": 13635,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 1,
+    "tail_fixed_int16_mean": -1.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 1.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 69.54,
+     "t20_float_ms": 69.48,
+     "delta_ms": 0.058,
+     "delta_pct": 0.083
+    }
+   },
+   "rows": [
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NO-TAIL",
+     "reason": "float state is below 1 LSB when the drive stops",
+     "tail_start_ms": 320.0
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 175,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 2730631.2,
+     "state_residual_peak_lsb": 2.0,
+     "state_residual_mean_lsb": -2.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 2,
+     "tail": {
+      "kind": "stuck",
+      "value": -2
+     },
+     "departure_ms": 240.0,
+     "float_level_at_departure_lsb": 1760.7,
+     "bus_residual_peak_lsb": 1.0,
+     "bus_residual_mean_lsb": -1.0,
+     "bus_residual_dbfs": -108.37,
+     "int16_residual_peak_lsb": 0.45,
+     "int16_residual_dbfs": -97.24
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 581,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 591404.3,
+     "state_residual_peak_lsb": 2.0,
+     "state_residual_mean_lsb": -2.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 2,
+     "tail": {
+      "kind": "stuck",
+      "value": -2
+     },
+     "departure_ms": 90.0,
+     "float_level_at_departure_lsb": 341.4,
+     "bus_residual_peak_lsb": 1.0,
+     "bus_residual_mean_lsb": -1.0,
+     "bus_residual_dbfs": -108.37,
+     "int16_residual_peak_lsb": 0.45,
+     "int16_residual_dbfs": -97.24
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "SD",
+     "accent": 2.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  },
+  {
+   "voice": {
+    "sound": "LT",
+    "accent": 0.5,
+    "peak_int16": 3851,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 16,
+    "tail_fixed_int16_mean": -16.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 16.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 223.75,
+     "t20_float_ms": 203.66,
+     "delta_ms": 20.092,
+     "delta_pct": 9.865
+    }
+   },
+   "rows": [
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 315,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 1573616.8,
+     "state_residual_peak_lsb": 7201.0,
+     "state_residual_mean_lsb": -7201.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 7201,
+     "tail": {
+      "kind": "stuck",
+      "value": -7201
+     },
+     "departure_ms": 520.0,
+     "float_level_at_departure_lsb": 5509.9,
+     "bus_residual_peak_lsb": 35.0,
+     "bus_residual_mean_lsb": -35.0,
+     "bus_residual_dbfs": -77.49,
+     "int16_residual_peak_lsb": 15.7504,
+     "int16_residual_dbfs": -66.36
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 0.5,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  },
+  {
+   "voice": {
+    "sound": "LT",
+    "accent": 1.0,
+    "peak_int16": 7372,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 16,
+    "tail_fixed_int16_mean": -16.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 16.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 207.13,
+     "t20_float_ms": 203.02,
+     "delta_ms": 4.11,
+     "delta_pct": 2.025
+    }
+   },
+   "rows": [
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 315,
+     "tail_start_ms": 80.0,
+     "float_peak_at_tail_start": 1543105.5,
+     "state_residual_peak_lsb": 7158.0,
+     "state_residual_mean_lsb": -7158.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 7158,
+     "tail": {
+      "kind": "stuck",
+      "value": -7158
+     },
+     "departure_ms": 580.0,
+     "float_level_at_departure_lsb": 5401.9,
+     "bus_residual_peak_lsb": 35.0,
+     "bus_residual_mean_lsb": -35.0,
+     "bus_residual_dbfs": -77.49,
+     "int16_residual_peak_lsb": 15.7504,
+     "int16_residual_dbfs": -66.36
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 1.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": true
+  },
+  {
+   "voice": {
+    "sound": "LT",
+    "accent": 2.0,
+    "peak_int16": 12983,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 16,
+    "tail_fixed_int16_mean": -16.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 16.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 202.38,
+     "t20_float_ms": 201.21,
+     "delta_ms": 1.171,
+     "delta_pct": 0.582
+    }
+   },
+   "rows": [
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 315,
+     "tail_start_ms": 80.0,
+     "float_peak_at_tail_start": 3045392.3,
+     "state_residual_peak_lsb": 7029.0,
+     "state_residual_mean_lsb": -7029.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 7029,
+     "tail": {
+      "kind": "stuck",
+      "value": -7029
+     },
+     "departure_ms": 630.0,
+     "float_level_at_departure_lsb": 5347.3,
+     "bus_residual_peak_lsb": 34.0,
+     "bus_residual_mean_lsb": -34.0,
+     "bus_residual_dbfs": -77.74,
+     "int16_residual_peak_lsb": 15.3004,
+     "int16_residual_dbfs": -66.61
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "LT",
+     "accent": 2.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  },
+  {
+   "voice": {
+    "sound": "MT",
+    "accent": 0.5,
+    "peak_int16": 3301,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 10,
+    "tail_fixed_int16_mean": -10.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 10.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 142.65,
+     "t20_float_ms": 130.36,
+     "delta_ms": 12.291,
+     "delta_pct": 9.428
+    }
+   },
+   "rows": [
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 406,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 974577.2,
+     "state_residual_peak_lsb": 3201.0,
+     "state_residual_mean_lsb": -3201.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 3201,
+     "tail": {
+      "kind": "stuck",
+      "value": -3201
+     },
+     "departure_ms": 360.0,
+     "float_level_at_departure_lsb": 2523.6,
+     "bus_residual_peak_lsb": 20.0,
+     "bus_residual_mean_lsb": -20.0,
+     "bus_residual_dbfs": -82.35,
+     "int16_residual_peak_lsb": 9.0002,
+     "int16_residual_dbfs": -71.22
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 0.5,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  },
+  {
+   "voice": {
+    "sound": "MT",
+    "accent": 1.0,
+    "peak_int16": 6316,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 1,
+    "tail_fixed_int16_mean": -1.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 1.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 130.07,
+     "t20_float_ms": 129.95,
+     "delta_ms": 0.12,
+     "delta_pct": 0.092
+    }
+   },
+   "rows": [
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 406,
+     "tail_start_ms": 80.0,
+     "float_peak_at_tail_start": 666964.2,
+     "state_residual_peak_lsb": 2.0,
+     "state_residual_mean_lsb": -2.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 2,
+     "tail": {
+      "kind": "stuck",
+      "value": -2
+     },
+     "departure_ms": 390.0,
+     "float_level_at_departure_lsb": 2730.2,
+     "bus_residual_peak_lsb": 1.0,
+     "bus_residual_mean_lsb": -1.0,
+     "bus_residual_dbfs": -108.37,
+     "int16_residual_peak_lsb": 0.45,
+     "int16_residual_dbfs": -97.24
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 1.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": true
+  },
+  {
+   "voice": {
+    "sound": "MT",
+    "accent": 2.0,
+    "peak_int16": 11115,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 10,
+    "tail_fixed_int16_mean": -10.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 10.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 129.87,
+     "t20_float_ms": 128.78,
+     "delta_ms": 1.089,
+     "delta_pct": 0.845
+    }
+   },
+   "rows": [
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 406,
+     "tail_start_ms": 80.0,
+     "float_peak_at_tail_start": 1209530.7,
+     "state_residual_peak_lsb": 3127.0,
+     "state_residual_mean_lsb": -3127.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 3127,
+     "tail": {
+      "kind": "stuck",
+      "value": -3127
+     },
+     "departure_ms": 400.0,
+     "float_level_at_departure_lsb": 3967.6,
+     "bus_residual_peak_lsb": 20.0,
+     "bus_residual_mean_lsb": -20.0,
+     "bus_residual_dbfs": -82.35,
+     "int16_residual_peak_lsb": 9.0002,
+     "int16_residual_dbfs": -71.22
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "MT",
+     "accent": 2.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  },
+  {
+   "voice": {
+    "sound": "HT",
+    "accent": 0.5,
+    "peak_int16": 3858,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 8,
+    "tail_fixed_int16_mean": -8.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 8.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 104.41,
+     "t20_float_ms": 99.11,
+     "delta_ms": 5.302,
+     "delta_pct": 5.349
+    }
+   },
+   "rows": [
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 651,
+     "tail_start_ms": 20.0,
+     "float_peak_at_tail_start": 672116.3,
+     "state_residual_peak_lsb": 1704.0,
+     "state_residual_mean_lsb": -1704.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 1704,
+     "tail": {
+      "kind": "stuck",
+      "value": -1704
+     },
+     "departure_ms": 290.0,
+     "float_level_at_departure_lsb": 1295.4,
+     "bus_residual_peak_lsb": 17.0,
+     "bus_residual_mean_lsb": -17.0,
+     "bus_residual_dbfs": -83.76,
+     "int16_residual_peak_lsb": 7.6502,
+     "int16_residual_dbfs": -72.64
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 0.5,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  },
+  {
+   "voice": {
+    "sound": "HT",
+    "accent": 1.0,
+    "peak_int16": 7378,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 1,
+    "tail_fixed_int16_mean": -1.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 1.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 99.16,
+     "t20_float_ms": 98.81,
+     "delta_ms": 0.344,
+     "delta_pct": 0.348
+    }
+   },
+   "rows": [
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 651,
+     "tail_start_ms": 80.0,
+     "float_peak_at_tail_start": 329588.9,
+     "state_residual_peak_lsb": 1.0,
+     "state_residual_mean_lsb": -1.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 1,
+     "tail": {
+      "kind": "stuck",
+      "value": -1
+     },
+     "departure_ms": 310.0,
+     "float_level_at_departure_lsb": 1483.2,
+     "bus_residual_peak_lsb": 1.0,
+     "bus_residual_mean_lsb": -1.0,
+     "bus_residual_dbfs": -108.37,
+     "int16_residual_peak_lsb": 0.45,
+     "int16_residual_dbfs": -97.24
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 1.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": true
+  },
+  {
+   "voice": {
+    "sound": "HT",
+    "accent": 2.0,
+    "peak_int16": 12969,
+    "sounding_extent_ms": 2190.0,
+    "tail_fixed_int16_peak": 1,
+    "tail_fixed_int16_mean": -1.0,
+    "tail_float_int16_peak": 1,
+    "output_residual_peak_lsb": 1.0,
+    "couple_en": 0,
+    "t20": {
+     "status": "MEASURED",
+     "t20_fixed_ms": 98.06,
+     "t20_float_ms": 98.09,
+     "delta_ms": -0.039,
+     "delta_pct": -0.04
+    }
+   },
+   "rows": [
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 0,
+     "reach": [
+      "tap->mode2",
+      "tap->mode1",
+      "tap->mode2",
+      "tap->mode7"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 1,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 2,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 3,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 4,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105599 of 105600: no free tail inside the render",
+     "last_event_frame": 105599
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 5,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 6,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "REFUSED",
+     "reason": "driven/retuned until frame 105586 of 105600: no free tail inside the render",
+     "last_event_frame": 105586
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 7,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 8,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 9,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 10,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 11,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 12,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 13,
+     "reach": [
+      "body-bus"
+     ],
+     "status": "MEASURED",
+     "amp": 651,
+     "tail_start_ms": 80.0,
+     "float_peak_at_tail_start": 518225.8,
+     "state_residual_peak_lsb": 1.0,
+     "state_residual_mean_lsb": -1.0,
+     "float_end_peak_lsb": 0.0,
+     "fixed_end_peak_lsb": 1,
+     "tail": {
+      "kind": "stuck",
+      "value": -1
+     },
+     "departure_ms": 330.0,
+     "float_level_at_departure_lsb": 1492.3,
+     "bus_residual_peak_lsb": 1.0,
+     "bus_residual_mean_lsb": -1.0,
+     "bus_residual_dbfs": -108.37,
+     "int16_residual_peak_lsb": 0.45,
+     "int16_residual_dbfs": -97.24
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 14,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    },
+    {
+     "sound": "HT",
+     "accent": 2.0,
+     "mode": 15,
+     "reach": [
+      "tap->mix"
+     ],
+     "status": "NOT-DRIVEN",
+     "reason": "no drive reaches this mode in this sound"
+    }
+   ],
+   "stock_checked": false
+  }
+ ],
+ "provenance": {
+  "source_commit": "f5a0cdd",
+  "dirty": false,
+  "uncommitted_sha256": "e3b0c44298fc1c14",
+  "branch": "feature/issue-350",
+  "command": "python3 tools/probes/modal_deadband.py --table dev --out docs/scorecard/modal-deadband-350/dev.json",
+  "inputs": {
+   "tools/probes/modal_deadband.py": "sha256:97baa382ff53e375",
+   "model/modal_fixed.py": "sha256:d5f642012774db57",
+   "model/drums_fx.py": "sha256:76bf5af0763581c3",
+   "tools/run_case.py": "sha256:d30bea05a162b7d2"
+  },
+  "generated": "2026-10-10T18:22:39Z"
+ }
+}
