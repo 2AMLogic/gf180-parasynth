@@ -33,6 +33,7 @@ import numpy as np
 sys.path[:0] = [str(pathlib.Path(__file__).resolve().parent)]
 import modal_deadband as md        # noqa: E402
 import modal_fixed as mf           # noqa: E402
+import provenance as pv        # noqa: E402
 
 N = 96000
 
@@ -62,6 +63,10 @@ def main(argv=None):
            "state_q_sweep": {}}
     for (f0, q, name) in ((90.0, 25.0, "LT 90Hz Q25"), (50.0, 22.3, "BD-like 50Hz Q22.3")):
         res["state_q_sweep"][name] = {str(sq): one(f0, q, 1000, sq=sq, sb=32) for sq in (15, 17, 19, 21)}
+    res["provenance"] = md.provenance(
+        "python3 tools/probes/modal_deadband_candidates.py" + (f" --out {a.out}" if a.out else ""),
+        extra_inputs={f: pv.file_sha(md.ROOT / f) for f in
+                      ("tools/probes/modal_deadband_candidates.py", "tools/probes/modal_deadband.py")})
     print(json.dumps(res, indent=1))
     if a.out:
         a.out.write_text(json.dumps(res, indent=1) + "\n")

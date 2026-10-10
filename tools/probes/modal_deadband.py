@@ -150,6 +150,11 @@ class TwinBank(ModalFx):
         self.f1 = [0.0] * self.M
         self.f2 = [0.0] * self.M
 
+    def _shadow_next(self, m, a1, a2, x, sc) -> float:
+        """One float-shadow update for mode m. A method so a shadow-only defect
+        can be injected (SHADOW_DEFECTS) without touching the integer path."""
+        return (a1 * self.f1[m] + a2 * self.f2[m]) / sc + x
+
     def step(self, exc, coefs, num=None) -> int:
         CF, SB, SQ = self.CF, self.SB, self.SQ
         osh = SQ - 15 + self.HR
@@ -174,7 +179,7 @@ class TwinBank(ModalFx):
                 x = e
             acc = a1 * y1[m] + a2 * y2[m] + self.RND
             y = sat((acc >> CF) + x, SB)
-            yf = (a1 * self.f1[m] + a2 * self.f2[m]) / sc + x
+            yf = self._shadow_next(m, a1, a2, x, sc)
             self.f2[m], self.f1[m] = self.f1[m], yf
             y2[m], y1[m] = y1[m], y
             c = (y * amp) >> 16
@@ -525,6 +530,43 @@ def guard_float_twin_independent(f0=90.0, q=25.0, rel_tol=1e-9) -> None:
         raise Refused("float shadow disagrees with the closed-form impulse response")
 
 
+SHADOW_POLES = ((90.0, 25.0), (56.0, 22.3), (2000.0, 10.0))
+
+
+def guard_twin_shadow_independent(bank_cls=None, poles=SHADOW_POLES, n=4000, rel_tol=1e-9) -> None:
+    """The shadow the production tables READ (TwinBank.rec_f) equals the closed
+    form. guard_float_twin_independent checks float_recursion, a second
+    implementation no table touches; this drives TwinBank itself, so a
+    coefficient/sign error confined to its shadow cannot hide behind the integer
+    stock-equivalence check (which sees only the integer return value)."""
+    bank_cls = bank_cls or TwinBank
+    for f0, q in poles:
+        a1, a2 = mf.pole_regs(f0, q)
+        b = bank_cls(n, modes=1, nums=1, headroom=0, out_bits=28)
+        for t in range(n):
+            b.step([1 if t == 0 else 0], [(a1, a2, 65535)], [RAW])
+        want = analytic_impulse(a1, a2, n)
+        err = float(np.max(np.abs(b.rec_f[:, 0] - want)))
+        if not err <= rel_tol * float(np.max(np.abs(want))):
+            raise Refused(f"TwinBank shadow disagrees with the closed form at {f0} Hz Q{q} (max err {err:.3g})")
+
+
+class _ShadowA2Sign(TwinBank):
+    """Shadow-only defect: the a2 term has the wrong sign. The integer path,
+    and so every stock-equivalence check, is untouched."""
+    def _shadow_next(self, m, a1, a2, x, sc):
+        return (a1 * self.f1[m] - a2 * self.f2[m]) / sc + x
+
+
+class _ShadowStaleCoef(TwinBank):
+    """Shadow-only defect: a1 is one coefficient LSB off (a retune/rounding slip)."""
+    def _shadow_next(self, m, a1, a2, x, sc):
+        return ((a1 + 1) * self.f1[m] + a2 * self.f2[m]) / sc + x
+
+
+SHADOW_DEFECTS = {"a2-sign": _ShadowA2Sign, "a1+1lsb": _ShadowStaleCoef}
+
+
 def guard_twin_not_fixed(table: dict) -> None:
     """A twin that IS the fixed run (or only its rounding) reports ~zero
     residual everywhere and would 'confirm' no defect. The 100-LSB known-deadband
@@ -593,6 +635,16 @@ def check_freeze(path=FREEZE_PATH, committed_check=True) -> dict:
 # ---------------------------------------------------------------------------
 # 6. Provenance
 # ---------------------------------------------------------------------------
+def ground_inputs(g: dict) -> dict:
+    """Full sha256 of every capture actually read, plus the corpus manifest."""
+    ex = {f"capture:{v}": r["sha256"] for v, r in g["voices"].items() if "sha256" in r}
+    mf_ = pathlib.Path(g["refdir"]) / "manifest.json"
+    if mf_.is_file():
+        ex["corpus manifest.json"] = hashlib.sha256(mf_.read_bytes()).hexdigest()
+    ex["corpus_git_head"] = g.get("corpus_git_head")
+    return ex
+
+
 def provenance(command: str, extra_inputs: dict | None = None) -> dict:
     import provenance as pv
     st = pv.worktree_state()
@@ -673,6 +725,14 @@ CONFIG_DEFECTS = {"headroom=10": dict(PROD_KW, headroom=10), "state_q=17": dict(
                   "nums=16": dict(PROD_KW, nums=16)}
 
 
+def p_twin_shadow(cls) -> bool:
+    try:
+        guard_twin_shadow_independent(cls)
+        return True
+    except Refused:
+        return False
+
+
 def controls_matrix() -> dict:
     """properties x defects. MOVED = the property flips from its clean value."""
     m = {}
@@ -681,16 +741,20 @@ def controls_matrix() -> dict:
     for dn, fn in DEFECTS.items():
         for pn, pf in props.items():
             m[(pn, dn)] = "MOVED" if pf(fn) != clean[pn] else "BLIND"
+    clean_sh = p_twin_shadow(TwinBank)
+    for dn, cls in SHADOW_DEFECTS.items():
+        m[("twin-shadow-closed-form", dn)] = "MOVED" if p_twin_shadow(cls) != clean_sh else "BLIND"
     clean_cfg = p_config_guard(PROD_KW)
     for dn, kw in CONFIG_DEFECTS.items():
         m[("config-guard", dn)] = "MOVED" if p_config_guard(kw) != clean_cfg else "BLIND"
-    return dict(clean=dict(clean, **{"config-guard": clean_cfg}), matrix=m)
+    return dict(clean=dict(clean, **{"config-guard": clean_cfg, "twin-shadow-closed-form": clean_sh}), matrix=m)
 
 
 # Which (property, defect) pairs MUST move. Anything else may be BLIND by design:
 # a property is only obliged to see the defect it exists to catch.
 EXPECTED_MOVED = ({("known-answer-table", d) for d in DEFECTS}
                   | {("twin-independent", "float-stub")}
+                  | {("twin-shadow-closed-form", d) for d in SHADOW_DEFECTS}
                   | {("config-guard", d) for d in CONFIG_DEFECTS})
 
 
@@ -708,6 +772,67 @@ def print_matrix(res: dict) -> None:
 # ---------------------------------------------------------------------------
 # 8. External grounding
 # ---------------------------------------------------------------------------
+def _read_capture(path: pathlib.Path, declared_sr) -> tuple:
+    """(sample_rate, mono float in [-1, 1]) or Refused. Normalises by the file's
+    ACTUAL encoding: dividing everything by 32768 is right only for int16."""
+    from scipy.io import wavfile
+    sr, raw = wavfile.read(str(path))
+    if not isinstance(declared_sr, int) or isinstance(declared_sr, bool) or sr != declared_sr:
+        raise Refused(f"{path.name}: sample rate {sr} is not the manifest's declared {declared_sr!r}")
+    dt = raw.dtype
+    if dt == np.int16:
+        scale = 32768.0
+    elif dt == np.int32:
+        scale = 2147483648.0
+    elif dt in (np.float32, np.float64):
+        scale = 1.0
+    else:
+        raise Refused(f"{path.name}: unsupported sample encoding {dt} (int16, int32, float32/64 only)")
+    x = np.asarray(raw, dtype=np.float64)
+    x = x.mean(axis=1) if x.ndim > 1 else x
+    x = x / scale
+    if not np.all(np.isfinite(x)):
+        raise Refused(f"{path.name}: non-finite samples")
+    if float(np.max(np.abs(x))) > 1.0:
+        raise Refused(f"{path.name}: samples exceed full scale for {dt}: the encoding is not what it claims")
+    if float(np.max(np.abs(x))) == 0.0:
+        raise Refused(f"{path.name}: silent capture")
+    return int(sr), x
+
+
+def measure_capture(path: pathlib.Path, declared_sr) -> dict:
+    try:
+        sr, x = _read_capture(path, declared_sr)
+    except Refused as why:
+        return dict(status="REFUSED", reason=str(why))
+    k = int(0.1 * sr)
+    if len(x) < 3 * k:
+        return dict(status="REFUSED", reason="capture shorter than 300 ms")
+    last, prev = x[-k:], x[-2 * k:-k]
+    pk = lambda s: float(np.max(np.abs(s - np.mean(s))))
+    flat = pk(last) > 0 and abs(20 * math.log10(max(pk(prev), 1e-12) / pk(last))) <= 3.0
+    return dict(status="MEASURED" if flat else "REFUSED", sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                sr=sr, seconds=round(len(x) / sr, 3),
+                tail_ac_peak_dbfs=round(20 * math.log10(max(pk(last), 1e-12)), 2),
+                tail_mean_dbfs=round(20 * math.log10(max(abs(float(np.mean(last))), 1e-12)), 2),
+                reason="" if flat else "last 100 ms is still decaying (not a noise floor)")
+
+
+def _ground_voices(refdir: pathlib.Path, ref_main: dict, declared_sr, refuse_because: str | None) -> dict:
+    """Per-voice capture levels. A corpus whose gate or pin failed yields NO
+    levels: the pin is a precondition of the measurement, not a note beside it."""
+    voices = {}
+    for v, (rel, _) in ref_main.items():
+        p = refdir / rel
+        if not p.is_file():
+            voices[v] = dict(status="REFUSED", reason=f"{rel} missing")
+        elif refuse_because:
+            voices[v] = dict(status="REFUSED", reason=refuse_because)
+        else:
+            voices[v] = measure_capture(p, declared_sr)
+    return voices
+
+
 def ground(refs: str | None = None) -> dict:
     """What the Fischer captures can and cannot establish.
 
@@ -719,7 +844,6 @@ def ground(refs: str | None = None) -> dict:
     """
     import residual_dc as rd
     import run_case as rc
-    from scipy.io import wavfile
     g = rd.reference_gate(refs)
     refdir = pathlib.Path(refs) if refs else rc.configured_refs()
     out = dict(gate=g, refdir=str(refdir), voices={})
@@ -729,27 +853,12 @@ def ground(refs: str | None = None) -> dict:
     out["corpus_tree_clean"] = (status.strip() == "") if head else None
     out["pin"] = "85fbecf1bec32553395625ea659e2a56dfd7c0e1"
     out["pinned_ok"] = head == out["pin"] and out["corpus_tree_clean"] is True
-    for v, (rel, _) in rc.REF_MAIN.items():
-        p = refdir / rel
-        if not p.is_file():
-            out["voices"][v] = dict(status="REFUSED", reason=f"{rel} missing")
-            continue
-        sr, x = wavfile.read(str(p))
-        x = np.asarray(x, dtype=np.float64)
-        x = x.mean(axis=1) if x.ndim > 1 else x
-        x /= 32768.0
-        k = int(0.1 * sr)
-        if len(x) < 3 * k:
-            out["voices"][v] = dict(status="REFUSED", reason="capture shorter than 300 ms")
-            continue
-        last, prev = x[-k:], x[-2 * k:-k]
-        pk = lambda s: float(np.max(np.abs(s - np.mean(s))))
-        flat = pk(last) > 0 and abs(20 * math.log10(max(pk(prev), 1e-12) / pk(last))) <= 3.0
-        out["voices"][v] = dict(status="MEASURED" if flat else "REFUSED", sha256=hashlib.sha256(p.read_bytes()).hexdigest()[:16],
-                                sr=int(sr), seconds=round(len(x) / sr, 3),
-                                tail_ac_peak_dbfs=round(20 * math.log10(max(pk(last), 1e-12)), 2),
-                                tail_mean_dbfs=round(20 * math.log10(max(abs(float(np.mean(last))), 1e-12)), 2),
-                                reason="" if flat else "last 100 ms is still decaying (not a noise floor)")
+    why = None
+    if g.get("status") != "AVAILABLE":
+        why = "reference gate REFUSED: " + "; ".join(g.get("reasons", []))
+    elif not out["pinned_ok"]:
+        why = "corpus is not the pinned, clean checkout: capture identity is unestablished"
+    out["voices"] = _ground_voices(refdir, rc.REF_MAIN, g.get("sample_rate"), why)
     return out
 
 
@@ -801,6 +910,7 @@ def main(argv=None) -> int:
         t = deadband_table()
         guard_float_twin_independent()
         guard_twin_not_fixed(t)
+        guard_twin_shadow_independent()
         print(json.dumps(t, indent=1))
         print("reproduces committed:", check_known_answer(t))
     elif a.controls:
@@ -825,6 +935,9 @@ def main(argv=None) -> int:
         print(rec["reconcile"])
     elif a.ground:
         g = ground(a.refs)
+        g["provenance"] = provenance("python3 tools/probes/modal_deadband.py --ground" + (f" --refs {a.refs}" if a.refs else "")
+                                     + (f" --out {a.out}" if a.out else ""),
+                                     extra_inputs=ground_inputs(g))
         if a.out:
             a.out.parent.mkdir(parents=True, exist_ok=True)
             a.out.write_text(json.dumps(g, indent=1, default=_json_default) + "\n")

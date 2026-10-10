@@ -209,6 +209,32 @@ def test_config_guard_refuses_every_wrong_bank():
         md.assert_production_config(d2, md.TwinBank(2, **md.PROD_KW))
 
 
+# ---- 3b. the shadow that PRODUCES the tables is the one checked --------------
+def test_twin_shadow_matches_closed_form_at_several_poles():
+    """TwinBank's own rec_f (what the production tables read), driven by an
+    impulse, equals the analytic answer. Not float_recursion: that is a second
+    implementation the tables never touch."""
+    md.guard_twin_shadow_independent()
+
+
+@pytest.mark.parametrize("name", sorted(md.SHADOW_DEFECTS))
+def test_shadow_only_mutant_is_refused_while_stock_integer_equality_stays_green(name):
+    """The defect is confined to the float shadow: the integer return value is
+    still bit-identical to the stock bank (so the stock-equivalence test is
+    blind to it), and the shadow guard must refuse."""
+    cls = md.SHADOW_DEFECTS[name]
+    rng = np.random.default_rng(5)
+    kw = dict(modes=2, nums=1, headroom=0, out_bits=19)
+    twin, stock = cls(2000, **kw), mf.ModalFx(**kw)
+    co = [mf.pole_regs(90.0, 25.0) + (60000,), mf.pole_regs(300.0, 8.0) + (40000,)]
+    for _ in range(2000):
+        e = [int(v) for v in rng.integers(-2000, 2000, 2)]
+        assert twin.step(e, co, [mf.RAW]) == stock.step(e, co, [mf.RAW])
+    assert not np.allclose(twin.rec_f, md.TwinBank(2000, **kw).rec_f)        # the mutant is ACTIVE
+    with pytest.raises(md.Refused):
+        md.guard_twin_shadow_independent(cls)
+
+
 def test_twin_independence_guard_refuses_a_twin_that_is_the_fixed_path():
     md.guard_twin_not_fixed(md.deadband_table(levels=(100,), n=48000))
     with pytest.raises(md.Refused):
@@ -271,8 +297,85 @@ def test_confirmation_refuses_without_a_committed_matching_freeze(tmp_path, monk
 
 
 # ---- 6. grounding refuses without a usable corpus ------------------------------
+def _wav(path, x, sr=48000, dtype=np.int16):
+    from scipy.io import wavfile
+    wavfile.write(str(path), sr, np.asarray(x).astype(dtype))
+    return path
+
+
+def _decay(n=48000, amp=0.5, floor=0.001, seed=0):
+    """A decaying ring over a flat noise floor: the last two 100 ms windows match."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(n) / 48000
+    return amp * np.exp(-t * 30) * np.sin(2 * np.pi * 100 * t) + floor * rng.standard_normal(n)
+
+
+def test_capture_levels_agree_across_encodings(tmp_path):
+    """The same signal stored as int16, int32 and float32 reads as the same dBFS."""
+    x = _decay()
+    got = {}
+    for name, (arr, dt) in {"i16": (x * 32767, np.int16), "i32": (x * 2147483647, np.int32), "f32": (x, np.float32)}.items():
+        got[name] = md.measure_capture(_wav(tmp_path / f"{name}.wav", arr, dtype=dt), 48000)
+        assert got[name]["status"] == "MEASURED", got[name]
+    ref = got["i16"]["tail_ac_peak_dbfs"]
+    assert abs(got["i32"]["tail_ac_peak_dbfs"] - ref) < 0.1 and abs(got["f32"]["tail_ac_peak_dbfs"] - ref) < 0.1
+
+
+@pytest.mark.parametrize("why,arr,dt,sr", [
+    ("uint8", lambda x: (x * 127 + 128), np.uint8, 48000),
+    ("wrong rate", lambda x: x * 32767, np.int16, 44100),
+    ("silent", lambda x: x * 0, np.int16, 48000),
+    ("float out of range", lambda x: x * 40000, np.float32, 48000),
+])
+def test_capture_refuses_unqualified_encoding_rate_or_content(tmp_path, why, arr, dt, sr):
+    r = md.measure_capture(_wav(tmp_path / "c.wav", arr(_decay()), sr=sr, dtype=dt), 48000)
+    assert r["status"] == "REFUSED" and r["reason"], (why, r)
+
+
+def test_capture_refuses_non_finite_float(tmp_path):
+    x = _decay().astype(np.float32)
+    x[1000] = np.nan
+    assert md.measure_capture(_wav(tmp_path / "n.wav", x, dtype=np.float32), 48000)["status"] == "REFUSED"
+
+
+def test_unpinned_corpus_never_yields_measured_voices(tmp_path):
+    """A perfectly good WAV in a corpus that is not the pinned, clean checkout."""
+    _wav(tmp_path / "v.wav", _decay() * 32767)
+    out = md._ground_voices(tmp_path, {"BD": ("v.wav", None)}, 48000, "corpus is not the pinned, clean checkout")
+    assert out["BD"]["status"] == "REFUSED" and "pinned" in out["BD"]["reason"]
+    ok = md._ground_voices(tmp_path, {"BD": ("v.wav", None)}, 48000, None)
+    assert ok["BD"]["status"] == "MEASURED"
+
+
+
 def test_ground_refuses_a_missing_corpus(tmp_path):
     g = md.ground(str(tmp_path / "nope"))
     assert g["gate"]["status"] == "REFUSED" and g["gate"]["dc"] == "REFUSED"
     assert g["pinned_ok"] is False
     assert all(v["status"] == "REFUSED" for v in g["voices"].values())
+
+
+def test_ground_record_carries_provenance(tmp_path):
+    """AC6: the ground record is stamped like every other measurement record."""
+    import subprocess
+    root = pathlib.Path(md.ROOT)
+    subprocess.run([sys.executable, str(root / "tools/probes/modal_deadband.py"), "--ground",
+                    "--refs", str(tmp_path / "nope"), "--out", str(tmp_path / "g.json")], check=True, capture_output=True)
+    g = json.loads((tmp_path / "g.json").read_text())
+    for k in ("source_commit", "dirty", "command", "inputs", "uncommitted_sha256"):
+        assert k in g["provenance"], k
+    assert "--ground" in g["provenance"]["command"]
+
+
+def test_candidates_record_carries_provenance(tmp_path):
+    import subprocess
+    root = pathlib.Path(md.ROOT)
+    src = (root / "tools/probes/modal_deadband_candidates.py").read_text()
+    assert 'res["provenance"] = md.provenance(' in src and "pv.file_sha" in src
+
+
+def test_ground_inputs_hash_full_sha256(tmp_path):
+    _wav(tmp_path / "v.wav", _decay() * 32767)
+    voices = md._ground_voices(tmp_path, {"BD": ("v.wav", None)}, 48000, None)
+    assert len(voices["BD"]["sha256"]) == 64
+    assert md.ground_inputs(dict(voices=voices, refdir=str(tmp_path)))["capture:BD"] == voices["BD"]["sha256"]

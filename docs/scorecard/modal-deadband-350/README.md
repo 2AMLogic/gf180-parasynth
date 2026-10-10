@@ -49,8 +49,13 @@ command refuse (`test_confirmation_refuses_without_a_committed_matching_freeze`)
 - the first >3.0 dB departure falls at the same 10 ms block (10 / 230 / 410 / 640 ms);
 - the fixed tail peak is exact (2 / 3 / 7201 / 7201).
 
-The float shadow is checked against the closed-form impulse response at 90 Hz/Q25, 56 Hz/Q22.3 and 2 kHz/Q10, so
-it is not calibrated on our own recursion. The fixed recursion is checked against the same closed form while it is
+The float shadow the tables read, `TwinBank.rec_f`, is driven by an impulse at 90 Hz/Q25, 56 Hz/Q22.3 and 2 kHz/Q10
+and compared with the closed-form response (`guard_twin_shadow_independent`), so it is not calibrated on our own
+recursion. **Correction (review of #642):** an earlier revision made this claim for `float_recursion`, a separate
+SciPy implementation that no production table reads; the stock-equivalence test sees only the integer return value, so
+a defect confined to the `TwinBank` shadow passed both. The shadow-only mutants `a2-sign` and `a1+1lsb`
+(`SHADOW_DEFECTS`) now fail the guard while their integer output stays bit-identical to the stock bank, and the controls
+matrix requires both to MOVE. The fixed recursion is checked against the same closed form while it is
 far above the floor.
 
 **Correction to the issue text.** The tails are not limit cycles. The exact classifier (`tail_shape`) shows the
@@ -212,7 +217,21 @@ candidates script. None changed a published production figure, because none exis
 
 ## Provenance and commands
 
-Every JSON carries `source_commit`, the dirty flag, `uncommitted_sha256`, the exact command and the sha256 of the four
+**Records pending regeneration (review of #642).** The apparatus changed after the freeze (shadow hook, shadow guard,
+capture gates, provenance on `ground.json` and `candidates.json`), and `freeze.json` pins the sha256 of
+`modal_deadband.py`, so `--table confirm` refuses on this tree. `dev.json`, `confirm.json`, `population.json`,
+`ground.json` and `candidates.json` below therefore still describe the earlier apparatus; their numbers are unaffected
+by a behaviour-preserving refactor only until a regeneration shows it. To close that out, on the build box with the
+reference corpus: re-run `--freeze` (a NEW freeze, committed before the tables, recorded here as written after seeing
+the earlier confirmation), then `--table dev`, `--table confirm`, `--population`, `--ground --refs <corpus> --out ...`
+and `modal_deadband_candidates.py --out ...`, and diff each table against the committed one cell by cell. A cell that
+moved is a defect in this change, not an update.
+
+The capture levels in `ground.json` are only valid if the corpus is the pinned clean checkout and each WAV is a
+supported encoding at the manifest's rate; since this change `ground()` REFUSES every voice otherwise (`pinned_ok`,
+dtype-aware normalisation, finite/full-scale/non-silent checks, `measure_capture`).
+
+Every JSON, including `ground.json` and `candidates.json` once regenerated, carries `source_commit`, the dirty flag, `uncommitted_sha256`, the exact command and the sha256 of the four
 model and tool inputs. `dev.json` is at `f5a0cdd`, `confirm.json` at `72a6b60`, `population.json` at `044925d`.
 All three are clean (`dirty: false`).
 
