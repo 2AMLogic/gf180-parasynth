@@ -1,0 +1,172 @@
+{
+ "what": "sha256 of the 16 shipped drum renders (perceptual_gate.render_ours, Python model), tools/drum_render_hashes.py",
+ "trees": {
+  "base_2aceb8ce": "2aceb8ce2f4b76c1fff4689b8152307be5955849 (branch base when rank-current/rank.json was made at 3bdb7e9b)",
+  "rebased_head": "77962cd4 (this branch rebased onto origin/main 468339aa, which includes #554)"
+ },
+ "identical": true,
+ "base_2aceb8ce": {
+  "BD": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "ec28fa13174d2f91ab279c584723d6e8712ec4822041f596ab064eac5f3300b1"
+  },
+  "SD": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "8f224ada2410dfe61b9bff33c9cc9ac52af0258ae7ff1f29d75c2e62463a6dd1"
+  },
+  "LT": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "632d7c202cae7c9486c1709d843144ca07b43fb8d1d2c15ca9a69029d93fbd55"
+  },
+  "LC": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "b8afdb46e4290a52c94d40999daf418bfa0aa235715ea5538d74e904c83e0b52"
+  },
+  "MT": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "abebf7053d994a06fe4c95d445ae3c88d68abe5270d3397b6c1027e89ef6a1f3"
+  },
+  "MC": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "92cf4baac5b76cd3ff9e27f0bcdcc678bb2f6e6a6648590b575e886775a7cabb"
+  },
+  "HT": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "1bcf90c83ab19d455ad86254201ae82fa1f440e8f4240401513814e415bd18b1"
+  },
+  "HC": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "f48f6df1cc6185853810434e04d648625fc7c055fe066cc5b15bca260d8d1323"
+  },
+  "RS": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "21dd814f86253a7d7b10148170539e67e258229bc4365dc52a6bb287403e2f7b"
+  },
+  "CL": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "b29f8dea85964ed47457f56dd199b05c6e203861e4f1d58ab3b9905079397bff"
+  },
+  "CP": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "029b35d0c81e2c562b304c6810a20d1fb492b9ca1a9032ea900e27cddd7a402d"
+  },
+  "MA": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "59fc90181266fa0b27c6e24afccb4047eecacd0234d1ef8a67fd489bc0f49e4f"
+  },
+  "CB": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "a8696dfb5d9a0c9dd7be864dbbee5f5ea34ea509d18750b52d3998a1bad7b79b"
+  },
+  "CY": {
+   "n": 172800,
+   "sr": 48000,
+   "sha256": "61bc9aaab09720798aa57e77946f66c51257069320aa85f9604d712ed3353809"
+  },
+  "OH": {
+   "n": 172800,
+   "sr": 48000,
+   "sha256": "e396da021f87a5546b8ad401a3fc4f8e07e1cb92eb138d83e1f5c47bf8254316"
+  },
+  "CH": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "f62aefcdbb57cf81c5f70b1749f9b3b324f05f4201f6430a33ca9e658d120468"
+  }
+ },
+ "rebased_head": {
+  "BD": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "ec28fa13174d2f91ab279c584723d6e8712ec4822041f596ab064eac5f3300b1"
+  },
+  "SD": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "8f224ada2410dfe61b9bff33c9cc9ac52af0258ae7ff1f29d75c2e62463a6dd1"
+  },
+  "LT": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "632d7c202cae7c9486c1709d843144ca07b43fb8d1d2c15ca9a69029d93fbd55"
+  },
+  "LC": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "b8afdb46e4290a52c94d40999daf418bfa0aa235715ea5538d74e904c83e0b52"
+  },
+  "MT": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "abebf7053d994a06fe4c95d445ae3c88d68abe5270d3397b6c1027e89ef6a1f3"
+  },
+  "MC": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "92cf4baac5b76cd3ff9e27f0bcdcc678bb2f6e6a6648590b575e886775a7cabb"
+  },
+  "HT": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "1bcf90c83ab19d455ad86254201ae82fa1f440e8f4240401513814e415bd18b1"
+  },
+  "HC": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "f48f6df1cc6185853810434e04d648625fc7c055fe066cc5b15bca260d8d1323"
+  },
+  "RS": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "21dd814f86253a7d7b10148170539e67e258229bc4365dc52a6bb287403e2f7b"
+  },
+  "CL": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "b29f8dea85964ed47457f56dd199b05c6e203861e4f1d58ab3b9905079397bff"
+  },
+  "CP": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "029b35d0c81e2c562b304c6810a20d1fb492b9ca1a9032ea900e27cddd7a402d"
+  },
+  "MA": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "59fc90181266fa0b27c6e24afccb4047eecacd0234d1ef8a67fd489bc0f49e4f"
+  },
+  "CB": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "a8696dfb5d9a0c9dd7be864dbbee5f5ea34ea509d18750b52d3998a1bad7b79b"
+  },
+  "CY": {
+   "n": 172800,
+   "sr": 48000,
+   "sha256": "61bc9aaab09720798aa57e77946f66c51257069320aa85f9604d712ed3353809"
+  },
+  "OH": {
+   "n": 172800,
+   "sr": 48000,
+   "sha256": "e396da021f87a5546b8ad401a3fc4f8e07e1cb92eb138d83e1f5c47bf8254316"
+  },
+  "CH": {
+   "n": 105600,
+   "sr": 48000,
+   "sha256": "f62aefcdbb57cf81c5f70b1749f9b3b324f05f4201f6430a33ca9e658d120468"
+  }
+ }
+}

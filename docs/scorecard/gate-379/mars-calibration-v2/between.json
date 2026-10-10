@@ -1,0 +1,1572 @@
+{
+ "calibration": {
+  "rule": "v2",
+  "selection": {
+   "eligible": [
+    "BD",
+    "CY",
+    "HC",
+    "HT",
+    "LC",
+    "LT",
+    "MC",
+    "MT",
+    "SD"
+   ],
+   "by_p": {
+    "0.05": {
+     "mean_rate": 0.0686,
+     "per_sound": {
+      "BD": 0.0075,
+      "SD": 0.2575,
+      "LT": 0.0,
+      "LC": 0.0,
+      "MT": 0.0,
+      "MC": 0.195,
+      "HT": 0.155,
+      "HC": 0.0,
+      "CY": 0.0025
+     },
+     "top_failing": {
+      "BD": [
+       [
+        "pitch_shape",
+        200
+       ],
+       [
+        "flatness",
+        191
+       ],
+       [
+        "pitch",
+        178
+       ]
+      ],
+      "SD": [
+       [
+        "spec_peak",
+        136
+       ],
+       [
+        "centroid",
+        115
+       ],
+       [
+        "attack",
+        108
+       ]
+      ],
+      "LT": [
+       [
+        "flatness",
+        200
+       ],
+       [
+        "pitch",
+        200
+       ],
+       [
+        "spec_peak",
+        200
+       ]
+      ],
+      "LC": [
+       [
+        "centroid",
+        200
+       ],
+       [
+        "flatness",
+        200
+       ],
+       [
+        "attack",
+        200
+       ]
+      ],
+      "MT": [
+       [
+        "centroid",
+        200
+       ],
+       [
+        "flatness",
+        200
+       ],
+       [
+        "decay",
+        200
+       ]
+      ],
+      "MC": [
+       [
+        "spec_peak",
+        200
+       ],
+       [
+        "centroid",
+        200
+       ],
+       [
+        "flatness",
+        200
+       ]
+      ],
+      "HT": [
+       [
+        "spec",
+        200
+       ],
+       [
+        "spec_peak",
+        200
+       ],
+       [
+        "centroid",
+        200
+       ]
+      ],
+      "HC": [
+       [
+        "spec",
+        200
+       ],
+       [
+        "spec_peak",
+        200
+       ],
+       [
+        "centroid",
+        200
+       ]
+      ],
+      "CY": [
+       [
+        "spec",
+        200
+       ],
+       [
+        "spec_peak",
+        200
+       ],
+       [
+        "centroid",
+        200
+       ]
+      ]
+     }
+    },
+    "0.1": {
+     "mean_rate": 0.1161,
+     "per_sound": {
+      "BD": 0.1775,
+      "SD": 0.515,
+      "LT": 0.0,
+      "LC": 0.0,
+      "MT": 0.0,
+      "MC": 0.195,
+      "HT": 0.155,
+      "HC": 0.0,
+      "CY": 0.0025
+     },
+     "top_failing": {
+      "BD": [
+       [
+        "pitch_shape",
+        200
+       ],
+       [
+        "flatness",
+        162
+       ],
+       [
+        "pitch",
+        131
+       ]
+      ],
+      "SD": [
+       [
+        "spec_peak",
+        82
+       ],
+       [
+        "decay",
+        71
+       ],
+       [
+        "centroid",
+        66
+       ]
+      ],
+      "LT": [
+       [
+        "flatness",
+        200
+       ],
+       [
+        "pitch",
+        200
+       ],
+       [
+        "modulation",
+        200
+       ]
+      ],
+      "LC": [
+       [
+        "centroid",
+        200
+       ],
+       [
+        "flatness",
+        200
+       ],
+       [
+        "attack",
+        200
+       ]
+      ],
+      "MT": [
+       [
+        "centroid",
+        200
+       ],
+       [
+        "flatness",
+        200
+       ],
+       [
+        "decay",
+        200
+       ]
+      ],
+      "MC": [
+       [
+        "spec_peak",
+        200
+       ],
+       [
+        "centroid",
+        200
+       ],
+       [
+        "flatness",
+        200
+       ]
+      ],
+      "HT": [
+       [
+        "spec",
+        200
+       ],
+       [
+        "spec_peak",
+        200
+       ],
+       [
+        "centroid",
+        200
+       ]
+      ],
+      "HC": [
+       [
+        "spec",
+        200
+       ],
+       [
+        "spec_peak",
+        200
+       ],
+       [
+        "centroid",
+        200
+       ]
+      ],
+      "CY": [
+       [
+        "spec",
+        200
+       ],
+       [
+        "spec_peak",
+        200
+       ],
+       [
+        "centroid",
+        200
+       ]
+      ]
+     }
+    },
+    "0.15": {
+     "mean_rate": 0.3225,
+     "per_sound": {
+      "BD": 0.32,
+      "SD": 0.695,
+      "LT": 0.0,
+      "LC": 0.3675,
+      "MT": 0.17,
+      "MC": 0.3925,
+      "HT": 0.4,
+      "HC": 0.4,
+      "CY": 0.1575
+     },
+     "top_failing": {
+      "BD": [
+       [
+        "pitch_shape",
+        200
+       ],
+       [
+        "flatness",
+        98
+       ],
+       [
+        "pitch",
+        86
+       ]
+      ],
+      "SD": [
+       [
+        "centroid",
+        56
+       ],
+       [
+        "spec_peak",
+        55
+       ],
+       [
+        "decay",
+        54
+       ]
+      ],
+      "LT": [
+       [
+        "flatness",
+        200
+       ],
+       [
+        "pitch",
+        200
+       ],
+       [
+        "modulation",
+        200
+       ]
+      ],
+      "LC": [
+       [
+        "flatness",
+        144
+       ],
+       [
+        "decay",
+        144
+       ],
+       [
+        "attack",
+        109
+       ]
+      ],
+      "MT": [
+       [
+        "modulation",
+        128
+       ],
+       [
+        "centroid",
+        119
+       ],
+       [
+        "decay",
+        103
+       ]
+      ],
+      "MC": [
+       [
+        "pitch_shape",
+        155
+       ],
+       [
+        "centroid",
+        150
+       ],
+       [
+        "flatness",
+        150
+       ]
+      ],
+      "HT": [
+       [
+        "centroid",
+        110
+       ],
+       [
+        "pitch",
+        105
+       ],
+       [
+        "spec_peak",
+        104
+       ]
+      ],
+      "HC": [
+       [
+        "flatness",
+        103
+       ],
+       [
+        "spec_peak",
+        101
+       ],
+       [
+        "decay",
+        101
+       ]
+      ],
+      "CY": [
+       [
+        "flatness",
+        135
+       ],
+       [
+        "centroid",
+        125
+       ],
+       [
+        "attack",
+        114
+       ]
+      ]
+     }
+    },
+    "0.2": {
+     "mean_rate": 0.36,
+     "per_sound": {
+      "BD": 0.3775,
+      "SD": 0.7225,
+      "LT": 0.0475,
+      "LC": 0.3675,
+      "MT": 0.17,
+      "MC": 0.5975,
+      "HT": 0.4,
+      "HC": 0.4,
+      "CY": 0.1575
+     },
+     "top_failing": {
+      "BD": [
+       [
+        "pitch_shape",
+        200
+       ],
+       [
+        "pitch",
+        56
+       ],
+       [
+        "spec_peak",
+        44
+       ]
+      ],
+      "SD": [
+       [
+        "decay",
+        54
+       ],
+       [
+        "attack",
+        52
+       ],
+       [
+        "spec_peak",
+        49
+       ]
+      ],
+      "LT": [
+       [
+        "flatness",
+        200
+       ],
+       [
+        "pitch",
+        200
+       ],
+       [
+        "modulation",
+        196
+       ]
+      ],
+      "LC": [
+       [
+        "flatness",
+        144
+       ],
+       [
+        "decay",
+        144
+       ],
+       [
+        "attack",
+        109
+       ]
+      ],
+      "MT": [
+       [
+        "modulation",
+        128
+       ],
+       [
+        "centroid",
+        119
+       ],
+       [
+        "decay",
+        103
+       ]
+      ],
+      "MC": [
+       [
+        "pitch_shape",
+        98
+       ],
+       [
+        "pitch",
+        91
+       ],
+       [
+        "spec",
+        88
+       ]
+      ],
+      "HT": [
+       [
+        "centroid",
+        110
+       ],
+       [
+        "pitch",
+        105
+       ],
+       [
+        "spec_peak",
+        104
+       ]
+      ],
+      "HC": [
+       [
+        "flatness",
+        103
+       ],
+       [
+        "spec_peak",
+        101
+       ],
+       [
+        "decay",
+        101
+       ]
+      ],
+      "CY": [
+       [
+        "flatness",
+        135
+       ],
+       [
+        "centroid",
+        125
+       ],
+       [
+        "attack",
+        114
+       ]
+      ]
+     }
+    },
+    "0.3": {
+     "mean_rate": 0.5214,
+     "per_sound": {
+      "BD": 0.435,
+      "SD": 0.805,
+      "LT": 0.1375,
+      "LC": 0.61,
+      "MT": 0.37,
+      "MC": 0.7425,
+      "HT": 0.6025,
+      "HC": 0.5525,
+      "CY": 0.4375
+     },
+     "top_failing": {
+      "BD": [
+       [
+        "pitch_shape",
+        200
+       ],
+       [
+        "pitch",
+        30
+       ],
+       [
+        "spec_peak",
+        15
+       ]
+      ],
+      "SD": [
+       [
+        "decay",
+        38
+       ],
+       [
+        "spec_peak",
+        27
+       ],
+       [
+        "centroid",
+        26
+       ]
+      ],
+      "LT": [
+       [
+        "flatness",
+        200
+       ],
+       [
+        "pitch",
+        199
+       ],
+       [
+        "modulation",
+        176
+       ]
+      ],
+      "LC": [
+       [
+        "flatness",
+        74
+       ],
+       [
+        "decay",
+        74
+       ],
+       [
+        "modulation",
+        50
+       ]
+      ],
+      "MT": [
+       [
+        "centroid",
+        119
+       ],
+       [
+        "spec_peak",
+        68
+       ],
+       [
+        "flatness",
+        67
+       ]
+      ],
+      "MC": [
+       [
+        "pitch_shape",
+        68
+       ],
+       [
+        "pitch",
+        63
+       ],
+       [
+        "spec",
+        62
+       ]
+      ],
+      "HT": [
+       [
+        "centroid",
+        76
+       ],
+       [
+        "spec_peak",
+        60
+       ],
+       [
+        "pitch_shape",
+        47
+       ]
+      ],
+      "HC": [
+       [
+        "pitch_shape",
+        76
+       ],
+       [
+        "decay",
+        74
+       ],
+       [
+        "flatness",
+        64
+       ]
+      ],
+      "CY": [
+       [
+        "attack",
+        111
+       ],
+       [
+        "centroid",
+        67
+       ],
+       [
+        "spec_peak",
+        51
+       ]
+      ]
+     }
+    },
+    "0.5": {
+     "mean_rate": 0.7217,
+     "per_sound": {
+      "BD": 0.875,
+      "SD": 0.9125,
+      "LT": 0.185,
+      "LC": 0.79,
+      "MT": 0.63,
+      "MC": 0.9,
+      "HT": 0.765,
+      "HC": 0.74,
+      "CY": 0.6975
+     },
+     "top_failing": {
+      "BD": [
+       [
+        "pitch_shape",
+        50
+       ]
+      ],
+      "SD": [
+       [
+        "spec_peak",
+        14
+       ],
+       [
+        "decay",
+        13
+       ],
+       [
+        "attack",
+        8
+       ]
+      ],
+      "LT": [
+       [
+        "flatness",
+        200
+       ],
+       [
+        "pitch",
+        149
+       ],
+       [
+        "spec_peak",
+        125
+       ]
+      ],
+      "LC": [
+       [
+        "pitch_shape",
+        32
+       ],
+       [
+        "flatness",
+        32
+       ],
+       [
+        "decay",
+        32
+       ]
+      ],
+      "MT": [
+       [
+        "centroid",
+        119
+       ],
+       [
+        "flatness",
+        25
+       ],
+       [
+        "spec_peak",
+        19
+       ]
+      ],
+      "MC": [
+       [
+        "pitch_shape",
+        30
+       ],
+       [
+        "spec",
+        26
+       ],
+       [
+        "pitch",
+        26
+       ]
+      ],
+      "HT": [
+       [
+        "centroid",
+        64
+       ],
+       [
+        "attack",
+        33
+       ],
+       [
+        "spec_peak",
+        10
+       ]
+      ],
+      "HC": [
+       [
+        "pitch_shape",
+        62
+       ],
+       [
+        "decay",
+        23
+       ],
+       [
+        "impulse",
+        18
+       ]
+      ],
+      "CY": [
+       [
+        "attack",
+        76
+       ],
+       [
+        "spec_peak",
+        24
+       ],
+       [
+        "decay",
+        10
+       ]
+      ]
+     }
+    },
+    "0.75": {
+     "mean_rate": 0.8206,
+     "per_sound": {
+      "BD": 1.0,
+      "SD": 1.0,
+      "LT": 0.25,
+      "LC": 0.9175,
+      "MT": 0.65,
+      "MC": 0.985,
+      "HT": 0.8375,
+      "HC": 0.815,
+      "CY": 0.93
+     },
+     "top_failing": {
+      "BD": [],
+      "SD": [],
+      "LT": [
+       [
+        "flatness",
+        200
+       ],
+       [
+        "modulation",
+        98
+       ],
+       [
+        "pitch",
+        22
+       ]
+      ],
+      "LC": [
+       [
+        "modulation",
+        18
+       ],
+       [
+        "pitch_shape",
+        13
+       ],
+       [
+        "spec_peak",
+        3
+       ]
+      ],
+      "MT": [
+       [
+        "centroid",
+        119
+       ],
+       [
+        "flatness",
+        24
+       ],
+       [
+        "decay",
+        9
+       ]
+      ],
+      "MC": [
+       [
+        "pitch_shape",
+        5
+       ],
+       [
+        "spec",
+        4
+       ],
+       [
+        "spec_peak",
+        4
+       ]
+      ],
+      "HT": [
+       [
+        "centroid",
+        64
+       ],
+       [
+        "attack",
+        5
+       ],
+       [
+        "pitch_shape",
+        1
+       ]
+      ],
+      "HC": [
+       [
+        "pitch_shape",
+        62
+       ],
+       [
+        "flatness",
+        8
+       ],
+       [
+        "impulse",
+        6
+       ]
+      ],
+      "CY": [
+       [
+        "attack",
+        22
+       ],
+       [
+        "centroid",
+        4
+       ],
+       [
+        "flatness",
+        3
+       ]
+      ]
+     }
+    },
+    "1.0": {
+     "mean_rate": 0.93,
+     "per_sound": {
+      "BD": 1.0,
+      "SD": 1.0,
+      "LT": 0.8775,
+      "LC": 0.9725,
+      "MT": 0.6675,
+      "MC": 0.9975,
+      "HT": 0.9575,
+      "HC": 0.915,
+      "CY": 0.9825
+     },
+     "top_failing": {
+      "BD": [],
+      "SD": [],
+      "LT": [
+       [
+        "flatness",
+        35
+       ],
+       [
+        "modulation",
+        11
+       ],
+       [
+        "centroid",
+        3
+       ]
+      ],
+      "LC": [
+       [
+        "modulation",
+        9
+       ],
+       [
+        "pitch_shape",
+        1
+       ],
+       [
+        "spec_peak",
+        1
+       ]
+      ],
+      "MT": [
+       [
+        "centroid",
+        119
+       ],
+       [
+        "flatness",
+        10
+       ],
+       [
+        "decay",
+        8
+       ]
+      ],
+      "MC": [
+       [
+        "spec",
+        1
+       ],
+       [
+        "spec_peak",
+        1
+       ],
+       [
+        "centroid",
+        1
+       ]
+      ],
+      "HT": [
+       [
+        "centroid",
+        17
+       ]
+      ],
+      "HC": [
+       [
+        "pitch_shape",
+        30
+       ],
+       [
+        "impulse",
+        2
+       ],
+       [
+        "flatness",
+        2
+       ]
+      ],
+      "CY": [
+       [
+        "flatness",
+        3
+       ],
+       [
+        "attack",
+        3
+       ],
+       [
+        "centroid",
+        2
+       ]
+      ]
+     }
+    }
+   },
+   "chosen": null,
+   "coverage_required": 0.8,
+   "min_keys": 8,
+   "splits": 200
+  },
+  "p": null,
+  "sounds": {},
+  "twins": {
+   "BD": {
+    "keys": 72,
+    "unpaired": []
+   },
+   "SD": {
+    "keys": 108,
+    "unpaired": []
+   },
+   "LT": {
+    "keys": 33,
+    "unpaired": []
+   },
+   "LC": {
+    "keys": 22,
+    "unpaired": []
+   },
+   "MT": {
+    "keys": 33,
+    "unpaired": []
+   },
+   "MC": {
+    "keys": 22,
+    "unpaired": []
+   },
+   "HT": {
+    "keys": 33,
+    "unpaired": []
+   },
+   "HC": {
+    "keys": 22,
+    "unpaired": []
+   },
+   "RS": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CL": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CP": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "MA": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CB": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CY": {
+    "keys": 24,
+    "unpaired": []
+   },
+   "OH": {
+    "keys": 5,
+    "unpaired": []
+   },
+   "CH": {
+    "keys": 2,
+    "unpaired": []
+   }
+  },
+  "diagnostic": null,
+  "status": "REFUSED: no p in P_GRID reaches the split-coverage requirement",
+  "injected_control": {
+   "corrupt": "darker",
+   "calibration_status": "REFUSED: no p in P_GRID reaches the split-coverage requirement",
+   "qualified": null
+  },
+  "old_bar_context": {
+   "BD": {
+    "old_bar": "808-neighbour",
+    "n_takes": 144,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "01. Bass Drum/Clean/Digital/A/BD A 808 Decay C 03.wav",
+     "worst_ratio": 7.5032,
+     "worst_feature": "pitch",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "flatness",
+      "attack",
+      "decay",
+      "modulation",
+      "pitch",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 22.2163,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "SD": {
+    "old_bar": "808-neighbour",
+    "n_takes": 216,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone F 06.wav",
+     "worst_ratio": 2.9159,
+     "worst_feature": "spec",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "attack",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 2.0555,
+     "worst_feature": "attack"
+    }
+   },
+   "LT": {
+    "old_bar": "808-neighbour",
+    "n_takes": 66,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "03. Low Tom/Clean/Digital/A/Tom Low A 808 01.wav",
+     "worst_ratio": 5.6497,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "impulse",
+      "decay",
+      "modulation",
+      "pitch",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 14.848,
+     "worst_feature": "modulation"
+    }
+   },
+   "LC": {
+    "old_bar": "808-neighbour",
+    "n_takes": 44,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "06. Low Conga/Clean/Digital/A/Conga Low A 808 01.wav",
+     "worst_ratio": 5.1933,
+     "worst_feature": "flatness",
+     "failing": [
+      "spec",
+      "flatness",
+      "decay",
+      "modulation",
+      "pitch",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 16.4492,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "MT": {
+    "old_bar": "808-neighbour",
+    "n_takes": 66,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 06.wav",
+     "worst_ratio": 3.1384,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "centroid",
+      "flatness",
+      "attack",
+      "decay",
+      "modulation",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 10.531,
+     "worst_feature": "centroid"
+    }
+   },
+   "MC": {
+    "old_bar": "808-neighbour",
+    "n_takes": 44,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "07. Mid Conga/Clean/Digital/A/Conga Mid A 808 01.wav",
+     "worst_ratio": 4.3484,
+     "worst_feature": "flatness",
+     "failing": [
+      "flatness",
+      "decay",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 19.4205,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "HT": {
+    "old_bar": "808-neighbour",
+    "n_takes": 66,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "05. Hi Tom/Clean/Digital/A/Tom Hi A 808 02.wav",
+     "worst_ratio": 4.6694,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "centroid",
+      "flatness",
+      "decay",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 8.0158,
+     "worst_feature": "centroid"
+    }
+   },
+   "HC": {
+    "old_bar": "808-neighbour",
+    "n_takes": 44,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "08. Hi Conga/Clean/Digital/A/Conga Hi A 808 03.wav",
+     "worst_ratio": 1.9705,
+     "worst_feature": "impulse",
+     "failing": [
+      "impulse",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 8.732,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "RS": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "09. Rim Shot/Clean/Tape/Rim Shot A 808 Tape.wav",
+     "worst_ratio": 2.3023,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "flatness",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 20.6218,
+     "worst_feature": "centroid"
+    }
+   },
+   "CL": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "11. Claves/Clean/Digital/Claves A 808.wav",
+     "worst_ratio": 5.1166,
+     "worst_feature": "flatness",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "decay",
+      "pitch"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 15.8195,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "CP": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "10. Hand Clap/Clean/Tape/Clap A 808 Tape.wav",
+     "worst_ratio": 5.0749,
+     "worst_feature": "attack",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "impulse",
+      "attack",
+      "decay",
+      "modulation"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 15.8926,
+     "worst_feature": "decay"
+    }
+   },
+   "MA": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "12. Maracas/Clean/Tape/Maracas A 808 Tape.wav",
+     "worst_ratio": 4.5154,
+     "worst_feature": "attack",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "impulse",
+      "attack",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 35.4865,
+     "worst_feature": "centroid"
+    }
+   },
+   "CB": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "13. Cowbell/Clean/Digital/Cowbell A 808.wav",
+     "worst_ratio": 10.7181,
+     "worst_feature": "pitch_shape",
+     "failing": [
+      "spec_peak",
+      "decay",
+      "modulation",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 11.0934,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "CY": {
+    "old_bar": "808-neighbour",
+    "n_takes": 48,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "14. Cymbal/Clean/Tape/B/Cym B 808 Tape Decay A 02.wav",
+     "worst_ratio": 3.6844,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "attack",
+      "decay",
+      "modulation"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 7.8605,
+     "worst_feature": "centroid"
+    }
+   },
+   "OH": {
+    "old_bar": "808-neighbour",
+    "n_takes": 10,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "15. Open HH/Clean/Tape/OH 808 Tape Decay 04.wav",
+     "worst_ratio": 1.0522,
+     "worst_feature": "attack",
+     "failing": [
+      "attack"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 4.4025,
+     "worst_feature": "centroid"
+    }
+   },
+   "CH": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "16. Closed HH/Clean/Digital/CH B 808.wav",
+     "worst_ratio": 2.0208,
+     "worst_feature": "spec_peak",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "flatness"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 9.2517,
+     "worst_feature": "flatness"
+    }
+   }
+  }
+ },
+ "qualification": null,
+ "decision": {
+  "status": "REFUSED",
+  "why": "REFUSED: no p in P_GRID reaches the split-coverage requirement"
+ },
+ "provenance": {
+  "commit": "3bdb7e9b4e1dc588a97c47b20faf0f12a75eebb4",
+  "sources_dirty": false,
+  "refs": "/home/ubuntu/fischer",
+  "fixtures_sha256_16": {},
+  "features": [
+   "spec",
+   "spec_peak",
+   "centroid",
+   "flatness",
+   "impulse",
+   "attack",
+   "decay",
+   "modulation",
+   "pitch",
+   "pitch_shape"
+  ],
+  "units": {
+   "spec": "loudness L1 fraction",
+   "spec_peak": "worst frame, fraction of loudest frame",
+   "centroid": "Bark RMS",
+   "flatness": "dB RMS",
+   "attack": "ms RMS of 5/20/50 % cumulative-energy times, first 100 ms (worst band)",
+   "decay": "dB RMS (worst band)",
+   "modulation": "dB RMS (worst band)",
+   "impulse": "dB, worst-sample crest >2 kHz (strike, body)",
+   "pitch": "cents, median offset",
+   "pitch_shape": "cents, worst 20 ms after the offset"
+  },
+  "weak_r": 1.0628,
+  "conventions": {
+   "rate": 48000,
+   "hp_hz": 20.0,
+   "onset_frac": 0.02,
+   "trim_s": 0.001,
+   "loudness": "BS.1770 K, 50 ms blocks, 20 dB relative gate, -23",
+   "span": "2 x target -60 dB + 50 ms, cap 3.0 s",
+   "floor_db": 60.0
+  }
+ }
+}
