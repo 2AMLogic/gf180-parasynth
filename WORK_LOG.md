@@ -6,6 +6,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 Closure events below record forge state, not a verified fix or a new sound result.
 
+- **Issue #347** (closed): M5 pulse preset upper-partial deficit (4.9–5.3 dB vs Mini V3): cutoff/voicing question
+- **Issue #339** (closed): Late-event policy P3 vs RTL: a late event with an earlier sent due than a draining tail is dropped (decide policy or next-image RTL)
 - **PR #639**: [#324] R1 capture inputs: R1-bound references and commands; T-PHYSICAL capture-r1 refuses R0 material
 - **Issue #163** (closed): Root cause: symmetry of code is not symmetry of treatment — three comparisons where both sides called the same function and were handled differently
 - **PR #638**: Preparation contract at the drum pair site: refuse unlike-prepared sides (#163, first slice)
