@@ -60,7 +60,8 @@ module voice_dp #(
     parameter K_ROM_FILE = "../spec/reference/tables/k_rom32.hex",    // Appendix E,  33 x Q1.15
     parameter SINE_FILE  = "../spec/reference/tables/sine_q256.hex",  // Appendix B, 256 x Q1.15
     parameter EXP_FILE   = "../spec/reference/tables/exp_rom65.hex",  // Appendix H,  65 x Q0.15
-    parameter TANH_FILE  = "tanh16.hex"                               // Appendix C, the ladder's
+    parameter TANH_FILE  = "tanh16.hex",                              // Appendix C, the ladder's
+    parameter CORR_ROM_FILE = "../docs/res-tuning/corr_rom33.hex"     // DR 0024, 33 x Q1.15; read only under VOICE_RES_CORR
 )(
     input  wire        clk,
     input  wire        rst_n,
@@ -248,8 +249,55 @@ module voice_dp #(
         // appended again, for the same reason: tb_voice.v tracks state NUMBERS
         S_DA0 = 75, S_DV0 = 76, S_DV1 = 77, S_DR0 = 78, S_DR1 = 79,
         // appended after S_DR1, for the same reason
-        S_SKM = 80, S_W3 = 81, S_W4 = 82;   // polyBLAMP: the slope word, then s^3, then m3*s^3
+        S_SKM = 80, S_W3 = 81, S_W4 = 82,
+        // DR 0024: the resonance-keyed cutoff correction (VOICE_RES_CORR only)
+        S_CR0 = 83, S_CR1 = 84, S_CR2 = 85, S_CR3 = 86, S_CR4 = 87;   // polyBLAMP: the slope word, then s^3, then m3*s^3
     reg [6:0]  state;
+`ifdef VOICE_RES_CORR
+    // DR 0024 (issue #257): the resonance-keyed cutoff correction. CANDIDATE,
+    // compiled in only under VOICE_RES_CORR: without the define this module is
+    // the shipped datapath, state for state. Spec: model/voice_fx.py
+    // `corrected_cut_res`; the table is docs/res-tuning/corr_rom33.hex.
+    reg [15:0] crom [0:32];
+    initial $readmemh(CORR_ROM_FILE, crom);
+    reg  [15:0] cr0, cr1, cc;
+    reg  [14:0] cut_pre;               // the cutoff before the stage (the NO_COMP control reads it)
+`ifdef INJECT_BUG_VOICE_CORR_KEFF_KEY
+    wire [16:0] corr_key = k_eff;      // NEGATIVE CONTROL: keyed on the compensated k of the PREVIOUS frame
+`else
+    wire [16:0] corr_key = k;          // the HOST k register, which nothing downstream modifies
+`endif
+    // d = clamp(key - 65536, 0, 65535): key is 17 bits, so the clamp is its bit 16
+    wire [4:0]  ci  = corr_key[16] ? corr_key[15:11] : 5'd0;
+    wire [10:0] cf  = corr_key[16] ? corr_key[10:0]  : 11'd0;
+`ifdef INJECT_BUG_VOICE_CORR_INDEX_OFF1
+    wire [4:0]  ci_a = (ci == 5'd31) ? 5'd31 : ci + 5'd1;   // NEGATIVE CONTROL: reads one knot too high
+`else
+    wire [4:0]  ci_a = ci;
+`endif
+`ifdef INJECT_BUG_VOICE_CORR_INDEX_WRAP
+    // NEGATIVE CONTROL = the defect this stage's FIRST build had: i + 1 in 5 bits wraps 31 -> 0,
+    // so for k >= 129024 (res >= 1.969) the upper knot read is entry 0 (unity). Only the
+    // `extremes` scenarios reach it; the res 1.05 `waves2` scenario cannot.
+    wire [15:0] crd = (state == S_CR1) ? crom[ci_a + 5'd1] : crom[ci_a];
+`else
+    wire [15:0] crd = (state == S_CR1) ? crom[{1'b0, ci_a} + 6'd1] : crom[ci_a];   // 6 bits: 31 + 1 = 32, the guard entry
+`endif
+    wire signed [45:0] cr_d = mr >>> 11;                                  // floor, as the model's >>
+    wire [15:0] cc_n = cr0 + cr_d[15:0];
+`ifdef INJECT_BUG_VOICE_CORR_REVERSED
+    wire [15:0] cc_use = 16'd0 - cc_n;                                    // NEGATIVE CONTROL: 65536 - c (mirrors about unity)
+`else
+    wire [15:0] cc_use = cc_n;
+`endif
+`ifdef INJECT_BUG_VOICE_CORR_FLOOR
+    wire [45:0] cr_p = mr >> 15;                                          // NEGATIVE CONTROL: floor, no +2^14
+`else
+    wire [45:0] cr_p = (mr + 46'd16384) >> 15;                            // cut * c is non-negative: unsigned shift is exact
+`endif
+    wire [14:0] cut_cr = (cr_p < 46'd30) ? 15'd30 : (cr_p > 46'd21600) ? 15'd21600 : cr_p[14:0];
+`endif
+
     reg [1:0]  kk;                     // oscillator index
     reg [1:0]  win;                    // PolyBLEP window 0..3
     reg signed [16:0] c_pp, c_ps;      // corrections at the two edges
@@ -456,8 +504,13 @@ module voice_dp #(
     wire [14:0] rc  = dphase ? dcut_c : cut;                      // which cutoff the ROMs serve
     wire [6:0]  gi  = rc[14:8];
     wire [7:0]  gf  = rc[7:0];
-    wire [4:0]  ki  = rc[14:10];
-    wire [9:0]  kf  = rc[9:0];
+`ifdef INJECT_BUG_VOICE_CORR_NO_COMP
+    wire [14:0] rck = dphase ? dcut_c : cut_pre;                  // NEGATIVE CONTROL: the k ROM is NOT re-derived, it still sees the uncorrected cutoff
+`else
+    wire [14:0] rck = rc;
+`endif
+    wire [4:0]  ki  = rck[14:10];
+    wire [9:0]  kf  = rck[9:0];
     wire        rom_second = (state == S_ROM1) || (state == S_DC1);
     wire [15:0] grd = rom_second ? grom[gi + 7'd1] : grom[gi];
     wire [15:0] krd = rom_second ? krom[ki + 5'd1] : krom[ki];
@@ -868,7 +921,20 @@ module voice_dp #(
                     state <= S_CUT1;
                 end
                 S_CUT1: begin ma <= {10'b0, cut_n}; mb <= {4'b0, mant_f}; state <= S_CUTM; end
+`ifdef VOICE_RES_CORR
+                S_CUTM: begin cut <= cut_m; cut_pre <= cut_m; state <= S_CR0; end   // 5b, then 5c (DR 0024)
+                S_CR0: begin cr0 <= crd; state <= S_CR1; end                 // rom[i]
+                S_CR1: begin cr1 <= crd; state <= S_CR2; end                 // rom[i+1]
+                S_CR2: begin ma <= {{8{1'b0}}, 1'b0, cr1} - {{8{1'b0}}, 1'b0, cr0}; mb <= {10'b0, cf}; state <= S_CR3; end
+                S_CR3: begin cc <= cc_use; ma <= {10'b0, cut}; mb <= {5'b0, cc_use}; state <= S_CR4; end
+`ifdef INJECT_BUG_VOICE_CORR_DISABLED
+                S_CR4: begin state <= S_ROM0; end                            // NEGATIVE CONTROL: the stage computes and discards
+`else
+                S_CR4: begin cut <= cut_cr; state <= S_ROM0; end             // round, clamp, write
+`endif
+`else
                 S_CUTM: begin cut <= cut_m; state <= S_ROM0; end             // 5b: filter modulation
+`endif
                 S_ROM0: begin g0 <= grd; kc0 <= krd; state <= S_ROM1; end
                 S_ROM1: begin g1 <= grd; kc1 <= krd; state <= S_ROM2; end
                 S_ROM2: begin

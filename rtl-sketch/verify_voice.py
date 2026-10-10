@@ -127,7 +127,8 @@ F1CAL = "surge-type2-clean-v1"
 F1CAL_FAULT = None
 BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF", "PULSE2X_OFF", "PULSE2X_RECT_HEADROOM",
         "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "SHARK_BLAMP_SIGN", "MOD_NODELAY",
-        "DRIFT_SHARED", "DRIFT_LEAKFLOOR", "DRIFT_MEANSTEP"]
+        "DRIFT_SHARED", "DRIFT_LEAKFLOOR", "DRIFT_MEANSTEP",
+        "CORR_DISABLED", "CORR_REVERSED", "CORR_KEFF_KEY", "CORR_INDEX_OFF1", "CORR_INDEX_WRAP", "CORR_FLOOR", "CORR_NO_COMP"]
 #: The production launch. tb_voice.v's GO must equal synth_top.v's GO_CYCLE:
 #: a bench that launches later than the chip refuses configurations the chip
 #: runs (PR #235's three-saw refusal, docs/deadline/README.md), and one that
@@ -550,10 +551,18 @@ def coverage(v: vf.VoiceFx, regs: dict, writes: list, phases0: list, trig, gate)
     return "; ".join(notes)
 
 
+def _res_corr_rom():
+    """The DR 0024 correction table, read from the SAME file the RTL's
+    $readmemh reads (docs/res-tuning/corr_rom33.hex), so the two cannot differ."""
+    with open(os.path.join(HERE, "..", "docs", "res-tuning", "corr_rom33.hex")) as fh:
+        return [int(w, 16) for w in fh.read().split()]
+
+
 # ---- generate: run the model, write the writes and the expected taps -------------
 def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=False,
-             filter_2x=False, pulse_2x=False):
-    v = vf.VoiceFx(oversample_2x=oversample_2x,
+             filter_2x=False, pulse_2x=False, res_corr=False):
+    v = vf.VoiceFx(res_corr_rom=_res_corr_rom() if res_corr else None,
+                   oversample_2x=oversample_2x,
                    oversample_pulse_2x=pulse_2x,
                    rate_converted_ladder=filter_2x,
                    preserve_filter_headroom=filter_2x,
@@ -728,6 +737,9 @@ def main(argv=None) -> int:
     ap.add_argument("--pulse2x", action="store_true", help="select 2x rectangular oscillators")
     ap.add_argument("--filter2x", action="store_true",
                     help="enable causal reconstructed 2x filter and the pulse-duty challenger")
+    ap.add_argument("--res-corr", action="store_true",
+                    help="DR 0024 (issue #257): enable the resonance-keyed cutoff correction in "
+                         "the model and the RTL (VOICE_RES_CORR) together")
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--rtl", default=None, metavar="FILE", help="simulate FILE in place of voice_dp.v")
     ap.add_argument("--compare-only", default=None, metavar="FILE")
@@ -753,7 +765,8 @@ def main(argv=None) -> int:
           + (f", only {sorted(only)}" if only else ""))
     expected, state, writes, report = generate(a.outdir, a.set, only,
                                                oversample_2x=a.osc2x,
-                                               filter_2x=a.filter2x, pulse_2x=a.pulse2x)
+                                               filter_2x=a.filter2x, pulse_2x=a.pulse2x,
+                                               res_corr=a.res_corr)
     if a.compare_only:
         status = compare(expected, state, report, a.compare_only)
     else:
@@ -762,6 +775,8 @@ def main(argv=None) -> int:
             defines.append("VOICE_FILTER_2X")
         if a.pulse2x:
             defines.append("VOICE_PULSE_2X")
+        if a.res_corr:
+            defines.append("VOICE_RES_CORR")
         if a.inject:
             defines.append(f"INJECT_BUG_VOICE_{a.inject}")
         rtl = os.path.relpath(os.path.abspath(a.rtl), HERE) if a.rtl else None

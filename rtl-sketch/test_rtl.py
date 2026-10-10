@@ -121,6 +121,43 @@ def test_voice_negative_control_is_caught(bug, only, tmp_path):
     assert verify_voice.main(["--set", "quick", "--only", only, "--inject", bug, "--outdir", str(tmp_path)]) == 1
 
 
+# DR 0024 / issue #257: the resonance-keyed cutoff correction stage (VOICE_RES_CORR).
+# Every control is paired with --res-corr: without it the build has no stage and
+# the control compiles to nothing (verify_voice reports NOT CAUGHT, status 0).
+CORR_BUGS = [("CORR_DISABLED", "waves2"), ("CORR_REVERSED", "waves2"), ("CORR_KEFF_KEY", "waves2"),
+             ("CORR_INDEX_OFF1", "waves2"), ("CORR_FLOOR", "waves2"), ("CORR_NO_COMP", "waves2"),
+             ("CORR_INDEX_WRAP", "extremes")]      # waves2 (res 1.05) cannot reach the i = 31 wrap
+
+
+@needs_sim
+def test_res_corr_stage_is_bit_exact_on_the_scenarios_that_reach_it(tmp_path):
+    for only in ("waves2", "extremes"):
+        assert verify_voice.main(["--set", "quick", "--only", only, "--res-corr",
+                                  "--outdir", str(tmp_path / only)]) == 0
+
+
+@needs_sim
+def test_res_corr_bench_fails_on_a_stub(tmp_path):
+    """Start red for the enabled configuration: ports with no behaviour, every output X."""
+    assert verify_voice.main(["--set", "quick", "--only", "waves2", "--res-corr", "--outdir", str(tmp_path),
+                              "--rtl", os.path.join(HERE, "stubs", "voice_dp_stub.v")]) == 1
+
+
+@needs_sim
+@pytest.mark.parametrize("bug,only", CORR_BUGS)
+def test_res_corr_negative_control_is_caught(bug, only, tmp_path):
+    assert verify_voice.main(["--set", "quick", "--only", only, "--res-corr", "--inject", bug,
+                              "--outdir", str(tmp_path)]) == 1
+
+
+@needs_sim
+def test_res_corr_waves2_is_blind_to_the_index_wrap(tmp_path):
+    """Pinned, not hidden (verification-rules rule 4): the wrap only exists for
+    k >= 129024, which `waves2` never reaches, so this control passes there."""
+    assert verify_voice.main(["--set", "quick", "--only", "waves2", "--res-corr", "--inject",
+                              "CORR_INDEX_WRAP", "--outdir", str(tmp_path)]) == 0
+
+
 @needs_sim
 def test_drum_section_rtl_is_bit_exact(tmp_path):
     """The short stimulus (every stop soloed, edge semantics, all eight at

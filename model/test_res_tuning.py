@@ -276,3 +276,67 @@ def test_the_acceptance_matrix_is_pinned_including_what_it_is_blind_to():
         assert set(rep["controls"][n]["matrix"].values()) == {"BLIND"}, n
     assert rep["controls"]["reversed"]["matrix"]["N1_worst_abs"] == "MOVED"
     assert rep["controls"]["disabled"]["matrix"]["N1_worst_abs"] == "BLIND"
+
+
+# ---- the RTL's table and the voice model's mirror of the stage (DR 0024) -----
+def test_the_rtl_table_file_is_the_validated_table_and_nothing_else():
+    """docs/res-tuning/corr_rom33.hex is what voice_dp.v's $readmemh reads and
+    what verify_voice.py feeds the model; it must be the validated table."""
+    val = json.load(open(VAL))
+    assert [int(x) for x in rt.load_corr_hex()] == val["corr_rom"]
+    assert open(rt.CORR_HEX).read() == rt.corr_hex_text(val["corr_rom"])
+
+
+def test_the_hex_writer_refuses_a_table_that_is_not_unity_at_entry_zero():
+    rom = json.load(open(VAL))["corr_rom"]
+    with pytest.raises(rt.Refused):
+        rt.corr_hex_text([32767] + rom[1:])
+    with pytest.raises(rt.Refused):
+        rt.corr_hex_text(rom[:-1])
+    with pytest.raises(rt.Refused):
+        rt.corr_hex_text(rom[:-1] + [65536])
+
+
+def test_the_voice_models_stage_equals_the_measured_one_over_the_whole_k_range():
+    """voice_fx.corrected_cut_res (what the RTL bench compares against) and
+    res_tuning.corrected_cut (what the 5.5 c figure was measured with) are two
+    spellings of one function. Every 97th k, plus both ends and the onset."""
+    rom = rt.load_corr_hex()
+    ks = sorted(set(list(range(0, 1 << 17, 97)) + [0, 65535, 65536, 65537, 131071]))
+    cuts = np.array([30, 31, 150, 1793, 9000, 21599, 21600])
+    for k in ks:
+        want = rt.corrected_cut(cuts, k, rom)
+        got = vf.corrected_cut_res(cuts, k, rom)
+        assert np.array_equal(want, got), k
+    assert np.array_equal(vf.corrected_cut_res(cuts, 70000, None), cuts)
+
+
+def test_the_stage_is_the_identity_at_and_below_the_onset_for_the_rtl_table():
+    rom = rt.load_corr_hex()
+    cuts = np.arange(30, 21601, 7)
+    for k in (0, 1, 65535, 65536):
+        assert np.array_equal(vf.corrected_cut_res(cuts, k, rom), cuts)
+
+
+def _note_trace(rom, res):
+    v = vf.VoiceFx(res_corr_rom=rom)
+    y = v.note(57, 0.03, q=res, cutoff=(300, 6000))
+    return y, v.trace
+
+
+def test_a_voice_without_the_table_is_the_shipped_voice_bit_for_bit():
+    """res_corr_rom=None adds nothing: a res-1.5 note is identical to one from
+    a table whose every entry is unity (the stage then rounds to the same cut),
+    and DIFFERENT from the committed table's -- so the option is neither inert
+    nor disturbing."""
+    rom = rt.load_corr_hex()
+    y0, t0 = _note_trace(None, 1.5)
+    y1, t1 = _note_trace(np.full(33, 32768), 1.5)
+    y2, t2 = _note_trace(rom, 1.5)
+    assert np.array_equal(y0, y1) and np.array_equal(t0["cut"], t1["cut"])
+    assert not np.array_equal(t0["cut"], t2["cut"])
+    assert np.all(t2["cut"] >= t0["cut"])            # the table only ever raises the cutoff
+    # below the onset the committed table is the identity: nothing to see
+    ya, ta = _note_trace(None, 0.8)
+    yb, tb = _note_trace(rom, 0.8)
+    assert np.array_equal(ya, yb) and np.array_equal(ta["cut"], tb["cut"])
