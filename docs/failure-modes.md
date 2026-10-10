@@ -383,3 +383,38 @@ including the instances not yet hit.
 The test of whether this is working is not that the list of checks grows. It is
 that **the next unknown failure is caught by a check written before anyone knew
 about it.**
+
+---
+
+# The fourth batch: the comparison, not the claim
+
+#155 is about claims. This one is about **comparisons**, and it is counted as
+the fifth root cause (#163).
+
+## Root cause: symmetry of code is not symmetry of treatment
+
+**Code looks symmetric because both sides call the same function, but what the
+function does depends on state that differs between the sides.** Nothing
+declares the difference, and the call site cannot show it. It reads `f(ours)`
+and `f(theirs)` and looks obviously fair. The state is set *upstream*, often by
+different code paths (`_render_raw` for ours, `read_wav` for theirs). So the
+asymmetry is introduced in one file, consumed in another, and **visible in
+neither**. It also hides itself: the more carefully the comparison is written,
+with the same function, parameters and window length, the fairer it looks.
+
+| where | the shared function | the state that differed | worth |
+|---|---|---|---|
+| **#101** | `band_energy` → `sosfiltfilt` | pre-onset **lead**: reference 0.16 ms, ours 1.00 ms, against a 0.562 ms pad | **6 dB** vs a 3 dB tolerance |
+| **#160 F2** | window placement | our clip **pre-trimmed** at onset, the machine's not | **+32 dB** on window 0 |
+| **#161** | `condition()` → `sosfiltfilt` | **first sample value**, which the trim above determines | pedestal integrating to **−373** vs +0.02 |
+
+The third compounds the second. Two defects that each look small can multiply.
+
+> **The check: a paired comparison asserts its inputs are in the same
+> preparation state, and REFUSES naming every field that is not.** Assert
+> apparatus state (rate as it governs the windowing, lead, finiteness,
+> silence). Never assert acoustic content: first sample, peak and length
+> legitimately differ between two different sounds. For the drum pair site this
+> is `tools/preparation_contract.py`. Every other paired site, and whether it
+> asserts, records or does neither, is listed in
+> `docs/comparison-boundaries.md`.
