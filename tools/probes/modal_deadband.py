@@ -4,7 +4,7 @@
     python3 tools/probes/modal_deadband.py --declared             thresholds, grids, mapping
     python3 tools/probes/modal_deadband.py --known-answer         the committed table, reproduced
     python3 tools/probes/modal_deadband.py --controls             MOVED/BLIND: properties x defects
-    python3 tools/probes/modal_deadband.py --population           every (sound, mode) cell, 1 accent
+    python3 tools/probes/modal_deadband.py --population --out F   the eight non-modal sounds, accent 1.0
     python3 tools/probes/modal_deadband.py --freeze               commit-bound freeze of the sets
     python3 tools/probes/modal_deadband.py --table dev|confirm --out F.json
     python3 tools/probes/modal_deadband.py --ground [--refs DIR]  what the captures can support
@@ -815,7 +815,7 @@ def main(argv=None) -> int:
         run_table(a.table, a.out)
     elif a.population:
         tabs = []
-        for s in dx.SOUND_NAMES:
+        for s in SOUNDS_OTHER:
             tabs.append(rows_for(s, 1.0, check_stock=True))
             print(s, "ok", flush=True)
         rec = dict(reconcile=reconcile(tabs), tables=tabs,
