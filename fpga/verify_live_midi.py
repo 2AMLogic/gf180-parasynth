@@ -571,6 +571,7 @@ class Oracle:
             return
         stop = dx.STOP_NAMES.index(name)
         image = dict(self.mh.image)
+        nominal = dict(self.mh.nominal)         # #598: roll back BOTH on a refusal
         position = dict(self.position)
         n0 = len(self.mh.w)
         cut = []
@@ -601,6 +602,7 @@ class Oracle:
         bend = {w.addr for w in new if w.frame == 0 and w.tag == "tom-bend"}
         if not self._schedule(g, head, tail, t, conditional=True):
             self.mh.image = image
+            self.mh.nominal = nominal
             self.position = position
             for x in cut:
                 self.plan.append(x)
