@@ -26,6 +26,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
+- **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158)
@@ -37,7 +38,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#324**: R1 capture inputs: R1-bound references and commands for the physical capture procedure
 
 ## PRs Awaiting Review
 
@@ -75,6 +76,8 @@ Issues carrying `loom:curated`.
 - **#285**: CLAUDE.md headless rule: say how to wait on jobs longer than one foreground call (10 min cap) *(curated)*
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms) *(curated)*
 - **#310**: Sweep hygiene: a killed sweep leaves its nohup'd heavy job running, and nothing reaps or surfaces it *(curated)*
+- **#324**: R1 capture inputs: R1-bound references and commands for the physical capture procedure *(curated)*
+- **#325**: Consolidated physical setup session sheet (R0 first, then R1) *(curated)*
 - **#334**: Sound: shared tom/conga body-spectrum failures — test a common cause before tuning six presets *(curated)*
 - **#335**: Sound: cowbell partial balance (2.82x tolerance) — local voicing repair *(curated)*
 - **#336**: Sound: rimshot spectrum, maracas envelope/band balance, and hat/cymbal qualification — cover every advertised drum *(curated)*
@@ -93,16 +96,17 @@ Issues carrying `loom:curated`.
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate *(curated)*
 - **#565**: Refuse to report 'routed' from an incomplete nextpnr log (fpga/scripts/report.sh + fpga/Makefile) *(curated)*
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning *(curated)*
+- **#619**: Nightly controls requires I2S_SWAP detection despite declared blind timing *(curated)*
 - **#622**: Nightly reference-freshness gate is unsatisfiable: tests a docs path that has never existed *(curated)*
 - **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)*
 - **#599**: Single git-state reader: collapse ~20 private git() provenance helpers onto tools/provenance.py with one failure encoding *(architect)*
-- **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)*
 - **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(architect)*
 - **#629**: check_workflows.py: assert paths named in workflows and Makefiles exist (standing guard for the #622 class) *(architect)*
+- **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)*
+- **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)*
 
 ## Epics
 
@@ -115,11 +119,11 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 5 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 9 |
-| In Progress (`loom:building`) | 0 |
+| Ready (`loom:issue`) | 10 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 5 |
-| Curated | 36 |
+| Curated | 39 |
 | Architect / Hermit proposals | 5 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->

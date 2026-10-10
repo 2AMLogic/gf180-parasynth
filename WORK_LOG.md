@@ -2,6 +2,14 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-10
+
+Closure events below record forge state, not a verified fix or a new sound result.
+
+- **PR #639**: [#324] R1 capture inputs: R1-bound references and commands; T-PHYSICAL capture-r1 refuses R0 material
+- **Issue #163** (closed): Root cause: symmetry of code is not symmetry of treatment — three comparisons where both sides called the same function and were handled differently
+- **PR #638**: Preparation contract at the drum pair site: refuse unlike-prepared sides (#163, first slice)
+
 ### 2026-10-09
 
 Closure events below record forge state, not a verified fix or a new sound result.
@@ -103,6 +111,16 @@ Closure events below record forge state, not a verified fix or a new sound resul
 - **Issue #45** (closed): Mechanical process-fix tracking.
 
 ### 2026-10-01
+
+- **PR #509**: [dag] propagate RED/BLOCKED dependency status in classify (#140)
+- **PR #508**: Read the promoted metrics' floor from the harness that measures floors (#138)
+- **PR #507**: Promote cqt.0-200Hz and jit.period_ms to refusing estimators; floor unmeasurable (#138)
+- **PR #505**: fpga/spi_host.py: fix hits() anchoring claim, pin 15.7.1 sequence-step movement (#496)
+- **PR #503**: Wire causality battery into _Plugin.qualify for Surge and Mini V3 (#137)
+- **PR #499**: Add mechanism=<status> claim modifier: effect and mechanism are separate claims
+- **PR #501**: NaN fails closed at every audio-entry boundary (#134)
+- **PR #500**: Qualification is a verdict per (rig, host, capability), not one boolean per rig
+- **PR #495**: spec: the model's write burst is not a wire schedule — 15.7.1 gains the anchor policy
 
 - **PR #516**: Edge-leak cause and normalization decision.
 - **PR #514**: Low-band onset metric and edge-straddle precondition; partial #138.
