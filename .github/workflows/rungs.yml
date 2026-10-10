@@ -341,6 +341,14 @@ jobs:
       - name: the CI change classifier and its wiring
         run: python -m pytest tools/test_ci_changes.py -q
 
+      # The FPGA fit reporter (#565). report.sh used to print "RESULT: routed."
+      # from the absence of an ERROR line, so an empty or killed nextpnr log
+      # read as a fit. Its injected-bug controls and the fake-executable
+      # `make -C fpga` tests need no EDA tools. Named explicitly: this does not
+      # depend on how #482 ends up collecting the other fpga/test_*.py files.
+      - name: the FPGA fit reporter refuses incomplete place-and-route logs
+        run: python -m pytest fpga/test_pnr_report.py -q
+
       # Same argument, one file over: the oscillator-1 Shape/Width table in
       # model/reference_rigs.py is a hand transcription of
       # docs/surge-waveform-mapping.txt, and that comment now says outright that
