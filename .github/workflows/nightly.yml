@@ -8,9 +8,9 @@
 # WHAT CANNOT RUN HERE, and why it is not silently omitted: the reference
 # comparison against Surge XT, Arturia Mini V3 and u-he Diva needs licensed
 # plugins installed on a workstation. GitHub-hosted runners do not have them.
-# That half runs from `make -f Makefile.nightly local` on a machine that does,
-# and `nightly-local-required` below fails if its result is stale, so the gap
-# is visible rather than assumed.
+# That half is produced on a provisioned host and committed as snapshots under
+# docs/reference-freshness/ (see its README); the `reference-freshness` job
+# below fails if they are absent or stale, so the gap is visible, not assumed.
 name: nightly
 
 on:
@@ -220,16 +220,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: the reference comparison must not go stale
-        run: |
-          R=docs/reference-comparison-results.md
-          if [ ! -f "$R" ]; then
-            echo "no reference comparison result committed -- the voice is UNVALIDATED against anything external"
-            exit 1
-          fi
-          AGE=$(( ( $(date +%s) - $(git log -1 --format=%ct -- "$R") ) / 86400 ))
-          echo "reference comparison last updated $AGE days ago"
-          if [ "$AGE" -gt 14 ]; then
-            echo "stale: re-run 'make -f Makefile.nightly local' on a machine with the plugins"
-            exit 1
-          fi
+        with: { fetch-depth: 0 }   # commit age needs full history; shallow is REFUSED
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # Exit 0 FRESH, 1 STALE, 2 REFUSED (absent/unusable/no history). The check
+      # prints the supported producer command and the publication instructions.
+      # It measures COMMIT age only; see tools/reference_freshness.py.
+      - name: the reference response snapshot must not be absent or stale
+        run: python tools/reference_freshness.py
