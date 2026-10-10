@@ -454,3 +454,47 @@ def test_the_boundary_control_turns_red_under_the_pre_132_clamp(monkeypatch):
     metrics, _ = rc.drum_measurements("LC", hit, SR, padded, SR, "known-answer hit", [])
     worst = max(abs(m["error"]) / m["tolerance"] for m in metrics.values() if m["valid"])
     assert worst > BOUNDARY_FRACTION_OF_TOLERANCE, worst
+
+
+# --- the current-state probe must not report success for pairs it skipped ----
+# Control for the false-green path: a refusal upstream of the contract used to
+# skip the pair without counting it, so "contract refusals: 0" exited 0.
+
+def _probe(monkeypatch, tmp_path, *, prepare_refuses_for=()):
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "probes"))
+    import preparation_contract_current_state as probe
+    monkeypatch.setenv(rc.REFS_ENV, str(tmp_path))
+    monkeypatch.setattr(rc, "REF_MAIN", {"a": 0, "b": 0, "c": 0})
+    ok = np.concatenate([np.zeros(48), np.ones(480) * 0.5])
+    monkeypatch.setattr(rc, "load_reference", lambda v, d: (ok, 48000, f"{v}.wav", None))
+    monkeypatch.setattr(rc, "render_drum_solo", lambda v: (ok, 48000))
+
+    def prep(x, sr, side=""):
+        if any(v in side for v in prepare_refuses_for):
+            raise rc.Refused("injected upstream refusal")
+        return x
+    monkeypatch.setattr(rc, "prepare", prep)
+    monkeypatch.setattr(pc, "check_prepared_pair", lambda r, o: {
+        "reference": {"lead_samples": 1, "lead_samples_required": 1},
+        "ours": {"lead_samples": 1, "lead_samples_required": 1}})
+    return probe
+
+
+def test_probe_clean_all_accepted_exits_zero(monkeypatch, tmp_path, capsys):
+    probe = _probe(monkeypatch, tmp_path)
+    assert probe.run(tmp_path) == (3, 0, 0, 3)
+    assert probe.main() == 0
+
+
+def test_probe_one_upstream_refusal_is_not_success(monkeypatch, tmp_path, capsys):
+    probe = _probe(monkeypatch, tmp_path, prepare_refuses_for=("our b render",))
+    assert probe.run(tmp_path) == (2, 0, 1, 3)
+    assert probe.main() == 2
+    assert "accepted 2 of 3" in capsys.readouterr().out
+
+
+def test_probe_all_upstream_refusals_is_not_success(monkeypatch, tmp_path, capsys):
+    probe = _probe(monkeypatch, tmp_path, prepare_refuses_for=("our ",))
+    assert probe.run(tmp_path) == (0, 0, 3, 3)
+    assert probe.main() == 2
+    assert "accepted 0 of 3" in capsys.readouterr().out
