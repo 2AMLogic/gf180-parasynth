@@ -6,6 +6,13 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 Closure events below record forge state, not a verified fix or a new sound result.
 
+- **Issue #631** (closed): ci: replace retired "(D5)" Blacksmith citations in workflow comments (needs workflow scope; 2am#3914)
+- **PR #632**: ci: cite the Blacksmith decision by section, not the retired "(D5)"
+- **Issue #609** (closed): Test and inject-control tools/r1_harvest.py: the R1 receipt_valid verdict has no test
+- **PR #628**: test: cover r1_harvest receipt_valid verdict with injected controls
+- **Issue #620** (closed): Vacuous-pass guard audit: standing check for verdicts that pass on an empty population
+- **PR #627**: tools: vacuous_guard_audit, a standing check for verdicts that pass on an empty population
+
 - **Issue #623** (closed): Nightly sound-report red: CP (clap) decay tau, T20 and attack outside tolerance, two of them locks
 - **Issue #610** (closed): Follow-on from PR #604: preserve measurement errors and corrupt RTL anchors
 - **PR #613**: Preserve corrupt anchors and measurement error types (#610)
