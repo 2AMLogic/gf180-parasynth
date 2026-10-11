@@ -412,13 +412,22 @@ def test_confirm_runs_once(tmp_path):
 def test_a_refused_fit_leaves_the_reserved_rows_unread(tmp_path):
     """With no development fit there is nothing to confirm: the record is the
     rule's REFUSED and NO reserved take is opened (an empty refs directory
-    would otherwise REFUSE with missing-take)."""
+    would otherwise REFUSE with missing-take). Asymmetric values: each
+    quantity must be refused for the *exact* no-fit reason with an EMPTY
+    contamination list -- a NOT-READ row that failed its own identity binding
+    would be misread as pooled development data and mask the no-fit reason."""
     fit = tmp_path / "fit.json"
     fit.write_text(json.dumps({"status": "REFUSED", "reason": "not-identifiable: test"}))
     rec = tp.confirm_record(tmp_path, tp.load_prereg(), fit)
     assert rec["reserved_rows_read"] is False
     assert all(r["class"] == "NOT-READ" for r in rec["rows"].values())
-    assert rec["judgement"]["magnitude"]["verdict"] == "REFUSED"
+    assert all(r["take"] == tp.take_rel(k) for k, r in rec["rows"].items()), \
+        "unread rows must carry their reserved take identity"
+    assert rec["judgement"]["development_rows_in_confirmation"] == []
+    for quantity in ("magnitude", "relaxation"):
+        assert rec["judgement"][quantity]["verdict"] == "REFUSED"
+        assert rec["judgement"][quantity]["reason"] == "no development fit", \
+            f"{quantity}: refused for the wrong reason (false contamination?)"
     assert rec["judgement"]["decision"]["magnitude"] == "not identifiable"
     assert rec["judgement"]["decision"]["independent_confirmation"].startswith("REFUSED")
 

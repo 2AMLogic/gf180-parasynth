@@ -907,7 +907,8 @@ def confirm_record(refs: pathlib.Path, pr: dict, fit_path: pathlib.Path) -> dict
         # testing nothing; they are left UNREAD for a successor, and the
         # judgement is the rule's own REFUSED.
         res["rows"] = {c: {"split": "confirmation", "class": "NOT-READ",
-                           "reason": "development fit REFUSED: reserved row not measured"}
+                           "reason": "development fit REFUSED: reserved row not measured",
+                           "take": take_rel(c)}
                        for c, sp in pr["split_of"].items() if sp == "confirmation"}
         res["reserved_rows_read"] = False
     else:
