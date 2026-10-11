@@ -1,0 +1,24 @@
+verify_synth_top: 61 writes over the pins (61 voice, 0 drum), 957 frames after the last
+verify_synth_top: M5A controls: pulse=pulse29; effective pulse=pulse29 (29.00% duty); saw cutoff=14073 Hz; saw volume correction=+0.00000 dB
+verify_synth_top: M5A stimulus has 4 note events, smoke: envelope completion not claimed; selected filter drive 0.75; pulse pulse29; saw cutoff 14073 Hz; saw volume correction +0.00000 dB; reference sha256 a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a
+verify_synth_top: selected 2x saw candidate; compile defines: VOICE_OSC_2X
+verify_synth_top: simulator backend iverilog
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 61 writes sent, 4838 frames, 4837 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 61, writes drained 61, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 4838 frames, MISSING in 0, worst strobe cycle 166 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from 7b662b0, outdir build/m5smoke-legacy-relative; synth_top.v 2fc3939d1140, drum_kit.v 23e97ff6e0e4, drum_regs.v 1282ebc944ee; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 166 of 256, past the LRCLK transition at 128 (35 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: M5A schedule (legacy-relative) against the stimulus's own smoke map (no reference): FAIL -- GATE_ON offsets [55, 50, 47, 42], GATE_OFF offsets [53, 48, 45, 40] frames (permitted 0)
+  segment 0 event 0 GATE_ON late by 55 frame(s) (+55)
+  segment 0 event 0 GATE_OFF late by 53 frame(s) (+53)
+  segment 0 event 1 GATE_ON late by 50 frame(s) (+50)
+  segment 0 event 1 GATE_OFF late by 48 frame(s) (+48)
+  segment 0 event 2 GATE_ON late by 47 frame(s) (+47)
+  segment 0 event 2 GATE_OFF late by 45 frame(s) (+45)
+  segment 0 event 3 GATE_ON late by 42 frame(s) (+42)
+  segment 0 event 3 GATE_OFF late by 40 frame(s) (+40)
+verify_synth_top: REFUSED -- the phrase did not land on M5A's timing map
+Command exited with non-zero status 2
+18.99 s

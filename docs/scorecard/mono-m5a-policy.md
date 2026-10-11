@@ -54,3 +54,57 @@ stimulus exercises both waveforms at MIDI 84/96 through SPI writes and the
 production I2S serializer, then compares every emitted I2S word bit-exactly to
 `SynthTopModel`. That integration check makes no full-envelope claim; the
 scorecard's complete envelope and sound comparison is explicitly model-based.
+
+## Stimulus timing contract (M5A and M5B, #372)
+
+The scorer cuts every window at an absolute position in the decoded WAV, so
+the SPI stimulus is part of the case definition, and so is where it lands.
+
+- **Timing map.** Segment k starts at the manifest's `offset_samples[k]`, the
+  scorer's own map, and not at the sum of `duration_s` and silence. The
+  reference segments were trimmed by their 44-sample host latency, so the two
+  differ by 44 samples per segment. An event is heard at sample
+  `offset_samples + round(on_s × 48000)` and released at
+  `offset_samples + round((on_s + gate_s) × 48000)`, rounded to the nearest frame.
+- **Wire delay.** i2s_tx sends core frame f's sample in period f + 1
+  (contract 13, D = 1). Each GATE_ON and GATE_OFF is therefore applied in
+  core frame (map sample − 1).
+- **Permitted error: 0 frames, for every GATE_ON and GATE_OFF.** This comes
+  from the link, not from a candidate. A write applies in the frame after the
+  one its CS_N acceptance falls in (DR 0007 §5), and the host chooses that
+  frame when it starts the transaction.
+- **Check.** `tools/check_phrase_schedule.py` reads the bench's pin-side write
+  log and compares it with the manifest. It does not consult the scheduler.
+  It returns FAIL on any offset, and REFUSES malformed, unordered or
+  unpredicted logs, missing or extra gates, and an inconsistent map.
+  `verify_synth_top.py --m5a` runs the same check and REFUSES a phrase that
+  misses the map. The scheduler's `legacy-relative` mode (`--m5a-schedule
+  legacy-relative`) is the control that must be refused. It was refused on the
+  iverilog smoke bench: `m5-schedule-372/smoke-legacy-relative/`.
+
+**What the earlier stimulus did.** It used relative waits with a fixed
+10/16-frame reserve and gate waits shortened by 3 frames. Measured against
+the map above, with the link timing that reproduces the bench's stored traces,
+every gate landed **late**:
+
+| | lead-in | later GATE_ONs (first event aligned) | gate length |
+|---|---:|---|---:|
+| no override | +55 | 0, −5, +36, +31 | −2 |
+| saw drive 0.35 | +58 | 0, −11, +33, +22 | −2 |
+| saw cutoff + volume | +53 | 0, −11, +28, +17 | −2 |
+
+The "up to 27 frames early" figure in #343 was measured against the
+duration+silence cursor with the first event aligned. On that cursor the same
+runs give 0, −11, −16, −27 frames. The 44-sample map difference and the
+constant lead-in were both invisible to that check. The absolute schedule
+places all 8 gates of M5A and M5B with an offset of 0, with or without
+overrides.
+
+**Stale receipts.** Every SPI→I2S M5 receipt recorded before this change used
+the earlier stimulus. Its decoded WAV, its hashes and any score cut from it do
+not describe the current stimulus. They remain valid as records of that
+stimulus, and must be re-run before anyone quotes them as the M5 case:
+`mono-m5a-miniv3/filter2x-spi-i2s.txt` and `filter2x-i2s.wav`,
+`mono-m5a-miniv3/saw-cutoff-20khz-i2s.*` and `saw-cutoff-20khz-scored.wav`,
+`m5-artifacts-333/{repro,probe,pulse2x-rtl,saw-drive/confirm}/`, and
+`mono-pulse-2x/rtl/`.
