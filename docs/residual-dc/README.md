@@ -6,7 +6,8 @@ modal arithmetic is #220/#350; toms and congas are #558/#591-#593. Nothing
 here repairs any of them.
 
 Regenerate: `python3 tools/probes/residual_dc.py --screen|--detail|--controls|--reference`.
-Controls: `python3 -m pytest tools/probes/test_residual_dc.py -q` (98 tests).
+Output-stage quantisation (#618): `--output-floor` per condition, `--floor-verdict DEV.json CONFIRM.json`.
+Controls: `python3 -m pytest tools/probes/test_residual_dc.py -q` (123 tests).
 Per-subject ending: `python3 tools/probes/residual_dc.py --verdict DEV.json CONFIRM.json`, reading the
 `--screen --rows-out` records of both conditions (refuses a missing/duplicate condition, a dirty
 record, a record without a valid 40-hex source commit, mixed commits, moved limits, a malformed
@@ -17,7 +18,7 @@ inputs are permanent tests; `red-verdict-guards.txt` records them failing before
 
 | item | state |
 |---|---|
-| apparatus qualified on constant-offset / short-burst / zero-mean / added-HF ground truth, MOVED/BLIND matrix | **done**, `controls-matrix.txt`, 98 passing |
+| apparatus qualified on constant-offset / short-burst / zero-mean / added-HF ground truth, MOVED/BLIND matrix | **done**, `controls-matrix.txt`, 123 passing |
 | start-red record | **done**, `red-start.txt` (estimator stubbed to NaN, fixtures executed, assertions failed); `red-h-ch2.txt` (the H_CH2 defeater against the one-sided rule); `red-verdict-guards.txt` (the `--verdict` provenance / non-finite / singleton defeaters) |
 | dev condition, CH / RS / BD / HT | **done**, `screen-dev-subjects.txt` / `.json`, `detail-dev.txt`, rendered from clean commit `cae21c566571` |
 | per-subject ending produced by the tool | **done**: `--verdict`; on the dev record alone it REFUSES (confirm missing), as it must |
@@ -182,7 +183,84 @@ as the fixture pattern. **Filed: #617.**
 Related, unowned as far as this search found: the output stage's `>> 15` floor
 may leave a sub-LSB bias that a pre-output blocker cannot remove (H_CH2, pending
 `confirm`, and now NO VERDICT on dev). It is an arithmetic matter adjacent to #220/#350 but not inside
-either brief. **Filed: #618.**
+either brief. **Filed: #618, and measured 2026-10-11 -- see the next section.**
+
+## #618: the output stage's final quantisation (2026-10-11)
+
+The production output stage forms ONE int64 accumulator and floors it:
+`output_fx` computes `sat16((dmix*g + body*g) >> 15)` (`model/drums_fx.py:619-627`); the
+RTL is the same shape (`rtl-sketch/voice_dp.v`: `tacc`, |.| < 2^38, line 281; `tsh = tacc >>> 15`,
+line 601; `sat16t`, line 597; `sample <= sat16t(tsh)`, line 1004). Arithmetic `>>>` on ints is
+floor, so production FLOORS where exact rounding would round-half-to-even. #618 measured what
+that choice costs, from the SAME accumulator, without re-rendering:
+`tools/probes/residual_dc.py --output-floor` (per condition) and `--floor-verdict DEV.json CONFIRM.json`.
+
+Method, frozen in the committing commit (5407b1f) before confirm was read: retain each integer
+accumulator once (`render_bus` keeps the dmix/body buses and gain); derive the production floor
+AND the exact integer round-half-even of acc/2^15 from that one accumulator by quotient/remainder
+only (r = acc − (q<<15) in [0, 32767]; the tie r = 16384 goes to the even quotient — correct for
+negative ties too), apply the SAME rails; require the floor variant to equal the shipped
+`output_fx` sample for sample before interpreting anything; CH the hypothesis subject, the other
+14 SCREEN_VOICES controls; declared dev/confirm conditions and the baseline's onset-relative
+2.0 s window; named REFUSED at the point of use for short windows, insufficient level,
+accumulator overflow (|acc| ≥ 2^38), failed gain reach and failed baseline identity. Clipped
+frames are counted and kept out of the attribution population — none occurred: 0 clipped frames
+in all 30 rows.
+
+### Endings, kept separate
+
+1. **Model-side bias: CONFIRMED, all 15 voices, both conditions** (signed integer sum of
+   floor−round nonzero, same sign, in dev and confirm). Magnitude: mean floor−round spans
+   −0.0031 (RS, dev) to −0.9188 LSB (SD, dev); ≤ 0.014 % of that row's baseline peak
+   (worst: MT confirm); max per-sample difference is 1 LSB everywhere. Full table with
+   provenance, residue classes, per-row accumulator hashes and the controls matrix:
+   `output-floor/qualification.json` (commit 5407b1f, clean tree, one commit for both records).
+2. **Mechanism: MEASURED at the arithmetic level.** The floor error is exactly −r/Q15 per
+   sample, so its mean is set by the residue distribution: CH dev has 90.9 % exact-multiple
+   accumulators → −0.048 LSB, while SD dev has 9.2 % → −0.70 LSB. The often-quoted −0.5 LSB is
+   a residue-distribution hypothesis, NOT a constant: measured means span −0.019 to −0.75 LSB.
+   Ties are rare (0 in 27 of 30 rows; 9773+14784 in CB/OH confirm) and never decide a bias.
+3. **Reference fidelity / DC inference: REFUSED.** The reference gate stands refused (no
+   verified corpus on this host; an AC-coupled capture could not prove DC absent in any case).
+   This does not erase the model arithmetic result above; it forbids a fidelity claim from it.
+4. **CH attenuation mechanism (H_CH2): unchanged, NO VERDICT.** The inherited own-baseline
+   overshoot guard (#614 review) is reproduced in the suite and was not tuned to any CH result.
+   The steady spectral prediction is NOT claimed as a hard upper bound here: finite window,
+   filter start state and the quantiser's nonlinearity are open applicability questions. The
+   #152 screen/verdict itself was not re-run in this issue.
+5. **RTL delivery: NOT claimed.** The exact round-half-even variant is a model-only
+   counterfactual; the RTL floors too, so the table quantifies what the shipped floor choice
+   costs against exact rounding — it does not propose a change and does not claim the hardware
+   delivers the rounded variant. No audibility, sound-defect, production-default or image claim
+   follows from any of this.
+
+### Wrong-then-right: 9, all before any measurement was read
+
+Seven caught RED by the controls/fixtures or by execution crashes, two by tracing the mutant
+wiring before the matrix ran: a 4-tuple unpack of a 3-tuple bus record; the wrong-gain mutant
+never consulted by the row path (its control would have been silently BLIND); six hand-oracle
+rows wrong at the rails and at −32767 — **every time the integer arithmetic under test was
+right and the hand-written expectation was wrong**; two properties rendering a 0.3 s fixture a
+declared 2.0 s window must refuse; the identity-stub mutant invisible to every property (caught
+by the "each mutant MOVES" contract, fixed with a composed-guard property); a duplicate-base-class
+crash; `diff_sum` validated as non-negative though it is a signed sum; `all_refused` reading
+`label` from rows that carry `status`. The fixtures did their job: the apparatus could not say
+anything until it agreed with hand arithmetic.
+
+### Class search: signed shift / final quantisation / rails, across model and RTL
+
+- `model/drums_fx.py`: `output_fx:627` is the only audio-output `>> 15` floor+clip.
+  `:181/:230` (`peak*accent >> 15`, usat-clipped, non-negative) are the same shift class at
+  control rate — an envelope level, floor-biased < 1 LSB, NOT measured here (out of scope).
+  `:523` is register field extraction, exact.
+- `rtl-sketch/voice_dp.v`: floor sites `>>> 15` at `:600/:601` (dq, tsh — tsh is the measured
+  counterpart), mixer taps `:507/:510`, noise paths `:476-:487`; the drift paths `:554-:556`
+  add `+17'sd32` before `>>> 6` — round-half-UP. The codebase therefore already mixes floor
+  and round-half-up BY STAGE; the output stage floors. Rail assumptions: `sat16t` is the ONE
+  rail (`:597`), with the no-rail negative control at `:1002`.
+- Mixer/modal recursion quantisation: adjacent, owned by #350/#641 — not expanded here. No
+  other output-stage quantisation site was found in either tree.
+
 
 ### Class search: guards on imported JSON (#614 review of `ba62bc8`)
 
