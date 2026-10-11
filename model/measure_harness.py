@@ -233,6 +233,28 @@ def _default_read_candidate(path: pathlib.Path) -> tuple[np.ndarray, int]:
 _DATA_ERRORS = (OSError, EOFError, ValueError, RuntimeError)
 
 
+def _ratio_grid(min_ratio: float, max_ratio: float, ratio_step: float) -> np.ndarray:
+    """Resampling ratios for `descent_test`: np.arange(min, max, step), except
+    that whenever 1.0 lies in [min, max) the grid contains EXACTLY 1.0.
+
+    np.arange accumulates float error (0.90 + 80 * 0.0025 is
+    0.9999999999999979), so int(len * ratio) came out one sample short and the
+    identity candidate was resampled (best_correlation 0.6091 for identical
+    i.i.d. noise). A lattice point within step*1e-6 of 1.0 is snapped to 1.0;
+    if 1.0 is in the interval but off the lattice it is inserted. An interval
+    that excludes 1.0 (including max_ratio == 1.0, half-open) has no identity
+    member and is returned unchanged.
+    """
+    g = np.arange(min_ratio, max_ratio, ratio_step)
+    if len(g) and min_ratio <= 1.0 < max_ratio:
+        near = np.abs(g - 1.0) <= abs(ratio_step) * 1e-6
+        if near.any():
+            g[near] = 1.0
+        elif 1.0 not in g:
+            g = np.sort(np.append(g, 1.0))
+    return g
+
+
 def descent_test(candidates: pathlib.Path,
                  classify: Callable[[pathlib.Path], dict | None],
                  read_ref: Callable[[pathlib.Path], tuple[np.ndarray, int]],
@@ -327,8 +349,9 @@ def descent_test(candidates: pathlib.Path,
         for q in refs:
             xr, s2 = read_ref(q)
             b = _n(prepare(xr, s2)[:int(window_s * s2)])
-            for ratio in np.arange(min_ratio, max_ratio, ratio_step):
-                aa = resample(a0, max(1, int(len(a0) * ratio)))
+            for ratio in _ratio_grid(min_ratio, max_ratio, ratio_step):
+                # ratio == 1.0 is the identity: do not resample it.
+                aa = a0 if ratio == 1.0 else resample(a0, max(1, int(len(a0) * ratio)))
                 n = min(len(aa), len(b))
                 if n < 2:
                     continue
