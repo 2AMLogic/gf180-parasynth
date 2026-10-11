@@ -259,6 +259,62 @@ def test_confirmation_pooling_development_rows_is_caught():
     assert not tp._prop_confirmation_disjoint()
 
 
+def test_confirmation_refuses_a_supplied_development_row_without_injection():
+    """Defeating input for the normal branch: development rows MIXED INTO the
+    supplied set (no --inject) must be REFUSED, not silently filtered out."""
+    fit = tp.fit({"A": _row("development", 30.0), "B": _row("development", 34.0)}, PRE)
+    conf = {f"C{i}": _row("confirmation", 30.0) for i in range(4)}
+    conf["D1"] = _row("development", 30.0)
+    assert not tp.INJECT
+    j = tp.judge_confirmation(conf, fit, PRE)
+    assert j["development_rows_in_confirmation"] == ["D1"]
+    assert j["magnitude"] == j["relaxation"] == {"verdict": "REFUSED", "reason": "confirmation-pooled-development"}
+
+
+def _good_ka():
+    return {"n": 3, "n_ok": 3, "rows": []}
+
+
+def _good_controls():
+    clean = {p: True for p in tp.PROPERTIES}
+    return {"clean": clean, "clean_again": dict(clean),
+            "mutants": {m: {"verdict": "CAUGHT"} for m in tp.INJECTIONS}}
+
+
+@pytest.mark.parametrize("cmd", ["knownanswer", "controls"])
+def test_cli_exit_status_is_red_for_a_failed_verification_then_green(cmd, tmp_path, monkeypatch):
+    """The command's own acceptance path: bad record -> nonzero (and not the
+    refusal status 2), the record is still written; good record -> 0."""
+    good = {"knownanswer": _good_ka, "controls": _good_controls}[cmd]()
+    bad = json.loads(json.dumps(good))
+    if cmd == "knownanswer":
+        bad["n_ok"] = 2
+    else:
+        bad["mutants"][tp.INJECTIONS[0]]["verdict"] = "MISSED"
+    fn = {"knownanswer": "knownanswer", "controls": "controls"}[cmd]
+    out = tmp_path / "rec.json"
+    # provenance REFUSES a dirty tree (its own precondition); stub it so the
+    # exit-status path is what is observed
+    monkeypatch.setattr(tp, "provenance", lambda refs: {"commit": "x"})
+    monkeypatch.setattr(tp, "close_provenance", lambda prov: prov)
+    for rec, want in ((bad, 1), (good, 0)):
+        monkeypatch.setattr(tp, fn, lambda *a, _r=rec, **k: json.loads(json.dumps(_r)))
+        out.unlink(missing_ok=True)
+        assert tp.main([cmd, "--out", str(out)]) == want
+        assert out.exists()  # the diagnostic record is retained either way
+
+
+def test_cli_controls_red_on_non_caught_variants_and_dirty_clean():
+    base = _good_controls()
+    assert tp.verification_failures("controls", base) == []
+    nv = json.loads(json.dumps(base))
+    nv["mutants"][tp.INJECTIONS[0]]["verdict"] = "NO-VERDICT"
+    assert tp.verification_failures("controls", nv)
+    cl = json.loads(json.dumps(base))
+    cl["clean_again"][tp.PROPERTIES[0]] = "NO-VERDICT: boom"
+    assert tp.verification_failures("controls", cl)
+
+
 def test_confirm_runs_once(tmp_path):
     out = tmp_path / "confirm.json"
     out.write_text("{}")

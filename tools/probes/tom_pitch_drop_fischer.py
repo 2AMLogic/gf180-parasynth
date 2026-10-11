@@ -978,7 +978,9 @@ def judge_confirmation(conf_rows: dict, fit_rec: dict, prereg: dict) -> dict:
         rows = dict(conf_rows)
         rows.update(fit_rec.get("_dev_rows", {}))
     else:
-        rows = {k: r for k, r in conf_rows.items() if r["split"] == "confirmation"}
+        rows = dict(conf_rows)
+    # validate EVERYTHING supplied before any use: filtering first would make
+    # a supplied development row invisible to this check
     leak = [k for k, r in rows.items() if r["split"] != "confirmation"]
     use = {k: r for k, r in rows.items() if r["class"] == "MEASURED"}
     out = {"n_reserved": len(conf_rows), "n_usable": len(use), "development_rows_in_confirmation": leak,
@@ -1235,6 +1237,21 @@ def close_provenance(prov: dict) -> dict:
     return prov
 
 
+def verification_failures(cmd: str, res: dict) -> list:
+    """Why a knownanswer/controls record must NOT exit green (empty = holds).
+    A failed check is exit 1; a scientific REFUSED is exit 0; a Refused
+    precondition is exit 2."""
+    why = []
+    if cmd == "knownanswer":
+        if res["n_ok"] != res["n"]:
+            why.append(f"known answers: {res['n_ok']} / {res['n']} ok")
+    elif cmd == "controls":
+        why += [f"control {m}: {r['verdict']}" for m, r in res["mutants"].items() if r["verdict"] != "CAUGHT"]
+        for key in ("clean", "clean_again"):
+            why += [f"{key}.{p}: {v!r}" for p, v in res[key].items() if v is not True]
+    return why
+
+
 def main(argv=None) -> int:
     global INJECT
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -1291,7 +1308,10 @@ def main(argv=None) -> int:
         return 2
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(_json(res), indent=1) + "\n")
-    return 0
+    failures = verification_failures(a.cmd, res)
+    for w in failures:
+        print("FAILED:", w)
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
