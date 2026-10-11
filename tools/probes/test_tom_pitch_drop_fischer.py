@@ -265,6 +265,20 @@ def test_confirm_runs_once(tmp_path):
     assert tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(out), "--out", str(out)]) == 2
 
 
+def test_a_refused_fit_leaves_the_reserved_rows_unread(tmp_path):
+    """With no development fit there is nothing to confirm: the record is the
+    rule's REFUSED and NO reserved take is opened (an empty refs directory
+    would otherwise REFUSE with missing-take)."""
+    fit = tmp_path / "fit.json"
+    fit.write_text(json.dumps({"status": "REFUSED", "reason": "not-identifiable: test"}))
+    rec = tp.confirm_record(tmp_path, tp.load_prereg(), fit)
+    assert rec["reserved_rows_read"] is False
+    assert all(r["class"] == "NOT-READ" for r in rec["rows"].values())
+    assert rec["judgement"]["magnitude"]["verdict"] == "REFUSED"
+    assert rec["judgement"]["decision"]["magnitude"] == "not identifiable"
+    assert rec["judgement"]["decision"]["independent_confirmation"].startswith("REFUSED")
+
+
 # ---- injected defects: each must move its declared property ----------------
 @pytest.mark.parametrize("mutant", tp.INJECTIONS)
 def test_injection_moves_its_declared_property(mutant, tmp_path):

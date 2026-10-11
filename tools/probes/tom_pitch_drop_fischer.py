@@ -894,6 +894,50 @@ def discrepancy(e808: dict, eo: dict) -> dict:
     return out
 
 
+def confirm_record(refs: pathlib.Path, pr: dict, fit_path: pathlib.Path) -> dict:
+    fit_rec = json.loads(fit_path.read_text())
+    res = {"fit_record": {"path": str(fit_path), "sha256": _sha(fit_path)}}
+    if fit_rec.get("status") != "FITTED":
+        # Nothing was fitted, so there is no hypothesis to confirm. Measuring
+        # the reserved rows now would expose them to this estimator while
+        # testing nothing; they are left UNREAD for a successor, and the
+        # judgement is the rule's own REFUSED.
+        res["rows"] = {c: {"split": "confirmation", "class": "NOT-READ",
+                           "reason": "development fit REFUSED: reserved row not measured"}
+                       for c, sp in pr["split_of"].items() if sp == "confirmation"}
+        res["reserved_rows_read"] = False
+    else:
+        res["rows"] = measure_rows(refs, pr, "confirmation")
+        res["reserved_rows_read"] = True
+    res["judgement"] = judge_confirmation(res["rows"], fit_rec, pr)
+    return res
+
+
+def describe(refs: pathlib.Path, prereg: dict) -> dict:
+    """POST-HOC DIAGNOSTIC, development takes only (it refuses nothing else
+    because it reads nothing else): each take's estimate with BOTH routes'
+    numbers, including the ones `measure` refused, and our unity renders. It
+    selects nothing and confirms nothing; it exists so a refused row's reason
+    is inspectable rather than a single word."""
+    sha = prereg["corpus"]["sha256"]
+    out = {"post_hoc": True, "takes": {}, "ours_unity": {}}
+    for c, sp in prereg["split_of"].items():
+        if sp != "development":
+            continue
+        try:
+            x, sr = load_take(refs, c, sha)
+            out["takes"][c] = estimate(x, sr)
+        except Refused as e:
+            out["takes"][c] = {"class": "REFUSED", "reason": e.reason, "detail": str(e)}
+        e = out["takes"][c]
+        print(c, e["class"], e.get("reason", ""), e.get("detail", ""), " | ".join(
+            f"{rt} {e[rt].get('class')} E {e[rt].get('E', float('nan')):+.4f} tau "
+            f"{e[rt].get('tau', float('nan')) * 1e3:.1f} ms" for rt in ("A", "B") if rt in e), flush=True)
+    for s_ in TOMS:
+        out["ours_unity"][s_] = measure_ours(s_, 1.0)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # fit (development only) and confirm (reserved, once)
 # ---------------------------------------------------------------------------
@@ -1211,7 +1255,10 @@ def main(argv=None) -> int:
     cf.add_argument("--refs", type=pathlib.Path, required=True)
     cf.add_argument("--fit", type=pathlib.Path, required=True)
     cf.add_argument("--out", type=pathlib.Path, required=True)
-    for p_ in (k, c, m, f, cf):
+    d = sub.add_parser("describe", help="POST-HOC: per-take estimates of the DEVELOPMENT takes only")
+    d.add_argument("--refs", type=pathlib.Path, required=True)
+    d.add_argument("--out", type=pathlib.Path, required=True)
+    for p_ in (k, c, m, f, cf, d):
         p_.add_argument("--inject", choices=INJECTIONS, default=None)
     a = ap.parse_args(argv)
     INJECT = {a.inject} if a.inject else set()
@@ -1232,12 +1279,10 @@ def main(argv=None) -> int:
             res = fit(rec["rows"], load_prereg())
             res["from_record"] = {"path": str(a.record), "sha256": _sha(a.record)}
             print(json.dumps(_json(res), indent=1))
+        elif a.cmd == "describe":
+            res = describe(a.refs, load_prereg())
         else:
-            pr = load_prereg()
-            fit_rec = json.loads(a.fit.read_text())
-            res = {"fit_record": {"path": str(a.fit), "sha256": _sha(a.fit)}}
-            res["rows"] = measure_rows(a.refs, pr, "confirmation")
-            res["judgement"] = judge_confirmation(res["rows"], fit_rec, pr)
+            res = confirm_record(a.refs, load_prereg(), a.fit)
             print(json.dumps(_json(res["judgement"]), indent=1))
         res["inject"] = sorted(INJECT)
         res["provenance"] = close_provenance(prov)
