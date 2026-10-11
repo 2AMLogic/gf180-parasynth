@@ -75,13 +75,13 @@
   "CY7550.WAV": "ce99385f835cf38f1be8c73e71c9ee57d2451e3901e0ffffaa0a48b5cb23d33c",
   "CY7575.WAV": "bf173c5c43968f29441a5a16c75dd448cd9420326c05e1c736e2d744f110e8d9"
  },
- "source_commit": "1b54ab372114175c925f7eb5e66cc4b3db8cb41d",
+ "source_commit": "e2e0fd798e84c775fca72f4dfa0072a89c14f6d5",
  "source_hashes": {
   "model/drums_fx.py": "76bf5af0763581c3bf9e602b758253d371fd1eaf4152c1d7360801398eb70970",
   "tools/cymbal_bands.py": "5fbc81ca8559c9811df8a7a5c060e9ddf1c66fffbffad7597d0e7624fc5ab6aa",
   "tools/cymbal_low_tail.py": "05f357f838d9446f0076b80596e5a240aaeedbef48c2529b9bcf2dd342b466e0",
   "tools/cymbal_mid.py": "5b934c8b564b87a9e86eca09b335069822ae835e088ae180f24df4de64fa9b9e",
-  "tools/probes/cymbal_400_production_tail.py": "d461f729a4c43f372ed6fa8f8003a529e9f1c72273c7aa365d16f1f5abf3797e",
+  "tools/probes/cymbal_400_production_tail.py": "e589036c7f1e2dffe488d0c62d1e81e29241a00063fcc26815d2dac6ca5cb24b",
   "tools/run_case.py": "d30bea05a162b7d29568425b55885a547c02bd47290a3108a90b28b0a629c5cc"
  },
  "stage_isolation": {
