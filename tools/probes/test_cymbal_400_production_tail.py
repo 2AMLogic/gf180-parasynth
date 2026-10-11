@@ -357,9 +357,10 @@ def _fake_corpus(tmp_path, samples) -> dict:
     return {"CY5025.WAV": hashlib.sha256(p.read_bytes()).hexdigest()}
 
 
-def _frozen_for(tmp_path, ref_sha, *, hashes=None) -> pathlib.Path:
+def _frozen_for(tmp_path, ref_sha, *, hashes=None, reference_sha256=None) -> pathlib.Path:
     f = dict(pt.FROZEN, source_commit=pt._git("rev-parse", "HEAD"), source_hashes=hashes or pt.source_hashes(),
-             reference_sha256=ref_sha, corpus_git_commit=None, windows_s=[1.5])
+             reference_sha256=reference_sha256 if reference_sha256 is not None else ref_sha,
+             corpus_git_commit=None, windows_s=[1.5])
     p = tmp_path / "frozen.json"
     p.write_text(json.dumps(f))
     return p
@@ -407,6 +408,65 @@ def test_dirty_tracked_tree_refuses_before_rendering(tmp_path, capsys, monkeypat
 def test_require_tree_identity_records_the_measured_commit(monkeypatch):
     monkeypatch.setattr(pt, "_git", lambda *a: "abc123" if a[:2] == ("rev-parse", "HEAD") else "")
     assert pt.require_tree_identity() == "abc123"
+
+
+def test_incomplete_frozen_pin_omitting_a_dependency_refuses_before_rendering(tmp_path, capsys, monkeypatch, ref_long):
+    """The executed bypass this closes: `measure` iterated the frozen record's OWN keys, so a
+    record missing one pin never checked that file -- a dependency changed after freeze reached
+    the render under an unchanged guard (rule 8: the input that satisfies the check while
+    violating its intent). The pin set must be complete before any hash is compared."""
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    hashes = pt.source_hashes()
+    del hashes["model/modal_fixed.py"]                     # the defeat: the pin itself is absent
+    monkeypatch.setattr(pt, "source_hashes",
+                        lambda: dict(hashes, **{"model/modal_fixed.py": "1" * 64}))  # and it HAS changed
+    monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)
+    code = pt.main(_cli(tmp_path, _frozen_for(tmp_path, sha, hashes=hashes)))
+    assert code == 2, "a frozen record with an incomplete pin set must refuse, not measure"
+    out = capsys.readouterr().out
+    assert "modal_fixed" in out and "re-freeze" in out, out
+
+
+def test_empty_source_pin_record_refuses_before_rendering(tmp_path, capsys, monkeypatch, ref_long):
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)
+    code = pt.main(_cli(tmp_path, _frozen_for(tmp_path, sha, hashes={})))
+    assert code == 2, "an empty source pin sees no file at all"
+    assert "re-freeze" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("bad", ["absent", "empty"])
+def test_measure_reference_pin_absent_or_empty_refuses(tmp_path, capsys, monkeypatch, ref_long, bad):
+    """An absent/empty corpus pin made `require_corpus`'s comparison loop iterate nothing and
+    accept whatever corpus it was handed -- verification skipped, not done."""
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)
+    f = _frozen_for(tmp_path, sha)
+    rec = json.loads(f.read_text())
+    if bad == "absent":
+        del rec["reference_sha256"]
+    else:
+        rec["reference_sha256"] = {}
+    f.write_text(json.dumps(rec))
+    code = pt.main(_cli(tmp_path, f))
+    assert code == 2, f"an {bad} reference pin must refuse, not skip corpus verification"
+    out = capsys.readouterr().out
+    assert "reference" in out and "re-freeze" in out, out
+
+
+def test_reference_pin_not_covering_the_loaded_file_refuses(tmp_path, capsys, monkeypatch, ref_long):
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    other = tmp_path / "cy8" / "CYOTHER.WAV"   # CY*.WAV so the old pin loop accepts it
+    other.write_bytes(b"not the reference")
+    monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)
+    f = _frozen_for(tmp_path, sha, reference_sha256={"CYOTHER.WAV": hashlib.sha256(other.read_bytes()).hexdigest()})
+    code = pt.main(_cli(tmp_path, f))
+    assert code == 2, "a pin that does not cover the file actually loaded leaves it unverified"
+    assert "CY5025.WAV" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------- refusal boundary (CLI)
