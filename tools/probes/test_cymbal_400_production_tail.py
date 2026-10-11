@@ -326,9 +326,9 @@ def test_control_matrix_energy_decay_x_defects_is_printed_and_no_defect_goes_uns
     # downstream refusals that survive it -- the reason changes, the verdicts do not.
     fin = rows["NO_FINITE_CHECK"]
     for prop in ("energy", "decay"):
-        assert "not finite" in fin[prop][0][2], (prop, fin[prop][0])
+        assert "not finite" in fin[prop][0][3], (prop, fin[prop][0])
         assert fin[prop][1][0] == "REFUSED", (prop, fin[prop][1])
-        assert "not finite" not in fin[prop][1][2], (prop, fin[prop][1])
+        assert "not finite" not in fin[prop][1][3], (prop, fin[prop][1])
     assert fin["energy"][0][0] == "REFUSED(record-level)" and fin["energy"][1][0] == "REFUSED"
 
 
@@ -452,7 +452,9 @@ def test_cli_nonfinite_render_refuses_not_tracebacks(tmp_path, capsys, monkeypat
 def test_cli_reference_cut_into_its_strike_refuses_not_tracebacks(tmp_path, capsys, monkeypatch):
     _require_clean_tree()
     t = np.arange(2 * SR) / SR
-    loud = 0.5 * np.sign(np.sin(2 * np.pi * 1000.0 * t))    # at 50 % of full scale from sample 0
+    # at FULL SCALE from sample 0 (sin phase-shifted by +90 deg): _onset_index lands at 0, which
+    # is the cut-into-strike refusal; an onset at index 1 would be padded and prepare would pass
+    loud = 0.5 * np.sign(np.sin(2 * np.pi * 1000.0 * t + np.pi / 2))
     sha = _fake_corpus(tmp_path, loud)
     monkeypatch.setattr(pt.lt, "check", lambda: (True, []))
     monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)   # the reference is prepared first
