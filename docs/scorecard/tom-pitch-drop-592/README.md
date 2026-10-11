@@ -86,7 +86,7 @@ fail. The stub is BLIND to them, and the matrix row above shows that.
 | hash | a tampered take | `wrong_hash_refused` |
 | carry | omitted host writes | the `omit-host-writes` mutant |
 | confirmation | development rows pooled into confirmation | the `confirm-pools-dev` mutant |
-| confirm-once | a record that already exists | `test_confirm_runs_once` |
+| confirm-once | a record that already exists, or the same preregistration confirmed again under a different report path | `test_confirm_runs_once`, `test_confirm_cannot_be_repeated_by_changing_the_output_path` |
 
 **Not defeated, and a finding** (section 4): the agreement rule's *class* test.
 
@@ -141,6 +141,7 @@ after `development.json` was measured at `b6d216e`:
 | `1a697f1` | `knownanswer`/`controls` exit non-zero on any failed case or uncaught mutant; the confirmation leak check sees supplied development rows instead of filtering them out first | none: identical re-run below |
 | `8fedbf4` | route A keeps only successful, finite optimizer results (an unconverged lower-cost start can no longer supply the parameters); route B REFUSES `fit-failed` when its bounded refinement does not converge; `fit` and `judge_confirmation` bind every row to `prereg.split_of`, its label and its take path | none: identical re-run below |
 | `df1efe6` | `confirm`'s unread (NOT-READ) rows carry their reserved take identity: the `8fedbf4` binding made every unread row fail its own identity check, so a refused-fit confirmation mis-judged `confirmation-pooled-development` where the record says `no development fit` (caught in review at `b5fe5a4`; reporting path only — the reserved rows were never read, by this code or the code that produced the record) | none: `confirm` re-run at `df1efe6` below — judgement identical to the committed `confirmation.json` |
+| `76ec1ef` | `confirm`'s once-only reservation is claimed atomically against the preregistration identity (a claim file next to `prereg.json`, keyed to its sha256) before any reserved take is opened: the old guard keyed on the report path, so a second `confirm` of the same preregistration and fit under a different `--out` read the reserved rows again (caught in review at `211267c`, reproduced: two `main` calls, two report paths, `measure_rows` ran `confirmation` twice). The no-fit branch reads nothing reserved and takes no claim | none: every committed `confirm` record is a no-fit record and the claim lives on the FITTED branch; `confirm` re-run at `76ec1ef` below — judgement identical, no claim taken |
 
 So `knownanswer.json`, `controls.json` (both at `8b31320`), `development.json` (`b6d216e`) and `fit.json` were all produced by
 earlier code than the code that ships. **Re-run at `8fedbf4`**, then the last commit to touch the probe, from a clean tree, into
@@ -163,6 +164,12 @@ The judgement is IDENTICAL to the committed record: `reserved_rows_read: false`,
 REFUSED with reason `no development fit`. Heads from `8fedbf4` (which introduced the take binding) through `b5fe5a4` would have
 mis-judged it (see section 4, item 4); no committed number came from them, and `b8c1fb0`/`1a697f1`'s leak check tested only the
 `split` label, which the unread rows carry.
+
+**Re-run of `confirm` at `76ec1ef`** (the commit that added the preregistration-keyed claim above), same protocol: from a clean
+tree, into `rerun-76ec1ef/confirmation.json`, `--refs` a nonexistent path (any take read would have crashed the run). The
+judgement is IDENTICAL to the committed record, `reserved_rows_read: false`, and no claim file was created — the no-fit branch
+still spends nothing. The claim itself is exercised by the defeating-input regression: a second `confirm` under a different
+report path is refused on the claim having read nothing (section 4, item 5; `red-confirm-out-path.txt` is its red run).
 
 No recorded number changed, so the wrong-then-right count in section 4 is unchanged by the code changes. The Judge independently
 re-estimated the 7 development takes at `8fedbf4` and got the same result.
@@ -209,7 +216,7 @@ when the other route's E lies inside its E_upper, pre-register that change, and 
 tau is still compared when route B is NO-DROP. The successor must decide that, and state it, when it pre-registers. It must not be
 decided after seeing which choice rescues the take.
 
-**Wrong in this record, caught in review, not by a control.** Three statements in earlier versions of this README were wrong. None of
+**Wrong in this record, caught in review, not by a control.** Five statements in earlier versions of this README were wrong. None of
 them was a measured number from the estimator.
 
 1. The sound summary said the 808's excess "crosses above ours at roughly 20-25 ms". Recomputed from the record's fitted E and tau,
@@ -224,6 +231,14 @@ them was a measured number from the estimator.
    `df1efe6` with the asymmetric regression (`red-refused-fit-take.txt` is its red run) and the `confirm` re-run above.
    No committed number came from the defective path: the record predates the binding, and no re-run of `confirm` had been made
    between `8fedbf4` and the fix.
+5. The once-only `confirm` guard was keyed to the report path (`--out` exists), so a second `confirm` of the same
+   preregistration and fit under a different report path read the reserved rows a second time — the guard's defeating input was
+   its own first argument. Found by the Judge's review at `211267c` (reproduced: two `main` calls, `confirm-1.json` and
+   `confirm-2.json`, both exit 0, `measure_rows` ran `confirmation` twice), not by a control — `test_confirm_runs_once` only
+   ever re-used the same path. Fixed in `76ec1ef`: the reservation is a claim file keyed to the preregistration sha256,
+   created `O_EXCL` before any reserved take is opened, and the defeating input is the permanent regression
+   `test_confirm_cannot_be_repeated_by_changing_the_output_path` (`red-confirm-out-path.txt` is its red run). No committed
+   number came from the weak guard: `confirmation.json` was produced by the no-fit branch, which reads nothing reserved.
 
 ## 5. Class search (`git grep` on `origin/main` at `6d5b335`)
 
@@ -253,6 +268,8 @@ them was a measured number from the estimator.
   - At `df1efe6` (the unread-row fix) without the corpus: `test_tom_pitch_drop_fischer.py` 163 passed, 1 skipped (the
     corpus-gated test above; 164 collected), `test_tom_conga_gate.py` 28 passed, 4 skipped,
     `test_tpd592_rerun_compare.py` 7 passed.
+  - At `76ec1ef` (the preregistration-keyed claim fix) without the corpus: the three files together 200 passed, 5 skipped;
+    with `GF180_TR808_FISCHER=/tmp/fischer-592`, `test_tom_pitch_drop_fischer.py` 166 passed, 0 skipped.
   - The `knownanswer`, `controls`, `measure`, `fit`, `confirm` and `describe` commands as recorded. Each record carries its commit, a
     clean-tree check at the start and end, the prereg sha256, the argv, and the Python/numpy/scipy versions. `knownanswer`,
     `controls`, `measure` and `fit` were re-run at `8fedbf4` into `rerun-8fedbf4/` (section 3); `confirm` was re-run at `df1efe6`
