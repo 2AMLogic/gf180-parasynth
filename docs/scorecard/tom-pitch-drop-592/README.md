@@ -132,7 +132,7 @@ Before that commit, the only operation performed on the corpus was hashing the t
   still use them as reserved conditions for this estimator. That does not make them fresh; see section 2.
 
 **Changes to the probe after the development measurement** (deviations from the preregistered code). An earlier version of this
-README said the estimator was unchanged apart from `b8c1fb0`. That was wrong. Three commits changed `tools/probes/tom_pitch_drop_fischer.py`
+README said the estimator was unchanged apart from `b8c1fb0`. That was wrong. Four commits changed `tools/probes/tom_pitch_drop_fischer.py`
 after `development.json` was measured at `b6d216e`:
 
 | commit | change | effect on a committed record |
@@ -140,9 +140,10 @@ after `development.json` was measured at `b6d216e`:
 | `b8c1fb0` | `confirm` leaves the reserved rows unread when the development fit is REFUSED; adds the post-hoc `describe` | none: it only governs `confirmation.json`, which was produced by it |
 | `1a697f1` | `knownanswer`/`controls` exit non-zero on any failed case or uncaught mutant; the confirmation leak check sees supplied development rows instead of filtering them out first | none: identical re-run below |
 | `8fedbf4` | route A keeps only successful, finite optimizer results (an unconverged lower-cost start can no longer supply the parameters); route B REFUSES `fit-failed` when its bounded refinement does not converge; `fit` and `judge_confirmation` bind every row to `prereg.split_of`, its label and its take path | none: identical re-run below |
+| `df1efe6` | `confirm`'s unread (NOT-READ) rows carry their reserved take identity: the `8fedbf4` binding made every unread row fail its own identity check, so a refused-fit confirmation mis-judged `confirmation-pooled-development` where the record says `no development fit` (caught in review at `b5fe5a4`; reporting path only — the reserved rows were never read, by this code or the code that produced the record) | none: `confirm` re-run at `df1efe6` below — judgement identical to the committed `confirmation.json` |
 
 So `knownanswer.json`, `controls.json` (both at `8b31320`), `development.json` (`b6d216e`) and `fit.json` were all produced by
-earlier code than the code that ships. **Re-run at `8fedbf4`**, the last commit to touch the probe, from a clean tree, into
+earlier code than the code that ships. **Re-run at `8fedbf4`**, then the last commit to touch the probe, from a clean tree, into
 `rerun-8fedbf4/` (`knownanswer`, `controls`, `measure --split development`, `fit`; `confirm` was not re-run and no reserved take
 was read). `tools/probes/tpd592_rerun_compare.py` compares each pair field by field, floats exactly as serialised, excluding only
 the top-level `provenance` block, and refuses if it cannot see an injected 1e-9 relative change to one value:
@@ -153,6 +154,15 @@ the top-level `provenance` block, and refuses if it cannot see an injected 1e-9 
 | `controls.json` | `8b31320` | IDENTICAL: clean and clean-again hold every property, 7 / 7 mutants CAUGHT, same matrix |
 | `development.json` | `b6d216e` | IDENTICAL: same classes and reasons on all 7 rows, same E and tau to the last serialised digit |
 | `fit.json` | `bd33dbe` (committed in `41f5ffb`) | IDENTICAL: REFUSED, not-identifiable, 3 usable development rows < 4 |
+
+**Re-run of `confirm` at `df1efe6`** (the commit that fixed the unread-row binding above), from a clean tree, into
+`rerun-df1efe6/confirmation.json` — a NEW path: the reserved rows are evaluated once, and the committed `confirmation.json`
+(built by `b8c1fb0`, whose leak check tested only the `split` label that the unread rows carry, so it judged correctly) is
+preserved unchanged with its own provenance. The re-run reads nothing: its `refs` argument is a nonexistent path, so any take read would have crashed the run.
+The judgement is IDENTICAL to the committed record: `reserved_rows_read: false`, no contamination row, both quantities
+REFUSED with reason `no development fit`. Heads from `8fedbf4` (which introduced the take binding) through `b5fe5a4` would have
+mis-judged it (see section 4, item 4); no committed number came from them, and `b8c1fb0`/`1a697f1`'s leak check tested only the
+`split` label, which the unread rows carry.
 
 No recorded number changed, so the wrong-then-right count in section 4 is unchanged by the code changes. The Judge independently
 re-estimated the 7 development takes at `8fedbf4` and got the same result.
@@ -207,6 +217,13 @@ them was a measured number from the estimator.
 2. Section 3 said the estimator was unchanged apart from `b8c1fb0`. Two later commits, `1a697f1` and `8fedbf4`, changed the probe.
    They are now disclosed, and the records were re-run at `8fedbf4` with identical results (section 3).
 3. Section 6 gave a test count of 150. That count was stale after those two commits added tests (section 6 has the current count).
+4. The `confirm` reporting path introduced by the `8fedbf4` take binding was wrong: unread (NOT-READ) rows carry no take, so the
+   binding flagged all eight reserved conditions as pooled development data and a refused-fit confirmation would have judged
+   `confirmation-pooled-development` where the committed record says `no development fit`. Found by the Judge's review at
+   `b5fe5a4` (reproduced), not by a control — the existing test accepted any REFUSED reason, which is why it passed. Fixed in
+   `df1efe6` with the asymmetric regression (`red-refused-fit-take.txt` is its red run) and the `confirm` re-run above.
+   No committed number came from the defective path: the record predates the binding, and no re-run of `confirm` had been made
+   between `8fedbf4` and the fix.
 
 ## 5. Class search (`git grep` on `origin/main` at `6d5b335`)
 
@@ -233,11 +250,13 @@ them was a measured number from the estimator.
 - **Run on this loom worker:**
   - At `8fedbf4` (the probe's final code), `tools/probes/test_tom_pitch_drop_fischer.py` with `GF180_TR808_FISCHER=/tmp/fischer-592`:
     164 passed (164 collected).
-  - `tools/probes/test_tom_conga_gate.py` without the corpus: 28 passed, 4 skipped.
-  - `tools/probes/test_tpd592_rerun_compare.py`: 7 passed.
+  - At `df1efe6` (the unread-row fix) without the corpus: `test_tom_pitch_drop_fischer.py` 163 passed, 1 skipped (the
+    corpus-gated test above; 164 collected), `test_tom_conga_gate.py` 28 passed, 4 skipped,
+    `test_tpd592_rerun_compare.py` 7 passed.
   - The `knownanswer`, `controls`, `measure`, `fit`, `confirm` and `describe` commands as recorded. Each record carries its commit, a
     clean-tree check at the start and end, the prereg sha256, the argv, and the Python/numpy/scipy versions. `knownanswer`,
-    `controls`, `measure` and `fit` were re-run at `8fedbf4` into `rerun-8fedbf4/` (section 3).
+    `controls`, `measure` and `fit` were re-run at `8fedbf4` into `rerun-8fedbf4/` (section 3); `confirm` was re-run at `df1efe6`
+    into `rerun-df1efe6/confirmation.json`, reading nothing (section 3).
 - **Known pre-existing issue on `origin/main`, not addressed here.** With `GF180_TR808_FISCHER` pointing at a tom-only corpus,
   `tools/probes/test_tom_conga_gate.py` fails 3 tests with `FileNotFoundError: mc8/MC50.WAV` instead of skipping them, because the
   conga tests skip on the environment variable rather than on each take. That is why the count above is without the corpus.
