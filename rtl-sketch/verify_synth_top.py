@@ -778,6 +778,20 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
             offsets.append(cursor)
             cursor += round((float(segment["duration_s"]) + segment_silence_s) * 48000)
     else:
+        # Validate the timing map with the SAME schema the schedule check
+        # uses, before any of it becomes a frame: an `offset_samples` of
+        # 657556.9 must not be truncated into a phrase, and a missing or
+        # non-finite event field must be a contextual ValueError (what every
+        # caller turns into REFUSED), not a KeyError (PR #647 review).
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import check_phrase_schedule as cps
+        try:
+            cps.targets(manifest)
+            for k, segment in enumerate(manifest["timeline"]["segments"]):
+                cps._seconds(segment, "duration_s", f"segment {k}")
+            cps._seconds(manifest["timeline"], "audio_duration_s", "manifest timeline")
+        except cps.Refused as exc:
+            raise ValueError(f"M5A manifest timing map refused: {exc}") from exc
         timeline_segments = manifest["timeline"]["segments"]
         segment_silence_s = float(manifest["timeline"]["segment_silence_s"])
         final_audio_s = float(manifest["timeline"]["audio_duration_s"])

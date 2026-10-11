@@ -216,6 +216,124 @@ def test_no_log_or_two_logs_is_refused(tmp_path):
     assert cps.main(["--manifest", str(M5A), f"run={d}"]) == 2
 
 
+# ---- a malformed timing map: REFUSED (exit 2), never a verdict --------------
+#
+# PR #647 Judge finding: `int(seg["offset_samples"])` truncated 657556.9 to
+# 657556 and PASSED a corrupted map, and `ev["gate_s"]` / `ev["on_s"]` were read
+# outside any guard, so a missing or non-numeric field raised out of main() --
+# Python's exit status 1, which is the status FAIL uses. Each case below goes
+# through main() with the CLEAN log, so the only thing wrong is the map; the
+# clean manifest beside them PASSes with the very same log.
+
+def _seg(m, k=1):
+    return m["timeline"]["segments"][k]
+
+
+def _ev(m, k=0, i=0):
+    return m["timeline"]["segments"][k]["midi_events"][i]
+
+
+# name -> (mutation, text the refusal must name so a reader can find the field)
+MALFORMED_MAPS = {
+    # the Judge's reproduced defeats
+    "fractional offset_samples": (lambda m: _seg(m).__setitem__("offset_samples", 657_556.9),
+                                  "segment 1 offset_samples"),
+    "missing gate_s": (lambda m: _ev(m).pop("gate_s"), "segment 0 event 0 gate_s"),
+    "non-numeric on_s": (lambda m: _ev(m).__setitem__("on_s", "0.1"), "segment 0 event 0 on_s"),
+    "empty midi_events": (lambda m: _seg(m).__setitem__("midi_events", []),
+                          "segment 1 midi_events"),
+    "bool samples": (lambda m: _seg(m, 0).__setitem__("samples", True), "segment 0 samples"),
+    "nan on_s": (lambda m: _ev(m).__setitem__("on_s", float("nan")), "segment 0 event 0 on_s"),
+    "inf gate_s": (lambda m: _ev(m).__setitem__("gate_s", float("inf")),
+                   "segment 0 event 0 gate_s"),
+    "-inf on_s": (lambda m: _ev(m, 1, 1).__setitem__("on_s", float("-inf")),
+                  "segment 1 event 1 on_s"),
+    "nan segment_silence_s": (lambda m: m["timeline"].__setitem__("segment_silence_s",
+                                                                    float("nan")),
+                              "segment_silence_s"),
+    # the same class, one step over
+    "integral float offset_samples": (lambda m: _seg(m).__setitem__("offset_samples", 657_556.0),
+                                      "segment 1 offset_samples"),
+    "string samples": (lambda m: _seg(m, 0).__setitem__("samples", "647956"),
+                       "segment 0 samples"),
+    "bool offset_samples": (lambda m: _seg(m, 0).__setitem__("offset_samples", False),
+                            "segment 0 offset_samples"),
+    "missing on_s": (lambda m: _ev(m, 1, 1).pop("on_s"), "segment 1 event 1 on_s"),
+    "missing offset_samples": (lambda m: _seg(m).pop("offset_samples"),
+                               "segment 1 offset_samples"),
+    "missing midi_events": (lambda m: _seg(m).pop("midi_events"), "segment 1 midi_events"),
+    "null gate_s": (lambda m: _ev(m).__setitem__("gate_s", None), "segment 0 event 0 gate_s"),
+    "bool gate_s": (lambda m: _ev(m).__setitem__("gate_s", True), "segment 0 event 0 gate_s"),
+    # finite, but times 48000 overflows to inf and round() raises OverflowError
+    "huge on_s": (lambda m: _ev(m).__setitem__("on_s", 1e308), "segment 0 event 0 on_s"),
+    "event is not an object": (lambda m: _seg(m)["midi_events"].__setitem__(0, [0.1, 0.6]),
+                               "segment 1 event 0"),
+    "midi_events is not a list": (lambda m: _seg(m).__setitem__("midi_events", {"on_s": 13.6}),
+                                  "segment 1 midi_events"),
+    "segment is not an object": (lambda m: m["timeline"]["segments"].__setitem__(1, 657_556),
+                                 "segment 1"),
+    "segments is not a list": (lambda m: m["timeline"].__setitem__("segments",
+                                                                   {"0": _seg(m, 0)}),
+                               "segments"),
+    "timeline is not an object": (lambda m: m.__setitem__("timeline", []), "timeline"),
+    "missing segment_silence_s": (lambda m: m["timeline"].pop("segment_silence_s"),
+                                  "segment_silence_s"),
+}
+
+
+def _run_map(tmp_path, m):
+    p = tmp_path / "manifest.json"
+    p.write_text(json.dumps(m))            # json.dumps writes NaN/Infinity literals
+    d = _write(tmp_path, _rows(M5A_ON, M5A_OFF))
+    return cps.main(["--manifest", str(p), f"run={d}"])
+
+
+def test_the_clean_map_passes_beside_the_malformed_ones(tmp_path):
+    """The control beside the controls: the same rewritten-manifest path and
+    the same log PASS when nothing is wrong with the map."""
+    assert _run_map(tmp_path, json.loads(M5A.read_text())) == 0
+
+
+@pytest.mark.parametrize("name", sorted(MALFORMED_MAPS))
+def test_a_malformed_timing_map_is_refused_not_judged(tmp_path, capsys, name):
+    m = json.loads(M5A.read_text())
+    MALFORMED_MAPS[name][0](m)
+    assert _run_map(tmp_path, m) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("REFUSED: ") and "PASS" not in out and "FAIL" not in out
+
+
+@pytest.mark.parametrize("name", sorted(MALFORMED_MAPS))
+def test_the_refusal_is_raised_by_the_map_and_names_the_field(name):
+    """Not refused by accident further down: an empty `midi_events` used to be
+    caught only because the log then held too many gates, and a bool `samples`
+    only because 1 sample cannot hold an event. The map check itself must
+    refuse, and say which field."""
+    m = json.loads(M5A.read_text())
+    mutate, where = MALFORMED_MAPS[name]
+    mutate(m)
+    with pytest.raises(cps.Refused) as exc:
+        cps.targets(m)
+    assert where in str(exc.value), str(exc.value)
+
+
+def test_an_unforeseen_checker_exception_is_refused_not_failed(tmp_path, monkeypatch, capsys):
+    """The backstop behind the schema checks: an exception nobody anticipated
+    must not leave main() as Python's exit 1, the status FAIL uses."""
+    def boom(*_a, **_k):
+        raise IndexError("synthetic")
+    monkeypatch.setattr(cps, "judge", boom)
+    assert _run(tmp_path, _rows(M5A_ON, M5A_OFF)) == 2
+    assert "REFUSED: checker error, not a verdict: IndexError: synthetic" in capsys.readouterr().out
+
+
+def test_a_manifest_that_is_not_an_object_is_refused(tmp_path):
+    p = tmp_path / "manifest.json"
+    p.write_text("[1, 2, 3]\n")
+    d = _write(tmp_path, _rows(M5A_ON, M5A_OFF))
+    assert cps.main(["--manifest", str(p), f"run={d}"]) == 2
+
+
 # ---- the scheduler, end to end through the bench's link timing ------------
 
 def _log_from_script(writes):

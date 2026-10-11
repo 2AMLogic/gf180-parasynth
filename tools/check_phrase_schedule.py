@@ -26,10 +26,14 @@ when it starts the transaction, and frame quantisation is resolved by the
 integer targets above. Any nonzero offset is therefore a scheduling error, and
 the old relative-wait scheduler's 11-27 frames were exactly that.
 
-REFUSED (exit 2), not judged: an inconsistent timing map, a missing, malformed,
+REFUSED (exit 2), not judged: a malformed timing map (a missing field, a wrong
+type, a sample count that is not an exact integer -- 657556.9, 657556.0 and
+True are all refused, never truncated -- a non-finite time, an empty or
+missing `midi_events`), an inconsistent timing map, a missing, malformed,
 unordered or ambiguous write log, a write whose applied frame differs from its
 pin prediction or has none, and a gate sequence that is not on/off pairs in the
-manifest's number. FAIL is exit 1, PASS exit 0.
+manifest's number. Any other exception is also REFUSED: Python's uncaught exit
+status is 1, which is FAIL's. FAIL is exit 1, PASS exit 0.
 """
 from __future__ import annotations
 
@@ -49,36 +53,89 @@ class Refused(Exception):
     """The inputs cannot carry a verdict."""
 
 
+# ---- the timing map's schema, checked before any number is used -------------
+#
+# Every field `targets()` reads goes through one of these, so a malformed map is
+# REFUSED with the field named rather than (a) silently coerced -- `int()` turned
+# an `offset_samples` of 657556.9 into 657556 and PASSED a corrupted map -- or
+# (b) raised out of main() as an uncaught exception, whose exit status 1 is the
+# status FAIL uses (PR #647 review).
+
+def _object(value, where: str) -> dict:
+    if not isinstance(value, dict):
+        raise Refused(f"{where} is {type(value).__name__}, not an object")
+    return value
+
+
+def _list(obj: dict, key: str, where: str) -> list:
+    if key not in obj:
+        raise Refused(f"{where} {key} is missing")
+    value = obj[key]
+    if not isinstance(value, list):
+        raise Refused(f"{where} {key} is {type(value).__name__}, not a list")
+    if not value:
+        raise Refused(f"{where} {key} is empty")
+    return value
+
+
+def _samples(obj: dict, key: str, where: str) -> int:
+    """An integer sample count. No truncation: 657556.9 and 657556.0 are not
+    integers in this map, and neither is True."""
+    if key not in obj:
+        raise Refused(f"{where} {key} is missing")
+    value = obj[key]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise Refused(f"{where} {key} is {value!r} ({type(value).__name__}), not an integer "
+                      f"sample count")
+    if value < 0:
+        raise Refused(f"{where} {key} is negative ({value})")
+    return value
+
+
+def _seconds(obj: dict, key: str, where: str) -> float:
+    """A finite time in seconds whose frame number is also finite."""
+    if key not in obj:
+        raise Refused(f"{where} {key} is missing")
+    value = obj[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise Refused(f"{where} {key} is {value!r} ({type(value).__name__}), not a number")
+    if not math.isfinite(value) or not math.isfinite(float(value) * SR):
+        raise Refused(f"{where} {key} is {value!r}, not a finite time")
+    return float(value)
+
+
 def _frame(seconds: float) -> int:
-    if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or not math.isfinite(seconds):
-        raise Refused(f"non-finite or non-numeric time {seconds!r}")
-    return int(round(float(seconds) * SR))
+    """Round-to-nearest sample of a time already validated by `_seconds`."""
+    return int(round(seconds * SR))
 
 
 def targets(manifest: dict) -> list[dict]:
-    """Per event, the core frame its GATE_ON and GATE_OFF must be applied in."""
-    try:
-        tl = manifest["timeline"]
-        segs = tl["segments"]
-        silence = _frame(tl["segment_silence_s"])
-    except (KeyError, TypeError) as exc:
-        raise Refused(f"manifest has no usable timeline: {exc}") from exc
-    if not segs:
-        raise Refused("manifest timeline has no segments")
+    """Per event, the core frame its GATE_ON and GATE_OFF must be applied in.
+
+    Raises Refused, never anything else, on any map it cannot read exactly."""
+    tl = _object(_object(manifest, "manifest").get("timeline"), "manifest timeline")
+    segs = _list(tl, "segments", "manifest timeline")
+    silence = _frame(_seconds(tl, "segment_silence_s", "manifest timeline"))
     out, expect_offset, last_off = [], 0, -1
     for k, seg in enumerate(segs):
-        try:
-            offset, samples = int(seg["offset_samples"]), int(seg["samples"])
-            events = seg["midi_events"]
-        except (KeyError, TypeError, ValueError) as exc:
-            raise Refused(f"segment {k} lacks its timing map: {exc}") from exc
+        where = f"segment {k}"
+        seg = _object(seg, where)
+        offset = _samples(seg, "offset_samples", where)
+        samples = _samples(seg, "samples", where)
+        events = _list(seg, "midi_events", where)
         if offset != expect_offset:
             raise Refused(f"segment {k} offset_samples {offset} != {expect_offset} "
                           f"(previous offset + samples + segment silence)")
         expect_offset = offset + samples + silence
         for i, ev in enumerate(events):
-            on = _frame(ev["on_s"])
-            off = _frame(float(ev["on_s"]) + float(ev["gate_s"]))
+            ew = f"segment {k} event {i}"
+            ev = _object(ev, ew)
+            on_s = _seconds(ev, "on_s", ew)
+            gate_s = _seconds(ev, "gate_s", ew)
+            if not math.isfinite((on_s + gate_s) * SR):
+                raise Refused(f"{ew} on_s + gate_s is not a finite time")
+            on = _frame(on_s)
+            off = _frame(on_s + gate_s)
             if not 0 <= on < off <= samples:
                 raise Refused(f"segment {k} event {i}: on {on} / off {off} outside the "
                               f"segment's {samples} samples or not on < off")
@@ -179,6 +236,12 @@ def main(argv=None) -> int:
                 status = 1
     except (Refused, OSError, json.JSONDecodeError) as exc:
         print(f"REFUSED: {exc}")
+        return 2
+    except Exception as exc:             # noqa: BLE001 -- an unknown is not a FAIL
+        # Backstop for any read the schema checks above missed: an uncaught
+        # exception exits 1, which is FAIL's status, so it would print a
+        # verdict the inputs never earned. The type and message are kept.
+        print(f"REFUSED: checker error, not a verdict: {type(exc).__name__}: {exc}")
         return 2
     if a.out:
         a.out.write_text(json.dumps(res, indent=1) + "\n")

@@ -210,6 +210,27 @@ def test_an_infeasible_spacing_is_refused_not_moved(tmp_path):
         top.m5a_script(str(path))
 
 
+@pytest.mark.parametrize("schedule", ["absolute", "legacy-relative"])
+@pytest.mark.parametrize("mutate", [
+    # PR #647 review: int() truncated this to 657556 and built a phrase anyway
+    lambda m: m["timeline"]["segments"][1].__setitem__("offset_samples", 657_556.9),
+    lambda m: m["timeline"]["segments"][0].__setitem__("samples", True),
+    lambda m: m["timeline"]["segments"][0]["midi_events"][0].pop("gate_s"),
+    lambda m: m["timeline"]["segments"][0]["midi_events"][0].__setitem__("on_s", float("nan")),
+    lambda m: m["timeline"]["segments"][1].__setitem__("midi_events", []),
+], ids=["fractional-offset", "bool-samples", "missing-gate_s", "nan-on_s", "empty-events"])
+def test_a_malformed_timing_map_is_refused_before_a_phrase_is_built(tmp_path, schedule, mutate):
+    """The stimulus reads the same map as tools/check_phrase_schedule.py and
+    must refuse the same malformed inputs, rather than truncate or raise
+    something other than the ValueError its callers turn into REFUSED."""
+    path, m = _held_out(tmp_path, [[(84, 0.1, 0.6), (96, 5.7, 0.6)]] * 2)
+    top.m5a_script(str(path), schedule=schedule)            # the clean control builds
+    mutate(m)
+    path.write_text(json.dumps(m))
+    with pytest.raises(ValueError, match="timing map refused"):
+        top.m5a_script(str(path), schedule=schedule)
+
+
 def test_smoke_schedule_lands_on_its_own_map():
     w, tail, rep = top.m5a_script(str(MANIFEST), smoke=True)
     frames = link.landing_frames([c[0] for c in w])
