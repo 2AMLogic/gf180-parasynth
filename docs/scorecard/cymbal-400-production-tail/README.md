@@ -13,12 +13,13 @@ No candidate was rendered or promoted. #369 still owns model → RTL → decoded
 ## What was frozen before measuring (`frozen.json`)
 
 Order, stated because it is checkable in the history: the first freeze (`7e5f524`) preceded any measurement. The
-probe then changed three times after review (`1b54ab3`, raw values kept; the side-attribution fix; the pin-set fix),
-and each change required a re-freeze, because `measure` refuses on a changed probe hash. The first re-freeze was
-committed **together with** `result.json` (`8c604da`), not before it. Since then every `frozen.json` was re-frozen
-and committed **on its own, before** the `result.json` produced from it. The closure-extension freeze (the one that
-also **widened the pinned set**, below) and the current freeze each changed only `source_commit` and the probe's
-sha256; no threshold, window, setting, budget or corpus hash has ever moved.
+probe then changed four times after review (`1b54ab3`, raw values kept; the side-attribution fix; the pin-set fix;
+the contract gate), and each change required a re-freeze, because `measure` refuses on a changed probe hash. The
+first re-freeze was committed **together with** `result.json` (`8c604da`), not before it. Since then every
+`frozen.json` was re-frozen and committed **on its own, before** the `result.json` produced from it. The
+closure-extension freeze (the one that also **widened the pinned set**, below), the pin-set re-freeze and the
+contract-gate re-freeze each changed only `source_commit` and the probe's sha256; no threshold, window, setting,
+budget or corpus hash has ever moved.
 
 | item | value |
 |---|---|
@@ -29,7 +30,8 @@ sha256; no threshold, window, setting, budget or corpus hash has ever moved.
 | knob support | **none**: `render_drum_solo` has no CY TONE/DECAY parameter, so only the D14A anchor CY5025 renders. The other 24 settings are REFUSED (recorded in `result.json`); `kit_at` and candidates are not substituted. A test fails if the signature gains knobs |
 | windows | 1.5 s and 2.0 s, never mixed |
 | thresholds | `run_case.TOLERANCE_POLICY`: energy 3 dB, time 50 % — imported, **no new dial** (nothing to register in `tools/sensitivity.py`) |
-| Hh1 | production declared **without** Hh1 (`model/drums_fx.py`: "Hh1 is the documented omission"), reference with — an unchecked-at-runtime declaration, stated here |
+| record contract | `measure` requires the record's measurement-contract fields (supported/development/confirmation settings, `windows_s`, `tolerances`, `bands`, `prod_has_hh1`, `candidate_budget`, `preservation_set`, `stage_isolation`, ...) to **equal this module's declared `FROZEN` values** before anything loads or renders: a changed, missing, mistyped (non-bool `prod_has_hh1`) or renamed field refuses with the field named. The record cannot re-rubric the measurement of a pinned source, and the probe itself is inside the source closure, so a changed `FROZEN` cannot measure against an older record either. `result.json` records the frozen file's own sha256 (`frozen_sha256`), so a path alone cannot silently refer to a different rubric later |
+| Hh1 | production declared **without** Hh1 (`model/drums_fx.py`: "Hh1 is the documented omission"), reference with — the declaration is now **checked at runtime** against the contract above (it was previously stated-only) |
 | candidate budget | 0 |
 | preservation set | D15A, D16A, OH00–OH75 (untouched: the probe only reads) |
 
@@ -38,8 +40,9 @@ Two different "M" bands are used and never mixed: energy = `cymbal_mid` `M25` (8
 
 ## Result (`result.json`, produced by `measure`, ~37 s wall, one production render)
 
-Re-measured after the pin-set fix below: **every verdict, value and reason is identical** to the previous run;
-the record's `source_commit` / `measured_at_commit` moved with the re-freeze and nothing else changed.
+Re-measured after the pin-set fix and again after the contract gate below: **every verdict, value and reason is
+identical** to the previous run across all 25 settings; the record's `source_commit` / `measured_at_commit` /
+`frozen_sha256` moved with the re-freezes and nothing else changed.
 
 | property | window | production | Fischer CY5025 | outcome |
 |---|---|---|---|---|
@@ -74,13 +77,15 @@ positive finding here would still need a knob-capable production path (#413).
 Not run: its precondition (DISCREPANT in both windows) was not met. The predictions and their status are
 frozen in `frozen.json` (`stage_isolation`), all `unverified`/`inferred`; none is a result.
 
-## Controls (`tools/probes/test_cymbal_400_production_tail.py`, 53 tests, all pass)
+## Controls (`tools/probes/test_cymbal_400_production_tail.py`, 61 tests, all pass)
 
 Written and committed red against a stub (33 failed) before the instrument existed. The five refusal-attribution
 controls were committed red against the unlabelled probe (`5b5ff1e`: 5 failed, 33 passed) before the fix. The
 closure/boundary/matrix controls were committed red against the probe as it stood (`ba9deb1`: 9 failed,
 39 passed) before theirs. The five pin-set controls below were committed red against the record-key-iterating
-guard (all five reached the render, or refused for the wrong reason) before the fix.
+guard (all five reached the render, or refused for the wrong reason) before the fix. The seven contract-field
+controls and the frozen-hash control were committed red against the trusted-record guard (df71a41: all eight
+reached the render sentinel, crashed, or found no hash recorded) before the contract gate.
 
 - known answers: planted `lt.synth` strikes, energy MATCH/decay DISCREPANT, the reverse, joint, null (record vs itself);
   classifier boundaries (2.9 vs 5 dB; 40 % vs 60 %);
@@ -126,14 +131,19 @@ guard (all five reached the render, or refused for the wrong reason) before the 
   reached, which is how "before" is proven, not asserted); and the frozen record itself must be complete —
   a record omitting a dependency's pin (with that dependency actually changed in the hash provider, the
   executed bypass) and a record with an empty source pin must both refuse before rendering, as must a record
-  whose reference pin is absent, empty, or does not cover `CY5025.WAV`, the file actually loaded.
+  whose reference pin is absent, empty, or does not cover `CY5025.WAV`, the file actually loaded;
+- **record contract**: with valid, complete source and reference pins, a record whose `prod_has_hh1` is flipped
+  to True, whose `windows_s` is changed to `[0.01]` or deleted, whose `confirmation_settings` is emptied, whose
+  `supported_settings` is changed, whose `prod_has_hh1` is mistyped as the int `0` (equal to `False` in Python),
+  or that carries a renamed `windows` key must all refuse before rendering with the field named; and a clean
+  run must record the frozen file's exact sha256 in `result.json` (asserted against the file bytes).
 
 Known limitation of the controls: they run on synthetic strikes. The instrument's dynamic range on rho is narrow
 (a planted 2.4x tau ratio reads +86 %; shorter-than-reference tails below ~0.15 s are refused), so only the
 "production outlasts reference" direction could be planted as DISCREPANT. The reverse direction is covered only
 by the classifier unit tests, not end to end.
 
-## Wrong-then-right: 6
+## Wrong-then-right: 7
 
 1. Planted energy fixture: expected a 4x `a_m` change to read ~12 dB; M25 share saturates (−6.32 → −1.47 dB at 2 → 8). Caught by the test failing. Fixed by calibrating the plant.
 2. Planted decay fixture: a 2.4x shorter prod tail read a −48 % rho change (inside the 50 % tolerance) and ≤0.15 s tails refuse. Caught by the test failing; the plant was reversed.
@@ -141,6 +151,7 @@ by the classifier unit tests, not end to end.
 4. The corrected report then attributed **both** refusals to production. That holds for energy only: on decay, production qualified (EDT 6.08 dB, rho 0.8696 / 0.8709) and the Fischer recording refused (EDT 5.92 dB), and the README table said the opposite. Root cause: `compare_records` built the reason as `p_reason or r_reason` with no side label, so neither `result.json` nor its author could tell whose gate tripped — the raw-values fix in 3 added evidence but not attribution. Caught by the Judge reading `unqualified_raw` against the table, not by a control. Fixed by side-labelled reasons (`refused_by`) with planted one-sided refusal controls, a re-freeze and a re-measurement.
 5. The freeze pinned **six** files, enumerated by hand from the probe's own imports; the render actually executes `model/drums_fx.py`'s imports (`model/modal_fixed.py`, `audition/dsp.py`, `model/fixed.py`, `model/voice_fx.py`, imported lazily inside `render_drum_solo`) and preparation executes `model/audio_measure.py` and `tools/preparation_contract.py` — none pinned, so an edit to the modal bank after freeze would have changed the render under an unchanged guard while `result.json` attributed it to the frozen commit. Caught by the Judge reading the import graph, not executed there and not caught by any control. Fixed by deriving the closure from an actual render's loaded modules, refusing a dirty tracked tree at freeze and measure, recording `measured_at_commit`, and shipping the defeating inputs (changed closure file, dirty tree) as refuse-before-rendering controls.
 6. The extended closure was then defeated by its own record format: `measure` iterated the frozen record's **own** `source_hashes` keys, so a record omitting one pin (a legacy partial freeze) checked one file fewer — a dependency changed after freeze reached the render under an unchanged guard — and an absent/empty `reference_sha256` made `require_corpus` verify nothing while reading as verified. Caught by the Judge **executing** the bypass, not by any control (the changed-hash control supplied the full key set, so it could not see the omission). Fixed by requiring the record's pin set to match `SOURCE_FILES` exactly (missing and unexpected keys both refuse, with the re-freeze instruction) and refusing absent/empty/non-covering reference pins, with five refuse-before-rendering controls committed red. A sixth, smaller miss in the same fix: the test helper wrote `hashes or source_hashes()`, so an *empty* pin silently substituted the real hashes and masked the empty-pin control — the control caught its own helper on the first green run, which is the controls working, and is why the empty-pin case is `is None`-checked now.
+7. The hash guards prove the **code** did not move since freeze, but `measure` trusted the record's own **measurement contract** as read: `prod_has_hh1`, `windows_s` and `confirmation_settings` reached the comparison of the same pinned production source untouched by any guard. Caught by the Judge executing it — with unchanged, complete pins and a clean tree, each of the three altered records reached a render sentinel (a flipped Hh1 is the 8.63 dB declaration; an emptied `confirmation_settings` removes the promised population). Fixed by requiring the record's contract fields to equal the probe's declared `FROZEN` values (missing, mistyped-not-bool, changed and renamed keys all refuse, named), recording `frozen_sha256` in `result.json`, and eight controls committed red (`df71a41`); re-frozen and re-measured with every verdict unchanged.
 
 ## Reproduce / run on the build box
 
@@ -150,7 +161,8 @@ python3 tools/probes/cymbal_400_production_tail.py freeze  --refs $GF180_TR808_R
 python3 tools/probes/cymbal_400_production_tail.py measure --refs $GF180_TR808_REFS --frozen docs/scorecard/cymbal-400-production-tail/frozen.json --out docs/scorecard/cymbal-400-production-tail/result.json
 ```
 Exit 2 and `REFUSED / NO VERDICT` when the corpus, the frozen record (missing file, incomplete source-pin set,
-absent/empty/non-covering reference pin), a source hash or the tree state is
+absent/empty/non-covering reference pin, or a contract that does not equal the probe's declared `FROZEN` values),
+a source hash or the tree state is
 wrong — including the downstream preconditions (`run_case.prepare`'s non-finite / cut-into-strike refusals,
 `cymbal_mid`'s silence refusal), which are normalized by class at the CLI boundary; an implementation error
 still exits as a traceback. `freeze` and `measure` refuse a dirty tracked tree, so run them from a committed
