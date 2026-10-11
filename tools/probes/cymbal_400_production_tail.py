@@ -68,8 +68,19 @@ TIME_TOL_REL = 0.5       # run_case.TOLERANCE_POLICY["time"]: "50 % of the refer
 assert "3 dB" in rc.TOLERANCE_POLICY["energy ratio"] and "50 %" in rc.TOLERANCE_POLICY["time"]
 
 SOURCE_FILES = ("tools/cymbal_low_tail.py", "tools/cymbal_mid.py", "tools/cymbal_bands.py",
-                "tools/run_case.py", "model/drums_fx.py", "tools/probes/cymbal_400_production_tail.py")
+                "tools/run_case.py", "model/audio_measure.py", "tools/preparation_contract.py",
+                "model/drums_fx.py", "model/modal_fixed.py", "audition/dsp.py", "model/fixed.py",
+                "model/voice_fx.py", "tools/probes/cymbal_400_production_tail.py")
 REF_FILE = "cy8/CY5025.WAV"
+
+#: Every refusal class the measured path can raise, normalized at the CLI boundary. The first
+#: freeze pinned only six files, none of the model modules the render path executes
+#: (`drums_fx` imports `modal_fixed`, `dsp`, `fixed`, `voice_fx`) nor the preparation
+#: dependencies (`run_case.prepare` asserts finiteness through `audio_measure` and refuses
+#: through `preparation_contract.Refused`) -- an edit to the modal bank after freeze changed
+#: the render under an unchanged guard. The file list is the direct dependency closure; the
+#: source-tree rule below is the enforcement for everything else the interpreter loads.
+REFUSED_TYPES = (Refused, rc.Refused, cb.Refused, lt.Refused)
 
 FROZEN = {
     "issue": 400,
@@ -87,6 +98,9 @@ FROZEN = {
     "prod_has_hh1": False,
     "candidate_budget": 0,
     "candidate_budget_note": "no candidate is rendered or promoted under #400; #369 owns delivery",
+    "source_tree": ("freeze and measure refuse a working tree with uncommitted changes to tracked "
+                    "files: the render must be attributable to a named, committed state. result.json "
+                    "records the commit that actually executed as measured_at_commit"),
     "preservation_set": ["D15A", "D16A", "OH00", "OH10", "OH25", "OH50", "OH75"],
     "stage_isolation": {
         "run_only_if": "energy or decay verdict is DISCREPANT on CY5025 in both windows",
@@ -181,8 +195,11 @@ def _refused_by_side(p_val, p_reason, r_val, r_reason, *, undefined, detail=None
     return out
 
 
-def _side(y, sr, hh1, trim_s):
-    m = cm.measure_mid(y, sr, hh1, bands=["M25"])["M25"]
+def _side(y, sr, hh1, trim_s, side):
+    try:
+        m = cm.measure_mid(y, sr, hh1, bands=["M25"])["M25"]
+    except cb.Refused as e:                # a silent record: cymbal_mid's precondition, not ours
+        raise Refused(f"{side}: {e}") from e
     out = {"mid": m, "energy": None, "energy_refusal": None, "rho": None, "rho_all": None, "decay_refusal": None}
     rec_s = (len(y) - rc.required_lead_samples(sr)) / sr
     if rec_s < cb.ENERGY_S:
@@ -213,8 +230,8 @@ def compare_records(prod, sr_p, ref, sr_r, *, prod_has_hh1, trim_s=2.0, defect=N
     """Energy and decay of PROD vs REF, separately. Both must be run_case.prepare output."""
     prod = _check(prod, sr_p, "production", defect)
     ref = _check(ref, sr_r, "reference", defect)
-    p = _side(prod, sr_p, bool(prod_has_hh1), trim_s)
-    r = _side(ref, sr_r, True, trim_s)             # the machine has Hh1 (reference §10)
+    p = _side(prod, sr_p, bool(prod_has_hh1), trim_s, "production")
+    r = _side(ref, sr_r, True, trim_s, "reference")   # the machine has Hh1 (reference §10)
     if p["energy"] is None or r["energy"] is None:
         energy = _refused_by_side(p["energy"], p["energy_refusal"], r["energy"], r["energy_refusal"],
                                   undefined="energy undefined",
@@ -247,7 +264,21 @@ def source_hashes() -> dict:
     return {f: sha256(ROOT / f) for f in SOURCE_FILES}
 
 
+def require_tree_identity() -> str:
+    """The render must be attributable to a named, committed state. A working tree with
+    uncommitted changes to tracked files is refused at freeze AND at measure: the hash list
+    cannot see a file outside its closure, but a dirty tree is not ANY commit's source."""
+    head = _git("rev-parse", "HEAD")
+    dirty = _git("status", "--porcelain", "--untracked-files=no")
+    if dirty:
+        raise Refused("the working tree has uncommitted changes to tracked files, so the render is "
+                      "not attributable to a commit; commit or stash (per-worktree, never a bare "
+                      "git stash) and re-freeze before measuring:\n" + dirty)
+    return head
+
+
 def cmd_freeze(a) -> int:
+    require_tree_identity()
     hashes = require_corpus(a.refs, None)
     try:
         corpus_commit = subprocess.run(["git", "-C", str(a.refs), "rev-parse", "HEAD"], capture_output=True,
@@ -269,10 +300,11 @@ def cmd_measure(a) -> int:
         return 2
     try:
         require_corpus(a.refs, frozen)
+        measured_at = require_tree_identity()
         now = source_hashes()
         for f, h in frozen["source_hashes"].items():
             if now.get(f) != h:
-                raise Refused(f"{f} changed since freeze: re-freeze before measuring")
+                raise Refused(f"{f} changed since freeze (dependency closure): re-freeze before measuring")
         ok, lines = lt.check()
         if not ok:
             raise Refused("cymbal_low_tail's own controls do not pass:\n" + "\n".join(lines))
@@ -280,7 +312,8 @@ def cmd_measure(a) -> int:
         ref = rc.prepare(x, sr_r, side="CY5025")
         y, sr_p = rc.render_drum_solo("CY")
         prod = rc.prepare(y, sr_p, side="production CY")
-        res = {"frozen": str(a.frozen), "source_commit": frozen["source_commit"], "settings": {}}
+        res = {"frozen": str(a.frozen), "source_commit": frozen["source_commit"],
+               "measured_at_commit": measured_at, "settings": {}}
         for s in frozen["supported_settings"]:
             production_supported(s)
             res["settings"][s] = {f"{w:g}s": compare_records(prod, sr_p, ref, sr_r, prod_has_hh1=frozen["prod_has_hh1"],
@@ -314,7 +347,9 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     try:
         return {"freeze": cmd_freeze, "measure": cmd_measure}[a.cmd](a)
-    except Refused as e:
+    except REFUSED_TYPES as e:
+        # Downstream preconditions are normalized HERE, by class -- never by catching
+        # Exception: an implementation error must still be a traceback, not a refusal.
         print(f"REFUSED / NO VERDICT: {e}")
         return 2
 
