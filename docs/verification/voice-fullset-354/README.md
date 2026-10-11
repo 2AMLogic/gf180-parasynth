@@ -168,7 +168,7 @@ upstream divergence. Mutating the matcher to name the downstream tap turns two o
 - The other wide results, `out_full` and `u_full`, go through `sat_o` / `sat_s`. The only exception is `u_full`'s own
   `INJECT_BUG` control.
 
-**Wrong-then-right in this pass: 1.** The first attempt at the three chain runs went in one backgrounded command. The
+**Wrong-then-right in this pass: 0 measurements.** One run gave no verdict. The first attempt at the three chain runs went in one backgrounded command. The
 harness stopped it at its 600 s background limit during the mutant run. The two clean results had completed and were
 kept. The mutant was re-run alone. Separately, one 7 s `--extremes-index 0` run overlapped the mutant chain on this
 host. Both results are recorded as they ran.
