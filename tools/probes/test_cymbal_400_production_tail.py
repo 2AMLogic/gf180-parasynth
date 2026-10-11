@@ -171,6 +171,41 @@ def test_filter_skirt_leak_only_band_refuses_not_discrepant(ref_long):
     assert "skirt" in (r["energy"]["reason"] + r["decay"]["reason"]).lower() or "leak" in (r["energy"]["reason"] + r["decay"]["reason"]).lower()
 
 
+# ---------------------------------------------------------------- refusal attribution
+# The #400 report once attributed the decay refusal to production when result.json showed the
+# REFERENCE had refused it: the reason was built as `p_reason or r_reason` with no side label, so
+# neither a reader nor the author could tell whose gate tripped. These plant a refusal on ONE side.
+@pytest.mark.parametrize("k", ["energy", "decay"])
+def test_reference_only_refusal_names_the_reference_not_production(ref_long, k):
+    leak_only = lt.synth(tau_l=0.35, a_m=0.0, tau_h=0.2, a_h=0.6)[0]
+    r = pt.compare_records(ref_long, SR, leak_only, SR, prod_has_hh1=True)   # prod qualifies, ref is leak-only
+    assert r[k]["verdict"] == "REFUSED", r[k]
+    assert r[k]["prod"] is not None, "planted production side should qualify: the plant is wrong"
+    assert r[k]["reason"].startswith("reference: "), r[k]["reason"]
+    assert "production:" not in r[k]["reason"], r[k]["reason"]
+    assert r[k]["refused_by"] == {"production": None, "reference": r[k]["reason"][len("reference: "):]}
+
+
+@pytest.mark.parametrize("k", ["energy", "decay"])
+def test_production_only_refusal_names_production_not_the_reference(ref_long, k):
+    leak_only = lt.synth(tau_l=0.35, a_m=0.0, tau_h=0.2, a_h=0.6)[0]
+    r = pt.compare_records(leak_only, SR, ref_long, SR, prod_has_hh1=True)   # ref qualifies, prod is leak-only
+    assert r[k]["verdict"] == "REFUSED", r[k]
+    assert r[k]["ref"] is not None, "planted reference side should qualify: the plant is wrong"
+    assert r[k]["reason"].startswith("production: "), r[k]["reason"]
+    assert "reference:" not in r[k]["reason"], r[k]["reason"]
+    assert r[k]["refused_by"]["reference"] is None and r[k]["refused_by"]["production"]
+
+
+def test_both_sides_refusing_records_both_reasons():
+    leak_only = lt.synth(tau_l=0.35, a_m=0.0, tau_h=0.2, a_h=0.6)[0]
+    r = pt.compare_records(leak_only, SR, leak_only, SR, prod_has_hh1=True)
+    for k in ("energy", "decay"):
+        assert r[k]["verdict"] == "REFUSED", r[k]
+        assert "production: " in r[k]["reason"] and "reference: " in r[k]["reason"], r[k]["reason"]
+        assert all(r[k]["refused_by"].values()), r[k]["refused_by"]
+
+
 # ---------------------------------------------------------------- refusals
 def test_production_path_has_no_knob_parameters_so_only_cy5025_is_supported():
     params = set(inspect.signature(rc.render_drum_solo).parameters)
@@ -209,17 +244,20 @@ def test_mutant_no_prep_assert_lets_the_unprepared_record_through(ref_long):
         assert "prepar" not in str(e), "mutant still hit the preparation guard: it is not the mutant"
 
 
-def test_mutant_no_finite_check_is_caught(ref_long):
+def test_mutant_no_finite_check_bypasses_the_guard_and_downstream_still_refuses(ref_long):
+    """The finite guard is DEFENCE IN DEPTH, not the only thing stopping NaN input: with it removed,
+    `classify` refuses energy ("a side is missing or non-finite") and cymbal_mid's floor gate refuses
+    decay. What the guard adds is an early, side-named refusal of the whole record. This asserts what
+    the mutant actually produces, so a downstream change that let NaN through to a verdict goes red."""
     y = ref_long.copy()
     y[-1000] = np.nan
-    with pytest.raises(pt.Refused, match="finite"):
+    with pytest.raises(pt.Refused, match="production: record is not finite"):
         pt.compare_records(y, SR, ref_long, SR, prod_has_hh1=True)
-    try:
-        r = pt.compare_records(y, SR, ref_long, SR, prod_has_hh1=True, defect="NO_FINITE_CHECK")
-    except pt.Refused as e:
-        assert "finite" not in str(e)
-    except Exception:
-        pass  # the mutant crashed downstream: the guard was load-bearing
+    r = pt.compare_records(y, SR, ref_long, SR, prod_has_hh1=True, defect="NO_FINITE_CHECK")
+    for k in ("energy", "decay"):
+        assert r[k]["verdict"] == "REFUSED", (k, r[k])
+        assert "record is not finite" not in r[k]["reason"], "mutant still hit the finite guard: not the mutant"
+    assert r["joint"] is False
 
 
 def test_mutant_wrong_hh1_declaration_changes_the_leak_prediction(ref_long):
