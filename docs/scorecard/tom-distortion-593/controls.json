@@ -1,0 +1,126 @@
+{
+ "clean": {
+  "K1_known_answers": "PASS",
+  "K2_pure_sinusoid_reads_unresolved": "PASS",
+  "K3_applied_quadratic_reads_at_spec": "PASS",
+  "J0_good_candidate_confirms": "PASS",
+  "J1_decay_violation_rejected": "PASS",
+  "J2_peak_violation_rejected": "PASS",
+  "J3_contaminated_confirmation_refused": "PASS",
+  "J4_no_distortion_candidate_not_confirmed": "PASS",
+  "J5_null_target_refused_not_zero_error": "PASS",
+  "M1_mechanism_classes": "PASS"
+ },
+ "cells": {
+  "stub-estimator": {
+   "K1_known_answers": "MOVED",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "MOVED",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "M1_mechanism_classes": "BLIND"
+  },
+  "missing-distortion": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "MOVED",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "M1_mechanism_classes": "BLIND"
+  },
+  "leakage-as-h2": {
+   "K1_known_answers": "MOVED",
+   "K2_pure_sinusoid_reads_unresolved": "MOVED",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "M1_mechanism_classes": "BLIND"
+  },
+  "preservation-bypass": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "MOVED",
+   "J2_peak_violation_rejected": "MOVED",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "M1_mechanism_classes": "BLIND"
+  },
+  "contaminated-confirmation": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "MOVED",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "M1_mechanism_classes": "BLIND"
+  },
+  "target-ignored": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "MOVED",
+   "J5_null_target_refused_not_zero_error": "MOVED",
+   "M1_mechanism_classes": "BLIND"
+  },
+  "mechanism-bypass": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "M1_mechanism_classes": "MOVED"
+  }
+ },
+ "intended": {
+  "stub-estimator": [
+   "K1_known_answers"
+  ],
+  "missing-distortion": [
+   "K3_applied_quadratic_reads_at_spec"
+  ],
+  "leakage-as-h2": [
+   "K2_pure_sinusoid_reads_unresolved"
+  ],
+  "preservation-bypass": [
+   "J1_decay_violation_rejected",
+   "J2_peak_violation_rejected"
+  ],
+  "contaminated-confirmation": [
+   "J3_contaminated_confirmation_refused"
+  ],
+  "target-ignored": [
+   "J4_no_distortion_candidate_not_confirmed"
+  ],
+  "mechanism-bypass": [
+   "M1_mechanism_classes"
+  ]
+ },
+ "intended_not_moved": [],
+ "status": "OK"
+}

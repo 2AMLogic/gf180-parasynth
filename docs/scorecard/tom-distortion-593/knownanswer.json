@@ -1,0 +1,29 @@
+{
+ "n_cases": 810,
+ "n_read": 1890,
+ "missed_resolved": 0,
+ "refused_wrongly": 0,
+ "false_resolved_on_absent": 0,
+ "max_abs_err_db": 2.093162186030419,
+ "p95_abs_err_db": 0.9263997770132956,
+ "refusal_cases_ok": [
+  "nan",
+  "inf",
+  "silent",
+  "below_silence_floor",
+  "short_window",
+  "f0_too_high_for_h4",
+  "glide_outside_domain",
+  "unsupported_rate",
+  "empty"
+ ],
+ "refusal_cases_bad": [],
+ "pass": true,
+ "frozen": {
+  "TOL_DB": 2.5,
+  "RESOLVE_MARGIN_DB": 6.0,
+  "SPEC_FLOOR_DB": -60.0,
+  "SNR_REQ_DB": 20.0,
+  "GLIDE_MAX_CENTS": 60.0
+ }
+}
