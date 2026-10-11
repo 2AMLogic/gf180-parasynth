@@ -9,6 +9,7 @@ non-finite), refusals (corpus / frozen record / unsupported knob settings),
 invariances, and executed mutants (a defect injected into the probe must turn
 the matching control red -- a control never seen to fail is not a control).
 """
+import hashlib
 import inspect
 import json
 import math
@@ -17,6 +18,7 @@ import sys
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -267,11 +269,218 @@ def test_mutant_wrong_hh1_declaration_changes_the_leak_prediction(ref_long):
     assert a["energy"]["detail"]["predicted_leak_db_re_L"] != b["energy"]["detail"]["predicted_leak_db_re_L"]
 
 
+# ---------------------------------------------------------------- properties x defects matrix (rule 4)
+# Two properties are decided (energy, decay), so every injected defect is reported as MOVED for the
+# properties that saw it and BLIND for the ones that did not -- a property that never sees anything
+# is decoration wearing the costume of coverage (docs/verification-rules.md rule 4). Executed, not
+# declared: each row below was run, and the report is printed so a reader sees the reasons, not just
+# the word MOVED.
+
+DEFECT_RUNS = 0
+
+
+def _outcome(record, ref, **kw) -> dict:
+    """(verdict, prod, ref, reason[, predicted leak]) per property; a record-level refusal
+    (compare_records raised) is recorded as such for BOTH properties, with the exception text."""
+    try:
+        r = pt.compare_records(record, SR, ref, SR, **kw)
+    except pt.REFUSED_TYPES as e:
+        return {k: ("REFUSED(record-level)", None, None, str(e), None) for k in ("energy", "decay")}
+    out = {}
+    for k in ("energy", "decay"):
+        d = r[k]
+        out[k] = (d["verdict"],
+                  None if d.get("prod") is None else round(float(d["prod"]), 6),
+                  None if d.get("ref") is None else round(float(d["ref"]), 6),
+                  d.get("reason", ""),
+                  (d.get("detail") or {}).get("predicted_leak_db_re_L") if k == "energy" else None)
+    return out
+
+
+def test_control_matrix_energy_decay_x_defects_is_printed_and_no_defect_goes_unseen(ref_long):
+    unprepared = np.concatenate([np.zeros(10), np.hanning(64) * 0.5,
+                                 np.random.default_rng(1).standard_normal(3 * SR) * 0.01])
+    nan_rec = ref_long.copy()
+    nan_rec[-1000] = np.nan
+    plants = {
+        # defect -> (the defeating input, how compare_records is run with the defect in place)
+        "NO_PREP_ASSERT": (unprepared, {}),
+        "NO_FINITE_CHECK": (nan_rec, {}),
+        "WRONG_HH1": (ref_long, {"prod_has_hh1": False}),
+    }
+    rows = {}
+    for name, (rec, kw) in plants.items():
+        defect = name if name != "WRONG_HH1" else None
+        hh1 = kw.get("prod_has_hh1", True)
+        clean = _outcome(rec, ref_long, prod_has_hh1=True)
+        mutant = _outcome(rec, ref_long, defect=defect, prod_has_hh1=hh1)
+        rows[name] = {k: (clean[k], mutant[k], "MOVED" if clean[k] != mutant[k] else "BLIND")
+                      for k in ("energy", "decay")}
+        assert any(cell[2] == "MOVED" for cell in rows[name].values()), (
+            f"{name} moved NO property: it is not a control, remove it or fix the plant", rows[name])
+    print("\nproperties x defects (executed; clean outcome -> mutant outcome):")
+    for name, cells in rows.items():
+        for prop, (clean, mutant, seen) in cells.items():
+            print(f"  {name:16s} {prop:6s} {seen:5s}  clean={clean} -> mutant={mutant}")
+    # The finite guard is defence in depth: its removal must be distinguishable from the
+    # downstream refusals that survive it -- the reason changes, the verdicts do not.
+    fin = rows["NO_FINITE_CHECK"]
+    for prop in ("energy", "decay"):
+        assert "not finite" in fin[prop][0][2], (prop, fin[prop][0])
+        assert fin[prop][1][0] == "REFUSED", (prop, fin[prop][1])
+        assert "not finite" not in fin[prop][1][2], (prop, fin[prop][1])
+    assert fin["energy"][0][0] == "REFUSED(record-level)" and fin["energy"][1][0] == "REFUSED"
+
+
+# ---------------------------------------------------------------- source-tree identity (freeze closure)
+# The first freeze pinned six files enumerated by hand from the probe's own imports; the render path
+# runs through model/modal_fixed.py, audition/dsp.py, model/fixed.py, model/voice_fx.py,
+# and preparation runs through
+# model/audio_measure.py -- none was pinned, so an edit to the modal bank after freeze changed the
+# render under an unchanged guard while result.json attributed it to the frozen commit.
+
+def test_source_closure_covers_the_render_and_preparation_path():
+    need = {"model/modal_fixed.py", "audition/dsp.py", "model/fixed.py", "model/voice_fx.py",
+            "model/audio_measure.py", "tools/preparation_contract.py"}
+    assert need <= set(pt.SOURCE_FILES), f"closure missing {sorted(need - set(pt.SOURCE_FILES))}"
+
+
+def _no_render(*a, **k):
+    raise AssertionError("render ran: a refusal must happen BEFORE rendering")
+
+
+def _fake_corpus(tmp_path, samples) -> dict:
+    d = tmp_path / "cy8"
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / "CY5025.WAV"
+    wavfile.write(str(p), SR, (np.asarray(samples, dtype=np.float64) * 32768.0).astype(np.int16))
+    return {"CY5025.WAV": hashlib.sha256(p.read_bytes()).hexdigest()}
+
+
+def _frozen_for(tmp_path, ref_sha, *, hashes=None) -> pathlib.Path:
+    f = dict(pt.FROZEN, source_commit=pt._git("rev-parse", "HEAD"), source_hashes=hashes or pt.source_hashes(),
+             reference_sha256=ref_sha, corpus_git_commit=None, windows_s=[1.5])
+    p = tmp_path / "frozen.json"
+    p.write_text(json.dumps(f))
+    return p
+
+
+def _cli(tmp_path, frozen) -> list:
+    return ["measure", "--refs", str(tmp_path), "--frozen", str(frozen), "--out", str(tmp_path / "result.json")]
+
+
+def _require_clean_tree():
+    """The CLI controls drive the committed tree end to end; from a dirty tree the guard
+    refuses before anything else (by design), which would read as a confusing assertion."""
+    dirty = pt._git("status", "--porcelain", "--untracked-files=no")
+    if dirty:
+        pytest.fail("the CLI controls run against the committed tree; commit first:\n" + dirty)
+
+
+def test_changed_closure_dependency_refuses_before_rendering(tmp_path, capsys, monkeypatch, ref_long):
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    hashes = pt.source_hashes()
+    hashes["model/modal_fixed.py"] = "0" * 64          # the defeat: an omitted closure file edited post-freeze
+    monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)
+    code = pt.main(_cli(tmp_path, _frozen_for(tmp_path, sha, hashes=hashes)))
+    assert code == 2, "the changed closure file must refuse, not measure"
+    out = capsys.readouterr().out
+    assert "modal_fixed" in out and "re-freeze" in out, out
+
+
+def test_dirty_tracked_tree_refuses_before_rendering(tmp_path, capsys, monkeypatch, ref_long):
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    real_git = pt._git
+
+    def fake_git(*a):
+        return " M model/modal_fixed.py" if a[:2] == ("status", "--porcelain") else real_git(*a)
+
+    monkeypatch.setattr(pt, "_git", fake_git)
+    monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)
+    code = pt.main(_cli(tmp_path, _frozen_for(tmp_path, sha)))
+    assert code == 2, "an uncommitted tree is not attributable to the frozen commit"
+    assert "uncommitted" in capsys.readouterr().out
+
+
+def test_require_tree_identity_records_the_measured_commit(monkeypatch):
+    monkeypatch.setattr(pt, "_git", lambda *a: "abc123" if a[:2] == ("rev-parse", "HEAD") else "")
+    assert pt.require_tree_identity() == "abc123"
+
+
+# ---------------------------------------------------------------- refusal boundary (CLI)
+# run_case.prepare refuses non-finite / cut-into-strike records with run_case.Refused and cymbal_mid
+# refuses a silent record with cymbal_bands.Refused -- classes distinct from this probe's Refused,
+# which the CLI caught alone, so those preconditions escaped as a traceback (exit 1) instead of the
+# advertised REFUSED / NO VERDICT (exit 2). Each control drives pt.main end to end; the production
+# render is a planted record where the render itself is not what is under test (declared per test).
+
+def test_measure_mid_silence_is_attributed_to_the_side_it_refused(ref_long):
+    silent = np.zeros(2 * SR)
+    with pytest.raises(pt.Refused, match="reference: silent"):
+        pt.compare_records(ref_long, SR, silent, SR, prod_has_hh1=True)
+
+
+def test_cli_silent_reference_refuses_with_the_side_not_a_traceback(tmp_path, capsys, monkeypatch, ref_long):
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, np.zeros(2 * SR))
+    monkeypatch.setattr(pt.lt, "check", lambda: (True, []))
+    monkeypatch.setattr(pt.rc, "render_drum_solo", lambda *a, **k: (ref_long, SR))
+    code = pt.main(_cli(tmp_path, _frozen_for(tmp_path, sha)))
+    assert code == 2, "a silent reference must refuse, not crash"
+    assert "REFUSED / NO VERDICT" in capsys.readouterr().out
+
+
+def test_cli_nonfinite_render_refuses_not_tracebacks(tmp_path, capsys, monkeypatch, ref_long):
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    monkeypatch.setattr(pt.lt, "check", lambda: (True, []))
+    called = []
+
+    def nan_render(*a, **k):
+        called.append(True)
+        return np.full(SR, np.nan), SR
+
+    monkeypatch.setattr(pt.rc, "render_drum_solo", nan_render)
+    code = pt.main(_cli(tmp_path, _frozen_for(tmp_path, sha)))
+    assert called, "the control must reach the render it is defeating"
+    assert code == 2
+    assert "production" in capsys.readouterr().out
+
+
+def test_cli_reference_cut_into_its_strike_refuses_not_tracebacks(tmp_path, capsys, monkeypatch):
+    _require_clean_tree()
+    t = np.arange(2 * SR) / SR
+    loud = 0.5 * np.sign(np.sin(2 * np.pi * 1000.0 * t))    # at 50 % of full scale from sample 0
+    sha = _fake_corpus(tmp_path, loud)
+    monkeypatch.setattr(pt.lt, "check", lambda: (True, []))
+    monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)   # the reference is prepared first
+    code = pt.main(_cli(tmp_path, _frozen_for(tmp_path, sha)))
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "cut into the strike" in out and "CY5025" in out, out
+
+
+def test_cli_implementation_error_is_not_swallowed_as_a_refusal(tmp_path, monkeypatch, ref_long):
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    monkeypatch.setattr(pt.lt, "check", lambda: (True, []))
+
+    def boom(*a, **k):
+        raise ValueError("implementation error, not a refusal")
+
+    monkeypatch.setattr(pt.rc, "render_drum_solo", boom)
+    with pytest.raises(ValueError, match="implementation error"):
+        pt.main(_cli(tmp_path, _frozen_for(tmp_path, sha)))
+
+
 # ---------------------------------------------------------------- frozen record
 def test_frozen_record_declares_the_pre_measurement_commitments():
     f = pt.FROZEN
     for k in ("supported_settings", "windows_s", "tolerances", "candidate_budget",
-              "preservation_set", "stage_isolation", "development_settings", "confirmation_settings"):
+              "preservation_set", "stage_isolation", "development_settings", "confirmation_settings",
+              "source_tree"):
         assert k in f
     assert f["candidate_budget"] == 0
     assert set(f["preservation_set"]) >= {"D15A", "D16A", "OH00", "OH75"}
