@@ -132,6 +132,12 @@ help:
 ## are gated here for the same reason the shared module is -- a change to the
 ## synthesis must not be able to move their numbers unnoticed. Both print the
 ## TR-808 corpus's absence as a result and exit 0 without it.
+## #354: the all-maximum `extremes` image alone, OSC2X+FILTER2X (960 frames,
+## ~7 s). R1's 25-bit ladder `xg` wrapped on it and the continuing full-set
+## voice carried the wrong state into `audition`; #364 widened it. This is the
+## clean half; `controls` runs the retained R1 width (INJECT_BUG_LADDER_XG25)
+## on the same image and requires R1's recorded signature, first divergence
+## y19 at frame 62 and 387 samples (--expect-first), not merely a failure.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
@@ -142,6 +148,7 @@ verify:
 	  "$(PY) rtl-sketch/verify_synth_top.py --osc2x" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --osc2x --outdir build/voice-osc2x" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --outdir build/voice-filter2x" \
+	  "$(PY) tools/verify_voice_scoped.py --extremes-index 0 --osc2x --filter2x --outdir build/voice-allmax-354" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --outdir build/top-m5a-filter2x" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --outdir build/top-drum-solo-smoke" \
 	  "$(PY) tools/gen_rate_conv_2x.py --check" \
@@ -492,6 +499,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_LEAKFLOOR --expect-fail --outdir build/voice-drift-leakfloor" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_MEANSTEP --expect-fail --outdir build/voice-drift-meanstep" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --inject SHARK_BLAMP_SIGN --expect-fail --outdir build/voice-shark-blamp-sign" \
+	  "$(PY) tools/verify_voice_scoped.py --extremes-index 0 --osc2x --filter2x --define INJECT_BUG_LADDER_XG25 --expect-fail --expect-first y19@62:387 --outdir build/voice-allmax-354-xg25" \
 	  "$(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail --outdir build/ctl-data24" \
