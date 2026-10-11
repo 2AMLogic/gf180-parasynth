@@ -84,8 +84,12 @@
       "rho_all_ref": null
      },
      "prod": 0.8696,
-     "reason": "over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band",
+     "reason": "reference: over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band",
      "ref": null,
+     "refused_by": {
+      "production": null,
+      "reference": "over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+     },
      "verdict": "REFUSED"
     },
     "energy": {
@@ -107,8 +111,12 @@
       }
      },
      "prod": null,
-     "reason": "band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
+     "reason": "production: band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
      "ref": -16.889,
+     "refused_by": {
+      "production": "band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
+      "reference": null
+     },
      "verdict": "REFUSED"
     },
     "joint": false,
@@ -129,8 +137,12 @@
       "rho_all_ref": null
      },
      "prod": 0.8709,
-     "reason": "over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band",
+     "reason": "reference: over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band",
      "ref": null,
+     "refused_by": {
+      "production": null,
+      "reference": "over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+     },
      "verdict": "REFUSED"
     },
     "energy": {
@@ -152,8 +164,12 @@
       }
      },
      "prod": null,
-     "reason": "band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
+     "reason": "production: band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
      "ref": -16.889,
+     "refused_by": {
+      "production": "band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
+      "reference": null
+     },
      "verdict": "REFUSED"
     },
     "joint": false,
@@ -190,5 +206,5 @@
    "verdict": "REFUSED"
   }
  },
- "source_commit": "1b54ab372114175c925f7eb5e66cc4b3db8cb41d"
+ "source_commit": "e2e0fd798e84c775fca72f4dfa0072a89c14f6d5"
 }
