@@ -65,19 +65,27 @@ SCOPE (#354). This bench deliberately exceeds R1's qualified domain
 drives, resonances or register words the release host cannot send
 (`tools/verify_voice_scoped.py --classify-full` lists each and its rule). Its
 job is component equivalence over the whole register space, not a statement
-about supported play. KNOWN FAILURE, OUT OF DOMAIN: with --osc2x --filter2x
-the all-maximum `extremes` image (inc 2^24-1, k 131071, gain/ogain 2^20-1,
-vol 65535) diverges at the ladder's 19-bit rail (frame 62: model -262119,
-RTL -262144) and the output rails with opposite signs. Every scenario runs on
-ONE continuing voice, so that divergence is CARRIED into the later scenarios:
-`--only audition` alone passes bit-exact (115,200 frames, with and without
---pulse2x), and so does an in-domain stress of all three R1 presets at the
-live controllers' limits (`verify_voice_scoped.py --domain`, 144,000 frames).
-A full-set FAIL is therefore not evidence of an in-domain defect -- and a
-full-set PASS remains the goal. The out-of-domain divergence is
-ladder_dp_n.v's 25-bit (x * gain) >> 11 register wrapping (26 bits needed);
-repaired for R2 in #364 (full set then PASSES, 442,596 frames), unrepaired in
-R1's frozen bytes by design.
+about supported play.
+
+Two implementations, two answers -- say which one a result is for:
+  R1's PINNED BYTES (67d59af7, frozen by design): KNOWN FAILURE, OUT OF
+    DOMAIN. With --osc2x --filter2x the all-maximum `extremes` image (inc
+    2^24-1, k 131071, gain/ogain 2^20-1, vol 65535) diverges at the ladder's
+    19-bit word (frame 62: model -262119, RTL -262144) and the output rails
+    with opposite signs (frame 203). Every scenario runs on ONE continuing
+    voice, so the wrong state is CARRIED into `audition`: R1's 821 / 649
+    musical-sequence mismatches are this, not a musical-input defect
+    (`--only audition` alone passes, 115,200 frames). Cause: ladder_dp_n.v's
+    (x * gain) >> 11 held in 25 bits; the ports need 26 and it wrapped.
+  THE CURRENT TREE (#364 widened xg to 26 bits): the image passes, and so
+    does the `--only audition,extremes` chain with continuity kept. `make
+    verify` runs the image alone (verify_voice_scoped.py --extremes-index 0
+    --osc2x --filter2x); `make controls` runs R1's width back in
+    (-DINJECT_BUG_LADDER_XG25) and requires R1's signature, y19 at frame 62
+    and 387 samples (--expect-first y19@62:387). A full-set FAIL on the
+    current tree is therefore a NEW defect, not #354 -- report its first
+    divergent tap before proposing arithmetic. #247 (above-Nyquist glide) is
+    a separate question. Receipts: docs/verification/voice-fullset-354/.
 
 Exit status (a CI job asserting that a negative control fails must require
 exactly 1):
