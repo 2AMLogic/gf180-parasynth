@@ -1,6 +1,6 @@
 {
  "frozen": "docs/scorecard/cymbal-400-production-tail/frozen.json",
- "measured_at_commit": "0c3b79ceaf5603cd09f1e01fb4fee4d17b5875fe",
+ "measured_at_commit": "55e21b0f39340fbf63184a43ba79bbd70bafdab8",
  "settings": {
   "CY0000": {
    "reason": "CY0000: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
@@ -207,5 +207,5 @@
    "verdict": "REFUSED"
   }
  },
- "source_commit": "b6a105a87bece98ce4a977479272e60bc653b994"
+ "source_commit": "4d1b753431ce32336ac2b8dca825161ca1fddd9a"
 }
