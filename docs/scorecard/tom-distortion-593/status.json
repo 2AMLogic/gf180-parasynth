@@ -1,6 +1,6 @@
 {
  "issue": 593,
- "instrument_commit": "d91dc5c",
+ "instrument_commit": "425a203",
  "ran_on_this_host": {"knownanswer": "PASS (knownanswer.json)", "controls": "OK (controls.json)"},
  "not_run": {
   "baseline": "REFUSED: corpus directory missing (~/dev/refs / GF180_TR808_FISCHER absent on the dispatch worker). Heavy run owned by the coordinator's build box.",

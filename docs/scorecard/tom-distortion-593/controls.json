@@ -9,6 +9,8 @@
   "J3_contaminated_confirmation_refused": "PASS",
   "J4_no_distortion_candidate_not_confirmed": "PASS",
   "J5_null_target_refused_not_zero_error": "PASS",
+  "J6_frozen_population_enforced": "PASS",
+  "J7_nonfinite_or_missing_measurement_refused": "PASS",
   "M1_mechanism_classes": "PASS"
  },
  "cells": {
@@ -22,6 +24,8 @@
    "J3_contaminated_confirmation_refused": "BLIND",
    "J4_no_distortion_candidate_not_confirmed": "BLIND",
    "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
    "M1_mechanism_classes": "BLIND"
   },
   "missing-distortion": {
@@ -34,6 +38,8 @@
    "J3_contaminated_confirmation_refused": "BLIND",
    "J4_no_distortion_candidate_not_confirmed": "BLIND",
    "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
    "M1_mechanism_classes": "BLIND"
   },
   "leakage-as-h2": {
@@ -46,6 +52,8 @@
    "J3_contaminated_confirmation_refused": "BLIND",
    "J4_no_distortion_candidate_not_confirmed": "BLIND",
    "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
    "M1_mechanism_classes": "BLIND"
   },
   "preservation-bypass": {
@@ -58,6 +66,8 @@
    "J3_contaminated_confirmation_refused": "BLIND",
    "J4_no_distortion_candidate_not_confirmed": "BLIND",
    "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "MOVED",
    "M1_mechanism_classes": "BLIND"
   },
   "contaminated-confirmation": {
@@ -70,6 +80,8 @@
    "J3_contaminated_confirmation_refused": "MOVED",
    "J4_no_distortion_candidate_not_confirmed": "BLIND",
    "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
    "M1_mechanism_classes": "BLIND"
   },
   "target-ignored": {
@@ -82,6 +94,8 @@
    "J3_contaminated_confirmation_refused": "BLIND",
    "J4_no_distortion_candidate_not_confirmed": "MOVED",
    "J5_null_target_refused_not_zero_error": "MOVED",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
    "M1_mechanism_classes": "BLIND"
   },
   "mechanism-bypass": {
@@ -94,7 +108,37 @@
    "J3_contaminated_confirmation_refused": "BLIND",
    "J4_no_distortion_candidate_not_confirmed": "BLIND",
    "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
    "M1_mechanism_classes": "MOVED"
+  },
+  "population-bypass": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "MOVED",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
+   "M1_mechanism_classes": "BLIND"
+  },
+  "nonfinite-bypass": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "MOVED",
+   "M1_mechanism_classes": "BLIND"
   }
  },
  "intended": {
@@ -119,6 +163,12 @@
   ],
   "mechanism-bypass": [
    "M1_mechanism_classes"
+  ],
+  "population-bypass": [
+   "J6_frozen_population_enforced"
+  ],
+  "nonfinite-bypass": [
+   "J7_nonfinite_or_missing_measurement_refused"
   ]
  },
  "intended_not_moved": [],

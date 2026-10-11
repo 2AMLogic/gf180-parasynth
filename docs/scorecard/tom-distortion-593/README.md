@@ -10,7 +10,7 @@ independent confirmation are **not run** (see "What was and was not run"). Part 
 |---|---|---|
 | Known-answer harness of the H2..H4 estimator (810 analytic cases, both sample rates, glide, noise) | **PASS**, 1890 harmonic reads, max error 2.09 dB, 95th percentile 0.93 dB, 0 missed, 0 false-resolved on absent harmonics, 9/9 refusal inputs refused | `knownanswer.json` |
 | Start-red: stub estimator against the same harness | **RED** (every specified harmonic missed, 0 of 9 refusals) | `test_start_red_stub_estimator_fails_the_harness` |
-| Injected defects x properties | **OK**, 7 defects, each MOVES its intended property (table below) | `controls.json` |
+| Injected defects x properties | **OK**, 9 defects, each MOVES its intended property (table below) | `controls.json` |
 | Baseline of the production kit (bit-exact vs `render_drum_solo`, raw peak, harmonics, every gate feature, hashes) | **REFUSED**: the Fischer corpus is absent on this host | `status.json`; command `tom_distortion.py baseline` |
 | Mechanism (effect real? post-resonator polynomial vs waveform-intrinsic vs leakage) | **REFUSED**, so the mechanism is **INSUFFICIENT** (unmeasured) | `status.json`; command `tom_distortion.py mechanism` |
 | Development selection | **NO CANDIDATE**: none registered, deliberately | `prereg.json` |
@@ -52,23 +52,31 @@ oscillator nonlinearity inside a feedback loop from a post-resonator polynomial 
 
 MOVED = the property passes clean and fails with the defect; BLIND = still passes; NO VERDICT = the control errored (none did).
 
-| defect \ property | K1 | K2 | K3 | J0 | J1 | J2 | J3 | J4 | J5 | M1 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| stub-estimator | MOVED | BLIND | MOVED | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND |
-| missing-distortion | BLIND | BLIND | MOVED | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND |
-| leakage-as-h2 | MOVED | MOVED | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND |
-| preservation-bypass | BLIND | BLIND | BLIND | BLIND | MOVED | MOVED | BLIND | BLIND | BLIND | BLIND |
-| contaminated-confirmation | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | MOVED | BLIND | BLIND | BLIND |
-| target-ignored | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | MOVED | MOVED | BLIND |
-| mechanism-bypass | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | MOVED |
+| defect \ property | K1 | K2 | K3 | J0 | J1 | J2 | J3 | J4 | J5 | J6 | J7 | M1 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| stub-estimator | MOVED | BLIND | MOVED | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND |
+| missing-distortion | BLIND | BLIND | MOVED | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND |
+| leakage-as-h2 | MOVED | MOVED | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND |
+| preservation-bypass | BLIND | BLIND | BLIND | BLIND | MOVED | MOVED | BLIND | BLIND | BLIND | BLIND | MOVED | BLIND |
+| contaminated-confirmation | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | MOVED | BLIND | BLIND | BLIND | BLIND | BLIND |
+| target-ignored | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | MOVED | MOVED | BLIND | BLIND | BLIND |
+| mechanism-bypass | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | MOVED |
+| population-bypass | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | MOVED | BLIND | BLIND |
+| nonfinite-bypass | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | BLIND | MOVED | BLIND |
 
 K1 known-answer recovery; K2 a pure sinusoid reads unresolved (leakage is not H2); K3 the applied quadratic term reads at its specification;
 J0 a clean candidate is CONFIRMED (the judge is satisfiable); J1/J2 a candidate with an attractive target gain that breaks decay/peak is rejected;
-J3 contaminated confirmation is refused; J4 a no-distortion candidate with improved `modulation` is not confirmed; J5 a null target is REFUSED; M1 mechanism classes.
+J3 a confirmation registration naming a prior-seen file is refused; J4 a no-distortion candidate with improved `modulation` is not confirmed;
+J5 a null target is REFUSED; J6 the frozen population is enforced (an omitted registered row, an unregistered row/hash, a relabelled split, or one
+recording under two keys cannot be scored); J7 a non-finite or deleted measurement is refused, and a null on both sides of a preserved feature is a
+violation, not a skip; M1 mechanism classes.
 
-Reading it honestly: the intended cell (defect on its named property) moved for all seven. The off-diagonal BLIND cells are real: `stub-estimator` is
+Reading it honestly: the intended cell (defect on its named property) moved for all nine. The off-diagonal BLIND cells are real: `stub-estimator` is
 invisible to K2 (a stub that says "unresolved" satisfies it), so K2 alone could not catch a stub and K1/K3 carry that. J0 never moves by design.
-`leakage-as-h2` and `stub-estimator` also move K1 and K3 respectively because they share the estimator.
+`leakage-as-h2` and `stub-estimator` also move K1 and K3 respectively because they share the estimator. `preservation-bypass` also moves J7 because
+J7 asserts the both-null preserved feature is a violation through `_violations`, which that defect disables. J3 was re-aimed during review: the
+label-substitution fixture it used is now caught by the frozen-population guard (J6) regardless of this defect, so its defeating input is the one
+only this guard can catch -- a registration that itself names a prior-seen file.
 
 ## Correction rate (wrong before right)
 
