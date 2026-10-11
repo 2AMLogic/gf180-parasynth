@@ -122,3 +122,53 @@ The musical audition mismatches were this wrap, carried by the continuing voice.
 chain, so the full set's continuity is kept rather than reset around.
 
 **Model unchanged.** No sound score is stale.
+
+## 7. Closure on the current tree (2026-10-11, #354)
+
+Sections 1–5 describe **R1's pinned bytes** (`67d59af7`), which stay as they are by design. Section 6 is the repair
+(#364). This section re-measures the **current tree** (`origin/main` `dcc534bd` plus this branch, which changes no
+RTL). It ran on a Loom dispatch worker under Icarus **13.0**, Python 3.12, with one simulation at a time; the
+historical runs used Icarus 14 on the build box. Every run below uses `--osc2x --filter2x`.
+
+| run | result | receipt |
+|---|---|---|
+| all-maximum image alone (`verify_voice_scoped --extremes-index 0`) | **PASS**, 960 frames | `current-x0-clean.log` |
+| the same, `-DINJECT_BUG_LADDER_XG25` (R1's 25-bit `xg`) | **FAIL, caught for its reason**: first divergence y19 at frame 62 (model −262,119, RTL −262,144), 387 samples, output rails with opposite signs at frame 203 | `current-x0-xg25-control.{log,json}` |
+| `--only audition,extremes`, continuing voice | **PASS**, 121,040 frames, every sample and tap | `current-ae-clean.log` |
+| the same, `--pulse2x` | **PASS**, 121,040 frames | `current-ae-clean-p2x.log` |
+| the same chain, `-DINJECT_BUG_LADDER_XG25` | **FAIL**: 5,581 samples, of which 04-lead-glide 4,143, 07-growl-bass 821 and 08-self-osc-whistle 0 | `current-ae-xg25.log` |
+
+**What this establishes.** Putting R1's width back into today's tree, and changing nothing else, reproduces R1's
+published chain count exactly: 5,581 samples, the same per-sequence split, and the same first divergence. The
+`audition` mismatches in #354 were therefore all this one wrap, carried by the continuing voice. No part of them is a
+separate defect driven by musical input. With the repair, the chain passes with continuity kept. Nothing was reset
+around the failure.
+
+**What this does not establish.**
+
+- **Not the full set.** `--set full` (442,596 frames) in both pulse configurations is a build-box run, and this host is
+  not the box. The figure in section 6 is the last full-set measurement, against #364's head, not against this commit.
+- **Not R1 PULSE2X with the mutant.** R1's PULSE2X count of 649 was not re-derived under the mutant.
+- **Not #247.** The above-Nyquist glide question is a separate issue and is not touched here.
+- **Not the build box's Icarus 14.** These values are from Icarus 13.
+
+**Now gated.** The clean image runs in `make verify` as `verify_voice_scoped.py --extremes-index 0 --osc2x
+--filter2x`. The mutant runs in `make controls` with `--expect-fail --expect-first y19@62:387`. A bare
+`--expect-fail` accepts any failure, so a define that stopped reaching the ladder, combined with an unrelated
+breakage, would still read as "caught". `--expect-first` passes only on R1's recorded signature. Its matcher has
+pure-Python tests, `tools/test_verify_voice_scoped_expect.py`, and they include that defeating input: an earlier,
+upstream divergence. Mutating the matcher to name the downstream tap turns two of those tests red.
+
+**Defect-class search** (`git grep` on `origin/main`, for a product slice taken before saturation,
+`<= *_full[…]`): it finds only the `xg` registers.
+
+- `ladder_dp_n.v` is repaired, with the 25-bit control kept.
+- The scalar `ladder_dp.v` keeps a 25-bit `xg`. Its `x_in` is 16-bit, so 2^15 · (2^20 − 1) >> 11 = 16,777,200 < 2^24,
+  and it cannot wrap.
+- The other wide results, `out_full` and `u_full`, go through `sat_o` / `sat_s`. The only exception is `u_full`'s own
+  `INJECT_BUG` control.
+
+**Wrong-then-right in this pass: 1.** The first attempt at the three chain runs went in one backgrounded command. The
+harness stopped it at its 600 s background limit during the mutant run. The two clean results had completed and were
+kept. The mutant was re-run alone. Separately, one 7 s `--extremes-index 0` run overlapped the mutant chain on this
+host. Both results are recorded as they ran.

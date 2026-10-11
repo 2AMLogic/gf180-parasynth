@@ -1,0 +1,86 @@
+{
+ "headroom": {
+  "worst": {
+   "ladder_y19_abs": 262144,
+   "mixed_abs": 32768,
+   "out_abs": 32767,
+   "vca_abs": 262136,
+   "ladder_margin_db": -0.0
+  },
+  "per_scenario": [
+   {
+    "name": "the all-maximum control image (weights, envelopes, cutoff, k, gain, ogain, vol, glide, inc)",
+    "ladder_y19_abs": 262144,
+    "mixed_abs": 32768,
+    "out_abs": 32767,
+    "vca_abs": 262136
+   }
+  ]
+ },
+ "verify_voice_exit": 0,
+ "scenarios": [
+  "the all-maximum control image (weights, envelopes, cutoff, k, gain, ogain, vol, glide, inc)"
+ ],
+ "compare": {
+  "status": 1,
+  "frames": 960,
+  "mismatches": {
+   "sample": 387,
+   "osc0": 0,
+   "osc1": 0,
+   "osc2": 0,
+   "inc0": 0,
+   "inc1": 0,
+   "inc2": 0,
+   "sh0": 0,
+   "sh1": 0,
+   "sh2": 0,
+   "r0": 0,
+   "r1": 0,
+   "r2": 0,
+   "mixed": 0,
+   "ae": 0,
+   "fe": 0,
+   "cut": 0,
+   "g": 0,
+   "kc": 0,
+   "k_eff": 0,
+   "y19": 758,
+   "v": 758,
+   "out_v": 758,
+   "phase2x0": 0,
+   "phase2x1": 0,
+   "phase2x2": 0
+  },
+  "first": {
+   "y19": [
+    62,
+    -262119,
+    "-262144",
+    "extremes"
+   ],
+   "v": [
+    62,
+    -262112,
+    "-262136",
+    "extremes"
+   ],
+   "out_v": [
+    62,
+    -524217,
+    "-524265",
+    "extremes"
+   ],
+   "sample": [
+    203,
+    32767,
+    "-32768",
+    "extremes"
+   ]
+  },
+  "first_divergence": [
+   62,
+   "y19"
+  ]
+ }
+}
