@@ -991,11 +991,89 @@ FLOOR_ROW_FIELDS = ("mean_floor_err_lsb", "mean_diff_lsb", "diff_pct_of_peak",
                     "floor_err_pct_of_peak")
 
 
+def declared_window_frames():
+    return int(round(ANALYSIS_S * 48000.0))
+
+
+def _close(a, b):
+    return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12)
+
+
+def floor_arithmetic_problems(row):
+    """Why an OK row's figures are IMPOSSIBLE, given finite numbers and
+    non-negative integer counts that partition n_frames (checked first).
+
+    The arithmetic being reconciled (`output_floor_row`): per sample the floor
+    variant is clip(q) and the exact one clip(q + up), up in {0, 1}, with the
+    SAME monotone rails, so floor - round is -1 or 0 and nothing else. Hence:
+      * diff_sum <= 0, max_abs_diff in {0, 1}, and max_abs_diff == 1 iff
+        diff_sum != 0;
+      * -diff_sum <= n_res_high + n_res_tie (only a high residue or an
+        odd-quotient tie increments), and -diff_sum >= n_res_high - clip_floor
+        - clip_exact (a high residue's -1 can only be hidden by a rail);
+      * mean_diff_lsb == diff_sum / n_frames, diff_pct_of_peak == 100 *
+        mean_diff_lsb / peak_lsb, floor_err_pct_of_peak likewise;
+      * the pre-rail error is -r / 2^15 per sample, r in [1, 2^14) low,
+        2^14 tie, (2^14, 2^15) high, 0 exact: its mean sits in the interval the
+        residue counts allow;
+      * n_frames is the declared window, > 0, and `window` spans exactly it;
+        peak_lsb is the level the guard admitted and no more than full scale;
+        clip counts do not exceed n_frames.
+    Defeater carried as a permanent control (PR #653 review): every BD row
+    rewritten to diff_sum=96000, mean_diff_lsb=1.0, diff_pct_of_peak=100/peak,
+    counts untouched -- it used to reach BIAS CONFIRMED +1.0000 LSB."""
+    out = []
+    n, ds = row["n_frames"], row["diff_sum"]
+    zero, low, tie, high = (row[k] for k in ("n_res_zero", "n_res_low", "n_res_tie", "n_res_high"))
+    cf, ce, mx, peak = row["clip_floor"], row["clip_exact"], row["max_abs_diff"], row["peak_lsb"]
+    want_n = declared_window_frames()
+    if n <= 0:
+        return [f"n_frames {n}: an OK row with no frames measured nothing"]
+    if n != want_n:
+        out.append(f"n_frames {n} is not the declared window ({want_n} frames = {ANALYSIS_S} s)")
+    w = row.get("window")
+    if not (isinstance(w, list) and len(w) == 2 and all(isinstance(x, int) and not isinstance(x, bool) for x in w)
+            and 0 <= w[0] and w[1] - w[0] == n):
+        out.append(f"window {w!r} does not span exactly n_frames={n} from a non-negative onset")
+    if not MIN_PEAK_LSB <= peak <= FS:
+        out.append(f"peak_lsb {peak!r} outside [{MIN_PEAK_LSB}, {FS}] (the level guard and full scale)")
+    for k, c in (("clip_floor", cf), ("clip_exact", ce)):
+        if c > n:
+            out.append(f"{k} {c} exceeds n_frames {n}")
+    if ds > 0:
+        out.append(f"diff_sum {ds} > 0: floor minus round-half-even under shared rails is -1 or 0 per sample")
+    elif -ds > high + tie:
+        out.append(f"diff_sum {ds}: more -1s than high residues + ties ({high} + {tie})")
+    elif -ds < high - cf - ce:
+        out.append(f"diff_sum {ds}: fewer -1s than high residues not hidden by a rail "
+                   f"({high} - {cf} - {ce})")
+    if mx not in (0, 1):
+        out.append(f"max_abs_diff {mx} is not 0 or 1")
+    elif mx != (1 if ds else 0):
+        out.append(f"max_abs_diff {mx} disagrees with diff_sum {ds}")
+    md, fe = row["mean_diff_lsb"], row["mean_floor_err_lsb"]
+    if not _close(md, ds / n):
+        out.append(f"mean_diff_lsb {md!r} != diff_sum / n_frames = {ds / n!r}")
+    if peak > 0:
+        if not _close(row["diff_pct_of_peak"], 100.0 * md / peak):
+            out.append(f"diff_pct_of_peak {row['diff_pct_of_peak']!r} != 100 * mean_diff_lsb / peak_lsb "
+                       f"= {100.0 * md / peak!r}")
+        if not _close(row["floor_err_pct_of_peak"], 100.0 * fe / peak):
+            out.append(f"floor_err_pct_of_peak {row['floor_err_pct_of_peak']!r} != 100 * "
+                       f"mean_floor_err_lsb / peak_lsb = {100.0 * fe / peak!r}")
+    lo = -(0.5 * low + 0.5 * tie + high) / n                # every residue at its largest
+    hi = -(low / Q15 + 0.5 * tie + (0.5 + 1 / Q15) * high) / n   # ... at its smallest
+    if not (lo - 1e-12 <= fe <= hi + 1e-12):
+        out.append(f"mean_floor_err_lsb {fe!r} outside [{lo!r}, {hi!r}], the interval the residue counts allow")
+    return out
+
+
 def floor_row_problems(rows):
     """Why a `--output-floor` record's rows cannot reach an ending, validated
     where the JSON is read. Reconciliation: every row is OK or REFUSED; an OK
     row carries finite measurements, non-negative integer counts whose residue
-    classes sum to n_frames; a REFUSED row carries a reason."""
+    classes sum to n_frames, and figures that are POSSIBLE for floor-minus-round
+    (`floor_arithmetic_problems`); a REFUSED row carries a reason."""
     if not isinstance(rows, list):
         return [f"rows is not a list: {type(rows).__name__}"]
     out, voices = [], []
@@ -1015,7 +1093,8 @@ def floor_row_problems(rows):
             if not isinstance(row.get("reason"), str) or not row["reason"]:
                 out.append(f"row {i} ({v}) REFUSED without a reason")
             continue
-        for k in FLOOR_ROW_FIELDS:
+        n_before = len(out)
+        for k in FLOOR_ROW_FIELDS + ("peak_lsb",):
             if not finite_real(row.get(k)):
                 out.append(f"row {i} ({v}) {k} {row.get(k)!r} is not a finite real number")
         for k in ("n_frames", "n_res_zero", "n_res_low", "n_res_tie", "n_res_high",
@@ -1030,6 +1109,8 @@ def floor_row_problems(rows):
                                                      "n_res_tie", "n_res_high")) \
                 and sum(row[k] for k in ("n_res_zero", "n_res_low", "n_res_tie", "n_res_high")) != row["n_frames"]:
             out.append(f"row {i} ({v}) residue classes do not sum to n_frames")
+        if len(out) == n_before:                            # shape is sound: now the arithmetic
+            out += [f"row {i} ({v}) {p}" for p in floor_arithmetic_problems(row)]
     dup = sorted({v for v in voices if isinstance(v, str) and voices.count(v) > 1})
     if dup:
         out.append(f"duplicate rows for {dup}")
@@ -1117,7 +1198,12 @@ def floor_verdicts(records):
 def floor_summary(records):
     """Every narrative figure for the #618 write-up, derived from the records
     and carried WITH the (condition, voice) it came from, so prose cannot
-    attach a number to the wrong row. Usable rows only; counts are explicit."""
+    attach a number to the wrong row. Usable rows only; counts are explicit.
+    Raises Refused unless `floor_verdicts` accepts the records: a figure is
+    never derived from a record the ending would refuse (PR #653 review)."""
+    status, _ends, why = floor_verdicts(records)
+    if status != "OK":
+        raise Refused("; ".join(why))
     ok = [(r["condition"], row) for r in records for row in r["rows"] if row.get("status") == "OK"]
     refused = sum(1 for r in records for row in r["rows"] if row.get("status") != "OK")
 
@@ -1183,6 +1269,21 @@ def floor_summary_text(s):
     return "```\n" + "\n".join(lines[:6]) + "\n```\n\n" + "\n".join(lines[7:]) + "\n"
 
 
+def floor_summary_cli(path):
+    """`--floor-summary`: the README block, or a named REFUSED with exit 2 and
+    no measurement block at all."""
+    try:
+        rep = json.loads(pathlib.Path(path).read_text())
+        if not isinstance(rep, dict):
+            raise Refused(f"report is a {type(rep).__name__}, not a JSON object")
+        text = floor_summary_text(floor_summary(rep.get("records")))
+    except (OSError, ValueError, Refused) as e:
+        print(f"FLOOR SUMMARY REFUSED: {e}")
+        return 2
+    print(text, end="")
+    return 0
+
+
 def refresh_endings(path):
     """Re-derive a saved report's endings from the records it already carries,
     without re-rendering: the rows (and their accumulator hashes) are untouched,
@@ -1190,7 +1291,14 @@ def refresh_endings(path):
     `floor_verdicts`. REFUSES (exit 2, file unchanged) if the records no longer
     combine -- e.g. this module's declared limits moved since they were rendered."""
     p = pathlib.Path(path)
-    rep = json.loads(p.read_text())
+    try:
+        rep = json.loads(p.read_text())
+    except (OSError, ValueError) as e:
+        print(f"REFUSED: cannot read the report: {e}")
+        return 2
+    if not isinstance(rep, dict):
+        print(f"REFUSED: report is a {type(rep).__name__}, not a JSON object")
+        return 2
     status, ends, why = floor_verdicts(rep.get("records"))
     if status != "OK":
         print("REFUSED: " + "; ".join(why))
@@ -1205,7 +1313,11 @@ def refresh_endings(path):
 def floor_report(paths, json_out=None):
     """The deliverable table: provenance, the dev/confirm rows, the frozen
     endings, the apparatus controls, and the reference gate's current result."""
-    recs = [json.loads(pathlib.Path(p).read_text()) for p in paths]
+    try:
+        recs = [json.loads(pathlib.Path(p).read_text()) for p in paths]
+    except (OSError, ValueError) as e:
+        print(f"OUTPUT-FLOOR ENDING from {', '.join(paths)}\nREFUSED: cannot read a record: {e}")
+        return 2
     status, ends, why = floor_verdicts(recs)
     ref = reference_gate()
     rep = dict(schema="residual-dc-output-floor-report/1",
@@ -1757,9 +1869,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     vs = tuple(a.voices.split(",")) if a.voices else None
     if a.floor_summary:
-        rep = json.loads(pathlib.Path(a.floor_summary).read_text())
-        print(floor_summary_text(floor_summary(rep["records"])), end="")
-        return 0
+        return floor_summary_cli(a.floor_summary)
     if a.refresh_endings:
         return refresh_endings(a.refresh_endings)
     if a.floor_verdict:

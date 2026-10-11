@@ -772,14 +772,15 @@ def test_committed_endings_are_what_the_committed_records_produce():
 
 def test_floor_summary_derives_extrema_with_their_voice_and_condition():
     """Hand-built records whose extrema sit in DIFFERENT conditions: each figure
-    must be reported with the row it came from."""
-    def row(v, md, pct, fe, zero, tie, high):
-        return dict(voice=v, status="OK", n_frames=1000, n_res_zero=zero, n_res_tie=tie,
-                    n_res_high=high, n_res_low=1000 - zero - tie - high, diff_sum=-high,
-                    mean_diff_lsb=md, diff_pct_of_peak=pct, mean_floor_err_lsb=fe,
-                    floor_err_pct_of_peak=-0.001, max_abs_diff=1, clip_floor=0, clip_exact=0)
-    recs = [_frec("dev", [row("AA", -0.5, -0.002, -0.7, 10, 0, 500), row("BB", -0.01, -0.0001, -0.02, 900, 0, 10)]),
-            _frec("confirm", [row("AA", -0.002, -0.009, -0.3, 500, 7, 2), row("BB", -0.8, -0.001, -0.9, 0, 3, 800)])]
+    must be reported with the row it came from. The rows are arithmetically
+    POSSIBLE (built by `_crow`), because floor_summary now refuses any record
+    `floor_verdicts` refuses
+    (it caught this fixture at n=1000, off the declared window)."""
+    def row(v, zero, tie, high, peak):           # per-mille counts, scaled to the declared window
+        k = 96
+        return _crow(v, n=1000 * k, zero=zero * k, tie=tie * k, high=high * k, peak=peak)
+    recs = [_frec("dev", [row("AA", 10, 0, 500, 32000.0), row("BB", 900, 0, 10, 1000.0)]),
+            _frec("confirm", [row("AA", 500, 7, 2, 16.0), row("BB", 0, 3, 800, 32000.0)])]
     s = R.floor_summary(recs)
     assert (s["diff_min"]["voice"], s["diff_min"]["condition"]) == ("AA", "confirm")
     assert (s["diff_max"]["voice"], s["diff_max"]["condition"]) == ("BB", "confirm")
@@ -818,6 +819,140 @@ def test_readme_floor_summary_block_is_generated_from_the_committed_records():
     assert block == R.floor_summary_text(R.floor_summary(q["records"]))
 
 
+def test_the_committed_records_pass_the_arithmetic_gate():
+    """Run the stricter gate against the current state before committing it:
+    every committed OK row must reconcile, or the gate is unsatisfiable."""
+    q = json.loads(QUAL.read_text())
+    for r in q["records"]:
+        assert R.floor_row_problems(r["rows"]) == [], r["condition"]
+
+
+def _qual_with(mutate):
+    q = json.loads(QUAL.read_text())
+    for r in q["records"]:
+        mutate(r)
+    return q
+
+
+def _dirty_and_limits_moved(r):
+    r["dirty"], r["limits"] = True, {}
+
+
+def test_floor_summary_cli_refuses_records_the_verdict_gate_refuses(tmp_path, capsys):
+    """PR #653 review, finding 1: --floor-summary published README figures from
+    dirty records with an empty limits block. It must refuse by name, exit 2,
+    and print NO measurement block."""
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(_qual_with(_dirty_and_limits_moved)))
+    assert R.main(["--floor-summary", str(p)]) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("FLOOR SUMMARY REFUSED:"), out
+    assert "dirty" in out and "limits differ" in out, out
+    assert "rows:" not in out and "| voice |" not in out and "LSB" not in out, out
+    with pytest.raises(R.Refused):
+        R.floor_summary(_qual_with(_dirty_and_limits_moved)["records"])
+
+
+@pytest.mark.parametrize("text", ["not json", "[]", '{"records": 3}'])
+def test_floor_summary_cli_refuses_an_unreadable_report(tmp_path, capsys, text):
+    p = tmp_path / "q.json"
+    p.write_text(text)
+    assert R.main(["--floor-summary", str(p)]) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("FLOOR SUMMARY REFUSED:") and "rows:" not in out, out
+
+
+@pytest.mark.parametrize("flag", ["--refresh-endings", "--floor-verdict"])
+@pytest.mark.parametrize("text", [None, "not json", "[]"])
+def test_floor_report_paths_refuse_an_unreadable_input(tmp_path, capsys, flag, text):
+    """Same-class sweep of finding 1: every path that reads saved records names
+    its refusal and exits 2 rather than tracebacking (or, worse, emitting)."""
+    p = tmp_path / "q.json"
+    if text is not None:
+        p.write_text(text)
+    args = [flag, str(p)] + ([str(p)] if flag == "--floor-verdict" else [])
+    assert R.main(args) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "BIAS" not in out, out
+
+
+def _bd_positive(r):
+    """The review's exact defeater: every BD row claims floor sits a full LSB
+    ABOVE round-half-even, with every count left as rendered."""
+    for row in r["rows"]:
+        if row["voice"] == "BD":
+            row.update(diff_sum=96000, mean_diff_lsb=1.0, diff_pct_of_peak=100 / row["peak_lsb"])
+
+
+def test_floor_verdicts_refuse_the_positive_difference_defeater(tmp_path, capsys):
+    """PR #653 review, finding 2 -- a permanent control. floor - round(half-even)
+    under the same monotone rails is -1 or 0 per sample, so a positive sum is
+    impossible; it used to reach BIAS CONFIRMED +1.0000 LSB."""
+    q = _qual_with(_bd_positive)
+    status, ends, why = R.floor_verdicts(q["records"])
+    assert status == "REFUSED" and ends == {}, (status, ends)
+    assert any("BD" in w and "diff_sum" in w for w in why), why
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(q))
+    assert R.main(["--floor-summary", str(p)]) == 2
+    assert R.main(["--floor-verdict", *_write(tmp_path, *q["records"])]) == 2
+    assert "BIAS CONFIRMED" not in capsys.readouterr().out
+
+
+_IMPOSSIBLE = {
+    "zero-frame": (dict(n_frames=0, n_res_zero=0, n_res_low=0, n_res_tie=0, n_res_high=0,
+                        diff_sum=0, mean_diff_lsb=0.0, diff_pct_of_peak=0.0,
+                        mean_floor_err_lsb=0.0, floor_err_pct_of_peak=0.0, max_abs_diff=0), "n_frames"),
+    "window-not-declared": (dict(window=[10, 96009]), "window"),
+    "short-declared-window": (None, "declared window"),
+    "positive-sum": (dict(diff_sum=5271), "diff_sum"),
+    "sum-below-residues": (dict(diff_sum=-5272, mean_diff_lsb=-5272 / 96000,
+                                diff_pct_of_peak=100 * (-5272 / 96000) / 6378.0), "diff_sum"),
+    "sum-above-residues": (dict(diff_sum=-5270, mean_diff_lsb=-5270 / 96000,
+                                diff_pct_of_peak=100 * (-5270 / 96000) / 6378.0), "diff_sum"),
+    "mean-not-sum-over-n": (dict(mean_diff_lsb=-0.06), "mean_diff_lsb"),
+    "pct-not-mean-over-peak": (dict(diff_pct_of_peak=-0.001), "diff_pct_of_peak"),
+    "err-pct-not-err-over-peak": (dict(floor_err_pct_of_peak=-0.001), "floor_err_pct_of_peak"),
+    "err-outside-residue-bounds": (dict(mean_floor_err_lsb=-0.5, floor_err_pct_of_peak=100 * -0.5 / 6378.0),
+                                   "mean_floor_err_lsb"),
+    "max-diff-two": (dict(max_abs_diff=2), "max_abs_diff"),
+    "max-diff-zero-with-a-sum": (dict(max_abs_diff=0), "max_abs_diff"),
+    "peak-above-full-scale": (dict(peak_lsb=40000.0, diff_pct_of_peak=100 * (-5271 / 96000) / 40000.0,
+                                   floor_err_pct_of_peak=None), "peak_lsb"),
+    "peak-below-level-floor": (dict(peak_lsb=8.0, diff_pct_of_peak=100 * (-5271 / 96000) / 8.0,
+                                    floor_err_pct_of_peak=None), "peak_lsb"),
+    "clip-exceeds-frames": (dict(clip_floor=96001), "clip_floor"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_IMPOSSIBLE))
+def test_floor_row_problems_reject_impossible_arithmetic(name):
+    """Each input satisfies the old shape checks (finite, non-negative integer
+    counts, residue classes summing to n_frames) and is still impossible."""
+    patch, why = _IMPOSSIBLE[name]
+    row = _frow("BD")
+    assert R.floor_row_problems([row]) == []
+    if name == "short-declared-window":
+        row = _crow("BD", n=1000, zero=500, high=10)
+    else:
+        row.update(patch)
+        if row.get("floor_err_pct_of_peak") is None:
+            row["floor_err_pct_of_peak"] = 100.0 * row["mean_floor_err_lsb"] / row["peak_lsb"]
+    probs = R.floor_row_problems([row])
+    assert any(why in p for p in probs), (name, probs)
+
+
+def test_the_arithmetic_gate_admits_clipping_and_ties():
+    """The bounds are not tighter than the arithmetic: clipped samples may hide a
+    high residue's -1, and odd-quotient ties add one each."""
+    row = _crow("BD", zero=95000, tie=40, high=500, odd_ties=40)
+    assert R.floor_row_problems([row]) == []
+    clipped = dict(_crow("BD", zero=95000, high=500, odd_ties=0), clip_floor=3, clip_exact=2)
+    clipped.update(diff_sum=-495, mean_diff_lsb=-495 / 96000,
+                   diff_pct_of_peak=100 * (-495 / 96000) / clipped["peak_lsb"])
+    assert R.floor_row_problems([clipped]) == []
+
+
 # -- refusals at the point of use ----------------------------------------------------
 def test_floor_row_refuses_a_window_shorter_than_declared():
     row = R.output_floor_row("CH", dict(seconds=0.30, gain=0.45, vel=1.0))
@@ -834,11 +969,7 @@ def test_floor_guards_refuse_each_defeating_input():
 def test_floor_record_reconciles_the_whole_declared_population():
     """Every declared voice exactly once; REFUSED rows carry a reason; residue
     classes sum to n_frames. The real record must survive this check."""
-    ok = dict(status="OK", n_frames=96000, n_res_zero=95329, n_res_low=64, n_res_tie=6,
-              n_res_high=601, diff_sum=-5271, mean_diff_lsb=-0.05, diff_pct_of_peak=-0.001,
-              mean_floor_err_lsb=-0.05, floor_err_pct_of_peak=-0.001, window=[10, 96010],
-              peak_lsb=6378.0, gain=14746, acc_sha256="0" * 16, clip_floor=0, clip_exact=0,
-              max_abs_diff=1)
+    ok = {k: x for k, x in _frow("CH").items() if k != "voice"}
     rows = [dict(ok, voice=v) for v in R.SCREEN_VOICES[:-1]]
     rows.append(dict(voice=R.SCREEN_VOICES[-1], status="REFUSED", reason="window: only 1.9 s"))
     assert R.floor_row_problems(rows) == []
@@ -851,12 +982,31 @@ def test_floor_record_reconciles_the_whole_declared_population():
 
 
 # -- the verdict path: endings are produced by the tool, refusals are named ----------
-def _frow(v, diff_sum=-5271, mean_diff=-0.0549):
-    return dict(voice=v, status="OK", n_frames=96000, n_res_zero=95329, n_res_low=64,
-                n_res_tie=6, n_res_high=601, diff_sum=diff_sum, mean_diff_lsb=mean_diff,
-                diff_pct_of_peak=-0.001, mean_floor_err_lsb=-0.048, floor_err_pct_of_peak=-0.001,
-                window=[10, 96010], peak_lsb=6378.0, gain=14746, acc_sha256="0" * 16,
-                clip_floor=0, clip_exact=0, max_abs_diff=1)
+def _crow(v, n=96000, zero=0, tie=0, high=0, odd_ties=0, peak=6378.0, err_at=0.5):
+    """An OK row whose figures are POSSIBLE for floor-minus-round under shared
+    monotone rails (no clipping): every per-sample difference is -1 or 0, so
+    diff_sum = -(high residues + odd-quotient ties); the means and the % of
+    peak follow from it; the pre-rail error sits `err_at` of the way through
+    the interval the residue counts allow."""
+    low = n - zero - tie - high
+    ds = -(high + odd_ties)
+    lo = -(0.5 * low + 0.5 * tie + high) / n
+    hi = -(low / R.Q15 + 0.5 * tie + (0.5 + 1 / R.Q15) * high) / n
+    fe = hi + err_at * (lo - hi)
+    return dict(voice=v, status="OK", n_frames=n, n_res_zero=zero, n_res_low=low,
+                n_res_tie=tie, n_res_high=high, diff_sum=ds, mean_diff_lsb=ds / n,
+                diff_pct_of_peak=100.0 * (ds / n) / peak, mean_floor_err_lsb=fe,
+                floor_err_pct_of_peak=100.0 * fe / peak, window=[10, 10 + n], peak_lsb=peak,
+                gain=14746, acc_sha256="0" * 16, clip_floor=0, clip_exact=0,
+                max_abs_diff=1 if ds else 0)
+
+
+def _frow(v, diff_sum=-5271):
+    """A declared-window (96000-frame) row: diff_sum=0 is low residues only
+    (rounding happened, no net bias); otherwise every difference is a high residue."""
+    if diff_sum == 0:
+        return _crow(v, zero=95000)
+    return _crow(v, zero=96000 - 1000 + diff_sum, high=-diff_sum)
 
 
 def _frec(cond, rows, commit="a" * 40, dirty=False, limits=None):
@@ -865,8 +1015,8 @@ def _frec(cond, rows, commit="a" * 40, dirty=False, limits=None):
 
 
 def test_floor_verdict_cli_produces_each_voices_ending(tmp_path, capsys):
-    dev = _frec("dev", [_frow("CH"), _frow("RS", diff_sum=0, mean_diff=0.0)])
-    con = _frec("confirm", [_frow("CH"), _frow("RS", diff_sum=0, mean_diff=0.0)])
+    dev = _frec("dev", [_frow("CH"), _frow("RS", diff_sum=0)])
+    con = _frec("confirm", [_frow("CH"), _frow("RS", diff_sum=0)])
     assert R.main(["--floor-verdict", *_write(tmp_path, dev, con)]) == 0
     out = capsys.readouterr().out
     lines = {ln.split()[0]: ln for ln in out.splitlines() if ln[:2] == "  " and ln.split()[0] in ("RS", "CH")}
@@ -894,7 +1044,7 @@ def test_output_floor_rows_out_round_trips_into_floor_verdict(tmp_path, monkeypa
     """--output-floor --rows-out writes what --floor-verdict reads (no render:
     output_floor_row stubbed with valid fabricated rows)."""
     monkeypatch.setattr(R, "output_floor_row",
-                        lambda v, c, probe=R.REAL_FLOOR: _frow(v, diff_sum=0, mean_diff=0.0))
+                        lambda v, c, probe=R.REAL_FLOOR: _frow(v, diff_sum=0))
     monkeypatch.setattr(R, "provenance", lambda c: "prov")
     p = {c: str(tmp_path / f"{c}.json") for c in R.CONDITIONS}
     for c in R.CONDITIONS:

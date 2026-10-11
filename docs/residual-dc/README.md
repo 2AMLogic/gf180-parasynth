@@ -298,7 +298,7 @@ rows with no high residue (bias would rest on ties alone): 0 (none)
    delivers the rounded variant. No audibility, sound-defect, production-default or image claim
    follows from any of this.
 
-### Wrong-then-right: 10, nine before any measurement was read, one after
+### Wrong-then-right: 11, nine before any measurement was read, two after
 
 Seven caught RED by the controls/fixtures or by execution crashes, two by tracing the mutant
 wiring before the matrix ran: a 4-tuple unpack of a 3-tuple bus record; the wrong-gain mutant
@@ -329,6 +329,44 @@ Class search for positional condition labels: `rg -nE 'sorted\([^)]*\)\[[0-9]\]|
 plus a read of every per-condition formatter in `residual_dc.py`. `subject_verdict` and both
 `*_verdicts` combiners build and pass name-keyed dicts, so none of them labels by position.
 No other instance was found in `tools/probes`. I did not search outside it.
+
+**Wrong-then-right number 11 was in the gates, not the figures, and review caught it again**
+(PR #653, second round). No published number changed, but two paths would have published
+numbers they should have refused. First, `--floor-summary` (the command that generates the
+block above) called `floor_summary` with no record validation. Records marked `dirty=True` with
+`limits={}` printed the full block, although `floor_verdicts` refused them. Second,
+`floor_row_problems` checked shape only: finite numbers and integer counts that partition
+`n_frames`. Every BD row rewritten to `diff_sum=96000`, `mean_diff_lsb=1.0`,
+`diff_pct_of_peak=100/peak_lsb` therefore reached `BIAS CONFIRMED ... +1.0000 LSB`, and a
+zero-frame OK row was admissible. That is impossible: floor minus round-half-even under the
+same monotone rails is −1 or 0 per sample. The fix has two parts. `floor_summary` now raises
+`Refused` unless `floor_verdicts` accepts the records, and the CLI prints a named
+`FLOOR SUMMARY REFUSED:` with exit 2 and no block. `floor_arithmetic_problems` reconciles
+every OK row before it can reach an ending. It checks diff_sum ≤ 0, and that the −1 count
+lies between (high − clip_floor − clip_exact) and (high + ties). It checks max_abs_diff ∈ {0, 1}
+and that it agrees with the sum. mean_diff_lsb must equal diff_sum/n, and both %-of-peak
+figures must equal their mean over peak_lsb. The pre-rail error must lie inside the interval
+the residue counts allow. n_frames must be the declared 96000-frame window and `window` must
+span it. peak_lsb must lie in [16, 32768], and clip counts may not exceed n_frames. The
+review's exact defeater is a permanent test
+(`test_floor_verdicts_refuse_the_positive_difference_defeater`), with fifteen further
+impossible rows. All of them were committed red in `output-floor/red-arithmetic-gate.txt`. The
+committed records pass the stricter gate (`test_the_committed_records_pass_the_arithmetic_gate`),
+and the block above is byte-identical. The new gate also caught one of the suite's own
+fixtures: it had used 1000-frame rows, off the declared window. The old shape-only fixtures
+were impossible too (for example, `diff_sum=-5271` with 601 high residues and 6 ties), so
+they are now built by `_crow` from the arithmetic.
+
+Class search for "figures emitted from saved records without the gate", across every reader
+of a saved record in `residual_dc.py` (`rg -n 'json.loads|records\]|\["rows"\]'
+tools/probes/residual_dc.py`). `--floor-summary` was the only emitter that skipped the gate.
+`--refresh-endings` and `--floor-verdict` already gated through `floor_verdicts`, but they
+crashed with a traceback on an unreadable or non-object input. They now name the refusal and
+exit 2 (`test_floor_report_paths_refuse_an_unreadable_input`). `--output-floor` prints only rows
+it has just computed, so it reads no saved record. The pre-existing #152 `--verdict` path
+(`verdicts`/`row_problems`, on `main`) has the same shape gap. It trusts each record's
+`label` and does not re-derive the label from the β/S statistics in `detail` under the frozen
+limits. It is outside this PR's diff, so it is filed as a follow-up rather than fixed here.
 
 ### Class search: signed shift / final quantisation / rails, across model and RTL
 
