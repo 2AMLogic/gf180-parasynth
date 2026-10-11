@@ -2,6 +2,16 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-11
+
+Closure events below record forge state, not a verified fix or a new sound result.
+
+- **Issue #403** (closed): PR #195: regenerate report.json — stale source_commit has blocked CI across 5 fallback-review passes and 11+ rebases
+- **Issue #354** (closed): verify_voice --set full fails on R1's published voice_dp.v (osc2x+filter2x): an audition reference sequence and extremes
+- **PR #646**: #354: gate the all-max image and pin R1's ladder-width control to its signature; current-tree closure receipts
+- **Issue #361** (closed): descent_test's resample-ratio sweep never tests ratio 1.0 exactly (drops one sample at 'x1.0000')
+- **PR #645**: fix(harness): descent_test identity candidate is exactly ratio 1.0 (#361)
+
 ### 2026-10-10
 
 Closure events below record forge state, not a verified fix or a new sound result.
