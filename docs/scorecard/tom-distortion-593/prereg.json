@@ -1,0 +1,210 @@
+{
+ "issue": 593,
+ "frozen": "2026-10-11, before any take or candidate was passed through tools/probes/tom_distortion.py's measuring commands",
+ "supersedes": "nothing. The #558 split (docs/scorecard/tom-conga-558/prereg.json split_of) is NOT reused: its 'untouched' rows were examined in #558 and cannot be untouched again.",
+ "corpus": {
+  "repo": "https://github.com/tidalcycles/sounds-tr808-fischer",
+  "commit": "85fbecf",
+  "sha256_16": {
+   "lt8/LT00.WAV": "a324073813003398",
+   "lt8/LT25.WAV": "fdd8fbb073407dce",
+   "lt8/LT50.WAV": "d3720682985a9621",
+   "lt8/LT75.WAV": "17386b1ed8d6eb28",
+   "lt8/LT10.WAV": "b5f6c19876ce2353",
+   "mt8/MT00.WAV": "b649329207aec14f",
+   "mt8/MT25.WAV": "9a0a847a29f4b0d4",
+   "mt8/MT50.WAV": "81bbc63110a21c5d",
+   "mt8/MT75.WAV": "7c070b28f1cd916a",
+   "mt8/MT10.WAV": "50b81a0a9ab88871",
+   "ht8/HT00.WAV": "96d0de026d7421e0",
+   "ht8/HT25.WAV": "5ed0365551d140da",
+   "ht8/HT50.WAV": "7e0b9eddd9537929",
+   "ht8/HT75.WAV": "c312ac79a02ced12",
+   "ht8/HT10.WAV": "aef7d50fc43965c3",
+   "lc8/LC00.WAV": "a00777a5d2831b16",
+   "lc8/LC25.WAV": "fd6593c88a75de8a",
+   "lc8/LC50.WAV": "6591f57bbbdb8918",
+   "lc8/LC75.WAV": "442942b82e73a719",
+   "lc8/LC10.WAV": "8c8e0224afb3f2fd",
+   "mc8/MC00.WAV": "3c4857ddc26e4d5d",
+   "mc8/MC25.WAV": "a3ca42608916815e",
+   "mc8/MC50.WAV": "8175efe26c67f5af",
+   "mc8/MC75.WAV": "347afdc65ba86694",
+   "mc8/MC10.WAV": "e0b10cfaac26f357",
+   "hc8/HC00.WAV": "e1c3328d5943e08b",
+   "hc8/HC25.WAV": "3476e81b5a43031d",
+   "hc8/HC50.WAV": "ee4354b1fb79126e",
+   "hc8/HC75.WAV": "660f956127198dc5",
+   "hc8/HC10.WAV": "21a3b7dfb1d87e8a"
+  },
+  "cross_check": "table copied from #558's prereg, where the six TUNING 5.0 hashes were checked against docs/scorecard/results/D03A..D08A.json; every take is hash-checked again when used"
+ },
+ "prior_seen": {
+  "keys": [
+   "LT00",
+   "LT25",
+   "LT50",
+   "LT75",
+   "LT10",
+   "MT00",
+   "MT25",
+   "MT50",
+   "MT75",
+   "MT10",
+   "HT00",
+   "HT25",
+   "HT50",
+   "HT75",
+   "HT10",
+   "LC00",
+   "LC25",
+   "LC50",
+   "LC75",
+   "LC10",
+   "MC00",
+   "MC25",
+   "MC50",
+   "MC75",
+   "MC10",
+   "HC00",
+   "HC25",
+   "HC50",
+   "HC75",
+   "HC10"
+  ],
+  "sha256_16": {
+   "lt8/LT00.WAV": "a324073813003398",
+   "lt8/LT25.WAV": "fdd8fbb073407dce",
+   "lt8/LT50.WAV": "d3720682985a9621",
+   "lt8/LT75.WAV": "17386b1ed8d6eb28",
+   "lt8/LT10.WAV": "b5f6c19876ce2353",
+   "mt8/MT00.WAV": "b649329207aec14f",
+   "mt8/MT25.WAV": "9a0a847a29f4b0d4",
+   "mt8/MT50.WAV": "81bbc63110a21c5d",
+   "mt8/MT75.WAV": "7c070b28f1cd916a",
+   "mt8/MT10.WAV": "50b81a0a9ab88871",
+   "ht8/HT00.WAV": "96d0de026d7421e0",
+   "ht8/HT25.WAV": "5ed0365551d140da",
+   "ht8/HT50.WAV": "7e0b9eddd9537929",
+   "ht8/HT75.WAV": "c312ac79a02ced12",
+   "ht8/HT10.WAV": "aef7d50fc43965c3",
+   "lc8/LC00.WAV": "a00777a5d2831b16",
+   "lc8/LC25.WAV": "fd6593c88a75de8a",
+   "lc8/LC50.WAV": "6591f57bbbdb8918",
+   "lc8/LC75.WAV": "442942b82e73a719",
+   "lc8/LC10.WAV": "8c8e0224afb3f2fd",
+   "mc8/MC00.WAV": "3c4857ddc26e4d5d",
+   "mc8/MC25.WAV": "a3ca42608916815e",
+   "mc8/MC50.WAV": "8175efe26c67f5af",
+   "mc8/MC75.WAV": "347afdc65ba86694",
+   "mc8/MC10.WAV": "e0b10cfaac26f357",
+   "hc8/HC00.WAV": "e1c3328d5943e08b",
+   "hc8/HC25.WAV": "3476e81b5a43031d",
+   "hc8/HC50.WAV": "ee4354b1fb79126e",
+   "hc8/HC75.WAV": "660f956127198dc5",
+   "hc8/HC10.WAV": "21a3b7dfb1d87e8a"
+  },
+  "note": "ALL 30 Fischer takes were examined in #558 (diagnosis, development, the 'untouched' confirmation, the post-hoc tables), and the six TUNING 5.0 takes were looked at in #593's own originating diagnosis (harmonics.json). None can serve as independent confirmation here."
+ },
+ "development": {
+  "keys": [
+   "LT00",
+   "LT25",
+   "LT50",
+   "LT75",
+   "LT10",
+   "MT00",
+   "MT25",
+   "MT50",
+   "MT75",
+   "MT10",
+   "HT00",
+   "HT25",
+   "HT50",
+   "HT75",
+   "HT10"
+  ],
+  "status": "prior-seen. Development ONLY: selection on these rows can be reported but not confirmed by them. The 15 tom takes (3 toms x 5 TUNING settings)."
+ },
+ "preservation_only": {
+  "keys": [
+   "LC00",
+   "LC25",
+   "LC50",
+   "LC75",
+   "LC10",
+   "MC00",
+   "MC25",
+   "MC50",
+   "MC75",
+   "MC10",
+   "HC00",
+   "HC25",
+   "HC50",
+   "HC75",
+   "HC10"
+  ],
+  "note": "conga takes: not scored for the harmonic target; scored for every preserved quantity because the conga voices share the TOM_HW path (drums_fx.py). Reuse of #558's preservation FORM is declared applicable: same gate features, same bar scale, same shipped-ratio baseline."
+ },
+ "confirmation": {
+  "status": "REFUSED",
+  "reason": "No external recording set that was unused by #558/#593 exists in this repository or in the reference corpus available to the sweep: the Fischer corpus is 30/30 prior-seen; 808 From Mars fitted the diode-drop law (TOM_DROP_*) and has no frozen take table. Fischer's single, undocumented accent cannot validate an accent law (stated, not assumed).",
+  "keys": [],
+  "to_unrefuse": "commit an amendment to this file BEFORE selection naming a new external set (repo, commit, per-file sha256_16) none of whose hashes is in prior_seen.sha256_16, with its provenance. The judge refuses any confirmation row whose key is prior-seen/development or whose sha16 is absent or in prior_seen."
+ },
+ "features": [
+  "spec",
+  "spec_peak",
+  "centroid",
+  "flatness",
+  "impulse",
+  "attack",
+  "decay",
+  "modulation",
+  "pitch",
+  "pitch_shape"
+ ],
+ "targets": [
+  "modulation"
+ ],
+ "targets_note": "two targets: (a) the gate's `modulation` ratio must improve (rows where either ratio is null, e.g. HT, are EXCLUDED and counted, never scored as zero error); (b) harmonic error = mean |H_k - H_k(808)| over H2..H4 resolved in the 808 take, see tom_distortion._harm_pair. Every other gate feature, the raw peak and DC are PRESERVED.",
+ "candidates": {},
+ "candidates_note": "EMPTY on purpose. The issue states the quadratic output term in tom_conga_gate.h2_response() is a sensitivity diagnostic, not a justified topology, and requires the mechanism to be measured before a topology is chosen. A candidate is added by amendment only after `mechanism` returns SUPPORTED on the build box. Until then the judge returns NO CANDIDATE.",
+ "diagnostic_only": {
+  "quadratic_output_term": "y + c*y^2 with c set so H2 sits at the 808's level at the strike (tom_distortion.apply_quadratic). Used as a known-answer control and a sensitivity pointer only; never selected, never confirmed."
+ },
+ "continuous_parameters": {
+  "proposed": [],
+  "why_none": "no candidate is registered, so no continuous dial is proposed. The H2 level of the diagnostic term is a control input, not a shipped value. If an amendment proposes one it must be added to docs/sensitivity/registry.json (with its committed sweep and an independently justified prediction) in the same commit."
+ },
+ "mechanism": {
+  "hypotheses": [
+   "H-post: a polynomial of the decaying carrier after the resonator (H_k/H1 falls as exp(-(k-1)t/tau))",
+   "H-intrinsic: harmonics inside the oscillator waveform (H_k/H1 constant in time)",
+   "H-leak: estimator leakage (refuted if H2..H4 clear the per-take null floor)"
+  ],
+  "test": "tom_distortion.harmonic_trajectory / mechanism_verdict on the 15 tom takes (early 20-140 ms vs late 180-300 ms windows). SUPPORTED/REFUTED need >= 4 decidable takes and >= 75 % agreement; otherwise INSUFFICIENT. Reported separately from any feature improvement. Cannot separate an oscillator nonlinearity inside a feedback loop from a post-resonator polynomial when both give H_k on exp(-k t/tau) (stated limitation)."
+ },
+ "rules": {
+  "preserve_rel": 1.1,
+  "preserve_abs": 0.1,
+  "peak_db": 1.0,
+  "dc_abs_fs": 0.002,
+  "min_rows": 6,
+  "select_median": 0.5,
+  "select_frac": 0.75,
+  "confirm_median": 0.5,
+  "confirm_frac": 0.75,
+  "preserve_note": "candidate ratio <= 1.10 x shipped + 0.10 on the same row for every non-target gate feature (decay, attack, pitch, pitch_shape, impulse, ... ); raw peak within peak_db; |DC| not more than dc_abs_fs FS above shipped (#152: a quadratic term adds DC). The gate's bars are not loosened.",
+  "select": "development + preservation-only rows: among candidates with zero violations, median harmonic-error reduction >= select_median, improved on >= select_frac of rows, modulation improved on >= select_frac of non-null rows; the largest median wins. None -> NOT CONFIRMED; no candidates -> NO CANDIDATE.",
+  "confirm": "the selected candidate, once, on confirmation rows only: the same thresholds with confirm_*; fewer than min_rows independent rows -> REFUSED."
+ },
+ "estimator": {
+  "module": "tools/probes/tom_distortion.py",
+  "validated_domain": "f0 72-330 Hz, tau 60-300 ms, 44.1/48 kHz, 20-300 ms window, in-window f0 excursion <= 60 cents, harmonic >= 20 dB analytic SNR; tolerance frozen at TOL_DB from docs/scorecard/tom-distortion-593/knownanswer.json"
+ },
+ "claims": {
+  "hardware_delivery": "none. Model audio alone establishes no RTL, decoded-I2S or image delivery; a confirmed repair would hand the exact fixed-point/host contract to #558.",
+  "sound_improvement": "none claimed by this file"
+ }
+}
