@@ -1,6 +1,6 @@
 {
-  "loom_version": "0.19.1068",
-  "loom_commit": "fcc4454e112d13e088464bb0a178b75c0dc96c0f",
+  "loom_version": "0.19.1071",
+  "loom_commit": "dcab8265613676d08b763cddc911b93c7ab7d9d4",
   "install_date": "2026-09-24",
   "loom_source_remote": "https://github.com/rjwalters/loom.git",
   "installed_files": [
@@ -661,7 +661,8 @@
     ".loom/scripts/tests/test-champion-pr-merge-negation-guard.sh",
     ".claude/commands/loom/sweep-doctor-glm-escalation.md",
     ".loom/docs/pr-planning.md",
-    ".loom/docs/stale-check-inputs.md"
+    ".loom/docs/stale-check-inputs.md",
+    ".loom/docs/session-output.md"
   ],
   "last_resync": "2026-10-11",
   "requires_daemon": "0.19.772"
