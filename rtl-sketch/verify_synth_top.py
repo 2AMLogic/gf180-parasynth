@@ -115,6 +115,7 @@ from scipy.io import wavfile
 import voice_fx as vf
 import drums_fx as dx
 import synth_top_model as stm
+import tb_top_bx_timing as link
 from verify_ladder import tool
 
 SEC_V, SEC_D = 0, 1
@@ -617,14 +618,65 @@ def drum_solo_report(model_writes, n, wire, spec, lag: int) -> dict:
     return rep, window
 
 
+#: Contract 13 (D = 1): i2s_tx sends core frame f's sample in LRCLK period
+#: f + 1, so a gate that must be HEARD at decoded-WAV sample s is applied in
+#: core frame s - 1. Stated here, at the point of use, for the M5 schedule.
+M5_WIRE_D = 1
+M5_SCHEDULES = ("absolute", "legacy-relative")
+
+
+def _m5_burst_waits(bursts):
+    """wait_frames for every write, so that each burst's LAST write lands in
+    the burst's target frame on tb_top_bx (#372).
+
+    A burst is (target_frame or None, n_writes). A wait > 0 resumes the bench
+    on a frame tick, so the landing frame of a burst's last write moves one
+    for one with its wait: try a wait of 1, read the landing frame off the
+    bench's own timing (`tb_top_bx_timing`, validated against the stored bench
+    traces), and correct by the difference. A target that needs a wait below
+    1 -- the previous writes have not finished -- is INFEASIBLE and raises;
+    nothing is silently moved."""
+    waits = []
+    for target, n in bursts:
+        if target is None:
+            waits += [0] * n
+            continue
+        trial = waits + [1] + [0] * (n - 1)
+        w = 1 + target - link.landing_frames(trial)[-1]
+        if w < 1:
+            raise ValueError(f"infeasible M5 schedule: the write landing in frame {target} "
+                             f"cannot start until {1 - w} frame(s) after it must")
+        waits += [w] + [0] * (n - 1)
+        landed = link.landing_frames(waits)[-1]
+        if landed != target:
+            raise ValueError(f"M5 schedule: frame {target} requested, the link lands it in {landed}")
+    return waits
+
+
 def m5a_script(manifest_path: str, *, smoke: bool = False,
                pulse_shape: str = "pulse29", saw_cutoff_hz: int | None = None,
-               saw_volume_correction_db: float = 0.0, saw_drive: float | None = None):
+               saw_volume_correction_db: float = 0.0, saw_drive: float | None = None,
+               schedule: str = "absolute", legacy_margin: int | None = None):
     """Build the frozen two-wave M5A phrase as register writes over SPI.
 
     `saw_drive` (#333, the saw-only operating point): the ladder's k/gain/ogain
     for saw segments come from the host conversion at this drive; pulse
-    segments restore the preset's 0.75. None keeps every published byte."""
+    segments restore the preset's 0.75. None keeps every published byte.
+
+    `schedule` (#372). "absolute": every GATE_ON and GATE_OFF is placed in the
+    core frame the manifest's timing map names (segment `offset_samples` plus
+    round(on_s * 48000), less M5_WIRE_D), independently of what came before.
+    "legacy-relative" reinstates the scheduler the published M5 phrases used --
+    relative waits with a fixed 10/16-frame reserve (`legacy_margin` overrides
+    it) and gate waits shortened by 3 -- which lands later notes up to 27
+    frames early, a short gate, a ~55-frame lead-in and the pulse segment 44
+    frames off the scorer's map. It is kept ONLY as the control that
+    tools/check_phrase_schedule.py must reject. The register order and data
+    are identical in both; only the waits differ."""
+    if schedule not in M5_SCHEDULES:
+        raise ValueError(f"unknown M5 schedule {schedule!r}")
+    if legacy_margin is not None and schedule != "legacy-relative":
+        raise ValueError("legacy_margin applies only to the legacy-relative schedule")
     manifest_file = os.path.abspath(manifest_path)
     manifest = json.loads(open(manifest_file).read())
     audio = manifest.get("audio", {})
@@ -715,10 +767,21 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
         ]
         segment_silence_s = 0.005
         final_audio_s = 0.100
+        # no reference recording, so no host-latency trim: the map is the cursor
+        offsets, cursor = [], 0
+        for segment in timeline_segments:
+            offsets.append(cursor)
+            cursor += round((float(segment["duration_s"]) + segment_silence_s) * 48000)
     else:
         timeline_segments = manifest["timeline"]["segments"]
         segment_silence_s = float(manifest["timeline"]["segment_silence_s"])
         final_audio_s = float(manifest["timeline"]["audio_duration_s"])
+        # THE SCORER'S timing map (tools/mono_m5a_score.py cuts its windows
+        # here), not duration + silence: the reference was trimmed by its host
+        # latency, so each segment is 44 samples shorter than its duration.
+        offsets = [int(segment["offset_samples"]) for segment in timeline_segments]
+    bursts = [(None, len(w))]          # the image, sent back to back
+    legacy_waits = [0] * len(w)
     cursor_s = 0.0
     previous_off_s = 0.0
     events = []
@@ -730,50 +793,64 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
         for event_index, event in enumerate(segment["midi_events"]):
             on_s = absolute_segment_s + float(event["on_s"])
             off_s = on_s + float(event["gate_s"])
-            # A write serializes for about 1.55 frames. Reserve ten frames for
-            # the three increment writes and gate write, then use the pin-side
-            # report below as the authoritative event time.
-            # The saw-drive override adds three writes (K, GAIN, OGAIN) to a
-            # segment's first event. A 22-frame reserve for them was tried and
-            # measured WORSE against the manifest's schedule (worst -40 frames
-            # vs -22 at 16; tools/check_phrase_schedule.py), because the note
-            # then lands early by the unused reserve. The bench's schedule
-            # already drifts early by up to 27 frames with no override (a
-            # pre-existing property of every published M5 phrase); 16 is kept.
-            margin = 16 if segment_controls else 10
-            wait = max(0, round((on_s - previous_off_s) * 48000) - margin)
+            on_frame = (offsets[segment_index] + round(float(event["on_s"]) * 48000)
+                        - M5_WIRE_D)
+            off_frame = (offsets[segment_index]
+                         + round((float(event["on_s"]) + float(event["gate_s"])) * 48000)
+                         - M5_WIRE_D)
+            # legacy-relative (the published scheduler, kept as a control): a
+            # write serializes for about 1.55 frames; a fixed reserve of ten
+            # frames (sixteen with segment overrides) was subtracted from the
+            # wait measured from the previous GATE_OFF, and three from the gate.
+            margin = (legacy_margin if legacy_margin is not None
+                      else 16 if segment_controls else 10)
+            start = len(w)
             if event_index == 0:
                 if segment_controls:
                     target_regs = saw_regs if wave == "saw" else regs
-                    put(wait, 0, A.A_CUT_LO, target_regs["cut_lo"])
+                    put(0, 0, A.A_CUT_LO, target_regs["cut_lo"])
                     put(0, 0, A.A_CUT_HI, target_regs["cut_hi"])
                     put(0, 0, A.A_VOL, target_regs["vol"])
                     if saw_drive is not None:
                         put(0, 0, A.A_K, target_regs["k"])
                         put(0, 0, A.A_GAIN, target_regs["gain"])
                         put(0, 0, A.A_OGAIN, target_regs["ogain"])
-                    wait = 0
                 wave_code = 0 if wave == "saw" else vf.WAVE_CODE[pulse_shape]
-                put(wait, 0, A.A_WAVE, wave_code)
-                wait = 0
+                put(0, 0, A.A_WAVE, wave_code)
             incs = vf.VoiceFx.note_incs(int(event["note"]), regs["detune"])
-            put(wait, 1, A.A_INC, incs[0])
+            put(0, 1, A.A_INC, incs[0])
             put(0, 1, A.A_INC + 1, incs[1]); put(0, 1, A.A_INC + 2, incs[2])
             put(0, 0, A.A_TRACK, vf.VoiceFx.note_track(int(event["note"]), regs["track"]))
             put(0, 0, A.A_GATE_ON, 0)
+            bursts.append((on_frame, len(w) - start))
+            legacy_waits += ([max(0, round((on_s - previous_off_s) * 48000) - margin)]
+                             + [0] * (len(w) - start - 1))
             events.append({"wave": wave, "note": int(event["note"]),
-                           "on_s": on_s, "off_s": off_s})
-            wait_off = max(0, round(float(event["gate_s"]) * 48000) - 3)
-            put(wait_off, 0, A.A_GATE_OFF, 0)
+                           "on_s": on_s, "off_s": off_s,
+                           "on_frame": on_frame, "off_frame": off_frame})
+            put(0, 0, A.A_GATE_OFF, 0)
+            bursts.append((off_frame, 1))
+            legacy_waits.append(max(0, round(float(event["gate_s"]) * 48000) - 3))
             previous_off_s = off_s
         cursor_s += float(segment["duration_s"]) + segment_silence_s
-    tail = max(1, round((final_audio_s - previous_off_s) * 48000) - 3)
+    if schedule == "legacy-relative":
+        waits = legacy_waits
+        tail = max(1, round((final_audio_s - previous_off_s) * 48000) - 3)
+    else:
+        waits = _m5_burst_waits(bursts)
+        # main() models last + tail + 1 frames; the scorer needs the decoded
+        # WAV to hold round(audio_duration_s * 48000) samples.
+        tail = round(final_audio_s * 48000) - events[-1]["off_frame"]
+        if tail < 1:
+            raise ValueError("infeasible M5 schedule: the last release is past the audio's end")
+    w = [(int(wait),) + tuple(cmd[1:]) for wait, cmd in zip(waits, w)]
     return w, tail, {"events": events, "manifest": manifest, "reference_audio": ref_audio,
                     "filter_drive": 0.75, "pulse_shape": pulse_shape,
                     "saw_drive": 0.75 if saw_drive is None else float(saw_drive),
                     "saw_cutoff_hz": effective_saw_cutoff,
                     "saw_cutoff_override": saw_cutoff_hz is not None,
                     "saw_volume_correction_db": float(saw_volume_correction_db),
+                    "schedule": schedule, "wire_delay_periods": M5_WIRE_D,
                      "smoke": smoke, "audio_duration_s": final_audio_s}
 
 
@@ -1254,6 +1331,9 @@ def main(argv=None) -> int:
     ap.add_argument("--m5a-saw-drive", type=float, default=None,
                     help="saw-only ladder drive (the #333 operating point); pulse keeps 0.75")
     ap.add_argument("--m5a-manifest", default=os.path.join(ROOT, "docs/scorecard/mono-m5a-miniv3/manifest.json"))
+    ap.add_argument("--m5a-schedule", choices=M5_SCHEDULES, default="absolute",
+                    help="M5 write schedule (#372); legacy-relative is the control "
+                         "the schedule check must REFUSE")
     ap.add_argument("--wav-out", default=None,
                     help="write decoded left-channel I2S samples to an int16 WAV")
     ap.add_argument("--simulator", choices=("iverilog", "verilator"), default="iverilog",
@@ -1329,7 +1409,8 @@ def main(argv=None) -> int:
                                          pulse_shape=a.m5a_pulse_shape,
                                          saw_cutoff_hz=a.m5a_saw_cutoff_hz,
                                          saw_volume_correction_db=a.m5a_saw_volume_correction_db,
-                                         saw_drive=a.m5a_saw_drive)
+                                         saw_drive=a.m5a_saw_drive,
+                                         schedule=a.m5a_schedule)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             print(f"verify_synth_top: REFUSED -- M5A stimulus: {exc}")
             return 2
@@ -1523,6 +1604,36 @@ def main(argv=None) -> int:
         return 1
     # drive the model from the PREDICTION, not from what the chip reported
     model_writes = [(int(g[5]), int(g[1]), int(g[2]), int(g[3]), int(g[4])) for g in wr]
+    if a.m5a:
+        # #372: every gate where the case's timing map puts it, read from the
+        # pins' own write log against the manifest -- not against the stimulus
+        # that was built from it. A misplaced phrase is not this case's
+        # stimulus, whatever the audio comparison says: REFUSED.
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import check_phrase_schedule as cps
+        try:
+            tgt = (cps.targets(m5a["manifest"]) if not m5a["smoke"] else
+                   [{"segment": 0, "event": i, "on_frame": e["on_frame"], "off_frame": e["off_frame"]}
+                    for i, e in enumerate(m5a["events"])])
+            sched = cps.judge(tgt, [[int(x) for x in g] for g in wr])
+        except (cps.Refused, ValueError) as exc:
+            print(f"verify_synth_top: REFUSED -- {case_id} schedule check: {exc}")
+            return 2
+        sched["targets_from"] = ("the stimulus's own smoke map (no reference)" if m5a["smoke"]
+                                 else "the manifest's timing map")
+        sched["schedule"] = m5a["schedule"]
+        LAST.update(m5_schedule=sched)
+        with open(os.path.join(a.outdir, "m5-schedule.json"), "w") as fh:
+            json.dump(sched, fh, indent=1)
+        print(f"verify_synth_top: {case_id} schedule ({m5a['schedule']}) against "
+              f"{sched['targets_from']}: {sched['verdict']} -- GATE_ON offsets "
+              f"{sched['gate_on_offset_frames']}, GATE_OFF offsets {sched['gate_off_offset_frames']} "
+              f"frames (permitted {sched['tolerance_frames']})")
+        if sched["verdict"] != "PASS":
+            for v in sched["violations"]:
+                print(f"  {v}")
+            print(f"verify_synth_top: REFUSED -- the phrase did not land on {case_id}'s timing map")
+            return 2
     ens_schedule = None
     if a.ensemble:
         ens_schedule = ensemble_schedule(ens, wr)

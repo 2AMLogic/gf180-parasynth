@@ -50,3 +50,154 @@ def test_m5a_saw_candidate_settings_are_written_over_spi_and_pulse_is_restored()
 def test_m5a_stimulus_refuses_unsupported_saw_overrides(kwargs):
     with pytest.raises(ValueError, match="saw (cutoff|volume correction)"):
         top.m5a_script(str(MANIFEST), smoke=True, **kwargs)
+
+
+# ---- #372: the schedule lands on the case's timing map ---------------------
+#
+# The link timing this scheduler relies on (tb_top_bx_timing) is checked
+# against the bench's OWN write logs stored under docs/deadline/traces, and the
+# schedule is checked by tools/check_phrase_schedule.py, which computes its
+# targets from the manifest without consulting the scheduler.
+
+import gzip
+import hashlib
+import json
+import shutil
+import sys
+
+import tb_top_bx_timing as link
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+import check_phrase_schedule as cps                                   # noqa: E402
+
+M5B = ROOT / "docs/scorecard/mono-m5b-miniv3/manifest.json"
+
+
+def _bench_traces():
+    out = []
+    for d in sorted((ROOT / "docs/deadline/traces").iterdir()):
+        cmds, wrs = d / "top_bx_cmds.txt.gz", sorted(d.glob("top_wrs_*.txt.gz"))
+        if cmds.exists() and len(wrs) == 1:
+            waits = [int(l.split()[0]) for l in gzip.open(cmds, "rt") if l.strip()]
+            pred = [int(l.split()[5]) for l in gzip.open(wrs[0], "rt") if l.strip()]
+            out.append((d.name, waits, pred))
+    return out
+
+
+def test_link_timing_reproduces_every_stored_bench_trace():
+    traces = _bench_traces()
+    assert len(traces) >= 18 and sum(len(p) for _, _, p in traces) >= 6000
+    for name, waits, pred in traces:
+        assert link.landing_frames(waits) == pred, name
+
+
+@pytest.mark.parametrize("name,value", [
+    ("FIRST_TICK_EDGE", link.FIRST_TICK_EDGE + 1), ("FIRST_TICK_EDGE", link.FIRST_TICK_EDGE - 1),
+    ("WRITE_PS", link.WRITE_PS + 1_000_000), ("PIN_TO_PUSH_EDGES", 4),
+    ("CSN_RISE_PS", link.CSN_RISE_PS + 600_000),
+])
+def test_a_wrong_link_timing_misses_the_stored_traces(monkeypatch, name, value):
+    """Start red for the timing model: each constant, off by one edge or a
+    fraction of a write, contradicts the bench somewhere."""
+    monkeypatch.setattr(link, name, value)
+    assert any(link.landing_frames(w) != p for _, w, p in _bench_traces())
+
+
+@pytest.mark.parametrize("manifest,periods", [(MANIFEST, 1_305_543), (M5B, 729_543)])
+def test_legacy_schedule_reproduces_the_stored_confirm_run_length(manifest, periods):
+    """docs/scorecard/m5-artifacts-333/saw-drive (confirm/M5A.txt): the
+    published scheduler at saw drive 0.35 ran M5A for 1,305,543 I2S periods
+    and M5B for 729,543 -- the bench's numbers, which the link timing must
+    reproduce for the old waits before its numbers for the new ones mean
+    anything."""
+    w, tail, _ = top.m5a_script(str(manifest), saw_drive=0.35, schedule="legacy-relative")
+    assert max(link.landing_frames([c[0] for c in w])) + tail + 1 == periods
+
+
+ORDER_SHA = {   # (flag, sec, addr, data) of every write, recorded before #372
+    (MANIFEST, ()): "5dc521e06dac84aa",
+    (MANIFEST, (("saw_drive", 0.35),)): "7c81fc8c080c4e18",
+    (MANIFEST, (("saw_cutoff_hz", 20_000), ("saw_volume_correction_db", 5.22576))): "f1d88c21c460f92b",
+    (M5B, ()): "0ea2d89f13aa0b01",
+    (M5B, (("saw_drive", 0.35),)): "fd9f5673c51a44ac",
+    (M5B, (("saw_cutoff_hz", 20_000), ("saw_volume_correction_db", 5.22576))): "b649d13e9b862db0",
+}
+
+
+def _log(writes):
+    frames = link.landing_frames([c[0] for c in writes])
+    return [[f, *c[1:], f] for f, c in zip(frames, writes)]
+
+
+@pytest.mark.parametrize("key", list(ORDER_SHA))
+@pytest.mark.parametrize("schedule", ["absolute", "legacy-relative"])
+def test_schedule_changes_only_waits_and_lands_on_the_map(key, schedule):
+    manifest, kw = key
+    w, tail, rep = top.m5a_script(str(manifest), schedule=schedule, **dict(kw))
+    seq = json.dumps([list(c[1:]) for c in w])
+    assert hashlib.sha256(seq.encode()).hexdigest()[:16] == ORDER_SHA[key]
+    res = cps.judge(cps.targets(json.loads(pathlib.Path(manifest).read_text())), _log(w))
+    if schedule == "absolute":
+        assert res["verdict"] == "PASS", res["violations"]
+        audio = round(rep["audio_duration_s"] * 48_000)
+        assert max(f for f, *_ in _log(w)) + tail + 1 == audio + 1
+    else:
+        assert res["verdict"] == "FAIL"
+
+
+def _held_out(tmp_path, segments):
+    """A copy of M5A's manifest with a different event pattern, next to the
+    same reference audio (m5a_script checks its hash)."""
+    m = json.loads(MANIFEST.read_text())
+    for seg, events in zip(m["timeline"]["segments"], segments):
+        seg["midi_events"] = [dict(seg["midi_events"][0], note=n, on_s=on, gate_s=g)
+                              for n, on, g in events]
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(m))
+    ref = MANIFEST.parent / m["audio"]["file"]
+    (tmp_path / m["audio"]["file"]).symlink_to(ref)
+    return path, m
+
+
+def test_held_out_tight_spacing_and_a_waveform_boundary_land_exactly(tmp_path):
+    """Not the pattern the scheduler was repaired on: three notes 12 frames
+    apart (release to next gate), a release 6 frames before the saw segment
+    ends, and the pulse segment's first gate 2 ms after its boundary."""
+    f = 1 / 48_000
+    seg0 = [(60, 0.1, 0.5), (72, 0.6 + 12 * f, 0.25), (84, 0.85 + 24 * f, 0.3),
+            (96, 13.4, (647_950 - 643_200) * f)]
+    seg1 = [(84, 0.002, 0.01), (96, 0.012 + 12 * f, 0.6)]
+    path, m = _held_out(tmp_path, [seg0, seg1])
+    for kw in ({}, {"saw_drive": 0.35}):
+        w, _tail, _ = top.m5a_script(str(path), **kw)
+        res = cps.judge(cps.targets(m), _log(w))
+        assert res["verdict"] == "PASS", res["violations"]
+        assert res["events"] == 6
+
+
+def test_an_infeasible_spacing_is_refused_not_moved(tmp_path):
+    f = 1 / 48_000
+    path, _ = _held_out(tmp_path, [[(60, 0.1, 0.5), (72, 0.6 + 4 * f, 0.25)],
+                                   [(84, 0.1, 0.6)]])
+    with pytest.raises(ValueError, match="infeasible"):
+        top.m5a_script(str(path))
+
+
+def test_smoke_schedule_lands_on_its_own_map():
+    w, tail, rep = top.m5a_script(str(MANIFEST), smoke=True)
+    frames = link.landing_frames([c[0] for c in w])
+    on = [f for f, c in zip(frames, w) if c[3] == top.A.A_GATE_ON]
+    off = [f for f, c in zip(frames, w) if c[3] == top.A.A_GATE_OFF]
+    # hand-derived: segments at 0 and round(0.050 * 48000) = 2400, events at
+    # 5 and 20 ms for 10 ms, less the one period of I2S delay
+    assert on == [239, 959, 2639, 3359]
+    assert off == [719, 1439, 3119, 3839]
+    assert max(frames) + tail + 1 == 4801
+
+
+def test_unknown_schedule_and_stray_margin_are_refused():
+    with pytest.raises(ValueError, match="unknown M5 schedule"):
+        top.m5a_script(str(MANIFEST), smoke=True, schedule="relative")
+    with pytest.raises(ValueError, match="legacy_margin"):
+        top.m5a_script(str(MANIFEST), smoke=True, legacy_margin=22)
