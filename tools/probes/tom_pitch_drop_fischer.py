@@ -94,6 +94,11 @@ ENV_BAND = (0.50, 2.00)   # the WINDOW rule's envelope (shared): Butterworth ban
 LP_B = 3.0                # route B: Butterworth low-pass (order 2) at this x f_coarse; no high-pass
 TAU_RANGE = (0.002, 0.200)       # s: the relaxation the fit may report
 DETECT_SIGMA = 3.0       # |E| / se below this -> NO-DROP (tau not identifiable)
+# ... or |E| below this absolute floor: 0.003 is ~5 cents (the gate's pitch
+# JND). Without it the white-residual se called a 0.3-cent deterministic drift
+# in our own engine's NO-drop render "significant" (LT: E 0.0002, se 0.00004)
+# and the row was refused as tau-at-bound instead of read as NO-DROP.
+E_MIN_DETECT = 0.003
 TAU_REL_SE_MAX = 0.5     # a DROP whose tau has a larger relative se -> REFUSED
 MIN_OBS_HALFCYCLES = 4   # half-cycles inside [T_START, T_START + 2 tau] needed to see the curvature
 # Agreement between routes A and B, and the known-answer bounds. Fixed on the
@@ -364,7 +369,7 @@ def classify(r: dict) -> dict:
     E, se = r["E"], r["se_E"]
     if not (math.isfinite(E) and math.isfinite(se)) or se <= 0:
         return {"class": "REFUSED", "reason": "fit-failed", "detail": "non-finite E or se"}
-    if abs(E) < DETECT_SIGMA * se:
+    if abs(E) < max(DETECT_SIGMA * se, E_MIN_DETECT):
         return {"class": "NO-DROP", "E": E, "se_E": se, "E_upper": abs(E) + DETECT_SIGMA * se}
     tau = r["tau"]
     if tau <= TAU_RANGE[0] * 1.05 or tau >= TAU_RANGE[1] * 0.95:
@@ -412,7 +417,7 @@ def estimate(x, sr) -> dict:
     res = {**out, "class": ca["class"], "E": ra["E"], "se_E": ra["se_E"],
            "u_E": math.sqrt(ra["se_E"] ** 2 + U_E_FLOOR ** 2)}
     if ca["class"] == "NO-DROP":
-        res["E_upper"] = abs(ra["E"]) + DETECT_SIGMA * ra["se_E"]
+        res["E_upper"] = max(abs(ra["E"]) + DETECT_SIGMA * ra["se_E"], E_MIN_DETECT)
     if ca["class"] == "DROP":
         res.update(tau=ra["tau"], se_tau=ra["se_tau"],
                    u_ln_tau=math.sqrt((ra["se_tau"] / ra["tau"]) ** 2 + U_LN_TAU_FLOOR ** 2),
@@ -937,13 +942,16 @@ def judge_confirmation(conf_rows: dict, fit_rec: dict, prereg: dict) -> dict:
            "independence": prereg["adequacy"]["independent_confirmation"]}
     if leak:
         out["magnitude"] = out["relaxation"] = {"verdict": "REFUSED", "reason": "confirmation-pooled-development"}
+        out["decision"] = decide(out, prereg)
         return out
     if fit_rec.get("status") != "FITTED":
         out["magnitude"] = out["relaxation"] = {"verdict": "REFUSED", "reason": "no development fit"}
+        out["decision"] = decide(out, prereg)
         return out
     if len(use) < rules["min_confirm_rows"]:
         out["magnitude"] = out["relaxation"] = {
             "verdict": "REFUSED", "reason": f"not-identifiable: {len(use)} usable < {rules['min_confirm_rows']}"}
+        out["decision"] = decide(out, prereg)
         return out
     frac = rules["confirm_frac"]
     jnd = rules["jnd_cents"]
@@ -1001,7 +1009,13 @@ def decide(conf: dict, prereg: dict) -> dict:
         if v["verdict"] == "REFUSED":
             d[q] = "not identifiable"
         elif v["verdict"] == "CONFIRMED" and v.get("proposal") not in (None, "no change"):
-            d[q] = "repair justified on reserved (previously exposed) conditions"
+            # prereg adequacy.accent_confound: the law's E is accent-scaled and
+            # the Fischer accent is undocumented, so a confirmed magnitude
+            # discrepancy cannot identify a TOM_DROP_RATIO defect
+            d[q] = ("not identifiable (accent confound): discrepancy confirmed as a measured effect"
+                    if q == "magnitude" else
+                    "repair supported on reserved (previously exposed) conditions, at this unit's "
+                    "undocumented accent")
         elif v["verdict"] == "CONFIRMED":
             d[q] = "no repair: the shipped law agrees within the frozen threshold"
         else:

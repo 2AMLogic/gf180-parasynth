@@ -199,7 +199,7 @@ def test_horizon_is_not_the_time_constant():
 def test_omitted_host_writes_break_the_carry_check():
     tp.INJECT = {"omit-host-writes"}
     m = tp.measure_ours("LT", 1.0)
-    assert m["render"]["class"] == "NO-DROP"
+    assert m["render"]["class"] == "NO-DROP", m["render"]
     assert not m["carry"]["ok"]
 
 
@@ -231,7 +231,10 @@ def test_confirmation_confirms_a_systematic_discrepancy():
     j = tp.judge_confirmation(conf, fit, PRE)
     assert j["magnitude"]["verdict"] == "CONFIRMED"
     assert j["relaxation"]["verdict"] == "CONFIRMED"
-    assert j["decision"]["magnitude"].startswith("repair justified")
+    # a confirmed MAGNITUDE discrepancy is never a justified repair here: the
+    # Fischer accent is undocumented (prereg adequacy.accent_confound)
+    assert j["decision"]["magnitude"].startswith("not identifiable (accent confound)")
+    assert j["decision"]["relaxation"].startswith("repair supported")
     assert j["decision"]["independent_confirmation"].startswith("REFUSED")
 
 
