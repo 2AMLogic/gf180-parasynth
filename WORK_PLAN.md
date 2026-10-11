@@ -29,24 +29,27 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails
+- **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first
+- **#400**: Cymbal tail: qualify and localize the remaining production-path energy/decay discrepancy
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158)
 - **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
+- **#593**: [sound] toms: H2..H4 output distortion (LT modulation 14.8x), lead from #558
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#354**: verify_voice --set full fails on R1's published voice_dp.v (osc2x+filter2x): an audition reference sequence and extremes
-- **#361**: descent_test's resample-ratio sweep never tests ratio 1.0 exactly (drops one sample at 'x1.0000')
+- **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents)
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
 - **#595**: [#559] CH/CP: CH hp-Q candidate PROVISIONAL (clean rerun pending, disabled); CP not repairable by tail tunables
+- **#649**: [593] tom distortion: qualification instrument, controls and preregistration
 
 ## Approved (Awaiting Merge)
 
@@ -87,11 +90,12 @@ Issues carrying `loom:curated`.
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement *(curated)*
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails *(curated)*
 - **#353**: Harvest the finished half-slot route: one command, four files, one DAG node *(curated)*
-- **#354**: verify_voice --set full fails on R1's published voice_dp.v (osc2x+filter2x): an audition reference sequence and extremes *(curated)*
-- **#361**: descent_test's resample-ratio sweep never tests ratio 1.0 exactly (drops one sample at 'x1.0000') *(curated)*
 - **#367**: fpga/ARTY.md: document --box local for the on-box DSP extraction invocation *(curated)*
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY *(curated)*
+- **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override) *(curated)*
+- **#373**: Receipts: require a reuse report whenever the evidence shows a reused run (not only when the recorded command asks) *(curated)*
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first *(curated)*
+- **#400**: Cymbal tail: qualify and localize the remaining production-path energy/decay discrepancy *(curated)*
 - **#502**: A Builder cannot re-bind the attack-context evidence: workflow_dispatch is 403 for the agent token *(curated)*
 - **#510**: Ship the cymbal DC coupling: register contract, RTL, and the I2S carry-through #165 did not trigger *(curated)*
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158) *(curated)*
@@ -101,6 +105,8 @@ Issues carrying `loom:curated`.
 - **#558**: [sound] toms and congas: pitch trajectory and strike impulse fail the gate (MC 19.4x, LC 16.4x, LT 14.8x, MT 10.5x, HC 8.7x, HT 8.0x) *(curated)*
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate *(curated)*
 - **#565**: Refuse to report 'routed' from an incomplete nextpnr log (fpga/scripts/report.sh + fpga/Makefile) *(curated)*
+- **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents) *(curated)*
+- **#593**: [sound] toms: H2..H4 output distortion (LT modulation 14.8x), lead from #558 *(curated)*
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning *(curated)*
 - **#619**: Nightly controls requires I2S_SWAP detection despite declared blind timing *(curated)*
 - **#622**: Nightly reference-freshness gate is unsatisfiable: tests a docs path that has never existed *(curated)*
@@ -125,11 +131,11 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 5 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 11 |
-| In Progress (`loom:building`) | 2 |
-| PRs awaiting review | 1 |
+| Ready (`loom:issue`) | 14 |
+| In Progress (`loom:building`) | 1 |
+| PRs awaiting review | 2 |
 | Approved PRs awaiting merge | 5 |
-| Curated | 43 |
+| Curated | 46 |
 | Architect / Hermit proposals | 5 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
