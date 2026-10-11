@@ -366,7 +366,7 @@ exit 2 (`test_floor_report_paths_refuse_an_unreadable_input`). `--output-floor` 
 it has just computed, so it reads no saved record. The pre-existing #152 `--verdict` path
 (`verdicts`/`row_problems`, on `main`) has the same shape gap. It trusts each record's
 `label` and does not re-derive the label from the β/S statistics in `detail` under the frozen
-limits. It is outside this PR's diff, so it is filed as a follow-up rather than fixed here.
+limits. It is outside this PR's diff, so it is filed as a follow-up (#654) rather than fixed here.
 
 ### Class search: signed shift / final quantisation / rails, across model and RTL
 
