@@ -214,6 +214,12 @@ def compare_records(prod, sr_p, ref, sr_r, *, prod_has_hh1, trim_s=2.0, defect=N
     else:
         decay = classify(p["rho"], r["rho"], "time_ratio")
     energy.setdefault("detail", {})["predicted_leak_db_re_L"] = p["mid"]["predicted_leak_db_re_L"]
+    # UNQUALIFIED raw values, kept so a REFUSED is diagnosable and a near-boundary refusal visible.
+    # They are NOT verdict inputs and must never be quoted as measurements of the sound.
+    energy["detail"]["unqualified_raw"] = {
+        side: {"energy_share_db": x["mid"]["energy_share_db"], "over_leak_1s_db": x["mid"]["over_leak_1s_db"],
+               "over_leak_edt_db": x["mid"]["over_leak_edt_db"], "leak_margin_required_db": cm.LEAK_MARGIN_DB}
+        for side, x in (("prod", p), ("ref", r))}
     decay.setdefault("detail", {})["rho_all_prod"] = p["rho_all"]
     decay["detail"]["rho_all_ref"] = r["rho_all"]
     return {"energy": energy, "decay": decay, "trim_s": trim_s, "prod_has_hh1": bool(prod_has_hh1),
