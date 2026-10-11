@@ -706,6 +706,118 @@ def test_bias_endings_are_distinct_and_frozen():
     assert R.bias_ending({**both(), "dev": dict(status="REFUSED", reason="x")}).startswith("REFUSED")
 
 
+# -- condition/value association (PR #653 review) ------------------------------------
+# The ending once labelled figures by SORTED index: `confirm` sorts before `dev`,
+# so every dev/confirm pair was printed swapped. Identical values in both
+# conditions cannot see that, so these rows differ in every reported figure, and
+# `confirm` deliberately carries the values that sort first. Committed red first
+# against the index-labelled formatter: docs/residual-dc/output-floor/red-condition-labels.txt.
+_ASYM = {
+    "dev":     dict(mean_diff_lsb=-0.1111, diff_pct_of_peak=-0.0022, mean_floor_err_lsb=-0.3333,
+                    diff_sum=-11),
+    "confirm": dict(mean_diff_lsb=-0.9999, diff_pct_of_peak=-0.0077, mean_floor_err_lsb=-0.6666,
+                    diff_sum=-99),
+}
+
+
+def _asym_row(c):
+    return dict(status="OK", n_frames=100, n_res_zero=10, n_res_low=40, n_res_tie=0,
+                n_res_high=50, floor_err_pct_of_peak=-0.001, **_ASYM[c])
+
+
+def _labelled(ending, unit, cond):
+    """Every number printed immediately before '<unit> (<cond>)' in an ending."""
+    import re
+    return [float(x) for x in re.findall(r"([+-]\d+\.\d+) " + re.escape(unit) + r" \(" + cond + r"\)",
+                                         ending)]
+
+
+@pytest.mark.parametrize("order", [("dev", "confirm"), ("confirm", "dev")], ids=["dev-first", "confirm-first"])
+def test_bias_ending_labels_every_figure_with_its_own_condition(order):
+    e = R.bias_ending({c: _asym_row(c) for c in order})
+    assert e.startswith("BIAS CONFIRMED"), e
+    for c, v in _ASYM.items():
+        assert _labelled(e, "LSB", c)[:1] == [v["mean_diff_lsb"]], (c, e)          # floor - round
+        assert _labelled(e, "%", c) == [v["diff_pct_of_peak"]], (c, e)              # % of peak
+        assert _labelled(e, "LSB", c)[1:] == [v["mean_floor_err_lsb"]], (c, e)     # pre-rail error
+
+
+def test_condition_dependent_ending_names_the_condition_that_carries_the_bias():
+    rows = {c: _asym_row(c) for c in ("confirm", "dev")}
+    rows["confirm"] = dict(rows["confirm"], diff_sum=0)
+    e = R.bias_ending(rows)
+    assert e.startswith("BIAS IS CONDITION-DEPENDENT") and "['dev']" in e, e
+    assert "'dev': -11" in e and "'confirm': 0" in e, e
+
+
+QUAL = pathlib.Path(__file__).resolve().parents[2] / "docs/residual-dc/output-floor/qualification.json"
+
+
+def test_committed_endings_are_what_the_committed_records_produce():
+    """The saved endings must be regenerable from the saved rows, and the swapped
+    SD/CH figures the review read out of the JSON must sit under their own labels."""
+    q = json.loads(QUAL.read_text())
+    status, ends, why = R.floor_verdicts(q["records"])
+    assert status == "OK", why
+    assert q["endings"] == ends
+    by = {r["condition"]: {row["voice"]: row for row in r["rows"]} for r in q["records"]}
+    for v in ("SD", "CH"):
+        for c in ("dev", "confirm"):
+            row = by[c][v]
+            assert _labelled(ends[v], "LSB", c) == [round(row["mean_diff_lsb"], 4),
+                                                    round(row["mean_floor_err_lsb"], 4)], (v, c)
+    assert _labelled(ends["SD"], "LSB", "dev") == [-0.0709, -0.3315]
+    assert _labelled(ends["SD"], "LSB", "confirm") == [-0.9188, -0.7018]
+
+
+def test_floor_summary_derives_extrema_with_their_voice_and_condition():
+    """Hand-built records whose extrema sit in DIFFERENT conditions: each figure
+    must be reported with the row it came from."""
+    def row(v, md, pct, fe, zero, tie, high):
+        return dict(voice=v, status="OK", n_frames=1000, n_res_zero=zero, n_res_tie=tie,
+                    n_res_high=high, n_res_low=1000 - zero - tie - high, diff_sum=-high,
+                    mean_diff_lsb=md, diff_pct_of_peak=pct, mean_floor_err_lsb=fe,
+                    floor_err_pct_of_peak=-0.001, max_abs_diff=1, clip_floor=0, clip_exact=0)
+    recs = [_frec("dev", [row("AA", -0.5, -0.002, -0.7, 10, 0, 500), row("BB", -0.01, -0.0001, -0.02, 900, 0, 10)]),
+            _frec("confirm", [row("AA", -0.002, -0.009, -0.3, 500, 7, 2), row("BB", -0.8, -0.001, -0.9, 0, 3, 800)])]
+    s = R.floor_summary(recs)
+    assert (s["diff_min"]["voice"], s["diff_min"]["condition"]) == ("AA", "confirm")
+    assert (s["diff_max"]["voice"], s["diff_max"]["condition"]) == ("BB", "confirm")
+    assert (s["pct_max"]["voice"], s["pct_max"]["condition"]) == ("AA", "confirm")
+    assert (s["err_min"]["voice"], s["err_min"]["condition"]) == ("BB", "dev")
+    assert (s["err_max"]["voice"], s["err_max"]["condition"]) == ("BB", "confirm")
+    assert s["zero_tie_rows"] == [("dev", "AA"), ("dev", "BB")]
+    assert s["rows_without_high"] == [] and s["usable"] == 4 and s["refused"] == 0
+    assert s["by_row"][("confirm", "AA")]["exact_multiple_pct"] == 50.0
+
+
+def test_refresh_endings_rewrites_only_the_endings_and_refuses_moved_limits(tmp_path, capsys):
+    q = json.loads(QUAL.read_text())
+    q["endings"] = {v: "stale" for v in q["endings"]}
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(q))
+    assert R.main(["--refresh-endings", str(p)]) == 0
+    out = json.loads(p.read_text())
+    assert out["records"] == q["records"] and out["controls"] == q["controls"]
+    assert out["endings"] == R.floor_verdicts(q["records"])[1]
+    q["records"][0]["limits"] = dict(q["records"][0]["limits"], S_OFFSET_MIN=7.0)
+    p.write_text(json.dumps(q))
+    before = p.read_text()
+    assert R.main(["--refresh-endings", str(p)]) == 2
+    assert p.read_text() == before and "REFUSED" in capsys.readouterr().out
+
+
+def test_readme_floor_summary_block_is_generated_from_the_committed_records():
+    """The #618 narrative quotes only the generated block, so the block itself
+    must be byte-identical to what the committed records produce."""
+    text = (QUAL.parents[1] / "README.md").read_text()
+    a, b = "<!-- floor-summary:begin -->\n", "<!-- floor-summary:end -->"
+    assert a in text and b in text
+    block = text.split(a, 1)[1].split(b, 1)[0]
+    q = json.loads(QUAL.read_text())
+    assert block == R.floor_summary_text(R.floor_summary(q["records"]))
+
+
 # -- refusals at the point of use ----------------------------------------------------
 def test_floor_row_refuses_a_window_shorter_than_declared():
     row = R.output_floor_row("CH", dict(seconds=0.30, gain=0.45, vel=1.0))

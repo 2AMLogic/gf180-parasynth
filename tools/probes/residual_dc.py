@@ -8,6 +8,8 @@
     python3 tools/probes/residual_dc.py --verdict DEV.json CONFIRM.json   per-subject ending (subject_verdict)
     python3 tools/probes/residual_dc.py --output-floor [--condition dev|confirm] [--voices A,B] [--rows-out F.json]
     python3 tools/probes/residual_dc.py --floor-verdict DEV.json CONFIRM.json [--rows-out F.json]
+    python3 tools/probes/residual_dc.py --floor-summary REPORT.json     the README's derived #618 figures
+    python3 tools/probes/residual_dc.py --refresh-endings REPORT.json   re-derive saved endings, no render
     python3 tools/probes/residual_dc.py --detail  [--condition dev|confirm]   CH / RS / BD / HT
     python3 tools/probes/residual_dc.py --batch-spec    the tools/run_all.py job list
     python3 -m pytest tools/probes/test_residual_dc.py -q
@@ -965,18 +967,21 @@ def bias_ending(rows_by_cond):
     if not any(rounded):
         return ("NO BIAS POSSIBLE: every accumulator in the window is an exact multiple of "
                 "32768 in both conditions; floor and round agree bit for bit")
-    conf = [c for c in sorted(sums) if sums[c] != 0]
+    # Every figure is looked up by its condition NAME and printed beside that
+    # name. Never by position: sorted() puts `confirm` before `dev`, and an
+    # index-labelled formatter printed every pair swapped (PR #653 review).
+    order = tuple(CONDITIONS)                               # declaration order: dev, confirm
+    sums = {c: sums[c] for c in order}
+    conf = [c for c in order if sums[c] != 0]
     if not conf:
         return ("NO NET BIAS: residues present, but the integer sum of floor-minus-round is "
                 "exactly 0 in both conditions (residue asymmetry, not a net level)")
-    if len(conf) == len(sums) and (sums[conf[0]] > 0) == (sums[conf[1]] > 0):
-        m = {c: rows_by_cond[c]["mean_diff_lsb"] for c in sorted(sums)}
-        p = {c: rows_by_cond[c]["diff_pct_of_peak"] for c in sorted(sums)}
-        f = {c: rows_by_cond[c]["mean_floor_err_lsb"] for c in sorted(sums)}
-        return (f"BIAS CONFIRMED (model-side): floor sits {m[sorted(sums)[0]]:+.4f} LSB (dev) / "
-                f"{m[sorted(sums)[1]]:+.4f} LSB (confirm) from exact round-half-even "
-                f"({p[sorted(sums)[0]]:+.3f} / {p[sorted(sums)[1]]:+.3f} % of baseline peak); "
-                f"pre-rail floor error {f[sorted(sums)[0]]:+.4f} / {f[sorted(sums)[1]]:+.4f} LSB. "
+    if len(conf) == len(order) and len({sums[c] > 0 for c in order}) == 1:
+        def each(key, unit, fmt):
+            return " / ".join(f"{rows_by_cond[c][key]:{fmt}} {unit} ({c})" for c in order)
+        return (f"BIAS CONFIRMED (model-side): floor sits {each('mean_diff_lsb', 'LSB', '+.4f')} "
+                f"from exact round-half-even ({each('diff_pct_of_peak', '%', '+.4f')} of baseline peak); "
+                f"pre-rail floor error {each('mean_floor_err_lsb', 'LSB', '+.4f')}. "
                 f"Model arithmetic only: no audibility, sound-defect or RTL-delivery claim.")
     return (f"BIAS IS CONDITION-DEPENDENT: confirmed in {conf or 'neither'} only "
             f"(diff sums {sums}); reported, not forced into one verdict")
@@ -1107,6 +1112,94 @@ def floor_verdicts(records):
         out[v] = (f"NO VERDICT ({', '.join(missing)} has no row for {v})" if missing
                   else bias_ending({c: by[c][v] for c in sorted(by)}))
     return "OK", out, []
+
+
+def floor_summary(records):
+    """Every narrative figure for the #618 write-up, derived from the records
+    and carried WITH the (condition, voice) it came from, so prose cannot
+    attach a number to the wrong row. Usable rows only; counts are explicit."""
+    ok = [(r["condition"], row) for r in records for row in r["rows"] if row.get("status") == "OK"]
+    refused = sum(1 for r in records for row in r["rows"] if row.get("status") != "OK")
+
+    def at(cond, row, key):
+        return dict(condition=cond, voice=row["voice"], value=row[key])
+
+    def ext(key, pick):
+        cond, row = pick(ok, key=lambda cr: abs(cr[1][key]))
+        return at(cond, row, key)
+
+    by_row = {(c, row["voice"]): dict(
+        exact_multiple=row["n_res_zero"], n_frames=row["n_frames"],
+        exact_multiple_pct=100.0 * row["n_res_zero"] / row["n_frames"],
+        ties=row["n_res_tie"], high=row["n_res_high"], low=row["n_res_low"],
+        mean_diff_lsb=row["mean_diff_lsb"], diff_pct_of_peak=row["diff_pct_of_peak"],
+        mean_floor_err_lsb=row["mean_floor_err_lsb"], diff_sum=row["diff_sum"])
+        for c, row in ok}
+    return dict(
+        usable=len(ok), refused=refused,
+        clipped=sum(row["clip_floor"] + row["clip_exact"] for _, row in ok),
+        max_abs_diff=max(row["max_abs_diff"] for _, row in ok),
+        diff_min=ext("mean_diff_lsb", min), diff_max=ext("mean_diff_lsb", max),
+        pct_max=ext("diff_pct_of_peak", max),
+        err_min=ext("mean_floor_err_lsb", min), err_max=ext("mean_floor_err_lsb", max),
+        zero_tie_rows=sorted((c, row["voice"]) for c, row in ok if row["n_res_tie"] == 0),
+        # floor-minus-round = -(high residues) - (odd-quotient ties); with any
+        # high residue the integer sum is nonzero whatever the ties do.
+        rows_without_high=sorted((c, row["voice"]) for c, row in ok if row["n_res_high"] == 0),
+        by_row=by_row)
+
+
+def floor_summary_text(s):
+    """The generated block quoted by docs/residual-dc/README.md (#618)."""
+    def at(e, fmt):
+        return f"{e['value']:{fmt}} ({e['voice']} {e['condition']})"
+    order = [c for c in CONDITIONS]
+    lines = [
+        f"rows: {s['usable']} usable + {s['refused']} refused; clipped frames (floor+round): "
+        f"{s['clipped']}; max per-sample |floor-round|: {s['max_abs_diff']} LSB",
+        f"mean floor-round, smallest |.|: {at(s['diff_min'], '+.4f')} LSB; "
+        f"largest: {at(s['diff_max'], '+.4f')} LSB",
+        f"largest |floor-round| as % of baseline peak: {at(s['pct_max'], '+.4f')} %",
+        f"pre-rail mean floor error, smallest |.|: {at(s['err_min'], '+.4f')} LSB; "
+        f"largest: {at(s['err_max'], '+.4f')} LSB",
+        f"rows with zero ties: {len(s['zero_tie_rows'])} of {s['usable']} "
+        f"({', '.join(f'{v} {c}' for c, v in s['zero_tie_rows']) or 'none'})",
+        f"rows with no high residue (bias would rest on ties alone): "
+        f"{len(s['rows_without_high'])} ({', '.join(f'{v} {c}' for c, v in s['rows_without_high']) or 'none'})",
+        "",
+        "| voice | cond | exact multiples | ties | high | floor err LSB | floor-round LSB | % of peak |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    voices = [v for v in SCREEN_VOICES if any((c, v) in s["by_row"] for c in order)]
+    for v in voices:
+        for c in order:
+            r = s["by_row"].get((c, v))
+            if r is None:
+                continue
+            lines.append(f"| {v} | {c} | {r['exact_multiple']}/{r['n_frames']} "
+                         f"({r['exact_multiple_pct']:.2f} %) | {r['ties']} | {r['high']} | "
+                         f"{r['mean_floor_err_lsb']:+.4f} | {r['mean_diff_lsb']:+.4f} | "
+                         f"{r['diff_pct_of_peak']:+.4f} |")
+    return "```\n" + "\n".join(lines[:6]) + "\n```\n\n" + "\n".join(lines[7:]) + "\n"
+
+
+def refresh_endings(path):
+    """Re-derive a saved report's endings from the records it already carries,
+    without re-rendering: the rows (and their accumulator hashes) are untouched,
+    only `endings`/`status`/`refused_reasons` are recomputed by the current
+    `floor_verdicts`. REFUSES (exit 2, file unchanged) if the records no longer
+    combine -- e.g. this module's declared limits moved since they were rendered."""
+    p = pathlib.Path(path)
+    rep = json.loads(p.read_text())
+    status, ends, why = floor_verdicts(rep.get("records"))
+    if status != "OK":
+        print("REFUSED: " + "; ".join(why))
+        return 2
+    changed = sorted(v for v in ends if (rep.get("endings") or {}).get(v) != ends[v])
+    rep.update(status=status, endings=ends, refused_reasons=why)
+    p.write_text(json.dumps(_jsonable(rep), indent=1))
+    print(f"endings refreshed from the saved records ({len(changed)} changed: {', '.join(changed) or 'none'})")
+    return 0
 
 
 def floor_report(paths, json_out=None):
@@ -1657,8 +1750,18 @@ def main(argv=None):
                     help="per-subject ending from one --rows-out record per condition (dev and confirm)")
     ap.add_argument("--floor-verdict", nargs="+", metavar="FLOOR_JSON",
                     help="per-voice bias ending from one --output-floor record per condition (dev and confirm)")
+    ap.add_argument("--floor-summary", metavar="REPORT_JSON",
+                    help="print the README's generated #618 figures from a saved --floor-verdict report")
+    ap.add_argument("--refresh-endings", metavar="REPORT_JSON",
+                    help="recompute a saved --floor-verdict report's endings from its OWN records, in place; no render")
     a = ap.parse_args(argv)
     vs = tuple(a.voices.split(",")) if a.voices else None
+    if a.floor_summary:
+        rep = json.loads(pathlib.Path(a.floor_summary).read_text())
+        print(floor_summary_text(floor_summary(rep["records"])), end="")
+        return 0
+    if a.refresh_endings:
+        return refresh_endings(a.refresh_endings)
     if a.floor_verdict:
         return floor_report(a.floor_verdict, a.rows_out)
     if a.verdict:
