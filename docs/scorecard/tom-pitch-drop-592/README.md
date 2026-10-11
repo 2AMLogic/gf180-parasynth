@@ -19,7 +19,7 @@ takes hash-checked against the full sha256 in `prereg.json`. `~/dev/refs` does n
 |---|---|---|
 | **Shipped staircase** (our engine, unity tuning, accent 1.0) | onset excess **E 0.076 / 0.070 / 0.067** (LT/MT/HT, i.e. 127 / 117 / 112 cents), relaxation **tau 14.7 / 15.7 / 16.3 ms**. The law asks for E 0.060 and a continuous tau of 20 ms. The realised staircase reads higher and faster: it uses interval-mean steps and then holds at f0 (1 + E e^-3) after 60 ms, so it never returns to f0. The render carries the production host's staircase on every route (`carry` in `describe-development.json`). | measured on our model, independent of the corpus |
 | **808 development takes** (post-hoc description, not a verdict) | LT50 E 0.027 (47 cents), tau 55 ms. LT75 E 0.047 (80 cents), tau 51 ms. MT50 E 0.024 (41 cents), tau 34 ms. HT75 E 0.049 (82 cents), tau 22 ms. LT25, HT25 and HT50 were REFUSED on route disagreement. | 3 usable for the fit (HT75 has no tuning reference, because HT50 refused); **not a confirmed effect** |
-| **Discrepancy, 808 minus ours** (the 3 measured rows) | onset excess **-81 / -63 / -76 cents** (u ~35 cents). tau ratio **x3.7 / x3.3 / x2.2** (ln 1.32 / 1.20 / 0.77, u 0.43). The 808 starts lower and relaxes 2-4x slower. Its excess crosses above ours at roughly 20-25 ms. | measured on 3 development rows; **not confirmed** |
+| **Discrepancy, 808 minus ours** (the 3 measured rows) | onset excess **-81 / -63 / -76 cents** (u ~35 cents). tau ratio **x3.7 / x3.3 / x2.2** (ln 1.32 / 1.20 / 0.77, u 0.43). The 808 starts lower and relaxes 2-4x slower. On the two continuous exponential fits, its excess crosses above ours at **20.7 ms (LT50), 13.1 ms (LT75) and 31.3 ms (MT50)**, i.e. about 13-31 ms, from t = ln(E_ours/E_808) / (1/tau_ours - 1/tau_808) with the record's fitted E and tau. That uses the exponential fit for ours; the realised staircase instead holds at f0 (1 + E e^-3) after 60 ms. |  measured on 3 development rows; **not confirmed** |
 | **Production repair** | none proposed. A magnitude change would not be identifiable here even if confirmed: the Fischer accent is undocumented and the law's E scales with accent (prereg `adequacy.accent_confound`). | **not identifiable** |
 
 **Re-reading #558's "74 vs 35 cents"** (post-hoc). The gate's first frame read the 808's LT50 at 74 cents and ours at 35. The phase-aware
@@ -123,13 +123,39 @@ Before that commit, the only operation performed on the corpus was hashing the t
 | LT75 | MEASURED, r 1.053 | 0.0472 (79.9) / 50.5 ms | 0.0860 (142.9) / 15.3 ms | -62.9 (34.5) | +1.20 (0.43) |
 | MT50 | MEASURED | 0.0238 (40.7) / 33.8 ms | 0.0696 (116.5) / 15.7 ms | -75.8 (35.1) | +0.77 (0.43) |
 | HT25, HT75 | REFUSED: no tuning reference (HT50 refused) | | | | |
-| HT50 | REFUSED: route disagreement | | | | |
+| HT50 | REFUSED: no tuning reference (record reason). HT50 is its own tuning reference, and its 808 estimate is refused on route disagreement (`describe-development.json`) | | | | |
 
 - **`fit.json`** (committed in `41f5ffb`, before `confirm` ran): **REFUSED, not identifiable**, because 3 usable development rows are fewer than 4.
 - **`confirmation.json`**: magnitude **REFUSED**, relaxation **REFUSED** (no development fit). **None of the 8 reserved takes was read.**
-  This procedure was added after the development result, in commit `b8c1fb0`. The estimator is unchanged. It is the conservative
+  This procedure was added after the development result, in commit `b8c1fb0`. It is the conservative
   reading of "evaluate once": with no hypothesis, measuring the reserved takes would spend them without testing anything. A successor can
   still use them as reserved conditions for this estimator. That does not make them fresh; see section 2.
+
+**Changes to the probe after the development measurement** (deviations from the preregistered code). An earlier version of this
+README said the estimator was unchanged apart from `b8c1fb0`. That was wrong. Three commits changed `tools/probes/tom_pitch_drop_fischer.py`
+after `development.json` was measured at `b6d216e`:
+
+| commit | change | effect on a committed record |
+|---|---|---|
+| `b8c1fb0` | `confirm` leaves the reserved rows unread when the development fit is REFUSED; adds the post-hoc `describe` | none: it only governs `confirmation.json`, which was produced by it |
+| `1a697f1` | `knownanswer`/`controls` exit non-zero on any failed case or uncaught mutant; the confirmation leak check sees supplied development rows instead of filtering them out first | none: identical re-run below |
+| `8fedbf4` | route A keeps only successful, finite optimizer results (an unconverged lower-cost start can no longer supply the parameters); route B REFUSES `fit-failed` when its bounded refinement does not converge; `fit` and `judge_confirmation` bind every row to `prereg.split_of`, its label and its take path | none: identical re-run below |
+
+So `knownanswer.json`, `controls.json` (both at `8b31320`), `development.json` (`b6d216e`) and `fit.json` were all produced by
+earlier code than the code that ships. **Re-run at `8fedbf4`**, the last commit to touch the probe, from a clean tree, into
+`rerun-8fedbf4/` (`knownanswer`, `controls`, `measure --split development`, `fit`; `confirm` was not re-run and no reserved take
+was read). `tools/probes/tpd592_rerun_compare.py` compares each pair field by field, floats exactly as serialised, excluding only
+the top-level `provenance` block, and refuses if it cannot see an injected 1e-9 relative change to one value:
+
+| record | committed at | re-run at `8fedbf4` |
+|---|---|---|
+| `knownanswer.json` | `8b31320` | IDENTICAL: 195 / 195, 14 out-of-domain refusals, max abs E 0.008969, max abs ln tau 0.110528, 0 zero-drop read as DROP |
+| `controls.json` | `8b31320` | IDENTICAL: clean and clean-again hold every property, 7 / 7 mutants CAUGHT, same matrix |
+| `development.json` | `b6d216e` | IDENTICAL: same classes and reasons on all 7 rows, same E and tau to the last serialised digit |
+| `fit.json` | `bd33dbe` (committed in `41f5ffb`) | IDENTICAL: REFUSED, not-identifiable, 3 usable development rows < 4 |
+
+No recorded number changed, so the wrong-then-right count in section 4 is unchanged by the code changes. The Judge independently
+re-estimated the 7 development takes at `8fedbf4` and got the same result.
 - **`describe-development.json`** (post-hoc, development takes only): both routes' figures for every development take, including the
   refused ones (the 808 column in the sound summary). HT75 measures cleanly (E 0.049, tau 22 ms) but has no tuning ratio.
 
@@ -168,6 +194,20 @@ All 7 pre-corpus errors were caught by the known answers or by our own render, n
 It is not corrected here, because the estimator is frozen by `prereg.json`. A successor should treat an under-powered NO-DROP as compatible
 when the other route's E lies inside its E_upper, pre-register that change, and re-run development before reading the reserved takes.
 
+**That rule may not rescue HT25.** HT50's routes agree on tau (19.1 against 19.6 ms), but HT25's do not: A 15.7 ms, B 25.7 ms
+(`describe-development.json`), ln(25.7/15.7) = 0.49, which is above `AGREE_LN_TAU` 0.35. Whether HT25 is rescued depends on whether
+tau is still compared when route B is NO-DROP. The successor must decide that, and state it, when it pre-registers. It must not be
+decided after seeing which choice rescues the take.
+
+**Wrong in this record, caught in review, not by a control.** Three statements in earlier versions of this README were wrong. None of
+them was a measured number from the estimator.
+
+1. The sound summary said the 808's excess "crosses above ours at roughly 20-25 ms". Recomputed from the record's fitted E and tau,
+   the crossings are 20.7 / 13.1 / 31.3 ms (LT50 / LT75 / MT50). Only LT50 fell inside the stated range.
+2. Section 3 said the estimator was unchanged apart from `b8c1fb0`. Two later commits, `1a697f1` and `8fedbf4`, changed the probe.
+   They are now disclosed, and the records were re-run at `8fedbf4` with identical results (section 3).
+3. Section 6 gave a test count of 150. That count was stale after those two commits added tests (section 6 has the current count).
+
 ## 5. Class search (`git grep` on `origin/main` at `6d5b335`)
 
 **Onset-frequency excess read as a real drop:**
@@ -191,10 +231,16 @@ when the other route's E lies inside its E_upper, pre-register that change, and 
 ## 6. What was and was not run
 
 - **Run on this loom worker:**
-  - `tools/probes/test_tom_pitch_drop_fischer.py` with `GF180_TR808_FISCHER` set: 150 passed.
+  - At `8fedbf4` (the probe's final code), `tools/probes/test_tom_pitch_drop_fischer.py` with `GF180_TR808_FISCHER=/tmp/fischer-592`:
+    164 passed (164 collected).
   - `tools/probes/test_tom_conga_gate.py` without the corpus: 28 passed, 4 skipped.
+  - `tools/probes/test_tpd592_rerun_compare.py`: 7 passed.
   - The `knownanswer`, `controls`, `measure`, `fit`, `confirm` and `describe` commands as recorded. Each record carries its commit, a
-    clean-tree check at the start and end, the prereg sha256, the argv, and the Python/numpy/scipy versions.
+    clean-tree check at the start and end, the prereg sha256, the argv, and the Python/numpy/scipy versions. `knownanswer`,
+    `controls`, `measure` and `fit` were re-run at `8fedbf4` into `rerun-8fedbf4/` (section 3).
+- **Known pre-existing issue on `origin/main`, not addressed here.** With `GF180_TR808_FISCHER` pointing at a tom-only corpus,
+  `tools/probes/test_tom_conga_gate.py` fails 3 tests with `FileNotFoundError: mc8/MC50.WAV` instead of skipping them, because the
+  conga tests skip on the environment variable rather than on each take. That is why the count above is without the corpus.
 - **Not run:** `make verify`, `make controls` and `make verify-full`. No RTL or decoded-output runs.
   - They belong on the pinned build box, which this worker has no access to.
   - Nothing in the model, RTL or image changed.
