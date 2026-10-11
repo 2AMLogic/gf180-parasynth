@@ -90,7 +90,21 @@
     },
     "energy": {
      "detail": {
-      "predicted_leak_db_re_L": -11.36
+      "predicted_leak_db_re_L": -11.36,
+      "unqualified_raw": {
+       "prod": {
+        "energy_share_db": -17.253,
+        "leak_margin_required_db": 6.0,
+        "over_leak_1s_db": 5.96,
+        "over_leak_edt_db": 6.08
+       },
+       "ref": {
+        "energy_share_db": -16.889,
+        "leak_margin_required_db": 6.0,
+        "over_leak_1s_db": 6.06,
+        "over_leak_edt_db": 5.92
+       }
+      }
      },
      "prod": null,
      "reason": "band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
@@ -121,7 +135,21 @@
     },
     "energy": {
      "detail": {
-      "predicted_leak_db_re_L": -11.36
+      "predicted_leak_db_re_L": -11.36,
+      "unqualified_raw": {
+       "prod": {
+        "energy_share_db": -17.253,
+        "leak_margin_required_db": 6.0,
+        "over_leak_1s_db": 5.96,
+        "over_leak_edt_db": 6.08
+       },
+       "ref": {
+        "energy_share_db": -16.889,
+        "leak_margin_required_db": 6.0,
+        "over_leak_1s_db": 6.06,
+        "over_leak_edt_db": 5.92
+       }
+      }
      },
      "prod": null,
      "reason": "band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
@@ -162,5 +190,5 @@
    "verdict": "REFUSED"
   }
  },
- "source_commit": "0a98c6a4b251b8d4ddabb7cf3a0f2b1db894eb01"
+ "source_commit": "1b54ab372114175c925f7eb5e66cc4b3db8cb41d"
 }
