@@ -21,7 +21,7 @@ _None._
 
 ## Ready
 
-Human-approved, unblocked issues carrying `loom:issue`. Some already have implementation PRs in review or under operator holds; check the PR lane before claiming them.
+Human-approved issues ready for implementation (`loom:issue`).
 
 - **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
@@ -30,27 +30,23 @@ Human-approved, unblocked issues carrying `loom:issue`. Some already have implem
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first
-- **#502**: A Builder cannot re-bind the attack-context evidence: workflow_dispatch is 403 for the agent token
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158)
 - **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
-- **#565**: Refuse to report 'routed' from an incomplete nextpnr log (fpga/scripts/report.sh + fpga/Makefile)
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
-- **#619**: Nightly controls requires I2S_SWAP detection despite declared blind timing
-- **#622**: Nightly reference-freshness gate is unsatisfiable: tests a docs path that has never existed
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#354**: verify_voice --set full fails on R1's published voice_dp.v (osc2x+filter2x): an audition reference sequence and extremes
+- **#361**: descent_test's resample-ratio sweep never tests ratio 1.0 exactly (drops one sample at 'x1.0000')
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
 - **#595**: [#559] CH/CP: CH hp-Q candidate PROVISIONAL (clean rerun pending, disabled); CP not repairable by tail tunables
-- **#642**: Qualify the modal-bank floor deadband across production tails: REFUSED on external grounding (#350)
 
 ## Approved (Awaiting Merge)
 
@@ -91,6 +87,9 @@ Issues carrying `loom:curated`.
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement *(curated)*
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails *(curated)*
 - **#353**: Harvest the finished half-slot route: one command, four files, one DAG node *(curated)*
+- **#354**: verify_voice --set full fails on R1's published voice_dp.v (osc2x+filter2x): an audition reference sequence and extremes *(curated)*
+- **#361**: descent_test's resample-ratio sweep never tests ratio 1.0 exactly (drops one sample at 'x1.0000') *(curated)*
+- **#367**: fpga/ARTY.md: document --box local for the on-box DSP extraction invocation *(curated)*
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY *(curated)*
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first *(curated)*
 - **#502**: A Builder cannot re-bind the attack-context evidence: workflow_dispatch is 403 for the agent token *(curated)*
@@ -126,11 +125,11 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 5 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 15 |
-| In Progress (`loom:building`) | 0 |
-| PRs awaiting review | 2 |
+| Ready (`loom:issue`) | 11 |
+| In Progress (`loom:building`) | 2 |
+| PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 5 |
-| Curated | 40 |
+| Curated | 43 |
 | Architect / Hermit proposals | 5 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
