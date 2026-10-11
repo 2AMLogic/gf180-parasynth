@@ -10,7 +10,12 @@ WHAT THIS IS. A thin, frozen-before-use COMPARISON layer over the qualified
 instruments `tools/cymbal_low_tail.py` (decay ratio rho) and
 `tools/cymbal_mid.py` (band energy + skirt-leak gate). It changes neither. It
 renders the production CY through `run_case.render_drum_solo` (the register
-interface of the kit that ships) and compares it with Fischer CY5025.
+interface of the kit that ships) and compares it with Fischer CY5025. Before
+anything loads or renders, `measure` requires the frozen record's contract
+(settings populations, windows, tolerances, bands, prod_has_hh1, ...) to equal
+this module's declared FROZEN values: a changed, missing, mistyped or renamed
+field refuses, so a hand-edited record cannot re-rubric a pinned source, and
+the result records the frozen file's own sha256, not just its path.
 
 TWO "M" BANDS, stated because they differ. Energy uses cymbal_mid's `M25`
 (891-2818 Hz); decay uses cymbal_low_tail's `M` (891-2828 Hz). Both are the
@@ -288,6 +293,37 @@ def require_tree_identity() -> str:
     return head
 
 
+#: Keys a frozen record carries besides the contract itself (written by cmd_freeze).
+RECORD_EXTRA_KEYS = ("source_commit", "source_hashes", "reference_sha256", "corpus_git_commit")
+
+
+def require_frozen_contract(frozen: dict) -> None:
+    """The record's measurement contract must EQUAL the probe's declared FROZEN values.
+
+    The source-hash pins prove the code did not move since freeze; they say nothing about the
+    record's own fields, and `measure` used to trust `prod_has_hh1`, `windows_s` and
+    `confirmation_settings` as read -- a hand-edited record re-rubriced the measurement of the
+    same pinned production source (review repro: all three altered records reached the render).
+    The code is the anchor, and this module is inside the source closure, so a changed FROZEN
+    cannot measure against an older record either: both directions force a re-freeze."""
+    missing = sorted(k for k in FROZEN if k not in frozen)
+    mistyped = sorted(k for k, w in FROZEN.items() if k in frozen
+                      and isinstance(w, bool) != isinstance(frozen[k], bool))
+    changed = sorted(k for k, w in FROZEN.items() if k in frozen and k not in mistyped
+                     and frozen[k] != w)
+    extra = sorted(set(frozen) - set(FROZEN) - set(RECORD_EXTRA_KEYS))
+    if missing or mistyped or changed or extra:
+        def fmt(pairs):
+            return ", ".join(f"{k}={v!r}" for k, v in pairs) or "-"
+        raise Refused(
+            "the frozen record's measurement contract does not match the probe's declared FROZEN "
+            f"values: missing [{', '.join(missing) or '-'}], "
+            f"mistyped-not-bool [{fmt([(k, frozen[k]) for k in mistyped])}], "
+            f"changed [{fmt([(k, frozen[k]) for k in changed])}], "
+            f"unexpected keys [{', '.join(extra) or '-'}] - a hand-edited record must not "
+            "re-rubric the measurement of a pinned source; re-freeze before measuring")
+
+
 def cmd_freeze(a) -> int:
     require_tree_identity()
     hashes = require_corpus(a.refs, None)
@@ -310,6 +346,7 @@ def cmd_measure(a) -> int:
         print(f"REFUSED: no frozen record at {a.frozen}; run `freeze` BEFORE measuring")
         return 2
     try:
+        require_frozen_contract(frozen)
         require_corpus(a.refs, frozen)
         measured_at = require_tree_identity()
         now = source_hashes()
@@ -334,7 +371,8 @@ def cmd_measure(a) -> int:
         ref = rc.prepare(x, sr_r, side="CY5025")
         y, sr_p = rc.render_drum_solo("CY")
         prod = rc.prepare(y, sr_p, side="production CY")
-        res = {"frozen": str(a.frozen), "source_commit": frozen["source_commit"],
+        res = {"frozen": str(a.frozen), "frozen_sha256": sha256(pathlib.Path(a.frozen)),
+               "source_commit": frozen["source_commit"],
                "measured_at_commit": measured_at, "settings": {}}
         for s in frozen["supported_settings"]:
             production_supported(s)
