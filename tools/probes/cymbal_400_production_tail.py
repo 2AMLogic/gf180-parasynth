@@ -156,9 +156,20 @@ def require_corpus(refs, frozen) -> dict:
         raise Refused(f"reference corpus missing: {refs / REF_FILE} (set GF180_TR808_REFS / --refs); "
                       f"NO VERDICT without the Fischer recordings")
     got = {p.name: sha256(p) for p in sorted((refs / "cy8").glob("CY*.WAV"))}
-    for name, want in ((frozen or {}).get("reference_sha256") or {}).items():
-        if got.get(name) != want:
-            raise Refused(f"reference hash mismatch for {name}: corpus is not the one frozen")
+    pin = (frozen or {}).get("reference_sha256")
+    if frozen is not None:
+        # an absent/empty pin made the loop below iterate nothing: verification SKIPPED reads as
+        # verification done. measure requires a pin that covers the file it actually loads.
+        if not pin:
+            raise Refused("the frozen record has no reference-corpus pin: corpus verification would be "
+                          "skipped, not done; re-freeze before measuring")
+        name = pathlib.PurePosixPath(REF_FILE).name
+        if name not in pin:
+            raise Refused(f"the frozen record's reference pin does not cover {name}, the file actually "
+                          f"loaded; re-freeze before measuring")
+    for fname, want in (pin or {}).items():
+        if got.get(fname) != want:
+            raise Refused(f"reference hash mismatch for {fname}: corpus is not the one frozen")
     return got
 
 
@@ -302,8 +313,19 @@ def cmd_measure(a) -> int:
         require_corpus(a.refs, frozen)
         measured_at = require_tree_identity()
         now = source_hashes()
-        for f, h in frozen["source_hashes"].items():
-            if now.get(f) != h:
+        # iterate the EXPECTED closure, never the record's own keys: a record missing a pin
+        # (legacy partial freeze) made the old loop check one file fewer and let a dependency
+        # changed after freeze reach the render under an unchanged guard.
+        pinned = frozen.get("source_hashes") or {}
+        missing = sorted(set(SOURCE_FILES) - set(pinned))
+        extra = sorted(set(pinned) - set(SOURCE_FILES))
+        if missing or extra:
+            raise Refused(f"the frozen record's source-hash pin set does not match the dependency "
+                          f"closure ({len(SOURCE_FILES)} files): missing {missing or 'none'}, "
+                          f"unexpected {extra or 'none'} - the guard cannot see a file it has no "
+                          f"pin for; re-freeze before measuring")
+        for f in SOURCE_FILES:
+            if now[f] != pinned[f]:
                 raise Refused(f"{f} changed since freeze (dependency closure): re-freeze before measuring")
         ok, lines = lt.check()
         if not ok:

@@ -358,7 +358,8 @@ def _fake_corpus(tmp_path, samples) -> dict:
 
 
 def _frozen_for(tmp_path, ref_sha, *, hashes=None, reference_sha256=None) -> pathlib.Path:
-    f = dict(pt.FROZEN, source_commit=pt._git("rev-parse", "HEAD"), source_hashes=hashes or pt.source_hashes(),
+    f = dict(pt.FROZEN, source_commit=pt._git("rev-parse", "HEAD"),
+             source_hashes=pt.source_hashes() if hashes is None else hashes,
              reference_sha256=reference_sha256 if reference_sha256 is not None else ref_sha,
              corpus_git_commit=None, windows_s=[1.5])
     p = tmp_path / "frozen.json"
