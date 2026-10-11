@@ -37,7 +37,9 @@ Commands
                engine (and the production host's staircase) at each take's
                tuning; REFUSES rather than answers on any failed precondition.
   fit          development rows only -> the frozen discrepancy record.
-  confirm      the reserved rows, ONCE: refuses if the record already exists.
+  confirm      the reserved rows, ONCE: the evaluation is claimed atomically
+               against the preregistration (not the report path) before any
+               reserved take is opened; a second confirm refuses.
 
 Preconditions asserted at the point of use: frozen full sha256 per take,
 44.1/48 kHz, finite, non-silent; our unity render bit-exact against
@@ -50,10 +52,12 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import pathlib
 import statistics
 import subprocess
 import sys
+import time
 
 import numpy as np
 from scipy.optimize import least_squares, minimize_scalar
@@ -898,6 +902,31 @@ def discrepancy(e808: dict, eo: dict) -> dict:
     return out
 
 
+def confirm_claim_path() -> pathlib.Path:
+    """Where the once-only reservation is recorded: next to the preregistration
+    and keyed to its sha256 -- the reserved experiment's identity -- never to a
+    report destination (a second `--out` used to buy a second reserved read)."""
+    return PREREG.parent / f"confirm-consumed-{_sha(PREREG)[:16]}.json"
+
+
+def claim_reserved_evaluation() -> pathlib.Path:
+    """Atomically claim THE reserved evaluation, BEFORE any reserved take is
+    opened. O_EXCL makes the claim itself the guard: a second confirm of the
+    same preregistration -- under any report path -- finds the claim and
+    refuses, and two concurrent confirms cannot both read the reserved rows."""
+    claim = confirm_claim_path()
+    try:
+        fd = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError:
+        raise Refused("already-confirmed",
+                      f"{claim} exists: the reserved rows are evaluated ONCE") from None
+    with os.fdopen(fd, "w") as f:
+        json.dump({"prereg_sha256": _sha(PREREG),
+                   "claimed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, f)
+        f.write("\n")
+    return claim
+
+
 def confirm_record(refs: pathlib.Path, pr: dict, fit_path: pathlib.Path) -> dict:
     fit_rec = json.loads(fit_path.read_text())
     res = {"fit_record": {"path": str(fit_path), "sha256": _sha(fit_path)}}
@@ -905,13 +934,15 @@ def confirm_record(refs: pathlib.Path, pr: dict, fit_path: pathlib.Path) -> dict
         # Nothing was fitted, so there is no hypothesis to confirm. Measuring
         # the reserved rows now would expose them to this estimator while
         # testing nothing; they are left UNREAD for a successor, and the
-        # judgement is the rule's own REFUSED.
+        # judgement is the rule's own REFUSED. No claim is taken: nothing
+        # reserved was read, so the once-only evaluation is not spent.
         res["rows"] = {c: {"split": "confirmation", "class": "NOT-READ",
                            "reason": "development fit REFUSED: reserved row not measured",
                            "take": take_rel(c)}
                        for c, sp in pr["split_of"].items() if sp == "confirmation"}
         res["reserved_rows_read"] = False
     else:
+        claim_reserved_evaluation()
         res["rows"] = measure_rows(refs, pr, "confirmation")
         res["reserved_rows_read"] = True
     res["judgement"] = judge_confirmation(res["rows"], fit_rec, pr)

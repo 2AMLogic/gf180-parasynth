@@ -409,6 +409,42 @@ def test_confirm_runs_once(tmp_path):
     assert tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(out), "--out", str(out)]) == 2
 
 
+def test_confirm_cannot_be_repeated_by_changing_the_output_path(tmp_path, monkeypatch):
+    """DEFEATING INPUT for the once-only guard: a second `confirm` of the same
+    preregistration and fit under a DIFFERENT report path. The reservation is
+    bound to the preregistration identity, not to the report destination, and
+    is claimed atomically BEFORE any reserved take is opened -- so the second
+    run is refused having read nothing, and exactly one reserved read happens."""
+    monkeypatch.setattr(tp, "PREREG", tmp_path / "prereg.json")
+    (tmp_path / "prereg.json").write_text("{}\n")
+    monkeypatch.setattr(tp, "provenance", lambda refs: {"refs": str(refs)})
+    monkeypatch.setattr(tp, "close_provenance", lambda prov: prov)
+    reads = []
+    monkeypatch.setattr(tp, "measure_rows", lambda refs, pr, split: reads.append(split) or {})
+    fit = tmp_path / "fit.json"
+    fit.write_text(json.dumps({"status": "FITTED"}))
+    out1, out2 = tmp_path / "confirm-1.json", tmp_path / "confirm-2.json"
+    assert tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit), "--out", str(out1)]) == 0
+    assert tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit), "--out", str(out2)]) == 2, \
+        "a different report path must not buy a second reserved evaluation"
+    assert reads == ["confirmation"], f"the reserved rows were read {len(reads)} times"
+    assert out1.exists() and not out2.exists()
+    assert tp.confirm_claim_path().exists(), "the claim must outlive the run it guards"
+
+
+def test_a_refused_fit_never_claims_the_reserved_evaluation(tmp_path, monkeypatch):
+    """The no-fit branch reads no reserved data, so it must not consume the
+    once-only reservation either: a successor can still confirm, and repeated
+    refused-fit confirmations stay possible."""
+    monkeypatch.setattr(tp, "PREREG", tmp_path / "prereg.json")
+    (tmp_path / "prereg.json").write_text(json.dumps(PRE) + "\n")
+    fit = tmp_path / "fit.json"
+    fit.write_text(json.dumps({"status": "REFUSED", "reason": "not-identifiable: test"}))
+    tp.confirm_record(tmp_path, json.loads((tmp_path / "prereg.json").read_text()), fit)
+    assert not tp.confirm_claim_path().exists(), \
+        "a no-fit confirm reads nothing reserved, so it must not burn the claim"
+
+
 def test_a_refused_fit_leaves_the_reserved_rows_unread(tmp_path):
     """With no development fit there is nothing to confirm: the record is the
     rule's REFUSED and NO reserved take is opened (an empty refs directory
