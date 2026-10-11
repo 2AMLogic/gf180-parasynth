@@ -170,6 +170,17 @@ def _refused(reason, prod=None, ref=None, detail=None):
     return {"verdict": "REFUSED", "prod": prod, "ref": ref, "reason": reason, "detail": detail or {}}
 
 
+def _refused_by_side(p_val, p_reason, r_val, r_reason, *, undefined, detail=None):
+    """REFUSED with the reason ATTRIBUTED to the side(s) whose gate tripped. An unlabelled
+    `p_reason or r_reason` misattributed the #400 decay refusal (README wrong-then-right #4)."""
+    by = {"production": None if p_val is not None else (p_reason or undefined),
+          "reference": None if r_val is not None else (r_reason or undefined)}
+    reason = "; ".join(f"{side}: {why}" for side, why in by.items() if why is not None)
+    out = _refused(reason, p_val, r_val, detail)
+    out["refused_by"] = by
+    return out
+
+
 def _side(y, sr, hh1, trim_s):
     m = cm.measure_mid(y, sr, hh1, bands=["M25"])["M25"]
     out = {"mid": m, "energy": None, "energy_refusal": None, "rho": None, "rho_all": None, "decay_refusal": None}
@@ -205,12 +216,13 @@ def compare_records(prod, sr_p, ref, sr_r, *, prod_has_hh1, trim_s=2.0, defect=N
     p = _side(prod, sr_p, bool(prod_has_hh1), trim_s)
     r = _side(ref, sr_r, True, trim_s)             # the machine has Hh1 (reference §10)
     if p["energy"] is None or r["energy"] is None:
-        energy = _refused(p["energy_refusal"] or r["energy_refusal"], p["energy"], r["energy"],
-                          {"predicted_leak_db_re_L": p["mid"]["predicted_leak_db_re_L"]})
+        energy = _refused_by_side(p["energy"], p["energy_refusal"], r["energy"], r["energy_refusal"],
+                                  undefined="energy undefined",
+                                  detail={"predicted_leak_db_re_L": p["mid"]["predicted_leak_db_re_L"]})
     else:
         energy = classify(p["energy"], r["energy"], "energy_db")
     if p["rho"] is None or r["rho"] is None:
-        decay = _refused(p["decay_refusal"] or r["decay_refusal"] or "rho undefined", p["rho"], r["rho"])
+        decay = _refused_by_side(p["rho"], p["decay_refusal"], r["rho"], r["decay_refusal"], undefined="rho undefined")
     else:
         decay = classify(p["rho"], r["rho"], "time_ratio")
     energy.setdefault("detail", {})["predicted_leak_db_re_L"] = p["mid"]["predicted_leak_db_re_L"]
@@ -284,6 +296,9 @@ def cmd_measure(a) -> int:
     a.out.write_text(json.dumps(res, indent=1, sort_keys=True, default=str) + "\n")
     for w, r in res["settings"]["CY5025"].items():
         print(f"CY5025 {w}: energy {r['energy']['verdict']}  decay {r['decay']['verdict']}  joint {r['joint']}")
+        for k in ("energy", "decay"):
+            if r[k]["verdict"] == "REFUSED":
+                print(f"  {k} REFUSED by {r[k]['reason']}")
     return 0
 
 
