@@ -140,6 +140,10 @@ def _param(path, name):
 #: SAMPLE / DEADLINE lines), so a negative control can be checked against the
 #: failure it was recorded to cause.
 DEADLINE: dict = {}
+#: What the last compare() found: {"status", "n", "mism" (per field), "first"
+#: (field -> (frame, model, RTL, scenario key))}. Lets a control assert WHERE
+#: it failed (tools/verify_voice_scoped.py --expect-first), not only that it did.
+LAST_COMPARE: dict = {}
 
 
 # ---- the model's writes as register writes -----------------------------------
@@ -603,6 +607,7 @@ def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=Fal
 
 # ---- compare: every field of every frame, then the state ---------------------------
 def compare(expected, state, report, out_file, name="verify_voice") -> int:
+    LAST_COMPARE.clear()
     try:
         lines = [l.split() for l in open(out_file) if l.strip()]
     except OSError:
@@ -641,6 +646,8 @@ def compare(expected, state, report, out_file, name="verify_voice") -> int:
           f"worst {max(cycles)} (of 256 - 8 in the chip)")
     for r, (s, t) in zip(report, per_scn):
         print(f"  [{r['key']}] {r['n']} frames: {s} sample mismatches, {t} tap mismatches")
+    LAST_COMPARE.update(status=0 if total == 0 and not st_mism else 1, n=n, mism=dict(mism),
+                        first=dict(first), state_mismatch=list(st_mism))
     if total == 0 and not st_mism:
         print(f"{name}: PASS -- {n} frames, every sample and every tap identical to the model; final state identical")
         return 0

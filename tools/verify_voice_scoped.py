@@ -17,6 +17,20 @@ on a chosen scenario list from reset:
                        fpga/release/qualified_domain (check_patch, check_note)
                        and the run REFUSES if any is outside it.
 
+  --expect-first TAP@FRAME[:SAMPLES]
+                       with --expect-fail: the control is CAUGHT only if the
+                       comparison failed AND its first divergence is TAP at
+                       FRAME (the earliest mismatching frame, and TAP the most
+                       upstream mismatching tap there, in pipeline order) and,
+                       if given, exactly SAMPLES output samples differ. #354's
+                       retained R1 width (-DINJECT_BUG_LADDER_XG25) on the
+                       all-maximum image must give y19@62:387 -- R1's recorded
+                       signature. A control that fails somewhere else is NOT
+                       caught for its reason (exit 1): what defeats a bare
+                       --expect-fail is any other breakage (a compile define
+                       that stopped reaching the ladder plus an unrelated
+                       failure), and the pinned location is what rejects it.
+
 It also reports the model's headroom at the ladder's 19-bit word and the
 mixer and output rails for the scenarios it ran, so "cannot reach the
 saturation that diverges" is a measured margin, not an argument.
@@ -42,6 +56,46 @@ import qualified_domain as qd  # noqa: E402
 SR = vf.SR
 PRESET_DRIVES = None   # filled lazily: {drive of default, m5a-saw, m5a-pulse}
 Y19_RAIL = (1 << 18) - 1
+
+
+#: Pipeline order for "the most upstream tap that differs": the oscillators and
+#: their words, the mixer, the envelopes and cutoff chain, the ladder, the VCA,
+#: and the output sample last. (verify_voice.FIELDS lists `sample` first.)
+PIPELINE = ["inc0", "inc1", "inc2", "r0", "r1", "r2", "phase2x0", "phase2x1", "phase2x2",
+            "osc0", "osc1", "osc2", "sh0", "sh1", "sh2", "mixed", "ae", "fe", "cut", "g",
+            "kc", "k_eff", "y19", "v", "out_v", "sample"]
+assert sorted(PIPELINE) == sorted(vv.FIELDS), "PIPELINE must order exactly verify_voice.FIELDS"
+
+
+def parse_expect_first(spec: str) -> tuple:
+    """'y19@62' or 'y19@62:387' -> (tap, frame, samples-or-None)."""
+    tap, rest = spec.split("@", 1)
+    frame, _, samples = rest.partition(":")
+    if tap not in PIPELINE:
+        raise SystemExit(f"REFUSED: --expect-first names unknown tap {tap!r}")
+    return tap, int(frame), (int(samples) if samples else None)
+
+
+def first_divergence(first: dict) -> tuple | None:
+    """(frame, tap) of the earliest mismatch; the most upstream tap at that frame."""
+    if not first:
+        return None
+    frame = min(v[0] for v in first.values())
+    taps = [f for f in PIPELINE if f in first and first[f][0] == frame]
+    return frame, taps[0]
+
+
+def check_expect_first(result: dict, spec: str) -> tuple:
+    """(caught, message) for a control whose failure location is pinned."""
+    tap, frame, samples = parse_expect_first(spec)
+    if result.get("status") != 1:
+        return False, f"comparison status {result.get('status')}, not a completed value mismatch"
+    got = first_divergence(result["first"])
+    if got != (frame, tap):
+        return False, f"first divergence {got}, expected ({frame}, {tap!r})"
+    if samples is not None and result["mism"]["sample"] != samples:
+        return False, f"{result['mism']['sample']} samples differ, expected {samples}"
+    return True, f"first divergence {tap} at frame {frame}, {result['mism']['sample']} samples differ"
 
 
 def extremes_only(index: int):
@@ -213,10 +267,16 @@ def main(argv=None) -> int:
     ap.add_argument("--inject", default=None)
     ap.add_argument("--define", action="append", default=[], help="extra Verilog define (a component control)")
     ap.add_argument("--expect-fail", action="store_true")
+    ap.add_argument("--expect-first", default=None, metavar="TAP@FRAME[:SAMPLES]",
+                    help="with --expect-fail: also require the first divergence to be here")
     ap.add_argument("--headroom-only", action="store_true")
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--json", type=pathlib.Path, default=None)
     a = ap.parse_args(argv)
+    if a.expect_first:
+        if not a.expect_fail:
+            ap.error("--expect-first requires --expect-fail")
+        parse_expect_first(a.expect_first)          # refuse a malformed spec before simulating
     if a.recon_audit:
         scns = {"extremes0": lambda: extremes_only(0), "domain": domain_scenarios,
                 "full": lambda: list(vv.scenarios("full"))}[a.recon_audit]()
@@ -257,9 +317,19 @@ def main(argv=None) -> int:
     if a.expect_fail:
         argv2.append("--expect-fail")
     rc = vv.main(argv2)
+    if a.expect_first and rc == 0:
+        caught, msg = check_expect_first(vv.LAST_COMPARE, a.expect_first)
+        print(("verify_voice_scoped: control CAUGHT FOR ITS REASON -- " if caught else
+               "verify_voice_scoped: CONTROL NOT CAUGHT FOR ITS REASON -- ") + msg)
+        rc = 0 if caught else 1
     if a.json:
+        lc = vv.LAST_COMPARE
         a.json.write_text(json.dumps({"headroom": hr, "verify_voice_exit": rc,
-                                      "scenarios": [s[1] for s in scns]}, indent=1) + "\n")
+                                      "scenarios": [s[1] for s in scns],
+                                      "compare": {"status": lc.get("status"), "frames": lc.get("n"),
+                                                  "mismatches": lc.get("mism"), "first": lc.get("first"),
+                                                  "first_divergence": first_divergence(lc.get("first") or {})}},
+                                     indent=1) + "\n")
     return rc
 
 
