@@ -206,28 +206,57 @@ def test_omitted_host_writes_break_the_carry_check():
 # ---- development / confirmation discipline --------------------------------
 PRE = {"rules": {"min_dev_rows": 2, "min_confirm_rows": 2, "confirm_frac": 0.75, "jnd_cents": 5.0,
                  "tau_ratio_threshold": 1.25},
-       "adequacy": {"independent_confirmation": "REFUSED: test", "scope": "test"}}
+       "adequacy": {"independent_confirmation": "REFUSED: test", "scope": "test"},
+       "split_of": {"LT25": "development", "LT50": "development", "LT75": "development",
+                    "LT00": "confirmation", "LT10": "confirmation", "MT00": "confirmation",
+                    "MT25": "confirmation"}}
+CONF = ("LT00", "LT10", "MT00", "MT25")
 
 
-def _row(split, d, lt=0.0, u=1.0):
-    return {"split": split, "class": "MEASURED",
+def _row(c, split, d, lt=0.0, u=1.0):
+    return {"split": split, "take": tp.take_rel(c), "class": "MEASURED",
             "discrepancy": {"d_cents": d, "u_cents": u, "ln_tau_ratio": lt, "u_ln_tau": 0.05}}
+
+
+def _dev(d1=30.0, d2=34.0, lt1=0.0, lt2=0.0):
+    return {"LT25": _row("LT25", "development", d1, lt1), "LT50": _row("LT50", "development", d2, lt2)}
 
 
 def test_fit_refuses_a_non_development_row():
     with pytest.raises(tp.Refused) as e:
-        tp.fit({"A": _row("development", 10.0), "B": _row("confirmation", 10.0)}, PRE)
+        tp.fit({"LT25": _row("LT25", "development", 10.0), "LT00": _row("LT00", "confirmation", 10.0)}, PRE)
     assert e.value.reason == "fit-reads-non-development"
 
 
+@pytest.mark.parametrize("rows", [
+    # reserved identity relabelled development
+    {"LT25": _row("LT25", "development", 1.0), "LT00": _row("LT00", "development", 1.0)},
+    # unknown identity
+    {"LT25": _row("LT25", "development", 1.0), "XX99": _row("XX99", "development", 1.0)},
+    # row filed under another condition's id (take path disagrees)
+    {"LT25": _row("LT25", "development", 1.0), "LT50": _row("LT00", "development", 1.0)},
+])
+def test_fit_binds_rows_to_the_frozen_split_not_the_label(rows):
+    with pytest.raises(tp.Refused) as e:
+        tp.fit(rows, PRE)
+    assert e.value.reason == "fit-reads-non-development"
+
+
+def test_fit_refuses_a_prereg_without_split_of():
+    pre = {k: v for k, v in PRE.items() if k != "split_of"}
+    with pytest.raises(tp.Refused) as e:
+        tp.fit(_dev(), pre)
+    assert e.value.reason == "prereg-no-split_of"
+
+
 def test_fit_with_too_few_rows_is_not_identifiable():
-    r = tp.fit({"A": _row("development", 10.0)}, PRE)
+    r = tp.fit({"LT25": _row("LT25", "development", 10.0)}, PRE)
     assert r["status"] == "REFUSED" and "not-identifiable" in r["reason"]
 
 
 def test_confirmation_confirms_a_systematic_discrepancy():
-    fit = tp.fit({"A": _row("development", 30.0, 0.5), "B": _row("development", 34.0, 0.6)}, PRE)
-    conf = {f"C{i}": _row("confirmation", 28.0 + i, 0.5) for i in range(4)}
+    fit = tp.fit(_dev(30.0, 34.0, 0.5, 0.6), PRE)
+    conf = {c: _row(c, "confirmation", 28.0 + i, 0.5) for i, c in enumerate(CONF)}
     j = tp.judge_confirmation(conf, fit, PRE)
     assert j["magnitude"]["verdict"] == "CONFIRMED"
     assert j["relaxation"]["verdict"] == "CONFIRMED"
@@ -239,16 +268,16 @@ def test_confirmation_confirms_a_systematic_discrepancy():
 
 
 def test_confirmation_rejects_a_discrepancy_that_does_not_hold():
-    fit = tp.fit({"A": _row("development", 30.0), "B": _row("development", 34.0)}, PRE)
-    conf = {f"C{i}": _row("confirmation", (-1) ** i * 2.0) for i in range(4)}
+    fit = tp.fit(_dev(), PRE)
+    conf = {c: _row(c, "confirmation", (-1) ** i * 2.0) for i, c in enumerate(CONF)}
     j = tp.judge_confirmation(conf, fit, PRE)
     assert j["magnitude"]["verdict"] == "NOT-CONFIRMED"
     assert j["decision"]["magnitude"] == "unsupported"
 
 
 def test_confirmation_with_too_few_rows_is_refused():
-    fit = tp.fit({"A": _row("development", 30.0), "B": _row("development", 34.0)}, PRE)
-    j = tp.judge_confirmation({"C1": _row("confirmation", 30.0)}, fit, PRE)
+    fit = tp.fit(_dev(), PRE)
+    j = tp.judge_confirmation({"LT00": _row("LT00", "confirmation", 30.0)}, fit, PRE)
     assert j["magnitude"]["verdict"] == "REFUSED"
     assert j["decision"]["magnitude"] == "not identifiable"
 
@@ -262,13 +291,72 @@ def test_confirmation_pooling_development_rows_is_caught():
 def test_confirmation_refuses_a_supplied_development_row_without_injection():
     """Defeating input for the normal branch: development rows MIXED INTO the
     supplied set (no --inject) must be REFUSED, not silently filtered out."""
-    fit = tp.fit({"A": _row("development", 30.0), "B": _row("development", 34.0)}, PRE)
-    conf = {f"C{i}": _row("confirmation", 30.0) for i in range(4)}
-    conf["D1"] = _row("development", 30.0)
+    fit = tp.fit(_dev(), PRE)
+    conf = {c: _row(c, "confirmation", 30.0) for c in CONF}
+    conf["LT75"] = _row("LT75", "development", 30.0)
     assert not tp.INJECT
     j = tp.judge_confirmation(conf, fit, PRE)
-    assert j["development_rows_in_confirmation"] == ["D1"]
+    assert j["development_rows_in_confirmation"] == ["LT75"]
     assert j["magnitude"] == j["relaxation"] == {"verdict": "REFUSED", "reason": "confirmation-pooled-development"}
+
+
+@pytest.mark.parametrize("key,row", [
+    ("LT25", _row("LT25", "confirmation", 30.0)),    # development identity relabelled confirmation
+    ("XX99", _row("XX99", "confirmation", 30.0)),    # unknown identity
+    ("MT25", _row("LT00", "confirmation", 30.0)),    # take path of another condition
+])
+def test_confirmation_binds_rows_to_the_frozen_split_not_the_label(key, row):
+    fit = tp.fit(_dev(), PRE)
+    conf = {c: _row(c, "confirmation", 30.0) for c in CONF if c != key}
+    conf[key] = row
+    j = tp.judge_confirmation(conf, fit, PRE)
+    assert key in j["development_rows_in_confirmation"]
+    assert j["magnitude"] == {"verdict": "REFUSED", "reason": "confirmation-pooled-development"}
+
+
+# ---- optimizer convergence is asserted, not assumed -----------------------
+class _Res:
+    def __init__(self, x, cost, success):
+        self.x, self.cost, self.success = np.asarray(x, float), cost, success
+        self.jac, self.fun = np.eye(len(self.x)), np.zeros(len(self.x))
+
+
+def _signal():
+    sr = 48000
+    t = np.arange(int(0.6 * sr)) / sr
+    return 150.0 * 0 + np.exp(-t / 0.2) * np.sin(2 * np.pi * 120 * t), sr
+
+
+def test_route_a_refuses_when_no_start_converged(monkeypatch):
+    x, sr = _signal()
+    monkeypatch.setattr(tp, "least_squares", lambda f, q0, **k: _Res(q0, 1e-12, False))
+    with pytest.raises(tp.Refused) as e:
+        tp.route_a(x, sr)
+    assert e.value.reason == "fit-failed"
+
+
+def test_route_a_unconverged_lower_cost_never_displaces_a_converged_fit(monkeypatch):
+    x, sr = _signal()
+    real, kept = tp.least_squares, []
+
+    def mixed(f, q0, **k):
+        if not kept:    # start 1: the honest, converged fit
+            kept.append(real(f, q0, **k))
+            return kept[0]
+        return _Res(kept[0].x + 1.0, 0.0, False)   # cost 0 beats it, but did not converge
+    monkeypatch.setattr(tp, "least_squares", mixed)
+    got = tp.route_a(x, sr)
+    assert got["f_inf"] == pytest.approx(float(kept[0].x[0]))
+
+
+def test_route_b_refuses_an_unconverged_refinement(monkeypatch):
+    class R:
+        x, fun, success = 0.0, 1.0, False
+    monkeypatch.setattr(tp, "minimize_scalar", lambda *a, **k: R())
+    t = np.linspace(0, 0.3, 40)
+    with pytest.raises(tp.Refused) as e:
+        tp.fit_halfcycles(t, 100 * t + 1.0 - np.exp(-t / 0.05))
+    assert e.value.reason == "fit-failed"
 
 
 def _good_ka():

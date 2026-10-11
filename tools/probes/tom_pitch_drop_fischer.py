@@ -271,6 +271,8 @@ def route_a(x, sr) -> dict:
                                   x_scale="jac", max_nfev=200)
             except (ValueError, np.linalg.LinAlgError):
                 continue
+            if not (r.success and np.isfinite(r.cost) and np.all(np.isfinite(r.x))):
+                continue    # an unconverged result never supplies the parameters
             if best is None or r.cost < best.cost:
                 best = r
     if best is None:
@@ -325,6 +327,8 @@ def fit_halfcycles(t, n, rate=0.0) -> dict:
     r = minimize_scalar(lambda lt: _lin_fit(t, n, math.exp(lt), rate)[1],
                         bounds=(math.log(lo), math.log(hi)), method="bounded",
                         options={"xatol": 1e-6})
+    if not (r.success and np.isfinite(r.x) and np.isfinite(r.fun)):
+        raise Refused("fit-failed", "route B: bounded refinement did not converge")
     tau = math.exp(r.x)
     (a_, f, c, _z1, _z2), s, X = _lin_fit(t, n, tau, rate)
     # full Jacobian in (a, f, c, zig, zig-decaying, ln tau) for the covariance
@@ -941,11 +945,24 @@ def describe(refs: pathlib.Path, prereg: dict) -> dict:
 # ---------------------------------------------------------------------------
 # fit (development only) and confirm (reserved, once)
 # ---------------------------------------------------------------------------
+def misbound_rows(rows: dict, prereg: dict, split: str) -> list:
+    """Condition ids whose identity does not bind them to `split`: the id must
+    be in the frozen prereg with that split, the row's own label must agree,
+    and its take path must be the id's. A label alone is data, not identity."""
+    split_of = prereg.get("split_of")
+    if not split_of:
+        raise Refused("prereg-no-split_of", "cannot bind rows to the frozen split")
+    return [k for k, r in rows.items()
+            if split_of.get(k) != split or r.get("split") != split or r.get("take") != take_rel(k)]
+
+
 def fit(dev_rows: dict, prereg: dict) -> dict:
     rules = prereg["rules"]
-    use = {k: r for k, r in dev_rows.items() if r["split"] == "development" and r["class"] == "MEASURED"}
-    if any(r["split"] != "development" for r in dev_rows.values()):
-        raise Refused("fit-reads-non-development", "fit was handed a non-development row")
+    bad = misbound_rows(dev_rows, prereg, "development")
+    if bad:
+        raise Refused("fit-reads-non-development",
+                      f"fit was handed rows not bound to the frozen development split: {bad}")
+    use = {k: r for k, r in dev_rows.items() if r["class"] == "MEASURED"}
     out = {"n_dev": len(dev_rows), "n_usable": len(use),
            "refused": {k: r.get("reason") for k, r in dev_rows.items() if r["class"] != "MEASURED"}}
     if len(use) < rules["min_dev_rows"]:
@@ -981,7 +998,7 @@ def judge_confirmation(conf_rows: dict, fit_rec: dict, prereg: dict) -> dict:
         rows = dict(conf_rows)
     # validate EVERYTHING supplied before any use: filtering first would make
     # a supplied development row invisible to this check
-    leak = [k for k, r in rows.items() if r["split"] != "confirmation"]
+    leak = misbound_rows(rows, prereg, "confirmation")
     use = {k: r for k, r in rows.items() if r["class"] == "MEASURED"}
     out = {"n_reserved": len(conf_rows), "n_usable": len(use), "development_rows_in_confirmation": leak,
            "refused": {k: r.get("reason") for k, r in rows.items() if r["class"] != "MEASURED"},
@@ -1139,13 +1156,16 @@ def _prop_hash_refusal(tmp: pathlib.Path):
 
 def _prop_confirmation_disjoint():
     pre = {"rules": {"min_confirm_rows": 2, "confirm_frac": 0.75, "jnd_cents": 5.0, "tau_ratio_threshold": 1.25},
-           "adequacy": {"independent_confirmation": "x", "scope": "x"}}
+           "adequacy": {"independent_confirmation": "x", "scope": "x"},
+           "split_of": {"LT00": "confirmation", "LT10": "confirmation",
+                        "LT25": "development", "LT50": "development", "LT75": "development"}}
 
-    def row(split, d):
-        return {"split": split, "class": "MEASURED",
+    def row(c, split, d):
+        return {"split": split, "take": take_rel(c), "class": "MEASURED",
                 "discrepancy": {"d_cents": d, "u_cents": 1.0, "ln_tau_ratio": 0.0, "u_ln_tau": 0.1}}
-    conf = {"C1": row("confirmation", 1.0), "C2": row("confirmation", -1.0)}
-    dev = {"D1": row("development", 40.0), "D2": row("development", 41.0), "D3": row("development", 39.0)}
+    conf = {"LT00": row("LT00", "confirmation", 1.0), "LT10": row("LT10", "confirmation", -1.0)}
+    dev = {"LT25": row("LT25", "development", 40.0), "LT50": row("LT50", "development", 41.0),
+           "LT75": row("LT75", "development", 39.0)}
     fit_rec = {"status": "FITTED", "median_d_cents": 40.0, "median_ln_tau_ratio": 0.0,
                "magnitude_proposal": "808 larger", "tau_proposal": "none: within threshold", "_dev_rows": dev}
     res = judge_confirmation(conf, fit_rec, pre)
