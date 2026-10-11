@@ -27,7 +27,7 @@ This module mirrors exactly that, in integer picoseconds. It is NOT the oracle
 of any acceptance check: the bench's own write log (applied frame == pin
 prediction, which `main()` and `tools/check_phrase_schedule.py` both require)
 is. It is a scheduling aid, and it is validated against the stored bench traces
-under `docs/deadline/traces/` (`test_tb_top_bx_timing.py`), which were produced
+under `docs/deadline/traces/` (`rtl-sketch/test_m5a_stimulus.py`), which were produced
 by the real bench and not by this file. If the bench's timing changes and this
 file does not, the scheduler will miss its targets and the independent
 schedule check goes red -- which is the right failure.

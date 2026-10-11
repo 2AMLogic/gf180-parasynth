@@ -104,6 +104,32 @@ def test_a_wrong_link_timing_misses_the_stored_traces(monkeypatch, name, value):
     assert any(link.landing_frames(w) != p for _, w, p in _bench_traces())
 
 
+# The two simulator races the model refuses to resolve (Judge note on #647: the
+# `Race` case was never constructed). Each is built through `landing_frames`
+# by moving the start so the event falls EXACTLY on the edge, with a 1 ps
+# control that must NOT raise -- otherwise "raises" could mean "always raises".
+def test_a_csn_rise_exactly_on_a_posedge_is_a_race(monkeypatch):
+    k = 1000
+    monkeypatch.setattr(link, "START_PS", link.edge_time(k) - link.CSN_RISE_PS)
+    with pytest.raises(link.Race, match="CS_N rises exactly on posedge"):
+        link.landing_frames([0])
+    monkeypatch.setattr(link, "START_PS", link.edge_time(k) - link.CSN_RISE_PS + 1)
+    link.landing_frames([0])
+
+
+def test_a_wait_called_exactly_on_a_tick_edge_is_a_race(monkeypatch):
+    monkeypatch.setattr(link, "START_PS", link.tick_time(0))
+    with pytest.raises(link.Race, match="exactly on a tick edge"):
+        link.landing_frames([1])
+    monkeypatch.setattr(link, "START_PS", link.tick_time(0) + 1)
+    link.landing_frames([1])
+
+
+def test_the_published_bench_start_is_not_a_race():
+    """The real START_PS with a zero wait and a one-frame wait resolves."""
+    assert link.landing_frames([0, 1, 0, 2])
+
+
 @pytest.mark.parametrize("manifest,periods", [(MANIFEST, 1_305_543), (M5B, 729_543)])
 def test_legacy_schedule_reproduces_the_stored_confirm_run_length(manifest, periods):
     """docs/scorecard/m5-artifacts-333/saw-drive (confirm/M5A.txt): the

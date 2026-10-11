@@ -81,6 +81,13 @@ the SPI stimulus is part of the case definition, and so is where it lands.
   misses the map. The scheduler's `legacy-relative` mode (`--m5a-schedule
   legacy-relative`) is the control that must be refused. It was refused on the
   iverilog smoke bench: `m5-schedule-372/smoke-legacy-relative/`.
+- **Scope: SPI only.** The absolute waits are solved against SPI landing
+  (`rtl-sketch/tb_top_bx_timing.py`). The FPGA UART phrase
+  (`fpga/uart_host.py --fixture m5a`, `fpga/verify_uart_bridge.py`) reads
+  each wait as a UART frame count. It is a smoke fixture with no claim on
+  this map, and R1 pins its bytes as `run-m5a`. It therefore passes
+  `schedule="legacy-relative"` explicitly, and `tools/test_r1_capture.py`
+  asserts that R1's bytes are unchanged.
 
 **What the earlier stimulus did.** It used relative waits with a fixed
 10/16-frame reserve and gate waits shortened by 3 frames. Measured against

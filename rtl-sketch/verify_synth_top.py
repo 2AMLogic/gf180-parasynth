@@ -670,9 +670,14 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
     relative waits with a fixed 10/16-frame reserve (`legacy_margin` overrides
     it) and gate waits shortened by 3 -- which lands later notes up to 27
     frames early, a short gate, a ~55-frame lead-in and the pulse segment 44
-    frames off the scorer's map. It is kept ONLY as the control that
-    tools/check_phrase_schedule.py must reject. The register order and data
-    are identical in both; only the waits differ."""
+    frames off the scorer's map. On the SPI M5 case it is kept only as the
+    control that tools/check_phrase_schedule.py must reject. The FPGA UART
+    callers (fpga/uart_host.py --fixture m5a, fpga/verify_uart_bridge.py
+    phrase_items) pass it EXPLICITLY: there the waits are UART frame counts,
+    the phrase is a smoke fixture with no map claim, and its bytes are R1's
+    frozen `run-m5a` (tools/test_r1_capture.py). The "absolute" waits are
+    solved for SPI landing only. The register order and data are identical in
+    both; only the waits differ."""
     if schedule not in M5_SCHEDULES:
         raise ValueError(f"unknown M5 schedule {schedule!r}")
     if legacy_margin is not None and schedule != "legacy-relative":
