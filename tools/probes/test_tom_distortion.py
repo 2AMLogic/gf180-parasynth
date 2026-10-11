@@ -281,13 +281,38 @@ def test_null_target_is_refused_not_scored_as_zero_error():
     assert _j(null_target=True)["verdict"] == "REFUSED"
 
 
-def test_unresolved_shipped_harmonic_is_bounded_by_its_floor_not_dropped():
-    rec = td.synthetic_record()
-    for r in rec["rows"].values():
-        h = r["variants"]["shipped"]["harm"]
-        h.update(resolved=[False] * 3, db=[-80.0] * 3, floor_db=[-80.0] * 3)
-    v = td.judge(rec, td.synthetic_prereg())
-    assert v["verdict"] == "CONFIRMED" and v["selection"]["Q"]["n_harm"] > 0
+def test_unresolved_shipped_harmonic_earns_no_credit_from_its_floor():
+    """Review defeating input: shipped unresolved at 5.9 dB above its floor
+    (legal under the 6 dB rule); the true improvement is 0.355 < the 0.5 bar,
+    the old floor-substitution reported 0.778 and CONFIRMED."""
+    assert td.prop_J9_unresolved_shipped_floor_earns_no_credit()
+    td.INJECT = {"floor-as-bound"}
+    try:
+        assert not td.prop_J9_unresolved_shipped_floor_earns_no_credit()
+    finally:
+        td.INJECT = set()
+
+
+@pytest.mark.parametrize("mech", ["INSUFFICIENT", "REFUTED", "bogus", None])
+def test_unsupported_mechanism_cannot_select_a_candidate(mech):
+    v = _j(mechanism=mech)
+    assert v["verdict"] == "REFUSED" and "mechanism" in v["why"]
+    assert "selection" in v and not v["selection"]
+
+
+def test_missing_mechanism_record_cannot_select_a_candidate():
+    assert td.prop_J8_unsupported_mechanism_cannot_select()
+    td.INJECT = {"mechanism-gate-bypass"}
+    try:
+        assert not td.prop_J8_unsupported_mechanism_cannot_select()
+    finally:
+        td.INJECT = set()
+
+
+def test_empty_registration_stays_no_candidate_whatever_the_mechanism():
+    p = td.synthetic_prereg()
+    p["candidates"] = {}
+    assert td.judge(td.synthetic_record(prereg=p, mechanism="INSUFFICIENT"), p)["verdict"] == "NO CANDIDATE"
 
 
 def test_floor_above_the_target_makes_the_row_unmeasurable():

@@ -38,7 +38,8 @@ class Refused(RuntimeError):
 #: Injected defects (rule 5). Each must turn a named property red.
 DEFECTS = ("stub-estimator", "missing-distortion", "leakage-as-h2",
            "preservation-bypass", "contaminated-confirmation", "target-ignored",
-           "mechanism-bypass", "population-bypass", "nonfinite-bypass")
+           "mechanism-bypass", "population-bypass", "nonfinite-bypass", "mechanism-gate-bypass",
+           "floor-as-bound")
 INJECT: set = set()
 
 
@@ -425,11 +426,14 @@ def load_prereg(path: pathlib.Path = PREREG) -> dict:
 
 def _harm_pair(base: dict, cand: dict, target: dict | None):
     """(shipped error, candidate error) in dB, mean over harmonics where the 808
-    target is RESOLVED, else (None, None). Absence is never zero error.
-    A shipped harmonic that is unresolved is bounded by its floor (an upper bound
-    on its level), usable only if that floor is below the target; a candidate
-    harmonic that is unresolved gets NO credit (it is charged the shipped error).
-    Both bounds understate the improvement, never overstate it."""
+    target is RESOLVED AND the shipped harmonic is resolved, else (None, None).
+    Absence is never zero error. An unresolved shipped harmonic gets NO credit:
+    "unresolved" means it failed the 6 dB clearance OR the frequency-location
+    test, so its floor is NOT an upper bound on its level (a level up to
+    RESOLVE_MARGIN_DB above the floor, or off-location, is still 'unresolved')
+    and substituting the floor overstates the shipped error and the
+    improvement. A candidate harmonic that is unresolved is charged the shipped
+    error (no credit). Neither rule can overstate the improvement."""
     if not target or not base.get("harm") or not cand.get("harm"):
         return None, None
     eb, ec = [], []
@@ -438,10 +442,15 @@ def _harm_pair(base: dict, cand: dict, target: dict | None):
             continue
         t = target["db"][i]
         hb, hc = base["harm"], cand["harm"]
-        lb = hb["db"][i] if hb["resolved"][i] else hb.get("floor_db", [math.inf] * 3)[i]
-        if not hb["resolved"][i] and not lb < t:
-            continue                                   # cannot tell shipped from the target
-        e0 = abs(lb - t)
+        if not hb["resolved"][i] and "floor-as-bound" not in INJECT:
+            continue                                   # no establishable bound: no credit
+        if hb["resolved"][i]:
+            e0 = abs(hb["db"][i] - t)
+        else:                                          # the defeated rule: floor taken as the level
+            fl = hb.get("floor_db", [math.inf] * 3)[i]
+            if not fl < t:
+                continue
+            e0 = abs(fl - t)
         e1 = abs(hc["db"][i] - t) if hc["resolved"][i] else e0
         eb.append(e0)
         ec.append(e1)
@@ -645,6 +654,14 @@ def judge(record: dict, prereg: dict) -> dict:
     if not cands:
         res["verdict"], res["why"] = "NO CANDIDATE", "no candidate registered: nothing to select or confirm"
         return res
+    # the issue requires the mechanism to be measured and SUPPORTED before a
+    # topology is chosen: missing, unknown, INSUFFICIENT and REFUTED all stop here
+    mech = res["mechanism"].get("verdict") if isinstance(res["mechanism"], dict) else None
+    if "mechanism-gate-bypass" not in INJECT and mech != "SUPPORTED":
+        res["verdict"] = "REFUSED"
+        res["why"] = (f"mechanism verdict {mech!r} is not SUPPORTED: no candidate may be selected "
+                      "before the mechanism is measured and supported, however large the feature gain")
+        return res
     for name in cands:
         s = _stage(rows, dev, name, prereg)
         s["target_measurable"] = s["n_harm"] >= rule["min_rows"]
@@ -708,7 +725,7 @@ def _variant(mod=14.0, h=-85.0, dec=2.0, peak=0.5, dc=0.0):
             "harm": {"db": [h, h, h], "resolved": [True] * 3}}
 
 
-def synthetic_record(*, prereg=None, decay_bad=False, peak_bad=False, no_distortion=False,
+def synthetic_record(*, prereg=None, mechanism="SUPPORTED", decay_bad=False, peak_bad=False, no_distortion=False,
                      contaminated=False, null_target=False, n_conf=6, ht_null_mod=True) -> dict:
     """A record the clean judge must CONFIRM, with one attractive-but-wrong
     variation on request. `decay_bad`/`peak_bad` keep the target gain and break
@@ -745,7 +762,7 @@ def synthetic_record(*, prereg=None, decay_bad=False, peak_bad=False, no_distort
         if dev:
             src = dev[0]
             rows[src + "c"] = dict(rows[src], split="confirmation", sha16="seen000000000001")
-    return {"rows": rows, "mechanism": {"verdict": "INSUFFICIENT"}}
+    return {"rows": rows, "mechanism": {"verdict": mechanism}}
 
 
 def prop_K1_known_answers() -> bool:
@@ -887,6 +904,33 @@ def prop_J7_nonfinite_or_missing_measurement_refused() -> bool:
     return v["verdict"] == "NOT CONFIRMED" and v["chosen"] is None
 
 
+def prop_J8_unsupported_mechanism_cannot_select() -> bool:
+    """An attractive feature gain with the mechanism INSUFFICIENT, REFUTED,
+    unknown or absent must not be confirmed."""
+    for m in ("INSUFFICIENT", "REFUTED", "bogus", None):
+        if _verdict(mechanism=m)["verdict"] == "CONFIRMED":
+            return False
+    r = synthetic_record()
+    del r["mechanism"]
+    return judge(r, synthetic_prereg())["verdict"] != "CONFIRMED"
+
+
+def prop_J9_unresolved_shipped_floor_earns_no_credit() -> bool:
+    """Shipped harmonic unresolved but 5.9 dB above its floor (consistent with
+    the clearance rule): the true improvement is 1-2/3.1 = 0.35 < 0.5, so the
+    floor must not be substituted for it."""
+    p = synthetic_prereg()
+    r = synthetic_record(prereg=p)
+    for k, row in r["rows"].items():
+        if row["split"] == "preservation-only":
+            continue
+        row["target_harm"] = {"db": [-35.0] * 3, "resolved": [True] * 3}
+        row["variants"]["shipped"]["harm"] = {"db": [-38.1] * 3, "floor_db": [-44.0] * 3,
+                                              "resolved": [False] * 3}
+        row["variants"]["Q"]["harm"] = {"db": [-37.0] * 3, "floor_db": [-60.0] * 3, "resolved": [True] * 3}
+    return judge(r, p)["verdict"] != "CONFIRMED"
+
+
 def prop_M1_mechanism_classes() -> bool:
     sr = 48000
     poly = synth_mixture(110.0, 0.1, (-35.0, -40.0, -45.0), h_tau_ratio=(0.5, 1 / 3, 0.25))
@@ -901,7 +945,9 @@ PROPERTIES = {f.__name__[5:]: f for f in (
     prop_J1_decay_violation_rejected, prop_J2_peak_violation_rejected,
     prop_J3_contaminated_confirmation_refused, prop_J4_no_distortion_candidate_not_confirmed,
     prop_J5_null_target_refused_not_zero_error, prop_J6_frozen_population_enforced,
-    prop_J7_nonfinite_or_missing_measurement_refused, prop_M1_mechanism_classes)}
+    prop_J7_nonfinite_or_missing_measurement_refused,
+    prop_J8_unsupported_mechanism_cannot_select, prop_J9_unresolved_shipped_floor_earns_no_credit,
+    prop_M1_mechanism_classes)}
 
 #: defect -> the property whose assertion it is meant to defeat
 INTENDED = {"stub-estimator": ("K1_known_answers",),
@@ -911,6 +957,8 @@ INTENDED = {"stub-estimator": ("K1_known_answers",),
             "contaminated-confirmation": ("J3_contaminated_confirmation_refused",),
             "target-ignored": ("J4_no_distortion_candidate_not_confirmed",),
             "mechanism-bypass": ("M1_mechanism_classes",),
+            "mechanism-gate-bypass": ("J8_unsupported_mechanism_cannot_select",),
+            "floor-as-bound": ("J9_unresolved_shipped_floor_earns_no_credit",),
             "population-bypass": ("J6_frozen_population_enforced",),
             "nonfinite-bypass": ("J7_nonfinite_or_missing_measurement_refused",)}
 
