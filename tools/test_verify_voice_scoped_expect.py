@@ -47,6 +47,14 @@ def test_wrong_sample_count_is_not_caught():
     assert not vs.check_expect_first(R1, "y19@62:386")[0]
 
 
-def test_malformed_spec_refuses():
-    with pytest.raises(SystemExit):
-        vs.parse_expect_first("nosuchtap@62")
+def test_wrong_frame_is_not_caught():
+    # right tap, right sample count, wrong frame: only the frame comparison rejects this
+    caught, msg = vs.check_expect_first(R1, "y19@63:387")
+    assert not caught and "63" in msg
+
+
+@pytest.mark.parametrize("spec", ["nosuchtap@62", "y19", "y19@x", "y19@62:x", "y19@", ""])
+def test_malformed_spec_refuses(spec):
+    with pytest.raises(SystemExit) as e:
+        vs.parse_expect_first(spec)
+    assert str(e.value.code).startswith("REFUSED")

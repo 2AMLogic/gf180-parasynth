@@ -69,11 +69,15 @@ assert sorted(PIPELINE) == sorted(vv.FIELDS), "PIPELINE must order exactly verif
 
 def parse_expect_first(spec: str) -> tuple:
     """'y19@62' or 'y19@62:387' -> (tap, frame, samples-or-None)."""
-    tap, rest = spec.split("@", 1)
-    frame, _, samples = rest.partition(":")
+    try:
+        tap, rest = spec.split("@", 1)
+        frame, _, samples = rest.partition(":")
+        frame, samples = int(frame), (int(samples) if samples else None)
+    except ValueError:
+        raise SystemExit(f"REFUSED: --expect-first {spec!r} is not TAP@FRAME[:SAMPLES]") from None
     if tap not in PIPELINE:
         raise SystemExit(f"REFUSED: --expect-first names unknown tap {tap!r}")
-    return tap, int(frame), (int(samples) if samples else None)
+    return tap, frame, samples
 
 
 def first_divergence(first: dict) -> tuple | None:
