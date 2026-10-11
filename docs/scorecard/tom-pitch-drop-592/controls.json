@@ -1,0 +1,125 @@
+{
+ "clean": {
+  "zero_drop_any_phase": true,
+  "nonzero_drop_recovered": true,
+  "route_disagreement_refused": true,
+  "staircase_carried": true,
+  "wrong_hash_refused": true,
+  "confirmation_disjoint": true
+ },
+ "mutants": {
+  "stub": {
+   "matrix": {
+    "zero_drop_any_phase": "BLIND",
+    "nonzero_drop_recovered": "MOVED",
+    "route_disagreement_refused": "MOVED",
+    "staircase_carried": "MOVED",
+    "wrong_hash_refused": "BLIND",
+    "confirmation_disjoint": "BLIND"
+   },
+   "declared": "nonzero_drop_recovered",
+   "verdict": "CAUGHT"
+  },
+  "fixed-onset-phase": {
+   "matrix": {
+    "zero_drop_any_phase": "MOVED",
+    "nonzero_drop_recovered": "MOVED",
+    "route_disagreement_refused": "MOVED",
+    "staircase_carried": "MOVED",
+    "wrong_hash_refused": "BLIND",
+    "confirmation_disjoint": "BLIND"
+   },
+   "declared": "zero_drop_any_phase",
+   "verdict": "CAUGHT"
+  },
+  "first-frame": {
+   "matrix": {
+    "zero_drop_any_phase": "MOVED",
+    "nonzero_drop_recovered": "MOVED",
+    "route_disagreement_refused": "MOVED",
+    "staircase_carried": "MOVED",
+    "wrong_hash_refused": "BLIND",
+    "confirmation_disjoint": "BLIND"
+   },
+   "declared": "zero_drop_any_phase",
+   "verdict": "CAUGHT"
+  },
+  "omit-host-writes": {
+   "matrix": {
+    "zero_drop_any_phase": "BLIND",
+    "nonzero_drop_recovered": "BLIND",
+    "route_disagreement_refused": "BLIND",
+    "staircase_carried": "MOVED",
+    "wrong_hash_refused": "BLIND",
+    "confirmation_disjoint": "BLIND"
+   },
+   "declared": "staircase_carried",
+   "verdict": "CAUGHT"
+  },
+  "confirm-pools-dev": {
+   "matrix": {
+    "zero_drop_any_phase": "BLIND",
+    "nonzero_drop_recovered": "BLIND",
+    "route_disagreement_refused": "BLIND",
+    "staircase_carried": "BLIND",
+    "wrong_hash_refused": "BLIND",
+    "confirmation_disjoint": "MOVED"
+   },
+   "declared": "confirmation_disjoint",
+   "verdict": "CAUGHT"
+  },
+  "no-hash-check": {
+   "matrix": {
+    "zero_drop_any_phase": "BLIND",
+    "nonzero_drop_recovered": "BLIND",
+    "route_disagreement_refused": "BLIND",
+    "staircase_carried": "BLIND",
+    "wrong_hash_refused": "MOVED",
+    "confirmation_disjoint": "BLIND"
+   },
+   "declared": "wrong_hash_refused",
+   "verdict": "CAUGHT"
+  },
+  "no-agreement-check": {
+   "matrix": {
+    "zero_drop_any_phase": "BLIND",
+    "nonzero_drop_recovered": "BLIND",
+    "route_disagreement_refused": "MOVED",
+    "staircase_carried": "BLIND",
+    "wrong_hash_refused": "BLIND",
+    "confirmation_disjoint": "BLIND"
+   },
+   "declared": "route_disagreement_refused",
+   "verdict": "CAUGHT"
+  }
+ },
+ "clean_again": {
+  "zero_drop_any_phase": true,
+  "nonzero_drop_recovered": true,
+  "route_disagreement_refused": true,
+  "staircase_carried": true,
+  "wrong_hash_refused": true,
+  "confirmation_disjoint": true
+ },
+ "inject": [],
+ "provenance": {
+  "commit": "ae11e633057bc25d09551f2f7dcf609a3fe9e7c9",
+  "dirty": false,
+  "read_at": "start",
+  "origin_main": "6d5b335c4c452e9f138b451bdc6e1f2a05056145",
+  "prereg_sha256": null,
+  "refs": null,
+  "argv": [
+   "tools/probes/tom_pitch_drop_fischer.py",
+   "controls",
+   "--out",
+   "docs/scorecard/tom-pitch-drop-592/controls.json"
+  ],
+  "python": "3.12.3",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "commit_at_end": "ae11e633057bc25d09551f2f7dcf609a3fe9e7c9",
+  "head_moved_during_run": false,
+  "dirty_at_end": false
+ }
+}

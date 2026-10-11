@@ -1,0 +1,1157 @@
+.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF [ 63%]
+.FFFFF.FFFFF...........................FF                                [100%]
+=================================== FAILURES ===================================
+______________ test_known_answer[base-82Hz-ph0.00-E0.02-tau0.02] _______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-82Hz-ph0.00-E0.06-tau0.02] _______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-82Hz-ph0.00-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-82Hz-ph0.00-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-82Hz-ph0.00-E0.04-tau0.01] _______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-82Hz-ph1.57-E0.02-tau0.02] _______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-82Hz-ph1.57-E0.06-tau0.02] _______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-82Hz-ph1.57-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-82Hz-ph1.57-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-82Hz-ph1.57-E0.04-tau0.01] _______________
+
+case = {'family': 'base', 'f_inf': 82.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph0.00-E0.02-tau0.02] _______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph0.00-E0.06-tau0.02] _______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph0.00-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph0.00-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph0.00-E0.04-tau0.01] _______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph1.57-E0.02-tau0.02] _______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph1.57-E0.06-tau0.02] _______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph1.57-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph1.57-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-90Hz-ph1.57-E0.04-tau0.01] _______________
+
+case = {'family': 'base', 'f_inf': 90.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-101Hz-ph0.00-E0.02-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-101Hz-ph0.00-E0.06-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-101Hz-ph0.00-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-101Hz-ph0.00-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-101Hz-ph0.00-E0.04-tau0.01] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-101Hz-ph1.57-E0.02-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-101Hz-ph1.57-E0.06-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-101Hz-ph1.57-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-101Hz-ph1.57-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-101Hz-ph1.57-E0.04-tau0.01] ______________
+
+case = {'family': 'base', 'f_inf': 101.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-135Hz-ph0.00-E0.02-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-135Hz-ph0.00-E0.06-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-135Hz-ph0.00-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-135Hz-ph0.00-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-135Hz-ph0.00-E0.04-tau0.01] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-135Hz-ph1.57-E0.02-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-135Hz-ph1.57-E0.06-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-135Hz-ph1.57-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-135Hz-ph1.57-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-135Hz-ph1.57-E0.04-tau0.01] ______________
+
+case = {'family': 'base', 'f_inf': 135.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-185Hz-ph0.00-E0.02-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-185Hz-ph0.00-E0.06-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-185Hz-ph0.00-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-185Hz-ph0.00-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-185Hz-ph0.00-E0.04-tau0.01] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-185Hz-ph1.57-E0.02-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-185Hz-ph1.57-E0.06-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-185Hz-ph1.57-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-185Hz-ph1.57-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-185Hz-ph1.57-E0.04-tau0.01] ______________
+
+case = {'family': 'base', 'f_inf': 185.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-205Hz-ph0.00-E0.02-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-205Hz-ph0.00-E0.06-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-205Hz-ph0.00-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-205Hz-ph0.00-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-205Hz-ph0.00-E0.04-tau0.01] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-205Hz-ph1.57-E0.02-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-205Hz-ph1.57-E0.06-tau0.02] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-205Hz-ph1.57-E0.15-tau0.012] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[base-205Hz-ph1.57-E0.06-tau0.035] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[base-205Hz-ph1.57-E0.04-tau0.01] ______________
+
+case = {'family': 'base', 'f_inf': 205.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[harsh-90Hz-ph0.00-E0.02-tau0.02] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[harsh-90Hz-ph0.00-E0.06-tau0.02] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[harsh-90Hz-ph0.00-E0.15-tau0.012] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[harsh-90Hz-ph0.00-E0.06-tau0.035] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[harsh-90Hz-ph0.00-E0.04-tau0.01] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[harsh-90Hz-ph1.57-E0.02-tau0.02] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.02, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.02 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[harsh-90Hz-ph1.57-E0.06-tau0.02] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.06, 'tau': 0.02, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[harsh-90Hz-ph1.57-E0.15-tau0.012] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.15, 'tau': 0.012, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.15 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+_____________ test_known_answer[harsh-90Hz-ph1.57-E0.06-tau0.035] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.06, 'tau': 0.035, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.06 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+______________ test_known_answer[harsh-90Hz-ph1.57-E0.04-tau0.01] ______________
+
+case = {'family': 'harsh', 'f_inf': 90.0, 'E': 0.04, 'tau': 0.01, ...}
+
+    @pytest.mark.parametrize("case", KA, ids=[
+        f"{c['family']}-{c['f_inf']:.0f}Hz-ph{(c['phi0'] or 0):.2f}-E{c['E']}-tau{c['tau']}"
+        + (f"-{c.get('numer_name')}" if c["family"] == "lti" else "") for c in KA])
+    def test_known_answer(case):
+        est = tp.estimate(tp.ka_signal(case), case["sr"])
+        chk = tp.ka_check(case, est)
+>       assert chk["ok"], chk["why"]
+E       AssertionError: drop 0.04 read as NO-DROP
+E       assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:51: AssertionError
+________________ test_drop_recovered_at_44k1_and_48k[0.06-0.02] ________________
+
+E = 0.06, tau = 0.02
+
+    @pytest.mark.parametrize("E,tau", [(0.06, 0.020), (0.15, 0.012)])
+    def test_drop_recovered_at_44k1_and_48k(E, tau):
+        for sr in (44100, 48000):
+            c = dict(family="base", f_inf=101.0, E=E, tau=tau, tau_a=tp.ka_tau_a(101.0), phi0=1.0,
+                     noise_db=-70.0, h2_db=-35.0, strike_db=-6.0, sr=sr)
+            chk = tp.ka_check(c, tp.estimate(tp.ka_signal(c), sr))
+>           assert chk["ok"], (sr, chk["why"])
+E           AssertionError: (44100, 'drop 0.06 read as NO-DROP')
+E           assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:88: AssertionError
+_______________ test_drop_recovered_at_44k1_and_48k[0.15-0.012] ________________
+
+E = 0.15, tau = 0.012
+
+    @pytest.mark.parametrize("E,tau", [(0.06, 0.020), (0.15, 0.012)])
+    def test_drop_recovered_at_44k1_and_48k(E, tau):
+        for sr in (44100, 48000):
+            c = dict(family="base", f_inf=101.0, E=E, tau=tau, tau_a=tp.ka_tau_a(101.0), phi0=1.0,
+                     noise_db=-70.0, h2_db=-35.0, strike_db=-6.0, sr=sr)
+            chk = tp.ka_check(c, tp.estimate(tp.ka_signal(c), sr))
+>           assert chk["ok"], (sr, chk["why"])
+E           AssertionError: (44100, 'drop 0.15 read as NO-DROP')
+E           assert False
+
+tools/probes/test_tom_pitch_drop_fischer.py:88: AssertionError
+=========================== short test summary info ============================
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph0.00-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph0.00-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph0.00-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph0.00-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph0.00-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph1.57-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph1.57-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph1.57-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph1.57-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph1.57-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph0.00-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph0.00-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph0.00-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph0.00-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph0.00-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph1.57-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph1.57-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph1.57-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph1.57-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-90Hz-ph1.57-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph0.00-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph0.00-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph0.00-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph0.00-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph0.00-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph1.57-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph1.57-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph1.57-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph1.57-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-101Hz-ph1.57-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph0.00-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph0.00-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph0.00-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph0.00-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph0.00-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph1.57-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph1.57-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph1.57-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph1.57-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-135Hz-ph1.57-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph0.00-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph0.00-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph0.00-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph0.00-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph0.00-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph1.57-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph1.57-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph1.57-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph1.57-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-185Hz-ph1.57-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph0.00-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph0.00-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph0.00-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph0.00-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph0.00-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph1.57-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph1.57-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph1.57-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph1.57-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-205Hz-ph1.57-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph0.00-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph0.00-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph0.00-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph0.00-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph0.00-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph1.57-E0.02-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph1.57-E0.06-tau0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph1.57-E0.15-tau0.012]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph1.57-E0.06-tau0.035]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph1.57-E0.04-tau0.01]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_drop_recovered_at_44k1_and_48k[0.06-0.02]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_drop_recovered_at_44k1_and_48k[0.15-0.012]
+72 failed, 41 passed, 36 deselected in 1.92s
