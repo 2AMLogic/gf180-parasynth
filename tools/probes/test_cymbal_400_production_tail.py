@@ -361,7 +361,7 @@ def _frozen_for(tmp_path, ref_sha, *, hashes=None, reference_sha256=None) -> pat
     f = dict(pt.FROZEN, source_commit=pt._git("rev-parse", "HEAD"),
              source_hashes=pt.source_hashes() if hashes is None else hashes,
              reference_sha256=reference_sha256 if reference_sha256 is not None else ref_sha,
-             corpus_git_commit=None, windows_s=[1.5])
+             corpus_git_commit=None)
     p = tmp_path / "frozen.json"
     p.write_text(json.dumps(f))
     return p
@@ -468,6 +468,67 @@ def test_reference_pin_not_covering_the_loaded_file_refuses(tmp_path, capsys, mo
     code = pt.main(_cli(tmp_path, f))
     assert code == 2, "a pin that does not cover the file actually loaded leaves it unverified"
     assert "CY5025.WAV" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- frozen measurement contract
+# The source pins prove the CODE did not move since freeze; they say nothing about the record's
+# OWN fields. measure trusted prod_has_hh1, windows_s and confirmation_settings as read, so a
+# hand-edited record re-rubriced the measurement of the same pinned production source (review
+# repro: all three altered records reached the render sentinel). The contract must equal the
+# probe's declared FROZEN values before anything loads or renders.
+
+_DEL = object()   # delete the key
+
+
+def _altered_frozen(tmp_path, sha, change: dict) -> pathlib.Path:
+    """A record with valid, complete source/reference pins and one contract field altered."""
+    f = json.loads(_frozen_for(tmp_path, sha).read_text())
+    for k, v in change.items():
+        if v is _DEL:
+            f.pop(k, None)
+        else:
+            f[k] = v
+    p = tmp_path / "altered.json"
+    p.write_text(json.dumps(f))
+    return p
+
+
+_CONTRACT_DEFEATS = [
+    ({"prod_has_hh1": True}, "prod_has_hh1"),          # the 8.63 dB declaration, flipped
+    ({"windows_s": [0.01]}, "windows_s"),              # a window the freeze never promised
+    ({"confirmation_settings": []}, "confirmation_settings"),   # promised population removed
+    ({"supported_settings": ["CY0000"]}, "supported_settings"),  # a knob the path cannot render
+    ({"prod_has_hh1": 0}, "prod_has_hh1"),             # mistyped: int masquerading as the bool
+    ({"windows_s": _DEL}, "windows_s"),                # missing contract field
+    ({"windows": [1.5, 2.0]}, "windows"),              # renamed field: the real one unchecked
+]
+
+
+@pytest.mark.parametrize("change,name", _CONTRACT_DEFEATS,
+                         ids=[n + ":" + ",".join(c) for c, n in _CONTRACT_DEFEATS])
+def test_altered_contract_field_refuses_before_rendering(tmp_path, capsys, monkeypatch, ref_long, change, name):
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)
+    code = pt.main(_cli(tmp_path, _altered_frozen(tmp_path, sha, change)))
+    assert code == 2, f"an altered {name} must refuse, not re-rubric the measurement"
+    out = capsys.readouterr().out
+    assert name in out and "re-freeze" in out, out
+
+
+def test_result_records_the_frozen_record_hash_not_just_its_path(tmp_path, capsys, monkeypatch, ref_long):
+    """A path alone can silently refer to a different rubric later; the result must carry the
+    exact frozen-record sha256 it was measured against."""
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, ref_long)
+    f = _frozen_for(tmp_path, sha)
+    monkeypatch.setattr(pt.lt, "check", lambda: (True, []))
+    monkeypatch.setattr(pt.rc, "render_drum_solo", lambda *a, **k: (ref_long, SR))
+    out_path = tmp_path / "result.json"
+    code = pt.main(["measure", "--refs", str(tmp_path), "--frozen", str(f), "--out", str(out_path)])
+    assert code == 0
+    res = json.loads(out_path.read_text())
+    assert res["frozen_sha256"] == hashlib.sha256(f.read_bytes()).hexdigest(), res.get("frozen")
 
 
 # ---------------------------------------------------------------- refusal boundary (CLI)
