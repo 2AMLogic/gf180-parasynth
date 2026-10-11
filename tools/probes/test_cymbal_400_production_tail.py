@@ -36,7 +36,7 @@ def strike(tau_m, a_m, **kw):
 
 @pytest.fixture(scope="module")
 def ref_long():
-    return strike(0.60, 4.0)
+    return strike(0.25, 2.0)
 
 
 # ---------------------------------------------------------------- known answers
@@ -61,7 +61,10 @@ def test_classify_unknown_kind_refuses():
 
 
 def test_properties_are_reported_separately_energy_match_decay_discrepant(ref_long):
-    prod = strike(0.25, 4.0)                       # same level, 2.4x shorter decay
+    # tau_m 0.25 -> 0.60 (2.4x longer). Measured rho 0.79 -> 1.47 (+86 %): the 2.4x planted ratio
+    # compresses to ~1.9x because Ln shares the band's skirt. SHORTER prods (<=0.15) are REFUSED by
+    # the instrument itself, so the discrepant direction that can be planted is "prod outlasts ref".
+    prod = strike(0.60, 1.5)
     r = pt.compare_records(prod, SR, ref_long, SR, prod_has_hh1=True)
     assert r["energy"]["verdict"] == "MATCH", r["energy"]
     assert r["decay"]["verdict"] == "DISCREPANT", r["decay"]
@@ -69,7 +72,7 @@ def test_properties_are_reported_separately_energy_match_decay_discrepant(ref_lo
 
 
 def test_properties_are_reported_separately_energy_discrepant_decay_match(ref_long):
-    prod = strike(0.60, 12.0)                      # +9.5 dB in M, same decay
+    prod = strike(0.25, 8.0)                      # a_m 2 -> 8 reads +4.8 dB of M25 share (measured: -6.32 -> -1.47; the share saturates, 4x amplitude is NOT 12 dB), same decay
     r = pt.compare_records(prod, SR, ref_long, SR, prod_has_hh1=True)
     assert r["energy"]["verdict"] == "DISCREPANT", r["energy"]
     assert r["decay"]["verdict"] == "MATCH", r["decay"]
@@ -81,15 +84,15 @@ def test_null_control_a_record_against_itself_matches_everywhere(ref_long):
 
 
 def test_joint_requires_both(ref_long):
-    prod = strike(0.25, 12.0)
+    prod = strike(0.60, 8.0)
     r = pt.compare_records(prod, SR, ref_long, SR, prod_has_hh1=True)
     assert r["joint"] is True
 
 
 # ---------------------------------------------------------------- invariances
 def test_scale_and_prepended_silence_invariance(ref_long):
-    base = strike(0.25, 4.0)
-    raw = lt.synth(tau_l=0.35, tau_m=0.25, a_m=4.0, tau_h=0.2, a_h=0.6)[0]
+    base = strike(0.25, 2.0)
+    raw = lt.synth(tau_l=0.35, tau_m=0.25, a_m=2.0, tau_h=0.2, a_h=0.6)[0]
     scaled = rc.prepare(0.1 * raw, SR, side="scaled")
     padded = rc.prepare(np.concatenate([np.zeros(SR // 4), raw]), SR, side="padded")
     a = pt.compare_records(base, SR, ref_long, SR, prod_has_hh1=True)
@@ -105,7 +108,7 @@ def test_trailing_silence_is_outside_the_domain_so_it_never_silently_changes_a_v
     """Trailing digital silence zeroes the floor estimate the Schroeder curve
     subtracts. The declared domain forbids it: the probe must either give the
     same verdict or REFUSE -- never a different verdict."""
-    base = strike(0.25, 4.0)
+    base = strike(0.25, 2.0)
     a = pt.compare_records(base, SR, ref_long, SR, prod_has_hh1=True)
     padded = np.concatenate([base, np.zeros(SR)])
     try:
@@ -138,7 +141,7 @@ def test_nonfinite_is_refused(ref_long, bad):
 
 
 def test_truncation_refuses_decay_instead_of_reporting_a_short_tail(ref_long):
-    prod = strike(0.60, 4.0)
+    prod = strike(0.25, 2.0)
     short = prod[: rc.required_lead_samples(SR) + int(0.5 * SR)]   # cut inside the tail
     try:
         r = pt.compare_records(short, SR, ref_long, SR, prod_has_hh1=True)
@@ -149,7 +152,7 @@ def test_truncation_refuses_decay_instead_of_reporting_a_short_tail(ref_long):
 
 
 def test_floor_contamination_is_not_a_discrepancy(ref_long):
-    noisy = strike(0.60, 4.0, floor=0.05)
+    noisy = strike(0.25, 2.0, floor=0.05)
     try:
         r = pt.compare_records(noisy, SR, ref_long, SR, prod_has_hh1=True)
     except pt.Refused:
@@ -220,7 +223,7 @@ def test_mutant_no_finite_check_is_caught(ref_long):
 
 
 def test_mutant_wrong_hh1_declaration_changes_the_leak_prediction(ref_long):
-    prod = strike(0.25, 4.0)
+    prod = strike(0.25, 2.0)
     a = pt.compare_records(prod, SR, ref_long, SR, prod_has_hh1=False)
     b = pt.compare_records(prod, SR, ref_long, SR, prod_has_hh1=True)
     assert a["energy"]["detail"]["predicted_leak_db_re_L"] != b["energy"]["detail"]["predicted_leak_db_re_L"]
