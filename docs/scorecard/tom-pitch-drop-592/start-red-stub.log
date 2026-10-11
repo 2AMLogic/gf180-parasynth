@@ -1,5 +1,6 @@
-.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF [ 63%]
-.FFFFF.FFFFF...........................FF                                [100%]
+.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF.FFFFF [ 48%]
+.FFFFF.FFFFF...............................FFFFFFFF.......F............. [ 96%]
+..s..                                                                    [100%]
 =================================== FAILURES ===================================
 ______________ test_known_answer[base-82Hz-ph0.00-E0.02-tau0.02] _______________
 
@@ -1081,6 +1082,81 @@ E           AssertionError: (44100, 'drop 0.15 read as NO-DROP')
 E           assert False
 
 tools/probes/test_tom_pitch_drop_fischer.py:88: AssertionError
+____________________ test_refuses_nonfinite_before_silence _____________________
+
+    def test_refuses_nonfinite_before_silence():
+        """Defeating input for a silence guard: NaN (IEEE comparisons are False)."""
+>       assert tp.estimate(np.full(48000, np.nan), 48000)["reason"] == "non-finite"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'reason'
+
+tools/probes/test_tom_pitch_drop_fischer.py:94: KeyError
+_____________________________ test_refuses_silence _____________________________
+
+    def test_refuses_silence():
+        x = tp.analytic(90.0, 0.06, 0.02, 0.09, 0.0, sr=48000) * 1e-5
+>       assert tp.estimate(x, 48000)["reason"] == "silent"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'reason'
+
+tools/probes/test_tom_pitch_drop_fischer.py:102: KeyError
+________________________ test_refuses_wrong_sample_rate ________________________
+
+    def test_refuses_wrong_sample_rate():
+        x = tp.analytic(90.0, 0.06, 0.02, 0.09, 0.0, sr=44100)
+>       assert tp.estimate(x, 22050)["reason"] == "sample-rate"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'reason'
+
+tools/probes/test_tom_pitch_drop_fischer.py:108: KeyError
+_____________ test_refuses_too_short_and_padding_cannot_rescue_it ______________
+
+    def test_refuses_too_short_and_padding_cannot_rescue_it():
+        """Rule 8's #139 adversary: appending digital silence to a short record."""
+        x = tp.analytic(90.0, 0.06, 0.02, tp.ka_tau_a(90.0), 0.0, sr=44100, seconds=0.07)
+>       assert tp.estimate(x, 44100)["reason"] == "too-short"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'reason'
+
+tools/probes/test_tom_pitch_drop_fischer.py:114: KeyError
+_____________________ test_refuses_unobservable_relaxation _____________________
+
+    def test_refuses_unobservable_relaxation():
+        """tau 3 ms at 82 Hz: the curvature spans < MIN_OBS_HALFCYCLES half-cycles."""
+        x = tp.analytic(82.0, 0.15, 0.003, tp.ka_tau_a(82.0), 0.0, sr=44100)
+>       assert tp.estimate(x, 44100)["reason"] == "relaxation-unobservable"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'reason'
+
+tools/probes/test_tom_pitch_drop_fischer.py:121: KeyError
+_____________ test_refuses_route_disagreement_on_the_beating_tone ______________
+
+    def test_refuses_route_disagreement_on_the_beating_tone():
+        est = tp.estimate(tp.beating_tone(), 48000)
+>       assert est["class"] == "REFUSED" and est["reason"] == "route-disagreement", est
+E       AssertionError: {'class': 'NO-DROP', 'E': 0.0, 'se_E': 1.0, 'f_inf': 0.0, ...}
+E       assert ('NO-DROP' == 'REFUSED'
+E         
+E         - REFUSED
+E         + NO-DROP)
+
+tools/probes/test_tom_pitch_drop_fischer.py:126: AssertionError
+____________________ test_horizon_is_not_the_time_constant _____________________
+
+    def test_horizon_is_not_the_time_constant():
+        """TOM_DROP_MS (60 ms) is a scheduling horizon; the continuous law's tau is
+        20 ms, and the REALISED staircase reads shorter still (interval means, then
+        a held endpoint above f0). A reader that took 60 ms for tau would be 3-4x
+        out; this pins the shipped render's measured tau well below 60 ms."""
+        import drums_fx as dx
+        m = tp.measure_ours("LT", 1.0)
+>       assert m["render"]["class"] == "DROP"
+E       AssertionError: assert 'NO-DROP' == 'DROP'
+E         
+E         - DROP
+E         + NO-DROP
+
+tools/probes/test_tom_pitch_drop_fischer.py:193: AssertionError
 =========================== short test summary info ============================
 FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph0.00-E0.02-tau0.02]
 FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[base-82Hz-ph0.00-E0.06-tau0.02]
@@ -1154,4 +1230,11 @@ FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz
 FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_known_answer[harsh-90Hz-ph1.57-E0.04-tau0.01]
 FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_drop_recovered_at_44k1_and_48k[0.06-0.02]
 FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_drop_recovered_at_44k1_and_48k[0.15-0.012]
-72 failed, 41 passed, 36 deselected in 1.92s
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_refuses_nonfinite_before_silence
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_refuses_silence - Ke...
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_refuses_wrong_sample_rate
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_refuses_too_short_and_padding_cannot_rescue_it
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_refuses_unobservable_relaxation
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_refuses_route_disagreement_on_the_beating_tone
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_horizon_is_not_the_time_constant
+79 failed, 69 passed, 1 skipped in 48.87s

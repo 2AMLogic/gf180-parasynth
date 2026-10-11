@@ -4247,11 +4247,11 @@
  ],
  "inject": [],
  "provenance": {
-  "commit": "ae11e633057bc25d09551f2f7dcf609a3fe9e7c9",
+  "commit": "8b313200dba23273d7824b31a50946c750322137",
   "dirty": false,
   "read_at": "start",
   "origin_main": "6d5b335c4c452e9f138b451bdc6e1f2a05056145",
-  "prereg_sha256": null,
+  "prereg_sha256": "3856c14e7877538d1f12799b1d8d0f200c393bc845b8efd89f92f61bc66769e9",
   "refs": null,
   "argv": [
    "tools/probes/tom_pitch_drop_fischer.py",
@@ -4262,7 +4262,7 @@
   "python": "3.12.3",
   "numpy": "2.5.4",
   "scipy": "1.18.1",
-  "commit_at_end": "ae11e633057bc25d09551f2f7dcf609a3fe9e7c9",
+  "commit_at_end": "8b313200dba23273d7824b31a50946c750322137",
   "head_moved_during_run": false,
   "dirty_at_end": false
  }
