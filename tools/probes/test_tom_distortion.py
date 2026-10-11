@@ -164,23 +164,39 @@ def test_prereg_of_558_is_refused(tmp_path):
 
 
 def test_actual_prereg_with_no_candidate_gives_no_candidate_never_confirmed():
-    v = td.judge(td.synthetic_record(), td.load_prereg())
+    p = td.load_prereg()
+    v = td.judge(td.synthetic_record(prereg=p), p)          # population from the prereg itself
     assert v["verdict"] == "NO CANDIDATE"
 
 
-def test_actual_prereg_refuses_every_prior_seen_confirmation_row():
-    p = td.load_prereg()
-    p["candidates"] = {"Q": "x"}
-    rec = td.synthetic_record(n_conf=6)
-    seen = list(p["prior_seen"]["sha256_16"].values())
-    for i, k in enumerate(k for k, r in rec["rows"].items() if r["split"] == "confirmation"):
+def test_actual_prereg_refuses_rows_outside_its_frozen_population():
+    p = td.load_prereg()                                    # registration: confirmation REFUSED
+    rec = td.synthetic_record(prereg=p)
+    rec["rows"]["EXT00"] = dict(rec["rows"]["LT25"], split="confirmation")
+    assert td.judge(rec, p)["verdict"] == "REFUSED"
+
+
+def test_confirmation_rows_with_prior_seen_hashes_are_refused():
+    p = td.synthetic_prereg()
+    rec = td.synthetic_record(prereg=p)
+    seen = sorted(p["prior_seen"]["sha256_16"].values())
+    for i, k in enumerate(p["confirmation"]["keys"]):
         rec["rows"][k]["sha16"] = seen[i]
     assert td.judge(rec, p)["verdict"] == "REFUSED"
 
 
+def test_confirmation_registration_using_a_prior_seen_hash_is_refused():
+    p = td.synthetic_prereg()
+    k0 = p["confirmation"]["keys"][0]
+    p["confirmation"]["sha256_16"][k0] = sorted(p["prior_seen"]["sha256_16"].values())[0]
+    v = td.judge(td.synthetic_record(prereg=p), p)          # matches the cheating registration
+    assert v["verdict"] == "REFUSED"
+
+
 # ---- the frozen judge ------------------------------------------------------
 def _j(**kw):
-    return td.judge(td.synthetic_record(**kw), td.synthetic_prereg())
+    n = kw.pop("n_conf", 6)
+    return td.judge(td.synthetic_record(n_conf=n, **kw), td.synthetic_prereg(n_conf=n))
 
 
 def test_clean_candidate_is_confirmed_so_the_judge_is_satisfiable():
@@ -213,6 +229,54 @@ def test_null_preserved_feature_on_one_side_is_a_violation_not_a_skip():
     assert "LT25" in td.judge(rec, td.synthetic_prereg())["selection"]["Q"]["violations"]
 
 
+# ---- non-finite / missing measurements (each must refuse, never score) ------
+def test_nonfinite_measurements_are_refused_not_scored():
+    nan, inf = float("nan"), float("inf")
+    mangles = {
+        "nan ratio, candidate side": lambda r:
+            r["rows"]["MT25"]["variants"]["Q"]["ratio"].update(attack=nan),
+        "nan ratio, shipped side": lambda r:
+            r["rows"]["MT25"]["variants"]["shipped"]["ratio"].update(decay=nan),
+        "inf peak, shipped side": lambda r:
+            r["rows"]["MT25"]["variants"]["shipped"].update(peak_fs=inf),
+        "nan peak, candidate side": lambda r:
+            r["rows"]["MT25"]["variants"]["Q"].update(peak_fs=nan),
+        "zero peak, candidate side": lambda r:
+            r["rows"]["MT25"]["variants"]["Q"].update(peak_fs=0.0),
+        "nan dc, shipped side": lambda r:
+            r["rows"]["MT25"]["variants"]["shipped"].update(dc_fs=nan),
+        "inf dc, candidate side": lambda r:
+            r["rows"]["MT25"]["variants"]["Q"].update(dc_fs=-inf),
+        "nan in a resolved harmonic": lambda r:
+            r["rows"]["MT25"]["variants"]["shipped"]["harm"]["db"].__setitem__(0, nan),
+        "nan in the target": lambda r:
+            r["rows"]["MT25"]["target_harm"]["db"].__setitem__(1, nan),
+    }
+    for name, mangle in mangles.items():
+        rec = td.synthetic_record()
+        mangle(rec)
+        with pytest.raises(td.Refused, match="not finite|positive finite"):
+            td.judge(rec, td.synthetic_prereg())
+
+
+def test_deleted_feature_field_is_refused_not_treated_as_null():
+    rec = td.synthetic_record()
+    for vn in ("shipped", "Q"):
+        rec["rows"]["MT25"]["variants"][vn]["ratio"].pop("pitch")
+    with pytest.raises(td.Refused, match="not a measured null"):
+        td.judge(rec, td.synthetic_prereg())
+
+
+def test_null_on_both_sides_of_a_preserved_feature_is_a_violation_not_a_skip():
+    rec = td.synthetic_record()
+    for vn in ("shipped", "Q"):
+        rec["rows"]["MT25"]["variants"][vn]["ratio"]["attack"] = None
+    v = td.judge(rec, td.synthetic_prereg())
+    assert v["verdict"] == "NOT CONFIRMED"
+    assert any("null-on-both-sides" in x
+               for vs in v["selection"]["Q"]["violations"].values() for x in vs)
+
+
 def test_null_target_is_refused_not_scored_as_zero_error():
     assert _j(null_target=True)["verdict"] == "REFUSED"
 
@@ -241,15 +305,15 @@ def test_unresolved_candidate_harmonic_gets_no_credit():
     assert td.judge(rec, td.synthetic_prereg())["verdict"] == "NOT CONFIRMED"
 
 
-def test_missing_variant_or_split_is_refused():
+def test_missing_variant_is_refused_and_a_frozen_split_cannot_be_relabeled():
     rec = td.synthetic_record()
     del rec["rows"]["LT25"]["variants"]["Q"]
     with pytest.raises(td.Refused):
         td.judge(rec, td.synthetic_prereg())
     rec = td.synthetic_record()
     rec["rows"]["LT25"]["split"] = "untouched"
-    with pytest.raises(td.Refused):
-        td.judge(rec, td.synthetic_prereg())
+    v = td.judge(rec, td.synthetic_prereg())
+    assert v["verdict"] == "REFUSED" and "contradicts the frozen assignment" in v["why"]
     with pytest.raises(td.Refused):
         td.judge({"rows": {}}, td.synthetic_prereg())
 
@@ -272,6 +336,41 @@ def test_too_few_independent_confirmation_rows_is_refused_not_confirmed():
     assert v["verdict"] == "REFUSED" and "independent confirmation" in v["why"]
     v = _j(n_conf=0)
     assert v["verdict"] == "REFUSED"
+
+
+# ---- the frozen population (defeating inputs, one per leg of the guard) -----
+def test_frozen_population_defeating_inputs_are_rejected():
+    p = td.synthetic_prereg()
+    mangles = {
+        "omitted preservation-only row": lambda r: r["rows"].pop("LC25"),
+        "omitted development row": lambda r: r["rows"].pop("MT75"),
+        "unregistered confirmation row": lambda r: r["rows"].update(
+            EXT99=dict(r["rows"]["EXT00"])),
+        "unregistered hash on a registered key": lambda r: r["rows"]["EXT00"].update(
+            sha16="unregistered00"),
+        "a split the submitter may not choose": lambda r: r["rows"]["EXT00"].update(
+            split="development"),
+    }
+    for name, mangle in mangles.items():
+        rec = td.synthetic_record(prereg=p)
+        mangle(rec)
+        v = td.judge(rec, p)
+        assert v["verdict"] == "REFUSED", (name, v.get("why"))
+
+
+def test_one_recording_under_two_confirmation_keys_is_refused():
+    p = td.synthetic_prereg()
+    k0, k1 = p["confirmation"]["keys"][:2]
+    p["confirmation"]["sha256_16"][k1] = p["confirmation"]["sha256_16"][k0]
+    v = td.judge(td.synthetic_record(prereg=p), p)
+    assert v["verdict"] == "REFUSED" and "not independent" in v["why"]
+
+
+def test_unusable_confirmation_registration_is_refused():
+    p = td.synthetic_prereg()
+    del p["confirmation"]["sha256_16"]["EXT03"]             # registration incomplete
+    v = td.judge(td.synthetic_record(prereg=p), p)
+    assert v["verdict"] == "REFUSED" and "unusable" in v["why"]
 
 
 def test_confirmation_failure_is_not_confirmed_and_selection_is_not_reopened():
@@ -338,6 +437,40 @@ def test_measuring_commands_refuse_without_a_corpus(tmp_path, capsys):
 
 def test_cli_judge_on_a_record(tmp_path, capsys):
     p = tmp_path / "r.json"
-    p.write_text(json.dumps(td.synthetic_record(), default=str))
+    p.write_text(json.dumps(td.synthetic_record(prereg=td.load_prereg()), default=str))
     assert td.main(["judge", str(p), "--out", str(tmp_path / "j.json")]) == 0
     assert json.loads((tmp_path / "j.json").read_text())["verdict"] == "NO CANDIDATE"
+
+
+# ---- CLI exit codes: a failure or a refusal is never exit 0 -----------------
+def test_cli_knownanswer_with_a_failing_harness_exits_1(tmp_path, monkeypatch):
+    monkeypatch.setattr(td, "estimate", td.stub_levels)     # the start-red estimator
+    assert td.main(["knownanswer", "--out", str(tmp_path / "k.json")]) == 1
+    assert json.loads((tmp_path / "k.json").read_text())["pass"] is False
+
+
+def test_cli_missed_intended_control_exits_1(tmp_path, monkeypatch):
+    monkeypatch.setattr(td, "PROPERTIES", {"J0_good_candidate_confirms": td.prop_J0_good_candidate_confirms})
+    monkeypatch.setattr(td, "INTENDED", {"stub-estimator": ("J0_good_candidate_confirms",)})
+    assert td.main(["controls", "--out", str(tmp_path / "c.json")]) == 1    # BLIND: not moved
+    out = json.loads((tmp_path / "c.json").read_text())
+    assert out["status"] == "FAIL" and out["intended_not_moved"]
+
+
+def test_cli_red_controls_baseline_refuses_with_exit_2(tmp_path, monkeypatch):
+    monkeypatch.setitem(td.PROPERTIES, "J0_good_candidate_confirms", lambda: False)
+    assert td.main(["controls", "--out", str(tmp_path / "c.json")]) == 2
+    assert json.loads((tmp_path / "c.json").read_text())["status"] == "REFUSED"
+
+
+def test_cli_judge_exit_codes_follow_the_verdict(tmp_path, monkeypatch):
+    prereg_path = tmp_path / "prereg.json"                  # the real load_prereg call path
+    prereg_path.write_text(json.dumps(td.synthetic_prereg()))
+    monkeypatch.setattr(td, "load_prereg", lambda *a, **k: json.loads(prereg_path.read_text()))
+    p = tmp_path / "r.json"
+    p.write_text(json.dumps(td.synthetic_record(null_target=True), default=str))
+    assert td.main(["judge", str(p), "--out", str(tmp_path / "j.json")]) == 2
+    assert json.loads((tmp_path / "j.json").read_text())["verdict"] == "REFUSED"
+    p.write_text(json.dumps(td.synthetic_record(), default=str))
+    assert td.main(["judge", str(p), "--out", str(tmp_path / "j.json")]) == 0
+    assert json.loads((tmp_path / "j.json").read_text())["verdict"] == "CONFIRMED"

@@ -12,6 +12,12 @@ Pieces, in the order they must be trusted:
 
 START RED (docs/verification-rules.md rule 1): this module first existed with
 only the stub estimator below. `harness_verdict(stub)` is the recorded red run.
+
+CLI exit codes: 0 = the asked-for verdict is good (harness PASS, controls OK,
+judge CONFIRMED or NO CANDIDATE); 1 = completed and negative (harness FAIL,
+controls FAIL, judge NOT CONFIRMED); 2 = REFUSED -- the apparatus cannot
+answer (a Refused exception, a controls baseline that is itself red, or a
+judge REFUSED verdict). Refusal is never reported as success.
 """
 from __future__ import annotations
 
@@ -32,7 +38,7 @@ class Refused(RuntimeError):
 #: Injected defects (rule 5). Each must turn a named property red.
 DEFECTS = ("stub-estimator", "missing-distortion", "leakage-as-h2",
            "preservation-bypass", "contaminated-confirmation", "target-ignored",
-           "mechanism-bypass")
+           "mechanism-bypass", "population-bypass", "nonfinite-bypass")
 INJECT: set = set()
 
 
@@ -453,6 +459,9 @@ def _violations(base: dict, cand: dict, rule: dict, features, targets) -> list:
             continue
         rb, rc_ = base["ratio"].get(f), cand["ratio"].get(f)
         if rb is None and rc_ is None:
+            # an explicit null on both sides is not a pass: preservation of this
+            # feature cannot be verified on this row, so the row cannot confirm.
+            out.append(f"{f} null-on-both-sides: preservation unverifiable")
             continue
         if rb is None or rc_ is None:
             out.append(f"{f} null-mismatch {rb}->{rc_}")
@@ -466,6 +475,56 @@ def _violations(base: dict, cand: dict, rule: dict, features, targets) -> list:
     return out
 
 
+def _finite(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+
+
+def _validate_variant(k: str, name: str, v: dict, feats) -> None:
+    """Schema and finiteness, BEFORE any scoring. A missing field is not a
+    measured null, and a NaN would silently defeat every ordered comparison
+    below (NaN > x is false): refuse what cannot be scored."""
+    for key in ("ratio", "peak_fs", "dc_fs", "harm"):
+        if key not in v:
+            raise Refused(f"row {k} variant '{name}' lacks '{key}'")
+    ratio = v["ratio"]
+    if not isinstance(ratio, dict):
+        raise Refused(f"row {k} variant '{name}': ratio is not a mapping")
+    for f in feats:
+        if f not in ratio:
+            raise Refused(f"row {k} variant '{name}': ratio lacks registered feature '{f}' "
+                          "(a missing field is not a measured null)")
+        if ratio[f] is not None and not _finite(ratio[f]):
+            raise Refused(f"row {k} variant '{name}': ratio['{f}'] = {ratio[f]!r} is not finite")
+    pk, dc = v["peak_fs"], v["dc_fs"]
+    if not _finite(pk) or pk <= 0:
+        raise Refused(f"row {k} variant '{name}': peak_fs = {pk!r} is not a positive finite peak")
+    if not _finite(dc):
+        raise Refused(f"row {k} variant '{name}': dc_fs = {dc!r} is not finite")
+    h = v["harm"]
+    for key in ("db", "resolved"):
+        if not isinstance(h.get(key), list) or len(h[key]) != 3:
+            raise Refused(f"row {k} variant '{name}': harm['{key}'] is not a 3-vector")
+    for i in range(3):
+        if h["resolved"][i] and not _finite(h["db"][i]):
+            raise Refused(f"row {k} variant '{name}': resolved harm[{i}] = {h['db'][i]!r} is not finite")
+    for i, x in enumerate(h.get("floor_db") or ()):
+        if not _finite(x):
+            raise Refused(f"row {k} variant '{name}': floor_db[{i}] = {x!r} is not finite")
+
+
+def _validate_target(k: str, t) -> None:
+    if t is None:
+        return
+    if not isinstance(t, dict):
+        raise Refused(f"row {k}: target_harm is not a mapping")
+    for key in ("db", "resolved"):
+        if not isinstance(t.get(key), list) or len(t[key]) != 3:
+            raise Refused(f"row {k}: target_harm['{key}'] is not a 3-vector")
+    for i in range(3):
+        if t["resolved"][i] and not _finite(t["db"][i]):
+            raise Refused(f"row {k}: resolved target harmonic {i} is not finite")
+
+
 def _stage(rows: dict, keys, name: str, prereg: dict) -> dict:
     import statistics
     rule, feats, targets = prereg["rules"], prereg["features"], prereg["targets"]
@@ -475,6 +534,10 @@ def _stage(rows: dict, keys, name: str, prereg: dict) -> dict:
         if "shipped" not in r["variants"] or name not in r["variants"]:
             raise Refused(f"row {k} lacks variant '{name}' or 'shipped'")
         b, c = r["variants"]["shipped"], r["variants"][name]
+        if "nonfinite-bypass" not in INJECT:
+            _validate_target(k, r.get("target_harm"))
+            _validate_variant(k, "shipped", b, feats)
+            _validate_variant(k, name, c, feats)
         v = _violations(b, c, rule, feats, targets)
         if v:
             viol[k] = v
@@ -512,11 +575,59 @@ def judge(record: dict, prereg: dict) -> dict:
     rows = record.get("rows") or {}
     if not rows:
         raise Refused("record has no rows")
-    for k, r in rows.items():
-        if r.get("split") not in ("development", "confirmation", "preservation-only"):
-            raise Refused(f"row {k}: unknown split {r.get('split')!r}")
-    dev = [k for k, r in rows.items() if r["split"] in ("development", "preservation-only")]
-    conf = [k for k, r in rows.items() if r["split"] == "confirmation"]
+    dev_keys = list(prereg["development"]["keys"])
+    pres_keys = list(prereg["preservation_only"]["keys"])
+    conf_keys = list(prereg["confirmation"]["keys"])
+    if "population-bypass" in INJECT:
+        # the defeated guard: populations taken from the submitter's own labels
+        dev = [k for k, r in rows.items() if r.get("split") in ("development", "preservation-only")]
+        conf = [k for k, r in rows.items() if r.get("split") == "confirmation"]
+    else:
+        # frozen population: which row is which split is the PREREGISTRATION's
+        # decision, not the submitter's. Every registered row must be present
+        # with exactly its frozen split, and nothing else may be scored.
+        frozen = {k: "development" for k in dev_keys}
+        frozen.update({k: "preservation-only" for k in pres_keys})
+        frozen.update({k: "confirmation" for k in conf_keys})
+        for k, r in rows.items():
+            want = frozen.get(k)
+            if want is None:
+                res = {"verdict": "REFUSED",
+                       "why": (f"row {k} is not in the frozen population: "
+                               "which rows exist, and their splits, are not the submitter's to choose")}
+                return res
+            if r.get("split") != want:
+                res = {"verdict": "REFUSED",
+                       "why": f"row {k}: split {r.get('split')!r} contradicts the frozen assignment {want!r}"}
+                return res
+        missing = [k for k in frozen if k not in rows]
+        if missing:
+            res = {"verdict": "REFUSED",
+                   "why": (f"frozen population incomplete: {len(missing)} registered row(s) absent "
+                           f"(e.g. {sorted(missing)[0]}): a shrunken population cannot be audited")}
+            return res
+        reg = prereg["confirmation"].get("sha256_16") or {}
+        if conf_keys:
+            unreg = [k for k in conf_keys if not reg.get(k)]
+            if unreg:
+                res = {"verdict": "REFUSED",
+                       "why": (f"confirmation registration unusable: {unreg[0]} has no registered hash; "
+                               "confirmation cannot run")}
+                return res
+            for k in conf_keys:
+                if rows[k].get("sha16") != reg[k]:
+                    res = {"verdict": "REFUSED",
+                           "why": (f"confirmation row {k}: hash {rows[k].get('sha16')!r} is not the "
+                                   f"registered {reg[k]!r}: an unregistered file cannot confirm")}
+                    return res
+            shas = [reg[k] for k in conf_keys]
+            if len(set(shas)) != len(shas):
+                res = {"verdict": "REFUSED",
+                       "why": ("one recording registered under several confirmation keys: "
+                               "not independent confirmation")}
+                return res
+        dev = dev_keys + pres_keys
+        conf = conf_keys
     res = {"mechanism": record.get("mechanism", {"verdict": "INSUFFICIENT", "why": "not supplied"}),
            "selection": {}, "confirmation": None, "chosen": None}
     # contamination guard: it ships with the input that defeats it (a row relabelled
@@ -572,15 +683,17 @@ GATE_FEATURES = ("spec", "spec_peak", "centroid", "flatness", "impulse", "attack
                  "modulation", "pitch", "pitch_shape")
 
 
-def synthetic_prereg() -> dict:
+def synthetic_prereg(n_conf: int = 6) -> dict:
     dev = ["LT25", "LT75", "MT25", "MT75", "HT25", "HT75"]
+    conf = [f"EXT{i:02d}" for i in range(n_conf)]
     return {
         "issue": 593, "frozen": "synthetic", "corpus": {},
         "prior_seen": {"keys": [f"{s}{c}" for s in ("LT", "MT", "HT", "LC", "MC", "HC")
                                 for c in ("00", "25", "50", "75", "10")],
                        "sha256_16": {f"x{i}": f"seen{i:012d}" for i in range(30)}},
         "development": {"keys": dev}, "preservation_only": {"keys": ["LC25", "MC25", "HC25"]},
-        "confirmation": {"status": "synthetic", "keys": []},
+        "confirmation": {"status": "synthetic", "keys": conf,
+                         "sha256_16": {k: f"new{k}" for k in conf}},
         "features": list(GATE_FEATURES), "targets": ["modulation"],
         "candidates": {"Q": "quadratic output term (synthetic control)"},
         "rules": {"preserve_rel": 1.10, "preserve_abs": 0.10, "peak_db": 1.0, "dc_abs_fs": 0.002,
@@ -595,18 +708,23 @@ def _variant(mod=14.0, h=-85.0, dec=2.0, peak=0.5, dc=0.0):
             "harm": {"db": [h, h, h], "resolved": [True] * 3}}
 
 
-def synthetic_record(*, decay_bad=False, peak_bad=False, no_distortion=False,
+def synthetic_record(*, prereg=None, decay_bad=False, peak_bad=False, no_distortion=False,
                      contaminated=False, null_target=False, n_conf=6, ht_null_mod=True) -> dict:
     """A record the clean judge must CONFIRM, with one attractive-but-wrong
     variation on request. `decay_bad`/`peak_bad` keep the target gain and break
     a preserved quantity; `contaminated` relabels development/prior-seen rows
-    as confirmation; `no_distortion` improves `modulation` with no harmonic change."""
+    as confirmation; `no_distortion` improves `modulation` with no harmonic change.
+    The population comes from `prereg` (default: the matching synthetic one), so
+    a record can never carry a population its judge has not frozen."""
+    if prereg is None:
+        prereg = synthetic_prereg(n_conf=n_conf)
+    dev = list(prereg["development"]["keys"])
+    pres = list(prereg["preservation_only"]["keys"])
+    conf = list(prereg["confirmation"]["keys"])
+    reg = prereg["confirmation"].get("sha256_16") or {}
     tgt = {"db": [-35.0, -38.0, -41.0], "resolved": [True] * 3}
     rows = {}
-    keys = {"development": ["LT25", "LT75", "MT25", "MT75", "HT25", "HT75"],
-            "preservation-only": ["LC25", "MC25", "HC25"],
-            "confirmation": [f"EXT{i:02d}" for i in range(n_conf)]}
-    for split, ks in keys.items():
+    for split, ks in (("development", dev), ("preservation-only", pres), ("confirmation", conf)):
         for k in ks:
             cand = _variant(mod=7.0, h=-37.0 if not no_distortion else -85.0)
             if split == "preservation-only":
@@ -618,14 +736,15 @@ def synthetic_record(*, decay_bad=False, peak_bad=False, no_distortion=False,
             ship = _variant()
             if ht_null_mod and k.startswith("HT"):
                 ship["ratio"]["modulation"] = cand["ratio"]["modulation"] = None
-            rows[k] = {"split": split, "sha16": f"new{k}" if split == "confirmation" else None,
+            rows[k] = {"split": split, "sha16": reg.get(k) if split == "confirmation" else None,
                        "target_harm": None if null_target else tgt,
                        "variants": {"shipped": ship, "Q": cand}}
     if contaminated:
-        for i, k in enumerate(keys["confirmation"]):
+        for i, k in enumerate(conf):
             rows[k]["sha16"] = f"seen{i:012d}"            # a prior-seen file under a new label
-        rows["LT25c"] = dict(rows["LT25"], split="confirmation", sha16="seen000000000000")
-        rows["LT25c"]["sha16"] = "seen000000000001"
+        if dev:
+            src = dev[0]
+            rows[src + "c"] = dict(rows[src], split="confirmation", sha16="seen000000000001")
     return {"rows": rows, "mechanism": {"verdict": "INSUFFICIENT"}}
 
 
@@ -670,8 +789,16 @@ def prop_J2_peak_violation_rejected() -> bool:
 
 
 def prop_J3_contaminated_confirmation_refused() -> bool:
+    """The contamination guard's own defeating input: a confirmation
+    registration that names a prior-seen file (a cheating amendment), with the
+    record matching its registration exactly. (A confirmation row merely
+    LABELLED with prior-seen content is already caught by the frozen
+    population and hash-exactness checks -- see prop_J6.)"""
+    p = synthetic_prereg()
+    k0 = p["confirmation"]["keys"][0]
+    p["confirmation"]["sha256_16"][k0] = sorted(p["prior_seen"]["sha256_16"].values())[0]
     try:
-        return _verdict(contaminated=True)["verdict"] == "REFUSED"
+        return judge(synthetic_record(prereg=p), p)["verdict"] == "REFUSED"
     except Refused:
         return True
 
@@ -682,6 +809,82 @@ def prop_J4_no_distortion_candidate_not_confirmed() -> bool:
 
 def prop_J5_null_target_refused_not_zero_error() -> bool:
     return _verdict(null_target=True)["verdict"] == "REFUSED"
+
+
+def prop_J6_frozen_population_enforced() -> bool:
+    """The defeating inputs for the frozen population: an omitted preservation
+    row, an omitted development row, a row the registration never named, an
+    unregistered file on a registered key, a split the submitter may not
+    choose, and one recording registered under two keys."""
+    def refused(rec, p) -> bool:
+        try:
+            return judge(rec, p)["verdict"] == "REFUSED"
+        except Refused:
+            return True                                     # a refusal is a rejection too
+    p = synthetic_prereg()
+    rec = synthetic_record(prereg=p)
+    del rec["rows"]["LC25"]                                 # preservation-only row omitted
+    if not refused(rec, p):
+        return False
+    rec = synthetic_record(prereg=p)
+    del rec["rows"]["MT75"]                                 # development row omitted
+    if not refused(rec, p):
+        return False
+    rec = synthetic_record(prereg=p)
+    rec["rows"]["EXT99"] = dict(rec["rows"]["EXT00"])       # a row the registration never named
+    if not refused(rec, p):
+        return False
+    rec = synthetic_record(prereg=p)
+    rec["rows"]["EXT00"]["sha16"] = "unregistered00"        # registered key, unregistered file
+    if not refused(rec, p):
+        return False
+    rec = synthetic_record(prereg=p)
+    rec["rows"]["EXT00"]["split"] = "development"           # a split the submitter may not choose
+    if not refused(rec, p):
+        return False
+    p2 = synthetic_prereg()
+    k0, k1 = p2["confirmation"]["keys"][:2]
+    p2["confirmation"]["sha256_16"][k1] = p2["confirmation"]["sha256_16"][k0]
+    rec = synthetic_record(prereg=p2)                       # matches the (bad) registration
+    return refused(rec, p2)                                 # one recording, two keys
+
+
+def prop_J7_nonfinite_or_missing_measurement_refused() -> bool:
+    """NaN/Inf would defeat every ordered comparison (NaN > x is false) and a
+    deleted field is not a measured null: each must be refused. An explicit
+    null on both sides of a preserved feature is a violation, not a skip."""
+    nan, inf = float("nan"), float("inf")
+
+    def mangled(mut):
+        rec = synthetic_record()
+        row = rec["rows"]["MT25"]
+        mut(row["variants"]["shipped"], row["variants"]["Q"], row)
+        return rec
+
+    def must_refuse(rec) -> bool:
+        try:
+            return judge(rec, synthetic_prereg())["verdict"] == "REFUSED"
+        except Refused:
+            return True
+
+    for mut in (
+        lambda s, c, r: c["ratio"].__setitem__("attack", nan),   # candidate side
+        lambda s, c, r: s["ratio"].__setitem__("decay", nan),    # shipped side
+        lambda s, c, r: s.__setitem__("peak_fs", inf),
+        lambda s, c, r: c.__setitem__("peak_fs", nan),
+        lambda s, c, r: c.__setitem__("peak_fs", 0.0),           # not a positive peak
+        lambda s, c, r: s.__setitem__("dc_fs", nan),
+        lambda s, c, r: c.__setitem__("dc_fs", -inf),
+        lambda s, c, r: s["harm"]["db"].__setitem__(0, nan),
+        lambda s, c, r: (s["ratio"].pop("pitch"), c["ratio"].pop("pitch")),  # deleted, not null
+        lambda s, c, r: r["target_harm"]["db"].__setitem__(1, nan),
+    ):
+        if not must_refuse(mangled(mut)):
+            return False
+    rec = mangled(lambda s, c, r: (s["ratio"].__setitem__("attack", None),
+                                   c["ratio"].__setitem__("attack", None)))
+    v = judge(rec, synthetic_prereg())
+    return v["verdict"] == "NOT CONFIRMED" and v["chosen"] is None
 
 
 def prop_M1_mechanism_classes() -> bool:
@@ -697,7 +900,8 @@ PROPERTIES = {f.__name__[5:]: f for f in (
     prop_K3_applied_quadratic_reads_at_spec, prop_J0_good_candidate_confirms,
     prop_J1_decay_violation_rejected, prop_J2_peak_violation_rejected,
     prop_J3_contaminated_confirmation_refused, prop_J4_no_distortion_candidate_not_confirmed,
-    prop_J5_null_target_refused_not_zero_error, prop_M1_mechanism_classes)}
+    prop_J5_null_target_refused_not_zero_error, prop_J6_frozen_population_enforced,
+    prop_J7_nonfinite_or_missing_measurement_refused, prop_M1_mechanism_classes)}
 
 #: defect -> the property whose assertion it is meant to defeat
 INTENDED = {"stub-estimator": ("K1_known_answers",),
@@ -706,7 +910,9 @@ INTENDED = {"stub-estimator": ("K1_known_answers",),
             "preservation-bypass": ("J1_decay_violation_rejected", "J2_peak_violation_rejected"),
             "contaminated-confirmation": ("J3_contaminated_confirmation_refused",),
             "target-ignored": ("J4_no_distortion_candidate_not_confirmed",),
-            "mechanism-bypass": ("M1_mechanism_classes",)}
+            "mechanism-bypass": ("M1_mechanism_classes",),
+            "population-bypass": ("J6_frozen_population_enforced",),
+            "nonfinite-bypass": ("J7_nonfinite_or_missing_measurement_refused",)}
 
 
 def _outcome(fn) -> str:
@@ -885,6 +1091,18 @@ def main(argv=None) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1, default=str) + "\n")
     print(json.dumps({k: v for k, v in res.items() if k in ("pass", "status", "verdict")}))
+    # exit codes (module docstring): 0 good verdict, 1 completed and negative,
+    # 2 REFUSED. A completed result is never reported as success.
+    if a.cmd == "knownanswer":
+        return 0 if res.get("pass") is True else 1
+    if a.cmd == "controls":
+        st = res.get("status")
+        return 0 if st == "OK" else 2 if st == "REFUSED" else 1
+    if a.cmd == "judge":
+        v = res.get("verdict")
+        if v == "REFUSED":
+            return 2
+        return 0 if v in ("CONFIRMED", "NO CANDIDATE") else 1
     return 0
 
 
