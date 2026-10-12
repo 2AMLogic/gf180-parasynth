@@ -485,3 +485,371 @@ def test_the_committed_record_says_what_the_writeup_says():
     # ...and the one-number requirement was REFUSED, not reported
     assert d["superposition"]["ok"] is False
     assert d["required_short_band_offset"] is None
+
+
+# ===========================================================================
+# #413: the knob renderer on the SHIPPED structure
+# ===========================================================================
+# Registers first (free, exact); the renders after (minutes, module-cached).
+import numpy as np                      # noqa: E402
+import run_case as rc                   # noqa: E402
+import cymbal_vca_drive as vd           # noqa: E402
+
+TEST_SECONDS = 5.0
+
+
+def _good_row():
+    return {d: {"H_edt10_ms": h, "L_edt10_ms": l, "H_t20_late_ms": None, "L_t20_late_ms": None}
+            for d, h, l in zip(tre.DECAY_ORDER, (80, 151, 268, 330, 405), (287, 573, 869, 1798, 1810))}
+
+
+_ALL_DISTINCT = {p: False for p in [("00", "25"), ("25", "50"), ("50", "75"), ("75", "10"), ("00", "10")]}
+_FISCHER = dict(zip(tre.DECAY_ORDER, (265.0, 432.0, 721.0, 962.0, 1094.0)))
+
+
+# ---- start red: a no-op knob, a saturated knob and a non-finite number -------
+def test_a_noop_knob_is_red():
+    """A stub CY branch that ignores DECAY renders five identical waveforms with
+    five identical measures. Every property that is about DECAY moving must be
+    FAIL, not PASS and not REFUSED."""
+    flat = {d: {"H_edt10_ms": 151.0, "L_edt10_ms": 573.0, "H_t20_late_ms": None,
+                "L_t20_late_ms": None} for d in tre.DECAY_ORDER}
+    ident = {p: True for p in _ALL_DISTINCT}
+    v = tre.decay_row_verdict(flat, ident, _FISCHER)
+    for k in ("distinct-renders", "h-edt10-rises", "l-edt10-rises", "h-edt10-direction-matches-808"):
+        assert v[k]["status"] == tre.FAIL, (k, v[k])
+
+
+def test_a_clean_row_passes_and_the_late_t20_is_refused_not_passed():
+    v = tre.decay_row_verdict(_good_row(), dict(_ALL_DISTINCT), _FISCHER)
+    for k in ("distinct-renders", "h-edt10-rises", "l-edt10-rises", "h-edt10-direction-matches-808"):
+        assert v[k]["status"] == tre.PASS, (k, v[k])
+    assert v["late-t20"]["status"] == tre.REFUSED     # nothing qualified in this row
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), None])
+def test_a_non_finite_measure_is_refused_never_passed(bad):
+    row = _good_row()
+    row["50"]["H_edt10_ms"] = bad
+    v = tre.decay_row_verdict(row, dict(_ALL_DISTINCT), _FISCHER)
+    assert v["h-edt10-rises"]["status"] == tre.REFUSED
+    assert v["h-edt10-direction-matches-808"]["status"] == tre.REFUSED
+
+
+def test_a_plateau_in_the_808_establishes_no_direction_but_a_reversal_still_fails():
+    plateau = dict(_FISCHER, **{"10": _FISCHER["75"] * 0.995})       # the TONE-10 row's shape
+    v = tre.decay_row_verdict(_good_row(), dict(_ALL_DISTINCT), plateau)
+    p = v["h-edt10-direction-matches-808"]
+    assert p["status"] == tre.PASS and p["undetermined_steps"] == ["75->10"]
+    reversed_ours = _good_row()
+    reversed_ours["50"]["H_edt10_ms"], reversed_ours["75"]["H_edt10_ms"] = 330, 268     # a real reversal
+    v = tre.decay_row_verdict(reversed_ours, dict(_ALL_DISTINCT), _FISCHER)
+    assert v["h-edt10-direction-matches-808"]["status"] == tre.FAIL
+    flat = {d: 100.0 for d in tre.DECAY_ORDER}                                          # no direction at all
+    v = tre.decay_row_verdict(_good_row(), dict(_ALL_DISTINCT), flat)
+    assert v["h-edt10-direction-matches-808"]["status"] == tre.REFUSED
+
+
+def test_a_missing_audio_comparison_is_refused():
+    v = tre.decay_row_verdict(_good_row(), {}, _FISCHER)
+    assert v["distinct-renders"]["status"] == tre.REFUSED
+
+
+def test_the_late_t20_is_checked_where_it_qualifies():
+    row = _good_row()
+    for d, t in (("00", 570.0), ("25", 1232.0), ("50", 600.0)):      # falls: wrong
+        row[d]["L_t20_late_ms"] = t
+    v = tre.decay_row_verdict(row, dict(_ALL_DISTINCT), _FISCHER)
+    assert v["late-t20"]["bands"]["L"]["status"] == tre.REFUSED
+    assert v["late-t20"]["bands"]["L"]["monotone_where_qualified"] is False
+    assert v["late-t20"]["status"] == tre.REFUSED   # refusals outrank an unqualified FAIL here
+
+
+# ---- the register image ------------------------------------------------------
+def test_the_anchor_writes_nothing_for_any_of_the_sixteen_sounds():
+    for s in dx.SOUND_NAMES:
+        assert dict(cc.shipped_knob_kit(cc.TONE_ANCHOR, cc.DECAY_ANCHOR, sound=s)) \
+            == dict(dx.kit_with_sounds(s)), s
+
+
+def test_decay_scale_is_strictly_increasing_and_one_at_the_anchor():
+    k = [cc.decay_scale(d) for d in tre.DECAY_ORDER]
+    assert all(b > a for a, b in zip(k, k[1:])) and cc.decay_scale(cc.DECAY_ANCHOR) == 1.0
+
+
+def test_the_five_decay_images_are_pairwise_distinct():
+    imgs = [tuple(cc.shipped_knob_kit(cc.TONE_ANCHOR, d)) for d in tre.DECAY_ORDER]
+    assert len(set(imgs)) == 5
+
+
+def test_the_decay_network_is_the_vca_drive_tools():
+    res = {d: ohm for _, _, ohm, d in vd.ENV_RES}
+    assert cc.DECAY_R93_OHM == res["R93"] and cc.DECAY_VR2_OHM == vd.ENV_POT["ohm"]
+
+
+def test_nothing_outside_the_cymbal_envelopes_is_ever_written():
+    own = cc.shipped_knob_owned_addresses()
+    for t in tre.CODES:
+        for d in tre.DECAY_ORDER:
+            r = tre.owned_addresses_check(t, d)
+            assert r["status"] == tre.PASS, (t, d, r["stray"])
+    # and the check can fail: widen a write by hand
+    base = dict(dx.kit_with_sounds("CY"))
+    assert dx.A_MODE + dx.M_CYHI * dx.MODE_STRIDE + 2 not in own and base
+
+
+def test_an_unknown_knob_position_is_refused_not_snapped():
+    for bad in (3.0, "99", 11):
+        with pytest.raises(cc.Refused):
+            cc.shipped_knob_kit(bad, "25")
+        with pytest.raises(cc.Refused):
+            cc.shipped_knob_kit("50", bad)
+
+
+def test_the_register_floor_is_what_the_old_path_hit():
+    """The Q0.16 rate register cannot express a time constant longer than
+    2^16 / SR = 1.365 s. The old path asked E_CYL for k * 500 ms with k up to 8,
+    so DECAY 7.5 and 10.0 both landed on the floor. The CURRENT law asks for
+    1.0 and 1.27 s there: the second is below the floor's tau but the register
+    quantises it onto the same code -- recorded, not fixed."""
+    f = tre.rate_register_floor()
+    assert f["slowest_tau_s"] == pytest.approx(1.3653, abs=1e-3)
+    # old path's clamp, executed against the register: k=8 and k=4 are one code
+    assert dx.rate_reg(dx.CY_TAU_LOW * 8.0) == dx.rate_reg(dx.CY_TAU_LOW * 4.0) == 1
+    # the current law: E_CYL's rate code at 7.5 and 10.0 is the same floor code,
+    # E_CYD's is not -- which is why the two positions still differ
+    p = f["positions"]
+    assert p["75"]["E_CYL"]["rate_reg"] == p["10"]["E_CYL"]["rate_reg"] == 1
+    assert p["75"]["E_CYD"]["rate_reg"] != p["10"]["E_CYD"]["rate_reg"]
+
+
+# ---- renders -----------------------------------------------------------------
+@pytest.fixture(scope="module")
+def clean_row():
+    return tre.sweep_row(cc.TONE_ANCHOR, seconds=TEST_SECONDS)
+
+
+def test_the_anchor_render_is_render_drum_solo_bit_for_bit():
+    r = tre.anchor_equivalence()
+    assert r["registers_differing"] == [] and r["audio_bit_identical"] and r["status"] == tre.PASS
+
+
+def test_the_clean_row_passes_every_decay_property(clean_row):
+    row, ident, _ = clean_row
+    v = tre.decay_row_verdict(row, ident, tre.fischer_h_edt(cc.TONE_ANCHOR))
+    for k in ("distinct-renders", "h-edt10-rises", "l-edt10-rises", "h-edt10-direction-matches-808"):
+        assert v[k]["status"] == tre.PASS, (k, v[k])
+    assert not any(ident.values())
+
+
+def test_the_historical_saturation_is_caught(clean_row):
+    """THE CONTROL. DECAY 10.0 given 7.5's scale: builds, executes, renders
+    7.5 and 10.0 bit-identical, and the DECAY properties go red while the clean
+    row above passes. `blind` is what the mutant does NOT move."""
+    _, _, clean_audio = clean_row
+    mrow, mident, maudio = tre.sweep_row(cc.TONE_ANCHOR, kit_fn=tre.saturated_kit,
+                                         seconds=TEST_SECONDS,
+                                         _audio={d: clean_audio[d] for d in ("00", "25", "50")})
+    assert tre.saturated_kit("50", "10") == tre.saturated_kit("50", "75")       # it activated
+    assert tre.saturated_kit("50", "10") != cc.shipped_knob_kit("50", "10")     # and is not the clean path
+    assert mident[("75", "10")] is True
+    v = tre.decay_row_verdict(mrow, mident, tre.fischer_h_edt(cc.TONE_ANCHOR))
+    assert v["distinct-renders"]["status"] == tre.FAIL
+    assert v["h-edt10-rises"]["status"] == tre.FAIL
+    assert v["l-edt10-rises"]["status"] == tre.FAIL
+    # blind: endpoints 00 vs 10 are still distinct, so a gate that compared only
+    # the endpoints would have passed this mutant
+    assert ("00", "10") in mident and mident[("00", "10")] is False
+    assert v["distinct-renders"]["identical_pairs"] == ["75=10"]
+
+
+def test_the_hats_are_bit_exact_at_the_corners():
+    res = tre.hat_preservation(tones=("00", "10"), decays=("00", "10"))
+    assert res and all(res.values()), res
+
+
+# ---- the committed #413 knob-render record -----------------------------------
+# The render tests above run only the TONE-50 row (a row is minutes). These read
+# the committed record so a regression in the other four rows, or a late-T20
+# claim, turns something red without rendering. They recompute every verdict
+# from the record's own measured numbers with the CURRENT verdict function, so
+# a hand-edited status cannot pass and a gate change that would flip a recorded
+# row cannot land silently.
+KNOB_RECORD = ROOT / "docs" / "scorecard" / "cymbal-369" / "knob-render" / "knob-render.json"
+_EDT_GATES = ("h-edt10-rises", "l-edt10-rises", "h-edt10-direction-matches-808")
+_knob_skip = pytest.mark.skipif(not KNOB_RECORD.exists(), reason="the knob-render record is not committed")
+
+
+def _knob_record() -> dict:
+    import json
+    return json.loads(KNOB_RECORD.read_text())
+
+
+def _recorded_identical(verdict: dict) -> dict:
+    pairs = list(zip(tre.DECAY_ORDER, tre.DECAY_ORDER[1:])) + [(tre.DECAY_ORDER[0], tre.DECAY_ORDER[-1])]
+    same = set(verdict["distinct-renders"]["identical_pairs"])
+    return {(a, b): f"{a}={b}" in same for a, b in pairs}
+
+
+def _recompute(d: dict, tone: str, row: dict | None = None) -> dict:
+    return tre.decay_row_verdict(row if row is not None else d["rows"][tone],
+                                 _recorded_identical(d["verdicts"][tone]),
+                                 tre.fischer_h_edt(tone))
+
+
+@_knob_skip
+def test_the_committed_knob_record_covers_every_tone_row_and_passes_the_edt10_gate():
+    d = _knob_record()
+    assert sorted(d["rows"]) == sorted(tre.CODES) == sorted(d["verdicts"])
+    for t in tre.CODES:
+        assert sorted(d["rows"][t]) == sorted(tre.DECAY_ORDER), t
+        rec = d["verdicts"][t]
+        assert rec["distinct-renders"]["status"] == tre.PASS, t
+        assert rec["distinct-renders"]["identical_pairs"] == [], t
+        v = _recompute(d, t)
+        for k in _EDT_GATES:
+            assert v[k]["status"] == tre.PASS, (t, k, v[k])
+            assert rec[k]["status"] == v[k]["status"], (t, k, "recorded status != recomputed")
+
+
+@_knob_skip
+def test_the_committed_knob_record_keeps_the_late_t20_gap_visible():
+    """#413 item 3 is NOT met (tracked by #656). No row may claim a late-T20
+    PASS, the recorded statuses must be what the numbers give, and TONE 00's
+    L reversal on the E_CYL rate floor stays a FAIL. When #656 lands this test
+    is meant to go red and be rewritten against the new record."""
+    d = _knob_record()
+    for t in tre.CODES:
+        v = _recompute(d, t)["late-t20"]
+        rec = d["verdicts"][t]["late-t20"]
+        assert v["status"] != tre.PASS and rec["status"] == v["status"], (t, rec["status"], v["status"])
+        for b in ("H", "L"):
+            assert rec["bands"][b]["status"] == v["bands"][b]["status"], (t, b)
+    l00 = d["verdicts"]["00"]["late-t20"]["bands"]["L"]
+    assert l00["status"] == tre.FAIL and l00["refused_at"] == []
+    assert l00["values"]["75"] == pytest.approx(3653.91) and l00["values"]["10"] == pytest.approx(3648.81)
+    floor = d["rate_register_floor"]["positions"]
+    assert [floor[x]["E_CYL"]["at_floor"] for x in tre.DECAY_ORDER] == [False, False, False, True, True]
+
+
+@_knob_skip
+def test_the_knob_record_check_turns_red_on_a_planted_regression_off_the_anchor_row():
+    """The control for the two tests above: a reversal planted in a non-TONE-50
+    row (which no render test here exercises) must make the recompute FAIL."""
+    import copy
+    d = _knob_record()
+    for t in [c for c in tre.CODES if c != cc.TONE_ANCHOR]:
+        row = copy.deepcopy(d["rows"][t])
+        row["50"]["H_edt10_ms"], row["75"]["H_edt10_ms"] = row["75"]["H_edt10_ms"], row["50"]["H_edt10_ms"]
+        row["25"]["L_edt10_ms"] = row["00"]["L_edt10_ms"]
+        v = _recompute(d, t, row)
+        assert v["h-edt10-rises"]["status"] == tre.FAIL, t
+        assert v["l-edt10-rises"]["status"] == tre.FAIL, t
+        assert v["h-edt10-direction-matches-808"]["status"] == tre.FAIL, t
+
+
+# ---- the command's own exit decision (run_knob_render, not just the verdict) --
+# The record tests above recompute verdicts from committed numbers; none of them
+# reaches the EXIT the command itself returns. These do, with every expensive
+# render behind run_knob_render replaced by fakes.
+_IDENT_PAIRS = dict(_ALL_DISTINCT)
+_ALL_IDENTICAL = {p: True for p in _ALL_DISTINCT}
+_MUTANT_MUST_REDDEN = ("distinct-renders", "h-edt10-rises", "l-edt10-rises")
+
+
+def _flat_row():
+    return {d: {"H_edt10_ms": 151.0, "L_edt10_ms": 573.0, "H_t20_late_ms": None,
+                "L_t20_late_ms": None} for d in tre.DECAY_ORDER}
+
+
+def _install_knob_fakes(monkeypatch, *, clean_row, clean_ident, mutant_row, mutant_ident):
+    """`clean_row` is what every real TONE row measures, `mutant_row` what the
+    saturation control measures; the ident maps say which DECAY pairs rendered
+    identical audio. Returns the sweep_row calls (True = a clean row)."""
+    import copy
+    calls = []
+
+    def fake_sweep(tone, kit_fn=None, seconds=tre.SWEEP_SECONDS, decays=tre.DECAY_ORDER,
+                   _audio=None):
+        calls.append(kit_fn is None)
+        row, ident = (clean_row, clean_ident) if kit_fn is None else (mutant_row, mutant_ident)
+        return copy.deepcopy(row), dict(ident), {d: np.zeros(2) for d in decays}
+
+    monkeypatch.setattr(tre, "sweep_row", fake_sweep)
+    monkeypatch.setattr(tre, "anchor_equivalence",
+                        lambda: {"registers_differing": [], "audio_bit_identical": True,
+                                 "status": tre.PASS})
+    monkeypatch.setattr(tre, "owned_addresses_check",
+                        lambda t, d: {"stray": {}, "status": tre.PASS})
+    monkeypatch.setattr(tre, "hat_preservation", lambda **k: {"OH@TONE00/DECAY00": True})
+    monkeypatch.setattr(tre, "fischer_h_edt", lambda t, path=None: dict(_FISCHER))
+    return calls
+
+
+def _run_knob_render(monkeypatch, tmp_path, **kw):
+    import json
+    calls = _install_knob_fakes(monkeypatch, **kw)
+    out = tmp_path / "knob-render.json"
+    code = tre.run_knob_render(out)
+    assert calls == [True] * len(tre.CODES) + [False], calls   # five rows, then the control
+    return code, json.loads(out.read_text())
+
+
+def test_knob_render_exits_zero_only_with_every_declared_property_green(monkeypatch, tmp_path):
+    """The deferred late-T20 FAIL (#656) stays visible in the record and does
+    NOT gate: TONE 00's L band rises then falls where it qualifies, everything
+    the command enforces is green, and the run exits 0."""
+    clean = _good_row()
+    for d, v in zip(tre.DECAY_ORDER, (3653.91, 3700.0, 3750.0, 3800.0, 3648.81)):
+        clean[d]["L_t20_late_ms"] = v
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=clean, clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_flat_row(), mutant_ident=_ALL_IDENTICAL)
+    assert code == 0
+    assert rec["verdicts"]["00"]["late-t20"]["status"] == tre.FAIL    # reported, not buried
+    assert set(rec["saturation_control"]["red"]) == set(_MUTANT_MUST_REDDEN) \
+        | {"h-edt10-direction-matches-808"}
+    assert rec["saturation_control"]["misses"] == []
+
+
+def test_knob_render_is_red_on_a_failed_clean_decay_verdict(monkeypatch, tmp_path):
+    """A clean row whose EDT10 does not rise (the old path's flat 7.5 == 10.0)
+    must fail the command, not only the verdict helper."""
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=_flat_row(), clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_flat_row(), mutant_ident=_ALL_IDENTICAL)
+    assert code == 1
+    assert rec["saturation_control"]["red"], "the control still ran"
+
+
+def test_knob_render_is_red_on_a_refused_clean_decay_verdict(monkeypatch, tmp_path):
+    row = _good_row()
+    row["50"]["H_edt10_ms"] = None                    # the measure refused: not PASS, not data
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=row, clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_flat_row(), mutant_ident=_ALL_IDENTICAL)
+    assert code == 1
+    assert rec["verdicts"]["50"]["h-edt10-rises"]["status"] == tre.REFUSED
+
+
+def test_knob_render_is_red_on_an_uncaught_mutant(monkeypatch, tmp_path):
+    """Preservation and every clean verdict green, but the injected saturation
+    changed nothing: the control has no teeth and the command must say so."""
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=_good_row(), clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_good_row(), mutant_ident=_IDENT_PAIRS)
+    assert code == 1
+    assert rec["saturation_control"]["red"] == []
+    assert rec["saturation_control"]["misses"] == list(_MUTANT_MUST_REDDEN)
+
+
+def test_knob_render_is_red_on_a_mutant_that_reddens_only_one_property(monkeypatch, tmp_path):
+    """The control must redden its INTENDED observables. Here the audio went
+    identical (distinct-renders red) but the EDT10 rises still pass: half-caught
+    is not caught."""
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=_good_row(), clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_good_row(), mutant_ident=_ALL_IDENTICAL)
+    assert code == 1
+    assert rec["saturation_control"]["red"] == ["distinct-renders"]
+    assert rec["saturation_control"]["misses"] == ["h-edt10-rises", "l-edt10-rises"]

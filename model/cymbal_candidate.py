@@ -697,3 +697,111 @@ def band_only(kit, band: str):
         if p != live:
             k[dx.A_PATH + p] = off
     return sorted(k.items())
+
+
+# ---------------------------------------------------------------------------
+# #413: the knob renderer on the SHIPPED structure
+# ---------------------------------------------------------------------------
+# `test_discrimination.kit_at("CY", ...)` used to build its CY image from two
+# calibration renders: TONE solved in closed form for the REFERENCE's own band
+# ratio (so it reproduced the recording it was judged against by construction),
+# and DECAY solved through a clamped two-point power law (so 7.5 and 10.0 landed
+# on the same clamp and rendered bit for bit identically). Both are retired.
+#
+# What replaces them touches only registers the shipped cymbal already owns, and
+# at the anchor (TONE 50, DECAY 25 -- Fischer's CY5025, the recording the shipped
+# kit was built from) it touches NOTHING, so the anchor image IS `kit_with_sounds
+# ("CY")` register for register and the audio is bit-identical by construction.
+#
+#  TONE   the three band LEVELS, scaled by `TONE_GAIN_DB` -- the nodal network's
+#         own gain at each band's centre, relative to the anchor. Nothing in it
+#         is read from a recording. Applied as the envelope PEAK of the band's
+#         VCA path (E_CYL / E_CYD / E_CYS), the register the kit already uses to
+#         level that band. The band shapes the wiper also moves are the
+#         revision-4 structure's business; this renderer applies the level
+#         half only, which is what `tone_gains` documents revision 4 to carry.
+#  DECAY  the time constants of E_CYD and E_CYL together (the knob scales both
+#         and leaves the 12 ms E_CYS alone -- drums_fx CY_TAU_SHORT), by the
+#         ratio of the DECAY network's timing resistance to its value at the
+#         anchor. The network is read off the schematic, not fitted:
+#         C41 (1 uF) discharges through R93 (470 k) in SERIES with VR2 (2 M(B),
+#         wiper strapped to pin 3), so R = 470 k + p * 2 M with p the wiper
+#         fraction. `tools/cymbal_vca_drive.py` carries the same resistors and
+#         `test_decay_network_is_the_vca_drive_tools` binds the two.
+#
+# What this law is NOT: validated against the machine's DECAY span. It is the
+# circuit's own, and `tools/cymbal_tone_render.py --decay` reports how it sits
+# against the Fischer records as a separate, labelled check.
+DECAY_ANCHOR = "25"
+DECAY_POS = {"00": 0.0, "25": 0.25, "50": 0.5, "75": 0.75, "10": 1.0}
+DECAY_R93_OHM = 470e3
+DECAY_VR2_OHM = 2.0e6
+KNOB_CODE = {0.0: "00", 2.5: "25", 5.0: "50", 7.5: "75", 10.0: "10"}
+# E_CYS carries the short band; E_CYD and E_CYL are the DECAY knob's two.
+SHIPPED_BAND_ENV = {"low": dx.E_CYL, "decay": dx.E_CYD, "short": dx.E_CYS}
+SHIPPED_BAND_PEAK = {"low": dx.PEAK_CYL, "decay": dx.PEAK_CYD, "short": dx.PEAK_CYS}
+SHIPPED_ENV_TAU = {dx.E_CYD: dx.CY_TAU_DECAY, dx.E_CYL: dx.CY_TAU_LOW}
+
+
+class Refused(RuntimeError):
+    """A precondition the knob renderer needs is not met. Not a failed check."""
+
+
+def knob_code(value, what: str) -> str:
+    """A knob value (0..10 or a two-digit code) as one of the five code
+    positions. REFUSES any other value: the TONE table has five rows, and
+    snapping 3.0 to the nearest would render a setting nobody asked for."""
+    if isinstance(value, str):
+        if value not in DECAY_POS:
+            raise Refused(f"{what} code {value!r} is not one of {sorted(DECAY_POS)}")
+        return value
+    code = KNOB_CODE.get(float(value))
+    if code is None:
+        raise Refused(f"{what} {value!r} is not one of the five positions "
+                      f"{sorted(KNOB_CODE)} this renderer has a law for")
+    return code
+
+
+def decay_timing_ohm(code: str) -> float:
+    return DECAY_R93_OHM + DECAY_POS[code] * DECAY_VR2_OHM
+
+
+def decay_scale(code: str) -> float:
+    """Factor on E_CYD's and E_CYL's time constants at DECAY `code`, relative to
+    the anchor. Strictly increasing in the knob: it cannot clamp."""
+    return decay_timing_ohm(code) / decay_timing_ohm(DECAY_ANCHOR)
+
+
+def shipped_knob_kit(tone, decay, sound: str = "CY"):
+    """The shipped kit (`kit_with_sounds(sound)`) with the cymbal's TONE and
+    DECAY applied; a sorted write list. Writes only the registers it must: at
+    the anchor, none."""
+    tcode, dcode = knob_code(tone, "TONE"), knob_code(decay, "DECAY")
+    img = dict(dx.kit_with_sounds(sound))
+    gains = tone_gains(tcode)
+    for band, e in SHIPPED_BAND_ENV.items():
+        if gains[band] == 1.0:
+            continue
+        a = dx.A_ENV + e * dx.ENV_STRIDE + 1
+        if img[a] != dx.peak_reg(SHIPPED_BAND_PEAK[band]):
+            raise Refused(f"{band} envelope peak register is not the shipped value")
+        peak = SHIPPED_BAND_PEAK[band] * gains[band]
+        if peak > 1.0:
+            raise Refused(f"TONE {tcode} {band}: needs envelope peak {peak:.3f} > 1.0")
+        img[a] = dx.peak_reg(peak)
+    k = decay_scale(dcode)
+    if k != 1.0:
+        for e, tau in SHIPPED_ENV_TAU.items():
+            a = dx.A_ENV + e * dx.ENV_STRIDE + 2
+            if img[a] != dx.rate_reg(tau):
+                raise Refused(f"envelope {e} rate register is not the shipped value")
+            img[a] = dx.rate_reg(tau * k)
+    return sorted(img.items())
+
+
+def shipped_knob_owned_addresses() -> set:
+    """The only registers `shipped_knob_kit` may ever change."""
+    out = set()
+    for e in (dx.E_CYL, dx.E_CYD, dx.E_CYS):
+        out |= {dx.A_ENV + e * dx.ENV_STRIDE + 1, dx.A_ENV + e * dx.ENV_STRIDE + 2}
+    return out
