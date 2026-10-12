@@ -24,7 +24,7 @@
     "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
     "rtl-sketch/drum_regs.v": "9ad0535d68b3eebd0573e565aefb7bf649be3f11d21ec4d199f378fc0d3dd01c",
     "rtl-sketch/drum_kit.v": "01f975c48af789ecdb8a255170564ae1be1c984012da3b239f5f0462eaa7ed30",
-    "rtl-sketch/drum_dp.v": "ab68e5aca8b4d7f2de83c6cd37786099e12f30504b8d02215e41b3d9bf516216",
+    "rtl-sketch/drum_dp.v": "b20e3f4e2114224da825688e60c1dd0367d14f434e67f828ea651f3e8e98e825",
     "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
     "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
     "rtl-sketch/ladder_dp_n.v": "2276e89d112bd24d6384f3deed427bcabb9525d3df68ded8c61d2c681a3a8373",

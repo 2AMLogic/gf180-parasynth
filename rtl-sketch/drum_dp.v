@@ -30,7 +30,7 @@
 // destination. The sentinels moved with the fields: envelope index 31 reads
 // full scale, destination 31 is the mix bus.
 //
-// REVISION 17 (#656) adds an exponent e above each RATE / FRATE word's 16-bit
+// REVISION 18 (#656) adds an exponent e above each RATE / FRATE word's 16-bit
 // mantissa m: RATE = {e, m}, dec = (level * m) >> (16 + e). The multiply is
 // unchanged (m is still the 16-bit operand); only the slice of the product the
 // decay takes moves, by a RATE_EB-stage shift on the applied slot. e = 0 is

@@ -122,7 +122,7 @@
  },
  "limits": [
   "The plan's SELECTION prediction (3, with 2 just above 5 %) was wrong in detail: 2 measured 4.978 %, just under, so the frozen rule selected 2. The selection was then amended to 3 (see amendments), which is where the prediction had put it -- by a different route, which is recorded rather than claimed as a confirmed prediction.",
-  "The objective is the closed-form tau of the code. The integer decay truncates (level * m) >> (16 + e), so below about -20 dB of the strike it runs 6.7-8.3 % slower than the closed form at EVERY width (tail_slow_pct), the anchor included. That bias predates revision 17 and is the same for every width at equal realised tau.",
+  "The objective is the closed-form tau of the code. The integer decay truncates (level * m) >> (16 + e), so below about -20 dB of the strike it runs 6.7-8.3 % slower than the closed form at EVERY width (tail_slow_pct), the anchor included. That bias predates revision 18 and is the same for every width at equal realised tau.",
   "One knob law (cymbal_candidate's DECAY network, scaled from the anchor's realised tau). Other envelopes keep rate_reg's e = 0 codes and are unaffected."
  ],
  "amendments": [

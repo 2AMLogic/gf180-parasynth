@@ -36,7 +36,7 @@ Formats (contract 15.1):
     accent      Q0.15 per stop, 16 bits (32768 = 1.0; 65535 = 2.0 is legal)
     envelope    level 24-bit unsigned Q0.24; peak 24; rate and frate a 16-bit
                 mantissa m with a RATE_EXP_BITS exponent e above it (revision
-                17, #656; e = 0 is the old Q0.16 register); hold 8 bits
+                18, #656; e = 0 is the old Q0.16 register); hold 8 bits
                 (frames); bursts 2 bits; period 9 bits; t 11-bit frame counter
                 decay: level -= max(1, (level * m) >> (16 + e)) -- the voice's
                 release rule, dead zone closed by the max(1, .), section 8.3
