@@ -10,13 +10,18 @@ Pieces, in the order they must be trusted:
      tom-distortion-593/prereg.json), not by the #558 one.
   4. start-red and injected-defect controls through the verdict path.
 
-ACCEPTANCE BOUNDARY (round-4 review): one 0.28 s window cannot exclude a
+ACCEPTANCE BOUNDARY (round-4/5 review): one 0.28 s window cannot exclude a
 partial within ~1 Hz of k*f0 (the measured blind zone: 179/432 such cases are
-still accepted at an error beyond TOL_DB). The estimator therefore never
-attests `interference_free`; a record may carry the attestation only from a
-validated input qualification, and a resolved-but-unattested reading is a
-DIAGNOSTIC: the judge REFUSES rather than score it, and `mechanism()` does not
-count the take, however attractive the number.
+still accepted at an error beyond TOL_DB), and no validated input-qualification
+apparatus exists. The estimator therefore never attests `interference_free`,
+and a submitted boolean is NOT evidence: the judge DERIVES qualification from
+per-harmonic `qual` evidence it verifies (an analytic component list, bound to
+the reading's own f0 and to the estimator's window, with the harmonic-role
+component AT k*f0 -- within QUAL_AT_KF0_TOL_HZ; a "harmonic" declared off the
+multiple is the blind zone itself -- and every other component
+>= QUAL_SEPARATION_HZ from k*f0). A resolved reading without verified evidence
+is a DIAGNOSTIC: the judge REFUSES rather than score it, and `mechanism()` does
+not count the take, however attractive the number.
 
 START RED (docs/verification-rules.md rule 1): this module first existed with
 only the stub estimator below. `harness_verdict(stub)` is the recorded red run.
@@ -94,7 +99,7 @@ def stub_levels(y, sr, onset=0, **kw) -> dict:
     """Right ports, no behaviour: reports a perfectly clean signal."""
     return {"f0": 0.0, "db": [-120.0, -120.0, -120.0], "resolved": [False] * 3,
             "floor_db": [-120.0] * 3, "slip_hz": [None] * 3, "ambiguous": [False] * 3,
-            "interference_free": [False] * 3}
+            "interference_free": [False] * 3, "qual": None}
 
 
 SUPPORTED_RATES = (44100, 48000)
@@ -225,12 +230,13 @@ def harmonic_levels(y, sr, onset: int = 0, win=(0.02, 0.30), _rect=False) -> dic
     band) and `resolved` = clears the floor by RESOLVE_MARGIN_DB, sits at k*f0 AND
     is phase-locked to the fundamental (`slip_hz` <= SLIP_MAX_HZ). A second
     component inside the band makes it `ambiguous` and unresolved.
-    `interference_free` is ALWAYS False here: this measurement cannot establish
-    the absence of a partial within its blind radius (|sep| within ~1 Hz of
-    k*f0 is not separable by one window, and |sep| <= SLIP_MAX_HZ passes even
-    the phase-lock gate), so it must never self-attest. Only a record carrying
-    a validated input qualification may attest it, and only attested readings
-    may decide selection or mechanism (see the module docstring).
+    `interference_free` is ALWAYS False and `qual` is None here: this
+    measurement cannot establish the absence of a partial within its blind
+    radius (|sep| within ~1 Hz of k*f0 is not separable by one window, and
+    |sep| <= SLIP_MAX_HZ passes even the phase-lock gate), so it must never
+    self-attest and it produces no qualification evidence. Only verified `qual`
+    evidence carried by a record may qualify a reading, and only qualified
+    readings may decide selection or mechanism (see the module docstring).
     REFUSES on non-finite, silent, short, unsupported-rate or unresolved-
     fundamental input. Validated domain: docs/scorecard/tom-distortion-593/."""
     y = _check_input(y, sr)
@@ -281,7 +287,7 @@ def harmonic_levels(y, sr, onset: int = 0, win=(0.02, 0.30), _rect=False) -> dic
     if "leakage-as-h2" in INJECT:                  # the floor guard removed
         ok = [True] * 3
     return {"f0": f0, "tau": tau, "glide_cents": gl, "db": db, "resolved": ok, "floor_db": floor,
-            "slip_hz": slip, "ambiguous": amb, "interference_free": [False] * 3}
+            "slip_hz": slip, "ambiguous": amb, "interference_free": [False] * 3, "qual": None}
 
 
 def estimate(y, sr, onset: int = 0, **kw) -> dict:
@@ -301,6 +307,20 @@ ESTIMATOR = estimate
 #: knownanswer.json) and may not be edited after a candidate has been measured.
 TOL_DB = 2.5                  # observed max 2.09 dB on the grid (glide 60 cents x H4 at ~20 dB SNR) + margin
 RESOLVE_MARGIN_DB = 6.0       # a harmonic must clear its own floor by this much
+#: The acceptance boundary's qualification constants. A component closer than
+#: QUAL_SEPARATION_HZ to k*f0 sits inside the measured blind zone (the
+#: nearby_partials sweep: 0 of 648 gating cases accepted wrongly at >= 1.5 Hz,
+#: 179/432 wrong inside ~1 Hz at T = 0.28 s); QUAL_WIN_S is the estimator's
+#: validated measurement window -- a qualification for any other window says
+#: nothing about a reading this instrument took. QUAL_AT_KF0_TOL_HZ is how far
+#: off k*f0 the harmonic-role component may sit in a spec: an analytic
+#: construction puts it at the exact multiple, and anything looser admits the
+#: blind-zone partial declared AS the harmonic (found by the malformed-evidence
+#: control: a spec with the "harmonic" at k*f0 + 0.25 Hz passed a LOC_TOL
+#: match). FROZEN with the sweep.
+QUAL_SEPARATION_HZ = 1.5
+QUAL_WIN_S = 0.28
+QUAL_AT_KF0_TOL_HZ = 0.01
 SPEC_FLOOR_DB = -60.0         # harnessed range: harmonics specified at or above this
 
 
@@ -449,7 +469,9 @@ def nearby_partial_summary(estimator) -> dict:
 def frozen_constants() -> dict:
     return {"TOL_DB": TOL_DB, "RESOLVE_MARGIN_DB": RESOLVE_MARGIN_DB, "SPEC_FLOOR_DB": SPEC_FLOOR_DB,
             "SNR_REQ_DB": SNR_REQ_DB, "GLIDE_MAX_CENTS": GLIDE_MAX_CENTS, "SLIP_MAX_HZ": SLIP_MAX_HZ,
-            "SLIP_KEEP": SLIP_KEEP, "SLIP_BAND": SLIP_BAND, "SLIP_TRIM": SLIP_TRIM}
+            "SLIP_KEEP": SLIP_KEEP, "SLIP_BAND": SLIP_BAND, "SLIP_TRIM": SLIP_TRIM,
+            "QUAL_SEPARATION_HZ": QUAL_SEPARATION_HZ, "QUAL_WIN_S": QUAL_WIN_S,
+            "QUAL_AT_KF0_TOL_HZ": QUAL_AT_KF0_TOL_HZ}
 
 
 def refusal_cases(estimator):
@@ -575,13 +597,67 @@ def load_prereg(path: pathlib.Path = PREREG) -> dict:
     return p
 
 
-def _attested(h: dict, i: int) -> bool:
-    """True only if the harm dict carries a well-formed `interference_free`
-    attestation that is True for harmonic i. Fail closed: a missing, short or
-    non-boolean attestation is NOT an attestation (a string or a number would
-    otherwise pass a truthiness test)."""
-    q = h.get("interference_free")
-    return (isinstance(q, list) and len(q) == 3 and isinstance(q[i], bool) and q[i])
+def _spec_qual(f0: float, db, partials=()) -> list:
+    """Qualification EVIDENCE for an analytic fixture: every component of the
+    mixture the reading was made on, as independently specified by the
+    known-answer construction. Nothing here is a verdict -- the consumer derives
+    interference-freeness from it (`_qualified`). `partials` are
+    (multiple-of-f0, sep_hz, db) interfering components, if any."""
+    comps = [{"f_hz": f0 * 1.0, "db": 0.0}]
+    comps += [{"f_hz": f0 * k, "db": d} for k, d in zip((2, 3, 4), db)]
+    comps += [{"f_hz": f0 * m + s, "db": d} for (m, s, d) in partials]
+    return [{"kind": "analytic-spec", "f0": float(f0), "win_s": QUAL_WIN_S,
+             "components": [dict(c) for c in comps]} for _ in range(3)]
+
+
+def _qualified(h: dict, i: int) -> bool:
+    """True only if the harm/target dict carries qualification EVIDENCE for
+    harmonic i that THIS CONSUMER VERIFIES (round-5 review: a submitted
+    `interference_free` boolean is a claim, not evidence, and is never read).
+    The evidence must be an analytic-spec component list that (a) is bound to
+    the reading by matching its measured f0 (within LOC_TOL) and the
+    estimator's window (QUAL_WIN_S), (b) places exactly one component AT k*f0
+    (within QUAL_AT_KF0_TOL_HZ -- an analytic construction puts the harmonic at
+    the exact multiple; a component declared off k*f0, even by the 0.25 Hz the
+    blind zone cannot separate, is the unseparable case masquerading as the
+    reading's harmonic and is refused), and (c) places every other component
+    at least QUAL_SEPARATION_HZ away, the nearby_partials sweep's validated
+    separability boundary (0 of 648 gating cases accepted wrongly at >= 1.5 Hz;
+    179/432 inside ~1 Hz). Fail closed: missing, malformed or mismatched
+    evidence is no evidence. The residual, stated (rule 8): a wholly fabricated
+    clean spec paired with readings measured elsewhere is not detectable here
+    -- records are harness-produced (docs/verification-rules.md), forged
+    measurement numbers are outside the judge's trust model, and the committed
+    records pin which readings exist."""
+    if "qualification-bypass" in INJECT:
+        return bool(h["resolved"][i])          # the defeated guard: trust any submission
+    k = i + 2
+    f0 = h.get("f0")
+    if not _finite(f0) or f0 <= 0:
+        return False
+    q = h.get("qual")
+    if not isinstance(q, list) or len(q) != 3:
+        return False
+    e = q[i]
+    if not isinstance(e, dict) or e.get("kind") != "analytic-spec":
+        return False
+    ef0, win = e.get("f0"), e.get("win_s")
+    if not _finite(ef0) or ef0 <= 0 or not _finite(win) or abs(win - QUAL_WIN_S) > 0.005:
+        return False
+    if abs(ef0 - f0) > LOC_TOL * f0:
+        return False                # bound to this reading's measured fundamental
+    comps = e.get("components")
+    if not isinstance(comps, list) or not comps:
+        return False
+    for c in comps:
+        if not isinstance(c, dict) or not _finite(c.get("f_hz")) or not _finite(c.get("db")):
+            return False            # an unknown level is not an absent component
+    at = [c for c in comps if abs(c["f_hz"] - k * ef0) <= QUAL_AT_KF0_TOL_HZ]
+    if len(at) != 1:
+        return False                # nothing established AT k*f0 to be a reading of
+                                    # (a "harmonic" declared 0.25 Hz off IS the blind zone)
+    return all(abs(c["f_hz"] - k * ef0) >= QUAL_SEPARATION_HZ
+               for c in comps if c is not at[0])
 
 
 def _harm_pair(base: dict, cand: dict, target: dict | None):
@@ -594,7 +670,7 @@ def _harm_pair(base: dict, cand: dict, target: dict | None):
     and substituting the floor overstates the shipped error and the
     improvement. A candidate harmonic that is unresolved is charged the shipped
     error (no credit). Neither rule can overstate the improvement. A RESOLVED
-    reading with no `interference_free` attestation is treated like an
+    reading with no verified `qual` evidence is treated like an
     unresolved one: the 0.28 s window cannot exclude a partial within its blind
     radius, so the level can carry an unquantified error and must not score."""
     if not target or not base.get("harm") or not cand.get("harm"):
@@ -605,7 +681,7 @@ def _harm_pair(base: dict, cand: dict, target: dict | None):
             continue
         t = target["db"][i]
         hb, hc = base["harm"], cand["harm"]
-        ok_b = hb["resolved"][i] and (_attested(hb, i) or "qualification-bypass" in INJECT)
+        ok_b = hb["resolved"][i] and _qualified(hb, i)
         if not ok_b and "floor-as-bound" not in INJECT:
             continue                                   # no establishable bound: no credit
         if ok_b:
@@ -615,7 +691,7 @@ def _harm_pair(base: dict, cand: dict, target: dict | None):
             if not fl < t:
                 continue
             e0 = abs(fl - t)
-        ok_c = hc["resolved"][i] and (_attested(hc, i) or "qualification-bypass" in INJECT)
+        ok_c = hc["resolved"][i] and _qualified(hc, i)
         e1 = abs(hc["db"][i] - t) if ok_c else e0
         eb.append(e0)
         ec.append(e1)
@@ -688,6 +764,10 @@ def _validate_variant(k: str, name: str, v: dict, feats) -> None:
     if q is not None and (not isinstance(q, list) or len(q) != 3 or not all(isinstance(x, bool) for x in q)):
         raise Refused(f"row {k} variant '{name}': harm['interference_free'] is not a 3-vector of booleans "
                       "(a forged or malformed attestation is not an attestation)")
+    q = h.get("qual")
+    if q is not None and (not isinstance(q, list) or len(q) != 3
+                          or any(x is not None and not isinstance(x, dict) for x in q)):
+        raise Refused(f"row {k} variant '{name}': harm['qual'] is not a 3-vector of evidence-or-null")
 
 
 def _validate_target(k: str, t) -> None:
@@ -704,6 +784,10 @@ def _validate_target(k: str, t) -> None:
     q = t.get("interference_free")
     if q is not None and (not isinstance(q, list) or len(q) != 3 or not all(isinstance(x, bool) for x in q)):
         raise Refused(f"row {k}: target_harm['interference_free'] is not a 3-vector of booleans")
+    q = t.get("qual")
+    if q is not None and (not isinstance(q, list) or len(q) != 3
+                          or any(x is not None and not isinstance(x, dict) for x in q)):
+        raise Refused(f"row {k}: target_harm['qual'] is not a 3-vector of evidence-or-null")
 
 
 def _stage(rows: dict, keys, name: str, prereg: dict) -> dict:
@@ -828,8 +912,10 @@ def judge(record: dict, prereg: dict) -> dict:
         return res
     # input qualification at the acceptance boundary: one 0.28 s window cannot
     # exclude a partial within ~1 Hz of k*f0 (the measured blind zone), so a
-    # RESOLVED reading with no interference attestation is a diagnostic and may
-    # not decide selection or confirmation -- however attractive the number.
+    # RESOLVED reading that no verified evidence qualifies is a diagnostic and
+    # may not decide selection or confirmation -- however attractive the number.
+    # An `interference_free` boolean in the record is a submission, not
+    # evidence (round-5 review), and is never read here.
     if "qualification-bypass" not in INJECT:
         poisoned = []
         for k in dev_keys + conf_keys:
@@ -842,17 +928,19 @@ def judge(record: dict, prereg: dict) -> dict:
                 infl = [n for n in names if r["variants"][n]["harm"]["resolved"][i]]
                 if not infl:
                     continue                       # nothing is scored from harmonic i on this row
-                if (not _attested(t, i) or any(not _attested(r["variants"][n]["harm"], i) for n in infl)):
+                if (not _qualified(t, i) or any(not _qualified(r["variants"][n]["harm"], i) for n in infl)):
                     poisoned.append((k, i))
                     break
         if poisoned:
             (k0, i0) = poisoned[0]
             return {"verdict": "REFUSED",
                     "why": (f"row {k0} harmonic H{i0 + 2} would be scored from a resolved reading that no "
-                            "input qualification attests free of a close interfering partial: one 0.28 s "
-                            "window cannot exclude a partial within ~1 Hz of k*f0 (the measured blind "
-                            "zone), so a resolved reading is a diagnostic until a validated input "
-                            f"qualification exists ({len(poisoned)} row/harmonic pairs affected)")}
+                            "verified input qualification evidence covers: one 0.28 s window cannot "
+                            "exclude a partial within ~1 Hz of k*f0 (the measured blind zone), a record's "
+                            "interference_free booleans are not evidence, and qualification is derived "
+                            "only from qual evidence the judge verifies -- an analytic component list "
+                            "bound to the reading's f0 and window with every other component >= "
+                            f"QUAL_SEPARATION_HZ away ({len(poisoned)} row/harmonic pairs affected)")}
     # the issue requires the mechanism to be measured and SUPPORTED before a
     # topology is chosen: missing, unknown, INSUFFICIENT and REFUTED all stop here
     mech = res["mechanism"].get("verdict") if isinstance(res["mechanism"], dict) else None
@@ -921,7 +1009,9 @@ def _variant(mod=14.0, h=-85.0, dec=2.0, peak=0.5, dc=0.0):
     ratio = {f: 2.0 for f in GATE_FEATURES}
     ratio["modulation"], ratio["decay"] = mod, dec
     return {"ratio": ratio, "peak_fs": peak, "dc_fs": dc,
-            "harm": {"db": [h, h, h], "resolved": [True] * 3, "interference_free": [True] * 3}}
+            "harm": {"f0": 110.0, "db": [h, h, h], "resolved": [True] * 3,
+                     "interference_free": [True] * 3,   # an inert submission: the judge never reads it
+                     "qual": _spec_qual(110.0, (h, h, h))}}
 
 
 def synthetic_record(*, prereg=None, mechanism="SUPPORTED", decay_bad=False, peak_bad=False, no_distortion=False,
@@ -938,7 +1028,8 @@ def synthetic_record(*, prereg=None, mechanism="SUPPORTED", decay_bad=False, pea
     pres = list(prereg["preservation_only"]["keys"])
     conf = list(prereg["confirmation"]["keys"])
     reg = prereg["confirmation"].get("sha256_16") or {}
-    tgt = {"db": [-35.0, -38.0, -41.0], "resolved": [True] * 3, "interference_free": [True] * 3}
+    tgt = {"f0": 110.0, "db": [-35.0, -38.0, -41.0], "resolved": [True] * 3,
+           "interference_free": [True] * 3, "qual": _spec_qual(110.0, (-35.0, -38.0, -41.0))}
     rows = {}
     for split, ks in (("development", dev), ("preservation-only", pres), ("confirmation", conf)):
         for k in ks:
@@ -1125,11 +1216,13 @@ def prop_J9_unresolved_shipped_floor_earns_no_credit() -> bool:
     for k, row in r["rows"].items():
         if row["split"] == "preservation-only":
             continue
-        row["target_harm"] = {"db": [-35.0] * 3, "resolved": [True] * 3, "interference_free": [True] * 3}
-        row["variants"]["shipped"]["harm"] = {"db": [-38.1] * 3, "floor_db": [-44.0] * 3,
+        row["target_harm"] = {"f0": 110.0, "db": [-35.0] * 3, "resolved": [True] * 3,
+                              "interference_free": [True] * 3, "qual": _spec_qual(110.0, (-35.0,) * 3)}
+        row["variants"]["shipped"]["harm"] = {"f0": 110.0, "db": [-38.1] * 3, "floor_db": [-44.0] * 3,
                                               "resolved": [False] * 3}
-        row["variants"]["Q"]["harm"] = {"db": [-37.0] * 3, "floor_db": [-60.0] * 3, "resolved": [True] * 3,
-                                        "interference_free": [True] * 3}
+        row["variants"]["Q"]["harm"] = {"f0": 110.0, "db": [-37.0] * 3, "floor_db": [-60.0] * 3,
+                                        "resolved": [True] * 3, "interference_free": [True] * 3,
+                                        "qual": _spec_qual(110.0, (-37.0,) * 3)}
     return judge(r, p)["verdict"] != "CONFIRMED"
 
 
@@ -1138,9 +1231,10 @@ def prop_J10_blind_zone_reading_cannot_confirm() -> bool:
     +0.25 Hz from H2 (72 Hz f0, tau 0.06 s, phase 1.0) reads resolved and
     unambiguous -- the measured blind zone -- and that poisoned level decided
     selection (CONFIRMED at 0.989 where the true -40 dB level gives NOT
-    CONFIRMED at 0.455). A resolved reading that no input qualification attests
-    free of a close interfering partial is a diagnostic: the judge must REFUSE
-    the record, and the mechanism path must not count the take as evidence."""
+    CONFIRMED at 0.455). A resolved reading that no verified qualification
+    evidence covers is a diagnostic: the judge must REFUSE the record even with
+    every `interference_free` boolean forced True (round 5: a submitted boolean
+    is not evidence), and the mechanism path must not count the take."""
     sr, tau, f0 = 48000, 0.06, 72.0
     y = synth_mixture(f0, tau, (-40.0, -40.0, -40.0))
     t = np.arange(len(y)) / sr
@@ -1156,21 +1250,57 @@ def prop_J10_blind_zone_reading_cannot_confirm() -> bool:
     for row in r["rows"].values():
         if row["split"] == "preservation-only":
             continue
-        row["target_harm"] = {"db": [-28.0] * 3, "resolved": [True, False, False],
-                              "interference_free": [True, True, True]}
-        row["variants"]["shipped"]["harm"] = {"db": [-50.0] * 3, "resolved": [True] * 3,
+        row["target_harm"] = {"f0": f0, "db": [-28.0] * 3, "resolved": [True, False, False],
+                              "interference_free": [True] * 3}
+        row["variants"]["shipped"]["harm"] = {"f0": f0, "db": [-50.0] * 3, "resolved": [True] * 3,
                                               "interference_free": [True] * 3}
         row["variants"]["Q"]["harm"] = _levels_json(h)      # the poisoned measurement, as a record carries it
+        for hd in (row["target_harm"], row["variants"]["shipped"]["harm"],
+                   row["variants"]["Q"]["harm"]):
+            hd["interference_free"] = [True] * 3            # the round-5 attack: force every boolean True
     if judge(r, p)["verdict"] != "REFUSED":
         return False
     if mechanism_verdict([], True, n_unqualified=1)["verdict"] != "INSUFFICIENT":
         return False            # an unqualified resolved H2 is not mechanism evidence either
     for row in r["rows"].values():
         if row["split"] != "preservation-only":
-            row["variants"]["Q"]["harm"] = {"db": [-40.0] * 3, "resolved": [True] * 3,
-                                            "interference_free": [True] * 3}
+            row["target_harm"]["qual"] = _spec_qual(f0, (-28.0, -40.0, -40.0))
+            row["variants"]["shipped"]["harm"]["qual"] = _spec_qual(f0, (-50.0, -40.0, -40.0))
+            row["variants"]["Q"]["harm"] = {"f0": f0, "db": [-40.0] * 3, "resolved": [True] * 3,
+                                            "interference_free": [True] * 3,
+                                            "qual": _spec_qual(f0, (-40.0, -40.0, -40.0))}
     v = judge(r, p)
     return v["verdict"] == "NOT CONFIRMED"      # the honest verdict on the true level: the refusal was the gate's
+
+
+def prop_J11_submitted_boolean_never_qualifies() -> bool:
+    """The round-5 defeating input, carried as a permanent control: the poisoned
+    J10 record with EVERY `interference_free` boolean forced True -- a
+    well-formed, schema-clean submission, no audio changed, no evidence added --
+    must stay REFUSED. Qualification is derived by the judge from evidence it
+    verifies; a submitted True creates nothing."""
+    sr, tau, f0 = 48000, 0.06, 72.0
+    y = synth_mixture(f0, tau, (-40.0, -40.0, -40.0))
+    t = np.arange(len(y)) / sr
+    phi = 2 * math.pi * np.cumsum(np.full(len(y), f0)) / sr
+    y = y + 10 ** (-30 / 20) * np.exp(-t / tau) * np.sin(2 * phi - 2 * math.pi * 0.25 * t + 1.0)
+    h = estimate(y, sr)
+    if not (h["resolved"][0] and not h["ambiguous"][0]):
+        return False            # precondition: the measurement IS in the blind zone
+    p = synthetic_prereg()
+    r = synthetic_record(prereg=p)
+    for row in r["rows"].values():
+        if row["split"] == "preservation-only":
+            continue
+        row["target_harm"] = {"f0": f0, "db": [-28.0] * 3, "resolved": [True, False, False],
+                              "interference_free": [True] * 3}
+        row["variants"]["shipped"]["harm"] = {"f0": f0, "db": [-50.0] * 3, "resolved": [True] * 3,
+                                              "interference_free": [True] * 3}
+        row["variants"]["Q"]["harm"] = _levels_json(h)      # the poisoned measurement
+        for hd in (row["target_harm"], row["variants"]["shipped"]["harm"],
+                   row["variants"]["Q"]["harm"]):
+            hd["interference_free"] = [True] * 3            # the whole attack: every boolean True
+    return judge(r, p)["verdict"] == "REFUSED"
 
 
 def prop_K4_nearby_partial_is_not_an_accurate_harmonic() -> bool:
@@ -1210,6 +1340,7 @@ PROPERTIES = {f.__name__[5:]: f for f in (
     prop_J7_nonfinite_or_missing_measurement_refused,
     prop_J8_unsupported_mechanism_cannot_select, prop_J9_unresolved_shipped_floor_earns_no_credit,
     prop_J10_blind_zone_reading_cannot_confirm,
+    prop_J11_submitted_boolean_never_qualifies,
     prop_M1_mechanism_classes, prop_M2_non_detection_is_not_refutation)}
 
 #: defect -> the property whose assertion it is meant to defeat
@@ -1224,7 +1355,8 @@ INTENDED = {"stub-estimator": ("K1_known_answers",),
             "nondetection-refutes": ("M2_non_detection_is_not_refutation",),
             "mechanism-gate-bypass": ("J8_unsupported_mechanism_cannot_select",),
             "floor-as-bound": ("J9_unresolved_shipped_floor_earns_no_credit",),
-            "qualification-bypass": ("J10_blind_zone_reading_cannot_confirm",),
+            "qualification-bypass": ("J10_blind_zone_reading_cannot_confirm",
+                                     "J11_submitted_boolean_never_qualifies"),
             "population-bypass": ("J6_frozen_population_enforced",),
             "nonfinite-bypass": ("J7_nonfinite_or_missing_measurement_refused",)}
 
@@ -1301,7 +1433,7 @@ def _gate():
 
 def _levels_json(r: dict) -> dict:
     return {k: r[k] for k in ("f0", "tau", "glide_cents", "db", "resolved", "floor_db", "slip_hz",
-                              "ambiguous", "interference_free")}
+                              "ambiguous", "interference_free", "qual")}
 
 
 def _try(fn, *a):
@@ -1361,14 +1493,14 @@ def mechanism(refs: pathlib.Path, prereg: dict) -> dict:
                                 "trajectory": t if "REFUSED" in t else
                                 {k: v for k, v in t.items() if k not in ("early", "late")}}
             if "REFUSED" not in h:
-                if _attested(h, 0):
-                    real.append(bool(h["resolved"][0]))    # only an attested take decides the effect
+                if _qualified(h, 0):
+                    real.append(bool(h["resolved"][0]))    # only a qualified take decides the effect
                 elif h["resolved"][0]:
                     n_unq += 1                             # a resolved-but-blind reading is a diagnostic
             if "REFUSED" not in t:
                 e, l = t.get("early") or {}, t.get("late") or {}
-                if _attested(e, 0) and _attested(l, 0):
-                    trajs.append(t)                        # only attested windows decide the class
+                if _qualified(e, 0) and _qualified(l, 0):
+                    trajs.append(t)                        # only qualified windows decide the class
     eff = None if not real else (sum(real) >= 0.75 * len(real))
     return {"takes": takes, "n_refused": sum("REFUSED" in v["levels"] for v in takes.values()),
             "n_unqualified_resolved": n_unq,

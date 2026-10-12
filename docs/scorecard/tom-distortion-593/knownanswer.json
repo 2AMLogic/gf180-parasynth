@@ -42,6 +42,9 @@
   "SLIP_MAX_HZ": 0.25,
   "SLIP_KEEP": 0.3,
   "SLIP_BAND": 0.1,
-  "SLIP_TRIM": 0.1
+  "SLIP_TRIM": 0.1,
+  "QUAL_SEPARATION_HZ": 1.5,
+  "QUAL_WIN_S": 0.28,
+  "QUAL_AT_KF0_TOL_HZ": 0.01
  }
 }

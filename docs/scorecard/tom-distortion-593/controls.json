@@ -15,6 +15,7 @@
   "J8_unsupported_mechanism_cannot_select": "PASS",
   "J9_unresolved_shipped_floor_earns_no_credit": "PASS",
   "J10_blind_zone_reading_cannot_confirm": "PASS",
+  "J11_submitted_boolean_never_qualifies": "PASS",
   "M1_mechanism_classes": "PASS",
   "M2_non_detection_is_not_refutation": "PASS"
  },
@@ -35,6 +36,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "MOVED",
+   "J11_submitted_boolean_never_qualifies": "MOVED",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -54,6 +56,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -73,6 +76,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -92,6 +96,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -111,6 +116,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -130,6 +136,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "MOVED",
    "J10_blind_zone_reading_cannot_confirm": "MOVED",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -149,6 +156,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "MOVED",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -168,6 +176,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -187,6 +196,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -206,6 +216,7 @@
    "J8_unsupported_mechanism_cannot_select": "MOVED",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -225,6 +236,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "MOVED",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -244,6 +256,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -263,6 +276,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "MOVED"
   },
@@ -282,6 +296,7 @@
    "J8_unsupported_mechanism_cannot_select": "BLIND",
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "MOVED",
+   "J11_submitted_boolean_never_qualifies": "MOVED",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   }
@@ -322,7 +337,8 @@
    "J9_unresolved_shipped_floor_earns_no_credit"
   ],
   "qualification-bypass": [
-   "J10_blind_zone_reading_cannot_confirm"
+   "J10_blind_zone_reading_cannot_confirm",
+   "J11_submitted_boolean_never_qualifies"
   ],
   "population-bypass": [
    "J6_frozen_population_enforced"

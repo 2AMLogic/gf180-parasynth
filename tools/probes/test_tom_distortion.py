@@ -373,9 +373,11 @@ def test_blind_zone_reading_cannot_confirm_the_record():
     """The reviewer's exact defeating input: a -30 dB partial at +0.25 Hz from
     H2 reads resolved+unambiguous (the measured blind zone) and that level used
     to decide selection (CONFIRMED 0.989 vs 0.455 with the true -40 dB). Now
-    the judge REFUSES the record, the same record with the true level reads NOT
-    CONFIRMED (so the refusal is the gate, not the number), and the defect that
-    bypasses the gate turns the poisoned record back into CONFIRMED."""
+    the judge REFUSES the record even with every attestation boolean forced
+    True (round 5: booleans are not evidence), the same record with verified
+    evidence and the true level reads NOT CONFIRMED (so the refusal is the
+    gate, not the number), and the defect that makes the consumer trust
+    submissions turns the poisoned record back into CONFIRMED."""
     assert td.prop_J10_blind_zone_reading_cannot_confirm()
     sr, tau, f0 = 48000, 0.06, 72.0
     y = td.synth_mixture(f0, tau, (-40.0, -40.0, -40.0))
@@ -385,16 +387,20 @@ def test_blind_zone_reading_cannot_confirm_the_record():
     h = td.estimate(y, sr)
     assert h["resolved"][0] and not h["ambiguous"][0]      # still read: the disclosed, measured limit
     assert h["interference_free"] == [False] * 3           # and never self-attested
+    assert h["qual"] is None                               # and never produces evidence
     p = td.synthetic_prereg()
     r = td.synthetic_record(prereg=p)
     for row in r["rows"].values():
         if row["split"] == "preservation-only":
             continue
-        row["target_harm"] = {"db": [-28.0] * 3, "resolved": [True, False, False],
+        row["target_harm"] = {"f0": f0, "db": [-28.0] * 3, "resolved": [True, False, False],
                               "interference_free": [True] * 3}
-        row["variants"]["shipped"]["harm"] = {"db": [-50.0] * 3, "resolved": [True] * 3,
+        row["variants"]["shipped"]["harm"] = {"f0": f0, "db": [-50.0] * 3, "resolved": [True] * 3,
                                               "interference_free": [True] * 3}
         row["variants"]["Q"]["harm"] = td._levels_json(h)
+        for hd in (row["target_harm"], row["variants"]["shipped"]["harm"],
+                   row["variants"]["Q"]["harm"]):
+            hd["interference_free"] = [True] * 3           # the round-5 attack: force every boolean
     v = td.judge(r, p)
     assert v["verdict"] == "REFUSED" and "input qualification" in v["why"]
     td.INJECT = {"qualification-bypass"}
@@ -404,27 +410,71 @@ def test_blind_zone_reading_cannot_confirm_the_record():
         td.INJECT = set()
 
 
+def test_submitted_boolean_never_qualifies_the_record():
+    """Round-5 review, permanent control (J11): the poisoned record with every
+    interference_free forced True is a well-formed submission that must stay
+    REFUSED -- and the defect that makes the consumer trust submissions turns
+    it CONFIRMED, proving the gate (not the number) decides."""
+    assert td.prop_J11_submitted_boolean_never_qualifies()
+    td.INJECT = {"qualification-bypass"}
+    try:
+        assert not td.prop_J11_submitted_boolean_never_qualifies()
+    finally:
+        td.INJECT = set()
+
+
 def test_record_without_attestation_is_refused_fail_closed():
-    """A record that predates the boundary (no interference_free anywhere) must
-    not confirm: absent attestation is not attestation."""
+    """A record that predates the boundary (no qual evidence and no
+    interference_free anywhere) must not confirm: absent evidence is not
+    evidence."""
     p = td.synthetic_prereg()
     r = td.synthetic_record(prereg=p)
     for row in r["rows"].values():
         for v in row["variants"].values():
             v["harm"].pop("interference_free", None)
+            v["harm"].pop("qual", None)
         if isinstance(row.get("target_harm"), dict):
             row["target_harm"].pop("interference_free", None)
+            row["target_harm"].pop("qual", None)
     assert td.judge(r, p)["verdict"] == "REFUSED"
 
 
 def test_forged_or_malformed_attestation_is_refused():
-    """A non-boolean or malformed interference_free can never pass the boundary:
-    the guard treats it as absent (fail closed) and refuses the record."""
+    """A non-boolean or malformed interference_free, and malformed or
+    non-verifiable qual evidence, can never pass the boundary. On a scored
+    record the verifier's fail-closed path refuses first (verdict REFUSED);
+    schema-broken shapes can also raise from the validator when the gate does
+    not refuse first (e.g. no resolved scored harmonic). Both surfaces refuse."""
+    def refused(rec) -> bool:
+        try:
+            return td.judge(rec, td.synthetic_prereg())["verdict"] == "REFUSED"
+        except td.Refused:
+            return True
     for bad in ([True, "yes", True], [True, True], "True", [1, 0, 1]):
         r = td.synthetic_record()
         r["rows"]["MT25"]["variants"]["Q"]["harm"]["interference_free"] = bad
-        v = td.judge(r, td.synthetic_prereg())
-        assert v["verdict"] == "REFUSED", bad
+        assert refused(r), bad
+    for badq in ("evidence", [None, None],                     # schema-broken
+                 [{"kind": "analytic-spec"}] * 3,              # well-formed shape, unverifiable
+                 [{"kind": "analytic-spec", "f0": 110.0, "win_s": 0.28, "components": []}] * 3,
+                 [{"kind": "analytic-spec", "f0": 440.0, "win_s": 0.28,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 220.0, "db": -35.0},
+                                  {"f_hz": 330.0, "db": -38.0},
+                                  {"f_hz": 440.0, "db": -41.0}]}] * 3,      # another signal's spec
+                 [{"kind": "analytic-spec", "f0": 110.0, "win_s": 2.0,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 220.0, "db": -35.0},
+                                  {"f_hz": 330.0, "db": -38.0},
+                                  {"f_hz": 440.0, "db": -41.0}]}] * 3,      # another window
+                 [{"kind": "analytic-spec", "f0": 110.0, "win_s": 0.28,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 220.25, "db": -30.0},
+                                  {"f_hz": 330.0, "db": -38.0},
+                                  {"f_hz": 440.0, "db": -41.0}]}] * 3):     # a partial in the blind radius
+        r = td.synthetic_record()
+        r["rows"]["MT25"]["variants"]["Q"]["harm"]["qual"] = badq
+        assert refused(r), badq
 
 
 def test_mechanism_path_does_not_count_unqualified_resolved_h2():
