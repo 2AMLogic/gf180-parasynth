@@ -790,26 +790,34 @@ def test_the_committed_knob_record_covers_every_tone_row_and_passes_the_edt10_ga
             assert rec[k]["status"] == v[k]["status"], (t, k, "recorded status != recomputed")
 
 
+# What the record measured after #656, pinned so a change in EITHER direction is
+# seen: L's late T20 qualified and rising on TONE 00/25/50; refused at the slow
+# end on TONE 75 and 10, which #660 localises to E_CYL's headroom (not the rate).
+_L_REFUSED_AT = {"00": [], "25": [], "50": [], "75": ["10"], "10": ["50", "75", "10"]}
+
+
 @_knob_skip
 def test_the_committed_knob_record_gates_l_late_t20_and_keeps_h_visible():
-    """#656: on every TONE row the gated band L qualifies at all five DECAY
-    positions and rises; the recorded statuses are what the numbers give under
-    the CURRENT verdict function; H keeps its own recorded status (REFUSED
-    somewhere on every row, not a pass) and names its follow-up issue; no
-    E_CYL / E_CYD code is on the floor."""
+    """#656: the gated band L qualifies at all five DECAY positions and rises on
+    TONE 00/25/50, and is REFUSED (never a pass) where _L_REFUSED_AT says; the
+    recorded statuses are what the numbers give under the CURRENT verdict
+    function; H keeps its own recorded status (REFUSED somewhere on every row)
+    and names #661; no E_CYL / E_CYD code is on the floor."""
     d = _knob_record()
     assert d["gate"]["late_t20_gated_bands"] == ["L"] and "late-t20" in d["gate"]["clean"]
     for t in tre.CODES:
         v = _recompute(d, t)
         rec = d["verdicts"][t]
-        for k in ("late-t20", "decay-taus-realised"):
-            assert v[k]["status"] == tre.PASS and rec[k]["status"] == tre.PASS, (t, k, v[k])
+        assert v["decay-taus-realised"]["status"] == rec["decay-taus-realised"]["status"] == tre.PASS, t
+        assert rec["late-t20"]["status"] == v["late-t20"]["status"], t
         L = rec["late-t20"]["bands"]["L"]
-        assert L["refused_at"] == [] and len(L["qualified_at"]) == 5, t
+        assert L["refused_at"] == _L_REFUSED_AT[t], (t, L["refused_at"])
+        want = tre.PASS if not _L_REFUSED_AT[t] else tre.REFUSED
+        assert v["late-t20"]["status"] == want, (t, v["late-t20"]["status"])
         for b in ("H", "L"):
             assert rec["late-t20"]["bands"][b]["status"] == v["late-t20"]["bands"][b]["status"], (t, b)
         assert rec["late-t20"]["ungated"]["H"]["status"] != tre.PASS, t
-        assert rec["late-t20"]["ungated"]["H"]["issue"], t
+        assert rec["late-t20"]["ungated"]["H"]["issue"] == 661, t
     floor = d["rate_register_floor"]["positions"]
     for x in tre.DECAY_ORDER:
         for n in ("E_CYL", "E_CYD"):
@@ -831,7 +839,32 @@ def test_the_knob_record_check_turns_red_on_a_planted_regression_off_the_anchor_
         assert v["h-edt10-rises"]["status"] == tre.FAIL, t
         assert v["l-edt10-rises"]["status"] == tre.FAIL, t
         assert v["h-edt10-direction-matches-808"]["status"] == tre.FAIL, t
-        assert v["late-t20"]["status"] == tre.FAIL, t
+        # a plateau where every position qualified is FAIL; where one is refused
+        # the row stays REFUSED -- red either way, never PASS
+        qualified = all(tre._finite(row[x]["L_t20_late_ms"]) for x in tre.DECAY_ORDER)
+        assert v["late-t20"]["status"] == (tre.FAIL if qualified else tre.REFUSED), t
+
+
+CONFIRM_RECORD = KNOB_RECORD.parent / "confirmation.json"
+
+
+@pytest.mark.skipif(not CONFIRM_RECORD.exists(), reason="the confirmation record is not committed")
+def test_the_confirmation_record_reproduces_the_gate_on_untouched_conditions():
+    """#656 confirmation (tools/probes/cymbal_late_t20.py confirm): TONE 25 at
+    nine wiper fractions, four between the knob codes -- L qualifies and rises
+    at every one; TONE 75 with the strike 7919 frames later -- L refuses at
+    DECAY 10 exactly as the selection grid did (#660), and nowhere else. From a
+    clean tree."""
+    import json
+    c = json.loads(CONFIRM_RECORD.read_text())
+    assert c["sources_dirty"] is False and c["rate_exp_bits"] == dx.RATE_EXP_BITS
+    a = c["intermediate_wipers_tone25"]
+    assert a["L"]["status"] == "PASS" and len(a["rows"]) == 9
+    vals = [a["rows"][k]["L"]["t20_late_ms"] for k in sorted(a["rows"], key=float)]
+    assert all(y > x for x, y in zip(vals, vals[1:])), vals
+    b = c["shifted_phase_tone75"]
+    assert b["L"]["status"] == "REFUSED" and b["L"]["refused_at"] == [4]
+    assert b["hit_frame"] != rc.DRUM_SOLO_HIT_FRAME
 
 
 # ---- the command's own exit decision (run_knob_render, not just the verdict) --

@@ -1,6 +1,6 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 17 — 2026-10-08 — status: PROPOSED. Not ratified.**
+**Revision 18 — 2026-10-12 — status: PROPOSED. Not ratified.**
 
 Revision 13 is one normative change: the shark-tooth's triangle share now
 carries a **polyBLAMP** correction on its two corners as well as the PolyBLEP
@@ -11,8 +11,10 @@ G), the rimshot's two bridged-T modes' relative drive and the level re-balance
 that follows it (#388). Revision 16 adds one register, the shared-bus DC
 coupling's enable at drum-page `0x30` (15.10, DR 0025; #551), reset off, with
 no RTL yet. Revision 17 changes nothing: it records in 5.1 and 5.2 the seven
-registers and the fourth `wave` bit that revision 9 shipped (#321). Section 18
-has all five.
+registers and the fourth `wave` bit that revision 9 shipped (#321). Revision
+18 gives the drum envelopes' `RATE` and `FRATE` a 3-bit exponent above their
+16-bit mantissa (15.3, #656); exponent 0 is the old register exactly. Section 18
+has all six.
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -125,7 +127,7 @@ envelope.
 | Tuning | A4 (MIDI note 69) = 440 Hz |
 | Glide | `glide`, unsigned Q0.24, 24 bits, the ratio per frame minus 1; increment accumulator Q24.8 (`GLIDE_BITS`, `INC_FRAC`); the reference host writes 2692 = 90 ms per octave (`GLIDE_REF_S`) — DR 0004 |
 | Drum stops / accents | 11 stops, edge-triggered; accent Q0.15, 16 bits per stop (15.2) — DR 0008 |
-| Drum envelopes | 18; level 24-bit unsigned Q0.24, rate Q0.16, hold 8 bits, bursts 2, period 9, frame counter 11 (15.3) |
+| Drum envelopes | 18; level 24-bit unsigned Q0.24, rate and frate 19 bits = 3-bit exponent e above a Q0.16 mantissa m (revision 18), hold 8 bits, bursts 2, period 9, frame counter 11 (15.3) |
 | Drum paths | 23; source 5 bits, two envelope indices of 5 bits, nonlinearity 2 bits, attenuation 3, destination 5 (15.5) |
 | Drum sources | a 31-bit LFSR (16 bits per frame), six 24-bit square-wave phase accumulators, a pulse (15.4) |
 | Modal bank | 12 modes, the first 6 with a selectable numerator; coefficients Q2.24 signed (26 bits); amp Q0.16; state 28 bits, 15 fraction; excitation 21 bits; output Q4.15, 19 bits (15.6) |
@@ -1482,8 +1484,8 @@ legal; nothing is rejected for range. Writes apply at frame boundaries by
 | `0x30` | `COUPLE` | 1 | **revision 16** (15.10): bit 0 enables the shared-bus DC coupling, K = 10 fixed; bits 31..1 reserved, ignored on write; resets to 0 = bypass |
 | `0x40 + 4e` | `ENV_CTL[e]` | 27 | `[3:0] stop`, `[7:4] choke`, `[15:8] hold`, `[17:16] bursts`, `[26:18] period` (15.3); a stop or choke index ≥ `N_STOPS` means never |
 | `0x41 + 4e` | `ENV_PEAK[e]` | 24 u | Q0.24 level at a strike, before the accent |
-| `0x42 + 4e` | `ENV_RATE[e]` | 16 u | Q0.16 decay rate, the voice's `rate` (8.3) |
-| `0x43 + 4e` | `ENV_FRATE[e]` | 16 u | **revision 14**: Q0.16 decay rate of the FINAL strike (15.3); 0 = off, the reset value, which is the envelope of revisions 10 to 13 exactly |
+| `0x42 + 4e` | `ENV_RATE[e]` | 19 u | decay rate `{e[2:0], m[15:0]}`, `dec = (level · m) >> (16 + e)` (**revision 18**, 15.3); `e = 0` is the Q0.16 rate of revisions 10 to 17 exactly. Bits 31..19 are not stored |
+| `0x43 + 4e` | `ENV_FRATE[e]` | 19 u | **revision 14**: decay rate of the FINAL strike (15.3), the same `{e, m}` encoding since revision 18; 0 = off, the reset value, which is the envelope of revisions 10 to 13 exactly. Any non-zero code enables it, an exponent with `m = 0` included |
 | `0x90 + p` | `PATH[p]` | 25 | `[4:0] src`, `[9:5] e1`, `[14:10] e2`, `[16:15] nl`, `[19:17] att`, `[24:20] dest` (15.5) |
 | `0xB0 + 4m` | `MODE_A1[m]` | 26 s | Q2.24 coefficient a1 = 2r·cos ω |
 | `0xB1 + 4m` | `MODE_A2[m]` | 26 s | Q2.24 coefficient a2 = −r² |
@@ -1558,7 +1560,8 @@ else:
     elif period ≠ 0 and t = k·period for some k in 1..bursts:
         strike ← (strike · 53248) >> 16 ;  level ← strike   re-strike at 13/16 of the last
     else:                                                   decay, the release rule of 8.3
-        dec   ← (level · rate) >> 16
+        m, e  ← rate[15:0], rate[18:16]                     revision 18; e = 0 before it
+        dec   ← (level · m) >> (16 + e)
         level ← max(0, level − max(1, dec))
 if choke < 8 and fire[choke]:  level ← 0                    choked, after everything above
 ENV(e) = level >> 9                                         Q0.15, what the paths multiply by
@@ -1572,7 +1575,7 @@ below applies and the envelope is revision 10 exactly. With `FRATE ≠ 0`, and
 ```
 fired:                         fcap ← level                 the fire level, captured once per hit
 re-strike at t = last:         strike ← fcap ; level ← strike      NOT 13/16 of the last strike
-decay while t > last:          dec ← (level · FRATE) >> 16   FRATE instead of rate
+decay while t > last:          dec ← (level · FRATE.m) >> (16 + FRATE.e)   FRATE instead of rate
 choked:                        fcap ← 0 as well              no final strike can follow a choke
 ```
 
@@ -1596,6 +1599,35 @@ choked:                        fcap ← 0 as well              no final strike c
   `INJECT_BUG_DRUM_FINAL_WEAK` (13/16 final strike), `_FINAL_SHORT` (keeps
   `RATE`), `_FINAL_SHIFT` (one burst early, the 4th strike omitted) and
   `_FCAP_STALE` (a retrigger keeps the previous capture).
+
+**Revision 18: the rate exponent** (#656). Q0.16 alone stops at `rate = 1`,
+τ = 2^16 / SR = 1.3653 s, and one step above it (rate 2) halves τ: the
+cymbal's DECAY knob asked E_CYL for about 0.92 s and 1.16 s at 7.5 and 10.0
+and got 1.3653 s for both. `RATE` and `FRATE` are now `{e, m}` with
+`dec = (level · m) >> (16 + e)`, the voice release's encoding (8.3, `AdsrFx`)
+on the drum envelopes.
+
+- `e = 0` is the old register bit for bit. The reference kit (Appendix G)
+  writes `e = 0` everywhere (`rate_reg`), so every shipped sound is unchanged.
+  `drums_fx.rate_code` normalises the mantissa where the field allows.
+- The width (3 bits) is a swept dial: `docs/sensitivity/drum-rate-exp-bits.json`,
+  plan committed before any point. At 3 bits every cymbal DECAY ask at 101
+  wiper positions is realised within 0.31 %. The frozen 5 % rule alone selected
+  2 bits, which a frozen acoustic gate then refuted, and the record says so.
+- `m = 0` at any `e` decays one LSB per frame, as `rate = 0` always did.
+  `RATE` and `FRATE` are read on every decay frame and apply from the frame
+  they are written. Fire, hold, re-strike, final strike and choke do not read
+  `e`.
+- Below about −20 dB of a slow envelope, `(level · m) >> (16 + e)` is a few
+  LSB, and truncation makes the tail run 6.7–8.3 % slower than the code's
+  nominal τ, at every width (the sweep's `tail_slow_pct`). This is a property
+  of the envelope since revision 1. It is not changed here.
+- RTL (`drum_dp.v`): the multiply is unchanged (`m` is the 16-bit operand).
+  The applied slot shifts the 40-bit product by `e` before taking `[39:16]`,
+  combinationally, so the schedule is still 68 clocks. `drum_regs.v` stores 19
+  bits. Negative controls: `INJECT_BUG_DRUM_RATE_Q16` (the datapath ignores
+  `e`) and `INJECT_BUG_DRUM_RATE_REG16` (the register truncates the write to
+  16 bits, as it did). Both are caught at the I2S pins.
 
 `ENV(e)` is read *after* this frame's update: the fired frame reads the
 strike, the next frame the first decay. A `hold` of H keeps the strike for
@@ -2412,6 +2444,19 @@ record that extends this document; none may be resolved by picking a reading.
 ---
 
 ## 18. Revision history
+
+- **Rev 18 (2026-10-12)** — **the drum envelope rate exponent** (15.3, 15.1;
+  #656, part of #369). `ENV_RATE` and `ENV_FRATE` grow from 16 to 19 bits:
+  a 3-bit exponent `e` above the Q0.16 mantissa `m`, with
+  `dec = (level · m) >> (16 + e)`. `e = 0` is revision 17 exactly, the
+  reference kit writes only `e = 0`, and every pinned stream of the shipped kit
+  is unchanged. The exponent is used by the cymbal's DECAY knob
+  (`cymbal_candidate.shipped_knob_kit`) off its anchor, where Q0.16 put E_CYL
+  on `rate = 1` at both DECAY 7.5 and 10.0. Model, RTL (`drum_dp`, `drum_regs`,
+  `drum_kit`, `synth_top`, parameter `RATE_EB = 3`) and benches move together.
+  `verify_drums` and `verify_synth_top` (at the pins) are bit-exact, and the two
+  negative controls above are caught. Width selection and its amendment:
+  `docs/sensitivity/drum-rate-exp-bits.json`.
 
 - **Rev 17 (2026-10-08)** — **records what revision 9 already shipped in 5.1
   and 5.2** (#321; found while writing Rev 9's own entry, #301). **No behaviour

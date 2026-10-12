@@ -121,7 +121,8 @@ def _final_strike_env_class():
                     self.n_restrike += 1
                 else:
                     rate = self.final_rate if (self.bursts and t > last) else self.rate
-                    dec = (self.level * rate) >> dx.RATE_Q
+                    # revision 18 (#656): {e, m}; e = 0 is the Q0.16 rate this was written for
+                    dec = (self.level * (rate & dx.RATE_M_MASK)) >> (dx.RATE_Q + (rate >> dx.RATE_Q))
                     if dec == 0:
                         self.n_floor += self.level > 0
                         if self.floor:
