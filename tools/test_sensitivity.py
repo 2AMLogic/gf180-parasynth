@@ -30,7 +30,10 @@ FILES = ["docs/sensitivity/registry.json",
          # issue #551's record: COUPLE_K, a python-constant in the drum model
          "docs/sensitivity/coupling-k.json",
          "docs/sensitivity/coupling-k-sweep.txt",
-         "model/drums_fx.py"]
+         "model/drums_fx.py",
+         # issue #656's record: RATE_EXP_BITS, the drum envelope rate exponent
+         "docs/sensitivity/drum-rate-exp-bits.json",
+         "docs/sensitivity/drum-rate-exp-bits-sweep.txt"]
 
 
 @pytest.fixture
