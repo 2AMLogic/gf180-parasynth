@@ -564,6 +564,7 @@ def print_report(res: dict):
 # qualifies it and gated only for monotonicity among those positions. The
 # refusals are listed, never counted as passes.
 SWEEP_SECONDS = 7.0
+FISCHER_DEADBAND = 0.02        # the 808's own step below this establishes no direction
 MIN_H_EDT_STEP = 0.05          # H EDT10 must rise by >= 5 % per DECAY step
 PASS, FAIL, REFUSED = "PASS", "FAIL", "REFUSED"
 DECAY_ORDER = ("00", "25", "50", "75", "10")      # by knob value, NOT by filename
@@ -651,11 +652,22 @@ def decay_row_verdict(row: dict, identical: dict, fischer_h_edt: dict | None) ->
         if not all(_finite(x) for x in f) or not all(_finite(x) for x in h):
             out["h-edt10-direction-matches-808"] = {"status": REFUSED, "why": "non-finite input"}
         else:
-            fdir = [b > a for a, b in zip(f, f[1:])]
-            odir = [b > a for a, b in zip(h, h[1:])]
+            # The 808's own H EDT10 plateaus at TONE 10 (137.10 -> 136.19 ms from
+            # DECAY 7.5 to 10): a reference that does not move there establishes
+            # no direction there. A step inside the deadband is UNDETERMINED and
+            # not required of us; a determined step must agree. (First version
+            # demanded all four rise and so was unsatisfiable on that row by the
+            # reference's own data -- wrong-then-right 5.)
+            fstep = [b / a - 1.0 for a, b in zip(f, f[1:])]
+            ostep = [b / a - 1.0 for a, b in zip(h, h[1:])]
+            det = [abs(x) > FISCHER_DEADBAND for x in fstep]
+            agree = [(x > 0) == (y > 0) for x, y, d in zip(fstep, ostep, det) if d]
             out["h-edt10-direction-matches-808"] = {
-                "status": PASS if fdir == odir and all(fdir) else FAIL,
-                "fischer": f, "ours": h}
+                "status": PASS if (agree and all(agree)) else (REFUSED if not agree else FAIL),
+                "fischer": f, "ours": h, "fischer_rel_steps": [round(x, 4) for x in fstep],
+                "undetermined_steps": [f"{a}->{b}" for (a, b), d in
+                                       zip(zip(DECAY_ORDER, DECAY_ORDER[1:]), det) if not d],
+                "deadband": FISCHER_DEADBAND}
     # the issue's qualified measure: reported where qualified, never faked
     t20 = {}
     for b in ("H", "L"):

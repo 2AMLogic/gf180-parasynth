@@ -536,6 +536,20 @@ def test_a_non_finite_measure_is_refused_never_passed(bad):
     assert v["h-edt10-direction-matches-808"]["status"] == tre.REFUSED
 
 
+def test_a_plateau_in_the_808_establishes_no_direction_but_a_reversal_still_fails():
+    plateau = dict(_FISCHER, **{"10": _FISCHER["75"] * 0.995})       # the TONE-10 row's shape
+    v = tre.decay_row_verdict(_good_row(), dict(_ALL_DISTINCT), plateau)
+    p = v["h-edt10-direction-matches-808"]
+    assert p["status"] == tre.PASS and p["undetermined_steps"] == ["75->10"]
+    reversed_ours = _good_row()
+    reversed_ours["50"]["H_edt10_ms"], reversed_ours["75"]["H_edt10_ms"] = 330, 268     # a real reversal
+    v = tre.decay_row_verdict(reversed_ours, dict(_ALL_DISTINCT), _FISCHER)
+    assert v["h-edt10-direction-matches-808"]["status"] == tre.FAIL
+    flat = {d: 100.0 for d in tre.DECAY_ORDER}                                          # no direction at all
+    v = tre.decay_row_verdict(_good_row(), dict(_ALL_DISTINCT), flat)
+    assert v["h-edt10-direction-matches-808"]["status"] == tre.REFUSED
+
+
 def test_a_missing_audio_comparison_is_refused():
     v = tre.decay_row_verdict(_good_row(), {}, _FISCHER)
     assert v["distinct-renders"]["status"] == tre.REFUSED
