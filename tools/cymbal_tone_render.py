@@ -723,22 +723,24 @@ def fischer_h_edt(tone: str, path=None) -> dict:
     return {d: blob[f"CY{tone}{d}"]["H"]["edt10_ms"] for d in DECAY_ORDER}
 
 
+_REAL_DECAY_SCALE = cc.decay_scale
+
+
 def saturated_decay_scale(code: str) -> float:
     """THE HISTORICAL DEFECT as a control: DECAY 10.0 asks for what 7.5 asked
     for. The old path got there through a clamp on a fitted scale (k <= 8) that
     pushed E_CYL's tau past the Q0.16 rate register's floor; the observable was
     the same -- two knob positions, one register image, one waveform."""
-    return cc.decay_scale("75" if code == "10" else code)
+    return _REAL_DECAY_SCALE("75" if code == "10" else code)
 
 
 def saturated_kit(tone, decay):
     """`shipped_knob_kit` with the saturation injected. Builds and executes."""
-    orig = cc.decay_scale
     cc.decay_scale = saturated_decay_scale
     try:
         return cc.shipped_knob_kit(tone, decay)
     finally:
-        cc.decay_scale = orig
+        cc.decay_scale = _REAL_DECAY_SCALE
 
 
 def rate_register_floor() -> dict:
@@ -775,7 +777,7 @@ def run_knob_render(out: pathlib.Path) -> int:
         owned = {f"CY{t}{d}": owned_addresses_check(t, d) for t in CODES for d in DECAY_ORDER}
         hats = hat_preservation()
         # the control: the clean 00/25/50, the saturated 75/10, TONE anchor row
-        mrow, mident, _ = sweep_row(cc.TONE_ANCHOR, kit_fn=saturated_kit, decays=("75", "10"),
+        mrow, mident, _ = sweep_row(cc.TONE_ANCHOR, kit_fn=saturated_kit,
                                     _audio={d: audio50[d] for d in ("00", "25", "50")})
         mutant = decay_row_verdict(mrow, mident, fi[cc.TONE_ANCHOR])
     except Refused as exc:

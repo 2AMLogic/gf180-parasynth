@@ -2109,3 +2109,19 @@ def test_the_frozen_ruler_makes_the_two_distances_commensurate():
     # property that hides the mismatch rather than the property we want
     assert np.allclose(_zspace(None, np.vstack([a, b])),
                        _zspace(None, np.vstack([a * 7.0, b * 7.0])))
+
+
+# ---- #413: the CY knob branch is the shipped constructor, not a fitted law ----
+def test_cy_knob_render_is_delegated_and_reads_no_fitted_law():
+    """`kit_at("CY", ...)` used to solve TONE for the reference's own band ratio
+    and DECAY through a clamped power law (7.5 and 10.0 rendered bit-identical).
+    Pass NO laws: if the branch still read `CY.tone_ratio` / `CY.decay_tau` this
+    would KeyError, and the anchor must be the shipped image exactly."""
+    import cymbal_candidate as cc
+    import drums_fx as dx
+    assert not hasattr(sys.modules[__name__], "_cy_hi_amp")
+    assert not hasattr(sys.modules[__name__], "_cy_decay_scale")
+    assert dict(kit_at("CY", (5.0, 2.5), {})) == dict(dx.kit_with_sounds("CY"))
+    img75, img10 = dict(kit_at("CY", (5.0, 7.5), {})), dict(kit_at("CY", (5.0, 10.0), {}))
+    assert img75 != img10                                  # the historical saturation
+    assert img10 == dict(cc.shipped_knob_kit(5.0, 10.0))   # one constructor, not two
