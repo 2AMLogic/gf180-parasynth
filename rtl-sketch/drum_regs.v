@@ -48,7 +48,7 @@ module drum_regs #(
     parameter PATHS = 23,
     parameter MODES = 16,
     parameter STOPS = 11,
-    parameter RATE_EB = 2                        // revision 18 (#656): RATE / FRATE exponent bits
+    parameter RATE_EB = 3                        // revision 18 (#656): RATE / FRATE exponent bits
 )(
     input  wire        clk,
     input  wire        rst_n,

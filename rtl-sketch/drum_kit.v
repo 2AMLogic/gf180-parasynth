@@ -20,7 +20,7 @@ module drum_kit #(
     parameter OW    = 19,
     parameter HR    = 0,
     parameter MW    = 4,
-    parameter RATE_EB = 2,                       // revision 18 (#656): RATE / FRATE exponent bits
+    parameter RATE_EB = 3,                       // revision 18 (#656): RATE / FRATE exponent bits
     parameter ROM_FILE = "tanh16.hex"
 )(
     input  wire                    clk,

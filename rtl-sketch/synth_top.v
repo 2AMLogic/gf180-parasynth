@@ -50,7 +50,7 @@ module synth_top #(
     parameter MODES = 16,
     parameter NUMS  = 11,
     parameter STOPS = 11,
-    parameter RATE_EB = 2,            // revision 18 (#656): drum RATE / FRATE exponent bits
+    parameter RATE_EB = 3,            // revision 18 (#656): drum RATE / FRATE exponent bits
     parameter WITH_UART = 0,          // second control front end on the UART pins
     parameter UART_BAUD = 115_200,
     parameter UART_EVQ_DEPTH = 64,

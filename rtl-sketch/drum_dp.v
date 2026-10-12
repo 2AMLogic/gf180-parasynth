@@ -57,7 +57,7 @@ module drum_dp #(
     parameter SB       = 28,             // the bank's state width, for the tap
     parameter EW       = 21,             // the bank's excitation width
     parameter MW       = 4,              // mode index width
-    parameter RATE_EB  = 2,              // revision 18: RATE / FRATE exponent bits (>= 1)
+    parameter RATE_EB  = 3,              // revision 18: RATE / FRATE exponent bits (>= 1)
     parameter ROM_FILE = "tanh16.hex"
 )(
     input  wire                  clk,

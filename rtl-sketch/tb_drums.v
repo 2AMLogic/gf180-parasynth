@@ -20,7 +20,7 @@
 module tb_drums;
     parameter ENVS = 18, PATHS = 23, MODES = 16, NUMS = 11, STOPS = 11, MW = 4;
     parameter MAXW = 1 << 16;
-    parameter RATE_EB = 2;                        // revision 18 (#656)
+    parameter RATE_EB = 3;                        // revision 18 (#656)
     localparam RW = 16 + RATE_EB;
 
     reg clk = 0, rst_n = 0, frame_tick = 0;

@@ -32,7 +32,7 @@ from dsp import SR
 FULL24 = (1 << 24) - 1
 ACC = [32768] * dx.N_STOPS
 E = dx.E_CYL                       # any envelope; the cymbal's low band is the one #656 is about
-EMAX = (1 << dx.RATE_EXP_BITS) - 1   # the largest exponent the field holds (3 at RATE_EXP_BITS = 2)
+EMAX = (1 << dx.RATE_EXP_BITS) - 1   # the largest exponent the field holds (7 at RATE_EXP_BITS = 3)
 TOL = 0.05                         # the sensitivity plan's frozen tau tolerance (ISO 3382-1 EDT JND)
 
 
@@ -141,11 +141,11 @@ def test_largest_and_smallest_codes():
 
 
 def test_register_holds_16_plus_exponent_bits_and_ignores_the_rest():
-    """RATE and FRATE are 16 + RATE_EXP_BITS wide (REG_BITS, 18 at 2 bits);
+    """RATE and FRATE are 16 + RATE_EXP_BITS wide (REG_BITS);
     the bits above are not stored, exactly as bits 31..16 were not stored
     before revision 18."""
     w = 16 + dx.RATE_EXP_BITS
-    assert dx.REG_BITS["rate"] == dx.REG_BITS["frate"] == w == 18
+    assert dx.REG_BITS["rate"] == dx.REG_BITS["frate"] == w
     d = dx.DrumsFx()
     base = dx.A_ENV + E * dx.ENV_STRIDE
     d.write(base + 2, (0xFFFFFFFF << w) & 0xFFFFFFFF | (EMAX << 16) | 1234)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """#656: the cymbal's late T20 after the RATE exponent -- localisation and confirmation.
 
-    python3 tools/probes/cymbal_late_t20.py localise-h --out docs/scorecard/cymbal-369/knob-render/h-late-t20-localise.json
+    python3 tools/probes/cymbal_late_t20.py localise --out docs/scorecard/cymbal-369/knob-render/late-t20-localise.json
     python3 tools/probes/cymbal_late_t20.py confirm    --out docs/scorecard/cymbal-369/knob-render/confirmation.json
 
 Both measure with the frozen instrument (`tools/cymbal_bands.measure` through
@@ -9,16 +9,20 @@ Both measure with the frozen instrument (`tools/cymbal_bands.measure` through
 rendered by the integer model exactly as `cymbal_tone_render.render_shipped_knob`
 does (one strike at accent 1.0, both drum buses 0.45, 7 s after the strike).
 
-localise-h
+localise
     #656's curation: "attributing every multi-exponential refusal to that floor
     is a hypothesis until a paired intervention demonstrates it". With the floor
-    gone, H's late T20 still refuses at TONE 50 (also at the anchor, which the
-    floor never touched). This is the paired intervention on the remaining
-    cause: the same image with ONE cymbal VCA path switched off (low / short),
-    at the anchor and at DECAY 10. If H qualifies with the low path off and
-    not with the short path off, H's late segment is the low band's energy
-    above 6 kHz on top of E_CYD: a property of the shipped kit's band
-    structure, not of the rate register.
+    gone, two refusals remain: H at TONE 50 (also at the anchor, which the
+    floor never touched) and L at TONE 10 / DECAY 7.5-10. This is the paired
+    intervention on each: the same image with ONE cymbal VCA path switched off.
+      H, TONE 50, DECAY 2.5 and 10: low path off, short path off
+      L, TONE 10, DECAY 7.5 and 10: decay path off, short path off
+    LOCALISED means: switching the suspected path off drops the band's late
+    residual below the instrument's 1.5 dB bound by at least 0.5 dB, and
+    switching the short path off moves it by less than 0.2 dB. (Wrong-then-right
+    2: the first criterion asked that the short-path-off render NOT qualify,
+    and read H's 1.47 dB -- unchanged from 1.50, just under the bound -- as a
+    counterexample. The residual, not the threshold crossing, is the effect.)
 
 confirm
     The DECAY gate (`cymbal_tone_render --knob-render`) selects nothing -- it is
@@ -87,27 +91,39 @@ def provenance() -> dict:
     return {"commit": head, "sources_dirty": dirty, "rate_exp_bits": dx.RATE_EXP_BITS}
 
 
-def localise_h() -> dict:
+CASES = (("H", "50", ("25", "10"), "no-low", cc.P_CYL),
+         ("L", "10", ("75", "10"), "no-decay", cc.P_CYD))
+MAX_RESID_DB = cb.MAX_RESID_DB
+
+
+def localise() -> dict:
     off = dx.path_word(dx.SRC_OFF, dx.ENV_NONE, dest=dx.DEST_MIX)
-    out = {}
-    for d in ("25", "10"):
-        base = dict(cc.shipped_knob_kit(cc.TONE_ANCHOR, d))
-        for label, drop in (("all", ()), ("no-low", (cc.P_CYL,)), ("no-short", (cc.P_CYS,))):
-            img = dict(base)
-            for p in drop:
-                img[dx.A_PATH + p] = off
-            r = measure(render(sorted(img.items())), f"CY50{d} {label}")
-            out[f"D{d}/{label}"] = r
-            print(f"DECAY {d} {label:9s} H T20 {r['H']['t20_late_ms']} resid {r['H']['late_residual_db']} | "
-                  f"L T20 {r['L']['t20_late_ms']} resid {r['L']['late_residual_db']}", flush=True)
-    q = lambda k: _finite(out[k]["H"]["t20_late_ms"])        # noqa: E731
-    finding = {d: {"all_qualifies": q(f"D{d}/all"), "no_low_qualifies": q(f"D{d}/no-low"),
-                   "no_short_qualifies": q(f"D{d}/no-short")} for d in ("25", "10")}
-    localised = all(not f["all_qualifies"] and f["no_low_qualifies"] and not f["no_short_qualifies"]
-                    for f in finding.values())
+    out, finding = {}, {}
+    for band, tone, decays, suspect, sp in CASES:
+        for d in decays:
+            base = dict(cc.shipped_knob_kit(tone, d))
+            res = {}
+            for label, drop in (("all", ()), (suspect, (sp,)), ("no-short", (cc.P_CYS,))):
+                img = dict(base)
+                for p in drop:
+                    img[dx.A_PATH + p] = off
+                r = measure(render(sorted(img.items())), f"CY{tone}{d} {label}")
+                res[label] = r
+                print(f"{band} TONE {tone} DECAY {d} {label:9s} T20 {r[band]['t20_late_ms']} "
+                      f"resid {r[band]['late_residual_db']}", flush=True)
+            out[f"{band}/CY{tone}{d}"] = res
+            a = res["all"][band]["late_residual_db"]
+            s_ = res[suspect][band]["late_residual_db"]
+            n = res["no-short"][band]["late_residual_db"]
+            ok = all(_finite(x) for x in (a, s_, n))
+            finding[f"{band}/CY{tone}{d}"] = {
+                "suspect_path_off": suspect, "resid_all_db": a, "resid_suspect_off_db": s_,
+                "resid_short_off_db": n,
+                "localised": bool(ok and s_ < MAX_RESID_DB and a - s_ >= 0.5 and abs(n - a) < 0.2)}
     return {"renders": out, "finding": finding,
-            "localised_to_low_band": localised,
-            "what": "H's late T20 with one cymbal VCA path off; TONE 50"}
+            "localised_everywhere": all(f["localised"] for f in finding.values()),
+            "max_resid_db": MAX_RESID_DB,
+            "what": "the late-T20 residual of the refusing band with one cymbal VCA path off"}
 
 
 def confirm() -> dict:
@@ -137,11 +153,11 @@ def confirm() -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("what", choices=("localise-h", "confirm"))
+    ap.add_argument("what", choices=("localise", "confirm"))
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     try:
-        res = localise_h() if a.what == "localise-h" else confirm()
+        res = localise() if a.what == "localise" else confirm()
     except (cb.Refused, cc.Refused, rc.Refused) as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2

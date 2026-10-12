@@ -96,8 +96,8 @@
   "tau_tolerance_relative": 0.05,
   "tolerance_basis": "ISO 3382-1:2009 Annex A, Table A.1: the just-noticeable difference of early decay time and reverberation time is 5 % relative. A realised decay within 5 % of the asked one is not audibly a different DECAY setting. This is a property of hearing, fixed before any width was evaluated and independent of what any width achieves.",
   "rule": "ship the SMALLEST width on the grid whose worst error is <= 5 %; every rate word costs 36 flip-flops per exponent bit, so a wider field than the tolerance needs buys nothing audible.",
-  "selected": 2,
-  "result": "worst errors 49.23 / 24.89 / 4.978 / 0.312 / 0.0014 % for 0..4 bits; the smallest width at or under 5 % is 2 (4.978 %), so RATE_EXP_BITS = 2 ships, by the rule frozen in the plan."
+  "selected": 3,
+  "result": "worst errors 49.23 / 24.89 / 4.978 / 0.312 / 0.0014 % for 0..4 bits. The plan's rule alone selects 2 (4.978 %). AMENDED to 3 after a measurement refuted the rule's stated premise -- see amendments. 3 is also what the plan's closed-form prediction selected."
  },
  "verdict": {
   "state": "SENSITIVE",
@@ -118,11 +118,20 @@
     4
    ]
   ],
-  "summary": "Every adjacent width separates by 2x or more, as predicted in closed form.\nThe frozen 5 % rule selects 2 bits (worst 4.978 %, the five knob codes 4.72 % E_CYL / 1.35 % E_CYD).\n3 bits would buy 0.31 % for 36 more flip-flops; that is below the JND and the rule does not buy it."
+  "summary": "Every adjacent width separates by 2x or more, as predicted in closed form.\nThe frozen 5 % rule alone selects 2 bits (4.978 %, a 0.022-point margin); the selection was amended to 3 (0.31 %)\nbecause 2 bits measurably moved a frozen acoustic gate (amendments). 3 costs 36 more flip-flops than 2."
  },
  "limits": [
-  "The plan's SELECTION prediction was wrong in detail: it predicted 2 bits just above 5 % (about 5.3 %) and selection 3. Measured 4.978 %, just below, so the rule selects 2. The runs prediction (SENSITIVE) held. The selection margin is 0.022 percentage points: a different anchor or DECAY network would move it, and the record says so rather than widening the field after the fact.",
+  "The plan's SELECTION prediction (3, with 2 just above 5 %) was wrong in detail: 2 measured 4.978 %, just under, so the frozen rule selected 2. The selection was then amended to 3 (see amendments), which is where the prediction had put it -- by a different route, which is recorded rather than claimed as a confirmed prediction.",
   "The objective is the closed-form tau of the code. The integer decay truncates (level * m) >> (16 + e), so below about -20 dB of the strike it runs 6.7-8.3 % slower than the closed form at EVERY width (tail_slow_pct), the anchor included. That bias predates revision 17 and is the same for every width at equal realised tau.",
   "One knob law (cymbal_candidate's DECAY network, scaled from the anchor's realised tau). Other envelopes keep rate_reg's e = 0 codes and are unaffected."
+ ],
+ "amendments": [
+  {
+   "stated_before_results": false,
+   "found_by": "the #656 knob-render gate's own measurement, after the width was first set to 2: the frozen late-T20 instrument (tools/cymbal_bands.py, MAX_RESID_DB 1.5) REFUSED band L at TONE 5.0 / DECAY 10.0 with 2 bits (Schroeder residual 1.51 dB; E_CYL code 0x30009, realised 1.2136 s against an ask of 1.1589 s, +4.72 %) and QUALIFIED it with 3 bits (1.38 dB; code 0x70097, 1.1574 s, -0.13 %), everything else identical (tools/probes/cymbal_late_t20.py renders; docs/scorecard/cymbal-369/knob-render/README.md).",
+   "what_was_wrong": "the selection rule's premise, 'a wider field than the tolerance needs buys nothing audible', treated the 5 % JND as the only consequence of a tau error. A +4.7 % error on E_CYL alone changes the RATIO of the two DECAY envelopes, which is what decides whether a band's late decay is one exponential; at the slow end that moved a frozen gate across its line.",
+   "what_is_unchanged": "the grid, the objective, the decision rule and the points; the runs prediction (SENSITIVE) holds. Only the selection moved, from 2 to 3.",
+   "honest_limit": "the evidence for 3 over 2 is one condition crossing a threshold by 0.01 dB one way and 0.12 dB the other; it is a paired measurement, not a margin. The independent reason to prefer 3 is the tolerance margin itself: 2 bits met 5 % by 0.022 points."
+  }
  ]
 }

@@ -560,25 +560,27 @@ def print_report(res: dict):
 # at both positions. #656 gave the register an exponent (contract revision 18),
 # and the gate now stands on the late T20 as well as on EDT10:
 #
-#   late-t20  GATED on band L: the frozen measure must QUALIFY at all five DECAY
-#             positions and RISE strictly at every step. A refusal anywhere is
-#             REFUSED, a plateau or a reversal is FAIL; neither is a pass.
+#   late-t20  GATED on band L, on EVERY TONE row: the frozen measure must
+#             QUALIFY at all five DECAY positions and RISE strictly at every
+#             step. A refusal anywhere is REFUSED, a plateau or a reversal is
+#             FAIL; neither is a pass, and the command exits 1 on either.
 #             H is measured and REPORTED with its own status, and is NOT gated:
-#             its refusal survives the rate fix (it refuses at the anchor itself,
-#             which this renderer must leave bit-identical), and switching the
-#             low band's path off makes H qualify (residual 1.47 -> 0.27 dB at
-#             the anchor, 1.77 -> 0.28 dB at DECAY 10, TONE 50 --
-#             tools/probes/cymbal_late_t20.py localise-h). So H's late segment is E_CYD plus
-#             the low band's energy above 6 kHz, two exponentials by construction
-#             of the shipped kit, not a register floor. That is a sound-design
-#             defect with its own issue (LATE_T20_H_ISSUE) and it stays visible
-#             here as REFUSED, never counted as a pass.
+#             it refuses at the anchor itself (which this renderer must leave
+#             bit-identical), so no DECAY setting can make it qualify, and a
+#             gate red at the anchor could not show a control turning it red.
+#             What remains after the rate fix -- H at every TONE, L at TONE 7.5
+#             and 10 at the slow end -- is band crosstalk, localised by switching
+#             one VCA path off (tools/probes/cymbal_late_t20.py localise): each
+#             band's late segment is its own envelope plus the OTHER envelope's
+#             energy in its frequency range, two exponentials by construction
+#             of the shipped kit, not a register floor. It has its own issue
+#             (LATE_T20_CROSSTALK_ISSUE) and stays visible here, never a pass.
 #   decay-taus-realised  every E_CYL / E_CYD code realises its ask (the anchor's
 #             realised tau x the DECAY network ratio) within TAU_TOL, and no code
 #             sits on its mantissa floor (m = 1). Read off the register image.
 SWEEP_SECONDS = 7.0
 LATE_T20_GATED = ("L",)        # the bands whose late T20 the gate requires
-LATE_T20_H_ISSUE = None        # filled when the H follow-up is filed
+LATE_T20_CROSSTALK_ISSUE = None   # the follow-up for the refusals the rate fix does not reach
 TAU_TOL = 0.05                 # docs/sensitivity/drum-rate-exp-bits-plan.json, frozen (ISO 3382-1 JND)
 FISCHER_DEADBAND = 0.02        # the 808's own step below this establishes no direction
 MIN_H_EDT_STEP = 0.05          # H EDT10 must rise by >= 5 % per DECAY step
@@ -712,8 +714,8 @@ def decay_row_verdict(row: dict, identical: dict, fischer_h_edt: dict | None,
                        "ungated": {b: {"status": v["status"],
                                        "why": ("refuses at the anchor itself; the low band's energy above "
                                                "6 kHz makes H's late segment two exponentials (localised: "
-                                               "tools/probes/cymbal_late_t20.py localise-h), not the rate floor"),
-                                       "issue": LATE_T20_H_ISSUE}
+                                               "tools/probes/cymbal_late_t20.py localise), not the rate floor"),
+                                       "issue": LATE_T20_CROSSTALK_ISSUE}
                                    for b, v in t20.items() if b not in gated},
                        "what": "the frozen late-T20 measure; the gated bands must qualify at all "
                                "five positions and rise strictly; REFUSED is never a pass"}

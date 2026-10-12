@@ -741,8 +741,8 @@ def band_only(kit, band: str):
 # So the anchor's sound is the realised 0.4551 / 0.1365 s, and the knob scales
 # THAT by the network ratio. Off the anchor the code is drums_fx.rate_code
 # (revision 18): Q0.16 alone stopped at rate 1 = 1.3653 s and gave DECAY 7.5 and
-# 10.0 one E_CYL; with RATE_EXP_BITS = 2 every ask at 101 wiper positions is
-# within 5 % (docs/sensitivity/drum-rate-exp-bits.json). At the anchor nothing
+# 10.0 one E_CYL; with RATE_EXP_BITS = 3 every ask at 101 wiper positions is
+# within 0.31 % (docs/sensitivity/drum-rate-exp-bits.json). At the anchor nothing
 # is written, so the anchor stays render_drum_solo("CY") bit for bit.
 DECAY_ANCHOR = "25"
 DECAY_POS = {"00": 0.0, "25": 0.25, "50": 0.5, "75": 0.75, "10": 1.0}
