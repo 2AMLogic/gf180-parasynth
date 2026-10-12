@@ -76,7 +76,7 @@ def main(argv=None):
         "CY5025-AB-808-shipped-808-candidate.wav: 808, shipped, 808, candidate; each matched to the\n"
         "808's K-weighted loudness, then scaled together to -1 dBFS peak. Listening only; the\n"
         "measurements decide promotion (docs/scorecard/cymbal-369/candidate/). Other TONE/DECAY\n"
-        "settings wait for the knob-law repair (the knob render is was not the instrument, #413; repaired path: docs/scorecard/cymbal-369/knob-render/).\n")
+        "settings wait for the knob-law repair (the knob render was not the instrument, #413; repaired path: docs/scorecard/cymbal-369/knob-render/).\n")
     print("wrote", sorted(p.name for p in a.out.iterdir()))
     return 0
 
