@@ -368,6 +368,76 @@ def test_unsupported_mechanism_cannot_select_a_candidate(mech):
     assert "selection" in v and not v["selection"]
 
 
+# ---- round-4 review: the blind zone may not feed the acceptance boundary ----
+def test_blind_zone_reading_cannot_confirm_the_record():
+    """The reviewer's exact defeating input: a -30 dB partial at +0.25 Hz from
+    H2 reads resolved+unambiguous (the measured blind zone) and that level used
+    to decide selection (CONFIRMED 0.989 vs 0.455 with the true -40 dB). Now
+    the judge REFUSES the record, the same record with the true level reads NOT
+    CONFIRMED (so the refusal is the gate, not the number), and the defect that
+    bypasses the gate turns the poisoned record back into CONFIRMED."""
+    assert td.prop_J10_blind_zone_reading_cannot_confirm()
+    sr, tau, f0 = 48000, 0.06, 72.0
+    y = td.synth_mixture(f0, tau, (-40.0, -40.0, -40.0))
+    t = np.arange(len(y)) / sr
+    phi = 2 * np.pi * np.cumsum(np.full(len(y), f0)) / sr
+    y = y + 10 ** (-30 / 20) * np.exp(-t / tau) * np.sin(2 * phi - 2 * np.pi * 0.25 * t + 1.0)
+    h = td.estimate(y, sr)
+    assert h["resolved"][0] and not h["ambiguous"][0]      # still read: the disclosed, measured limit
+    assert h["interference_free"] == [False] * 3           # and never self-attested
+    p = td.synthetic_prereg()
+    r = td.synthetic_record(prereg=p)
+    for row in r["rows"].values():
+        if row["split"] == "preservation-only":
+            continue
+        row["target_harm"] = {"db": [-28.0] * 3, "resolved": [True, False, False],
+                              "interference_free": [True] * 3}
+        row["variants"]["shipped"]["harm"] = {"db": [-50.0] * 3, "resolved": [True] * 3,
+                                              "interference_free": [True] * 3}
+        row["variants"]["Q"]["harm"] = td._levels_json(h)
+    v = td.judge(r, p)
+    assert v["verdict"] == "REFUSED" and "input qualification" in v["why"]
+    td.INJECT = {"qualification-bypass"}
+    try:
+        assert td.judge(r, p)["verdict"] == "CONFIRMED"    # the defect reopens the boundary
+    finally:
+        td.INJECT = set()
+
+
+def test_record_without_attestation_is_refused_fail_closed():
+    """A record that predates the boundary (no interference_free anywhere) must
+    not confirm: absent attestation is not attestation."""
+    p = td.synthetic_prereg()
+    r = td.synthetic_record(prereg=p)
+    for row in r["rows"].values():
+        for v in row["variants"].values():
+            v["harm"].pop("interference_free", None)
+        if isinstance(row.get("target_harm"), dict):
+            row["target_harm"].pop("interference_free", None)
+    assert td.judge(r, p)["verdict"] == "REFUSED"
+
+
+def test_forged_or_malformed_attestation_is_refused():
+    """A non-boolean or malformed interference_free can never pass the boundary:
+    the guard treats it as absent (fail closed) and refuses the record."""
+    for bad in ([True, "yes", True], [True, True], "True", [1, 0, 1]):
+        r = td.synthetic_record()
+        r["rows"]["MT25"]["variants"]["Q"]["harm"]["interference_free"] = bad
+        v = td.judge(r, td.synthetic_prereg())
+        assert v["verdict"] == "REFUSED", bad
+
+
+def test_mechanism_path_does_not_count_unqualified_resolved_h2():
+    """A resolved H2 with no attestation is not mechanism evidence: INSUFFICIENT
+    with the qualification reason -- while non-detection (no take resolved)
+    keeps its own M2 reason."""
+    v = td.mechanism_verdict([], True, n_unqualified=15)
+    assert v["verdict"] == "INSUFFICIENT" and "input qualification" in v["why"]
+    assert v["n_unqualified_resolved"] == 15
+    v2 = td.mechanism_verdict([], False)
+    assert v2["verdict"] == "INSUFFICIENT" and "not detected" in v2["why"] and "qualification" not in v2["why"]
+
+
 def test_missing_mechanism_record_cannot_select_a_candidate():
     assert td.prop_J8_unsupported_mechanism_cannot_select()
     td.INJECT = {"mechanism-gate-bypass"}
