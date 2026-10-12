@@ -1,6 +1,6 @@
 {
-  "loom_version": "0.19.1072",
-  "loom_commit": "29b48db1ead9c4501304e0114a5c33310e1d589f",
+  "loom_version": "0.19.1084",
+  "loom_commit": "5b1a67d3793386937de5ed625c09ea18fe9b59ed",
   "install_date": "2026-09-24",
   "loom_source_remote": "https://github.com/rjwalters/loom.git",
   "installed_files": [
@@ -662,8 +662,16 @@
     ".claude/commands/loom/sweep-doctor-glm-escalation.md",
     ".loom/docs/pr-planning.md",
     ".loom/docs/stale-check-inputs.md",
-    ".loom/docs/session-output.md"
+    ".loom/docs/session-output.md",
+    ".loom/docs/branch-update-strategy.md",
+    ".loom/docs/push-lease-pinning.md",
+    ".loom/scripts/tests/test-merge-pr-required-checks.sh",
+    ".loom/scripts/tests/test-sweep-wave-judge-done-staleness.sh",
+    ".loom/scripts/tests/test-sync-labels-prune-undeclared.sh",
+    ".agents/skills/loom-builder-complexity/SKILL.md",
+    ".agents/skills/loom-builder-worktree/SKILL.md",
+    ".loom/scripts/tests/test-merge-pr-ci-result.sh"
   ],
-  "last_resync": "2026-10-11",
-  "requires_daemon": "0.19.772"
+  "last_resync": "2026-10-12",
+  "requires_daemon": "0.19.1081"
 }
