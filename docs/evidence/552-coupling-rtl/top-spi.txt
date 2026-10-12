@@ -1,4 +1,4 @@
-# production top through SPI, --couple --short (last run: EN_NORESET wait widened)
+# production top through SPI, --couple --short (this log predates widening the EN_NORESET wait to 6 gaps; the rerun gave the same verdicts)
 ==============================================================================
 PASS             9.7s  python3 rtl-sketch/verify_synth_top.py --couple --short --outdir /tmp/m3/clean
               verify_synth_top: COUPLE writes sent 5, delivered at the register port 5 (frames [302, 328, 634, 647, 982], data ['0xfffffffe', '0xffffffff', '0x2', '0x3', '0x1']); the stage changes 309 of 1122 final samples vs the bypass model
