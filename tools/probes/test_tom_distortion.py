@@ -439,6 +439,24 @@ def test_shifted_fundamental_spec_never_qualifies():
         td.INJECT = set()
 
 
+def test_competing_fundamental_spec_never_qualifies():
+    """Round-7 review, start-red regression and permanent control (J13): a real
+    but negligible (-80 dB) component AT the declared fundamental satisfied the
+    round-6 existence check while H1 was measured from the competing 110 Hz
+    carrier, and the judge CONFIRMED (executed on the reviewed head). The
+    declared fundamental must be the strongest component of its own list, with
+    no other component within QUAL_SEPARATION_HZ of it; the same attack aimed
+    at 3*ef0 and 4*ef0 must fail too. The `competing-fundamental` defect
+    re-opens the check and turns the control CONFIRMED, proving the check (not
+    the number) decides."""
+    assert td.prop_J13_competing_fundamental_never_qualifies()
+    td.INJECT = {"competing-fundamental"}
+    try:
+        assert not td.prop_J13_competing_fundamental_never_qualifies()
+    finally:
+        td.INJECT = set()
+
+
 def test_record_without_attestation_is_refused_fail_closed():
     """A record that predates the boundary (no qual evidence and no
     interference_free anywhere) must not confirm: absent evidence is not
@@ -490,9 +508,14 @@ def test_forged_or_malformed_attestation_is_refused():
                                   {"f_hz": 440.0, "db": -41.0}]}] * 3,      # a partial in the blind radius
                  [{"kind": "analytic-spec", "f0": 110.125, "win_s": 0.28,
                    "components": [{"f_hz": 110.0, "db": 0.0},
-                                  {"f_hz": 220.25, "db": -35.0}]}] * 3):     # shifted fundamental (round 6):
-        r = td.synthetic_record()                                            # nothing at 110.125 itself
-        r["rows"]["MT25"]["variants"]["Q"]["harm"]["qual"] = badq
+                                  {"f_hz": 220.25, "db": -35.0}]}] * 3,      # shifted fundamental (round 6):
+                                                                              # nothing at 110.125 itself
+                 [{"kind": "analytic-spec", "f0": 110.125, "win_s": 0.28,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 110.125, "db": -80.0},
+                                  {"f_hz": 220.25, "db": -35.0}]}] * 3):      # competing fundamental (round 7):
+        r = td.synthetic_record()                                             # -80 dB at the declaration,
+        r["rows"]["MT25"]["variants"]["Q"]["harm"]["qual"] = badq             # carrier measured from 110.0
         assert refused(r), badq
 
 

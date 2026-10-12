@@ -18,7 +18,10 @@ and a submitted boolean is NOT evidence: the judge DERIVES qualification from
 per-harmonic `qual` evidence it verifies (an analytic component list, bound to
 the reading's own f0 and to the estimator's window, containing a component AT
 the declared fundamental itself -- a declaration nothing sits at can relocate
-a nearby partial onto k*f0 exactly -- with the harmonic-role component AT k*f0
+a nearby partial onto k*f0 exactly, and one that is not the list's strongest
+component (with no competing fundamental inside QUAL_SEPARATION_HZ of it)
+declares a fundamental H1 was not measured from (H1 is read from the dominant
+peak; round-7 control J13) -- with the harmonic-role component AT k*f0
 -- within QUAL_AT_KF0_TOL_HZ; a "harmonic" declared off the multiple is the
 blind zone itself -- and every other component
 >= QUAL_SEPARATION_HZ from k*f0). A resolved reading without verified evidence
@@ -55,7 +58,7 @@ DEFECTS = ("stub-estimator", "missing-distortion", "leakage-as-h2",
            "preservation-bypass", "contaminated-confirmation", "target-ignored",
            "mechanism-bypass", "population-bypass", "nonfinite-bypass", "mechanism-gate-bypass",
            "floor-as-bound", "ambiguity-bypass", "nondetection-refutes", "qualification-bypass",
-           "shifted-fundamental")
+           "shifted-fundamental", "competing-fundamental")
 INJECT: set = set()
 
 
@@ -623,7 +626,13 @@ def _qualified(h: dict, i: int) -> bool:
     declared fundamental (within QUAL_AT_KF0_TOL_HZ -- round-6 review: a
     declaration nothing sits at is inconsistent with its own component list,
     and shifting the declared fundamental relocates a nearby partial exactly
-    onto k*f0, so 220.25 Hz read as "H2" of 110.125), (c) places exactly one
+    onto k*f0, so 220.25 Hz read as "H2" of 110.125) with that component the
+    STRONGEST of the list and no other component within QUAL_SEPARATION_HZ of
+    it (round-7 review: a real but negligible -80 dB component at the
+    declaration beside a 0 dB carrier satisfied the existence check while H1
+    was measured from the carrier -- H1 comes from the dominant peak, and a
+    competing fundamental inside the separability radius makes the attribution
+    ambiguous; control J13 / `competing-fundamental`), (c) places exactly one
     component AT k*f0 (within QUAL_AT_KF0_TOL_HZ -- an analytic construction
     puts the harmonic at the exact multiple; a component declared off k*f0,
     even by the 0.25 Hz the blind zone cannot separate, is the unseparable
@@ -661,12 +670,25 @@ def _qualified(h: dict, i: int) -> bool:
     for c in comps:
         if not isinstance(c, dict) or not _finite(c.get("f_hz")) or not _finite(c.get("db")):
             return False            # an unknown level is not an absent component
-    if "shifted-fundamental" not in INJECT:
-        fund = [c for c in comps if abs(c["f_hz"] - ef0) <= QUAL_AT_KF0_TOL_HZ]
-        if len(fund) != 1:
+    fund = [c for c in comps if abs(c["f_hz"] - ef0) <= QUAL_AT_KF0_TOL_HZ]
+    if len(fund) != 1:
+        if "shifted-fundamental" not in INJECT:
             return False            # nothing AT the declared fundamental: the list
                                     # contradicts its own declaration, and the shift
                                     # exists to relocate a partial onto k*ef0
+    elif "competing-fundamental" not in INJECT:
+        if any(c["db"] > fund[0]["db"] for c in comps):
+            return False            # round-7 review: H1 is measured from the dominant
+                                    # peak, so a spec whose declared fundamental is not
+                                    # the strongest of its own components does not
+                                    # describe the mixture the reading was taken on --
+                                    # the -80 dB component at the declaration beside the
+                                    # true 0 dB carrier satisfied the existence check
+        if any(abs(c["f_hz"] - ef0) < QUAL_SEPARATION_HZ
+               for c in comps if c is not fund[0]):
+            return False            # a competing fundamental inside the separability
+                                    # radius: one window cannot say which of the two
+                                    # supplied H1, so the attribution is ambiguous
     at = [c for c in comps if abs(c["f_hz"] - k * ef0) <= QUAL_AT_KF0_TOL_HZ]
     if len(at) != 1:
         return False                # nothing established AT k*f0 to be a reading of
@@ -1355,6 +1377,46 @@ def prop_J12_shifted_fundamental_never_qualifies() -> bool:
     return judge(r, p)["verdict"] == "REFUSED"
 
 
+def prop_J13_competing_fundamental_never_qualifies() -> bool:
+    """Round-7 review: a REAL but negligible component at the declared
+    fundamental satisfies the round-6 existence check while H1 is measured
+    from a competing carrier -- an -80 dB component at 110.125 Hz beside a
+    0 dB carrier at 110 Hz let a spec declare f0 = 110.125, pass the
+    nothing-at-the-declaration check, relocate the 220.25 Hz partial exactly
+    onto 2*ef0, qualify H2 and CONFIRM the record (executed on the reviewed
+    head), although every component of the spec IS present in the audio. The
+    declared fundamental must be the strongest component of its own list --
+    H1 is measured from the dominant peak -- with no competing fundamental
+    inside QUAL_SEPARATION_HZ; the same attack aimed at 3*ef0 and 4*ef0 must
+    fail too."""
+    sr = 48000
+    x = np.arange(sr // 2) / sr
+    y = np.exp(-x / .15) * (np.sin(2 * np.pi * 110.0 * x)
+                            + 10 ** (-80 / 20) * np.sin(2 * np.pi * 110.125 * x)
+                            + 10 ** (-35 / 20) * np.sin(2 * np.pi * 220.25 * x))
+    h = harmonic_levels(y, sr)
+    if not h["resolved"][0]:
+        return False            # precondition: the reading IS resolved (the blind zone)
+    base = [{"f_hz": 110.0, "db": 0.0}, {"f_hz": 110.125, "db": -80.0}]
+    specs = [{"kind": "analytic-spec", "f0": 110.125, "win_s": QUAL_WIN_S,
+              "components": base + [{"f_hz": 110.125 * k, "db": -35.0}]}
+             for k in (2, 3, 4)]
+    if abs(specs[0]["f0"] - h["f0"]) > LOC_TOL * h["f0"]:
+        return False            # precondition: the shifted declaration BINDS (within 3 %)
+    if any(_qualified({**h, "qual": [specs[i] if j == i else None for j in range(3)]}, i)
+           for i in range(3)):
+        return False            # a spec whose fundamental is not its carrier is not evidence
+    hq = _levels_json(h)
+    hq["qual"] = [specs[0], None, None]      # the reviewer's exact k=2 input
+    p = synthetic_prereg()
+    r = synthetic_record(prereg=p)
+    for row in r["rows"].values():
+        row["variants"]["Q"]["harm"] = hq
+        for z in (row["target_harm"], row["variants"]["shipped"]["harm"]):
+            z["resolved"] = [True, False, False]
+    return judge(r, p)["verdict"] == "REFUSED"
+
+
 def prop_K4_nearby_partial_is_not_an_accurate_harmonic() -> bool:
     """The reviewer's defeating inputs (#649): -30 dB partials at 1.98 / 2.02 f0 beside a
     -40 dB H2, plus the registered sweep: none may be accepted beyond TOL_DB."""
@@ -1394,6 +1456,7 @@ PROPERTIES = {f.__name__[5:]: f for f in (
     prop_J10_blind_zone_reading_cannot_confirm,
     prop_J11_submitted_boolean_never_qualifies,
     prop_J12_shifted_fundamental_never_qualifies,
+    prop_J13_competing_fundamental_never_qualifies,
     prop_M1_mechanism_classes, prop_M2_non_detection_is_not_refutation)}
 
 #: defect -> the property whose assertion it is meant to defeat
@@ -1411,6 +1474,7 @@ INTENDED = {"stub-estimator": ("K1_known_answers",),
             "qualification-bypass": ("J10_blind_zone_reading_cannot_confirm",
                                      "J11_submitted_boolean_never_qualifies"),
             "shifted-fundamental": ("J12_shifted_fundamental_never_qualifies",),
+            "competing-fundamental": ("J13_competing_fundamental_never_qualifies",),
             "population-bypass": ("J6_frozen_population_enforced",),
             "nonfinite-bypass": ("J7_nonfinite_or_missing_measurement_refused",)}
 
