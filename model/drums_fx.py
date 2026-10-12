@@ -73,7 +73,7 @@ ENV_BITS, RATE_Q, ACCENT_BITS = 24, 16, 16
 # the cymbal's DECAY knob asked E_CYL for 1.0155 s and 1.2732 s and got 1.3653 s
 # for both. The width is a swept dial: docs/sensitivity/drum-rate-exp-bits.json
 # (plan committed before any point; tools/probes/drum_rate_exp_sweep.py).
-RATE_EXP_BITS = 0
+RATE_EXP_BITS = 2
 RATE_BITS = RATE_Q + RATE_EXP_BITS
 RATE_MASK = (1 << RATE_BITS) - 1
 RATE_M_MASK = (1 << RATE_Q) - 1
