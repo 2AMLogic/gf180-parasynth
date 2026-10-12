@@ -3,6 +3,7 @@
   "K1_known_answers": "PASS",
   "K2_pure_sinusoid_reads_unresolved": "PASS",
   "K3_applied_quadratic_reads_at_spec": "PASS",
+  "K4_nearby_partial_is_not_an_accurate_harmonic": "PASS",
   "J0_good_candidate_confirms": "PASS",
   "J1_decay_violation_rejected": "PASS",
   "J2_peak_violation_rejected": "PASS",
@@ -11,13 +12,17 @@
   "J5_null_target_refused_not_zero_error": "PASS",
   "J6_frozen_population_enforced": "PASS",
   "J7_nonfinite_or_missing_measurement_refused": "PASS",
-  "M1_mechanism_classes": "PASS"
+  "J8_unsupported_mechanism_cannot_select": "PASS",
+  "J9_unresolved_shipped_floor_earns_no_credit": "PASS",
+  "M1_mechanism_classes": "PASS",
+  "M2_non_detection_is_not_refutation": "PASS"
  },
  "cells": {
   "stub-estimator": {
    "K1_known_answers": "MOVED",
    "K2_pure_sinusoid_reads_unresolved": "BLIND",
    "K3_applied_quadratic_reads_at_spec": "MOVED",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
    "J0_good_candidate_confirms": "BLIND",
    "J1_decay_violation_rejected": "BLIND",
    "J2_peak_violation_rejected": "BLIND",
@@ -26,12 +31,16 @@
    "J5_null_target_refused_not_zero_error": "BLIND",
    "J6_frozen_population_enforced": "BLIND",
    "J7_nonfinite_or_missing_measurement_refused": "BLIND",
-   "M1_mechanism_classes": "BLIND"
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
   },
   "missing-distortion": {
    "K1_known_answers": "BLIND",
    "K2_pure_sinusoid_reads_unresolved": "BLIND",
    "K3_applied_quadratic_reads_at_spec": "MOVED",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
    "J0_good_candidate_confirms": "BLIND",
    "J1_decay_violation_rejected": "BLIND",
    "J2_peak_violation_rejected": "BLIND",
@@ -40,12 +49,16 @@
    "J5_null_target_refused_not_zero_error": "BLIND",
    "J6_frozen_population_enforced": "BLIND",
    "J7_nonfinite_or_missing_measurement_refused": "BLIND",
-   "M1_mechanism_classes": "BLIND"
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
   },
   "leakage-as-h2": {
    "K1_known_answers": "MOVED",
    "K2_pure_sinusoid_reads_unresolved": "MOVED",
    "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "MOVED",
    "J0_good_candidate_confirms": "BLIND",
    "J1_decay_violation_rejected": "BLIND",
    "J2_peak_violation_rejected": "BLIND",
@@ -54,12 +67,16 @@
    "J5_null_target_refused_not_zero_error": "BLIND",
    "J6_frozen_population_enforced": "BLIND",
    "J7_nonfinite_or_missing_measurement_refused": "BLIND",
-   "M1_mechanism_classes": "BLIND"
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
   },
   "preservation-bypass": {
    "K1_known_answers": "BLIND",
    "K2_pure_sinusoid_reads_unresolved": "BLIND",
    "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
    "J0_good_candidate_confirms": "BLIND",
    "J1_decay_violation_rejected": "MOVED",
    "J2_peak_violation_rejected": "MOVED",
@@ -68,12 +85,16 @@
    "J5_null_target_refused_not_zero_error": "BLIND",
    "J6_frozen_population_enforced": "BLIND",
    "J7_nonfinite_or_missing_measurement_refused": "MOVED",
-   "M1_mechanism_classes": "BLIND"
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
   },
   "contaminated-confirmation": {
    "K1_known_answers": "BLIND",
    "K2_pure_sinusoid_reads_unresolved": "BLIND",
    "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
    "J0_good_candidate_confirms": "BLIND",
    "J1_decay_violation_rejected": "BLIND",
    "J2_peak_violation_rejected": "BLIND",
@@ -82,12 +103,16 @@
    "J5_null_target_refused_not_zero_error": "BLIND",
    "J6_frozen_population_enforced": "BLIND",
    "J7_nonfinite_or_missing_measurement_refused": "BLIND",
-   "M1_mechanism_classes": "BLIND"
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
   },
   "target-ignored": {
    "K1_known_answers": "BLIND",
    "K2_pure_sinusoid_reads_unresolved": "BLIND",
    "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
    "J0_good_candidate_confirms": "BLIND",
    "J1_decay_violation_rejected": "BLIND",
    "J2_peak_violation_rejected": "BLIND",
@@ -96,12 +121,16 @@
    "J5_null_target_refused_not_zero_error": "MOVED",
    "J6_frozen_population_enforced": "BLIND",
    "J7_nonfinite_or_missing_measurement_refused": "BLIND",
-   "M1_mechanism_classes": "BLIND"
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "MOVED",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
   },
   "mechanism-bypass": {
    "K1_known_answers": "BLIND",
    "K2_pure_sinusoid_reads_unresolved": "BLIND",
    "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
    "J0_good_candidate_confirms": "BLIND",
    "J1_decay_violation_rejected": "BLIND",
    "J2_peak_violation_rejected": "BLIND",
@@ -110,12 +139,16 @@
    "J5_null_target_refused_not_zero_error": "BLIND",
    "J6_frozen_population_enforced": "BLIND",
    "J7_nonfinite_or_missing_measurement_refused": "BLIND",
-   "M1_mechanism_classes": "MOVED"
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "MOVED",
+   "M2_non_detection_is_not_refutation": "BLIND"
   },
   "population-bypass": {
    "K1_known_answers": "BLIND",
    "K2_pure_sinusoid_reads_unresolved": "BLIND",
    "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
    "J0_good_candidate_confirms": "BLIND",
    "J1_decay_violation_rejected": "BLIND",
    "J2_peak_violation_rejected": "BLIND",
@@ -124,12 +157,16 @@
    "J5_null_target_refused_not_zero_error": "BLIND",
    "J6_frozen_population_enforced": "MOVED",
    "J7_nonfinite_or_missing_measurement_refused": "BLIND",
-   "M1_mechanism_classes": "BLIND"
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
   },
   "nonfinite-bypass": {
    "K1_known_answers": "BLIND",
    "K2_pure_sinusoid_reads_unresolved": "BLIND",
    "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
    "J0_good_candidate_confirms": "BLIND",
    "J1_decay_violation_rejected": "BLIND",
    "J2_peak_violation_rejected": "BLIND",
@@ -138,7 +175,82 @@
    "J5_null_target_refused_not_zero_error": "BLIND",
    "J6_frozen_population_enforced": "BLIND",
    "J7_nonfinite_or_missing_measurement_refused": "MOVED",
-   "M1_mechanism_classes": "BLIND"
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
+  },
+  "mechanism-gate-bypass": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
+   "J8_unsupported_mechanism_cannot_select": "MOVED",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
+  },
+  "floor-as-bound": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "MOVED",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
+  },
+  "ambiguity-bypass": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "MOVED",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
+  },
+  "nondetection-refutes": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "MOVED"
   }
  },
  "intended": {
@@ -163,6 +275,18 @@
   ],
   "mechanism-bypass": [
    "M1_mechanism_classes"
+  ],
+  "ambiguity-bypass": [
+   "K4_nearby_partial_is_not_an_accurate_harmonic"
+  ],
+  "nondetection-refutes": [
+   "M2_non_detection_is_not_refutation"
+  ],
+  "mechanism-gate-bypass": [
+   "J8_unsupported_mechanism_cannot_select"
+  ],
+  "floor-as-bound": [
+   "J9_unresolved_shipped_floor_earns_no_credit"
   ],
   "population-bypass": [
    "J6_frozen_population_enforced"
