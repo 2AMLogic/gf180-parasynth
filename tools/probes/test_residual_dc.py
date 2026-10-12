@@ -571,3 +571,503 @@ def test_reference_gate_refuses_a_malformed_manifest(tmp_path, manifest):
     (root / "manifest.json").write_text(json.dumps(manifest(m)))
     g = R.reference_gate(str(root), environ={})
     assert g["status"] == "REFUSED" and g["dc"] == "REFUSED" and g["reasons"], g
+
+
+# ==== #618: the output stage's final quantisation (same-accumulator apparatus) ======
+# ONE int64 accumulator is retained per render; floor (production) and exact
+# integer round-half-even are derived from THAT accumulator. Every expected
+# value below comes from hand integer arithmetic or CPython's own
+# round(Fraction) -- NEVER from drums_fx.output_fx or from the probe under test.
+
+from fractions import Fraction                                          # noqa: E402
+
+
+def _ref_floor(acc):
+    """Independent production reference: `>>` on ints IS floor; the clamp is
+    the spec's one rail."""
+    return max(-32768, min(32767, acc >> 15))
+
+
+def _ref_round(acc):
+    """Independent round-half-even: CPython rounds a Fraction to nearest with
+    ties to even -- the definition, not our implementation."""
+    return max(-32768, min(32767, round(Fraction(acc, R.Q15))))
+
+
+@pytest.mark.parametrize("name,prop", R.FLOOR_PROPERTIES, ids=[n for n, _ in R.FLOOR_PROPERTIES])
+def test_floor_property_holds_on_the_real_probe(name, prop):
+    assert prop(R.REAL_FLOOR), name
+
+
+def test_every_floor_mutant_turns_something_red():
+    rows = R.floor_controls_matrix()
+    clean = rows.pop("(clean)")
+    assert all(v == "ok" for v in clean.values()), clean
+    for defect, row in rows.items():
+        assert "MOVED" in row.values(), f"{defect} is invisible to every property: {row}"
+
+
+def test_each_floor_property_moves_at_least_one_defect():
+    """A property no defect moves is a property that tests nothing.
+    EXEMPT, stated: `no-bias-possible` guards the ENDING RULE (a nonzero signal
+    whose accumulators are all exact multiples of 32768), not a probe decision
+    -- no single-defect mutant of the probe attacks it; the fixture test below
+    holds it directly."""
+    rows = R.floor_controls_matrix()
+    rows.pop("(clean)")
+    dead = [n for n, _ in R.FLOOR_PROPERTIES if all(r[n] != "MOVED" for r in rows.values())]
+    assert set(dead) <= {"no-bias-possible"}, dead
+
+
+class _NoIntervention(R.FloorProbe):
+    """Start red through the reporting path: the apparatus with NO intervention
+    -- `exact` is the floor, so it would read every result as NO NET BIAS."""
+
+    name = "no-intervention stub (exact := floor)"
+
+    def exact(self, acc):
+        return self.floor(acc)
+
+
+def test_start_red_the_no_intervention_stub_fails_the_property_set():
+    stub = _NoIntervention()
+    assert not R.p_oracle_fixture_floor(stub)          # the intended failed assertion
+    ok = {}
+    for n, f in R.FLOOR_PROPERTIES:
+        try:
+            ok[n] = bool(f(stub))
+        except R.Refused:
+            ok[n] = False
+    assert not all(ok.values()), ok
+
+
+# -- the oracle: hand table (every class the issue names) + an independent sweep ----
+HAND_FIXTURES = (
+    (0, 0, 0),                                   # exact zero
+    (32768, 1, 1), (-32768, -1, -1), (65536, 2, 2),   # exact multiples: agree
+    (32769, 1, 1), (-32769, -2, -1),             # nonintegers just past the multiple
+    (32767, 0, 1), (-32767, -1, -1),             # just under: floor drops, round does not
+    (16384, 0, 0),                               # +tie, even quotient -> stays
+    (49152, 1, 2),                               # +tie, odd quotient -> up
+    (-16384, -1, 0),                             # -tie, odd quotient -> up
+    (-49152, -2, -2),                            # -tie, even quotient -> stays
+    (32767 * 32768, 32767, 32767),               # at the high rail, exact
+    (32768 * 32768, 32767, 32767),               # past the high rail: both clip
+    (-32768 * 32768, -32768, -32768),            # low rail exactly
+    (-32768 * 32768 - 1, -32768, -32768),        # past the low rail: both clip
+)
+
+
+def test_floor_and_round_match_hand_arithmetic_on_every_named_accumulator_class():
+    for acc, fl, ex in HAND_FIXTURES:
+        assert R.REAL_FLOOR.floor(np.int64(acc)) == fl, (acc, "floor")
+        assert R.REAL_FLOOR.exact(np.int64(acc)) == ex, (acc, "round")
+
+
+def test_floor_and_round_match_an_independent_reference_on_random_accumulators():
+    """The sweep the hand table cannot be: 4096 accumulators across the whole
+    RTL tacc range, against divmod-floor and CPython Fraction rounding."""
+    rng = np.random.default_rng(618)
+    acc = rng.integers(-(1 << 38) + 1, 1 << 38, 4096, dtype=np.int64)
+    for a, f, x in zip(acc.tolist(), R.floor_out(acc).tolist(), R.rint_out(acc).tolist()):
+        assert f == _ref_floor(a), a
+        assert x == _ref_round(a), a
+
+
+def test_a_nonzero_integer_resolvable_mean_is_not_a_bias():
+    """The generic-bias defeater through the ending rule: a signal with a real
+    nonzero mean whose accumulators are all exact multiples of 32768. Floor
+    and round agree bit for bit; 'mean != 0 => bias' would be wrong here."""
+    row = dict(status="OK", n_frames=64, n_res_zero=64, n_res_low=0, n_res_tie=0,
+               n_res_high=0, diff_sum=0, mean_diff_lsb=0.0, diff_pct_of_peak=0.0,
+               mean_floor_err_lsb=0.0, floor_err_pct_of_peak=0.0)
+    e = R.bias_ending({c: row for c in sorted(R.CONDITIONS)})
+    assert e.startswith("NO BIAS POSSIBLE"), e
+
+
+def test_bias_endings_are_distinct_and_frozen():
+    def frow(**kw):
+        base = dict(status="OK", n_frames=100, n_res_zero=60, n_res_low=20, n_res_tie=10,
+                    n_res_high=10, diff_sum=0, mean_diff_lsb=0.0, diff_pct_of_peak=0.0,
+                    mean_floor_err_lsb=-0.4, floor_err_pct_of_peak=-0.001)
+        base.update(kw)
+        return base
+
+    def both(**kw):
+        return {c: frow(**kw) for c in sorted(R.CONDITIONS)}
+
+    assert R.bias_ending(both()).startswith("NO NET BIAS")
+    v = R.bias_ending(both(diff_sum=-50, mean_diff_lsb=-0.5, diff_pct_of_peak=-0.01))
+    assert v.startswith("BIAS CONFIRMED") and "no audibility" in v, v
+    mixed = {c: frow(diff_sum=-50 if c == "dev" else 0,
+                     mean_diff_lsb=-0.5 if c == "dev" else 0.0) for c in sorted(R.CONDITIONS)}
+    assert R.bias_ending(mixed).startswith("BIAS IS CONDITION-DEPENDENT")
+    assert R.bias_ending({"dev": frow()}).startswith("REFUSED")
+    assert R.bias_ending({**both(), "dev": dict(status="REFUSED", reason="x")}).startswith("REFUSED")
+
+
+# -- condition/value association (PR #653 review) ------------------------------------
+# The ending once labelled figures by SORTED index: `confirm` sorts before `dev`,
+# so every dev/confirm pair was printed swapped. Identical values in both
+# conditions cannot see that, so these rows differ in every reported figure, and
+# `confirm` deliberately carries the values that sort first. Committed red first
+# against the index-labelled formatter: docs/residual-dc/output-floor/red-condition-labels.txt.
+_ASYM = {
+    "dev":     dict(mean_diff_lsb=-0.1111, diff_pct_of_peak=-0.0022, mean_floor_err_lsb=-0.3333,
+                    diff_sum=-11),
+    "confirm": dict(mean_diff_lsb=-0.9999, diff_pct_of_peak=-0.0077, mean_floor_err_lsb=-0.6666,
+                    diff_sum=-99),
+}
+
+
+def _asym_row(c):
+    return dict(status="OK", n_frames=100, n_res_zero=10, n_res_low=40, n_res_tie=0,
+                n_res_high=50, floor_err_pct_of_peak=-0.001, **_ASYM[c])
+
+
+def _labelled(ending, unit, cond):
+    """Every number printed immediately before '<unit> (<cond>)' in an ending."""
+    import re
+    return [float(x) for x in re.findall(r"([+-]\d+\.\d+) " + re.escape(unit) + r" \(" + cond + r"\)",
+                                         ending)]
+
+
+@pytest.mark.parametrize("order", [("dev", "confirm"), ("confirm", "dev")], ids=["dev-first", "confirm-first"])
+def test_bias_ending_labels_every_figure_with_its_own_condition(order):
+    e = R.bias_ending({c: _asym_row(c) for c in order})
+    assert e.startswith("BIAS CONFIRMED"), e
+    for c, v in _ASYM.items():
+        assert _labelled(e, "LSB", c)[:1] == [v["mean_diff_lsb"]], (c, e)          # floor - round
+        assert _labelled(e, "%", c) == [v["diff_pct_of_peak"]], (c, e)              # % of peak
+        assert _labelled(e, "LSB", c)[1:] == [v["mean_floor_err_lsb"]], (c, e)     # pre-rail error
+
+
+def test_condition_dependent_ending_names_the_condition_that_carries_the_bias():
+    rows = {c: _asym_row(c) for c in ("confirm", "dev")}
+    rows["confirm"] = dict(rows["confirm"], diff_sum=0)
+    e = R.bias_ending(rows)
+    assert e.startswith("BIAS IS CONDITION-DEPENDENT") and "['dev']" in e, e
+    assert "'dev': -11" in e and "'confirm': 0" in e, e
+
+
+QUAL = pathlib.Path(__file__).resolve().parents[2] / "docs/residual-dc/output-floor/qualification.json"
+
+
+def test_committed_endings_are_what_the_committed_records_produce():
+    """The saved endings must be regenerable from the saved rows, and the swapped
+    SD/CH figures the review read out of the JSON must sit under their own labels."""
+    q = json.loads(QUAL.read_text())
+    status, ends, why = R.floor_verdicts(q["records"])
+    assert status == "OK", why
+    assert q["endings"] == ends
+    by = {r["condition"]: {row["voice"]: row for row in r["rows"]} for r in q["records"]}
+    for v in ("SD", "CH"):
+        for c in ("dev", "confirm"):
+            row = by[c][v]
+            assert _labelled(ends[v], "LSB", c) == [round(row["mean_diff_lsb"], 4),
+                                                    round(row["mean_floor_err_lsb"], 4)], (v, c)
+    assert _labelled(ends["SD"], "LSB", "dev") == [-0.0709, -0.3315]
+    assert _labelled(ends["SD"], "LSB", "confirm") == [-0.9188, -0.7018]
+
+
+def test_floor_summary_derives_extrema_with_their_voice_and_condition():
+    """Hand-built records whose extrema sit in DIFFERENT conditions: each figure
+    must be reported with the row it came from. The rows are arithmetically
+    POSSIBLE (built by `_crow`), because floor_summary now refuses any record
+    `floor_verdicts` refuses
+    (it caught this fixture at n=1000, off the declared window)."""
+    def row(v, zero, tie, high, peak):           # per-mille counts, scaled to the declared window
+        k = 96
+        return _crow(v, n=1000 * k, zero=zero * k, tie=tie * k, high=high * k, peak=peak)
+    recs = [_frec("dev", [row("AA", 10, 0, 500, 32000.0), row("BB", 900, 0, 10, 1000.0)]),
+            _frec("confirm", [row("AA", 500, 7, 2, 16.0), row("BB", 0, 3, 800, 32000.0)])]
+    s = R.floor_summary(recs)
+    assert (s["diff_min"]["voice"], s["diff_min"]["condition"]) == ("AA", "confirm")
+    assert (s["diff_max"]["voice"], s["diff_max"]["condition"]) == ("BB", "confirm")
+    assert (s["pct_max"]["voice"], s["pct_max"]["condition"]) == ("AA", "confirm")
+    assert (s["err_min"]["voice"], s["err_min"]["condition"]) == ("BB", "dev")
+    assert (s["err_max"]["voice"], s["err_max"]["condition"]) == ("BB", "confirm")
+    assert s["zero_tie_rows"] == [("dev", "AA"), ("dev", "BB")]
+    assert s["rows_without_high"] == [] and s["usable"] == 4 and s["refused"] == 0
+    assert s["by_row"][("confirm", "AA")]["exact_multiple_pct"] == 50.0
+
+
+def test_refresh_endings_rewrites_only_the_endings_and_refuses_moved_limits(tmp_path, capsys):
+    q = json.loads(QUAL.read_text())
+    q["endings"] = {v: "stale" for v in q["endings"]}
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(q))
+    assert R.main(["--refresh-endings", str(p)]) == 0
+    out = json.loads(p.read_text())
+    assert out["records"] == q["records"] and out["controls"] == q["controls"]
+    assert out["endings"] == R.floor_verdicts(q["records"])[1]
+    q["records"][0]["limits"] = dict(q["records"][0]["limits"], S_OFFSET_MIN=7.0)
+    p.write_text(json.dumps(q))
+    before = p.read_text()
+    assert R.main(["--refresh-endings", str(p)]) == 2
+    assert p.read_text() == before and "REFUSED" in capsys.readouterr().out
+
+
+def test_readme_floor_summary_block_is_generated_from_the_committed_records():
+    """The #618 narrative quotes only the generated block, so the block itself
+    must be byte-identical to what the committed records produce."""
+    text = (QUAL.parents[1] / "README.md").read_text()
+    a, b = "<!-- floor-summary:begin -->\n", "<!-- floor-summary:end -->"
+    assert a in text and b in text
+    block = text.split(a, 1)[1].split(b, 1)[0]
+    q = json.loads(QUAL.read_text())
+    assert block == R.floor_summary_text(R.floor_summary(q["records"]))
+
+
+def test_the_committed_records_pass_the_arithmetic_gate():
+    """Run the stricter gate against the current state before committing it:
+    every committed OK row must reconcile, or the gate is unsatisfiable."""
+    q = json.loads(QUAL.read_text())
+    for r in q["records"]:
+        assert R.floor_row_problems(r["rows"]) == [], r["condition"]
+
+
+def _qual_with(mutate):
+    q = json.loads(QUAL.read_text())
+    for r in q["records"]:
+        mutate(r)
+    return q
+
+
+def _dirty_and_limits_moved(r):
+    r["dirty"], r["limits"] = True, {}
+
+
+def test_floor_summary_cli_refuses_records_the_verdict_gate_refuses(tmp_path, capsys):
+    """PR #653 review, finding 1: --floor-summary published README figures from
+    dirty records with an empty limits block. It must refuse by name, exit 2,
+    and print NO measurement block."""
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(_qual_with(_dirty_and_limits_moved)))
+    assert R.main(["--floor-summary", str(p)]) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("FLOOR SUMMARY REFUSED:"), out
+    assert "dirty" in out and "limits differ" in out, out
+    assert "rows:" not in out and "| voice |" not in out and "LSB" not in out, out
+    with pytest.raises(R.Refused):
+        R.floor_summary(_qual_with(_dirty_and_limits_moved)["records"])
+
+
+@pytest.mark.parametrize("text", ["not json", "[]", '{"records": 3}'])
+def test_floor_summary_cli_refuses_an_unreadable_report(tmp_path, capsys, text):
+    p = tmp_path / "q.json"
+    p.write_text(text)
+    assert R.main(["--floor-summary", str(p)]) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("FLOOR SUMMARY REFUSED:") and "rows:" not in out, out
+
+
+@pytest.mark.parametrize("flag", ["--refresh-endings", "--floor-verdict"])
+@pytest.mark.parametrize("text", [None, "not json", "[]"])
+def test_floor_report_paths_refuse_an_unreadable_input(tmp_path, capsys, flag, text):
+    """Same-class sweep of finding 1: every path that reads saved records names
+    its refusal and exits 2 rather than tracebacking (or, worse, emitting)."""
+    p = tmp_path / "q.json"
+    if text is not None:
+        p.write_text(text)
+    args = [flag, str(p)] + ([str(p)] if flag == "--floor-verdict" else [])
+    assert R.main(args) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "BIAS" not in out, out
+
+
+def _bd_positive(r):
+    """The review's exact defeater: every BD row claims floor sits a full LSB
+    ABOVE round-half-even, with every count left as rendered."""
+    for row in r["rows"]:
+        if row["voice"] == "BD":
+            row.update(diff_sum=96000, mean_diff_lsb=1.0, diff_pct_of_peak=100 / row["peak_lsb"])
+
+
+def test_floor_verdicts_refuse_the_positive_difference_defeater(tmp_path, capsys):
+    """PR #653 review, finding 2 -- a permanent control. floor - round(half-even)
+    under the same monotone rails is -1 or 0 per sample, so a positive sum is
+    impossible; it used to reach BIAS CONFIRMED +1.0000 LSB."""
+    q = _qual_with(_bd_positive)
+    status, ends, why = R.floor_verdicts(q["records"])
+    assert status == "REFUSED" and ends == {}, (status, ends)
+    assert any("BD" in w and "diff_sum" in w for w in why), why
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(q))
+    assert R.main(["--floor-summary", str(p)]) == 2
+    assert R.main(["--floor-verdict", *_write(tmp_path, *q["records"])]) == 2
+    assert "BIAS CONFIRMED" not in capsys.readouterr().out
+
+
+_IMPOSSIBLE = {
+    "zero-frame": (dict(n_frames=0, n_res_zero=0, n_res_low=0, n_res_tie=0, n_res_high=0,
+                        diff_sum=0, mean_diff_lsb=0.0, diff_pct_of_peak=0.0,
+                        mean_floor_err_lsb=0.0, floor_err_pct_of_peak=0.0, max_abs_diff=0), "n_frames"),
+    "window-not-declared": (dict(window=[10, 96009]), "window"),
+    "short-declared-window": (None, "declared window"),
+    "positive-sum": (dict(diff_sum=5271), "diff_sum"),
+    "sum-below-residues": (dict(diff_sum=-5272, mean_diff_lsb=-5272 / 96000,
+                                diff_pct_of_peak=100 * (-5272 / 96000) / 6378.0), "diff_sum"),
+    "sum-above-residues": (dict(diff_sum=-5270, mean_diff_lsb=-5270 / 96000,
+                                diff_pct_of_peak=100 * (-5270 / 96000) / 6378.0), "diff_sum"),
+    "mean-not-sum-over-n": (dict(mean_diff_lsb=-0.06), "mean_diff_lsb"),
+    "pct-not-mean-over-peak": (dict(diff_pct_of_peak=-0.001), "diff_pct_of_peak"),
+    "err-pct-not-err-over-peak": (dict(floor_err_pct_of_peak=-0.001), "floor_err_pct_of_peak"),
+    "err-outside-residue-bounds": (dict(mean_floor_err_lsb=-0.5, floor_err_pct_of_peak=100 * -0.5 / 6378.0),
+                                   "mean_floor_err_lsb"),
+    "max-diff-two": (dict(max_abs_diff=2), "max_abs_diff"),
+    "max-diff-zero-with-a-sum": (dict(max_abs_diff=0), "max_abs_diff"),
+    "peak-above-full-scale": (dict(peak_lsb=40000.0, diff_pct_of_peak=100 * (-5271 / 96000) / 40000.0,
+                                   floor_err_pct_of_peak=None), "peak_lsb"),
+    "peak-below-level-floor": (dict(peak_lsb=8.0, diff_pct_of_peak=100 * (-5271 / 96000) / 8.0,
+                                    floor_err_pct_of_peak=None), "peak_lsb"),
+    "clip-exceeds-frames": (dict(clip_floor=96001), "clip_floor"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_IMPOSSIBLE))
+def test_floor_row_problems_reject_impossible_arithmetic(name):
+    """Each input satisfies the old shape checks (finite, non-negative integer
+    counts, residue classes summing to n_frames) and is still impossible."""
+    patch, why = _IMPOSSIBLE[name]
+    row = _frow("BD")
+    assert R.floor_row_problems([row]) == []
+    if name == "short-declared-window":
+        row = _crow("BD", n=1000, zero=500, high=10)
+    else:
+        row.update(patch)
+        if row.get("floor_err_pct_of_peak") is None:
+            row["floor_err_pct_of_peak"] = 100.0 * row["mean_floor_err_lsb"] / row["peak_lsb"]
+    probs = R.floor_row_problems([row])
+    assert any(why in p for p in probs), (name, probs)
+
+
+def test_the_arithmetic_gate_admits_clipping_and_ties():
+    """The bounds are not tighter than the arithmetic: clipped samples may hide a
+    high residue's -1, and odd-quotient ties add one each."""
+    row = _crow("BD", zero=95000, tie=40, high=500, odd_ties=40)
+    assert R.floor_row_problems([row]) == []
+    clipped = dict(_crow("BD", zero=95000, high=500, odd_ties=0), clip_floor=3, clip_exact=2)
+    clipped.update(diff_sum=-495, mean_diff_lsb=-495 / 96000,
+                   diff_pct_of_peak=100 * (-495 / 96000) / clipped["peak_lsb"])
+    assert R.floor_row_problems([clipped]) == []
+
+
+# -- refusals at the point of use ----------------------------------------------------
+def test_floor_row_refuses_a_window_shorter_than_declared():
+    row = R.output_floor_row("CH", dict(seconds=0.30, gain=0.45, vel=1.0))
+    assert row["status"] == "REFUSED" and "window" in row["reason"], row
+
+
+def test_floor_guards_refuse_each_defeating_input():
+    assert "empty" in R.floor_guards(np.array([], np.int64), 100.0)
+    assert "insufficient level" in R.floor_guards(np.array([1], np.int64), 10.0)
+    assert "overflow" in R.floor_guards(np.array([1 << 38], np.int64), 100.0)
+    assert R.floor_guards(np.array([1 << 37], np.int64), 100.0) is None
+
+
+def test_floor_record_reconciles_the_whole_declared_population():
+    """Every declared voice exactly once; REFUSED rows carry a reason; residue
+    classes sum to n_frames. The real record must survive this check."""
+    ok = {k: x for k, x in _frow("CH").items() if k != "voice"}
+    rows = [dict(ok, voice=v) for v in R.SCREEN_VOICES[:-1]]
+    rows.append(dict(voice=R.SCREEN_VOICES[-1], status="REFUSED", reason="window: only 1.9 s"))
+    assert R.floor_row_problems(rows) == []
+    dup = [dict(ok, voice="CH")] * 2
+    assert any("duplicate" in p for p in R.floor_row_problems(dup))
+    assert any("n_frames" in p for p in R.floor_row_problems([dict(ok, voice="CH", n_frames=99)]))
+    assert any("finite" in p for p in R.floor_row_problems([dict(ok, voice="CH", mean_diff_lsb=float("nan"))]))
+    assert any("reason" in p for p in R.floor_row_problems([dict(voice="CH", status="REFUSED")]))
+    assert any("status" in p for p in R.floor_row_problems([dict(voice="CH", status="MAYBE")]))
+
+
+# -- the verdict path: endings are produced by the tool, refusals are named ----------
+def _crow(v, n=96000, zero=0, tie=0, high=0, odd_ties=0, peak=6378.0, err_at=0.5):
+    """An OK row whose figures are POSSIBLE for floor-minus-round under shared
+    monotone rails (no clipping): every per-sample difference is -1 or 0, so
+    diff_sum = -(high residues + odd-quotient ties); the means and the % of
+    peak follow from it; the pre-rail error sits `err_at` of the way through
+    the interval the residue counts allow."""
+    low = n - zero - tie - high
+    ds = -(high + odd_ties)
+    lo = -(0.5 * low + 0.5 * tie + high) / n
+    hi = -(low / R.Q15 + 0.5 * tie + (0.5 + 1 / R.Q15) * high) / n
+    fe = hi + err_at * (lo - hi)
+    return dict(voice=v, status="OK", n_frames=n, n_res_zero=zero, n_res_low=low,
+                n_res_tie=tie, n_res_high=high, diff_sum=ds, mean_diff_lsb=ds / n,
+                diff_pct_of_peak=100.0 * (ds / n) / peak, mean_floor_err_lsb=fe,
+                floor_err_pct_of_peak=100.0 * fe / peak, window=[10, 10 + n], peak_lsb=peak,
+                gain=14746, acc_sha256="0" * 16, clip_floor=0, clip_exact=0,
+                max_abs_diff=1 if ds else 0)
+
+
+def _frow(v, diff_sum=-5271):
+    """A declared-window (96000-frame) row: diff_sum=0 is low residues only
+    (rounding happened, no net bias); otherwise every difference is a high residue."""
+    if diff_sum == 0:
+        return _crow(v, zero=95000)
+    return _crow(v, zero=96000 - 1000 + diff_sum, high=-diff_sum)
+
+
+def _frec(cond, rows, commit="a" * 40, dirty=False, limits=None):
+    return dict(schema=R.FLOOR_SCHEMA, condition=cond, commit=commit, dirty=dirty,
+                limits=limits if limits is not None else R._jsonable(R.declared_limits()), rows=rows)
+
+
+def test_floor_verdict_cli_produces_each_voices_ending(tmp_path, capsys):
+    dev = _frec("dev", [_frow("CH"), _frow("RS", diff_sum=0)])
+    con = _frec("confirm", [_frow("CH"), _frow("RS", diff_sum=0)])
+    assert R.main(["--floor-verdict", *_write(tmp_path, dev, con)]) == 0
+    out = capsys.readouterr().out
+    lines = {ln.split()[0]: ln for ln in out.splitlines() if ln[:2] == "  " and ln.split()[0] in ("RS", "CH")}
+    assert "BIAS CONFIRMED" in lines["CH"] and "model-side" in lines["CH"], lines
+    assert "NO NET BIAS" in lines["RS"], lines
+    assert "reference gate now" in out
+
+
+@pytest.mark.parametrize("make,why", [
+    (lambda: [_frec("dev", []), _frec("dev", [])], "per condition"),
+    (lambda: [_frec("dev", []), _frec("confirm", [], dirty=True)], "dirty"),
+    (lambda: [_frec("dev", []), _frec("confirm", [], commit="b" * 40)], "different commits"),
+    (lambda: [_frec("dev", []), _frec("confirm", [], limits=dict(R._jsonable(R.declared_limits()), S_OFFSET_MIN=7.0))],
+     "limits differ"),
+    (lambda: [_frec("dev", [_frow("CH")]), _frec("confirm", [])], "no row"),
+], ids=["same-condition-twice", "dirty", "mixed-commits", "revisited-limits", "confirm-missing"])
+def test_floor_verdict_refuses_or_hedges_records_it_cannot_combine(tmp_path, capsys, make, why):
+    assert R.main(["--floor-verdict", *_write(tmp_path, *make())]) in (0, 2)
+    out = capsys.readouterr().out
+    assert why in out, out
+    assert "BIAS CONFIRMED" not in out, out
+
+
+def test_output_floor_rows_out_round_trips_into_floor_verdict(tmp_path, monkeypatch):
+    """--output-floor --rows-out writes what --floor-verdict reads (no render:
+    output_floor_row stubbed with valid fabricated rows)."""
+    monkeypatch.setattr(R, "output_floor_row",
+                        lambda v, c, probe=R.REAL_FLOOR: _frow(v, diff_sum=0))
+    monkeypatch.setattr(R, "provenance", lambda c: "prov")
+    p = {c: str(tmp_path / f"{c}.json") for c in R.CONDITIONS}
+    for c in R.CONDITIONS:
+        rows = R.output_floor_screen(c, ("RS", "CH"), p[c])
+        assert len(rows) == 2
+    recs = [json.loads(pathlib.Path(p[c]).read_text()) for c in R.CONDITIONS]
+    assert all(r["schema"] == R.FLOOR_SCHEMA and r["limits"] == R._jsonable(R.declared_limits())
+               for r in recs)
+    assert all("command" in r and "--output-floor" in r["command"] for r in recs)
+    for r in recs:                       # the worktree may be dirty while testing: that guard is tested above
+        r["dirty"] = False
+    status, ends, why = R.floor_verdicts(recs)
+    assert status == "OK" and all(e.startswith("NO NET BIAS") for e in ends.values()), (status, ends, why)
+
+
+def test_an_all_refused_output_floor_exits_2_not_0(monkeypatch):
+    """run_all.py must not read an all-REFUSED batch as green. One answered row
+    among refusals is evidence, so exit 0."""
+    monkeypatch.setattr(R, "provenance", lambda c: "prov")
+    monkeypatch.setattr(R, "output_floor_row",
+                        lambda v, c, probe=R.REAL_FLOOR: dict(voice=v, status="REFUSED", reason="r"))
+    assert R.main(["--output-floor", "--voices", "RS,HT"]) == 2
+    monkeypatch.setattr(R, "output_floor_row",
+                        lambda v, c, probe=R.REAL_FLOOR: _frow(v) if v == "RS"
+                        else dict(voice=v, status="REFUSED", reason="r"))
+    assert R.main(["--output-floor", "--voices", "RS,HT"]) == 0

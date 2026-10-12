@@ -1,0 +1,28 @@
+# PR #653 review: condition/value association, run against the index-labelled bias_ending at 9418567
+# python3 -m pytest tools/probes/test_residual_dc.py -q -k 'own_condition or condition_dependent or committed_endings or floor_summary or readme_floor'
+# The two label tests and the committed-endings test fail on the SWAP (-0.9999 printed as dev, SD dev -0.9188),
+# not on format; floor_summary / README block fail because they did not exist yet.
+E           AssertionError: ('dev', 'BIAS CONFIRMED (model-side): floor sits -0.9999 LSB (dev) / -0.1111 LSB (confirm) from exact round-half-even ...pre-rail floor error -0.6666 / -0.3333 LSB. Model arithmetic only: no audibility, sound-defect or RTL-delivery claim.')
+E           assert [-0.9999] == [-0.1111]
+E             
+E             At index 0 diff: -0.9999 != -0.1111
+E             Use -v to get more diff
+E           AssertionError: ('dev', 'BIAS CONFIRMED (model-side): floor sits -0.9999 LSB (dev) / -0.1111 LSB (confirm) from exact round-half-even ...pre-rail floor error -0.6666 / -0.3333 LSB. Model arithmetic only: no audibility, sound-defect or RTL-delivery claim.')
+E           assert [-0.9999] == [-0.1111]
+E             
+E             At index 0 diff: -0.9999 != -0.1111
+E             Use -v to get more diff
+E               AssertionError: ('SD', 'dev')
+E               assert [-0.9188] == [-0.0709, -0.3315]
+E                 
+E                 At index 0 diff: -0.9188 != -0.0709
+E                 Right contains one more item: -0.3315
+E                 Use -v to get more diff
+E       AttributeError: module 'residual_dc' has no attribute 'floor_summary'
+E       AssertionError: assert ('<!-- floor-summary:begin -->\n' in '# Residual drum DC coupling: non-cymbal screen, CH / RS detail (#152)\n\nDiagnostic code and evidence only. No produc...limits above are apparatus\nlimits, not hardware parameters.) `COUPLE_K` is already registered\n(`coupling-k.json`).\n')
+FAILED tools/probes/test_residual_dc.py::test_bias_ending_labels_every_figure_with_its_own_condition[dev-first]
+FAILED tools/probes/test_residual_dc.py::test_bias_ending_labels_every_figure_with_its_own_condition[confirm-first]
+FAILED tools/probes/test_residual_dc.py::test_committed_endings_are_what_the_committed_records_produce
+FAILED tools/probes/test_residual_dc.py::test_floor_summary_derives_extrema_with_their_voice_and_condition
+FAILED tools/probes/test_residual_dc.py::test_readme_floor_summary_block_is_generated_from_the_committed_records
+5 failed, 1 passed, 123 deselected in 0.22s

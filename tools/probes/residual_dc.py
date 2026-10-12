@@ -6,6 +6,10 @@
     python3 tools/probes/residual_dc.py --reference     what an external recording can say
     python3 tools/probes/residual_dc.py --screen  [--condition dev|confirm] [--voices A,B] [--rows-out F.json]
     python3 tools/probes/residual_dc.py --verdict DEV.json CONFIRM.json   per-subject ending (subject_verdict)
+    python3 tools/probes/residual_dc.py --output-floor [--condition dev|confirm] [--voices A,B] [--rows-out F.json]
+    python3 tools/probes/residual_dc.py --floor-verdict DEV.json CONFIRM.json [--rows-out F.json]
+    python3 tools/probes/residual_dc.py --floor-summary REPORT.json     the README's derived #618 figures
+    python3 tools/probes/residual_dc.py --refresh-endings REPORT.json   re-derive saved endings, no render
     python3 tools/probes/residual_dc.py --detail  [--condition dev|confirm]   CH / RS / BD / HT
     python3 tools/probes/residual_dc.py --batch-spec    the tools/run_all.py job list
     python3 -m pytest tools/probes/test_residual_dc.py -q
@@ -721,6 +725,779 @@ def window_slice(x, i0, sr):
     return np.asarray(x, float)[i0:i0 + int(round(ANALYSIS_S * sr))]
 
 
+# ===========================================================================
+# The output stage's final quantisation (#618). The production stage computes
+# ONE int64 accumulator, floors it with `>> 15` and clamps once (`output_fx`;
+# RTL voice_dp.v: `tacc`, `tsh = tacc >>> 15`, `sat16t`). This apparatus
+# retains that ONE accumulator per render and derives from it, without
+# re-rendering:
+#
+#   floor   the production output -- must equal `output_fx` sample for sample
+#           before anything is interpreted (the identity guard);
+#   exact   the exact integer round-half-even of acc / 2^15 under the SAME
+#           rails, by quotient/remainder only.
+#
+# The measured quantities are the residue distribution, the pre-rail floor
+# error against the exact rational accumulator, the signed floor-minus-round
+# output difference (LSB and % of baseline peak) and the pre-rail clip counts
+# (kept OUT of the attribution population). The comparison, the voice
+# population (SCREEN_VOICES, CH the hypothesis subject, the rest controls)
+# and every refusal rule below were frozen in the commit that added them,
+# BEFORE the confirm condition was read. No expected value anywhere comes
+# from `output_fx` or from this apparatus: the fixtures' answers are integer
+# arithmetic, written by hand.
+# ===========================================================================
+FLOOR_SCHEMA = "residual-dc-output-floor/1"
+Q15 = 1 << 15
+HALF15 = Q15 >> 1
+ACC_BOUND = 1 << 38        # |tacc| < 2^38 (voice_dp.v:281 "the whole sum, |.| < 2^38")
+
+
+def floor_out(acc):
+    """The production output stage, re-derived from the RTL description
+    (arithmetic shift right 15 = floor, then the ONE rail). The oracle the
+    fixtures check; `output_fx` is checked against THIS, never the reverse."""
+    return np.clip(np.asarray(acc, np.int64) >> 15, -32768, 32767)
+
+
+def rint_out(acc):
+    """EXACT integer round-half-even of acc / 2^15. Quotient/remainder only:
+    `>> 15` is floor, so r = acc - (q << 15) is always in [0, 32767]; the tie
+    r == 32768/2 resolves to the EVEN quotient, which is also correct for
+    negative ties (q = -1, r = half -> 0; q = -2, r = half -> -2). No float
+    conversion, and the rounding happens before the rail, never on an
+    already-shifted bus."""
+    acc = np.asarray(acc, np.int64)
+    q = acc >> 15
+    r = acc - (q << 15)
+    up = (r > HALF15) | ((r == HALF15) & ((q & 1) == 1))
+    return np.clip(q + up.astype(np.int64), -32768, 32767)
+
+
+def acc_of(dmix, body, gain):
+    """The output stage's int64 accumulator, exactly as `output_fx` forms it
+    for the drum path (v = 0): dmix*g + body*g, once, retained."""
+    g = int(gain)
+    return np.asarray(dmix, np.int64) * g + np.asarray(body, np.int64) * g
+
+
+class FloorProbe:
+    """The output-stage instrument. Every decision is a method so an injected
+    control swaps exactly ONE decision and runs the same fixtures."""
+
+    name = "exact round-half-even vs production floor (clean)"
+
+    def floor(self, acc):
+        return floor_out(acc)
+
+    def exact(self, acc):
+        return rint_out(acc)
+
+    def window(self, i0, n_avail):
+        """The declared shared window: onset-relative, and the onset is the
+        BASELINE's (an independent onset would measure a different population)."""
+        if n_avail - i0 < int(round(ANALYSIS_S * 48000.0)):
+            raise Refused(f"only {(n_avail - i0) / 48000.0:.2f} s after the baseline "
+                          f"onset, {ANALYSIS_S:.2f} s declared")
+        return i0, i0 + int(round(ANALYSIS_S * 48000.0))
+
+    def identity(self, floor_variant, production_out):
+        """The saturated production samples must match `output_fx` exactly --
+        checked, not assumed; a probe that always says yes is a control."""
+        return bool(np.array_equal(np.asarray(floor_variant, np.int64),
+                                   np.asarray(production_out, np.int64)))
+
+
+REAL_FLOOR = FloorProbe()
+
+
+# ---- injected defects: one decision each ----------------------------------
+class TieAlwaysUp(FloorProbe):
+    """Negative-tie mishandling: ties always round up (half-up), so q even
+    (e.g. -2 at -1.5) goes to the wrong side."""
+    name = "ties always up (negative ties mishandled)"
+
+    def exact(self, acc):
+        acc = np.asarray(acc, np.int64)
+        q, r = acc >> 15, acc - ((acc >> 15) << 15)
+        return np.clip(q + (r >= HALF15).astype(np.int64), -32768, 32767)
+
+
+class RoundAfterShift(FloorProbe):
+    """Rounding an already-shifted bus IN FLOAT: floor(acc/32768.0 + 0.5) is
+    half-up through a float conversion -- both named sins of the class."""
+    name = "round after the shift, in float (half-up)"
+
+    def exact(self, acc):
+        return np.clip(np.floor(np.asarray(acc, np.float64) / FS + 0.5), -32768, 32767).astype(np.int64)
+
+
+class WrongGain(FloorProbe):
+    """Reconstructs the accumulator with a doubled gain: the identity guard
+    must refuse it, not measure it."""
+    name = "accumulator at the wrong gain"
+
+    def accumulate(self, dmix, body, gain):
+        return acc_of(dmix, body, int(gain) * 2)
+
+
+class IndependentOnset(FloorProbe):
+    """Windows from onset+1: a different population than the declared one."""
+    name = "independent onset selection (baseline onset + 1)"
+
+    def window(self, i0, n_avail):
+        return super().window(i0 + 1, n_avail)
+
+
+class NoRails(FloorProbe):
+    """Clipping omitted -- the exact `INJECT_BUG_VOICE_OUT_SAT` control the
+    RTL carries (`sample <= tsh[15:0]`)."""
+    name = "final rails omitted"
+
+    def floor(self, acc):
+        return np.asarray(acc, np.int64) >> 15
+
+    def exact(self, acc):
+        a = np.asarray(acc, np.int64)
+        q, r = a >> 15, a - ((a >> 15) << 15)
+        up = (r > HALF15) | ((r == HALF15) & ((q & 1) == 1))
+        return q + up.astype(np.int64)
+
+
+class IdentityAlwaysOk(FloorProbe):
+    """The baseline identity guard stubbed to pass: the guard's own defect."""
+    name = "baseline identity falsely accepted"
+
+    def identity(self, floor_variant, production_out):
+        return True
+
+
+FloorProbe.accumulate = staticmethod(acc_of)   # swappable like the rest
+
+FLOOR_MUTANTS = (TieAlwaysUp, RoundAfterShift, WrongGain, IndependentOnset,
+                 NoRails, IdentityAlwaysOk)
+
+
+def floor_guards(acc, peak_lsb):
+    """Point-of-use preconditions, each with its named refusal. Order matters:
+    the cheapest refusals first. Returns a reason string or None. (Window
+    coverage is asserted before this runs, in `FloorProbe.window`.)"""
+    if acc.size == 0 or not np.all(np.isfinite(acc)):
+        return "non-finite or empty accumulator"
+    if peak_lsb < MIN_PEAK_LSB:
+        return f"insufficient level: window peak {peak_lsb:.1f} LSB < {MIN_PEAK_LSB:.0f}"
+    m = int(np.abs(acc).max()) if acc.size else 0
+    if m >= ACC_BOUND:
+        return f"accumulator overflow: max |acc| {m} >= 2^38 (the RTL tacc bound); the model arithmetic is not what ships"
+    return None
+
+
+def output_floor_row(sound, c, probe: FloorProbe = REAL_FLOOR):
+    """One voice, one condition: the same-accumulator floor-vs-exact row.
+    `c` is a conditions dict (seconds, gain, vel). REFUSED is a first-class
+    outcome; every refusal names its reason through the row's `status`."""
+    import drums_fx as dx
+    try:
+        raw, out, _n_clip = render_bus(sound, 0, c["seconds"], c["gain"], c["vel"])
+    except Refused as e:
+        return dict(voice=sound, status="REFUSED", reason=f"render refused: {e}")
+    dmix, body, g = _BUSES[(sound, 0, c["seconds"], c["gain"], c["vel"])]
+    acc = probe.accumulate(dmix, body, g)                   # swappable: a wrong-gain accumulator must die on the identity guard
+    if g != dx.accent_reg(c["gain"]):
+        return dict(voice=sound, status="REFUSED",
+                    reason=f"requested gain {c['gain']} did not reach the render (accent reg {g})")
+    i0 = onset_index(out)                                   # the BASELINE's onset
+    try:
+        a, b = probe.window(i0, len(out))
+    except Refused as e:
+        return dict(voice=sound, status="REFUSED", reason=f"window: {e}")
+    accw = acc[a:b]
+    floorw, exactw = probe.floor(accw), probe.exact(accw)
+    prodw = np.asarray(out[a:b], np.int64)
+    if not probe.identity(floorw, prodw):
+        return dict(voice=sound, status="REFUSED",
+                    reason="baseline identity FAILED: the floor variant is not the production "
+                           "output sample for sample; refusing to interpret either")
+    why = floor_guards(accw, float(np.abs(prodw).max()))
+    if why:
+        return dict(voice=sound, status="REFUSED", reason=why)
+    q = accw >> 15
+    r = accw - (q << 15)
+    n = accw.size
+    n_tie = int((r == HALF15).sum())
+    res = dict(n_frames=n,
+               n_res_zero=int((r == 0).sum()),
+               n_res_low=int(((r > 0) & (r < HALF15)).sum()),
+               n_res_tie=n_tie,
+               n_res_high=int((r > HALF15).sum()))
+    assert sum(res[k] for k in ("n_res_zero", "n_res_low", "n_res_tie", "n_res_high")) == n
+    err_num = (q << 15) - accw          # PRE-rail floor error, over Q15: q*2^15 - acc == -r; the post-rail
+                                        # floorw would fold the clamp into the error (a rail is a rail, not a bias)
+    dsum = int((floorw.astype(np.int64) - exactw.astype(np.int64)).sum())
+    up = (r > HALF15) | ((r == HALF15) & ((q & 1) == 1))    # the SAME increment rint_out applies, ties included
+    clip_floor = int(((q > 32767) | (q < -32768)).sum())
+    qe = q + up.astype(np.int64)
+    clip_exact = int(((qe > 32767) | (qe < -32768)).sum())
+    peak = float(np.abs(prodw).max())
+    return dict(voice=sound, status="OK", window=[int(a), int(b)], peak_lsb=peak,
+                gain=int(g), acc_sha256=hashlib.sha256(accw.tobytes()).hexdigest()[:16],
+                mean_floor_err_lsb=float(err_num.sum()) / (n * Q15),
+                mean_diff_lsb=dsum / n, diff_sum=int(dsum),
+                diff_pct_of_peak=100.0 * (dsum / n) / peak,
+                floor_err_pct_of_peak=100.0 * (float(err_num.sum()) / (n * Q15)) / peak,
+                max_abs_diff=int(np.abs(floorw.astype(np.int64) - exactw.astype(np.int64)).max()),
+                clip_floor=clip_floor, clip_exact=clip_exact, **res)
+
+
+def bias_ending(rows_by_cond):
+    """The standing-bias ending for ONE voice, frozen rules, both conditions.
+    Distinct endings: REFUSED / NO BIAS POSSIBLE (nothing was rounded) /
+    NO NET BIAS (rounding happened, integer sum exactly 0) / BIAS CONFIRMED.
+    A generic 'mean != 0' bias assertion is defeated by a nonzero signal whose
+    accumulators are all exact multiples of 32768 -- covered by a fixture."""
+    if not isinstance(rows_by_cond, dict) or sorted(rows_by_cond) != sorted(CONDITIONS):
+        return "REFUSED (need one row per declared condition)"
+    for c, r in rows_by_cond.items():
+        if r.get("status") == "REFUSED":
+            return f"REFUSED ({c}: {r.get('reason')})"
+        if r.get("status") != "OK":
+            return f"REFUSED ({c}: row status {r.get('status')!r})"
+    rounded = [r["n_res_zero"] < r["n_frames"] for r in rows_by_cond.values()]
+    sums = {c: r["diff_sum"] for c, r in rows_by_cond.items()}
+    if not any(rounded):
+        return ("NO BIAS POSSIBLE: every accumulator in the window is an exact multiple of "
+                "32768 in both conditions; floor and round agree bit for bit")
+    # Every figure is looked up by its condition NAME and printed beside that
+    # name. Never by position: sorted() puts `confirm` before `dev`, and an
+    # index-labelled formatter printed every pair swapped (PR #653 review).
+    order = tuple(CONDITIONS)                               # declaration order: dev, confirm
+    sums = {c: sums[c] for c in order}
+    conf = [c for c in order if sums[c] != 0]
+    if not conf:
+        return ("NO NET BIAS: residues present, but the integer sum of floor-minus-round is "
+                "exactly 0 in both conditions (residue asymmetry, not a net level)")
+    if len(conf) == len(order) and len({sums[c] > 0 for c in order}) == 1:
+        def each(key, unit, fmt):
+            return " / ".join(f"{rows_by_cond[c][key]:{fmt}} {unit} ({c})" for c in order)
+        return (f"BIAS CONFIRMED (model-side): floor sits {each('mean_diff_lsb', 'LSB', '+.4f')} "
+                f"from exact round-half-even ({each('diff_pct_of_peak', '%', '+.4f')} of baseline peak); "
+                f"pre-rail floor error {each('mean_floor_err_lsb', 'LSB', '+.4f')}. "
+                f"Model arithmetic only: no audibility, sound-defect or RTL-delivery claim.")
+    return (f"BIAS IS CONDITION-DEPENDENT: confirmed in {conf or 'neither'} only "
+            f"(diff sums {sums}); reported, not forced into one verdict")
+
+
+FLOOR_ROW_FIELDS = ("mean_floor_err_lsb", "mean_diff_lsb", "diff_pct_of_peak",
+                    "floor_err_pct_of_peak")
+
+
+def declared_window_frames():
+    return int(round(ANALYSIS_S * 48000.0))
+
+
+def _close(a, b):
+    return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12)
+
+
+def floor_arithmetic_problems(row):
+    """Why an OK row's figures are IMPOSSIBLE, given finite numbers and
+    non-negative integer counts that partition n_frames (checked first).
+
+    The arithmetic being reconciled (`output_floor_row`): per sample the floor
+    variant is clip(q) and the exact one clip(q + up), up in {0, 1}, with the
+    SAME monotone rails, so floor - round is -1 or 0 and nothing else. Hence:
+      * diff_sum <= 0, max_abs_diff in {0, 1}, and max_abs_diff == 1 iff
+        diff_sum != 0;
+      * -diff_sum <= n_res_high + n_res_tie (only a high residue or an
+        odd-quotient tie increments), and -diff_sum >= n_res_high - clip_floor
+        - clip_exact (a high residue's -1 can only be hidden by a rail);
+      * mean_diff_lsb == diff_sum / n_frames, diff_pct_of_peak == 100 *
+        mean_diff_lsb / peak_lsb, floor_err_pct_of_peak likewise;
+      * the pre-rail error is -r / 2^15 per sample, r in [1, 2^14) low,
+        2^14 tie, (2^14, 2^15) high, 0 exact: its mean sits in the interval the
+        residue counts allow;
+      * n_frames is the declared window, > 0, and `window` spans exactly it;
+        peak_lsb is the level the guard admitted and no more than full scale;
+        clip counts do not exceed n_frames.
+    Defeater carried as a permanent control (PR #653 review): every BD row
+    rewritten to diff_sum=96000, mean_diff_lsb=1.0, diff_pct_of_peak=100/peak,
+    counts untouched -- it used to reach BIAS CONFIRMED +1.0000 LSB."""
+    out = []
+    n, ds = row["n_frames"], row["diff_sum"]
+    zero, low, tie, high = (row[k] for k in ("n_res_zero", "n_res_low", "n_res_tie", "n_res_high"))
+    cf, ce, mx, peak = row["clip_floor"], row["clip_exact"], row["max_abs_diff"], row["peak_lsb"]
+    want_n = declared_window_frames()
+    if n <= 0:
+        return [f"n_frames {n}: an OK row with no frames measured nothing"]
+    if n != want_n:
+        out.append(f"n_frames {n} is not the declared window ({want_n} frames = {ANALYSIS_S} s)")
+    w = row.get("window")
+    if not (isinstance(w, list) and len(w) == 2 and all(isinstance(x, int) and not isinstance(x, bool) for x in w)
+            and 0 <= w[0] and w[1] - w[0] == n):
+        out.append(f"window {w!r} does not span exactly n_frames={n} from a non-negative onset")
+    if not MIN_PEAK_LSB <= peak <= FS:
+        out.append(f"peak_lsb {peak!r} outside [{MIN_PEAK_LSB}, {FS}] (the level guard and full scale)")
+    for k, c in (("clip_floor", cf), ("clip_exact", ce)):
+        if c > n:
+            out.append(f"{k} {c} exceeds n_frames {n}")
+    if ds > 0:
+        out.append(f"diff_sum {ds} > 0: floor minus round-half-even under shared rails is -1 or 0 per sample")
+    elif -ds > high + tie:
+        out.append(f"diff_sum {ds}: more -1s than high residues + ties ({high} + {tie})")
+    elif -ds < high - cf - ce:
+        out.append(f"diff_sum {ds}: fewer -1s than high residues not hidden by a rail "
+                   f"({high} - {cf} - {ce})")
+    if mx not in (0, 1):
+        out.append(f"max_abs_diff {mx} is not 0 or 1")
+    elif mx != (1 if ds else 0):
+        out.append(f"max_abs_diff {mx} disagrees with diff_sum {ds}")
+    md, fe = row["mean_diff_lsb"], row["mean_floor_err_lsb"]
+    if not _close(md, ds / n):
+        out.append(f"mean_diff_lsb {md!r} != diff_sum / n_frames = {ds / n!r}")
+    if peak > 0:
+        if not _close(row["diff_pct_of_peak"], 100.0 * md / peak):
+            out.append(f"diff_pct_of_peak {row['diff_pct_of_peak']!r} != 100 * mean_diff_lsb / peak_lsb "
+                       f"= {100.0 * md / peak!r}")
+        if not _close(row["floor_err_pct_of_peak"], 100.0 * fe / peak):
+            out.append(f"floor_err_pct_of_peak {row['floor_err_pct_of_peak']!r} != 100 * "
+                       f"mean_floor_err_lsb / peak_lsb = {100.0 * fe / peak!r}")
+    lo = -(0.5 * low + 0.5 * tie + high) / n                # every residue at its largest
+    hi = -(low / Q15 + 0.5 * tie + (0.5 + 1 / Q15) * high) / n   # ... at its smallest
+    if not (lo - 1e-12 <= fe <= hi + 1e-12):
+        out.append(f"mean_floor_err_lsb {fe!r} outside [{lo!r}, {hi!r}], the interval the residue counts allow")
+    return out
+
+
+def floor_row_problems(rows):
+    """Why a `--output-floor` record's rows cannot reach an ending, validated
+    where the JSON is read. Reconciliation: every row is OK or REFUSED; an OK
+    row carries finite measurements, non-negative integer counts whose residue
+    classes sum to n_frames, and figures that are POSSIBLE for floor-minus-round
+    (`floor_arithmetic_problems`); a REFUSED row carries a reason."""
+    if not isinstance(rows, list):
+        return [f"rows is not a list: {type(rows).__name__}"]
+    out, voices = [], []
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            out.append(f"row {i} is not an object")
+            continue
+        v = row.get("voice")
+        voices.append(v)
+        if not isinstance(v, str) or not v:
+            out.append(f"row {i} has no voice")
+        st = row.get("status")
+        if st not in ("OK", "REFUSED"):
+            out.append(f"row {i} ({v}) status {st!r} not OK|REFUSED")
+            continue
+        if st == "REFUSED":
+            if not isinstance(row.get("reason"), str) or not row["reason"]:
+                out.append(f"row {i} ({v}) REFUSED without a reason")
+            continue
+        n_before = len(out)
+        for k in FLOOR_ROW_FIELDS + ("peak_lsb",):
+            if not finite_real(row.get(k)):
+                out.append(f"row {i} ({v}) {k} {row.get(k)!r} is not a finite real number")
+        for k in ("n_frames", "n_res_zero", "n_res_low", "n_res_tie", "n_res_high",
+                  "clip_floor", "clip_exact", "max_abs_diff"):
+            x = row.get(k)
+            if not isinstance(x, int) or isinstance(x, bool) or x < 0:
+                out.append(f"row {i} ({v}) {k} {x!r} is not a non-negative integer")
+        ds = row.get("diff_sum")
+        if not isinstance(ds, int) or isinstance(ds, bool):
+            out.append(f"row {i} ({v}) diff_sum {ds!r} is not an integer (it is a SIGNED sum)")
+        if all(isinstance(row.get(k), int) for k in ("n_frames", "n_res_zero", "n_res_low",
+                                                     "n_res_tie", "n_res_high")) \
+                and sum(row[k] for k in ("n_res_zero", "n_res_low", "n_res_tie", "n_res_high")) != row["n_frames"]:
+            out.append(f"row {i} ({v}) residue classes do not sum to n_frames")
+        if len(out) == n_before:                            # shape is sound: now the arithmetic
+            out += [f"row {i} ({v}) {p}" for p in floor_arithmetic_problems(row)]
+    dup = sorted({v for v in voices if isinstance(v, str) and voices.count(v) > 1})
+    if dup:
+        out.append(f"duplicate rows for {dup}")
+    return out
+
+
+def floor_record(cond_name, rows):
+    """The `--output-floor --rows-out` record: rows plus what a later reader
+    must check (schema, commit, dirty, limits, the exact command)."""
+    cmd = (f"tools/probes/residual_dc.py --output-floor --condition {cond_name} "
+           f"--voices {','.join(SCREEN_VOICES)}")
+    return dict(schema=FLOOR_SCHEMA, condition=cond_name, commit=git("rev-parse", "HEAD"),
+                dirty=bool(git("status", "--porcelain")), command=cmd,
+                limits=_jsonable(declared_limits()), rows=_jsonable(rows))
+
+
+def output_floor_screen(cond_name, voices=SCREEN_VOICES, rows_out=None):
+    """The frozen population: every SCREEN_VOICE, CH the hypothesis subject,
+    the rest controls. Every row is accounted for; usable/refused counts are
+    printed, never implied."""
+    print(provenance(cond_name))
+    print("\nOUTPUT-STAGE FLOOR vs EXACT ROUND-HALF-EVEN "
+          "(uncoupled production baseline; CH subject, others controls; model arithmetic only)")
+    rows = []
+    for v in voices:
+        r = output_floor_row(v, CONDITIONS[cond_name])
+        rows.append(r)
+        if r["status"] == "REFUSED":
+            print(f"  {v:3s} REFUSED  {r['reason']}", flush=True)
+        else:
+            print(f"  {v:3s} mean floor err {r['mean_floor_err_lsb']:+.4f} LSB "
+                  f"({r['floor_err_pct_of_peak']:+.3f} % of peak)  "
+                  f"floor-round {r['mean_diff_lsb']:+.4f} LSB ({r['diff_pct_of_peak']:+.3f} %)  "
+                  f"max|d| {r['max_abs_diff']}  residues 0/{r['n_res_zero']} low/{r['n_res_low']} "
+                  f"tie/{r['n_res_tie']} high/{r['n_res_high']}  "
+                  f"clip floor/{r['clip_floor']} round/{r['clip_exact']}", flush=True)
+    ok = sum(1 for r in rows if r["status"] == "OK")
+    print(f"  rows: {ok} usable + {len(rows) - ok} refused = {len(rows)} "
+          f"(population {len(voices)} x condition {cond_name})")
+    if rows_out:
+        p = pathlib.Path(rows_out)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(floor_record(cond_name, rows), indent=1))
+    return rows
+
+
+def floor_verdicts(records):
+    """Per-voice bias ending from two `--output-floor` records. REFUSED when
+    the records cannot be combined (same guards as `verdicts`), else the
+    frozen `bias_ending` per voice. Returns (status, {voice: ending}, reasons)."""
+    if not isinstance(records, (list, tuple)) or not all(isinstance(r, dict) for r in records):
+        return "REFUSED", {}, ["each record must be a JSON object"]
+    reasons = []
+    conds = [r.get("condition") for r in records]
+    if (sorted(map(str, conds)) != sorted(CONDITIONS) or len(conds) != len(CONDITIONS)
+            or any(r.get("schema") != FLOOR_SCHEMA for r in records)):
+        reasons.append(f"need one {FLOOR_SCHEMA} record per condition {sorted(CONDITIONS)}, got {conds}")
+    if any(r.get("dirty", True) is not False for r in records):
+        reasons.append("a record was rendered from a dirty tree (or carries no boolean dirty=false)")
+    commits = [r.get("commit") for r in records]
+    invalid = [r.get("condition") for r in records if not valid_commit(r.get("commit"))]
+    if invalid:
+        reasons.append(f"record(s) {invalid} carry no valid source commit (need 40 lowercase hex)")
+    elif len(set(commits)) != 1:
+        reasons.append(f"records come from different commits: {[str(c)[:12] for c in commits]}")
+    want = _jsonable(declared_limits())
+    bad = [r.get("condition") for r in records if r.get("limits") != want]
+    if bad:
+        reasons.append(f"declared limits differ from this module's in {bad}")
+    for r in records:
+        reasons += [f"{r.get('condition')}: {p}" for p in floor_row_problems(r.get("rows"))]
+    if reasons:
+        return "REFUSED", {}, reasons
+    by = {r["condition"]: {row["voice"]: row for row in r["rows"]} for r in records}
+    voices = [v for v in SCREEN_VOICES if any(v in by[c] for c in by)]
+    voices += sorted({v for c in by for v in by[c]} - set(voices))
+    out = {}
+    for v in voices:
+        missing = [c for c in sorted(by) if v not in by[c]]
+        out[v] = (f"NO VERDICT ({', '.join(missing)} has no row for {v})" if missing
+                  else bias_ending({c: by[c][v] for c in sorted(by)}))
+    return "OK", out, []
+
+
+def floor_summary(records):
+    """Every narrative figure for the #618 write-up, derived from the records
+    and carried WITH the (condition, voice) it came from, so prose cannot
+    attach a number to the wrong row. Usable rows only; counts are explicit.
+    Raises Refused unless `floor_verdicts` accepts the records: a figure is
+    never derived from a record the ending would refuse (PR #653 review)."""
+    status, _ends, why = floor_verdicts(records)
+    if status != "OK":
+        raise Refused("; ".join(why))
+    ok = [(r["condition"], row) for r in records for row in r["rows"] if row.get("status") == "OK"]
+    refused = sum(1 for r in records for row in r["rows"] if row.get("status") != "OK")
+
+    def at(cond, row, key):
+        return dict(condition=cond, voice=row["voice"], value=row[key])
+
+    def ext(key, pick):
+        cond, row = pick(ok, key=lambda cr: abs(cr[1][key]))
+        return at(cond, row, key)
+
+    by_row = {(c, row["voice"]): dict(
+        exact_multiple=row["n_res_zero"], n_frames=row["n_frames"],
+        exact_multiple_pct=100.0 * row["n_res_zero"] / row["n_frames"],
+        ties=row["n_res_tie"], high=row["n_res_high"], low=row["n_res_low"],
+        mean_diff_lsb=row["mean_diff_lsb"], diff_pct_of_peak=row["diff_pct_of_peak"],
+        mean_floor_err_lsb=row["mean_floor_err_lsb"], diff_sum=row["diff_sum"])
+        for c, row in ok}
+    return dict(
+        usable=len(ok), refused=refused,
+        clipped=sum(row["clip_floor"] + row["clip_exact"] for _, row in ok),
+        max_abs_diff=max(row["max_abs_diff"] for _, row in ok),
+        diff_min=ext("mean_diff_lsb", min), diff_max=ext("mean_diff_lsb", max),
+        pct_max=ext("diff_pct_of_peak", max),
+        err_min=ext("mean_floor_err_lsb", min), err_max=ext("mean_floor_err_lsb", max),
+        zero_tie_rows=sorted((c, row["voice"]) for c, row in ok if row["n_res_tie"] == 0),
+        # floor-minus-round = -(high residues) - (odd-quotient ties); with any
+        # high residue the integer sum is nonzero whatever the ties do.
+        rows_without_high=sorted((c, row["voice"]) for c, row in ok if row["n_res_high"] == 0),
+        by_row=by_row)
+
+
+def floor_summary_text(s):
+    """The generated block quoted by docs/residual-dc/README.md (#618)."""
+    def at(e, fmt):
+        return f"{e['value']:{fmt}} ({e['voice']} {e['condition']})"
+    order = [c for c in CONDITIONS]
+    lines = [
+        f"rows: {s['usable']} usable + {s['refused']} refused; clipped frames (floor+round): "
+        f"{s['clipped']}; max per-sample |floor-round|: {s['max_abs_diff']} LSB",
+        f"mean floor-round, smallest |.|: {at(s['diff_min'], '+.4f')} LSB; "
+        f"largest: {at(s['diff_max'], '+.4f')} LSB",
+        f"largest |floor-round| as % of baseline peak: {at(s['pct_max'], '+.4f')} %",
+        f"pre-rail mean floor error, smallest |.|: {at(s['err_min'], '+.4f')} LSB; "
+        f"largest: {at(s['err_max'], '+.4f')} LSB",
+        f"rows with zero ties: {len(s['zero_tie_rows'])} of {s['usable']} "
+        f"({', '.join(f'{v} {c}' for c, v in s['zero_tie_rows']) or 'none'})",
+        f"rows with no high residue (bias would rest on ties alone): "
+        f"{len(s['rows_without_high'])} ({', '.join(f'{v} {c}' for c, v in s['rows_without_high']) or 'none'})",
+        "",
+        "| voice | cond | exact multiples | ties | high | floor err LSB | floor-round LSB | % of peak |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    voices = [v for v in SCREEN_VOICES if any((c, v) in s["by_row"] for c in order)]
+    for v in voices:
+        for c in order:
+            r = s["by_row"].get((c, v))
+            if r is None:
+                continue
+            lines.append(f"| {v} | {c} | {r['exact_multiple']}/{r['n_frames']} "
+                         f"({r['exact_multiple_pct']:.2f} %) | {r['ties']} | {r['high']} | "
+                         f"{r['mean_floor_err_lsb']:+.4f} | {r['mean_diff_lsb']:+.4f} | "
+                         f"{r['diff_pct_of_peak']:+.4f} |")
+    return "```\n" + "\n".join(lines[:6]) + "\n```\n\n" + "\n".join(lines[7:]) + "\n"
+
+
+def floor_summary_cli(path):
+    """`--floor-summary`: the README block, or a named REFUSED with exit 2 and
+    no measurement block at all."""
+    try:
+        rep = json.loads(pathlib.Path(path).read_text())
+        if not isinstance(rep, dict):
+            raise Refused(f"report is a {type(rep).__name__}, not a JSON object")
+        text = floor_summary_text(floor_summary(rep.get("records")))
+    except (OSError, ValueError, Refused) as e:
+        print(f"FLOOR SUMMARY REFUSED: {e}")
+        return 2
+    print(text, end="")
+    return 0
+
+
+def refresh_endings(path):
+    """Re-derive a saved report's endings from the records it already carries,
+    without re-rendering: the rows (and their accumulator hashes) are untouched,
+    only `endings`/`status`/`refused_reasons` are recomputed by the current
+    `floor_verdicts`. REFUSES (exit 2, file unchanged) if the records no longer
+    combine -- e.g. this module's declared limits moved since they were rendered."""
+    p = pathlib.Path(path)
+    try:
+        rep = json.loads(p.read_text())
+    except (OSError, ValueError) as e:
+        print(f"REFUSED: cannot read the report: {e}")
+        return 2
+    if not isinstance(rep, dict):
+        print(f"REFUSED: report is a {type(rep).__name__}, not a JSON object")
+        return 2
+    status, ends, why = floor_verdicts(rep.get("records"))
+    if status != "OK":
+        print("REFUSED: " + "; ".join(why))
+        return 2
+    changed = sorted(v for v in ends if (rep.get("endings") or {}).get(v) != ends[v])
+    rep.update(status=status, endings=ends, refused_reasons=why)
+    p.write_text(json.dumps(_jsonable(rep), indent=1))
+    print(f"endings refreshed from the saved records ({len(changed)} changed: {', '.join(changed) or 'none'})")
+    return 0
+
+
+def floor_report(paths, json_out=None):
+    """The deliverable table: provenance, the dev/confirm rows, the frozen
+    endings, the apparatus controls, and the reference gate's current result."""
+    try:
+        recs = [json.loads(pathlib.Path(p).read_text()) for p in paths]
+    except (OSError, ValueError) as e:
+        print(f"OUTPUT-FLOOR ENDING from {', '.join(paths)}\nREFUSED: cannot read a record: {e}")
+        return 2
+    status, ends, why = floor_verdicts(recs)
+    ref = reference_gate()
+    rep = dict(schema="residual-dc-output-floor-report/1",
+               commit=git("rev-parse", "HEAD"), dirty=bool(git("status", "--porcelain")),
+               reference=dict(status=ref["status"], dc=ref["dc"], reasons=ref["reasons"]),
+               records=recs,
+               controls=_jsonable(floor_controls_matrix()),
+               status=status, endings=ends if status == "OK" else None,
+               refused_reasons=why)
+    if json_out:
+        p = pathlib.Path(json_out)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(_jsonable(rep), indent=1))
+    print(f"OUTPUT-FLOOR ENDING from {', '.join(paths)}")
+    if status == "REFUSED":
+        print("REFUSED: " + "; ".join(why))
+        return 2
+    for v, e in ends.items():
+        print(f"  {v:3s} {e}")
+    print("  (fidelity for every voice: capability REFUSED unless a verified DC-coupled "
+          "reference exists; reference gate now: "
+          f"{ref['status']} dc-inference={ref['dc']})")
+    return 0
+
+
+# ---- properties for the output-floor apparatus ----------------------------
+def _floor_row_probe(probe, c=None):
+    """A row on the full dev condition: the declared 2.0 s window must FIT, so
+    a short fixture render would REFUSE before any property could read the
+    row. The render is memoised (`render_bus`), so the whole controls matrix
+    costs one CH dev render."""
+    return output_floor_row("CH", c or CONDITIONS["dev"], probe)
+
+
+def p_oracle_fixture_floor(est):
+    """The hand table: every accumulator's floor AND round output, predicted by
+    integer arithmetic written in the test, under the probe's own methods."""
+    for acc, fl, ex in ORACLE_FIXTURES:
+        if est.floor(np.int64(acc)) != np.int64(fl) or est.exact(np.int64(acc)) != np.int64(ex):
+            return False
+    return True
+
+
+def p_mean_diff_known(est):
+    """Constructed residue blocks: all r = Q15/4 -> floor error -0.25 LSB and
+    zero diff; all r = 3Q15/4 -> -0.75 LSB and diff exactly -1; half-ties on
+    even quotients -> both agree. Predicted by integer arithmetic."""
+    a1 = np.arange(64, dtype=np.int64) * Q15 + Q15 // 4
+    a2 = np.arange(64, dtype=np.int64) * Q15 + 3 * (Q15 // 4)
+    a3 = np.arange(64, dtype=np.int64) * Q15 + HALF15      # ties, q = 0..63 even/odd mix
+    for acc, e_err, e_diff in ((a1, -0.25, 0.0), (a2, -0.75, -1.0)):
+        f, x = est.floor(acc), est.exact(acc)
+        if abs(float(((f.astype(np.int64) << 15) - acc).sum()) / (acc.size * Q15) - e_err) > 1e-12:
+            return False
+        if float((f - x).sum()) != e_diff * acc.size:
+            return False
+    f, x = est.floor(a3), est.exact(a3)
+    # ties: even quotient stays, odd quotient goes up; floor differs by exactly the odd half
+    want = np.where(np.arange(64) % 2 == 1, 1, 0)
+    return bool(np.array_equal(x - f, want))
+
+
+def p_production_identity(est):
+    """floor(accumulate(buses)) IS the shipped `output_fx` on a synthetic bus
+    triple, formed through the probe's OWN accumulate. A probe whose output
+    stage is not the production stage cannot measure production."""
+    import drums_fx as dx
+    rng = np.random.default_rng(11)
+    dmix = rng.integers(-10 ** 5, 10 ** 5, 4096).astype(np.int64)
+    body = rng.integers(-10 ** 5, 10 ** 5, 4096).astype(np.int64)
+    g = dx.accent_reg(0.45)
+    acc = est.accumulate(dmix, body, g)
+    return bool(np.array_equal(est.floor(acc),
+                               dx.output_fx(np.zeros(4096), 0, dmix, g, body, g)))
+
+
+def p_identity_guard_fires(est):
+    """A doctored (wrong-gain) accumulator through THIS probe's full row path
+    is REFUSED on the identity guard, not measured. The probe under test is
+    composed with the wrong-gain mutant, so a stubbed identity
+    (`IdentityAlwaysOk`) is caught here: the doctored accumulator sails
+    through and the property reads an OK row where only a refusal may be."""
+    base = type(est)
+    doctored = (est if base is WrongGain
+                else type("_Doctored", (WrongGain, base), {})())
+    row = _floor_row_probe(doctored)
+    return row["status"] == "REFUSED" and "identity" in row["reason"]
+
+
+def p_no_bias_possible(est):
+    """The integer-resolvable defeater: a nonzero signal whose accumulators
+    are ALL exact multiples of 32768 must end NO BIAS POSSIBLE -- a generic
+    'nonzero mean => bias' assertion would be wrong here."""
+    acc = np.arange(64, dtype=np.int64) * Q15 * 3            # exact multiples, nonzero
+    row = dict(status="OK", n_frames=acc.size, n_res_zero=acc.size, n_res_low=0,
+               n_res_tie=0, n_res_high=0, diff_sum=0, mean_diff_lsb=0.0,
+               diff_pct_of_peak=0.0, mean_floor_err_lsb=0.0, floor_err_pct_of_peak=0.0)
+    e = bias_ending({c: row for c in sorted(CONDITIONS)})
+    return e.startswith("NO BIAS POSSIBLE")
+
+
+def p_clip_counts(est):
+    """Both rails: pre-rail clip counts are correct, and clipped frames agree
+    after the rails (round >= floor, so a clipped frame cannot differ)."""
+    lo, hi = -32768 * Q15 - Q15 // 2, 32768 * Q15 + 3 * Q15
+    acc = np.array([hi, hi - 1, lo, lo - 1, 0, Q15], np.int64)
+    f, x = est.floor(acc), est.exact(acc)
+    if est is REAL_FLOOR:
+        if int(((acc >> 15) > 32767).sum()) != 2 or int(((acc >> 15) < -32768).sum()) != 2:
+            return False
+        if not (np.all(f[[0, 1]] == 32767) and np.all(f[[2, 3]] == -32768)):
+            return False
+    return bool(np.all(f[[0, 1, 2, 3]] == x[[0, 1, 2, 3]]))
+
+
+def p_window_shared(est):
+    """The row's window is the baseline's onset window, once (an independent
+    onset measures a different population and must be caught)."""
+    row = _floor_row_probe(est)
+    if row["status"] != "OK":
+        return False
+    _, out, _ = render_bus("CH", 0, **CONDITIONS["dev"])
+    i0 = onset_index(out)
+    return row["window"] == [i0, i0 + int(round(ANALYSIS_S * 48000.0))]
+
+
+FLOOR_PROPERTIES = (
+    ("oracle-fixture", p_oracle_fixture_floor),
+    ("mean-diff-known", p_mean_diff_known),
+    ("production-identity", p_production_identity),
+    ("identity-guard-fires", p_identity_guard_fires),
+    ("no-bias-possible", p_no_bias_possible),
+    ("clip-counts", p_clip_counts),
+    ("window-shared", p_window_shared),
+)
+
+
+def floor_controls_matrix():
+    """{defect: {property: MOVED|BLIND}} for the output-floor apparatus, plus
+    the clean row. Same contract as `controls_matrix`."""
+    rows = {"(clean)": {n: ("ok" if f(REAL_FLOOR) else "RED") for n, f in FLOOR_PROPERTIES}}
+    for M in FLOOR_MUTANTS:
+        est = M()
+        row = {}
+        for n, f in FLOOR_PROPERTIES:
+            try:
+                ok = f(est)
+            except Refused:
+                ok = False
+            row[n] = "blind" if ok else "MOVED"
+        rows[M.name] = row
+    return rows
+
+
+ORACLE_FIXTURES = (
+    # (accumulator, floor, exact round-half-even) -- hand integer arithmetic.
+    # `floor` is the POST-rail production output (a rail is a rail): at and
+    # past the rails floor and exact AGREE, which is itself the expectation.
+    (0, 0, 0),
+    (Q15, 1, 1), (2 * Q15, 2, 2),                       # exact multiples: agree
+    (Q15 - 1, 0, 1), (Q15 + 1, 1, 1),
+    (HALF15, 0, 0), (HALF15 - 1, 0, 0), (HALF15 + 1, 0, 1),   # +tie: q=0 even
+    (3 * Q15 // 2, 1, 2), (3 * Q15 // 2 - 1, 1, 1),           # +tie: q=1 odd -> 2
+    (-1, -1, 0), (1 - Q15, -1, -1),
+    (-HALF15, -1, 0),                                          # -tie: q=-1 odd -> 0
+    (-HALF15 - 1, -1, -1),                                     # just past the tie
+    (-3 * Q15 // 2, -2, -2),                                   # -tie: q=-2 even -> -2
+    (-3 * Q15 // 2 - 1, -2, -2), (-3 * Q15 // 2 + 1, -2, -1),
+    (32767 * Q15, 32767, 32767),                        # at the rail, exact
+    (32767 * Q15 + HALF15, 32767, 32767),               # tie just under the rail
+    (32767 * Q15 + HALF15 + 1, 32767, 32767),           # round would exceed: rail
+    (32768 * Q15, 32767, 32767),                        # high rail: both clip
+    (32768 * Q15 + 5, 32767, 32767),
+    (-32768 * Q15, -32768, -32768),                     # low rail exactly
+    (-32768 * Q15 - 1, -32768, -32768),                 # low rail: both clip
+    (-32768 * Q15 - HALF15, -32768, -32768),            # -tie past the rail: clips
+    ((1 << 38) - 1, 32767, 32767),                      # inside the RTL bound, clips
+)
+
+
 def voice_row(sound, cond_name):
     """The uncoupled production baseline's classification, both signals."""
     import drums_fx as dx
@@ -1074,15 +1851,29 @@ def batch_spec():
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    for flag in ("declared", "controls", "reference", "screen", "detail", "batch-spec"):
+    for flag in ("declared", "controls", "reference", "screen", "detail", "batch-spec",
+                 "output-floor"):
         ap.add_argument("--" + flag, action="store_true")
     ap.add_argument("--condition", choices=sorted(CONDITIONS), default="dev")
     ap.add_argument("--voices", default=None)
-    ap.add_argument("--rows-out", default=None, help="with --screen: write the rows as JSON for --verdict")
+    ap.add_argument("--rows-out", default=None,
+                    help="with --screen or --output-floor: write the rows as JSON for --verdict/--floor-verdict")
     ap.add_argument("--verdict", nargs="+", metavar="ROWS_JSON",
                     help="per-subject ending from one --rows-out record per condition (dev and confirm)")
+    ap.add_argument("--floor-verdict", nargs="+", metavar="FLOOR_JSON",
+                    help="per-voice bias ending from one --output-floor record per condition (dev and confirm)")
+    ap.add_argument("--floor-summary", metavar="REPORT_JSON",
+                    help="print the README's generated #618 figures from a saved --floor-verdict report")
+    ap.add_argument("--refresh-endings", metavar="REPORT_JSON",
+                    help="recompute a saved --floor-verdict report's endings from its OWN records, in place; no render")
     a = ap.parse_args(argv)
     vs = tuple(a.voices.split(",")) if a.voices else None
+    if a.floor_summary:
+        return floor_summary_cli(a.floor_summary)
+    if a.refresh_endings:
+        return refresh_endings(a.refresh_endings)
+    if a.floor_verdict:
+        return floor_report(a.floor_verdict, a.rows_out)
     if a.verdict:
         try:
             recs = [json.loads(pathlib.Path(p).read_text()) for p in a.verdict]
@@ -1112,6 +1903,11 @@ def main(argv=None):
     rc = 0
     if a.screen:
         if all_refused(screen(a.condition, vs or SCREEN_VOICES, a.rows_out)):
+            print("NO EVIDENCE: every row REFUSED (exit 2)")
+            rc = 2
+    if a.output_floor:
+        rows = output_floor_screen(a.condition, vs or SCREEN_VOICES, a.rows_out)
+        if not rows or all(r["status"] == "REFUSED" for r in rows):
             print("NO EVIDENCE: every row REFUSED (exit 2)")
             rc = 2
     if a.detail:
