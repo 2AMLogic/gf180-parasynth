@@ -165,7 +165,7 @@ Step 4 of #379 (fix the worst sound, pass the gate on untouched settings) cannot
      archive.org `tr-808-samples` has excellent provenance but no licence, so it could be used for calibration only,
      never redistributed;
    - (c) something else.
-2. **The cymbal's selection needs the knob-law render**, and #371 showed `kit_at` is not the instrument. Without the
+2. **The cymbal's selection needs the knob-law render**, and step 1 (#371, the merged PR) showed `kit_at` is not the instrument; the repair is #413 (`docs/scorecard/cymbal-369/knob-render/`). Without the
    `kit_at` repair there is no candidate render at the 9 development or 16 confirmation settings.
 3. **By this gate the cymbal is not the worst sound.** It ranks 14th. MA, RS and BD lead, and BD's missing pitch drop
    is a single, circuit-documented mechanism (reference §2).

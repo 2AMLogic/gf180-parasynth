@@ -1,0 +1,1202 @@
+{
+ "issue": 413,
+ "sweep_seconds": 7.0,
+ "anchor": {
+  "registers_differing": [],
+  "audio_bit_identical": true,
+  "status": "PASS"
+ },
+ "owned_addresses": {
+  "CY0000": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY0025": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY0050": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY0075": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY0010": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY2500": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY2525": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY2550": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY2575": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY2510": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY5000": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY5025": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY5050": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY5075": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY5010": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY7500": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY7525": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY7550": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY7575": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY7510": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY1000": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY1025": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY1050": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY1075": {
+   "stray": {},
+   "status": "PASS"
+  },
+  "CY1010": {
+   "stray": {},
+   "status": "PASS"
+  }
+ },
+ "hats_bit_identical": {
+  "OH@TONE00/DECAY00": true,
+  "OH@TONE00/DECAY25": true,
+  "OH@TONE00/DECAY50": true,
+  "OH@TONE00/DECAY75": true,
+  "OH@TONE00/DECAY10": true,
+  "OH@TONE25/DECAY00": true,
+  "OH@TONE25/DECAY25": true,
+  "OH@TONE25/DECAY50": true,
+  "OH@TONE25/DECAY75": true,
+  "OH@TONE25/DECAY10": true,
+  "OH@TONE50/DECAY00": true,
+  "OH@TONE50/DECAY25": true,
+  "OH@TONE50/DECAY50": true,
+  "OH@TONE50/DECAY75": true,
+  "OH@TONE50/DECAY10": true,
+  "OH@TONE75/DECAY00": true,
+  "OH@TONE75/DECAY25": true,
+  "OH@TONE75/DECAY50": true,
+  "OH@TONE75/DECAY75": true,
+  "OH@TONE75/DECAY10": true,
+  "OH@TONE10/DECAY00": true,
+  "OH@TONE10/DECAY25": true,
+  "OH@TONE10/DECAY50": true,
+  "OH@TONE10/DECAY75": true,
+  "OH@TONE10/DECAY10": true,
+  "CH@TONE00/DECAY00": true,
+  "CH@TONE00/DECAY25": true,
+  "CH@TONE00/DECAY50": true,
+  "CH@TONE00/DECAY75": true,
+  "CH@TONE00/DECAY10": true,
+  "CH@TONE25/DECAY00": true,
+  "CH@TONE25/DECAY25": true,
+  "CH@TONE25/DECAY50": true,
+  "CH@TONE25/DECAY75": true,
+  "CH@TONE25/DECAY10": true,
+  "CH@TONE50/DECAY00": true,
+  "CH@TONE50/DECAY25": true,
+  "CH@TONE50/DECAY50": true,
+  "CH@TONE50/DECAY75": true,
+  "CH@TONE50/DECAY10": true,
+  "CH@TONE75/DECAY00": true,
+  "CH@TONE75/DECAY25": true,
+  "CH@TONE75/DECAY50": true,
+  "CH@TONE75/DECAY75": true,
+  "CH@TONE75/DECAY10": true,
+  "CH@TONE10/DECAY00": true,
+  "CH@TONE10/DECAY25": true,
+  "CH@TONE10/DECAY50": true,
+  "CH@TONE10/DECAY75": true,
+  "CH@TONE10/DECAY10": true
+ },
+ "rows": {
+  "00": {
+   "00": {
+    "H_edt10_ms": 79.15,
+    "L_edt10_ms": 286.92,
+    "H_t20_late_ms": 207.14,
+    "L_t20_late_ms": 565.03,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 10.909
+   },
+   "25": {
+    "H_edt10_ms": 149.9,
+    "L_edt10_ms": 571.62,
+    "H_t20_late_ms": 414.14,
+    "L_t20_late_ms": 1218.87,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 10.855
+   },
+   "50": {
+    "H_edt10_ms": 267.06,
+    "L_edt10_ms": 865.35,
+    "H_t20_late_ms": 641.11,
+    "L_t20_late_ms": 1889.63,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.472
+   },
+   "75": {
+    "H_edt10_ms": 328.77,
+    "L_edt10_ms": 1782.0,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": 3653.91,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.0 dB)",
+    "L_t20_refused": null,
+    "H_minus_L_db": 10.035
+   },
+   "10": {
+    "H_edt10_ms": 404.15,
+    "L_edt10_ms": 1794.6,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": 3648.81,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.2 dB)",
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.061
+   }
+  },
+  "25": {
+   "00": {
+    "H_edt10_ms": 80.15,
+    "L_edt10_ms": 286.9,
+    "H_t20_late_ms": 209.36,
+    "L_t20_late_ms": 566.72,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 10.799
+   },
+   "25": {
+    "H_edt10_ms": 150.98,
+    "L_edt10_ms": 571.9,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": 1223.26,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "L_t20_refused": null,
+    "H_minus_L_db": 10.78
+   },
+   "50": {
+    "H_edt10_ms": 267.79,
+    "L_edt10_ms": 867.19,
+    "H_t20_late_ms": 644.48,
+    "L_t20_late_ms": 1891.96,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.412
+   },
+   "75": {
+    "H_edt10_ms": 329.46,
+    "L_edt10_ms": 1787.52,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": null,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.0 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "H_minus_L_db": 9.978
+   },
+   "10": {
+    "H_edt10_ms": 405.02,
+    "L_edt10_ms": 1799.67,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": null,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.2 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "H_minus_L_db": 11.009
+   }
+  },
+  "50": {
+   "00": {
+    "H_edt10_ms": 80.17,
+    "L_edt10_ms": 287.15,
+    "H_t20_late_ms": 208.5,
+    "L_t20_late_ms": 570.3,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 10.836
+   },
+   "25": {
+    "H_edt10_ms": 151.31,
+    "L_edt10_ms": 573.15,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": 1232.91,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "L_t20_refused": null,
+    "H_minus_L_db": 10.823
+   },
+   "50": {
+    "H_edt10_ms": 268.06,
+    "L_edt10_ms": 869.23,
+    "H_t20_late_ms": 644.84,
+    "L_t20_late_ms": 1895.35,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.458
+   },
+   "75": {
+    "H_edt10_ms": 329.52,
+    "L_edt10_ms": 1798.54,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": null,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.0 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "H_minus_L_db": 10.027
+   },
+   "10": {
+    "H_edt10_ms": 405.08,
+    "L_edt10_ms": 1810.0,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": null,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.2 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "H_minus_L_db": 11.058
+   }
+  },
+  "75": {
+   "00": {
+    "H_edt10_ms": 80.08,
+    "L_edt10_ms": 287.67,
+    "H_t20_late_ms": 205.99,
+    "L_t20_late_ms": 579.12,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.018
+   },
+   "25": {
+    "H_edt10_ms": 151.06,
+    "L_edt10_ms": 576.52,
+    "H_t20_late_ms": 413.12,
+    "L_t20_late_ms": 1249.99,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 10.996
+   },
+   "50": {
+    "H_edt10_ms": 268.06,
+    "L_edt10_ms": 877.15,
+    "H_t20_late_ms": 643.54,
+    "L_t20_late_ms": 1891.76,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.629
+   },
+   "75": {
+    "H_edt10_ms": 329.46,
+    "L_edt10_ms": 1824.6,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": null,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.1 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 2.1 dB)",
+    "H_minus_L_db": 10.201
+   },
+   "10": {
+    "H_edt10_ms": 405.1,
+    "L_edt10_ms": 1840.31,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": null,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.2 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 2.1 dB)",
+    "H_minus_L_db": 11.231
+   }
+  },
+  "10": {
+   "00": {
+    "H_edt10_ms": 77.38,
+    "L_edt10_ms": 291.31,
+    "H_t20_late_ms": 198.99,
+    "L_t20_late_ms": 618.63,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.798
+   },
+   "25": {
+    "H_edt10_ms": 149.5,
+    "L_edt10_ms": 594.19,
+    "H_t20_late_ms": 408.24,
+    "L_t20_late_ms": 1240.42,
+    "H_t20_refused": null,
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.642
+   },
+   "50": {
+    "H_edt10_ms": 266.67,
+    "L_edt10_ms": 917.12,
+    "H_t20_late_ms": 650.44,
+    "L_t20_late_ms": null,
+    "H_t20_refused": null,
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 2.0 dB)",
+    "H_minus_L_db": 12.22
+   },
+   "75": {
+    "H_edt10_ms": 328.02,
+    "L_edt10_ms": 1958.25,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": null,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.3 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 3.0 dB)",
+    "H_minus_L_db": 10.791
+   },
+   "10": {
+    "H_edt10_ms": 404.42,
+    "L_edt10_ms": 1974.42,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": null,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.4 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 3.0 dB)",
+    "H_minus_L_db": 11.807
+   }
+  }
+ },
+ "verdicts": {
+  "00": {
+   "distinct-renders": {
+    "status": "PASS",
+    "identical_pairs": [],
+    "what": "adjacent DECAY positions and the endpoints render different audio (the old path made 7.5 == 10.0)"
+   },
+   "h-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     79.15,
+     149.9,
+     267.06,
+     328.77,
+     404.15
+    ],
+    "rel_steps": [
+     0.8939,
+     0.7816,
+     0.2311,
+     0.2293
+    ],
+    "min_step": 0.05,
+    "what": "H_edt10_ms rises with DECAY by more than 5% per step"
+   },
+   "l-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     286.92,
+     571.62,
+     865.35,
+     1782.0,
+     1794.6
+    ],
+    "rel_steps": [
+     0.9923,
+     0.5139,
+     1.0593,
+     0.0071
+    ],
+    "min_step": 0.0,
+    "what": "L_edt10_ms rises with DECAY by more than 0% per step"
+   },
+   "h-edt10-direction-matches-808": {
+    "status": "PASS",
+    "fischer": [
+     139.09,
+     182.83,
+     229.16,
+     295.6,
+     320.86
+    ],
+    "ours": [
+     79.15,
+     149.9,
+     267.06,
+     328.77,
+     404.15
+    ],
+    "fischer_rel_steps": [
+     0.3145,
+     0.2534,
+     0.2899,
+     0.0855
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
+   },
+   "late-t20": {
+    "status": "FAIL",
+    "bands": {
+     "H": {
+      "qualified_at": [
+       "00",
+       "25",
+       "50"
+      ],
+      "refused_at": [
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 207.14,
+       "25": 414.14,
+       "50": 641.11,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     },
+     "L": {
+      "qualified_at": [
+       "00",
+       "25",
+       "50",
+       "75",
+       "10"
+      ],
+      "refused_at": [],
+      "values": {
+       "00": 565.03,
+       "25": 1218.87,
+       "50": 1889.63,
+       "75": 3653.91,
+       "10": 3648.81
+      },
+      "monotone_where_qualified": false,
+      "status": "FAIL"
+     }
+    },
+    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+   }
+  },
+  "25": {
+   "distinct-renders": {
+    "status": "PASS",
+    "identical_pairs": [],
+    "what": "adjacent DECAY positions and the endpoints render different audio (the old path made 7.5 == 10.0)"
+   },
+   "h-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     80.15,
+     150.98,
+     267.79,
+     329.46,
+     405.02
+    ],
+    "rel_steps": [
+     0.8837,
+     0.7737,
+     0.2303,
+     0.2293
+    ],
+    "min_step": 0.05,
+    "what": "H_edt10_ms rises with DECAY by more than 5% per step"
+   },
+   "l-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     286.9,
+     571.9,
+     867.19,
+     1787.52,
+     1799.67
+    ],
+    "rel_steps": [
+     0.9934,
+     0.5163,
+     1.0613,
+     0.0068
+    ],
+    "min_step": 0.0,
+    "what": "L_edt10_ms rises with DECAY by more than 0% per step"
+   },
+   "h-edt10-direction-matches-808": {
+    "status": "PASS",
+    "fischer": [
+     143.15,
+     166.21,
+     212.9,
+     253.79,
+     284.92
+    ],
+    "ours": [
+     80.15,
+     150.98,
+     267.79,
+     329.46,
+     405.02
+    ],
+    "fischer_rel_steps": [
+     0.1611,
+     0.2809,
+     0.1921,
+     0.1227
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
+   },
+   "late-t20": {
+    "status": "REFUSED",
+    "bands": {
+     "H": {
+      "qualified_at": [
+       "00",
+       "50"
+      ],
+      "refused_at": [
+       "25",
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 209.36,
+       "25": null,
+       "50": 644.48,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     },
+     "L": {
+      "qualified_at": [
+       "00",
+       "25",
+       "50"
+      ],
+      "refused_at": [
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 566.72,
+       "25": 1223.26,
+       "50": 1891.96,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     }
+    },
+    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+   }
+  },
+  "50": {
+   "distinct-renders": {
+    "status": "PASS",
+    "identical_pairs": [],
+    "what": "adjacent DECAY positions and the endpoints render different audio (the old path made 7.5 == 10.0)"
+   },
+   "h-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     80.17,
+     151.31,
+     268.06,
+     329.52,
+     405.08
+    ],
+    "rel_steps": [
+     0.8874,
+     0.7716,
+     0.2293,
+     0.2293
+    ],
+    "min_step": 0.05,
+    "what": "H_edt10_ms rises with DECAY by more than 5% per step"
+   },
+   "l-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     287.15,
+     573.15,
+     869.23,
+     1798.54,
+     1810.0
+    ],
+    "rel_steps": [
+     0.996,
+     0.5166,
+     1.0691,
+     0.0064
+    ],
+    "min_step": 0.0,
+    "what": "L_edt10_ms rises with DECAY by more than 0% per step"
+   },
+   "h-edt10-direction-matches-808": {
+    "status": "PASS",
+    "fischer": [
+     128.1,
+     147.78,
+     180.43,
+     214.08,
+     235.74
+    ],
+    "ours": [
+     80.17,
+     151.31,
+     268.06,
+     329.52,
+     405.08
+    ],
+    "fischer_rel_steps": [
+     0.1536,
+     0.2209,
+     0.1865,
+     0.1012
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
+   },
+   "late-t20": {
+    "status": "REFUSED",
+    "bands": {
+     "H": {
+      "qualified_at": [
+       "00",
+       "50"
+      ],
+      "refused_at": [
+       "25",
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 208.5,
+       "25": null,
+       "50": 644.84,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     },
+     "L": {
+      "qualified_at": [
+       "00",
+       "25",
+       "50"
+      ],
+      "refused_at": [
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 570.3,
+       "25": 1232.91,
+       "50": 1895.35,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     }
+    },
+    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+   }
+  },
+  "75": {
+   "distinct-renders": {
+    "status": "PASS",
+    "identical_pairs": [],
+    "what": "adjacent DECAY positions and the endpoints render different audio (the old path made 7.5 == 10.0)"
+   },
+   "h-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     80.08,
+     151.06,
+     268.06,
+     329.46,
+     405.1
+    ],
+    "rel_steps": [
+     0.8864,
+     0.7745,
+     0.2291,
+     0.2296
+    ],
+    "min_step": 0.05,
+    "what": "H_edt10_ms rises with DECAY by more than 5% per step"
+   },
+   "l-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     287.67,
+     576.52,
+     877.15,
+     1824.6,
+     1840.31
+    ],
+    "rel_steps": [
+     1.0041,
+     0.5215,
+     1.0801,
+     0.0086
+    ],
+    "min_step": 0.0,
+    "what": "L_edt10_ms rises with DECAY by more than 0% per step"
+   },
+   "h-edt10-direction-matches-808": {
+    "status": "PASS",
+    "fischer": [
+     121.25,
+     138.73,
+     164.74,
+     184.01,
+     190.2
+    ],
+    "ours": [
+     80.08,
+     151.06,
+     268.06,
+     329.46,
+     405.1
+    ],
+    "fischer_rel_steps": [
+     0.1442,
+     0.1875,
+     0.117,
+     0.0336
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
+   },
+   "late-t20": {
+    "status": "REFUSED",
+    "bands": {
+     "H": {
+      "qualified_at": [
+       "00",
+       "25",
+       "50"
+      ],
+      "refused_at": [
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 205.99,
+       "25": 413.12,
+       "50": 643.54,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     },
+     "L": {
+      "qualified_at": [
+       "00",
+       "25",
+       "50"
+      ],
+      "refused_at": [
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 579.12,
+       "25": 1249.99,
+       "50": 1891.76,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     }
+    },
+    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+   }
+  },
+  "10": {
+   "distinct-renders": {
+    "status": "PASS",
+    "identical_pairs": [],
+    "what": "adjacent DECAY positions and the endpoints render different audio (the old path made 7.5 == 10.0)"
+   },
+   "h-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     77.38,
+     149.5,
+     266.67,
+     328.02,
+     404.42
+    ],
+    "rel_steps": [
+     0.932,
+     0.7837,
+     0.2301,
+     0.2329
+    ],
+    "min_step": 0.05,
+    "what": "H_edt10_ms rises with DECAY by more than 5% per step"
+   },
+   "l-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     291.31,
+     594.19,
+     917.12,
+     1958.25,
+     1974.42
+    ],
+    "rel_steps": [
+     1.0397,
+     0.5435,
+     1.1352,
+     0.0083
+    ],
+    "min_step": 0.0,
+    "what": "L_edt10_ms rises with DECAY by more than 0% per step"
+   },
+   "h-edt10-direction-matches-808": {
+    "status": "PASS",
+    "fischer": [
+     97.39,
+     110.68,
+     119.46,
+     137.1,
+     136.19
+    ],
+    "ours": [
+     77.38,
+     149.5,
+     266.67,
+     328.02,
+     404.42
+    ],
+    "fischer_rel_steps": [
+     0.1365,
+     0.0793,
+     0.1477,
+     -0.0066
+    ],
+    "undetermined_steps": [
+     "75->10"
+    ],
+    "deadband": 0.02
+   },
+   "late-t20": {
+    "status": "REFUSED",
+    "bands": {
+     "H": {
+      "qualified_at": [
+       "00",
+       "25",
+       "50"
+      ],
+      "refused_at": [
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 198.99,
+       "25": 408.24,
+       "50": 650.44,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     },
+     "L": {
+      "qualified_at": [
+       "00",
+       "25"
+      ],
+      "refused_at": [
+       "50",
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 618.63,
+       "25": 1240.42,
+       "50": null,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     }
+    },
+    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+   }
+  }
+ },
+ "split": {
+  "CY0000": "confirmation",
+  "CY0025": "confirmation",
+  "CY0050": "development",
+  "CY0075": "confirmation",
+  "CY0010": "confirmation",
+  "CY2500": "confirmation",
+  "CY2525": "confirmation",
+  "CY2550": "development",
+  "CY2575": "confirmation",
+  "CY2510": "confirmation",
+  "CY5000": "development",
+  "CY5025": "development",
+  "CY5050": "development",
+  "CY5075": "development",
+  "CY5010": "development",
+  "CY7500": "confirmation",
+  "CY7525": "confirmation",
+  "CY7550": "development",
+  "CY7575": "confirmation",
+  "CY7510": "confirmation",
+  "CY1000": "confirmation",
+  "CY1025": "confirmation",
+  "CY1050": "development",
+  "CY1075": "confirmation",
+  "CY1010": "confirmation"
+ },
+ "rate_register_floor": {
+  "slowest_tau_s": 1.3653,
+  "positions": {
+   "00": {
+    "E_CYD": {
+     "asked_tau_s": 0.0678,
+     "rate_reg": 20,
+     "realised_tau_s": 0.0683,
+     "at_floor": false
+    },
+    "E_CYL": {
+     "asked_tau_s": 0.2423,
+     "rate_reg": 6,
+     "realised_tau_s": 0.2276,
+     "at_floor": false
+    }
+   },
+   "25": {
+    "E_CYD": {
+     "asked_tau_s": 0.14,
+     "rate_reg": 10,
+     "realised_tau_s": 0.1365,
+     "at_floor": false
+    },
+    "E_CYL": {
+     "asked_tau_s": 0.5,
+     "rate_reg": 3,
+     "realised_tau_s": 0.4551,
+     "at_floor": false
+    }
+   },
+   "50": {
+    "E_CYD": {
+     "asked_tau_s": 0.2122,
+     "rate_reg": 6,
+     "realised_tau_s": 0.2276,
+     "at_floor": false
+    },
+    "E_CYL": {
+     "asked_tau_s": 0.7577,
+     "rate_reg": 2,
+     "realised_tau_s": 0.6827,
+     "at_floor": false
+    }
+   },
+   "75": {
+    "E_CYD": {
+     "asked_tau_s": 0.2843,
+     "rate_reg": 5,
+     "realised_tau_s": 0.2731,
+     "at_floor": false
+    },
+    "E_CYL": {
+     "asked_tau_s": 1.0155,
+     "rate_reg": 1,
+     "realised_tau_s": 1.3653,
+     "at_floor": true
+    }
+   },
+   "10": {
+    "E_CYD": {
+     "asked_tau_s": 0.3565,
+     "rate_reg": 4,
+     "realised_tau_s": 0.3413,
+     "at_floor": false
+    },
+    "E_CYL": {
+     "asked_tau_s": 1.2732,
+     "rate_reg": 1,
+     "realised_tau_s": 1.3653,
+     "at_floor": true
+    }
+   }
+  }
+ },
+ "saturation_control": {
+  "verdict": {
+   "distinct-renders": {
+    "status": "FAIL",
+    "identical_pairs": [
+     "75=10"
+    ],
+    "what": "adjacent DECAY positions and the endpoints render different audio (the old path made 7.5 == 10.0)"
+   },
+   "h-edt10-rises": {
+    "status": "FAIL",
+    "value": [
+     80.17,
+     151.31,
+     268.06,
+     329.52,
+     329.52
+    ],
+    "rel_steps": [
+     0.8874,
+     0.7716,
+     0.2293,
+     0.0
+    ],
+    "min_step": 0.05,
+    "what": "H_edt10_ms rises with DECAY by more than 5% per step"
+   },
+   "l-edt10-rises": {
+    "status": "FAIL",
+    "value": [
+     287.15,
+     573.15,
+     869.23,
+     1798.54,
+     1798.54
+    ],
+    "rel_steps": [
+     0.996,
+     0.5166,
+     1.0691,
+     0.0
+    ],
+    "min_step": 0.0,
+    "what": "L_edt10_ms rises with DECAY by more than 0% per step"
+   },
+   "h-edt10-direction-matches-808": {
+    "status": "FAIL",
+    "fischer": [
+     128.1,
+     147.78,
+     180.43,
+     214.08,
+     235.74
+    ],
+    "ours": [
+     80.17,
+     151.31,
+     268.06,
+     329.52,
+     329.52
+    ],
+    "fischer_rel_steps": [
+     0.1536,
+     0.2209,
+     0.1865,
+     0.1012
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
+   },
+   "late-t20": {
+    "status": "REFUSED",
+    "bands": {
+     "H": {
+      "qualified_at": [
+       "00",
+       "50"
+      ],
+      "refused_at": [
+       "25",
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 208.5,
+       "25": null,
+       "50": 644.84,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     },
+     "L": {
+      "qualified_at": [
+       "00",
+       "25",
+       "50"
+      ],
+      "refused_at": [
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 570.3,
+       "25": 1232.91,
+       "50": 1895.35,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "status": "REFUSED"
+     }
+    },
+    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+   }
+  },
+  "red": [
+   "distinct-renders",
+   "h-edt10-rises",
+   "l-edt10-rises",
+   "h-edt10-direction-matches-808"
+  ],
+  "blind": []
+ },
+ "commit": "2dfd1fdf096608ba53eb84badd61552ae2252cd3",
+ "sources_dirty": false
+}
