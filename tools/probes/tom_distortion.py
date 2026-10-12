@@ -16,9 +16,11 @@ still accepted at an error beyond TOL_DB), and no validated input-qualification
 apparatus exists. The estimator therefore never attests `interference_free`,
 and a submitted boolean is NOT evidence: the judge DERIVES qualification from
 per-harmonic `qual` evidence it verifies (an analytic component list, bound to
-the reading's own f0 and to the estimator's window, with the harmonic-role
-component AT k*f0 -- within QUAL_AT_KF0_TOL_HZ; a "harmonic" declared off the
-multiple is the blind zone itself -- and every other component
+the reading's own f0 and to the estimator's window, containing a component AT
+the declared fundamental itself -- a declaration nothing sits at can relocate
+a nearby partial onto k*f0 exactly -- with the harmonic-role component AT k*f0
+-- within QUAL_AT_KF0_TOL_HZ; a "harmonic" declared off the multiple is the
+blind zone itself -- and every other component
 >= QUAL_SEPARATION_HZ from k*f0). A resolved reading without verified evidence
 is a DIAGNOSTIC: the judge REFUSES rather than score it, and `mechanism()` does
 not count the take, however attractive the number.
@@ -52,7 +54,8 @@ class Refused(RuntimeError):
 DEFECTS = ("stub-estimator", "missing-distortion", "leakage-as-h2",
            "preservation-bypass", "contaminated-confirmation", "target-ignored",
            "mechanism-bypass", "population-bypass", "nonfinite-bypass", "mechanism-gate-bypass",
-           "floor-as-bound", "ambiguity-bypass", "nondetection-refutes", "qualification-bypass")
+           "floor-as-bound", "ambiguity-bypass", "nondetection-refutes", "qualification-bypass",
+           "shifted-fundamental")
 INJECT: set = set()
 
 
@@ -616,17 +619,23 @@ def _qualified(h: dict, i: int) -> bool:
     `interference_free` boolean is a claim, not evidence, and is never read).
     The evidence must be an analytic-spec component list that (a) is bound to
     the reading by matching its measured f0 (within LOC_TOL) and the
-    estimator's window (QUAL_WIN_S), (b) places exactly one component AT k*f0
-    (within QUAL_AT_KF0_TOL_HZ -- an analytic construction puts the harmonic at
-    the exact multiple; a component declared off k*f0, even by the 0.25 Hz the
-    blind zone cannot separate, is the unseparable case masquerading as the
-    reading's harmonic and is refused), and (c) places every other component
-    at least QUAL_SEPARATION_HZ away, the nearby_partials sweep's validated
-    separability boundary (0 of 648 gating cases accepted wrongly at >= 1.5 Hz;
-    179/432 inside ~1 Hz). Fail closed: missing, malformed or mismatched
-    evidence is no evidence. The residual, stated (rule 8): a wholly fabricated
-    clean spec paired with readings measured elsewhere is not detectable here
-    -- records are harness-produced (docs/verification-rules.md), forged
+    estimator's window (QUAL_WIN_S), (b) contains exactly one component AT the
+    declared fundamental (within QUAL_AT_KF0_TOL_HZ -- round-6 review: a
+    declaration nothing sits at is inconsistent with its own component list,
+    and shifting the declared fundamental relocates a nearby partial exactly
+    onto k*f0, so 220.25 Hz read as "H2" of 110.125), (c) places exactly one
+    component AT k*f0 (within QUAL_AT_KF0_TOL_HZ -- an analytic construction
+    puts the harmonic at the exact multiple; a component declared off k*f0,
+    even by the 0.25 Hz the blind zone cannot separate, is the unseparable
+    case masquerading as the reading's harmonic and is refused), and (d)
+    places every other component at least QUAL_SEPARATION_HZ away, the
+    nearby_partials sweep's validated separability boundary (0 of 648 gating
+    cases accepted wrongly at >= 1.5 Hz; 179/432 inside ~1 Hz). Fail closed:
+    missing, malformed, mismatched or self-inconsistent evidence is no
+    evidence. The residual, stated (rule 8): a wholly fabricated clean spec
+    paired with readings measured elsewhere is not detectable here -- the
+    list must still be internally consistent with its own declaration, but
+    records are harness-produced (docs/verification-rules.md), forged
     measurement numbers are outside the judge's trust model, and the committed
     records pin which readings exist."""
     if "qualification-bypass" in INJECT:
@@ -652,6 +661,12 @@ def _qualified(h: dict, i: int) -> bool:
     for c in comps:
         if not isinstance(c, dict) or not _finite(c.get("f_hz")) or not _finite(c.get("db")):
             return False            # an unknown level is not an absent component
+    if "shifted-fundamental" not in INJECT:
+        fund = [c for c in comps if abs(c["f_hz"] - ef0) <= QUAL_AT_KF0_TOL_HZ]
+        if len(fund) != 1:
+            return False            # nothing AT the declared fundamental: the list
+                                    # contradicts its own declaration, and the shift
+                                    # exists to relocate a partial onto k*ef0
     at = [c for c in comps if abs(c["f_hz"] - k * ef0) <= QUAL_AT_KF0_TOL_HZ]
     if len(at) != 1:
         return False                # nothing established AT k*f0 to be a reading of
@@ -939,7 +954,8 @@ def judge(record: dict, prereg: dict) -> dict:
                             "exclude a partial within ~1 Hz of k*f0 (the measured blind zone), a record's "
                             "interference_free booleans are not evidence, and qualification is derived "
                             "only from qual evidence the judge verifies -- an analytic component list "
-                            "bound to the reading's f0 and window with every other component >= "
+                            "bound to the reading's f0 and window, containing a component at its declared "
+                            "fundamental, with every other component >= "
                             f"QUAL_SEPARATION_HZ away ({len(poisoned)} row/harmonic pairs affected)")}
     # the issue requires the mechanism to be measured and SUPPORTED before a
     # topology is chosen: missing, unknown, INSUFFICIENT and REFUTED all stop here
@@ -1303,6 +1319,42 @@ def prop_J11_submitted_boolean_never_qualifies() -> bool:
     return judge(r, p)["verdict"] == "REFUSED"
 
 
+def prop_J12_shifted_fundamental_never_qualifies() -> bool:
+    """Round-6 review: an analytic-spec declaring a fundamental NO component of
+    its own list sits at is inconsistent with itself -- and shifting the
+    declaration relocates a nearby partial exactly onto k*ef0 (the 220.25 Hz
+    partial declared as 2 x 110.125 qualified H2 and the judge CONFIRMED). The
+    judge must refuse the record, and the verifier must reject the same shift
+    aimed at 3*ef0 and 4*ef0."""
+    sr = 48000
+    x = np.arange(sr // 2) / sr
+    y = np.exp(-x / .15) * (np.sin(2 * np.pi * 110.0 * x)
+                            + 10 ** (-35 / 20) * np.sin(2 * np.pi * 220.25 * x))
+    h = harmonic_levels(y, sr)
+    if not h["resolved"][0]:
+        return False            # precondition: the reading IS resolved (the blind zone)
+    specs = []
+    for k in (2, 3, 4):
+        comp = 110.0 * k + 0.25
+        specs.append({"kind": "analytic-spec", "f0": comp / k, "win_s": QUAL_WIN_S,
+                      "components": [{"f_hz": 110.0, "db": 0.0},
+                                     {"f_hz": comp, "db": -35.0}]})
+    if any(abs(s["f0"] - h["f0"]) > LOC_TOL * h["f0"] for s in specs):
+        return False            # precondition: each shifted declaration BINDS (within 3 %)
+    if any(_qualified({**h, "qual": [specs[i] if j == i else None for j in range(3)]}, i)
+           for i in range(3)):
+        return False            # a spec nothing sits the fundamental at is not evidence
+    hq = _levels_json(h)
+    hq["qual"] = [specs[0], None, None]      # the reviewer's exact k=2 input
+    p = synthetic_prereg()
+    r = synthetic_record(prereg=p)
+    for row in r["rows"].values():
+        row["variants"]["Q"]["harm"] = hq
+        for z in (row["target_harm"], row["variants"]["shipped"]["harm"]):
+            z["resolved"] = [True, False, False]
+    return judge(r, p)["verdict"] == "REFUSED"
+
+
 def prop_K4_nearby_partial_is_not_an_accurate_harmonic() -> bool:
     """The reviewer's defeating inputs (#649): -30 dB partials at 1.98 / 2.02 f0 beside a
     -40 dB H2, plus the registered sweep: none may be accepted beyond TOL_DB."""
@@ -1341,6 +1393,7 @@ PROPERTIES = {f.__name__[5:]: f for f in (
     prop_J8_unsupported_mechanism_cannot_select, prop_J9_unresolved_shipped_floor_earns_no_credit,
     prop_J10_blind_zone_reading_cannot_confirm,
     prop_J11_submitted_boolean_never_qualifies,
+    prop_J12_shifted_fundamental_never_qualifies,
     prop_M1_mechanism_classes, prop_M2_non_detection_is_not_refutation)}
 
 #: defect -> the property whose assertion it is meant to defeat
@@ -1357,6 +1410,7 @@ INTENDED = {"stub-estimator": ("K1_known_answers",),
             "floor-as-bound": ("J9_unresolved_shipped_floor_earns_no_credit",),
             "qualification-bypass": ("J10_blind_zone_reading_cannot_confirm",
                                      "J11_submitted_boolean_never_qualifies"),
+            "shifted-fundamental": ("J12_shifted_fundamental_never_qualifies",),
             "population-bypass": ("J6_frozen_population_enforced",),
             "nonfinite-bypass": ("J7_nonfinite_or_missing_measurement_refused",)}
 

@@ -16,6 +16,7 @@
   "J9_unresolved_shipped_floor_earns_no_credit": "PASS",
   "J10_blind_zone_reading_cannot_confirm": "PASS",
   "J11_submitted_boolean_never_qualifies": "PASS",
+  "J12_shifted_fundamental_never_qualifies": "PASS",
   "M1_mechanism_classes": "PASS",
   "M2_non_detection_is_not_refutation": "PASS"
  },
@@ -37,6 +38,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "MOVED",
    "J11_submitted_boolean_never_qualifies": "MOVED",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -57,6 +59,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -77,6 +80,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -97,6 +101,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -117,6 +122,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -137,6 +143,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "MOVED",
    "J10_blind_zone_reading_cannot_confirm": "MOVED",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -157,6 +164,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "MOVED",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -177,6 +185,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -197,6 +206,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -217,6 +227,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -237,6 +248,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "MOVED",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -257,6 +269,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   },
@@ -277,6 +290,7 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "BLIND",
    "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "BLIND",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "MOVED"
   },
@@ -297,6 +311,28 @@
    "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
    "J10_blind_zone_reading_cannot_confirm": "MOVED",
    "J11_submitted_boolean_never_qualifies": "MOVED",
+   "J12_shifted_fundamental_never_qualifies": "MOVED",
+   "M1_mechanism_classes": "BLIND",
+   "M2_non_detection_is_not_refutation": "BLIND"
+  },
+  "shifted-fundamental": {
+   "K1_known_answers": "BLIND",
+   "K2_pure_sinusoid_reads_unresolved": "BLIND",
+   "K3_applied_quadratic_reads_at_spec": "BLIND",
+   "K4_nearby_partial_is_not_an_accurate_harmonic": "BLIND",
+   "J0_good_candidate_confirms": "BLIND",
+   "J1_decay_violation_rejected": "BLIND",
+   "J2_peak_violation_rejected": "BLIND",
+   "J3_contaminated_confirmation_refused": "BLIND",
+   "J4_no_distortion_candidate_not_confirmed": "BLIND",
+   "J5_null_target_refused_not_zero_error": "BLIND",
+   "J6_frozen_population_enforced": "BLIND",
+   "J7_nonfinite_or_missing_measurement_refused": "BLIND",
+   "J8_unsupported_mechanism_cannot_select": "BLIND",
+   "J9_unresolved_shipped_floor_earns_no_credit": "BLIND",
+   "J10_blind_zone_reading_cannot_confirm": "BLIND",
+   "J11_submitted_boolean_never_qualifies": "BLIND",
+   "J12_shifted_fundamental_never_qualifies": "MOVED",
    "M1_mechanism_classes": "BLIND",
    "M2_non_detection_is_not_refutation": "BLIND"
   }
@@ -339,6 +375,9 @@
   "qualification-bypass": [
    "J10_blind_zone_reading_cannot_confirm",
    "J11_submitted_boolean_never_qualifies"
+  ],
+  "shifted-fundamental": [
+   "J12_shifted_fundamental_never_qualifies"
   ],
   "population-bypass": [
    "J6_frozen_population_enforced"

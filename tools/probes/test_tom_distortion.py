@@ -423,6 +423,22 @@ def test_submitted_boolean_never_qualifies_the_record():
         td.INJECT = set()
 
 
+def test_shifted_fundamental_spec_never_qualifies():
+    """Round-6 review, start-red regression and permanent control (J12): a spec
+    declaring f0 = 110.125 with no component at it relocated the 220.25 Hz
+    partial exactly onto 2*ef0, `_qualified` returned True and the judge
+    CONFIRMED (executed on the pre-fix head). The component list must contain a
+    component AT the declared fundamental; the same shift aimed at 3*ef0 and
+    4*ef0 must fail too. The `shifted-fundamental` defect re-opens the check
+    and turns the control CONFIRMED, proving the check (not the number) decides."""
+    assert td.prop_J12_shifted_fundamental_never_qualifies()
+    td.INJECT = {"shifted-fundamental"}
+    try:
+        assert not td.prop_J12_shifted_fundamental_never_qualifies()
+    finally:
+        td.INJECT = set()
+
+
 def test_record_without_attestation_is_refused_fail_closed():
     """A record that predates the boundary (no qual evidence and no
     interference_free anywhere) must not confirm: absent evidence is not
@@ -471,8 +487,11 @@ def test_forged_or_malformed_attestation_is_refused():
                    "components": [{"f_hz": 110.0, "db": 0.0},
                                   {"f_hz": 220.25, "db": -30.0},
                                   {"f_hz": 330.0, "db": -38.0},
-                                  {"f_hz": 440.0, "db": -41.0}]}] * 3):     # a partial in the blind radius
-        r = td.synthetic_record()
+                                  {"f_hz": 440.0, "db": -41.0}]}] * 3,      # a partial in the blind radius
+                 [{"kind": "analytic-spec", "f0": 110.125, "win_s": 0.28,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 220.25, "db": -35.0}]}] * 3):     # shifted fundamental (round 6):
+        r = td.synthetic_record()                                            # nothing at 110.125 itself
         r["rows"]["MT25"]["variants"]["Q"]["harm"]["qual"] = badq
         assert refused(r), badq
 
