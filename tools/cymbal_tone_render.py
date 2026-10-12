@@ -568,19 +568,25 @@ def print_report(res: dict):
 #             it refuses at the anchor itself (which this renderer must leave
 #             bit-identical), so no DECAY setting can make it qualify, and a
 #             gate red at the anchor could not show a control turning it red.
-#             What remains after the rate fix -- H at every TONE, L at TONE 7.5
-#             and 10 at the slow end -- is band crosstalk, localised by switching
-#             one VCA path off (tools/probes/cymbal_late_t20.py localise): each
-#             band's late segment is its own envelope plus the OTHER envelope's
-#             energy in its frequency range, two exponentials by construction
-#             of the shipped kit, not a register floor. It has its own issue
-#             (LATE_T20_CROSSTALK_ISSUE) and stays visible here, never a pass.
+#             Two refusals survive the rate fix, each localised by a paired
+#             intervention (tools/probes/cymbal_late_t20.py localise, record
+#             docs/scorecard/cymbal-369/knob-render/late-t20-localise.json):
+#               H, every TONE row: switching the LOW path off qualifies it
+#                 (CY5010 1.77 -> 0.29 dB); the low band's energy above 6 kHz
+#                 makes H's late segment two exponentials. #661, ungated here.
+#               L, TONE 7.5 / 10 at the slow end: NOT crosstalk (decay path off
+#                 2.94 -> 2.83 dB at CY1010) but E_CYL's HEADROOM -- PEAK x 8
+#                 with att + 3, level-neutral, qualifies it (0.43 dB). The low
+#                 band's envelope starts 21-28 dB above its integer floor.
+#                 #660. L stays GATED, so those rows are red until #660 lands:
+#                 a real defect the gate is right to report, not a gate defect.
 #   decay-taus-realised  every E_CYL / E_CYD code realises its ask (the anchor's
 #             realised tau x the DECAY network ratio) within TAU_TOL, and no code
 #             sits on its mantissa floor (m = 1). Read off the register image.
 SWEEP_SECONDS = 7.0
 LATE_T20_GATED = ("L",)        # the bands whose late T20 the gate requires
-LATE_T20_CROSSTALK_ISSUE = None   # the follow-up for the refusals the rate fix does not reach
+LATE_T20_H_ISSUE = 661         # H: the low band's energy above 6 kHz (ungated until it lands)
+LATE_T20_L_HEADROOM_ISSUE = 660   # L at TONE 7.5/10, slow DECAY: E_CYL headroom (gated, red until it lands)
 TAU_TOL = 0.05                 # docs/sensitivity/drum-rate-exp-bits-plan.json, frozen (ISO 3382-1 JND)
 FISCHER_DEADBAND = 0.02        # the 808's own step below this establishes no direction
 MIN_H_EDT_STEP = 0.05          # H EDT10 must rise by >= 5 % per DECAY step
@@ -715,7 +721,7 @@ def decay_row_verdict(row: dict, identical: dict, fischer_h_edt: dict | None,
                                        "why": ("refuses at the anchor itself; the low band's energy above "
                                                "6 kHz makes H's late segment two exponentials (localised: "
                                                "tools/probes/cymbal_late_t20.py localise), not the rate floor"),
-                                       "issue": LATE_T20_CROSSTALK_ISSUE}
+                                       "issue": LATE_T20_H_ISSUE}
                                    for b, v in t20.items() if b not in gated},
                        "what": "the frozen late-T20 measure; the gated bands must qualify at all "
                                "five positions and rise strictly; REFUSED is never a pass"}
