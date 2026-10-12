@@ -15,8 +15,17 @@ Per width it reports, in a fixed-width table `tools/sensitivity.py` re-extracts:
   cyl_knob_pct        the same at the five knob codes only, E_CYL
   cyd_knob_pct        the same, E_CYD
   sim_check_pct       worst disagreement between rate_code_tau (the closed
-                      form) and a tau fitted to the integer EnvFx's level at the
-                      five codes -- the closed form is checked, not trusted
+                      form) and a tau fitted to the integer EnvFx's level from
+                      -3 to -20 dB at the five codes -- the closed form is
+                      checked, not trusted
+  tail_slow_pct       the same fit from -20 to -40 dB: how much SLOWER the
+                      integer decay runs there than the closed form says,
+                      because (level * m) >> (16 + e) truncates a product of a
+                      few LSB. A property of the envelope since revision 1,
+                      identical at every width for the same realised tau.
+                      (Wrong-then-right 1: the first run fitted -6..-40 dB as
+                      one window and read this tail bias, 3.8-4.6 %, as a
+                      closed-form disagreement.)
   floor_db            the linear-floor onset (2^(16+e)/m) at the slowest ask,
                       dB re full scale
   flops_added         18 envelopes x (RATE + FRATE) x width
@@ -78,8 +87,8 @@ def asks(n: int = 101) -> dict:
     return out
 
 
-def fitted_tau(code: int, tau_hint: float) -> float:
-    """Fire one EnvFx at full scale with `code` and fit ln(level) from -6 to -40 dB."""
+def fitted_tau(code: int, tau_hint: float, lo_db: float = -20.0, hi_db: float = -3.0) -> float:
+    """Fire one EnvFx at full scale with `code` and fit ln(level) between lo_db and hi_db."""
     env = dx.EnvFx()
     env.peak, env.rate = dx.FULL24, code
     env.set_ctl(dx.env_ctl(0))
@@ -92,7 +101,7 @@ def fitted_tau(code: int, tau_hint: float) -> float:
         if env.level <= 0:
             break
         r = env.level / pk
-        if 0.01 <= r <= 0.5:
+        if 10 ** (lo_db / 20) <= r <= 10 ** (hi_db / 20):
             xs.append(i)
             ys.append(math.log(env.level))
     if len(xs) < 20:
@@ -109,21 +118,23 @@ def point(bits: int, a: dict) -> dict:
         return abs(got / tau - 1.0)
     worst = max(err(t) for v in a.values() for _, t in v["dense"])
     knob = {name: max(err(t) for _, t in v["knob"]) for name, v in a.items()}
-    sim = 0.0
+    sim = tail = 0.0
     for v in a.values():
         for _, t in v["knob"]:
             code = dx.rate_code(t, exp_bits=bits)
             f = fitted_tau(code, dx.rate_code_tau(code))
-            if not math.isfinite(f):
+            g = fitted_tau(code, dx.rate_code_tau(code), lo_db=-40.0, hi_db=-20.0)
+            if not (math.isfinite(f) and math.isfinite(g)):
                 raise Refused(f"width {bits}: the EnvFx decay at tau {t:.4f} s never crossed the fit window")
             sim = max(sim, abs(f / dx.rate_code_tau(code) - 1.0))
+            tail = max(tail, g / dx.rate_code_tau(code) - 1.0)
     slow = max(t for v in a.values() for _, t in v["dense"])
     c = dx.rate_code(slow, exp_bits=bits)
     m, e = c & dx.RATE_M_MASK, c >> dx.RATE_Q
     floor = (1 << (dx.RATE_Q + e)) / m
     return {"RATE_EXP_BITS": bits, "worst_err_pct": 100 * worst,
             "cyl_knob_pct": 100 * knob["E_CYL"], "cyd_knob_pct": 100 * knob["E_CYD"],
-            "sim_check_pct": 100 * sim, "floor_db": 20 * math.log10(floor / (1 << dx.ENV_BITS)),
+            "sim_check_pct": 100 * sim, "tail_slow_pct": 100 * tail, "floor_db": 20 * math.log10(floor / (1 << dx.ENV_BITS)),
             "flops_added": 2 * dx.N_ENV * bits, "clocks": CLOCKS}
 
 
@@ -144,7 +155,7 @@ def main(argv=None) -> int:
     select = min(passing) if passing else None
     head = _git("rev-parse", "--short=12", "HEAD").stdout.strip()
     cols = ("RATE_EXP_BITS", "worst_err_pct", "cyl_knob_pct", "cyd_knob_pct", "sim_check_pct",
-            "floor_db", "flops_added", "clocks")
+            "tail_slow_pct", "floor_db", "flops_added", "clocks")
     lines = [
         "Issue #656 drum RATE_EXP_BITS sweep -- written by `python3 tools/probes/drum_rate_exp_sweep.py`.",
         "Grid, rule, tolerance and prediction: docs/sensitivity/drum-rate-exp-bits-plan.json (committed before this ran).",
