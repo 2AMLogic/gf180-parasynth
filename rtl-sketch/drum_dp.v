@@ -30,7 +30,15 @@
 // destination. The sentinels moved with the fields: envelope index 31 reads
 // full scale, destination 31 is the mix bus.
 //
-// Formats, all the model's: level 24-bit unsigned; rate Q0.16; accent Q0.15;
+// REVISION 17 (#656) adds an exponent e above each RATE / FRATE word's 16-bit
+// mantissa m: RATE = {e, m}, dec = (level * m) >> (16 + e). The multiply is
+// unchanged (m is still the 16-bit operand); only the slice of the product the
+// decay takes moves, by a RATE_EB-stage shift on the applied slot. e = 0 is
+// revision 14 bit for bit. Q0.16 alone stopped at rate 1 = tau 1.3653 s, where
+// the cymbal's DECAY 7.5 and 10.0 both landed. RATE_EB is the swept dial of
+// docs/sensitivity/drum-rate-exp-bits.json and must equal drums_fx.RATE_EXP_BITS.
+//
+// Formats, all the model's: level 24-bit unsigned; rate {e, Q0.16}; accent Q0.15;
 // sources Q1.15 signed; envsum 16-bit unsigned (up to 65534); v 17-bit
 // signed; mix_out 21-bit signed, exact. The tanh is the ladder's TANH16
 // (Appendix C, tanh16.hex) read on a Q1.15 argument: idx = |u| >> 13,
@@ -49,6 +57,7 @@ module drum_dp #(
     parameter SB       = 28,             // the bank's state width, for the tap
     parameter EW       = 21,             // the bank's excitation width
     parameter MW       = 4,              // mode index width
+    parameter RATE_EB  = 2,              // revision 18: RATE / FRATE exponent bits (>= 1)
     parameter ROM_FILE = "tanh16.hex"
 )(
     input  wire                  clk,
@@ -59,8 +68,8 @@ module drum_dp #(
     input  wire [6*24-1:0]       osc_inc_bus,
     input  wire [ENVS*27-1:0]    env_ctl_bus,
     input  wire [ENVS*24-1:0]    env_peak_bus,
-    input  wire [ENVS*16-1:0]    env_rate_bus,
-    input  wire [ENVS*16-1:0]    env_frate_bus,       // revision 14: the final strike (15.3)
+    input  wire [ENVS*(16+RATE_EB)-1:0] env_rate_bus,        // revision 18: {e, m}
+    input  wire [ENVS*(16+RATE_EB)-1:0] env_frate_bus,       // revision 14: the final strike (15.3)
     input  wire [PATHS*25-1:0]   path_bus,
     output wire [MW-1:0]         tap_sel,
     input  wire signed [SB-1:0]  tap_y1,
@@ -77,6 +86,7 @@ module drum_dp #(
     localparam [4:0] DEST_MIX = 5'd31;              // the destination that is the mix bus
     localparam T_MAX = 11'd2047;
     localparam [15:0] BURST_C = 16'd53248;          // 13/16 in Q0.16
+    localparam RW = 16 + RATE_EB;                   // revision 18: one RATE / FRATE word
 
     // ---- tanh table: TANH16 plus the model's top word 32767 -------------------
     reg signed [15:0] rom [0:16];
@@ -138,8 +148,8 @@ module drum_dp #(
     wire [1:0]  e_bur  = ectl[17:16];
     wire [8:0]  e_per  = ectl[26:18];
     wire [23:0] e_peak = env_peak_bus[ei*24 +: 24];
-    wire [15:0] e_rate = env_rate_bus[ei*16 +: 16];
-    wire [15:0] e_frate = env_frate_bus[ei*16 +: 16];
+    wire [RW-1:0] e_rate  = env_rate_bus[ei*RW +: RW];
+    wire [RW-1:0] e_frate = env_frate_bus[ei*RW +: RW];
 `ifdef INJECT_BUG_DRUM_LEVEL_TRIG
     wire [STOPS-1:0] fire_src = stops_q;            // NEGATIVE CONTROL: level, not edge
 `else
@@ -166,7 +176,7 @@ module drum_dp #(
     // every decay after it runs at FRATE. FRATE = 0 is revision 10 exactly.
     // Neither needs a multiply of its own: the final strike is a register copy
     // (the slot's product is unused) and the final decay only swaps mul_b.
-    wire        e_fen   = (e_frate != 16'd0);
+    wire        e_fen   = (e_frate != {RW{1'b0}});     // any non-zero code, exponent included
 `ifdef INJECT_BUG_DRUM_FINAL_SHIFT
     // NEGATIVE CONTROL: the final strike one burst early -- the 4th strike omitted
     wire [10:0] last_t  = (e_bur == 2'd2) ? {2'b0, e_per} : (e_bur == 2'd3) ? per2 : 11'd0;
@@ -186,13 +196,26 @@ module drum_dp #(
 `endif
     wire [16*16-1:0] accent_x = {{((16-STOPS)*16){1'b0}}, accent_bus};
     wire [15:0] e_acc   = accent_x[e_stop*16 +: 16];
+    // the decay's exponent: the code the slot's mantissa came from (RATE or FRATE)
+    wire [RATE_EB-1:0] e_exp = e_usefr ? e_frate[RW-1:16] : e_rate[RW-1:16];
     reg  [1:0]  op_q;  reg [EI-1:0] e_q;  reg chok_q;  reg [10:0] t_q;  reg fin_q;
+    reg  [RATE_EB-1:0] exp_q;
 
     // ---- envelope slot e-1: apply the product --------------------------------------
     wire [24:0] fire_lvl25 = mul_r[39:15];                                  // (peak * accent) >> 15
     wire [23:0] fire_lvl   = fire_lvl25[24] ? 24'hFFFFFF : fire_lvl25[23:0]; // usat24
     wire [23:0] rs_lvl     = mul_r[39:16];                                  // (strike * 13/16)
-    wire [23:0] dec        = mul_r[39:16];                                  // (level * rate) >> 16
+    // (level * m) >> (16 + e): the unsigned 40-bit product, shifted by e, then
+    // the same [39:16] slice revision 14 took. level < 2^24 and m < 2^16, so
+    // the product needs 40 bits and every e keeps the result below 2^24.
+    wire [39:0] dprod      = mul_r[39:0];
+`ifdef INJECT_BUG_DRUM_RATE_Q16
+    wire [39:0] dprod_sh   = dprod;                                         // NEGATIVE CONTROL: the Q0.16 register,
+                                                                            //   exponent ignored (#656's floor)
+`else
+    wire [39:0] dprod_sh   = dprod >> exp_q;
+`endif
+    wire [23:0] dec        = dprod_sh[39:16];
 `ifdef INJECT_BUG_DRUM_ENV_FLOOR
     wire [23:0] dec1       = dec;                                           // NEGATIVE CONTROL: no max(1, .)
 `else
@@ -265,7 +288,7 @@ module drum_dp #(
             for (i = 0; i < ENVS; i = i + 1) begin level[i] <= 0; strike[i] <= 0; tcnt[i] <= 0; fcap[i] <= 0; end
             fin_q <= 1'b0;
             dmix <= 0; st <= 0; e <= 0; p <= 0; half <= 0; mul_a <= 0; mul_b <= 0;
-            op_q <= 0; e_q <= 0; chok_q <= 0; t_q <= 0;
+            op_q <= 0; e_q <= 0; chok_q <= 0; t_q <= 0; exp_q <= 0;
             t0_q <= 0; tneg_q <= 0; tsat_q <= 0; nl_q <= 0; slin_q <= 0; envsum_q <= 0;
             att_q <= 0; att_c <= 0; dest_q <= 0; dest_c <= 0;
             exc_we <= 0; exc_mode <= 0; exc_val <= 0; bank_start <= 0; mix_out <= 0; mix_valid <= 0;
@@ -304,7 +327,8 @@ module drum_dp #(
                 endcase
                 if (e < ENVS) begin                              // load slot e
                     mul_a <= e_fired ? {1'b0, e_peak} : e_rs ? {1'b0, strike[ei]} : {1'b0, level[ei]};
-                    mul_b <= e_fired ? e_acc : e_rs ? BURST_C : e_usefr ? e_frate : e_rate;
+                    mul_b <= e_fired ? e_acc : e_rs ? BURST_C : e_usefr ? e_frate[15:0] : e_rate[15:0];
+                    exp_q <= e_exp;                      // used only when op_q is DECAY
                     op_q <= e_op; e_q <= ei; chok_q <= e_chok; t_q <= e_fired ? 11'd0 : t_nx;
                     fin_q <= !e_fired && !e_holdp && e_fin;
                     e <= e + 1'b1;

@@ -256,6 +256,22 @@ def script(short: bool = False):
     put(0, 0, SEC_V, A.A_BVOL, dx.accent_reg(0.45))
     strike(gap, (1 << dx.SD) | (1 << dx.CY))
 
+    # ---- revision 18 (#656): the RATE exponent, over the PINS -----------------
+    # The cymbal's two DECAY envelopes at the slow end of the knob, as codes
+    # with e > 0 (which the Q0.16 register could not hold), sent through the
+    # link and drum_regs like a host, struck, then the kit's own codes back.
+    # INJECT_BUG_DRUM_RATE_REG16 (the register truncates the write to 16 bits,
+    # #656's drum_regs.v as it was) and INJECT_BUG_DRUM_RATE_Q16 (the datapath
+    # ignores e) are the two places the exponent can be lost on its way.
+    ecl, ecd = dx.A_ENV + dx.E_CYL * dx.ENV_STRIDE + 2, dx.A_ENV + dx.E_CYD * dx.ENV_STRIDE + 2
+    put(gap, 0, SEC_D, ecl, dx.rate_code(1.159))
+    put(0, 0, SEC_D, ecd, dx.rate_code(0.3476))
+    strike(gap, 1 << dx.CY)
+    kit0 = dict(dx.kit_808())
+    put(gap * 2, 0, SEC_D, ecl, kit0[ecl])
+    put(0, 0, SEC_D, ecd, kit0[ecd])
+    rate_exp = sum(1 for c in w if c[2] == SEC_D and c[3] in (ecl, ecd) and c[4] >> 16)
+
     # ---- the envelope DEAD ZONE (15.3 / 8.3), reached on purpose -------------
     # Below 2^16/rate the exponential step is zero; without the max(1, .) the
     # level FREEZES there instead of running out at one LSB per frame. From a
@@ -277,6 +293,7 @@ def script(short: bool = False):
     cover = dict(stops=sorted(fired), swapped=swapped,
                  sounds=len(fired) + len(swapped),
                  drum_reset=sum(1 for c in w if c[2] == SEC_D and c[3] == dx.A_RESET),
+                 rate_exp=rate_exp,
                  voice_reset=sum(1 for c in w if c[2] == SEC_V and c[3] == A.A_RESET))
     return w, tail, cover
 
@@ -1386,6 +1403,10 @@ def main(argv=None) -> int:
                   f"{cover['sounds']} of {len(dx.SOUND_NAMES)} sounds"); return 2
         if not (cover["drum_reset"] and cover["voice_reset"]):
             print("verify_synth_top: REFUSED -- the stimulus does not reset both pages during activity")
+            return 2
+        if not cover["rate_exp"] or dx.RATE_EXP_BITS < 1:
+            print("verify_synth_top: REFUSED -- the stimulus sends no RATE code with an exponent "
+                  "(#656): the register path for e > 0 would be untested")
             return 2
     write_cmds(os.path.join(a.outdir, "top_bx_cmds.txt"), cmds)
     print(f"verify_synth_top: {len(cmds)} writes over the pins "

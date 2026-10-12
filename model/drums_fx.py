@@ -67,7 +67,7 @@ from modal_fixed import ModalFx, RAW, BP, HP, pole_regs
 # ---- sizes (contract 15.1) ----------------------------------------------------
 N_STOPS, N_ENV, N_PATH, N_MODES, N_NUMS, N_OSC = 11, 18, 23, 16, 11, 6
 ENV_BITS, RATE_Q, ACCENT_BITS = 24, 16, 16
-# Revision 17 (#656): an exponent field above RATE's and FRATE's 16-bit mantissa,
+# Revision 18 (#656): an exponent field above RATE's and FRATE's 16-bit mantissa,
 # dec = (level * m) >> (16 + e), the voice's release encoding (voice_fx.AdsrFx)
 # applied to the drum envelopes. Q0.16 alone stops at rate 1 = tau 1.3653 s, and
 # the cymbal's DECAY knob asked E_CYL for 1.0155 s and 1.2732 s and got 1.3653 s
@@ -481,7 +481,7 @@ class DrumsFx:
             elif f == 1:
                 self.envs[e].peak = value & FULL24
             elif f == 2:
-                self.envs[e].rate = value & RATE_MASK     # revision 17: (e << 16) | m
+                self.envs[e].rate = value & RATE_MASK     # revision 18: (e << 16) | m
             else:
                 self.envs[e].frate = value & RATE_MASK    # revision 14: the final strike (15.3)
         elif A_PATH <= addr < A_PATH + self.P:
@@ -651,7 +651,7 @@ def rate_reg(tau_s: float) -> int:
 
 
 def rate_code(tau_s: float, exp_bits: int | None = None) -> int:
-    """Revision 17 (#656): RATE / FRATE as (e << 16) | m for an amplitude time
+    """Revision 18 (#656): RATE / FRATE as (e << 16) | m for an amplitude time
     constant of tau seconds, alpha = 1 - exp(-1 / (tau SR)) = m / 2^(16 + e).
     The exponent normalises the mantissa into [2^15, 2^16) where the field
     allows (e = ceil(-log2 alpha) - 1, clamped to 0 .. 2^exp_bits - 1), the

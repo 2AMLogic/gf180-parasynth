@@ -135,7 +135,7 @@ def test_drum_section_rtl_is_bit_exact(tmp_path):
 @pytest.mark.parametrize("bug", ["DRUM_ENV_FLOOR", "DRUM_LEVEL_TRIG", "DRUM_LFSR_TAP", "DRUM_TAP_NOSAT",
                                  "DRUM_LAST_PATH", "DRUM_SQ_LONE", "MODAL_NUM_HOLD", "MODAL_EXC_NOCLEAR",
                                  "DRUM_FINAL_WEAK", "DRUM_FINAL_SHORT", "DRUM_FINAL_SHIFT",
-                                 "DRUM_FCAP_STALE"])
+                                 "DRUM_FCAP_STALE", "DRUM_RATE_Q16"])
 def test_drum_negative_control_is_caught(bug, tmp_path):
     """Each defect -- the envelope without its max(1, .), level- instead of
     edge-triggered stops, a wrong LFSR tap, a wrapping tap, the strawman's
@@ -245,6 +245,8 @@ CHIP_CONTROLS = [
     ("MODAL_NUM_HOLD",        "core"),
     ("MODAL_EXC_NOCLEAR",     "core"),
     ("DRUM_LFSR_TAP",         "core"),
+    ("DRUM_RATE_Q16",         "core"),   # #656: the datapath ignores the RATE exponent
+    ("DRUM_RATE_REG16",       "core"),   # #656: drum_regs truncates the RATE write to 16 bits
     ("I2S_SHIFT",             "wire"),   # every bit one BCLK late
     ("I2S_DELAY",             "wire"),   # the sample a period late (D = 2)
 ]

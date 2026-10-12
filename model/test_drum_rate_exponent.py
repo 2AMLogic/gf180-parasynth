@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""#656: the drum envelope RATE / FRATE exponent (contract 15.3, revision 17).
+"""#656: the drum envelope RATE / FRATE exponent (contract 15.3, revision 18).
 
 The Q0.16 rate register's slowest non-zero decay is rate 1, tau = 2^16 / SR =
 1.3653 s, and one step above it (rate 2) halves tau. The cymbal's DECAY knob
 asked E_CYL for 1.0155 s and 1.2732 s and got 1.3653 s for both, so two knob
-positions shared one envelope. Revision 17 adds an exponent field e above the
+positions shared one envelope. Revision 18 adds an exponent field e above the
 16-bit mantissa m:
 
     RATE = (e << 16) | m        dec = (level * m) >> (16 + e)
@@ -143,7 +143,7 @@ def test_largest_and_smallest_codes():
 def test_register_holds_16_plus_exponent_bits_and_ignores_the_rest():
     """RATE and FRATE are 16 + RATE_EXP_BITS wide (REG_BITS, 18 at 2 bits);
     the bits above are not stored, exactly as bits 31..16 were not stored
-    before revision 17."""
+    before revision 18."""
     w = 16 + dx.RATE_EXP_BITS
     assert dx.REG_BITS["rate"] == dx.REG_BITS["frate"] == w == 18
     d = dx.DrumsFx()
@@ -233,3 +233,16 @@ def test_rate_code_tau_matches_the_simulated_envelope():
         code = dx.rate_code(tau)
         got = _measured_tau(_env_via_register(code), int(8 * tau * SR) + 100)
         assert abs(got / dx.rate_code_tau(code) - 1.0) < 0.01, (tau, got)
+
+
+# ---- the RTL carries the same width ------------------------------------------------
+def test_rtl_rate_exponent_width_is_the_models():
+    """drum_dp / drum_regs / drum_kit / synth_top / tb_drums default RATE_EB to
+    the model's RATE_EXP_BITS. A mismatch would be bit-exact on every e = 0
+    code and wrong only on the slow DECAY settings, so it is pinned here."""
+    import pathlib
+    import re
+    rtl = pathlib.Path(__file__).resolve().parents[1] / "rtl-sketch"
+    for name in ("drum_dp.v", "drum_regs.v", "drum_kit.v", "synth_top.v", "tb_drums.v"):
+        hits = re.findall(r"parameter\s+RATE_EB\s*=\s*(\d+)", (rtl / name).read_text())
+        assert hits == [str(dx.RATE_EXP_BITS)], (name, hits)
