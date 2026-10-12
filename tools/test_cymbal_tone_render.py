@@ -666,3 +666,83 @@ def test_the_historical_saturation_is_caught(clean_row):
 def test_the_hats_are_bit_exact_at_the_corners():
     res = tre.hat_preservation(tones=("00", "10"), decays=("00", "10"))
     assert res and all(res.values()), res
+
+
+# ---- the committed #413 knob-render record -----------------------------------
+# The render tests above run only the TONE-50 row (a row is minutes). These read
+# the committed record so a regression in the other four rows, or a late-T20
+# claim, turns something red without rendering. They recompute every verdict
+# from the record's own measured numbers with the CURRENT verdict function, so
+# a hand-edited status cannot pass and a gate change that would flip a recorded
+# row cannot land silently.
+KNOB_RECORD = ROOT / "docs" / "scorecard" / "cymbal-369" / "knob-render" / "knob-render.json"
+_EDT_GATES = ("h-edt10-rises", "l-edt10-rises", "h-edt10-direction-matches-808")
+_knob_skip = pytest.mark.skipif(not KNOB_RECORD.exists(), reason="the knob-render record is not committed")
+
+
+def _knob_record() -> dict:
+    import json
+    return json.loads(KNOB_RECORD.read_text())
+
+
+def _recorded_identical(verdict: dict) -> dict:
+    pairs = list(zip(tre.DECAY_ORDER, tre.DECAY_ORDER[1:])) + [(tre.DECAY_ORDER[0], tre.DECAY_ORDER[-1])]
+    same = set(verdict["distinct-renders"]["identical_pairs"])
+    return {(a, b): f"{a}={b}" in same for a, b in pairs}
+
+
+def _recompute(d: dict, tone: str, row: dict | None = None) -> dict:
+    return tre.decay_row_verdict(row if row is not None else d["rows"][tone],
+                                 _recorded_identical(d["verdicts"][tone]),
+                                 tre.fischer_h_edt(tone))
+
+
+@_knob_skip
+def test_the_committed_knob_record_covers_every_tone_row_and_passes_the_edt10_gate():
+    d = _knob_record()
+    assert sorted(d["rows"]) == sorted(tre.CODES) == sorted(d["verdicts"])
+    for t in tre.CODES:
+        assert sorted(d["rows"][t]) == sorted(tre.DECAY_ORDER), t
+        rec = d["verdicts"][t]
+        assert rec["distinct-renders"]["status"] == tre.PASS, t
+        assert rec["distinct-renders"]["identical_pairs"] == [], t
+        v = _recompute(d, t)
+        for k in _EDT_GATES:
+            assert v[k]["status"] == tre.PASS, (t, k, v[k])
+            assert rec[k]["status"] == v[k]["status"], (t, k, "recorded status != recomputed")
+
+
+@_knob_skip
+def test_the_committed_knob_record_keeps_the_late_t20_gap_visible():
+    """#413 item 3 is NOT met (tracked by #656). No row may claim a late-T20
+    PASS, the recorded statuses must be what the numbers give, and TONE 00's
+    L reversal on the E_CYL rate floor stays a FAIL. When #656 lands this test
+    is meant to go red and be rewritten against the new record."""
+    d = _knob_record()
+    for t in tre.CODES:
+        v = _recompute(d, t)["late-t20"]
+        rec = d["verdicts"][t]["late-t20"]
+        assert v["status"] != tre.PASS and rec["status"] == v["status"], (t, rec["status"], v["status"])
+        for b in ("H", "L"):
+            assert rec["bands"][b]["status"] == v["bands"][b]["status"], (t, b)
+    l00 = d["verdicts"]["00"]["late-t20"]["bands"]["L"]
+    assert l00["status"] == tre.FAIL and l00["refused_at"] == []
+    assert l00["values"]["75"] == pytest.approx(3653.91) and l00["values"]["10"] == pytest.approx(3648.81)
+    floor = d["rate_register_floor"]["positions"]
+    assert [floor[x]["E_CYL"]["at_floor"] for x in tre.DECAY_ORDER] == [False, False, False, True, True]
+
+
+@_knob_skip
+def test_the_knob_record_check_turns_red_on_a_planted_regression_off_the_anchor_row():
+    """The control for the two tests above: a reversal planted in a non-TONE-50
+    row (which no render test here exercises) must make the recompute FAIL."""
+    import copy
+    d = _knob_record()
+    for t in [c for c in tre.CODES if c != cc.TONE_ANCHOR]:
+        row = copy.deepcopy(d["rows"][t])
+        row["50"]["H_edt10_ms"], row["75"]["H_edt10_ms"] = row["75"]["H_edt10_ms"], row["50"]["H_edt10_ms"]
+        row["25"]["L_edt10_ms"] = row["00"]["L_edt10_ms"]
+        v = _recompute(d, t, row)
+        assert v["h-edt10-rises"]["status"] == tre.FAIL, t
+        assert v["l-edt10-rises"]["status"] == tre.FAIL, t
+        assert v["h-edt10-direction-matches-808"]["status"] == tre.FAIL, t

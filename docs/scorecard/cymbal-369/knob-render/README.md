@@ -27,13 +27,14 @@ private implementation). It reads no `laws`; the anchor writes nothing.
 | hats / OH / CH shared resources bit-identical at every TONE x DECAY | PASS (all) |
 | five DECAY renders pairwise distinct, endpoints distinct | PASS, all 5 TONE rows |
 | H and L EDT10 rise with DECAY; H EDT10 direction matches the 808 | PASS, all 5 TONE rows |
-| **late-T20 monotone across all five positions** | **NOT MET**: REFUSED by the frozen instrument ("late decay is not one exponential") at the anchor-H and at DECAY 7.5/10 for H, L and Ln; at TONE 00 L (qualified at all five) is **non-monotone, 3653.9 ms at 7.5 vs 3648.8 ms at 10.0 -> FAIL**, kept visible |
+| **late-T20 monotone across all five positions** | **NOT MET, tracked by #656**: REFUSED by the frozen instrument ("late decay is not one exponential") for H at DECAY 7.5/10 in every TONE row (also 2.5 at TONE 25/50), and for L at DECAY 7.5/10 in every row except TONE 00 (also 5.0 at TONE 10); at TONE 00 L (qualified at all five) is **non-monotone, 3653.9 ms at 7.5 vs 3648.8 ms at 10.0 -> FAIL**, kept visible. No row passes. Pinned by `test_the_committed_knob_record_*` |
 | injected saturation control | clean green; mutant (DECAY 10.0 asks what 7.5 asks) RED on `distinct-renders` (75=10), `h-edt10-rises`, `l-edt10-rises`, `h-edt10-direction-matches-808`; no property blind |
 
 The late-T20 failure is a measured fact about the instrument, not a gate defect: the 7.5 -> 10.0 L step is a
 0.14 % reversal sitting on the E_CYL rate-register floor. The gate stands on EDT10 (qualified everywhere) and
 reports late-T20 only where it qualifies. Requiring it everywhere would be unsatisfiable (verification rule 8);
-it is REFUSED, not passed. A real fix needs a wider E_CYL rate range (RTL), out of scope here.
+it is REFUSED, not passed. A real fix needs a wider E_CYL rate range (RTL), out of scope here and filed as
+**#656**. #413 stays open on its acceptance item 3 until #656 lands.
 
 Development vs confirmation: the record labels every setting (`split`); the gate is structural and not tuned on
 either set, so CY2500 (a confirmation holdout) is judged by the same untuned gate. No claim about tracking the
