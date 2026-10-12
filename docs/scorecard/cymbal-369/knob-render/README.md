@@ -36,6 +36,12 @@ reports late-T20 only where it qualifies. Requiring it everywhere would be unsat
 it is REFUSED, not passed. A real fix needs a wider E_CYL rate range (RTL), out of scope here and filed as
 **#656**. #413 stays open on its acceptance item 3 until #656 lands.
 
+The `--knob-render` command enforces exactly this split in its exit: `distinct-renders`, `h-edt10-rises`,
+`l-edt10-rises` and `h-edt10-direction-matches-808` must PASS on all five TONE rows, and the saturation control
+must redden `distinct-renders` and both EDT10 rises — otherwise the exit is 1 and `saturation_control.misses`
+names what the control failed to catch. Late-T20 is reported, never required. Pinned by the
+`test_knob_render_*` tests, which drive `run_knob_render` itself with faked renders.
+
 Development vs confirmation: the record labels every setting (`split`); the gate is structural and not tuned on
 either set, so CY2500 (a confirmation holdout) is judged by the same untuned gate. No claim about tracking the
 808 across TONE/DECAY *accuracy* is made -- that needs the Fischer TONE law (out of scope).

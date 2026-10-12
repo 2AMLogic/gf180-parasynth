@@ -795,6 +795,16 @@ def run_knob_render(out: pathlib.Path) -> int:
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 3
+    # The DECAY gate the command enforces: the four clean properties must PASS on
+    # every TONE row, and the saturation control must redden its intended
+    # observables. late-t20 is deliberately absent from both: it is the deferred
+    # #656 gap, kept visible in the record, never a pass requirement here.
+    _CLEAN_GATES = ("distinct-renders", "h-edt10-rises", "l-edt10-rises",
+                    "h-edt10-direction-matches-808")
+    _MUTANT_MUST_REDDEN = ("distinct-renders", "h-edt10-rises", "l-edt10-rises")
+    clean_misses = [f"TONE {t}/{k}" for t in CODES for k in _CLEAN_GATES
+                    if verdicts[t][k]["status"] != PASS]
+    mutant_misses = [k for k in _MUTANT_MUST_REDDEN if mutant[k]["status"] != FAIL]
     res = {
         "issue": 413, "sweep_seconds": SWEEP_SECONDS,
         "anchor": anchor, "owned_addresses": owned, "hats_bit_identical": hats,
@@ -804,19 +814,23 @@ def run_knob_render(out: pathlib.Path) -> int:
         "rate_register_floor": rate_register_floor(),
         "saturation_control": {"verdict": mutant,
                                "red": [k for k, v in mutant.items() if v["status"] == FAIL],
-                               "blind": [k for k, v in mutant.items() if v["status"] == PASS]},
+                               "blind": [k for k, v in mutant.items() if v["status"] == PASS],
+                               "misses": mutant_misses},
         "commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
                                  text=True).stdout.strip(),
         "sources_dirty": subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "model", "tools"],
                                         cwd=ROOT).returncode != 0,
     }
     bad = (anchor["status"] != PASS or any(v["status"] != PASS for v in owned.values())
-           or not all(hats.values()))
+           or not all(hats.values()) or bool(clean_misses) or bool(mutant_misses))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(res, indent=1, default=tn.json_leaf) + "\n")
-    print("anchor:", anchor["status"], "| owned:", "PASS" if not bad else "see record",
+    print("anchor:", anchor["status"],
+          "| owned:", "PASS" if all(v["status"] == PASS for v in owned.values()) else "see record",
           "| hats all bit-identical:", all(hats.values()),
-          "| control red:", res["saturation_control"]["red"])
+          "| decay gate:", "PASS" if not clean_misses else f"see record ({clean_misses})",
+          "| control red:", res["saturation_control"]["red"],
+          "| control misses:", mutant_misses)
     return 1 if bad else 0
 
 

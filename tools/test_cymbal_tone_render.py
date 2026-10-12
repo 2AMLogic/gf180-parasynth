@@ -746,3 +746,110 @@ def test_the_knob_record_check_turns_red_on_a_planted_regression_off_the_anchor_
         assert v["h-edt10-rises"]["status"] == tre.FAIL, t
         assert v["l-edt10-rises"]["status"] == tre.FAIL, t
         assert v["h-edt10-direction-matches-808"]["status"] == tre.FAIL, t
+
+
+# ---- the command's own exit decision (run_knob_render, not just the verdict) --
+# The record tests above recompute verdicts from committed numbers; none of them
+# reaches the EXIT the command itself returns. These do, with every expensive
+# render behind run_knob_render replaced by fakes.
+_IDENT_PAIRS = dict(_ALL_DISTINCT)
+_ALL_IDENTICAL = {p: True for p in _ALL_DISTINCT}
+_MUTANT_MUST_REDDEN = ("distinct-renders", "h-edt10-rises", "l-edt10-rises")
+
+
+def _flat_row():
+    return {d: {"H_edt10_ms": 151.0, "L_edt10_ms": 573.0, "H_t20_late_ms": None,
+                "L_t20_late_ms": None} for d in tre.DECAY_ORDER}
+
+
+def _install_knob_fakes(monkeypatch, *, clean_row, clean_ident, mutant_row, mutant_ident):
+    """`clean_row` is what every real TONE row measures, `mutant_row` what the
+    saturation control measures; the ident maps say which DECAY pairs rendered
+    identical audio. Returns the sweep_row calls (True = a clean row)."""
+    import copy
+    calls = []
+
+    def fake_sweep(tone, kit_fn=None, seconds=tre.SWEEP_SECONDS, decays=tre.DECAY_ORDER,
+                   _audio=None):
+        calls.append(kit_fn is None)
+        row, ident = (clean_row, clean_ident) if kit_fn is None else (mutant_row, mutant_ident)
+        return copy.deepcopy(row), dict(ident), {d: np.zeros(2) for d in decays}
+
+    monkeypatch.setattr(tre, "sweep_row", fake_sweep)
+    monkeypatch.setattr(tre, "anchor_equivalence",
+                        lambda: {"registers_differing": [], "audio_bit_identical": True,
+                                 "status": tre.PASS})
+    monkeypatch.setattr(tre, "owned_addresses_check",
+                        lambda t, d: {"stray": {}, "status": tre.PASS})
+    monkeypatch.setattr(tre, "hat_preservation", lambda **k: {"OH@TONE00/DECAY00": True})
+    monkeypatch.setattr(tre, "fischer_h_edt", lambda t, path=None: dict(_FISCHER))
+    return calls
+
+
+def _run_knob_render(monkeypatch, tmp_path, **kw):
+    import json
+    calls = _install_knob_fakes(monkeypatch, **kw)
+    out = tmp_path / "knob-render.json"
+    code = tre.run_knob_render(out)
+    assert calls == [True] * len(tre.CODES) + [False], calls   # five rows, then the control
+    return code, json.loads(out.read_text())
+
+
+def test_knob_render_exits_zero_only_with_every_declared_property_green(monkeypatch, tmp_path):
+    """The deferred late-T20 FAIL (#656) stays visible in the record and does
+    NOT gate: TONE 00's L band rises then falls where it qualifies, everything
+    the command enforces is green, and the run exits 0."""
+    clean = _good_row()
+    for d, v in zip(tre.DECAY_ORDER, (3653.91, 3700.0, 3750.0, 3800.0, 3648.81)):
+        clean[d]["L_t20_late_ms"] = v
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=clean, clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_flat_row(), mutant_ident=_ALL_IDENTICAL)
+    assert code == 0
+    assert rec["verdicts"]["00"]["late-t20"]["status"] == tre.FAIL    # reported, not buried
+    assert set(rec["saturation_control"]["red"]) == set(_MUTANT_MUST_REDDEN) \
+        | {"h-edt10-direction-matches-808"}
+    assert rec["saturation_control"]["misses"] == []
+
+
+def test_knob_render_is_red_on_a_failed_clean_decay_verdict(monkeypatch, tmp_path):
+    """A clean row whose EDT10 does not rise (the old path's flat 7.5 == 10.0)
+    must fail the command, not only the verdict helper."""
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=_flat_row(), clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_flat_row(), mutant_ident=_ALL_IDENTICAL)
+    assert code == 1
+    assert rec["saturation_control"]["red"], "the control still ran"
+
+
+def test_knob_render_is_red_on_a_refused_clean_decay_verdict(monkeypatch, tmp_path):
+    row = _good_row()
+    row["50"]["H_edt10_ms"] = None                    # the measure refused: not PASS, not data
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=row, clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_flat_row(), mutant_ident=_ALL_IDENTICAL)
+    assert code == 1
+    assert rec["verdicts"]["50"]["h-edt10-rises"]["status"] == tre.REFUSED
+
+
+def test_knob_render_is_red_on_an_uncaught_mutant(monkeypatch, tmp_path):
+    """Preservation and every clean verdict green, but the injected saturation
+    changed nothing: the control has no teeth and the command must say so."""
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=_good_row(), clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_good_row(), mutant_ident=_IDENT_PAIRS)
+    assert code == 1
+    assert rec["saturation_control"]["red"] == []
+    assert rec["saturation_control"]["misses"] == list(_MUTANT_MUST_REDDEN)
+
+
+def test_knob_render_is_red_on_a_mutant_that_reddens_only_one_property(monkeypatch, tmp_path):
+    """The control must redden its INTENDED observables. Here the audio went
+    identical (distinct-renders red) but the EDT10 rises still pass: half-caught
+    is not caught."""
+    code, rec = _run_knob_render(monkeypatch, tmp_path,
+                                 clean_row=_good_row(), clean_ident=_IDENT_PAIRS,
+                                 mutant_row=_good_row(), mutant_ident=_ALL_IDENTICAL)
+    assert code == 1
+    assert rec["saturation_control"]["red"] == ["distinct-renders"]
+    assert rec["saturation_control"]["misses"] == ["h-edt10-rises", "l-edt10-rises"]
