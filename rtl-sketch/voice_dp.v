@@ -608,13 +608,20 @@ module voice_dp #(
     wire signed [24:0] body_m = {{9{body[19]}}, ((body > 20'sd32767) ? 16'sd32767 :
                                  (body < -20'sd32768) ? -16'sd32768 : body[15:0])};
 `else
+`ifdef INJECT_BUG_VOICE_COUPLED_TRUNC
+    // NEGATIVE CONTROL: the pre-#552 widths -- the coupled buses' added bit is dropped on entry
+    wire signed [24:0] dmix_m = {{3{dmix[21]}}, dmix[21:0]};
+    wire signed [24:0] body_m = {{6{body[18]}}, body[18:0]};
+`else
     wire signed [24:0] dmix_m = {{2{dmix[22]}}, dmix};
     wire signed [24:0] body_m = {{5{body[19]}}, body};
+`endif
 `endif
     // NEGATIVE CONTROL: each product floored to Q.15 before the sum -- two
     // floors instead of contract 12's one.
     wire signed [39:0] macc_r = $signed({macc[35:15], 15'b0});
     wire signed [39:0] dacc_r = $signed({dacc[39:15], 15'b0});
+    wire signed [39:0] dacc_sum = dacc + $signed(mr[39:0]);          // S_DM2's sum, exact in 40 bits
 
     integer i;
     always @(posedge clk) begin
@@ -969,7 +976,12 @@ module voice_dp #(
                     ma <= dmix_m; mb <= {5'b0, dvol}; state <= S_DM1;
                 end
                 S_DM1: begin dacc <= $signed(mr[39:0]); ma <= body_m; mb <= {5'b0, bvol}; state <= S_DM2; end
+`ifdef INJECT_BUG_VOICE_DACC39
+                // NEGATIVE CONTROL: the drum-gain sum kept to 39 bits, as before the buses grew (wraps)
+                S_DM2: begin dacc <= {dacc_sum[38], dacc_sum[38:0]}; state <= S_DFLT; end
+`else
                 S_DM2: begin dacc <= dacc + $signed(mr[39:0]); state <= S_DFLT; end
+`endif
                 // the drum filter runs on sat16 of the GAIN-SCALED drum bus
                 // (ARCHITECTURE.md 4.1: its input is sat16(drum_bus), and its
                 // rail is the designed mixer-overload rail); the VCA multiply

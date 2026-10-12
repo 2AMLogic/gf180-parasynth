@@ -80,14 +80,31 @@ module drum_kit #(
     reg step_q;                                    // the coupled buses are valid
     always @(posedge clk) step_q <= rst_n & body_valid_raw;
 
-    // Defect inputs (inert unless a mutant is compiled in): clear the charge on a strike / retune
-    reg [STOPS-1:0]        stops_p;
-    reg [MODES*(CF+2)-1:0] a1_p;
-    always @(posedge clk) begin stops_p <= stops; a1_p <= a1_bus; end
+    // Defect inputs (inert unless a mutant is compiled in): clear the charge on a strike / retune.
+    // The event happens before frame_tick and the stage steps ~118 clocks later, so the event is
+    // HELD until the step consumes it (a one-clock pulse would never meet the step: that was the
+    // first version of this control, and it was not caught-because-inert).
 `ifdef INJECT_BUG_DRUM_COUPLE_HIT_CLEAR
-    wire dc_clr = (stops != stops_p) && (stops & ~stops_p) != 0;      // a stop rising = a strike
+    reg [STOPS-1:0] stops_p;
+    reg             clr_pend;
+    always @(posedge clk) stops_p <= stops;
+    wire dc_ev = ((stops & ~stops_p) != 0);                           // a stop rising = a strike
 `elsif INJECT_BUG_DRUM_COUPLE_RETUNE_CLEAR
-    wire dc_clr = (a1_bus != a1_p);                                   // a coefficient retune
+    reg [MODES*(CF+2)-1:0] a1_p;
+    reg                    clr_pend;
+    always @(posedge clk) a1_p <= a1_bus;
+    wire dc_ev = (a1_bus != a1_p);                                    // a coefficient retune
+`endif
+`ifdef INJECT_BUG_DRUM_COUPLE_HIT_CLEAR
+    always @(posedge clk) begin
+        if (!rst_n) clr_pend <= 1'b0; else if (body_valid_raw) clr_pend <= 1'b0; else if (dc_ev) clr_pend <= 1'b1;
+    end
+    wire dc_clr = clr_pend;
+`elsif INJECT_BUG_DRUM_COUPLE_RETUNE_CLEAR
+    always @(posedge clk) begin
+        if (!rst_n) clr_pend <= 1'b0; else if (body_valid_raw) clr_pend <= 1'b0; else if (dc_ev) clr_pend <= 1'b1;
+    end
+    wire dc_clr = clr_pend;
 `else
     wire dc_clr = 1'b0;
 `endif

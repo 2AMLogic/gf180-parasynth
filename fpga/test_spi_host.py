@@ -368,3 +368,48 @@ def test_live_queue_can_accept_more_events_after_a_drain():
     second = live.schedule(BENCH)
     assert len(second) > len(first)
     assert len([p for p in second if p.w.tag == "gate"]) == 2
+
+
+# ---- COUPLE initialisation (#552, contract 15.10) -----------------------------
+def test_coupling_is_off_by_default_and_the_load_list_is_byte_identical_to_the_frozen_one():
+    """R0/R1 have no COUPLE register: a default MusicHost must not send one, and must not
+    change a single load write (their hashed kit lists depend on it)."""
+    plain = sh.MusicHost().load(0)
+    explicit_off = sh.MusicHost(coupling=False).load(0)
+    key = lambda h: [(w.frame, w.flag, w.sec, w.addr, w.data) for w in h.w]
+    assert key(plain) == key(explicit_off)
+    assert not any(w.sec == sh.SEC_DRUM and w.addr == dx.A_COUPLE for w in plain.w)
+    assert plain.load_span[1] - plain.load_span[0] == len(plain.w)
+
+
+def test_a_capable_image_gets_exactly_one_COUPLE_write_after_the_kit_on_the_drum_page():
+    plain = sh.MusicHost().load(0)
+    cap = sh.MusicHost(coupling=True).load(0)
+    extra = [w for w in cap.w if w.addr == dx.A_COUPLE and w.sec == sh.SEC_DRUM]
+    assert [(w.sec, w.addr, w.data, w.flag) for w in extra] == [(sh.SEC_DRUM, 0x30, 1, 0)]
+    # everything else is the frozen list, in order
+    rest = [w for w in cap.w if not (w.sec == sh.SEC_DRUM and w.addr == dx.A_COUPLE)]
+    assert [w.key() for w in rest] == [w.key() for w in plain.w]
+    # the kit itself is not touched, and the write follows every kit write
+    assert cap.kit == plain.kit
+    idx = {id(w): i for i, w in enumerate(cap.w)}
+    last_kit = max(idx[id(w)] for w in cap.w if w.tag == "kit")
+    assert idx[id(extra[0])] > last_kit
+    assert cap.load_span[1] - cap.load_span[0] == len(cap.w) == len(plain.w) + 1
+
+
+def test_the_COUPLE_write_survives_scheduling_as_the_right_wire_word_after_the_kit():
+    cap = sh.MusicHost(coupling=True).load(0)
+    placed = cap.schedule(BENCH)
+    words = [sh.encode_tx(p.w.flag, p.w.sec, p.w.addr, p.w.data) for p in placed]
+    want = sh.encode_tx(0, 1, 0x30, 1)
+    assert words.count(want) == 1
+    pos = words.index(want)
+    kit_words = {sh.encode_tx(0, 1, a, v) for a, v in cap.kit}
+    assert all(i < pos for i, wd in enumerate(words) if wd in kit_words)
+    assert sh.decode_tx(want) == (0, 1, 0x30, 1)
+
+
+def test_live_host_passes_the_option_through():
+    live = sh.LiveMusicHost(coupling=True).load(0)
+    assert any(w.sec == sh.SEC_DRUM and w.addr == 0x30 and w.data == 1 for w in live.w)

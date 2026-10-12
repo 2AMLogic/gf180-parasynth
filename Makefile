@@ -151,6 +151,11 @@ verify:
 	  "$(PY) tools/verify_voice_scoped.py --extremes-index 0 --osc2x --filter2x --outdir build/voice-allmax-354" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --outdir build/top-m5a-filter2x" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --outdir build/top-drum-solo-smoke" \
+	  "$(PY) rtl-sketch/verify_couple.py --outdir build/couple" \
+	  "$(PY) rtl-sketch/verify_outpath.py --outdir build/outpath" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --outdir build/drum-couple" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --no-couple --outdir build/drum-bypass" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --couple --short --outdir build/top-couple" \
 	  "$(PY) tools/gen_rate_conv_2x.py --check" \
 	  "$(PY) tools/verify_rate_conv_2x.py" \
 	  "$(PY) tools/verify_mono_case.py" \
@@ -531,6 +536,22 @@ controls:
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_STOPS8 --expect-fail --outdir build/top-stops8" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_BUS_STALE --expect-fail --outdir build/top-busstale" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_DONE_NOWAIT --expect-fail --outdir build/top-nowait" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_BYPASS --expect-fail --outdir build/drum-couple-bypass" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_MISPLACED --expect-fail --outdir build/drum-couple-misplaced" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_HIT_CLEAR --expect-fail --outdir build/drum-couple-hit_clear" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_RETUNE_CLEAR --expect-fail --outdir build/drum-couple-retune_clear" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_NARROW_OUT --expect-fail --outdir build/drum-couple-narrow_out" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_SHIFT_LOGICAL --expect-fail --outdir build/drum-couple-shift_logical" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_FROZEN --expect-fail --outdir build/drum-couple-frozen" \
+	  "$(PY) rtl-sketch/verify_couple.py --inject BYPASS --expect-fail --outdir build/couple-bypass" \
+	  "$(PY) rtl-sketch/verify_couple.py --inject NARROW_ACC --expect-fail --outdir build/couple-narrow_acc" \
+	  "$(PY) rtl-sketch/verify_couple.py --inject NARROW_OUT --expect-fail --outdir build/couple-narrow_out" \
+	  "$(PY) rtl-sketch/verify_couple.py --inject SHIFT_LOGICAL --expect-fail --outdir build/couple-shift_logical" \
+	  "$(PY) rtl-sketch/verify_couple.py --inject FROZEN --expect-fail --outdir build/couple-frozen" \
+	  "$(PY) rtl-sketch/verify_outpath.py --inject COUPLED_TRUNC --expect-fail --outdir build/outpath-coupled_trunc" \
+	  "$(PY) rtl-sketch/verify_outpath.py --inject DACC39 --expect-fail --outdir build/outpath-dacc39" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --couple --short --inject DRUM_COUPLE_EN_NORESET --expect-fail --outdir build/top-couple-drum_couple_en_noreset" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --couple --short --inject DRUM_COUPLE_BYPASS --expect-fail --outdir build/top-couple-drum_couple_bypass" \
 	  "$(PY) tools/run_case.py --inject MONO_PITCH_UP_25_CENTS M5B --results build/case-m5b-pitch --expect changed" \
 	  "$(PY) fpga/verify_fixture.py --wrong no-coef-seq --expect-fail --outdir build/fx-nocoef" \
 	  "$(PY) fpga/verify_fixture.py --wrong drop-restore --expect-fail --outdir build/fx-droprest" \

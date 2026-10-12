@@ -401,8 +401,15 @@ SPI_SCENARIOS = {"threesaw-f1cal": sc_threesaw_f1cal, "stress-saw": sc_stress_sa
 # the RTL that ran it. The byte-exact binding had the same gap.
 #: sha256[:12] of the drum-section RTL at which the latency argument above was
 #: made (provenance() format). Update only after re-reading those files.
-DRUM_LATENCY_ARGUED_AT = {"drum_dp.v": "2ad7e5cec5b3", "drum_kit.v": "23e97ff6e0e4",
-                          "modal_dp.v": "dd4906617919", "drum_regs.v": "1282ebc944ee"}
+DRUM_LATENCY_ARGUED_AT = {"drum_dp.v": "2ad7e5cec5b3", "drum_kit.v": "f6642164b148",
+                          "modal_dp.v": "dd4906617919", "drum_regs.v": "54c68d13c715"}
+# Re-read at #552 (shared-bus DC coupling, contract 15.10): drum_kit.v now registers both buses
+# through drum_dcblock on body_valid_raw and raises body_valid ONE clock later, unconditionally
+# (step_q <= body_valid_raw): the drum busy window is one clock longer in every frame, whatever
+# the register values; nothing in the stage branches on data, the enable only selects which of two
+# registered words is loaded. drum_regs.v gained one register (COUPLE) decoded by address and
+# read by nothing in the schedule. The OLD captures ran on the old hashes, so the binding for them
+# falls back to a refusal until tools/deadline_recapture_l2.py is re-run on the build box.
 
 
 def read_cmds(path):
