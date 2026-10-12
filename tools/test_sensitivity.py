@@ -383,5 +383,64 @@ def test_an_unresolvable_ref_refuses_rather_than_passing_quietly(repo):
     assert code == 2, text
 
 
+# A parameter INTRODUCED by the branch: its source file exists at the ref but
+# the declaration does not. #662's CI refused exactly here ("found 0
+# declarations of RATE_EXP_BITS, expected exactly 1") although nothing was
+# wrong -- there is no old value to price a move from.
+
+NEW_DECL = "\nRATE_EXP_BITS = 3"
+
+
+def commit_base(root, edit):
+    """Commit a base in which `edit` has been applied, then undo it on disk."""
+    saved = {rel: (root / rel).read_text() for rel in edit}
+    for rel, (old, new) in edit.items():
+        text = saved[rel]
+        assert text.count(old) == 1, (rel, old)
+        (root / rel).write_text(text.replace(old, new))
+    for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-qm", "base"]):
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+                       cwd=root, check=True, capture_output=True)
+    for rel, text in saved.items():
+        (root / rel).write_text(text)
+    return root
+
+
+REGISTERED = '"coupling-k.json",\n    "drum-rate-exp-bits.json"'
+
+
+def test_a_parameter_the_branch_introduces_is_not_present_at_the_ref(root):
+    # the base: model/drums_fx.py exists, RATE_EXP_BITS does not, and the record
+    # that registers it is not in the registry either -- origin/main before #656
+    commit_base(root, {"model/drums_fx.py": (NEW_DECL, "\n"),
+                       "docs/sensitivity/registry.json": (REGISTERED, '"coupling-k.json"')})
+    rec = next(r for r in sens.load_records(
+        sens.load_registry(root / "docs/sensitivity/registry.json"), root)
+        if r["parameter"]["name"] == "RATE_EXP_BITS")
+    assert sens.value_at_ref(rec, "HEAD", root) is None
+    code, text = run(root, changed_since="HEAD")
+    assert code == 0, text
+    assert "RATE_EXP_BITS" not in [ln.split()[1] for ln in text.splitlines()
+                                   if ln.startswith(("PRICED", "FLAT-MOVE"))]
+
+
+def test_a_parameter_renamed_under_a_registered_record_refuses(root):
+    """Rule 8, the input that defeats the rule above: a declaration RENAMED at
+    the ref also has zero declarations there, so it would read as new and its
+    value change would go unpriced. The record being registered at the ref is
+    what tells the two apart: a registered record names a parameter that the
+    gate already held at the ref, so a missing declaration there is a rename
+    (or a deletion), never an introduction."""
+    commit_base(root, {"model/drums_fx.py": (NEW_DECL, "\nRATE_EXP_WIDTH = 3")})
+    code, text = run(root, changed_since="HEAD")
+    assert code == 2 and "RATE_EXP_BITS" in text and "registered" in text, text
+
+
+def test_an_ambiguous_parameter_at_the_ref_still_refuses(root):
+    commit_base(root, {"model/drums_fx.py": (NEW_DECL, NEW_DECL + NEW_DECL)})
+    code, text = run(root, changed_since="HEAD")
+    assert code == 2 and "found 2 declarations of RATE_EXP_BITS" in text, text
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q", *sys.argv[1:]]))
