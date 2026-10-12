@@ -201,7 +201,7 @@
  },
  "estimator": {
   "module": "tools/probes/tom_distortion.py",
-  "validated_domain": "f0 72-330 Hz, tau 60-300 ms, 44.1/48 kHz, 20-300 ms window, in-window f0 excursion <= 60 cents, harmonic >= 20 dB analytic SNR; tolerance frozen at TOL_DB from docs/scorecard/tom-distortion-593/knownanswer.json"
+  "validated_domain": "f0 72-330 Hz, tau 60-300 ms, 44.1/48 kHz, 20-300 ms window, in-window f0 excursion <= 60 cents, harmonic >= 40 dB analytic SNR; tolerance frozen at TOL_DB from docs/scorecard/tom-distortion-593/knownanswer.json"
  },
  "claims": {
   "hardware_delivery": "none. Model audio alone establishes no RTL, decoded-I2S or image delivery; a confirmed repair would hand the exact fixed-point/host contract to #558.",

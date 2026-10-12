@@ -10,6 +10,8 @@ import json
 import math
 import os
 import pathlib
+import re
+import subprocess
 import sys
 
 import numpy as np
@@ -729,3 +731,35 @@ def test_cli_judge_exit_codes_follow_the_verdict(tmp_path, monkeypatch):
     p.write_text(json.dumps(td.synthetic_record(), default=str))
     assert td.main(["judge", str(p), "--out", str(tmp_path / "j.json")]) == 0
     assert json.loads((tmp_path / "j.json").read_text())["verdict"] == "CONFIRMED"
+
+
+# ---- committed records: provenance and prereg agreement (PR #649 review) ----
+def test_status_instrument_commit_resolves():
+    """The status record must name a commit that exists in this repository.
+    A dangling instrument_commit cannot establish which instrument produced
+    the frozen knownanswer/controls records: the previous value named a
+    commit that was rebased away and never pushed (PR #649 review)."""
+    repo = pathlib.Path(__file__).resolve().parents[2]
+    status = json.loads((repo / "docs/scorecard/tom-distortion-593/status.json").read_text())
+    sha = status["instrument_commit"]
+    assert re.fullmatch(r"[0-9a-f]{7,40}", sha), f"instrument_commit is not a git SHA: {sha!r}"
+    r = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", sha, "HEAD"],
+                       capture_output=True)
+    assert r.returncode == 0, (
+        f"instrument_commit {sha} is not an ancestor of HEAD -- reachable checks need a "
+        f"commit in this tree's history, not a rebased-away object that may still exist "
+        f"in a stale local clone: {r.stderr.decode().strip()}"
+    )
+
+
+def test_prereg_validated_domain_matches_frozen_snr():
+    """The preregistration must declare the domain the instrument enforces.
+    It said >= 20 dB while the shipping estimator requires SNR_REQ_DB = 40
+    (20-40 dB produced up to 6.3 Hz slip), so a consumer could legitimately
+    apply the estimator in a region this PR says is unvalidated (PR #649)."""
+    repo = pathlib.Path(__file__).resolve().parents[2]
+    prereg = json.loads((repo / "docs/scorecard/tom-distortion-593/prereg.json").read_text())
+    domain = prereg["estimator"]["validated_domain"]
+    m = re.search(r"harmonic >= (\d+(?:\.\d+)?) dB analytic SNR", domain)
+    assert m, f"validated_domain no longer states the harmonic analytic-SNR floor: {domain!r}"
+    assert float(m.group(1)) == td.frozen_constants()["SNR_REQ_DB"]
