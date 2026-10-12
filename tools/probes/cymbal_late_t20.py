@@ -14,15 +14,25 @@ localise
     is a hypothesis until a paired intervention demonstrates it". With the floor
     gone, two refusals remain: H at TONE 50 (also at the anchor, which the
     floor never touched) and L at TONE 10 / DECAY 7.5-10. This is the paired
-    intervention on each: the same image with ONE cymbal VCA path switched off.
-      H, TONE 50, DECAY 2.5 and 10: low path off, short path off
-      L, TONE 10, DECAY 7.5 and 10: decay path off, short path off
-    LOCALISED means: switching the suspected path off drops the band's late
-    residual below the instrument's 1.5 dB bound by at least 0.5 dB, and
-    switching the short path off moves it by less than 0.2 dB. (Wrong-then-right
-    2: the first criterion asked that the short-path-off render NOT qualify,
-    and read H's 1.47 dB -- unchanged from 1.50, just under the bound -- as a
-    counterexample. The residual, not the threshold crossing, is the effect.)
+    intervention on each, one variable at a time:
+      H, TONE 50, DECAY 2.5 and 10: low path off / short path off / headroom
+      L, TONE 10, DECAY 7.5 and 10: decay path off / short path off / headroom
+    `headroom` keeps every path and every output level and moves ONE thing:
+    E_CYL's envelope runs 18 dB higher (PEAK x 8) and its path is attenuated
+    by the same 18 dB (att + 3, a pure shift). The low band's envelope then
+    sits 18 dB further above its one-LSB-per-frame floor (2^(16+e)/m, about
+    tau * SR LSB: -49.6 dB re full scale at 1.16 s), where the shipped PEAK_CYL
+    (0.0864, -21.3 dB) x the TONE gain (0.43 at TONE 10: -28.5 dB) leaves the
+    low band's last 20-odd dB on or near that floor.
+    A path or change is LOCALISED as the cause when it drops the band's late
+    residual below the instrument's 1.5 dB bound by at least 0.5 dB.
+    (Wrong-then-right 2: the first criterion asked that the short-path-off
+    render NOT qualify, and read H's 1.47 dB -- unchanged from 1.50, just under
+    the bound -- as a counterexample. The residual, not the threshold
+    crossing, is the effect. Wrong-then-right 4: the first reading of these
+    renders called H's refusal "crosstalk" from the low band; the L/TONE 10
+    rows refuted crosstalk (decay path off: 2.58 -> 2.46 dB) and the headroom
+    row is what moves both.)
 
 confirm
     The DECAY gate (`cymbal_tone_render --knob-render`) selects nothing -- it is
@@ -94,6 +104,21 @@ def provenance() -> dict:
 CASES = (("H", "50", ("25", "10"), "no-low", cc.P_CYL),
          ("L", "10", ("75", "10"), "no-decay", cc.P_CYD))
 MAX_RESID_DB = cb.MAX_RESID_DB
+HEADROOM_X, HEADROOM_ATT = 8, 3          # x 2^3 on PEAK, + 3 on the path's att: level-neutral
+
+
+def headroom(img: dict) -> dict:
+    """E_CYL's PEAK x 8 and P_CYL's att + 3: the same output level, the envelope
+    18 dB further above its floor. REFUSES if the peak would clip or att wrap."""
+    out = dict(img)
+    pa = dx.A_ENV + dx.E_CYL * dx.ENV_STRIDE + 1
+    w = out[dx.A_PATH + cc.P_CYL]
+    att = (w >> 17) & 7
+    if out[pa] * HEADROOM_X > dx.FULL24 or att + HEADROOM_ATT > 7:
+        raise cc.Refused("headroom intervention would clip the peak or wrap att")
+    out[pa] = out[pa] * HEADROOM_X
+    out[dx.A_PATH + cc.P_CYL] = (w & ~(7 << 17)) | ((att + HEADROOM_ATT) << 17)
+    return out
 
 
 def localise() -> dict:
@@ -103,9 +128,9 @@ def localise() -> dict:
         for d in decays:
             base = dict(cc.shipped_knob_kit(tone, d))
             res = {}
-            for label, drop in (("all", ()), (suspect, (sp,)), ("no-short", (cc.P_CYS,))):
-                img = dict(base)
-                for p in drop:
+            for label, drop in (("all", ()), (suspect, (sp,)), ("no-short", (cc.P_CYS,)), ("headroom", None)):
+                img = headroom(base) if drop is None else dict(base)
+                for p in (drop or ()):
                     img[dx.A_PATH + p] = off
                 r = measure(render(sorted(img.items())), f"CY{tone}{d} {label}")
                 res[label] = r
@@ -113,15 +138,18 @@ def localise() -> dict:
                       f"resid {r[band]['late_residual_db']}", flush=True)
             out[f"{band}/CY{tone}{d}"] = res
             a = res["all"][band]["late_residual_db"]
-            s_ = res[suspect][band]["late_residual_db"]
-            n = res["no-short"][band]["late_residual_db"]
-            ok = all(_finite(x) for x in (a, s_, n))
-            finding[f"{band}/CY{tone}{d}"] = {
-                "suspect_path_off": suspect, "resid_all_db": a, "resid_suspect_off_db": s_,
-                "resid_short_off_db": n,
-                "localised": bool(ok and s_ < MAX_RESID_DB and a - s_ >= 0.5 and abs(n - a) < 0.2)}
+            f = {"resid_all_db": a}
+            for label in (suspect, "no-short", "headroom"):
+                r_ = res[label][band]["late_residual_db"]
+                f[label] = {"resid_db": r_, "t20_late_ms": res[label][band]["t20_late_ms"],
+                            "localised": bool(_finite(a) and _finite(r_) and r_ < MAX_RESID_DB
+                                              and a - r_ >= 0.5)}
+            finding[f"{band}/CY{tone}{d}"] = f
     return {"renders": out, "finding": finding,
-            "localised_everywhere": all(f["localised"] for f in finding.values()),
+            "headroom_localises_every_refusal": all(f["headroom"]["localised"] for f in finding.values()),
+            "crosstalk_localises_every_refusal": all(
+                f[s]["localised"] for f, s in zip(finding.values(),
+                                                  [c[3] for c in CASES for _ in c[2]])),
             "max_resid_db": MAX_RESID_DB,
             "what": "the late-T20 residual of the refusing band with one cymbal VCA path off"}
 
