@@ -33,7 +33,7 @@ def _clean_inject():
 def test_start_red_stub_estimator_fails_the_harness():
     """Rule 1: the right ports and no behaviour must FAIL the known answers, for
     every reason (missed harmonics, no refusals)."""
-    r = td.harness_verdict(td.stub_levels, td.ka_grid()[:40])
+    r = td.harness_verdict(td.stub_levels, td.ka_grid()[:40], nearby=False)
     assert not r["pass"]
     assert r["missed_resolved"] > 0
     assert len(r["refusal_cases_bad"]) == len(td.refusal_cases(td.stub_levels)[1])
@@ -41,7 +41,7 @@ def test_start_red_stub_estimator_fails_the_harness():
 
 # ---- the estimator against closed-form truth -------------------------------
 def test_estimator_recovers_independent_harmonics():
-    r = td.harness_verdict(td.estimate, td.ka_grid()[::4])
+    r = td.harness_verdict(td.estimate, td.ka_grid()[::4], nearby=False)
     assert r["pass"], r
     assert r["max_abs_err_db"] <= td.TOL_DB
 
@@ -73,6 +73,36 @@ def test_adjacent_inharmonic_partial_cannot_pose_as_a_harmonic():
     for ratio in (1.5, 2.5):
         z = y + 10 ** (-30 / 20) * np.exp(-n / 0.15) * np.sin(2 * np.pi * 110.0 * ratio * n)
         assert not any(td.estimate(z, 48000)["resolved"])
+
+
+@pytest.mark.parametrize("ratio", [1.98, 2.02])
+def test_nearby_partial_beside_h2_is_not_accepted_as_an_accurate_harmonic(ratio):
+    """The reviewer's reproduction (#649): a -30 dB partial at 1.98 / 2.02 f0 beside
+    a -40 dB H2. Either it reads unresolved or it reads within TOL_DB of the
+    INDEPENDENTLY specified -40 dB; it may not read resolved at -31.9 / -27.9."""
+    y = td.synth_mixture(110, .15, (-40., -40., -40.))
+    t = np.arange(len(y)) / 48000
+    y += 10 ** (-30 / 20) * np.exp(-t / .15) * np.sin(2 * np.pi * 110 * ratio * t)
+    h = td.estimate(y, 48000)
+    assert (not h["resolved"][0]) or abs(h["db"][0] + 40.0) <= td.TOL_DB, h
+
+
+def test_every_registered_nearby_partial_case_is_rejected_or_accurate():
+    """The registered sweep (|sep| >= 1.5 Hz, both sides, H2..H4, three f0, two tau, glide on and
+    off; partial 10 dB above and equal to the harmonic): none may be accepted with an error
+    beyond TOL_DB. This is the acceptance path."""
+    bad = [c for c in td.nearby_partial_cases("required") if td.nearby_partial_outcome(c) == "WRONG"]
+    assert not bad, bad[:3]
+    bad = [c for c in td.nearby_partial_cases("comparable") if td.nearby_partial_outcome(c) == "WRONG"]
+    assert not bad, bad[:3]
+
+
+def test_nearby_partial_blind_zone_is_measured_not_hidden():
+    """Below ~1 Hz the partial is not separable from the harmonic by one 0.28 s window. The
+    harness records that zone as a measured limitation (never gating); it must still run."""
+    out = td.nearby_partial_summary(td.estimate)
+    assert out["required_wrong"] == 0
+    assert out["blind_n"] > 0 and out["comparable_n"] > 0 and "blind_wrong" in out and "comparable_wrong" in out
 
 
 def test_window_leakage_does_not_masquerade_as_h2():
@@ -137,10 +167,48 @@ def test_mechanism_verdict_separates_effect_from_mechanism():
     poly = [{"class": "polynomial-of-carrier"}] * 5
     assert td.mechanism_verdict(poly, True)["verdict"] == "SUPPORTED"
     assert td.mechanism_verdict(poly, None)["verdict"] == "INSUFFICIENT"
-    assert td.mechanism_verdict(poly, False)["verdict"] == "REFUTED"
+    assert td.mechanism_verdict(poly, False)["verdict"] == "INSUFFICIENT"   # non-detection is not absence
     assert td.mechanism_verdict([{"class": "constant-ratio"}] * 5, True)["verdict"] == "REFUTED"
     assert td.mechanism_verdict(poly[:2], True)["verdict"] == "INSUFFICIENT"
     assert td.mechanism_verdict([{"class": "insufficient"}] * 8, True)["verdict"] == "INSUFFICIENT"
+
+
+def test_non_detection_is_insufficient_not_refuted_through_the_mechanism_path():
+    """The reviewer's reproduction (#649): harmonics at -130 dB are analytically
+    nonzero but cannot clear the floor, so nothing is decidable. That is NOT
+    evidence that there is no distortion to explain."""
+    h = td.harmonic_levels(td.synth_mixture(110, .15, (-130., -130., -130.)), 48000)
+    assert h["resolved"] == [False, False, False]
+    v = td.mechanism_verdict([], bool(h["resolved"][0]))
+    assert v["verdict"] == "INSUFFICIENT" and v["n_takes"] == 0, v
+
+
+def test_refutation_needs_decidable_constant_ratio_takes():
+    const = [{"class": "constant-ratio"}] * 5
+    assert td.mechanism_verdict(const, True)["verdict"] == "REFUTED"
+    assert td.mechanism_verdict(const[:2], True)["verdict"] == "INSUFFICIENT"
+    assert td.mechanism_verdict(const, False)["verdict"] == "INSUFFICIENT"
+
+
+def test_committed_records_are_those_of_the_final_instrument():
+    """#649 review: controls.json had 9 cells while DEFECTS had 11, and the README table
+    omitted two defects. Cheap structural staleness check (the full matrix is
+    re-run by the other tests; this asserts the COMMITTED record names it)."""
+    d = pathlib.Path(td.__file__).resolve().parents[2] / "docs" / "scorecard" / "tom-distortion-593"
+    c = json.loads((d / "controls.json").read_text())
+    assert set(c["cells"]) == set(td.DEFECTS), set(td.DEFECTS) ^ set(c["cells"])
+    assert set(c["clean"]) == set(td.PROPERTIES)
+    assert all(set(r) == set(td.PROPERTIES) for r in c["cells"].values())
+    assert c["intended"] == {k: list(v) for k, v in td.INTENDED.items()}
+    assert c["status"] == "OK" and not c["intended_not_moved"]
+    k = json.loads((d / "knownanswer.json").read_text())
+    assert k["frozen"] == td.frozen_constants()
+    assert k["nearby_partials"]["required_wrong"] == 0 and k["nearby_partials"]["comparable_wrong"] == 0
+    readme = (d / "README.md").read_text()
+    for name in td.DEFECTS:
+        assert f"| {name} |" in readme, f"README table lacks defect {name}"
+    for name in td.PROPERTIES:
+        assert name.split("_")[0] in readme
 
 
 # ---- the preregistration ---------------------------------------------------

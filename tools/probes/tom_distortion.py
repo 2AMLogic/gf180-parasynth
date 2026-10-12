@@ -39,7 +39,7 @@ class Refused(RuntimeError):
 DEFECTS = ("stub-estimator", "missing-distortion", "leakage-as-h2",
            "preservation-bypass", "contaminated-confirmation", "target-ignored",
            "mechanism-bypass", "population-bypass", "nonfinite-bypass", "mechanism-gate-bypass",
-           "floor-as-bound")
+           "floor-as-bound", "ambiguity-bypass", "nondetection-refutes")
 INJECT: set = set()
 
 
@@ -85,7 +85,7 @@ def apply_quadratic(y: np.ndarray, h2_db: float) -> np.ndarray:
 def stub_levels(y, sr, onset=0, **kw) -> dict:
     """Right ports, no behaviour: reports a perfectly clean signal."""
     return {"f0": 0.0, "db": [-120.0, -120.0, -120.0], "resolved": [False] * 3,
-            "floor_db": [-120.0] * 3}
+            "floor_db": [-120.0] * 3, "slip_hz": [None] * 3, "ambiguous": [False] * 3}
 
 
 SUPPORTED_RATES = (44100, 48000)
@@ -164,11 +164,58 @@ def glide_span_cents(y, sr, f0, a, b) -> float:
     return float(1200 * math.log2(hi / lo))
 
 
+#: A harmonic is PHASE-LOCKED to the fundamental: phi_k(t) = k phi_1(t) at every instant, glide or
+#: not, so the mean rate of arg(z_k conj(z_1)^k) is 0 Hz. A nearby inharmonic partial (or a second
+#: component inside the +-5 % band) drifts against it. `_slip_rate_hz` measures that rate; a
+#: harmonic that would be "resolved" but slips by more than SLIP_MAX_HZ reads UNRESOLVED
+#: (ambiguous), because the level at its peak is then not the level of a harmonic. FROZEN from the
+#: clean grid (max 0.11 Hz over the 1095 qualified reads at >= 40 dB analytic SNR) before any take was measured.
+SLIP_MAX_HZ = 0.25
+SLIP_BAND = 0.10              # +-10 % about f0 / k*f0 for the two analytic signals
+SLIP_KEEP = 0.3               # only samples where |z_k| >= this fraction of its peak (noise-dominated tails drop out)
+SLIP_TRIM = 0.1               # window ends dropped (Blackman-Harris taper)
+
+
+def _slip_rate_hz(y, sr, a, b, f0, k) -> float:
+    """Mean rate (Hz) at which harmonic k's phase drifts against k x the fundamental's phase,
+    over [a, b). Band-limits the Blackman-Harris-windowed segment in the frequency domain
+    (so the much larger fundamental's leakage is window-limited, not filter-limited), forms
+    u = z_k conj(z_1)^k, and takes the angle of the sum of unit-magnitude lag-1 products over
+    the strong samples. 0 for an isolated harmonic; ~ the separation (Hz) for a lone partial
+    beside it; small only when the partial is smaller than ~1/3 of the harmonic."""
+    seg = y[a:b] * _bh(b - a)
+    X = np.fft.fft(seg)
+    f = np.fft.fftfreq(len(seg), 1 / sr)
+
+    # the band must hold the window's whole main lobe (+-4/T for Blackman-Harris) or the
+    # edges truncate it and distort the phase: max(10 %, 4.5/T), but never into a neighbour
+    def analytic(fc):
+        half = min(max(SLIP_BAND * fc, 4.5 * sr / (b - a)), 0.45 * f0)
+        m = (f >= fc - half) & (f <= fc + half)
+        Z = np.zeros_like(X)
+        Z[m] = 2 * X[m]
+        return np.fft.ifft(Z)
+
+    z1, zk = analytic(f0), analytic(k * f0)
+    n = len(seg)
+    lo, hi = int(SLIP_TRIM * n), int((1 - SLIP_TRIM) * n)
+    u = (zk * np.conj(z1) ** k)[lo:hi]
+    strong = np.abs(zk[lo:hi]) >= SLIP_KEEP * np.abs(zk[lo:hi]).max()
+    p = u[1:] * np.conj(u[:-1])
+    mag = np.abs(p)
+    w = (strong[1:] & strong[:-1]) & (mag > 0)
+    if not w.any():
+        return math.inf
+    return float(np.angle(np.sum(p[w] / mag[w])) * sr / (2 * math.pi))
+
+
 def harmonic_levels(y, sr, onset: int = 0, win=(0.02, 0.30), _rect=False) -> dict:
     """H2..H4 in dB re H1 over [onset+win0, onset+win1), with, per harmonic, its
     own FLOOR (the larger of the apparent level the same window reads on a pure
     sinusoid with this f0 and decay, and the larger neighbouring off-harmonic
-    band) and `resolved` = clears the floor by RESOLVE_MARGIN_DB and sits at k*f0.
+    band) and `resolved` = clears the floor by RESOLVE_MARGIN_DB, sits at k*f0 AND
+    is phase-locked to the fundamental (`slip_hz` <= SLIP_MAX_HZ). A second
+    component inside the band makes it `ambiguous` and unresolved.
     REFUSES on non-finite, silent, short, unsupported-rate or unresolved-
     fundamental input. Validated domain: docs/scorecard/tom-distortion-593/."""
     y = _check_input(y, sr)
@@ -198,7 +245,7 @@ def harmonic_levels(y, sr, onset: int = 0, win=(0.02, 0.30), _rect=False) -> dic
     Sn, _ = _window_spectrum(null, sr, a, b, _rect)
     h1, _ = _band_peak(S, f, f0 * (1 - BAND), f0 * (1 + BAND))
     h1n, _ = _band_peak(Sn, f, f0 * (1 - BAND), f0 * (1 + BAND))
-    db, floor, ok = [], [], []
+    db, floor, ok, slip, amb = [], [], [], [], []
     for k in (2, 3, 4):
         pk, fk = _band_peak(S, f, k * f0 * (1 - BAND), k * f0 * (1 + BAND))
         nk, _ = _band_peak(Sn, f, k * f0 * (1 - BAND), k * f0 * (1 + BAND))
@@ -208,10 +255,18 @@ def harmonic_levels(y, sr, onset: int = 0, win=(0.02, 0.30), _rect=False) -> dic
         fl = 20 * math.log10(max(nk / h1n, off / h1, 1e-300))
         db.append(lvl)
         floor.append(fl)
-        ok.append(bool(pk > 0 and abs(fk / (k * f0) - 1) <= LOC_TOL and lvl >= fl + RESOLVE_MARGIN_DB))
+        good = bool(pk > 0 and abs(fk / (k * f0) - 1) <= LOC_TOL and lvl >= fl + RESOLVE_MARGIN_DB)
+        sl = _slip_rate_hz(y, sr, a, b, f0, k) if good else None
+        locked = sl is not None and abs(sl) <= SLIP_MAX_HZ
+        if "ambiguity-bypass" in INJECT:
+            locked = good
+        slip.append(sl)
+        amb.append(bool(good and not locked))
+        ok.append(bool(good and locked))
     if "leakage-as-h2" in INJECT:                  # the floor guard removed
         ok = [True] * 3
-    return {"f0": f0, "tau": tau, "glide_cents": gl, "db": db, "resolved": ok, "floor_db": floor}
+    return {"f0": f0, "tau": tau, "glide_cents": gl, "db": db, "resolved": ok, "floor_db": floor,
+            "slip_hz": slip, "ambiguous": amb}
 
 
 def estimate(y, sr, onset: int = 0, **kw) -> dict:
@@ -249,7 +304,9 @@ def ka_grid() -> list:
     return cases
 
 
-SNR_REQ_DB = 20.0             # harnessed domain: harmonic's analytic SNR in the window
+SNR_REQ_DB = 40.0             # harnessed domain: harmonic's analytic SNR in the window. Raised from 20:
+#                               the phase-lock (ambiguity) test is noise-limited -- at 20-30 dB its
+#                               measured |slip| reached 6 Hz on CLEAN harmonics, at >= 40 dB 0.43 Hz.
 
 
 def analytic_snr_db(c: dict, k: int) -> float:
@@ -270,7 +327,7 @@ def _run(estimator, y, sr, onset=0):
     return estimator(y, sr, onset=onset)
 
 
-def harness_verdict(estimator, grid=None) -> dict:
+def harness_verdict(estimator, grid=None, nearby: bool = True) -> dict:
     """Run the estimator over the analytic grid. PASS needs: every specified
     harmonic >= SPEC_FLOOR_DB is read as RESOLVED within TOL_DB; every absent
     harmonic (pure decaying sinusoids) is NOT resolved; every refusal case
@@ -311,9 +368,73 @@ def harness_verdict(estimator, grid=None) -> dict:
            "refused_wrongly": wrong_refusal, "false_resolved_on_absent": false_resolved,
            "max_abs_err_db": float(ea.max()), "p95_abs_err_db": float(np.percentile(ea, 95)) if errs else math.inf,
            "refusal_cases_ok": refusal_ok, "refusal_cases_bad": refusal_bad}
+    if nearby:
+        out["nearby_partials"] = nearby_partial_summary(estimator)
     out["pass"] = bool(errs and missed == 0 and wrong_refusal == 0 and false_resolved == 0
-                       and ea.max() <= TOL_DB and not refusal_bad)
+                       and ea.max() <= TOL_DB and not refusal_bad
+                       and (not nearby or (out["nearby_partials"]["required_wrong"] == 0
+                                           and out["nearby_partials"]["comparable_wrong"] == 0)))
     return out
+
+
+#: Nearby-partial sweep. A partial at k*f0 + sep_hz (locked to the carrier's glide track) beside a
+#: harmonic specified at -40 dB re H1. Three classes, because the estimator's power differs:
+#:   required   partial 10 dB ABOVE the harmonic (-30), |sep| >= 1.5 Hz: it must be REJECTED or read
+#:              within TOL_DB of the specified harmonic. Gating (harness FAILS on any WRONG).
+#:   comparable partial equal to the harmonic (-40), |sep| >= 1.5 Hz, two relative phases: the two
+#:              interfere (error up to ~5 dB); same rule, also gating.
+#:   blind      |sep| <= 1 Hz (< 0.3 of a 1/T bin): a partial is not separable from the harmonic by
+#:              one 0.28 s window at all. MEASURED and recorded, never gating.
+#: A partial 10 dB BELOW the harmonic moves the read by <= 20log10(1+0.316) = 2.4 dB < TOL_DB.
+NEARBY_CLASSES = {"required": ((-30.0,), (1.5, 3.0, 6.0), (1.0,)),
+                  "comparable": ((-40.0,), (1.5, 3.0, 6.0), (0.0, 2.1)),
+                  "blind": ((-30.0, -40.0), (0.25, 0.5, 1.0), (1.0,))}
+
+
+def nearby_partial_cases(cls: str) -> list:
+    pdbs, seps, phases = NEARBY_CLASSES[cls]
+    return [dict(f0=f0, tau=tau, k=k, sep_hz=sg * sp, partial_db=pdb, glide_cents=g, phase=ph)
+            for f0 in (72.0, 165.0, 330.0) for tau in (0.06, 0.3) for k in (2, 3, 4)
+            for sp in seps for sg in (-1, 1) for pdb in pdbs for g in (0.0, 60.0) for ph in phases]
+
+
+def nearby_partial_outcome(c, estimator=None, sr: int = 48000) -> str:
+    """REJECTED (unresolved or REFUSED) | ACCURATE (resolved within TOL_DB of the
+    independently specified -40 dB harmonic) | WRONG (resolved, off by more)."""
+    estimator = estimator or estimate
+    y = synth_mixture(c["f0"], c["tau"], (-40.0, -40.0, -40.0), sr=sr, glide_cents=c["glide_cents"],
+                      glide_tau=0.1, noise_db=None)
+    t = np.arange(len(y)) / sr
+    # the partial rides the carrier's glide track, offset by sep_hz at the end of the glide
+    f = c["f0"] * 2.0 ** (c["glide_cents"] / 1200.0 * np.exp(-t / 0.1))
+    phi = 2 * np.pi * np.cumsum(f) / sr
+    y = y + 10 ** (c["partial_db"] / 20) * np.exp(-t / c["tau"]) * np.sin(
+        c["k"] * phi + 2 * np.pi * c["sep_hz"] * t + c["phase"])
+    try:
+        r = _run(estimator, y, sr)
+    except Refused:
+        return "REJECTED"
+    i = c["k"] - 2
+    if not r["resolved"][i]:
+        return "REJECTED"
+    return "ACCURATE" if abs(r["db"][i] + 40.0) <= TOL_DB else "WRONG"
+
+
+def nearby_partial_summary(estimator) -> dict:
+    out = {}
+    for name in NEARBY_CLASSES:
+        res = [nearby_partial_outcome(c, estimator) for c in nearby_partial_cases(name)]
+        out[f"{name}_n"] = len(res)
+        out[f"{name}_wrong"] = res.count("WRONG")
+        out[f"{name}_rejected"] = res.count("REJECTED")
+        out[f"{name}_accurate"] = res.count("ACCURATE")
+    return out
+
+
+def frozen_constants() -> dict:
+    return {"TOL_DB": TOL_DB, "RESOLVE_MARGIN_DB": RESOLVE_MARGIN_DB, "SPEC_FLOOR_DB": SPEC_FLOOR_DB,
+            "SNR_REQ_DB": SNR_REQ_DB, "GLIDE_MAX_CENTS": GLIDE_MAX_CENTS, "SLIP_MAX_HZ": SLIP_MAX_HZ,
+            "SLIP_KEEP": SLIP_KEEP, "SLIP_BAND": SLIP_BAND, "SLIP_TRIM": SLIP_TRIM}
 
 
 def refusal_cases(estimator):
@@ -385,14 +506,19 @@ def mechanism_verdict(trajs: list, effect_real: bool | None, min_takes: int = 4,
     """Support / refutation / insufficient evidence for 'a polynomial after the
     resonator' as the source of the 808's H2..H4. Reported SEPARATELY from any
     feature improvement. `effect_real` = the recordings' harmonics clear their
-    own null floor (leakage refuted); None = not measured -> INSUFFICIENT."""
+    own null floor (leakage refuted); None = not measured, False = not detected ->
+    INSUFFICIENT either way. REFUTED needs >= min_takes decidable constant-ratio takes."""
     cls = [t["class"] for t in trajs]
     n_dec = sum(c != "insufficient" for c in cls)
     out = {"n_takes": len(cls), "n_decidable": n_dec, "effect_real": effect_real,
            "counts": {c: cls.count(c) for c in sorted(set(cls))}}
     if effect_real is None:
         out["verdict"], out["why"] = "INSUFFICIENT", "effect (H2 above leakage floor) not measured"
-    elif effect_real is False:
+    elif effect_real is False and "nondetection-refutes" not in INJECT:
+        # a floor is not an upper bound: failing to clear it is "not detected", never "absent"
+        out["verdict"], out["why"] = "INSUFFICIENT", ("H2 not detected above the leakage floor: "
+                                                      "non-detection is not evidence of absence")
+    elif effect_real is False:                       # the defeated rule
         out["verdict"], out["why"] = "REFUTED", ("the recordings' H2..H4 do not clear the leakage floor: "
                                                  "there is no distortion to explain")
     elif n_dec < min_takes:
@@ -766,7 +892,7 @@ def synthetic_record(*, prereg=None, mechanism="SUPPORTED", decay_bad=False, pea
 
 
 def prop_K1_known_answers() -> bool:
-    return harness_verdict(estimate, ka_grid()[::7])["pass"]
+    return harness_verdict(estimate, ka_grid()[::7], nearby=False)["pass"]
 
 
 def prop_K2_pure_sinusoid_reads_unresolved() -> bool:
@@ -931,6 +1057,25 @@ def prop_J9_unresolved_shipped_floor_earns_no_credit() -> bool:
     return judge(r, p)["verdict"] != "CONFIRMED"
 
 
+def prop_K4_nearby_partial_is_not_an_accurate_harmonic() -> bool:
+    """The reviewer's defeating inputs (#649): -30 dB partials at 1.98 / 2.02 f0 beside a
+    -40 dB H2, plus the registered sweep: none may be accepted beyond TOL_DB."""
+    for sep in (-2.2, 2.2):                          # 1.98 / 2.02 x 110 Hz
+        c = dict(f0=110.0, tau=0.15, k=2, sep_hz=sep, partial_db=-30.0, glide_cents=0.0, phase=0.0)
+        if nearby_partial_outcome(c) == "WRONG":
+            return False
+    return all(nearby_partial_outcome(c) != "WRONG"
+               for cls in ("required", "comparable") for c in nearby_partial_cases(cls)[::9])
+
+
+def prop_M2_non_detection_is_not_refutation() -> bool:
+    """Harmonics at -130 dB cannot clear the floor: nothing is decidable, and that must read
+    INSUFFICIENT through the same path the production code uses, never REFUTED."""
+    h = harmonic_levels(synth_mixture(110.0, 0.15, (-130.0, -130.0, -130.0)), 48000)
+    v = mechanism_verdict([], bool(h["resolved"][0]))
+    return v["verdict"] == "INSUFFICIENT"
+
+
 def prop_M1_mechanism_classes() -> bool:
     sr = 48000
     poly = synth_mixture(110.0, 0.1, (-35.0, -40.0, -45.0), h_tau_ratio=(0.5, 1 / 3, 0.25))
@@ -941,13 +1086,14 @@ def prop_M1_mechanism_classes() -> bool:
 
 PROPERTIES = {f.__name__[5:]: f for f in (
     prop_K1_known_answers, prop_K2_pure_sinusoid_reads_unresolved,
-    prop_K3_applied_quadratic_reads_at_spec, prop_J0_good_candidate_confirms,
+    prop_K3_applied_quadratic_reads_at_spec, prop_K4_nearby_partial_is_not_an_accurate_harmonic,
+    prop_J0_good_candidate_confirms,
     prop_J1_decay_violation_rejected, prop_J2_peak_violation_rejected,
     prop_J3_contaminated_confirmation_refused, prop_J4_no_distortion_candidate_not_confirmed,
     prop_J5_null_target_refused_not_zero_error, prop_J6_frozen_population_enforced,
     prop_J7_nonfinite_or_missing_measurement_refused,
     prop_J8_unsupported_mechanism_cannot_select, prop_J9_unresolved_shipped_floor_earns_no_credit,
-    prop_M1_mechanism_classes)}
+    prop_M1_mechanism_classes, prop_M2_non_detection_is_not_refutation)}
 
 #: defect -> the property whose assertion it is meant to defeat
 INTENDED = {"stub-estimator": ("K1_known_answers",),
@@ -957,6 +1103,8 @@ INTENDED = {"stub-estimator": ("K1_known_answers",),
             "contaminated-confirmation": ("J3_contaminated_confirmation_refused",),
             "target-ignored": ("J4_no_distortion_candidate_not_confirmed",),
             "mechanism-bypass": ("M1_mechanism_classes",),
+            "ambiguity-bypass": ("K4_nearby_partial_is_not_an_accurate_harmonic",),
+            "nondetection-refutes": ("M2_non_detection_is_not_refutation",),
             "mechanism-gate-bypass": ("J8_unsupported_mechanism_cannot_select",),
             "floor-as-bound": ("J9_unresolved_shipped_floor_earns_no_credit",),
             "population-bypass": ("J6_frozen_population_enforced",),
@@ -1034,7 +1182,7 @@ def _gate():
 
 
 def _levels_json(r: dict) -> dict:
-    return {k: r[k] for k in ("f0", "tau", "glide_cents", "db", "resolved", "floor_db")}
+    return {k: r[k] for k in ("f0", "tau", "glide_cents", "db", "resolved", "floor_db", "slip_hz", "ambiguous")}
 
 
 def _try(fn, *a):
@@ -1119,9 +1267,7 @@ def main(argv=None) -> int:
     try:
         if a.cmd == "knownanswer":
             res = harness_verdict(estimate)
-            res["frozen"] = {"TOL_DB": TOL_DB, "RESOLVE_MARGIN_DB": RESOLVE_MARGIN_DB,
-                             "SPEC_FLOOR_DB": SPEC_FLOOR_DB, "SNR_REQ_DB": SNR_REQ_DB,
-                             "GLIDE_MAX_CENTS": GLIDE_MAX_CENTS}
+            res["frozen"] = frozen_constants()
         elif a.cmd == "controls":
             res = controls_matrix()
         elif a.cmd == "judge":
