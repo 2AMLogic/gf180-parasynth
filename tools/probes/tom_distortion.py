@@ -39,7 +39,7 @@ class Refused(RuntimeError):
 DEFECTS = ("stub-estimator", "missing-distortion", "leakage-as-h2",
            "preservation-bypass", "contaminated-confirmation", "target-ignored",
            "mechanism-bypass", "population-bypass", "nonfinite-bypass", "mechanism-gate-bypass",
-           "floor-as-bound", "ambiguity-bypass", "nondetection-refutes")
+           "floor-as-bound", "ambiguity-bypass", "nondetection-refutes", "qualification-bypass")
 INJECT: set = set()
 
 
@@ -848,7 +848,7 @@ def _variant(mod=14.0, h=-85.0, dec=2.0, peak=0.5, dc=0.0):
     ratio = {f: 2.0 for f in GATE_FEATURES}
     ratio["modulation"], ratio["decay"] = mod, dec
     return {"ratio": ratio, "peak_fs": peak, "dc_fs": dc,
-            "harm": {"db": [h, h, h], "resolved": [True] * 3}}
+            "harm": {"db": [h, h, h], "resolved": [True] * 3, "interference_free": [True] * 3}}
 
 
 def synthetic_record(*, prereg=None, mechanism="SUPPORTED", decay_bad=False, peak_bad=False, no_distortion=False,
@@ -865,7 +865,7 @@ def synthetic_record(*, prereg=None, mechanism="SUPPORTED", decay_bad=False, pea
     pres = list(prereg["preservation_only"]["keys"])
     conf = list(prereg["confirmation"]["keys"])
     reg = prereg["confirmation"].get("sha256_16") or {}
-    tgt = {"db": [-35.0, -38.0, -41.0], "resolved": [True] * 3}
+    tgt = {"db": [-35.0, -38.0, -41.0], "resolved": [True] * 3, "interference_free": [True] * 3}
     rows = {}
     for split, ks in (("development", dev), ("preservation-only", pres), ("confirmation", conf)):
         for k in ks:
@@ -1050,11 +1050,52 @@ def prop_J9_unresolved_shipped_floor_earns_no_credit() -> bool:
     for k, row in r["rows"].items():
         if row["split"] == "preservation-only":
             continue
-        row["target_harm"] = {"db": [-35.0] * 3, "resolved": [True] * 3}
+        row["target_harm"] = {"db": [-35.0] * 3, "resolved": [True] * 3, "interference_free": [True] * 3}
         row["variants"]["shipped"]["harm"] = {"db": [-38.1] * 3, "floor_db": [-44.0] * 3,
                                               "resolved": [False] * 3}
-        row["variants"]["Q"]["harm"] = {"db": [-37.0] * 3, "floor_db": [-60.0] * 3, "resolved": [True] * 3}
+        row["variants"]["Q"]["harm"] = {"db": [-37.0] * 3, "floor_db": [-60.0] * 3, "resolved": [True] * 3,
+                                        "interference_free": [True] * 3}
     return judge(r, p)["verdict"] != "CONFIRMED"
+
+
+def prop_J10_blind_zone_reading_cannot_confirm() -> bool:
+    """The reviewer's exact defeating input (#649 round 4): a -30 dB partial at
+    +0.25 Hz from H2 (72 Hz f0, tau 0.06 s, phase 1.0) reads resolved and
+    unambiguous -- the measured blind zone -- and that poisoned level decided
+    selection (CONFIRMED at 0.989 where the true -40 dB level gives NOT
+    CONFIRMED at 0.455). A resolved reading that no input qualification attests
+    free of a close interfering partial is a diagnostic: the judge must REFUSE
+    the record, and the mechanism path must not count the take as evidence."""
+    sr, tau, f0 = 48000, 0.06, 72.0
+    y = synth_mixture(f0, tau, (-40.0, -40.0, -40.0))
+    t = np.arange(len(y)) / sr
+    phi = 2 * math.pi * np.cumsum(np.full(len(y), f0)) / sr
+    y = y + 10 ** (-30 / 20) * np.exp(-t / tau) * np.sin(2 * phi - 2 * math.pi * 0.25 * t + 1.0)
+    h = estimate(y, sr)
+    if not (h["resolved"][0] and not h["ambiguous"][0]):
+        return False            # precondition: this input IS in the disclosed blind zone
+    if h.get("interference_free", [True] * 3)[0]:
+        return False            # the estimator must not self-attest its blind zone
+    p = synthetic_prereg()
+    r = synthetic_record(prereg=p)
+    for row in r["rows"].values():
+        if row["split"] == "preservation-only":
+            continue
+        row["target_harm"] = {"db": [-28.0] * 3, "resolved": [True, False, False],
+                              "interference_free": [True, True, True]}
+        row["variants"]["shipped"]["harm"] = {"db": [-50.0] * 3, "resolved": [True] * 3,
+                                              "interference_free": [True] * 3}
+        row["variants"]["Q"]["harm"] = _levels_json(h)      # the poisoned measurement, as a record carries it
+    if judge(r, p)["verdict"] != "REFUSED":
+        return False
+    if mechanism_verdict([], True, n_unqualified=1)["verdict"] != "INSUFFICIENT":
+        return False            # an unqualified resolved H2 is not mechanism evidence either
+    for row in r["rows"].values():
+        if row["split"] != "preservation-only":
+            row["variants"]["Q"]["harm"] = {"db": [-40.0] * 3, "resolved": [True] * 3,
+                                            "interference_free": [True] * 3}
+    v = judge(r, p)
+    return v["verdict"] == "NOT CONFIRMED"      # the honest verdict on the true level: the refusal was the gate's
 
 
 def prop_K4_nearby_partial_is_not_an_accurate_harmonic() -> bool:
@@ -1093,6 +1134,7 @@ PROPERTIES = {f.__name__[5:]: f for f in (
     prop_J5_null_target_refused_not_zero_error, prop_J6_frozen_population_enforced,
     prop_J7_nonfinite_or_missing_measurement_refused,
     prop_J8_unsupported_mechanism_cannot_select, prop_J9_unresolved_shipped_floor_earns_no_credit,
+    prop_J10_blind_zone_reading_cannot_confirm,
     prop_M1_mechanism_classes, prop_M2_non_detection_is_not_refutation)}
 
 #: defect -> the property whose assertion it is meant to defeat
@@ -1107,6 +1149,7 @@ INTENDED = {"stub-estimator": ("K1_known_answers",),
             "nondetection-refutes": ("M2_non_detection_is_not_refutation",),
             "mechanism-gate-bypass": ("J8_unsupported_mechanism_cannot_select",),
             "floor-as-bound": ("J9_unresolved_shipped_floor_earns_no_credit",),
+            "qualification-bypass": ("J10_blind_zone_reading_cannot_confirm",),
             "population-bypass": ("J6_frozen_population_enforced",),
             "nonfinite-bypass": ("J7_nonfinite_or_missing_measurement_refused",)}
 
