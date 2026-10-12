@@ -240,17 +240,65 @@ def shipped_value(rec: dict, root: Path = ROOT, overrides: dict | None = None) -
     return parse_parameter(path.read_text(), p["name"], p["source"], p["kind"])
 
 
-def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
-    """The parameter's value at a git ref, or None if the file is not there."""
-    p = rec["parameter"]
-    r = subprocess.run(["git", "show", f"{ref}:{p['source']}"],
-                       cwd=root, capture_output=True, text=True)
+def git_show(ref: str, rel: str, root: Path = ROOT) -> str | None:
+    """A file's text at a git ref, None if the path is not there; Refused if the
+    ref itself cannot be read (an unresolvable ref must never read as absent)."""
+    r = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=root, capture_output=True, text=True)
     if r.returncode != 0:
         if "exists on disk, but not in" in r.stderr or "does not exist" in r.stderr:
             return None
-        raise Refused(f"cannot read {p['source']} at {ref}: {r.stderr.strip()}")
-    return parse_parameter(r.stdout, p["name"], f"{p['source']}@{ref}",
-                           p.get("kind", "verilog-parameter"))
+        raise Refused(f"cannot read {rel} at {ref}: {r.stderr.strip()}")
+    return r.stdout
+
+
+def registered_at_ref(ref: str, root: Path = ROOT) -> tuple[set[str], set[str]]:
+    """(record files, record ids) the registry listed at a ref; empty if none."""
+    reg = git_show(ref, "docs/sensitivity/registry.json", root)
+    if reg is None:
+        return set(), set()
+    files = set(json.loads(reg).get("records") or [])
+    ids = set()
+    for name in files:
+        text = git_show(ref, f"docs/sensitivity/{name}", root)
+        if text is not None:
+            ids.add(json.loads(text).get("id"))
+    return files, ids
+
+
+def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
+    """The parameter's value at a git ref, or None if it was not there.
+
+    "Not there" is either the source file missing at the ref, or the file
+    present with NO declaration of the parameter -- a parameter the branch
+    introduces (#662: RATE_EXP_BITS). There is no old value, so no move to
+    price. The current tree is still held to exactly one declaration by
+    shipped_value(), and two or more at the ref still refuse.
+
+    Rule 8, what defeats the zero-declarations rule: a parameter RENAMED (or
+    deleted and re-added) at the ref also has zero declarations there, and would
+    read as new, so its value change would go unpriced. Guard: if this record
+    (by file or by id) was already registered at the ref, the gate held this
+    parameter there, so a missing declaration is a rename -- REFUSE. What still
+    defeats it: renaming the parameter AND re-registering it under a new record
+    file and id. That is a registry change (dropping a record, adding one), which
+    is the reviewable act docs/sensitivity/registry.json names, and the old
+    parameter was then never priced by this gate at all, so nothing this check
+    covered is lost.
+    """
+    p = rec["parameter"]
+    text = git_show(ref, p["source"], root)
+    if text is None:
+        return None
+    kind = p.get("kind", "verilog-parameter")
+    if kind in KIND_PATTERN and not re.findall(
+            KIND_PATTERN[kind].format(name=re.escape(p["name"])), text, re.MULTILINE):
+        files, ids = registered_at_ref(ref, root)
+        if rec.get("_file") in files or rec["id"] in ids:
+            raise Refused(f"{rec['id']}: {p['source']}@{ref} has no declaration of {p['name']}, "
+                          f"but this record was already registered at {ref} -- a renamed or "
+                          "deleted parameter, not a new one; its move cannot be priced")
+        return None
+    return parse_parameter(text, p["name"], f"{p['source']}@{ref}", kind)
 
 
 # --------------------------------------------------------------------------
