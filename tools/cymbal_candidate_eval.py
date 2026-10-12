@@ -15,7 +15,7 @@ Order, fixed:
  4. Band measures (energy share, EDT10, late T20) for 808 CY5025, shipped and
     candidate.
 Knob tracking is NOT claimed here: the knob-law render (kit_at) is not the
-instrument (#371) and gets its own labelled repair.
+instrument (#413 repaired it: docs/scorecard/cymbal-369/knob-render/) and gets its own labelled repair.
 """
 from __future__ import annotations
 
