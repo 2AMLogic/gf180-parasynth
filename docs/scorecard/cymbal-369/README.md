@@ -123,6 +123,8 @@ this chain. So the thing gating acceptance item 3 of #396, the listening pack's 
 §2 selection argument was tracked by nothing. It now has its own issue, **#413**; `balance/README.md` §6 lists the
 four citations that need correcting to point at it.
 
+**Repaired (#413):** see `knob-render/README.md` -- `kit_at("CY")` now delegates to the shipped constructor.
+
 > **Where this went.** Step 2 is `candidate/README.md` (the §10 candidate, negative); step 3 is
 > `candidate2/README.md` (Hh2, Hh3 and the level stage read off W14b Figures 4 and 10 by
 > `tools/werner_fig4.py`, and a second negative that eliminates the filter values as the cause).

@@ -455,7 +455,15 @@
      267.06,
      328.77,
      404.15
-    ]
+    ],
+    "fischer_rel_steps": [
+     0.3145,
+     0.2534,
+     0.2899,
+     0.0855
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
    },
    "late-t20": {
     "status": "FAIL",
@@ -560,7 +568,15 @@
      267.79,
      329.46,
      405.02
-    ]
+    ],
+    "fischer_rel_steps": [
+     0.1611,
+     0.2809,
+     0.1921,
+     0.1227
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
    },
    "late-t20": {
     "status": "REFUSED",
@@ -666,7 +682,15 @@
      268.06,
      329.52,
      405.08
-    ]
+    ],
+    "fischer_rel_steps": [
+     0.1536,
+     0.2209,
+     0.1865,
+     0.1012
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
    },
    "late-t20": {
     "status": "REFUSED",
@@ -772,7 +796,15 @@
      268.06,
      329.46,
      405.1
-    ]
+    ],
+    "fischer_rel_steps": [
+     0.1442,
+     0.1875,
+     0.117,
+     0.0336
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
    },
    "late-t20": {
     "status": "REFUSED",
@@ -864,7 +896,7 @@
     "what": "L_edt10_ms rises with DECAY by more than 0% per step"
    },
    "h-edt10-direction-matches-808": {
-    "status": "FAIL",
+    "status": "PASS",
     "fischer": [
      97.39,
      110.68,
@@ -878,7 +910,17 @@
      266.67,
      328.02,
      404.42
-    ]
+    ],
+    "fischer_rel_steps": [
+     0.1365,
+     0.0793,
+     0.1477,
+     -0.0066
+    ],
+    "undetermined_steps": [
+     "75->10"
+    ],
+    "deadband": 0.02
    },
    "late-t20": {
     "status": "REFUSED",
@@ -1090,7 +1132,15 @@
      268.06,
      329.52,
      329.52
-    ]
+    ],
+    "fischer_rel_steps": [
+     0.1536,
+     0.2209,
+     0.1865,
+     0.1012
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
    },
    "late-t20": {
     "status": "REFUSED",
@@ -1147,6 +1197,6 @@
   ],
   "blind": []
  },
- "commit": "751bf8db3490ef0c6d6f90ce02c39e01d15ca244",
+ "commit": "2dfd1fdf096608ba53eb84badd61552ae2252cd3",
  "sources_dirty": false
 }
