@@ -12,6 +12,7 @@ Judge-approved PRs stuck under a `loom:operator` merge-risk hold — implementat
 - **#594**: fpga: refuse 'routed' from an incomplete nextpnr log (#565)
 - **#624**: Nightly controls: replace blind I2S_SWAP with discriminating serializer bench
 - **#633**: Replace unsatisfiable nightly reference-freshness check (#622)
+- **#650**: feat(#400): production-tail diagnostic for the CY 1-2.5 kHz question (REFUSED/NO VERDICT)
 
 ## Operator Priority
 
@@ -26,23 +27,26 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
+- **#324**: R1 capture inputs: R1-bound references and commands for the physical capture procedure
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
+- **#337**: Sound: mono character — oscillator mixtures, drift, drive/resonance, envelope response; M1A as a phase-aware question
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first
-- **#400**: Cymbal tail: qualify and localize the remaining production-path energy/decay discrepancy
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158)
 - **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
+- **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents)
 - **#593**: [sound] toms: H2..H4 output distortion (LT modulation 14.8x), lead from #558
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
+- **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents)
+_None._
 
 ## PRs Awaiting Review
 
@@ -50,6 +54,7 @@ PRs waiting on Judge (`loom:review-requested`).
 
 - **#595**: [#559] CH/CP: CH hp-Q candidate PROVISIONAL (clean rerun pending, disabled); CP not repairable by tail tunables
 - **#649**: [593] tom distortion: qualification instrument, controls and preregistration
+- **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
 
 ## Approved (Awaiting Merge)
 
@@ -60,6 +65,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#594**: fpga: refuse 'routed' from an incomplete nextpnr log (#565)
 - **#624**: Nightly controls: replace blind I2S_SWAP with discriminating serializer bench
 - **#633**: Replace unsatisfiable nightly reference-freshness check (#622)
+- **#650**: feat(#400): production-tail diagnostic for the CY 1-2.5 kHz question (REFUSED/NO VERDICT)
 
 ## Proposed
 
@@ -96,10 +102,12 @@ Issues carrying `loom:curated`.
 - **#373**: Receipts: require a reuse report whenever the evidence shows a reused run (not only when the recorded command asks) *(curated)*
 - **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first *(curated)*
 - **#400**: Cymbal tail: qualify and localize the remaining production-path energy/decay discrepancy *(curated)*
+- **#413**: Cymbal knob-law render: kit_at is not the instrument, and its blocker was tracked by a merged PR *(curated)*
 - **#502**: A Builder cannot re-bind the attack-context evidence: workflow_dispatch is 403 for the agent token *(curated)*
 - **#510**: Ship the cymbal DC coupling: register contract, RTL, and the I2S carry-through #165 did not trigger *(curated)*
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158) *(curated)*
 - **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader *(curated)*
+- **#552**: Cymbal DC coupling 2/3: RTL shared-bus stage, drum_regs decoder, host init, bit-exact bench with mutants (#510) *(curated)*
 - **#556**: [sound] MA and RS: noise-voice centroid and flatness trajectories fail the gate (35.5x, 20.6x; 9.0x and 7.9x farther than real MARS takes) *(curated)*
 - **#557**: [sound] BD: missing pitch drop (pitch_shape 22.2x; about 230 cents) *(curated)*
 - **#558**: [sound] toms and congas: pitch trajectory and strike impulse fail the gate (MC 19.4x, LC 16.4x, LT 14.8x, MT 10.5x, HC 8.7x, HT 8.0x) *(curated)*
@@ -111,6 +119,7 @@ Issues carrying `loom:curated`.
 - **#619**: Nightly controls requires I2S_SWAP detection despite declared blind timing *(curated)*
 - **#622**: Nightly reference-freshness gate is unsatisfiable: tests a docs path that has never existed *(curated)*
 - **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(curated)*
+- **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -129,13 +138,13 @@ Issues carrying `loom:curated`.
 
 | Tier | Count |
 |------|-------|
-| Operator merge-risk holds | 5 |
+| Operator merge-risk holds | 6 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 14 |
-| In Progress (`loom:building`) | 1 |
-| PRs awaiting review | 2 |
-| Approved PRs awaiting merge | 5 |
-| Curated | 46 |
+| Ready (`loom:issue`) | 17 |
+| In Progress (`loom:building`) | 0 |
+| PRs awaiting review | 3 |
+| Approved PRs awaiting merge | 6 |
+| Curated | 49 |
 | Architect / Hermit proposals | 5 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->

@@ -2,6 +2,14 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-12
+
+Closure events below record forge state, not a verified fix or a new sound result.
+
+- **PR #655**: Cymbal knob-law render: kit_at delegates to the shipped constructor (#413)
+- **Issue #618** (closed): Output-stage floor quantisation: does `>> 15` leave a standing sub-LSB bias and explain H_CH2's bound overshoot?
+- **PR #653**: probe: measure output-stage floor quantisation against an exact round-half-even oracle
+
 ### 2026-10-11
 
 Closure events below record forge state, not a verified fix or a new sound result.
