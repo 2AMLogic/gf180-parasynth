@@ -1,0 +1,13 @@
+# START RED, #552. Bypass RTL (drum_kit.v with the stage not built; couple_en port unused) vs enabled model stream.
+# base 6e3db76 Icarus Verilog version 13.0 (stable) (v13_0)
+# python3 rtl-sketch/verify_drums.py --short --outdir /tmp/vd-red
+verify_drums: model DrumsFx(18 envelopes, 23 paths, bank 16 modes / 11 with numerators, headroom 0, 19-bit body word)
+  coupling coverage (model): 67257 of 73178 frames differ from the bypass on the mix bus, 70729 on the body bus; charge needed 26/27 bits (limit 32/29), output 18/20 bits (limit 23/20)
+  73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+  model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+verify_drums: simulating drum_kit.v
+  sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 117 worst 117 (tick to body_valid)
+verify_drums: FAIL -- 137986 of 146356 samples differ (0 undefined/X)
+  first mismatch at sample 22: model 1964, RTL 1965, error +1 LSB
+  worst |error| 48993 LSB; error RMS 3504.0 LSB vs signal RMS 32924.2 LSB (-19.5 dB)
+# exit=1

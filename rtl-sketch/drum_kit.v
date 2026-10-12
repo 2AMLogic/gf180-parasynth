@@ -37,9 +37,10 @@ module drum_kit #(
     input  wire [MODES*(CF+2)-1:0] a2_bus,
     input  wire [MODES*16-1:0]     amp_bus,
     input  wire [MODES*2-1:0]      num_bus,
-    output wire signed [21:0]      mix_out,
+    input  wire                    couple_en,       // COUPLE bit 0 (15.10)
+    output wire signed [22:0]      mix_out,
     output wire                    mix_valid,
-    output wire signed [OW-1:0]    body_out,
+    output wire signed [OW:0]      body_out,
     output wire                    body_valid
 );
     wire [MW-1:0]        tap_sel;
@@ -47,17 +48,26 @@ module drum_kit #(
     wire                 exc_we, bank_start;
     wire [MW-1:0]        exc_mode;
     wire signed [EW-1:0] exc_val;
+    wire signed [21:0]   raw_mix;
+    wire signed [OW-1:0] raw_body;
+    wire                 mix_valid_raw, body_valid_raw;
 
     drum_dp #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .STOPS(STOPS), .SB(SB), .EW(EW), .MW(MW), .ROM_FILE(ROM_FILE)) src (
         .clk(clk), .rst_n(rst_n), .frame_tick(frame_tick), .stops(stops), .accent_bus(accent_bus),
         .osc_inc_bus(osc_inc_bus), .env_ctl_bus(env_ctl_bus), .env_peak_bus(env_peak_bus),
         .env_rate_bus(env_rate_bus), .env_frate_bus(env_frate_bus), .path_bus(path_bus), .tap_sel(tap_sel), .tap_y1(tap_y1),
         .exc_we(exc_we), .exc_mode(exc_mode), .exc_val(exc_val), .bank_start(bank_start),
-        .mix_out(mix_out), .mix_valid(mix_valid));
+        .mix_out(raw_mix), .mix_valid(mix_valid_raw));
 
     modal_dp #(.MODES(MODES), .NUMS(NUMS), .SB(SB), .CF(CF), .HR(HR), .OW(OW), .EW(EW), .MW(MW)) bank (
         .clk(clk), .rst_n(rst_n), .exc_we(exc_we), .exc_mode(exc_mode), .exc_val(exc_val),
         .sample_valid(bank_start), .a1_bus(a1_bus), .a2_bus(a2_bus), .amp_bus(amp_bus), .num_bus(num_bus),
-        .tap_sel(tap_sel), .tap_y1(tap_y1), .y_out(body_out), .y_valid(body_valid));
+        .tap_sel(tap_sel), .tap_y1(tap_y1), .y_out(raw_body), .y_valid(body_valid_raw));
+
+    // RED STATE (#552): bypass only, the stage not yet built
+    assign mix_out = {raw_mix[21], raw_mix};
+    assign body_out = {raw_body[OW-1], raw_body};
+    assign mix_valid = mix_valid_raw;
+    assign body_valid = body_valid_raw;
 endmodule
 `default_nettype wire
