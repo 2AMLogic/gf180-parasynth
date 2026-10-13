@@ -997,6 +997,21 @@ class Bridge:
                       f"{row.packet.hex()} -> applies f{row.apply_frame}")
         return rows
 
+    @staticmethod
+    def _refuse_unreachable_hold(hold_frames: int, *, rtt_frames: int,
+                                 lead: int, baud: int) -> None:
+        """Plan the gate-off alone against a nominal anchor; a due plan()
+        calls inside the wrap guard becomes Refused (exit 2), not a
+        ValueError traceback."""
+        probe = [("event", max(1, int(hold_frames) - rtt_frames), 0, 0, 0, 0)]
+        try:
+            plan_shifted(probe, baud=baud, start_frame=lead, anchor_frame=0)
+        except ValueError as exc:
+            raise Refused(f"hold_frames {hold_frames} cannot be delivered as "
+                          f"one scheduled note-off: {exc}. The device reasons "
+                          f"about dues within +-{WRAP_HALF} frames; use a "
+                          f"shorter hold") from None
+
     def _run_with_hold(self, commands: list, *, baud: int, quiet: bool,
                        hold_frames: int) -> list:
         """A scheduled note-off anchors to the OBSERVED gate, not a
@@ -1011,6 +1026,15 @@ class Bridge:
         self.origin = origin = anchor.frame
         round_trip = self.status_round_trip_s or 0.0
         self.lead_frames = lead = (MIN_LEAD_FRAMES + int(round_trip * SR) + 1)
+        # REFUSE an unreachable hold before the note-on leaves: a refusal
+        # after it would leave a gate sounding (issue #458). The wrap guard
+        # measures the due from its own acceptance frame, so this verdict is
+        # a function of the hold and the lead, not of the free-running
+        # counter's anchor -- re-anchoring and retrying cannot change it.
+        if hold_frames > 0:
+            self._refuse_unreachable_hold(
+                hold_frames, rtt_frames=int(round_trip * SR),
+                lead=MIN_LEAD_FRAMES + 1, baud=baud)
         mi = next(i for i, c in enumerate(commands) if c[0] == "gate-off")
         live_cmds, markers, rest = commands[:mi], commands[mi], commands[mi + 1:]
         rows_live = plan(live_cmds, baud=baud, start_frame=lead,
@@ -1074,8 +1098,13 @@ class Bridge:
                     print(f"  send f{row.send_frame:<6} {row.kind:<7} "
                           f"{row.packet.hex()} -> applies f{row.apply_frame}")
             return rows
-        rows_ev = plan_shifted(ev_cmds, baud=baud, start_frame=lead2,
-                               anchor_frame=origin2)
+        try:
+            rows_ev = plan_shifted(ev_cmds, baud=baud, start_frame=lead2,
+                                   anchor_frame=origin2)
+        except ValueError as exc:
+            # backstop: the gate is already on, so say so
+            raise Refused(f"the gate-off cannot be planned ({exc}); the "
+                          "note-on was already sent -- run `abort`") from None
         rows = rows_live + rows_ev
         verdict = preflight(rows, baud=baud)
         if verdict["verdict"] != "FEASIBLE":
