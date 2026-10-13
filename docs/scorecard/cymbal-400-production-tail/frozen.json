@@ -1,0 +1,133 @@
+{
+ "bands": {
+  "decay": "cymbal_low_tail.BANDS['M'] 891-2828 Hz vs Ln",
+  "decay_depth_db": -10.0,
+  "energy": "cymbal_mid.MID['M25'] 891-2818 Hz"
+ },
+ "candidate_budget": 0,
+ "candidate_budget_note": "no candidate is rendered or promoted under #400; #369 owns delivery",
+ "confirmation_note": "production cannot render any confirmation setting, so no untouched confirmation exists on this path: a confirmed MECHANISM claim is withheld by construction",
+ "confirmation_settings": [
+  "CY0000",
+  "CY0010",
+  "CY0025",
+  "CY0050",
+  "CY0075",
+  "CY1000",
+  "CY1010",
+  "CY1025",
+  "CY1050",
+  "CY1075",
+  "CY2500",
+  "CY2510",
+  "CY2525",
+  "CY2550",
+  "CY2575",
+  "CY5000",
+  "CY5010",
+  "CY5050",
+  "CY5075",
+  "CY7500",
+  "CY7510",
+  "CY7525",
+  "CY7550",
+  "CY7575"
+ ],
+ "corpus_git_commit": "85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+ "development_settings": [
+  "CY5025"
+ ],
+ "issue": 400,
+ "preservation_set": [
+  "D15A",
+  "D16A",
+  "OH00",
+  "OH10",
+  "OH25",
+  "OH50",
+  "OH75"
+ ],
+ "prod_has_hh1": false,
+ "reference_sha256": {
+  "CY0000.WAV": "02f21af068c08f2024fe279fa935329801dee05954c11f07ece1a83bb9c32d6b",
+  "CY0010.WAV": "5e90c2d127809e66a9d6ccbb41629df877ff7feb105e3f7d6356cc4a83e9a882",
+  "CY0025.WAV": "bdb65b35461ef62f229c1461539c548470a3faf65bd592e5c2a5050c27d4b399",
+  "CY0050.WAV": "f356c7741b0c8afa158d94d2492473a45d05597e11629fe8e5d463ec2df30fdb",
+  "CY0075.WAV": "e8ea77861310eeed2d4619467506d4ef949b98f26790ae76a1aba17a1537b211",
+  "CY1000.WAV": "3f8a1f546869d6a3cefca44c9296c0971163e54e80380fa39501fc44f1079ed7",
+  "CY1010.WAV": "0d49c0a19edda77869d0ad1b3a4a6c583bf37e1260ca2974f5b6ec06029ae7aa",
+  "CY1025.WAV": "f774fde1ff134add25ba429cbd33b7b9e235b089ff00d2846fc5871d954988d5",
+  "CY1050.WAV": "60f377d4f8d3ce61c3e8edb6ac5bc8a060073002dc3585009c955118a9d041fb",
+  "CY1075.WAV": "704cdfc63dbbfc43884ac47b2361b79aea183af872f90d3498eb22646c8d097b",
+  "CY2500.WAV": "479adfc574c065d6c3f6a38e48047ff4885331e782b1bde894bcfc6327b8129b",
+  "CY2510.WAV": "4c314dac351797b5b13a2224b42133d10e477dac55bdbb6ffa2097d2b01eb5e1",
+  "CY2525.WAV": "85079d61861dc1e5bc1ee8dd30cbd1656b776da2670dcfd8028ae9b5408fffd1",
+  "CY2550.WAV": "8006625720c2ec1246bd25c345e2e43f9be59396b07af909f6729e971133b941",
+  "CY2575.WAV": "dddc33ee7a8d030a123cbcdb4b67f57a11b936ee5f5512ab1ecb2a83b3e4e6f9",
+  "CY5000.WAV": "c9c98fb276990086f76d029ad9aebeb1b6911fd11855b04bef9dc35dbd612ea1",
+  "CY5010.WAV": "18d5302e8545e9f7208f4181eb35fc77e37496a3ee85f02e5dd6dc7a5e07b1b7",
+  "CY5025.WAV": "6bec4a9d12d10c93a568bfc9167610f5ffb28aded87413c9c41649ed4af17a1f",
+  "CY5050.WAV": "3aad28641774c1e7a5502f40ec76d1b219192631547e308ce74c6d4a1c5e70a0",
+  "CY5075.WAV": "d1806c3878815fcc3816dcef4ab870c67eb67bf27f2dd140f5c25178749525be",
+  "CY7500.WAV": "98f66cdd15e5118d58046882767a901fede01e1ba8923a55f434e965af7979a5",
+  "CY7510.WAV": "45f735f28f884fdcc3a0479fb58cc618c377295efe48117907811342f9be2424",
+  "CY7525.WAV": "e5a77668f46b1a7c160445f432bb568dc39f98d4c2c1b2f2ace10063e8c6f102",
+  "CY7550.WAV": "ce99385f835cf38f1be8c73e71c9ee57d2451e3901e0ffffaa0a48b5cb23d33c",
+  "CY7575.WAV": "bf173c5c43968f29441a5a16c75dd448cd9420326c05e1c736e2d744f110e8d9"
+ },
+ "source_commit": "6ec5c34a927d77440ef6a54088dcaaa8063b427d",
+ "source_hashes": {
+  "audition/dsp.py": "7bd8e2dcce3934908a3175af0032aabe5031139baf0873bcc2a26f4cfea880fe",
+  "model/audio_measure.py": "9ad2c9f238ba3149e52ae31f12030d7f8208d1914b17bdf2a33cbcb46fba452f",
+  "model/drums_fx.py": "76bf5af0763581c3bf9e602b758253d371fd1eaf4152c1d7360801398eb70970",
+  "model/fixed.py": "eec1c66158a611dc480212de6977d644fddf196331c00ac38f673b24f7f257b3",
+  "model/modal_fixed.py": "d5f642012774db57b3f2bb9b53c242984fdcdd007d2236068f28095d7e818670",
+  "model/voice_fx.py": "a19ef99b338c73e04c5bfd09eef2ba4a938acc11f4372a94874363f92c897e70",
+  "tools/cymbal_bands.py": "5fbc81ca8559c9811df8a7a5c060e9ddf1c66fffbffad7597d0e7624fc5ab6aa",
+  "tools/cymbal_low_tail.py": "05f357f838d9446f0076b80596e5a240aaeedbef48c2529b9bcf2dd342b466e0",
+  "tools/cymbal_mid.py": "5b934c8b564b87a9e86eca09b335069822ae835e088ae180f24df4de64fa9b9e",
+  "tools/preparation_contract.py": "9e7744c72749dc72fc9d9b4d921eb0c989e43c600a4c39603f3783fb303efe6c",
+  "tools/probes/cymbal_400_production_tail.py": "c2392fa67e3cb0d3ec43fe15be9decd255299a61f4ee5b176a16d658a2aab205",
+  "tools/run_case.py": "d30bea05a162b7d29568425b55885a547c02bd47290a3108a90b28b0a629c5cc"
+ },
+ "source_tree": "freeze and measure refuse a working tree with uncommitted changes to tracked files: the render must be attributable to a named, committed state. result.json records the commit that actually executed as measured_at_commit",
+ "stage_isolation": {
+  "ablations_touch": "CY only; D15A/D16A/OH00-OH75 asserted bit-identical before and after",
+  "predictions": [
+   {
+    "claim": "energy deficit persists with the envelope stage bypassed (flat gate)",
+    "if_true": "source or routing, not envelope",
+    "status": "unverified"
+   },
+   {
+    "claim": "decay deficit disappears with the envelope stage bypassed",
+    "if_true": "envelope realization owns the tail",
+    "status": "unverified"
+   },
+   {
+    "claim": "output stage (hard 16-bit rail) contributes < 1 dB; vca-clip/vca-drive already recorded zero saturation events",
+    "status": "inferred"
+   }
+  ],
+  "run_only_if": "energy or decay verdict is DISCREPANT on CY5025 in both windows",
+  "stages": [
+   "source (mode amplitudes/decay)",
+   "band routing / filter realization",
+   "envelope",
+   "output stage"
+  ]
+ },
+ "supported_reason": "run_case.render_drum_solo has no CY knob parameter; D14A anchor only",
+ "supported_settings": [
+  "CY5025"
+ ],
+ "tolerances": {
+  "energy_db": 3.0,
+  "source": "run_case.TOLERANCE_POLICY (imported, not re-chosen)",
+  "time_rel": 0.5
+ },
+ "windows_s": [
+  1.5,
+  2.0
+ ]
+}
