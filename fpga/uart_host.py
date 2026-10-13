@@ -999,13 +999,16 @@ class Bridge:
 
     @staticmethod
     def _refuse_unreachable_hold(hold_frames: int, *, rtt_frames: int,
-                                 lead: int, baud: int) -> None:
-        """Plan the gate-off alone against a nominal anchor; a due plan()
+                                 lead: int, baud: int,
+                                 anchor_frame: int) -> None:
+        """Plan the gate-off alone against the REAL anchor (so an
+        anchor-dependent guard would show here, not be hidden); a due plan()
         calls inside the wrap guard becomes Refused (exit 2), not a
         ValueError traceback."""
         probe = [("event", max(1, int(hold_frames) - rtt_frames), 0, 0, 0, 0)]
         try:
-            plan_shifted(probe, baud=baud, start_frame=lead, anchor_frame=0)
+            plan_shifted(probe, baud=baud, start_frame=lead,
+                         anchor_frame=anchor_frame)
         except ValueError as exc:
             raise Refused(f"hold_frames {hold_frames} cannot be delivered as "
                           f"one scheduled note-off: {exc}. The device reasons "
@@ -1034,7 +1037,7 @@ class Bridge:
         if hold_frames > 0:
             self._refuse_unreachable_hold(
                 hold_frames, rtt_frames=int(round_trip * SR),
-                lead=MIN_LEAD_FRAMES + 1, baud=baud)
+                lead=MIN_LEAD_FRAMES + 1, baud=baud, anchor_frame=origin)
         mi = next(i for i, c in enumerate(commands) if c[0] == "gate-off")
         live_cmds, markers, rest = commands[:mi], commands[mi], commands[mi + 1:]
         rows_live = plan(live_cmds, baud=baud, start_frame=lead,

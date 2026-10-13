@@ -11,7 +11,11 @@ the due's distance from its own acceptance frame, so it is a function of the
 hold and the lead, NOT of where the free-running frame counter happens to
 be. The issue's "intermittent, re-anchor and retry" hypothesis does not
 hold, so no retry loop is built: it would burn round trips on a verdict that
-cannot change. The sweep below is the evidence, and fails if that changes.
+cannot change. The sweep below is the evidence. Its defeating input is
+plan() measuring `rel = due - accept` (anchor-dependent): that only ever ADDS
+the anchor, so the out-of-horizon sweep (48000) stays "refused" under it and
+cannot see it -- the in-horizon sweep (24000) is what goes red, refused/raising
+at the higher anchors. Checked by hand: mutation applied, 24000 case red.
 
 No hardware: the device is fpga/uart_device_sim on simulated time.
 """
@@ -19,6 +23,15 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
+import sys
+
+# self-contained collection: this file imports synth_top_model before
+# uart_host (which is what normally puts model/ on the path), so running it
+# alone used to fail with ModuleNotFoundError
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _sub in ("model", "fpga"):
+    sys.path.insert(0, os.path.join(_ROOT, _sub))
 
 import pytest
 
@@ -68,18 +81,23 @@ def test_main_exits_2_with_reason(capsys):
     assert "REFUSED" in capsys.readouterr().err
 
 
-def test_wrap_guard_does_not_depend_on_the_anchor():
+@pytest.mark.parametrize("hold, expected", [(48000, "refused"),
+                                             (24000, "ran")])
+def test_wrap_guard_does_not_depend_on_the_anchor(hold, expected):
     # the control for "retry would help": sweep the counter across its range
-    # and require an identical verdict at every anchor
+    # and require an identical verdict at every anchor. Both sides are swept:
+    # an anchor-dependent guard (e.g. plan() measuring `due - accept`) only
+    # ever ADDS the anchor, so it cannot flip an out-of-horizon hold to "ran"
+    # -- it shows as the in-horizon hold being refused at a high anchor.
     verdicts = set()
     for epoch in range(0, 1 << 16, 7919):
         br, _sim, _ser = _bridge(epoch_frame=epoch)
         try:
-            _run(br, 48000)
+            _run(br, hold)
             verdicts.add("ran")
         except uh.Refused:
             verdicts.add("refused")
-    assert verdicts == {"refused"}
+    assert verdicts == {expected}
 
 
 def test_in_horizon_hold_still_runs():
