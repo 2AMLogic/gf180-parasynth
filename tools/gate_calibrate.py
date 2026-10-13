@@ -386,6 +386,17 @@ def decide(q: dict, injected_qualified: bool | None) -> dict:
             "unrun": unrun}
 
 
+def injected_outcome(qi: dict | None) -> tuple[bool | None, dict | None]:
+    """The corrupted corpus's qualification as the three outcomes decide() needs:
+    QUALIFIED -> True, a completed NOT QUALIFIED -> False, REFUSED/unrun -> None.
+    Collapsing REFUSED into False would turn a control that could not run into a
+    caught defect. Also returns the injected decision so its reasons are kept."""
+    if not qi:
+        return None, None
+    dec = decide(qi, False)
+    return {"QUALIFIED": True, "NOT QUALIFIED": False}.get(dec["status"]), dec
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -426,9 +437,10 @@ def main(argv=None) -> int:
         qi = qualify(ci, a.refs, ours) if ci.get("k") else None
         # A refusal is not a pass: if the corrupted corpus is refused by the same
         # rule that refused the clean one, the control saw nothing (None, REFUSED).
-        inj = (decide(qi, False)["status"] == "QUALIFIED") if qi else None
+        inj, inj_dec = injected_outcome(qi)
         cal["injected_control"] = {"corrupt": json.loads(a.corrupt_tables.read_text())["corrupt"],
-                                   "calibration_status": ci["status"], "qualified": inj}
+                                   "calibration_status": ci["status"], "qualified": inj,
+                                   "decision": inj_dec}
     q = qualify(cal, a.refs, ours) if cal.get("k") else None
     dec = decide(q, inj) if q else {"status": "REFUSED", "why": cal["status"]}
     if q and cal.get("diagnostic"):
