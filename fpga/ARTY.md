@@ -220,7 +220,9 @@ its predecessor only in the DSP fields and `published_evidence_sha256`, and
 `publish_arty.py <dir> --rederive-dsp` is a fixed point on it. To repeat:
 `python tools/dsp_dpreg_extract.py --box <host> --dcp <routed.dcp> \
 --dcp-sha256 <digest> --drc-rpt <drc.rpt> --evidence <fresh dir>/dsp-dpreg-evidence`,
-then `tools/dsp_dpreg_analyse.py --evidence …` and publish. If a checkpoint
+then `tools/dsp_dpreg_analyse.py --evidence …` and publish. When already on the
+Vivado host, pass `--box local` instead of a hostname: it runs the same steps on
+the box itself via `bash -c` / `cp` instead of `ssh` / `scp`. If a checkpoint
 no longer exists, its flag stays false until a re-implementation is
 extracted.
 
