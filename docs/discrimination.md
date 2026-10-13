@@ -1539,3 +1539,11 @@ two sounds separate by 1.2–1.5× rms; the extra columns append and never
 reorder the original 320; the CV grouping does not move between processes;
 a sound with no knob can produce no knob-equivalent; and a frozen ruler makes
 the two distances commensurate.
+
+> **Reference-freshness snapshots (#622).** The nightly `reference-freshness`
+> job no longer reads this corpus. `docs/reference-compare-results.json` is a
+> frozen historical aggregate (its `ours` rows are a revision-8 anchor) and is
+> preserved untouched. Freshness is checked by `tools/reference_freshness.py`
+> over four separately committed `docs/reference-freshness/response-<device>.json`
+> files; publication instructions are in `docs/reference-freshness/README.md`.
+> It reports commit age only and is not evidence the synth sounds right.
