@@ -55,6 +55,8 @@ def check_claim(claim: dict) -> list[str]:
         second = claim.get("second_route")
         if not second:
             problems.append("negative claim has no second_route")
+        elif not isinstance(second, dict):
+            problems.append("second_route is not an object")
         else:
             env2 = second.get("environment")
             problems += [f"second_route: {p}" for p in check_env(env2)]
