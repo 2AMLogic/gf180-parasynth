@@ -137,6 +137,10 @@ class UartDeviceSim:
         # refuse an unsafe schedule rather than lean on this.
         self.write_frames: list = []
         self.received: list = []                # ("write"|"event"|"status"|"abort", detail)
+        # parallel to `received`: the UNWRAPPED device frame of each receipt
+        # (#479). `received` carries 16-bit frames only; a harness that
+        # unwraps them needs a reference that is not derived from them.
+        self.received_frames: list = []
         self.errors: list = []                  # (code, seq, info)
         self.status_requests = 0
         self.evq_peak = 0                       # most events ever held at once
@@ -266,6 +270,10 @@ class UartDeviceSim:
         data = int.from_bytes(pkt[off + 2:off + 6], "big")
         return flag, sec, addr, data
 
+    def _note_received(self, t: float, entry: tuple) -> None:
+        self.received.append(entry)
+        self.received_frames.append(self._abs_frame_at(t))
+
     def _accept(self, op: int, pkt: bytes, t: float) -> None:
         # the acceptance instant is the LAST BYTE's scheduled completion time
         # on the chronological cursor: baud-true spacing regardless of host or
@@ -274,17 +282,17 @@ class UartDeviceSim:
         # are logged on their scheduled device frames.
         f = self._frame_at(t)
         if op == OP_STATUS:
-            self.received.append(("status", f))
+            self._note_received(t, ("status", f))
             self._status()
         elif op == OP_ABORT:
-            self.received.append(("abort", f))
+            self._note_received(t, ("abort", f))
             self.evq.clear()
             self.wrq.clear()
             self.evq_count = self.wrq_count = 0
             self._ack()
         elif op == OP_WRITE:
             flag, sec, addr, data = self._reg(pkt, 1)
-            self.received.append(("write", (f, addr, data)))
+            self._note_received(t, ("write", (f, addr, data)))
             if self.wrq_count >= self.wrq_depth:
                 self.drops += 1
                 self.flags_sticky |= 0x2
@@ -296,7 +304,7 @@ class UartDeviceSim:
         elif op == OP_EVENT:
             due = pkt[1] | (pkt[2] << 8)
             flag, sec, addr, data = self._reg(pkt, 3)
-            self.received.append(("event", (f, due, addr, data)))
+            self._note_received(t, ("event", (f, due, addr, data)))
             ddiff = (due - f) & 0xFFFF
             due_past = ddiff == 0 or ddiff > 0x7FFF
             out_of_order = (self.evq_count != 0

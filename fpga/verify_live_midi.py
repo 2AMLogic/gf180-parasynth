@@ -77,6 +77,10 @@ import synth_top_model as stm                     # noqa: E402
 import drums_fx as dx                             # noqa: E402
 import voice_fx as vf                             # noqa: E402
 import r1_candidate as r1c                        # noqa: E402
+# ONE unwrap, shared with the rolling-playback verifier (#474, #479): a second
+# copy is how the unchecked 0x8000 assumption survived here.
+from verify_rolling_playback import (             # noqa: E402
+    UNWRAP_GAP_BOUND, UnwrapRefused, _unwrap, _unwrap_offsets)
 from dsp import note_hz, phase_inc                # noqa: E402
 
 SR = C.SR
@@ -712,17 +716,26 @@ def set_revolution(run: dict, anchor) -> None:
     run["revolution"] = 65536 * round(d / 65536)
 
 
-def _unwrap(frames16: list, start: int) -> list:
-    out, prev, acc = [], start & 0xFFFF, start
-    for f in frames16:
-        d = (f - prev) & 0xFFFF
-        acc += d if d < 0x8000 else d - 0x10000
-        prev = f
-        out.append(acc)
+def unwrap_checked(frames16: list, start: int, expected: list, truth: list,
+                   what: str) -> list:
+    """`_unwrap` plus the two checks that make its answer evidence (#479):
+    the EXPECTED schedule's gap bound (raises UnwrapRefused) and agreement,
+    up to one constant offset, with the sim's own unwrapped log `truth`
+    (raises UnwrapRefused on an aliased step, or if the logs disagree in
+    length so nothing can be compared)."""
+    out = _unwrap(frames16, start, expected)
+    if len(truth) != len(out):
+        raise UnwrapRefused(f"{what}: {len(out)} logged frames but the device's "
+                            f"unwrapped log has {len(truth)}; nothing to check against")
+    offs = _unwrap_offsets(out, truth)
+    if len(offs) > 1:
+        raise UnwrapRefused(f"{what}: the frame log unwrapped to {len(offs)} different "
+                            f"offsets {offs} from the device's own unwrapped log: a "
+                            f"write is further than {UNWRAP_GAP_BOUND} frames from the "
+                            f"one before it")
     return out
 
 
-# ---- the checks -----------------------------------------------------------------
 def props_of(timed: list) -> dict:
     """Decompose a timed write stream into the named properties."""
     V_KNOB = {stm.A_CUT_LO, stm.A_CUT_HI, stm.A_K, stm.A_GAIN, stm.A_OGAIN, stm.A_VOL,
@@ -802,7 +815,15 @@ def check(run: dict, *, target: bool = False) -> dict:
                        "refusals": len(exp["refusals"]), "superseded": len(exp["superseded"])}
     live = [w for w in sim.writes if w[5] == "live"]
     evw = [w for w in sim.writes if w[5] == "event"]
-    frames = _unwrap([w[0] for w in evw], anchor[0])
+    ev_i = [i for i, w in enumerate(sim.writes) if w[5] == "event"]
+    try:
+        frames = unwrap_checked([w[0] for w in evw], anchor[0],
+                                [anchor[0]] + [e[0] for e in exp["timed"]],
+                                [sim.write_frames[i] for i in ev_i], "executed writes")
+    except UnwrapRefused as exc:
+        res["preconditions"].append(f"REFUSED: {exc}")
+        res["verdict"] = "NO VERDICT"
+        return res
     got = [(f, w[1], w[2], w[3], w[4] & 0xFFFFFFFF) for f, w in zip(frames, evw)]
     want = exp["timed"]
     end = max([g[0] for g in got] + [w[0] for w in want] + [0]) + 1
@@ -918,7 +939,15 @@ def check(run: dict, *, target: bool = False) -> dict:
     # rest; an anchor with no counterpart has no latency.
     sent = [(t, pkt) for t, data in ser.tx_log for pkt in _packets(data)
             if pkt[0] == dev.OP_EVENT]
-    acc_u = _unwrap([v[0] for k, v in sim.received if k == "event"], anchor[0])
+    rcv_i = [i for i, (k, _v) in enumerate(sim.received) if k == "event"]
+    try:
+        acc_u = unwrap_checked([sim.received[i][1][0] for i in rcv_i], anchor[0],
+                               [anchor[0]] + [truth_frame(run, t) for t, _ in sent],
+                               [sim.received_frames[i] for i in rcv_i], "receipts")
+    except UnwrapRefused as exc:
+        res["preconditions"].append(f"REFUSED: {exc}")
+        res["verdict"] = "NO VERDICT"
+        return res
     pair = {}
     for blk in sm.get_matching_blocks():
         for k in range(blk.size):
