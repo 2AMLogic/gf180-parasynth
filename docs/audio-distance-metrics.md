@@ -14,6 +14,17 @@ measurement path**, and reproducible with:
 #   exit 0
 ```
 
+> **Known stale (#533).** Every `mel_dac` figure below that came from a Fischer
+> file (44.1 kHz; E2, E3, E4, E6, E7, E9) was measured with the filterbank built
+> for 48 kHz, because `distances()` did not pass the sample rate. Measured size
+> on the `bd8/BD5050.WAV` 1-sample floor: 0.011947 (as printed) vs 0.011846
+> (true rate), about 0.9 %; 0.1-0.6 % on the other anchors spot-checked. The
+> code is fixed (`sr` is now a required argument), but **the tables and
+> `audio-distance-metrics-results.json` have NOT been regenerated**: the
+> reference corpus was not on the host that fixed it, so no number here has
+> moved yet. Our own renders (`dx.SR`) were never affected. `mss_*` and
+> `mrstft` columns do not use the mel filterbank and are unaffected.
+
 It was drafted against `c752145` and re-measured in full when #132 landed,
 because #132 changes the `prepare()` this probe depends on. **Every conclusion
 survived; two got stronger.** What changed is in
