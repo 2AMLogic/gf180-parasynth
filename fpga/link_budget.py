@@ -166,6 +166,8 @@ def fixture_demand(bpm: float, bars: int, link: LinkTiming) -> dict:
                 play_lead_frames=max((-p.moved for p in play_early), default=0),
                 worst_move_frames=st["worst_move_frames"],
                 worst_move_us=st["worst_move_frames"] * us(FRAME_PS),
+                bd_window_stretch_frames=st["window_stretch_frames"],
+                bd_window_stretch_us=st["window_stretch_us"],
                 sched=sched, check=st)
 
 

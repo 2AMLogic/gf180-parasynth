@@ -372,6 +372,32 @@ def place(writes: list, link: LinkTiming) -> list:
     return out
 
 
+def window_widths(placed: list) -> list:
+    """Width change of each BD attack window (contract 15.7.1), as
+    (landed width - requested width) in frames, signed: + is a stretched
+    window, - a shortened one. The window is defined by a PAIR (hot, restore)
+    of writes to the same address; each moves independently under spread() and
+    feasible(), so anchor_jitter and worst_move_frames cannot see the width.
+    Pairing is by address then by request order, which stays correct when two
+    windows overlap (every restore sits a constant offset after its hot)."""
+    def nom(p):
+        return p.w.nominal if p.w.nominal >= 0 else p.w.frame
+    out = []
+    by = {}
+    for p in placed:
+        if p.w.tag in ("bd-attack-hot", "bd-attack-restore"):
+            by.setdefault((p.w.tag, p.w.addr), []).append(p)
+    for (tag, addr), hots in sorted(by.items()):
+        if tag != "bd-attack-hot":
+            continue
+        rests = by.get(("bd-attack-restore", addr), [])
+        hots = sorted(hots, key=nom)
+        rests = sorted(rests, key=nom)
+        for h, r in zip(hots, rests):
+            out.append((r.land - h.land) - (nom(r) - nom(h)))
+    return out
+
+
 def check(placed: list) -> dict:
     """What the schedule actually achieved, in absolute units. `conflicts` is
     the only fatal one: an anchor that did not land in the frame the scheduler
@@ -382,7 +408,14 @@ def check(placed: list) -> dict:
     slipped = [p for p in placed if p.slip != 0]
     moved = [p for p in placed if p.moved]
     jitter = [p for p in placed if p.w.anchor and p.moved]
-    return dict(n=len(placed),
+    widths = window_widths(placed)
+    stretched = [d for d in widths if d]
+    worst = max(stretched, key=abs, default=0)
+    return dict(window_pairs=len(widths),
+                window_stretch=len(stretched),
+                window_stretch_frames=worst,        # signed: + wider, - narrower
+                window_stretch_us=worst * FRAME_PS / 1e6,
+                n=len(placed),
                 conflicts=conflicts,
                 slipped=len(slipped),
                 moved=len(moved),

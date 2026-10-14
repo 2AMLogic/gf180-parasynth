@@ -134,6 +134,10 @@ def main(argv=None) -> int:
         print(f"play: {st['anchor_jitter']} musical instant(s) shared a frame and were "
               f"quantised, by at most {st['anchor_jitter_us']:.1f} us "
               f"(one transaction is the floor)")
+    if st["window_stretch"]:
+        print(f"play: {st['window_stretch']} BD attack-window write(s) changed width, "
+              f"worst {st['window_stretch_frames']:+d} frames "
+              f"({st['window_stretch_us']:+.1f} us) vs the 192-frame request")
 
     x = stm.SynthTopModel(oversample_2x=bool(a.preset), filter_2x=bool(a.preset)).run(
         sh.model_writes(sched), n)["sample"].astype(np.int16)
