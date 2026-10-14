@@ -1,6 +1,6 @@
 {
   "loom_version": "0.19.1154",
-  "loom_commit": "26203ed6548af5c5c4b884e83a706a483ccbe8a1",
+  "loom_commit": "9086c5eb90893212b418186a85216681fe12376c",
   "install_date": "2026-09-24",
   "loom_source_remote": "https://github.com/rjwalters/loom.git",
   "installed_files": [
@@ -690,7 +690,10 @@
     ".loom/scripts/tests/test-approval-history-per-issue-events.sh",
     ".agents/skills/loom-judge-reference/SKILL.md",
     ".loom/docs/trace-identity.md",
-    ".loom/hooks/presence-beat.sh"
+    ".loom/hooks/presence-beat.sh",
+    ".loom/scripts/tests/fixtures/config_resolver/.loom-local/fleet-repo.json",
+    ".loom/hooks/tests/test-guard-loom-workspace.sh",
+    ".loom/scripts/tests/lib/assert.sh"
   ],
   "last_resync": "2026-10-14",
   "requires_daemon": "0.19.1081"
