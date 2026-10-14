@@ -823,6 +823,7 @@ class MidiSession:
         stop = dx.STOP_NAMES.index(stop_name)
         accent = 0.6 + 0.8 * (vel - 1) / 126.0
         image = dict(self.mh.image)
+        nominal = dict(self.mh.nominal)    # #598: a refusal rolls back BOTH
         position = dict(self.position)
         n0 = len(self.mh.w)
         cut = []
@@ -851,8 +852,13 @@ class MidiSession:
                 if a in dirty or self.mh.image.get(a) != v:
                     self.mh.drum(0, a, other[a] if "WRONG_ALT" in self.inject else v,
                                  tag="select")
-                    self.mh.image[a] = v     # the control's bookkeeping stays right, so
-                                             # every later packet pairs with the schedule
+                    # the control's bookkeeping stays right, so every later
+                    # packet pairs with the schedule. Both halves of the host's
+                    # state (#598): a select is the musician's tuning, so it is
+                    # never transient, and setting only `image` here would split
+                    # them silently if its tag ever became exempt.
+                    assert "select" not in self.mh.NOMINAL_EXEMPT_TAGS
+                    self.mh.image[a] = self.mh.nominal[a] = v
             self.position[stop_name] = name
         self.mh.hits([(0, stop, accent)])
         new = self.mh.w[n0:]
@@ -863,6 +869,8 @@ class MidiSession:
         new = self._schedule("hit", t, head, tail, conditional=True)
         if new is None:
             self.mh.image = image
+            if "IMAGE_ONLY_ROLLBACK" not in self.inject:
+                self.mh.nominal = nominal          # the injected defect skips this
             self.position = position
             self._uncut(cut)
             return self._refuse(t, m, "queue-pressure", f"{name}: the link cannot deliver "

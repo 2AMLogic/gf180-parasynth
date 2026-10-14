@@ -426,11 +426,26 @@ class MusicHost:
     silently undo a DECAY knob (the fault that record already had to be fixed
     for). A host that does not track its image cannot do the attack window."""
 
+    # Timed coefficient writes the HOST generates (15.7.1). They are device
+    # state -- the image holds them -- but they are not the musician's tuning,
+    # so they never enter `nominal` (#598: a completed tom bend ends at
+    # f0*(1+excess*e^-3), and reading that back as the next hit's tuning made
+    # nominal pitch walk).
+    TRANSIENT_DRUM_TAGS = frozenset({"tom-bend", "bd-attack-hot", "bd-attack-restore"})
+    NOMINAL_EXEMPT_TAGS = TRANSIENT_DRUM_TAGS
+    # Drum writes that ARE the musician's tuning (or plain device state the
+    # nominal may carry). Every SEC_DRUM tag must be in exactly one of these two
+    # sets: `_put` refuses an unclassified tag, so a new generated transient
+    # cannot silently become nominal by being left off the exempt list.
+    NOMINAL_DRUM_TAGS = frozenset({"kit", "accent", "stops-on", "stops-off",
+                                   "knob-decay", "select", "retune"})
+
     def __init__(self, patch: dict = None, kit: list = None, *, stop_hold: int = 2,
                  coef_seq: bool = True, keyhost: vf.KeyHost = None):
         self.regs = dict(patch or vf.VoiceFx.patch_regs())
         self.kit = list(kit if kit is not None else dx.kit_808())
-        self.image = dict(self.kit)                # SEC = 1 register image
+        self.image = dict(self.kit)                # SEC = 1 register image (device state)
+        self.nominal = dict(self.kit)              # the musician's tuning: no transients
         self.stop_hold = int(stop_hold)            # frames a stop bit is held high
         self.coef_seq = bool(coef_seq)
         self.host = keyhost or vf.KeyHost()
@@ -441,10 +456,18 @@ class MusicHost:
 
     # -- primitives
     def _put(self, frame, flag, sec, addr, data, tag="", anchor=False):
+        # classify BEFORE mutating: a refused write must leave no trace in the
+        # list `schedule()` lays out, nor in image/nominal
+        if sec == SEC_DRUM and (tag not in self.TRANSIENT_DRUM_TAGS
+                                and tag not in self.NOMINAL_DRUM_TAGS):
+            raise ValueError(f"drum write tag {tag!r} is neither transient nor "
+                             "nominal: classify it in MusicHost (#598)")
         self.w.append(Write(int(frame), int(flag) & 1, int(sec), int(addr) & 0xFF,
                             int(data) & 0xFFFFFFFF, tag, anchor))
         if sec == SEC_DRUM:
             self.image[int(addr) & 0xFF] = int(data) & 0xFFFFFFFF
+            if tag not in self.NOMINAL_EXEMPT_TAGS:
+                self.nominal[int(addr) & 0xFF] = int(data) & 0xFFFFFFFF
 
     def voice(self, frame, addr, data, *, flag=0, tag="", anchor=False):
         self._put(frame, flag, SEC_VOICE, addr, data, tag, anchor)
@@ -547,12 +570,13 @@ class MusicHost:
 
     def _mode_pair(self, mode: int) -> list:
         base = dx.A_MODE + mode * dx.MODE_STRIDE
-        return [self.image.get(base, 0), self.image.get(base + 1, 0)]
+        return [self.nominal.get(base, 0), self.nominal.get(base + 1, 0)]
 
     def _bd_window(self, frame: int):
         """Contract 15.7.1, first bullet. FOUR writes: the resonator up to
         130 Hz / Q 6 at the hit and back 192 frames (4 ms) later, to whatever
-        the image holds -- NOT to a recomputed preset."""
+        the NOMINAL tuning holds (retunes and knobs included, an earlier window's
+        own transient writes excluded) -- NOT to a recomputed preset."""
         seq = dx.bd_attack_writes(frame, self._mode_pair(dx.M_BD))
         for i, (f, a, v) in enumerate(seq):
             self.drum(f, a, v, tag="bd-attack-hot" if f == frame else "bd-attack-restore")
@@ -561,13 +585,13 @@ class MusicHost:
 
     def _tom_bend(self, frame: int, mode: int, accent: float):
         """Contract 15.7.1, second bullet. (TOM_DROP_STEPS + 1) x 2 writes over
-        60 ms, read out of the IMAGE so a retuned tom or a conga sweeps from
+        60 ms, read out of the NOMINAL tuning so a retuned tom or a conga sweeps from
         where it actually sits -- which now matters twice over, because the
         measured law depends on the TUNING pot as well as the accent. Sent as
         the model specifies it: this verifies the path, not the value."""
         a1, a2 = self._mode_pair(mode)
         f0, q = dx.poles_from_regs(a1, a2)
-        amp = self.image.get(dx.A_MODE + mode * dx.MODE_STRIDE + 2, 0) / float(1 << 15)
+        amp = self.nominal.get(dx.A_MODE + mode * dx.MODE_STRIDE + 2, 0) / float(1 << 15)
         seq = dx.tom_pitch_drop_writes(frame, mode, f0, q, amp, accent)
         for f, a, v in seq:
             self.drum(f, a, v, tag="tom-bend")
@@ -642,6 +666,10 @@ class LiveMusicHost(MusicHost):
     that an unbounded input stream has finite latency.
     """
     MAX_LIVE_LATENCY_FRAMES = 512
+    # A rebuild replays every event from the boot image, so the register state
+    # must be replayed from the boot image too (#598). Off only in the
+    # injected control that reinstates the leak.
+    RESET_STATE_ON_REMATERIALIZE = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -676,6 +704,14 @@ class LiveMusicHost(MusicHost):
         if self._live_materialized:
             return
         self.w = list(self._live_base_w)
+        if self.RESET_STATE_ON_REMATERIALIZE:
+            self.image = dict(self.kit)
+            self.nominal = dict(self.kit)
+            for x in self.w:
+                if x.sec == SEC_DRUM:
+                    self.image[x.addr] = x.data
+                    if x.tag not in self.NOMINAL_EXEMPT_TAGS:
+                        self.nominal[x.addr] = x.data
         # KeyHost is stateful across the phrase, so hand it one canonical
         # stream.  Drum image changes are applied bucket by bucket below.
         keys = sorted((e[0], e[1], *e[2]) for e in self._live_events
