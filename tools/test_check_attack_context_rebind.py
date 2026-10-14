@@ -78,6 +78,38 @@ def test_injected_defect_refused(tmp_path, name, edit, report_edit, reason):
         chk.check(*staged(tmp_path, edit, report_edit))
 
 
+def _set_rows(rows):
+    return lambda r: r.update(rows=rows)
+
+
+@pytest.mark.parametrize("name,edit,report_edit,reason", [
+    ("row-missing-audio", lambda i: i.update(model_audio_files=1,
+                                             model_wavs_byte_identical_across_rebind=1),
+     _set_rows([{"sha256": "a"}]), "lacks a string 'audio'"),
+    ("row-not-dict", lambda i: i.update(model_audio_files=1,
+                                        model_wavs_byte_identical_across_rebind=1),
+     _set_rows(["x.wav"]), "lacks a string 'audio'"),
+    ("row-audio-not-str", lambda i: i.update(model_audio_files=1,
+                                             model_wavs_byte_identical_across_rebind=1),
+     _set_rows([{"audio": 7, "sha256": "a"}]), "lacks a string 'audio'"),
+    ("rows-not-list", None, _set_rows({"a": 1}), "rows is not a list"),
+    ("rows-string", None, _set_rows("abc"), "rows is not a list"),
+    ("produced-by-not-dict", lambda i: i.update(produced_by="me"), None,
+     "produced_by is not an object"),
+])
+def test_malformed_shape_refused_not_crashed(tmp_path, name, edit, report_edit, reason):
+    with pytest.raises(ValueError, match=reason):
+        chk.check(*staged(tmp_path, edit, report_edit))
+
+
+@pytest.mark.parametrize("which", ["ci-import.json", "report.json"])
+def test_non_object_top_level_refused(tmp_path, which):
+    imp, rep = staged(tmp_path)
+    (tmp_path / which).write_text("[1, 2]")
+    with pytest.raises(ValueError, match="is not a JSON object"):
+        chk.check(imp, rep)
+
+
 def test_wav_on_disk_differs_refused(tmp_path):
     imp, rep = staged(tmp_path)
     victim = sorted(tmp_path.glob("*.wav"))[0]

@@ -6,7 +6,7 @@ a declaration that the re-render was byte-identical; without it the tool refuses
 rather than reporting.  The declaration is a claim in the record: this tool
 checks that it is present and consistent (its count equals the report's rows,
 and the WAVs on disk match the report's digests), not that an earlier render's
-bytes equalled these.  A missing or unreadable input is REFUSED, not a crash.
+bytes equalled these.  A missing, unreadable or malformed (wrong-shaped) input is REFUSED, not a crash.
 This does not replace verify_attack_context_model.py (content); it checks
 provenance (who produced it, and what supports it).
 """
@@ -26,11 +26,14 @@ RUN_URL = re.compile(r"^https://github\.com/2AMLogic/gf180-parasynth/actions/run
 
 def _load(path: Path) -> dict:
     try:
-        return json.loads(path.read_text())
+        data = json.loads(path.read_text())
     except OSError as e:
         raise ValueError(f"cannot read input {path}: {e.strerror or e}") from e
     except json.JSONDecodeError as e:
         raise ValueError(f"input {path} is not valid JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError(f"input {path} is not a JSON object")
+    return data
 
 
 def check(ci_import: Path, report: Path) -> str:
@@ -48,6 +51,8 @@ def check(ci_import: Path, report: Path) -> str:
             raise ValueError(f"workflow_url is not an Actions run URL of this repository: {url!r}")
         return "OK-CI"
     produced = imp.get("produced_by") or {}
+    if not isinstance(produced, dict):
+        raise ValueError("produced_by is not an object")
     for key in ("host", "command", "why_not_ci"):
         if not produced.get(key):
             raise ValueError(f"locally produced re-bind lacks produced_by.{key}")
@@ -56,9 +61,13 @@ def check(ci_import: Path, report: Path) -> str:
         raise ValueError("locally produced re-bind lacks byte-identical WAV evidence "
                          "(model_wavs_byte_identical_across_rebind must equal model_audio_files)")
     rows = rep.get("rows") or []
+    if not isinstance(rows, list):
+        raise ValueError("report rows is not a list")
     if total != len(rows):
         raise ValueError(f"model_audio_files={total} does not match the report's {len(rows)} rows")
     for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("audio"), str):
+            raise ValueError(f"report row lacks a string 'audio' field: {row!r}")
         wav = report.parent / Path(row["audio"]).name
         try:
             digest = hashlib.sha256(wav.read_bytes()).hexdigest()
