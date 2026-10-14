@@ -319,8 +319,8 @@ def _stalled_bridge(stall_s, *, freeze=False):
     counter) -- the control."""
     h = vrp.Harness()
     br = uh.Bridge.on_serial(h.ser, clock=h.clock)
-    real_status, real_send, real_wait = br.status, br.send, br.wait_until
-    st = {"armed": False, "done": False, "sent": False}
+    real_status, real_send = br.status, br.send
+    st = {"armed": False, "done": False, "sent": False, "last_frame": 0}
 
     def send(rows, *a, **kw):
         out = real_send(rows, *a, **kw)
@@ -328,14 +328,6 @@ def _stalled_bridge(stall_s, *, freeze=False):
         # `_roll_events` unwraps (send -> loop -> status)
         if not st["done"] and any(r.kind == "event" for r in rows):
             st["sent"] = True
-            st["armed"] = not freeze
-        return out
-
-    def wait_until(*a, **kw):
-        out = real_wait(*a, **kw)
-        # a frozen counter is only read by the unwrap guard when the loop
-        # comes back from a device wait with a window already sent
-        if freeze and st["sent"] and not st["done"]:
             st["armed"] = True
         return out
 
@@ -343,11 +335,14 @@ def _stalled_bridge(stall_s, *, freeze=False):
         if st["armed"] and not st["done"]:
             st["done"] = True
             if freeze:
-                h.sim.frame_freeze_t = h.clock.t
+                # stopped as of the previous STATUS answer: no step at all
+                h.sim.frame_freeze_t = (h.sim._t0 + (st["last_frame"]
+                                        - 1 - h.sim.epoch + 0.25) / uh.SR)  # STATUS reports audio+1
             h.clock.t += stall_s
-        return real_status(*a, **kw)
+        out = real_status(*a, **kw)
+        st["last_frame"] = out.frame
+        return out
     br.send = send
-    br.wait_until = wait_until
     br.status = status
     return h, br
 
@@ -371,6 +366,12 @@ def test_a_stall_past_the_horizon_reads_a_second_status_and_says_so():
     # the sim is truthful: the second read shows the counter moving, so the
     # device is NOT stopped, and the message says that is the evidence used
     assert "second STATUS" in msg and "advanced" in msg
+
+
+@pytest.mark.parametrize("frames", [0x8000 + 200, 0xFFFF - 200])
+def test_a_stall_just_above_the_horizon_and_just_below_the_alias(frames):
+    msg = _roll_with_stall(frames / uh.SR)
+    assert "host latency" in msg and "second STATUS" in msg
 
 
 def test_a_stall_aliasing_to_a_small_positive_step_refuses():
