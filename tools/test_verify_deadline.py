@@ -217,6 +217,82 @@ def _capture(tmp_path, record, scenario="stress-saw"):
     return files
 
 
+# ---- the capture is bound to the RTL that ran it, too (#452) ------------------------
+# A hash pin is an INTERNAL-CONSISTENCY check: it shows schedule-relevant RTL
+# changed, not that the schedule moved (external grounding: #453).
+def _tree_with(tmp_path, monkeypatch, name, edit):
+    """A copy of rtl-sketch (symlinks, except `name`, edited by `edit`) as the tree."""
+    d = tmp_path / "tree"; d.mkdir()
+    for f in os.listdir(vd.HERE):
+        if os.path.isfile(os.path.join(vd.HERE, f)) and f != name:
+            os.symlink(os.path.join(vd.HERE, f), d / f)
+    (d / name).write_text(edit(open(os.path.join(vd.HERE, name)).read()))
+    monkeypatch.setattr(vd, "HERE", str(d))
+    (tmp_path / "c").mkdir()
+    return tmp_path / "c"
+
+
+def test_a_schedule_moving_voice_edit_is_refused_as_this_trees_evidence(tmp_path, monkeypatch):
+    """The control: the late:N mutant applied to the tree's voice_dp.v."""
+    mutated = open(os.path.join(vd.make_mutant("late:37", str(tmp_path / "m")), "voice_dp.v")).read()
+    cdir = _tree_with(tmp_path, monkeypatch, "voice_dp.v", lambda _: mutated)
+    assert "MUTANT late" in open(os.path.join(vd.HERE, "voice_dp.v")).read()      # it landed
+    with pytest.raises(AssertionError, match="not driven by this tree") as e:
+        _capture(cdir, CLEAN)
+    assert "voice_dp.v" in str(e.value) and "Re-run the monitor" in str(e.value)
+
+
+def test_an_edit_outside_the_schedule_set_leaves_the_capture_admitted(tmp_path, monkeypatch):
+    assert "i2s_tx.v" not in vd.SCHEDULE_RTL and "tb_top_bx.v" not in vd.SCHEDULE_RTL
+    cdir = _tree_with(tmp_path, monkeypatch, "i2s_tx.v", lambda t: t + "\n// edited\n")
+    assert _capture(cdir, CLEAN)["binding"] in ("identical", "drum-values")
+
+
+def test_a_comment_only_edit_to_a_named_file_is_refused_with_the_rerun_instruction(tmp_path, monkeypatch):
+    cdir = _tree_with(tmp_path, monkeypatch, "synth_top.v", lambda t: t + "\n// comment\n")
+    with pytest.raises(AssertionError, match="Re-run the monitor"):
+        _capture(cdir, CLEAN)
+
+
+def test_the_rtl_binding_refuses_when_it_has_nothing_to_compare(monkeypatch):
+    import json
+    rec = json.load(open(os.path.join(RUNS, CLEAN + ".json")))
+    assert vd.rtl_binding(rec) == []                                  # the committed pair agrees today
+    with monkeypatch.context() as m:
+        m.setattr(vd, "SCHEDULE_RTL", {})
+        assert "empty" in vd.rtl_binding(rec)[0]                       # emptied set: not a vacuous pass
+    for bad in (None, {}, {"provenance": {}}, {"provenance": {"files": {}}}, {"provenance": None}):
+        assert vd.rtl_binding(bad), bad
+    dropped = json.loads(json.dumps(rec)); del dropped["provenance"]["files"]["voice_dp.v"]
+    assert "voice_dp.v" in vd.rtl_binding(dropped)[0]                  # named file absent from the record
+    cmds = vd.SPI_SCENARIOS["stress-saw"](False)[0]
+    assert vd.stimulus_binding(cmds, cmds, record=None)[0] == "refused"   # even an identical stimulus
+
+
+def test_the_schedule_set_contains_the_drum_argument_files_and_exists_in_the_record():
+    import json
+    assert set(vd.DRUM_LATENCY_ARGUED_AT) <= set(vd.SCHEDULE_RTL)
+    assert all(vd.SCHEDULE_RTL.values())                               # a reason per file
+    rec = json.load(open(os.path.join(RUNS, CLEAN + ".json")))
+    assert set(vd.SCHEDULE_RTL) <= set(rec["provenance"]["files"])
+
+
+def test_the_known_drift_waiver_is_exactly_the_current_drift_and_nothing_wider():
+    """The waiver must not outlive its drift (a re-capture should delete it) and
+    must not cover a further edit: it is an exact (record, tree) hash pair."""
+    import json
+    rec = json.load(open(os.path.join(RUNS, CLEAN + ".json")))["provenance"]["files"]
+    tree = vd.schedule_rtl_hashes()
+    actual = {n: (rec[n], tree[n]) for n in vd.SCHEDULE_RTL if rec[n] != tree[n]}
+    assert actual == vd.KNOWN_RTL_DRIFT, "re-capture, or update/delete the waiver"
+    # a further edit to a waived file is refused, as is a different record hash
+    r = {"provenance": {"files": dict(rec)}}
+    assert vd.rtl_binding(r, dict(tree)) == []
+    assert vd.rtl_binding(r, dict(tree, **{"voice_dp.v": "0" * 12}))
+    r["provenance"]["files"]["voice_dp.v"] = "1" * 12
+    assert vd.rtl_binding(r, dict(tree))
+
+
 def test_the_pre_revision_14_captures_are_history_not_this_trees_stimulus(tmp_path):
     """The control for _capture's precondition: the retained pre-L2 capture is
     refused as this tree's evidence (it stays in the tree, unmodified)."""
@@ -400,8 +476,12 @@ def test_the_relaxation_is_refused_when_its_premise_is_not_asserted(tmp_path, mo
     rows = [dict(r) for r in _committed_sched(CLEAN)]
     assert vd.stimulus_binding(cur, new, sched_rows=rows, record=rec)[0] == "drum-values"
     bad_rec = json.loads(json.dumps(rec)); bad_rec["provenance"]["files"]["modal_dp.v"] = "0" * 12
-    kind, why = vd.stimulus_binding(cur, new, sched_rows=rows, record=bad_rec)
+    # the RTL binding (#452) would refuse this record first; agree with it on the
+    # tree side so THIS test still exercises the drum relaxation's own precondition
+    agree = dict(vd.schedule_rtl_hashes(), **{"modal_dp.v": "0" * 12})
+    kind, why = vd.stimulus_binding(cur, new, sched_rows=rows, record=bad_rec, tree_rtl=agree)
     assert kind == "refused" and "run record" in why[0]
+    assert vd.stimulus_binding(cur, new, sched_rows=rows, record=bad_rec)[0] == "refused"
     rows[700]["d_last"] += 1
     kind, why = vd.stimulus_binding(cur, new, sched_rows=rows, record=rec)
     assert kind == "refused" and "drum busy windows" in why[0]
