@@ -303,3 +303,146 @@ def test_frozen_device_refuses_rather_than_retimes():
     assert h.sim.status_requests > 0 and not h.sim.errors
     fired = [w for w in h.sim.writes if w[5] == "event"]
     assert 0 < len(fired) < len(vrp.intended("bar808-full")["timed"])
+
+
+# ---- #459: host latency is not a stopped device clock --------------------------
+# The 16-bit unwrap reads a step >= 0x8000 frames (0.683 s at 48 kHz) as
+# NEGATIVE, so a slow HOST round trip used to be reported as "the device's
+# frame counter did not advance" -- a correct device blamed for the host.
+# A step of 0x10000 + k aliases to a small positive k and was accepted.
+# The stall below is injected on the host's wall clock (the same SimClock
+# the simulated device counts frames from), so the device counter is truthful.
+def _stalled_bridge(stall_s, *, freeze=False):
+    """A Bridge whose first STATUS after the first rolling window was sent
+    takes `stall_s` longer, on the injectable clock. With freeze=True the
+    device's audio counter also stops at that moment (a genuinely dead
+    counter) -- the control."""
+    h = vrp.Harness()
+    br = uh.Bridge.on_serial(h.ser, clock=h.clock)
+    real_status, real_send = br.status, br.send
+    st = {"armed": False, "done": False, "sent": False, "last_frame": 0}
+
+    def send(rows, *a, **kw):
+        out = real_send(rows, *a, **kw)
+        # the STATUS right after the first window of events is the anchor
+        # `_roll_events` unwraps (send -> loop -> status)
+        if not st["done"] and any(r.kind == "event" for r in rows):
+            st["sent"] = True
+            st["armed"] = True
+        return out
+
+    def status(*a, **kw):
+        if st["armed"] and not st["done"]:
+            st["done"] = True
+            if freeze:
+                # stopped as of the previous STATUS answer: no step at all
+                h.sim.frame_freeze_t = (h.sim._t0 + (st["last_frame"]
+                                        - 1 - h.sim.epoch + 0.25) / uh.SR)  # STATUS reports audio+1
+            h.clock.t += stall_s
+        out = real_status(*a, **kw)
+        st["last_frame"] = out.frame
+        return out
+    br.send = send
+    br.status = status
+    return h, br
+
+
+def _roll_with_stall(stall_s):
+    h, br = _stalled_bridge(stall_s)
+    with pytest.raises(uh.Refused) as ei:
+        quiet(br.run_rolling, _run_commands("bar808-full"), quiet=True)
+    return str(ei.value)
+
+
+def test_a_host_stall_past_the_unwrap_horizon_is_blamed_on_the_host():
+    msg = _roll_with_stall(0.80)              # 38,400 frames > 0x8000
+    assert "host latency" in msg and "0.683" in msg
+    assert "frame counter did not advance" not in msg
+    assert "ms between anchors" in msg
+
+
+def test_a_stall_past_the_horizon_reads_a_second_status_and_says_so():
+    msg = _roll_with_stall(0.80)
+    # the sim is truthful: the second read shows the counter moving, so the
+    # device is NOT stopped, and the message says that is the evidence used
+    assert "second STATUS" in msg and "advanced" in msg
+
+
+@pytest.mark.parametrize("frames", [0x8000 + 200, 0xFFFF - 200])
+def test_a_stall_just_above_the_horizon_and_just_below_the_alias(frames):
+    msg = _roll_with_stall(frames / uh.SR)
+    assert "host latency" in msg and "second STATUS" in msg
+
+
+def test_a_stall_aliasing_to_a_small_positive_step_refuses():
+    # 1.5 s = 72,000 frames: step mod 0x10000 = 6,464, a plausible progress
+    msg = _roll_with_stall(1.5)
+    assert "0x10000" in msg or "65536" in msg
+    assert "host latency" in msg
+
+
+@pytest.mark.parametrize("frames,must", [
+    (0x8000 - 3000, "no-refusal"), (0x8000 - 1000, "no-refusal"),            # well inside the unwrap: plays
+])
+def test_a_short_stall_does_not_refuse(frames, must):
+    h, br = _stalled_bridge(frames / uh.SR)
+    quiet(br.run_rolling, _run_commands("bar808-full"), quiet=True)
+
+
+def test_exactly_0x10000_frames_between_anchors_refuses():
+    # the alias-to-zero case: the modulo step is 0, indistinguishable from a
+    # stopped counter -- unless the host interval is consulted
+    msg = _roll_with_stall(0x10000 / uh.SR)
+    assert "host latency" in msg
+    assert "frame counter did not advance" not in msg
+
+
+def test_a_counter_that_genuinely_stops_keeps_the_device_wording():
+    # the control: same guard, counter frozen, short host interval
+    h, br = _stalled_bridge(0.0, freeze=True)
+    with pytest.raises(uh.Refused) as ei:
+        quiet(br.run_rolling, _run_commands("bar808-full"), quiet=True)
+    msg = str(ei.value)
+    assert "frame counter did not advance" in msg
+    assert "host latency" not in msg
+
+
+def test_a_gap_just_below_the_ambiguous_band_needs_no_second_status():
+    # 0.60 s = 28,800 frames < 0x8000 - 2048: the host interval cannot
+    # explain a missing step, so the device wording stands without a re-read
+    h, br = _stalled_bridge(0.60, freeze=True)
+    with pytest.raises(uh.Refused) as ei:
+        quiet(br.run_rolling, _run_commands("bar808-full"), quiet=True)
+    assert "frame counter did not advance" in str(ei.value)
+    assert "second STATUS" not in str(ei.value)
+
+
+def test_a_stopped_counter_after_a_long_gap_is_still_the_device():
+    # ambiguous interval AND the second STATUS shows no motion: the device
+    # is stopped, and the message says the second read found that
+    h, br = _stalled_bridge(0.66, freeze=True)
+    with pytest.raises(uh.Refused) as ei:
+        quiet(br.run_rolling, _run_commands("bar808-full"), quiet=True)
+    msg = str(ei.value)
+    assert "frame counter did not advance" in msg
+    assert "second STATUS" in msg and "host latency" not in msg
+
+
+def test_behind_the_anchor_names_host_latency_when_it_is_lateness():
+    ev = [(1000 + 100, ("event", 100, 0, 0, 0x20, 0))]
+    with pytest.raises(ValueError) as ei:
+        uh.rolling_batch(ev, 0, 1142, 50, uh.DEFAULT_BAUD,
+                         prev_origin=1000, anchor_interval_s=0.05)
+    msg = str(ei.value)
+    assert "behind the anchor" in msg
+    assert "42 frames" in msg and "ms" in msg and "host" in msg.lower()
+
+
+def test_behind_the_anchor_without_lateness_is_a_schedule_fault():
+    # due already behind the PREVIOUS anchor: lateness cannot explain it
+    ev = [(900, ("event", 0, 0, 0, 0x20, 0))]
+    with pytest.raises(ValueError) as ei:
+        uh.rolling_batch(ev, 0, 1000, 50, uh.DEFAULT_BAUD,
+                         prev_origin=950, anchor_interval_s=0.05)
+    assert "host" not in str(ei.value).lower()
+    assert "behind the anchor" in str(ei.value)
