@@ -125,15 +125,39 @@ marked on the Arty's silkscreen: the top row is 1–6, and 5 and 6 are GND and
 | JA5 | — | **GND** | common ground |
 | JA6 | — | **VIN** | 3.3 V supply. The breakout accepts 3.3–5 V |
 
-Leave **MCK, DE, FIL, MU, FM** unconnected. Adafruit's pinout page states these
-defaults:
+**Control pins (a precondition of the audio path, not a footnote).** What to do
+with the breakout's control pads depends on which breakout is in use. The
+PCM5102A's control inputs have no internal pull-ups; "leave it unconnected" is
+true only where the board supplies them.
 
-- the PCM5102 generates its own main clock (MCK is optional);
-- de-emphasis "by default it is off";
-- the filter is normal until FIL is pulled high;
-- the outputs are unmuted until MU is pulled low;
-- the format is I2S until FM is pulled high. The design emits standard I2S: MSB
-  on the second BCK after the WSEL edge, WSEL low for left.
+| Breakout | MCK | XSMT / MU (mute) | FMT / FM (format) | FLT / FIL (filter) | DEMP / DE |
+|---|---|---|---|---|---|
+| **Adafruit 6250** (labels MCK, DE, FIL, MU, FM) | leave | leave: onboard pull resistors un-mute | leave: onboard default is I2S | leave | leave |
+| **Generic purple PCM5102** (header SCK BCK DIN LCK GND VIN; control pads or back solder jumpers labelled XSMT, FMT, FLT, DEMP) | leave | **tie to 3.3 V** (L = muted, H = un-muted) | **tie to GND** (L = I2S, H = left-justified) | tie to GND | tie to GND |
+
+On the purple board a floating XSMT reads low and **hard-mutes the DAC while
+every digital check passes**: programming `done 1`, link up, 48 kHz frame
+counter, LRCLK toggling, `drops 0, errs 0`, and
+`fpga/release/held_note_audible.py` decoding an I2S peak of 12,760 LSB, with
+no sound at all (#460; #408 for the hardware). Nothing on the FPGA side can
+detect it. If the purple board has its back solder jumpers closed to the right
+levels, that satisfies this step; check them, do not assume.
+
+**Do not start section 5 until you have written in the session file which
+breakout this is and the level each of XSMT, FMT, FLT and DEMP is held at
+(tied wire or solder jumper).** That is a manual attestation, because no
+bitstream drives or reads these pins: `arty_a7_sd_top` has no port for them,
+`fpga/boards/arty-a7-100-sd.xdc` (plus the shared XDC for DIN) assigns only
+G13, B11, D12, D3, D4 and A11, and the other JA positions are unconstrained.
+Giving the design control of XSMT would need a new output port, an XDC entry
+for a spare JA pin, a disposition for `build_arty_sd.py`'s output-port gate
+(timing class or explicit exception), and a rebuild. The design emits standard
+I2S (MSB on the second BCK after the WSEL edge, WSEL low for left), so FMT must
+be low.
+
+For the Adafruit board the other defaults are: the PCM5102 generates its own
+main clock (MCK is optional); de-emphasis is off; the filter is normal until
+FIL is pulled high.
 
 Nothing goes on Pmod JB. JB is the SPI controller header, and this procedure
 does not use it.

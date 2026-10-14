@@ -379,6 +379,15 @@ below mean **connector positions**, not FPGA package pins.
 | JB4 | C15 | external controller CS_N |
 | JB5 or JB11 | ground | controller ground |
 
+**DAC control pins are part of the wiring.** The PCM5102A's XSMT, FMT, FLT and
+DEMP inputs have no internal pull-ups. Adafruit 6250 supplies them on the
+board, so its MU/FM/FIL/DE pads are left unconnected. A generic purple PCM5102
+breakout does not: tie **XSMT to 3.3 V** (floating = hard mute), **FMT, FLT and
+DEMP to GND** (or confirm its back jumpers do). Omitting this is silent: every
+FPGA-side check passes with no sound (#460). No bitstream drives these pins:
+`arty_a7_sd_top` has no port for them and its XDC leaves the other JA positions
+unconstrained. Procedure: `docs/capture-r0.md` section 3.
+
 Use 3.3 V logic and a common ground. Power off while wiring. The
 [Adafruit breakout](https://www.adafruit.com/product/6250) accepts 3–5 V supply
 and 3.3 V data. Its default I2S configuration needs BCLK, WSEL and DIN, with no
@@ -510,8 +519,9 @@ JA1 (G13) is driven low for SCK, BCK is on JA2 (B11), DIN on JA3 (A11), LCK
 on JA4 (D12), GND on JA5 and VIN on JA6. The published R0/R1 images keep the
 jumper layout in §Wiring (BCK on JA1, LCK on JA2, DIN on JA3), so **do not
 plug the breakout straight into an R0/R1 image**. The power pins line up, so
-nothing is damaged, but the signals are wrong. The breakout's back jumpers
-must set XSMT high (unmuted) and FMT low (I2S).
+nothing is damaged, but the signals are wrong. The breakout's control pins (or back jumpers)
+must set XSMT high (unmuted), FMT low (I2S), and FLT and DEMP low; see
+§Wiring.
 
 **On the bench.** Rebuild with `python fpga/build_arty_sd.py` on a Vivado 2025.1
 host. Load with `openFPGALoader -b arty_a7_100t
