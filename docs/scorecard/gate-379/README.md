@@ -405,10 +405,9 @@ follow-up issues are scoped from both.
 2. The first validation fixture sat at 0.305 against a bar of 0.304 (a fixture rounding error); caught by the
    `VALIDATED` assertion.
 
-**Not done here, and why.** The p dial is not registered in `docs/sensitivity/registry.json`: a record needs a
-fixed-width evidence table and a prediction derived independently of the measurement, and the sweep here is a JSON
-record of a gate-calibration statistic, not a shipped parameter. The sweep is committed (`between.json`) and registering
-it is part of the follow-up if a bar is ever selected.
+**Not done here, and why.** The p dial is not registered in `docs/sensitivity/registry.json`, by an explicit exemption
+(a gate-calibration statistic, not a shipped parameter) whose reason and trigger are stated in
+`docs/sensitivity-sweeps.md`, "What this does not catch". The sweep is committed (`between.json`).
 
 ```sh
 # on the build box; tables from section 8, Fischer at 85fbecf, no MARS audio needed

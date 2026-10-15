@@ -120,6 +120,19 @@ Written down because a gate whose limits are unstated gets trusted past them.
   artefact. If `fpga/reports/mode_sweep.txt` is regenerated with different
   numbers, the gate goes red (the record no longer transcribes it) — which is
   the intended behaviour, but the gate is not what re-synthesised anything.
+- **Calibration-only statistics are exempt, and `p` is the one exemption.**
+  The registry covers parameters that *ship* a value: `evaluate()` compares the
+  shipped constant against the grid, so a statistic with no shipped constant
+  has nothing to compare. The gate-379 `p` dial is such a statistic. It is a
+  float, the calibration is REFUSED, so no value ships, and the sweep over it
+  is the committed `calibration.selection.by_p.<p>.mean_rate` in
+  `docs/scorecard/gate-379/mars-calibration-v2/between.json`. It is therefore
+  not registered, and `tools/sensitivity.py` has no float kind or "no value
+  ships" state (issue #682). **Trigger:** the moment a bar for `p` is selected,
+  `p` ships a value and must be registered in that same PR — the "register when
+  the change is proposed" rule above, applied at the point a value exists.
+  Nothing checks that the exemption lapses; a `p` that ships without a record
+  is the "does not see the argument" case in the first bullet.
 - **It says nothing about correctness.** `docs/verification-rules.md` rule 3:
   a cell count is not evidence that the circuit computes anything.
 - **It does not subsume the per-feature sweep instruments.**
