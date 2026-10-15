@@ -561,6 +561,15 @@ def calibrate_knob(dev, name, want_hz, lo=0.05, hi=0.98, iters=9, res=None):
     return 0.5 * (lo + hi)
 
 
+def _tracking_f_osc(y):
+    """f_osc of one tracking-stage ring: the zero-crossing frequency when it
+    agrees with the spectral peak inside 2 %, the peak otherwise, else None."""
+    e = am.dominant_frequency(y, 20.0, 20000.0, SR)
+    z = am.zero_crossing_frequency(y, SR)
+    return z.value if (z.ok and e.ok and abs(z.value - e.value) / e.value < 0.02) \
+        else (e.value if e.ok else None)
+
+
 def cut_setting_for(dev, name, hz, cache):
     """The control value that commands `hz` on this device, and the Hz we are
     entitled to CALL it -- None where the device states no frequency."""
@@ -636,10 +645,7 @@ def main(argv=None) -> int:
                 for hz in CUTOFFS_HZ:
                     cs, chz = cut_setting_for(dev, name, hz, cache)
                     y = dev.ring(cs, res, seconds=0.8)
-                    e = am.dominant_frequency(y, 20.0, 20000.0, SR)
-                    z = am.zero_crossing_frequency(y, SR)
-                    f = z.value if (z.ok and e.ok and abs(z.value - e.value) / e.value < 0.02) \
-                        else (e.value if e.ok else None)
+                    f = _tracking_f_osc(y)
                     rows.append(dict(device=name, commanded_hz=chz, want_hz=hz,
                                      cut_setting=cs, res=res, f_osc=f,
                                      rms=float(am.rms(y))))

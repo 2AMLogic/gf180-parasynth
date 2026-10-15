@@ -404,6 +404,14 @@ def _qualify_reference_integrity() -> dict:
                 "stdout": run.stdout.strip(), "stderr": run.stderr.strip()}
 
 
+def ring_hz(ring) -> float:
+    """The frequency of a Mini V3 free ring: the dominant spectral line."""
+    e = am.dominant_frequency(ring, 25.0, 15000.0, SR)
+    if not e.ok:
+        raise Refused(f"ring frequency refused: {e.reason}")
+    return float(e.value)
+
+
 def _measure_open_cutoff(repeats: int = 3) -> dict:
     """Measure the max-cutoff knob position by self-oscillation, not its 0..1 label."""
     values = []
