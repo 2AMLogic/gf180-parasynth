@@ -24,7 +24,7 @@ built and bound as the R2 release (r2_release.py, r2-2025.1.json); the
 host selects it by name (`--image r2`).
 
 The record binds what exists: the configuration, the exact compiled sources
-at this tree, how they differ from R1's freeze (exactly EXPECTED_CHANGES), and the
+as frozen at R2_FROZEN_AT (read from git, not the working tree), how they differ from R1's freeze (exactly EXPECTED_CHANGES), and the
 domain rule. The evidence is fpga/reports/r2/summary.json, bound
 by digest. BOUND means the committed record equals a fresh derivation.
 STALE means something moved. R1's records (r1-candidate.json,
@@ -79,47 +79,102 @@ def _rel(p) -> str:
     return str(Path(p).resolve().relative_to(ROOT))
 
 
+TREE = ROOT                                 # the working tree: read for drift only, never bound
+XDC_REL = "fpga/boards/arty-a7-100.xdc"
+
+
+def _frozen_at() -> str:
+    import r2_release
+    return r2_release.R2_FROZEN_AT
+
+
+def _frozen_blob(rel: str, commit: str | None = None) -> bytes:
+    commit = commit or _frozen_at()
+    try:
+        return subprocess.run(["git", "-C", str(ROOT), "show", f"{commit}:{rel}"],
+                              capture_output=True, check=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise Refused(f"cannot read {rel} at {commit[:12]} ({exc}); a shallow clone "
+                      "cannot verify the freeze") from None
+
+
+def _frozen_paths() -> tuple:
+    """(sources, roms) of R2's freeze, listed from git at R2_FROZEN_AT and not
+    from the working tree, so a file ADDED after R2 neither enters the hash nor
+    goes red. Mirrors build_arty.sources()/roms(): the wrapper, the SRCS of
+    rtl-sketch/verify_synth_top.py (as frozen), the UART bridge; every *.hex
+    beside the RTL plus the ones a frozen source's parameter names."""
+    import ast
+    import posixpath
+    import re
+    tree = ast.parse(_frozen_blob("rtl-sketch/verify_synth_top.py").decode())
+    names = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
+                 and any(isinstance(t, ast.Name) and t.id == "SRCS" for t in n.targets))
+    srcs = ["fpga/rtl/arty_a7_top.v"] + [f"rtl-sketch/{n}" for n in names] + \
+           ["rtl-sketch/uart_bridge.v"]
+    ls = subprocess.run(["git", "-C", str(ROOT), "ls-tree", "--name-only", _frozen_at(),
+                         "rtl-sketch/"], capture_output=True, text=True)
+    if ls.returncode:
+        raise Refused(f"cannot list rtl-sketch/ at {_frozen_at()[:12]}")
+    roms = {f for f in ls.stdout.split() if f.endswith(".hex")}
+    for rel in srcs:
+        for name in re.findall(r'parameter \w+\s*=\s*"([^"]+\.hex)"', _frozen_blob(rel).decode()):
+            roms.add(posixpath.normpath(f"rtl-sketch/{name}"))
+    return srcs, sorted(roms)
+
+
 def rtl() -> dict:
+    """R2's compiled sources, ROMs and XDC AS FROZEN: read from git at
+    R2_FROZEN_AT, never from the working tree (as r1_candidate.rtl_identity
+    does for R1). The tree may move on (a post-R2 RTL change) without touching
+    R2's identity; how far it has moved is reported by tree_drift(), not bound."""
     import build_arty as ba
     import r1_candidate as r1c
-    srcs = {_rel(p): sha(p) for p in ba.sources()}
-    roms = {_rel(p): sha(p) for p in ba.roms()}
-    xdc = {_rel(ba.XDC): sha(ba.XDC)}
-    changed = []
-    for rel, h in {**srcs, **roms, **xdc}.items():
-        r = subprocess.run(["git", "-C", str(ROOT), "show", f"{r1c.RTL_FROZEN_AT}:{rel}"],
-                           capture_output=True)
-        if r.returncode:
-            raise Refused(f"cannot read {rel} at R1's freeze {r1c.RTL_FROZEN_AT[:12]}")
-        if hashlib.sha256(r.stdout).hexdigest() != h:
-            changed.append(rel)
+    h = lambda rel: hashlib.sha256(_frozen_blob(rel)).hexdigest()      # noqa: E731
+    src_paths, rom_paths = _frozen_paths()
+    srcs = {rel: h(rel) for rel in src_paths}
+    roms = {rel: h(rel) for rel in rom_paths}
+    xdc = {XDC_REL: h(XDC_REL)}
+    changed = [rel for rel, d in {**srcs, **roms, **xdc}.items()
+               if hashlib.sha256(_frozen_blob(rel, r1c.RTL_FROZEN_AT)).hexdigest() != d]
     unexpected = sorted(set(changed) - set(EXPECTED_CHANGES))
     if unexpected:
-        raise Refused(f"compiled sources differ from R1's freeze beyond R2's stated changes: "
+        raise Refused(f"R2's frozen sources differ from R1's freeze beyond R2's stated changes: "
                       f"{unexpected}")
     missing = sorted(set(EXPECTED_CHANGES) - set(changed))
     if missing:
-        raise Refused(f"R2's stated changes are absent from this tree: {missing}")
-    src = (ROOT / "rtl-sketch/voice_dp.v").read_text()
+        raise Refused(f"R2's stated changes are absent from its freeze: {missing}")
+    src = _frozen_blob("rtl-sketch/voice_dp.v").decode()
     if src.count("if (!blep || (use_osc2x && shape_osc2x)) state <= S_MIX;") != 1:
         raise Refused("voice_dp.v does not hold the skip2xwin S_WIN condition exactly once")
-    pair = (ROOT / "rtl-sketch/polyblep_saw_pair.v").read_text()
+    pair = _frozen_blob("rtl-sketch/polyblep_saw_pair.v").decode()
     if pair.count("localparam signed [15:0] RECT_GAIN_Q15=16'sd24248;") != 1:
         raise Refused("polyblep_saw_pair.v does not hold the 24248 rectangle headroom exactly once")
-    lad = (ROOT / "rtl-sketch/ladder_dp_n.v").read_text()
+    lad = _frozen_blob("rtl-sketch/ladder_dp_n.v").decode()
     if lad.count("xg    <= xg_full[SW+1:0];") != 1 or "reg signed [SW+1:0] xg;" not in lad:
         raise Refused("ladder_dp_n.v does not hold the #354 26-bit xg repair")
     import xdc_bindings as xb
+    xdc_text = _frozen_blob(XDC_REL).decode()
     try:
-        xb.object_queries(ba.XDC.read_text())
+        xb.object_queries(xdc_text)
     except xb.Refused as exc:
         raise Refused(f"the XDC has a query without a required match count: {exc}")
-    if "g_uart\\.u_uart" not in ba.XDC.read_text():
+    if "g_uart\\.u_uart" not in xdc_text:
         raise Refused("the XDC does not hold the #315 UART-RX sync fix")
     return {"configuration": CONFIG, "defines": DEFINES, "part": ba.PART,
             "sources": srcs, "roms": roms, "constraints": xdc,
             "differs_from_r1_freeze": {k: EXPECTED_CHANGES[k] for k in sorted(changed)},
             "r1_freeze": r1c.RTL_FROZEN_AT}
+
+
+def tree_drift(rtl_rec: dict | None = None, tree: Path | None = None) -> list:
+    """Frozen files the WORKING TREE no longer holds (informational: the tree
+    has moved past R2; a post-R2 image is a new record, never this one)."""
+    rtl_rec = rtl_rec or rtl()
+    tree = Path(tree or TREE)
+    frozen = {**rtl_rec["sources"], **rtl_rec["roms"], **rtl_rec["constraints"]}
+    return sorted(rel for rel, want in frozen.items()
+                  if not (tree / rel).is_file() or sha(tree / rel) != want)
 
 
 def domain() -> dict:
@@ -164,9 +219,11 @@ def check(record: Path = RECORD) -> tuple:
     if committed != fresh:
         keys = sorted(k for k in set(committed) | set(fresh) if committed.get(k) != fresh.get(k))
         return "STALE", f"differs from a fresh derivation at {keys}"
+    drift = tree_drift(fresh["rtl"])
+    note = f"; NOTE: working tree has moved past R2 in {drift}" if drift else ""
     return "BOUND", (f"{_rel(record)} equals a fresh derivation (differs from R1's "
                      f"freeze in {list(fresh['rtl']['differs_from_r1_freeze'])}; evidence "
-                     f"{fresh['evidence']['state']})")
+                     f"{fresh['evidence']['state']}){note}")
 
 
 def main(argv=None) -> int:
