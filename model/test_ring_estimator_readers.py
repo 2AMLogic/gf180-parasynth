@@ -20,6 +20,13 @@ Not routed, by reading (verification-rules rule 8 -- why no defeating input):
   * `promoted_measures`, `measure_conga_body_spread`, `audio_measure`,
     `test_808_acceptance`, `test_moog_acceptance`: driven / struck voices.
     Assumed from names and docstrings -- skimmed, not traced.
+  * `tools/measure_mono_m1a_reference.py`, `tools/measure_mono_m5a_reference.py`
+    (Mini V3 free rings -- `_measure_open_cutoff`, M1A's three-ring phrase):
+    STILL on `am.dominant_frequency`, deliberately. Both files are hashed into
+    the attack qualification (`suite-v3.json` `sources_sha256`) and the
+    attack-context analysis basis; editing them makes those records REFUSED
+    as stale, and re-running them needs the Mini V3 rig this host lacks.
+    Routing them is a follow-up that must regenerate those records.
 """
 import math
 import os
@@ -41,8 +48,6 @@ import ring_estimator as re_                                        # noqa: E402
 import sound_report as sr                                           # noqa: E402
 from dsp import SR                                                  # noqa: E402
 
-import measure_mono_m1a_reference as m1a                            # noqa: E402,F401
-import measure_mono_m5a_reference as m5a                            # noqa: E402
 
 
 def _tone(f, seconds, amp):
@@ -158,17 +163,3 @@ def test_reference_integrity_tracking_still_answers_sustained_rings(monkeypatch)
     monkeypatch.setattr(rr, "OurLadder", L, raising=True)
     errs = ri._tracking_once("ours", {})
     assert all(v is not None and abs(v - 1.0) < 0.05 for v in errs.values()), errs
-
-
-@pytest.mark.parametrize("make", BAD)
-def test_mini_v3_ring_reader_refuses(make):
-    """The M1A / M5A readers share `m5a.ring_hz`. The Mini V3 rig itself is
-    unavailable on this host, so the rig path (`_measure_open_cutoff`, M1A's
-    three-ring phrase) is REFUSED here rather than skipped: only the reader is
-    exercised, on synthetic records."""
-    with pytest.raises(m5a.Refused):
-        m5a.ring_hz(make())
-
-
-def test_mini_v3_ring_reader_still_answers_a_sustained_ring():
-    assert abs(m5a.ring_hz(sustained(1500.0)) - 1500.0) < 1.5

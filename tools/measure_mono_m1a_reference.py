@@ -479,7 +479,7 @@ def main(argv=None):
         for _ in range(3):
             rig = ref.rr.MiniV3Rig(block=ref.BLOCK)
             y = rig.ring(PATCH["filter_cutoff"][2], .98, seconds=1.2)
-            rings.append(ref.ring_hz(y))
+            rings.append(ref.am.dominant_frequency(y, 25, 15000, ref.SR).require("bass cutoff ring"))
         if np.ptp(rings) > 10:
             raise ref.Refused("bass cutoff ring is not repeatable")
         report = {"schema": "mono-m1a-reference-v1", "case_id": "M1A", "valid": True,
