@@ -1452,35 +1452,36 @@ def tone_amplitude(x, hz: float, sr: int = SR_DEFAULT, *,
 
 
 def zero_crossing_frequency(x, sr: int = SR_DEFAULT, *, min_crossings: int = 5) -> Estimate:
-    """Frequency from interpolated upward zero crossings, first to last.
+    """Frequency from interpolated zero crossings, first to last, averaged over
+    the upward and the downward set.
 
     The estimator for a FREE RING whose amplitude is changing over the record:
     a windowed FFT of a growing or decaying sinusoid is smeared by the
     envelope, while the crossings are not. Wrong for anything with more than
     one component; `dominant_frequency` is for those.
 
-    NOT polarity-symmetric (#673): reversing the record swaps the upward
-    crossings for the downward set, and on an asymmetric multi-harmonic record
-    f(x) and f(-x) differ by up to 0.78 % (~13 cents; 0.45 % over the 96
-    `permitted_differences` `asym` draws at seed 0). On a single-component ring
-    the two sets agree. Left as-is on purpose: averaging the up- and
-    down-crossing readings makes it exactly symmetric, but moves the
-    `res_tuning` correction table (entry 28, 34790 -> 34789, and 0.5 c at the
-    30 Hz / 1.15 point), which `docs/res-tuning/{sweeps,validation,controls}`
-    and the shipped scorecards were fitted from -- a chain regeneration of its
-    own. Do not "fix" it by counting both directions in one pass: that doubles
-    the reading."""
+    Polarity-symmetric (#684): f(x) == f(-x), because reversing the record
+    swaps the upward set for the downward one and the mean is blind to which
+    is which. The upward set alone read an asymmetric multi-harmonic record up
+    to 0.78 % (~13 cents; 0.45 % over the 96 `permitted_differences` `asym`
+    draws at seed 0) apart from its negation (#673). Each set is a reading in
+    its own right, `(n-1)` periods over its first-to-last span; they are
+    averaged, NOT pooled into one count, which would double the reading. A
+    failure on either polarity is a failure: never a half-average."""
     x = _as_float(x)
     if is_silent(x):
         return _fail("silent")
     x = x - x.mean()
     s = np.signbit(x)
-    up = np.nonzero(s[:-1] & ~s[1:])[0]
-    if len(up) < min_crossings:
-        return _fail("too few zero crossings", crossings=int(len(up)))
-    t = up + (-x[up]) / (x[up + 1] - x[up])
-    return Estimate(float((len(t) - 1) / ((t[-1] - t[0]) / sr)), True, "",
-                    dict(crossings=int(len(up))))
+    readings = []
+    for edge in (s[:-1] & ~s[1:], ~s[:-1] & s[1:]):
+        idx = np.nonzero(edge)[0]
+        if len(idx) < min_crossings:
+            return _fail("too few zero crossings", crossings=int(len(idx)))
+        t = idx + (-x[idx]) / (x[idx + 1] - x[idx])
+        readings.append(((len(t) - 1) / ((t[-1] - t[0]) / sr), len(idx)))
+    return Estimate(float(0.5 * (readings[0][0] + readings[1][0])), True, "",
+                    dict(crossings=int(readings[0][1])))
 
 
 def harmonic_powers(x, f0: float, ks, sr: int = SR_DEFAULT, *, guard: int = 4) -> np.ndarray:
