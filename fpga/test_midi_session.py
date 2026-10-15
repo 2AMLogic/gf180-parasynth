@@ -10,6 +10,7 @@ input, and that the session's maps are the documented ones.
 import os
 import random
 import sys
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -375,3 +376,102 @@ def test_the_verifier_can_still_construct_a_session_with_injection():
     s = ms.MidiSession(dev.SimSerial(dev.UartDeviceSim(clock=clock)), clock=clock,
                        image="tree", inject={"FUTURE_CONTROL", "DROP_NOTE_OFF"})
     assert s.inject == {"FUTURE_CONTROL", "DROP_NOTE_OFF"}
+
+
+# ---- #584: a loaded host is REFUSED / NO-VERDICT, never a session FAIL ------
+
+def _fake_load(monkeypatch, load, cpus=8):
+    monkeypatch.setattr(ms.os, "getloadavg", lambda: (load, load, load))
+    monkeypatch.setattr(ms.os, "cpu_count", lambda: cpus)
+
+
+def test_host_overloaded_is_strictly_above_the_cpu_count(monkeypatch):
+    _fake_load(monkeypatch, 8.0)
+    assert ms.host_overloaded() is None
+    _fake_load(monkeypatch, 8.01)
+    assert ms.host_overloaded() == (8.01, 8)
+
+
+def test_host_overloaded_without_a_load_average_does_not_refuse(monkeypatch):
+    def no_loadavg():
+        raise OSError("unavailable")
+    monkeypatch.setattr(ms.os, "getloadavg", no_loadavg)
+    assert ms.host_overloaded() is None
+
+
+def test_sim_on_a_loaded_host_is_refused_before_any_opener(monkeypatch, capsys):
+    _arm_fail_fast_openers(monkeypatch)
+    monkeypatch.setattr(ms, "resolve_image", lambda *_a, **_k: "tree")
+    _fake_load(monkeypatch, 21.0)
+    rc = ms.main(["--port", "sim", "--midi-in", "scripted:coverage"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "REFUSED -- load average 21.00 on 8 CPUs" in err
+
+
+class _FakeSim:
+    """Stands in for the pty-backed simulator: main() only reads these."""
+    def __init__(self, errors=(), drops=0):
+        self.errors, self.drops, self.writes, self.evq_peak = list(errors), drops, [], 0
+        self.port = "fake"
+
+    def start(self):
+        return self
+
+    def stop(self):
+        pass
+
+
+def _run_main_with_fake_sim(monkeypatch, capsys, *, errors, drops=0, deadline_misses=0,
+                            load_at_end, load_at_start=1.0):
+    loads = iter([load_at_start, load_at_end])
+    monkeypatch.setattr(ms.os, "getloadavg", lambda: (next(loads),) * 3)
+    monkeypatch.setattr(ms.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(ms, "resolve_image", lambda *_a, **_k: "tree")
+    monkeypatch.setattr(ms, "open_midi_input", lambda _s: (object(), None, "fake"))
+    monkeypatch.setattr(dev, "UartDeviceSim", lambda *_a, **_k: _FakeSim(errors, drops))
+    monkeypatch.setattr(_uh, "_require_serial", lambda: None)
+    # pyserial is not installed in CI: stand in for the whole module, not just Serial
+    fake_serial = types.ModuleType("serial")
+    fake_serial.Serial = lambda *_a, **_k: object()
+    fake_serial.SerialException = type("SerialException", (OSError,), {})
+    monkeypatch.setitem(sys.modules, "serial", fake_serial)
+
+    class _Session:
+        input_lost = None
+        stats = {"groups": {}, "device_errors": [(e[0], e[1]) for e in errors],
+                 "deadline_misses": deadline_misses, "boots": 0,
+                 "final_status": {"drops": drops}}
+
+        def __init__(self, *_a, **_k):
+            pass
+
+        def start(self):
+            pass
+    monkeypatch.setattr(ms, "MidiSession", _Session)
+    monkeypatch.setattr(ms, "run_live", lambda *_a, **_k: None)
+    rc = ms.main(["--port", "sim", "--midi-in", "scripted:coverage"])
+    return rc, capsys.readouterr()
+
+
+def test_late_events_on_a_host_that_became_loaded_are_no_verdict(monkeypatch, capsys):
+    rc, out = _run_main_with_fake_sim(monkeypatch, capsys, errors=[(dev.ERR_DUE, 5, 0)],
+                                      deadline_misses=2, load_at_end=21.0)
+    assert rc == 2
+    assert "NO-VERDICT" in out.err and "21.00" in out.err
+
+
+def test_negative_control_late_events_on_a_quiet_host_still_fail(monkeypatch, capsys):
+    rc, out = _run_main_with_fake_sim(monkeypatch, capsys, errors=[(dev.ERR_DUE, 5, 0)],
+                                      deadline_misses=2, load_at_end=1.0)
+    assert rc == 1 and "NO-VERDICT" not in out.err
+
+
+@pytest.mark.parametrize("errors,drops", [
+    ([(dev.ERR_DUE, 5, 0), (dev.ERR_DUE + 1, 6, 0)], 0),    # a non-timing error code
+    ([], 3),                                                # dropped writes
+    ([(dev.ERR_DUE, 5, 0)], 1)])                            # timing error AND a drop
+def test_non_timing_failures_stay_fail_even_under_load(monkeypatch, capsys, errors, drops):
+    rc, out = _run_main_with_fake_sim(monkeypatch, capsys, errors=errors, drops=drops,
+                                      load_at_end=21.0)
+    assert rc == 1 and "NO-VERDICT" not in out.err
