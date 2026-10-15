@@ -856,6 +856,25 @@ def test_zero_crossing_frequency_survives_an_envelope_that_smears_an_fft():
     assert abs(am.zero_crossing_frequency(x).require() / 300.0 - 1.0) < 5e-3
 
 
+def test_zero_crossing_frequency_polarity_sensitivity_is_bounded():
+    """#673, documented and left as-is: upward-only crossings read `x` and `-x`
+    apart on an asymmetric six-harmonic record -- bounded here at the measured
+    0.78 %. A single sine does not move. The test pins the documented defect so
+    a change to the estimator's polarity behaviour is noticed, not hidden."""
+    t = np.arange(24000) / 48000
+    worst = 0.0
+    for seed in range(8):
+        rng = np.random.default_rng(seed)
+        f0, ph = rng.uniform(110.0, 330.0), rng.uniform(0.0, 2 * math.pi)
+        x = sum(np.sin(2 * math.pi * k * f0 * t + ph) / k for k in range(1, 7))
+        a, b = am.zero_crossing_frequency(x).require(), am.zero_crossing_frequency(-x).require()
+        worst = max(worst, abs(a - b) / a)
+    assert worst < 8e-3, worst
+    s = _sine(440.0, 1 << 15, 0.5)
+    assert am.zero_crossing_frequency(s).require() == pytest.approx(
+        am.zero_crossing_frequency(-s).require(), rel=1e-4)
+
+
 def test_zero_crossing_frequency_refuses_silence_and_a_single_cycle():
     assert not am.zero_crossing_frequency(np.zeros(1000)).ok
     assert not am.zero_crossing_frequency(_sine(20.0, 1000)).ok

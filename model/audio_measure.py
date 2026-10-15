@@ -1457,7 +1457,19 @@ def zero_crossing_frequency(x, sr: int = SR_DEFAULT, *, min_crossings: int = 5) 
     The estimator for a FREE RING whose amplitude is changing over the record:
     a windowed FFT of a growing or decaying sinusoid is smeared by the
     envelope, while the crossings are not. Wrong for anything with more than
-    one component; `dominant_frequency` is for those."""
+    one component; `dominant_frequency` is for those.
+
+    NOT polarity-symmetric (#673): reversing the record swaps the upward
+    crossings for the downward set, and on an asymmetric multi-harmonic record
+    f(x) and f(-x) differ by up to 0.78 % (~13 cents; 0.45 % over the 96
+    `permitted_differences` `asym` draws at seed 0). On a single-component ring
+    the two sets agree. Left as-is on purpose: averaging the up- and
+    down-crossing readings makes it exactly symmetric, but moves the
+    `res_tuning` correction table (entry 28, 34790 -> 34789, and 0.5 c at the
+    30 Hz / 1.15 point), which `docs/res-tuning/{sweeps,validation,controls}`
+    and the shipped scorecards were fitted from -- a chain regeneration of its
+    own. Do not "fix" it by counting both directions in one pass: that doubles
+    the reading."""
     x = _as_float(x)
     if is_silent(x):
         return _fail("silent")
