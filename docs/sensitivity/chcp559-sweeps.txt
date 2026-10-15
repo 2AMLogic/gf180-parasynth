@@ -1,0 +1,37 @@
+Issue #559 DEV sweeps -- written by `python3 tools/probes/chcp_559.py tables`.
+provenance: CH sweep commit 460d0628210d model 730264ba1988eb1d; CP sweep commit b10a6e8f0c45 model 76bf5af0763581c3
+Grids, rules and predictions: tools/probes/chcp_559_select.py docstring (committed before the sweep).
+Objective: median over the 5 DEV conditions of the ratio to the #379 WEAK bar (lower is better).
+
+ch_hp_q -- CH flatness ratio against the CH high-pass Q x10 (f0 11.7 kHz, hat band-pass Q 6)
+CH_HP_Q_X10 HAT_BP_Q_X10 flatness_ratio worst_median
+5 60 5.208 5.208
+7 60 5.621 5.621
+10 60 6.319 6.319
+15 60 7.324 7.324
+25 60 8.872 8.872
+
+ch_bp_q -- CH flatness ratio against the hats' 7.1 kHz band-pass Q x10 (CH high-pass Q 0.5)
+HAT_BP_Q_X10 CH_HP_Q_X10 flatness_ratio worst_median
+20 5 2.385 2.778
+30 5 2.457 2.732
+40 5 3.085 3.085
+60 5 5.208 5.208
+
+cp_tail_tau -- CP max(decay, attack) ratio against the tail tau in ms (tail peak +0 dB re 0.22)
+CP_TAIL_TAU_MS CP_TAIL_PEAK_DB objective_ratio decay_ratio attack_ratio
+80 0 15.893 15.893 7.111
+120 0 9.106 9.106 6.136
+160 0 9.921 9.921 6.054
+200 0 14.960 14.960 6.004
+250 0 20.746 20.746 5.978
+315 0 23.862 23.862 5.928
+400 0 27.143 27.143 5.698
+
+cp_tail_peak -- CP max(decay, attack) ratio against the tail peak in dB re 0.22 (tail tau 80 ms)
+CP_TAIL_PEAK_DB CP_TAIL_TAU_MS objective_ratio decay_ratio attack_ratio
+-16 80 20.230 20.230 6.136
+-12 80 19.142 19.142 6.184
+-8 80 17.966 17.966 6.199
+-4 80 16.838 16.838 6.332
+0 80 15.893 15.893 7.111

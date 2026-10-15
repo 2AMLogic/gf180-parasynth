@@ -1,0 +1,7 @@
+known answer: {'true_late_tau_ms': 270.0, 'fit_ms': 262.2149149667651, 'within_10pct': True}
+/Users/rwalters/GitHub/gf180-parasynth/.loom/worktrees/issue-559/tools/perceptual_gate.py:168: WavFileWarning: Reached EOF prematurely; finished at 176446 bytes, expected 176447 bytes from header.
+  sr, raw = wavfile.read(str(path))
+/Users/rwalters/GitHub/gf180-parasynth/.loom/worktrees/issue-559/tools/perceptual_gate.py:168: WavFileWarning: Reached EOF prematurely; finished at 44146 bytes, expected 44147 bytes from header.
+  sr, raw = wavfile.read(str(path))
+cp8/CP.WAV floor(last 100 ms) -69.2 {'0.08-0.2s': {'slope_db_per_s': -104.71097362693887, 'amp_tau_ms': 82.95214626640968, 'rms_resid_db': 0.8375699893548493}, '0.3-1.2s': {'slope_db_per_s': -27.61550325757961, 'amp_tau_ms': 314.533467631663, 'rms_resid_db': 1.1167105476484485}} margin@1.2s 8.546491445633642
+sd8/SD5050.WAV floor(last 100 ms) -66.1 None margin@1.2s None

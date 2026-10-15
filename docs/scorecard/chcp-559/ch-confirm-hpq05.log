@@ -1,0 +1,6 @@
+model file changed since the sweep (730264ba1988eb1d -> 50d295f6859e9c13); engine+images fingerprint at 460d0628210d ceecf14933fddc78, now ceecf14933fddc78
+CONFIRM CH CH hpQ0.5 bpQ6.0: objective 8.07 -> 4.75 (-41%), better on 6/6, regressions none -> CONFIRMED
+   per-condition regression (disclosure) at [13651, 1.0]: ['attack 1.01->1.44']
+   shipped   spec=2.26 spec_peak=2.73 centroid=2.79 flatness=8.07 impulse=0.39 attack=0.92 decay=3.06
+   candidate spec=2.01 spec_peak=2.25 centroid=0.69 flatness=4.75 impulse=0.49 attack=0.96 decay=3.03
+exit 0

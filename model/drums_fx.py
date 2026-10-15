@@ -748,7 +748,15 @@ PEAK_RSG_REV14 = 0.343
 # the LAST at the accent-scaled fire level (L = 1.00) decaying at 20 ms, and the
 # tail's tau at its one-record measured 80 ms (was the R348 x C138 estimate 47).
 CP_BURST_TAU, CP_BURSTS, CP_PERIOD = 4e-3, 3, 511
-CP_FINAL_TAU, CP_TAIL_TAU = 20e-3, 80e-3
+# The tail's tau and level are registered tunables (#559: cp-tail-tau,
+# cp-tail-peak in docs/sensitivity/registry.json), so they are integers at
+# column 0 that tools/sensitivity.py can read. CP_TAIL_TAU_MS / 1000 is
+# bit-for-bit the 80e-3 it replaced, and 10 ** (0 / 20) is exactly 1.0.
+CP_TAIL_TAU_MS = 80
+CP_TAIL_PEAK_DB = 0
+CP_TAIL_PEAK = 0.22
+CP_FINAL_TAU, CP_TAIL_TAU = 20e-3, CP_TAIL_TAU_MS / 1000
+CP_TAIL_PEAK_LEVEL = CP_TAIL_PEAK * 10 ** (CP_TAIL_PEAK_DB / 20)
 # The RS/CL exciter, by position. The RIMSHOT's is low on purpose: both taps
 # go through the swing VCA, and a tap that drives the tanh into its rail comes
 # out as a flat-topped burst whose decay is the GATE's 22 ms rather than the
@@ -1783,20 +1791,47 @@ def tom_pitch_drop_writes(frame: int, mode: int, f0_hz: float, q: float, amp: fl
     return out
 
 
-def kit_808() -> list:
+# ---- the hats' two filter Qs, registered tunables (#559) ----------------------
+# Integers x10 at column 0 so tools/sensitivity.py can read what ships
+# (docs/sensitivity/registry.json: ch-hp-q, hat-bp-q). The shipped values are
+# reference 10/11's readings, both marked [inferred] there: Q 6 from R58/R59
+# (the bridged-T formula, without the stage's input C11/R55 network) and Q 2.5
+# from R153/R155 under an equal-C unity-gain Sallen-Key reading of Q31.
+HAT_BP_Q_X10 = 60
+CH_HP_Q_X10 = 25
+# #559's CANDIDATE, DISABLED: NOT what kit_808() loads. The CH high-pass Q
+# alone, selected on DEV conditions and confirmed on untouched ones against the
+# #379 gate's WEAK bar (docs/scorecard/chcp-559/README.md). The hat band-pass Q
+# (HAT_BP_Q_X10 30) improved CH further and OH too, but regressed CY, so it is
+# NOT in the candidate. It stays off until #379/#560 qualify an acceptance
+# policy AND the image is proven to play it (model -> RTL -> I2S, deadlines):
+# until then `kit_808_candidate_559()` is how to hear or verify it.
+CANDIDATE_559 = {"CH_HP_Q_X10": 5}
+
+
+def kit_808(tuning: dict | None = None) -> list:
     """The reference kit as a list of (addr, value) writes: every number is
     docs/tr808-reference.md's where it gives one (tagged there), and marked
     'chosen' here where it does not. Levels (`amp`, peaks) are balanced by
     `model/drums_fx_render.py --balance` so that each voice alone peaks near
     -6 dBFS on its bus at accent 1.0, in the proportions of Roland's tuning
-    chart; they are the kit's, not the circuit's."""
+    chart; they are the kit's, not the circuit's.
+
+    `tuning` overrides the registered tunables by name (HAT_BP_Q_X10,
+    CH_HP_Q_X10) and nothing else; None, the default, is the shipped kit
+    exactly. An unknown name REFUSES rather than being ignored."""
+    t = {"HAT_BP_Q_X10": HAT_BP_Q_X10, "CH_HP_Q_X10": CH_HP_Q_X10}
+    for k, v in (tuning or {}).items():
+        if k not in t:
+            raise KeyError(f"kit_808 tuning: {k!r} is not a registered tunable ({', '.join(t)})")
+        t[k] = int(v)
     w = []
     for i, hz in enumerate(OSC_HZ):
         w.append((A_OSC + i, osc_inc_reg(hz)))
     # modes: filters first (numerators), then the bodies
-    w += mode_writes(M_HATBP, 7117.0, 6.0, 0.0, BP)          # hats' band-pass, reference 10/11; tapped only
+    w += mode_writes(M_HATBP, 7117.0, t["HAT_BP_Q_X10"] / 10, 0.0, BP)   # hats' band-pass, reference 10/11; tapped only
     w += mode_writes(M_OHHP, 7800.0, 2.5, 0.45, HP)          # OH high-pass, reference 11
-    w += mode_writes(M_CHHP, 11700.0, 2.5, 0.69, HP)         # CH high-pass, reference 11
+    w += mode_writes(M_CHHP, 11700.0, t["CH_HP_Q_X10"] / 10, 0.69, HP)   # CH high-pass, reference 11
     w += mode_writes(M_SDN, SD_NOISE_HZ, SD_NOISE_Q, SD_NOISE_AMP, BP)   # SD snappy filter, reference 3
     w += mode_writes(M_CPBP, 1071.0, 1.6, 0.0, BP)           # CP band-pass, reference 7; tapped only
     w += mode_writes(M_CBBP, CB_BP_HZ, CB_BP_Q, CB_BP_AMP, BP)   # CB band-pass, reference 9 (DR 0010)
@@ -1833,7 +1868,7 @@ def kit_808() -> list:
     w += env_writes(E_OH, OH, 150e-3, 1.0, choke=CH)         # DECAY knob mid; CH chokes it, reference 11
     w += env_writes(E_CPBURST, CP, CP_BURST_TAU, 0.69, bursts=CP_BURSTS, period=CP_PERIOD,
                     final_tau=CP_FINAL_TAU)                  # L2: four strikes, the last at the fire level
-    w += env_writes(E_CPTAIL, CP, CP_TAIL_TAU, 0.22)         # the tail, tau MEASURED (plan084)
+    w += env_writes(E_CPTAIL, CP, CP_TAIL_TAU, CP_TAIL_PEAK_LEVEL)   # the tail, tau MEASURED (plan084)
     w += env_writes(E_CBA, CB, 5e-3, 0.5)                    # two-slope envelope, reference 9
     w += env_writes(E_CBB, CB, CB_TAU_B, 0.5)                # cowbell tail, reference 9 (DR 0010)
     w += env_writes(E_RSX, CL, 0.1e-3, PEAK_RSX)             # the RS/CL exciter pulse
@@ -1884,6 +1919,14 @@ def kit_808() -> list:
     for p, word in enumerate(paths):
         w.append((A_PATH + p, word))
     return w
+
+
+def kit_808_candidate_559() -> list:
+    """#559's DISABLED candidate kit: kit_808() with CANDIDATE_559's two hat
+    filter Qs and nothing else. Not loaded by anything that ships; it exists so
+    the candidate can be heard, measured and driven through the RTL benches
+    (`rtl-sketch/verify_drums.py --kit candidate-559`) before anyone enables it."""
+    return kit_808(tuning=CANDIDATE_559)
 
 
 # ---- the kit an image that predates revision 14 plays --------------------------
@@ -2040,7 +2083,7 @@ def preset_writes(sound: str) -> list:
                                                 nl=NL_TANH, dest=DEST_MIX))]
                 + env_writes(E_CPBURST, CP, CP_BURST_TAU, 0.69, bursts=CP_BURSTS, period=CP_PERIOD,
                              final_tau=CP_FINAL_TAU)
-                + env_writes(E_CPTAIL, CP, CP_TAIL_TAU, 0.22))
+                + env_writes(E_CPTAIL, CP, CP_TAIL_TAU, CP_TAIL_PEAK_LEVEL))
     if n == "MA":
         # Same noise source, same buffer (IC19), SW12 selects: the band-pass
         # becomes Q68's Sallen-Key HIGH-pass and the three-burst envelope

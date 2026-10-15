@@ -1,0 +1,17 @@
+CH shipped  O=8.87 med spec=2.33 spec_peak=3.33 centroid=3.18 flatness=8.87 impulse=0.67 attack=1.31 decay=2.67
+CH hpQ0.5 bpQ6.0         O=5.21 ELIGIBLE | spec=1.98 spec_peak=2.58 centroid=1.17 flatness=5.21 impulse=0.55 attack=1.03 decay=2.67
+CH hpQ0.7 bpQ6.0         O=5.62 ELIGIBLE | spec=1.96 spec_peak=2.62 centroid=1.38 flatness=5.62 impulse=0.55 attack=1.05 decay=2.67
+CH hpQ1.0 bpQ6.0         O=6.32 ELIGIBLE | spec=1.99 spec_peak=2.77 centroid=1.81 flatness=6.32 impulse=0.58 attack=1.06 decay=2.68
+CH hpQ1.5 bpQ6.0         O=7.32 ELIGIBLE | spec=2.10 spec_peak=3.01 centroid=2.40 flatness=7.32 impulse=0.70 attack=1.25 decay=2.67
+CH hpQ2.5 bpQ6.0         O=8.87 ELIGIBLE | spec=2.33 spec_peak=3.33 centroid=3.18 flatness=8.87 impulse=0.67 attack=1.31 decay=2.67
+SELECTED stage 1 (DEV): {'label': 'CH hpQ0.5 bpQ6.0', 'cand': {'hpq': 0.5, 'bpq': 6.0}, 'objective': 5.208419776042868, 'best_objective_any': 5.208419776042868, 'tied': ['CH hpQ0.5 bpQ6.0']}
+CH hpQ0.5 bpQ2.0         O=2.38 ELIGIBLE | spec=2.08 spec_peak=2.21 centroid=1.26 flatness=2.38 impulse=0.67 attack=1.45 decay=2.78
+CH hpQ0.5 bpQ3.0         O=2.46 ELIGIBLE | spec=1.96 spec_peak=2.19 centroid=1.05 flatness=2.46 impulse=0.31 attack=1.15 decay=2.73
+CH hpQ0.5 bpQ4.0         O=3.09 ELIGIBLE | spec=1.93 spec_peak=2.30 centroid=1.00 flatness=3.09 impulse=0.20 attack=1.05 decay=2.69
+CH hpQ0.5 bpQ6.0         O=5.21 ELIGIBLE | spec=1.98 spec_peak=2.58 centroid=1.17 flatness=5.21 impulse=0.55 attack=1.03 decay=2.67
+SELECTED stage 2 (DEV): {'label': 'CH hpQ0.5 bpQ3.0', 'cand': {'hpq': 0.5, 'bpq': 3.0}, 'objective': 2.4570428089750216, 'best_objective_any': 2.384484645561614, 'tied': ['CH hpQ0.5 bpQ3.0', 'CH hpQ0.5 bpQ2.0']}
+  CH hpQ0.5 bpQ6.0 OH: worst 4.40 -> 4.40 | spec=1.29->1.29 spec_peak=0.59->0.59 centroid=4.40->4.40 flatness=3.75->3.75 impulse=0.12->0.12 attack=1.75->1.75 decay=0.70->0.70 modulation=1.45->1.45
+  CH hpQ0.5 bpQ6.0 CY: worst 7.86 -> 7.84 | spec=3.68->3.62 spec_peak=2.41->2.48 centroid=7.86->7.84 flatness=2.00->2.02 impulse=0.66->0.48 attack=6.77->6.74 decay=4.51->4.52 modulation=2.18->2.18
+  CH hpQ0.5 bpQ3.0 OH: worst 4.40 -> 3.01 | spec=1.29->1.20 spec_peak=0.59->0.54 centroid=4.40->3.01 flatness=3.75->1.98 impulse=0.12->0.43 attack=1.75->1.93 decay=0.70->0.70 modulation=1.45->1.12
+  CH hpQ0.5 bpQ3.0 CY: worst 7.86 -> 8.82 | spec=3.68->4.55 spec_peak=2.41->2.82 centroid=7.86->8.82 flatness=2.00->2.01 impulse=0.66->0.64 attack=6.77->6.12 decay=4.51->4.93 modulation=2.18->1.92
+exit 0

@@ -1,0 +1,93 @@
+{
+ "schema": "sensitivity-sweep-v1",
+ "id": "cp-tail-peak",
+ "parameter": {
+  "name": "CP_TAIL_PEAK_DB",
+  "source": "model/drums_fx.py",
+  "kind": "python-constant",
+  "what": "issue #559: the clap tail's envelope peak in dB re 0.22 (E_CPTAIL PEAK). Ships 0."
+ },
+ "objective": {
+  "name": "CP max(decay, attack) ratio to the #379 WEAK bar",
+  "units": "ratio to bar",
+  "lower_is_better": true,
+  "why": "#559's named CP failures: decay 15.9x and attack 6.2x (gate-379 section 4); the larger of the two, so neither can hide behind the other."
+ },
+ "grid": {
+  "stated_before_results": true,
+  "values": [
+   -16,
+   -12,
+   -8,
+   -4,
+   0
+  ],
+  "range_basis": [
+   "0 ships. -16 dB brackets the take's inter-burst gaps (about -30 dB against ours -10 to -16 dB) from the shipped side. Slice at the shipped tau.",
+   "Committed in tools/probes/chcp_559_select.py (module docstring and grid constants, committed in b10a6e8f before any DEV point was rendered)"
+  ],
+  "held_fixed": {
+   "CP_TAIL_TAU_MS": 80
+  }
+ },
+ "decision_rule": {
+  "stated_before_results": true,
+  "flat_within_relative": 0.1,
+  "why": "the gate's own resolution, not the spread of these data: a candidate is only told apart from another if the gap is a meaningful fraction of the 808's own one-step distance (the WEAK bar). At the ratios swept here (2 to 27) one bar is 4 to 50 % of the value; 10 % is the low end of that, so two points closer than 10 % are within the gate's own step and cannot justify a choice. Stated in this record before it was checked, from the decision's granularity."
+ },
+ "evidence": {
+  "artifact": "docs/sensitivity/chcp559-sweeps.txt",
+  "format": "fixed-width-table",
+  "table": "cp_tail_peak",
+  "value_column": "CP_TAIL_PEAK_DB",
+  "objective_column": "objective_ratio",
+  "held_fixed": {
+   "CP_TAIL_TAU_MS": 80
+  },
+  "regenerate": "python3 tools/probes/chcp_559.py ch-sweep|cp-sweep, then python3 tools/probes/chcp_559.py tables",
+  "instrument": "tools/probes/chcp_559.py through tools/perceptual_gate.py UNCHANGED (#379 gate, WEAK bar, single Fischer take); objective = median over the 5 frozen DEV strikes (480, 23110, 25283, 25409, 28527 frames) of the ratio to the bar. CH renders: the real DrumsFx block. CP renders: the exact fast path, asserted bit-identical to the real block (check-fast)."
+ },
+ "points": [
+  {
+   "value": -16,
+   "objective": 20.23
+  },
+  {
+   "value": -12,
+   "objective": 19.142
+  },
+  {
+   "value": -8,
+   "objective": 17.966
+  },
+  {
+   "value": -4,
+   "objective": 16.838
+  },
+  {
+   "value": 0,
+   "objective": 15.893
+  }
+ ],
+ "verdict": {
+  "state": "MIXED",
+  "runs": [
+   [
+    -16,
+    -12
+   ],
+   [
+    -8,
+    -4
+   ],
+   [
+    0
+   ]
+  ],
+  "summary": "At the shipped 80 ms, lowering the tail only worsens the objective: 15.89 (0) to 20.23 (-16), and D12A's decay (T20) fails on all 5 DEV strikes at every lowered level."
+ },
+ "limits": [
+  "NO PREDICTION BLOCK: the committed CP-P prediction ('decay ... worsens with peak at fixed tau') is the opposite of what this slice measures, so it is recorded as FAILED.",
+  "One slice of a 2-D grid (see cp-tail-tau)."
+ ]
+}

@@ -37,10 +37,16 @@ from dsp import SR
 from verify_ladder import tool, compare
 
 
-def stimulus(short: bool = False):
+#: The register images the bench can drive. "shipped" is kit_808(); the others
+#: are DISABLED candidates the model carries so the RTL can be shown to play
+#: them bit-exactly before anyone enables one (#559).
+KITS = {"shipped": dx.kit_808, "candidate-559": dx.kit_808_candidate_559}
+
+
+def stimulus(short: bool = False, kit_name: str = "shipped"):
     """The write stream and its length. State carries across segments."""
     S = 0.25 if short else 1.0
-    kit = dx.kit_808()
+    kit = KITS[kit_name]()
     hits, writes = [], []
     f = 10
     # 1. every stop soloed at accent 1.0 -- eleven of them since revision 10, so the cymbal's three
@@ -158,8 +164,8 @@ class Coverage:
     def restore(self): modal_fixed.sat = self._sat
 
 
-def generate(outdir: str, short: bool = False, verbose: bool = True):
-    writes, n = stimulus(short)
+def generate(outdir: str, short: bool = False, verbose: bool = True, kit_name: str = "shipped"):
+    writes, n = stimulus(short, kit_name)
     d = dx.DrumsFx()
     cov = Coverage(d)
     dmix, body = d.play(writes, n)
@@ -215,10 +221,14 @@ def main(argv=None) -> int:
     ap.add_argument("--short", action="store_true")
     ap.add_argument("--compare-only", default=None, metavar="FILE")
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
+    ap.add_argument("--kit", choices=sorted(KITS), default="shipped",
+                    help="the register image to drive (default: the shipped kit_808)")
     a = ap.parse_args(argv)
     print(f"verify_drums: model DrumsFx({dx.N_ENV} envelopes, {dx.N_PATH} paths, bank {dx.N_MODES} modes / "
           f"{dx.N_NUMS} with numerators, headroom {dx.BODY_HR}, {dx.BODY_BITS}-bit body word)")
-    expected, n, _ = generate(a.outdir, a.short)
+    if a.kit != "shipped":
+        print(f"verify_drums: driving the DISABLED candidate image '{a.kit}', not the shipped kit")
+    expected, n, _ = generate(a.outdir, a.short, kit_name=a.kit)
     if a.compare_only:
         status = compare(expected, a.compare_only, "verify_drums")
     else:
