@@ -10,6 +10,7 @@ input, and that the session's maps are the documented ones.
 import os
 import random
 import sys
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -430,8 +431,11 @@ def _run_main_with_fake_sim(monkeypatch, capsys, *, errors, drops=0, deadline_mi
     monkeypatch.setattr(ms, "open_midi_input", lambda _s: (object(), None, "fake"))
     monkeypatch.setattr(dev, "UartDeviceSim", lambda *_a, **_k: _FakeSim(errors, drops))
     monkeypatch.setattr(_uh, "_require_serial", lambda: None)
-    import serial
-    monkeypatch.setattr(serial, "Serial", lambda *_a, **_k: object())
+    # pyserial is not installed in CI: stand in for the whole module, not just Serial
+    fake_serial = types.ModuleType("serial")
+    fake_serial.Serial = lambda *_a, **_k: object()
+    fake_serial.SerialException = type("SerialException", (OSError,), {})
+    monkeypatch.setitem(sys.modules, "serial", fake_serial)
 
     class _Session:
         input_lost = None
