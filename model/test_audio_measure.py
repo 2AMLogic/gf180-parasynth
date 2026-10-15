@@ -873,27 +873,45 @@ def _zc_polarity_gap(estimate, draws=96):
     return worst
 
 
-def test_zero_crossing_frequency_polarity_sensitivity_is_bounded():
-    """#673, documented and left as-is: upward-only crossings read `x` and `-x`
-    apart on an asymmetric noisy record. Measured worst over 96 draws: 0.45 %
-    (a few draws in a hundred; the median is ~4e-7). Pinned from BOTH sides --
-    a ceiling so it cannot grow, a floor so the test goes red the day the
-    symmetric fix (#684) lands and this docstring must be updated. A single
-    sine does not move."""
+def _zc_up_only(x, sr=am.SR_DEFAULT):
+    """The pre-#684 estimator, kept as the guard's defeating reference."""
+    x = np.asarray(x, float)
+    x = x - x.mean()
+    s = np.signbit(x)
+    up = np.nonzero(s[:-1] & ~s[1:])[0]
+    t = up + (-x[up]) / (x[up + 1] - x[up])
+    return (len(t) - 1) / ((t[-1] - t[0]) / sr)
+
+
+def test_zero_crossing_frequency_is_polarity_symmetric():
+    """#684: f(x) == f(-x) on the asymmetric records that moved the upward-only
+    estimator by 0.45 % (#673). A single sine never met the defect."""
     worst = _zc_polarity_gap(lambda x: am.zero_crossing_frequency(x).require())
-    assert 1e-3 < worst < 6e-3, worst
+    assert worst < 1e-9, worst
     s = _sine(440.0, 1 << 15, 0.5)
     assert am.zero_crossing_frequency(s).require() == pytest.approx(
         am.zero_crossing_frequency(-s).require(), rel=1e-4)
 
 
-def test_zero_crossing_polarity_pin_turns_red_on_the_symmetric_estimator():
-    """Injected-bug control: the both-directions-averaged estimator reads `x`
-    and `-x` identically, so it must fall under the floor above."""
-    def symmetric(x):
-        return 0.5 * (am.zero_crossing_frequency(x).require()
-                      + am.zero_crossing_frequency(-x).require())
-    assert _zc_polarity_gap(symmetric) < 1e-3
+def test_zero_crossing_symmetry_guard_is_defeated_by_the_upward_only_estimator():
+    """Guard with its defeating input (verification-rules 8): the same records
+    on which the pre-#684 upward-only estimator differs from its negation by
+    more than 0.3 %, so the test above is not satisfiable by a symmetric-looking
+    easy input."""
+    assert _zc_polarity_gap(lambda x: _zc_up_only(x)) > 3e-3
+
+
+def test_zero_crossing_frequency_refuses_when_either_polarity_is_short():
+    """A failure on either polarity is a failure, never a half-average: a record
+    that starts low and ends high has one more upward than downward crossing,
+    so 5 up / 4 down passes an upward-only count and must be refused."""
+    x = np.full(2000, -0.1)
+    for k in range(5):                      # 5 narrow positive pulses
+        x[100 + 300 * k:150 + 300 * k] = 1.0
+    x[1300:] = 1.0                          # ends high: the 5th pulse never falls
+    up = np.nonzero(np.signbit(x - x.mean())[:-1] & ~np.signbit(x - x.mean())[1:])[0]
+    assert len(up) >= 5                     # the upward-only count would accept it
+    assert not am.zero_crossing_frequency(x, min_crossings=5).ok
 
 
 def test_zero_crossing_frequency_refuses_silence_and_a_single_cycle():
