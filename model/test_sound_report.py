@@ -294,9 +294,10 @@ def test_the_changelog_records_the_commits_that_actually_moved_the_locks():
     introduced the table (#51), bf13fdd added the power-centroid lock (#251),
     and 50d7aaf / 80b3756 are the two re-locks #242 traced with drift_probe.py."""
     by = {ev["recorded_by"]: ev for ev in sr.LOCK_CHANGELOG}
-    assert set(by) == {"28dfd55", "bf13fdd", "50d7aaf", "80b3756"}
+    assert set(by) == {"28dfd55", "bf13fdd", "50d7aaf", "80b3756", "b572b7fc"}
     assert list(by["bf13fdd"]["locks"]) == [("SD", "brightness (power centroid)")]
     assert list(by["50d7aaf"]["locks"]) == [("LADDER", "corner ratio drift")]
+    assert list(by["b572b7fc"]["locks"]) == [("LADDER", "corner ratio drift")]
     assert list(by["80b3756"]["locks"]) == [("LT", "attack")]
     assert all(was is None for was, _ in by["28dfd55"]["locks"].values()), (
         "nothing was pinned before 28dfd55, so every entry there is a first lock")

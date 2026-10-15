@@ -1659,3 +1659,22 @@ def test_dc_plateau_db_refuses_a_band_that_reaches_the_corner(poles):
     ok = am.dc_plateau_db(f, _allpole_db(f, 250.0, poles), (40.0, 100.0), scale_hz=250.0)
     assert ok.ok, ok.reason
     assert ok.detail["band_top_over_cutoff"] == pytest.approx(0.4)
+
+
+def test_corner_dc_referenced_reads_a_four_pole_at_the_analytic_corner_or_refuses():
+    """#546. Truth is algebra, not our estimator: four real poles at fp are -3 dB
+    at sqrt(10**0.075 - 1) * fp at every cutoff. Where dc_plateau_db refuses
+    (band top past 0.4 of the cutoff) there is NO corner -- not the +82 % the
+    median reference gave at 100 Hz."""
+    F = np.geomspace(40.0, 12000.0, 28)
+    x0 = float(np.sqrt(10 ** 0.075 - 1.0))
+    for cut in (400.0, 1600.0, 6400.0):
+        g = -40.0 * np.log10(1.0 + (F / cut) ** 2)
+        e = am.corner_dc_referenced(F, g, ref_band=(F[0], max(100.0, cut * 0.25)),
+                                    scale_hz=cut)
+        assert e.ok and abs(e.value / (x0 * cut) - 1.0) < 0.012, (cut, e)
+    g = -40.0 * np.log10(1.0 + (F / 100.0) ** 2)
+    e = am.corner_dc_referenced(F, g, ref_band=(F[0], 100.0), scale_hz=100.0)
+    assert not e.ok and "no passband reference" in e.reason, e
+    old = am.corner_from_curve(F, g, ref_band=(F[0], 100.0))
+    assert old.ok and old.value / (x0 * 100.0) > 1.5     # the bias being refused
