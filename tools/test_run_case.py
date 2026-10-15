@@ -2604,3 +2604,20 @@ def test_run_case_script_reaches_a_verdict_on_a_filter_case(tmp_path):
     assert "no verdict" not in got.stdout, (
         "F1A reached no measured verdict as a SCRIPT while the imported-module "
         f"tests above are green -- the #115 regression's exact shape:\n{out[-3000:]}")
+
+
+def test_a_refusal_from_the_write_path_ends_the_batch_by_design(tmp_path, monkeypatch):
+    """#615: `Refused` from `write_result` is not caught inside `--batch`; the
+    first corrupt record ends the run and no later case is attempted."""
+    ran = []
+    monkeypatch.setattr(rc, "base_check", lambda allow_stale: {"checked": False, "why": "t"})
+    monkeypatch.setattr(rc, "run_case", lambda c, *a, **k: ran.append(c["case_id"]) or {})
+    monkeypatch.setattr(rc, "verdict_of", lambda c, res: ("no verdict", None, ""))
+    monkeypatch.setattr(rc, "plan_for", lambda cid: "drum")
+
+    def refuse(case, dest, res, **k):
+        raise rc.Refused(f"{dest} is present but unreadable")
+    monkeypatch.setattr(rc, "write_result", refuse)
+    with pytest.raises(rc.Refused):
+        rc.main(["--batch", "First 32", "--results", str(tmp_path)])
+    assert len(ran) == 1

@@ -293,10 +293,20 @@ def response_row(freqs, g, cut_hz, name, res, cut_setting):
     ref_band = (freqs[0], max(freqs[0] * 2.5, (cut_hz or 400.0) * 0.25))
     row = dict(device=name, res=res, cut_setting=cut_setting, cut_hz=cut_hz,
                freqs=[float(f) for f in freqs], gain_db=[float(v) for v in g])
-    c = am.corner_from_curve(freqs, g, ref_band=ref_band)
+    # DC-plateau reference, not the median of a band that moves with the
+    # cutoff (#546, tools/probes/corner_reference_convention.py): the median
+    # read the corner +82 % / +25 % / +6 % high at 100 / 200 / 400 Hz on an
+    # ideal 4-pole. Where the plateau refuses (cutoff below ~250 Hz on this
+    # grid) there is no corner and so no slope band to place -- the slope is
+    # refused with the reason rather than fitted over a band placed from the
+    # commanded cutoff, which is not where the corner is.
+    c = am.corner_dc_referenced(freqs, g, ref_band=ref_band, scale_hz=(cut_hz or 400.0))
     row["corner_hz"] = c.value if c.ok else None
     row["corner_why"] = None if c.ok else c.reason
-    ref = c.value if c.ok else cut_hz
+    ref = c.value if c.ok else None
+    if not c.ok:
+        row["slope_db_oct"], row["slope_band"] = None, None
+        row["slope_resid_db"], row["slope_why"] = None, "no measured corner: " + c.reason
     if ref:
         # Cap the stopband fit where the measurement's own floor starts: below
         # about -70 dB of the passband the stepped-tone projection is reading

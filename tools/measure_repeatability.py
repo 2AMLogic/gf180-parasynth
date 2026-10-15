@@ -266,8 +266,18 @@ def _promoted(metric: str):
         import test_discrimination as td
         try:
             c = td.condition(np.asarray(y, float), sr, level_match=False)
-        except Exception as why:                        # noqa: BLE001 - see above
+        except ValueError as why:
+            # `condition` signals an unusable clip (empty, not 1-D) with
+            # ValueError: that is the refusal this function promises.
             return am.Estimate(None, False, f"conditioning refused: {why}", {})
+        except Exception as why:                        # noqa: BLE001
+            # Anything else is a defect in the conditioner, not a property of
+            # the clip, and must not read as "refused" (#615). Still an
+            # Estimate, so one bad clip does not end the sweep, but it names
+            # its type and says so.
+            return am.Estimate(None, False,
+                               f"conditioning ERROR (a defect, not a refusal): "
+                               f"{type(why).__name__}: {why}", {})
         if metric == "lowband_level_db":
             return pm.lowband_level_db(c, sr)
         if metric == "lowband_onset_db":
