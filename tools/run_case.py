@@ -4252,6 +4252,10 @@ def main(argv=None) -> int:
         injected_verdicts[cid] = (state, worst, why, res.get("note", ""))
         res.setdefault("provenance", {})["outcome_code"] = OUTCOME_CODE[state]
         if not a.dry_run:
+            # A `Refused` from here (a corrupt existing record, #600/#610) is
+            # deliberately NOT caught: it ends the whole batch, because
+            # skipping the case would leave a stale record on the board that
+            # reads as current. Documented and tested (#615).
             write_result(c, outdir / f"{cid}.json", res, carry_history=not a.inject)
         states[state] = states.get(state, 0) + 1
         code = max(code, OUTCOME_CODE[state])
