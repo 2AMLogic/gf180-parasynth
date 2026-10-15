@@ -69,6 +69,7 @@ def worktree_state(root: pathlib.Path = ROOT) -> dict:
     too -- tracked modifications from `git diff HEAD`, and every untracked
     file git would not ignore, by content. `dirty` says which of the two
     kinds of record this is."""
+    commit_ok = bool(git("rev-parse", "HEAD", root=root).strip())
     h = hashlib.sha256()
     diff = git("diff", "HEAD", root=root)
     h.update(diff.encode())
@@ -84,7 +85,9 @@ def worktree_state(root: pathlib.Path = ROOT) -> dict:
     return {"commit": source_commit(root=root),
             "described": git("describe", "--always", "--dirty", root=root).strip() or "?",
             "branch": git("rev-parse", "--abbrev-ref", "HEAD", root=root).strip() or "?",
-            "dirty": bool(diff.strip() or untracked),
+            # `git` returns "" on failure, so an unanswered git must not read
+            # as an empty diff: no commit means "cannot say", i.e. dirty (#615)
+            "dirty": bool(diff.strip() or untracked) or not commit_ok,
             "uncommitted_sha256": h.hexdigest()[:16],
             "untracked_files": len(untracked)}
 

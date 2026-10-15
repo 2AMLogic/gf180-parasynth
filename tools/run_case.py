@@ -2315,13 +2315,13 @@ def filt_rolloff(cut_hz: float):
     16.8 % (issue #169). Bounds actually enforced:
     test_run_case.py::test_filt_rolloff_is_nearly_scale_invariant.
 
-    Relation to `reference_compare.response_row`: that function places its
-    slope band from a corner measured without `ref_db` (moving-median passband
-    reference), whereas this uses the DC-plateau reference, so the two do NOT
-    agree by construction; they share the 2.2-7x band definition applied to
-    differently referenced corners. Whether `response_row` and
-    `sound_report._corner` should move is a separate qualification question,
-    not decided here.
+    Relation to `reference_compare.response_row`: since #546 that function also
+    reads its corner against the DC-plateau reference (`am.corner_dc_referenced`),
+    so the two share the corner definition and the 2.2-7x band. They still differ
+    where the plateau refuses: `response_row` yields no slope there, this
+    profile's `_ref_band` does the same. The moving-median convention they used
+    to share read an ideal 4-pole +82 / +25 / +6 % high at 100 / 200 / 400 Hz
+    (tools/probes/corner_reference_convention.py).
 
     Refuses whenever `slope_db_oct` refuses -- a curve that is not a straight
     line over the band has no slope, and that refusal is what found the
@@ -4252,6 +4252,10 @@ def main(argv=None) -> int:
         injected_verdicts[cid] = (state, worst, why, res.get("note", ""))
         res.setdefault("provenance", {})["outcome_code"] = OUTCOME_CODE[state]
         if not a.dry_run:
+            # A `Refused` from here (a corrupt existing record, #600/#610) is
+            # deliberately NOT caught: it ends the whole batch, because
+            # skipping the case would leave a stale record on the board that
+            # reads as current. Documented and tested (#615).
             write_result(c, outdir / f"{cid}.json", res, carry_history=not a.inject)
         states[state] = states.get(state, 0) + 1
         code = max(code, OUTCOME_CODE[state])

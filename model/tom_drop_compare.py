@@ -230,7 +230,8 @@ def provenance() -> dict:
     h = hashlib.sha256((REPO / "model" / "drums_fx.py").read_bytes()).hexdigest()[:16]
     return {"commit": sh("git", "rev-parse", "HEAD"),
             "branch": sh("git", "rev-parse", "--abbrev-ref", "HEAD"),
-            "dirty": bool(sh("git", "status", "--porcelain")),
+            # git unanswered (empty stdout, nonzero rc) cannot be called clean (#615)
+            "dirty": bool(sh("git", "status", "--porcelain")) or not sh("git", "rev-parse", "HEAD"),
             "drums_fx_sha256": h,
             "index_sha256": hashlib.sha256(INDEX.read_bytes()).hexdigest(),
             "python": sys.version.split()[0]}

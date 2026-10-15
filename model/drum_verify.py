@@ -202,7 +202,12 @@ OSC_NOMINAL = [205.3, 369.6, 304.4, 522.7, 800.0, 540.0]
 # ---------------------------------------------------------------- io ----------
 def read_wav(path: str) -> tuple[int, np.ndarray]:
     """Mono float64, DC removed, peak-normalised to 1.0. Levels are not
-    comparable across the reference set anyway (LEVEL was pinned at max)."""
+    comparable across the reference set anyway (LEVEL was pinned at max).
+
+    The DC estimate is the mean over the span from the first to the last
+    non-zero sample, not over the whole file: a whole-file mean moves with the
+    digital silence a clip carries (#617), and the peak normalisation then
+    rescales every sample with it."""
     sr, x = wavfile.read(path)
     x = np.asarray(x)
     if x.ndim > 1:
@@ -210,7 +215,9 @@ def read_wav(path: str) -> tuple[int, np.ndarray]:
     x = x.astype(np.float64)
     if np.issubdtype(np.asarray(wavfile.read(path)[1]).dtype, np.integer):
         x = x / 32768.0
-    x = x - x.mean()
+    nz = np.nonzero(x)[0]
+    if len(nz):
+        x = x - x[nz[0]:nz[-1] + 1].mean()
     pk = np.abs(x).max()
     return sr, (x / pk if pk > 0 else x)
 

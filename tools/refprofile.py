@@ -854,7 +854,8 @@ def worktree_state() -> dict:
             h.update(b"?")
     return {"commit": (_git("rev-parse", "--short", "HEAD").strip() or "?"),
             "branch": (_git("rev-parse", "--abbrev-ref", "HEAD").strip() or "?"),
-            "dirty": bool(diff.strip() or untracked),
+            # `_git` returns "" on failure; unanswered git is not "clean" (#615)
+            "dirty": bool(diff.strip() or untracked) or not _git("rev-parse", "HEAD").strip(),
             "uncommitted_sha256": h.hexdigest()[:16],
             "untracked_files": len(untracked)}
 

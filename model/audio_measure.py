@@ -2234,6 +2234,27 @@ def corner_from_curve(freqs, gain_db, *, ref_band=None, kind: str = "lowpass",
     return Estimate(hz, True, "", dict(plateau_db=ref, band_median_db=band_ref))
 
 
+def corner_dc_referenced(freqs, gain_db, *, ref_band, scale_hz: float) -> Estimate:
+    """`corner_from_curve` against the DC-plateau reference (`dc_plateau_db`)
+    instead of the median of `ref_band`, for a caller whose band moves with the
+    commanded cutoff `scale_hz`. The median carries a different amount of the
+    filter's own droop at each cutoff (issue #546: +82 % at 100 Hz, +25 % at
+    200 Hz, +6 % at 400 Hz on an ideal 4-pole whose truth is 0.4343 of its pole
+    at every cutoff); the plateau does not.
+
+    REFUSES, rather than falling back to the median, wherever `dc_plateau_db`
+    refuses -- which is every cutoff whose band top passes
+    MAX_PLATEAU_BAND_TOP_RATIO of the cutoff (below 250 Hz on a 40 Hz grid
+    floor). A biased number there would read as the filter's.
+
+    Ground truth: tools/probes/corner_reference_convention.py."""
+    ref = dc_plateau_db(freqs, gain_db, ref_band, scale_hz=scale_hz)
+    if not ref.ok:
+        return _fail("no passband reference to measure a corner against: " + ref.reason,
+                     **ref.detail)
+    return corner_from_curve(freqs, gain_db, ref_band=ref_band, ref_db=ref.value)
+
+
 def peak_from_curve(freqs, gain_db, *, ref_band=None, min_peak_db: float = 0.5) -> Estimate:
     """Height of a measured resonant peak over the passband plateau, in dB.
     `detail['f_peak']` is its frequency (parabolic on the measured points) and
