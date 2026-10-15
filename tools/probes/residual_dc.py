@@ -225,6 +225,15 @@ def tail_ring_frac(seg, tail=0.10):
 REAL = Estimator()
 
 
+def label_from_stats(beta, flat):
+    """The frozen OFFSET / SKIRT / MIXED rule. One definition, called by
+    `classify` and by `row_problems`, so a record's label is re-derived under
+    the same rule that produced it."""
+    off = beta >= BETA_OFFSET_MIN and flat >= S_OFFSET_MIN
+    skirt = beta <= BETA_SKIRT_MAX and flat <= S_SKIRT_MAX
+    return "OFFSET" if off else "SKIRT" if skirt else "MIXED"
+
+
 def classify(x, sr, fc, est: Estimator = REAL):
     """(label, detail). label is one of OFFSET, SKIRT, MIXED, REFUSED.
     MIXED = the two independent statistics disagree: reported, not forced."""
@@ -256,9 +265,7 @@ def classify(x, sr, fc, est: Estimator = REAL):
     st["beta_half"], st["flat_half"] = h["beta"], h["flat"]
     if abs(h["beta"] - st["beta"]) > BETA_STABLE_TOL:
         return "REFUSED", dict(reason=f"beta moves {h['beta']:.2f} -> {st['beta']:.2f} with the window", **st)
-    off = st["beta"] >= BETA_OFFSET_MIN and st["flat"] >= S_OFFSET_MIN
-    skirt = st["beta"] <= BETA_SKIRT_MAX and st["flat"] <= S_SKIRT_MAX
-    return ("OFFSET" if off else "SKIRT" if skirt else "MIXED"), st
+    return label_from_stats(st["beta"], st["flat"]), st
 
 
 def window_means(x, sr, edges_ms=WINDOW_EDGES_MS):
@@ -1590,6 +1597,38 @@ def finite_real(x):
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
+def label_problems(label, detail):
+    """Why a non-REFUSED row's label does not follow from its own detail under
+    the frozen limits (#654). `classify` only returns OFFSET / SKIRT / MIXED
+    after every gate below has passed, so a record whose detail fails one was
+    not produced by it. Checked: beta and flat finite and giving `label`; the
+    stored resolution, tail-ring, margin and half-window stability gates.
+    Defeater carried as a permanent control: a SKIRT row relabelled OFFSET with
+    detail and mean_frac untouched used to reach MODEL-SIDE STANDING OFFSET."""
+    out = []
+    num = {k: detail.get(k) for k in ("beta", "flat", "beta_half", "tail_ring", "margin_db", "nfc", "n20")}
+    for k, x in num.items():
+        if not finite_real(x):
+            out.append(f"detail[{k!r}] {x!r} is not a finite real number")
+    if out:
+        return out
+    want = label_from_stats(num["beta"], num["flat"])
+    if want != label:
+        out.append(f"label {label!r} but detail beta={num['beta']!r} flat={num['flat']!r} give {want!r} "
+                   f"under the frozen limits")
+    if num["nfc"] < MIN_BINS_BELOW_FC:
+        out.append(f"detail['nfc'] {num['nfc']!r} is below the {MIN_BINS_BELOW_FC} bins required")
+    if num["n20"] < MIN_BINS_SUB20:
+        out.append(f"detail['n20'] {num['n20']!r} is below the {MIN_BINS_SUB20} bins required")
+    if num["tail_ring"] > TAIL_RING_MAX:
+        out.append(f"detail['tail_ring'] {num['tail_ring']!r} exceeds {TAIL_RING_MAX}")
+    if num["margin_db"] < RES_MARGIN_DB:
+        out.append(f"detail['margin_db'] {num['margin_db']!r} is under the {RES_MARGIN_DB} dB required")
+    if abs(num["beta_half"] - num["beta"]) > BETA_STABLE_TOL:
+        out.append(f"detail['beta_half'] {num['beta_half']!r} vs beta {num['beta']!r} moves more than {BETA_STABLE_TOL}")
+    return out
+
+
 def row_problems(rows):
     """Why a record's rows cannot reach an ending, validated at the JSON
     consumption boundary. Verdict-bearing fields: voice, label, detail and --
@@ -1613,6 +1652,8 @@ def row_problems(rows):
             out.append(f"row {i} ({v}) detail is not an object")
         if row.get("label") != "REFUSED" and not finite_real(row.get("mean_frac")):
             out.append(f"row {i} ({v}) mean_frac {row.get('mean_frac')!r} is not a finite real number")
+        if row.get("label") in LABELS and row.get("label") != "REFUSED" and isinstance(row.get("detail"), dict):
+            out += [f"row {i} ({v}) {p}" for p in label_problems(row["label"], row["detail"])]
     dup = sorted({v for v in voices if isinstance(v, str) and voices.count(v) > 1})
     if dup:
         out.append(f"duplicate rows for {dup}")
