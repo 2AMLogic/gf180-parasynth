@@ -54,10 +54,13 @@ from scipy.signal import resample_poly
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 import audio_measure as am           # noqa: E402
 import drum_verify as dv             # noqa: E402
 import measure_harness as mh         # noqa: E402
+import preparation_contract as pc    # noqa: E402
+import run_case as rc                # noqa: E402
 
 BAND, SPLIT_HZ = dv.BAND, dv.SPLIT_HZ
 TOL_DB = 3.0
@@ -83,25 +86,20 @@ FISCHER_TUNING = {"00": 0.0, "25": 2.5, "50": 5.0, "75": 7.5, "10": 10.0}
 # --------------------------------------------------------------------------
 # The definition
 # --------------------------------------------------------------------------
-def prepare(x, sr: int) -> np.ndarray:
-    """Verbatim from run_case.prepare."""
-    x = np.asarray(x, dtype=np.float64)
-    if am.is_silent(x):
-        return x
-    pk = float(np.abs(x).max())
-    i = int(np.argmax(np.abs(x) > 0.02 * pk))
-    lead = max(0, i - int(1e-3 * sr))
-    if lead >= int(5e-3 * sr):
-        x = x - float(x[:lead].mean())
-    y = x[lead:]
-    p = float(np.abs(y).max())
-    return y / p if p > 0 else y
+# `run_case.prepare` / `run_case.window`, not private copies. This file's copy
+# was "verbatim" until #132 changed the original and kept the #101 lead clamp
+# (#636); a copy cannot be verbatim for longer than the original stays put.
+prepare = rc.prepare
+window = rc.window
 
 
-def window(y, sr: int, t0: float, t1):
-    a = int(t0 * sr)
-    b = len(y) if t1 is None else min(len(y), int(t1 * sr))
-    return y[a:b]
+def check_pair(ref_x, ref_sr: int, ours_x, ours_sr: int, voice: str, name: str) -> None:
+    """REFUSE, naming every violating field, unless the reference and our render
+    are prepared into the same apparatus state. Run before any metric of a pair."""
+    side_r = f"the reference recording {name}"
+    side_o = f"our {voice} render"
+    pc.check_prepared_pair(pc.Side(side_r, prepare(ref_x, ref_sr, side=side_r), ref_sr),
+                           pc.Side(side_o, prepare(ours_x, ours_sr, side=side_o), ours_sr))
 
 
 def band_ratio_db(x, sr: int, split_hz: float, lo: float, hi: float,
@@ -302,7 +300,13 @@ def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
         y = np.asarray(dx.output_fx(np.zeros(n), 0, dm, g, bd, g),
                        dtype=np.float64) / 32768.0
 
-        # as shipped: reference with no lead, ours with 1 ms.
+        # The pair is asserted before any metric: both go through the same
+        # prepare(), which is what #101 looked like too.
+        check_pair(x, sr, y, dx.SR, voice, p["ref_file"])
+
+        # as shipped. Since #132 `prepare` guarantees the same lead on both
+        # sides, so the lead_1ms / lead_0ms variants below no longer differ from
+        # this row; they stay as the record that the old window term is gone.
         r0, _ = body_spectrum(x, sr, voice)
         o1, _ = body_spectrum(y, dx.SR, voice)
 
