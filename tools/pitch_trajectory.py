@@ -19,7 +19,12 @@ WHAT IT REFUSES (Refused, never a number):
   - no onset (signal already loud at sample 0 -- cut into the strike);
   - a metric whose window holds fewer than MIN_FRAMES live frames.  A hit that
     has died before the late window has NO late pitch; reporting 0 cents there
-    would be a short-decay refusal rendered as a perfect score.
+    would be a short-decay refusal rendered as a perfect score;
+  - a glide where the closed-form known answer is wrong by more than
+    GLIDE_FLOOR_CENTS (`_qualify_glide`, #602): the late window must be full and
+    no weaker than GLIDE_LATE_MIN_DB below the peak, and the strongest line must
+    lie within GLIDE_F0_CENTS of f_ref.  MIN_FRAMES alone answered tens of cents
+    wrong just above its threshold.
 
 THE THREE QUANTITIES, kept apart (issue acceptance bullet 2):
   offset_cents(a, b)   median tuning difference over co-live frames
@@ -58,6 +63,22 @@ ATTACK_SKIP_S = 0.010
 EARLY_WINDOW_S = (0.020, 0.050)   # estimator is edge-limited before ~20 ms (qualified)
 LATE_WINDOW_S = (0.080, 0.130)
 MIN_FRAMES = 3
+# glide_cents qualification (#602).  A constant-pitch decaying sinusoid has a
+# TRUE glide of 0, so the reading of one is its own error; the sweep is
+# tools/bd_glide_phase_sweep.py and tools/test_pitch_trajectory.py.  The floor is
+# the documented steady-tone worst error (docs/bd-pitch-baseline-request.md).
+# The two thresholds were selected on the 48 kHz sweep only (knobs 0..10 step
+# 0.1, f0 40..65 step 0.5).  WRONG-THEN-RIGHT, twice: the late threshold was
+# first -16.5 dB; the held-out 44.1 kHz grid read -13.94 c (knob 2.5, 50 Hz) for
+# a true 0, so it became -16.0; the full `range` sweep then found knob 2.6 /
+# 50.5 Hz / 44.1 kHz at -13.96 c (its window bottoms at -15.88 dB), so it became
+# -15.7.  The declared knob 2.5 / 50 Hz / 48 kHz bottoms at -15.56 dB, 0.14 dB
+# inside it: that condition is AT the edge, not comfortably within.  After each
+# move the grid that triggered it stopped being untouched; HELDOUT3 in the
+# test file was generated after the last move.
+GLIDE_FLOOR_CENTS = 13.9
+GLIDE_LATE_MIN_DB = -15.7   # weakest late-window frame vs the peak: a decay this short reads biased by the filter edge
+GLIDE_F0_CENTS = (-140.0, 40.0)   # strongest line vs f_ref: the fixed pass band skews the IF off-centre
 WORST_FRAMES = 4            # 20 ms at HOP_S
 ANALYSIS_S = 0.300
 TAIL_S = 0.100              # signal filtered beyond the analysed span
@@ -81,6 +102,7 @@ class Trajectory:
     f0: float               # strongest line found near f_ref
     sr: int
     onset_index: int
+    f_ref: float = 0.0      # the reference the band was centred on (0 = unknown)
 
 
 def _check(x, sr):
@@ -154,7 +176,7 @@ def trajectory(x, sr: int, f_ref: float, *, onset_index: int | None = None) -> T
     live = a > a.max() * 10 ** (-LIVE_DB / 20)
     if live.sum() * HOP_S < MIN_LIVE_S:
         raise Refused(f"only {live.sum() * HOP_S * 1e3:.0f} ms live (< {MIN_LIVE_S * 1e3:.0f} ms)")
-    return Trajectory((idx - pad) / sr, fi[idx], a, live, f0, sr, i0)
+    return Trajectory((idx - pad) / sr, fi[idx], a, live, f0, sr, i0, float(f_ref))
 
 
 def _window_mean_cents(tr: Trajectory, w, ref_hz: float, what: str) -> float:
@@ -163,6 +185,27 @@ def _window_mean_cents(tr: Trajectory, w, ref_hz: float, what: str) -> float:
         raise Refused(f"{what}: {int(m.sum())} live frame(s) in {w[0]*1e3:.0f}-{w[1]*1e3:.0f} ms "
                       f"(< {MIN_FRAMES}); the hit has no pitch there")
     return 1200 * math.log2(float(np.mean(tr.f[m])) / ref_hz)
+
+
+def _qualify_glide(tr: Trajectory) -> None:
+    """Refuse a glide whose closed-form known answer is off by more than
+    GLIDE_FLOOR_CENTS (#602).  Two causes, one check each; both are written so
+    that a NaN fails them."""
+    if not (math.isfinite(tr.f_ref) and tr.f_ref > 0 and math.isfinite(tr.f0) and tr.f0 > 0):
+        raise Refused("glide: trajectory carries no usable f_ref / line frequency")
+    c = 1200 * math.log2(tr.f0 / tr.f_ref)
+    if not (GLIDE_F0_CENTS[0] <= c <= GLIDE_F0_CENTS[1]):
+        raise Refused(f"glide: strongest line {tr.f0:.2f} Hz is {c:+.0f} cents from f_ref {tr.f_ref:.1f} Hz "
+                      f"(outside {GLIDE_F0_CENTS[0]:+.0f}..{GLIDE_F0_CENTS[1]:+.0f}); "
+                      f"the fixed band reads a zero glide more than {GLIDE_FLOOR_CENTS} cents off there")
+    m = (tr.t >= LATE_WINDOW_S[0]) & (tr.t < LATE_WINDOW_S[1])
+    need = int(round((LATE_WINDOW_S[1] - LATE_WINDOW_S[0]) / HOP_S))
+    if int(m.sum()) < need:
+        raise Refused(f"glide: late window holds {int(m.sum())} of {need} frames")
+    db = 20 * math.log10(max(float(np.min(tr.amp[m])), 1e-300) / float(np.max(tr.amp)))
+    if not (db >= GLIDE_LATE_MIN_DB):
+        raise Refused(f"glide: late window falls to {db:.1f} dB of the peak (< {GLIDE_LATE_MIN_DB} dB); "
+                      f"the ring is too short for a zero glide to read within {GLIDE_FLOOR_CENTS} cents")
 
 
 def glide_cents(tr: Trajectory) -> float:
@@ -174,6 +217,7 @@ def glide_cents(tr: Trajectory) -> float:
         if (tr.live & (tr.t >= LATE_WINDOW_S[0]) & (tr.t < LATE_WINDOW_S[1])).sum() >= MIN_FRAMES else None
     if late is None:
         raise Refused("late window has too few live frames; the hit has no pitch there")
+    _qualify_glide(tr)
     return _window_mean_cents(tr, EARLY_WINDOW_S, float(late), "early window")
 
 

@@ -253,6 +253,16 @@ SELECT_KNOBS = (0.0, 0.3, 0.6, 1.0, 1.5, 2.5, 5.0, 10.0)
 SELECT_F0S = (40.0, 43.5, 46.0, 48.0, 50.0, 52.0, 54.0, 56.0, 60.0, 65.0)
 HELDOUT_KNOBS = (0.15, 0.45, 0.8, 1.2, 2.0, 3.7, 7.5, 8.8)
 HELDOUT_F0S = (41.25, 44.75, 47.25, 49.25, 51.25, 53.25, 55.25, 58.25, 63.25)
+# HELDOUT_* was the first confirmation set; it caught the -16.5 dB threshold (a
+# 44.1 kHz cell read -13.94 c), after which the threshold moved and HELDOUT_* and
+# the 44.1 kHz SELECT_* cells stopped being untouched.  HELDOUT2 was generated
+# after that and has been run once against the final thresholds.
+# HELDOUT2 also stopped being untouched when the full `range` sweep moved the
+# threshold to -15.7; HELDOUT3 was generated after that.
+HELDOUT3_KNOBS = (0.35, 0.95, 1.65, 2.15, 2.45, 2.85, 3.45, 4.7, 5.9, 8.2)
+HELDOUT3_F0S = (40.25, 43.0, 46.75, 48.25, 49.0, 50.25, 51.0, 52.25, 53.0, 54.75, 59.0, 62.5, 65.0)
+HELDOUT2_KNOBS = (0.25, 1.1, 1.8, 2.3, 2.7, 3.3, 4.2, 6.3, 9.1)
+HELDOUT2_F0S = (42.0, 45.5, 47.75, 48.5, 49.5, 50.5, 51.5, 52.5, 53.5, 57.5, 61.0, 64.5)
 
 
 def answered_violations(rates, knobs, f0s, floor=GLIDE_FLOOR_CENTS):
@@ -286,7 +296,9 @@ def test_zero_glide_answers_never_exceed_the_floor():
     bad, answered = answered_violations((48000,), SELECT_KNOBS, SELECT_F0S)
     assert not bad, f"{len(bad)} answered cell(s) beyond {GLIDE_FLOOR_CENTS} c: {bad[:6]}"
     # a refuse-everything estimator also passes the line above; it must not be this one
-    assert answered >= 20, answered
+    for k in (5.0, 10.0):
+        for f0 in (48.0, 50.0, 52.0):
+            assert zero_glide_reading(f0, bd_tau(k, f0), 0.0, 48000) is not None, (k, f0)
 
 
 def test_zero_glide_answers_hold_on_untouched_conditions():
@@ -297,13 +309,33 @@ def test_zero_glide_answers_hold_on_untouched_conditions():
     assert not bad, f"{len(bad)} answered cell(s) beyond {GLIDE_FLOOR_CENTS} c at 44.1 kHz: {bad[:6]}"
 
 
-@pytest.mark.parametrize("sr", [48000, 44100])
-@pytest.mark.parametrize("knob", [2.5, 5.0, 7.5, 10.0])
+def test_zero_glide_answers_hold_on_second_untouched_grid():
+    bad, answered = answered_violations((44100, 48000), HELDOUT2_KNOBS, HELDOUT2_F0S)
+    assert not bad, f"{len(bad)} answered cell(s) beyond {GLIDE_FLOOR_CENTS} c: {bad[:6]}"
+    assert answered > 0
+
+
+def test_zero_glide_answers_hold_on_third_untouched_grid():
+    bad, answered = answered_violations((44100, 48000), HELDOUT3_KNOBS, HELDOUT3_F0S)
+    assert not bad, f"{len(bad)} answered cell(s) beyond {GLIDE_FLOOR_CENTS} c: {bad[:6]}"
+    assert answered > 0
+
+
+@pytest.mark.parametrize("sr,knob", [(48000, 2.5), (48000, 5.0), (48000, 7.5), (48000, 10.0),
+                                     (44100, 5.0), (44100, 7.5), (44100, 10.0)])
 def test_declared_557_conditions_still_answer(sr, knob):
     """A fix that refuses everything is not a fix: the DECLARED knobs at the
-    pitch the BD is declared at (tone 50) must still produce a number."""
+    pitch the BD is declared at (tone 50) must still produce a number, at the
+    gate's rate (48 kHz) and, where the floor allows, at 44.1 kHz."""
     for ph in (0.0, math.pi / 2):
         assert zero_glide_reading(50.0, bd_tau(knob, 50.0), ph, sr) is not None
+
+
+def test_declared_knob_2p5_at_44k_is_a_refusal_not_a_borderline_number():
+    """Pinned: at 44.1 kHz knob 2.5 / 50 Hz reads -13.94 c for a true 0 (floor
+    13.9); the criterion refuses it rather than answering at the edge."""
+    for ph in (0.0, math.pi / 2):
+        assert zero_glide_reading(50.0, bd_tau(2.5, 50.0), ph, 44100) is None
 
 
 def test_old_min_frames_only_gate_is_caught(monkeypatch):

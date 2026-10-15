@@ -328,35 +328,36 @@ def test_onset_phase_alone_cannot_satisfy_the_rule_at_declared_knobs(record, pha
     w = sweep_mod.worst(phase_sweep)
     assert w["phase_only"] > 3.0, "the phase effect vanished: re-measure and update the record"
     ka = record["primary_metric"]["onset_phase_known_answer"]["declared_knobs"]
-    assert w["phase_only"] == pytest.approx(ka["worst_cents"], abs=0.01)
-    assert (w["sr"], w["knob"], w["f0"]) == (ka["worst_at"]["sr"], ka["worst_at"]["decay_knob"],
-                                              ka["worst_at"]["f0_hz"])
-    assert floor / w["phase_only"] == pytest.approx(ka["margin_x"], abs=0.01)
+    # #602: glide_cents now REFUSES the cells the frozen record's worst figure
+    # came from (f0 far from F_REF), so the measured worst can only have moved
+    # down.  The record is frozen (not re-frozen here); it stays a valid upper
+    # bound, which is what this test can still pin.  Re-freezing to the new
+    # measured figure is the record owner's call.
+    assert w["phase_only"] <= ka["worst_cents"] + 0.01, "worse than the frozen record states"
+    assert floor / ka["worst_cents"] == pytest.approx(ka["margin_x"], abs=0.01)
 
 
-def test_edge_scan_worst_exceeds_the_apparatus_part_and_is_recorded(record, edge_sweep, sweep_mod):
-    """The range-wide claim is NOT 'below the rule': near the refusal edge onset
-    phase alone moves a zero-glide reading by more than 27.8 cents.  The record
-    states that figure; this pins it to the measurement."""
-    floor = bp.minimum_improvement_cents(record, {"recording_glide_spread_cents": 0.0})
-    w = sweep_mod.worst(edge_sweep)
+def test_edge_scan_is_now_refused_where_it_read_wrong(record, edge_sweep, sweep_mod):
+    """The frozen record states the PRE-#602 edge-scan worst (onset phase alone
+    moved a zero-glide reading by more than the 27.8 cent apparatus part, near
+    the refusal edge).  glide_cents now refuses those cells (#602), so the scan
+    must hold no answered cell beyond the known-answer floor; the record's
+    figure is the historic measurement, not reproducible by design."""
     ek = record["primary_metric"]["onset_phase_known_answer"]["edge_scan"]
-    assert w["phase_only"] > floor and ek["exceeds_apparatus_part"] is True
-    assert w["phase_only"] == pytest.approx(ek["worst_cents"], abs=0.01)
-    assert (w["sr"], w["knob"], w["f0"]) == (ek["worst_at"]["sr"], ek["worst_at"]["decay_knob"],
-                                              ek["worst_at"]["f0_hz"])
+    assert ek["exceeds_apparatus_part"] is True       # what the estimator did before #602
+    for r in edge_sweep:
+        if not r["refused"]:
+            assert max(abs(r["sin"]), abs(r["cos"])) <= sweep_mod.pt.GLIDE_FLOOR_CENTS, r
     declared = set(sweep_mod.record_knobs())
     assert not declared & {r["knob"] for r in edge_sweep if r["knob"] != 0.0}, \
         "the edge scan must cover knobs the declared conditions do NOT use"
 
 
-def test_glide_cents_accepts_wrong_readings_just_above_the_refusal_edge(edge_sweep):
-    """Finding for a tool follow-up, pinned so it cannot be forgotten or
-    silently fixed unnoticed: a zero-glide tone at DECAY knob 0.6, 52 Hz,
-    48 kHz is NOT refused and reads tens of cents of glide."""
+def test_glide_cents_refuses_the_wrong_readings_just_above_the_old_refusal_edge(edge_sweep):
+    """#602, formerly pinned as a finding: a zero-glide tone at DECAY knob 0.6,
+    52 Hz, 48 kHz was NOT refused and read -68 / -34 cents.  It is refused now."""
     cells = [r for r in edge_sweep if r["knob"] == 0.6 and r["f0"] == 52.0 and r["sr"] == 48000]
-    assert len(cells) == 1 and not cells[0]["refused"]
-    assert abs(cells[0]["sin"]) > 50.0 and abs(cells[0]["cos"]) > 25.0, cells[0]
+    assert len(cells) == 1 and cells[0]["refused"], cells
 
 
 def test_glide_refuses_at_decay_knob_0(record, phase_sweep):
@@ -366,14 +367,16 @@ def test_glide_refuses_at_decay_knob_0(record, phase_sweep):
     pitch at 44.1 kHz.  Below 44 Hz at 48 kHz it does not refuse (and reads
     wrongly); that is recorded, not hidden.  The record's predicted_refusals must
     be exactly the untouched Fischer conditions at a knob where it refuses."""
-    refusing = {r["knob"] for r in phase_sweep if r["refused"]}
-    assert refusing == {0.0}, refusing
+    # #602: refusal is no longer confined to knob 0.  glide_cents also refuses
+    # wherever f0 is far from F_REF, so the other declared knobs refuse at some
+    # pitches; what must hold is that knob 0 refuses at EVERY pitch and rate (the
+    # 8 cells below 44 Hz at 48 kHz that used to answer wrongly are gone).
     k0 = [r for r in phase_sweep if r["knob"] == 0.0]
-    assert all(r["refused"] for r in k0 if r["sr"] == 44100 or r["f0"] >= 44.0)
-    assert all(isinstance(r["sin"], str) or isinstance(r["cos"], str) for r in k0 if r["refused"])
-    leak = [r for r in k0 if not r["refused"]]
-    assert leak and all(r["sr"] == 48000 and r["f0"] < 44.0 for r in leak)
-    assert all(abs(r["sin"]) > 50.0 and abs(r["cos"]) > 50.0 for r in leak), "reads wrongly, not zero"
+    assert k0 and all(r["refused"] for r in k0), [r for r in k0 if not r["refused"]]
+    assert all(isinstance(r["sin"], str) or isinstance(r["cos"], str) for r in k0)
+    for k in (2.5, 5.0, 7.5, 10.0):
+        assert any(not r["refused"] for r in phase_sweep if r["knob"] == k), k   # still measurable
+    refusing = {0.0}
     want = {c["id"] for c in bp.untouched_fischer(record) if c["model"]["decay_knob"] in refusing}
     assert want == {"U-F-T50-D00", "U-F-T00-D00"}
     rr = record["primary_metric"]["refused_readings"]
