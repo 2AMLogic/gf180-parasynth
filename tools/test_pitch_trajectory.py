@@ -213,3 +213,105 @@ def test_blind_estimator_is_caught_by_the_glide_qualification():
     with pytest.raises(AssertionError):
         want = 56.0
         assert pt.glide_cents(blind) == pytest.approx(want, abs=15.0)
+
+
+# --------------------------------------------------------------------------
+# glide_cents must REFUSE where its known answer is wrong (#602)
+# --------------------------------------------------------------------------
+# A constant-pitch decaying sinusoid has a TRUE glide of ZERO, so every
+# answered reading is its own error.  The floor is the largest steady-tone
+# error the estimator is documented to have (docs/bd-pitch-baseline-request.md,
+# "steady-tone worst error from 20 ms: 13.9 cents (48k)"); a reading that can be
+# further from the truth than that is not data, it must be a refusal.
+GLIDE_FLOOR_CENTS = 13.9
+F_REF = 52.0
+
+
+def zero_glide_tone(f0, tau, phase, sr):
+    """10 ms of silence then 0.5 sin(2 pi f0 t + phase) exp(-t/tau): true glide 0."""
+    t = np.arange(sr) / sr
+    return np.concatenate([np.zeros(sr // 100),
+                           0.5 * np.sin(2 * np.pi * f0 * t + phase) * np.exp(-t / tau)]), sr
+
+
+def zero_glide_reading(f0, tau, phase, sr):
+    """The glide_cents of the zero-glide tone, or None when it REFUSES."""
+    try:
+        return pt.glide_cents(pt.trajectory(*zero_glide_tone(f0, tau, phase, sr), F_REF))
+    except pt.Refused:
+        return None
+
+
+def bd_tau(knob, f0):
+    import bd_glide_phase_sweep as sweep
+    return sweep.bd_q(knob) / (math.pi * f0)
+
+
+# knobs chosen on 48 kHz; 44.1 kHz and the offset f0 grid are held out (see
+# test_zero_glide_answers_hold_on_untouched_conditions)
+SELECT_KNOBS = (0.0, 0.3, 0.6, 1.0, 1.5, 2.5, 5.0, 10.0)
+SELECT_F0S = (40.0, 43.5, 46.0, 48.0, 50.0, 52.0, 54.0, 56.0, 60.0, 65.0)
+HELDOUT_KNOBS = (0.15, 0.45, 0.8, 1.2, 2.0, 3.7, 7.5, 8.8)
+HELDOUT_F0S = (41.25, 44.75, 47.25, 49.25, 51.25, 53.25, 55.25, 58.25, 63.25)
+
+
+def answered_violations(rates, knobs, f0s, floor=GLIDE_FLOOR_CENTS):
+    """(sr, knob, f0, phase, reading) for every ANSWERED cell further than
+    `floor` from the true 0, and the number of cells that answered."""
+    bad, answered = [], 0
+    for sr in rates:
+        for k in knobs:
+            for f0 in f0s:
+                for ph in (0.0, math.pi / 2):
+                    g = zero_glide_reading(f0, bd_tau(k, f0), ph, sr)
+                    if g is None:
+                        continue
+                    answered += 1
+                    if not abs(g) <= floor:
+                        bad.append((sr, k, f0, round(ph, 2), round(g, 1)))
+    return bad, answered
+
+
+def test_named_wrong_answers_are_refused_or_within_floor():
+    """The two cells #602 names: knob 0.6 / 52 Hz read -68 c; knob 0 / 40-43.5 Hz
+    read +76..+97 c.  Each must now be a refusal or within the floor."""
+    cells = [(0.6, 52.0)] + [(0.0, f) for f in (40.0, 41.5, 43.5)]
+    for k, f0 in cells:
+        for ph in (0.0, math.pi / 2):
+            g = zero_glide_reading(f0, bd_tau(k, f0), ph, 48000)
+            assert g is None or abs(g) <= GLIDE_FLOOR_CENTS, (k, f0, ph, g)
+
+
+def test_zero_glide_answers_never_exceed_the_floor():
+    bad, answered = answered_violations((48000,), SELECT_KNOBS, SELECT_F0S)
+    assert not bad, f"{len(bad)} answered cell(s) beyond {GLIDE_FLOOR_CENTS} c: {bad[:6]}"
+    # a refuse-everything estimator also passes the line above; it must not be this one
+    assert answered >= 20, answered
+
+
+def test_zero_glide_answers_hold_on_untouched_conditions():
+    """Criteria were chosen on 48 kHz with SELECT_*; these were not used."""
+    bad, answered = answered_violations((44100, 48000), HELDOUT_KNOBS, HELDOUT_F0S)
+    assert not bad, f"{len(bad)} answered cell(s) beyond {GLIDE_FLOOR_CENTS} c: {bad[:6]}"
+    bad, answered = answered_violations((44100,), SELECT_KNOBS, SELECT_F0S)
+    assert not bad, f"{len(bad)} answered cell(s) beyond {GLIDE_FLOOR_CENTS} c at 44.1 kHz: {bad[:6]}"
+
+
+@pytest.mark.parametrize("sr", [48000, 44100])
+@pytest.mark.parametrize("knob", [2.5, 5.0, 7.5, 10.0])
+def test_declared_557_conditions_still_answer(sr, knob):
+    """A fix that refuses everything is not a fix: the DECLARED knobs at the
+    pitch the BD is declared at (tone 50) must still produce a number."""
+    for ph in (0.0, math.pi / 2):
+        assert zero_glide_reading(50.0, bd_tau(knob, 50.0), ph, sr) is not None
+
+
+def test_old_min_frames_only_gate_is_caught(monkeypatch):
+    """INJECTED BUG (rule 8): restore the gate that counted live frames and
+    nothing else.  The known-answer check above must then fail, or it would
+    pass an estimator that has the original defect."""
+    monkeypatch.setattr(pt, "_qualify_glide", lambda tr: None)
+    bad, _ = answered_violations((48000,), SELECT_KNOBS, SELECT_F0S)
+    assert bad, "the MIN_FRAMES-only gate passed the known-answer sweep: the sweep cannot see #602"
+    named = zero_glide_reading(52.0, bd_tau(0.6, 52.0), 0.0, 48000)
+    assert named is not None and abs(named) > GLIDE_FLOOR_CENTS
