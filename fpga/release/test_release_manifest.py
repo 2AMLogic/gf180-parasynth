@@ -122,6 +122,83 @@ def test_image_source_absent_from_the_source_commit_refuses(tmp_path, monkeypatc
     assert verdict == "REFUSED" and "voice_dp.v" in detail and "source commit" in detail
 
 
+# ---- population: the sets are compared with an independent expected list -----
+# (docs/verification-rules.md rule 8: each fixture must fail on the population
+# message, not on a hash mismatch, so a hash check cannot satisfy it.)
+_POP = {
+    "published_sha256": "published files",
+    "published_evidence_sha256": "DSP evidence files",
+    "source_sha256": "image sources",
+}
+
+
+def _write_pub(d, pub, rep=None):
+    if rep is not None:
+        (d / "report.json").write_text(json.dumps(rep))
+        pub["published_sha256"]["report.json"] = _sha(d / "report.json")
+    (d / "publication.json").write_text(json.dumps(pub))
+
+
+@pytest.mark.parametrize("key", sorted(_POP))
+def test_emptied_set_refuses_on_population(tmp_path, monkeypatch, key):
+    d = _copy_pub(tmp_path)
+    pub = json.loads((d / "publication.json").read_text())
+    rep = json.loads((d / "report.json").read_text())
+    pub[key] = {}
+    if key == "source_sha256":
+        rep[key] = {}  # both emptied: the report/publication equality still holds
+        _write_pub(d, pub, rep)
+    else:
+        _write_pub(d, pub)
+    monkeypatch.setattr(rm, "PUB_DIR", d)
+    with pytest.raises(rm.Refused, match=rf"{_POP[key]}.*missing"):
+        rm.image_identity()
+
+
+@pytest.mark.parametrize("key,victim", [
+    ("published_sha256", "timing.rpt"),
+    ("published_evidence_sha256", "vivado_extract.log"),
+    ("source_sha256", "rtl-sketch/voice_dp.v"),
+])
+def test_entry_removed_with_its_file_refuses_on_population(tmp_path, monkeypatch, key, victim):
+    d = _copy_pub(tmp_path)
+    pub = json.loads((d / "publication.json").read_text())
+    rep = json.loads((d / "report.json").read_text())
+    del pub[key][victim]
+    if key == "source_sha256":
+        del rep[key][victim]
+        _write_pub(d, pub, rep)
+    else:
+        base = d / "dsp-dpreg-evidence" if key == "published_evidence_sha256" else d
+        (base / victim).unlink()
+        _write_pub(d, pub)
+    monkeypatch.setattr(rm, "PUB_DIR", d)
+    with pytest.raises(rm.Refused, match=rf"{_POP[key]}.*missing.*{victim}"):
+        rm.image_identity()
+
+
+@pytest.mark.parametrize("key,extra", [
+    ("published_sha256", "extra.rpt"),
+    ("published_evidence_sha256", "extra.log"),
+    ("source_sha256", "rtl-sketch/extra.v"),
+])
+def test_extra_entry_refuses_on_population(tmp_path, monkeypatch, key, extra):
+    d = _copy_pub(tmp_path)
+    pub = json.loads((d / "publication.json").read_text())
+    rep = json.loads((d / "report.json").read_text())
+    if key == "source_sha256":
+        pub[key][extra] = rep[key][extra] = "a" * 64
+        _write_pub(d, pub, rep)
+    else:
+        base = d / "dsp-dpreg-evidence" if key == "published_evidence_sha256" else d
+        (base / extra).write_text("x")
+        pub[key][extra] = _sha(base / extra)
+        _write_pub(d, pub)
+    monkeypatch.setattr(rm, "PUB_DIR", d)
+    with pytest.raises(rm.Refused, match=rf"{_POP[key]}.*extra.*{extra}"):
+        rm.image_identity()
+
+
 def test_working_tree_moving_past_the_image_is_reported_not_bound():
     """#252 changed voice_dp.v on main after the image was built: the release
     still names the image's own sources (at IMAGE_SOURCE_COMMIT) and says the
