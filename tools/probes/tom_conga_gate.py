@@ -285,8 +285,8 @@ def _to(y, ysr, sr):
     return resample_poly(np.asarray(y, dtype=np.float64), sr // g, ysr // g)
 
 
-def score(T, bar, y, ysr, label) -> dict:
-    v = pg.verdict(T.distance(y, ysr, label), bar)
+def score(T, bar, y, ysr, label, match_rate=False) -> dict:
+    v = pg.verdict(T.distance(y, ysr, label, match_rate=match_rate), bar)
     return {"verdict": v["verdict"], "worst": v["worst_ratio"], "worst_feature": v["worst_feature"],
             "ratio": {f: v["features"][f].get("ratio") for f in pg.FEATURES},
             "d": {f: v["features"][f].get("d") for f in pg.FEATURES}}
@@ -517,14 +517,20 @@ def ratepath16(refs: pathlib.Path) -> dict:
         y, ysr = pg.render_ours(s)
         y = np.asarray(y, dtype=np.float64)
         row = {"target_sr": sr, "target_impulse_db": T.a["impulse"].tolist()}
-        for name, (z, zs) in (("native", (y, ysr)), ("via-take-rate", (_to(y, ysr, sr) if sr != ysr else y, sr))):
-            a_ = pg.analyse(pg.condition(z, zs, side=name), T.plan)
+        # "gate-matched" is the shipped fix (#588): the native render handed to
+        # the gate with match_rate=True. It must equal "via-take-rate".
+        for name, (z, zs, mr) in (("native", (y, ysr, False)),
+                                  ("via-take-rate", (_to(y, ysr, sr) if sr != ysr else y, sr, False)),
+                                  ("gate-matched", (y, ysr, True))):
+            zc, zcs = (pg.resample_to(z, zs, sr), sr) if mr else (z, zs)
+            a_ = pg.analyse(pg.condition(zc, zcs, side=name), T.plan)
             row[name] = {"impulse_db": a_["impulse"].tolist(),
-                         "impulse_ratio": score(T, b, z, zs, name)["ratio"]["impulse"]}
+                         "impulse_ratio": score(T, b, z, zs, name, match_rate=mr)["ratio"]["impulse"]}
         out[s] = row
         print(s, sr, "target", np.round(T.a["impulse"], 1), "| native", np.round(row["native"]["impulse_db"], 1),
               f"x{row['native']['impulse_ratio']:.2f}", "| via take rate", np.round(row["via-take-rate"]["impulse_db"], 1),
-              f"x{row['via-take-rate']['impulse_ratio']:.2f}", flush=True)
+              f"x{row['via-take-rate']['impulse_ratio']:.2f}", "| gate-matched",
+              f"x{row['gate-matched']['impulse_ratio']:.2f}", flush=True)
     return out
 
 

@@ -368,8 +368,22 @@ def _rec(cond, rows, commit="a" * 40, dirty=False, limits=None):
                 limits=limits if limits is not None else R._jsonable(R.declared_limits()), rows=rows)
 
 
+# detail a non-REFUSED classify() row carries, one per label, inside every in-limit bound
+_DETAIL = {
+    "OFFSET": dict(beta=0.95, flat=12.0),
+    "SKIRT": dict(beta=0.30, flat=1.0),
+    "MIXED": dict(beta=0.70, flat=5.0),
+}
+
+
+def _in_limit_detail(label):
+    return dict(_DETAIL[label], beta_half=_DETAIL[label]["beta"], tail_ring=0.0, margin_db=R.RES_MARGIN_DB + 10,
+                nfc=R.MIN_BINS_BELOW_FC, n20=R.MIN_BINS_SUB20)
+
+
 def _vrow(voice, label, mean_frac=0.0, reason=None):
-    return dict(voice=voice, label=label, mean_frac=mean_frac, detail=dict(reason=reason))
+    detail = dict(reason=reason) if label == "REFUSED" else _in_limit_detail(label)
+    return dict(voice=voice, label=label, mean_frac=mean_frac, detail=detail)
 
 
 def _write(tmp_path, *recs):
@@ -408,6 +422,65 @@ def test_verdict_refuses_records_it_cannot_combine(tmp_path, capsys, make, why):
     assert R.main(["--verdict", *_write(tmp_path, *make())]) == 2
     out = capsys.readouterr().out
     assert "REFUSED" in out and why in out, out
+
+
+@pytest.mark.parametrize("true,forged", [("SKIRT", "OFFSET"), ("OFFSET", "SKIRT"), ("MIXED", "OFFSET"),
+                                         ("MIXED", "SKIRT"), ("SKIRT", "MIXED"), ("OFFSET", "MIXED")])
+def test_verdict_refuses_a_label_the_detail_does_not_give(true, forged):
+    """Defeater (#654): flip a row's label, leave detail and mean_frac alone. It
+    used to reach MODEL-SIDE STANDING OFFSET on a SKIRT subject."""
+    big = 10 * R.OFFSET_PEAK_FRAC
+    honest = [_rec(c, [_vrow("RS", true, big)]) for c in ("dev", "confirm")]
+    assert R.verdicts(honest)[0] == "OK"
+    forged_recs = [_rec(c, [dict(_vrow("RS", true, big), label=forged)]) for c in ("dev", "confirm")]
+    status, ends, why = R.verdicts(forged_recs)
+    assert status == "REFUSED" and ends == {}, (status, ends)
+    assert any("label" in w and forged in w and true in w for w in why), why
+
+
+@pytest.mark.parametrize("beta,flat,want", [
+    (R.BETA_OFFSET_MIN, R.S_OFFSET_MIN, "OFFSET"),
+    (R.BETA_SKIRT_MAX, R.S_SKIRT_MAX, "SKIRT"),
+    (R.BETA_OFFSET_MIN, R.S_OFFSET_MIN - 1e-9, "MIXED"),
+    (R.BETA_SKIRT_MAX + 1e-9, R.S_SKIRT_MAX, "MIXED"),
+])
+def test_label_rederivation_keeps_the_boundary_label_classify_gives(beta, flat, want):
+    """Exactly on a frozen limit keeps classify's label: no valid round trip is refused."""
+    assert R.label_from_stats(beta, flat) == want
+    row = dict(_vrow("RS", want), detail=dict(_in_limit_detail(want), beta=beta, flat=flat, beta_half=beta))
+    assert R.row_problems([row]) == []
+    other = "SKIRT" if want != "SKIRT" else "OFFSET"
+    assert R.row_problems([dict(row, label=other)])
+
+
+@pytest.mark.parametrize("key,bad", [
+    ("beta", None), ("beta", float("nan")), ("flat", "x"), ("flat", float("inf")),
+    ("tail_ring", R.TAIL_RING_MAX + 0.01), ("margin_db", R.RES_MARGIN_DB - 0.1),
+    ("beta_half", 0.95 - R.BETA_STABLE_TOL - 0.01), ("nfc", R.MIN_BINS_BELOW_FC - 1),
+    ("n20", R.MIN_BINS_SUB20 - 1),
+])
+def test_row_problems_refuses_detail_outside_the_frozen_limits(key, bad):
+    row = _vrow("RS", "OFFSET")
+    assert R.row_problems([row]) == []
+    row["detail"][key] = bad
+    assert any(key in p for p in R.row_problems([row])), R.row_problems([row])
+    del row["detail"][key]
+    assert any(key in p for p in R.row_problems([row]))
+
+
+@pytest.mark.parametrize("fx,want", [("fx_offset", "OFFSET"), ("fx_skirt", "SKIRT")])
+def test_real_classify_output_survives_the_json_round_trip(fx, want):
+    """The thing that ships: a row built from classify()'s own detail, through
+    JSON, passes the re-derivation (no stubbed detail)."""
+    label, detail = R.classify(getattr(R, fx)(), SR, FC)
+    assert label == want, label
+    row = json.loads(json.dumps(dict(voice="RS", label=label, mean_frac=0.0, detail=R._jsonable(detail))))
+    assert R.row_problems([row]) == []
+    assert R.row_problems([dict(row, label="MIXED" if want != "MIXED" else "OFFSET")])
+
+
+def test_refused_row_is_not_rederived():
+    assert R.row_problems([_vrow("RS", "REFUSED", reason="silent")]) == []
 
 
 def test_screen_rows_out_round_trips_into_verdict(tmp_path, monkeypatch):

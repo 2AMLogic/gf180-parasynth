@@ -438,3 +438,62 @@ def test_the_audit_reports_every_axis_with_a_verdict_and_a_number():
     assert sorted(closed) == ["drive", "numerical-precision"], rep["axes"]
     assert rep["conclusion"].startswith("Rung 1")
     assert json.dumps(rep)          # the report has to be serialisable to be evidence
+
+
+# =============================================================================
+# 4. `_ring_ratio` shares the sustained-ring policy (issue #548)
+# =============================================================================
+class _FixedRing:
+    """A device whose free ring is a given record, so the estimator policy is
+    exercised through the real `_ring_ratio` without a render."""
+
+    def __init__(self, y):
+        self.y = y
+
+    def ring(self, cut, res, seconds=0.8):
+        return self.y
+
+
+def test_ring_ratio_refuses_below_onset_dead_band_limit_cycle():
+    """The defect: 1131 Hz at res 0.97 and 800 Hz at res 0.98 ring down to a
+    ~6e-4 full-scale dead-band limit cycle. Before #548 `_ring_ratio` returned
+    0.9813 and 0.9917 for them; it must refuse, on the real filter."""
+    import reference_rigs as rr
+    dev = rr.OurLadder("ours")
+    for cut, res in ((1131.0, 0.97), (800.0, 0.98)):
+        with pytest.raises(lh.Refused, match="not a sustained ring"):
+            lh._ring_ratio(dev, cut, res)
+
+
+def test_ring_ratio_refuses_estimator_disagreement_instead_of_taking_the_peak():
+    """Injected control: 1000 Hz + 0.8 x 2500 Hz has its crossings follow the
+    faster line while the spectral peak stays at 1000 Hz. The old code took the
+    peak (ratio 1.0 at a 1000 Hz cut); it must refuse as ambiguous."""
+    import res_tuning as rt
+    y = (rt._synthetic(1000.0, 0.48, "sine") + 0.8 * rt._synthetic(2500.0, 0.48, "sine"))
+    with pytest.raises(lh.Refused, match="ambiguous"):
+        lh._ring_ratio(_FixedRing(y), 1000.0, 1.05)
+
+
+def test_ring_ratio_known_frequency_synthetic_and_same_answer_as_the_public_estimator():
+    """Known-frequency qualification through BOTH public paths: a record whose
+    frequency is true by construction comes out of `_ring_ratio` as f / cut and
+    equals `rt.ring_frequency` on the same record."""
+    import res_tuning as rt
+    for shape in ("sine", "saturated"):
+        for f in (100.0, 1000.0, 6400.0):
+            y = rt._synthetic(f, rt.QUALIFY_SECONDS, shape)
+            ratio = lh._ring_ratio(_FixedRing(y), 1000.0, 1.05)
+            assert ratio == rt.ring_frequency(y) / 1000.0
+            assert abs(1200.0 * math.log2(ratio * 1000.0 / f)) < 2.0, (shape, f, ratio)
+    assert rt.qualify_estimator()["ok"]
+
+
+def test_ring_ratio_refusal_is_the_cli_exit_code_2(monkeypatch):
+    """A shared-estimator refusal reaches `main` as `ladder_headroom.Refused`,
+    so the CLI still exits 2 rather than crashing with a foreign exception."""
+    import ring_estimator as re_
+    assert not issubclass(re_.Refused, lh.Refused)
+    monkeypatch.setattr(lh, "audit", lambda quick=False: lh._ring_ratio(
+        _FixedRing([0.0] * 100), 1000.0, 1.05))
+    assert lh.main(["--quick"]) == 2

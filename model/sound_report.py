@@ -129,7 +129,12 @@ def _ladder_curves(ctx):
 
 def _corner(ctx, cut):
     g = _ladder_curves(ctx)[cut]
-    e = am.corner_from_curve(FREQS, g, ref_band=(FREQS[0], max(100.0, cut * 0.25)))
+    # DC-plateau reference (#546, tools/probes/corner_reference_convention.py):
+    # the median of this moving band read +82 % / +25 % / +6 % high at 100 / 200
+    # / 400 Hz on an ideal 4-pole. Cutoffs where the plateau refuses (100, 200
+    # Hz here) return None and are left out of the spread, not measured badly.
+    e = am.corner_dc_referenced(FREQS, g, ref_band=(FREQS[0], max(100.0, cut * 0.25)),
+                                scale_hz=cut)
     return e.value if e.ok else None
 
 
@@ -442,13 +447,17 @@ LOCK = "28dfd55"
 #   (voice, property) -> (commit that moved it, the value before it, why)
 RELOCKS = {
     ("LADDER", "corner ratio drift"): (
-        "50d7aaf", 9.40462,
-        "DR 0011 baked CUT_TRIM * Huovilainen's fcr() into voice_fx.make_g_rom(), "
-        "so the shipped cutoff ROM is the TUNED one. The cutoff scaling got more "
-        "uniform, 9.40 % -> 4.21 %. This property IS the defect contract 17.12 "
-        "records and DR 0011 is its identified fix, so the lock falling is the fix "
-        "landing, not a regression: the sibling 'self-oscillation tuning spread' "
-        "target fell 7.92 -> 0.51 pp in the same commit"),
+        "b572b7fc", 4.21473,
+        "#546: the corner is now read against the DC-plateau reference, not the "
+        "median of a band that moves with the cutoff. On an ideal 4-pole (truth "
+        "0.4343 of the pole at every cutoff) the median read +82 / +25 / +6 % high "
+        "at 100 / 200 / 400 Hz, which is estimator drift reading as cutoff-control "
+        "drift (tools/probes/corner_reference_convention.py). The plateau refuses "
+        "at 100 and 200 Hz, so the spread is now over the five cutoffs 400-6400 Hz "
+        "and 4.21 % -> 2.75 %; on those same five cutoffs the old reference gave "
+        "2.34 %, so this is a coverage change, not a better ladder. Earlier move: "
+        "50d7aaf, DR 0011 baked CUT_TRIM * Huovilainen's fcr() into "
+        "voice_fx.make_g_rom() (9.40 % -> 4.21 %), the fix for contract 17.12"),
     ("LT", "attack"): (
         "80b3756", 16.625,
         "the toms' pitch drop was corrected from the inferred x1.7 to the x1.06 "
@@ -547,8 +556,8 @@ def build_properties():
 # the rest are untouched at their 28dfd55 values on purpose.
 LOCKS = {
     ("LADDER", "corner at 800 Hz / commanded"): 0.786039,
-    # re-locked from 9.40462 in #242; see RELOCKS above (50d7aaf, DR 0011)
-    ("LADDER", "corner ratio drift"): 4.21473,
+    # re-locked from 9.40462 in #242 and from 4.21473 in #546; see RELOCKS above
+    ("LADDER", "corner ratio drift"): 2.74577,
     ("LADDER", "h3 at self-oscillation (res 1.3)"): -45.3762,
     ("LADDER", "h5-h3 at self-oscillation (res 1.3)"): -13.7836,
     ("BD", "T20"): 307.979,
@@ -660,6 +669,19 @@ LOCK_CHANGELOG = [
                   "the full rationale.",
         "locks": {
             ("LT", "attack"): (16.625, 6.27083),
+        },
+    },
+    {
+        "at": "50d7aaf",
+        "recorded_by": "b572b7fc",
+        "issue": 546,
+        "reason": "_corner reads the -3 dB point against the DC-plateau reference "
+                  "instead of the moving-band median (+82 / +25 / +6 % high at 100 / "
+                  "200 / 400 Hz on an ideal 4-pole) and refuses where the plateau "
+                  "does (100, 200 Hz), so the spread covers 400-6400 Hz only -- see "
+                  "RELOCKS above for the full rationale.",
+        "locks": {
+            ("LADDER", "corner ratio drift"): (4.21473, 2.74577),
         },
     },
 ]
