@@ -73,6 +73,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import ring_estimator                                               # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 
 SR = rr.SR
@@ -547,13 +548,19 @@ def report(out):                                                  # noqa: C901
 def calibrate_knob(dev, name, want_hz, lo=0.05, hi=0.98, iters=9, res=None):
     """For a device whose cutoff control has no units (Mini V3), find the knob
     position whose SELF-OSCILLATION lands at `want_hz`. Bisection on a
-    measured frequency, not a guess at the taper."""
+    measured frequency, not a guess at the taper. A step whose ring is refused
+    (`ring_estimator`: decaying, dead-band, too short) RAISES `Refused` -- it
+    used to count as 0 Hz and bias the bisection toward a higher knob."""
     res = res_grid(name)[-1] if res is None else res
     for _ in range(iters):
         mid = 0.5 * (lo + hi)
         y = dev.ring(mid, res, seconds=0.5)
-        e = am.dominant_frequency(y, 25.0, 15000.0, SR)
-        f = e.value if e.ok else 0.0
+        try:
+            f = ring_estimator.ring_frequency(y, SR)
+        except ring_estimator.Refused as exc:
+            raise ring_estimator.Refused(
+                f"calibrate_knob({name}, {want_hz:.1f} Hz): the ring at knob {mid:.4f} "
+                f"is not a measurement ({exc})") from exc
         if f > want_hz:
             hi = mid
         else:
@@ -562,12 +569,13 @@ def calibrate_knob(dev, name, want_hz, lo=0.05, hi=0.98, iters=9, res=None):
 
 
 def _tracking_f_osc(y):
-    """f_osc of one tracking-stage ring: the zero-crossing frequency when it
-    agrees with the spectral peak inside 2 %, the peak otherwise, else None."""
-    e = am.dominant_frequency(y, 20.0, 20000.0, SR)
-    z = am.zero_crossing_frequency(y, SR)
-    return z.value if (z.ok and e.ok and abs(z.value - e.value) / e.value < 0.02) \
-        else (e.value if e.ok else None)
+    """f_osc of one tracking-stage ring through `ring_estimator.ring_frequency`
+    (#703), or None where it refuses: a decay or a below-onset dead-band limit
+    cycle is not a ring and is not reported as a pitch."""
+    try:
+        return ring_estimator.ring_frequency(y, SR)
+    except ring_estimator.Refused:
+        return None
 
 
 def cut_setting_for(dev, name, hz, cache):

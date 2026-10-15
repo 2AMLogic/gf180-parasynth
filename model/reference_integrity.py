@@ -44,6 +44,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import ring_estimator                                               # noqa: E402
 
 SR = rr.SR
 
@@ -311,10 +312,10 @@ def _tracking_once(name, cache):
                 cs, chz = rc.cut_setting_for(dev, name, hz, cache)
                 y = dev.ring(cs, rc.res_grid(name)[-1], seconds=0.8)
                 cmd = chz if chz is not None else hz
-            e = am.dominant_frequency(y, hz * 0.3, hz * 2.5, SR)
-            z = am.zero_crossing_frequency(y, SR)
-            f = (z.value if (z.ok and e.ok and abs(z.value - e.value) / e.value < 0.02)
-                 else (e.value if e.ok else None))
+            try:
+                f = ring_estimator.ring_frequency(y, SR)
+            except ring_estimator.Refused:
+                f = None
             errs[hz] = None if not f else (f / cmd - 1) * 100
         return errs
     finally:

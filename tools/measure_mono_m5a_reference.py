@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT / "model"))
 
 import audio_measure as am  # noqa: E402
 import reference_rigs as rr  # noqa: E402
+import ring_estimator  # noqa: E402
 import reference_voice as rv  # noqa: E402
 import voice_fx as vf  # noqa: E402
 
@@ -405,11 +406,13 @@ def _qualify_reference_integrity() -> dict:
 
 
 def ring_hz(ring) -> float:
-    """The frequency of a Mini V3 free ring: the dominant spectral line."""
-    e = am.dominant_frequency(ring, 25.0, 15000.0, SR)
-    if not e.ok:
-        raise Refused(f"ring frequency refused: {e.reason}")
-    return float(e.value)
+    """The frequency of a Mini V3 free ring, through
+    `ring_estimator.ring_frequency` (#703): a sustained ring whose zero
+    crossings and spectral peak agree inside 0.5 %, else `Refused`."""
+    try:
+        return float(ring_estimator.ring_frequency(ring, SR))
+    except ring_estimator.Refused as exc:
+        raise Refused(f"ring frequency refused: {exc}") from exc
 
 
 def _measure_open_cutoff(repeats: int = 3) -> dict:
@@ -419,9 +422,10 @@ def _measure_open_cutoff(repeats: int = 3) -> dict:
     readbacks = []
     wrong_block_rig = rr.MiniV3Rig(block=512)
     wrong_block_audio = np.asarray(wrong_block_rig.ring(1.0, 0.98, seconds=1.2), dtype=np.float64)
-    wrong_block_estimate = am.dominant_frequency(wrong_block_audio, 25.0, 15000.0, SR)
-    if not wrong_block_estimate.ok:
-        raise Refused(f"wrong-block cutoff control could not be measured: {wrong_block_estimate.reason}")
+    try:
+        wrong_block_hz = ring_hz(wrong_block_audio)
+    except Refused as exc:
+        raise Refused(f"wrong-block cutoff control could not be measured: {exc}") from exc
     for _ in range(repeats):
         rig = rr.MiniV3Rig(block=BLOCK)
         ring = np.asarray(rig.ring(1.0, 0.98, seconds=1.2), dtype=np.float64)
@@ -431,15 +435,16 @@ def _measure_open_cutoff(repeats: int = 3) -> dict:
         })
         if not len(ring) or float(np.max(np.abs(ring))) < 1e-5:
             raise Refused("Mini V3 max-cutoff calibration ring is silent")
-        measured = am.dominant_frequency(ring, 25.0, 15000.0, SR)
-        if not measured.ok or measured.value < 1000.0:
-            raise Refused(f"Mini V3 max-cutoff ring measurement refused: {measured.reason}")
-        values.append(float(measured.value))
-        prominence.append(float(measured.detail.get("prominence_db", 0.0)))
+        measured_hz = ring_hz(ring)
+        if measured_hz < 1000.0:
+            raise Refused(f"Mini V3 max-cutoff ring measurement refused: {measured_hz:.1f} Hz is below 1000 Hz")
+        values.append(measured_hz)
+        prominence.append(float(am.dominant_frequency(ring, 25.0, 15000.0, SR)
+                                .detail.get("prominence_db", 0.0)))
     spread = max(values) - min(values)
     if spread > 10.0:
         raise Refused(f"Mini V3 max-cutoff measurement is not repeatable: {spread:.2f} Hz")
-    if abs(float(wrong_block_estimate.value) - float(np.median(values))) <= 10.0:
+    if abs(float(wrong_block_hz) - float(np.median(values))) <= 10.0:
         raise Refused("wrong-block cutoff control did not distinguish the 512-sample apparatus from the pinned 16-sample setup")
     return {"knob": 1.0, "emphasis": 0.98, "block_size_samples": BLOCK,
             "method": "measured self-oscillation ring; dominant frequency",
@@ -447,9 +452,9 @@ def _measure_open_cutoff(repeats: int = 3) -> dict:
             "prominence_db_repeats": prominence, "f0_hz": float(np.median(values)),
             "repeat_count": repeats, "parameter_readbacks": readbacks,
             "wrong_block_control": {"block_size_samples": 512,
-                                    "f0_hz": float(wrong_block_estimate.value),
+                                    "f0_hz": float(wrong_block_hz),
                                     "separation_from_pinned_hz": float(abs(
-                                        wrong_block_estimate.value - np.median(values))),
+                                        wrong_block_hz - np.median(values))),
                                     "caught": True}}
 
 

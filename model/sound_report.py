@@ -66,6 +66,7 @@ import drum_verify as dv                                            # noqa: E402
 import drums_fx as dx                                               # noqa: E402
 import drums_fx_render as dr                                        # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import ring_estimator                                               # noqa: E402
 
 SR = rr.SR
 
@@ -204,10 +205,10 @@ def m_track_spread(ctx):
     errs = []
     for c in (200.0, 800.0, 3200.0, 6400.0):
         y = lad.ring(c, 1.05, seconds=0.6)
-        z = am.zero_crossing_frequency(y, SR)
-        d = am.dominant_frequency(y, c * 0.4, c * 2.2, SR)
-        f = z.value if (z.ok and d.ok and abs(z.value - d.value) / d.value < 0.03) else \
-            (d.value if d.ok else None)
+        try:
+            f = ring_estimator.ring_frequency(y, SR)
+        except ring_estimator.Refused:
+            f = None
         if f:
             errs.append((f / c - 1) * 100)
     return (max(errs) - min(errs)) if len(errs) >= 3 else None
