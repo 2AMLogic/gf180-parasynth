@@ -54,6 +54,55 @@ PRESETS = ("default", "m5a-saw", "m5a-pulse")
 # published image (voice_dp.v a1575257...). #252 (per-oscillator drift) then
 # changed voice_dp.v on main; the published bitstream was not rebuilt.
 IMAGE_SOURCE_COMMIT = "d089c678e661d8ba7cf54841036fea89d864aaf9"
+# The published image's populations, declared here rather than read back from
+# publication.json: a publication that describes its own membership can be
+# emptied or shrunk (entry and file deleted together) and still verify.
+IMAGE_PUBLISHED_FILES = frozenset({
+    "arty.bit",
+    "build.tcl",
+    "clocks.rpt",
+    "drc.rpt",
+    "report.json",
+    "timing.rpt",
+    "utilization.rpt",
+})
+IMAGE_EVIDENCE_FILES = frozenset({
+    "MANIFEST.sha256",
+    "drc_dpreg_names.txt",
+    "drc_rpt.sha256",
+    "dsp-opmode-analysis.json",
+    "dsp_cells_dump.txt",
+    "dsp_dpreg_extract.tcl",
+    "routed_dcp.sha256",
+    "vivado_extract.log",
+})
+IMAGE_SOURCE_FILES = frozenset({
+    "fpga/boards/arty-a7-100.xdc",
+    "fpga/rtl/arty_a7_top.v",
+    "rtl-sketch/decimate_2x_tm_sym.v",
+    "rtl-sketch/drum_dp.v",
+    "rtl-sketch/drum_kit.v",
+    "rtl-sketch/drum_regs.v",
+    "rtl-sketch/i2s_tx.v",
+    "rtl-sketch/ladder_dp_n.v",
+    "rtl-sketch/modal_dp.v",
+    "rtl-sketch/osc_2x_saw_bank.v",
+    "rtl-sketch/osc_2x_saw_path.v",
+    "rtl-sketch/osc_substep_pair.v",
+    "rtl-sketch/polyblep_saw_pair.v",
+    "rtl-sketch/rate_conv_2x.v",
+    "rtl-sketch/recip_div.v",
+    "rtl-sketch/spi_ctl.v",
+    "rtl-sketch/synth_top.v",
+    "rtl-sketch/tanh16.hex",
+    "rtl-sketch/tanh256.hex",
+    "rtl-sketch/uart_bridge.v",
+    "rtl-sketch/voice_dp.v",
+    "spec/reference/tables/exp_rom65.hex",
+    "spec/reference/tables/g_rom128.hex",
+    "spec/reference/tables/k_rom32.hex",
+    "spec/reference/tables/sine_q256.hex",
+})
 
 # The supported player-facing commands: (name, argv after `uart_host.py`,
 # evidence). Each one's exact bytes are captured by the shipped CLI (dry run)
@@ -100,12 +149,22 @@ def _need(path: Path) -> Path:
     return Path(path)
 
 
+def _require_population(what: str, got, expected) -> None:
+    got, expected = set(got), set(expected)
+    if got != expected:
+        raise Refused(f"{what} are not the expected set: missing {sorted(expected - got)}, "
+                      f"extra {sorted(got - expected)}")
+
+
 # ---- the image --------------------------------------------------------------
 def image_identity() -> dict:
     pub = json.loads(_need(PUB_DIR / "publication.json").read_text())
     rep = json.loads(_need(PUB_DIR / "report.json").read_text())
     if pub["configuration"] != CONFIG:
         raise Refused(f"publication configuration {pub['configuration']} is not {CONFIG}")
+    _require_population("published files", pub["published_sha256"], IMAGE_PUBLISHED_FILES)
+    _require_population("DSP evidence files", pub["published_evidence_sha256"], IMAGE_EVIDENCE_FILES)
+    _require_population("image sources", pub["source_sha256"], IMAGE_SOURCE_FILES)
     bit = sha(_need(PUB_DIR / "arty.bit"))
     if bit != pub["bitstream_sha256"]:
         raise Refused(f"arty.bit hashes to {bit}, the publication names {pub['bitstream_sha256']}")
