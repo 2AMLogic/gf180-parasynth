@@ -129,7 +129,12 @@ def _ladder_curves(ctx):
 
 def _corner(ctx, cut):
     g = _ladder_curves(ctx)[cut]
-    e = am.corner_from_curve(FREQS, g, ref_band=(FREQS[0], max(100.0, cut * 0.25)))
+    # DC-plateau reference (#546, tools/probes/corner_reference_convention.py):
+    # the median of this moving band read +82 % / +25 % / +6 % high at 100 / 200
+    # / 400 Hz on an ideal 4-pole. Cutoffs where the plateau refuses (100, 200
+    # Hz here) return None and are left out of the spread, not measured badly.
+    e = am.corner_dc_referenced(FREQS, g, ref_band=(FREQS[0], max(100.0, cut * 0.25)),
+                                scale_hz=cut)
     return e.value if e.ok else None
 
 
