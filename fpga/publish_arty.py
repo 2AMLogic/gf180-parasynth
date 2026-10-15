@@ -56,8 +56,12 @@ ROOT = Path(__file__).resolve().parents[1]
 #   reports/arty/rev14-clean      revision 14, both of the above: R1's sources,
 #                                 frozen at r1_candidate.RTL_FROZEN_AT (R1 is
 #                                 published; build_arty.IMAGE_VERIFICATION["r1"]).
-#   reports/arty/r2-clean         this tree: R2 (PULSE2X=1 and R2's RTL set,
-#                                 fpga/release/R2.md). See that directory's README.
+#   reports/arty/r2-clean         R2 (PULSE2X=1 and R2's RTL set,
+#                                 fpga/release/R2.md): R2's release evidence,
+#                                 build_arty.IMAGE_VERIFICATION["r2"]. See that
+#                                 directory's README.
+#   reports/arty/post-r2-clean    this tree: R2's configuration on the tree's own
+#                                 sources (build_arty.TREE_IMAGE, #678).
 VERIFICATION_BY_WRAPPER = {
     "arty_a7_top": build.IMAGE_VERIFICATION[build.TREE_IMAGE],
 }

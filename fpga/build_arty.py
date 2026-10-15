@@ -23,14 +23,20 @@ CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
 # The images this builder can build, by configuration. R1 is the default and
 # every existing path (R1's records, the publisher's R1 checks) uses it
 # unchanged; the R2 candidate adds PULSE2X=1 (#333, fpga/release/R2.md).
-IMAGE_CONFIGS = {"r1": CONFIG, "r2": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}}
+R2_CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}
+IMAGE_CONFIGS = {"r1": CONFIG, "r2": R2_CONFIG, "tree": R2_CONFIG}
 IMAGE_VERIFICATION = {"r1": ROOT / "fpga/reports/arty/rev14-clean/verification.json",
-                      "r2": ROOT / "fpga/reports/arty/r2-clean/verification.json"}
-# The image THIS tree's compiled sources are (fpga/release/R2.md). R1's sources
-# are frozen at r1_candidate.RTL_FROZEN_AT and differ from the tree's, so an
-# `--image r1` build of this tree REFUSES at its verification record (the
-# source digests), rather than labelling R2's RTL with R1's configuration.
-TREE_IMAGE = "r2"
+                      "r2": ROOT / "fpga/reports/arty/r2-clean/verification.json",
+                      "tree": ROOT / "fpga/reports/arty/post-r2-clean/verification.json"}
+# The image THIS tree's compiled sources are. "tree" has R2's configuration but
+# its own verification record, so a post-R2 compiled-source change re-captures
+# post-R2 hashes into post-r2-clean and never into r2-clean, which is R2's
+# release evidence (r2_release.VERIFICATION) and is never rewritten (#678).
+# R1's sources are frozen at r1_candidate.RTL_FROZEN_AT and differ from the
+# tree's, so an `--image r1` build of this tree REFUSES at its verification
+# record (the source digests), rather than labelling the tree's RTL with R1's
+# configuration; `--image r2` likewise refuses once the tree moves past R2.
+TREE_IMAGE = "tree"
 
 
 def config_defines(config) -> list:
