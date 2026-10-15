@@ -2,6 +2,53 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-15
+
+- **PR #504**: Reachable attack-context re-bind path for Builders (#502)
+- **PR #677**: Bump Repo Skills 0.19.5 -> 0.24.1
+- **PR #675**: audio_distance_floor: thread sample rate into mel_dac (#533)
+- **PR #674**: spi_host: report BD attack-window width change in check() (#506)
+- **Issue #502** (closed): A Builder cannot re-bind the attack-context evidence: workflow_dispatch is 403 for the agent token
+- **Issue #538** (closed): Correct remaining permitted-differences detection counts after #537
+- **Issue #506** (closed): spi_host: feasible() can lengthen the BD 4 ms attack window under dense hits; check() does not report it
+
+### 2026-10-14
+
+- **PR #671**: uart_host: blame host latency, not the device clock, at the rolling anchor unwrap (#459)
+- **PR #672**: docs: DAC control pins are breakout-specific and a precondition of the audio path
+- **PR #670**: verify_live_midi: refuse unmeasurable frame unwrap (#479)
+- **PR #669**: external_claim: REFUSE on malformed second_route instead of crashing (#475)
+- **PR #668**: Remove model/fixed_sweep.py (flat metric, unreferenced, superseded)
+- **PR #667**: deadline: bind the -l2 capture to the schedule-relevant RTL (#452)
+- **Issue #459** (closed): Rolling playback blames the device's clock for host latency: 'frame counter did not advance' while it ran at 48 kHz
+- **Issue #460** (closed): ARTY.md's 'leave MU/FM unconnected' is Adafruit-specific and silently mutes #408's purple PCM5102
+- **Issue #479** (closed): verify_live_midi._unwrap carries the same unchecked 0x8000 gap assumption #474 fixed
+- **Issue #475** (closed): tools/external_claim.py crashes instead of REFUSING on a malformed second_route
+- **Issue #486** (closed): check_doc_claims exits 1 on main: docs/scorecard/cymbal-369/vca-drive/vca-drive.json was committed from a dirty tree
+- **Issue #663** (closed): Remove model/fixed_sweep.py: flat metric, unreferenced, superseded by ladder-rung1-audit
+- **Issue #463** (closed): CI: decide whether PR branches should run each suite once (push + pull_request double run)
+- **Issue #452** (closed): Deadline evidence: the -l2 capture is bound to its stimulus but not to the RTL that ran it
+
+### 2026-10-13
+
+- **PR #666**: Correct rungs.yml comments on non-strict compile_dag --check
+- **PR #665**: fpga/ARTY.md: document --box local for on-box DSP extraction
+- **PR #664**: uart_host: --hold-frames over the wrap horizon is REFUSED, not a traceback
+- **PR #650**: feat(#400): production-tail diagnostic for the CY 1-2.5 kHz question (REFUSED/NO VERDICT)
+- **PR #561**: gate-379: between-recording bar rule v2 (REFUSED, isolated), current-main ranking, controls
+- **PR #633**: Replace unsatisfiable nightly reference-freshness check (#622)
+- **PR #594**: fpga: refuse 'routed' from an incomplete nextpnr log (#565)
+- **PR #624**: Nightly controls: replace blind I2S_SWAP with discriminating serializer bench
+- **PR #649**: [593] tom distortion: qualification instrument, controls and preregistration
+- **Issue #438** (closed): Correct rungs.yml comment about non-strict compile_dag --check behavior
+- **Issue #367** (closed): fpga/ARTY.md: document --box local for the on-box DSP extraction invocation
+- **Issue #458** (closed): uart_host --hold-frames raises a raw ValueError instead of REFUSED, and does so intermittently
+- **Issue #379** (closed): 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first
+- **Issue #400** (closed): Cymbal tail: qualify and localize the remaining production-path energy/decay discrepancy
+- **Issue #622** (closed): Nightly reference-freshness gate is unsatisfiable: tests a docs path that has never existed
+- **Issue #565** (closed): Refuse to report 'routed' from an incomplete nextpnr log (fpga/scripts/report.sh + fpga/Makefile)
+- **Issue #619** (closed): Nightly controls requires I2S_SWAP detection despite declared blind timing
+
 ### 2026-10-12
 
 Closure events below record forge state, not a verified fix or a new sound result.
