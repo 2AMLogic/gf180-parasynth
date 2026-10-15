@@ -554,16 +554,40 @@ def print_report(res: dict):
 # so the anchor IS render_drum_solo("CY") -- and everything here is the gate that
 # says so, with the saturation that used to ship injected as a control.
 #
-# THE MEASURE. The issue asks for the late T20. `cymbal_bands.measure` REFUSES it
-# on the shipped structure at the anchor (H) and at DECAY 7.5/10 (H, L and Ln):
-# "late decay is not one exponential", on a 9 s record, so it is not a short-record
-# artefact. A gate that required it would be unsatisfiable (verification rule: run
-# a gate against the current state before committing it). The gate therefore
-# stands on EDT10 -- qualified at every position, direction taken from the same
-# Fischer records -- and the late T20 is REPORTED wherever the frozen instrument
-# qualifies it and gated only for monotonicity among those positions. The
-# refusals are listed, never counted as passes.
+# THE MEASURE. The issue asks for the late T20. Under #413 `cymbal_bands.measure`
+# REFUSED it at DECAY 7.5/10 for H and L ("late decay is not one exponential") and
+# L reversed at TONE 00, with E_CYL on the Q0.16 rate register's floor (rate 1)
+# at both positions. #656 gave the register an exponent (contract revision 18),
+# and the gate now stands on the late T20 as well as on EDT10:
+#
+#   late-t20  GATED on band L, on EVERY TONE row: the frozen measure must
+#             QUALIFY at all five DECAY positions and RISE strictly at every
+#             step. A refusal anywhere is REFUSED, a plateau or a reversal is
+#             FAIL; neither is a pass, and the command exits 1 on either.
+#             H is measured and REPORTED with its own status, and is NOT gated:
+#             it refuses at the anchor itself (which this renderer must leave
+#             bit-identical), so no DECAY setting can make it qualify, and a
+#             gate red at the anchor could not show a control turning it red.
+#             Two refusals survive the rate fix, each localised by a paired
+#             intervention (tools/probes/cymbal_late_t20.py localise, record
+#             docs/scorecard/cymbal-369/knob-render/late-t20-localise.json):
+#               H, every TONE row: switching the LOW path off qualifies it
+#                 (CY5010 1.77 -> 0.29 dB); the low band's energy above 6 kHz
+#                 makes H's late segment two exponentials. #661, ungated here.
+#               L, TONE 7.5 / 10 at the slow end: NOT crosstalk (decay path off
+#                 2.94 -> 2.83 dB at CY1010) but E_CYL's HEADROOM -- PEAK x 8
+#                 with att + 3, level-neutral, qualifies it (0.43 dB). The low
+#                 band's envelope starts 21-28 dB above its integer floor.
+#                 #660. L stays GATED, so those rows are red until #660 lands:
+#                 a real defect the gate is right to report, not a gate defect.
+#   decay-taus-realised  every E_CYL / E_CYD code realises its ask (the anchor's
+#             realised tau x the DECAY network ratio) within TAU_TOL, and no code
+#             sits on its mantissa floor (m = 1). Read off the register image.
 SWEEP_SECONDS = 7.0
+LATE_T20_GATED = ("L",)        # the bands whose late T20 the gate requires
+LATE_T20_H_ISSUE = 661         # H: the low band's energy above 6 kHz (ungated until it lands)
+LATE_T20_L_HEADROOM_ISSUE = 660   # L at TONE 7.5/10, slow DECAY: E_CYL headroom (gated, red until it lands)
+TAU_TOL = 0.05                 # docs/sensitivity/drum-rate-exp-bits-plan.json, frozen (ISO 3382-1 JND)
 FISCHER_DEADBAND = 0.02        # the 808's own step below this establishes no direction
 MIN_H_EDT_STEP = 0.05          # H EDT10 must rise by >= 5 % per DECAY step
 PASS, FAIL, REFUSED = "PASS", "FAIL", "REFUSED"
@@ -614,13 +638,16 @@ def _finite(v) -> bool:
     return isinstance(v, (int, float)) and math.isfinite(v)
 
 
-def decay_row_verdict(row: dict, identical: dict, fischer_h_edt: dict | None) -> dict:
+def decay_row_verdict(row: dict, identical: dict, fischer_h_edt: dict | None,
+                      taus: dict | None = None, gated=None) -> dict:
     """The named properties of ONE TONE row across the five DECAY positions.
 
     row         {decay_code: {"H_edt10_ms", "L_edt10_ms", "H_t20_late_ms", "L_t20_late_ms"}}
     identical   {(a, b): bool} -- whether the AUDIO at DECAY a and b is bit-identical,
                 for every adjacent pair and the endpoints
     fischer_h_edt   the 808's H EDT10 per DECAY code at the same TONE, or None
+    taus        decay_taus(...) for the same row (the register image), or None
+    gated       the bands whose late T20 is required (default LATE_T20_GATED)
 
     A missing or non-finite number is REFUSED, never PASS and never FAIL: a gate
     that answers when its input is absent looks exactly like data."""
@@ -668,7 +695,11 @@ def decay_row_verdict(row: dict, identical: dict, fischer_h_edt: dict | None) ->
                 "undetermined_steps": [f"{a}->{b}" for (a, b), d in
                                        zip(zip(DECAY_ORDER, DECAY_ORDER[1:]), det) if not d],
                 "deadband": FISCHER_DEADBAND}
-    # the issue's qualified measure: reported where qualified, never faked
+    # the issue's qualified measure: every band measured and reported; the gated
+    # bands decide the status. A band with ANY refused position is REFUSED (a
+    # monotone run over fewer than five positions is not a monotone knob), a
+    # plateau or reversal among five qualified values is FAIL.
+    gated = tuple(LATE_T20_GATED if gated is None else gated)
     t20 = {}
     for b in ("H", "L"):
         vals = {d: row.get(d, {}).get(f"{b}_t20_late_ms") for d in DECAY_ORDER}
@@ -677,13 +708,58 @@ def decay_row_verdict(row: dict, identical: dict, fischer_h_edt: dict | None) ->
         mono = all(y > x for (_, x), (_, y) in zip(q, q[1:]))
         t20[b] = {"qualified_at": [d for d, _ in q], "refused_at": refused,
                   "values": vals, "monotone_where_qualified": bool(mono),
+                  "gated": b in gated,
                   "status": (REFUSED if refused else (PASS if mono else FAIL))}
-    out["late-t20"] = {"status": (FAIL if any(v["status"] == FAIL for v in t20.values())
-                                  else REFUSED if any(v["status"] == REFUSED for v in t20.values())
-                                  else PASS),
-                       "bands": t20,
-                       "what": "the frozen late-T20 measure; REFUSED where it does not qualify"}
+    unknown = [b for b in gated if b not in t20]
+    if not gated or unknown:
+        status = REFUSED              # a gate over no band, or a band nobody measured, is no gate
+    else:
+        st = [t20[b]["status"] for b in gated]
+        status = REFUSED if REFUSED in st else FAIL if FAIL in st else PASS
+    out["late-t20"] = {"status": status, "gated_bands": list(gated), "bands": t20,
+                       "ungated": {b: {"status": v["status"],
+                                       "why": ("refuses at the anchor itself; the low band's energy above "
+                                               "6 kHz makes H's late segment two exponentials (localised: "
+                                               "tools/probes/cymbal_late_t20.py localise), not the rate floor"),
+                                       "issue": LATE_T20_H_ISSUE}
+                                   for b, v in t20.items() if b not in gated},
+                       "what": "the frozen late-T20 measure; the gated bands must qualify at all "
+                               "five positions and rise strictly; REFUSED is never a pass"}
+    out["decay-taus-realised"] = taus_verdict(taus)
     return out
+
+
+def decay_taus(tone, kit_fn=None) -> dict:
+    """What E_CYL's and E_CYD's RATE codes realise at each DECAY code, against
+    what the DECAY law asks (the anchor's realised tau x the network ratio).
+    Pure register work: no render. `kit_fn` defaults to the shipped constructor."""
+    fn = kit_fn or cc.shipped_knob_kit
+    out = {}
+    for d in DECAY_ORDER:
+        img = dict(fn(tone, d))
+        asks = cc.decay_asks(cc.decay_scale(d))
+        row = {}
+        for name, e in (("E_CYL", dx.E_CYL), ("E_CYD", dx.E_CYD)):
+            code = img[dx.A_ENV + e * dx.ENV_STRIDE + 2]
+            got = dx.rate_code_tau(code)
+            row[name] = {"code": f"0x{code:05X}", "e": code >> dx.RATE_Q, "m": code & dx.RATE_M_MASK,
+                         "asked_tau_s": round(asks[e], 4), "realised_tau_s": round(got, 4),
+                         "err_rel": round(got / asks[e] - 1.0, 4),
+                         "at_floor": (code & dx.RATE_M_MASK) == 1}
+        out[d] = row
+    return out
+
+
+def taus_verdict(taus: dict | None) -> dict:
+    if not taus or any(d not in taus for d in DECAY_ORDER):
+        return {"status": REFUSED, "why": "no register image for every DECAY position"}
+    bad = [f"{d}/{n}" for d in DECAY_ORDER for n, v in taus[d].items()
+           if not _finite(v.get("err_rel")) or abs(v["err_rel"]) > TAU_TOL or v["at_floor"]]
+    worst = max(abs(v["err_rel"]) for d in DECAY_ORDER for v in taus[d].values()
+                if _finite(v.get("err_rel")))
+    return {"status": FAIL if bad else PASS, "outside": bad, "worst_err_rel": round(worst, 4),
+            "tolerance": TAU_TOL,
+            "what": f"every E_CYL/E_CYD code within {TAU_TOL:.0%} of its ask and off its mantissa floor"}
 
 
 def sweep_row(tone, kit_fn=None, seconds=SWEEP_SECONDS, decays=DECAY_ORDER, _audio=None):
@@ -755,21 +831,50 @@ def saturated_kit(tone, decay):
         cc.decay_scale = _REAL_DECAY_SCALE
 
 
+def q16_kit(tone, decay):
+    """THE #656 DEFECT as a control: the same knob law through the Q0.16
+    register (rate_code at exp_bits = 0, which is rate_reg exactly). E_CYL lands
+    on rate 1 at DECAY 7.5 and 10.0. Builds and executes."""
+    img = dict(cc.shipped_knob_kit(tone, cc.DECAY_ANCHOR))
+    cc._apply_decay(img, cc.decay_scale(cc.knob_code(decay, "DECAY")), exp_bits=0)
+    return sorted(img.items())
+
+
 def rate_register_floor() -> dict:
-    """What the DECAY law asks of E_CYL and E_CYD against what the Q0.16 rate
-    register can carry. The register's slowest decay is rate 1: tau = 2^16 / SR
-    seconds. Anything slower collapses onto it."""
-    out = {"slowest_tau_s": round(65536.0 / dx.SR, 4), "positions": {}}
+    """What the DECAY law asks of E_CYL and E_CYD against what the RATE register
+    carries, at the shipped width (revision 18) and, for the record, through the
+    Q0.16 register it replaced (whose slowest decay, rate 1, is 2^16 / SR)."""
+    emax = (1 << dx.RATE_EXP_BITS) - 1
+    out = {"rate_exp_bits": dx.RATE_EXP_BITS,
+           "slowest_tau_s": round(dx.rate_code_tau((emax << dx.RATE_Q) | 1), 4),
+           "q016_slowest_tau_s": round(65536.0 / dx.SR, 4),
+           "tolerance": TAU_TOL,
+           "anchor_realised_tau_s": {"E_CYL": round(cc.anchor_tau(dx.E_CYL), 4),
+                                     "E_CYD": round(cc.anchor_tau(dx.E_CYD), 4)},
+           "positions": {}}
+    shipped, old = decay_taus(cc.TONE_ANCHOR), decay_taus(cc.TONE_ANCHOR, q16_kit)
     for d in DECAY_ORDER:
-        k = cc.decay_scale(d)
         row = {}
-        for name, e, tau in (("E_CYD", dx.E_CYD, dx.CY_TAU_DECAY), ("E_CYL", dx.E_CYL, dx.CY_TAU_LOW)):
-            reg = dx.rate_reg(tau * k)
-            row[name] = {"asked_tau_s": round(tau * k, 4), "rate_reg": reg,
-                         "realised_tau_s": round(65536.0 / reg / dx.SR, 4),
-                         "at_floor": reg == 1}
+        for name, tau in (("E_CYD", dx.CY_TAU_DECAY), ("E_CYL", dx.CY_TAU_LOW)):
+            v = dict(shipped[d][name])
+            v["nominal_asked_tau_s"] = round(tau * cc.decay_scale(d), 4)   # the constant x k, for reference
+            v["within_tolerance"] = abs(v["err_rel"]) <= TAU_TOL
+            v["q016"] = {k: old[d][name][k] for k in ("code", "realised_tau_s", "err_rel", "at_floor")}
+            row[name] = v
         out["positions"][d] = row
     return out
+
+
+CLEAN_GATES = ("distinct-renders", "h-edt10-rises", "l-edt10-rises",
+               "h-edt10-direction-matches-808", "late-t20", "decay-taus-realised")
+# each control: {property: the statuses that count as caught}. The saturation
+# mutant gives 7.5 and 10.0 one image, so the late T20 of L is a plateau (FAIL).
+# The Q0.16 floor gives E_CYL one code at 7.5 and 10.0; what the frozen measure
+# does with that is either a plateau/reversal (FAIL) or a refusal (REFUSED) --
+# both are red, neither is a pass -- while the register property must FAIL.
+SATURATION_MUST = {"distinct-renders": (FAIL,), "h-edt10-rises": (FAIL,), "l-edt10-rises": (FAIL,),
+                   "late-t20": (FAIL,), "decay-taus-realised": (FAIL,)}
+Q16_MUST = {"late-t20": (FAIL, REFUSED), "decay-taus-realised": (FAIL,)}
 
 
 def run_knob_render(out: pathlib.Path) -> int:
@@ -781,56 +886,67 @@ def run_knob_render(out: pathlib.Path) -> int:
         for t in CODES:
             row, ident, audio = sweep_row(t)
             rows[t] = row
-            verdicts[t] = decay_row_verdict(row, ident, fi[t])
+            verdicts[t] = decay_row_verdict(row, ident, fi[t], taus=decay_taus(t))
             if t == cc.TONE_ANCHOR:
                 audio50 = audio
             print(f"TONE {t}: " + " ".join(f"{k}={v['status']}" for k, v in verdicts[t].items()),
                   flush=True)
         owned = {f"CY{t}{d}": owned_addresses_check(t, d) for t in CODES for d in DECAY_ORDER}
         hats = hat_preservation()
-        # the control: the clean 00/25/50, the saturated 75/10, TONE anchor row
+        # control 1: the clean 00/25/50, the saturated 75/10, TONE anchor row
         mrow, mident, _ = sweep_row(cc.TONE_ANCHOR, kit_fn=saturated_kit,
                                     _audio={d: audio50[d] for d in ("00", "25", "50")})
-        mutant = decay_row_verdict(mrow, mident, fi[cc.TONE_ANCHOR])
-    except Refused as exc:
+        mutant = decay_row_verdict(mrow, mident, fi[cc.TONE_ANCHOR],
+                                   taus=decay_taus(cc.TONE_ANCHOR, saturated_kit))
+        # control 2 (#656): the Q0.16 register, the anchor's audio reused (it writes nothing there)
+        qrow, qident, _ = sweep_row(cc.TONE_ANCHOR, kit_fn=q16_kit,
+                                    _audio={cc.DECAY_ANCHOR: audio50[cc.DECAY_ANCHOR]})
+        q16 = decay_row_verdict(qrow, qident, fi[cc.TONE_ANCHOR],
+                                taus=decay_taus(cc.TONE_ANCHOR, q16_kit))
+    except (Refused, cc.Refused) as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 3
-    # The DECAY gate the command enforces: the four clean properties must PASS on
-    # every TONE row, and the saturation control must redden its intended
-    # observables. late-t20 is deliberately absent from both: it is the deferred
-    # #656 gap, kept visible in the record, never a pass requirement here.
-    _CLEAN_GATES = ("distinct-renders", "h-edt10-rises", "l-edt10-rises",
-                    "h-edt10-direction-matches-808")
-    _MUTANT_MUST_REDDEN = ("distinct-renders", "h-edt10-rises", "l-edt10-rises")
-    clean_misses = [f"TONE {t}/{k}" for t in CODES for k in _CLEAN_GATES
+    # The DECAY gate the command enforces: the clean properties must PASS on every
+    # TONE row (late-t20 on its gated band L since #656), and each control must
+    # redden its intended observables with the intended status.
+    clean_misses = [f"TONE {t}/{k}" for t in CODES for k in CLEAN_GATES
                     if verdicts[t][k]["status"] != PASS]
-    mutant_misses = [k for k in _MUTANT_MUST_REDDEN if mutant[k]["status"] != FAIL]
+    mutant_misses = [k for k, want in SATURATION_MUST.items() if mutant[k]["status"] not in want]
+    q16_misses = [k for k, want in Q16_MUST.items() if q16[k]["status"] not in want]
     res = {
-        "issue": 413, "sweep_seconds": SWEEP_SECONDS,
+        "issue": [413, 656], "sweep_seconds": SWEEP_SECONDS,
         "anchor": anchor, "owned_addresses": owned, "hats_bit_identical": hats,
         "rows": rows, "verdicts": verdicts,
         "split": {f"CY{t}{d}": ("development" if f"CY{t}{d}" in cb.DEVELOPMENT else "confirmation")
                   for t in CODES for d in DECAY_ORDER},
         "rate_register_floor": rate_register_floor(),
+        "gate": {"clean": list(CLEAN_GATES), "late_t20_gated_bands": list(LATE_T20_GATED),
+                 "tau_tolerance": TAU_TOL},
         "saturation_control": {"verdict": mutant,
                                "red": [k for k, v in mutant.items() if v["status"] == FAIL],
                                "blind": [k for k, v in mutant.items() if v["status"] == PASS],
                                "misses": mutant_misses},
+        "q16_floor_control": {"verdict": q16,
+                              "moved": [k for k, v in q16.items() if v["status"] != PASS],
+                              "blind": [k for k, v in q16.items() if v["status"] == PASS],
+                              "misses": q16_misses},
         "commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
                                  text=True).stdout.strip(),
         "sources_dirty": subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "model", "tools"],
                                         cwd=ROOT).returncode != 0,
     }
     bad = (anchor["status"] != PASS or any(v["status"] != PASS for v in owned.values())
-           or not all(hats.values()) or bool(clean_misses) or bool(mutant_misses))
+           or not all(hats.values()) or bool(clean_misses) or bool(mutant_misses) or bool(q16_misses))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(res, indent=1, default=tn.json_leaf) + "\n")
     print("anchor:", anchor["status"],
           "| owned:", "PASS" if all(v["status"] == PASS for v in owned.values()) else "see record",
           "| hats all bit-identical:", all(hats.values()),
           "| decay gate:", "PASS" if not clean_misses else f"see record ({clean_misses})",
-          "| control red:", res["saturation_control"]["red"],
-          "| control misses:", mutant_misses)
+          "| saturation red:", res["saturation_control"]["red"],
+          "| misses:", mutant_misses,
+          "| q16 moved:", res["q16_floor_control"]["moved"],
+          "| misses:", q16_misses)
     return 1 if bad else 0
 
 

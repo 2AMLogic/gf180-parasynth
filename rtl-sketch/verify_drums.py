@@ -17,7 +17,8 @@ Exit status, as verify_ladder.py: 0 identical, 1 differed, 2 did not run.
 
   --inject NAME     compile with -DINJECT_BUG_<NAME> (DRUM_ENV_FLOOR, DRUM_LEVEL_TRIG,
                     DRUM_LFSR_TAP, DRUM_TAP_NOSAT, DRUM_LAST_PATH, DRUM_SQ_LONE,
-                    MODAL_NUM_HOLD, MODAL_EXC_NOCLEAR, ...)
+                    MODAL_NUM_HOLD, MODAL_EXC_NOCLEAR, DRUM_RATE_Q16 (#656: the RATE
+                    exponent ignored, the Q0.16 floor), ...)
   --jitter K        apply each frame's writes K clocks after its tick (the timing
                     contract's negative control)
   --expect-fail     exit 0 only if the comparison gave 1
@@ -35,6 +36,9 @@ import modal_fixed
 import drums_fx as dx
 from dsp import SR
 from verify_ladder import tool, compare
+
+
+EMAX = (1 << dx.RATE_EXP_BITS) - 1      # revision 18: the largest RATE / FRATE exponent
 
 
 def stimulus(short: bool = False):
@@ -88,6 +92,17 @@ def stimulus(short: bool = False):
     writes += [(f + 2 + P + 400, a, v) for a, v in dx.preset_writes("CP")]          # MA -> CP, MA ringing
     hits.append((f + 2 + P + 430, dx.CP, 1.0))
     f += P + 430 + LAST + 1500
+    # 4c. revision 18 (#656), the rate exponent: the cymbal's two DECAY envelopes at the slow end of
+    #     the knob (codes with e > 0, which the Q0.16 register could not hold), a hit, a mid-note
+    #     RATE rewrite to a different exponent, a retrigger, and the kit's own e = 0 codes back.
+    #     INJECT_BUG_DRUM_RATE_Q16 (the exponent ignored) is the historical floor this must catch.
+    ecl, ecd = dx.A_ENV + dx.E_CYL * dx.ENV_STRIDE, dx.A_ENV + dx.E_CYD * dx.ENV_STRIDE
+    writes += [(f, ecl + 2, dx.rate_code(1.159)), (f, ecd + 2, dx.rate_code(0.3476))]
+    hits.append((f + 2, dx.CY, 1.0))
+    writes.append((f + 2 + int(0.1 * S * SR), ecl + 2, dx.rate_code(0.62)))
+    hits.append((f + 2 + int(0.2 * S * SR), dx.CY, 0.7))
+    f += int(0.35 * S * SR)
+    writes += [(f, a, v) for a, v in kit if a in (ecl + 2, ecd + 2)]
     # 5. register extremes on the last three paths and the spare mode, every stop again at accent 2.0:
     #    a tap of the ringing BD into an unstable mode (the state rails, the body word saturates),
     #    two full envelopes on one path (envsum 65534), att 7, nl = TANH on a raw source, the last
@@ -120,18 +135,22 @@ def stimulus(short: bool = False):
     writes.append((f, dx.A_PATH + dx.N_PATH - 1, dx.path_word(dx.SRC_OFF, dx.ENV_FULL)))
     f += int(0.01 * S * SR)
     # 6. every envelope at its extremes: rate 0 (one LSB per frame), rate 65535, hold 255, 3 bursts at
-    #    period 511, peak 0 and FULL, choke by its own stop; then hits
+    #    period 511, peak 0 and FULL, choke by its own stop; then hits. Revision 18: the largest
+    #    exponent with the largest mantissa, a small exponent, a FRATE with an exponent, and a FRATE
+    #    whose mantissa is 0 but whose exponent is not (non-zero: the final strike is enabled)
     for e in range(dx.N_ENV):
         writes += [(f, dx.A_ENV + e * 4, dx.env_ctl(e % dx.N_STOPS,
                                                     choke=(e + 1) % dx.N_STOPS if e % 3 == 0 else 15,
                                                     hold=255 if e % 4 == 1 else 0, bursts=3 if e % 4 == 2 else 0,
                                                     period=511 if e % 4 == 2 else 0)),
                    (f, dx.A_ENV + e * 4 + 1, 0 if e % 5 == 0 else dx.FULL24),
-                   (f, dx.A_ENV + e * 4 + 2, 0 if e % 4 == 3 else (65535 if e % 4 == 1 else 3)),
+                   (f, dx.A_ENV + e * 4 + 2, 0 if e % 4 == 3 else (65535 if e % 4 == 1 else
+                                                    (EMAX << 16) | 65535 if e % 8 == 0 else
+                                                    (1 << 16) | 3 if e % 8 == 4 else 3)),
                    # revision 14: FRATE on the bursting envelopes (the final strike, at an ordinary
                    # and at the extreme rate) and on burst-less ones (FRATE from the first decay)
-                   (f, dx.A_ENV + e * 4 + 3, (dx.rate_reg(20e-3) if e % 8 == 2 else 65535) if e % 4 == 2
-                    else (1 if e % 4 == 3 else 0))]
+                   (f, dx.A_ENV + e * 4 + 3, (dx.rate_reg(20e-3) if e % 8 == 2 else (EMAX << 16) | 40000)
+                    if e % 4 == 2 else ((EMAX << 16) if e % 8 == 7 else 1) if e % 4 == 3 else 0)]
     hits += [(f + 3, s, 2.0) for s in range(dx.N_STOPS)]
     f += int(0.08 * S * SR)
     # 7. RESET mid-run, the kit again, one hit of each of BD and OH, then silence: decay to nothing

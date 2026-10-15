@@ -34,9 +34,11 @@ word's sat28 (part of the bank's arithmetic since rev 1) and the tap's rail.
 Formats (contract 15.1):
     stops       8 bits; a 0->1 change between consecutive frames fires
     accent      Q0.15 per stop, 16 bits (32768 = 1.0; 65535 = 2.0 is legal)
-    envelope    level 24-bit unsigned Q0.24; peak 24; rate Q0.16; hold 8 bits
+    envelope    level 24-bit unsigned Q0.24; peak 24; rate and frate a 16-bit
+                mantissa m with a RATE_EXP_BITS exponent e above it (revision
+                18, #656; e = 0 is the old Q0.16 register); hold 8 bits
                 (frames); bursts 2 bits; period 9 bits; t 11-bit frame counter
-                decay: level -= max(1, (level * rate) >> 16) -- the voice's
+                decay: level -= max(1, (level * m) >> (16 + e)) -- the voice's
                 release rule, dead zone closed by the max(1, .), section 8.3
     path        src 5 bits, e1/e2 4 bits, nl 2, att 3, dest 4 (22 bits)
     sources     Q1.15: NOISE (16 LFSR bits per frame), SQSUM (six squares,
@@ -65,6 +67,16 @@ from modal_fixed import ModalFx, RAW, BP, HP, pole_regs
 # ---- sizes (contract 15.1) ----------------------------------------------------
 N_STOPS, N_ENV, N_PATH, N_MODES, N_NUMS, N_OSC = 11, 18, 23, 16, 11, 6
 ENV_BITS, RATE_Q, ACCENT_BITS = 24, 16, 16
+# Revision 18 (#656): an exponent field above RATE's and FRATE's 16-bit mantissa,
+# dec = (level * m) >> (16 + e), the voice's release encoding (voice_fx.AdsrFx)
+# applied to the drum envelopes. Q0.16 alone stops at rate 1 = tau 1.3653 s, and
+# the cymbal's DECAY knob asked E_CYL for 1.0155 s and 1.2732 s and got 1.3653 s
+# for both. The width is a swept dial: docs/sensitivity/drum-rate-exp-bits.json
+# (plan committed before any point; tools/probes/drum_rate_exp_sweep.py).
+RATE_EXP_BITS = 3
+RATE_BITS = RATE_Q + RATE_EXP_BITS
+RATE_MASK = (1 << RATE_BITS) - 1
+RATE_M_MASK = (1 << RATE_Q) - 1
 HOLD_BITS, BURST_BITS, PERIOD_BITS, T_BITS = 8, 2, 9, 11
 T_MAX = (1 << T_BITS) - 1
 BURST_C = 53248                  # 13/16 in Q0.16: each re-strike is 13/16 of the last (15.3)
@@ -103,7 +115,7 @@ A_STOPS, A_ACCENT, A_OSC, A_ENV, A_PATH, A_MODE, A_RESET = 0x00, 0x10, 0x20, 0x4
 A_COUPLE = 0x30
 ENV_STRIDE, MODE_STRIDE = 4, 4   # ENV: +0 ctl, +1 peak, +2 rate, +3 frate; MODE: +0 a1, +1 a2, +2 amp, +3 num
 REG_BITS = dict(stops=N_STOPS, accent=ACCENT_BITS, osc_inc=PHASE_BITS, env_ctl=27, peak=ENV_BITS,
-                rate=RATE_Q, frate=RATE_Q, path=25, a1=26, a2=26, amp=16, num=2)
+                rate=RATE_BITS, frate=RATE_BITS, path=25, a1=26, a2=26, amp=16, num=2)
 
 
 def env_ctl(stop: int, choke: int = 15, hold: int = 0, bursts: int = 0, period: int = 0) -> int:
@@ -248,7 +260,7 @@ class EnvFx:
                 self.n_restrike += 1
             else:
                 rate = self.frate if (self.frate and t > last) else self.rate
-                dec = (self.level * rate) >> RATE_Q
+                dec = (self.level * (rate & RATE_M_MASK)) >> (RATE_Q + (rate >> RATE_Q))
                 if dec == 0:
                     self.n_floor += self.level > 0
                     if self.floor:
@@ -266,8 +278,9 @@ class EnvFx:
     @property
     def floor_level(self) -> int:
         """Below this level the exponential step is zero and the tail is
-        linear at one LSB per frame: 2^16 / rate (rate = 0: everything)."""
-        return (1 << RATE_Q) // self.rate + 1 if self.rate else FULL24
+        linear at one LSB per frame: 2^(16 + e) / m (m = 0: everything)."""
+        m, e = self.rate & RATE_M_MASK, self.rate >> RATE_Q
+        return (1 << (RATE_Q + e)) // m + 1 if m else FULL24
 
 
 # ---- output coupling: the DC blocker (#165, EXPERIMENTAL -- default OFF) -----
@@ -468,9 +481,9 @@ class DrumsFx:
             elif f == 1:
                 self.envs[e].peak = value & FULL24
             elif f == 2:
-                self.envs[e].rate = value & 0xFFFF
+                self.envs[e].rate = value & RATE_MASK     # revision 18: (e << 16) | m
             else:
-                self.envs[e].frate = value & 0xFFFF   # revision 14: the final strike (15.3)
+                self.envs[e].frate = value & RATE_MASK    # revision 14: the final strike (15.3)
         elif A_PATH <= addr < A_PATH + self.P:
             self.paths[addr - A_PATH] = value & ((1 << 25) - 1)
         elif A_MODE <= addr < A_MODE + self.M * MODE_STRIDE:
@@ -635,6 +648,36 @@ def rate_reg(tau_s: float) -> int:
     if tau_s <= 0.0:
         return 65535
     return max(1, usat(int(round((1.0 - math.exp(-1.0 / (tau_s * SR))) * (1 << RATE_Q))), RATE_Q))
+
+
+def rate_code(tau_s: float, exp_bits: int | None = None) -> int:
+    """Revision 18 (#656): RATE / FRATE as (e << 16) | m for an amplitude time
+    constant of tau seconds, alpha = 1 - exp(-1 / (tau SR)) = m / 2^(16 + e).
+    The exponent normalises the mantissa into [2^15, 2^16) where the field
+    allows (e = ceil(-log2 alpha) - 1, clamped to 0 .. 2^exp_bits - 1), the
+    voice's AdsrFx.regs_from rule. At exp_bits = 0 it IS rate_reg, bit for bit,
+    so the historical Q0.16 floor is this function with one argument changed.
+
+    rate_reg stays the conversion the reference kit is written with: a kit
+    value encoded with e = 0 keeps its exact register word and its audio."""
+    bits = RATE_EXP_BITS if exp_bits is None else int(exp_bits)
+    if bits == 0 or tau_s <= 0.0:
+        return rate_reg(tau_s)
+    alpha = 1.0 - math.exp(-1.0 / (tau_s * SR))
+    e = min(max(0, math.ceil(-math.log2(alpha)) - 1), (1 << bits) - 1)
+    m = min(RATE_M_MASK, max(1, int(round(alpha * (1 << (RATE_Q + e))))))
+    return (e << RATE_Q) | m
+
+
+def rate_code_tau(code: int) -> float:
+    """The amplitude time constant a RATE code realises, -1 / (SR ln(1 - m /
+    2^(16 + e))), ignoring the one-LSB floor (which governs only below level
+    2^(16 + e) / m). inf for m = 0; 0 for a code that empties in one frame."""
+    m, e = code & RATE_M_MASK, code >> RATE_Q
+    if m == 0:
+        return math.inf
+    a = m / float(1 << (RATE_Q + e))
+    return 0.0 if a >= 1.0 else -1.0 / (SR * math.log(1.0 - a))
 
 
 def accent_reg(level: float) -> int:

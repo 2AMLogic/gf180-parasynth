@@ -67,7 +67,9 @@ The drum section and the modal bank are one instrument, contract section 15:
    frames, re-struck `bursts` times every `period` frames at 13/16 of the
    last strike, choked to 0 by another stop, and otherwise the voice's
    release rule `level −= max(1, (level · rate) >> 16)` (8.3) — the same
-   dead zone, closed the same way, tested the same way; 16 paths, each
+   dead zone, closed the same way, tested the same way (contract revision
+   18, #656, gives `rate` a 3-bit exponent: `(level · m) >> (16 + e)`, the
+   voice release's own encoding; see the amendment at the end); 16 paths, each
    `v = nl(source) · (ENV(e1) + ENV(e2)) >> (15 + att)` on one 25×16
    multiplier, summed exactly into the mix bus or one mode's excitation;
    sources NOISE (a 31-bit LFSR, x³¹ + x¹⁵ + x¹³ + x¹¹ + 1, 16 bits per frame), SQSUM
@@ -147,3 +149,33 @@ The drum section and the modal bank are one instrument, contract section 15:
   RTL change; the BD attack shift, the toms' diode pitch fall, the tom
   noise, the BD tone filter and the cymbal are not in the reference kit
   (17.14).
+
+## Amendment (contract revision 18, #656): the envelope rate exponent
+
+The Q0.16 `rate` carried by this decision stops at `rate = 1`, which is
+τ = 2^16 / SR = 1.3653 s, and the step above it halves τ. The cymbal's DECAY
+knob needed slower and finer settings than that. Model and RTL now read
+`RATE` and `FRATE` as `{e[2:0], m[15:0]}`, with
+`dec = (level · m) >> (16 + e)`.
+
+- **Compatibility.** `e = 0` is this decision's arithmetic exactly. The
+  reference kit writes only `e = 0` codes (`drums_fx.rate_reg`), so every
+  shipped stream and every pinned hash is unchanged. Only the cymbal DECAY
+  knob's off-anchor images use `e > 0` (`drums_fx.rate_code`).
+- **Shared multiplier audit.** The 25 × 16 multiplier is untouched. Its
+  `mul_b` is still the 16-bit mantissa. The envelope slot's product, and only
+  that slot's, is shifted by `e` before the same `[39:16]` slice. The fire
+  (`[39:15]`), re-strike (`[39:16]` with `BURST_C`), tanh interpolation
+  (`[28:13]`) and path (`>>> (15 + att)`) slices read the unshifted product.
+  The schedule is still 68 clocks.
+- **Cost.** 3 bits × 2 registers × 18 envelopes = 108 flip-flops, plus a
+  3-stage shift of a 40-bit word on the decay slot. This is stated from the
+  RTL. No synthesis was run for this amendment.
+- **Host writers.** The only producers of drum `RATE` / `FRATE` words are
+  `drums_fx.rate_reg` (e = 0, ≤ 16 bits), `rate_code` (≤ 19 bits) and the
+  benches. `verify_ctl.py` drives `(1 << REG_BITS["rate"]) − 1` through the
+  link, so its corner moved to 19 bits with `REG_BITS`.
+- **Controls.** `INJECT_BUG_DRUM_RATE_Q16` (datapath ignores `e`) and
+  `INJECT_BUG_DRUM_RATE_REG16` (`drum_regs` truncates the write to 16 bits).
+  Both are caught bit-exactly at `drum_kit` and at the I2S pins.
+

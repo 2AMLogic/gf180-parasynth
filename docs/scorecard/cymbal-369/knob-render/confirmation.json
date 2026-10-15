@@ -1,0 +1,280 @@
+{
+ "intermediate_wipers_tone25": {
+  "rows": {
+   "0.000": {
+    "H": {
+     "edt10_ms": 76.83,
+     "t20_late_ms": 201.65,
+     "late_residual_db": 1.45,
+     "t20_refused": null,
+     "energy_share_db": -1.029
+    },
+    "L": {
+     "edt10_ms": 275.69,
+     "t20_late_ms": 547.78,
+     "late_residual_db": 0.34,
+     "t20_refused": null,
+     "energy_share_db": -11.828
+    }
+   },
+   "0.125": {
+    "H": {
+     "edt10_ms": 115.88,
+     "t20_late_ms": 314.06,
+     "late_residual_db": 1.37,
+     "t20_refused": null,
+     "energy_share_db": -1.026
+    },
+    "L": {
+     "edt10_ms": 424.52,
+     "t20_late_ms": 879.53,
+     "late_residual_db": 0.43,
+     "t20_refused": null,
+     "energy_share_db": -11.8
+    }
+   },
+   "0.250": {
+    "H": {
+     "edt10_ms": 150.98,
+     "t20_late_ms": null,
+     "late_residual_db": 1.53,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+     "energy_share_db": -1.022
+    },
+    "L": {
+     "edt10_ms": 571.9,
+     "t20_late_ms": 1223.26,
+     "late_residual_db": 0.37,
+     "t20_refused": null,
+     "energy_share_db": -11.802
+    }
+   },
+   "0.375": {
+    "H": {
+     "edt10_ms": 196.83,
+     "t20_late_ms": null,
+     "late_residual_db": 1.72,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+     "energy_share_db": -1.017
+    },
+    "L": {
+     "edt10_ms": 723.56,
+     "t20_late_ms": 1570.68,
+     "late_residual_db": 0.35,
+     "t20_refused": null,
+     "energy_share_db": -11.844
+    }
+   },
+   "0.500": {
+    "H": {
+     "edt10_ms": 241.06,
+     "t20_late_ms": null,
+     "late_residual_db": 1.68,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+     "energy_share_db": -1.008
+    },
+    "L": {
+     "edt10_ms": 877.5,
+     "t20_late_ms": 1911.64,
+     "late_residual_db": 0.29,
+     "t20_refused": null,
+     "energy_share_db": -11.933
+    }
+   },
+   "0.625": {
+    "H": {
+     "edt10_ms": 283.29,
+     "t20_late_ms": null,
+     "late_residual_db": 1.72,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+     "energy_share_db": -0.996
+    },
+    "L": {
+     "edt10_ms": 1032.29,
+     "t20_late_ms": 2231.29,
+     "late_residual_db": 0.46,
+     "t20_refused": null,
+     "energy_share_db": -12.067
+    }
+   },
+   "0.750": {
+    "H": {
+     "edt10_ms": 329.31,
+     "t20_late_ms": null,
+     "late_residual_db": 1.67,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+     "energy_share_db": -0.984
+    },
+    "L": {
+     "edt10_ms": 1194.65,
+     "t20_late_ms": 2556.48,
+     "late_residual_db": 0.72,
+     "t20_refused": null,
+     "energy_share_db": -12.201
+    }
+   },
+   "0.875": {
+    "H": {
+     "edt10_ms": 368.92,
+     "t20_late_ms": null,
+     "late_residual_db": 1.67,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+     "energy_share_db": -0.972
+    },
+    "L": {
+     "edt10_ms": 1353.46,
+     "t20_late_ms": 2855.88,
+     "late_residual_db": 1.0,
+     "t20_refused": null,
+     "energy_share_db": -12.357
+    }
+   },
+   "1.000": {
+    "H": {
+     "edt10_ms": 409.08,
+     "t20_late_ms": null,
+     "late_residual_db": 1.76,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+     "energy_share_db": -0.961
+    },
+    "L": {
+     "edt10_ms": 1514.38,
+     "t20_late_ms": 3145.7,
+     "late_residual_db": 1.2,
+     "t20_refused": null,
+     "energy_share_db": -12.506
+    }
+   }
+  },
+  "L": {
+   "status": "PASS"
+  },
+  "H": {
+   "status": "REFUSED",
+   "refused_at": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ]
+  },
+  "wipers": [
+   0.0,
+   0.125,
+   0.25,
+   0.375,
+   0.5,
+   0.625,
+   0.75,
+   0.875,
+   1.0
+  ]
+ },
+ "shifted_phase_tone75": {
+  "rows": {
+   "00": {
+    "H": {
+     "edt10_ms": 82.73,
+     "t20_late_ms": 204.57,
+     "late_residual_db": 1.47,
+     "t20_refused": null,
+     "energy_share_db": -1.09
+    },
+    "L": {
+     "edt10_ms": 276.75,
+     "t20_late_ms": 561.58,
+     "late_residual_db": 0.42,
+     "t20_refused": null,
+     "energy_share_db": -11.211
+    }
+   },
+   "25": {
+    "H": {
+     "edt10_ms": 170.73,
+     "t20_late_ms": null,
+     "late_residual_db": 1.73,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+     "energy_share_db": -1.053
+    },
+    "L": {
+     "edt10_ms": 571.83,
+     "t20_late_ms": 1248.15,
+     "late_residual_db": 0.36,
+     "t20_refused": null,
+     "energy_share_db": -11.456
+    }
+   },
+   "50": {
+    "H": {
+     "edt10_ms": 250.79,
+     "t20_late_ms": null,
+     "late_residual_db": 1.67,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+     "energy_share_db": -1.024
+    },
+    "L": {
+     "edt10_ms": 885.94,
+     "t20_late_ms": 1908.71,
+     "late_residual_db": 0.63,
+     "t20_refused": null,
+     "energy_share_db": -11.762
+    }
+   },
+   "75": {
+    "H": {
+     "edt10_ms": 328.04,
+     "t20_late_ms": null,
+     "late_residual_db": 1.71,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+     "energy_share_db": -0.993
+    },
+    "L": {
+     "edt10_ms": 1209.73,
+     "t20_late_ms": 2505.59,
+     "late_residual_db": 1.28,
+     "t20_refused": null,
+     "energy_share_db": -12.135
+    }
+   },
+   "10": {
+    "H": {
+     "edt10_ms": 409.4,
+     "t20_late_ms": null,
+     "late_residual_db": 1.86,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.9 dB)",
+     "energy_share_db": -0.964
+    },
+    "L": {
+     "edt10_ms": 1540.5,
+     "t20_late_ms": null,
+     "late_residual_db": 1.77,
+     "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+     "energy_share_db": -12.502
+    }
+   }
+  },
+  "L": {
+   "status": "REFUSED",
+   "refused_at": [
+    4
+   ]
+  },
+  "H": {
+   "status": "REFUSED",
+   "refused_at": [
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  "hit_frame": 8399
+ },
+ "requirement": "L late T20 qualifies at every point and rises strictly (the --knob-render gate's own rule); H reported, not gated",
+ "commit": "61217e54947baaae748a75855be953560aa4d317",
+ "sources_dirty": false,
+ "rate_exp_bits": 3
+}

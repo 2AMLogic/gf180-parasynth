@@ -1,5 +1,8 @@
 {
- "issue": 413,
+ "issue": [
+  413,
+  656
+ ],
  "sweep_seconds": 7.0,
  "anchor": {
   "registers_differing": [],
@@ -163,13 +166,13 @@
  "rows": {
   "00": {
    "00": {
-    "H_edt10_ms": 79.15,
-    "L_edt10_ms": 286.92,
-    "H_t20_late_ms": 207.14,
-    "L_t20_late_ms": 565.03,
+    "H_edt10_ms": 76.5,
+    "L_edt10_ms": 275.69,
+    "H_t20_late_ms": 201.02,
+    "L_t20_late_ms": 546.07,
     "H_t20_refused": null,
     "L_t20_refused": null,
-    "H_minus_L_db": 10.909
+    "H_minus_L_db": 10.911
    },
    "25": {
     "H_edt10_ms": 149.9,
@@ -181,39 +184,39 @@
     "H_minus_L_db": 10.855
    },
    "50": {
-    "H_edt10_ms": 267.06,
-    "L_edt10_ms": 865.35,
-    "H_t20_late_ms": 641.11,
-    "L_t20_late_ms": 1889.63,
-    "H_t20_refused": null,
+    "H_edt10_ms": 240.1,
+    "L_edt10_ms": 876.65,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": 1909.04,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
     "L_t20_refused": null,
-    "H_minus_L_db": 11.472
+    "H_minus_L_db": 10.988
    },
    "75": {
-    "H_edt10_ms": 328.77,
-    "L_edt10_ms": 1782.0,
+    "H_edt10_ms": 328.46,
+    "L_edt10_ms": 1191.15,
     "H_t20_late_ms": null,
-    "L_t20_late_ms": 3653.91,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.0 dB)",
+    "L_t20_late_ms": 2559.61,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
     "L_t20_refused": null,
-    "H_minus_L_db": 10.035
+    "H_minus_L_db": 11.273
    },
    "10": {
-    "H_edt10_ms": 404.15,
-    "L_edt10_ms": 1794.6,
+    "H_edt10_ms": 408.4,
+    "L_edt10_ms": 1510.56,
     "H_t20_late_ms": null,
-    "L_t20_late_ms": 3648.81,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.2 dB)",
+    "L_t20_late_ms": 3156.21,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
     "L_t20_refused": null,
-    "H_minus_L_db": 11.061
+    "H_minus_L_db": 11.597
    }
   },
   "25": {
    "00": {
-    "H_edt10_ms": 80.15,
-    "L_edt10_ms": 286.9,
-    "H_t20_late_ms": 209.36,
-    "L_t20_late_ms": 566.72,
+    "H_edt10_ms": 76.83,
+    "L_edt10_ms": 275.69,
+    "H_t20_late_ms": 201.65,
+    "L_t20_late_ms": 547.78,
     "H_t20_refused": null,
     "L_t20_refused": null,
     "H_minus_L_db": 10.799
@@ -228,39 +231,39 @@
     "H_minus_L_db": 10.78
    },
    "50": {
-    "H_edt10_ms": 267.79,
-    "L_edt10_ms": 867.19,
-    "H_t20_late_ms": 644.48,
-    "L_t20_late_ms": 1891.96,
-    "H_t20_refused": null,
+    "H_edt10_ms": 241.06,
+    "L_edt10_ms": 877.5,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": 1911.64,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
     "L_t20_refused": null,
-    "H_minus_L_db": 11.412
+    "H_minus_L_db": 10.925
    },
    "75": {
-    "H_edt10_ms": 329.46,
-    "L_edt10_ms": 1787.52,
+    "H_edt10_ms": 329.31,
+    "L_edt10_ms": 1194.65,
     "H_t20_late_ms": null,
-    "L_t20_late_ms": null,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.0 dB)",
-    "L_t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
-    "H_minus_L_db": 9.978
+    "L_t20_late_ms": 2556.48,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.217
    },
    "10": {
-    "H_edt10_ms": 405.02,
-    "L_edt10_ms": 1799.67,
+    "H_edt10_ms": 409.08,
+    "L_edt10_ms": 1514.38,
     "H_t20_late_ms": null,
-    "L_t20_late_ms": null,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.2 dB)",
-    "L_t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
-    "H_minus_L_db": 11.009
+    "L_t20_late_ms": 3145.7,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.545
    }
   },
   "50": {
    "00": {
-    "H_edt10_ms": 80.17,
-    "L_edt10_ms": 287.15,
-    "H_t20_late_ms": 208.5,
-    "L_t20_late_ms": 570.3,
+    "H_edt10_ms": 76.98,
+    "L_edt10_ms": 276.15,
+    "H_t20_late_ms": 201.4,
+    "L_t20_late_ms": 551.12,
     "H_t20_refused": null,
     "L_t20_refused": null,
     "H_minus_L_db": 10.836
@@ -275,39 +278,39 @@
     "H_minus_L_db": 10.823
    },
    "50": {
-    "H_edt10_ms": 268.06,
-    "L_edt10_ms": 869.23,
-    "H_t20_late_ms": 644.84,
-    "L_t20_late_ms": 1895.35,
-    "H_t20_refused": null,
+    "H_edt10_ms": 241.12,
+    "L_edt10_ms": 881.06,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": 1914.58,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
     "L_t20_refused": null,
-    "H_minus_L_db": 11.458
+    "H_minus_L_db": 10.972
    },
    "75": {
-    "H_edt10_ms": 329.52,
-    "L_edt10_ms": 1798.54,
+    "H_edt10_ms": 329.4,
+    "L_edt10_ms": 1200.79,
     "H_t20_late_ms": null,
-    "L_t20_late_ms": null,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.0 dB)",
-    "L_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
-    "H_minus_L_db": 10.027
+    "L_t20_late_ms": 2542.97,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.264
    },
    "10": {
-    "H_edt10_ms": 405.08,
-    "L_edt10_ms": 1810.0,
+    "H_edt10_ms": 409.21,
+    "L_edt10_ms": 1524.1,
     "H_t20_late_ms": null,
-    "L_t20_late_ms": null,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.2 dB)",
-    "L_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
-    "H_minus_L_db": 11.058
+    "L_t20_late_ms": 3114.49,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.593
    }
   },
   "75": {
    "00": {
-    "H_edt10_ms": 80.08,
-    "L_edt10_ms": 287.67,
-    "H_t20_late_ms": 205.99,
-    "L_t20_late_ms": 579.12,
+    "H_edt10_ms": 76.83,
+    "L_edt10_ms": 276.75,
+    "H_t20_late_ms": 199.62,
+    "L_t20_late_ms": 559.76,
     "H_t20_refused": null,
     "L_t20_refused": null,
     "H_minus_L_db": 11.018
@@ -322,42 +325,42 @@
     "H_minus_L_db": 10.996
    },
    "50": {
-    "H_edt10_ms": 268.06,
-    "L_edt10_ms": 877.15,
-    "H_t20_late_ms": 643.54,
-    "L_t20_late_ms": 1891.76,
-    "H_t20_refused": null,
+    "H_edt10_ms": 241.12,
+    "L_edt10_ms": 888.58,
+    "H_t20_late_ms": null,
+    "L_t20_late_ms": 1910.81,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
     "L_t20_refused": null,
-    "H_minus_L_db": 11.629
+    "H_minus_L_db": 11.143
    },
    "75": {
     "H_edt10_ms": 329.46,
-    "L_edt10_ms": 1824.6,
+    "L_edt10_ms": 1213.67,
     "H_t20_late_ms": null,
-    "L_t20_late_ms": null,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.1 dB)",
-    "L_t20_refused": "late decay is not one exponential (Schroeder residual 2.1 dB)",
-    "H_minus_L_db": 10.201
+    "L_t20_late_ms": 2499.35,
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "L_t20_refused": null,
+    "H_minus_L_db": 11.436
    },
    "10": {
-    "H_edt10_ms": 405.1,
-    "L_edt10_ms": 1840.31,
+    "H_edt10_ms": 409.27,
+    "L_edt10_ms": 1542.96,
     "H_t20_late_ms": null,
     "L_t20_late_ms": null,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.2 dB)",
-    "L_t20_refused": "late decay is not one exponential (Schroeder residual 2.1 dB)",
-    "H_minus_L_db": 11.231
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+    "H_minus_L_db": 11.764
    }
   },
   "10": {
    "00": {
-    "H_edt10_ms": 77.38,
-    "L_edt10_ms": 291.31,
-    "H_t20_late_ms": 198.99,
-    "L_t20_late_ms": 618.63,
+    "H_edt10_ms": 75.52,
+    "L_edt10_ms": 280.25,
+    "H_t20_late_ms": 192.6,
+    "L_t20_late_ms": 599.02,
     "H_t20_refused": null,
     "L_t20_refused": null,
-    "H_minus_L_db": 11.798
+    "H_minus_L_db": 11.806
    },
    "25": {
     "H_edt10_ms": 149.5,
@@ -369,31 +372,31 @@
     "H_minus_L_db": 11.642
    },
    "50": {
-    "H_edt10_ms": 266.67,
-    "L_edt10_ms": 917.12,
-    "H_t20_late_ms": 650.44,
+    "H_edt10_ms": 238.73,
+    "L_edt10_ms": 930.25,
+    "H_t20_late_ms": null,
     "L_t20_late_ms": null,
-    "H_t20_refused": null,
-    "L_t20_refused": "late decay is not one exponential (Schroeder residual 2.0 dB)",
-    "H_minus_L_db": 12.22
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 2.1 dB)",
+    "H_minus_L_db": 11.743
    },
    "75": {
-    "H_edt10_ms": 328.02,
-    "L_edt10_ms": 1958.25,
+    "H_edt10_ms": 328.17,
+    "L_edt10_ms": 1284.42,
     "H_t20_late_ms": null,
     "L_t20_late_ms": null,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 5.3 dB)",
-    "L_t20_refused": "late decay is not one exponential (Schroeder residual 3.0 dB)",
-    "H_minus_L_db": 10.791
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 2.6 dB)",
+    "H_minus_L_db": 12.015
    },
    "10": {
-    "H_edt10_ms": 404.42,
-    "L_edt10_ms": 1974.42,
+    "H_edt10_ms": 408.83,
+    "L_edt10_ms": 1647.71,
     "H_t20_late_ms": null,
     "L_t20_late_ms": null,
-    "H_t20_refused": "late decay is not one exponential (Schroeder residual 3.4 dB)",
-    "L_t20_refused": "late decay is not one exponential (Schroeder residual 3.0 dB)",
-    "H_minus_L_db": 11.807
+    "H_t20_refused": "late decay is not one exponential (Schroeder residual 1.9 dB)",
+    "L_t20_refused": "late decay is not one exponential (Schroeder residual 2.9 dB)",
+    "H_minus_L_db": 12.334
    }
   }
  },
@@ -407,17 +410,17 @@
    "h-edt10-rises": {
     "status": "PASS",
     "value": [
-     79.15,
+     76.5,
      149.9,
-     267.06,
-     328.77,
-     404.15
+     240.1,
+     328.46,
+     408.4
     ],
     "rel_steps": [
-     0.8939,
-     0.7816,
-     0.2311,
-     0.2293
+     0.9595,
+     0.6017,
+     0.368,
+     0.2434
     ],
     "min_step": 0.05,
     "what": "H_edt10_ms rises with DECAY by more than 5% per step"
@@ -425,17 +428,17 @@
    "l-edt10-rises": {
     "status": "PASS",
     "value": [
-     286.92,
+     275.69,
      571.62,
-     865.35,
-     1782.0,
-     1794.6
+     876.65,
+     1191.15,
+     1510.56
     ],
     "rel_steps": [
-     0.9923,
-     0.5139,
-     1.0593,
-     0.0071
+     1.0734,
+     0.5336,
+     0.3588,
+     0.2682
     ],
     "min_step": 0.0,
     "what": "L_edt10_ms rises with DECAY by more than 0% per step"
@@ -450,11 +453,11 @@
      320.86
     ],
     "ours": [
-     79.15,
+     76.5,
      149.9,
-     267.06,
-     328.77,
-     404.15
+     240.1,
+     328.46,
+     408.4
     ],
     "fischer_rel_steps": [
      0.3145,
@@ -466,26 +469,30 @@
     "deadband": 0.02
    },
    "late-t20": {
-    "status": "FAIL",
+    "status": "PASS",
+    "gated_bands": [
+     "L"
+    ],
     "bands": {
      "H": {
       "qualified_at": [
        "00",
-       "25",
-       "50"
+       "25"
       ],
       "refused_at": [
+       "50",
        "75",
        "10"
       ],
       "values": {
-       "00": 207.14,
+       "00": 201.02,
        "25": 414.14,
-       "50": 641.11,
+       "50": null,
        "75": null,
        "10": null
       },
       "monotone_where_qualified": true,
+      "gated": false,
       "status": "REFUSED"
      },
      "L": {
@@ -498,17 +505,32 @@
       ],
       "refused_at": [],
       "values": {
-       "00": 565.03,
+       "00": 546.07,
        "25": 1218.87,
-       "50": 1889.63,
-       "75": 3653.91,
-       "10": 3648.81
+       "50": 1909.04,
+       "75": 2559.61,
+       "10": 3156.21
       },
-      "monotone_where_qualified": false,
-      "status": "FAIL"
+      "monotone_where_qualified": true,
+      "gated": true,
+      "status": "PASS"
      }
     },
-    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+    "ungated": {
+     "H": {
+      "status": "REFUSED",
+      "why": "refuses at the anchor itself; the low band's energy above 6 kHz makes H's late segment two exponentials (localised: tools/probes/cymbal_late_t20.py localise), not the rate floor",
+      "issue": 661
+     }
+    },
+    "what": "the frozen late-T20 measure; the gated bands must qualify at all five positions and rise strictly; REFUSED is never a pass"
+   },
+   "decay-taus-realised": {
+    "status": "PASS",
+    "outside": [],
+    "worst_err_rel": 0.0015,
+    "tolerance": 0.05,
+    "what": "every E_CYL/E_CYD code within 5% of its ask and off its mantissa floor"
    }
   },
   "25": {
@@ -520,17 +542,17 @@
    "h-edt10-rises": {
     "status": "PASS",
     "value": [
-     80.15,
+     76.83,
      150.98,
-     267.79,
-     329.46,
-     405.02
+     241.06,
+     329.31,
+     409.08
     ],
     "rel_steps": [
-     0.8837,
-     0.7737,
-     0.2303,
-     0.2293
+     0.9651,
+     0.5966,
+     0.3661,
+     0.2422
     ],
     "min_step": 0.05,
     "what": "H_edt10_ms rises with DECAY by more than 5% per step"
@@ -538,17 +560,17 @@
    "l-edt10-rises": {
     "status": "PASS",
     "value": [
-     286.9,
+     275.69,
      571.9,
-     867.19,
-     1787.52,
-     1799.67
+     877.5,
+     1194.65,
+     1514.38
     ],
     "rel_steps": [
-     0.9934,
-     0.5163,
-     1.0613,
-     0.0068
+     1.0744,
+     0.5344,
+     0.3614,
+     0.2676
     ],
     "min_step": 0.0,
     "what": "L_edt10_ms rises with DECAY by more than 0% per step"
@@ -563,11 +585,11 @@
      284.92
     ],
     "ours": [
-     80.15,
+     76.83,
      150.98,
-     267.79,
-     329.46,
-     405.02
+     241.06,
+     329.31,
+     409.08
     ],
     "fischer_rel_steps": [
      0.1611,
@@ -579,50 +601,68 @@
     "deadband": 0.02
    },
    "late-t20": {
-    "status": "REFUSED",
+    "status": "PASS",
+    "gated_bands": [
+     "L"
+    ],
     "bands": {
      "H": {
       "qualified_at": [
-       "00",
-       "50"
+       "00"
       ],
       "refused_at": [
        "25",
+       "50",
        "75",
        "10"
       ],
       "values": {
-       "00": 209.36,
+       "00": 201.65,
        "25": null,
-       "50": 644.48,
+       "50": null,
        "75": null,
        "10": null
       },
       "monotone_where_qualified": true,
+      "gated": false,
       "status": "REFUSED"
      },
      "L": {
       "qualified_at": [
        "00",
        "25",
-       "50"
-      ],
-      "refused_at": [
+       "50",
        "75",
        "10"
       ],
+      "refused_at": [],
       "values": {
-       "00": 566.72,
+       "00": 547.78,
        "25": 1223.26,
-       "50": 1891.96,
-       "75": null,
-       "10": null
+       "50": 1911.64,
+       "75": 2556.48,
+       "10": 3145.7
       },
       "monotone_where_qualified": true,
-      "status": "REFUSED"
+      "gated": true,
+      "status": "PASS"
      }
     },
-    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+    "ungated": {
+     "H": {
+      "status": "REFUSED",
+      "why": "refuses at the anchor itself; the low band's energy above 6 kHz makes H's late segment two exponentials (localised: tools/probes/cymbal_late_t20.py localise), not the rate floor",
+      "issue": 661
+     }
+    },
+    "what": "the frozen late-T20 measure; the gated bands must qualify at all five positions and rise strictly; REFUSED is never a pass"
+   },
+   "decay-taus-realised": {
+    "status": "PASS",
+    "outside": [],
+    "worst_err_rel": 0.0015,
+    "tolerance": 0.05,
+    "what": "every E_CYL/E_CYD code within 5% of its ask and off its mantissa floor"
    }
   },
   "50": {
@@ -634,17 +674,17 @@
    "h-edt10-rises": {
     "status": "PASS",
     "value": [
-     80.17,
+     76.98,
      151.31,
-     268.06,
-     329.52,
-     405.08
+     241.12,
+     329.4,
+     409.21
     ],
     "rel_steps": [
-     0.8874,
-     0.7716,
-     0.2293,
-     0.2293
+     0.9656,
+     0.5935,
+     0.3661,
+     0.2423
     ],
     "min_step": 0.05,
     "what": "H_edt10_ms rises with DECAY by more than 5% per step"
@@ -652,17 +692,17 @@
    "l-edt10-rises": {
     "status": "PASS",
     "value": [
-     287.15,
+     276.15,
      573.15,
-     869.23,
-     1798.54,
-     1810.0
+     881.06,
+     1200.79,
+     1524.1
     ],
     "rel_steps": [
-     0.996,
-     0.5166,
-     1.0691,
-     0.0064
+     1.0755,
+     0.5372,
+     0.3629,
+     0.2692
     ],
     "min_step": 0.0,
     "what": "L_edt10_ms rises with DECAY by more than 0% per step"
@@ -677,11 +717,11 @@
      235.74
     ],
     "ours": [
-     80.17,
+     76.98,
      151.31,
-     268.06,
-     329.52,
-     405.08
+     241.12,
+     329.4,
+     409.21
     ],
     "fischer_rel_steps": [
      0.1536,
@@ -693,50 +733,68 @@
     "deadband": 0.02
    },
    "late-t20": {
-    "status": "REFUSED",
+    "status": "PASS",
+    "gated_bands": [
+     "L"
+    ],
     "bands": {
      "H": {
       "qualified_at": [
-       "00",
-       "50"
+       "00"
       ],
       "refused_at": [
        "25",
+       "50",
        "75",
        "10"
       ],
       "values": {
-       "00": 208.5,
+       "00": 201.4,
        "25": null,
-       "50": 644.84,
+       "50": null,
        "75": null,
        "10": null
       },
       "monotone_where_qualified": true,
+      "gated": false,
       "status": "REFUSED"
      },
      "L": {
       "qualified_at": [
        "00",
        "25",
-       "50"
-      ],
-      "refused_at": [
+       "50",
        "75",
        "10"
       ],
+      "refused_at": [],
       "values": {
-       "00": 570.3,
+       "00": 551.12,
        "25": 1232.91,
-       "50": 1895.35,
-       "75": null,
-       "10": null
+       "50": 1914.58,
+       "75": 2542.97,
+       "10": 3114.49
       },
       "monotone_where_qualified": true,
-      "status": "REFUSED"
+      "gated": true,
+      "status": "PASS"
      }
     },
-    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+    "ungated": {
+     "H": {
+      "status": "REFUSED",
+      "why": "refuses at the anchor itself; the low band's energy above 6 kHz makes H's late segment two exponentials (localised: tools/probes/cymbal_late_t20.py localise), not the rate floor",
+      "issue": 661
+     }
+    },
+    "what": "the frozen late-T20 measure; the gated bands must qualify at all five positions and rise strictly; REFUSED is never a pass"
+   },
+   "decay-taus-realised": {
+    "status": "PASS",
+    "outside": [],
+    "worst_err_rel": 0.0015,
+    "tolerance": 0.05,
+    "what": "every E_CYL/E_CYD code within 5% of its ask and off its mantissa floor"
    }
   },
   "75": {
@@ -748,17 +806,17 @@
    "h-edt10-rises": {
     "status": "PASS",
     "value": [
-     80.08,
+     76.83,
      151.06,
-     268.06,
+     241.12,
      329.46,
-     405.1
+     409.27
     ],
     "rel_steps": [
-     0.8864,
-     0.7745,
-     0.2291,
-     0.2296
+     0.9662,
+     0.5962,
+     0.3664,
+     0.2422
     ],
     "min_step": 0.05,
     "what": "H_edt10_ms rises with DECAY by more than 5% per step"
@@ -766,17 +824,17 @@
    "l-edt10-rises": {
     "status": "PASS",
     "value": [
-     287.67,
+     276.75,
      576.52,
-     877.15,
-     1824.6,
-     1840.31
+     888.58,
+     1213.67,
+     1542.96
     ],
     "rel_steps": [
-     1.0041,
-     0.5215,
-     1.0801,
-     0.0086
+     1.0832,
+     0.5413,
+     0.3659,
+     0.2713
     ],
     "min_step": 0.0,
     "what": "L_edt10_ms rises with DECAY by more than 0% per step"
@@ -791,11 +849,11 @@
      190.2
     ],
     "ours": [
-     80.08,
+     76.83,
      151.06,
-     268.06,
+     241.12,
      329.46,
-     405.1
+     409.27
     ],
     "fischer_rel_steps": [
      0.1442,
@@ -808,49 +866,68 @@
    },
    "late-t20": {
     "status": "REFUSED",
+    "gated_bands": [
+     "L"
+    ],
     "bands": {
      "H": {
       "qualified_at": [
        "00",
-       "25",
-       "50"
+       "25"
       ],
       "refused_at": [
+       "50",
        "75",
        "10"
       ],
       "values": {
-       "00": 205.99,
+       "00": 199.62,
        "25": 413.12,
-       "50": 643.54,
+       "50": null,
        "75": null,
        "10": null
       },
       "monotone_where_qualified": true,
+      "gated": false,
       "status": "REFUSED"
      },
      "L": {
       "qualified_at": [
        "00",
        "25",
-       "50"
+       "50",
+       "75"
       ],
       "refused_at": [
-       "75",
        "10"
       ],
       "values": {
-       "00": 579.12,
+       "00": 559.76,
        "25": 1249.99,
-       "50": 1891.76,
-       "75": null,
+       "50": 1910.81,
+       "75": 2499.35,
        "10": null
       },
       "monotone_where_qualified": true,
+      "gated": true,
       "status": "REFUSED"
      }
     },
-    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+    "ungated": {
+     "H": {
+      "status": "REFUSED",
+      "why": "refuses at the anchor itself; the low band's energy above 6 kHz makes H's late segment two exponentials (localised: tools/probes/cymbal_late_t20.py localise), not the rate floor",
+      "issue": 661
+     }
+    },
+    "what": "the frozen late-T20 measure; the gated bands must qualify at all five positions and rise strictly; REFUSED is never a pass"
+   },
+   "decay-taus-realised": {
+    "status": "PASS",
+    "outside": [],
+    "worst_err_rel": 0.0015,
+    "tolerance": 0.05,
+    "what": "every E_CYL/E_CYD code within 5% of its ask and off its mantissa floor"
    }
   },
   "10": {
@@ -862,17 +939,17 @@
    "h-edt10-rises": {
     "status": "PASS",
     "value": [
-     77.38,
+     75.52,
      149.5,
-     266.67,
-     328.02,
-     404.42
+     238.73,
+     328.17,
+     408.83
     ],
     "rel_steps": [
-     0.932,
-     0.7837,
-     0.2301,
-     0.2329
+     0.9796,
+     0.5969,
+     0.3746,
+     0.2458
     ],
     "min_step": 0.05,
     "what": "H_edt10_ms rises with DECAY by more than 5% per step"
@@ -880,17 +957,17 @@
    "l-edt10-rises": {
     "status": "PASS",
     "value": [
-     291.31,
+     280.25,
      594.19,
-     917.12,
-     1958.25,
-     1974.42
+     930.25,
+     1284.42,
+     1647.71
     ],
     "rel_steps": [
-     1.0397,
-     0.5435,
-     1.1352,
-     0.0083
+     1.1202,
+     0.5656,
+     0.3807,
+     0.2828
     ],
     "min_step": 0.0,
     "what": "L_edt10_ms rises with DECAY by more than 0% per step"
@@ -905,11 +982,11 @@
      136.19
     ],
     "ours": [
-     77.38,
+     75.52,
      149.5,
-     266.67,
-     328.02,
-     404.42
+     238.73,
+     328.17,
+     408.83
     ],
     "fischer_rel_steps": [
      0.1365,
@@ -924,25 +1001,29 @@
    },
    "late-t20": {
     "status": "REFUSED",
+    "gated_bands": [
+     "L"
+    ],
     "bands": {
      "H": {
       "qualified_at": [
        "00",
-       "25",
-       "50"
+       "25"
       ],
       "refused_at": [
+       "50",
        "75",
        "10"
       ],
       "values": {
-       "00": 198.99,
+       "00": 192.6,
        "25": 408.24,
-       "50": 650.44,
+       "50": null,
        "75": null,
        "10": null
       },
       "monotone_where_qualified": true,
+      "gated": false,
       "status": "REFUSED"
      },
      "L": {
@@ -956,17 +1037,32 @@
        "10"
       ],
       "values": {
-       "00": 618.63,
+       "00": 599.02,
        "25": 1240.42,
        "50": null,
        "75": null,
        "10": null
       },
       "monotone_where_qualified": true,
+      "gated": true,
       "status": "REFUSED"
      }
     },
-    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+    "ungated": {
+     "H": {
+      "status": "REFUSED",
+      "why": "refuses at the anchor itself; the low band's energy above 6 kHz makes H's late segment two exponentials (localised: tools/probes/cymbal_late_t20.py localise), not the rate floor",
+      "issue": 661
+     }
+    },
+    "what": "the frozen late-T20 measure; the gated bands must qualify at all five positions and rise strictly; REFUSED is never a pass"
+   },
+   "decay-taus-realised": {
+    "status": "PASS",
+    "outside": [],
+    "worst_err_rel": 0.0015,
+    "tolerance": 0.05,
+    "what": "every E_CYL/E_CYD code within 5% of its ask and off its mantissa floor"
    }
   }
  },
@@ -998,79 +1094,210 @@
   "CY1010": "confirmation"
  },
  "rate_register_floor": {
-  "slowest_tau_s": 1.3653,
+  "rate_exp_bits": 3,
+  "slowest_tau_s": 174.7627,
+  "q016_slowest_tau_s": 1.3653,
+  "tolerance": 0.05,
+  "anchor_realised_tau_s": {
+   "E_CYL": 0.4551,
+   "E_CYD": 0.1365
+  },
   "positions": {
    "00": {
     "E_CYD": {
-     "asked_tau_s": 0.0678,
-     "rate_reg": 20,
-     "realised_tau_s": 0.0683,
-     "at_floor": false
+     "code": "0x70A51",
+     "e": 7,
+     "m": 2641,
+     "asked_tau_s": 0.0662,
+     "realised_tau_s": 0.0662,
+     "err_rel": 0.0002,
+     "at_floor": false,
+     "nominal_asked_tau_s": 0.0678,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x00015",
+      "realised_tau_s": 0.065,
+      "err_rel": -0.0173,
+      "at_floor": false
+     }
     },
     "E_CYL": {
-     "asked_tau_s": 0.2423,
-     "rate_reg": 6,
-     "realised_tau_s": 0.2276,
-     "at_floor": false
+     "code": "0x70318",
+     "e": 7,
+     "m": 792,
+     "asked_tau_s": 0.2205,
+     "realised_tau_s": 0.2206,
+     "err_rel": 0.0006,
+     "at_floor": false,
+     "nominal_asked_tau_s": 0.2423,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x00006",
+      "realised_tau_s": 0.2275,
+      "err_rel": 0.0319,
+      "at_floor": false
+     }
     }
    },
    "25": {
     "E_CYD": {
-     "asked_tau_s": 0.14,
-     "rate_reg": 10,
+     "code": "0x0000A",
+     "e": 0,
+     "m": 10,
+     "asked_tau_s": 0.1365,
      "realised_tau_s": 0.1365,
-     "at_floor": false
+     "err_rel": 0.0,
+     "at_floor": false,
+     "nominal_asked_tau_s": 0.14,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x0000A",
+      "realised_tau_s": 0.1365,
+      "err_rel": 0.0,
+      "at_floor": false
+     }
     },
     "E_CYL": {
-     "asked_tau_s": 0.5,
-     "rate_reg": 3,
+     "code": "0x00003",
+     "e": 0,
+     "m": 3,
+     "asked_tau_s": 0.4551,
      "realised_tau_s": 0.4551,
-     "at_floor": false
+     "err_rel": 0.0,
+     "at_floor": false,
+     "nominal_asked_tau_s": 0.5,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x00003",
+      "realised_tau_s": 0.4551,
+      "err_rel": 0.0,
+      "at_floor": false
+     }
     }
    },
    "50": {
     "E_CYD": {
-     "asked_tau_s": 0.2122,
-     "rate_reg": 6,
-     "realised_tau_s": 0.2276,
-     "at_floor": false
+     "code": "0x7034D",
+     "e": 7,
+     "m": 845,
+     "asked_tau_s": 0.2069,
+     "realised_tau_s": 0.2068,
+     "err_rel": -0.0004,
+     "at_floor": false,
+     "nominal_asked_tau_s": 0.2122,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x00007",
+      "realised_tau_s": 0.195,
+      "err_rel": -0.0573,
+      "at_floor": false
+     }
     },
     "E_CYL": {
-     "asked_tau_s": 0.7577,
-     "rate_reg": 2,
-     "realised_tau_s": 0.6827,
-     "at_floor": false
+     "code": "0x700FD",
+     "e": 7,
+     "m": 253,
+     "asked_tau_s": 0.6897,
+     "realised_tau_s": 0.6908,
+     "err_rel": 0.0015,
+     "at_floor": false,
+     "nominal_asked_tau_s": 0.7577,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x00002",
+      "realised_tau_s": 0.6827,
+      "err_rel": -0.0102,
+      "at_floor": false
+     }
     }
    },
    "75": {
     "E_CYD": {
-     "asked_tau_s": 0.2843,
-     "rate_reg": 5,
-     "realised_tau_s": 0.2731,
-     "at_floor": false
+     "code": "0x70276",
+     "e": 7,
+     "m": 630,
+     "asked_tau_s": 0.2773,
+     "realised_tau_s": 0.2774,
+     "err_rel": 0.0004,
+     "at_floor": false,
+     "nominal_asked_tau_s": 0.2843,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x00005",
+      "realised_tau_s": 0.2731,
+      "err_rel": -0.0152,
+      "at_floor": false
+     }
     },
     "E_CYL": {
-     "asked_tau_s": 1.0155,
-     "rate_reg": 1,
-     "realised_tau_s": 1.3653,
-     "at_floor": true
+     "code": "0x700BD",
+     "e": 7,
+     "m": 189,
+     "asked_tau_s": 0.9243,
+     "realised_tau_s": 0.9247,
+     "err_rel": 0.0004,
+     "at_floor": false,
+     "nominal_asked_tau_s": 1.0155,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x00001",
+      "realised_tau_s": 1.3653,
+      "err_rel": 0.4772,
+      "at_floor": true
+     }
     }
    },
    "10": {
     "E_CYD": {
-     "asked_tau_s": 0.3565,
-     "rate_reg": 4,
-     "realised_tau_s": 0.3413,
-     "at_floor": false
+     "code": "0x701F7",
+     "e": 7,
+     "m": 503,
+     "asked_tau_s": 0.3476,
+     "realised_tau_s": 0.3474,
+     "err_rel": -0.0006,
+     "at_floor": false,
+     "nominal_asked_tau_s": 0.3565,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x00004",
+      "realised_tau_s": 0.3413,
+      "err_rel": -0.0182,
+      "at_floor": false
+     }
     },
     "E_CYL": {
-     "asked_tau_s": 1.2732,
-     "rate_reg": 1,
-     "realised_tau_s": 1.3653,
-     "at_floor": true
+     "code": "0x70097",
+     "e": 7,
+     "m": 151,
+     "asked_tau_s": 1.1589,
+     "realised_tau_s": 1.1574,
+     "err_rel": -0.0013,
+     "at_floor": false,
+     "nominal_asked_tau_s": 1.2732,
+     "within_tolerance": true,
+     "q016": {
+      "code": "0x00001",
+      "realised_tau_s": 1.3653,
+      "err_rel": 0.1782,
+      "at_floor": true
+     }
     }
    }
   }
+ },
+ "gate": {
+  "clean": [
+   "distinct-renders",
+   "h-edt10-rises",
+   "l-edt10-rises",
+   "h-edt10-direction-matches-808",
+   "late-t20",
+   "decay-taus-realised"
+  ],
+  "late_t20_gated_bands": [
+   "L"
+  ],
+  "tau_tolerance": 0.05
  },
  "saturation_control": {
   "verdict": {
@@ -1084,16 +1311,16 @@
    "h-edt10-rises": {
     "status": "FAIL",
     "value": [
-     80.17,
+     76.98,
      151.31,
-     268.06,
-     329.52,
-     329.52
+     241.12,
+     329.4,
+     329.4
     ],
     "rel_steps": [
-     0.8874,
-     0.7716,
-     0.2293,
+     0.9656,
+     0.5935,
+     0.3661,
      0.0
     ],
     "min_step": 0.05,
@@ -1102,16 +1329,16 @@
    "l-edt10-rises": {
     "status": "FAIL",
     "value": [
-     287.15,
+     276.15,
      573.15,
-     869.23,
-     1798.54,
-     1798.54
+     881.06,
+     1200.79,
+     1200.79
     ],
     "rel_steps": [
-     0.996,
-     0.5166,
-     1.0691,
+     1.0755,
+     0.5372,
+     0.3629,
      0.0
     ],
     "min_step": 0.0,
@@ -1127,11 +1354,158 @@
      235.74
     ],
     "ours": [
-     80.17,
+     76.98,
      151.31,
-     268.06,
+     241.12,
+     329.4,
+     329.4
+    ],
+    "fischer_rel_steps": [
+     0.1536,
+     0.2209,
+     0.1865,
+     0.1012
+    ],
+    "undetermined_steps": [],
+    "deadband": 0.02
+   },
+   "late-t20": {
+    "status": "FAIL",
+    "gated_bands": [
+     "L"
+    ],
+    "bands": {
+     "H": {
+      "qualified_at": [
+       "00"
+      ],
+      "refused_at": [
+       "25",
+       "50",
+       "75",
+       "10"
+      ],
+      "values": {
+       "00": 201.4,
+       "25": null,
+       "50": null,
+       "75": null,
+       "10": null
+      },
+      "monotone_where_qualified": true,
+      "gated": false,
+      "status": "REFUSED"
+     },
+     "L": {
+      "qualified_at": [
+       "00",
+       "25",
+       "50",
+       "75",
+       "10"
+      ],
+      "refused_at": [],
+      "values": {
+       "00": 551.12,
+       "25": 1232.91,
+       "50": 1914.58,
+       "75": 2542.97,
+       "10": 2542.97
+      },
+      "monotone_where_qualified": false,
+      "gated": true,
+      "status": "FAIL"
+     }
+    },
+    "ungated": {
+     "H": {
+      "status": "REFUSED",
+      "why": "refuses at the anchor itself; the low band's energy above 6 kHz makes H's late segment two exponentials (localised: tools/probes/cymbal_late_t20.py localise), not the rate floor",
+      "issue": 661
+     }
+    },
+    "what": "the frozen late-T20 measure; the gated bands must qualify at all five positions and rise strictly; REFUSED is never a pass"
+   },
+   "decay-taus-realised": {
+    "status": "FAIL",
+    "outside": [
+     "10/E_CYL",
+     "10/E_CYD"
+    ],
+    "worst_err_rel": 0.2021,
+    "tolerance": 0.05,
+    "what": "every E_CYL/E_CYD code within 5% of its ask and off its mantissa floor"
+   }
+  },
+  "red": [
+   "distinct-renders",
+   "h-edt10-rises",
+   "l-edt10-rises",
+   "h-edt10-direction-matches-808",
+   "late-t20",
+   "decay-taus-realised"
+  ],
+  "blind": [],
+  "misses": []
+ },
+ "q16_floor_control": {
+  "verdict": {
+   "distinct-renders": {
+    "status": "PASS",
+    "identical_pairs": [],
+    "what": "adjacent DECAY positions and the endpoints render different audio (the old path made 7.5 == 10.0)"
+   },
+   "h-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     76.38,
+     151.31,
+     223.85,
      329.52,
-     329.52
+     405.08
+    ],
+    "rel_steps": [
+     0.981,
+     0.4794,
+     0.4721,
+     0.2293
+    ],
+    "min_step": 0.05,
+    "what": "H_edt10_ms rises with DECAY by more than 5% per step"
+   },
+   "l-edt10-rises": {
+    "status": "PASS",
+    "value": [
+     286.96,
+     573.15,
+     868.33,
+     1798.54,
+     1810.0
+    ],
+    "rel_steps": [
+     0.9973,
+     0.515,
+     1.0713,
+     0.0064
+    ],
+    "min_step": 0.0,
+    "what": "L_edt10_ms rises with DECAY by more than 0% per step"
+   },
+   "h-edt10-direction-matches-808": {
+    "status": "PASS",
+    "fischer": [
+     128.1,
+     147.78,
+     180.43,
+     214.08,
+     235.74
+    ],
+    "ours": [
+     76.38,
+     151.31,
+     223.85,
+     329.52,
+     405.08
     ],
     "fischer_rel_steps": [
      0.1536,
@@ -1144,25 +1518,28 @@
    },
    "late-t20": {
     "status": "REFUSED",
+    "gated_bands": [
+     "L"
+    ],
     "bands": {
      "H": {
-      "qualified_at": [
-       "00",
-       "50"
-      ],
+      "qualified_at": [],
       "refused_at": [
+       "00",
        "25",
+       "50",
        "75",
        "10"
       ],
       "values": {
-       "00": 208.5,
+       "00": null,
        "25": null,
-       "50": 644.84,
+       "50": null,
        "75": null,
        "10": null
       },
       "monotone_where_qualified": true,
+      "gated": false,
       "status": "REFUSED"
      },
      "L": {
@@ -1176,27 +1553,50 @@
        "10"
       ],
       "values": {
-       "00": 570.3,
+       "00": 569.78,
        "25": 1232.91,
-       "50": 1895.35,
+       "50": 1891.3,
        "75": null,
        "10": null
       },
       "monotone_where_qualified": true,
+      "gated": true,
       "status": "REFUSED"
      }
     },
-    "what": "the frozen late-T20 measure; REFUSED where it does not qualify"
+    "ungated": {
+     "H": {
+      "status": "REFUSED",
+      "why": "refuses at the anchor itself; the low band's energy above 6 kHz makes H's late segment two exponentials (localised: tools/probes/cymbal_late_t20.py localise), not the rate floor",
+      "issue": 661
+     }
+    },
+    "what": "the frozen late-T20 measure; the gated bands must qualify at all five positions and rise strictly; REFUSED is never a pass"
+   },
+   "decay-taus-realised": {
+    "status": "FAIL",
+    "outside": [
+     "50/E_CYD",
+     "75/E_CYL",
+     "10/E_CYL"
+    ],
+    "worst_err_rel": 0.4772,
+    "tolerance": 0.05,
+    "what": "every E_CYL/E_CYD code within 5% of its ask and off its mantissa floor"
    }
   },
-  "red": [
+  "moved": [
+   "late-t20",
+   "decay-taus-realised"
+  ],
+  "blind": [
    "distinct-renders",
    "h-edt10-rises",
    "l-edt10-rises",
    "h-edt10-direction-matches-808"
   ],
-  "blind": []
+  "misses": []
  },
- "commit": "2dfd1fdf096608ba53eb84badd61552ae2252cd3",
+ "commit": "61217e54947baaae748a75855be953560aa4d317",
  "sources_dirty": false
 }

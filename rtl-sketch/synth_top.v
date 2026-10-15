@@ -50,6 +50,7 @@ module synth_top #(
     parameter MODES = 16,
     parameter NUMS  = 11,
     parameter STOPS = 11,
+    parameter RATE_EB = 3,            // revision 18 (#656): drum RATE / FRATE exponent bits
     parameter WITH_UART = 0,          // second control front end on the UART pins
     parameter UART_BAUD = 115_200,
     parameter UART_EVQ_DEPTH = 64,
@@ -148,14 +149,14 @@ module synth_top #(
     wire [6*24-1:0]       d_osc;
     wire [ENVS*27-1:0]    d_ectl;
     wire [ENVS*24-1:0]    d_peak;
-    wire [ENVS*16-1:0]    d_rate;
-    wire [ENVS*16-1:0]    d_frate;
+    wire [ENVS*(16+RATE_EB)-1:0] d_rate;      // revision 18 (#656): {e, m}
+    wire [ENVS*(16+RATE_EB)-1:0] d_frate;
     wire [PATHS*25-1:0]   d_path;
     wire [MODES*26-1:0]   d_a1, d_a2;
     wire [MODES*16-1:0]   d_amp;
     wire [MODES*2-1:0]    d_num;
     wire rst_n_drum = rst_n & ~d_soft_rst;
-    drum_regs #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .STOPS(STOPS)) u_dregs (
+    drum_regs #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .STOPS(STOPS), .RATE_EB(RATE_EB)) u_dregs (
         .clk(clk), .rst_n(rst_n_drum), .wr_valid(wr_drum), .wr_addr(wr_addr), .wr_data(wr_data),
         .soft_rst(d_soft_rst),
         .stops(d_stops), .accent_bus(d_accent), .osc_inc_bus(d_osc),
@@ -166,7 +167,7 @@ module synth_top #(
                                              // 23 paths x 17 bits needs 22 (revision 10)
     wire signed [18:0] body;                 // the body bus (15.6), 19 bits Q4.15
     wire               mix_valid, body_valid;
-    drum_kit #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .NUMS(NUMS), .STOPS(STOPS)) u_drums (
+    drum_kit #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .NUMS(NUMS), .STOPS(STOPS), .RATE_EB(RATE_EB)) u_drums (
         .clk(clk), .rst_n(rst_n_drum), .frame_tick(go),
         .stops(d_stops), .accent_bus(d_accent), .osc_inc_bus(d_osc),
         .env_ctl_bus(d_ectl), .env_peak_bus(d_peak), .env_rate_bus(d_rate), .env_frate_bus(d_frate), .path_bus(d_path),

@@ -732,6 +732,18 @@ def band_only(kit, band: str):
 # What this law is NOT: validated against the machine's DECAY span. It is the
 # circuit's own, and `tools/cymbal_tone_render.py --decay` reports how it sits
 # against the Fischer records as a separate, labelled check.
+#
+# #656: THE BASE IS THE ANCHOR'S REALISED TIME CONSTANT, AND THE CODE HAS AN
+# EXPONENT. The shipped kit writes E_CYL and E_CYD with rate_reg (Q0.16, e = 0):
+# CY_TAU_LOW = 0.5 s lands on rate 3 = 0.4551 s and CY_TAU_DECAY = 0.14 s on
+# rate 10 = 0.1365 s, and the kit's envelopes were FITTED through that
+# quantisation (drums_fx provenance: searched against the recording by render).
+# So the anchor's sound is the realised 0.4551 / 0.1365 s, and the knob scales
+# THAT by the network ratio. Off the anchor the code is drums_fx.rate_code
+# (revision 18): Q0.16 alone stopped at rate 1 = 1.3653 s and gave DECAY 7.5 and
+# 10.0 one E_CYL; with RATE_EXP_BITS = 3 every ask at 101 wiper positions is
+# within 0.31 % (docs/sensitivity/drum-rate-exp-bits.json). At the anchor nothing
+# is written, so the anchor stays render_drum_solo("CY") bit for bit.
 DECAY_ANCHOR = "25"
 DECAY_POS = {"00": 0.0, "25": 0.25, "50": 0.5, "75": 0.75, "10": 1.0}
 DECAY_R93_OHM = 470e3
@@ -789,13 +801,47 @@ def shipped_knob_kit(tone, decay, sound: str = "CY"):
         if peak > 1.0:
             raise Refused(f"TONE {tcode} {band}: needs envelope peak {peak:.3f} > 1.0")
         img[a] = dx.peak_reg(peak)
-    k = decay_scale(dcode)
-    if k != 1.0:
-        for e, tau in SHIPPED_ENV_TAU.items():
-            a = dx.A_ENV + e * dx.ENV_STRIDE + 2
-            if img[a] != dx.rate_reg(tau):
-                raise Refused(f"envelope {e} rate register is not the shipped value")
-            img[a] = dx.rate_reg(tau * k)
+    _apply_decay(img, decay_scale(dcode))
+    return sorted(img.items())
+
+
+def anchor_tau(e: int) -> float:
+    """The time constant the shipped kit's code for envelope `e` realises: the
+    anchor sound's, which is what the DECAY knob scales (#656)."""
+    return dx.rate_code_tau(dx.rate_reg(SHIPPED_ENV_TAU[e]))
+
+
+def decay_asks(k: float) -> dict:
+    """{envelope: asked tau} at DECAY network ratio k."""
+    return {e: anchor_tau(e) * k for e in SHIPPED_ENV_TAU}
+
+
+def _apply_decay(img: dict, k: float, exp_bits: int | None = None) -> None:
+    """Write E_CYD's and E_CYL's codes for network ratio k; nothing at k = 1.
+    `exp_bits` exists for the historical-floor control (0 = the Q0.16 register)."""
+    if k == 1.0:
+        return
+    for e, ask in decay_asks(k).items():
+        a = dx.A_ENV + e * dx.ENV_STRIDE + 2
+        if img[a] != dx.rate_reg(SHIPPED_ENV_TAU[e]):
+            raise Refused(f"envelope {e} rate register is not the shipped value")
+        img[a] = dx.rate_code(ask, exp_bits=exp_bits)
+
+
+def decay_scale_at_wiper(p: float) -> float:
+    """The network ratio at any wiper fraction 0..1 -- for confirmation renders
+    at positions the five-code grid never selected on."""
+    if not 0.0 <= float(p) <= 1.0:
+        raise Refused(f"wiper fraction {p!r} is outside 0..1")
+    return (DECAY_R93_OHM + float(p) * DECAY_VR2_OHM) / decay_timing_ohm(DECAY_ANCHOR)
+
+
+def shipped_knob_kit_at_wiper(tone, p: float, sound: str = "CY", exp_bits: int | None = None):
+    """`shipped_knob_kit` at a DECAY wiper fraction rather than a knob code.
+    Same constructor path (_apply_decay); p = 0.25 is the anchor exactly."""
+    tcode = knob_code(tone, "TONE")
+    img = dict(shipped_knob_kit(tcode, DECAY_ANCHOR, sound=sound))
+    _apply_decay(img, decay_scale_at_wiper(p), exp_bits=exp_bits)
     return sorted(img.items())
 
 

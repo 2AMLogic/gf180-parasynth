@@ -1,0 +1,14 @@
+Issue #656 drum RATE_EXP_BITS sweep -- written by `python3 tools/probes/drum_rate_exp_sweep.py`.
+Grid, rule, tolerance and prediction: docs/sensitivity/drum-rate-exp-bits-plan.json (committed before this ran).
+provenance: commit 7b9a426ade51  SR 48000  asks: anchor realised tau x DECAY network ratio, 101 wiper positions
+anchor realised: E_CYL 0.4551 s (asked constant 0.5), E_CYD 0.1365 s (asked constant 0.14)
+selection: smallest width with worst_err_pct <= 5 -> RATE_EXP_BITS = 2
+
+rate_exp_bits -- worst realised-tau error against the DECAY law's asks, and what each width costs
+RATE_EXP_BITS worst_err_pct cyl_knob_pct cyd_knob_pct sim_check_pct tail_slow_pct floor_db flops_added clocks
+0 49.2330 47.7180 5.7316 0.8187 8.3239 -48.1648 0 68
+1 24.8946 17.8156 1.8174 0.8187 8.3239 -48.1648 36 68
+2 4.9783 4.7248 1.3499 0.7264 7.1161 -49.1878 72 68
+3 0.3118 0.1540 0.0606 0.6924 6.7470 -49.6001 108 68
+4 0.0014 0.0009 0.0008 0.6933 6.7546 -49.5889 144 68
+

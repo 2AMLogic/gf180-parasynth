@@ -1,0 +1,137 @@
+{
+ "schema": "sensitivity-sweep-v1",
+ "id": "drum-rate-exp-bits",
+ "parameter": {
+  "name": "RATE_EXP_BITS",
+  "source": "model/drums_fx.py",
+  "kind": "python-constant",
+  "what": "issue #656: the exponent field above each drum envelope's 16-bit RATE / FRATE mantissa, dec = (level * m) >> (16 + e). 0 is the historical Q0.16 register (E_CYL on rate 1 = 1.3653 s at DECAY 7.5 and 10.0). The RTL carries the same width as RATE_EB in drum_dp.v / drum_regs.v / drum_kit.v / synth_top.v; model/test_drum_rate_exponent.py binds them."
+ },
+ "objective": {
+  "name": "worst DECAY tau error",
+  "units": "percent",
+  "lower_is_better": true,
+  "why": "the defect is that the DECAY knob's asked time constants are not realised; the worst relative error over every ask of E_CYL and E_CYD at 101 wiper positions is the quantity the frozen 5 % tolerance (ISO 3382-1 EDT JND) is applied to."
+ },
+ "grid": {
+  "stated_before_results": true,
+  "values": [
+   0,
+   1,
+   2,
+   3,
+   4
+  ],
+  "range_basis": [
+   "0 is what ships and is the defect: E_CYL sits on rate 1 (tau 1.3653 s) at DECAY 7.5 and 10.0 (docs/scorecard/cymbal-369/knob-render/knob-render.json, rate_register_floor).",
+   "4 (exponent up to 15) already normalises the mantissa into [2^15, 2^16) for every time constant up to 2^31 / SR = 44739 s, so any wider field cannot improve precision for any envelope the kit or the knob can ask; it bounds the generous side.",
+   "The voice's release register already uses the same mantissa/exponent split (model/voice_fx.py AdsrFx, RATE_EXP_BITS = 8 there); the drum width is a separate dial because the drum section stores 36 rate words (18 envelopes x RATE and FRATE) where the voice stores one.",
+   "Committed in docs/sensitivity/drum-rate-exp-bits-plan.json (commit 3948a96) before the instrument existed and before any point."
+  ],
+  "held_fixed": {
+   "encoder": "drums_fx.rate_code",
+   "SR": 48000,
+   "asks": "anchor realised tau x cymbal_candidate DECAY network ratio, 101 positions"
+  }
+ },
+ "decision_rule": {
+  "stated_before_results": true,
+  "flat_within_relative": 0.25,
+  "why": "the sweep feeds one decision: does a width clear the frozen tau tolerance below. Two widths whose worst errors are within 25 % of each other give the same answer to that decision unless they straddle the tolerance, which the selection rule handles explicitly. Stated from the decision's granularity, not from the spread of the data."
+ },
+ "evidence": {
+  "artifact": "docs/sensitivity/drum-rate-exp-bits-sweep.txt",
+  "format": "fixed-width-table",
+  "table": "rate_exp_bits",
+  "value_column": "RATE_EXP_BITS",
+  "objective_column": "worst_err_pct",
+  "held_fixed": {},
+  "regenerate": "python3 tools/probes/drum_rate_exp_sweep.py",
+  "instrument": "tools/probes/drum_rate_exp_sweep.py: closed-form realised tau of each encoded (e, m), checked against a tau fitted to the integer EnvFx's level from -3 to -20 dB at the five knob codes (sim_check_pct <= 0.82 % at every width). ~5 s on one core."
+ },
+ "points": [
+  {
+   "value": 0,
+   "objective": 49.233
+  },
+  {
+   "value": 1,
+   "objective": 24.8946
+  },
+  {
+   "value": 2,
+   "objective": 4.9783
+  },
+  {
+   "value": 3,
+   "objective": 0.3118
+  },
+  {
+   "value": 4,
+   "objective": 0.0014
+  }
+ ],
+ "prediction": {
+  "runs": [
+   [
+    0
+   ],
+   [
+    1
+   ],
+   [
+    2
+   ],
+   [
+    3
+   ],
+   [
+    4
+   ]
+  ],
+  "basis": "Closed form, before any point. The slowest ask is E_CYL at p = 1, about 1.159 s, alpha about 1.80e-5. With the exponent capped at 2^bits - 1 the mantissa there is alpha * 2^(16 + e_max): bits 0 -> 1.18 (rounds to 1; the worst ask in range is where the mantissa crosses 1.5, about 0.91 s, realised 1.365 s: about 50 %); bits 1 -> 2.36 (worst near a mantissa of 2.5 rounding to 2: about 25 %); bits 2 -> 9.4 (worst about 0.5 / 9.5: about 5.3 %); bits 3 -> 151 (about 0.33 %); bits 4 -> the exponent is no longer capped for any ask and the mantissa is normalised to >= 2^15 (about 0.0015 %). Every adjacent ratio is 2x or more, so every pair separates: SENSITIVE, falling monotonically. Selection under the 5 % rule is predicted to be 3, with 2 predicted to sit just above the tolerance.",
+  "independent_of_measurement": true
+ },
+ "selection": {
+  "tau_tolerance_relative": 0.05,
+  "tolerance_basis": "ISO 3382-1:2009 Annex A, Table A.1: the just-noticeable difference of early decay time and reverberation time is 5 % relative. A realised decay within 5 % of the asked one is not audibly a different DECAY setting. This is a property of hearing, fixed before any width was evaluated and independent of what any width achieves.",
+  "rule": "ship the SMALLEST width on the grid whose worst error is <= 5 %; every rate word costs 36 flip-flops per exponent bit, so a wider field than the tolerance needs buys nothing audible.",
+  "selected": 3,
+  "result": "worst errors 49.23 / 24.89 / 4.978 / 0.312 / 0.0014 % for 0..4 bits. The plan's rule alone selects 2 (4.978 %). AMENDED to 3 after a measurement refuted the rule's stated premise -- see amendments. 3 is also what the plan's closed-form prediction selected."
+ },
+ "verdict": {
+  "state": "SENSITIVE",
+  "runs": [
+   [
+    0
+   ],
+   [
+    1
+   ],
+   [
+    2
+   ],
+   [
+    3
+   ],
+   [
+    4
+   ]
+  ],
+  "summary": "Every adjacent width separates by 2x or more, as predicted in closed form.\nThe frozen 5 % rule alone selects 2 bits (4.978 %, a 0.022-point margin); the selection was amended to 3 (0.31 %)\nbecause 2 bits measurably moved a frozen acoustic gate (amendments). 3 costs 36 more flip-flops than 2."
+ },
+ "limits": [
+  "The plan's SELECTION prediction (3, with 2 just above 5 %) was wrong in detail: 2 measured 4.978 %, just under, so the frozen rule selected 2. The selection was then amended to 3 (see amendments), which is where the prediction had put it -- by a different route, which is recorded rather than claimed as a confirmed prediction.",
+  "The objective is the closed-form tau of the code. The integer decay truncates (level * m) >> (16 + e), so below about -20 dB of the strike it runs 6.7-8.3 % slower than the closed form at EVERY width (tail_slow_pct), the anchor included. That bias predates revision 18 and is the same for every width at equal realised tau.",
+  "One knob law (cymbal_candidate's DECAY network, scaled from the anchor's realised tau). Other envelopes keep rate_reg's e = 0 codes and are unaffected."
+ ],
+ "amendments": [
+  {
+   "stated_before_results": false,
+   "found_by": "the #656 knob-render gate's own measurement, after the width was first set to 2: the frozen late-T20 instrument (tools/cymbal_bands.py, MAX_RESID_DB 1.5) REFUSED band L at TONE 5.0 / DECAY 10.0 with 2 bits (Schroeder residual 1.51 dB; E_CYL code 0x30009, realised 1.2136 s against an ask of 1.1589 s, +4.72 %) and QUALIFIED it with 3 bits (1.38 dB; code 0x70097, 1.1574 s, -0.13 %), everything else identical (tools/probes/cymbal_late_t20.py renders; docs/scorecard/cymbal-369/knob-render/README.md).",
+   "what_was_wrong": "the selection rule's premise, 'a wider field than the tolerance needs buys nothing audible', treated the 5 % JND as the only consequence of a tau error. A +4.7 % error on E_CYL alone changes the RATIO of the two DECAY envelopes, which is what decides whether a band's late decay is one exponential; at the slow end that moved a frozen gate across its line.",
+   "what_is_unchanged": "the grid, the objective, the decision rule and the points; the runs prediction (SENSITIVE) holds. Only the selection moved, from 2 to 3.",
+   "honest_limit": "the evidence for 3 over 2 is one condition crossing a threshold by 0.01 dB one way and 0.12 dB the other; it is a paired measurement, not a margin. The independent reason to prefer 3 is the tolerance margin itself: 2 bits met 5 % by 0.022 points."
+  }
+ ]
+}
