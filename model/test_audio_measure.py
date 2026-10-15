@@ -856,6 +856,46 @@ def test_zero_crossing_frequency_survives_an_envelope_that_smears_an_fft():
     assert abs(am.zero_crossing_frequency(x).require() / 300.0 - 1.0) < 5e-3
 
 
+def _zc_polarity_gap(estimate, draws=96):
+    """Worst |f(x)-f(-x)|/f over the `draw_asym` / `build_asym` records at
+    seed 0 -- the asymmetric, -80 dB-floored, normalised records the
+    `permitted_differences` probe actually feeds the estimator. A noise-free
+    harmonic sum is symmetric to ~1e-6 and never meets the defect."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    os.pardir, "tools", "probes"))
+    import permitted_differences as pdf
+    rng = np.random.default_rng(0)
+    worst = 0.0
+    for _ in range(draws):
+        x = pdf.build_asym(pdf.draw_asym(rng)).x
+        a, b = estimate(x), estimate(-x)
+        worst = max(worst, abs(a - b) / a)
+    return worst
+
+
+def test_zero_crossing_frequency_polarity_sensitivity_is_bounded():
+    """#673, documented and left as-is: upward-only crossings read `x` and `-x`
+    apart on an asymmetric noisy record. Measured worst over 96 draws: 0.45 %
+    (a few draws in a hundred; the median is ~4e-7). Pinned from BOTH sides --
+    a ceiling so it cannot grow, a floor so the test goes red the day the
+    symmetric fix (#684) lands and this docstring must be updated. A single
+    sine does not move."""
+    worst = _zc_polarity_gap(lambda x: am.zero_crossing_frequency(x).require())
+    assert 1e-3 < worst < 6e-3, worst
+    s = _sine(440.0, 1 << 15, 0.5)
+    assert am.zero_crossing_frequency(s).require() == pytest.approx(
+        am.zero_crossing_frequency(-s).require(), rel=1e-4)
+
+
+def test_zero_crossing_polarity_pin_turns_red_on_the_symmetric_estimator():
+    """Injected-bug control: the both-directions-averaged estimator reads `x`
+    and `-x` identically, so it must fall under the floor above."""
+    def symmetric(x):
+        return 0.5 * (am.zero_crossing_frequency(x).require()
+                      + am.zero_crossing_frequency(-x).require())
+    assert _zc_polarity_gap(symmetric) < 1e-3
+
+
 def test_zero_crossing_frequency_refuses_silence_and_a_single_cycle():
     assert not am.zero_crossing_frequency(np.zeros(1000)).ok
     assert not am.zero_crossing_frequency(_sine(20.0, 1000)).ok
