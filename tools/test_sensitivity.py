@@ -30,7 +30,11 @@ FILES = ["docs/sensitivity/registry.json",
          # issue #551's record: COUPLE_K, a python-constant in the drum model
          "docs/sensitivity/coupling-k.json",
          "docs/sensitivity/coupling-k-sweep.txt",
-         "model/drums_fx.py"]
+         "model/drums_fx.py",
+         # issue #539's record: MEAN_TRIALS, the noise controls' detection statistic
+         "docs/sensitivity/mean-trials.json",
+         "docs/sensitivity/mean-trials-sweep.txt",
+         "tools/probes/permitted_differences.py"]
 
 
 @pytest.fixture
@@ -373,6 +377,27 @@ def test_a_move_to_an_unswept_value_is_red(repo):
 def test_an_unchanged_tree_prices_nothing(repo):
     code, text = run(repo, changed_since="HEAD")
     assert code == 0 and "FLAT-MOVE" not in text and "PRICED" not in text
+
+
+def test_a_parameter_new_since_the_ref_in_an_existing_file_is_not_a_refusal(repo):
+    # file present at the ref, constant absent there: the PR that registers it
+    src = repo / "rtl-sketch/drum_kit.v"
+    base = src.read_text().replace("parameter MODES = 16,", "parameter MODES_X = 16,")
+    src.write_text(base)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "drop"],
+                   cwd=repo, check=True, capture_output=True)
+    src.write_text(base.replace("parameter MODES_X = 16,", "parameter MODES = 16,"))
+    code, text = run(repo, changed_since="HEAD")
+    assert code == 0 and "declarations of" not in text, text
+
+
+def test_a_duplicated_declaration_at_the_ref_still_refuses(repo):
+    src = repo / "rtl-sketch/drum_kit.v"
+    src.write_text(src.read_text() + "\nlocalparam MODES = 16;\n")
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "dup"],
+                   cwd=repo, check=True, capture_output=True)
+    code, text = run(repo, changed_since="HEAD")
+    assert code == 2 and "declarations of MODES" in text, text
 
 
 def test_an_unresolvable_ref_refuses_rather_than_passing_quietly(repo):

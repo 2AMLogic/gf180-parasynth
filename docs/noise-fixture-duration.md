@@ -210,3 +210,87 @@ prediction and decision rule were committed before the run (`8e863b5a`), and
 the one later addition is labelled. If a later change proposes a different
 fixture length, teaching `sensitivity.py` a `python-constant` kind is the
 point at which to register it.
+
+## Decision (#539): the two noise controls are detected on a mean statistic
+
+Tool: `tools/probes/mean_statistic_sweep.py`; raw output
+`docs/mean-statistic-sweep-results.{json,log}`; registered sweep
+`docs/sensitivity/mean-trials.json` (`MEAN_TRIALS`). The grid, the CLT
+prediction and the selection rule are in that file's docstring, committed
+with it; the SELECT/CONFIRM/other-base populations are disjoint from each
+other and from CALIBRATE_BASE and VALIDATE_BASE.
+
+**What ships.** `SINGLE_WINDOW_SLOPE` on `noise/psd_slope` and
+`SHORT_WINDOW_SPECTRUM` on `noise/centroid` are CAUGHT when the **mean** of
+`MEAN_TRIALS = 24` residuals exceeds `MEAN_FACTOR = 3` x the clean row's
+calibrated mean residual (96 CALIBRATE_BASE draws). This is option 2 with a
+trial count (option 1's lever) chosen by the sweep. The per-row worst-trial
+verdict and thresholds for the permitted-difference suite are unchanged;
+`EXPECT_RED`, `run_controls` and `--inject` take the union of the row verdict
+and the mean statistic (`control_outcome`).
+
+**Measured, 80 groups per population, 96-trial prefixes** (trial i is seeded
+`[base, i, case]`, so the 12/24/48/96-trial statistics are prefixes of one run,
+asserted against the shipped `mean_margin` before any point):
+
+| trials | slope missed (SELECT_BASE) | centroid missed | clean false-red (both rows) |
+|---:|---:|---:|---:|
+| 12 | 3/80 | 0/80 | 0/80 |
+| 24 | 0/80 | 0/80 | 0/80 |
+| 48 | 0/80 | 0/80 | 0/80 |
+| 96 | 0/80 | 0/80 | 0/80 |
+
+The pre-stated rule picks the smallest qualifying count (zero false-reds and a
+one-sided 95 % Clopper-Pearson lower bound on detection >= 0.95): **24**. The
+CLT prediction, read from CALIBRATE_BASE moments only, expected 1.84 slope
+misses at 12 trials and 0.19 at 24; observed 3 and 0.
+
+**Confirmed on populations the selection never read**, at 24 trials, factor 3:
+CONFIRM_BASE 80 groups and a different seed base (FPR_BASE) 80 groups, both
+pairs: **0 missed, 0 false-red** (detection lower bound 0.963 on each). The
+old statistic on the same kind of population was 23/40 and 7/10. A third base
+(`FPR_BASE + 70000`) and a second (`CONFIRM_BASE + 90000`) are committed as
+tests (`test_the_mean_statistic_catches_its_control_on_a_changed_draw_sequence`),
+as is the clean-row control under the same statistic.
+
+**Factor sweep at 24 trials, SELECT_BASE (misses slope/centroid, false-reds):**
+
+| factor | 1.5 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| missed | 0/0 | 0/0 | 0/0 | 6/1 | 38/6 | 71/29 |
+| false-red | 1/0 | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 |
+
+The window with no miss and no false-red is **2-3**. The shipped 3 is the edge
+of it on the miss side: factor 4 already misses the slope control in 6 of 80
+groups. This is better than the old statistic (a 40 % miss rate at the shipped
+threshold), not a wide margin; it is stated rather than rounded up.
+
+**What it costs, said plainly.** The two noise pairs no longer depend on
+`SAFETY`, so they no longer bound it from above. The 4.19x upper bound came
+from `SINGLE_WINDOW_SLOPE`; the binding pair is now `TWO_POINT_TAIL_DECAY` on
+`noise/decay_tau`, lost above ~5.3e3x. The honest reading is that `SAFETY` is
+bounded from above only by pairs with huge margins; the per-row worst-trial
+threshold of `noise/psd_slope` (0.60) is **no longer shown to catch the slope
+defect**, only the mean statistic is. A `SAFETY`-scaled upper bound for the
+noise rows would need its own control and is not claimed.
+
+**Limits.** A mean is moved by one large trial: a clean row with a single
+outlier residual could read red (the safe direction), and a defect that
+affects one trial in 24 could be caught by it (also acceptable: the row has a
+real large residual). Two defects, one fixture length (2.0 s); a different
+defect on the same rows is not covered by this rate.
+
+**Wrong-then-right.** One figure was wrong before it was right: this change was
+first written with `MEAN_TRIALS = 48`, a guess carried over from the issue's
+"48 trials gives about 0.97"; the pre-stated rule selects 24 and 48 is
+indistinguishable from it at this resolution, so 24 ships. The issue's
+independence assumption for option 1 (P(detect) about 0.97 at 48 trials of the
+*worst* statistic) was not measured and is not relied on. Not examined, same as
+#537: `tools/run_case.py` ~line 270 and `tools/probes/estimator_ground_truth.py`
+~line 922.
+
+**Same-shape search.** `git grep -n -E "pair_margin\(|detection_at\(|DETECTION_PAIRS"
+-- tools` finds the callers; `noise_fixture_duration.py` calls `pair_margin`
+directly on the worst statistic and is left as the record of that experiment.
+No other injected control is detected on a worst-of-12 statistic with a
+margin under 1.5x (`--margins`: the other three pairs are 1.3e3x or more).

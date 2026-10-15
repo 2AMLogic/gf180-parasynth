@@ -138,7 +138,14 @@ A 4.0 s fixture was the candidate fix: it tightens the realisation spread by
 as a spread) and survives all eight recalibrations, but its own reserved
 confirmation still missed the control in 2 of 10 groups, so it does not ship
 and `NOISE_SECONDS` stays 2.0. The per-trial defect is simply too close to the
-row's own spread; what would fix it is a follow-up, not this file.
+row's own spread. #539 is that follow-up: those two controls are now detected
+on the MEAN of `MEAN_TRIALS` = 24 residuals against `MEAN_FACTOR` = 3 x the
+clean calibrated mean (`mean_margin`, swept in `tools/probes/
+mean_statistic_sweep.py`): 0 misses and 0 false-reds on 80 CONFIRM_BASE and 80
+other-base groups. Because that statistic does not depend on `SAFETY`, the
+4.19x / 7.59x upper bounds in the table above no longer apply to those two
+pairs and `--margins` prints `--` for them; the table is kept as the record of
+what the worst-trial statistic gave. See `docs/noise-fixture-duration.md`.
 
 Stochastic rows (independent noise realisation, free-running phase, and every
 row whose transform draws its own magnitude) are run over `--trials` draws and
@@ -268,6 +275,13 @@ CAL_TRIALS = 96           # draws behind every committed threshold
 SAFETY = 4.0              # committed threshold = SAFETY x worst calibration draw
 SLACK_FACTOR = 20.0       # above this x the recommendation, a threshold is vacuous
 TRIALS_DEFAULT = 12       # trials per row in the shipped suite
+#: #539: the two noise controls (`MEAN_PAIRS`) are detected on the MEAN of this
+#: many trials' residuals against `MEAN_FACTOR` x the clean row's calibrated
+#: mean residual, not on the worst of 12 trials against `SAFETY` x the worst of
+#: 96. Both are swept: `tools/probes/mean_statistic_sweep.py`, registered in
+#: `docs/sensitivity/registry.json` (`MEAN_TRIALS`).
+MEAN_TRIALS = 24          # trials behind a control's mean-residual statistic
+MEAN_FACTOR = 3           # control threshold = this x the clean calibrated mean
 MAX_REFUSAL_RATE = 0.25   # a row that refuses more than this is REFUSED, not PASS
 
 PASS, FAIL, REFUSED = "PASS", "FAIL", "REFUSED"
@@ -1514,9 +1528,8 @@ def run_controls(trials: int, seed_base: int) -> tuple[int, list[dict]]:
     print("=" * 100)
     for name, inj in INJECTIONS.items():
         rows = run_suite(trials, seed_base, name)
-        red = tuple(sorted(r.case.cid for r in rows if r.verdict == FAIL))
+        red, refused = control_outcome(name, rows, seed_base, trials)
         want = tuple(sorted(EXPECT_RED[name]))
-        refused = tuple(sorted(r.case.cid for r in rows if r.verdict == REFUSED))
         ok = red == want and not refused
         bad += 0 if ok else 1
         print(f"\n{'OK  ' if ok else 'FAIL'}  {name}")
@@ -1528,7 +1541,19 @@ def run_controls(trials: int, seed_base: int) -> tuple[int, list[dict]]:
         out.append(dict(injection=name, expected=list(want), observed=list(red),
                         refused=list(refused), ok=ok))
     print(f"\n   {len(INJECTIONS) - bad}/{len(INJECTIONS)} controls behaved as declared")
-    return (1 if bad else 0), out
+    # #539: the same statistic on the CLEAN rows. A detector that reds the
+    # undamaged row has not shown it separates anything.
+    print("\nMEAN-STATISTIC CLEAN ROWS -- must NOT go red under the statistic "
+          "that catches their defects")
+    clean_bad = 0
+    for _, cid in MEAN_PAIRS:
+        pm = mean_margin(None, cid, seed_base, max(trials, MEAN_TRIALS))
+        good = pm.state == MISSED
+        clean_bad += 0 if good else 1
+        print(f"   {'OK  ' if good else 'FAIL'}  {cid}: {render_margin(pm)}")
+        out.append(dict(injection=None, case=cid, state=pm.state, margin=pm.margin,
+                        ok=good))
+    return (1 if (bad or clean_bad) else 0), out
 
 
 # ===========================================================================
@@ -1602,6 +1627,7 @@ class PairMargin:
     margin: float | None
     state: str
     why: str = ""
+    statistic: str = "worst"      # "worst" of the trials, or "mean of N" (#539)
 
     @property
     def caught(self) -> bool:
@@ -1655,18 +1681,106 @@ def pair_margin(injection: str, row: RowResult) -> PairMargin:
     return out(NO_VERDICT, f"verdict {row.verdict} disagrees with margin {m:.4g}x", worst, m)
 
 
+#: The pairs detected on a DISTRIBUTION statistic (#539). Each defect's per-trial
+#: residual sits inside the clean row's own spread, so the worst of 12 against
+#: a worst-of-96 threshold catches it only by the luck of the draw (23 of 40
+#: untouched groups for the slope pair; `docs/noise-fixture-duration.md`). The
+#: mean of many trials is far more separable: the defect shifts the whole
+#: distribution, and averaging shrinks the clean spread by 1/sqrt(N).
+MEAN_PAIRS = (("SINGLE_WINDOW_SLOPE", "noise/psd_slope"),
+              ("SHORT_WINDOW_SPECTRUM", "noise/centroid"))
+
+_CAL_MEAN: dict[str, float] = {}
+
+
+def calibration_mean(cid: str) -> float:
+    """The clean row's mean residual over its `CAL_TRIALS` calibration draws.
+
+    REFUSES (raises) rather than answering when any calibration draw refused or
+    the mean is not a positive finite number: a threshold that is `MEAN_FACTOR`
+    x zero would call every defect caught."""
+    if cid not in _CAL_MEAN:
+        r = run_case(CASE_BY_ID[cid], CAL_TRIALS, CALIBRATE_BASE, None)
+        m = float(np.mean(r.residuals)) if r.residuals else float("nan")
+        if r.refusals or not (np.isfinite(m) and m > 0):
+            raise RuntimeError(f"{cid}: calibration mean is unusable "
+                               f"({r.refusals} refusals, mean {m!r})")
+        _CAL_MEAN[cid] = m
+    return _CAL_MEAN[cid]
+
+
+def mean_margin(injection: str | None, cid: str, seed_base: int,
+                trials: int = MEAN_TRIALS, factor: float = MEAN_FACTOR,
+                cal_mean: float | None = None) -> PairMargin:
+    """The distribution statistic's verdict for one (injection, row) group:
+    the mean residual over `trials` draws against `factor` x the clean row's
+    calibrated mean. `injection=None` is the clean row under the same
+    statistic, where `caught` means FALSE-RED.
+
+    Guards, each written against the input that defeats it (rule 8): a REFUSED
+    row is never a catch even if the trials that answered were large; a
+    non-finite mean or threshold is NO-VERDICT, not a number beside the word
+    CAUGHT; and fewer residuals than `trials` less the refusal allowance is
+    NO-VERDICT, because a mean over a handful of survivors is not the
+    statistic that was calibrated."""
+    stat = f"mean of {trials}"
+    c = CASE_BY_ID[cid]
+    row = run_case(c, trials, seed_base, injection)
+    name = injection or "(clean)"
+
+    def out(state, why, residual=None, margin=None, thr=float("nan")):
+        return PairMargin(name, cid, thr, residual, margin, state, why, stat)
+
+    if row.verdict == REFUSED:
+        return out(REFUSED, f"{row.refusals}/{row.trials} trials refused")
+    if c.policy.one_sided:
+        return out(NO_VERDICT, f"{c.policy.kind} has no ratio margin")
+    if len(row.residuals) < trials * (1 - MAX_REFUSAL_RATE):
+        return out(NO_VERDICT, f"only {len(row.residuals)}/{trials} residuals")
+    cm = calibration_mean(cid) if cal_mean is None else cal_mean
+    thr = factor * cm
+    mean = float(np.mean(row.residuals))
+    if not (np.isfinite(mean) and np.isfinite(thr) and thr > 0):
+        return out(NO_VERDICT, f"non-finite mean {mean!r} or threshold {thr!r}", mean,
+                   thr=thr)
+    m = mean / thr
+    return out(CAUGHT if m > 1.0 else MISSED, "", mean, m, thr)
+
+
+def control_outcome(name: str, rows: list[RowResult], seed_base: int,
+                    trials: int) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """(red rows, refused rows) for one injected control. A row is red when its
+    verdict is FAIL, or -- for a `MEAN_PAIRS` target -- when the distribution
+    statistic catches the defect. A statistic that cannot answer is REFUSED."""
+    red = {r.case.cid for r in rows if r.verdict == FAIL}
+    refused = {r.case.cid for r in rows if r.verdict == REFUSED}
+    for n, cid in MEAN_PAIRS:
+        if n == name:
+            pm = mean_margin(n, cid, seed_base, max(trials, MEAN_TRIALS))
+            if pm.caught:
+                red.add(cid)
+            elif pm.state in (REFUSED, NO_VERDICT):
+                refused.add(cid)
+    return tuple(sorted(red)), tuple(sorted(refused))
+
+
 def render_margin(pm: PairMargin) -> str:
     """CAUGHT and MISSED carry a number; REFUSED and NO-VERDICT never do, so a
     reader cannot mistake either for a measured margin."""
     if pm.state in (CAUGHT, MISSED):
-        return f"{pm.margin:.3g}x {pm.state}"
+        tag = "" if pm.statistic == "worst" else f" [{pm.statistic}]"
+        return f"{pm.margin:.3g}x {pm.state}{tag}"
     return f"{pm.state} ({pm.why})"
 
 
 def pair_margins(cases: list[Case], trials: int, seed_base: int) -> list[PairMargin]:
-    """`pair_margin` for every `DETECTION_PAIRS` entry against this case list."""
+    """The margin of every `DETECTION_PAIRS` entry. `MEAN_PAIRS` use the
+    distribution statistic, which does not depend on `SAFETY`; the rest use the
+    worst trial against the case list's threshold."""
     by_id = {c.cid: c for c in cases}
-    return [pair_margin(name, run_case(by_id[cid], trials, seed_base, name))
+    return [mean_margin(name, cid, seed_base, max(trials, MEAN_TRIALS))
+            if (name, cid) in MEAN_PAIRS else
+            pair_margin(name, run_case(by_id[cid], trials, seed_base, name))
             for name, cid in DETECTION_PAIRS]
 
 
@@ -1679,7 +1793,10 @@ def upper_cliff(pm: PairMargin, calibrated: float) -> float:
     `test_the_upper_cliff_is_where_the_pair_is_lost` re-runs the row either
     side of it. NaN for a pair that is not CAUGHT at the shipped factor -- it
     has no cliff above it to locate."""
-    if not pm.caught or not (np.isfinite(calibrated) and calibrated > 0):
+    if (not pm.caught or pm.statistic != "worst"
+            or not (np.isfinite(calibrated) and calibrated > 0)):
+        # a mean-statistic pair (#539) does not depend on SAFETY, so SAFETY has
+        # no cliff for it
         return float("nan")
     hi = pm.residual / calibrated           # _signif rounds up, so lost here
     lo = 0.5 * hi                           # and 2 s.f. cannot round up 2x
@@ -1811,9 +1928,12 @@ def print_margins(trials: int, seed_base: int = VALIDATE_BASE) -> tuple[int, lis
                         residual=pm.residual, margin=pm.margin, state=pm.state,
                         why=pm.why, calibrated=cal,
                         lost_above_safety=cliff if np.isfinite(cliff) else None))
+    # every pair must be CAUGHT; a pair detected on the mean statistic has no
+    # SAFETY cliff by construction and is reported as `--`, not counted missing
     cliffs = [d["lost_above_safety"] for d in out if d["lost_above_safety"] is not None]
-    if cliffs and len(cliffs) == len(out):
-        b = min(out, key=lambda d: d["lost_above_safety"])
+    if cliffs and rc == 0:
+        b = min((d for d in out if d["lost_above_safety"] is not None),
+                key=lambda d: d["lost_above_safety"])
         print(f"\n   upper bound on SAFETY: {b['lost_above_safety']:.3g}x, set by "
               f"{b['injection']} on {b['case']}")
     else:
@@ -1940,8 +2060,11 @@ def main(argv=None) -> int:
         a.json.parent.mkdir(parents=True, exist_ok=True)
         a.json.write_text(json.dumps(report, indent=2))
 
-    red = tuple(sorted(r.case.cid for r in rows if r.verdict == FAIL))
-    refused = tuple(sorted(r.case.cid for r in rows if r.verdict == REFUSED))
+    if a.inject:
+        red, refused = control_outcome(a.inject, rows, VALIDATE_BASE, a.trials)
+    else:
+        red = tuple(sorted(r.case.cid for r in rows if r.verdict == FAIL))
+        refused = tuple(sorted(r.case.cid for r in rows if r.verdict == REFUSED))
     if a.inject:
         want = tuple(sorted(EXPECT_RED[a.inject]))
         ok = red == want and not refused
