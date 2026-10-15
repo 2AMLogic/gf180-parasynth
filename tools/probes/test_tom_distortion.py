@@ -1,0 +1,765 @@
+"""Known answers, refusals and injected controls for tools/probes/tom_distortion.py (#593).
+
+Everything here is closed-form or synthetic and runs anywhere. Tests that need
+the Fischer corpus read GF180_TR808_FISCHER and are SKIPPED with that reason
+when it is absent -- a skip, never a pass.
+"""
+from __future__ import annotations
+
+import json
+import math
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+import numpy as np
+import pytest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import tom_distortion as td  # noqa: E402
+
+REFS = os.environ.get("GF180_TR808_FISCHER")
+needs_refs = pytest.mark.skipif(not REFS, reason="GF180_TR808_FISCHER (the Fischer corpus) not set")
+
+
+@pytest.fixture(autouse=True)
+def _clean_inject():
+    td.INJECT.clear()
+    yield
+    td.INJECT.clear()
+
+
+# ---- start red -------------------------------------------------------------
+def test_start_red_stub_estimator_fails_the_harness():
+    """Rule 1: the right ports and no behaviour must FAIL the known answers, for
+    every reason (missed harmonics, no refusals)."""
+    r = td.harness_verdict(td.stub_levels, td.ka_grid()[:40], nearby=False)
+    assert not r["pass"]
+    assert r["missed_resolved"] > 0
+    assert len(r["refusal_cases_bad"]) == len(td.refusal_cases(td.stub_levels)[1])
+
+
+# ---- the estimator against closed-form truth -------------------------------
+def test_estimator_recovers_independent_harmonics():
+    r = td.harness_verdict(td.estimate, td.ka_grid()[::4], nearby=False)
+    assert r["pass"], r
+    assert r["max_abs_err_db"] <= td.TOL_DB
+
+
+def test_refuses_what_it_cannot_answer():
+    ok, bad = td.refusal_cases(td.estimate)
+    assert not bad, bad
+    assert {"nan", "inf", "silent", "short_window", "f0_too_high_for_h4",
+            "glide_outside_domain", "unsupported_rate", "empty"} <= set(ok)
+
+
+def test_unresolved_fundamental_is_refused():
+    rng = np.random.default_rng(1)
+    with pytest.raises(td.Refused):
+        td.estimate(rng.standard_normal(24000) * 0.1, 48000)
+
+
+def test_dc_offset_does_not_make_harmonics():
+    y = td.synth_mixture(110.0, 0.15, ())
+    for dc in (0.5, 5.0):
+        assert not any(td.estimate(y + dc, 48000)["resolved"])
+
+
+def test_adjacent_inharmonic_partial_cannot_pose_as_a_harmonic():
+    """A partial at 1.5 f0 or 2.5 f0 (30 dB down) sits beside H2/H3: it must not
+    be reported as a resolved H2/H3 (the off-harmonic floor rises to meet it)."""
+    n = np.arange(24000) / 48000
+    y = td.synth_mixture(110.0, 0.15, ())
+    for ratio in (1.5, 2.5):
+        z = y + 10 ** (-30 / 20) * np.exp(-n / 0.15) * np.sin(2 * np.pi * 110.0 * ratio * n)
+        assert not any(td.estimate(z, 48000)["resolved"])
+
+
+@pytest.mark.parametrize("ratio", [1.98, 2.02])
+def test_nearby_partial_beside_h2_is_not_accepted_as_an_accurate_harmonic(ratio):
+    """The reviewer's reproduction (#649): a -30 dB partial at 1.98 / 2.02 f0 beside
+    a -40 dB H2. Either it reads unresolved or it reads within TOL_DB of the
+    INDEPENDENTLY specified -40 dB; it may not read resolved at -31.9 / -27.9."""
+    y = td.synth_mixture(110, .15, (-40., -40., -40.))
+    t = np.arange(len(y)) / 48000
+    y += 10 ** (-30 / 20) * np.exp(-t / .15) * np.sin(2 * np.pi * 110 * ratio * t)
+    h = td.estimate(y, 48000)
+    assert (not h["resolved"][0]) or abs(h["db"][0] + 40.0) <= td.TOL_DB, h
+
+
+def test_every_registered_nearby_partial_case_is_rejected_or_accurate():
+    """The registered sweep (|sep| >= 1.5 Hz, both sides, H2..H4, three f0, two tau, glide on and
+    off; partial 10 dB above and equal to the harmonic): none may be accepted with an error
+    beyond TOL_DB. This is the acceptance path."""
+    bad = [c for c in td.nearby_partial_cases("required") if td.nearby_partial_outcome(c) == "WRONG"]
+    assert not bad, bad[:3]
+    bad = [c for c in td.nearby_partial_cases("comparable") if td.nearby_partial_outcome(c) == "WRONG"]
+    assert not bad, bad[:3]
+
+
+def test_nearby_partial_blind_zone_is_measured_not_hidden():
+    """Below ~1 Hz the partial is not separable from the harmonic by one 0.28 s window. The
+    harness records that zone as a measured limitation (never gating); it must still run."""
+    out = td.nearby_partial_summary(td.estimate)
+    assert out["required_wrong"] == 0
+    assert out["blind_n"] > 0 and out["comparable_n"] > 0 and "blind_wrong" in out and "comparable_wrong" in out
+
+
+def test_window_leakage_does_not_masquerade_as_h2():
+    """Fast decay + glide + noise on a PURE sinusoid: the apparent H2 is leakage."""
+    for tau in (0.06, 0.15):
+        for g in (0.0, 60.0):
+            y = td.synth_mixture(110.0, tau, (), glide_cents=g, glide_tau=0.1, noise_db=-50.0)
+            assert not any(td.estimate(y, 48000)["resolved"])
+
+
+def test_rectangular_window_leaks_more_than_the_shipped_one():
+    """Why the window is Blackman-Harris: the same pure decaying sinusoid reads a
+    HIGHER apparent H2 floor through a rectangular window."""
+    y = td.synth_mixture(110.0, 0.06, (-45.0, -50.0, -55.0))
+    bh = td.harmonic_levels(y, 48000)["floor_db"][0]
+    rect = td.harmonic_levels(y, 48000, _rect=True)["floor_db"][0]
+    assert rect > bh + 10.0
+
+
+def test_glide_outside_domain_is_refused_not_misread():
+    y = td.synth_mixture(110.0, 0.15, (-35.0, -38.0, -41.0), glide_cents=480.0, glide_tau=0.1)
+    with pytest.raises(td.Refused, match="cents"):
+        td.estimate(y, 48000)
+
+
+def test_analytic_snr_matches_a_noise_only_measurement():
+    """analytic_snr_db is closed form; check it against a direct measurement."""
+    c = dict(f0=110.0, tau=0.15, h_db=(-40.0,), sr=48000, glide_cents=0.0, glide_tau=0.03, noise_db=-50.0)
+    snr = td.analytic_snr_db(c, 0)
+    assert 5.0 < snr < 40.0
+    c2 = dict(c, noise_db=-60.0)
+    assert td.analytic_snr_db(c2, 0) == pytest.approx(snr + 10.0, abs=1e-9)
+
+
+# ---- the candidate path (apply_quadratic) against a closed form ------------
+def test_quadratic_term_closed_form_on_a_steady_tone():
+    """y + c y^2 with y = A sin(wt): H2/H1 = c*A/2 exactly. Read from the raw DFT
+    of an integer number of cycles, with no estimator involved."""
+    sr, f0, n = 48000, 100.0, 48000
+    y = 0.4 * np.sin(2 * np.pi * f0 * np.arange(n) / sr)
+    z = td.apply_quadratic(y, -37.0)
+    S = np.abs(np.fft.rfft(z))
+    assert 20 * math.log10(S[200] / S[100]) == pytest.approx(-37.0, abs=0.01)
+
+
+def test_quadratic_term_reads_as_a_polynomial_of_the_carrier():
+    r = td.harmonic_trajectory(td.apply_quadratic(td.synth_mixture(110.0, 0.1, ()), -37.0), 48000)
+    assert r["class"] == "polynomial-of-carrier"
+
+
+# ---- mechanism -------------------------------------------------------------
+def test_mechanism_classes_on_known_answers():
+    assert td.prop_M1_mechanism_classes()
+
+
+def test_mechanism_indistinguishable_when_prediction_is_small():
+    y = td.synth_mixture(110.0, 0.9, (-35.0, -40.0, -45.0), seconds=0.6)
+    assert td.harmonic_trajectory(y, 48000)["class"] == "insufficient"
+
+
+def test_mechanism_verdict_separates_effect_from_mechanism():
+    poly = [{"class": "polynomial-of-carrier"}] * 5
+    assert td.mechanism_verdict(poly, True)["verdict"] == "SUPPORTED"
+    assert td.mechanism_verdict(poly, None)["verdict"] == "INSUFFICIENT"
+    assert td.mechanism_verdict(poly, False)["verdict"] == "INSUFFICIENT"   # non-detection is not absence
+    assert td.mechanism_verdict([{"class": "constant-ratio"}] * 5, True)["verdict"] == "REFUTED"
+    assert td.mechanism_verdict(poly[:2], True)["verdict"] == "INSUFFICIENT"
+    assert td.mechanism_verdict([{"class": "insufficient"}] * 8, True)["verdict"] == "INSUFFICIENT"
+
+
+def test_non_detection_is_insufficient_not_refuted_through_the_mechanism_path():
+    """The reviewer's reproduction (#649): harmonics at -130 dB are analytically
+    nonzero but cannot clear the floor, so nothing is decidable. That is NOT
+    evidence that there is no distortion to explain."""
+    h = td.harmonic_levels(td.synth_mixture(110, .15, (-130., -130., -130.)), 48000)
+    assert h["resolved"] == [False, False, False]
+    v = td.mechanism_verdict([], bool(h["resolved"][0]))
+    assert v["verdict"] == "INSUFFICIENT" and v["n_takes"] == 0, v
+
+
+def test_refutation_needs_decidable_constant_ratio_takes():
+    const = [{"class": "constant-ratio"}] * 5
+    assert td.mechanism_verdict(const, True)["verdict"] == "REFUTED"
+    assert td.mechanism_verdict(const[:2], True)["verdict"] == "INSUFFICIENT"
+    assert td.mechanism_verdict(const, False)["verdict"] == "INSUFFICIENT"
+
+
+def test_committed_records_are_those_of_the_final_instrument():
+    """#649 review: controls.json had 9 cells while DEFECTS had 11, and the README table
+    omitted two defects. Cheap structural staleness check (the full matrix is
+    re-run by the other tests; this asserts the COMMITTED record names it)."""
+    d = pathlib.Path(td.__file__).resolve().parents[2] / "docs" / "scorecard" / "tom-distortion-593"
+    c = json.loads((d / "controls.json").read_text())
+    assert set(c["cells"]) == set(td.DEFECTS), set(td.DEFECTS) ^ set(c["cells"])
+    assert set(c["clean"]) == set(td.PROPERTIES)
+    assert all(set(r) == set(td.PROPERTIES) for r in c["cells"].values())
+    assert c["intended"] == {k: list(v) for k, v in td.INTENDED.items()}
+    assert c["status"] == "OK" and not c["intended_not_moved"]
+    k = json.loads((d / "knownanswer.json").read_text())
+    assert k["frozen"] == td.frozen_constants()
+    assert k["nearby_partials"]["required_wrong"] == 0 and k["nearby_partials"]["comparable_wrong"] == 0
+    readme = (d / "README.md").read_text()
+    for name in td.DEFECTS:
+        assert f"| {name} |" in readme, f"README table lacks defect {name}"
+    for name in td.PROPERTIES:
+        assert name.split("_")[0] in readme
+
+
+# ---- the preregistration ---------------------------------------------------
+def test_prereg_loads_and_does_not_relabel_old_rows():
+    p = td.load_prereg()
+    assert p["issue"] == 593
+    assert len(p["prior_seen"]["keys"]) == 30
+    assert set(p["development"]["keys"]) <= set(p["prior_seen"]["keys"])
+    assert p["confirmation"]["status"] == "REFUSED" and p["confirmation"]["keys"] == []
+    assert p["candidates"] == {}
+    assert not set(p["confirmation"]["keys"]) & set(p["prior_seen"]["keys"])
+
+
+def test_prereg_of_558_is_refused(tmp_path):
+    old = ROOT_558 = pathlib.Path(__file__).resolve().parents[2] / "docs/scorecard/tom-conga-558/prereg.json"
+    with pytest.raises(td.Refused):
+        td.load_prereg(old)
+    with pytest.raises(td.Refused):
+        td.load_prereg(tmp_path / "missing.json")
+    assert ROOT_558.exists()
+
+
+def test_actual_prereg_with_no_candidate_gives_no_candidate_never_confirmed():
+    p = td.load_prereg()
+    v = td.judge(td.synthetic_record(prereg=p), p)          # population from the prereg itself
+    assert v["verdict"] == "NO CANDIDATE"
+
+
+def test_actual_prereg_refuses_rows_outside_its_frozen_population():
+    p = td.load_prereg()                                    # registration: confirmation REFUSED
+    rec = td.synthetic_record(prereg=p)
+    rec["rows"]["EXT00"] = dict(rec["rows"]["LT25"], split="confirmation")
+    assert td.judge(rec, p)["verdict"] == "REFUSED"
+
+
+def test_confirmation_rows_with_prior_seen_hashes_are_refused():
+    p = td.synthetic_prereg()
+    rec = td.synthetic_record(prereg=p)
+    seen = sorted(p["prior_seen"]["sha256_16"].values())
+    for i, k in enumerate(p["confirmation"]["keys"]):
+        rec["rows"][k]["sha16"] = seen[i]
+    assert td.judge(rec, p)["verdict"] == "REFUSED"
+
+
+def test_confirmation_registration_using_a_prior_seen_hash_is_refused():
+    p = td.synthetic_prereg()
+    k0 = p["confirmation"]["keys"][0]
+    p["confirmation"]["sha256_16"][k0] = sorted(p["prior_seen"]["sha256_16"].values())[0]
+    v = td.judge(td.synthetic_record(prereg=p), p)          # matches the cheating registration
+    assert v["verdict"] == "REFUSED"
+
+
+# ---- the frozen judge ------------------------------------------------------
+def _j(**kw):
+    n = kw.pop("n_conf", 6)
+    return td.judge(td.synthetic_record(n_conf=n, **kw), td.synthetic_prereg(n_conf=n))
+
+
+def test_clean_candidate_is_confirmed_so_the_judge_is_satisfiable():
+    v = _j()
+    assert v["verdict"] == "CONFIRMED", v
+    assert v["selection"]["Q"]["null_excluded"]["modulation"] > 0     # HT: null, excluded, counted
+
+
+def test_attractive_target_gain_that_breaks_decay_is_rejected():
+    v = _j(decay_bad=True)
+    assert v["verdict"] == "NOT CONFIRMED"
+    assert any("decay" in x for vs in v["selection"]["Q"]["violations"].values() for x in vs)
+
+
+def test_attractive_target_gain_that_breaks_peak_is_rejected():
+    v = _j(peak_bad=True)
+    assert v["verdict"] == "NOT CONFIRMED"
+
+
+def test_dc_added_by_a_quadratic_term_is_a_violation():
+    rec = td.synthetic_record()
+    for r in rec["rows"].values():
+        r["variants"]["Q"]["dc_fs"] = 0.01
+    assert td.judge(rec, td.synthetic_prereg())["verdict"] == "NOT CONFIRMED"
+
+
+def test_null_preserved_feature_on_one_side_is_a_violation_not_a_skip():
+    rec = td.synthetic_record()
+    rec["rows"]["LT25"]["variants"]["Q"]["ratio"]["attack"] = None
+    assert "LT25" in td.judge(rec, td.synthetic_prereg())["selection"]["Q"]["violations"]
+
+
+# ---- non-finite / missing measurements (each must refuse, never score) ------
+def test_nonfinite_measurements_are_refused_not_scored():
+    nan, inf = float("nan"), float("inf")
+    mangles = {
+        "nan ratio, candidate side": lambda r:
+            r["rows"]["MT25"]["variants"]["Q"]["ratio"].update(attack=nan),
+        "nan ratio, shipped side": lambda r:
+            r["rows"]["MT25"]["variants"]["shipped"]["ratio"].update(decay=nan),
+        "inf peak, shipped side": lambda r:
+            r["rows"]["MT25"]["variants"]["shipped"].update(peak_fs=inf),
+        "nan peak, candidate side": lambda r:
+            r["rows"]["MT25"]["variants"]["Q"].update(peak_fs=nan),
+        "zero peak, candidate side": lambda r:
+            r["rows"]["MT25"]["variants"]["Q"].update(peak_fs=0.0),
+        "nan dc, shipped side": lambda r:
+            r["rows"]["MT25"]["variants"]["shipped"].update(dc_fs=nan),
+        "inf dc, candidate side": lambda r:
+            r["rows"]["MT25"]["variants"]["Q"].update(dc_fs=-inf),
+        "nan in a resolved harmonic": lambda r:
+            r["rows"]["MT25"]["variants"]["shipped"]["harm"]["db"].__setitem__(0, nan),
+        "nan in the target": lambda r:
+            r["rows"]["MT25"]["target_harm"]["db"].__setitem__(1, nan),
+    }
+    for name, mangle in mangles.items():
+        rec = td.synthetic_record()
+        mangle(rec)
+        with pytest.raises(td.Refused, match="not finite|positive finite"):
+            td.judge(rec, td.synthetic_prereg())
+
+
+def test_deleted_feature_field_is_refused_not_treated_as_null():
+    rec = td.synthetic_record()
+    for vn in ("shipped", "Q"):
+        rec["rows"]["MT25"]["variants"][vn]["ratio"].pop("pitch")
+    with pytest.raises(td.Refused, match="not a measured null"):
+        td.judge(rec, td.synthetic_prereg())
+
+
+def test_null_on_both_sides_of_a_preserved_feature_is_a_violation_not_a_skip():
+    rec = td.synthetic_record()
+    for vn in ("shipped", "Q"):
+        rec["rows"]["MT25"]["variants"][vn]["ratio"]["attack"] = None
+    v = td.judge(rec, td.synthetic_prereg())
+    assert v["verdict"] == "NOT CONFIRMED"
+    assert any("null-on-both-sides" in x
+               for vs in v["selection"]["Q"]["violations"].values() for x in vs)
+
+
+def test_null_target_is_refused_not_scored_as_zero_error():
+    assert _j(null_target=True)["verdict"] == "REFUSED"
+
+
+def test_unresolved_shipped_harmonic_earns_no_credit_from_its_floor():
+    """Review defeating input: shipped unresolved at 5.9 dB above its floor
+    (legal under the 6 dB rule); the true improvement is 0.355 < the 0.5 bar,
+    the old floor-substitution reported 0.778 and CONFIRMED."""
+    assert td.prop_J9_unresolved_shipped_floor_earns_no_credit()
+    td.INJECT = {"floor-as-bound"}
+    try:
+        assert not td.prop_J9_unresolved_shipped_floor_earns_no_credit()
+    finally:
+        td.INJECT = set()
+
+
+@pytest.mark.parametrize("mech", ["INSUFFICIENT", "REFUTED", "bogus", None])
+def test_unsupported_mechanism_cannot_select_a_candidate(mech):
+    v = _j(mechanism=mech)
+    assert v["verdict"] == "REFUSED" and "mechanism" in v["why"]
+    assert "selection" in v and not v["selection"]
+
+
+# ---- round-4 review: the blind zone may not feed the acceptance boundary ----
+def test_blind_zone_reading_cannot_confirm_the_record():
+    """The reviewer's exact defeating input: a -30 dB partial at +0.25 Hz from
+    H2 reads resolved+unambiguous (the measured blind zone) and that level used
+    to decide selection (CONFIRMED 0.989 vs 0.455 with the true -40 dB). Now
+    the judge REFUSES the record even with every attestation boolean forced
+    True (round 5: booleans are not evidence), the same record with verified
+    evidence and the true level reads NOT CONFIRMED (so the refusal is the
+    gate, not the number), and the defect that makes the consumer trust
+    submissions turns the poisoned record back into CONFIRMED."""
+    assert td.prop_J10_blind_zone_reading_cannot_confirm()
+    sr, tau, f0 = 48000, 0.06, 72.0
+    y = td.synth_mixture(f0, tau, (-40.0, -40.0, -40.0))
+    t = np.arange(len(y)) / sr
+    phi = 2 * np.pi * np.cumsum(np.full(len(y), f0)) / sr
+    y = y + 10 ** (-30 / 20) * np.exp(-t / tau) * np.sin(2 * phi - 2 * np.pi * 0.25 * t + 1.0)
+    h = td.estimate(y, sr)
+    assert h["resolved"][0] and not h["ambiguous"][0]      # still read: the disclosed, measured limit
+    assert h["interference_free"] == [False] * 3           # and never self-attested
+    assert h["qual"] is None                               # and never produces evidence
+    p = td.synthetic_prereg()
+    r = td.synthetic_record(prereg=p)
+    for row in r["rows"].values():
+        if row["split"] == "preservation-only":
+            continue
+        row["target_harm"] = {"f0": f0, "db": [-28.0] * 3, "resolved": [True, False, False],
+                              "interference_free": [True] * 3}
+        row["variants"]["shipped"]["harm"] = {"f0": f0, "db": [-50.0] * 3, "resolved": [True] * 3,
+                                              "interference_free": [True] * 3}
+        row["variants"]["Q"]["harm"] = td._levels_json(h)
+        for hd in (row["target_harm"], row["variants"]["shipped"]["harm"],
+                   row["variants"]["Q"]["harm"]):
+            hd["interference_free"] = [True] * 3           # the round-5 attack: force every boolean
+    v = td.judge(r, p)
+    assert v["verdict"] == "REFUSED" and "input qualification" in v["why"]
+    td.INJECT = {"qualification-bypass"}
+    try:
+        assert td.judge(r, p)["verdict"] == "CONFIRMED"    # the defect reopens the boundary
+    finally:
+        td.INJECT = set()
+
+
+def test_submitted_boolean_never_qualifies_the_record():
+    """Round-5 review, permanent control (J11): the poisoned record with every
+    interference_free forced True is a well-formed submission that must stay
+    REFUSED -- and the defect that makes the consumer trust submissions turns
+    it CONFIRMED, proving the gate (not the number) decides."""
+    assert td.prop_J11_submitted_boolean_never_qualifies()
+    td.INJECT = {"qualification-bypass"}
+    try:
+        assert not td.prop_J11_submitted_boolean_never_qualifies()
+    finally:
+        td.INJECT = set()
+
+
+def test_shifted_fundamental_spec_never_qualifies():
+    """Round-6 review, start-red regression and permanent control (J12): a spec
+    declaring f0 = 110.125 with no component at it relocated the 220.25 Hz
+    partial exactly onto 2*ef0, `_qualified` returned True and the judge
+    CONFIRMED (executed on the pre-fix head). The component list must contain a
+    component AT the declared fundamental; the same shift aimed at 3*ef0 and
+    4*ef0 must fail too. The `shifted-fundamental` defect re-opens the check
+    and turns the control CONFIRMED, proving the check (not the number) decides."""
+    assert td.prop_J12_shifted_fundamental_never_qualifies()
+    td.INJECT = {"shifted-fundamental"}
+    try:
+        assert not td.prop_J12_shifted_fundamental_never_qualifies()
+    finally:
+        td.INJECT = set()
+
+
+def test_competing_fundamental_spec_never_qualifies():
+    """Round-7 review, start-red regression and permanent control (J13): a real
+    but negligible (-80 dB) component AT the declared fundamental satisfied the
+    round-6 existence check while H1 was measured from the competing 110 Hz
+    carrier, and the judge CONFIRMED (executed on the reviewed head). The
+    declared fundamental must be the strongest component of its own list, with
+    no other component within QUAL_SEPARATION_HZ of it; the same attack aimed
+    at 3*ef0 and 4*ef0 must fail too. The `competing-fundamental` defect
+    re-opens the check and turns the control CONFIRMED, proving the check (not
+    the number) decides."""
+    assert td.prop_J13_competing_fundamental_never_qualifies()
+    td.INJECT = {"competing-fundamental"}
+    try:
+        assert not td.prop_J13_competing_fundamental_never_qualifies()
+    finally:
+        td.INJECT = set()
+
+
+def test_record_without_attestation_is_refused_fail_closed():
+    """A record that predates the boundary (no qual evidence and no
+    interference_free anywhere) must not confirm: absent evidence is not
+    evidence."""
+    p = td.synthetic_prereg()
+    r = td.synthetic_record(prereg=p)
+    for row in r["rows"].values():
+        for v in row["variants"].values():
+            v["harm"].pop("interference_free", None)
+            v["harm"].pop("qual", None)
+        if isinstance(row.get("target_harm"), dict):
+            row["target_harm"].pop("interference_free", None)
+            row["target_harm"].pop("qual", None)
+    assert td.judge(r, p)["verdict"] == "REFUSED"
+
+
+def test_forged_or_malformed_attestation_is_refused():
+    """A non-boolean or malformed interference_free, and malformed or
+    non-verifiable qual evidence, can never pass the boundary. On a scored
+    record the verifier's fail-closed path refuses first (verdict REFUSED);
+    schema-broken shapes can also raise from the validator when the gate does
+    not refuse first (e.g. no resolved scored harmonic). Both surfaces refuse."""
+    def refused(rec) -> bool:
+        try:
+            return td.judge(rec, td.synthetic_prereg())["verdict"] == "REFUSED"
+        except td.Refused:
+            return True
+    for bad in ([True, "yes", True], [True, True], "True", [1, 0, 1]):
+        r = td.synthetic_record()
+        r["rows"]["MT25"]["variants"]["Q"]["harm"]["interference_free"] = bad
+        assert refused(r), bad
+    for badq in ("evidence", [None, None],                     # schema-broken
+                 [{"kind": "analytic-spec"}] * 3,              # well-formed shape, unverifiable
+                 [{"kind": "analytic-spec", "f0": 110.0, "win_s": 0.28, "components": []}] * 3,
+                 [{"kind": "analytic-spec", "f0": 440.0, "win_s": 0.28,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 220.0, "db": -35.0},
+                                  {"f_hz": 330.0, "db": -38.0},
+                                  {"f_hz": 440.0, "db": -41.0}]}] * 3,      # another signal's spec
+                 [{"kind": "analytic-spec", "f0": 110.0, "win_s": 2.0,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 220.0, "db": -35.0},
+                                  {"f_hz": 330.0, "db": -38.0},
+                                  {"f_hz": 440.0, "db": -41.0}]}] * 3,      # another window
+                 [{"kind": "analytic-spec", "f0": 110.0, "win_s": 0.28,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 220.25, "db": -30.0},
+                                  {"f_hz": 330.0, "db": -38.0},
+                                  {"f_hz": 440.0, "db": -41.0}]}] * 3,      # a partial in the blind radius
+                 [{"kind": "analytic-spec", "f0": 110.125, "win_s": 0.28,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 220.25, "db": -35.0}]}] * 3,      # shifted fundamental (round 6):
+                                                                              # nothing at 110.125 itself
+                 [{"kind": "analytic-spec", "f0": 110.125, "win_s": 0.28,
+                   "components": [{"f_hz": 110.0, "db": 0.0},
+                                  {"f_hz": 110.125, "db": -80.0},
+                                  {"f_hz": 220.25, "db": -35.0}]}] * 3):      # competing fundamental (round 7):
+        r = td.synthetic_record()                                             # -80 dB at the declaration,
+        r["rows"]["MT25"]["variants"]["Q"]["harm"]["qual"] = badq             # carrier measured from 110.0
+        assert refused(r), badq
+
+
+def test_mechanism_path_does_not_count_unqualified_resolved_h2():
+    """A resolved H2 with no attestation is not mechanism evidence: INSUFFICIENT
+    with the qualification reason -- while non-detection (no take resolved)
+    keeps its own M2 reason."""
+    v = td.mechanism_verdict([], True, n_unqualified=15)
+    assert v["verdict"] == "INSUFFICIENT" and "input qualification" in v["why"]
+    assert v["n_unqualified_resolved"] == 15
+    v2 = td.mechanism_verdict([], False)
+    assert v2["verdict"] == "INSUFFICIENT" and "not detected" in v2["why"] and "qualification" not in v2["why"]
+
+
+def test_missing_mechanism_record_cannot_select_a_candidate():
+    assert td.prop_J8_unsupported_mechanism_cannot_select()
+    td.INJECT = {"mechanism-gate-bypass"}
+    try:
+        assert not td.prop_J8_unsupported_mechanism_cannot_select()
+    finally:
+        td.INJECT = set()
+
+
+def test_empty_registration_stays_no_candidate_whatever_the_mechanism():
+    p = td.synthetic_prereg()
+    p["candidates"] = {}
+    assert td.judge(td.synthetic_record(prereg=p, mechanism="INSUFFICIENT"), p)["verdict"] == "NO CANDIDATE"
+
+
+def test_floor_above_the_target_makes_the_row_unmeasurable():
+    rec = td.synthetic_record()
+    for r in rec["rows"].values():
+        h = r["variants"]["shipped"]["harm"]
+        h.update(resolved=[False] * 3, db=[-20.0] * 3, floor_db=[-20.0] * 3)
+    assert td.judge(rec, td.synthetic_prereg())["verdict"] == "REFUSED"
+
+
+def test_unresolved_candidate_harmonic_gets_no_credit():
+    rec = td.synthetic_record()
+    for r in rec["rows"].values():
+        r["variants"]["Q"]["harm"]["resolved"] = [False] * 3
+    assert td.judge(rec, td.synthetic_prereg())["verdict"] == "NOT CONFIRMED"
+
+
+def test_missing_variant_is_refused_and_a_frozen_split_cannot_be_relabeled():
+    rec = td.synthetic_record()
+    del rec["rows"]["LT25"]["variants"]["Q"]
+    with pytest.raises(td.Refused):
+        td.judge(rec, td.synthetic_prereg())
+    rec = td.synthetic_record()
+    rec["rows"]["LT25"]["split"] = "untouched"
+    v = td.judge(rec, td.synthetic_prereg())
+    assert v["verdict"] == "REFUSED" and "contradicts the frozen assignment" in v["why"]
+    with pytest.raises(td.Refused):
+        td.judge({"rows": {}}, td.synthetic_prereg())
+
+
+def test_contaminated_confirmation_is_refused_with_its_defeating_input():
+    v = _j(contaminated=True)
+    assert v["verdict"] == "REFUSED"
+    # one defeating input per leg of the guard
+    rec = td.synthetic_record()
+    rec["rows"]["EXT00"]["sha16"] = None                        # no corpus hash
+    assert td.judge(rec, td.synthetic_prereg())["verdict"] == "REFUSED"
+    rec = td.synthetic_record()
+    rec["rows"]["LT25"]["sha16"] = "devfile"
+    rec["rows"]["LT25c"] = dict(rec["rows"]["LT25"], split="confirmation", sha16="devfile")  # dev FILE relabelled
+    assert td.judge(rec, td.synthetic_prereg())["verdict"] == "REFUSED"
+
+
+def test_too_few_independent_confirmation_rows_is_refused_not_confirmed():
+    v = _j(n_conf=2)
+    assert v["verdict"] == "REFUSED" and "independent confirmation" in v["why"]
+    v = _j(n_conf=0)
+    assert v["verdict"] == "REFUSED"
+
+
+# ---- the frozen population (defeating inputs, one per leg of the guard) -----
+def test_frozen_population_defeating_inputs_are_rejected():
+    p = td.synthetic_prereg()
+    mangles = {
+        "omitted preservation-only row": lambda r: r["rows"].pop("LC25"),
+        "omitted development row": lambda r: r["rows"].pop("MT75"),
+        "unregistered confirmation row": lambda r: r["rows"].update(
+            EXT99=dict(r["rows"]["EXT00"])),
+        "unregistered hash on a registered key": lambda r: r["rows"]["EXT00"].update(
+            sha16="unregistered00"),
+        "a split the submitter may not choose": lambda r: r["rows"]["EXT00"].update(
+            split="development"),
+    }
+    for name, mangle in mangles.items():
+        rec = td.synthetic_record(prereg=p)
+        mangle(rec)
+        v = td.judge(rec, p)
+        assert v["verdict"] == "REFUSED", (name, v.get("why"))
+
+
+def test_one_recording_under_two_confirmation_keys_is_refused():
+    p = td.synthetic_prereg()
+    k0, k1 = p["confirmation"]["keys"][:2]
+    p["confirmation"]["sha256_16"][k1] = p["confirmation"]["sha256_16"][k0]
+    v = td.judge(td.synthetic_record(prereg=p), p)
+    assert v["verdict"] == "REFUSED" and "not independent" in v["why"]
+
+
+def test_unusable_confirmation_registration_is_refused():
+    p = td.synthetic_prereg()
+    del p["confirmation"]["sha256_16"]["EXT03"]             # registration incomplete
+    v = td.judge(td.synthetic_record(prereg=p), p)
+    assert v["verdict"] == "REFUSED" and "unusable" in v["why"]
+
+
+def test_confirmation_failure_is_not_confirmed_and_selection_is_not_reopened():
+    rec = td.synthetic_record()
+    for k, r in rec["rows"].items():
+        if r["split"] == "confirmation":
+            r["variants"]["Q"]["ratio"]["decay"] = 9.0
+    v = td.judge(rec, td.synthetic_prereg())
+    assert v["verdict"] == "NOT CONFIRMED" and v["chosen"] == "Q"
+
+
+# ---- injected defects x properties -----------------------------------------
+@pytest.fixture(scope="module")
+def matrix():
+    td.INJECT.clear()
+    return td.controls_matrix()
+
+
+def test_every_clean_property_passes_so_the_matrix_is_not_vacuous(matrix):
+    assert matrix["status"] != "REFUSED", matrix["clean"]
+    assert all(v == "PASS" for v in matrix["clean"].values())
+
+
+def test_each_injected_defect_moves_its_intended_property(matrix):
+    assert matrix["intended_not_moved"] == [], matrix["intended_not_moved"]
+    for d, names in td.INTENDED.items():
+        for n in names:
+            assert matrix["cells"][d][n] == "MOVED", (d, n)
+
+
+def test_no_control_errored(matrix):
+    nv = [(d, n) for d, row in matrix["cells"].items() for n, v in row.items() if v == "NO VERDICT"]
+    assert nv == []
+
+
+def test_an_erroring_property_is_no_verdict_not_a_caught_mutant():
+    def boom():
+        raise RuntimeError("apparatus missing")
+    assert td._outcome(boom).startswith("NO VERDICT")
+    assert td._outcome(lambda: False) == "FAIL"
+
+
+def test_matrix_refuses_when_the_clean_baseline_is_red(monkeypatch):
+    monkeypatch.setitem(td.PROPERTIES, "J0_good_candidate_confirms", lambda: False)
+    assert td.controls_matrix()["status"] == "REFUSED"
+
+
+def test_inject_is_cleared_after_the_matrix(matrix):
+    assert not td.INJECT
+
+
+# ---- corpus-dependent (build box) ------------------------------------------
+@needs_refs
+def test_baseline_reproduces_render_drum_solo_bit_exactly():
+    out = td.baseline(pathlib.Path(REFS), td.load_prereg())
+    assert all(v["render_equals_render_drum_solo"] for v in out.values())
+
+
+def test_measuring_commands_refuse_without_a_corpus(tmp_path, capsys):
+    assert td.main(["baseline", "--refs", str(tmp_path / "nope"), "--out", str(tmp_path / "o.json")]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert not (tmp_path / "o.json").exists()
+
+
+def test_cli_judge_on_a_record(tmp_path, capsys):
+    p = tmp_path / "r.json"
+    p.write_text(json.dumps(td.synthetic_record(prereg=td.load_prereg()), default=str))
+    assert td.main(["judge", str(p), "--out", str(tmp_path / "j.json")]) == 0
+    assert json.loads((tmp_path / "j.json").read_text())["verdict"] == "NO CANDIDATE"
+
+
+# ---- CLI exit codes: a failure or a refusal is never exit 0 -----------------
+def test_cli_knownanswer_with_a_failing_harness_exits_1(tmp_path, monkeypatch):
+    monkeypatch.setattr(td, "estimate", td.stub_levels)     # the start-red estimator
+    assert td.main(["knownanswer", "--out", str(tmp_path / "k.json")]) == 1
+    assert json.loads((tmp_path / "k.json").read_text())["pass"] is False
+
+
+def test_cli_missed_intended_control_exits_1(tmp_path, monkeypatch):
+    monkeypatch.setattr(td, "PROPERTIES", {"J0_good_candidate_confirms": td.prop_J0_good_candidate_confirms})
+    monkeypatch.setattr(td, "INTENDED", {"stub-estimator": ("J0_good_candidate_confirms",)})
+    assert td.main(["controls", "--out", str(tmp_path / "c.json")]) == 1    # BLIND: not moved
+    out = json.loads((tmp_path / "c.json").read_text())
+    assert out["status"] == "FAIL" and out["intended_not_moved"]
+
+
+def test_cli_red_controls_baseline_refuses_with_exit_2(tmp_path, monkeypatch):
+    monkeypatch.setitem(td.PROPERTIES, "J0_good_candidate_confirms", lambda: False)
+    assert td.main(["controls", "--out", str(tmp_path / "c.json")]) == 2
+    assert json.loads((tmp_path / "c.json").read_text())["status"] == "REFUSED"
+
+
+def test_cli_judge_exit_codes_follow_the_verdict(tmp_path, monkeypatch):
+    prereg_path = tmp_path / "prereg.json"                  # the real load_prereg call path
+    prereg_path.write_text(json.dumps(td.synthetic_prereg()))
+    monkeypatch.setattr(td, "load_prereg", lambda *a, **k: json.loads(prereg_path.read_text()))
+    p = tmp_path / "r.json"
+    p.write_text(json.dumps(td.synthetic_record(null_target=True), default=str))
+    assert td.main(["judge", str(p), "--out", str(tmp_path / "j.json")]) == 2
+    assert json.loads((tmp_path / "j.json").read_text())["verdict"] == "REFUSED"
+    p.write_text(json.dumps(td.synthetic_record(), default=str))
+    assert td.main(["judge", str(p), "--out", str(tmp_path / "j.json")]) == 0
+    assert json.loads((tmp_path / "j.json").read_text())["verdict"] == "CONFIRMED"
+
+
+# ---- committed records: provenance and prereg agreement (PR #649 review) ----
+def test_status_instrument_commit_resolves():
+    """The status record must name a commit that exists in this repository.
+    A dangling instrument_commit cannot establish which instrument produced
+    the frozen knownanswer/controls records: the previous value named a
+    commit that was rebased away and never pushed (PR #649 review)."""
+    repo = pathlib.Path(__file__).resolve().parents[2]
+    status = json.loads((repo / "docs/scorecard/tom-distortion-593/status.json").read_text())
+    sha = status["instrument_commit"]
+    assert re.fullmatch(r"[0-9a-f]{7,40}", sha), f"instrument_commit is not a git SHA: {sha!r}"
+    r = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", sha, "HEAD"],
+                       capture_output=True)
+    assert r.returncode == 0, (
+        f"instrument_commit {sha} is not an ancestor of HEAD -- reachable checks need a "
+        f"commit in this tree's history, not a rebased-away object that may still exist "
+        f"in a stale local clone: {r.stderr.decode().strip()}"
+    )
+
+
+def test_prereg_validated_domain_matches_frozen_snr():
+    """The preregistration must declare the domain the instrument enforces.
+    It said >= 20 dB while the shipping estimator requires SNR_REQ_DB = 40
+    (20-40 dB produced up to 6.3 Hz slip), so a consumer could legitimately
+    apply the estimator in a region this PR says is unvalidated (PR #649)."""
+    repo = pathlib.Path(__file__).resolve().parents[2]
+    prereg = json.loads((repo / "docs/scorecard/tom-distortion-593/prereg.json").read_text())
+    domain = prereg["estimator"]["validated_domain"]
+    m = re.search(r"harmonic >= (\d+(?:\.\d+)?) dB analytic SNR", domain)
+    assert m, f"validated_domain no longer states the harmonic analytic-SNR floor: {domain!r}"
+    assert float(m.group(1)) == td.frozen_constants()["SNR_REQ_DB"]

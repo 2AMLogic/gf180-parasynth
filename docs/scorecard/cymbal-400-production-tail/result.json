@@ -1,0 +1,212 @@
+{
+ "frozen": "docs/scorecard/cymbal-400-production-tail/frozen.json",
+ "frozen_sha256": "b8ce69fd638127310c8eb198d7c76b6dd9394002444eabe934e95213f5533056",
+ "measured_at_commit": "a6df6b128bbccfed430594668d313ceccb4465aa",
+ "settings": {
+  "CY0000": {
+   "reason": "CY0000: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY0010": {
+   "reason": "CY0010: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY0025": {
+   "reason": "CY0025: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY0050": {
+   "reason": "CY0050: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY0075": {
+   "reason": "CY0075: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY1000": {
+   "reason": "CY1000: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY1010": {
+   "reason": "CY1010: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY1025": {
+   "reason": "CY1025: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY1050": {
+   "reason": "CY1050: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY1075": {
+   "reason": "CY1075: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY2500": {
+   "reason": "CY2500: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY2510": {
+   "reason": "CY2510: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY2525": {
+   "reason": "CY2525: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY2550": {
+   "reason": "CY2550: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY2575": {
+   "reason": "CY2575: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY5000": {
+   "reason": "CY5000: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY5010": {
+   "reason": "CY5010: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY5025": {
+   "1.5s": {
+    "decay": {
+     "detail": {
+      "rho_all_prod": {
+       "-10": 0.8696,
+       "-15": null,
+       "-20": null,
+       "-25": null,
+       "-30": null,
+       "-5": 0.7944
+      },
+      "rho_all_ref": null
+     },
+     "prod": 0.8696,
+     "reason": "reference: over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band",
+     "ref": null,
+     "refused_by": {
+      "production": null,
+      "reference": "over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+     },
+     "verdict": "REFUSED"
+    },
+    "energy": {
+     "detail": {
+      "predicted_leak_db_re_L": -11.36,
+      "unqualified_raw": {
+       "prod": {
+        "energy_share_db": -17.253,
+        "leak_margin_required_db": 6.0,
+        "over_leak_1s_db": 5.96,
+        "over_leak_edt_db": 6.08
+       },
+       "ref": {
+        "energy_share_db": -16.889,
+        "leak_margin_required_db": 6.0,
+        "over_leak_1s_db": 6.06,
+        "over_leak_edt_db": 5.92
+       }
+      }
+     },
+     "prod": null,
+     "reason": "production: band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
+     "ref": -16.889,
+     "refused_by": {
+      "production": "band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
+      "reference": null
+     },
+     "verdict": "REFUSED"
+    },
+    "joint": false,
+    "prod_has_hh1": false,
+    "trim_s": 1.5
+   },
+   "2s": {
+    "decay": {
+     "detail": {
+      "rho_all_prod": {
+       "-10": 0.8709,
+       "-15": 0.9109,
+       "-20": null,
+       "-25": null,
+       "-30": null,
+       "-5": 0.79
+      },
+      "rho_all_ref": null
+     },
+     "prod": 0.8709,
+     "reason": "reference: over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band",
+     "ref": null,
+     "refused_by": {
+      "production": null,
+      "reference": "over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+     },
+     "verdict": "REFUSED"
+    },
+    "energy": {
+     "detail": {
+      "predicted_leak_db_re_L": -11.36,
+      "unqualified_raw": {
+       "prod": {
+        "energy_share_db": -17.253,
+        "leak_margin_required_db": 6.0,
+        "over_leak_1s_db": 5.96,
+        "over_leak_edt_db": 6.08
+       },
+       "ref": {
+        "energy_share_db": -16.889,
+        "leak_margin_required_db": 6.0,
+        "over_leak_1s_db": 6.06,
+        "over_leak_edt_db": 5.92
+       }
+      }
+     },
+     "prod": null,
+     "reason": "production: band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
+     "ref": -16.889,
+     "refused_by": {
+      "production": "band is only 5.96 dB above the 3.45 kHz band's predicted skirt leakage (need 6): leak-dominated",
+      "reference": null
+     },
+     "verdict": "REFUSED"
+    },
+    "joint": false,
+    "prod_has_hh1": false,
+    "trim_s": 2.0
+   }
+  },
+  "CY5050": {
+   "reason": "CY5050: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY5075": {
+   "reason": "CY5075: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY7500": {
+   "reason": "CY7500: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY7510": {
+   "reason": "CY7510: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY7525": {
+   "reason": "CY7525: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY7550": {
+   "reason": "CY7550: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  },
+  "CY7575": {
+   "reason": "CY7575: unsupported knob setting on the production path (run_case.render_drum_solo has no CY knob parameter; D14A anchor only); not substituting kit_at or a candidate",
+   "verdict": "REFUSED"
+  }
+ },
+ "source_commit": "6ec5c34a927d77440ef6a54088dcaaa8063b427d"
+}

@@ -208,9 +208,10 @@ jobs:
 
       # The roadmap is compiled from evidence, not maintained by hand. This
       # document twice carried findings that had already been fixed -- the
-      # modal_dp exc hazard, and red on four repaired drum circuits. --check
-      # fails if README's diagram is out of date, or if any node is STALE:
-      # a green claim whose evidence has gone out from under it.
+      # modal_dp exc hazard, and red on four repaired drum circuits. Non-strict
+      # --check fails when the generated README disagrees with the recorded
+      # evidence. It does not fail merely because a node is RED or STALE; that
+      # project-health gate is nightly's `--check --strict` (nightly.yml).
       # The roadmap is compiled from evidence that is ACTUALLY EXECUTED here,
       # not from the presence of a file. An earlier version of this script
       # called a node green when its test file existed -- so a suite with every
@@ -218,10 +219,13 @@ jobs:
       # the tool exists to prevent.
       #
       # --run executes each fast node's suite and records pass/fail with the
-      # commit. --check then fails if README disagrees, if a node is RED, or if
-      # a node is STALE -- passed once, but a file it `covers` has changed
-      # since, so the result no longer describes this code. Slow nodes
-      # (iverilog, hours) carry their status from the nightly job.
+      # commit. The `|| true` on --run is deliberate: a RED node is a result
+      # to record, not a reason to stop before the README is regenerated.
+      # Non-strict --check then fails only when README disagrees with that
+      # recorded evidence. RED and STALE nodes are reported in the README, not
+      # failed here; STALE means a node passed once but a file it `covers` has
+      # changed since. Slow nodes (iverilog, hours) carry their status from the
+      # nightly job, which runs `--check --strict` as the project-health gate.
       # On a PR branch the dag workflow does not run, so this is what keeps a
       # pull request honest about what it claims. On main the bot regenerates
       # and commits instead -- see .github/workflows/dag.yml.
@@ -340,6 +344,14 @@ jobs:
       # its controls are guaranteed to run.
       - name: the CI change classifier and its wiring
         run: python -m pytest tools/test_ci_changes.py -q
+
+      # The FPGA fit reporter (#565). report.sh used to print "RESULT: routed."
+      # from the absence of an ERROR line, so an empty or killed nextpnr log
+      # read as a fit. Its injected-bug controls and the fake-executable
+      # `make -C fpga` tests need no EDA tools. Named explicitly: this does not
+      # depend on how #482 ends up collecting the other fpga/test_*.py files.
+      - name: the FPGA fit reporter refuses incomplete place-and-route logs
+        run: python -m pytest fpga/test_pnr_report.py -q
 
       # Same argument, one file over: the oscillator-1 Shape/Width table in
       # model/reference_rigs.py is a hand transcription of

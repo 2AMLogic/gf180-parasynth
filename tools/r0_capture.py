@@ -1491,7 +1491,8 @@ def new_session(bundle: pathlib.Path, manifest_path=None, *, image=None) -> path
                              "automatically and has no power-select jumper"},
          "dac": {"model": "Adafruit PCM5102 I2S DAC breakout #6250",
                  "wiring": "fpga/ARTY.md Wiring: JA1 BCK, JA2 WSEL, JA3 DIN, JA5 GND, "
-                           "JA6 VIN (3.3 V); MCK, DE, FIL, MU, FM unconnected"},
+                           "JA6 VIN (3.3 V); control pins per docs/capture-r0.md s3 "
+                           "(Adafruit: unconnected; purple PCM5102: XSMT 3.3 V, FMT/FLT/DEMP GND)"},
          "interface": {"model": "MOTU M4", "sample_rate": SR, "dac_channels": [3, 4],
                        "gain": "fixed: M4 line inputs 3/4 have no gain control",
                        "processing": "none", "monitor": "", "recorder": RECORDER,

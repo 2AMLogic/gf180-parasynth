@@ -24,7 +24,9 @@
 #
 # Needs: yosys; nextpnr-ecp5 + prjtrellis for ecp5; nextpnr-ice40 + icestorm for
 # ice40. Set NEXTPNR_ECP5 / NEXTPNR_ICE40
-# if they are not on PATH. A missing tool skips its target and says so.
+# if they are not on PATH. A missing tool REFUSES its target (non-zero exit, the
+# committed report untouched): scripts/pnr_report.py owns the verdict and the
+# exit status (issue #565). ice40 exits non-zero while the design does not fit.
 #
 # WHAT IS IN THIS BUILD. The REAL drum section: drum_regs, drum_kit, drum_dp and
 # modal_dp, the engine rtl-sketch/verify_drums.py shows bit-exact against
@@ -41,8 +43,8 @@ SHELL     := /bin/sh
 FPGA      := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 ROOT      := $(abspath $(FPGA)/..)
 RTL       := $(ROOT)/rtl-sketch
-BUILD     := $(FPGA)/build
-REPORTS   := $(FPGA)/reports
+BUILD     ?= $(FPGA)/build
+REPORTS   ?= $(FPGA)/reports
 
 YOSYS         ?= yosys
 NEXTPNR_ICE40 ?= nextpnr-ice40
@@ -80,6 +82,7 @@ SRC_ECP5  := $(FPGA)/rtl/ulx3s_top.v $(CORE)
 SRC_ICE40 := $(FPGA)/rtl/fpga_top.v  $(CORE)
 TOP_ECP5  := ulx3s_top
 TOP_ICE40 := fpga_top
+PNR_REPORT := $(PYTHON) $(FPGA)/scripts/pnr_report.py
 
 # The core clock. On the ULX3S this is what the PLL in fpga/rtl/ulx3s_top.v
 # actually produces from the board's 25 MHz oscillator -- 725/59 MHz -- not a
@@ -124,7 +127,7 @@ play:
 candidate: srccheck
 	@$(PYTHON) $(FPGA)/build_selected.py --nextpnr $(NEXTPNR_ECP5)
 
-all: srccheck provenance ecp5 ice40 blocks
+all: srccheck provenance ecp5 blocks ice40
 	@echo "--- reports in $(REPORTS)"
 
 $(BUILD) $(REPORTS):
@@ -179,36 +182,35 @@ provenance: | $(REPORTS)
 
 # ----------------------------------------------------------------- ECP5 25F
 ecp5: $(REPORTS)/ecp5_25f.txt
-$(REPORTS)/ecp5_25f.txt: $(SRC_ECP5) $(FPGA)/boards/ulx3s.lpf | $(BUILD) $(REPORTS)
+$(REPORTS)/ecp5_25f.txt: $(SRC_ECP5) $(FPGA)/boards/ulx3s.lpf $(FPGA)/scripts/pnr_report.py | $(BUILD) $(REPORTS)
 	@mkdir -p $(BUILD)
 	cd $(RTL) && $(YOSYS) -l $(BUILD)/ecp5_synth.log -p \
 	  'read_verilog -defer $(RTL_DEFS) $(SRC_ECP5); \
 	   synth_ecp5 -top $(TOP_ECP5) -json $(BUILD)/ecp5.json; \
 	   tee -o $(BUILD)/ecp5_stat.txt stat -top $(TOP_ECP5); \
 	   write_verilog -noattr $(BUILD)/ecp5_netlist.v'
-	-cd $(BUILD) && $(NEXTPNR_ECP5) --25k --package CABGA381 \
+	$(PNR_REPORT) run ecp5 $(TOP_ECP5) --build $(BUILD) --out $@ \
+	  --after "$(ECPPACK) ecp5.config ecp5.bit" -- \
+	  $(NEXTPNR_ECP5) --25k --package CABGA381 \
 	  --json $(BUILD)/ecp5.json --lpf $(FPGA)/boards/ulx3s.lpf \
 	  --textcfg $(BUILD)/ecp5.config --seed 1 \
-	  --report $(BUILD)/ecp5_report.json --log $(BUILD)/ecp5_pnr.log 2>&1 | tail -40
-	-cd $(BUILD) && test -f ecp5.config && $(ECPPACK) ecp5.config ecp5.bit
-	@$(FPGA)/scripts/report.sh ecp5 $(TOP_ECP5) > $@
-	@cat $@
+	  --report $(BUILD)/ecp5_report.json --log $(BUILD)/ecp5_pnr.log
 
 # ---------------------------------------------------------------- iCE40 UP5K
 ice40: $(REPORTS)/ice40_up5k.txt
-$(REPORTS)/ice40_up5k.txt: $(SRC_ICE40) $(FPGA)/boards/icebreaker.pcf | $(BUILD) $(REPORTS)
+$(REPORTS)/ice40_up5k.txt: $(SRC_ICE40) $(FPGA)/boards/icebreaker.pcf $(FPGA)/scripts/pnr_report.py | $(BUILD) $(REPORTS)
 	@mkdir -p $(BUILD)
 	cd $(RTL) && $(YOSYS) -l $(BUILD)/ice40_synth.log -p \
 	  'read_verilog -defer $(RTL_DEFS) $(SRC_ICE40); \
 	   synth_ice40 -top $(TOP_ICE40) -dsp -json $(BUILD)/ice40.json; \
 	   tee -o $(BUILD)/ice40_stat.txt stat -top $(TOP_ICE40)'
-	-cd $(BUILD) && $(NEXTPNR_ICE40) --up5k --package sg48 \
+	$(PNR_REPORT) run ice40 $(TOP_ICE40) --build $(BUILD) --out $@ \
+	  --after "$(ICEPACK) ice40.asc ice40.bin" \
+	  --after "$(ICETIME) -d up5k -mtr $(BUILD)/ice40_icetime.txt ice40.asc" -- \
+	  $(NEXTPNR_ICE40) --up5k --package sg48 \
 	  --json $(BUILD)/ice40.json --pcf $(FPGA)/boards/icebreaker.pcf \
 	  --asc $(BUILD)/ice40.asc --freq $(FREQ_MHZ) --seed 1 \
-	  --report $(BUILD)/ice40_report.json --log $(BUILD)/ice40_pnr.log 2>&1 | tail -40
-	-cd $(BUILD) && test -f ice40.asc && $(ICEPACK) ice40.asc ice40.bin && $(ICETIME) -d up5k -mtr $(BUILD)/ice40_icetime.txt ice40.asc
-	@$(FPGA)/scripts/report.sh ice40 $(TOP_ICE40) > $@
-	@cat $@
+	  --report $(BUILD)/ice40_report.json --log $(BUILD)/ice40_pnr.log
 
 # ------------------------------------------------- per-block area breakdown
 blocks: $(REPORTS)/blocks.txt
@@ -218,18 +220,17 @@ $(REPORTS)/blocks.txt: $(SRC_ECP5) $(FPGA)/scripts/blocks.sh | $(BUILD) $(REPORT
 
 # ------------------------------------------------ the completed-808 margin
 headroom: $(REPORTS)/ecp5_25f_headroom.txt
-$(REPORTS)/ecp5_25f_headroom.txt: $(FPGA)/rtl/headroom_top.v $(SRC_ECP5) $(FPGA)/boards/ulx3s.lpf | $(BUILD) $(REPORTS)
+$(REPORTS)/ecp5_25f_headroom.txt: $(FPGA)/rtl/headroom_top.v $(SRC_ECP5) $(FPGA)/boards/ulx3s.lpf $(FPGA)/scripts/pnr_report.py | $(BUILD) $(REPORTS)
 	@mkdir -p $(BUILD)
 	cd $(RTL) && $(YOSYS) -l $(BUILD)/ecp5hr_synth.log -p \
 	  'read_verilog -defer $(FPGA)/rtl/headroom_top.v $(SRC_ECP5); \
 	   synth_ecp5 -top headroom_top -json $(BUILD)/ecp5hr.json; \
 	   tee -o $(BUILD)/ecp5hr_stat.txt stat -top headroom_top'
-	-cd $(BUILD) && $(NEXTPNR_ECP5) --25k --package CABGA381 \
+	$(PNR_REPORT) run ecp5hr headroom_top --build $(BUILD) --out $@ --allow-no-fit -- \
+	  $(NEXTPNR_ECP5) --25k --package CABGA381 \
 	  --json $(BUILD)/ecp5hr.json --lpf $(FPGA)/boards/ulx3s.lpf \
 	  --textcfg $(BUILD)/ecp5hr.config --seed 1 \
-	  --report $(BUILD)/ecp5hr_report.json --log $(BUILD)/ecp5hr_pnr.log 2>&1 | tail -20
-	@$(FPGA)/scripts/report.sh ecp5hr headroom_top > $@
-	@cat $@
+	  --report $(BUILD)/ecp5hr_report.json --log $(BUILD)/ecp5hr_pnr.log
 
 clean:
 	rm -rf $(BUILD)

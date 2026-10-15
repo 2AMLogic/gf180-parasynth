@@ -997,6 +997,24 @@ class Bridge:
                       f"{row.packet.hex()} -> applies f{row.apply_frame}")
         return rows
 
+    @staticmethod
+    def _refuse_unreachable_hold(hold_frames: int, *, rtt_frames: int,
+                                 lead: int, baud: int,
+                                 anchor_frame: int) -> None:
+        """Plan the gate-off alone against the REAL anchor (so an
+        anchor-dependent guard would show here, not be hidden); a due plan()
+        calls inside the wrap guard becomes Refused (exit 2), not a
+        ValueError traceback."""
+        probe = [("event", max(1, int(hold_frames) - rtt_frames), 0, 0, 0, 0)]
+        try:
+            plan_shifted(probe, baud=baud, start_frame=lead,
+                         anchor_frame=anchor_frame)
+        except ValueError as exc:
+            raise Refused(f"hold_frames {hold_frames} cannot be delivered as "
+                          f"one scheduled note-off: {exc}. The device reasons "
+                          f"about dues within +-{WRAP_HALF} frames; use a "
+                          f"shorter hold") from None
+
     def _run_with_hold(self, commands: list, *, baud: int, quiet: bool,
                        hold_frames: int) -> list:
         """A scheduled note-off anchors to the OBSERVED gate, not a
@@ -1011,6 +1029,15 @@ class Bridge:
         self.origin = origin = anchor.frame
         round_trip = self.status_round_trip_s or 0.0
         self.lead_frames = lead = (MIN_LEAD_FRAMES + int(round_trip * SR) + 1)
+        # REFUSE an unreachable hold before the note-on leaves: a refusal
+        # after it would leave a gate sounding (issue #458). The wrap guard
+        # measures the due from its own acceptance frame, so this verdict is
+        # a function of the hold and the lead, not of the free-running
+        # counter's anchor -- re-anchoring and retrying cannot change it.
+        if hold_frames > 0:
+            self._refuse_unreachable_hold(
+                hold_frames, rtt_frames=int(round_trip * SR),
+                lead=MIN_LEAD_FRAMES + 1, baud=baud, anchor_frame=origin)
         mi = next(i for i, c in enumerate(commands) if c[0] == "gate-off")
         live_cmds, markers, rest = commands[:mi], commands[mi], commands[mi + 1:]
         rows_live = plan(live_cmds, baud=baud, start_frame=lead,
@@ -1074,8 +1101,13 @@ class Bridge:
                     print(f"  send f{row.send_frame:<6} {row.kind:<7} "
                           f"{row.packet.hex()} -> applies f{row.apply_frame}")
             return rows
-        rows_ev = plan_shifted(ev_cmds, baud=baud, start_frame=lead2,
-                               anchor_frame=origin2)
+        try:
+            rows_ev = plan_shifted(ev_cmds, baud=baud, start_frame=lead2,
+                                   anchor_frame=origin2)
+        except ValueError as exc:
+            # backstop: the gate is already on, so say so
+            raise Refused(f"the gate-off cannot be planned ({exc}); the "
+                          "note-on was already sent -- run `abort`") from None
         rows = rows_live + rows_ev
         verdict = preflight(rows, baud=baud)
         if verdict["verdict"] != "FEASIBLE":
@@ -1160,6 +1192,8 @@ class Bridge:
         d = (anchor.frame - ref) & 0xFFFF
         origin0 = ref + (d if d < 0x8000 else d - 0x10000)
         prev16, progress = anchor.frame, 0
+        t_prev = self.clock.monotonic()   # host time of the previous anchor
+        origin_prev = None
 
         def unwrap(frame16: int) -> int:
             nonlocal prev16, progress
@@ -1175,15 +1209,28 @@ class Bridge:
         while i < len(ev_abs):
             anchor = self.status()
             before = progress
+            t_now = self.clock.monotonic()
+            interval_s = t_now - t_prev
+            t_prev = t_now
+            interval_frames = interval_s * SR
+            # the modulo step cannot show a whole revolution (#459, #474
+            # pattern): REFUSE rather than unwrap an interval it can alias
+            if "ROLL_NO_UNWRAP" not in INJECT_BUGS \
+                    and interval_frames >= 0x10000:
+                raise Refused(
+                    f"host latency: {interval_s * 1000:.0f} ms between anchors "
+                    f"({interval_frames:.0f} frames) reaches the 16-bit "
+                    "counter's one-revolution aliasing bound (0x10000 frames, "
+                    "1.365 s at 48 kHz); the unwrap cannot tell it from a "
+                    "short or zero step -- refusing to re-time the phrase. "
+                    "This is the host or USB link, not the device")
             origin = unwrap(anchor.frame)
             if self.boots_seen != boots0:
                 raise Refused("the device reset mid-phrase (BOOT on the wire): "
                               "its queue and patch are gone -- refusing to "
                               "continue a phrase with a hole in it")
             if all_rows and progress <= before:
-                raise Refused("the device's frame counter did not advance "
-                              f"(STATUS f{anchor.frame}); the phrase's dues "
-                              "will die -- refusing to re-time the phrase")
+                raise Refused(self._no_advance_verdict(anchor, interval_s))
             # every event sent and due after this anchor must still be
             # queued: fewer means the device lost them (a reset clears the
             # queue by construction) and the music has a hole the host
@@ -1201,9 +1248,12 @@ class Bridge:
             lead = MIN_LEAD_FRAMES + int((self.status_round_trip_s or 0.0) * SR) + 1
             try:
                 batch, wait = rolling_batch(ev_abs, i, origin, lead, baud,
-                                            inflight=sent_dues[-EVENT_QUEUE_DEPTH:])
+                                            inflight=sent_dues[-EVENT_QUEUE_DEPTH:],
+                                            prev_origin=origin_prev,
+                                            anchor_interval_s=interval_s)
             except ValueError as exc:
                 raise Refused(f"{exc} -- refusing to re-time the phrase") from None
+            origin_prev = origin
             if not batch:
                 # wait on the DEVICE for the frame the cut named, in steps
                 # inside the +-32768 window the 16-bit compare can answer
@@ -1234,6 +1284,44 @@ class Bridge:
                       f"f{rows[0].due}-f{rows[-1].due}")
         self.wait_until(all_rows[-1].due + 64)
         return all_rows
+
+    # the 16-bit step the unwrap can read as forward progress is < 0x8000
+    # frames; the roller plans its waits ROLLING_HORIZON_FRAMES below that,
+    # so a host interval within this margin of the horizon is where a step
+    # may already have crossed it
+    UNWRAP_AMBIGUOUS_FRAMES = WRAP_HALF - ROLLING_HORIZON_FRAMES
+
+    def _no_advance_verdict(self, anchor: DevicePacket, interval_s: float) -> str:
+        """Why did the unwrapped counter not move between two anchors? A
+        stopped device and a host that stalled past the unwrap horizon
+        (0x8000 frames, 0.683 s) look identical to the modulo step: both
+        read as 'no forward progress'. The HOST clock between the two reads
+        separates them where it can; where it cannot, a second STATUS gives
+        the direction, and the verdict names the evidence it used (#459)."""
+        frames = interval_s * SR
+        ms = interval_s * 1000
+        tail = "the phrase's dues will die -- refusing to re-time the phrase"
+        if frames < WRAP_HALF - self.UNWRAP_AMBIGUOUS_FRAMES:
+            return ("the device's frame counter did not advance "
+                    f"(STATUS f{anchor.frame}; {ms:.0f} ms since the previous "
+                    f"anchor, inside the 0.683 s unwrap horizon, so the "
+                    f"host's own delay cannot explain it); {tail}")
+        # the host interval is long enough to have crossed the horizon:
+        # ask the device again to learn which way the counter is moving
+        again = self.status()
+        moved = (again.frame - anchor.frame) & 0xFFFF
+        if 0 < moved < WRAP_HALF:
+            return (f"host latency: {ms:.0f} ms between anchors "
+                    f"({frames:.0f} frames) exceeds the 16-bit unwrap horizon "
+                    "(0.683 s), so the step read as backwards. A second STATUS "
+                    f"read f{anchor.frame} -> f{again.frame} and the counter "
+                    f"advanced {moved} frames: the device clock is running; "
+                    f"{tail}")
+        return ("the device's frame counter did not advance "
+                f"(STATUS f{anchor.frame}); the interval since the previous "
+                f"anchor ({ms:.0f} ms) was long enough to hide a stall, so a "
+                f"second STATUS was read: f{again.frame}, no forward motion "
+                f"-- the counter is stopped; {tail}")
 
     @staticmethod
     def _reached(frame: int, target: int) -> bool:
@@ -1545,7 +1633,9 @@ def event_packet_frames_min(baud: int = DEFAULT_BAUD) -> int:
 
 
 def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
-                  baud: int = DEFAULT_BAUD, inflight: list = ()) -> tuple:
+                  baud: int = DEFAULT_BAUD, inflight: list = (), *,
+                  prev_origin: int = None, anchor_interval_s: float = None
+                  ) -> tuple:
     """The window cut, shared by the live roller and the virtual planner.
 
     From event `i`, take the events deliverable from a STATUS anchor named
@@ -1578,9 +1668,23 @@ def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
     for j, (due_abs, c) in enumerate(ev_abs[i:]):
         rel = due_abs - origin
         if rel <= 0:
+            # lateness (#459) vs a malformed schedule: a due that was still
+            # AHEAD of the previous anchor died while the host was between
+            # the two reads -- host/USB latency, not the device and not the
+            # schedule. A due already behind the previous anchor (or with no
+            # previous anchor) was never deliverable from where it started.
+            if (prev_origin is not None and anchor_interval_s is not None
+                    and due_abs > prev_origin):
+                raise ValueError(
+                    f"event due f{due_abs} is behind the anchor f{origin} by "
+                    f"{-rel} frames ({-rel * 1000 / SR:.1f} ms): its due died "
+                    "before the window could deliver it -- host/USB latency "
+                    f"({anchor_interval_s * 1000:.1f} ms between anchors), "
+                    "not a device fault and not a malformed schedule")
             raise ValueError(f"event due f{due_abs} is behind the anchor "
                              f"f{origin}: its due died before the window "
-                             "could deliver it")
+                             "could deliver it (the schedule itself is "
+                             "late for its anchor)")
         if rel > ROLLING_HORIZON_FRAMES:
             if not batch:
                 wait = due_abs - ROLLING_HORIZON_FRAMES

@@ -397,8 +397,14 @@ SPI_SCENARIOS = {"threesaw-f1cal": sc_threesaw_f1cal, "stress-saw": sc_stress_sa
 # ANY edit to these four files turns the deadline suite red, even with a
 # byte-identical stimulus, until someone re-reads them and updates the pin.
 #
-# NOT COVERED, and it never was: the capture is bound to the stimulus, not to
-# the RTL that ran it. The byte-exact binding had the same gap.
+# RTL BINDING (#452): the capture is ALSO bound to the RTL that ran it, for the
+# files in SCHEDULE_RTL (below): their hashes in the capture's run record
+# (provenance.files) must equal the current tree's. This is an INTERNAL-
+# CONSISTENCY check -- it notices that schedule-relevant RTL CHANGED, not that
+# the schedule MOVED; whether a class of edit moves it is the simulator's
+# question (#453, tools/deadline_binding_probe.py). Files outside the set do not
+# turn it red. The cost is deliberate and unnormalised: a comment-only edit to a
+# named file also refuses, and the message says to re-run the monitor.
 #: sha256[:12] of the drum-section RTL at which the latency argument above was
 #: made (provenance() format). Update only after re-reading those files.
 DRUM_LATENCY_ARGUED_AT = {"drum_dp.v": "2ad7e5cec5b3", "drum_kit.v": "23e97ff6e0e4",
@@ -428,12 +434,90 @@ def schedule_projection(cmds):
             for w, fl, sec, a, d in cmds]
 
 
+#: The RTL that can move the frame schedule, sha256[:12] compared against the
+#: capture's provenance.files. One line of reason per file. Chosen from the
+#: modules whose clocks the frame sequence waits on (voice_dp's wait states and
+#: synth_top's arbitration); it must contain DRUM_LATENCY_ARGUED_AT's files
+#: (asserted in the tests). NOT in the set: i2s_tx.v (serialises the finished
+#: sample; the voice never waits on it), testbenches, the deadline monitors
+#: (they observe), hex tables, fpga/ wrappers.
+SCHEDULE_RTL = {
+    "voice_dp.v": "the frame sequencer itself: every wait state and the PolyBLEP window loop",
+    "synth_top.v": "arbitration between voice and drum sections; frame start and drum_done wiring",
+    "spi_ctl.v": "decides in which frame each write lands, which sets the work of later frames",
+    "drum_regs.v": "drum register file; its address decode is part of the drum latency argument",
+    "drum_kit.v": "drum section top; part of the drum latency argument",
+    "drum_dp.v": "drum sequencer; its fixed busy window is the drum latency argument",
+    "modal_dp.v": "modal bank sequencer; 3*MODES+2 clocks of the drum busy window",
+    "recip_div.v": "reciprocal divider the voice waits on (GLIDE/MOD divisions)",
+    "ladder_dp_n.v": "filter datapath the voice waits on (rwait/oscwait cost terms)",
+    "rate_conv_2x.v": "2x rate converter in the voice's output path",
+    "osc_2x_saw_bank.v": "2x oscillator bank the voice waits on",
+    "osc_2x_saw_path.v": "per-path 2x oscillator datapath inside the bank",
+    "polyblep_saw_pair.v": "PolyBLEP window datapath (window loop cost)",
+    "osc_substep_pair.v": "oscillator sub-step datapath (its latency sets the window cost)",
+    "decimate_2x_tm_sym.v": "2x decimator on the 2x path",
+}
+
+
+#: DRIFT THAT EXISTED WHEN THE BINDING WAS ADDED (#452), recorded rather than
+#: hidden: file -> (hash in the committed -l2 record, hash in the tree). Found by
+#: running the gate against the current state: three SCHEDULE_RTL files had
+#: already changed since the capture's RTL (commit c50e36a):
+#:   voice_dp.v           78c9df19  S_WIN skips the PolyBLEP window loop for 2x
+#:                        oscillators (#333/R2). The capture's defines include
+#:                        VOICE_OSC_2X, so THIS ONE PLAUSIBLY MOVES THE SCHEDULE
+#:                        (the monitor has not been re-run on it).
+#:   ladder_dp_n.v        2f11792a  xg 25 -> 26 bits (#354); width only
+#:   polyblep_saw_pair.v  c6c9440b  per-shape gain under VOICE_PULSE_2X; data only
+#: An exact (record, tree) pair is waived so the suite is satisfiable today; ANY
+#: further edit to those files, or a different capture, is refused. Delete an
+#: entry by re-capturing (tools/deadline_recapture_l2.py), which makes the
+#: record hash equal the tree's. This waiver is NOT evidence the schedule is
+#: unmoved; it is an open finding (see the PR for #452).
+KNOWN_RTL_DRIFT = {
+    "voice_dp.v": ("67d59af7e249", "c1d21f5b8e0c"),
+    "ladder_dp_n.v": ("22e2be19863b", "2276e89d112b"),
+    "polyblep_saw_pair.v": ("1576461daa91", "cac599b32b23"),
+}
+
+
+def schedule_rtl_hashes(rtl_dir=None):
+    """sha256[:12] of every SCHEDULE_RTL file in `rtl_dir` (default: rtl-sketch,
+    read at call time). A missing file raises: no answer, not an empty one."""
+    rtl_dir = HERE if rtl_dir is None else rtl_dir
+    return {n: hashlib.sha256(open(os.path.join(rtl_dir, n), "rb").read()).hexdigest()[:12]
+            for n in SCHEDULE_RTL}
+
+
+def rtl_binding(record, tree_rtl=None):
+    """Reasons a capture's run record does NOT match this tree's schedule-
+    relevant RTL ([] = it matches). REFUSES (non-empty) when the set is empty,
+    the record has no provenance.files, or a named file is absent from it --
+    a check with nothing to compare must not pass."""
+    if not SCHEDULE_RTL:
+        return ["SCHEDULE_RTL is empty: nothing to compare, so the RTL binding cannot be asserted"]
+    files = ((record or {}).get("provenance") or {}).get("files")
+    if not isinstance(files, dict) or not files:
+        return ["the capture's run record has no provenance.files: cannot show which RTL ran it"]
+    tree = tree_rtl if tree_rtl is not None else schedule_rtl_hashes()
+    bad = [f"{n}: record {files.get(n)} vs tree {tree.get(n)}" for n in SCHEDULE_RTL
+           if files.get(n) is None or (files.get(n) != tree.get(n)
+                                       and KNOWN_RTL_DRIFT.get(n) != (files.get(n), tree.get(n)))]
+    if bad:
+        return ["schedule-relevant RTL differs from the RTL that ran the capture (" + "; ".join(bad) +
+                "). Re-run the monitor (tools/deadline_recapture_l2.py) to re-capture, or re-argue that "
+                "the edit cannot move the schedule; a comment-only edit also lands here by design"]
+    return []
+
+
 def drum_rtl_hashes(rtl_dir=HERE):
     return {n: hashlib.sha256(open(os.path.join(rtl_dir, n), "rb").read()).hexdigest()[:12]
             for n in DRUM_LATENCY_ARGUED_AT}
 
 
-def stimulus_binding(captured, current, *, sched_rows=None, record=None, tree_drum_rtl=None):
+def stimulus_binding(captured, current, *, sched_rows=None, record=None, tree_drum_rtl=None,
+                     tree_rtl=None):
     """Is a capture driven by `captured` admissible evidence for a tree whose
     scenario builds `current`? Returns (kind, reasons):
 
@@ -445,7 +529,11 @@ def stimulus_binding(captured, current, *, sched_rows=None, record=None, tree_dr
 
     `sched_rows` is the capture's schedule, `record` its run record (the
     provenance of the RTL that ran it), `tree_drum_rtl` the current tree's
-    drum RTL hashes (default: read from rtl-sketch)."""
+    drum RTL hashes (default: read from rtl-sketch). The RTL binding
+    (rtl_binding) is applied first, to every outcome including "identical"."""
+    rtl_why = rtl_binding(record, tree_rtl)
+    if rtl_why:
+        return "refused", rtl_why
     if list(captured) == list(current):
         return "identical", []
     pa, pb = schedule_projection(captured), schedule_projection(current)

@@ -106,3 +106,26 @@ def test_host_table_unbacked_fact_fails_and_consumer_refuses(tmp_path):
 def test_committed_host_table_is_not_consumable_as_fact():
     with pytest.raises(ec.Unverified):
         ec.host_result("Model D", "dawdreamer 0.9.0")
+
+
+@pytest.mark.parametrize("bad", [True, "x", [1], 1])
+def test_malformed_truthy_second_route_is_a_problem_not_a_crash(bad):
+    c = neg()
+    c["second_route"] = bad
+    assert "second_route is not an object" in ec.check_claim(c)
+
+
+@pytest.mark.parametrize("falsy", [[], 0, "", False, None])
+def test_falsy_second_route_still_reads_as_missing(falsy):
+    c = neg()
+    c["second_route"] = falsy
+    assert ec.check_claim(c) == ["negative claim has no second_route"]
+
+
+def test_main_types_malformed_second_route_without_traceback(tmp_path, capsys):
+    c = neg()
+    c["second_route"] = True
+    assert ec.main(_write(tmp_path, {"claims": [c]})) == 1
+    out = capsys.readouterr().out
+    assert "FAIL" in out and "second_route is not an object" in out
+    assert "Traceback" not in out

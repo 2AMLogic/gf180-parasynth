@@ -185,7 +185,7 @@ document that names mechanism 4.
 - Injected-defect controls on every integration check, including the exact
   defect that shipped (`SPI_ADDR7`).
   <!-- claim: grep="--inject SPI_ADDR7" in=Makefile -->
-- `make -C fpga srccheck` — the routed file set is the verified file set.
+- `make -C fpga srccheck` — the routed file set is the verified file set (re-read after the #565 Makefile edit: target unchanged).
   <!-- claim: grep="^srccheck:" in=fpga/Makefile covers=fpga/Makefile -->
 - CI running the integrated verifier, not only block checks.
   <!-- claim: grep="verify_synth_top" in=.github/workflows/*.yml -->

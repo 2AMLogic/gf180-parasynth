@@ -1,0 +1,13 @@
+{
+ "issue": 593,
+ "instrument_commit": "b480ee8a17211222671cbc997645123196310b6a",
+ "instrument_commit_note": "full SHA of the commit whose tree reproduces both records byte-identically (knownanswer and controls re-run 2026-10-12); must resolve via git -- enforced by test_tom_distortion.py. The previous short-SHA value named a commit that was rebased away and never pushed.",
+ "ran_on_this_host": {"knownanswer": "PASS (knownanswer.json)", "controls": "OK (controls.json)"},
+ "not_run": {
+  "baseline": "REFUSED: corpus directory missing (~/dev/refs / GF180_TR808_FISCHER absent on the dispatch worker). Heavy run owned by the coordinator's build box.",
+  "mechanism": "REFUSED: same missing corpus. Mechanism verdict is therefore INSUFFICIENT (not measured), not SUPPORTED and not REFUTED.",
+  "development_selection": "NO CANDIDATE: the preregistration registers none (prereg.json candidates is empty by design).",
+  "independent_confirmation": "REFUSED: no unused external recording set exists (prereg.json confirmation.reason)."
+ },
+ "sound_claims": "none. The model, RTL and image are unchanged; no repair is proposed or confirmed."
+}
