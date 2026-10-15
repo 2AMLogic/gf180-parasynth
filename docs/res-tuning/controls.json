@@ -8,30 +8,30 @@
    "N3_onset": true
   },
   "metrics": {
-   "mean_offset_travel_cents": 5.447398863592441,
+   "mean_offset_travel_cents": 5.491912465609209,
    "mean_offset_by_res": {
-    "1.03": 2.299254045438207,
-    "1.15": 3.9232290384750357,
-    "1.33": -1.5241698251174054,
-    "1.6": 0.5628384577071964,
-    "1.85": 1.6125769871669084,
-    "1.99": 0.8096044321812015
+    "1.03": 2.328044629122158,
+    "1.15": 3.9732041308926114,
+    "1.33": -1.5187083347165982,
+    "1.6": 0.5629502067956903,
+    "1.85": 1.6121375369094935,
+    "1.99": 0.8098371544308269
    },
    "per_cut_travel_cents": {
-    "30": 41.74148596401238,
-    "150": 9.428768435460608,
-    "300": 4.829762426019469,
-    "566": 3.526376364275047,
-    "1131": 1.0383768627869976,
-    "2263": 2.343612561192833,
-    "4525": 6.747404028786945,
-    "9000": 11.354136353446451,
-    "12000": 13.07419046141687,
-    "16000": 4.636872805726384
+    "30": 42.186156284300765,
+    "150": 9.428688800427011,
+    "300": 4.829686623600745,
+    "566": 3.5263989223391894,
+    "1131": 1.03824394477719,
+    "2263": 2.343891871160708,
+    "4525": 6.7473626390585295,
+    "9000": 11.353278174584588,
+    "12000": 13.074609725151449,
+    "16000": 4.639946366550172
    },
-   "worst_per_cut_travel_cents": 41.74148596401238,
-   "worst_abs_cents": 40.84671929582018,
-   "mean_abs_cents": 4.062685835800808
+   "worst_per_cut_travel_cents": 42.186156284300765,
+   "worst_abs_cents": 41.347061161636766,
+   "mean_abs_cents": 4.074802158722982
   }
  },
  "controls": {
@@ -45,10 +45,10 @@
     "N3_onset": "BLIND"
    },
    "metrics": {
-    "mean_offset_travel_cents": 105.83703432301535,
-    "worst_per_cut_travel_cents": 118.99627109868835,
-    "worst_abs_cents": 111.72944400996495,
-    "mean_abs_cents": 68.25479435708449
+    "mean_offset_travel_cents": 105.86573633642517,
+    "worst_per_cut_travel_cents": 119.2777268936419,
+    "worst_abs_cents": 111.73352358609317,
+    "mean_abs_cents": 68.27736659872426
    },
    "onset_failures": []
   },
@@ -62,10 +62,10 @@
     "N3_onset": "BLIND"
    },
    "metrics": {
-    "mean_offset_travel_cents": 204.16055065254295,
-    "worst_per_cut_travel_cents": 223.73321689868683,
-    "worst_abs_cents": 223.73321689868683,
-    "mean_abs_cents": 131.86676222660583
+    "mean_offset_travel_cents": 204.1880036831314,
+    "worst_per_cut_travel_cents": 223.72823261987318,
+    "worst_abs_cents": 223.72823261987318,
+    "mean_abs_cents": 131.88899150789973
    },
    "onset_failures": []
   },
@@ -79,10 +79,10 @@
     "N3_onset": "BLIND"
    },
    "metrics": {
-    "mean_offset_travel_cents": 22.977879808515773,
-    "worst_per_cut_travel_cents": 52.13236808847285,
-    "worst_abs_cents": 52.13236808847285,
-    "mean_abs_cents": 10.673013695746711
+    "mean_offset_travel_cents": 23.00602757361752,
+    "worst_per_cut_travel_cents": 52.13148821686824,
+    "worst_abs_cents": 52.13148821686824,
+    "mean_abs_cents": 10.685121649492718
    },
    "onset_failures": []
   },
@@ -96,10 +96,10 @@
     "N3_onset": "BLIND"
    },
    "metrics": {
-    "mean_offset_travel_cents": 9.013268395831126,
-    "worst_per_cut_travel_cents": 41.74148596401238,
-    "worst_abs_cents": 40.84671929582018,
-    "mean_abs_cents": 5.86785272000319
+    "mean_offset_travel_cents": 9.041204861809504,
+    "worst_per_cut_travel_cents": 42.186156284300765,
+    "worst_abs_cents": 41.347061161636766,
+    "mean_abs_cents": 5.879870856395242
    },
    "onset_failures": []
   },
@@ -113,10 +113,10 @@
     "N3_onset": "BLIND"
    },
    "metrics": {
-    "mean_offset_travel_cents": 6.842588786112586,
-    "worst_per_cut_travel_cents": 54.0503812549138,
+    "mean_offset_travel_cents": 6.870785896766915,
+    "worst_per_cut_travel_cents": 54.33183704986753,
     "worst_abs_cents": 43.81369035388476,
-    "mean_abs_cents": 5.062039335862762
+    "mean_abs_cents": 5.082111125719868
    },
    "onset_failures": []
   },
@@ -130,10 +130,10 @@
     "N3_onset": "BLIND"
    },
    "metrics": {
-    "mean_offset_travel_cents": 5.429321214019346,
-    "worst_per_cut_travel_cents": 41.74148596401238,
-    "worst_abs_cents": 40.84671929582018,
-    "mean_abs_cents": 3.9758911003313715
+    "mean_offset_travel_cents": 5.473899884052351,
+    "worst_per_cut_travel_cents": 42.186156284300765,
+    "worst_abs_cents": 41.347061161636766,
+    "mean_abs_cents": 3.9880100534215828
    },
    "onset_failures": []
   }
