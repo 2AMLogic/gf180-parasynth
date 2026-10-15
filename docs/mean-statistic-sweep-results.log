@@ -1,0 +1,29 @@
+SELECT_BASE x 80 groups, MEAN_FACTOR 3
+ trials pair                      missed  false_red
+     12 SINGLE_WINDOW_SLOPE         3/80        0/80
+     12 SHORT_WINDOW_SPECTRUM       0/80        0/80
+     24 SINGLE_WINDOW_SLOPE         0/80        0/80
+     24 SHORT_WINDOW_SPECTRUM       0/80        0/80
+     48 SINGLE_WINDOW_SLOPE         0/80        0/80
+     48 SHORT_WINDOW_SPECTRUM       0/80        0/80
+     96 SINGLE_WINDOW_SLOPE         0/80        0/80
+     96 SHORT_WINDOW_SPECTRUM       0/80        0/80
+12 trials: SINGLE_WINDOW_SLOPE missed 3/80 (lower95 0.906), false-red 0/80
+24 trials qualifies
+CLT predicts 12 trials: expected misses SINGLE_WINDOW_SLOPE 1.84, SHORT_WINDOW_SPECTRUM 0.32 -> zero misses False
+CLT predicts 24 trials: expected misses SINGLE_WINDOW_SLOPE 0.19, SHORT_WINDOW_SPECTRUM 0.01 -> zero misses True
+CLT predicts 48 trials: expected misses SINGLE_WINDOW_SLOPE 0.00, SHORT_WINDOW_SPECTRUM 0.00 -> zero misses True
+CLT predicts 96 trials: expected misses SINGLE_WINDOW_SLOPE 0.00, SHORT_WINDOW_SPECTRUM 0.00 -> zero misses True
+
+factor sweep at 24 trials (select groups)
+  x1.5: SINGLE_WINDOW_SLOPE: miss 0 fred 1  SHORT_WINDOW_SPECTRUM: miss 0 fred 0
+  x2: SINGLE_WINDOW_SLOPE: miss 0 fred 0  SHORT_WINDOW_SPECTRUM: miss 0 fred 0
+  x3: SINGLE_WINDOW_SLOPE: miss 0 fred 0  SHORT_WINDOW_SPECTRUM: miss 0 fred 0
+  x4: SINGLE_WINDOW_SLOPE: miss 6 fred 0  SHORT_WINDOW_SPECTRUM: miss 1 fred 0
+  x5: SINGLE_WINDOW_SLOPE: miss 38 fred 0  SHORT_WINDOW_SPECTRUM: miss 6 fred 0
+  x6: SINGLE_WINDOW_SLOPE: miss 71 fred 0  SHORT_WINDOW_SPECTRUM: miss 29 fred 0
+confirm: SINGLE_WINDOW_SLOPE missed 0/80 false-red 0/80
+confirm: SHORT_WINDOW_SPECTRUM missed 0/80 false-red 0/80
+alt_base: SINGLE_WINDOW_SLOPE missed 0/80 false-red 0/80
+alt_base: SHORT_WINDOW_SPECTRUM missed 0/80 false-red 0/80
+rc=0

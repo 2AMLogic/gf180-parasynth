@@ -30,7 +30,11 @@ FILES = ["docs/sensitivity/registry.json",
          # issue #551's record: COUPLE_K, a python-constant in the drum model
          "docs/sensitivity/coupling-k.json",
          "docs/sensitivity/coupling-k-sweep.txt",
-         "model/drums_fx.py"]
+         "model/drums_fx.py",
+         # issue #539's record: MEAN_TRIALS, the noise controls' detection statistic
+         "docs/sensitivity/mean-trials.json",
+         "docs/sensitivity/mean-trials-sweep.txt",
+         "tools/probes/permitted_differences.py"]
 
 
 @pytest.fixture
