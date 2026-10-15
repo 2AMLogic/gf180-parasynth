@@ -193,15 +193,60 @@ def test_a_dense_pattern_moves_a_sequence_step_earlier(link):
     nothing. Documented behaviour, not a goal."""
     host = sh.MusicHost(); host.load(0)
     host.hits([(5000, dx.BD, 1.0)] + [(5150 + 4 * k, dx.SD, 1.0) for k in range(20)])
-    seq, moved = _seq_moves(host, link)
-    restore = [w for w in moved if w.tag == "bd-attack-restore"]
-    # worse than anything the reference fixture does to a restore (2 frames
-    # earlier). Here the burst of anchors around the restore's frame is dense
-    # enough that the forward pass (feasible()) pushes it LATER instead, so
-    # the 4 ms window is stretched: a coefficient step is not pinned in either
-    # direction. Observed: +20 frames (5192 -> 5212), 192 -> 212 wide.
-    assert restore and max(abs(w.frame - w.nominal) for w in restore) > 2
-    assert sh.check(host.schedule(link))["conflicts"] == []
+    st = sh.check(host.schedule(link))
+    # The restore is pushed LATER by the forward pass (feasible()) because the
+    # anchor burst around its frame holds the wire: the 4 ms window is
+    # stretched. The restore lands +20 frames late (5192 -> 5212) AND the hot
+    # write is pulled 4 early (5000 -> 4996), so the landed width is 216, not
+    # 212: +24 frames over the 192 requested. check() must say so. The contract
+    # states "~4 ms" with no tolerance, so this is reported, not bounded.
+    assert st["window_pairs"] == 2 and st["window_stretch"] >= 1
+    assert st["window_stretch_frames"] == 24
+    assert st["window_stretch_us"] == pytest.approx(24 * FRAME_PS / 1e6)
+    assert st["conflicts"] == []
+
+
+@pytest.mark.parametrize("link", LINKS)
+def test_the_reference_fixture_window_stretch_is_pinned(link):
+    """bar_808: restores are pulled earlier (<= 2) but hots are pulled earlier
+    too (<= 8), so the landed window is WIDER by up to 6 frames (~125 us).
+    Not zero, contrary to the issue's expectation: a window is two moves."""
+    host, _, _ = fixtures.bar_808(short=True)
+    st = sh.check(host.schedule(link))
+    assert st["window_pairs"] > 0
+    assert 0 < st["window_stretch_frames"] <= 6
+
+
+def test_no_stretch_report_is_not_always_zero():
+    """Injected-bug control: an identity schedule (nothing spread) reports 0;
+    a hand-built widened pair is flagged, a narrowed one is negative."""
+    def pl(tag, nominal, land, addr=1):
+        w = sh.Write(frame=nominal, flag=0, sec=0, addr=addr, data=0,
+                     tag=tag, nominal=nominal)
+        return sh.Placed(w, 0, 0, land)
+    ident = [pl("bd-attack-hot", 5000, 5000), pl("bd-attack-restore", 5192, 5192)]
+    assert sh.check(ident)["window_stretch"] == 0
+    wide = [pl("bd-attack-hot", 5000, 5000), pl("bd-attack-restore", 5192, 5212)]
+    assert sh.check(wide)["window_stretch_frames"] == 20
+    narrow = [pl("bd-attack-hot", 5000, 5000), pl("bd-attack-restore", 5192, 5190)]
+    assert sh.check(narrow)["window_stretch_frames"] == -2
+    # overlapping windows still pair hot_i with restore_i
+    two = [pl("bd-attack-hot", 5000, 5000), pl("bd-attack-hot", 5100, 5100),
+           pl("bd-attack-restore", 5192, 5192), pl("bd-attack-restore", 5292, 5300)]
+    assert sh.check(two)["window_stretch_frames"] == 8
+
+
+@pytest.mark.parametrize("link", LINKS)
+def test_sweep_sd_spacing_where_the_stretch_begins(link):
+    """Dial sweep (issue 506): SD spacing in frames after a BD at 5000. Pins
+    the measured curve: a 2-frame floor (hot pulled early), growing only once
+    the burst is tighter than 16 frames."""
+    res = {}
+    for gap in (64, 32, 16, 8, 4):
+        host = sh.MusicHost(); host.load(0)
+        host.hits([(5000, dx.BD, 1.0)] + [(5150 + gap * k, dx.SD, 1.0) for k in range(20)])
+        res[gap] = sh.check(host.schedule(link))["window_stretch_frames"]
+    assert res == {64: 2, 32: 2, 16: 2, 8: 4, 4: 24}, res
 
 
 def test_the_attack_window_restores_the_IMAGE_not_the_kit_preset():
