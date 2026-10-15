@@ -99,6 +99,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 import audio_measure as am                                          # noqa: E402
 import fixed                                                        # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import ring_estimator as re_                                        # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 from dsp import SR                                                  # noqa: E402
 
@@ -373,18 +374,16 @@ def refit_tuning(cuts, degree: int, slope: float = None) -> tuple[np.ndarray, fl
 # ===========================================================================
 def _ring_ratio(dev, cut: float, res: float, seconds: float = 0.8) -> float:
     """`f_osc / commanded` from the fixed-point filter's own free ring, by the
-    same rule `model/reference_compare.py`'s tracking stage uses: the
-    zero-crossing frequency when it agrees with the spectral peak inside 2 %,
-    the peak otherwise."""
+    shared sustained-ring policy in `model/ring_estimator.py`: REFUSES a record
+    that is not a sustained ring (a decay, or the fixed-point dead-band limit
+    cycle a below-onset ring ends in) and one on which the zero-crossing and
+    spectral estimates disagree (issue #548). There is no fallback to the
+    spectral peak."""
     y = dev.ring(cut, res, seconds=seconds)
-    e = am.dominant_frequency(y, 20.0, 20000.0, SR)
-    z = am.zero_crossing_frequency(y, SR)
-    if z.ok and e.ok and abs(z.value - e.value) / e.value < 0.02:
-        f = z.value
-    elif e.ok:
-        f = e.value
-    else:
-        raise Refused(f"the ring at {cut:.0f} Hz, res {res} has no measurable frequency")
+    try:
+        f = re_.ring_frequency(y, SR)
+    except re_.Refused as exc:
+        raise Refused(f"the ring at {cut:.0f} Hz, res {res}: {exc}") from exc
     return f / float(cut)
 
 

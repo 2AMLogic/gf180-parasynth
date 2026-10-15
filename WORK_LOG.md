@@ -4,6 +4,20 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-10-15
 
+- **PR #691**: fix: audit broad except handlers; dirty on unanswered git, exit red on descent errors
+- **PR #689**: docs: exempt calibration-only p dial from sensitivity registry, with trigger
+- **PR #687**: fix: read response_row and sound_report corners against the DC plateau
+- **PR #686**: fix: refuse image_identity when published sets differ from declared populations
+- **PR #683**: fix: make drum read_wav and dominant_period padding-invariant
+- **PR #681**: ci: check_workflows asserts repo paths named by workflows and Makefiles exist
+- **PR #680**: release: bind the R2 candidate to R2_FROZEN_AT instead of the working tree
+- **Issue #682** (closed): gate-379: register or explicitly exempt the p calibration dial from the sensitivity registry
+- **Issue #658** (closed): Release gates: bind R2's candidate to R2_FROZEN_AT and give the post-R2 tree its own image/verification directory (blocks #657)
+- **Issue #629** (closed): check_workflows.py: assert paths named in workflows and Makefiles exist (standing guard for the #622 class)
+- **Issue #617** (closed): Audit drum-facing whole-clip-mean / zero-phase conditioning for trailing-silence sensitivity (drum_verify, discrimination_features)
+- **Issue #615** (closed): Audit the 57 remaining broad except handlers in tools/ and model/ (follow-up to #610)
+- **Issue #582** (closed): release_manifest.image_identity: self-described membership sets can be emptied (vacuous loop, same shape as #283)
+- **Issue #546** (closed): Qualify corner convention in reference_compare.response_row and sound_report._corner (no ref_db)
 - **PR #504**: Reachable attack-context re-bind path for Builders (#502)
 - **PR #677**: Bump Repo Skills 0.19.5 -> 0.24.1
 - **PR #675**: audio_distance_floor: thread sample rate into mel_dac (#533)

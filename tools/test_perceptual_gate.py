@@ -171,3 +171,63 @@ def test_injection_target_span_hides_a_candidate_that_rings_on(inject):
     assert clean > 0.5
     inject("span-target-only")
     assert dist("MA", (a, sr), (b, sr))["spec"] < 0.5 * clean
+
+
+# --- #588: the rate path -----------------------------------------------------
+def _take_44k(**kw):
+    """A 44.1 kHz 'take' made the way Fischer's are: it has been through a
+    resampler, so it carries resampler images a native 48 kHz render lacks."""
+    x, sr = strike(**kw)
+    return g.resample_to(x, sr, 44100), 44100
+
+
+def test_match_rate_is_the_explicit_round_trip():
+    # the fix is exactly "send the candidate through the target's own rate":
+    # nothing is added to the signal, so it must equal doing that by hand.
+    tgt = _take_44k(noise=0.05, seed=1)
+    cand = strike(f=210.0, noise=0.05, seed=2)
+    T = g.Target(*tgt, "LT", "t")
+    a = T.distance(*cand, "c", match_rate=True)
+    b = T.distance(g.resample_to(cand[0], cand[1], 44100), 44100, "c")
+    for f in a:
+        assert (a[f] is None and b[f] is None) or a[f] == pytest.approx(b[f], abs=1e-9), f
+
+
+def test_match_rate_is_a_no_op_when_the_rates_already_agree():
+    # 48 kHz target and a native 48 kHz candidate; a 44.1 kHz take against a
+    # 44.1 kHz candidate. Neither may move.
+    for tgt, cand in ((strike(noise=0.05, seed=1), strike(f=210.0, noise=0.05, seed=2)),
+                      (_take_44k(noise=0.05, seed=1), _take_44k(f=210.0, noise=0.05, seed=2))):
+        T = g.Target(*tgt, "LT", "t")
+        a, b = T.distance(*cand, "c", match_rate=True), T.distance(*cand, "c")
+        assert a == b
+
+
+def test_match_rate_default_leaves_the_bar_inputs_alone():
+    # bar_for / prove build their bar from candidate_path inputs with the
+    # default; match_rate must be opt-in or every bar silently moves.
+    import inspect
+    assert inspect.signature(g.Target.distance).parameters["match_rate"].default is False
+
+
+def test_a_genuine_body_click_still_fails_after_the_rate_fix():
+    # harmful counterexample: matching the rate must not hide a real click.
+    tgt = _take_44k()
+    clean = strike()
+    x, sr = clean
+    bad = x.copy()
+    bad[int(0.4 * sr)] += 0.5 * np.max(np.abs(x))
+    T = g.Target(*tgt, "LT", "t")
+    ok = T.distance(*clean, "ok", match_rate=True)["impulse"]
+    clicked = T.distance(bad, sr, "click", match_rate=True)["impulse"]
+    assert clicked > ok + 3.0, (clicked, ok)
+
+
+def test_a_noise_floor_does_not_buy_a_better_match():
+    # harmful counterexample: a candidate must not win by adding a floor. The
+    # impulse crest may fall, but the spectrum and decay must still say so.
+    tgt = _take_44k(noise=0.0)
+    clean, noisy = strike(), strike(noise=0.02, seed=3)
+    T = g.Target(*tgt, "LT", "t")
+    dc, dn = T.distance(*clean, "c", match_rate=True), T.distance(*noisy, "n", match_rate=True)
+    assert dn["spec"] > dc["spec"] and dn["decay"] >= dc["decay"], (dc, dn)
