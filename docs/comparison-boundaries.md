@@ -45,13 +45,13 @@ it as unknown, not as a no.
 | `tools/perceptual_gate.py:221` `condition` | its own path: resample to 48 kHz, AC-couple, align, level | yes (gate compares ours vs reference) | **neither** |
 | `model/test_discrimination.py:319` `condition` | its own path: onset-align, cut, DC, high-pass, normalise | yes (real vs ours clips) | **neither** at the production call sites. The helper `assert_same_preparation` (`:299`) is called only by a test (`:1885`), and it compares `dur_ms`, which legitimately differs between sounds. **Superseded** for the drum pair by `tools/preparation_contract.py` and left as-is (not widened) |
 | `model/condition_boundary.py:126` | `test_discrimination.condition` | yes | **records only** (`_prep` = `preparation_state`, and the median lead per side at `:219-221`) |
-| `tools/measure_partial_balance.py:67` `prepare` | **a private copy that still carries the pre-#132 clamp** (`lead = max(0, i - 1 ms)`, `:73`) | yes | **neither** |
-| `tools/measure_conga_body_spread.py:86` `prepare` | **a private copy, "verbatim from run_case.prepare", that is the pre-#132 version** (`:93`) | yes | **neither** |
+| `tools/measure_partial_balance.py` `prepare_pair` | `run_case.prepare` (was a private copy with the pre-#132 clamp, `lead = max(0, i - 1 ms)`; replaced in #636) | yes | **asserts** (`preparation_contract.check_prepared_pair` before any metric; `tools/test_measure_partial_balance.py` injects the clamp and expects REFUSED) |
+| `tools/measure_conga_body_spread.py` `check_pair` | `run_case.prepare` (was a private "verbatim" copy that was the pre-#132 version; replaced in #636) | yes | **asserts** (`check_pair` in `windowed_alike`; `tools/test_measure_conga_body_spread.py` injects the clamp and expects REFUSED) |
 | `tools/probes/estimator_defects.py:49` `prepare_shipped` | the pre-#132 `prepare`, kept on purpose as a historical control | control, not a comparison | **neither** (by design) |
 
 The two private copies are the same shape as this issue in a second form: a
 function copied as "identical on both sides" that stopped being identical to
-the one it copied when #132 changed the original. Filed as #636.
+the one it copied when #132 changed the original. Filed as #636 and closed by it.
 
 ## Everything else the search matched
 
