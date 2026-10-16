@@ -93,6 +93,7 @@ refprofile/cache/
 .loom/retry-state/
 .loom/exit-codes/
 .loom/sweep-checkpoint/
+.loom/private-jobs/
 .loom/sweep-run/
 .loom/targets/
 .loom/target*/
