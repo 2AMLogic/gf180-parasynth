@@ -2,6 +2,11 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-16
+
+- **PR #690**: fix: route conga and partial-balance probes through run_case.prepare and the preparation contract
+- **Issue #636** (closed): Two measurement tools carry private prepare() copies that still have the pre-#132 lead clamp (#101)
+
 ### 2026-10-15
 
 - **PR #708**: fix: make zero_crossing_frequency polarity-symmetric and regenerate res-tuning artifacts
