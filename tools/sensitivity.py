@@ -218,10 +218,14 @@ PY_CONST = r"^{name}\s*(?::\s*[\w\[\]., ]+)?=\s*(-?\d+)\s*(?:#.*)?$"
 KIND_PATTERN = {"verilog-parameter": PARAM, "python-constant": PY_CONST}
 
 
-def parse_parameter(text: str, name: str, where: str, kind: str = "verilog-parameter") -> float:
+def declarations(text: str, name: str, where: str, kind: str) -> list[str]:
     if kind not in KIND_PATTERN:
         raise Refused(f"{where}: unknown parameter kind {kind!r}")
-    hits = re.findall(KIND_PATTERN[kind].format(name=re.escape(name)), text, re.MULTILINE)
+    return re.findall(KIND_PATTERN[kind].format(name=re.escape(name)), text, re.MULTILINE)
+
+
+def parse_parameter(text: str, name: str, where: str, kind: str = "verilog-parameter") -> float:
+    hits = declarations(text, name, where, kind)
     if len(hits) != 1:
         raise Refused(f"{where}: found {len(hits)} declarations of {name}, expected exactly 1")
     return float(hits[0])
@@ -241,7 +245,13 @@ def shipped_value(rec: dict, root: Path = ROOT, overrides: dict | None = None) -
 
 
 def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
-    """The parameter's value at a git ref, or None if the file is not there."""
+    """The parameter's value at a git ref, or None if it is not there yet.
+
+    Not there yet means the file is missing at the ref, or the file exists and
+    declares no such parameter (a newly registered constant in an existing
+    file). Two or more declarations still refuse: that is ambiguity, not
+    absence.
+    """
     p = rec["parameter"]
     r = subprocess.run(["git", "show", f"{ref}:{p['source']}"],
                        cwd=root, capture_output=True, text=True)
@@ -249,8 +259,11 @@ def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
         if "exists on disk, but not in" in r.stderr or "does not exist" in r.stderr:
             return None
         raise Refused(f"cannot read {p['source']} at {ref}: {r.stderr.strip()}")
-    return parse_parameter(r.stdout, p["name"], f"{p['source']}@{ref}",
-                           p.get("kind", "verilog-parameter"))
+    kind = p.get("kind", "verilog-parameter")
+    where = f"{p['source']}@{ref}"
+    if not declarations(r.stdout, p["name"], where, kind):
+        return None
+    return parse_parameter(r.stdout, p["name"], where, kind)
 
 
 # --------------------------------------------------------------------------

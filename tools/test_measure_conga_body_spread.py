@@ -75,3 +75,30 @@ def test_a_short_lead_is_padded_so_the_body_spectrum_is_unmoved_by_more_silence(
     b, _ = probe.body_spectrum(z, 44100, "LC")
     assert a is not None and b is not None
     assert abs(a - b) < 1e-6
+
+
+@pytest.mark.parametrize("rows,code", [
+    ([], 0),
+    ([{"status": "unreadable"}, {"status": "REFUSED"}, {"best_match": "x"}], 0),
+    ([{"status": "unreadable"}, {"status": "error", "error_type": "KeyError"}], 3),
+])
+def test_a_descent_defect_row_turns_the_run_red_but_a_stated_decision_does_not(rows, code):
+    """#615: `error` rows were printed and then `main` returned 0."""
+    assert probe.descent_status(rows) == code
+
+
+def test_main_exits_nonzero_when_descent_records_a_defect(tmp_path, monkeypatch):
+    """Through `main`, so the exit code is the shipped one and not the helper's."""
+    floor = {k: 0.0 for k in ("lead_1ms_db", "lead_10ms_db", "sample_rate_44k_to_48k_db",
+                              "quantisation_16bit_db", "window_10ms_db")}
+    monkeypatch.setattr(probe, "validate_reproduction", lambda refdir: [], raising=True)
+    monkeypatch.setattr(probe, "validation_status", lambda report: 0)
+    monkeypatch.setattr(probe, "floor_for_these_signals",
+                        lambda refdir: [dict(floor, file="f")])
+    for name in ("measure_corpus", "measure_ours", "sensitivity", "windowed_alike"):
+        monkeypatch.setattr(probe, name, lambda *a, **k: [])
+    monkeypatch.setattr(probe, "descent_test", lambda refdir, cands: [
+        {"file": "a.wav", "status": "error", "error_type": "TypeError", "why": "x"}])
+    monkeypatch.setattr(sys, "argv", ["probe", "--refs", str(tmp_path),
+                                      "--descent", str(tmp_path)])
+    assert probe.main() == 3

@@ -87,6 +87,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 import audio_measure as am                                          # noqa: E402
 import fixed                                                        # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import ring_estimator                                               # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 from dsp import SR                                                  # noqa: E402
 from fixed import sat, shl                                          # noqa: E402
@@ -735,18 +736,14 @@ def _kick(cut: float, seconds: float, amp: float = 0.09):
 
 
 def _cents_of_ring(y, cut: float) -> float:
-    """`f_osc / commanded` as cents, by `reference_compare.py`'s own rule: the
-    zero-crossing frequency when it agrees with the spectral peak inside 2 %,
-    the peak otherwise. REFUSES rather than returning a number it cannot
-    support."""
-    e = am.dominant_frequency(y, 20.0, 20000.0, SR)
-    z = am.zero_crossing_frequency(y, SR)
-    if z.ok and e.ok and abs(z.value - e.value) / e.value < 0.02:
-        f = z.value
-    elif e.ok:
-        f = e.value
-    else:
-        raise Refused(f"the ring at {cut:.0f} Hz has no measurable frequency")
+    """`f_osc / commanded` as cents, through `ring_estimator.ring_frequency`
+    (#703): a sustained ring whose zero-crossing and spectral frequencies agree
+    inside 0.5 %. REFUSES rather than returning a number it cannot support --
+    a decay or a below-onset dead-band limit cycle is not a ring."""
+    try:
+        f = ring_estimator.ring_frequency(y, SR)
+    except ring_estimator.Refused as exc:
+        raise Refused(f"the ring at {cut:.0f} Hz has no measurable frequency: {exc}") from exc
     return 1200.0 * math.log2(f / float(cut))
 
 

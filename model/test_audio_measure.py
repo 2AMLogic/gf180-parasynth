@@ -856,6 +856,64 @@ def test_zero_crossing_frequency_survives_an_envelope_that_smears_an_fft():
     assert abs(am.zero_crossing_frequency(x).require() / 300.0 - 1.0) < 5e-3
 
 
+def _zc_polarity_gap(estimate, draws=96):
+    """Worst |f(x)-f(-x)|/f over the `draw_asym` / `build_asym` records at
+    seed 0 -- the asymmetric, -80 dB-floored, normalised records the
+    `permitted_differences` probe actually feeds the estimator. A noise-free
+    harmonic sum is symmetric to ~1e-6 and never meets the defect."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    os.pardir, "tools", "probes"))
+    import permitted_differences as pdf
+    rng = np.random.default_rng(0)
+    worst = 0.0
+    for _ in range(draws):
+        x = pdf.build_asym(pdf.draw_asym(rng)).x
+        a, b = estimate(x), estimate(-x)
+        worst = max(worst, abs(a - b) / a)
+    return worst
+
+
+def _zc_up_only(x, sr=am.SR_DEFAULT):
+    """The pre-#684 estimator, kept as the guard's defeating reference."""
+    x = np.asarray(x, float)
+    x = x - x.mean()
+    s = np.signbit(x)
+    up = np.nonzero(s[:-1] & ~s[1:])[0]
+    t = up + (-x[up]) / (x[up + 1] - x[up])
+    return (len(t) - 1) / ((t[-1] - t[0]) / sr)
+
+
+def test_zero_crossing_frequency_is_polarity_symmetric():
+    """#684: f(x) == f(-x) on the asymmetric records that moved the upward-only
+    estimator by 0.45 % (#673). A single sine never met the defect."""
+    worst = _zc_polarity_gap(lambda x: am.zero_crossing_frequency(x).require())
+    assert worst < 1e-9, worst
+    s = _sine(440.0, 1 << 15, 0.5)
+    assert am.zero_crossing_frequency(s).require() == pytest.approx(
+        am.zero_crossing_frequency(-s).require(), rel=1e-4)
+
+
+def test_zero_crossing_symmetry_guard_is_defeated_by_the_upward_only_estimator():
+    """Guard with its defeating input (verification-rules 8): the same records
+    on which the pre-#684 upward-only estimator differs from its negation by
+    more than 0.3 %, so the test above is not satisfiable by a symmetric-looking
+    easy input."""
+    assert _zc_polarity_gap(lambda x: _zc_up_only(x)) > 3e-3
+
+
+def test_zero_crossing_frequency_refuses_when_either_polarity_is_short():
+    """A failure on either polarity is a failure, never a half-average: a record
+    that starts low and ends high has one more upward than downward crossing,
+    so 5 up / 4 down passes an upward-only count and must be refused."""
+    x = np.full(2000, -0.1)
+    for k in range(5):                      # 5 narrow positive pulses
+        x[100 + 300 * k:150 + 300 * k] = 1.0
+    x[1300:] = 1.0                          # ends high: the 5th pulse never falls
+    up = np.nonzero(np.signbit(x - x.mean())[:-1] & ~np.signbit(x - x.mean())[1:])[0]
+    assert len(up) >= 5                     # the upward-only count would accept it
+    assert not am.zero_crossing_frequency(x, min_crossings=5).ok
+
+
 def test_zero_crossing_frequency_refuses_silence_and_a_single_cycle():
     assert not am.zero_crossing_frequency(np.zeros(1000)).ok
     assert not am.zero_crossing_frequency(_sine(20.0, 1000)).ok
@@ -1659,3 +1717,22 @@ def test_dc_plateau_db_refuses_a_band_that_reaches_the_corner(poles):
     ok = am.dc_plateau_db(f, _allpole_db(f, 250.0, poles), (40.0, 100.0), scale_hz=250.0)
     assert ok.ok, ok.reason
     assert ok.detail["band_top_over_cutoff"] == pytest.approx(0.4)
+
+
+def test_corner_dc_referenced_reads_a_four_pole_at_the_analytic_corner_or_refuses():
+    """#546. Truth is algebra, not our estimator: four real poles at fp are -3 dB
+    at sqrt(10**0.075 - 1) * fp at every cutoff. Where dc_plateau_db refuses
+    (band top past 0.4 of the cutoff) there is NO corner -- not the +82 % the
+    median reference gave at 100 Hz."""
+    F = np.geomspace(40.0, 12000.0, 28)
+    x0 = float(np.sqrt(10 ** 0.075 - 1.0))
+    for cut in (400.0, 1600.0, 6400.0):
+        g = -40.0 * np.log10(1.0 + (F / cut) ** 2)
+        e = am.corner_dc_referenced(F, g, ref_band=(F[0], max(100.0, cut * 0.25)),
+                                    scale_hz=cut)
+        assert e.ok and abs(e.value / (x0 * cut) - 1.0) < 0.012, (cut, e)
+    g = -40.0 * np.log10(1.0 + (F / 100.0) ** 2)
+    e = am.corner_dc_referenced(F, g, ref_band=(F[0], 100.0), scale_hz=100.0)
+    assert not e.ok and "no passband reference" in e.reason, e
+    old = am.corner_from_curve(F, g, ref_band=(F[0], 100.0))
+    assert old.ok and old.value / (x0 * 100.0) > 1.5     # the bias being refused

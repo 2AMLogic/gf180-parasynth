@@ -29,6 +29,14 @@ reads:
 .venv/bin/python fpga/midi_session.py --port sim --midi-in scripted:coverage
 ```
 
+The simulated board runs on the wall clock, so the command asserts its
+timing precondition: if the 1-minute load average exceeds the CPU count it
+prints `REFUSED -- load average ...` and exits 2 before starting the
+simulator; if a run fails only on late events (`ERR_DUE`, deadline misses)
+and the host is overloaded at the end, it prints `NO-VERDICT` and exits 2.
+Drops, boots, other error codes and a lost input stay exit 1 under any load.
+The serial-port form is unaffected (a late event there is a real defect).
+
 The run exits 0 (`fpga/reports/live-midi/start-command.log`, regenerated on
 the R1 candidate (revision 14, with the known-state preamble) for #279): 193 init writes acknowledged (kit for image
 tree, contract revision 14), 203 scheduled writes executed, 14 refusals printed

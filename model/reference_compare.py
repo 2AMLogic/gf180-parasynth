@@ -73,6 +73,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import ring_estimator                                               # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 
 SR = rr.SR
@@ -293,10 +294,20 @@ def response_row(freqs, g, cut_hz, name, res, cut_setting):
     ref_band = (freqs[0], max(freqs[0] * 2.5, (cut_hz or 400.0) * 0.25))
     row = dict(device=name, res=res, cut_setting=cut_setting, cut_hz=cut_hz,
                freqs=[float(f) for f in freqs], gain_db=[float(v) for v in g])
-    c = am.corner_from_curve(freqs, g, ref_band=ref_band)
+    # DC-plateau reference, not the median of a band that moves with the
+    # cutoff (#546, tools/probes/corner_reference_convention.py): the median
+    # read the corner +82 % / +25 % / +6 % high at 100 / 200 / 400 Hz on an
+    # ideal 4-pole. Where the plateau refuses (cutoff below ~250 Hz on this
+    # grid) there is no corner and so no slope band to place -- the slope is
+    # refused with the reason rather than fitted over a band placed from the
+    # commanded cutoff, which is not where the corner is.
+    c = am.corner_dc_referenced(freqs, g, ref_band=ref_band, scale_hz=(cut_hz or 400.0))
     row["corner_hz"] = c.value if c.ok else None
     row["corner_why"] = None if c.ok else c.reason
-    ref = c.value if c.ok else cut_hz
+    ref = c.value if c.ok else None
+    if not c.ok:
+        row["slope_db_oct"], row["slope_band"] = None, None
+        row["slope_resid_db"], row["slope_why"] = None, "no measured corner: " + c.reason
     if ref:
         # Cap the stopband fit where the measurement's own floor starts: below
         # about -70 dB of the passband the stepped-tone projection is reading
@@ -537,18 +548,34 @@ def report(out):                                                  # noqa: C901
 def calibrate_knob(dev, name, want_hz, lo=0.05, hi=0.98, iters=9, res=None):
     """For a device whose cutoff control has no units (Mini V3), find the knob
     position whose SELF-OSCILLATION lands at `want_hz`. Bisection on a
-    measured frequency, not a guess at the taper."""
+    measured frequency, not a guess at the taper. A step whose ring is refused
+    (`ring_estimator`: decaying, dead-band, too short) RAISES `Refused` -- it
+    used to count as 0 Hz and bias the bisection toward a higher knob."""
     res = res_grid(name)[-1] if res is None else res
     for _ in range(iters):
         mid = 0.5 * (lo + hi)
         y = dev.ring(mid, res, seconds=0.5)
-        e = am.dominant_frequency(y, 25.0, 15000.0, SR)
-        f = e.value if e.ok else 0.0
+        try:
+            f = ring_estimator.ring_frequency(y, SR)
+        except ring_estimator.Refused as exc:
+            raise ring_estimator.Refused(
+                f"calibrate_knob({name}, {want_hz:.1f} Hz): the ring at knob {mid:.4f} "
+                f"is not a measurement ({exc})") from exc
         if f > want_hz:
             hi = mid
         else:
             lo = mid
     return 0.5 * (lo + hi)
+
+
+def _tracking_f_osc(y):
+    """f_osc of one tracking-stage ring through `ring_estimator.ring_frequency`
+    (#703), or None where it refuses: a decay or a below-onset dead-band limit
+    cycle is not a ring and is not reported as a pitch."""
+    try:
+        return ring_estimator.ring_frequency(y, SR)
+    except ring_estimator.Refused:
+        return None
 
 
 def cut_setting_for(dev, name, hz, cache):
@@ -626,10 +653,7 @@ def main(argv=None) -> int:
                 for hz in CUTOFFS_HZ:
                     cs, chz = cut_setting_for(dev, name, hz, cache)
                     y = dev.ring(cs, res, seconds=0.8)
-                    e = am.dominant_frequency(y, 20.0, 20000.0, SR)
-                    z = am.zero_crossing_frequency(y, SR)
-                    f = z.value if (z.ok and e.ok and abs(z.value - e.value) / e.value < 0.02) \
-                        else (e.value if e.ok else None)
+                    f = _tracking_f_osc(y)
                     rows.append(dict(device=name, commanded_hz=chz, want_hz=hz,
                                      cut_setting=cs, res=res, f_osc=f,
                                      rms=float(am.rms(y))))

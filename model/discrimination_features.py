@@ -193,7 +193,14 @@ def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ) -> int:
     JIT_MIN_CYCLES of the winning lag, and the caller must then refuse rather
     than report -- a drift slope over three cycles is not a measurement."""
     x = np.asarray(x, float)
-    if len(x) < 16 or not np.any(x):
+    if not np.any(x):
+        return 0
+    # Condition on the span between the first and last non-zero sample: the
+    # JIT_MIN_CYCLES gate and the mean must not count digital silence the
+    # caller padded the window with (#617).
+    nz = np.nonzero(x)[0]
+    x = x[nz[0]:nz[-1] + 1]
+    if len(x) < 16:
         return 0
     lo, hi = int(sr / band[1]), int(sr / band[0])
     hi = min(hi, len(x) // JIT_MIN_CYCLES)

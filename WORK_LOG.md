@@ -4,6 +4,40 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-10-15
 
+- **PR #708**: fix: make zero_crossing_frequency polarity-symmetric and regenerate res-tuning artifacts
+- **PR #704**: fix: route free-ring pitch readers through ring_estimator
+- **PR #701**: ci: gate fpga publish-binding and Arty SD-top tests in verify-fast
+- **PR #699**: ci: run the named R1/R2 image selection tests in verify-fast
+- **PR #698**: feat: detect the two noise controls on a swept mean-residual statistic
+- **PR #697**: fix: glide_cents refuses where the zero-glide known answer exceeds the floor
+- **PR #696**: fix: _ring_ratio refuses non-sustained and ambiguous rings via a shared estimator
+- **PR #695**: gate: match the candidate's rate path to the target's for impulse
+- **PR #694**: fix: REFUSE the simulated MIDI session on an overloaded host instead of FAIL
+- **PR #688**: fix(residual_dc): re-derive --verdict row labels from detail under the frozen limits
+- **PR #685**: docs: record zero_crossing_frequency polarity sensitivity and pin its bound
+- **Issue #684** (closed): Make zero_crossing_frequency polarity-symmetric and regenerate the res-tuning artifacts
+- **Issue #703** (closed): Follow-on from PR #696: audit other ring-pitch readers still using bare am.dominant_frequency
+- **Issue #692** (closed): CI-reachability gate for the remaining unreached fpga/test_*.py (split from #482)
+- **Issue #654** (closed): residual_dc --verdict trusts each record's label instead of re-deriving it from detail under the frozen limits
+- **Issue #602** (closed): pitch_trajectory.glide_cents answers tens of cents wrong just above its refusal threshold (and with f0 far from F_REF)
+- **Issue #584** (closed): midi_session --port sim clean path reports ERR_DUE under host load (wall-clock flake, pre-existing)
+- **Issue #548** (closed): ladder_headroom._ring_ratio reports a pitch for a below-onset dead-band limit cycle, and falls back silently on estimator disagreement
+- **Issue #539** (closed): [probe] permitted-differences noise controls are caught in ~60% of independent seed groups; their green on VALIDATE_BASE is one draw
+- **Issue #482** (closed): CI does not run fpga/test_bringup_arty.py or several other fpga/test_*.py files
+- **PR #691**: fix: audit broad except handlers; dirty on unanswered git, exit red on descent errors
+- **PR #689**: docs: exempt calibration-only p dial from sensitivity registry, with trigger
+- **PR #687**: fix: read response_row and sound_report corners against the DC plateau
+- **PR #686**: fix: refuse image_identity when published sets differ from declared populations
+- **PR #683**: fix: make drum read_wav and dominant_period padding-invariant
+- **PR #681**: ci: check_workflows asserts repo paths named by workflows and Makefiles exist
+- **PR #680**: release: bind the R2 candidate to R2_FROZEN_AT instead of the working tree
+- **Issue #682** (closed): gate-379: register or explicitly exempt the p calibration dial from the sensitivity registry
+- **Issue #658** (closed): Release gates: bind R2's candidate to R2_FROZEN_AT and give the post-R2 tree its own image/verification directory (blocks #657)
+- **Issue #629** (closed): check_workflows.py: assert paths named in workflows and Makefiles exist (standing guard for the #622 class)
+- **Issue #617** (closed): Audit drum-facing whole-clip-mean / zero-phase conditioning for trailing-silence sensitivity (drum_verify, discrimination_features)
+- **Issue #615** (closed): Audit the 57 remaining broad except handlers in tools/ and model/ (follow-up to #610)
+- **Issue #582** (closed): release_manifest.image_identity: self-described membership sets can be emptied (vacuous loop, same shape as #283)
+- **Issue #546** (closed): Qualify corner convention in reference_compare.response_row and sound_report._corner (no ref_db)
 - **PR #504**: Reachable attack-context re-bind path for Builders (#502)
 - **PR #677**: Bump Repo Skills 0.19.5 -> 0.24.1
 - **PR #675**: audio_distance_floor: thread sample rate into mel_dac (#533)

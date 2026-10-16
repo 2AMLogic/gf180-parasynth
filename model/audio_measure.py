@@ -1452,23 +1452,36 @@ def tone_amplitude(x, hz: float, sr: int = SR_DEFAULT, *,
 
 
 def zero_crossing_frequency(x, sr: int = SR_DEFAULT, *, min_crossings: int = 5) -> Estimate:
-    """Frequency from interpolated upward zero crossings, first to last.
+    """Frequency from interpolated zero crossings, first to last, averaged over
+    the upward and the downward set.
 
     The estimator for a FREE RING whose amplitude is changing over the record:
     a windowed FFT of a growing or decaying sinusoid is smeared by the
     envelope, while the crossings are not. Wrong for anything with more than
-    one component; `dominant_frequency` is for those."""
+    one component; `dominant_frequency` is for those.
+
+    Polarity-symmetric (#684): f(x) == f(-x), because reversing the record
+    swaps the upward set for the downward one and the mean is blind to which
+    is which. The upward set alone read an asymmetric multi-harmonic record up
+    to 0.78 % (~13 cents; 0.45 % over the 96 `permitted_differences` `asym`
+    draws at seed 0) apart from its negation (#673). Each set is a reading in
+    its own right, `(n-1)` periods over its first-to-last span; they are
+    averaged, NOT pooled into one count, which would double the reading. A
+    failure on either polarity is a failure: never a half-average."""
     x = _as_float(x)
     if is_silent(x):
         return _fail("silent")
     x = x - x.mean()
     s = np.signbit(x)
-    up = np.nonzero(s[:-1] & ~s[1:])[0]
-    if len(up) < min_crossings:
-        return _fail("too few zero crossings", crossings=int(len(up)))
-    t = up + (-x[up]) / (x[up + 1] - x[up])
-    return Estimate(float((len(t) - 1) / ((t[-1] - t[0]) / sr)), True, "",
-                    dict(crossings=int(len(up))))
+    readings = []
+    for edge in (s[:-1] & ~s[1:], ~s[:-1] & s[1:]):
+        idx = np.nonzero(edge)[0]
+        if len(idx) < min_crossings:
+            return _fail("too few zero crossings", crossings=int(len(idx)))
+        t = idx + (-x[idx]) / (x[idx + 1] - x[idx])
+        readings.append(((len(t) - 1) / ((t[-1] - t[0]) / sr), len(idx)))
+    return Estimate(float(0.5 * (readings[0][0] + readings[1][0])), True, "",
+                    dict(crossings=int(readings[0][1])))
 
 
 def harmonic_powers(x, f0: float, ks, sr: int = SR_DEFAULT, *, guard: int = 4) -> np.ndarray:
@@ -2232,6 +2245,27 @@ def corner_from_curve(freqs, gain_db, *, ref_band=None, kind: str = "lowpass",
     t = (g0 - tgt) / (g0 - g1)
     hz = float(2.0 ** (math.log2(f[i - 1]) + t * (math.log2(f[i]) - math.log2(f[i - 1]))))
     return Estimate(hz, True, "", dict(plateau_db=ref, band_median_db=band_ref))
+
+
+def corner_dc_referenced(freqs, gain_db, *, ref_band, scale_hz: float) -> Estimate:
+    """`corner_from_curve` against the DC-plateau reference (`dc_plateau_db`)
+    instead of the median of `ref_band`, for a caller whose band moves with the
+    commanded cutoff `scale_hz`. The median carries a different amount of the
+    filter's own droop at each cutoff (issue #546: +82 % at 100 Hz, +25 % at
+    200 Hz, +6 % at 400 Hz on an ideal 4-pole whose truth is 0.4343 of its pole
+    at every cutoff); the plateau does not.
+
+    REFUSES, rather than falling back to the median, wherever `dc_plateau_db`
+    refuses -- which is every cutoff whose band top passes
+    MAX_PLATEAU_BAND_TOP_RATIO of the cutoff (below 250 Hz on a 40 Hz grid
+    floor). A biased number there would read as the filter's.
+
+    Ground truth: tools/probes/corner_reference_convention.py."""
+    ref = dc_plateau_db(freqs, gain_db, ref_band, scale_hz=scale_hz)
+    if not ref.ok:
+        return _fail("no passband reference to measure a corner against: " + ref.reason,
+                     **ref.detail)
+    return corner_from_curve(freqs, gain_db, ref_band=ref_band, ref_db=ref.value)
 
 
 def peak_from_curve(freqs, gain_db, *, ref_band=None, min_peak_db: float = 0.5) -> Estimate:

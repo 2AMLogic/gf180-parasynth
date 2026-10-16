@@ -3,6 +3,8 @@
 (#557 freeze, PR #601 review).
 
     python3 tools/bd_glide_phase_sweep.py            # worst cell: record knobs, edge scan
+    python3 tools/bd_glide_phase_sweep.py range [--jobs N]   # #602: knobs 0..10 step 0.1,
+                                                     # f0 40..65 step 0.5, 48k + 44.1k
 
 The signal is CLOSED FORM and independent of our model: a constant-pitch
 decaying sinusoid  0.5 * sin(2 pi f0 t + phi) * exp(-t / tau)  after 10 ms of
@@ -103,7 +105,43 @@ def worst(rows: list):
     return max(live, key=lambda r: r["phase_only"]) if live else None
 
 
-def main() -> int:
+RANGE_KNOBS = tuple(round(float(k), 1) for k in np.arange(0.0, 10.0 + 1e-9, 0.1))
+
+
+def _range_cell(args):
+    return cell(*args)
+
+
+def range_sweep(jobs: int = 2) -> list:
+    """The whole DECAY range (#602): the table in the issue, reproducible from main."""
+    grid = [(sr, k, f) for sr in RATES for k in RANGE_KNOBS for f in F0S]
+    if jobs <= 1:
+        return [cell(*g) for g in grid]
+    from multiprocessing import Pool
+    with Pool(jobs) as p:
+        return p.map(_range_cell, grid, chunksize=64)
+
+
+def range_report(rows: list, floor: float = pt.GLIDE_FLOOR_CENTS) -> dict:
+    """Answered-cell error against the known answer 0 (both onset phases), with
+    the refused fraction beside it: a fix that refuses everything is not a fix."""
+    ans = [r for r in rows if not r["refused"]]
+    err = [max(abs(r["sin"]), abs(r["cos"])) for r in ans]
+    worst = ans[int(np.argmax(err))] if ans else None
+    return {"cells": len(rows), "refused": len(rows) - len(ans),
+            "refused_fraction": (len(rows) - len(ans)) / len(rows) if rows else None,
+            "answered": len(ans), "floor_cents": floor,
+            "answered_beyond_floor": int(sum(e > floor for e in err)),
+            "max_answered_error_cents": max(err) if err else None,
+            "worst": ({k: worst[k] for k in ("sr", "knob", "f0", "sin", "cos")} if worst else None)}
+
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["range"]:
+        jobs = int(argv[argv.index("--jobs") + 1]) if "--jobs" in argv else 2
+        print(json.dumps(range_report(range_sweep(jobs)), indent=1))
+        return 0
     for name, rows in (("record knobs", sweep()), ("edge scan", edge_sweep())):
         w = worst(rows)
         print(f"{name}: {len(rows)} cells, {sum(r['refused'] for r in rows)} refused; " +

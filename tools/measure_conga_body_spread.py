@@ -521,7 +521,8 @@ def provenance(refdir: pathlib.Path) -> dict:
     return dict(
         commit=git("rev-parse", "--short=12", "HEAD"),
         branch=git("rev-parse", "--abbrev-ref", "HEAD"),
-        dirty=bool(git("status", "--porcelain")),
+        # git unanswered (no commit) cannot be called clean (#615)
+        dirty=bool(git("status", "--porcelain")) or not git("rev-parse", "HEAD"),
         run_at=datetime.datetime.now(datetime.timezone.utc)
         .strftime("%Y-%m-%dT%H:%M:%SZ"),
         python=sys.version.split()[0],
@@ -530,6 +531,16 @@ def provenance(refdir: pathlib.Path) -> dict:
                                     "model/drum_verify.py",
                                     "tools/measure_conga_body_spread.py")},
     )
+
+
+def descent_status(rows: list[dict]) -> int:
+    """0, or 3 when any descent row is a DEFECT (`status="error"`).
+
+    `unreadable` and `REFUSED` rows are stated decisions about the data or the
+    host and stay exit 0; `error` is a bug in the reader that `descent_test`
+    recorded rather than raised so the sweep could finish, and a run containing
+    one has not measured what it printed (#615)."""
+    return 3 if any(r.get("status") == "error" for r in rows) else 0
 
 
 def validation_status(report: dict) -> int:
@@ -705,6 +716,12 @@ def main(argv=None) -> int:
     if args.json:
         args.json.write_text(json.dumps(report, indent=2))
         print(f"\nwrote {args.json}")
+    if args.descent:
+        code = descent_status(report["descent"])
+        if code:
+            print("ERROR: a descent row hit a defect (status=error); "
+                  "this run is not a result", file=sys.stderr)
+        return code
     return 0
 
 

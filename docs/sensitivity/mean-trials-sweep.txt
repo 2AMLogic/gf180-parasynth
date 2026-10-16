@@ -1,0 +1,9 @@
+Issue #539 MEAN_TRIALS sweep -- written by `python3 tools/probes/mean_statistic_sweep.py --table`.
+provenance: commit 61a9d1374e11  2026-10-15T14:49:08Z  MEAN_FACTOR 3  80 SELECT_BASE groups
+
+mean_trials -- worst-pair miss upper bound against trials per mean statistic
+MEAN_TRIALS miss_slope miss_centroid false_red miss_upper95_pct
+12 3 0 0 9.41
+24 0 0 0 3.68
+48 0 0 0 3.68
+96 0 0 0 3.68

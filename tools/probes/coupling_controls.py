@@ -333,6 +333,8 @@ def run_props():
             out[p] = "ok"
         except RED:
             out[p] = "red"
+        except (KeyboardInterrupt, SystemExit):
+            raise                            # an interrupt is not a property's outcome (#615)
         except BaseException as e:           # noqa: BLE001 -- recorded, never swallowed
             out[p] = f"error:{type(e).__name__}: {str(e)[:80]}"
     T._PLAY_MEMO.clear()
