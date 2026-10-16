@@ -4,6 +4,7 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-10-16
 
+- **PR #711**: Bump Repo Skills 0.24.1 -> 0.24.3
 - **PR #714**: tools: add two-SHA driver for prepare-corpus before/after probes
 - **PR #690**: fix: route conga and partial-balance probes through run_case.prepare and the preparation contract
 - **Issue #636** (closed): Two measurement tools carry private prepare() copies that still have the pre-#132 lead clamp (#101)

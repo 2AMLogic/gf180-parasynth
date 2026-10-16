@@ -9,7 +9,6 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a h
 
 - **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
 - **#709**: ci: stop cancelling started main runs and double-running PR commits
-- **#711**: Bump Repo Skills 0.24.1 -> 0.24.3
 
 ## Very Important
 
@@ -49,13 +48,12 @@ Human-approved issues ready for implementation (`loom:issue`).
 Issues currently being built (`loom:building`).
 
 - **#540**: CI: stop cancelling started main runs, drop duplicate push+PR runs, and batch nodes on the newest main (~1,450 job-min/day on main)
-- **#636**: Two measurement tools carry private prepare() copies that still have the pre-#132 lead clamp (#101)
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#690**: fix: route conga and partial-balance probes through run_case.prepare and the preparation contract
+_None._
 
 ## Approved (Awaiting Merge)
 
@@ -63,7 +61,6 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
 - **#709**: ci: stop cancelling started main runs and double-running PR commits
-- **#711**: Bump Repo Skills 0.24.1 -> 0.24.3
 
 ## Proposed
 
@@ -117,7 +114,6 @@ Issues carrying `loom:curated`.
 - **#593**: [sound] toms: H2..H4 output distortion (LT modulation 14.8x), lead from #558 *(curated)*
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning *(curated)*
 - **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(curated)*
-- **#636**: Two measurement tools carry private prepare() copies that still have the pre-#132 lead clamp (#101) *(curated)*
 - **#637**: prepare() takes a DC estimate on our side and never on the reference side (5 ms pre-onset rule) *(curated)*
 - **#648**: M5 manifest readers truncate offset_samples and bare-subscript event fields (same class as PR #647 finding) *(curated)*
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL) *(curated)*
@@ -125,6 +121,7 @@ Issues carrying `loom:curated`.
 - **#676**: Re-run audio_distance_floor probe on build box and regenerate audio-distance-metrics results after sr fix (#533) *(curated)*
 - **#678**: Release gates: give the post-R2 tree its own image key and verification directory (blocks #657, split from #658) *(curated)*
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)*
+- **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)*
 
 ## Proposed (Architect / Hermit)
@@ -143,13 +140,13 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 3 |
+| Operator merge-risk holds | 2 |
 | Very important | 1 |
 | Important | 3 |
 | Ready (`loom:issue`) | 14 |
-| In Progress (`loom:building`) | 2 |
-| PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 3 |
+| In Progress (`loom:building`) | 1 |
+| PRs awaiting review | 0 |
+| Approved PRs awaiting merge | 2 |
 | Curated | 57 |
 | Architect / Hermit proposals | 4 |
 | Active epics | 2 |
