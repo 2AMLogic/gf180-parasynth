@@ -4,6 +4,7 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-10-15
 
+- **PR #708**: fix: make zero_crossing_frequency polarity-symmetric and regenerate res-tuning artifacts
 - **PR #704**: fix: route free-ring pitch readers through ring_estimator
 - **PR #701**: ci: gate fpga publish-binding and Arty SD-top tests in verify-fast
 - **PR #699**: ci: run the named R1/R2 image selection tests in verify-fast
@@ -14,6 +15,7 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 - **PR #694**: fix: REFUSE the simulated MIDI session on an overloaded host instead of FAIL
 - **PR #688**: fix(residual_dc): re-derive --verdict row labels from detail under the frozen limits
 - **PR #685**: docs: record zero_crossing_frequency polarity sensitivity and pin its bound
+- **Issue #684** (closed): Make zero_crossing_frequency polarity-symmetric and regenerate the res-tuning artifacts
 - **Issue #703** (closed): Follow-on from PR #696: audit other ring-pitch readers still using bare am.dominant_frequency
 - **Issue #692** (closed): CI-reachability gate for the remaining unreached fpga/test_*.py (split from #482)
 - **Issue #654** (closed): residual_dc --verdict trusts each record's label instead of re-deriving it from detail under the frozen limits
