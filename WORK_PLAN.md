@@ -5,20 +5,25 @@ Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sou
 <!-- guide:plan-body:start -->
 ## Operator Attention: Merge-Risk-Hold Pileup
 
-Judge-approved PRs stuck under a `loom:operator` merge-risk hold — implementation work is done, only a human merge decision is missing.
+Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
 
-- **#504**: Reachable attack-context re-bind path for Builders (#502)
-- **#561**: gate-379: between-recording bar rule v2 (REFUSED, isolated), current-main ranking, controls
-- **#594**: fpga: refuse 'routed' from an incomplete nextpnr log (#565)
-- **#624**: Nightly controls: replace blind I2S_SWAP with discriminating serializer bench
-- **#633**: Replace unsatisfiable nightly reference-freshness check (#622)
-- **#650**: feat(#400): production-tail diagnostic for the CY 1-2.5 kHz question (REFUSED/NO VERDICT)
+- **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
+- **#709**: ci: stop cancelling started main runs and double-running PR commits
+- **#711**: Bump Repo Skills 0.24.1 -> 0.24.3
 
-## Operator Priority
+## Very Important
 
-Issues the operator starred (`loom:operator-priority`); land these first.
+`loom:very-important` (one counts per workspace); every stage takes these first.
 
-_None._
+- **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
+
+## Important
+
+`loom:important`; taken before unlabelled work.
+
+- **#162**: The bass drum's entire attack is 18-23 dB short across 170-678 Hz
+- **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
+- **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents)
 
 ## Ready
 
@@ -27,45 +32,38 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
-- **#324**: R1 capture inputs: R1-bound references and commands for the physical capture procedure
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
-- **#337**: Sound: mono character — oscillator mixtures, drift, drive/resonance, envelope response; M1A as a phase-aware question
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails
+- **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158)
 - **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
-- **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents)
-- **#593**: [sound] toms: H2..H4 output distortion (LT modulation 14.8x), lead from #558
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
+- **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#540**: CI: stop cancelling started main runs, drop duplicate push+PR runs, and batch nodes on the newest main (~1,450 job-min/day on main)
+- **#636**: Two measurement tools carry private prepare() copies that still have the pre-#132 lead clamp (#101)
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#595**: [#559] CH/CP: CH hp-Q candidate PROVISIONAL (clean rerun pending, disabled); CP not repairable by tail tunables
-- **#649**: [593] tom distortion: qualification instrument, controls and preregistration
-- **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
+- **#690**: fix: route conga and partial-balance probes through run_case.prepare and the preparation contract
 
 ## Approved (Awaiting Merge)
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-- **#504**: Reachable attack-context re-bind path for Builders (#502)
-- **#561**: gate-379: between-recording bar rule v2 (REFUSED, isolated), current-main ranking, controls
-- **#594**: fpga: refuse 'routed' from an incomplete nextpnr log (#565)
-- **#624**: Nightly controls: replace blind I2S_SWAP with discriminating serializer bench
-- **#633**: Replace unsatisfiable nightly reference-freshness check (#622)
-- **#650**: feat(#400): production-tail diagnostic for the CY 1-2.5 kHz question (REFUSED/NO VERDICT)
+- **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
+- **#709**: ci: stop cancelling started main runs and double-running PR commits
+- **#711**: Bump Repo Skills 0.24.1 -> 0.24.3
 
 ## Proposed
 
@@ -96,36 +94,43 @@ Issues carrying `loom:curated`.
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement *(curated)*
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails *(curated)*
 - **#353**: Harvest the finished half-slot route: one command, four files, one DAG node *(curated)*
-- **#367**: fpga/ARTY.md: document --box local for the on-box DSP extraction invocation *(curated)*
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY *(curated)*
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override) *(curated)*
-- **#373**: Receipts: require a reuse report whenever the evidence shows a reused run (not only when the recorded command asks) *(curated)*
-- **#379**: 808 kit: automated perceptual gate calibrated against the 808's own variability — prove it, rank all 16 sounds, fix worst first *(curated)*
-- **#400**: Cymbal tail: qualify and localize the remaining production-path energy/decay discrepancy *(curated)*
 - **#413**: Cymbal knob-law render: kit_at is not the instrument, and its blocker was tracked by a merged PR *(curated)*
-- **#502**: A Builder cannot re-bind the attack-context evidence: workflow_dispatch is 403 for the agent token *(curated)*
+- **#453**: Run tools/deadline_binding_probe.py on the build box to ground-truth the #443 drum-latency argument *(curated)*
+- **#498**: np.trapezoid requires numpy>=2.0 and nothing declares that floor: 5 tests fail on a 1.26 host *(curated)*
 - **#510**: Ship the cymbal DC coupling: register contract, RTL, and the I2S carry-through #165 did not trigger *(curated)*
+- **#512**: Turn the edge-straddle guard on for lowband_level_db, and re-read HT/LC 7.5 with it *(curated)*
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158) *(curated)*
 - **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader *(curated)*
+- **#530**: Permitted-differences suite: add the polarity x estimated-frequency rows #158 names *(curated)*
+- **#533**: audio_distance_floor.distances() computes mel_dac at 48 kHz on 44.1 kHz Fischer files *(curated)*
+- **#540**: CI: stop cancelling started main runs, drop duplicate push+PR runs, and batch nodes on the newest main (~1,450 job-min/day on main) *(curated)*
 - **#552**: Cymbal DC coupling 2/3: RTL shared-bus stage, drum_regs decoder, host init, bit-exact bench with mutants (#510) *(curated)*
 - **#556**: [sound] MA and RS: noise-voice centroid and flatness trajectories fail the gate (35.5x, 20.6x; 9.0x and 7.9x farther than real MARS takes) *(curated)*
 - **#557**: [sound] BD: missing pitch drop (pitch_shape 22.2x; about 230 cents) *(curated)*
 - **#558**: [sound] toms and congas: pitch trajectory and strike impulse fail the gate (MC 19.4x, LC 16.4x, LT 14.8x, MT 10.5x, HC 8.7x, HT 8.0x) *(curated)*
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate *(curated)*
-- **#565**: Refuse to report 'routed' from an incomplete nextpnr log (fpga/scripts/report.sh + fpga/Makefile) *(curated)*
+- **#562**: gate-379 follow-up: regenerate between-recording diagnostics with Q6; register the p dial *(curated)*
+- **#588**: [gate] perceptual_gate impulse reads the 44.1->48 kHz rate path: BD and the six toms/congas fail it 3.8-5.0x with no sound defect *(curated)*
 - **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents) *(curated)*
 - **#593**: [sound] toms: H2..H4 output distortion (LT modulation 14.8x), lead from #558 *(curated)*
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning *(curated)*
-- **#619**: Nightly controls requires I2S_SWAP detection despite declared blind timing *(curated)*
-- **#622**: Nightly reference-freshness gate is unsatisfiable: tests a docs path that has never existed *(curated)*
 - **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(curated)*
+- **#636**: Two measurement tools carry private prepare() copies that still have the pre-#132 lead clamp (#101) *(curated)*
+- **#637**: prepare() takes a DC estimate on our side and never on the reference side (5 ms pre-onset rule) *(curated)*
+- **#648**: M5 manifest readers truncate offset_samples and bare-subscript event fields (same class as PR #647 finding) *(curated)*
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL) *(curated)*
+- **#673**: zero_crossing_frequency moves 0.78% under polarity reversal on an asymmetric waveform (upward crossings only) *(curated)*
+- **#676**: Re-run audio_distance_floor probe on build box and regenerate audio-distance-metrics results after sr fix (#533) *(curated)*
+- **#678**: Release gates: give the post-R2 tree its own image key and verification directory (blocks #657, split from #658) *(curated)*
+- **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)*
+- **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)*
 
 ## Proposed (Architect / Hermit)
 
 - **#599**: Single git-state reader: collapse ~20 private git() provenance helpers onto tools/provenance.py with one failure encoding *(architect)*
 - **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(architect)*
-- **#629**: check_workflows.py: assert paths named in workflows and Makefiles exist (standing guard for the #622 class) *(architect)*
 - **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)*
 - **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)*
 
@@ -136,15 +141,16 @@ Issues carrying `loom:curated`.
 
 ## Backlog Balance
 
-| Tier | Count |
+| Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 6 |
-| Operator priority | 0 |
-| Ready (`loom:issue`) | 17 |
-| In Progress (`loom:building`) | 0 |
-| PRs awaiting review | 3 |
-| Approved PRs awaiting merge | 6 |
-| Curated | 49 |
-| Architect / Hermit proposals | 5 |
+| Operator merge-risk holds | 3 |
+| Very important | 1 |
+| Important | 3 |
+| Ready (`loom:issue`) | 14 |
+| In Progress (`loom:building`) | 2 |
+| PRs awaiting review | 1 |
+| Approved PRs awaiting merge | 3 |
+| Curated | 57 |
+| Architect / Hermit proposals | 4 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
