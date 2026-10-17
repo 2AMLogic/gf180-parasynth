@@ -46,6 +46,9 @@ import sys
 import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path[:0] = [str(ROOT / "tools")]
+from finite_number import is_finite_number as _finite  # noqa: E402
+
 PREREG = ROOT / "docs" / "scorecard" / "tom-distortion-593" / "prereg.json"
 
 
@@ -760,10 +763,6 @@ def _violations(base: dict, cand: dict, rule: dict, features, targets) -> list:
     if abs(cand["dc_fs"]) > abs(base["dc_fs"]) + rule["dc_abs_fs"]:
         out.append(f"dc {base['dc_fs']:+.4f}->{cand['dc_fs']:+.4f} FS")
     return out
-
-
-def _finite(x) -> bool:
-    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
 def _validate_variant(k: str, name: str, v: dict, feats) -> None:

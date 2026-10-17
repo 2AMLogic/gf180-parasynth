@@ -62,6 +62,7 @@ import cymbal_candidate as cc            # noqa: E402
 import cymbal_bands as cb                # noqa: E402
 import cymbal_tone_knob as ctk           # noqa: E402
 import cymbal_tone_nodal as tn           # noqa: E402
+from finite_number import is_finite_number as _finite  # noqa: E402
 
 CENTRE = {"low": "3175", "decay": "10079", "short": "10079"}
 # Revision 4's low band leaves the chain at M_CYH1B, not M_CYH1.
@@ -608,10 +609,6 @@ def owned_addresses_check(tone, decay) -> dict:
         if bad:
             stray[s] = [f"0x{a:02X}" for a in bad]
     return {"stray": stray, "status": PASS if not stray else FAIL}
-
-
-def _finite(v) -> bool:
-    return isinstance(v, (int, float)) and math.isfinite(v)
 
 
 def decay_row_verdict(row: dict, identical: dict, fischer_h_edt: dict | None) -> dict:

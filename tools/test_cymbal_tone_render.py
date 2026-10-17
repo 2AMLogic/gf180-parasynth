@@ -536,6 +536,16 @@ def test_a_non_finite_measure_is_refused_never_passed(bad):
     assert v["h-edt10-direction-matches-808"]["status"] == tre.REFUSED
 
 
+def test_a_bool_edt10_is_refused_not_read_as_one_millisecond():
+    """bool is an int subclass: `True` passed the old _finite as the number 1.0
+    and the verdict ran on it (#718). A flag is not a measurement."""
+    for slot in ("H_edt10_ms", "L_edt10_ms"):
+        row = _good_row()
+        row["50"][slot] = True
+        v = tre.decay_row_verdict(row, dict(_ALL_DISTINCT), _FISCHER)
+        assert v["h-edt10-rises" if slot[0] == "H" else "l-edt10-rises"]["status"] == tre.REFUSED
+
+
 def test_a_plateau_in_the_808_establishes_no_direction_but_a_reversal_still_fails():
     plateau = dict(_FISCHER, **{"10": _FISCHER["75"] * 0.995})       # the TONE-10 row's shape
     v = tre.decay_row_verdict(_good_row(), dict(_ALL_DISTINCT), plateau)
