@@ -12,7 +12,17 @@
 # reports, which would leave a required check waiting forever (#287).
 name: nodes
 
-on: [push, pull_request, workflow_dispatch]
+# Triggers (#540, #463; operator ruling 2026-10-15): `push` is limited to main
+# plus measure/** and release/** -- branches that land work with no PR, so no
+# pull_request copy verifies them. A branch with an open PR runs once, as the
+# PR, instead of twice (a bare push + pull_request ran every PR commit twice).
+# moog-acceptance.yml keeps its own triggers (#264 header). Measured 7 days to
+# 2026-10-06: ~74 main job-min/day (5%) saved by this and the cancel rule.
+on:
+  push:
+    branches: [main, 'measure/**', 'release/**']
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   # Which suites this change can affect: tools/ci_changes.py. Every job below
@@ -42,7 +52,8 @@ jobs:
       # exists'), which read as a red pulse2x-rtl with no defect behind it.
       # Key by PR number / full ref so the two event kinds queue separately.
       group: pulse2x-short-${{ github.event.pull_request.number || github.ref }}
-      cancel-in-progress: true
+      # Only a PR run is superseded; a started main run is never cancelled.
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
