@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-10-17
 
+- **PR #722**: fix: run_case refuses a bool or numeric string as a measurement
+- **Issue #720** (closed): Follow-on from PR #719: run_case._finite still accepts bool and numeric strings
 - **PR #719**: fix: share one finite-number guard so a bool EDT10 is REFUSED
 - **Issue #718** (closed): Consolidate divergent _finite() guards; cymbal_tone_render's accepts bool
 
