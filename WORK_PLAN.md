@@ -21,6 +21,7 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a h
 `loom:important`; taken before unlabelled work.
 
 - **#162**: The bass drum's entire attack is 18-23 dB short across 170-678 Hz
+- **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents)
 
@@ -32,7 +33,6 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
-- **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
@@ -117,7 +117,6 @@ Issues carrying `loom:curated`.
 - **#637**: prepare() takes a DC estimate on our side and never on the reference side (5 ms pre-onset rule) *(curated)*
 - **#648**: M5 manifest readers truncate offset_samples and bare-subscript event fields (same class as PR #647 finding) *(curated)*
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL) *(curated)*
-- **#673**: zero_crossing_frequency moves 0.78% under polarity reversal on an asymmetric waveform (upward crossings only) *(curated)*
 - **#676**: Re-run audio_distance_floor probe on build box and regenerate audio-distance-metrics results after sr fix (#533) *(curated)*
 - **#678**: Release gates: give the post-R2 tree its own image key and verification directory (blocks #657, split from #658) *(curated)*
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)*
@@ -142,12 +141,12 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 2 |
 | Very important | 1 |
-| Important | 3 |
-| Ready (`loom:issue`) | 14 |
+| Important | 4 |
+| Ready (`loom:issue`) | 13 |
 | In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 2 |
-| Curated | 57 |
+| Curated | 56 |
 | Architect / Hermit proposals | 4 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
