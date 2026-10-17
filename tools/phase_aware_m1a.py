@@ -32,6 +32,7 @@ import analyse_m1a_phase_cycle as ap
 import diagnose_m1a_harmonic_phase as d
 import measure_m1a_drive as dx
 import mono_m1a_score as bass
+from finite_number import is_finite_number
 
 ROOT, SR, lead = bass.ROOT, bass.SR, bass.lead
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/phase-aware-337"
@@ -59,8 +60,7 @@ def finite(what, value):
     """A measurement that is not a finite real number REFUSES: every comparison
     below is False against NaN, so an unvalidated NaN passes whichever guard
     asks 'is it worse than'."""
-    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)) \
-            or not math.isfinite(value):
+    if not is_finite_number(value):
         raise Refused(f"{what} is {value!r}, not a finite number")
     return float(value)
 

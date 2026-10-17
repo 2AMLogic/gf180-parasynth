@@ -63,6 +63,9 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path[:0] = [str(ROOT / "tools")]
+from finite_number import is_finite_number as _finite  # noqa: E402
+
 RECORD = ROOT / "docs" / "bd-pitch-predeclaration.json"
 AXES = ("tone", "decay", "accent", "retrigger")
 MARS_TONES = tuple(f"{i:02d}" for i in range(1, 7))   # 6 TONE positions (measure_repeatability s"grid")
@@ -446,12 +449,6 @@ def load_baseline(path: pathlib.Path) -> dict:
     if not prov.get("commit") or prov.get("sources_dirty") is not False:
         raise Refused(f"baseline {path} has no commit or was produced from dirty sources")
     return b
-
-
-def _finite(x) -> bool:
-    """A real, finite number.  bool is an int subclass and a str is coerced by
-    float(): neither is a measurement, so neither is accepted."""
-    return not isinstance(x, bool) and isinstance(x, (int, float)) and math.isfinite(x)
 
 
 def minimum_improvement_cents(rec: dict, baseline: dict | None) -> float:
