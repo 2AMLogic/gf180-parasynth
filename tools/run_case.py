@@ -148,6 +148,7 @@ from scipy.io import wavfile                                         # noqa: E40
 from scipy.signal import butter, sosfiltfilt                         # noqa: E402
 
 import audio_measure as am                                           # noqa: E402
+from finite_number import is_finite_number                           # noqa: E402
 import drum_verify as dv                                             # noqa: E402
 import holdout                                                       # noqa: E402
 import refprofile as rp                                              # noqa: E402
@@ -3569,13 +3570,8 @@ def measure_pair(name, units, est, ours, ref, tol_rule, ctx, est_ref=None) -> di
     # An estimate that says ok with a non-finite number is refused HERE, at
     # the point of use: json writes NaN happily and the board must never be
     # handed one as an error (review of #241).
-    def _finite(v) -> bool:
-        try:
-            return math.isfinite(float(v))
-        except (TypeError, ValueError):
-            return False
     for side, e in (("reference", b), ("ours", a)):
-        if e.ok and not _finite(e.value):
+        if e.ok and not is_finite_number(e.value):
             return invalid_metric(units, f"{side}: estimator returned a non-finite "
                                          f"value {e.value!r}")
     if not b.ok:
@@ -4048,8 +4044,7 @@ def control_outcome(expect: str, inject: str, case_ids: list[str],
 
     def valid_measurement(v: tuple) -> bool:
         state, worst = v[:2]
-        return (state in ("pass", "fail") and worst is not None
-                and math.isfinite(float(worst)))
+        return state in ("pass", "fail") and is_finite_number(worst)
 
     for cid in case_ids:
         baseline, result = clean[cid], injected[cid]

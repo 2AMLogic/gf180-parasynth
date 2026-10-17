@@ -2621,3 +2621,38 @@ def test_a_refusal_from_the_write_path_ends_the_batch_by_design(tmp_path, monkey
     with pytest.raises(rc.Refused):
         rc.main(["--batch", "First 32", "--results", str(tmp_path)])
     assert len(ran) == 1
+
+
+# --- #720: a flag or a string is not a measurement ---------------------------
+
+def _stub_est(value):
+    return lambda *_a: am.Estimate(value, True, "", "")
+
+
+def _pair_with(value):
+    rule = lambda ref, ctx: (1.0, "unit tolerance")                 # noqa: E731
+    return rc.measure_pair("m", "Hz", _stub_est(value), (None,), (None,), rule, {})
+
+
+@pytest.mark.parametrize("bad", [True, np.bool_(True), "1", "1.5", None,
+                                 float("nan"), float("inf")])
+def test_measure_pair_refuses_a_non_measurement(bad):
+    m = _pair_with(bad)
+    assert m["valid"] is False and "non-finite" in m["why"], (bad, m)
+
+
+@pytest.mark.parametrize("good", [1.5, 2, np.float64(1.5)])
+def test_measure_pair_still_accepts_a_real_number(good):
+    assert _pair_with(good)["valid"] is True
+
+
+@pytest.mark.parametrize("bad", [True, "1", np.bool_(True)])
+def test_control_outcome_refuses_a_non_numeric_worst(bad):
+    """`worst` of True / "1" is not a measurement, so the injected control is
+    REFUSED rather than judged."""
+    clean = {"F1A": ("pass", 0.5, "", "")}
+    for c, i in ((clean, {"F1A": ("fail", bad, "", "")}),
+                 ({"F1A": ("pass", bad, "", "")}, {"F1A": ("fail", 0.9, "", "")})):
+        out = rc.control_outcome("changed", "REF_CORNER_2X", ["F1A"],
+                                 {"F1A": "filter"}, c, i)
+        assert out[0] == "refused", (bad, out)
