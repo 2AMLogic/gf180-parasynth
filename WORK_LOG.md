@@ -2,6 +2,11 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-17
+
+- **PR #719**: fix: share one finite-number guard so a bool EDT10 is REFUSED
+- **Issue #718** (closed): Consolidate divergent _finite() guards; cymbal_tone_render's accepts bool
+
 ### 2026-10-16
 
 - **PR #634**: performance_suite: first model-backend run of the 7 phrases (#338)
