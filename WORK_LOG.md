@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-10-16
 
+- **PR #634**: performance_suite: first model-backend run of the 7 phrases (#338)
+- **Issue #673** (closed): zero_crossing_frequency moves 0.78% under polarity reversal on an asymmetric waveform (upward crossings only)
 - **PR #711**: Bump Repo Skills 0.24.1 -> 0.24.3
 - **PR #714**: tools: add two-SHA driver for prepare-corpus before/after probes
 - **PR #690**: fix: route conga and partial-balance probes through run_case.prepare and the preparation contract
