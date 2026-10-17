@@ -66,6 +66,9 @@ import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "model"))
+sys.path.insert(0, str(ROOT / "tools"))
+
+from finite_number import is_finite_number  # noqa: E402
 
 FS = 32768.0                       # int16 full scale
 LSB = 1.0 / FS
@@ -1593,8 +1596,9 @@ def valid_commit(c):
 
 
 def finite_real(x):
-    """A JSON number that is finite. bool is excluded: abs(True) == 1."""
-    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+    """A JSON number that is finite. bool is excluded: abs(True) == 1.
+    The one definition lives in `finite_number` (#718)."""
+    return is_finite_number(x)
 
 
 def label_problems(label, detail):
