@@ -4,6 +4,7 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-10-20
 
+- **PR #709**: ci: stop cancelling started main runs and double-running PR commits
 - **PR #727**: docs(gate-379): source-qualification report for a between-recording bar
 - **Issue #726** (closed): Qualify up to three independent 808 reference-data sources for #560
 
