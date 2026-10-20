@@ -2,6 +2,11 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-20
+
+- **PR #727**: docs(gate-379): source-qualification report for a between-recording bar
+- **Issue #726** (closed): Qualify up to three independent 808 reference-data sources for #560
+
 ### 2026-10-17
 
 - **PR #722**: fix: run_case refuses a bool or numeric string as a measurement
