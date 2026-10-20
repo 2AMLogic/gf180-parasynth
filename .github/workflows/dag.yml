@@ -20,7 +20,9 @@ permissions:
 
 concurrency:
   group: dag-${{ github.ref }}
-  cancel-in-progress: true
+  # A started main run is never cancelled (#540): 12 of 95 runs in 7 days were,
+  # leaving those commits with no verdict. A newer merge waits instead.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   regenerate:
