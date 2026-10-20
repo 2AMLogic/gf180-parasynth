@@ -1,0 +1,112 @@
+{
+ "fit_record": {
+  "path": "docs/scorecard/tom-pitch-drop-592/fit.json",
+  "sha256": "5ee20cdab421fb58b3783fa8da498581e64466e8edabf19623ac541142656762"
+ },
+ "rows": {
+  "LT00": {
+   "split": "confirmation",
+   "class": "NOT-READ",
+   "reason": "development fit REFUSED: reserved row not measured",
+   "take": "lt8/LT00.WAV"
+  },
+  "LT10": {
+   "split": "confirmation",
+   "class": "NOT-READ",
+   "reason": "development fit REFUSED: reserved row not measured",
+   "take": "lt8/LT10.WAV"
+  },
+  "MT00": {
+   "split": "confirmation",
+   "class": "NOT-READ",
+   "reason": "development fit REFUSED: reserved row not measured",
+   "take": "mt8/MT00.WAV"
+  },
+  "MT25": {
+   "split": "confirmation",
+   "class": "NOT-READ",
+   "reason": "development fit REFUSED: reserved row not measured",
+   "take": "mt8/MT25.WAV"
+  },
+  "MT75": {
+   "split": "confirmation",
+   "class": "NOT-READ",
+   "reason": "development fit REFUSED: reserved row not measured",
+   "take": "mt8/MT75.WAV"
+  },
+  "MT10": {
+   "split": "confirmation",
+   "class": "NOT-READ",
+   "reason": "development fit REFUSED: reserved row not measured",
+   "take": "mt8/MT10.WAV"
+  },
+  "HT00": {
+   "split": "confirmation",
+   "class": "NOT-READ",
+   "reason": "development fit REFUSED: reserved row not measured",
+   "take": "ht8/HT00.WAV"
+  },
+  "HT10": {
+   "split": "confirmation",
+   "class": "NOT-READ",
+   "reason": "development fit REFUSED: reserved row not measured",
+   "take": "ht8/HT10.WAV"
+  }
+ },
+ "reserved_rows_read": false,
+ "judgement": {
+  "n_reserved": 8,
+  "n_usable": 0,
+  "development_rows_in_confirmation": [],
+  "refused": {
+   "LT00": "development fit REFUSED: reserved row not measured",
+   "LT10": "development fit REFUSED: reserved row not measured",
+   "MT00": "development fit REFUSED: reserved row not measured",
+   "MT25": "development fit REFUSED: reserved row not measured",
+   "MT75": "development fit REFUSED: reserved row not measured",
+   "MT10": "development fit REFUSED: reserved row not measured",
+   "HT00": "development fit REFUSED: reserved row not measured",
+   "HT10": "development fit REFUSED: reserved row not measured"
+  },
+  "independence": "REFUSED: the corpus holds one take per TUNING setting from one unit, and every reserved take's gate pitch_shape against the shipped engine was read and published in #558. No fresh tom take exists in it, so a confirmation here is on RESERVED, PREVIOUSLY EXPOSED conditions and is never reported as 'untouched' or 'independent'.",
+  "magnitude": {
+   "verdict": "REFUSED",
+   "reason": "no development fit"
+  },
+  "relaxation": {
+   "verdict": "REFUSED",
+   "reason": "no development fit"
+  },
+  "decision": {
+   "magnitude": "not identifiable",
+   "relaxation": "not identifiable",
+   "independent_confirmation": "REFUSED: the corpus holds one take per TUNING setting from one unit, and every reserved take's gate pitch_shape against the shipped engine was read and published in #558. No fresh tom take exists in it, so a confirmation here is on RESERVED, PREVIOUSLY EXPOSED conditions and is never reported as 'untouched' or 'independent'.",
+   "scope": "one TR-808 unit; the 15 Fischer tom takes at TUNING 0/2.5/5/7.5/10; their accent (undocumented) against our accent 1.0. No accent generalisation and no accent-threshold claim. No claim about any other unit or recording."
+  }
+ },
+ "inject": [],
+ "provenance": {
+  "commit": "76ec1efeee3b48bbd785a367e45a9eb1b015130c",
+  "dirty": false,
+  "read_at": "start",
+  "origin_main": "f7870b8475e3de135891ccc0061bd857e4a677d1",
+  "prereg_sha256": "3856c14e7877538d1f12799b1d8d0f200c393bc845b8efd89f92f61bc66769e9",
+  "refs": "/nonexistent-refs-path",
+  "argv": [
+   "tools/probes/tom_pitch_drop_fischer.py",
+   "confirm",
+   "--refs",
+   "/nonexistent-refs-path",
+   "--fit",
+   "docs/scorecard/tom-pitch-drop-592/fit.json",
+   "--out",
+   "docs/scorecard/tom-pitch-drop-592/rerun-76ec1ef/confirmation.json"
+  ],
+  "python": "3.12.3",
+  "numpy": "1.26.4",
+  "scipy": "1.11.4",
+  "commit_at_end": "76ec1efeee3b48bbd785a367e45a9eb1b015130c",
+  "head_moved_during_run": false,
+  "dirty_at_end": false
+ }
+}

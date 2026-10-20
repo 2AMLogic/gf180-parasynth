@@ -1,0 +1,41 @@
+# Red run: tightened test_a_refused_fit_leaves_the_reserved_rows_unread
+# against tools/probes/tom_pitch_drop_fischer.py at b5fe5a4 (2026-10-11T22:42:59Z)
+# Failing assertion: unread NOT-READ rows carry no take identity ->
+# misbound_rows flags all reserved ids -> false confirmation-pooled-development.
+
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______________ test_a_refused_fit_leaves_the_reserved_rows_unread ______________
+
+tmp_path = PosixPath('/tmp/loom-nt/046a907b-4622-4919-a7d5-b9054c8a47c4/pytest-of-ubuntu/pytest-0/test_a_refused_fit_leaves_the_0')
+
+    def test_a_refused_fit_leaves_the_reserved_rows_unread(tmp_path):
+        """With no development fit there is nothing to confirm: the record is the
+        rule's REFUSED and NO reserved take is opened (an empty refs directory
+        would otherwise REFUSE with missing-take). Asymmetric values: each
+        quantity must be refused for the *exact* no-fit reason with an EMPTY
+        contamination list -- a NOT-READ row that failed its own identity binding
+        would be misread as pooled development data and mask the no-fit reason."""
+        fit = tmp_path / "fit.json"
+        fit.write_text(json.dumps({"status": "REFUSED", "reason": "not-identifiable: test"}))
+        rec = tp.confirm_record(tmp_path, tp.load_prereg(), fit)
+        assert rec["reserved_rows_read"] is False
+        assert all(r["class"] == "NOT-READ" for r in rec["rows"].values())
+>       assert all(r["take"] == tp.take_rel(k) for k, r in rec["rows"].items()), \
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "unread rows must carry their reserved take identity"
+
+tools/probes/test_tom_pitch_drop_fischer.py:424: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <dict_itemiterator object at 0x77a25e117970>
+
+>   assert all(r["take"] == tp.take_rel(k) for k, r in rec["rows"].items()), \
+               ^^^^^^^^^
+        "unread rows must carry their reserved take identity"
+E   KeyError: 'take'
+
+tools/probes/test_tom_pitch_drop_fischer.py:424: KeyError
+=========================== short test summary info ============================
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_a_refused_fit_leaves_the_reserved_rows_unread
+1 failed in 0.45s
