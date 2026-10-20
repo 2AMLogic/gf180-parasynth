@@ -418,6 +418,8 @@ $P tools/gate_between.py --refs ~/fischer --tables $D/tables.json --corrupt-tabl
 $P tools/gate_between.py table between.json
 ```
 
+Source qualification for the missing between-recording data (#726, #560): [`source-qualification.md`](source-qualification.md).
+
 ## Reproduce (build box)
 
 ```sh
