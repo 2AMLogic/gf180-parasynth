@@ -8,7 +8,6 @@ Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sou
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
 
 - **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
-- **#709**: ci: stop cancelling started main runs and double-running PR commits
 
 ## Very Important
 
@@ -47,7 +46,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
-- **#540**: CI: stop cancelling started main runs, drop duplicate push+PR runs, and batch nodes on the newest main (~1,450 job-min/day on main)
+_None._
 
 ## PRs Awaiting Review
 
@@ -60,7 +59,6 @@ _None._
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
-- **#709**: ci: stop cancelling started main runs and double-running PR commits
 
 ## Proposed
 
@@ -102,7 +100,6 @@ Issues carrying `loom:curated`.
 - **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader *(curated)*
 - **#530**: Permitted-differences suite: add the polarity x estimated-frequency rows #158 names *(curated)*
 - **#533**: audio_distance_floor.distances() computes mel_dac at 48 kHz on 44.1 kHz Fischer files *(curated)*
-- **#540**: CI: stop cancelling started main runs, drop duplicate push+PR runs, and batch nodes on the newest main (~1,450 job-min/day on main) *(curated)*
 - **#552**: Cymbal DC coupling 2/3: RTL shared-bus stage, drum_regs decoder, host init, bit-exact bench with mutants (#510) *(curated)*
 - **#556**: [sound] MA and RS: noise-voice centroid and flatness trajectories fail the gate (35.5x, 20.6x; 9.0x and 7.9x farther than real MARS takes) *(curated)*
 - **#557**: [sound] BD: missing pitch drop (pitch_shape 22.2x; about 230 cents) *(curated)*
@@ -139,14 +136,14 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 2 |
+| Operator merge-risk holds | 1 |
 | Very important | 1 |
 | Important | 4 |
 | Ready (`loom:issue`) | 13 |
-| In Progress (`loom:building`) | 1 |
+| In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 2 |
-| Curated | 56 |
+| Approved PRs awaiting merge | 1 |
+| Curated | 55 |
 | Architect / Hermit proposals | 4 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
