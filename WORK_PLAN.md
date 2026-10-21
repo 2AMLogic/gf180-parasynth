@@ -7,7 +7,7 @@ Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sou
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
 
-- **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
+_None._
 
 ## Very Important
 
@@ -22,7 +22,6 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a h
 - **#162**: The bass drum's entire attack is 18-23 dB short across 170-678 Hz
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
-- **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents)
 
 ## Ready
 
@@ -58,7 +57,7 @@ _None._
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-- **#652**: [sound] #592 phase-aware tom pitch-drop measurement vs Fischer: REFUSED (not identifiable), no repair
+_None._
 
 ## Proposed
 
@@ -107,7 +106,6 @@ Issues carrying `loom:curated`.
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate *(curated)*
 - **#562**: gate-379 follow-up: regenerate between-recording diagnostics with Q6; register the p dial *(curated)*
 - **#588**: [gate] perceptual_gate impulse reads the 44.1->48 kHz rate path: BD and the six toms/congas fail it 3.8-5.0x with no sound defect *(curated)*
-- **#592**: [sound] toms: diode-drop magnitude and time constant against the Fischer takes (LT onset 74 vs 35 cents) *(curated)*
 - **#593**: [sound] toms: H2..H4 output distortion (LT modulation 14.8x), lead from #558 *(curated)*
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning *(curated)*
 - **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(curated)*
@@ -136,14 +134,14 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 1 |
+| Operator merge-risk holds | 0 |
 | Very important | 1 |
-| Important | 4 |
+| Important | 3 |
 | Ready (`loom:issue`) | 13 |
 | In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 1 |
-| Curated | 55 |
+| Approved PRs awaiting merge | 0 |
+| Curated | 54 |
 | Architect / Hermit proposals | 4 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
