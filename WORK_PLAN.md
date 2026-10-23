@@ -27,25 +27,22 @@ _None._
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
-- **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place
-- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
-- **#325**: Consolidated physical setup session sheet (R0 first, then R1)
-- **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails
-- **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
-- **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#521**: Detector coverage matrix + bounded first validation experiment (#158)
-- **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
-- **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
-- **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
-- **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
+- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
+- **#325**: Consolidated physical setup session sheet (R0 first, then R1)
+- **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails
+- **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
+- **#521**: Detector coverage matrix + bounded first validation experiment (#158)
+- **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
+- **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
+- **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
+- **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 
 ## PRs Awaiting Review
 
@@ -74,7 +71,6 @@ Issues carrying `loom:curated`.
 - **#208**: Record the first qualified R0 physical I2S capture on the Arty *(curated)*
 - **#220**: modal_fixed's floored biquad settles into a DC pedestal that grows as resonator state shrinks — blocks #21's BD excitation-shape fix *(curated)*
 - **#247**: Model/RTL mismatch: glide between increments >= 2^23 (register-legal, above Nyquist) diverges after ~7 frames *(curated)*
-- **#257**: A per-frame, resonance-keyed cutoff correction: closing most of the 105 cents issue #237 measured and declined to fix in-place *(curated)*
 - **#282**: Epic: great-sounding mono Moog-like synth and complete 808 kit (plan098) *(curated)*
 - **#285**: CLAUDE.md headless rule: say how to wait on jobs longer than one foreground call (10 min cap) *(curated)*
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms) *(curated)*
@@ -88,7 +84,6 @@ Issues carrying `loom:curated`.
 - **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement *(curated)*
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails *(curated)*
 - **#353**: Harvest the finished half-slot route: one command, four files, one DAG node *(curated)*
-- **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY *(curated)*
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override) *(curated)*
 - **#413**: Cymbal knob-law render: kit_at is not the instrument, and its blocker was tracked by a merged PR *(curated)*
 - **#453**: Run tools/deadline_binding_probe.py on the build box to ground-truth the #443 drum-latency argument *(curated)*
@@ -138,11 +133,11 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
 | Important | 3 |
-| Ready (`loom:issue`) | 13 |
-| In Progress (`loom:building`) | 0 |
+| Ready (`loom:issue`) | 1 |
+| In Progress (`loom:building`) | 10 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 54 |
+| Curated | 52 |
 | Architect / Hermit proposals | 5 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
