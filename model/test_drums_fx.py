@@ -1171,9 +1171,12 @@ def test_coupling_register_is_at_a_free_drum_page_address():
     assert not any(lo <= A_COUPLE < hi for lo, hi in ranges)
     rtl = (pathlib.Path(__file__).resolve().parent.parent / "rtl-sketch" / "drum_regs.v").read_text()
     lits = {int(m, 16) for m in re.findall(r"8'h([0-9A-Fa-f]{2})", rtl)}
-    assert 0x30 not in lits, "drum_regs.v already decodes 0x30 literally"
+    # #552 implemented the register: 0x30 is decoded EXACTLY ONCE, as an equality (not a range)
+    # and by nothing else -- the absence this test used to assert was the "no RTL yet" state
+    assert len(re.findall(r"wr_addr\s*==\s*8'h30\b", rtl)) == 1
+    assert rtl.count("8'h30") == 1, "0x30 appears in drum_regs.v other than as the COUPLE decode"
     # every literal range base in the decoder is one the model map knows
-    assert lits <= {lo for lo, _ in ranges} | {0x18, 0x26, 0x87} | {0x00}, sorted(hex(x) for x in lits)
+    assert lits <= {lo for lo, _ in ranges} | {0x18, 0x26, 0x87} | {0x00} | {0x30}, sorted(hex(x) for x in lits)
     # and no kit or hit sequence ever writes it
     assert all(a != A_COUPLE for a, _ in dx.kit_808())
 
