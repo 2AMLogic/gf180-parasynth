@@ -391,7 +391,9 @@ def _feature_set_pass(a, refs, laws, cache, names, arms, curve_voices, extra, re
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--refs", default="/tmp/tr808-ref")
+    sys.path.insert(0, os.path.join(HERE, "..", "tools"))
+    import run_case
+    ap.add_argument("--refs", default=str(run_case.configured_refs()))
     ap.add_argument("--out", default="docs/img/discrimination")
     ap.add_argument("--json", default="/tmp/discrimination.json")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 4) - 1))

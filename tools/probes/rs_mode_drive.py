@@ -133,10 +133,8 @@ class Refused(Exception):
 
 
 def refdir() -> pathlib.Path:
-    for var in ("GF180_TR808_REFS", "TR808_REFS"):
-        if os.environ.get(var):
-            return pathlib.Path(os.environ[var])
-    return pathlib.Path("/tmp/tr808-ref")
+    import run_case as rc
+    return rc.configured_refs()
 
 
 # --------------------------------------------------------------------------
@@ -323,7 +321,7 @@ def reference():
     d = refdir()
     if not d.exists():
         raise Refused(f"reference corpus not at {d} -- clone "
-                      f"tidalcycles/sounds-tr808-fischer or set GF180_TR808_REFS")
+                      f"tidalcycles/sounds-tr808-fischer or point GF180_TR808_REFS at it")
     if not (d / RC.REF_MAIN["RS"][0]).exists():
         raise Refused(f"reference recording missing: {RC.REF_MAIN['RS'][0]} under {d}")
     x, sr, rel, setting = RC.load_reference("RS", d)

@@ -39,6 +39,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "model")]
 import pitch_trajectory as pt  # noqa: E402
+import run_case as rc  # noqa: E402
 
 F_REF = 52.0
 QUAL_GLIDE = (58.0, 50.0, 0.020)    # closed form: f0, f_inf, tg
@@ -147,7 +148,7 @@ def run(refs: pathlib.Path, seconds: list, out: pathlib.Path | None) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", type=pathlib.Path,
-                    default=pathlib.Path(os.environ.get("GF180_TR808_REFS") or "/tmp/tr808-ref"))
+                    default=rc.configured_refs())
     ap.add_argument("--second", type=pathlib.Path, action="append", default=[])
     ap.add_argument("--out", type=pathlib.Path)
     a = ap.parse_args(argv)

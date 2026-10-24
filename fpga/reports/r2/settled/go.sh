@@ -1,6 +1,12 @@
 cd ~/work/r2i
 export PATH="$(cat ~/work/oss-path.txt):$PATH"
-export GF180_TR808_REFS=/home/ubuntu/dev/refs
+# PROVENANCE: the run recorded in runall.log/runall.json beside this script was
+# executed with GF180_TR808_REFS=/home/ubuntu/dev/refs (the corpus PARENT). The
+# export below was corrected AFTER the run by #522, to the Fischer repo root.
+# The variable was unused by every job in this run: none of them reads the drum
+# corpus (verify_synth_top imports run_case only for its renders and stimuli), so
+# no recorded result depended on it.
+export GF180_TR808_REFS=/home/ubuntu/dev/refs/sounds-tr808-fischer
 P=/home/ubuntu/work/venv/bin/python
 O=build/r2s
 DL="$P rtl-sketch/verify_deadline.py"

@@ -21,6 +21,7 @@ import argparse, hashlib, json, os, pathlib, re, subprocess, sys, tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import run_all as ra                                             # noqa: E402
+import run_case as rc                                            # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BEFORE_DEFAULT, AFTER_DEFAULT = "6fbd1bd1^1", "6fbd1bd1"    # #690 merge parents
@@ -111,7 +112,7 @@ def main(argv=None) -> int:
     ap.add_argument("--before", default=BEFORE_DEFAULT)
     ap.add_argument("--after", default=AFTER_DEFAULT)
     ap.add_argument("--refs", type=pathlib.Path,
-                    default=pathlib.Path(os.environ.get("GF180_TR808_REFS", "/tmp/tr808-ref")))
+                    default=rc.configured_refs())
     ap.add_argument("--timeout", type=float, default=3600)
     ap.add_argument("--json", type=pathlib.Path)
     ap.add_argument("--python", default=sys.executable)

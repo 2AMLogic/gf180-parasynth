@@ -64,10 +64,9 @@ def run(refdir: pathlib.Path) -> tuple[int, int, int, int]:
 
 
 def main() -> int:
-    import os
-    refdir = pathlib.Path(os.environ.get(rc.REFS_ENV) or rc.REFS_DEFAULT)
+    refdir = rc.configured_refs()
     if not refdir.exists():
-        print(f"REFUSED: reference corpus not at {refdir}; set {rc.REFS_ENV}")
+        print(f"REFUSED: reference corpus not at {refdir}; point GF180_TR808_REFS at it")
         return 2
     accepted, refused, unavailable, expected = run(refdir)
     print(f"accepted {accepted} of {expected}; contract-refused {refused}; "

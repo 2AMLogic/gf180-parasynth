@@ -69,6 +69,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 from finite_number import is_finite_number  # noqa: E402
+import run_case as rc  # noqa: E402
 
 FS = 32768.0                       # int16 full scale
 LSB = 1.0 / FS
@@ -526,9 +527,6 @@ def print_matrix(rows):
 # ===========================================================================
 # External reference gate. What a recording can and cannot establish.
 # ===========================================================================
-REFS_ENV = "GF180_TR808_REFS"
-REFS_FALLBACKS = ("/tmp/tr808-ref", str(pathlib.Path.home() / "dev" / "refs"))
-
 
 def reference_gate(path=None, environ=None):
     """Assert the reference apparatus at the point of use. Returns a dict:
@@ -545,13 +543,14 @@ def reference_gate(path=None, environ=None):
     **A capture that is AC-coupled or does not say cannot establish absence of
     DC.** Its zero mean is the capture chain's, so `dc` is REFUSED: a recording
     lacking an offset is not evidence the machine lacks one."""
-    environ = os.environ if environ is None else environ
-    cands = [path] if path else [environ.get(REFS_ENV), *REFS_FALLBACKS]
+    # `environ` is accepted for old callers and ignored: the corpus location is
+    # run_case.configured_refs()'s to decide (#522).
+    cands = [path] if path else [str(rc.configured_refs())]
     cands = [c for c in cands if c]
     root = next((pathlib.Path(c) for c in cands if pathlib.Path(c).is_dir()), None)
     if root is None:
         return dict(status="REFUSED", dc="REFUSED", root=None,
-                    reasons=[f"no reference directory ({REFS_ENV} unset or missing; tried "
+                    reasons=[f"no reference directory (the configured corpus location is missing; tried "
                              f"{', '.join(cands) or 'nothing'})"])
     mf = root / "manifest.json"
     if not mf.is_file():
