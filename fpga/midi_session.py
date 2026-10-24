@@ -1070,7 +1070,18 @@ def open_midi_input(spec: str, *, backend=None):
         raise cmi.MidiPortRefused(f"cannot open MIDI input {spec}: {exc}") from exc
 
 
-def main(argv=None) -> int:
+def host_overloaded():
+    """(1-minute load average, CPUs) when the load exceeds the CPU count, else
+    None.  Same bound as measure_mac_midi_latency.py; no load average -> None."""
+    try:
+        load = os.getloadavg()[0]
+    except (OSError, AttributeError):
+        return None
+    cpus = os.cpu_count() or 1
+    return (load, cpus) if load > cpus else None
+
+
+def main(argv=None, *, _inject=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__.split("\n", 1)[1])
@@ -1093,6 +1104,18 @@ def main(argv=None) -> int:
                          "or tree (built from this tree, revision 14, "
                          "development -- implied by --port sim, which refuses release)")
     a = ap.parse_args(argv)
+    # Fail closed on the boundary between the verifier and a real session:
+    # the fault-injection hooks exist only so verify_live_midi.py can prove
+    # its checks catch defects.  `_inject` is an internal/test seam, not a CLI
+    # flag.  Refusal is on non-emptiness (no allowlist of control names), and
+    # happens before ANY resource opener (CoreMIDI, MIDI input, simulator,
+    # serial) runs.
+    if _inject:
+        print("midi_session: REFUSED -- a non-empty fault-injection set "
+              f"({sorted(map(str, _inject))}) was presented to the real-session "
+              "entry point; injection is for fpga/verify_live_midi.py only, "
+              "which constructs MidiSession directly", file=sys.stderr)
+        return 2
     if a.list_midi_ports:
         try:
             ports = cmi.CoreMidiBackend().sources()
@@ -1110,15 +1133,22 @@ def main(argv=None) -> int:
     except uh.Refused as exc:
         print(f"midi_session: REFUSED -- {exc}", file=sys.stderr)
         return 2
+    if a.port == "sim":
+        load = host_overloaded()
+        if load:
+            print(f"midi_session: REFUSED -- load average {load[0]:.2f} on {load[1]} CPUs: "
+                  "the simulated board runs on the wall clock, so this would measure the "
+                  "other load, not the session. Re-run on a quiet host", file=sys.stderr)
+            return 2
     try:
         source, feeder, what = open_midi_input(a.midi_in)
     except cmi.MidiPortRefused as exc:
         print(f"midi_session: REFUSED -- {exc}", file=sys.stderr)
         return 2
     print(f"midi_session: MIDI input: {what}")
+    import uart_device_sim as dev
     sim = None
     if a.port == "sim":
-        import uart_device_sim as dev
         sim = dev.UartDeviceSim().start()
         port = sim.port
     else:
@@ -1146,18 +1176,22 @@ def main(argv=None) -> int:
     st = session.stats
     print(f"midi_session: accepted events by kind {dict(sorted(st['groups'].items()))}")
     rc = 0
+    timing_only = True         # every failure below is ERR_DUE / a missed deadline
     if session.input_lost:
         print(f"midi_session: ERROR -- the MIDI input was lost mid-session "
               f"({session.input_lost}); the session sent its panic (GATE_OFF, stops "
               "clear) over the UART and closed. That silences the board only if the "
               "UART link is still up: nothing here can mute a board it cannot reach",
               file=sys.stderr)
-        rc = 1
+        rc, timing_only = 1, False
     if st["device_errors"] or st["deadline_misses"] or st["final_status"]["drops"] \
             or st["boots"]:
         print(f"midi_session: FAIL -- device errors {st['device_errors'][:5]}, deadline "
               f"misses {st['deadline_misses']}, boots {st['boots']}")
         rc = 1
+        if st["final_status"]["drops"] or st["boots"] \
+                or any(e[0] != dev.ERR_DUE for e in st["device_errors"]):
+            timing_only = False
     if sim is not None:
         ex = [w for w in sim.writes if w[5] == "event"]
         print(f"midi_session: simulated device executed {len(ex)} scheduled writes, "
@@ -1165,7 +1199,16 @@ def main(argv=None) -> int:
               f"drops {sim.drops}, queue peak {sim.evq_peak}")
         if sim.errors or sim.drops:
             rc = 1
+            if sim.drops or any(e[0] != dev.ERR_DUE for e in sim.errors):
+                timing_only = False
         sim.stop()
+        load = host_overloaded()
+        if rc == 1 and timing_only and load:
+            print(f"midi_session: NO-VERDICT -- the only failures are late events (ERR_DUE / "
+                  f"deadline misses) and the host is overloaded (load average {load[0]:.2f} "
+                  f"on {load[1]} CPUs): host scheduling cannot be told from a session "
+                  "regression. Re-run on a quiet host", file=sys.stderr)
+            return 2
     return rc
 
 

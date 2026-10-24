@@ -5,15 +5,17 @@
 
 Collected by `make verify`'s broad pytest job (`pytest model/ spec/ tools/ ...`)
 and by CI's `pytest tools/ -q` job (rungs.yml, "every tools/ test, by
-directory"). 51 tests, 89 s measured alone on an 8-core box and 129 s with two
-other jobs beside it, nearly all of it in the nine injected controls and the
+directory"). 51 tests before #528, 89 s measured alone on an 8-core box and
+129 s with two other jobs beside it; 63 after #528, not yet timed on the box
+(this file plus `test_noise_fixture_duration.py`: 393 s on a laptop at load
+average 32). Nearly all of it is in the nine injected controls and the
 deterministic 96-draw calibration replay -- both of which are the point: a
 suite of invariance checks
 is trivially green if its tolerances are loose, so what has to be tested is
 that each tolerance is tight enough to catch a defect and that none of them
 false-alarms.
 
-Five things are asserted here that the probe cannot assert about itself:
+Seven things are asserted here that the probe cannot assert about itself:
 
   1. **Every row states what it permits AND what it does not.** #158 is
      explicit that these differences are "not universally benign", so a row
@@ -34,9 +36,12 @@ Five things are asserted here that the probe cannot assert about itself:
      of its three verdicts -- too tight, vacuous, unsatisfiable floor -- is
      driven as an input, with the unmutated row as the control.
   6. **`SAFETY = 4` is inside a measured window.** Removing the margin
-     false-alarms; doubling it loses two of the five injected defects. Both
-     ends are re-measured here, not transcribed from the docstring's
-     `--safety-sweep` table.
+     false-alarms; doubling it loses two NAMED injected defects, and the upper
+     cliff is located per pair (~4.19x, set by the original
+     `SINGLE_WINDOW_SLOPE`). Both ends are re-measured here, not transcribed
+     from the docstring's `--safety-sweep` table.
+  7. **A per-pair margin cannot render a non-detection as a detection**
+     (#528): missed, REFUSED and non-finite inputs are driven as cases.
 """
 from __future__ import annotations
 
@@ -200,8 +205,7 @@ def test_the_suite_is_green_on_the_validation_stream():
 @pytest.mark.parametrize("name", sorted(pd.INJECTIONS))
 def test_each_injected_control_reds_exactly_its_declared_rows(name):
     rows = pd.run_suite(QUICK, pd.VALIDATE_BASE, name)
-    red = tuple(sorted(r.case.cid for r in rows if r.verdict == pd.FAIL))
-    refused = tuple(sorted(r.case.cid for r in rows if r.verdict == pd.REFUSED))
+    red, refused = pd.control_outcome(name, rows, pd.VALIDATE_BASE, QUICK)
     assert red == tuple(sorted(pd.EXPECT_RED[name])), \
         f"{name}: declared {pd.EXPECT_RED[name]}, observed {red}"
     assert not refused, \
@@ -344,14 +348,69 @@ def test_safety_is_bounded_from_above_by_lost_detection():
     """The half a false-alarm measurement cannot give you: raising a threshold
     always stops the false alarms, so the upper bound has to come from the
     injected defects. At 4x all five (defect, calibrated row) pairs still go
-    red; at 8x two of them do not, and `noise/psd_slope` -- whose defect sits
-    only 1.05x above its committed threshold -- is one of them."""
+    red. Before #539 doubling SAFETY lost exactly the two noise pairs, whose
+    detection was the worst trial against SAFETY x the worst draw; those two
+    are now detected on the mean statistic, which SAFETY does not move, so
+    doubling it loses NOTHING and the bound comes from the three remaining
+    pairs (NAMED by `test_the_upper_cliff_is_where_the_pair_is_lost`). The two
+    noise pairs are asserted to be independent of SAFETY here, so a future
+    edit that quietly puts them back on a SAFETY-scaled threshold is seen."""
     assert pd.detection_at(pd.scaled_cases(pd.SAFETY), QUICK, pd.VALIDATE_BASE) \
         == len(pd.DETECTION_PAIRS)
-    assert pd.detection_at(pd.scaled_cases(2 * pd.SAFETY), QUICK, pd.VALIDATE_BASE) \
-        < len(pd.DETECTION_PAIRS), \
-        "doubling SAFETY no longer loses any injected defect, so the sweep no " \
-        "longer bounds it from above and the shipped factor is unconstrained"
+    lost = {(pm.injection, pm.cid) for pm in
+            pd.pair_margins(pd.scaled_cases(2 * pd.SAFETY), QUICK, pd.VALIDATE_BASE)
+            if not pm.caught}
+    assert lost == set(), \
+        f"doubling SAFETY now loses {sorted(lost)} -- re-run --margins and " \
+        f"re-derive the upper bound"
+    for pm in pd.pair_margins(pd.scaled_cases(512.0), QUICK, pd.VALIDATE_BASE):
+        if (pm.injection, pm.cid) in pd.MEAN_PAIRS:
+            assert pm.statistic == f"mean of {pd.MEAN_TRIALS}" and pm.caught, pm
+
+
+def test_the_upper_cliff_is_where_the_pair_is_lost():
+    """The upper bound LOCATED, not bracketed by a 2x grid step (#528). Before
+    #539 the binding pair was the original `SINGLE_WINDOW_SLOPE`, lost above
+    ~4.19x; that pair (and `SHORT_WINDOW_SPECTRUM`) now sit on the mean
+    statistic and have NO SAFETY cliff (NaN, asserted), so the binding pair is
+    `TWO_POINT_TAIL_DECAY` on `noise/decay_tau`, thousands of times over the
+    shipped factor. The row is re-run either side of the cliff `upper_cliff`
+    computes, so the arithmetic is checked against the estimator rather than
+    against itself."""
+    pms = pd.pair_margins(pd.CASES, QUICK, pd.VALIDATE_BASE)
+    cliffs = {(pm.injection, pm.cid): pd.upper_cliff(pm, pd.CASE_BY_ID[pm.cid].policy.calibrated)
+              for pm in pms}
+    for key in pd.MEAN_PAIRS:
+        assert math.isnan(cliffs[key]), (key, cliffs[key])
+    cliffs = {k: v for k, v in cliffs.items() if k not in pd.MEAN_PAIRS}
+    assert len(cliffs) == len(pd.DETECTION_PAIRS) - len(pd.MEAN_PAIRS)
+    assert all(math.isfinite(v) for v in cliffs.values()), cliffs
+    binding = min(cliffs, key=cliffs.get)
+    k = cliffs[binding]
+    assert binding == ("TWO_POINT_TAIL_DECAY", "noise/decay_tau"), cliffs
+    assert 100 * pd.SAFETY < k, k
+    name, cid = binding
+    for factor, want in ((0.99 * k, pd.CAUGHT), (1.01 * k, pd.MISSED)):
+        c = {c.cid: c for c in pd.scaled_cases(factor)}[cid]
+        pm = pd.pair_margin(name, pd.run_case(c, QUICK, pd.VALIDATE_BASE, name))
+        assert pm.state == want, (factor, pm)
+
+
+def test_the_slope_control_is_the_original_short_record_mutant():
+    """#537 review: the control was once silently made grosser (2048 samples at
+    nfft=512), which widened its margin by changing the defect rather than the
+    detection. Pinned behaviourally: the hooked row must read exactly
+    `psd_slope_db_oct(x[:4096], nfft=1024)` on both sides."""
+    c = pd.CASE_BY_ID["noise/psd_slope"]
+    rng = np.random.default_rng([pd.VALIDATE_BASE, 0, pd.case_seed(c.cid)])
+    p = pd.draw_noise(rng)
+    applied = pd.t_noise_realisation(p, rng)
+    a, b = pd.build(p), applied.post(pd.build(applied.params_b))
+    want = (pd.am.psd_slope_db_oct(b.x[:4096], (500.0, 8000.0), pd.SR, nfft=1024).value
+            - pd.am.psd_slope_db_oct(a.x[:4096], (500.0, 8000.0), pd.SR, nfft=1024).value)
+    got = pd.run_trial(c, pd.VALIDATE_BASE, 0, "SINGLE_WINDOW_SLOPE").delta
+    assert got == pytest.approx(want, abs=1e-12)
+    assert pd.INJECTIONS["SINGLE_WINDOW_SLOPE"].targets == ("noise/psd_slope",)
 
 
 def test_the_sweep_only_moves_the_thresholds_that_depend_on_safety():
@@ -365,3 +424,162 @@ def test_the_sweep_only_moves_the_thresholds_that_depend_on_safety():
             assert b.policy.threshold > a.policy.threshold, a.cid
     assert len(pd.CALIBRATED_ROWS) == 5, pd.CALIBRATED_ROWS
     assert len(pd.DETECTION_PAIRS) == 5, pd.DETECTION_PAIRS
+
+
+# ---------------------------------------------------------------------------
+# 8. per-pair margin reporting cannot render a non-detection as a detection
+# ---------------------------------------------------------------------------
+# #528 added a per-(injection, row) margin to the reports, because the
+# aggregate `caught 5/5` hid that one pair cleared its threshold by 5 %. A
+# margin column is a new guard, so it ships with the inputs that defeat it
+# (docs/verification-rules.md 8): a missed mutant, a REFUSED row that still
+# holds some large residuals, and a non-finite margin must never read as
+# CAUGHT. These are driven as synthetic RowResults so the guard is tested
+# without the estimator, and the first case is the control that a guard which
+# returned "not caught" unconditionally would fail.
+def _row(verdict, residuals, threshold=0.6, cid="noise/psd_slope", refusals=0):
+    c = pd.CASE_BY_ID[cid]
+    c = dataclasses.replace(c, policy=dataclasses.replace(c.policy, threshold=threshold))
+    exceed = sum(1 for r in residuals if np.isfinite(r) and r > threshold)
+    return pd.RowResult(c, verdict, 12, refusals, exceed, list(residuals), [])
+
+
+def test_a_caught_pair_reports_its_margin():
+    pm = pd.pair_margin("SINGLE_WINDOW_SLOPE", _row(pd.FAIL, [0.2, 0.9]))
+    assert pm.state == pd.CAUGHT and pm.caught
+    assert pm.margin == pytest.approx(1.5)
+    assert "1.5x" in pd.render_margin(pm)
+
+
+@pytest.mark.parametrize("label,row,state", [
+    # the mutant did not move the row past its threshold
+    ("missed", _row(pd.PASS, [0.2, 0.5]), pd.MISSED),
+    # REFUSED is not FAIL, even when the trials that did answer were large:
+    # "anything that is not green is a catch" is the nightly's old mistake
+    ("refused", _row(pd.REFUSED, [0.9, 1.4], refusals=10), pd.REFUSED),
+    # every trial refused: there is no residual to take a margin of
+    ("refused-empty", _row(pd.REFUSED, [], refusals=12), pd.REFUSED),
+    # non-finite residuals or threshold: a margin of inf or nan is not a number
+    ("inf-residual", _row(pd.FAIL, [0.2, float("inf")]), pd.NO_VERDICT),
+    ("nan-residual", _row(pd.FAIL, [float("nan")]), pd.NO_VERDICT),
+    ("zero-threshold", _row(pd.FAIL, [0.2, 0.9], threshold=0.0), pd.NO_VERDICT),
+    # a verdict that disagrees with its own margin is not evidence either way
+    ("fail-under-threshold", _row(pd.FAIL, [0.2, 0.5]), pd.NO_VERDICT),
+    ("pass-over-threshold", _row(pd.PASS, [0.2, 0.9]), pd.NO_VERDICT),
+])
+def test_a_non_detection_never_renders_as_caught(label, row, state):
+    pm = pd.pair_margin("SINGLE_WINDOW_SLOPE", row)
+    assert pm.state == state, (label, pm)
+    assert not pm.caught, label
+    text = pd.render_margin(pm)
+    assert pd.CAUGHT not in text, (label, text)
+    if state != pd.MISSED:
+        # only a real number below 1 may be printed as a margin
+        assert "x" not in text.split()[0], (label, text)
+
+
+def test_detection_counts_a_refused_control_as_not_caught(monkeypatch):
+    """The same guard at the point where the sweep counts: a control whose row
+    REFUSES with large residuals must not raise `caught`."""
+    def refusing(c, trials, seed_base, inject):
+        return _row(pd.REFUSED, [99.0], threshold=c.policy.threshold, cid=c.cid,
+                    refusals=trials)
+    monkeypatch.setattr(pd, "run_case", refusing)
+    assert pd.detection_at(pd.CASES, 12, pd.VALIDATE_BASE) == 0
+
+
+# ---------------------------------------------------------------------------
+# 9. the noise controls are detected on a distribution statistic (#539)
+# ---------------------------------------------------------------------------
+# The worst of 12 trials against 4x the worst of 96 caught `SINGLE_WINDOW_SLOPE`
+# in 23 of 40 untouched groups (docs/noise-fixture-duration.md). The mean of
+# `MEAN_TRIALS` residuals against `MEAN_FACTOR` x the clean calibrated mean is
+# swept in tools/probes/mean_statistic_sweep.py. These tests carry the controls
+# for that statistic: a different draw sequence, the clean row under the same
+# statistic, and the inputs that would make it answer without evidence.
+#: a seed base the shipped suite, the calibration and the selection never read
+OTHER_BASE = pd.FPR_BASE + 70_000
+
+
+@pytest.mark.parametrize("base", [pd.VALIDATE_BASE, pd.CONFIRM_BASE + 90_000, OTHER_BASE])
+@pytest.mark.parametrize("injection,cid", pd.MEAN_PAIRS)
+def test_the_mean_statistic_catches_its_control_on_a_changed_draw_sequence(injection, cid, base):
+    """The acceptance bar: the control stays red when the draw sequence
+    changes. VALIDATE_BASE alone is the fixed seed the old control was
+    green on by luck; the other two bases are ones nothing selected on."""
+    pm = pd.mean_margin(injection, cid, base)
+    assert pm.caught, (base, pm)
+    assert pm.statistic == f"mean of {pd.MEAN_TRIALS}"
+
+
+@pytest.mark.parametrize("base", [pd.VALIDATE_BASE, OTHER_BASE])
+@pytest.mark.parametrize("injection,cid", pd.MEAN_PAIRS)
+def test_the_mean_statistic_does_not_red_the_clean_row(injection, cid, base):
+    """The false-red control: the same statistic on the undamaged row. A
+    detector that reds the clean row catches the defect by catching everything."""
+    pm = pd.mean_margin(None, cid, base)
+    assert pm.state == pd.MISSED, (base, pm)
+
+
+def test_the_mean_pairs_are_the_declared_noise_controls():
+    assert set(pd.MEAN_PAIRS) <= set(pd.DETECTION_PAIRS)
+    for name, cid in pd.MEAN_PAIRS:
+        assert pd.INJECTIONS[name].targets == (cid,)
+        assert pd.CASE_BY_ID[cid].policy.tightness == "calibrated"
+
+
+def _patched(monkeypatch, residuals, verdict=None, refusals=0):
+    def fake(c, trials, seed_base, inject):
+        return pd.RowResult(c, verdict or pd.PASS, trials, refusals, 0, list(residuals), [])
+    monkeypatch.setattr(pd, "run_case", fake)
+
+
+@pytest.mark.parametrize("label,residuals,verdict,refusals,state", [
+    ("above", [0.5] * 24, None, 0, pd.CAUGHT),
+    ("below", [0.01] * 24, None, 0, pd.MISSED),
+    # REFUSED is never a catch even when what answered was huge
+    ("refused", [9.0] * 24, pd.REFUSED, 20, pd.REFUSED),
+    # a non-finite mean must not render as a margin beside CAUGHT
+    ("nan", [float("nan")] * 24, None, 0, pd.NO_VERDICT),
+    ("inf", [float("inf")] * 24, None, 0, pd.NO_VERDICT),
+    # a mean over a handful of survivors is not the calibrated statistic
+    ("too-few", [9.0] * 3, None, 21, pd.NO_VERDICT),
+])
+def test_the_mean_statistic_never_answers_without_evidence(
+        monkeypatch, label, residuals, verdict, refusals, state):
+    _patched(monkeypatch, residuals, verdict, refusals)
+    pm = pd.mean_margin("SINGLE_WINDOW_SLOPE", "noise/psd_slope", pd.VALIDATE_BASE,
+                        cal_mean=0.05)
+    assert pm.state == state, (label, pm)
+    assert pm.caught == (state == pd.CAUGHT)
+    if state in (pd.REFUSED, pd.NO_VERDICT):
+        assert pd.CAUGHT not in pd.render_margin(pm)
+        assert pm.margin is None or not math.isfinite(pm.margin) or state == pd.NO_VERDICT
+
+
+@pytest.mark.parametrize("cal", [0.0, -1.0, float("nan"), float("inf")])
+def test_an_unusable_calibration_mean_is_no_verdict_not_a_free_catch(monkeypatch, cal):
+    """`MEAN_FACTOR` x 0 is a threshold every residual clears. It must not
+    turn the control green by construction."""
+    _patched(monkeypatch, [0.5] * 24)
+    pm = pd.mean_margin("SINGLE_WINDOW_SLOPE", "noise/psd_slope", pd.VALIDATE_BASE,
+                        cal_mean=cal)
+    assert pm.state == pd.NO_VERDICT and not pm.caught, pm
+
+
+def test_a_mean_pair_that_cannot_answer_makes_its_control_refused(monkeypatch):
+    """`control_outcome` must report the pair as refused rather than quietly
+    dropping it from the red set, or an unanswerable statistic reads as a
+    control that behaved."""
+    rows = pd.run_suite(QUICK, pd.VALIDATE_BASE, "SINGLE_WINDOW_SLOPE")
+    _patched(monkeypatch, [9.0] * 24, pd.REFUSED, 20)
+    red, refused = pd.control_outcome("SINGLE_WINDOW_SLOPE", rows, pd.VALIDATE_BASE, QUICK)
+    assert "noise/psd_slope" in refused
+
+
+def test_the_mean_statistic_does_not_depend_on_safety():
+    """The point of moving off the worst-trial statistic: SAFETY must not be
+    able to lose these pairs, and the threshold must not move with it."""
+    a = pd.mean_margin("SINGLE_WINDOW_SLOPE", "noise/psd_slope", pd.VALIDATE_BASE)
+    assert a.threshold == pytest.approx(pd.MEAN_FACTOR * pd.calibration_mean("noise/psd_slope"))
+    assert math.isnan(pd.upper_cliff(a, pd.CASE_BY_ID["noise/psd_slope"].policy.calibrated))

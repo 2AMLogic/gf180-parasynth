@@ -883,34 +883,6 @@ def _degrade_envs(voice: str):
     return base
 
 
-def _cy_hi_amp(target_ratio: float) -> float:
-    """M_CYHI's amp that puts the cymbal's 5-13 kHz / 2-5 kHz energy at
-    `target_ratio`. Band power is quadratic in the amp, so one calibration
-    render fixes the law exactly -- the same closed form the snare's partial
-    balance and both envelope peaks already use, rather than a search."""
-    ratio0, amp0 = _calibrate()["cy_tone"]
-    return float(min(1.0, amp0 * math.sqrt(max(target_ratio, 1e-12) / max(ratio0, 1e-12))))
-
-
-def _cy_decay_scale(target_tau: float) -> float:
-    """The factor on E_CYD and E_CYL that puts the rendered voice's measured
-    tau at `target_tau`.
-
-    Two calibration renders, not one: the DECAY knob scales two of the three
-    cymbal envelopes and leaves the 12 ms one alone (drums_fx CY_TAU_SHORT),
-    so the whole voice is NOT a clean time-scaling of itself and a
-    single-point solve would be wrong by the short band's share. Fitting
-    log tau against log k through two points and inverting is exact to the
-    extent the relation is a power law, and is refused -- the factor is
-    clamped to the measured bracket -- outside it."""
-    (k1, t1), (k2, t2) = _calibrate()["cy_decay"]
-    if t1 <= 0 or t2 <= 0 or abs(math.log(t2 / t1)) < 1e-9:
-        return 1.0
-    a = math.log(k2 / k1) / math.log(t2 / t1)
-    k = k1 * (max(target_tau, 1e-6) / t1) ** a
-    return float(min(8.0, max(0.05, k)))
-
-
 def kit_at(voice: str, knobs: tuple, laws: dict, arm: str = "ours"):
     """The reference kit with this voice's knobs applied through the fitted
     law, then the arm's modification. Returns a write list."""
@@ -976,13 +948,17 @@ def kit_at(voice: str, knobs: tuple, laws: dict, arm: str = "ours"):
         kit_f0, kit_q, _ = dx.TOM_PRESET[voice]
         set_mode(m, f0, kit_q * f0 / kit_f0)
     elif voice == "CY":
-        tone, decay = knobs
-        set_mode(dx.M_CYHI, dx.CY_HI_HZ, dx.CY_HI_Q,
-                 _cy_hi_amp(laws["CY.tone_ratio"](tone)), num=dx.BP)
-        k = _cy_decay_scale(laws["CY.decay_tau"](decay))
-        for e in (dx.E_CYD, dx.E_CYL):
-            set_env(e, dx.CY, k * _env_tau_from_reg(base[dx.A_ENV + e * dx.ENV_STRIDE + 2]),
-                    base[dx.A_ENV + e * dx.ENV_STRIDE + 1] / dx.FULL24)
+        # #413: delegated. The old branch solved TONE for the REFERENCE's own
+        # band ratio (`CY.tone_ratio`, so it reproduced the recording it was
+        # judged against by construction) and DECAY through a clamped two-point
+        # power law whose E_CYL tau ran off the end of the Q0.16 rate register
+        # (7.5 and 10.0 rendered bit-identical). Both are gone: the image comes
+        # from the one shared constructor, `cymbal_candidate.shipped_knob_kit`,
+        # which at the anchor writes nothing, so it IS the shipped kit. `laws`
+        # is accepted for compatibility and deliberately unread for CY.
+        import cymbal_candidate as cc
+        base.clear()
+        base.update(dict(cc.shipped_knob_kit(knobs[0], knobs[1], sound=voice)))
 
     # --- the arm ------------------------------------------------------------
     if arm == "docfix":
@@ -1096,24 +1072,6 @@ def _calibrate():
     lo = float((y0[:w] ** 2).sum()) * band_share(y0[:w], sr, 0.0, 300.0)
     hi = max(1e-12, float((y1[:w] ** 2).sum()) * band_share(y1[:w], sr, 300.0, 20000.0))
     _CAL["bd"] = (lo, hi, 0.06)
-    # CY TONE: the rendered 5-13 kHz / 2-5 kHz ratio at the kit's own M_CYHI
-    # amp. CY DECAY: the rendered tau at two scalings of E_CYD and E_CYL.
-    img = {a: v for a, v in dx.kit_with_sounds("CY")}
-    c0, sr = _render_raw(dx.CY, sorted(img.items()))
-    _CAL["cy_tone"] = (band_share(c0, sr, 5000.0, 13000.0)
-                       / max(band_share(c0, sr, 2000.0, 5000.0), 1e-9),
-                       img[dx.A_MODE + dx.M_CYHI * dx.MODE_STRIDE + 2] / 65536.0)
-    pts = []
-    for k in (1.0, 2.0):
-        w = dict(img)
-        for e in (dx.E_CYD, dx.E_CYL):
-            for a, v in dx.env_writes(e, dx.CY,
-                                      k * _env_tau_from_reg(img[dx.A_ENV + e * dx.ENV_STRIDE + 2]),
-                                      img[dx.A_ENV + e * dx.ENV_STRIDE + 1] / dx.FULL24):
-                w[a] = v
-        y, sy = _render_raw(dx.CY, sorted(w.items()))
-        pts.append((k, measure_tau(y, sy)))
-    _CAL["cy_decay"] = tuple(pts)
     return _CAL
 
 
@@ -2151,3 +2109,19 @@ def test_the_frozen_ruler_makes_the_two_distances_commensurate():
     # property that hides the mismatch rather than the property we want
     assert np.allclose(_zspace(None, np.vstack([a, b])),
                        _zspace(None, np.vstack([a * 7.0, b * 7.0])))
+
+
+# ---- #413: the CY knob branch is the shipped constructor, not a fitted law ----
+def test_cy_knob_render_is_delegated_and_reads_no_fitted_law():
+    """`kit_at("CY", ...)` used to solve TONE for the reference's own band ratio
+    and DECAY through a clamped power law (7.5 and 10.0 rendered bit-identical).
+    Pass NO laws: if the branch still read `CY.tone_ratio` / `CY.decay_tau` this
+    would KeyError, and the anchor must be the shipped image exactly."""
+    import cymbal_candidate as cc
+    import drums_fx as dx
+    assert not hasattr(sys.modules[__name__], "_cy_hi_amp")
+    assert not hasattr(sys.modules[__name__], "_cy_decay_scale")
+    assert dict(kit_at("CY", (5.0, 2.5), {})) == dict(dx.kit_with_sounds("CY"))
+    img75, img10 = dict(kit_at("CY", (5.0, 7.5), {})), dict(kit_at("CY", (5.0, 10.0), {}))
+    assert img75 != img10                                  # the historical saturation
+    assert img10 == dict(cc.shipped_knob_kit(5.0, 10.0))   # one constructor, not two

@@ -130,7 +130,7 @@ Rules (amended after review, plan085 §3):
 | T-PULSE2X-IMAGE | Is a PULSE2X=1 image qualified (fit, timing, deadline, I²S)? | FAIL | #205 |
 | T-CLAP-L2 | Is D12A's late energy repaired in the shipping model and RTL? | in progress (#261 → D) | run_case D12A + model→RTL→I²S |
 | T-LIVE-MIDI | Does a MIDI controller drive the image with bounded latency and no stuck notes? | not started | new; sim first |
-| T-PHYSICAL | Does the board's line output match the digital prediction (gain, latency, noise, repeatability)? | registered; NO VERDICT (operator-blocked) until the rig is recorded | `tools/r0_capture.py` against `tools/r0_reference.py`; procedure `docs/capture-r0.md`; #208 |
+| T-PHYSICAL | Does the board's line output match the digital prediction (gain, latency, noise, repeatability)? | registered; NO VERDICT (operator-blocked) until the rig is recorded | `tools/r0_capture.py` against `tools/r0_reference.py`; procedure `docs/capture-r0.md`; #208. Mode `capture-r1` asks the same of the R1 image (`docs/capture-r1.md`, #324); the two modes refuse each other's references, sessions and transcripts, and R1 is NO VERDICT until its references are rendered and a bundle is recorded |
 | T-MEASURE-QUAL-* | A FAMILY of bounded tasks, one estimator each, starting with one qualified measurement and the known-unqualified clap timing; not a prerequisite for shipping L2 | NO VERDICT (#115) | known-answer suite per estimator |
 | T-BOARD-INTEGRITY | Is the scorecard internally consistent and bound to its records? | PASS | `tools/scorecard.py --check` |
 | T-BOARD-COVERAGE | How many cases have a valid measurement? (a count, not a pass) | 20 / 100 | scorecard |
@@ -193,6 +193,31 @@ same bootstrap and gates on T-DEADLINE and, since #278, on T-RELEASE-BOUND in it
 own `trial-release-bound` job. Receipts live under `build/trials/` and
 are uploaded by CI as `trial-receipts`; `tools/trial.py compare A B` checks two
 environments reached the same numbers from the same inputs.
+
+### Receipt membership is bound to the recorded registry (#283)
+
+A receipt is only as strong as its child list. Before #283, `check-receipt`
+walked whatever children the receipt listed, so deleting a failing required
+child (with its directory) and re-sealing produced a VALID PASS, and deleting
+the only required child did too (`all([])` is true). Now:
+
+- `composite()` returns NO VERDICT when the required population is empty
+  ("no required child answered the product question").
+- `check-receipt` finds the registry whose sha256 the receipt recorded
+  (`identities.registry`) -- the file at the recorded path, the working-tree
+  `docs/trials.json`, then any commit in git history -- and compares the
+  receipt's required and control children, with role, checker and interpreter
+  spec, against that mode. A difference is a `population:` problem.
+- If that exact registry cannot be retrieved, the result is `UNVERIFIABLE:` and
+  the receipt is never VALID. This is deliberately a different message from a
+  `population:` rejection: an unavailable historical registry is not evidence of
+  forgery. A receipt checked after the working-tree registry changed is still
+  VALID when the recorded registry is in history.
+
+Limit: the registry hash is the receipt's own claim. A forger who also supplies a
+registry with a matching hash is not caught here; git history is the authority
+only when the repository is available. Controls: `tools/test_trial.py`
+`test_forgery_a_*` / `test_forgery_b_*`.
 
 ### Pilot receipts, 2026-09-26 (a snapshot, not maintained state)
 

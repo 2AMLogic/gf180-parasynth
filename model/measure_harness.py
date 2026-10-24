@@ -219,6 +219,42 @@ def _default_read_candidate(path: pathlib.Path) -> tuple[np.ndarray, int]:
     return np.asarray(x, dtype=np.float64), int(sr)
 
 
+# Exceptions that mean "this file's data cannot be read" (soundfile's
+# LibsndfileError is a RuntimeError). Everything else from a reader is a bug.
+#
+# Known adversary (docs/verification-rules.md rule 8), accepted deliberately:
+# a BUG in the reader that raises ValueError (a shape mismatch in np.asarray,
+# int() on a bad string) or RuntimeError (RecursionError included) is still
+# classed status="unreadable". The type is not narrowed because a pluggable
+# `read_candidate` may legitimately signal bad data with either. The
+# mitigation is `error_type`, recorded on every row: a reader tells
+# "unreadable/ValueError" from "unreadable/OSError" by it. Pinned by
+# test_a_reader_bug_raising_valueerror_is_still_unreadable_known_gap.
+_DATA_ERRORS = (OSError, EOFError, ValueError, RuntimeError)
+
+
+def _ratio_grid(min_ratio: float, max_ratio: float, ratio_step: float) -> np.ndarray:
+    """Resampling ratios for `descent_test`: np.arange(min, max, step), except
+    that whenever 1.0 lies in [min, max) the grid contains EXACTLY 1.0.
+
+    np.arange accumulates float error (0.90 + 80 * 0.0025 is
+    0.9999999999999979), so int(len * ratio) came out one sample short and the
+    identity candidate was resampled (best_correlation 0.6091 for identical
+    i.i.d. noise). A lattice point within step*1e-6 of 1.0 is snapped to 1.0;
+    if 1.0 is in the interval but off the lattice it is inserted. An interval
+    that excludes 1.0 (including max_ratio == 1.0, half-open) has no identity
+    member and is returned unchanged.
+    """
+    g = np.arange(min_ratio, max_ratio, ratio_step)
+    if len(g) and min_ratio <= 1.0 < max_ratio:
+        near = np.abs(g - 1.0) <= abs(ratio_step) * 1e-6
+        if near.any():
+            g[near] = 1.0
+        elif 1.0 not in g:
+            g = np.sort(np.append(g, 1.0))
+    return g
+
+
 def descent_test(candidates: pathlib.Path,
                  classify: Callable[[pathlib.Path], dict | None],
                  read_ref: Callable[[pathlib.Path], tuple[np.ndarray, int]],
@@ -288,8 +324,19 @@ def descent_test(candidates: pathlib.Path,
             continue
         try:
             x, sr = read_candidate(path)
+        except _DATA_ERRORS as e:
+            # The FILE is bad (truncated, wrong format): unavailable data.
+            out.append(dict(info, file=path.name, status="unreadable",
+                            error_type=type(e).__name__,
+                            why=f"{type(e).__name__}: {e}"))
+            continue
         except Exception as e:  # noqa: BLE001 -- report, do not crash the sweep
-            out.append(dict(info, file=path.name, status="unreadable", why=str(e)))
+            # Anything else (TypeError, NameError, KeyError...) is a bug in the
+            # reader, not a property of the file; it must not read as
+            # "unreadable file" (#610).
+            out.append(dict(info, file=path.name, status="error",
+                            error_type=type(e).__name__,
+                            why=f"{type(e).__name__}: {e}"))
             continue
 
         val = None
@@ -302,8 +349,9 @@ def descent_test(candidates: pathlib.Path,
         for q in refs:
             xr, s2 = read_ref(q)
             b = _n(prepare(xr, s2)[:int(window_s * s2)])
-            for ratio in np.arange(min_ratio, max_ratio, ratio_step):
-                aa = resample(a0, max(1, int(len(a0) * ratio)))
+            for ratio in _ratio_grid(min_ratio, max_ratio, ratio_step):
+                # ratio == 1.0 is the identity: do not resample it.
+                aa = a0 if ratio == 1.0 else resample(a0, max(1, int(len(a0) * ratio)))
                 n = min(len(aa), len(b))
                 if n < 2:
                     continue

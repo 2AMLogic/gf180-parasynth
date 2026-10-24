@@ -20,7 +20,8 @@ passes -- rebuilt one level up, in the machinery that does the checking.
 This parses every workflow, and asserts the properties that silently break one.
 """
 from __future__ import annotations
-import pathlib, re, sys
+import pathlib, re, subprocess, sys
+from dataclasses import dataclass, field
 
 try:
     import yaml
@@ -28,7 +29,8 @@ except ImportError:
     print("pyyaml not installed; cannot check workflows", file=sys.stderr)
     raise SystemExit(2)          # no evidence, not "no problem"
 
-WF = pathlib.Path(__file__).resolve().parent.parent / ".github" / "workflows"
+REPO = pathlib.Path(__file__).resolve().parent.parent
+WF = REPO / ".github" / "workflows"
 
 
 # =============================================================================
@@ -117,6 +119,182 @@ def step_would_block_pull_request(workflow, job_name: str, substring: str):
                     f"would not block a pull_request run: " + "; ".join(neutralised))
 
 
+# =============================================================================
+# "the path a workflow names exists" -- issue #629, the #622 class.
+#
+# `nightly.yml` tested a docs results file that has never existed, so the
+# `reference-freshness` job was red for 6+ days regardless of real freshness.
+# CLAUDE.md calls this an unsatisfiable gate. This is the standing check.
+#
+# CONTRACT (bounded on purpose; a full shell parse is out of scope):
+#   * populations: step-level `run:` scalars in .github/workflows/*.yml|yaml,
+#     and TAB-led recipe lines of the root `Makefile` / `Makefile.nightly`.
+#   * a candidate is a literal, repo-relative token containing a `/` whose
+#     first component is a directory of `git ls-files` (so the prefix list is
+#     derived, never hand-written). Absolute paths, URLs and `~` are out of scope.
+#   * tokens containing `$`, `${{ }}` or glob metacharacters are SKIPPED, by
+#     reason, and counted -- never counted as checked.
+#   * generated outputs that do not exist at checkout time are skipped-generated:
+#     the two repo-wide roots in GENERATED_ROOTS, plus the narrow literal
+#     entries in GENERATED_ALLOW, each with its producer. No tracked source
+#     tree (docs/, tools/, ...) may be exempted wholesale.
+#   * REFUSED (exit 2) when `git ls-files` cannot run or when zero candidates
+#     were extracted -- a PASS over an empty population is not a PASS.
+#
+# KNOWN BLIND SPOTS (reported as skips or not seen at all, never as checked):
+#   a path assembled by a shell variable or glob (skipped, counted); a typo in
+#   the FIRST component (`doc/x` is not under any tracked prefix, so it is not
+#   a candidate); whole-line `#` comments are ignored but inline ones are not;
+#   `cd dir && cmd file` resolves `file` against the repo root, not `dir`.
+# =============================================================================
+GENERATED_ROOTS = {
+    "build/": "build output root, written by make/CI steps before it is read",
+    ".tools/": "toolchain cache root, populated by tools/setup_ci_oss_cad.py",
+}
+# Narrow literal path (or directory prefix ending in `/`) -> producer/reason.
+GENERATED_ALLOW: dict[str, str] = {}
+
+_GLOB_CHARS = set("*?[")
+_SPLIT = re.compile(r"""[\s'"`;|&<>=]+""")
+_EXPR = re.compile(r"\$\{\{.*?\}\}", re.S)
+
+
+@dataclass
+class PathScan:
+    checked: int = 0
+    skipped_dynamic: int = 0
+    skipped_glob: int = 0
+    skipped_generated: int = 0
+    missing: list[str] = field(default_factory=list)   # "file:line: path"
+
+    @property
+    def refused(self) -> str | None:
+        if self.checked + self.skipped_generated == 0:
+            return "no literal repo paths were extracted from any workflow/Makefile"
+        return None
+
+
+def tracked_files(repo: pathlib.Path = REPO) -> list[str]:
+    """`git ls-files`, or raise RuntimeError -- the caller REFUSES, never guesses."""
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "ls-files"], capture_output=True,
+                           text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(f"git ls-files could not run: {e}") from e
+    if r.returncode != 0:
+        raise RuntimeError(f"git ls-files exited {r.returncode}: {r.stderr.strip()}")
+    files = [l for l in r.stdout.splitlines() if l]
+    if not files:
+        raise RuntimeError("git ls-files returned no files")
+    return files
+
+
+def _run_blocks(path: pathlib.Path):
+    """Yield (line, text) for each step-level `run:` scalar. For `|` blocks the
+    line is exact per content line; otherwise it is the scalar's first line."""
+    try:
+        root = yaml.compose(path.read_text())
+    except yaml.YAMLError:
+        return                                  # main() already reports INVALID YAML
+    def get(node, key):
+        if isinstance(node, yaml.MappingNode):
+            for k, v in node.value:
+                if isinstance(k, yaml.ScalarNode) and k.value == key:
+                    return v
+        return None
+    jobs = get(root, "jobs")
+    if not isinstance(jobs, yaml.MappingNode):
+        return
+    for _, job in jobs.value:
+        steps = get(job, "steps")
+        if not isinstance(steps, yaml.SequenceNode):
+            continue
+        for step in steps.value:
+            run = get(step, "run")
+            if isinstance(run, yaml.ScalarNode):
+                base = run.start_mark.line + 1
+                literal = run.style == "|"
+                for i, text in enumerate(run.value.split("\n")):
+                    yield (base + 1 + i if literal else base), text
+
+
+def _makefile_lines(path: pathlib.Path):
+    for n, text in enumerate(path.read_text().splitlines(), 1):
+        if text.startswith("\t"):
+            yield n, text
+
+
+def _classify(token: str, prefixes: set[str], tracked: set[str],
+              tracked_dirs: set[str], repo: pathlib.Path):
+    """Return None (not a candidate), 'dynamic', 'glob', 'generated',
+    'ok' or 'missing'."""
+    token = token.strip("(){},:").rstrip(".").split("#", 1)[0]
+    token = re.sub(r":\d+(:\d+)?$", "", token)
+    if token.startswith("./"):
+        token = token[2:]
+    if (not token or token.startswith(("/", "~", "-")) or "://" in token
+            or "/" not in token):
+        return None
+    if "$" in token or "\x01" in token:
+        # Only worth counting if the literal part could be a repo path.
+        return "dynamic"
+    if token.startswith(tuple(GENERATED_ROOTS)):
+        return "generated"
+    if token.split("/", 1)[0] not in prefixes:
+        return None
+    if any(c in _GLOB_CHARS for c in token):
+        return "glob"
+    for entry in GENERATED_ALLOW:
+        if token == entry or (entry.endswith("/") and token.startswith(entry)):
+            return "generated"
+    t = token.rstrip("/")
+    if t in tracked or t in tracked_dirs or (repo / t).exists():
+        return "ok"
+    return "missing"
+
+
+def check_referenced_paths(sources, tracked: list[str],
+                           repo: pathlib.Path = REPO) -> PathScan:
+    """`sources` is an iterable of (display_name, [(line, text), ...]).
+    Pure apart from the existence probe under `repo`."""
+    tset = set(tracked)
+    prefixes = {t.split("/", 1)[0] for t in tracked if "/" in t}
+    dirs = {"/".join(t.split("/")[:i]) for t in tracked for i in range(1, t.count("/") + 1)}
+    scan = PathScan()
+    for name, lines in sources:
+        for line, text in lines:
+            if text.lstrip().startswith("#"):
+                continue
+            text = _EXPR.sub("$\x01", text)
+            for tok in _SPLIT.split(text):
+                kind = _classify(tok, prefixes, tset, dirs, repo)
+                if kind is None:
+                    continue
+                if kind == "dynamic":
+                    scan.skipped_dynamic += 1
+                elif kind == "glob":
+                    scan.skipped_glob += 1
+                elif kind == "generated":
+                    scan.skipped_generated += 1
+                elif kind == "ok":
+                    scan.checked += 1
+                else:
+                    scan.checked += 1
+                    scan.missing.append(f"{name}:{line}: {tok.strip('(){},:').rstrip('.')}")
+    return scan
+
+
+def gather_sources(repo: pathlib.Path = REPO):
+    wf = repo / ".github" / "workflows"
+    out = []
+    for f in sorted(wf.glob("*.yml")) + sorted(wf.glob("*.yaml")):
+        out.append((f".github/workflows/{f.name}", list(_run_blocks(f))))
+    for m in ("Makefile", "Makefile.nightly"):
+        if (repo / m).is_file():
+            out.append((m, list(_makefile_lines(repo / m))))
+    return out
+
+
 def main() -> int:
     files = sorted(WF.glob("*.yml")) + sorted(WF.glob("*.yaml"))
     if not files:
@@ -165,8 +343,23 @@ def main() -> int:
             if run_text and not checkout:
                 bad.append(f"{f.name}:{jname}: runs commands without actions/checkout")
 
+    refused = None
+    try:
+        scan = check_referenced_paths(gather_sources(), tracked_files())
+    except RuntimeError as e:
+        scan, refused = None, str(e)
+    if scan is not None:
+        refused = scan.refused
+        bad.extend(f"{m} -- path does not exist" for m in scan.missing)
+        print(f"referenced paths: {scan.checked} checked, "
+              f"{scan.skipped_dynamic} skipped-dynamic, {scan.skipped_glob} skipped-glob, "
+              f"{scan.skipped_generated} skipped-generated")
+
     for b in bad:
         print(f"  {b}", file=sys.stderr)
+    if refused and not bad:
+        print(f"REFUSED: {refused}", file=sys.stderr)
+        return 2
     if bad:
         print(f"\n{len(bad)} workflow problem(s). These do not surface as a failed "
               f"build -- an unregistered workflow simply never runs.", file=sys.stderr)

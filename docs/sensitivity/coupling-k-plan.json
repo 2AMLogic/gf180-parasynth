@@ -1,0 +1,62 @@
+{
+  "schema": "sensitivity-plan-v1",
+  "what": "Grid, decision rule and shape prediction for the COUPLE_K sweep (#551), committed BEFORE any point is rendered. The sweep instrument is tools/probes/dc_blocker.py --k-sweep, committed after this file and before it is run; its refusal on a dirty plan is the temporal proof.",
+  "parameter": "COUPLE_K in model/drums_fx.py: the shared-bus DC blocker's pole is 1 - 2^-K, corner SR/(2 pi 2^K).",
+  "grid": [
+    8,
+    9,
+    10,
+    11,
+    12,
+    13
+  ],
+  "range_basis": [
+    "K = 10 is what ships and is read off the BD's output network (7.52 Hz vs 7.457 Hz). 8..13 is the range the probe's own --cutoff sweep already reports, and the range the model's docstring names (K = 11 or 12 if the divider is not the AC load).",
+    "8 (29.8 Hz) is already inside the band-limited body and bounds the aggressive side; 13 (0.93 Hz) is below the CY's own decay corner and bounds the gentle side."
+  ],
+  "held_fixed": "placement bus; voice CY from the reference kit at the probe's RENDER_GAIN, RENDER_S = 2.40 s, one hit at LEAD_FRAMES.",
+  "objective": "CY residual sub-20 Hz energy after coupling, in PERCENT of the uncoupled energy in the same band (lower removes more).",
+  "decision_rule": {
+    "flat_within_relative": 0.1,
+    "why": "a K step halves the corner. 10 % of energy is 0.41 dB, twice the probe's tightest declared absolute allowance (0.2 dB, hf_5k_20k_db) and far below the 6 dB improvement the probe requires, so two points closer than that cannot be told apart by anything the probe asks. Stated from the decision's granularity, not from the spread of the data."
+  },
+  "prediction": {
+    "runs": [
+      [
+        8
+      ],
+      [
+        9
+      ],
+      [
+        10
+      ],
+      [
+        11
+      ],
+      [
+        12
+      ],
+      [
+        13
+      ]
+    ],
+    "basis": "Closed form, not the measurement. The blocker is linear with |H(f)|^2 = f^2 / (f^2 + fc^2) (to 0.05 %); its zero removes the f = 0 bin exactly at every K, and the CY has phi = 0.888 of its sub-20 Hz energy there (docs/dcblock/screen.txt), so the residual is at most 11.2 % of baseline and is the non-DC part only. That part is the skirt of a slowly decaying offset, a Lorentzian whose corner follows the CY's decay time (T20 about 558 ms, tau of order 0.1 to 0.2 s, 1 to 2 Hz), so it sits at f of order 0.4 to 3 Hz, on the 2.4 s clip's 0.42 Hz grid. For f well under fc, |H|^2 is about f^2/fc^2, a factor of 4 per K step (K = 8 to 11 have fc of 30, 15, 7.5, 3.7 Hz); at K = 12 and 13 (1.86 and 0.93 Hz) fc is inside the skirt and |H|^2 is 0.2 to 0.5 at 1 Hz, still more than 10 % apart. So every adjacent pair separates: SENSITIVE, residual rising monotonically with K.",
+    "independent_of_measurement": true,
+    "would_be_wrong_if": "the non-DC sub-20 Hz energy sat mostly above about 10 Hz (a tonal or periodic LF component), where |H|^2 saturates near 1 for K >= 11 and the high-K points merge into a plateau. That is what a failed prediction here would mean, and the record would say so."
+  },
+  "limits": [
+    "One voice. The CY is the one voice the probe finds to be a standing offset (phi 0.888); the BD, HT and CH are skirt-dominated and the RS has no DC defect. The BD-network rationale for 10 therefore says nothing about the CY, and this sweep says only how the CY's residual moves with K, not that 10 is the CY's physical corner.",
+    "The residual is half the trade-off. Bass preservation, decay and attack are the other half and live in docs/dcblock/cutoff.txt; this record does not rank K on them."
+  ],
+  "amendments": [
+    {
+      "stated_before_results": true,
+      "found_by": "the sweep instrument's own precondition (phi >= 0.8) REFUSED on the current baseline: phi = 0.391, not 0.888, before any K point was rendered",
+      "what_was_wrong": "the plan's basis and the dc_blocker.py docstring quote phi = 0.888, which is the 0.60 s window's value. phi is the f = 0 bin's share and its width is 1/T, so it fell to 0.391 at the probe's 2.40 s window with nothing about the cymbal changed (docs/dcblock/screen.txt, lines 8-10). 'The residual is at most 11.2 % of baseline' is therefore wrong; at this window it is at most 60.9 %.",
+      "what_is_unchanged": "the predicted runs. The window-independent discriminator beta (share of the sub-20 Hz energy BELOW the K = 10 corner) is 0.9828 for the CY, so the energy the blocker attenuates sits at f below about 7 Hz, which is the premise the prediction actually used.",
+      "independent_cross_check": "the probe's closed-form steady-state attenuation (steadystate_sub20_attenuation_db: the uncoupled spectrum times |H(f)|^2, nothing run through the integer filter) gives K = 8..13: 24.20, 19.15, 14.93, 11.43, 8.45, 5.94 dB (docs/dcblock/screen.txt line 44), i.e. 0.38, 1.22, 3.21, 7.20, 14.28, 25.41 % residual, every adjacent pair more than 1.7x apart. Read before any K point was rendered. It is an UPPER bound on attenuation (a causal filter from rest adds a transient), so the measured residual must be >= these; the sweep refuses if it is not.",
+      "instrument_change": "the precondition becomes beta >= 0.9 (window-stable) instead of phi >= 0.8."
+    }
+  ]
+}

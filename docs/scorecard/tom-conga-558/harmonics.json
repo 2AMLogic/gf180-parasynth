@@ -1,0 +1,225 @@
+{
+ "LT": {
+  "harmonics_808": {
+   "f0": 88.4399,
+   "H2_H4_db_re_H1": [
+    -36.8419,
+    -38.7441,
+    -40.7917
+   ]
+  },
+  "harmonics_ours": {
+   "f0": 90.271,
+   "H2_H4_db_re_H1": [
+    -83.1944,
+    -93.2029,
+    -99.9654
+   ]
+  },
+  "H2 None": {
+   "spec": 2.6749,
+   "spec_peak": 2.8797,
+   "centroid": 8.4608,
+   "flatness": 0.6377,
+   "impulse": 4.7953,
+   "attack": 1.2117,
+   "decay": 6.8435,
+   "modulation": 14.848,
+   "pitch": 0.3685,
+   "pitch_shape": 2.9564
+  },
+  "H2 -37.0": {
+   "spec": 2.6432,
+   "spec_peak": 2.8726,
+   "centroid": 8.4728,
+   "flatness": 0.6094,
+   "impulse": 4.7977,
+   "attack": 1.2663,
+   "decay": 5.8474,
+   "modulation": 7.54,
+   "pitch": 0.3685,
+   "pitch_shape": 2.9462
+  },
+  "H2 -57.0": {
+   "spec": 2.6739,
+   "spec_peak": 2.879,
+   "centroid": 8.4639,
+   "flatness": 0.6349,
+   "impulse": 4.7956,
+   "attack": 1.2194,
+   "decay": 6.8456,
+   "modulation": 12.4095,
+   "pitch": 0.3685,
+   "pitch_shape": 2.9554
+  }
+ },
+ "MT": {
+  "harmonics_808": {
+   "f0": 135.1318,
+   "H2_H4_db_re_H1": [
+    -32.6448,
+    -38.2292,
+    -43.6388
+   ]
+  },
+  "harmonics_ours": {
+   "f0": 135.3149,
+   "H2_H4_db_re_H1": [
+    -81.6575,
+    -90.6361,
+    -93.9439
+   ]
+  },
+  "H2 None": {
+   "spec": 2.2673,
+   "spec_peak": 3.2683,
+   "centroid": 10.531,
+   "flatness": 1.9749,
+   "impulse": 4.3225,
+   "attack": 2.1537,
+   "decay": 2.0838,
+   "modulation": 4.8412,
+   "pitch": 0.0352,
+   "pitch_shape": 0.975
+  },
+  "H2 -37.0": {
+   "spec": 2.2284,
+   "spec_peak": 3.2543,
+   "centroid": 10.5207,
+   "flatness": 2.0324,
+   "impulse": 4.3238,
+   "attack": 2.1485,
+   "decay": 2.0947,
+   "modulation": 4.4788,
+   "pitch": 0.0352,
+   "pitch_shape": 0.979
+  },
+  "H2 -57.0": {
+   "spec": 2.2667,
+   "spec_peak": 3.2669,
+   "centroid": 10.5339,
+   "flatness": 1.982,
+   "impulse": 4.3226,
+   "attack": 2.1537,
+   "decay": 2.0847,
+   "modulation": 4.8213,
+   "pitch": 0.0352,
+   "pitch_shape": 0.9754
+  }
+ },
+ "HT": {
+  "harmonics_808": {
+   "f0": 187.5,
+   "H2_H4_db_re_H1": [
+    -32.8481,
+    -37.4469,
+    -40.8281
+   ]
+  },
+  "harmonics_ours": {
+   "f0": 185.6689,
+   "H2_H4_db_re_H1": [
+    -80.4255,
+    -87.5395,
+    -87.9887
+   ]
+  },
+  "H2 None": {
+   "spec": 1.8379,
+   "spec_peak": 2.6642,
+   "centroid": 8.0158,
+   "flatness": 3.1936,
+   "impulse": 4.9366,
+   "attack": 0.8644,
+   "decay": 7.2425,
+   "modulation": null,
+   "pitch": 0.1413,
+   "pitch_shape": 1.1594
+  },
+  "H2 -37.0": {
+   "spec": 1.7989,
+   "spec_peak": 2.6437,
+   "centroid": 7.9868,
+   "flatness": 3.228,
+   "impulse": 4.9773,
+   "attack": 0.9026,
+   "decay": 7.2422,
+   "modulation": null,
+   "pitch": 0.1413,
+   "pitch_shape": 1.1594
+  },
+  "H2 -57.0": {
+   "spec": 1.8369,
+   "spec_peak": 2.6622,
+   "centroid": 8.0176,
+   "flatness": 3.1985,
+   "impulse": 4.9406,
+   "attack": 0.8644,
+   "decay": 7.2429,
+   "modulation": null,
+   "pitch": 0.1413,
+   "pitch_shape": 1.1594
+  }
+ },
+ "LC": {
+  "harmonics_808": {
+   "f0": 200.3174,
+   "H2_H4_db_re_H1": [
+    -73.7134,
+    -81.2308,
+    -90.3203
+   ]
+  },
+  "harmonics_ours": {
+   "f0": 184.9365,
+   "H2_H4_db_re_H1": [
+    -92.9756,
+    -97.2245,
+    -96.7832
+   ]
+  }
+ },
+ "MC": {
+  "harmonics_808": {
+   "f0": 281.0669,
+   "H2_H4_db_re_H1": [
+    -72.953,
+    -75.3389,
+    -79.0575
+   ]
+  },
+  "harmonics_ours": {
+   "f0": 279.9683,
+   "H2_H4_db_re_H1": [
+    -80.4588,
+    -83.7526,
+    -84.9637
+   ]
+  }
+ },
+ "HC": {
+  "harmonics_808": {
+   "f0": 412.3535,
+   "H2_H4_db_re_H1": [
+    -72.7968,
+    -75.0505,
+    -78.6777
+   ]
+  },
+  "harmonics_ours": {
+   "f0": 399.9023,
+   "H2_H4_db_re_H1": [
+    -81.5536,
+    -83.0591,
+    -83.2705
+   ]
+  }
+ },
+ "provenance": {
+  "commit": "b824f5bac2f8a17198d3eaca3d03d013c3732959",
+  "model_tools_dirty": false,
+  "origin_main": "cd066543744827276c5dbcb2f381991199fb038e",
+  "prereg_sha256_16": "b60c35fab40769a8",
+  "refs": "/tmp/refs558/sounds-tr808-fischer"
+ }
+}

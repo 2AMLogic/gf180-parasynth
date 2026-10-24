@@ -126,9 +126,12 @@ at 9–18 dB and refused to assert.
   candidate 2's error is not the same as being right, and a candidate that is worse than the shipped kit in two of
   three windows does not ship.
 - **Acceptance item 3 (accuracy across all 25 TONE/DECAY settings) is not claimed and cannot yet be tested at all**,
-  for the reason already recorded in `../README.md` §4 and filed as **#371**: the knob-law render is not the
-  instrument. The candidate renders at one fixed setting, so the frozen confirmation set (16 settings, including
-  CY2500) cannot be rendered against it. This is a blocker on the *instrument*, not a missing measurement.
+  for the reason already recorded in `../README.md` §4 and filed as **#413**: when this was written the knob-law
+  render was not the instrument. The candidate renders at one fixed setting, so the frozen confirmation set
+  (16 settings, including CY2500) could not be rendered against it. This was a blocker on the *instrument*, not a
+  missing measurement. *(Update, PR #655: the shipped structure now has a knob renderer,
+  `../knob-render/`; candidate 3 itself has still not been rendered across settings, and the DECAY late-T20
+  gap that remains is #656.)*
 
 ## 6. The finding that matters more than the candidate
 
@@ -186,7 +189,8 @@ CY5025-808.wav  CY5025-shipped.wav  CY5025-candidate.wav        the matched sing
 
 Each hit is matched to the 808's K-weighted loudness (BS.1770 K filter, gated to within 20 dB of its loudest 50 ms
 block), then all three scaled together to −1 dBFS peak. **Listening only; the measurements decide promotion.** Other
-TONE/DECAY settings are not in the pack because they cannot be rendered — see §5, #371.
+TONE/DECAY settings are not in the pack because they could not be rendered when it was built — see §5, #413
+(the shipped structure's knob renderer now exists, `../knob-render/`; the candidate has not been re-rendered).
 
 ## 8. The next question, and it is one question
 
@@ -201,7 +205,7 @@ have that produces it?** Filed as **#400**. It needs two things in order:
 
 Still open from earlier steps and **not** on the path to the tail defect, per §6: the inter-band balance (#396's
 deferred half, 9–18 dB bounded) and the TONE knob law. §6 **reprioritises #396** rather than blocking it — resolving
-the balance would not fix the tail. Still blocking any knob claim, and therefore acceptance item 3 entirely: **#371**.
+the balance would not fix the tail. Still blocking any knob claim, and therefore acceptance item 3 entirely: **#413**.
 
 ## Files
 

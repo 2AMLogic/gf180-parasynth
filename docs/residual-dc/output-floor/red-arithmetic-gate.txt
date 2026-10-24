@@ -1,0 +1,142 @@
+# PR #653 review round 2: provenance gate on --floor-summary and the floor-minus-round arithmetic gate,
+# run against floor_row_problems / main at 6afd399 (fixtures already made arithmetically possible).
+# python -m pytest tools/probes/test_residual_dc.py -q --tb=line -k 'arithmetic or floor_summary_cli or positive_difference or impossible'
+# test_the_committed_records_pass_the_arithmetic_gate and test_the_arithmetic_gate_admits_clipping_and_ties pass
+# here by construction (no gate yet = nothing rejected); they guard against an unsatisfiable or over-tight gate.
+E   AssertionError: assert 0 == 2
+     +  where 0 = <function main at 0x76388f12ae80>(['--floor-summary', '/tmp/pytest-of-ubuntu/pytest-332/test_floor_summary_cli_refuses0/q.json'])
+     +    where <function main at 0x76388f12ae80> = R.main
+----------------------------- Captured stdout call -----------------------------
+```
+rows: 30 usable + 0 refused; clipped frames (floor+round): 0; max per-sample |floor-round|: 1 LSB
+mean floor-round, smallest |.|: -0.0031 (RS confirm) LSB; largest: -0.9188 (SD confirm) LSB
+largest |floor-round| as % of baseline peak: -0.0140 (MT dev) %
+pre-rail mean floor error, smallest |.|: -0.0197 (MA confirm) LSB; largest: -0.7535 (BD dev) LSB
+rows with zero ties: 12 of 30 (CB dev, CH dev, CL dev, HC dev, HT dev, LC dev, MA dev, MC dev, MT dev, OH dev, RS dev, SD dev)
+rows with no high residue (bias would rest on ties alone): 0 (none)
+```
+| voice | cond | exact multiples | ties | high | floor err LSB | floor-round LSB | % of peak |
+|---|---|---|---|---|---|---|---|
+| BD | dev | 89/96000 (0.09 %) | 1 | 71999 | -0.7535 | -0.7500 | -0.0101 |
+| BD | confirm | 65794/96000 (68.54 %) | 10070 | 9997 | -0.1570 | -0.1570 | -0.0021 |
+| SD | dev | 75/96000 (0.08 %) | 0 | 6805 | -0.3315 | -0.0709 | -0.0011 |
+| SD | confirm | 3263/96000 (3.40 %) | 3161 | 86788 | -0.7018 | -0.9188 | -0.0138 |
+| LT | dev | 122/96000 (0.13 %) | 1 | 15728 | -0.3325 | -0.1638 | -0.0022 |
+| LT | confirm | 7106/96000 (7.40 %) | 7196 | 74453 | -0.6380 | -0.8125 | -0.0105 |
+| LC | dev | 222/96000 (0.23 %) | 0 | 80084 | -0.7003 | -0.8342 | -0.0113 |
+| LC | confirm | 74187/96000 (77.28 %) | 7308 | 7299 | -0.1139 | -0.1141 | -0.0015 |
+| MT | dev | 130/96000 (0.14 %) | 0 | 84981 | -0.5385 | -0.8852 | -0.0140 |
+| MT | confirm | 81497/96000 (84.89 %) | 4806 | 4907 | -0.0758 | -0.0761 | -0.0012 |
+| MC | dev | 79710/96000 (83.03 %) | 0 | 8182 | -0.0855 | -0.0852 | -0.0013 |
+| MC | confirm | 84263/96000 (87.77 %) | 3879 | 3828 | -0.0606 | -0.0599 | -0.0009 |
+| HT | dev | 104/96000 (0.11 %) | 0 | 87445 | -0.5404 | -0.9109 | -0.0123 |
+| HT | confirm | 4099/96000 (4.27 %) | 4136 | 4071 | -0.2713 | -0.0635 | -0.0008 |
+| HC | dev | 81490/96000 (84.89 %) | 0 | 7300 | -0.0757 | -0.0760 | -0.0010 |
+| HC | confirm | 85761/96000 (89.33 %) | 3471 | 3446 | -0.0537 | -0.0538 | -0.0007 |
+| RS | dev | 85056/96000 (88.60 %) | 0 | 10433 | -0.0619 | -0.1087 | -0.0017 |
+| RS | confirm | 85742/96000 (89.31 %) | 230 | 209 | -0.0284 | -0.0031 | -0.0001 |
+| CL | dev | 88205/96000 (91.88 %) | 0 | 5261 | -0.0418 | -0.0548 | -0.0010 |
+| CL | confirm | 89691/96000 (93.43 %) | 1192 | 1147 | -0.0255 | -0.0176 | -0.0006 |
+| CP | dev | 65708/96000 (68.45 %) | 1 | 15237 | -0.1568 | -0.1587 | -0.0021 |
+| CP | confirm | 73749/96000 (76.82 %) | 7310 | 7231 | -0.1146 | -0.1121 | -0.0015 |
+| MA | dev | 90526/96000 (94.30 %) | 0 | 3302 | -0.0286 | -0.0344 | -0.0005 |
+| MA | confirm | 91620/96000 (95.44 %) | 1065 | 1069 | -0.0197 | -0.0164 | -0.0002 |
+| CB | dev | 55880/96000 (58.21 %) | 0 | 20527 | -0.2068 | -0.2138 | -0.0029 |
+| CB | confirm | 66190/96000 (68.95 %) | 9773 | 9563 | -0.1529 | -0.1464 | -0.0020 |
+| OH | dev | 33782/96000 (35.19 %) | 0 | 32638 | -0.3285 | -0.3400 | -0.0046 |
+| OH | confirm | 50415/96000 (52.52 %) | 14784 | 14533 | -0.2329 | -0.2264 | -0.0031 |
+| CH | dev | 87274/96000 (90.91 %) | 0 | 5271 | -0.0481 | -0.0549 | -0.0009 |
+| CH | confirm | 89310/96000 (93.03 %) | 2039 | 2027 | -0.0333 | -0.0309 | -0.0005 |
+test_residual_dc.py:845: AssertionError: assert 0 == 2
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+/usr/lib/python3.12/json/decoder.py:355: json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+E   TypeError: list indices must be integers or slices, not str
+residual_dc.py:1761: TypeError: list indices must be integers or slices, not str
+E   TypeError: 'int' object is not iterable
+residual_dc.py:1121: TypeError: 'int' object is not iterable
+E   AssertionError: ('OK', {'BD': 'BIAS CONFIRMED (model-side): floor sits +1.0000 LSB (dev) / +1.0000 LSB (confirm) from exact round-half...03 LSB (dev) / -0.1139 LSB (confirm). Model arithmetic only: no audibility, sound-defect or RTL-delivery claim.', ...})
+    assert ('OK' == 'REFUSED'
+      - REFUSED
+      + OK)
+test_residual_dc.py:877: AssertionError: ('OK', {'BD': 'BIAS CONFIRMED (model-side): floor sits +1.0000 LSB (dev) / +1.0000 LSB (confirm) from exact round-half...03 LSB (dev) / -0.1139 LSB (confirm). Model arithmetic only: no audibility, sound-defect or RTL-delivery claim.', ...})
+E   AssertionError: ('clip-exceeds-frames', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14fb90>)
+test_residual_dc.py:926: AssertionError: ('clip-exceeds-frames', [])
+E   AssertionError: ('err-outside-residue-bounds', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14f5e0>)
+test_residual_dc.py:926: AssertionError: ('err-outside-residue-bounds', [])
+E   AssertionError: ('err-pct-not-err-over-peak', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14f1d0>)
+test_residual_dc.py:926: AssertionError: ('err-pct-not-err-over-peak', [])
+E   AssertionError: ('max-diff-two', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14c6c0>)
+test_residual_dc.py:926: AssertionError: ('max-diff-two', [])
+E   AssertionError: ('max-diff-zero-with-a-sum', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14d220>)
+test_residual_dc.py:926: AssertionError: ('max-diff-zero-with-a-sum', [])
+E   AssertionError: ('mean-not-sum-over-n', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f1ecfb0>)
+test_residual_dc.py:926: AssertionError: ('mean-not-sum-over-n', [])
+E   AssertionError: ('pct-not-mean-over-peak', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f1ed8a0>)
+test_residual_dc.py:926: AssertionError: ('pct-not-mean-over-peak', [])
+E   AssertionError: ('peak-above-full-scale', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14db10>)
+test_residual_dc.py:926: AssertionError: ('peak-above-full-scale', [])
+E   AssertionError: ('peak-below-level-floor', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14de50>)
+test_residual_dc.py:926: AssertionError: ('peak-below-level-floor', [])
+E   AssertionError: ('positive-sum', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14f6b0>)
+test_residual_dc.py:926: AssertionError: ('positive-sum', [])
+E   AssertionError: ('short-declared-window', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f1ecee0>)
+test_residual_dc.py:926: AssertionError: ('short-declared-window', [])
+E   AssertionError: ('sum-above-residues', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f1ee330>)
+test_residual_dc.py:926: AssertionError: ('sum-above-residues', [])
+E   AssertionError: ('sum-below-residues', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f1eecf0>)
+test_residual_dc.py:926: AssertionError: ('sum-below-residues', [])
+E   AssertionError: ('window-not-declared', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14f6b0>)
+test_residual_dc.py:926: AssertionError: ('window-not-declared', [])
+E   AssertionError: ('zero-frame', [])
+    assert False
+     +  where False = any(<generator object test_floor_row_problems_reject_impossible_arithmetic.<locals>.<genexpr> at 0x76388f14df20>)
+test_residual_dc.py:926: AssertionError: ('zero-frame', [])
+FAILED test_residual_dc.py::test_floor_summary_cli_refuses_records_the_verdict_gate_refuses
+FAILED test_residual_dc.py::test_floor_summary_cli_refuses_an_unreadable_report[not json]
+FAILED test_residual_dc.py::test_floor_summary_cli_refuses_an_unreadable_report[[]]
+FAILED test_residual_dc.py::test_floor_summary_cli_refuses_an_unreadable_report[{"records": 3}]
+FAILED test_residual_dc.py::test_floor_verdicts_refuse_the_positive_difference_defeater
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[clip-exceeds-frames]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[err-outside-residue-bounds]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[err-pct-not-err-over-peak]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[max-diff-two]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[max-diff-zero-with-a-sum]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[mean-not-sum-over-n]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[pct-not-mean-over-peak]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[peak-above-full-scale]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[peak-below-level-floor]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[positive-sum]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[short-declared-window]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[sum-above-residues]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[sum-below-residues]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[window-not-declared]
+FAILED test_residual_dc.py::test_floor_row_problems_reject_impossible_arithmetic[zero-frame]
+20 failed, 3 passed, 129 deselected in 0.34s

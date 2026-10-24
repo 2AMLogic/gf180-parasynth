@@ -1,0 +1,179 @@
+{
+ "confirmation": {
+  "baseline": {
+   "pulse": {
+    "alias_max": 7.2569,
+    "level_mean": -11.6339,
+    "max_abs": 4.628,
+    "mean_signed": -2.911790909090909,
+    "n_cells": 11,
+    "pitch_abs": 0.12043,
+    "rms": 3.134331827446714
+   },
+   "saw": {
+    "alias_max": 1.4469,
+    "level_mean": -17.0756,
+    "max_abs": 5.5103,
+    "mean_signed": -4.2337454545454545,
+    "n_cells": 11,
+    "pitch_abs": 0.12049,
+    "rms": 4.445904281675234
+   }
+  },
+  "baseline_official": {
+   "Clipping": 0.0,
+   "Envelope attack": 8.9167,
+   "Envelope release": 1213.25,
+   "Foldback energy": 8.8495,
+   "Gain": -11.6339,
+   "Harmonic shape": 5.9622,
+   "Pitch": -0.1482
+  },
+  "midi84_duplicate_note": {
+   "pulse": [
+    -13.3252
+   ],
+   "saw": [
+    -17.7665
+   ]
+  },
+  "pulse": {
+   "verdict": "NOT RUN: no eligible candidate"
+  },
+  "saw": {
+   "drive": 0.5,
+   "failures": [],
+   "official": {
+    "Clipping": 0.0,
+    "Envelope attack": 9.125,
+    "Envelope release": 1188.4375,
+    "Foldback energy": 6.1874,
+    "Gain": -17.4088,
+    "Harmonic shape": 5.2251,
+    "Pitch": -0.1482
+   },
+   "summary": {
+    "alias_max": 1.8438,
+    "level_mean": -17.4088,
+    "max_abs": 4.4333,
+    "mean_signed": -2.5820909090909088,
+    "n_cells": 11,
+    "pitch_abs": 0.12047,
+    "rms": 2.918143535008018
+   },
+   "verdict": "CONFIRMED"
+  }
+ },
+ "development": {
+  "baseline": {
+   "pulse": {
+    "alias_max": 10.2745,
+    "level_mean": -14.4963,
+    "max_abs": 5.3156,
+    "mean_signed": -2.9848523809523817,
+    "n_cells": 21,
+    "pitch_abs": 0.14354,
+    "rms": 3.2023571096333163
+   },
+   "saw": {
+    "alias_max": 2.2059,
+    "level_mean": -18.340049999999998,
+    "max_abs": 7.5614,
+    "mean_signed": -4.085590476190477,
+    "n_cells": 21,
+    "pitch_abs": 0.14813,
+    "rms": 4.51527913264665
+   }
+  },
+  "baseline_official": {
+   "Clipping": 0.0,
+   "Envelope attack": 8.6458,
+   "Envelope release": 1234.2917,
+   "Foldback energy": 10.2745,
+   "Gain": -17.7663,
+   "Harmonic shape": 7.5614,
+   "Pitch": -0.1481
+  },
+  "pulse": {
+   "candidates": {
+    "0.25": {
+     "compensation": {
+      "delta_db": 5.65245,
+      "reachable": true,
+      "vol_effective": 0.8626507689503369
+     },
+     "failures": [
+      "2 max error not 0.5 dB lower",
+      "3 rms above baseline",
+      "4 darker than baseline and reference"
+     ],
+     "summary": {
+      "alias_max": 1.8243,
+      "level_mean": -14.496649999999999,
+      "max_abs": 8.4875,
+      "mean_signed": -4.734942857142857,
+      "n_cells": 21,
+      "pitch_abs": 0.14353,
+      "rms": 5.14500644897555
+     }
+    },
+    "0.5": {
+     "compensation": {
+      "delta_db": 1.0503,
+      "reachable": true,
+      "vol_effective": 0.5078407117813761
+     },
+     "failures": [
+      "2 max error not 0.5 dB lower",
+      "3 rms above baseline",
+      "4 darker than baseline and reference"
+     ],
+     "summary": {
+      "alias_max": 7.8051,
+      "level_mean": -14.49645,
+      "max_abs": 5.4347,
+      "mean_signed": -3.6119428571428567,
+      "n_cells": 21,
+      "pitch_abs": 0.14353,
+      "rms": 3.7865863499614383
+     }
+    }
+   },
+   "chosen_drive": null,
+   "unreachable": []
+  },
+  "saw": {
+   "candidates": {
+    "0.5": {
+     "compensation": {
+      "delta_db": 2.726750000000001,
+      "reachable": true,
+      "vol_effective": 0.5845693136320522
+     },
+     "failures": [],
+     "summary": {
+      "alias_max": 2.3127,
+      "level_mean": -18.34,
+      "max_abs": 4.6364,
+      "mean_signed": -2.6894,
+      "n_cells": 21,
+      "pitch_abs": 0.14813,
+      "rms": 3.267000717710942
+     }
+    }
+   },
+   "chosen_drive": 0.5,
+   "unreachable": [
+    0.25
+   ]
+  }
+ },
+ "preconditions": {
+  "baseline_matches_records": true,
+  "baseline_sha": "7a518fdd5008383fba83e9974279abd438f3acb38861f9090ee6604152febe70",
+  "drive0.5_sha": "13db5b8331205b2ff76a69064395741dc134669ef545577f6e93347310961fa1",
+  "drive_changes_audio": true
+ },
+ "source_commit": "f31cc09306418acf6ea99a4f2f84ab226f9b843c",
+ "worktree_dirty": false
+}

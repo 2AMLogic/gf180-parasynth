@@ -1,0 +1,102 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "mean-trials",
+  "parameter": {
+    "name": "MEAN_TRIALS",
+    "source": "tools/probes/permitted_differences.py",
+    "kind": "python-constant",
+    "what": "issue #539: trials behind the mean-residual statistic that detects the SINGLE_WINDOW_SLOPE and SHORT_WINDOW_SPECTRUM controls (mean over N trials against MEAN_FACTOR x the clean row's calibrated mean). Replaces the worst-of-12-vs-4x-worst-of-96 detection that caught the slope control in only 23 of 40 untouched groups (docs/noise-fixture-duration.md)."
+  },
+  "objective": {
+    "name": "worst-pair miss rate, one-sided 95% upper bound",
+    "units": "percent of groups",
+    "lower_is_better": true,
+    "why": "the failure #539 exists to remove is a control that is red only on a lucky draw. The bound is never zero (a count of zero misses over 80 groups still leaves 3.68 %), so a relative-tolerance rule can read it; the floor of the curve is the group count, not the statistic."
+  },
+  "grid": {
+    "stated_before_results": true,
+    "values": [
+      12,
+      24,
+      48,
+      96
+    ],
+    "range_basis": [
+      "12 is the shipped suite's trial count and the statistic the issue replaces; 96 is CAL_TRIALS, the largest draw count the file already commits to.",
+      "24 and 48 are the doublings between. All four are prefixes of one 96-trial run per group (trial i is seeded [base, i, case]), asserted by the instrument before any point is taken.",
+      "Stated in the docstring of tools/probes/mean_statistic_sweep.py, committed with it."
+    ],
+    "held_fixed": {
+      "MEAN_FACTOR": 3,
+      "SELECT_BASE groups": 80,
+      "NOISE_SECONDS": 2.0
+    }
+  },
+  "decision_rule": {
+    "stated_before_results": true,
+    "flat_within_relative": 0.1,
+    "why": "the decision is whether the control is caught in >= 95 % of untouched groups, and the instrument's resolution is the 80-group count: one miss moves the upper bound by several percentage points. Two points within 10 % of each other differ by less than a fraction of one group's worth of evidence, so they cannot be told apart by anything this measurement can resolve. Stated from the granularity of the decision, not from the spread of the data."
+  },
+  "evidence": {
+    "artifact": "docs/sensitivity/mean-trials-sweep.txt",
+    "format": "fixed-width-table",
+    "table": "mean_trials",
+    "value_column": "MEAN_TRIALS",
+    "objective_column": "miss_upper95_pct",
+    "held_fixed": {},
+    "regenerate": "python3 tools/probes/mean_statistic_sweep.py --table docs/sensitivity/mean-trials-sweep.txt --json docs/mean-statistic-sweep-results.json",
+    "instrument": "tools/probes/mean_statistic_sweep.py: 80 SELECT_BASE groups of 96 trials per (defect, clean row); the shipped statistic pd.mean_margin is asserted equal to the prefix mean before any point is taken. ~4.5 min on 2 cores."
+  },
+  "points": [
+    {
+      "value": 12,
+      "objective": 9.41
+    },
+    {
+      "value": 24,
+      "objective": 3.68
+    },
+    {
+      "value": 48,
+      "objective": 3.68
+    },
+    {
+      "value": 96,
+      "objective": 3.68
+    }
+  ],
+  "prediction": {
+    "runs": [
+      [
+        12
+      ],
+      [
+        24,
+        48,
+        96
+      ]
+    ],
+    "basis": "Central limit theorem on single-trial moments read from CALIBRATE_BASE only (a stream no group in the table reads). A mean of N residuals has spread sigma/sqrt(N); the defect mean sits 2.0 / 2.8 / 4.0 / 5.6 clean-threshold-standard-errors above the threshold at N = 12 / 24 / 48 / 96 for the slope pair (2.6 / 3.7 / 5.3 / 7.5 for the centroid pair). Expected misses over 80 groups: 1.84 at N = 12 (so the bound moves off the floor), 0.19 / 0.00 / 0.00 at N = 24 / 48 / 96 (so all three read the same floor, 3.68 %). Predicted runs [[12], [24, 48, 96]]: the curve is sensitive to N only up to 24.",
+    "independent_of_measurement": true
+  },
+  "verdict": {
+    "state": "MIXED",
+    "runs": [
+      [
+        12
+      ],
+      [
+        24,
+        48,
+        96
+      ]
+    ],
+    "summary": "As predicted. At 12 trials the slope control is missed in 3 of 80 groups (upper bound 9.41 %); from 24 trials it is missed in none (3.68 %, the 80-group floor) and the centroid control is missed in none at any N. No false-red at any N on either clean row. Confirmed at 24 trials on 80 CONFIRM_BASE groups and 80 groups of a different seed base (FPR_BASE): 0 misses, 0 false-reds on both pairs. MEAN_TRIALS = 24 is the smallest qualifying count under the pre-stated rule; 48 and 96 are indistinguishable at this resolution, so 24 is not a point on a slope."
+  },
+  "limits": [
+    "The factor MEAN_FACTOR = 3 sits close to the miss cliff at 24 trials: x4 misses the slope control in 6 of 80 groups and x5 in 38 (see docs/noise-fixture-duration.md 'Decision (#539)'). The window with zero misses and zero false-reds is x2-x3 on 80 groups; MEAN_FACTOR is held fixed here, not registered (the registry's python-constant reader takes an integer and the factor sweep is a table in the doc).",
+    "Two controls, one fixture length (2.0 s), the injected mutants only. A different defect on the same rows is not covered by this detection rate.",
+    "The group count (80) bounds what 'zero misses' can mean: the 95 % lower bound on detection is 0.963.",
+    "Not hardware, not a listening result."
+  ]
+}

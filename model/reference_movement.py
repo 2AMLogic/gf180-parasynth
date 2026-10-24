@@ -241,19 +241,47 @@ LP_HZ = 800.0          # below the carrier: excludes the analytic envelope's own
 RATES_S = (0.4, 1.6, 4.0)   # slow enough that the step rate lands under LP_HZ
 
 
+# Expected "this device cannot be built here" failures.
+#
+# Known adversary (docs/verification-rules.md rule 8), accepted deliberately:
+# an ImportError from OUR code inside _build (e.g. `from x import renamed`
+# after a refactor) is still classed status="unavailable" / "NOT AVAILABLE",
+# indistinguishable by status from a plugin that is not installed. The
+# mitigation is `error_type` and `why` ("ImportError: cannot import name ...")
+# on the row and in the printed line; a missing plugin shows up as
+# FileNotFoundError or ModuleNotFoundError. Pinned by
+# test_an_import_error_from_our_own_code_is_still_unavailable_known_gap.
+_UNAVAILABLE = (ImportError, FileNotFoundError, NotImplementedError)
+
+
 def stage_plugins(devices, cache):
     rows = []
     for name in devices:
         try:
             dev = _build(name)
+        except _UNAVAILABLE as e:
+            # The plugin/licence/binary is not here: a property of the host.
+            print(f"  {name}: NOT AVAILABLE -- {type(e).__name__}: {e}", flush=True)
+            rows.append(dict(device=name, status="unavailable",
+                             error_type=type(e).__name__, why=f"{type(e).__name__}: {e}"))
+            continue
         except Exception as e:                                       # noqa: BLE001
-            print(f"  {name}: NOT AVAILABLE -- {e}", flush=True)
+            # Any other exception may be a bug in the rig or this harness, and
+            # must not read as "plugin not installed" (#610). Record, don't raise,
+            # so the rest of the sweep still runs.
+            print(f"  {name}: BUILD ERROR (a defect, not unavailability) -- "
+                  f"{type(e).__name__}: {e}", flush=True)
+            rows.append(dict(device=name, status="error",
+                             error_type=type(e).__name__, why=f"{type(e).__name__}: {e}"))
             continue
         for s in RATES_S:
             try:
                 y = dev_sweep(dev, name, CARRIER, SWEEP_LO, SWEEP_HI, s, cache)
             except NotImplementedError as e:
-                print(f"  {name}: NOT ANSWERABLE -- {e}", flush=True)
+                print(f"  {name}: NOT ANSWERABLE -- {type(e).__name__}: {e}", flush=True)
+                rows.append(dict(device=name, status="not-answerable",
+                                 error_type=type(e).__name__,
+                                 why=f"{type(e).__name__}: {e}"))
                 break
             env = am.analytic_envelope(y)
             e = am.envelope_ripple_db(env, SR, lp_hz=LP_HZ)

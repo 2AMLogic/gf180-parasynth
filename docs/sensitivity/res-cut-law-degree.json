@@ -1,0 +1,95 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "res-cut-law-degree",
+  "parameter": {
+    "name": "LAW_DEGREE",
+    "source": "model/res_tuning.py",
+    "kind": "python-constant",
+    "what": "issue #257: the cutoff -> coefficient tuning law. 0 is the shipped CUT_TRIM * fcr (DR 0011); 3 and 4 are polynomials in f/SR refitted to the linearised loop (ladder_headroom.refit_tuning)."
+  },
+  "objective": {
+    "name": "worst |offset| on the select grid",
+    "units": "cents",
+    "lower_is_better": true,
+    "why": "the law is a function of cutoff only, so it is judged by the worst single point's distance from the commanded cutoff with the resonance correction held fixed; the correction cannot reach a cutoff-dependent error."
+  },
+  "grid": {
+    "stated_before_results": true,
+    "values": [
+      0,
+      3,
+      4
+    ],
+    "range_basis": [
+      "0 is the law that ships today; 3 is fcr's own shape refitted (same build-time cost); 4 is the quartic docs/ladder-rung1-audit.md section 3 sized at 0.023 % law error. Higher degrees chase a law error already below the ring's own per-cutoff spread.",
+      "Committed in docs/res-tuning/plan.json (commit dcbc2e1) before any point was measured."
+    ],
+    "held_fixed": {
+      "CORR_ENTRIES": 9,
+      "REFIT_ENTRIES": 1
+    }
+  },
+  "decision_rule": {
+    "stated_before_results": true,
+    "flat_within_relative": 0.25,
+    "why": "pre-registered in docs/res-tuning/plan.json: the estimator is qualified to 1 cent, so a few cents is the granularity at which two candidates are distinguishable at the 5-20 cent level this objective lives at."
+  },
+  "evidence": {
+    "artifact": "docs/res-tuning/sweeps.txt",
+    "format": "fixed-width-table",
+    "table": "law_degree",
+    "value_column": "LAW_DEGREE",
+    "objective_column": "worst_abs_cents",
+    "held_fixed": {
+      "CORR_ENTRIES": 9,
+      "REFIT_ENTRIES": 1
+    },
+    "regenerate": "python3 model/res_tuning.py sweep",
+    "instrument": "model/res_tuning.py ring_frequency on reference_rigs.OurLadder's free ring (fixed-point model, 0.8 s, last 60 %); estimator qualified to 0.04 c on synthetic signals of known frequency."
+  },
+  "points": [
+    {
+      "value": 0,
+      "objective": 18.8
+    },
+    {
+      "value": 3,
+      "objective": 12.32
+    },
+    {
+      "value": 4,
+      "objective": 12.32
+    }
+  ],
+  "prediction": {
+    "runs": [
+      [
+        0
+      ],
+      [
+        3,
+        4
+      ]
+    ],
+    "basis": "stated in docs/res-tuning/plan.json before the sweep: the shipped law's ~1 % S-shaped residual (~17 c) is a function of cutoff the correction cannot touch, so 0 separates; the quartic's 0.2 pp gain over the cubic is under the ring's ~1.1 pp per-cutoff spread, so 3 and 4 do not.",
+    "independent_of_measurement": true
+  },
+  "verdict": {
+    "state": "MIXED",
+    "runs": [
+      [
+        0
+      ],
+      [
+        3,
+        4
+      ]
+    ],
+    "summary": "As predicted: refitting the law removes a third of the worst error (18.8 -> 12.3 c); cubic and quartic are the same to the cent. The pre-registered selection rule (lowest degree in the best run) picks 3, which is fcr's own shape and build-time cost."
+  },
+  "limits": [
+    "Model-level only: the parameter lives in model/res_tuning.py's candidate, not yet in rtl-sketch/voice_dp.v or the numeric contract (spec/decision-records/0024). The gate checks the candidate's value, which is what a later RTL change must carry.",
+    "Measured on the SELECT grid (7 cutoffs 100..6400 Hz x 7 resonances 1.02..2.00). The selected candidate was then validated once on the untouched grid in docs/res-tuning/validation.txt; that grid had no part in this choice.",
+    "The 12.3 c floor shared by 3 and 4 is set by a single cutoff-dependent residual neither law removes; it is not a law-degree question."
+  ]
+}

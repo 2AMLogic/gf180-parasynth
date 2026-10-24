@@ -1,0 +1,196 @@
+{
+ "issue": 592,
+ "frozen": "2026-10-11. Committed BEFORE any Fischer take was passed through tools/probes/tom_pitch_drop_fischer.py. The only operation performed on the corpus before this commit was sha256 hashing of the 15 tom takes (to build the table below); no estimate, waveform, spectrum or plot of any take was produced by this work before it.",
+ "question": "LT/MT/HT diode pitch drop: onset excess E (f(t) = f_inf (1 + E exp(-t / tau))) and relaxation time tau on the Fischer takes, against the SHIPPED engine's realised staircase at each take's tuning, with a phase-aware estimator that does not read onset phase as a drop.",
+ "corpus": {
+  "repo": "https://github.com/tidalcycles/sounds-tr808-fischer",
+  "commit": "85fbecf",
+  "unit": "one TR-808, serial 103852 (per drums_fx.TOM_HW_TAU's provenance)",
+  "sha256": {
+   "lt8/LT00.WAV": "a324073813003398a3ed92c3e569ac80f6ff50d82253f95b2b87a3f268f6951b",
+   "lt8/LT25.WAV": "fdd8fbb073407dce560847b2407f16f307463ddc423f0000ee098d75647eee60",
+   "lt8/LT50.WAV": "d3720682985a9621c4a67749dfd5336fa4f25564ef7ea2e633ac8ff5fdd64eda",
+   "lt8/LT75.WAV": "17386b1ed8d6eb2820fa217bfd86109c0d5178eda256557bcc0e849a903476b9",
+   "lt8/LT10.WAV": "b5f6c19876ce23539cd9b943f5d96c9284b0f95d6317e15e3f12b59f97f048df",
+   "mt8/MT00.WAV": "b649329207aec14fb7880d88a824526fc706ad1e8293b2fd9de5115be01530c0",
+   "mt8/MT25.WAV": "9a0a847a29f4b0d4a7cf731385c98600b1620abe9bb6faef73163e513d2fbcf8",
+   "mt8/MT50.WAV": "81bbc63110a21c5d1ff28572734f2969f96db9a2ca7e304e52b4f808de905927",
+   "mt8/MT75.WAV": "7c070b28f1cd916a896420a8a8374c805b0b8a1ff5ca480f1556a1d7bc2387d8",
+   "mt8/MT10.WAV": "50b81a0a9ab88871fd1a4eb98e642b9df12deae7beb826938c86c6b847636646",
+   "ht8/HT00.WAV": "96d0de026d7421e05d35b07905ff85072985db1d6fc1eea286c00aaa1836ff97",
+   "ht8/HT25.WAV": "5ed0365551d140dacd1a2b3c9959657f176a4c221d897700ec42de625c86cc1e",
+   "ht8/HT50.WAV": "7e0b9eddd95379298aacbf1520929f586191788d9e0841ad752d84bdde910d88",
+   "ht8/HT75.WAV": "c312ac79a02ced1283fea01504ee2d5b57c2439935d33a2ae6ddfdcb2715fd62",
+   "ht8/HT10.WAV": "aef7d50fc43965c35ef2fde924b19f3fa4be08a9132d0095514d0fae4b5c9202"
+  },
+  "cross_check": "every 16-hex prefix equals docs/scorecard/tom-conga-558/prereg.json's frozen table",
+  "location_on_this_host": "/tmp/fischer-592 (~/dev/refs does not exist on this loom worker; the checkout's provenance is not otherwise known, which is why every take is hash-checked at the point of use)",
+  "env": "GF180_TR808_FISCHER"
+ },
+ "prior_exposure": {
+  "per_take": {
+   "LT00": [
+    "#558 'untouched': evaluated once as the confirmation set of a NUMERATOR candidate; the shipped engine's gate pitch_shape ratio and the post-hoc float-twin figures on it are published (tom-conga-558 README section 3)"
+   ],
+   "LT25": [
+    "#558 DEVELOPMENT: BP / BP+X4 were selected on gate features including pitch_shape; the figures are published (docs/scorecard/tom-conga-558/README.md section 3)"
+   ],
+   "LT50": [
+    "#558 'seen-in-diagnosis': the gate's 5 ms pitch track was printed in cents (the 808 LT's '74 cents' that motivates #592 is LT50's first frame)",
+    "R1 case target (D03A..D05A); #351 selected the BP numerator for BODY SPECTRUM on it",
+    "drums_fx.TOM_HW_TAU's comment compares reference 4's tom decay with the machine's on this unit"
+   ],
+   "LT75": [
+    "#558 DEVELOPMENT: BP / BP+X4 were selected on gate features including pitch_shape; the figures are published (docs/scorecard/tom-conga-558/README.md section 3)"
+   ],
+   "LT10": [
+    "#558 'untouched': evaluated once as the confirmation set of a NUMERATOR candidate; the shipped engine's gate pitch_shape ratio and the post-hoc float-twin figures on it are published (tom-conga-558 README section 3)"
+   ],
+   "MT00": [
+    "#558 'untouched': evaluated once as the confirmation set of a NUMERATOR candidate; the shipped engine's gate pitch_shape ratio and the post-hoc float-twin figures on it are published (tom-conga-558 README section 3)"
+   ],
+   "MT25": [
+    "#558 'untouched': evaluated once as the confirmation set of a NUMERATOR candidate; the shipped engine's gate pitch_shape ratio and the post-hoc float-twin figures on it are published (tom-conga-558 README section 3)"
+   ],
+   "MT50": [
+    "#558 'seen-in-diagnosis': the gate's 5 ms pitch track was printed in cents (the 808 LT's '74 cents' that motivates #592 is LT50's first frame)",
+    "R1 case target (D03A..D05A); #351 selected the BP numerator for BODY SPECTRUM on it",
+    "drums_fx.TOM_HW_TAU's comment compares reference 4's tom decay with the machine's on this unit"
+   ],
+   "MT75": [
+    "#558 'untouched': evaluated once as the confirmation set of a NUMERATOR candidate; the shipped engine's gate pitch_shape ratio and the post-hoc float-twin figures on it are published (tom-conga-558 README section 3)"
+   ],
+   "MT10": [
+    "#558 'untouched': evaluated once as the confirmation set of a NUMERATOR candidate; the shipped engine's gate pitch_shape ratio and the post-hoc float-twin figures on it are published (tom-conga-558 README section 3)"
+   ],
+   "HT00": [
+    "#558 'untouched': evaluated once as the confirmation set of a NUMERATOR candidate; the shipped engine's gate pitch_shape ratio and the post-hoc float-twin figures on it are published (tom-conga-558 README section 3)"
+   ],
+   "HT25": [
+    "#558 DEVELOPMENT: BP / BP+X4 were selected on gate features including pitch_shape; the figures are published (docs/scorecard/tom-conga-558/README.md section 3)"
+   ],
+   "HT50": [
+    "#558 'seen-in-diagnosis': the gate's 5 ms pitch track was printed in cents (the 808 LT's '74 cents' that motivates #592 is LT50's first frame)",
+    "R1 case target (D03A..D05A); #351 selected the BP numerator for BODY SPECTRUM on it",
+    "drums_fx.TOM_HW_TAU's comment compares reference 4's tom decay with the machine's on this unit"
+   ],
+   "HT75": [
+    "#558 DEVELOPMENT: BP / BP+X4 were selected on gate features including pitch_shape; the figures are published (docs/scorecard/tom-conga-558/README.md section 3)"
+   ],
+   "HT10": [
+    "#558 'untouched': evaluated once as the confirmation set of a NUMERATOR candidate; the shipped engine's gate pitch_shape ratio and the post-hoc float-twin figures on it are published (tom-conga-558 README section 3)"
+   ]
+  },
+  "all_takes": [
+   "NONE of the 15 was used to fit the diode-drop law (TOM_DROP_*), which was fitted on 808 From Mars (docs/tom-pitch-drop-law.json)",
+   "NONE has been through a phase-aware drop estimator; no E or tau has been read from any of them before this file",
+   "EVERY ONE has had its gate pitch_shape ratio against the shipped engine read and published in #558 -- a pitch-trajectory distance, i.e. diagnostic exposure to the very question asked here"
+  ],
+  "this_estimator": "chosen and its constants frozen on closed-form tones and scipy resonators only (knownanswer.json, controls.json in this directory); our own renders were measured while building it (that is the shipped side, not the corpus)"
+ },
+ "split_of": {
+  "LT00": "confirmation",
+  "LT25": "development",
+  "LT50": "development",
+  "LT75": "development",
+  "LT10": "confirmation",
+  "MT00": "confirmation",
+  "MT25": "confirmation",
+  "MT50": "development",
+  "MT75": "confirmation",
+  "MT10": "confirmation",
+  "HT00": "confirmation",
+  "HT25": "development",
+  "HT50": "development",
+  "HT75": "development",
+  "HT10": "confirmation"
+ },
+ "split_rule": "development = every take previously used for SELECTION (#558 development) or DIAGNOSIS (the TUNING 5.0 takes): LT25 LT50 LT75 MT50 HT25 HT50 HT75. confirmation = the 8 takes never used to select or fit anything: LT00 LT10 MT00 MT25 MT75 MT10 HT00 HT10. They are RESERVED for this question, not untouched: see adequacy.",
+ "adequacy": {
+  "independent_confirmation": "REFUSED: the corpus holds one take per TUNING setting from one unit, and every reserved take's gate pitch_shape against the shipped engine was read and published in #558. No fresh tom take exists in it, so a confirmation here is on RESERVED, PREVIOUSLY EXPOSED conditions and is never reported as 'untouched' or 'independent'.",
+  "scope": "one TR-808 unit; the 15 Fischer tom takes at TUNING 0/2.5/5/7.5/10; their accent (undocumented) against our accent 1.0. No accent generalisation and no accent-threshold claim. No claim about any other unit or recording.",
+  "accent_confound": "the shipped law's E is linear in (accent - 0.67) and its tau is accent-independent, while 808 From Mars measured tau 13 / 24.5 / 33 ms by accent. A MAGNITUDE discrepancy at an undocumented accent is therefore not identifiable as a law defect: any E from 0 to ~0.24 at pot centre is reachable by SOME accent. Decided now: a confirmed magnitude discrepancy is reported as a measured effect with decision 'not identifiable (accent confound)', never as a justified repair of TOM_DROP_RATIO. The per-sound E ratio across TUNING (accent-invariant under the law's form, if one accent was used for all takes of a sound) is reported DESCRIPTIVELY only."
+ },
+ "engine": {
+  "ours": "run_case.render_drum_solo's render (kit_with_sounds + hit_writes, accent 1.0) with TUNING moved: f0 x r, Q x r; at r = 1.0 it must equal render_drum_solo bit-exactly or the run REFUSES",
+  "tuning_ratio": "r = the take's f_inf / the same sound's TUNING 5.0 take's f_inf, both from this estimator (route A); r = 1 for the 50 take. The law reads the retuned f0 out of the image, as the production host does.",
+  "staircase": "the PRODUCTION host's (fpga/spi_host.MusicHost) tom-bend writes for the first hit on a fresh image must equal hit_writes' (else REFUSED); decoded through poles_from_regs; a tone with exactly that instantaneous frequency is measured by the same estimator. The render must carry it, route by route, within AGREE_E_ABS + 2 se and AGREE_LN_TAU (else the row is REFUSED: staircase-carry).",
+  "598": "#598 (repeated hits feeding the bend's endpoint back into nominal tuning) is unresolved. Every render here is ONE hit from a fresh image, so its contamination cannot enter; the staircase's endpoint f0 (1 + E e^-3) != f0 is measured as part of the shipped trajectory (f_inf is free in the fit).",
+  "horizon": "TOM_DROP_MS = 60 ms is the SCHEDULING HORIZON; the continuous law's tau is 20 ms, and the realised staircase is measured, not assumed."
+ },
+ "estimator": {
+  "model": "f(t) = f_inf (1 + E exp(-t / tau)) for t >= T_START after the onset; phase curvature, with the onset phase free (route A: a linear coefficient; route B: the intercept)",
+  "routes": "A: unfiltered samples box-car decimated, variable-projection NLS with H1..H3 locked to theta(t). B: order-2 Butterworth low-pass at LP_B fc, interpolated zero crossings, half-cycle count fitted linearly in (a, f_inf, c, zig-zag x2) on a tau grid.",
+  "classes": "DROP (E and tau identified), NO-DROP (|E| < max(DETECT_SIGMA se, E_MIN_DETECT): tau not identifiable, not reported), REFUSED(reason): non-finite, silent, sample-rate, too-short, malformed, fit-failed, tau-at-bound, relaxation-unobservable, tau-unidentifiable, route-disagreement; corpus: missing-take, unregistered-take, wrong-hash; engine: not-shipped-engine, host-staircase-mismatch, staircase-carry, no-tuning-reference",
+  "uncertainty": "u_E = sqrt(se_E^2 + U_E_FLOOR^2); u_ln_tau = sqrt((se_tau/tau)^2 + U_LN_TAU_FLOOR^2). The floors are the worst error on the harsh analytic family (252 reads), measured before any corpus read.",
+  "constants": {
+   "ONSET_FRAC": 0.1,
+   "COARSE_WIN": [
+    0.04,
+    0.24
+   ],
+   "COARSE_BAND": [
+    40.0,
+    600.0
+   ],
+   "T_START": 0.004,
+   "T_END_MAX": 0.25,
+   "END_DB": 40.0,
+   "FLOOR_MARGIN_DB": 15.0,
+   "MIN_CYCLES": 8.0,
+   "SILENCE": 0.0001,
+   "SRS": [
+    44100,
+    48000
+   ],
+   "ENV_BAND": [
+    0.5,
+    2.0
+   ],
+   "LP_B": 3.0,
+   "HARMONICS": 3,
+   "TAU_RANGE": [
+    0.002,
+    0.2
+   ],
+   "DETECT_SIGMA": 3.0,
+   "E_MIN_DETECT": 0.003,
+   "TAU_REL_SE_MAX": 0.5,
+   "MIN_OBS_HALFCYCLES": 4,
+   "AGREE_E_ABS": 0.015,
+   "AGREE_LN_TAU": 0.35,
+   "KA_E_ABS": 0.004,
+   "KA_E_REL": 0.1,
+   "KA_LN_TAU": 0.15,
+   "KA_F_REL": 0.002,
+   "KA_HARSH_E_ABS": 0.015,
+   "KA_HARSH_LN_TAU": 0.3,
+   "U_E_FLOOR": 0.015,
+   "U_LN_TAU_FLOOR": 0.3
+  },
+  "known_answer_record": "knownanswer.json: 195 / 195 within the frozen bounds (14 correct refusals outside the observable domain); controls.json: 7 / 7 injections CAUGHT, MOVED/BLIND matrix",
+  "known_blind_spot": "a second partial 3 % below at -10 dB masks a real E 0.06 drop as NO-DROP (test_known_blind_spot_a_close_partial_can_mask_a_drop)"
+ },
+ "rules": {
+  "min_dev_rows": 4,
+  "min_confirm_rows": 5,
+  "confirm_frac": 0.75,
+  "jnd_cents": 5.0,
+  "jnd_source": "tools/perceptual_gate.PITCH_JND_CENTS",
+  "tau_ratio_threshold": 1.25,
+  "tau_threshold_note": "declared, not perceptual: a 25 % relaxation difference is the smallest this record calls a discrepancy",
+  "fit": "development rows only: median over MEASURED rows of d_cents = cents0_808 - cents0_ours and of ln(tau_808 / tau_ours) (rows where both are DROP). Fewer than min_dev_rows -> not identifiable. |median d_cents| < jnd -> 'no change' proposed; |median ln tau ratio| < ln 1.25 -> 'no change'.",
+  "confirm": "ONCE, on the reserved rows, with the fit record frozen (its sha256 is recorded): for a proposed change, CONFIRMED iff >= 75 % of usable rows have the dev sign, >= 75 % are resolved beyond 2u, |median| >= threshold with the dev sign, and the dev median offset predicts the 808 better than the shipped law on >= 75 %. For 'no change', CONFIRMED iff >= 75 % lie within max(threshold, 2u). Fewer than min_confirm_rows usable -> REFUSED (not identifiable). A confirmation set containing any development row is REFUSED.",
+  "decision": {
+   "magnitude": "CONFIRMED discrepancy -> 'not identifiable (accent confound)' per adequacy.accent_confound; CONFIRMED no-change -> no repair; NOT-CONFIRMED -> unsupported; REFUSED -> not identifiable",
+   "relaxation": "CONFIRMED discrepancy -> repair supported for the relaxation time on reserved (previously exposed) conditions at this unit's undocumented accent; NOT-CONFIRMED -> unsupported; REFUSED -> not identifiable",
+   "never": "no RTL, image or decoded-output delivery claim; any repair is a separate, reviewed change that must prove link, RTL and decoded-output carry-through"
+  }
+ },
+ "commands": {
+  "development": "GF180_TR808_FISCHER=<refs> .venv/bin/python tools/probes/tom_pitch_drop_fischer.py measure --refs <refs> --split development --out docs/scorecard/tom-pitch-drop-592/development.json",
+  "fit": ".venv/bin/python tools/probes/tom_pitch_drop_fischer.py fit docs/scorecard/tom-pitch-drop-592/development.json --out docs/scorecard/tom-pitch-drop-592/fit.json   (committed before confirm)",
+  "confirm": ".venv/bin/python tools/probes/tom_pitch_drop_fischer.py confirm --refs <refs> --fit docs/scorecard/tom-pitch-drop-592/fit.json --out docs/scorecard/tom-pitch-drop-592/confirmation.json   (refuses if the record exists)"
+ },
+ "sensitivity": "no production dial is proposed by this record, so nothing is registered under docs/sensitivity/registry.json; a repair that proposes a TOM_DROP_* value registers its sweep when it is proposed"
+}

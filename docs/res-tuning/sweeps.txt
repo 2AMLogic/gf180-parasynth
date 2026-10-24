@@ -1,0 +1,21 @@
+Issue #257 pre-registered sweeps -- written by `python3 model/res_tuning.py sweep`.
+Grids, rules and predictions: docs/res-tuning/plan.json (committed before this ran).
+Every number is on the SELECT grid; the validate grid is untouched here.
+
+law_degree -- worst |offset| against the tuning law, correction held at 9 entries
+LAW_DEGREE CORR_ENTRIES REFIT_ENTRIES worst_abs_cents travel_cents mean_abs_cents
+0 9 1 18.80 15.28 6.40
+3 9 1 12.32 3.92 2.93
+4 9 1 12.32 3.52 2.54
+
+corr_entries -- mean-offset travel against table size, law held at 3
+CORR_ENTRIES LAW_DEGREE REFIT_ENTRIES travel_cents worst_abs_cents mean_abs_cents
+0 3 1 104.82 113.57 51.58
+2 3 1 29.99 36.80 13.85
+3 3 1 12.05 15.89 5.25
+5 3 1 4.28 12.32 2.82
+9 3 1 3.92 12.32 2.93
+17 3 1 2.31 12.32 2.68
+33 3 1 1.33 12.32 2.48
+
+chosen by the pre-registered selection rules: LAW_DEGREE 3, CORR_ENTRIES 33

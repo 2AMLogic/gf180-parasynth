@@ -323,3 +323,24 @@ def test_loop_compare_reads_the_committed_floors():
     assert out["Pitch trajectory"]["session_floor"] == pytest.approx(1.3852)
     assert out["Pitch trajectory"]["take_over_session"] == pytest.approx(0.001, abs=1e-3)
     assert out["decay"] == {"refused": "no loop yielded 3 readable strikes"}
+
+
+def _conditioned(monkeypatch, exc):
+    import test_discrimination as td
+
+    def boom(*a, **k):
+        raise exc
+    monkeypatch.setattr(td, "condition", boom)
+    return mr._promoted("lowband_level_db")(np.ones(4410), 44100)
+
+
+def test_an_unusable_clip_is_a_conditioning_refusal(monkeypatch):
+    e = _conditioned(monkeypatch, ValueError("empty"))
+    assert not e.ok and "conditioning refused" in e.reason
+
+
+def test_a_defect_in_the_conditioner_is_not_reported_as_a_refusal(monkeypatch):
+    """#615: any exception used to read "conditioning refused"."""
+    e = _conditioned(monkeypatch, TypeError("bug"))
+    assert not e.ok
+    assert "TypeError" in e.reason and "refused" not in e.reason

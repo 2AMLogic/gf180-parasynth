@@ -1,0 +1,1146 @@
+#!/usr/bin/env python3
+"""Apparatus controls for tools/probes/residual_dc.py (#152).
+
+    python3 -m pytest tools/probes/test_residual_dc.py -q
+
+COMMITTED RED FIRST (docs/residual-dc/red-start.txt): the estimator was a stub
+returning NaN, every fixture executed, and the intended assertions failed.
+Only then was the estimator written.
+
+Every fixture's answer is fixed by CONSTRUCTION (a constant added to a
+zero-mean ring; a 10 ms half-sine pulse; a Hann-windowed integer-cycle tone),
+not by running the estimator on the drum model. Nothing here renders the
+model, so these tests are cheap and are the gate the model records depend on.
+"""
+from __future__ import annotations
+
+import json
+import math
+import pathlib
+import sys
+
+import numpy as np
+import pytest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import residual_dc as R                                   # noqa: E402
+
+SR = 48000
+FC = R.FC
+
+
+@pytest.mark.parametrize("name,prop", R.PROPERTIES, ids=[n for n, _ in R.PROPERTIES])
+def test_property_holds_on_the_real_estimator(name, prop):
+    assert prop(R.REAL), name
+
+
+def test_every_injected_defect_turns_something_red():
+    rows = R.controls_matrix()
+    clean = rows.pop("(clean)")
+    assert all(v == "ok" for v in clean.values()), clean
+    for defect, row in rows.items():
+        assert "MOVED" in row.values(), f"{defect} is invisible to every property: {row}"
+
+
+def test_each_property_catches_at_least_one_defect():
+    """A property no defect moves is a property that tests nothing."""
+    rows = R.controls_matrix()
+    rows.pop("(clean)")
+    dead = [n for n, _ in R.PROPERTIES if all(r[n] != "MOVED" for r in rows.values())]
+    # EXEMPT, stated: polarity and zero-mean are guarded by construction
+    # (|X0|^2 is sign-blind; a zero-mean burst has nothing for a defect to
+    # erase); burst->SKIRT is a direction none of the five defects attacks
+    # (a 10 ms pulse has ~no mean to subtract) -- it is held by the closed-form
+    # tests above instead. Anything else dead is a test that tests nothing.
+    assert set(dead) <= {"polarity", "zero-mean!=OFFSET", "burst->SKIRT"}, dead
+
+
+def test_the_mean_subtracting_conditioner_is_the_named_wrong_one():
+    """The exact conditioner the issue names. It erases the offset it classifies."""
+    est = R.MeanSubtract()
+    assert R.classify(R.fx_offset(), SR, FC, est)[0] != "OFFSET"
+    assert R.classify(R.fx_offset(), SR, FC, R.REAL)[0] == "OFFSET"
+
+
+def test_known_answers_on_the_synthetic_statistics():
+    off = R.REAL.stats(R.fx_offset(), SR, FC)
+    assert off["beta"] > 0.99 and off["flat"] > 0.9 * (2 * off["n20"] - 1), off
+    sk = R.REAL.stats(R.fx_skirt(), SR, FC)
+    assert abs(sk["flat"] - 1.0) < 0.1, sk                    # flat: S = 1
+    assert abs(sk["beta"] - FC / 20.0) < 0.05, sk             # flat -> beta = fc/20
+
+
+def test_spectral_flatness_is_the_closed_form_for_a_pulse():
+    """Independent of the estimator's own code: the DFT of a 10 ms half-sine is
+    |X(f)| ~ cos(pi f T/2)/(1-(fT)^2) -> flat to 20 Hz within 1 %."""
+    d = 0.010
+    ratio = math.cos(math.pi * 20.0 * d / 2.0) / (1 - (20.0 * d) ** 2)
+    assert 0.98 < ratio < 1.0
+    assert abs(R.REAL.stats(R.fx_skirt(), SR, FC)["flat"] - 1.0) < 2 * (1 - ratio) + 0.05
+
+
+def test_added_hf_is_absolute_and_lf_removal_is_not_hf():
+    base = R.fx_offset()
+    add = R.add_hf(base)
+    rem = R.remove_offset(base, 0.08 * R.FS)
+    k, d_hf, d_sh = R.share_change_kind(base, add, SR)
+    assert k == "HF_ADDED" and d_hf > 10.0, (k, d_hf)
+    k, d_hf, d_sh = R.share_change_kind(base, rem, SR)
+    assert k == "LF_REMOVAL" and abs(d_hf) < R.HF_FLAT_DB and d_sh > 0, (k, d_hf, d_sh)
+
+
+# ---- guards, each with the input that defeats it -----------------------------------
+def test_refuses_non_finite():
+    x = R.fx_offset().astype(float)
+    x[100] = np.nan
+    assert R.classify(x, SR, FC)[0] == "REFUSED"
+
+
+def test_refuses_silence_and_near_silence():
+    assert R.classify(np.zeros(SR * 3), SR, FC)[0] == "REFUSED"
+    quiet = np.zeros(SR * 3)
+    quiet[:10] = 3.0                                           # 3 LSB peak
+    assert R.classify(quiet, SR, FC)[0] == "REFUSED"
+
+
+def test_refuses_a_clip_shorter_than_the_declared_window():
+    x = R.fx_offset()[: int(1.0 * SR)]
+    label, d = R.classify(x, SR, FC)
+    assert label == "REFUSED" and "declared" in d["reason"], d
+
+
+def test_refuses_when_the_voice_is_still_sounding_at_the_window_end():
+    """Defeating input: a ring that never decays. Its beta/S are then functions
+    of where the window was cut, not of the signal."""
+    t = np.arange(int(2.4 * SR)) / SR
+    x = R._q(0.3 * np.sin(2 * np.pi * 300.0 * t) + 0.08)
+    label, d = R.classify(x, SR, FC)
+    assert label == "REFUSED" and "still sounding" in d["reason"], (label, d)
+
+
+def test_refuses_sub20_energy_that_does_not_clear_the_quantisation_floor():
+    """Defeating input: a zero-mean 33 LSB burst. It clears the silence guard
+    (peak >= 16 LSB) and has nothing in 0-20 Hz; a classifier that answered
+    would be reading rounding residue. (A constant offset cannot defeat this
+    guard: even 1 LSB held for 2 s is 41 dB over the white floor, because all
+    of it lands in one bin. Tried; stated rather than constructed.)"""
+    label, d = R.classify(R.fx_zero_mean(amp=0.001), SR, FC)
+    assert label == "REFUSED" and "quantisation floor" in d["reason"], (label, d)
+
+
+def test_refuses_a_band_it_cannot_resolve():
+    """Defeating input: a corner below the 4-bin resolution (0.5 Hz bins)."""
+    label, d = R.classify(R.fx_offset(), SR, 1.0)
+    assert label == "REFUSED" and "band resolution" in d["reason"], (label, d)
+
+
+def test_a_quantisation_floor_fixture_really_sits_at_the_floor():
+    """The floor formula against a measured requantisation of white noise
+    (an independent check: dither is generated, not derived)."""
+    rng = np.random.default_rng(7)
+    x = rng.uniform(-0.5, 0.5, SR * 8)                          # +-0.5 LSB uniform
+    got = R.band_db(x, SR, 0.0, 20.0)
+    assert abs(got - R.quantisation_floor_db(SR)) < 1.5, got
+
+
+def test_window_means_are_onset_relative_and_never_zero_for_a_missing_window():
+    x = R.fx_offset()
+    y = np.concatenate([np.zeros(12345), x])
+    a, b = R.window_means(x, SR), R.window_means(y, SR)
+    assert np.allclose(a, b, equal_nan=True)
+    short = R.window_means(x[:int(0.1 * SR)], SR)
+    assert math.isnan(short[-1]) and math.isnan(short[-2])
+
+
+def test_mixed_is_reported_not_forced():
+    """A burst sitting on a short plateau: beta says skirt, S says offset."""
+    x = R.fx_skirt().astype(float)
+    x[:int(0.2 * SR)] += 0.05 * R.FS                            # a 200 ms standing step
+    label, d = R.classify(x, SR, FC)
+    assert label in ("MIXED", "OFFSET", "REFUSED"), (label, d)
+    assert label != "SKIRT", d
+
+
+# ---- the reference gate: REFUSED is an outcome, and each guard has its defeater ----
+def _corpus(tmp, coupling="dc", corrupt=False, drop_sr=False, drop_file=False):
+    import hashlib
+    f = tmp / "BD.wav"
+    f.write_bytes(b"RIFFfake")
+    h = hashlib.sha256(b"RIFFfake").hexdigest()
+    if corrupt:
+        h = "0" * 64
+    m = {"files": [{"name": "BD.wav", "sha256": h}], "sample_rate": 48000}
+    if coupling:
+        m["capture_coupling"] = coupling
+    if drop_sr:
+        del m["sample_rate"]
+    if drop_file:
+        f.unlink()
+    (tmp / "manifest.json").write_text(json.dumps(m))
+    return str(tmp)
+
+
+def test_reference_gate_refuses_when_there_is_no_corpus(tmp_path):
+    g = R.reference_gate(str(tmp_path / "nope"), environ={})
+    assert g["status"] == "REFUSED" and g["dc"] == "REFUSED"
+
+
+def test_reference_gate_refuses_without_a_manifest(tmp_path):
+    assert R.reference_gate(str(tmp_path), environ={})["status"] == "REFUSED"
+
+
+@pytest.mark.parametrize("kw", [dict(corrupt=True), dict(drop_sr=True), dict(drop_file=True),
+                                dict(coupling=None)], ids=["bad-hash", "no-rate", "missing-file", "no-coupling"])
+def test_reference_gate_refuses_each_defeating_manifest(tmp_path, kw):
+    g = R.reference_gate(_corpus(tmp_path, **kw), environ={})
+    assert g["status"] == "REFUSED" and g["reasons"], g
+
+
+def test_an_ac_coupled_capture_is_available_but_never_proves_absence_of_dc(tmp_path):
+    g = R.reference_gate(_corpus(tmp_path, coupling="ac"), environ={})
+    assert g["status"] == "AVAILABLE" and g["dc"] == "REFUSED", g
+
+
+def test_only_a_declared_dc_coupled_verified_capture_permits_a_dc_reading(tmp_path):
+    g = R.reference_gate(_corpus(tmp_path, coupling="dc"), environ={})
+    assert g["status"] == "AVAILABLE" and g["dc"] == "PERMITTED", g
+
+
+# ---- the ending logic, on constructed rows (no render) ------------------------------
+def _row(label, mean_frac=0.0, reason=None):
+    return dict(label=label, mean_frac=mean_frac, detail=dict(reason=reason))
+
+
+def test_verdict_never_claims_a_sound_defect_without_a_reference():
+    v = R.subject_verdict({"dev": _row("OFFSET", .1), "confirm": _row("OFFSET", .1)})
+    assert "capability REFUSED" in v and "STANDING OFFSET" in v
+
+
+def test_verdict_is_no_verdict_when_a_condition_refuses_or_the_conditions_disagree():
+    assert R.subject_verdict({"dev": _row("REFUSED", reason="x"), "confirm": _row("OFFSET", .1)}).startswith("NO VERDICT")
+    v = R.subject_verdict({"dev": _row("OFFSET", .1), "confirm": _row("SKIRT")})
+    assert v.startswith("NO VERDICT") and "NOT revisited" in v
+
+
+def test_a_small_offset_is_not_a_defect_by_the_declared_magnitude():
+    v = R.subject_verdict({"dev": _row("OFFSET", .001), "confirm": _row("OFFSET", .001)})
+    assert "no defect established" in v
+
+
+def test_skirt_in_both_conditions_establishes_no_offset():
+    v = R.subject_verdict({"dev": _row("SKIRT"), "confirm": _row("SKIRT")})
+    assert v.startswith("NO STANDING OFFSET")
+
+
+def test_hypotheses_refuse_on_a_refused_class_and_do_not_fit_a_bad_prediction():
+    base = dict(label="OFFSET", beta=.97, S=40.0, reason=None, steady_db=11.7, measured_db=5.0)
+    ok = R.hypotheses({"CH": dict(base, rest_db=5.4)})[0][1]
+    assert ok.startswith("CONSISTENT")
+    bad = R.hypotheses({"CH": dict(base, rest_db=9.0)})[0][1]
+    assert bad.startswith("NOT SUPPORTED")
+    ref = R.hypotheses({"CH": dict(base, label="REFUSED", reason="r", rest_db=5.0)})[0][1]
+    assert ref.startswith("NO VERDICT")
+    na = R.hypotheses({"CH": dict(base, measured_db=11.0, rest_db=11.0)})[0][1]
+    assert na.startswith("NOT APPLICABLE")
+
+
+def test_the_toggle_in_the_render_is_the_register_the_model_ships():
+    """Check that the thing tested is the thing that ships: the production
+    register at reset is 0, and the enable writes go through DrumsFx.write."""
+    import drums_fx as dx
+    assert dx.DrumsFx().couple_en == 0
+    d = dx.DrumsFx()
+    d.write(dx.A_COUPLE, 1)
+    assert d.couple_en == 1
+
+
+# ---- the integer-resolution intervention, on ground truth ---------------------------
+def _sub_lsb_mean_signal(mean=0.27, amp=40.0, f0=11700.0, sr=SR, seconds=2.4):
+    n = np.arange(int(seconds * sr))
+    return np.floor(amp * np.sin(2 * np.pi * f0 * n / sr + 0.3) + mean + 0.5).astype(np.int64)
+
+
+def test_the_scale_probe_separates_an_integer_resolution_limit_from_a_linear_one():
+    """GROUND TRUTH: a 0.27 LSB mean under an 11.7 kHz ring. A float LTI
+    blocker attenuates it by the same amount at any scale; the integer one
+    cannot see a sub-LSB mean until acc crosses 2^K."""
+    import drums_fx as dx
+    from scipy.signal import lfilter
+    x = _sub_lsb_mean_signal()
+    assert abs(float(x.mean()) - 0.27) < 0.02                   # the construction holds
+    a = 1.0 - 2.0 ** -dx.COUPLE_K
+    lin = []
+    for sc in R.SCALES:
+        y = lfilter([1.0, -1.0], [1.0, -a], x * sc)
+        lin.append(R.band_db((x * sc)[:96000].astype(float), SR, 0, 20) - R.band_db(y[:96000], SR, 0, 20))
+    assert max(lin) - min(lin) < 0.05, lin                      # LTI: scale-free
+    integ = [att for _, att in R.integer_scale_probe(x, 0, SR, dx.COUPLE_K)]
+    assert integ[-1] - integ[0] > 3.0, integ                    # integer: scale-DEPENDENT
+    assert integ[-1] > lin[0] - 1.0, (integ, lin)               # and approaches the LTI answer
+
+
+def test_the_scale_probe_is_flat_where_the_mean_is_resolvable():
+    """Defeater of the 'always scale-dependent' reading: a 20 LSB mean is far
+    above the integer estimator's resolution; scale must then not matter much."""
+    import drums_fx as dx
+    x = _sub_lsb_mean_signal(mean=20.0)
+    att = [a for _, a in R.integer_scale_probe(x, 0, SR, dx.COUPLE_K)]
+    assert max(att) - min(att) < 1.5, att
+
+
+def _ch(production, floatout, x64, exact=True, bound=11.7, own=None):
+    """`own` = each variant's steady-state bound on ITS OWN baseline. Default:
+    the variant did not move its baseline, so its bound is the production one."""
+    rows = [("production", production), ("float-out", floatout), ("buses x8", x64), ("buses x64", x64)]
+    own = dict({n: bound for n, _ in rows}, **(own or {}))
+    return dict(label="OFFSET", beta=.97, S=40.0, reason=None, steady_db=bound, measured_db=production,
+                rest_db=bound, bv=dict(exact=exact, rows=rows, bounds=own))
+
+
+def _h2(row):
+    return [v for h, v in R.hypotheses({"CH": row}) if h.startswith("H_CH2")][0]
+
+
+def test_h_ch2_distinguishes_its_outcomes():
+    assert _h2(_ch(5.0, 11.5, 6.0)).startswith("SUPPORTED by intervention (output truncation)")
+    assert _h2(_ch(5.0, 6.0, 11.9)).startswith("SUPPORTED by intervention (bus-level")
+    assert _h2(_ch(5.0, 6.0, 6.0)).startswith("NOT SUPPORTED")
+    assert _h2(_ch(5.0, 11.5, 11.5, exact=False)).startswith("NO VERDICT")
+
+
+def test_h_ch2_defeater_a_variant_that_moves_its_own_baseline_is_not_support():
+    """RULE 8, the input that defeated the first rule (#614 review). The dev
+    record had float-out 21.22 dB against a production bound of 11.66 dB, and a
+    one-sided `>= bound - tol` read that as SUPPORTED. But removing the output
+    floor changes the variant's BASELINE too, so its attenuation is only
+    comparable to the steady bound computed on its own baseline.
+
+    (a) the variant clears the production bound but falls short of its own:
+        the quantiser was not the whole story -> must NOT read SUPPORTED.
+    (b) the variant overshoots its own bound by far more than the tolerance:
+        a filter does not beat its own steady-state bound, so the variant is not
+        like-for-like -> must NOT read SUPPORTED either."""
+    short_of_own = _ch(5.0, 21.2, 21.2, own={"float-out": 30.0, "buses x8": 30.0, "buses x64": 30.0})
+    assert not _h2(short_of_own).startswith("SUPPORTED"), _h2(short_of_own)
+    overshoot = _ch(5.0, 21.2, 21.2)                     # own bounds == 11.7
+    assert not _h2(overshoot).startswith("SUPPORTED"), _h2(overshoot)
+    assert _h2(overshoot).startswith("NO VERDICT"), _h2(overshoot)
+
+
+def test_the_bus_surrogate_is_bit_exact_against_the_shipped_coupling():
+    """Check that the thing tested is the thing that ships: a short render with
+    the CH, buses re-blocked by DcBlockFx at the declared widths, must equal the
+    A_COUPLE=1 buses exactly."""
+    import drums_fx as dx
+    c = dict(seconds=0.30, gain=0.45, vel=1.0)
+    R.render_bus("CH", 0, c["seconds"], c["gain"], c["vel"])
+    R.render_bus("CH", 1, c["seconds"], c["gain"], c["vel"])
+    got = R.bus_variants("CH", c, 0, dx.SR)
+    assert got["exact"] is True
+    # and the guard has a defeater: a surrogate at the wrong corner is not exact
+    d0, b0, g = R._BUSES[("CH", 0, c["seconds"], c["gain"], c["vel"])]
+    _, b1, _ = R._BUSES[("CH", 1, c["seconds"], c["gain"], c["vel"])]
+    assert not d0.any() and b0.any()          # the CH lives on the BODY bus; dmix is trivially exact
+    wrong = dx.DcBlockFx(dx.COUPLE_K - 1, in_bits=dx.BODY_BITS)
+    assert not np.array_equal(np.array([wrong.step(int(v)) for v in b0], np.int64), b1)
+
+
+def test_bus_variants_carry_an_own_baseline_bound_for_every_variant():
+    import drums_fx as dx
+    c = dict(seconds=0.30, gain=0.45, vel=1.0)
+    R.render_bus("CH", 0, c["seconds"], c["gain"], c["vel"])
+    R.render_bus("CH", 1, c["seconds"], c["gain"], c["vel"])
+    got = R.bus_variants("CH", c, 0, dx.SR)
+    assert set(got["bounds"]) == {n for n, _ in got["rows"]}
+    assert all(math.isfinite(b) for b in got["bounds"].values()), got["bounds"]
+
+
+def test_h_ch2_refuses_a_surrogate_without_own_bounds():
+    """A record from the old one-sided rule (no `bounds`) must not be re-read as support."""
+    row = _ch(5.0, 11.5, 11.5)
+    del row["bv"]["bounds"]
+    assert _h2(row).startswith("NO VERDICT"), _h2(row)
+
+
+# ---- --verdict: the per-subject ending is produced by the tool, not typed ----------
+def _rec(cond, rows, commit="a" * 40, dirty=False, limits=None):
+    return dict(schema=R.ROWS_SCHEMA, condition=cond, commit=commit, dirty=dirty,
+                limits=limits if limits is not None else R._jsonable(R.declared_limits()), rows=rows)
+
+
+# detail a non-REFUSED classify() row carries, one per label, inside every in-limit bound
+_DETAIL = {
+    "OFFSET": dict(beta=0.95, flat=12.0),
+    "SKIRT": dict(beta=0.30, flat=1.0),
+    "MIXED": dict(beta=0.70, flat=5.0),
+}
+
+
+def _in_limit_detail(label):
+    return dict(_DETAIL[label], beta_half=_DETAIL[label]["beta"], tail_ring=0.0, margin_db=R.RES_MARGIN_DB + 10,
+                nfc=R.MIN_BINS_BELOW_FC, n20=R.MIN_BINS_SUB20)
+
+
+def _vrow(voice, label, mean_frac=0.0, reason=None):
+    detail = dict(reason=reason) if label == "REFUSED" else _in_limit_detail(label)
+    return dict(voice=voice, label=label, mean_frac=mean_frac, detail=detail)
+
+
+def _write(tmp_path, *recs):
+    paths = []
+    for i, r in enumerate(recs):
+        p = tmp_path / f"r{i}.json"
+        p.write_text(json.dumps(r))
+        paths.append(str(p))
+    return paths
+
+
+def test_verdict_cli_produces_each_subjects_ending(tmp_path, capsys):
+    dev = _rec("dev", [_vrow("RS", "SKIRT"), _vrow("CH", "OFFSET", .001), _vrow("BD", "MIXED")])
+    con = _rec("confirm", [_vrow("RS", "SKIRT"), _vrow("CH", "MIXED")])
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 0
+    out = capsys.readouterr().out
+    lines = {ln.split()[0]: ln for ln in out.splitlines() if ln.startswith("  ") and ln.split()[0] in ("RS", "CH", "BD")}
+    assert "NO STANDING OFFSET" in lines["RS"]
+    assert "NO VERDICT" in lines["CH"] and "NOT revisited" in lines["CH"]       # class flipped
+    assert "NO VERDICT" in lines["BD"] and "confirm has no row" in lines["BD"]   # not run in confirm
+    _, ends, _ = R.verdicts([dev, con])
+    assert ends["RS"] == R.subject_verdict({"dev": dev["rows"][0], "confirm": con["rows"][0]})
+
+
+@pytest.mark.parametrize("make,why", [
+    (lambda: [_rec("dev", []), _rec("dev", [])], "per condition"),
+    (lambda: [_rec("dev", []), _rec("confirm", [], dirty=True)], "dirty"),
+    (lambda: [_rec("dev", []), _rec("confirm", [], commit="b" * 40)], "different commits"),
+    (lambda: [_rec("dev", []), _rec("confirm", [], limits=dict(R._jsonable(R.declared_limits()), S_OFFSET_MIN=7.0))],
+     "limits differ"),
+    (lambda: [_rec("dev", [])], "per condition"),
+], ids=["same-condition-twice", "dirty", "mixed-commits", "revisited-limits", "confirm-missing"])
+def test_verdict_refuses_records_it_cannot_combine(tmp_path, capsys, make, why):
+    """Each guard's defeating input: two dev records, a dirty render, records
+    from two commits, a record taken after a limit was moved, a lone record."""
+    assert R.main(["--verdict", *_write(tmp_path, *make())]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and why in out, out
+
+
+@pytest.mark.parametrize("true,forged", [("SKIRT", "OFFSET"), ("OFFSET", "SKIRT"), ("MIXED", "OFFSET"),
+                                         ("MIXED", "SKIRT"), ("SKIRT", "MIXED"), ("OFFSET", "MIXED")])
+def test_verdict_refuses_a_label_the_detail_does_not_give(true, forged):
+    """Defeater (#654): flip a row's label, leave detail and mean_frac alone. It
+    used to reach MODEL-SIDE STANDING OFFSET on a SKIRT subject."""
+    big = 10 * R.OFFSET_PEAK_FRAC
+    honest = [_rec(c, [_vrow("RS", true, big)]) for c in ("dev", "confirm")]
+    assert R.verdicts(honest)[0] == "OK"
+    forged_recs = [_rec(c, [dict(_vrow("RS", true, big), label=forged)]) for c in ("dev", "confirm")]
+    status, ends, why = R.verdicts(forged_recs)
+    assert status == "REFUSED" and ends == {}, (status, ends)
+    assert any("label" in w and forged in w and true in w for w in why), why
+
+
+@pytest.mark.parametrize("beta,flat,want", [
+    (R.BETA_OFFSET_MIN, R.S_OFFSET_MIN, "OFFSET"),
+    (R.BETA_SKIRT_MAX, R.S_SKIRT_MAX, "SKIRT"),
+    (R.BETA_OFFSET_MIN, R.S_OFFSET_MIN - 1e-9, "MIXED"),
+    (R.BETA_SKIRT_MAX + 1e-9, R.S_SKIRT_MAX, "MIXED"),
+])
+def test_label_rederivation_keeps_the_boundary_label_classify_gives(beta, flat, want):
+    """Exactly on a frozen limit keeps classify's label: no valid round trip is refused."""
+    assert R.label_from_stats(beta, flat) == want
+    row = dict(_vrow("RS", want), detail=dict(_in_limit_detail(want), beta=beta, flat=flat, beta_half=beta))
+    assert R.row_problems([row]) == []
+    other = "SKIRT" if want != "SKIRT" else "OFFSET"
+    assert R.row_problems([dict(row, label=other)])
+
+
+@pytest.mark.parametrize("key,bad", [
+    ("beta", None), ("beta", float("nan")), ("flat", "x"), ("flat", float("inf")),
+    ("tail_ring", R.TAIL_RING_MAX + 0.01), ("margin_db", R.RES_MARGIN_DB - 0.1),
+    ("beta_half", 0.95 - R.BETA_STABLE_TOL - 0.01), ("nfc", R.MIN_BINS_BELOW_FC - 1),
+    ("n20", R.MIN_BINS_SUB20 - 1),
+])
+def test_row_problems_refuses_detail_outside_the_frozen_limits(key, bad):
+    row = _vrow("RS", "OFFSET")
+    assert R.row_problems([row]) == []
+    row["detail"][key] = bad
+    assert any(key in p for p in R.row_problems([row])), R.row_problems([row])
+    del row["detail"][key]
+    assert any(key in p for p in R.row_problems([row]))
+
+
+@pytest.mark.parametrize("fx,want", [("fx_offset", "OFFSET"), ("fx_skirt", "SKIRT")])
+def test_real_classify_output_survives_the_json_round_trip(fx, want):
+    """The thing that ships: a row built from classify()'s own detail, through
+    JSON, passes the re-derivation (no stubbed detail)."""
+    label, detail = R.classify(getattr(R, fx)(), SR, FC)
+    assert label == want, label
+    row = json.loads(json.dumps(dict(voice="RS", label=label, mean_frac=0.0, detail=R._jsonable(detail))))
+    assert R.row_problems([row]) == []
+    assert R.row_problems([dict(row, label="MIXED" if want != "MIXED" else "OFFSET")])
+
+
+def test_refused_row_is_not_rederived():
+    assert R.row_problems([_vrow("RS", "REFUSED", reason="silent")]) == []
+
+
+def test_screen_rows_out_round_trips_into_verdict(tmp_path, monkeypatch):
+    """--screen --rows-out writes what --verdict reads (no render: voice_row stubbed)."""
+    monkeypatch.setattr(R, "voice_row", lambda v, c: dict(_vrow(v, "SKIRT"), cond=c, n_clip=0, raw_label="SKIRT",
+                                                          means=[float("nan")], peak_dbfs=-14.0))
+    monkeypatch.setattr(R, "fmt_row", lambda r: r["voice"])
+    monkeypatch.setattr(R, "provenance", lambda c: "prov")
+    p = {c: str(tmp_path / f"{c}.json") for c in R.CONDITIONS}
+    for c in R.CONDITIONS:
+        R.screen(c, ("RS", "HT"), p[c])
+    recs = [json.loads(pathlib.Path(p[c]).read_text()) for c in R.CONDITIONS]
+    assert all(r["schema"] == R.ROWS_SCHEMA and r["limits"] == R._jsonable(R.declared_limits()) for r in recs)
+    for r in recs:                       # the worktree may be dirty while testing: that guard is tested above
+        r["dirty"] = False
+    status, ends, why = R.verdicts(recs)
+    assert status == "OK" and ends["RS"].startswith("NO STANDING OFFSET"), (status, ends, why)
+
+
+def test_an_all_refused_screen_exits_2_not_0(monkeypatch):
+    """run_all.py must not read an all-REFUSED batch as green. Defeater of the
+    guard: one answered row among refusals is evidence, so exit 0."""
+    def row(label):
+        return lambda v, c: dict(_vrow(v, label, reason="r"), cond=c, n_clip=0, raw_label=label,
+                                 means=[0.0], peak_dbfs=-14.0)
+    monkeypatch.setattr(R, "fmt_row", lambda r: r["voice"])
+    monkeypatch.setattr(R, "provenance", lambda c: "prov")
+    monkeypatch.setattr(R, "voice_row", row("REFUSED"))
+    assert R.main(["--screen", "--voices", "RS,HT"]) == 2
+    monkeypatch.setattr(R, "voice_row", lambda v, c: row("REFUSED" if v == "RS" else "SKIRT")(v, c))
+    assert R.main(["--screen", "--voices", "RS,HT"]) == 0
+
+
+# ---- --verdict: provenance and numeric fields are validated where the JSON is read --
+# Judge review of ba62bc8: two absent / null / "?" commits compared equal, and a NaN
+# mean_frac fell through to "below the declared magnitude". Each defeating input
+# below must REFUSE (exit 2), never produce an ending.
+def _offset_pair(dev_kw=None, con_kw=None, mean_frac=0.1):
+    dev = _rec("dev", [_vrow("CH", "OFFSET", mean_frac)])
+    con = _rec("confirm", [_vrow("CH", "OFFSET", mean_frac)])
+    for r, kw in ((dev, dev_kw or {}), (con, con_kw or {})):
+        for k, v in kw.items():
+            if v is _ABSENT:
+                r.pop(k, None)
+            else:
+                r[k] = v
+    return dev, con
+
+
+_ABSENT = object()
+
+
+@pytest.mark.parametrize("commit", [_ABSENT, None, "", "?", "a" * 12, "g" * 40, "A" * 40, 40, ["a" * 40]],
+                         ids=["absent", "null", "empty", "git-failure-sentinel", "short", "non-hex",
+                              "uppercase", "int", "list"])
+def test_verdict_refuses_matching_but_invalid_commits(tmp_path, capsys, commit):
+    """Two records with the SAME invalid commit agree with each other and with
+    nothing: provenance is checked per record before the records are compared."""
+    dev, con = _offset_pair({"commit": commit}, {"commit": commit})
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "commit" in out and "STANDING OFFSET" not in out, out
+
+
+@pytest.mark.parametrize("dirty", [_ABSENT, None, 0, "false"], ids=["absent", "null", "int-zero", "string"])
+def test_verdict_refuses_a_dirty_flag_that_is_not_the_boolean_false(tmp_path, capsys, dirty):
+    dev, con = _offset_pair({"dirty": dirty}, {"dirty": dirty})
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 2
+    assert "dirty" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")], ids=["nan", "+inf", "-inf"])
+@pytest.mark.parametrize("where", ["both", "dev", "confirm"])
+def test_verdict_refuses_a_non_finite_mean_frac(tmp_path, capsys, bad, where):
+    """json.loads accepts NaN/Infinity. NaN compares False with every threshold,
+    so it read as 'below the declared magnitude'; +/-inf read as a defect."""
+    dev, con = _offset_pair()
+    for r in ((dev, con) if where == "both" else (dev,) if where == "dev" else (con,)):
+        r["rows"][0]["mean_frac"] = bad
+    paths = _write(tmp_path, dev, con)
+    assert any(t in pathlib.Path(paths[0 if where != "confirm" else 1]).read_text()
+               for t in ("NaN", "Infinity"))                        # the JSON really carries it
+    assert R.main(["--verdict", *paths]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "mean_frac" in out and "no defect established" not in out, out
+
+
+@pytest.mark.parametrize("bad", [_ABSENT, None, True, "0.1", [0.1]],
+                         ids=["absent", "null", "bool", "string", "list"])
+def test_verdict_refuses_a_mean_frac_that_is_not_a_real_number(tmp_path, capsys, bad):
+    """json `true` is a bool, and abs(True) = 1 clears every magnitude threshold."""
+    dev, con = _offset_pair()
+    for r in (dev, con):
+        if bad is _ABSENT:
+            r["rows"][0].pop("mean_frac")
+        else:
+            r["rows"][0]["mean_frac"] = bad
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 2
+    assert "mean_frac" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("row", [dict(voice="CH", label="OFFSETT", mean_frac=0.1, detail={}),
+                                 dict(voice="CH", label=None, mean_frac=0.1, detail={}),
+                                 dict(label="OFFSET", mean_frac=0.1, detail={}),
+                                 dict(voice="CH", label="OFFSET", mean_frac=0.1, detail=None),
+                                 "CH"],
+                         ids=["unknown-label", "null-label", "no-voice", "null-detail", "not-a-row"])
+def test_verdict_refuses_a_malformed_row(tmp_path, capsys, row):
+    dev, con = _offset_pair()
+    dev["rows"] = [row]
+    con["rows"] = [row]
+    assert R.main(["--verdict", *_write(tmp_path, dev, con)]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+
+
+def test_a_refused_row_needs_no_finite_mean_frac():
+    """A row the apparatus REFUSED (e.g. non-finite samples) carries no magnitude
+    that can reach an ending, so its NaN does not refuse the whole record."""
+    dev, con = _offset_pair()
+    dev["rows"].append(_vrow("RS", "REFUSED", float("nan"), reason="non-finite samples"))
+    con["rows"].append(_vrow("RS", "SKIRT"))
+    status, ends, why = R.verdicts([dev, con])
+    assert status == "OK" and ends["RS"].startswith("NO VERDICT"), (status, ends, why)
+
+
+def test_the_valid_pair_still_produces_its_ending(tmp_path, capsys):
+    """Control for the controls: the unmodified pair is not refused."""
+    assert R.main(["--verdict", *_write(tmp_path, *_offset_pair())]) == 0
+    assert "STANDING OFFSET" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("rows_by_cond", [{}, {"dev": _row("OFFSET", .1)}, {"confirm": _row("OFFSET", .1)},
+                                          {"dev": _row("OFFSET", .1), "other": _row("OFFSET", .1)}],
+                         ids=["empty", "dev-only", "confirm-only", "dev-plus-undeclared"])
+def test_subject_verdict_refuses_unless_both_declared_conditions_are_present(rows_by_cond):
+    """Agreement among the labels supplied is not agreement across conditions:
+    one row agrees with itself, and no rows agree vacuously."""
+    v = R.subject_verdict(rows_by_cond)
+    assert v.startswith("REFUSED") and "STANDING OFFSET" not in v, v
+
+
+@pytest.mark.parametrize("text", ["{not json", "[1, 2]", "null"], ids=["unparseable", "list", "null"])
+def test_verdict_refuses_a_record_that_is_not_a_json_object(tmp_path, capsys, text):
+    dev, con = _offset_pair()
+    paths = _write(tmp_path, dev, con)
+    pathlib.Path(paths[1]).write_text(text)
+    assert R.main(["--verdict", *paths]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+
+
+# Class search for the review's NaN/provenance finding: the manifest is the other
+# JSON consumption boundary. bool is an int subclass, so `"sample_rate": true`
+# satisfied isinstance(..., int); a non-object manifest or file entry raised.
+@pytest.mark.parametrize("manifest", [
+    lambda m: dict(m, sample_rate=True), lambda m: dict(m, sample_rate=48000.5),
+    lambda m: [m], lambda m: dict(m, files=["BD.wav"]),
+], ids=["bool-rate", "fractional-rate", "manifest-is-list", "file-entry-not-object"])
+def test_reference_gate_refuses_a_malformed_manifest(tmp_path, manifest):
+    root = pathlib.Path(_corpus(tmp_path))
+    m = json.loads((root / "manifest.json").read_text())
+    (root / "manifest.json").write_text(json.dumps(manifest(m)))
+    g = R.reference_gate(str(root), environ={})
+    assert g["status"] == "REFUSED" and g["dc"] == "REFUSED" and g["reasons"], g
+
+
+# ==== #618: the output stage's final quantisation (same-accumulator apparatus) ======
+# ONE int64 accumulator is retained per render; floor (production) and exact
+# integer round-half-even are derived from THAT accumulator. Every expected
+# value below comes from hand integer arithmetic or CPython's own
+# round(Fraction) -- NEVER from drums_fx.output_fx or from the probe under test.
+
+from fractions import Fraction                                          # noqa: E402
+
+
+def _ref_floor(acc):
+    """Independent production reference: `>>` on ints IS floor; the clamp is
+    the spec's one rail."""
+    return max(-32768, min(32767, acc >> 15))
+
+
+def _ref_round(acc):
+    """Independent round-half-even: CPython rounds a Fraction to nearest with
+    ties to even -- the definition, not our implementation."""
+    return max(-32768, min(32767, round(Fraction(acc, R.Q15))))
+
+
+@pytest.mark.parametrize("name,prop", R.FLOOR_PROPERTIES, ids=[n for n, _ in R.FLOOR_PROPERTIES])
+def test_floor_property_holds_on_the_real_probe(name, prop):
+    assert prop(R.REAL_FLOOR), name
+
+
+def test_every_floor_mutant_turns_something_red():
+    rows = R.floor_controls_matrix()
+    clean = rows.pop("(clean)")
+    assert all(v == "ok" for v in clean.values()), clean
+    for defect, row in rows.items():
+        assert "MOVED" in row.values(), f"{defect} is invisible to every property: {row}"
+
+
+def test_each_floor_property_moves_at_least_one_defect():
+    """A property no defect moves is a property that tests nothing.
+    EXEMPT, stated: `no-bias-possible` guards the ENDING RULE (a nonzero signal
+    whose accumulators are all exact multiples of 32768), not a probe decision
+    -- no single-defect mutant of the probe attacks it; the fixture test below
+    holds it directly."""
+    rows = R.floor_controls_matrix()
+    rows.pop("(clean)")
+    dead = [n for n, _ in R.FLOOR_PROPERTIES if all(r[n] != "MOVED" for r in rows.values())]
+    assert set(dead) <= {"no-bias-possible"}, dead
+
+
+class _NoIntervention(R.FloorProbe):
+    """Start red through the reporting path: the apparatus with NO intervention
+    -- `exact` is the floor, so it would read every result as NO NET BIAS."""
+
+    name = "no-intervention stub (exact := floor)"
+
+    def exact(self, acc):
+        return self.floor(acc)
+
+
+def test_start_red_the_no_intervention_stub_fails_the_property_set():
+    stub = _NoIntervention()
+    assert not R.p_oracle_fixture_floor(stub)          # the intended failed assertion
+    ok = {}
+    for n, f in R.FLOOR_PROPERTIES:
+        try:
+            ok[n] = bool(f(stub))
+        except R.Refused:
+            ok[n] = False
+    assert not all(ok.values()), ok
+
+
+# -- the oracle: hand table (every class the issue names) + an independent sweep ----
+HAND_FIXTURES = (
+    (0, 0, 0),                                   # exact zero
+    (32768, 1, 1), (-32768, -1, -1), (65536, 2, 2),   # exact multiples: agree
+    (32769, 1, 1), (-32769, -2, -1),             # nonintegers just past the multiple
+    (32767, 0, 1), (-32767, -1, -1),             # just under: floor drops, round does not
+    (16384, 0, 0),                               # +tie, even quotient -> stays
+    (49152, 1, 2),                               # +tie, odd quotient -> up
+    (-16384, -1, 0),                             # -tie, odd quotient -> up
+    (-49152, -2, -2),                            # -tie, even quotient -> stays
+    (32767 * 32768, 32767, 32767),               # at the high rail, exact
+    (32768 * 32768, 32767, 32767),               # past the high rail: both clip
+    (-32768 * 32768, -32768, -32768),            # low rail exactly
+    (-32768 * 32768 - 1, -32768, -32768),        # past the low rail: both clip
+)
+
+
+def test_floor_and_round_match_hand_arithmetic_on_every_named_accumulator_class():
+    for acc, fl, ex in HAND_FIXTURES:
+        assert R.REAL_FLOOR.floor(np.int64(acc)) == fl, (acc, "floor")
+        assert R.REAL_FLOOR.exact(np.int64(acc)) == ex, (acc, "round")
+
+
+def test_floor_and_round_match_an_independent_reference_on_random_accumulators():
+    """The sweep the hand table cannot be: 4096 accumulators across the whole
+    RTL tacc range, against divmod-floor and CPython Fraction rounding."""
+    rng = np.random.default_rng(618)
+    acc = rng.integers(-(1 << 38) + 1, 1 << 38, 4096, dtype=np.int64)
+    for a, f, x in zip(acc.tolist(), R.floor_out(acc).tolist(), R.rint_out(acc).tolist()):
+        assert f == _ref_floor(a), a
+        assert x == _ref_round(a), a
+
+
+def test_a_nonzero_integer_resolvable_mean_is_not_a_bias():
+    """The generic-bias defeater through the ending rule: a signal with a real
+    nonzero mean whose accumulators are all exact multiples of 32768. Floor
+    and round agree bit for bit; 'mean != 0 => bias' would be wrong here."""
+    row = dict(status="OK", n_frames=64, n_res_zero=64, n_res_low=0, n_res_tie=0,
+               n_res_high=0, diff_sum=0, mean_diff_lsb=0.0, diff_pct_of_peak=0.0,
+               mean_floor_err_lsb=0.0, floor_err_pct_of_peak=0.0)
+    e = R.bias_ending({c: row for c in sorted(R.CONDITIONS)})
+    assert e.startswith("NO BIAS POSSIBLE"), e
+
+
+def test_bias_endings_are_distinct_and_frozen():
+    def frow(**kw):
+        base = dict(status="OK", n_frames=100, n_res_zero=60, n_res_low=20, n_res_tie=10,
+                    n_res_high=10, diff_sum=0, mean_diff_lsb=0.0, diff_pct_of_peak=0.0,
+                    mean_floor_err_lsb=-0.4, floor_err_pct_of_peak=-0.001)
+        base.update(kw)
+        return base
+
+    def both(**kw):
+        return {c: frow(**kw) for c in sorted(R.CONDITIONS)}
+
+    assert R.bias_ending(both()).startswith("NO NET BIAS")
+    v = R.bias_ending(both(diff_sum=-50, mean_diff_lsb=-0.5, diff_pct_of_peak=-0.01))
+    assert v.startswith("BIAS CONFIRMED") and "no audibility" in v, v
+    mixed = {c: frow(diff_sum=-50 if c == "dev" else 0,
+                     mean_diff_lsb=-0.5 if c == "dev" else 0.0) for c in sorted(R.CONDITIONS)}
+    assert R.bias_ending(mixed).startswith("BIAS IS CONDITION-DEPENDENT")
+    assert R.bias_ending({"dev": frow()}).startswith("REFUSED")
+    assert R.bias_ending({**both(), "dev": dict(status="REFUSED", reason="x")}).startswith("REFUSED")
+
+
+# -- condition/value association (PR #653 review) ------------------------------------
+# The ending once labelled figures by SORTED index: `confirm` sorts before `dev`,
+# so every dev/confirm pair was printed swapped. Identical values in both
+# conditions cannot see that, so these rows differ in every reported figure, and
+# `confirm` deliberately carries the values that sort first. Committed red first
+# against the index-labelled formatter: docs/residual-dc/output-floor/red-condition-labels.txt.
+_ASYM = {
+    "dev":     dict(mean_diff_lsb=-0.1111, diff_pct_of_peak=-0.0022, mean_floor_err_lsb=-0.3333,
+                    diff_sum=-11),
+    "confirm": dict(mean_diff_lsb=-0.9999, diff_pct_of_peak=-0.0077, mean_floor_err_lsb=-0.6666,
+                    diff_sum=-99),
+}
+
+
+def _asym_row(c):
+    return dict(status="OK", n_frames=100, n_res_zero=10, n_res_low=40, n_res_tie=0,
+                n_res_high=50, floor_err_pct_of_peak=-0.001, **_ASYM[c])
+
+
+def _labelled(ending, unit, cond):
+    """Every number printed immediately before '<unit> (<cond>)' in an ending."""
+    import re
+    return [float(x) for x in re.findall(r"([+-]\d+\.\d+) " + re.escape(unit) + r" \(" + cond + r"\)",
+                                         ending)]
+
+
+@pytest.mark.parametrize("order", [("dev", "confirm"), ("confirm", "dev")], ids=["dev-first", "confirm-first"])
+def test_bias_ending_labels_every_figure_with_its_own_condition(order):
+    e = R.bias_ending({c: _asym_row(c) for c in order})
+    assert e.startswith("BIAS CONFIRMED"), e
+    for c, v in _ASYM.items():
+        assert _labelled(e, "LSB", c)[:1] == [v["mean_diff_lsb"]], (c, e)          # floor - round
+        assert _labelled(e, "%", c) == [v["diff_pct_of_peak"]], (c, e)              # % of peak
+        assert _labelled(e, "LSB", c)[1:] == [v["mean_floor_err_lsb"]], (c, e)     # pre-rail error
+
+
+def test_condition_dependent_ending_names_the_condition_that_carries_the_bias():
+    rows = {c: _asym_row(c) for c in ("confirm", "dev")}
+    rows["confirm"] = dict(rows["confirm"], diff_sum=0)
+    e = R.bias_ending(rows)
+    assert e.startswith("BIAS IS CONDITION-DEPENDENT") and "['dev']" in e, e
+    assert "'dev': -11" in e and "'confirm': 0" in e, e
+
+
+QUAL = pathlib.Path(__file__).resolve().parents[2] / "docs/residual-dc/output-floor/qualification.json"
+
+
+def test_committed_endings_are_what_the_committed_records_produce():
+    """The saved endings must be regenerable from the saved rows, and the swapped
+    SD/CH figures the review read out of the JSON must sit under their own labels."""
+    q = json.loads(QUAL.read_text())
+    status, ends, why = R.floor_verdicts(q["records"])
+    assert status == "OK", why
+    assert q["endings"] == ends
+    by = {r["condition"]: {row["voice"]: row for row in r["rows"]} for r in q["records"]}
+    for v in ("SD", "CH"):
+        for c in ("dev", "confirm"):
+            row = by[c][v]
+            assert _labelled(ends[v], "LSB", c) == [round(row["mean_diff_lsb"], 4),
+                                                    round(row["mean_floor_err_lsb"], 4)], (v, c)
+    assert _labelled(ends["SD"], "LSB", "dev") == [-0.0709, -0.3315]
+    assert _labelled(ends["SD"], "LSB", "confirm") == [-0.9188, -0.7018]
+
+
+def test_floor_summary_derives_extrema_with_their_voice_and_condition():
+    """Hand-built records whose extrema sit in DIFFERENT conditions: each figure
+    must be reported with the row it came from. The rows are arithmetically
+    POSSIBLE (built by `_crow`), because floor_summary now refuses any record
+    `floor_verdicts` refuses
+    (it caught this fixture at n=1000, off the declared window)."""
+    def row(v, zero, tie, high, peak):           # per-mille counts, scaled to the declared window
+        k = 96
+        return _crow(v, n=1000 * k, zero=zero * k, tie=tie * k, high=high * k, peak=peak)
+    recs = [_frec("dev", [row("AA", 10, 0, 500, 32000.0), row("BB", 900, 0, 10, 1000.0)]),
+            _frec("confirm", [row("AA", 500, 7, 2, 16.0), row("BB", 0, 3, 800, 32000.0)])]
+    s = R.floor_summary(recs)
+    assert (s["diff_min"]["voice"], s["diff_min"]["condition"]) == ("AA", "confirm")
+    assert (s["diff_max"]["voice"], s["diff_max"]["condition"]) == ("BB", "confirm")
+    assert (s["pct_max"]["voice"], s["pct_max"]["condition"]) == ("AA", "confirm")
+    assert (s["err_min"]["voice"], s["err_min"]["condition"]) == ("BB", "dev")
+    assert (s["err_max"]["voice"], s["err_max"]["condition"]) == ("BB", "confirm")
+    assert s["zero_tie_rows"] == [("dev", "AA"), ("dev", "BB")]
+    assert s["rows_without_high"] == [] and s["usable"] == 4 and s["refused"] == 0
+    assert s["by_row"][("confirm", "AA")]["exact_multiple_pct"] == 50.0
+
+
+def test_refresh_endings_rewrites_only_the_endings_and_refuses_moved_limits(tmp_path, capsys):
+    q = json.loads(QUAL.read_text())
+    q["endings"] = {v: "stale" for v in q["endings"]}
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(q))
+    assert R.main(["--refresh-endings", str(p)]) == 0
+    out = json.loads(p.read_text())
+    assert out["records"] == q["records"] and out["controls"] == q["controls"]
+    assert out["endings"] == R.floor_verdicts(q["records"])[1]
+    q["records"][0]["limits"] = dict(q["records"][0]["limits"], S_OFFSET_MIN=7.0)
+    p.write_text(json.dumps(q))
+    before = p.read_text()
+    assert R.main(["--refresh-endings", str(p)]) == 2
+    assert p.read_text() == before and "REFUSED" in capsys.readouterr().out
+
+
+def test_readme_floor_summary_block_is_generated_from_the_committed_records():
+    """The #618 narrative quotes only the generated block, so the block itself
+    must be byte-identical to what the committed records produce."""
+    text = (QUAL.parents[1] / "README.md").read_text()
+    a, b = "<!-- floor-summary:begin -->\n", "<!-- floor-summary:end -->"
+    assert a in text and b in text
+    block = text.split(a, 1)[1].split(b, 1)[0]
+    q = json.loads(QUAL.read_text())
+    assert block == R.floor_summary_text(R.floor_summary(q["records"]))
+
+
+def test_the_committed_records_pass_the_arithmetic_gate():
+    """Run the stricter gate against the current state before committing it:
+    every committed OK row must reconcile, or the gate is unsatisfiable."""
+    q = json.loads(QUAL.read_text())
+    for r in q["records"]:
+        assert R.floor_row_problems(r["rows"]) == [], r["condition"]
+
+
+def _qual_with(mutate):
+    q = json.loads(QUAL.read_text())
+    for r in q["records"]:
+        mutate(r)
+    return q
+
+
+def _dirty_and_limits_moved(r):
+    r["dirty"], r["limits"] = True, {}
+
+
+def test_floor_summary_cli_refuses_records_the_verdict_gate_refuses(tmp_path, capsys):
+    """PR #653 review, finding 1: --floor-summary published README figures from
+    dirty records with an empty limits block. It must refuse by name, exit 2,
+    and print NO measurement block."""
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(_qual_with(_dirty_and_limits_moved)))
+    assert R.main(["--floor-summary", str(p)]) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("FLOOR SUMMARY REFUSED:"), out
+    assert "dirty" in out and "limits differ" in out, out
+    assert "rows:" not in out and "| voice |" not in out and "LSB" not in out, out
+    with pytest.raises(R.Refused):
+        R.floor_summary(_qual_with(_dirty_and_limits_moved)["records"])
+
+
+@pytest.mark.parametrize("text", ["not json", "[]", '{"records": 3}'])
+def test_floor_summary_cli_refuses_an_unreadable_report(tmp_path, capsys, text):
+    p = tmp_path / "q.json"
+    p.write_text(text)
+    assert R.main(["--floor-summary", str(p)]) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("FLOOR SUMMARY REFUSED:") and "rows:" not in out, out
+
+
+@pytest.mark.parametrize("flag", ["--refresh-endings", "--floor-verdict"])
+@pytest.mark.parametrize("text", [None, "not json", "[]"])
+def test_floor_report_paths_refuse_an_unreadable_input(tmp_path, capsys, flag, text):
+    """Same-class sweep of finding 1: every path that reads saved records names
+    its refusal and exits 2 rather than tracebacking (or, worse, emitting)."""
+    p = tmp_path / "q.json"
+    if text is not None:
+        p.write_text(text)
+    args = [flag, str(p)] + ([str(p)] if flag == "--floor-verdict" else [])
+    assert R.main(args) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "BIAS" not in out, out
+
+
+def _bd_positive(r):
+    """The review's exact defeater: every BD row claims floor sits a full LSB
+    ABOVE round-half-even, with every count left as rendered."""
+    for row in r["rows"]:
+        if row["voice"] == "BD":
+            row.update(diff_sum=96000, mean_diff_lsb=1.0, diff_pct_of_peak=100 / row["peak_lsb"])
+
+
+def test_floor_verdicts_refuse_the_positive_difference_defeater(tmp_path, capsys):
+    """PR #653 review, finding 2 -- a permanent control. floor - round(half-even)
+    under the same monotone rails is -1 or 0 per sample, so a positive sum is
+    impossible; it used to reach BIAS CONFIRMED +1.0000 LSB."""
+    q = _qual_with(_bd_positive)
+    status, ends, why = R.floor_verdicts(q["records"])
+    assert status == "REFUSED" and ends == {}, (status, ends)
+    assert any("BD" in w and "diff_sum" in w for w in why), why
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(q))
+    assert R.main(["--floor-summary", str(p)]) == 2
+    assert R.main(["--floor-verdict", *_write(tmp_path, *q["records"])]) == 2
+    assert "BIAS CONFIRMED" not in capsys.readouterr().out
+
+
+_IMPOSSIBLE = {
+    "zero-frame": (dict(n_frames=0, n_res_zero=0, n_res_low=0, n_res_tie=0, n_res_high=0,
+                        diff_sum=0, mean_diff_lsb=0.0, diff_pct_of_peak=0.0,
+                        mean_floor_err_lsb=0.0, floor_err_pct_of_peak=0.0, max_abs_diff=0), "n_frames"),
+    "window-not-declared": (dict(window=[10, 96009]), "window"),
+    "short-declared-window": (None, "declared window"),
+    "positive-sum": (dict(diff_sum=5271), "diff_sum"),
+    "sum-below-residues": (dict(diff_sum=-5272, mean_diff_lsb=-5272 / 96000,
+                                diff_pct_of_peak=100 * (-5272 / 96000) / 6378.0), "diff_sum"),
+    "sum-above-residues": (dict(diff_sum=-5270, mean_diff_lsb=-5270 / 96000,
+                                diff_pct_of_peak=100 * (-5270 / 96000) / 6378.0), "diff_sum"),
+    "mean-not-sum-over-n": (dict(mean_diff_lsb=-0.06), "mean_diff_lsb"),
+    "pct-not-mean-over-peak": (dict(diff_pct_of_peak=-0.001), "diff_pct_of_peak"),
+    "err-pct-not-err-over-peak": (dict(floor_err_pct_of_peak=-0.001), "floor_err_pct_of_peak"),
+    "err-outside-residue-bounds": (dict(mean_floor_err_lsb=-0.5, floor_err_pct_of_peak=100 * -0.5 / 6378.0),
+                                   "mean_floor_err_lsb"),
+    "max-diff-two": (dict(max_abs_diff=2), "max_abs_diff"),
+    "max-diff-zero-with-a-sum": (dict(max_abs_diff=0), "max_abs_diff"),
+    "peak-above-full-scale": (dict(peak_lsb=40000.0, diff_pct_of_peak=100 * (-5271 / 96000) / 40000.0,
+                                   floor_err_pct_of_peak=None), "peak_lsb"),
+    "peak-below-level-floor": (dict(peak_lsb=8.0, diff_pct_of_peak=100 * (-5271 / 96000) / 8.0,
+                                    floor_err_pct_of_peak=None), "peak_lsb"),
+    "clip-exceeds-frames": (dict(clip_floor=96001), "clip_floor"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_IMPOSSIBLE))
+def test_floor_row_problems_reject_impossible_arithmetic(name):
+    """Each input satisfies the old shape checks (finite, non-negative integer
+    counts, residue classes summing to n_frames) and is still impossible."""
+    patch, why = _IMPOSSIBLE[name]
+    row = _frow("BD")
+    assert R.floor_row_problems([row]) == []
+    if name == "short-declared-window":
+        row = _crow("BD", n=1000, zero=500, high=10)
+    else:
+        row.update(patch)
+        if row.get("floor_err_pct_of_peak") is None:
+            row["floor_err_pct_of_peak"] = 100.0 * row["mean_floor_err_lsb"] / row["peak_lsb"]
+    probs = R.floor_row_problems([row])
+    assert any(why in p for p in probs), (name, probs)
+
+
+def test_the_arithmetic_gate_admits_clipping_and_ties():
+    """The bounds are not tighter than the arithmetic: clipped samples may hide a
+    high residue's -1, and odd-quotient ties add one each."""
+    row = _crow("BD", zero=95000, tie=40, high=500, odd_ties=40)
+    assert R.floor_row_problems([row]) == []
+    clipped = dict(_crow("BD", zero=95000, high=500, odd_ties=0), clip_floor=3, clip_exact=2)
+    clipped.update(diff_sum=-495, mean_diff_lsb=-495 / 96000,
+                   diff_pct_of_peak=100 * (-495 / 96000) / clipped["peak_lsb"])
+    assert R.floor_row_problems([clipped]) == []
+
+
+# -- refusals at the point of use ----------------------------------------------------
+def test_floor_row_refuses_a_window_shorter_than_declared():
+    row = R.output_floor_row("CH", dict(seconds=0.30, gain=0.45, vel=1.0))
+    assert row["status"] == "REFUSED" and "window" in row["reason"], row
+
+
+def test_floor_guards_refuse_each_defeating_input():
+    assert "empty" in R.floor_guards(np.array([], np.int64), 100.0)
+    assert "insufficient level" in R.floor_guards(np.array([1], np.int64), 10.0)
+    assert "overflow" in R.floor_guards(np.array([1 << 38], np.int64), 100.0)
+    assert R.floor_guards(np.array([1 << 37], np.int64), 100.0) is None
+
+
+def test_floor_record_reconciles_the_whole_declared_population():
+    """Every declared voice exactly once; REFUSED rows carry a reason; residue
+    classes sum to n_frames. The real record must survive this check."""
+    ok = {k: x for k, x in _frow("CH").items() if k != "voice"}
+    rows = [dict(ok, voice=v) for v in R.SCREEN_VOICES[:-1]]
+    rows.append(dict(voice=R.SCREEN_VOICES[-1], status="REFUSED", reason="window: only 1.9 s"))
+    assert R.floor_row_problems(rows) == []
+    dup = [dict(ok, voice="CH")] * 2
+    assert any("duplicate" in p for p in R.floor_row_problems(dup))
+    assert any("n_frames" in p for p in R.floor_row_problems([dict(ok, voice="CH", n_frames=99)]))
+    assert any("finite" in p for p in R.floor_row_problems([dict(ok, voice="CH", mean_diff_lsb=float("nan"))]))
+    assert any("reason" in p for p in R.floor_row_problems([dict(voice="CH", status="REFUSED")]))
+    assert any("status" in p for p in R.floor_row_problems([dict(voice="CH", status="MAYBE")]))
+
+
+# -- the verdict path: endings are produced by the tool, refusals are named ----------
+def _crow(v, n=96000, zero=0, tie=0, high=0, odd_ties=0, peak=6378.0, err_at=0.5):
+    """An OK row whose figures are POSSIBLE for floor-minus-round under shared
+    monotone rails (no clipping): every per-sample difference is -1 or 0, so
+    diff_sum = -(high residues + odd-quotient ties); the means and the % of
+    peak follow from it; the pre-rail error sits `err_at` of the way through
+    the interval the residue counts allow."""
+    low = n - zero - tie - high
+    ds = -(high + odd_ties)
+    lo = -(0.5 * low + 0.5 * tie + high) / n
+    hi = -(low / R.Q15 + 0.5 * tie + (0.5 + 1 / R.Q15) * high) / n
+    fe = hi + err_at * (lo - hi)
+    return dict(voice=v, status="OK", n_frames=n, n_res_zero=zero, n_res_low=low,
+                n_res_tie=tie, n_res_high=high, diff_sum=ds, mean_diff_lsb=ds / n,
+                diff_pct_of_peak=100.0 * (ds / n) / peak, mean_floor_err_lsb=fe,
+                floor_err_pct_of_peak=100.0 * fe / peak, window=[10, 10 + n], peak_lsb=peak,
+                gain=14746, acc_sha256="0" * 16, clip_floor=0, clip_exact=0,
+                max_abs_diff=1 if ds else 0)
+
+
+def _frow(v, diff_sum=-5271):
+    """A declared-window (96000-frame) row: diff_sum=0 is low residues only
+    (rounding happened, no net bias); otherwise every difference is a high residue."""
+    if diff_sum == 0:
+        return _crow(v, zero=95000)
+    return _crow(v, zero=96000 - 1000 + diff_sum, high=-diff_sum)
+
+
+def _frec(cond, rows, commit="a" * 40, dirty=False, limits=None):
+    return dict(schema=R.FLOOR_SCHEMA, condition=cond, commit=commit, dirty=dirty,
+                limits=limits if limits is not None else R._jsonable(R.declared_limits()), rows=rows)
+
+
+def test_floor_verdict_cli_produces_each_voices_ending(tmp_path, capsys):
+    dev = _frec("dev", [_frow("CH"), _frow("RS", diff_sum=0)])
+    con = _frec("confirm", [_frow("CH"), _frow("RS", diff_sum=0)])
+    assert R.main(["--floor-verdict", *_write(tmp_path, dev, con)]) == 0
+    out = capsys.readouterr().out
+    lines = {ln.split()[0]: ln for ln in out.splitlines() if ln[:2] == "  " and ln.split()[0] in ("RS", "CH")}
+    assert "BIAS CONFIRMED" in lines["CH"] and "model-side" in lines["CH"], lines
+    assert "NO NET BIAS" in lines["RS"], lines
+    assert "reference gate now" in out
+
+
+@pytest.mark.parametrize("make,why", [
+    (lambda: [_frec("dev", []), _frec("dev", [])], "per condition"),
+    (lambda: [_frec("dev", []), _frec("confirm", [], dirty=True)], "dirty"),
+    (lambda: [_frec("dev", []), _frec("confirm", [], commit="b" * 40)], "different commits"),
+    (lambda: [_frec("dev", []), _frec("confirm", [], limits=dict(R._jsonable(R.declared_limits()), S_OFFSET_MIN=7.0))],
+     "limits differ"),
+    (lambda: [_frec("dev", [_frow("CH")]), _frec("confirm", [])], "no row"),
+], ids=["same-condition-twice", "dirty", "mixed-commits", "revisited-limits", "confirm-missing"])
+def test_floor_verdict_refuses_or_hedges_records_it_cannot_combine(tmp_path, capsys, make, why):
+    assert R.main(["--floor-verdict", *_write(tmp_path, *make())]) in (0, 2)
+    out = capsys.readouterr().out
+    assert why in out, out
+    assert "BIAS CONFIRMED" not in out, out
+
+
+def test_output_floor_rows_out_round_trips_into_floor_verdict(tmp_path, monkeypatch):
+    """--output-floor --rows-out writes what --floor-verdict reads (no render:
+    output_floor_row stubbed with valid fabricated rows)."""
+    monkeypatch.setattr(R, "output_floor_row",
+                        lambda v, c, probe=R.REAL_FLOOR: _frow(v, diff_sum=0))
+    monkeypatch.setattr(R, "provenance", lambda c: "prov")
+    p = {c: str(tmp_path / f"{c}.json") for c in R.CONDITIONS}
+    for c in R.CONDITIONS:
+        rows = R.output_floor_screen(c, ("RS", "CH"), p[c])
+        assert len(rows) == 2
+    recs = [json.loads(pathlib.Path(p[c]).read_text()) for c in R.CONDITIONS]
+    assert all(r["schema"] == R.FLOOR_SCHEMA and r["limits"] == R._jsonable(R.declared_limits())
+               for r in recs)
+    assert all("command" in r and "--output-floor" in r["command"] for r in recs)
+    for r in recs:                       # the worktree may be dirty while testing: that guard is tested above
+        r["dirty"] = False
+    status, ends, why = R.floor_verdicts(recs)
+    assert status == "OK" and all(e.startswith("NO NET BIAS") for e in ends.values()), (status, ends, why)
+
+
+def test_an_all_refused_output_floor_exits_2_not_0(monkeypatch):
+    """run_all.py must not read an all-REFUSED batch as green. One answered row
+    among refusals is evidence, so exit 0."""
+    monkeypatch.setattr(R, "provenance", lambda c: "prov")
+    monkeypatch.setattr(R, "output_floor_row",
+                        lambda v, c, probe=R.REAL_FLOOR: dict(voice=v, status="REFUSED", reason="r"))
+    assert R.main(["--output-floor", "--voices", "RS,HT"]) == 2
+    monkeypatch.setattr(R, "output_floor_row",
+                        lambda v, c, probe=R.REAL_FLOOR: _frow(v) if v == "RS"
+                        else dict(voice=v, status="REFUSED", reason="r"))
+    assert R.main(["--output-floor", "--voices", "RS,HT"]) == 0

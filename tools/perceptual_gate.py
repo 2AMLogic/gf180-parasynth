@@ -192,12 +192,16 @@ def _load_aiff(path) -> tuple:
     return x, int(sr)
 
 
-def to_rate(x, sr: int) -> np.ndarray:
+def resample_to(x, sr: int, to: int) -> np.ndarray:
     x = np.asarray(x, dtype=np.float64)
-    if sr == SR:
+    if sr == to:
         return x
-    g = math.gcd(SR, sr)
-    return resample_poly(x, SR // g, sr // g)
+    g = math.gcd(to, sr)
+    return resample_poly(x, to // g, sr // g)
+
+
+def to_rate(x, sr: int) -> np.ndarray:
+    return resample_to(x, sr, SR)
 
 
 def kweight(x):
@@ -564,11 +568,23 @@ class Target:
     def __init__(self, x, sr, sound, label=""):
         self.label = label
         self.sound = sound
+        self.sr = int(sr)
         self.y = condition(x, sr, side=label or "target")
         self.plan = plan_from_target(self.y, sound)
         self.a = analyse(self.y, self.plan)
 
-    def distance(self, x, sr, label="candidate") -> dict:
+    def distance(self, x, sr, label="candidate", *, match_rate: bool = False) -> dict:
+        """`match_rate=True` is the path for a candidate that did NOT come from
+        a take at the target's rate (our renders, native 48 kHz): it is first
+        sent through the target's own rate, so it meets the same resampler the
+        target met in `condition` (#588). Without it, a 44.1 kHz target carries
+        resampler images above 2 kHz that a native 48 kHz candidate lacks, and
+        `impulse`'s body crest compares them against nothing (BD and the six
+        toms/congas read 3.8-5.0x with no sound defect). Left False for
+        `candidate_path` inputs: an 808 take that went through `to_rate` once
+        already carries the images, and the bar is built from them."""
+        if match_rate:
+            x, sr = resample_to(x, sr, self.sr), self.sr
         y = condition(x, sr, side=label)
         return distances(self.a, analyse(y, self.plan), self.plan)
 
@@ -942,7 +958,7 @@ def rank(refs: pathlib.Path, wavdir: pathlib.Path | None) -> dict:
             wavdir.mkdir(parents=True, exist_ok=True)
             wavfile.write(wavdir / f"{s}.wav", sr, np.asarray(y, dtype=np.float32))
         try:
-            v = verdict(T.distance(y, sr, f"ours {s}"), b["bar"])
+            v = verdict(T.distance(y, sr, f"ours {s}", match_rate=True), b["bar"])
         except Refused as e:
             v = {"verdict": "REFUSED", "why": str(e), "worst_ratio": math.inf, "failing": []}
         v.update({"target": rel, "bar_kind": b["kind"], "bar_from": b["from"]})

@@ -53,7 +53,7 @@ requires_history = pytest.mark.skipif(
 @requires_history
 def test_the_probe_reads_the_archived_tree_not_the_working_tree():
     """The false-attribution guard. `28dfd55` records 9.40462 for this lock
-    and today's tree records 4.21473 (re-locked in #242); the probe must
+    and today's tree records 2.74577 (re-locked in #242, #546); the probe must
     return the archived tree's number for the archived tree."""
     old = dp.measure_commit(BASE, {"lock": CORNER_LOCK}, timeout=120)
     assert not old.get("_import"), old

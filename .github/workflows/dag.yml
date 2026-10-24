@@ -20,12 +20,15 @@ permissions:
 
 concurrency:
   group: dag-${{ github.ref }}
-  cancel-in-progress: true
+  # A started main run is never cancelled (#540): 12 of 95 runs in 7 days were,
+  # leaving those commits with no verdict. A newer merge waits instead.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   regenerate:
     # GitHub-hosted (free on a public repo) since the 2026-09-30 Blacksmith
-    # outage and the operator's move of every public repo off Blacksmith (D5).
+    # outage and the operator's move of every public repo off Blacksmith
+    # (2am `docs/ci.md` §"Blacksmith: decided 2026-09-28, retire").
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     # Do not re-trigger on the bot's own commit. The push filter below is the

@@ -138,12 +138,22 @@ def run_evidence(nid: str, n: dict) -> tuple[bool, str]:
 
 
 def load_results() -> dict:
-    if RESULTS.exists():
-        try:
-            return json.loads(RESULTS.read_text())
-        except Exception:
-            return {}
-    return {}
+    """The recorded evidence, keyed by node. ABSENT means no evidence yet; a
+    file that is present but unreadable or the wrong shape is REFUSED (#600).
+    It used to read as {} -- every node unrun -- and `--run` would then write
+    its partial results over the file, deleting the slow nodes' stamps."""
+    if not RESULTS.exists():
+        return {}
+    try:
+        doc = json.loads(RESULTS.read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+        raise SystemExit(f"REFUSED: {RESULTS} is present but unreadable "
+                         f"({type(e).__name__}: {e}); not treating it as "
+                         f"'no evidence yet'. Restore it from git.")
+    if not isinstance(doc, dict):
+        raise SystemExit(f"REFUSED: {RESULTS} holds a {type(doc).__name__}, "
+                         f"not an object keyed by node")
+    return doc
 
 
 def stale_against(n: dict, at_sha: str) -> str | None:

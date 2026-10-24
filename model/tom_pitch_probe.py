@@ -561,44 +561,50 @@ def _fit_exponential(t: np.ndarray, exc: np.ndarray) -> dict:
     tf, ef = t[:lim], exc[:lim]
     out["n_fit"] = int(lim)
     from scipy.optimize import curve_fit
+    # Only curve_fit's own failures are a "no fit" (#600): RuntimeError when it
+    # exhausts maxfev, ValueError for a degenerate input (LinAlgError is one).
+    # Anything else is a bug and propagates, rather than returning the same
+    # all-None dict a legitimate non-convergence does.
+    FIT_FAILED = (RuntimeError, ValueError)
     try:
         p, _ = curve_fit(lambda tt, e0, tau: e0 * np.exp(-tt / max(tau, 1e-5)), tf, ef,
                          p0=[max(e_start, 1e-4), 0.025],
                          bounds=([-1.0, 1e-3], [3.0, 1.0]), maxfev=20000)
-        out["e0"], out["tau_ms"] = float(p[0]), float(p[1] * 1e3)
-        # e0 at a bound is a failed measurement. tau at a bound with e0 ~ 0 is
-        # not: it is the degenerate fit of an exponential to a flat trajectory,
-        # which is what a tom with NO drop correctly produces, and refusing it
-        # would refuse the null control.
-        out["e0_at_bound"] = bool(abs(p[0] + 1.0) < 1e-3 or abs(p[0] - 3.0) < 1e-3)
-        out["tau_at_bound"] = bool(abs(p[1] - 1e-3) < 1e-6 or abs(p[1] - 1.0) < 1e-6)
-        # An extrapolation that runs far past the data is not a measurement.
-        # Every degenerate fit seen on this corpus has the same shape: one high
-        # first period, the rest flat, explained by e0 -> the bound with a
-        # tau of ~1.8 ms. Guard on the gain from the largest OBSERVED excess.
-        obs = float(np.max(np.abs(ef))) if len(ef) else 0.0
-        out["extrap_gain"] = float(abs(p[0]) / obs) if obs > 0 else float("inf")
-        # A relaxation shorter than one period of the carrier is below what a
-        # per-period estimator can resolve; the fit is then describing the single
-        # first point, not a trajectory.
-        span = float(tf[-1] - tf[0]) if len(tf) > 1 else 0.0
-        one_period = span / max(len(tf) - 1, 1)
-        out["tau_unresolvable"] = bool(p[1] < one_period)
-        out["at_bound"] = bool(out["e0_at_bound"] or out["extrap_gain"] > EXTRAP_MAX
-                               or out["tau_unresolvable"])
-        out["rms_exp"] = float(np.sqrt(np.mean((ef - p[0] * np.exp(-tf / p[1])) ** 2)))
-    except Exception:
+    except FIT_FAILED:
         return out
+    out["e0"], out["tau_ms"] = float(p[0]), float(p[1] * 1e3)
+    # e0 at a bound is a failed measurement. tau at a bound with e0 ~ 0 is
+    # not: it is the degenerate fit of an exponential to a flat trajectory,
+    # which is what a tom with NO drop correctly produces, and refusing it
+    # would refuse the null control.
+    out["e0_at_bound"] = bool(abs(p[0] + 1.0) < 1e-3 or abs(p[0] - 3.0) < 1e-3)
+    out["tau_at_bound"] = bool(abs(p[1] - 1e-3) < 1e-6 or abs(p[1] - 1.0) < 1e-6)
+    # An extrapolation that runs far past the data is not a measurement.
+    # Every degenerate fit seen on this corpus has the same shape: one high
+    # first period, the rest flat, explained by e0 -> the bound with a
+    # tau of ~1.8 ms. Guard on the gain from the largest OBSERVED excess.
+    obs = float(np.max(np.abs(ef))) if len(ef) else 0.0
+    out["extrap_gain"] = float(abs(p[0]) / obs) if obs > 0 else float("inf")
+    # A relaxation shorter than one period of the carrier is below what a
+    # per-period estimator can resolve; the fit is then describing the single
+    # first point, not a trajectory.
+    span = float(tf[-1] - tf[0]) if len(tf) > 1 else 0.0
+    one_period = span / max(len(tf) - 1, 1)
+    out["tau_unresolvable"] = bool(p[1] < one_period)
+    out["at_bound"] = bool(out["e0_at_bound"] or out["extrap_gain"] > EXTRAP_MAX
+                           or out["tau_unresolvable"])
+    out["rms_exp"] = float(np.sqrt(np.mean((ef - p[0] * np.exp(-tf / p[1])) ** 2)))
     try:
         q, _ = curve_fit(lambda tt, e0, T: e0 * np.maximum(0.0, 1.0 - tt / max(T, 1e-5)), tf, ef,
                          p0=[max(e_start, 1e-4), 0.060],
                          bounds=([-1.0, 1e-3], [3.0, 1.0]), maxfev=20000)
+    except FIT_FAILED:
+        q = None
+    if q is not None:
         out["rms_lin"] = float(np.sqrt(np.mean(
             (ef - q[0] * np.maximum(0.0, 1.0 - tf / q[1])) ** 2)))
         out["lin_T_ms"] = float(q[1] * 1e3)
         out["lin_e0"] = float(q[0])
-    except Exception:
-        pass
     if out["rms_exp"] is not None and out["rms_lin"] is not None:
         out["shape"] = "exponential" if out["rms_exp"] < out["rms_lin"] else "linear"
     return out

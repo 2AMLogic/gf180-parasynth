@@ -148,12 +148,14 @@ from scipy.io import wavfile                                         # noqa: E40
 from scipy.signal import butter, sosfiltfilt                         # noqa: E402
 
 import audio_measure as am                                           # noqa: E402
+from finite_number import is_finite_number                           # noqa: E402
 import drum_verify as dv                                             # noqa: E402
 import holdout                                                       # noqa: E402
 import refprofile as rp                                              # noqa: E402
 import mono_m5a_score as mono_m5a                                    # noqa: E402
 import provenance                                                    # noqa: E402
 import partial_trajectory as PT                                      # noqa: E402
+import preparation_contract as prep_contract                         # noqa: E402
 
 CASES_CSV = ROOT / "docs" / "scorecard" / "cases.csv"
 RESULTS = ROOT / "docs" / "scorecard" / "results"
@@ -1544,10 +1546,13 @@ def highpass(y, sr: int, hz: float, order: int = 4) -> np.ndarray:
 # go stale, and this one gained eight entries while this runner was being written.
 REF_MAIN = dv.REF_MAIN
 
-class Refused(Exception):
-    """A precondition of the apparatus failed. REFUSED is a first-class
-    outcome here, distinct from pass and from fail: the case is written as a
-    no-verdict carrying this reason, and never as a number."""
+#: A precondition of the apparatus failed. REFUSED is a first-class outcome
+#: here, distinct from pass and from fail: the case is written as a no-verdict
+#: carrying this reason, and never as a number. Defined in
+#: `preparation_contract` (#163) so that the pair-site contract raises THIS
+#: class, which every caller of `drum_measurements` already turns into a
+#: REFUSED record; `rc.Refused` is the same object it always was to them.
+Refused = prep_contract.Refused
 
 
 def load_reference(voice: str, refdir: pathlib.Path, inject: str = "") -> tuple:
@@ -2283,8 +2288,9 @@ def filt_lowband_gain(cut_hz: float, open_plateau_db: float):
 
 def filt_rolloff(cut_hz: float):
     """Stopband slope in dB per octave, fitted between 2.2 and 7 times the
-    device's OWN measured corner -- `reference_compare.response_row`'s band,
-    so the two agree by construction.
+    device's OWN measured corner (the same 2.2-7x band definition as
+    `reference_compare.response_row`, positioned from the DC-plateau corner
+    `filt_corner` reports; see below).
 
     **Each device is measured over its own band, not over a shared one, and
     the raw slope is reported with no correction.** An earlier version of this
@@ -2298,17 +2304,38 @@ def filt_rolloff(cut_hz: float):
     +4.09 and +4.99 dB/oct at pole frequencies of 250, 312 and 500 Hz -- three
     different answers for three filters of identical shape.
 
-    THE SYSTEMATIC THAT REPLACES IT, MEASURED. The band is scale-invariant in
-    principle, so two filters of the same shape should read the same slope
-    wherever their corners are. They do not quite, because the measured corner
-    is interpolated on a log grid whose points are 20.2 % apart and that
-    interpolation's error depends on where the corner falls between two of
-    them. Over a 2:1 range of corners on closed-form ideal 4-poles the raw
-    slope moves from -18.68 to -17.46 dB/oct: **0.32 dB/oct per 25 % of corner
-    difference.** At F1A's 8 % corner difference that is about 0.1 dB/oct,
-    a fifteenth of the 1.5 dB/oct tolerance. It is pinned in
-    test_run_case.py::test_filt_rolloff_is_nearly_scale_invariant so it cannot
-    grow unnoticed.
+    THE GRID SYSTEMATIC, MEASURED (tools/rolloff_systematic.py, issue #169,
+    `reference_compare.FREQS`, closed-form `|1/(1+jf/fp)|^4`). The band is
+    scale-invariant in principle, so two filters of the same shape should read
+    the same slope wherever their corners are. They do not quite, because the
+    measured corner is interpolated on a log grid whose points are 20.2 %
+    apart and that interpolation's error depends on where the corner falls
+    between two of them. Observed on this grid and this fixture only:
+
+      fp 250 / 312.5 / 500 Hz -> -17.06 / -17.47 / -17.46 dB/oct (corner
+      108.4 / 135.1 / 216.2 Hz): 0.41 dB/oct over a 2:1 range, and 0.41 for
+      the 25 % pair 250 vs 312.5.
+      Fine sweep fp 200-800 Hz (41 points): -18.19 to -17.06, a 1.13 dB/oct
+      spread; worst 25 % pair over fp 200-640 Hz (5 Hz steps): 0.56 dB/oct.
+
+    These are finite-grid observations, not a general bound, and the effect
+    is not monotonic in the corner. The "-18.68 to -17.46 dB/oct, 0.32 dB/oct
+    per 25 %" that stood here was measured against the older moving-median
+    corner (`rolloff_531aa8a`, see test_f1_selected_path.py), before #178 put
+    the corner on the DC-plateau reference; it does not describe this
+    estimator, and the `band_systematic_db_oct_per_25pct_corner` detail field
+    that hardcoded it was retired (no consumer read it). The old "F1A's 8 %
+    corner difference" is #146-era too; the repaired corner difference is
+    16.8 % (issue #169). Bounds actually enforced:
+    test_run_case.py::test_filt_rolloff_is_nearly_scale_invariant.
+
+    Relation to `reference_compare.response_row`: since #546 that function also
+    reads its corner against the DC-plateau reference (`am.corner_dc_referenced`),
+    so the two share the corner definition and the 2.2-7x band. They still differ
+    where the plateau refuses: `response_row` yields no slope there, this
+    profile's `_ref_band` does the same. The moving-median convention they used
+    to share read an ideal 4-pole +82 / +25 / +6 % high at 100 / 200 / 400 Hz
+    (tools/probes/corner_reference_convention.py).
 
     Refuses whenever `slope_db_oct` refuses -- a curve that is not a straight
     line over the band has no slope, and that refusal is what found the
@@ -2346,8 +2373,7 @@ def filt_rolloff(cut_hz: float):
                                 corner_hz=round(c.value, 3),
                                 n_points=int(sl.detail.get("n", 0)),
                                 fit_residual_db=round(float(sl.detail.get("residual_db", 0.0)), 4),
-                                stopband_floor_db=STOPBAND_FLOOR_DB,
-                                band_systematic_db_oct_per_25pct_corner=0.32))
+                                stopband_floor_db=STOPBAND_FLOOR_DB))
     return f
 
 
@@ -3428,8 +3454,17 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
         return dest
     try:
         held = json.loads(dest.read_text())
-    except (OSError, ValueError):
-        return dest
+    except (OSError, ValueError) as e:
+        # Unreadable is not "not an anchor": it may BE an anchor (a 25-minute
+        # RTL run) that is merely damaged, and the caller is about to write, so
+        # a model result must not overwrite it (#610). An integrated-rtl result
+        # returned `dest` above, but that only SELECTS the destination: the
+        # write path (`write_result`) then runs `carry_rubric_history`, which
+        # refuses the corrupt record too, so no engine repairs it. Restoring it
+        # from git is the only repair, by design.
+        raise Refused(f"{dest} is present but unreadable ({type(e).__name__}: {e}); "
+                      f"it may be an integrated-rtl anchor, so a {res.get('engine')} "
+                      f"result will not overwrite it. Restore it from git.")
     if held.get("engine") != "integrated-rtl":
         return dest
     twin = dest.parent / MODEL_TWIN_DIR / dest.name
@@ -3439,6 +3474,22 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
           f"{twin.relative_to(dest.parent.parent) if dest.parent.parent in twin.parents else twin}"
           f" rather than replacing it. Neither is discarded.")
     return twin
+
+
+def write_result(case: dict, dest: pathlib.Path, res: dict, *,
+                 carry_history: bool = True) -> pathlib.Path:
+    """The batch write path, in the order it must run: choose WHERE
+    (`result_destination`), carry the record's earlier scores
+    (`carry_rubric_history`), and only then write. Returns the path written.
+
+    Both guards raise `Refused` before a byte changes, so a corrupt existing
+    record is never overwritten by any engine (#600, #610). A `Refused` is not
+    caught here; inside `--batch` it ends the run (#615)."""
+    dest = result_destination(dest, res)
+    if carry_history:
+        carry_rubric_history(case, dest, res)
+    dest.write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
+    return dest
 
 
 def carry_rubric_history(case: dict, dest: pathlib.Path, res: dict) -> None:
@@ -3454,10 +3505,14 @@ def carry_rubric_history(case: dict, dest: pathlib.Path, res: dict) -> None:
     import scorecard
     old = None
     if dest.exists():
+        # A record that is present but unreadable is REFUSED, not read as "no
+        # earlier record": that dropped its rubric_history and the write that
+        # follows then overwrote it (#600).
         try:
             old = json.loads(dest.read_text())
-        except Exception:
-            old = None
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise Refused(f"{dest} is present but unreadable ({type(e).__name__}: "
+                          f"{e}); its rubric_history would be lost. Restore it from git.")
     history = list((old or {}).get("rubric_history") or [])
     if old is not None:
         before, after = scorecard.evaluate(case, old), scorecard.evaluate(case, res)
@@ -3528,13 +3583,8 @@ def measure_pair(name, units, est, ours, ref, tol_rule, ctx, est_ref=None) -> di
     # An estimate that says ok with a non-finite number is refused HERE, at
     # the point of use: json writes NaN happily and the board must never be
     # handed one as an error (review of #241).
-    def _finite(v) -> bool:
-        try:
-            return math.isfinite(float(v))
-        except (TypeError, ValueError):
-            return False
     for side, e in (("reference", b), ("ours", a)):
-        if e.ok and not _finite(e.value):
+        if e.ok and not is_finite_number(e.value):
             return invalid_metric(units, f"{side}: estimator returned a non-finite "
                                          f"value {e.value!r}")
     if not b.ok:
@@ -3582,6 +3632,16 @@ def drum_measurements(voice: str, ours_x, ours_sr: int, ref_x, ref_sr: int,
     # was need opposite responses.
     ref_y = prepare(ref_x, ref_sr, side=f"the reference recording {rel}")
     ours_y = prepare(ours_x, ours_sr, side=f"our {voice} render")
+    # #163: the two calls above READ as symmetric, and #101, #160 F2 and #161
+    # were three comparisons that read exactly that way and were not. So the
+    # pair asserts the state `prepare` left both sides in -- rates windowed
+    # alike in samples, the guaranteed lead on each side, finite, not silent --
+    # and REFUSES, naming every violating field, before any metric runs. It
+    # compares apparatus state only: first sample, peak and length are the
+    # sounds' own and legitimately differ. tools/preparation_contract.py.
+    prep_contract.check_prepared_pair(
+        prep_contract.Side(f"the reference recording {rel}", ref_y, ref_sr),
+        prep_contract.Side(f"our {voice} render", ours_y, ours_sr))
     ref, ours = (ref_y, ref_sr), (ours_y, ours_sr)
     windowing = {"ours": lead_report(ours_x, ours_sr),
                  "reference": lead_report(ref_x, ref_sr)}
@@ -3997,8 +4057,7 @@ def control_outcome(expect: str, inject: str, case_ids: list[str],
 
     def valid_measurement(v: tuple) -> bool:
         state, worst = v[:2]
-        return (state in ("pass", "fail") and worst is not None
-                and math.isfinite(float(worst)))
+        return state in ("pass", "fail") and is_finite_number(worst)
 
     for cid in case_ids:
         baseline, result = clean[cid], injected[cid]
@@ -4201,10 +4260,11 @@ def main(argv=None) -> int:
         injected_verdicts[cid] = (state, worst, why, res.get("note", ""))
         res.setdefault("provenance", {})["outcome_code"] = OUTCOME_CODE[state]
         if not a.dry_run:
-            dest = result_destination(outdir / f"{cid}.json", res)
-            if not a.inject:
-                carry_rubric_history(c, dest, res)
-            dest.write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
+            # A `Refused` from here (a corrupt existing record, #600/#610) is
+            # deliberately NOT caught: it ends the whole batch, because
+            # skipping the case would leave a stale record on the board that
+            # reads as current. Documented and tested (#615).
+            write_result(c, outdir / f"{cid}.json", res, carry_history=not a.inject)
         states[state] = states.get(state, 0) + 1
         code = max(code, OUTCOME_CODE[state])
         if "traceback" in res:

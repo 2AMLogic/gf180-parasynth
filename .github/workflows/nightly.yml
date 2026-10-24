@@ -8,9 +8,9 @@
 # WHAT CANNOT RUN HERE, and why it is not silently omitted: the reference
 # comparison against Surge XT, Arturia Mini V3 and u-he Diva needs licensed
 # plugins installed on a workstation. GitHub-hosted runners do not have them.
-# That half runs from `make -f Makefile.nightly local` on a machine that does,
-# and `nightly-local-required` below fails if its result is stale, so the gap
-# is visible rather than assumed.
+# That half is produced on a provisioned host and committed as snapshots under
+# docs/reference-freshness/ (see its README); the `reference-freshness` job
+# below fails if they are absent or stale, so the gap is visible, not assumed.
 name: nightly
 
 on:
@@ -78,9 +78,17 @@ jobs:
           python rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail
           python rtl-sketch/verify_synth_top.py --inject VOICE_DRUM_CLAMP16    --expect-fail
           python rtl-sketch/verify_synth_top.py --inject I2S_SHIFT             --expect-fail
-          python rtl-sketch/verify_synth_top.py --inject I2S_SWAP              --expect-fail
+          python rtl-sketch/verify_synth_top.py --inject I2S_DELAY             --expect-fail
           python rtl-sketch/verify_synth_top.py --inject MODAL_NUM_HOLD        --expect-fail
           python rtl-sketch/verify_synth_top.py --inject DRUM_ENV_FLOOR        --expect-fail
+      # I2S_SWAP is BLIND at the whole chip (the core strobes past cycle 127, so a
+      # swapped right channel is bit-identical -- see the Makefile's controls
+      # target, #619). It is not listed above as a control that fires. The right
+      # channel is covered by i2s_tx's own bench, which strobes early enough.
+      - name: the right channel -- i2s_tx on its own bench (#619)
+        run: |
+          python rtl-sketch/verify_i2s_tx.py
+          python rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail
       # The build/report-tool half of docs/verification-rules.md rule 5 (#245).
       # Pure Python: it stages a copy of an archived ORFS run and drives the
       # shipped summarize.py, so no EDA tool is needed. Its X-propagation
@@ -220,16 +228,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: the reference comparison must not go stale
-        run: |
-          R=docs/reference-comparison-results.md
-          if [ ! -f "$R" ]; then
-            echo "no reference comparison result committed -- the voice is UNVALIDATED against anything external"
-            exit 1
-          fi
-          AGE=$(( ( $(date +%s) - $(git log -1 --format=%ct -- "$R") ) / 86400 ))
-          echo "reference comparison last updated $AGE days ago"
-          if [ "$AGE" -gt 14 ]; then
-            echo "stale: re-run 'make -f Makefile.nightly local' on a machine with the plugins"
-            exit 1
-          fi
+        with: { fetch-depth: 0 }   # commit age needs full history; shallow is REFUSED
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # Exit 0 FRESH, 1 STALE, 2 REFUSED (absent/unusable/no history). The check
+      # prints the supported producer command and the publication instructions.
+      # It measures COMMIT age only; see tools/reference_freshness.py.
+      - name: the reference response snapshot must not be absent or stale
+        run: python tools/reference_freshness.py

@@ -1,0 +1,5 @@
+# H_CH2 defeater, run against the ONE-SIDED rule (commit 87f55a9 residual_dc.py + this test), before the fix
+# python3 -m pytest tools/probes/test_residual_dc.py -q -k h_ch2
+E       AssertionError: SUPPORTED by intervention (output truncation): production 5.00 dB, same blocked buses without the output >>15 floor 21.20 dB (against that variant's OWN baseline: the floor's bias leaves both sides), steady bound 11.70 dB
+FAILED tools/probes/test_residual_dc.py::test_h_ch2_defeater_a_variant_that_moves_its_own_baseline_is_not_support
+1 failed, 1 passed, 41 deselected in 0.11s

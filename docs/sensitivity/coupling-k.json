@@ -1,0 +1,132 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "coupling-k",
+  "parameter": {
+    "name": "COUPLE_K",
+    "source": "model/drums_fx.py",
+    "kind": "python-constant",
+    "what": "issue #551 / #510: the shared-bus DC blocker's pole 1 - 2^-K (corner SR/(2 pi 2^K): 29.8, 14.9, 7.46, 3.73, 1.87, 0.93 Hz for K = 8..13). Fixed, not a register (contract 15.10). Its BD-network rationale (C49 0.47 uF into 45.05 kOhm, 7.52 Hz) does NOT establish the CY's physical corner."
+  },
+  "objective": {
+    "name": "CY residual sub-20 Hz energy",
+    "units": "percent of uncoupled",
+    "lower_is_better": true,
+    "why": "the defect the coupling exists to remove is the cymbal's standing offset (beta 0.983 of its sub-20 Hz energy lies below the K = 10 corner). Lower removes more. It is half the trade-off: bass preservation, decay and attack are the other half (docs/dcblock/cutoff.txt) and this record does not rank K on them."
+  },
+  "grid": {
+    "stated_before_results": true,
+    "values": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ],
+    "range_basis": [
+      "K = 10 is what ships and is read off the BD's output network (7.52 Hz vs 7.457 Hz). 8..13 is the range the probe's own --cutoff sweep already reports, and the range the model's docstring names (K = 11 or 12 if the divider is not the AC load).",
+      "8 (29.8 Hz) is already inside the band-limited body and bounds the aggressive side; 13 (0.93 Hz) is below the CY's own decay corner and bounds the gentle side.",
+      "Committed in docs/sensitivity/coupling-k-plan.json (first commit be9a724, amended before any point at a later commit; the amendment corrects the plan's premise and leaves the runs unchanged)."
+    ],
+    "held_fixed": {
+      "placement": "bus",
+      "voice": "CY",
+      "RENDER_S": 2.4
+    }
+  },
+  "decision_rule": {
+    "stated_before_results": true,
+    "flat_within_relative": 0.1,
+    "why": "a K step halves the corner. 10 % of energy is 0.41 dB, twice the probe's tightest declared absolute allowance (0.2 dB, hf_5k_20k_db) and far below the 6 dB improvement the probe requires, so two points closer than that cannot be told apart by anything the probe asks. Stated from the decision's granularity, not from the spread of the data."
+  },
+  "evidence": {
+    "artifact": "docs/sensitivity/coupling-k-sweep.txt",
+    "format": "fixed-width-table",
+    "table": "coupling_k",
+    "value_column": "COUPLE_K",
+    "objective_column": "sub20_resid_pct",
+    "held_fixed": {},
+    "regenerate": "python3 tools/probes/dc_blocker.py --k-sweep",
+    "instrument": "tools/probes/dc_blocker.py render('CY', bus, K) through the integer DrumsFx and output_fx, absolute band energy by rectangular-window FFT; the K = 10 point is asserted bit-equal to the production register path before any point is taken. 48 kHz, 2.40 s, ~65 s on one core."
+  },
+  "points": [
+    {
+      "value": 8,
+      "objective": 0.39
+    },
+    {
+      "value": 9,
+      "objective": 1.241
+    },
+    {
+      "value": 10,
+      "objective": 3.272
+    },
+    {
+      "value": 11,
+      "objective": 7.337
+    },
+    {
+      "value": 12,
+      "objective": 14.593
+    },
+    {
+      "value": 13,
+      "objective": 26.173
+    }
+  ],
+  "prediction": {
+    "runs": [
+      [
+        8
+      ],
+      [
+        9
+      ],
+      [
+        10
+      ],
+      [
+        11
+      ],
+      [
+        12
+      ],
+      [
+        13
+      ]
+    ],
+    "basis": "Closed form, not the measurement. The blocker is linear with |H(f)|^2 = f^2 / (f^2 + fc^2) (to 0.05 %); its zero removes the f = 0 bin exactly at every K, and the CY has phi = 0.888 of its sub-20 Hz energy there (docs/dcblock/screen.txt), so the residual is at most 11.2 % of baseline and is the non-DC part only. That part is the skirt of a slowly decaying offset, a Lorentzian whose corner follows the CY's decay time (T20 about 558 ms, tau of order 0.1 to 0.2 s, 1 to 2 Hz), so it sits at f of order 0.4 to 3 Hz, on the 2.4 s clip's 0.42 Hz grid. For f well under fc, |H|^2 is about f^2/fc^2, a factor of 4 per K step (K = 8 to 11 have fc of 30, 15, 7.5, 3.7 Hz); at K = 12 and 13 (1.86 and 0.93 Hz) fc is inside the skirt and |H|^2 is 0.2 to 0.5 at 1 Hz, still more than 10 % apart. So every adjacent pair separates: SENSITIVE, residual rising monotonically with K. Cross-check read before any point (plan amendment): the closed-form steady-state figures 0.38, 1.22, 3.21, 7.20, 14.28, 25.41 % for K = 8..13, computed from the uncoupled spectrum and |H(f)|^2 with nothing run through the integer filter.",
+    "independent_of_measurement": true
+  },
+  "verdict": {
+    "state": "SENSITIVE",
+    "runs": [
+      [
+        8
+      ],
+      [
+        9
+      ],
+      [
+        10
+      ],
+      [
+        11
+      ],
+      [
+        12
+      ],
+      [
+        13
+      ]
+    ],
+    "summary": "As predicted: residual rises monotonically with K, every adjacent pair 1.8x to 3.2x apart (0.39, 1.24, 3.27, 7.34, 14.59, 26.17 %), far outside the 10 % rule. The measured values sit 1.8 to 2.8 % above the closed-form upper bound on attenuation at every K, as they must (a causal filter from rest adds a transient). K = 10 leaves 3.27 % of the CY's sub-20 Hz energy (-14.85 dB); the 6 dB the probe requires is met through K = 12 (-8.36 dB) and missed at K = 13 (-5.82 dB). So K = 10 is a point on a steep, measured curve, not on a plateau: there is no 'any K will do' here, and no argument that K = 10 is the CY's corner."
+  },
+  "limits": [
+    "One voice (CY), one placement (bus), one hit, one window (2.40 s). The residual's absolute values depend on the window: phi, the f = 0 bin's share, was 0.888 at 0.60 s and is 0.391 at 2.40 s for the same cymbal. The SHAPE (every K step separates) is what the prediction claimed and is what is recorded.",
+    "The BD-network rationale for K = 10 does not establish the CY's physical corner; this curve says what each K costs the CY's sub-20 Hz residual and nothing about which corner the CY's circuit has. Whether the CY wants 10 is #553's acoustic acceptance.",
+    "Wrong-then-right in this record's making: 1 premise (the plan's phi = 0.888, window-dependent; caught by the instrument's own precondition before any point was rendered; the runs prediction was unchanged). Zero measurements were wrong before they were right.",
+    "Not hardware, not a listening result."
+  ]
+}

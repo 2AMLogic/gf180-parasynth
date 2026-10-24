@@ -1,0 +1,1966 @@
+#!/usr/bin/env python3
+"""Residual drum DC coupling: which non-cymbal voices carry a defect? (#152)
+
+    python3 tools/probes/residual_dc.py --declared      the limits + frozen conditions
+    python3 tools/probes/residual_dc.py --controls      MOVED/BLIND: properties x defects
+    python3 tools/probes/residual_dc.py --reference     what an external recording can say
+    python3 tools/probes/residual_dc.py --screen  [--condition dev|confirm] [--voices A,B] [--rows-out F.json]
+    python3 tools/probes/residual_dc.py --verdict DEV.json CONFIRM.json   per-subject ending (subject_verdict)
+    python3 tools/probes/residual_dc.py --output-floor [--condition dev|confirm] [--voices A,B] [--rows-out F.json]
+    python3 tools/probes/residual_dc.py --floor-verdict DEV.json CONFIRM.json [--rows-out F.json]
+    python3 tools/probes/residual_dc.py --floor-summary REPORT.json     the README's derived #618 figures
+    python3 tools/probes/residual_dc.py --refresh-endings REPORT.json   re-derive saved endings, no render
+    python3 tools/probes/residual_dc.py --detail  [--condition dev|confirm]   CH / RS / BD / HT
+    python3 tools/probes/residual_dc.py --batch-spec    the tools/run_all.py job list
+    python3 -m pytest tools/probes/test_residual_dc.py -q
+
+SCOPE. Diagnostic code and evidence only. No production enable, no RTL, no
+image change. #510/#552/#553 own cymbal carry-through, #556 owns MA/RS
+brightness, #220/#350 own modal arithmetic, #558/#591-#593 own tom/conga.
+
+THE QUESTION IS TWO QUESTIONS, and the apparatus keeps them apart.
+
+  1. WHAT KIND of sub-20 Hz energy does a voice carry? A STANDING OFFSET (a
+     level that persists for many cycles of the corner) or the SKIRT of a
+     finite burst (the Fourier content of a pulse shorter than ~1/20 Hz)?
+     A DC blocker removes the first and cannot remove the second.
+  2. IS IT A SOUND DEFECT? That needs an external reference whose capture
+     chain could have carried DC. Model self-comparison cannot establish it,
+     and an AC-coupled capture cannot prove DC absent (REFUSED, `--reference`).
+
+TWO INDEPENDENT STATISTICS decide question 1; the class is read off BOTH and
+they are required to agree, otherwise the class is MIXED and is REFUSED as a
+class (a result, not a fault):
+
+  beta  share of the sub-20 Hz energy BELOW the blocker's corner fc.
+        Corner-relative: "what could a blocker at fc remove".
+  S     spectral flatness of the 0-20 Hz band, `phi * (2 n - 1)` with phi the
+        f = 0 bin's share and n the number of bins below 20 Hz. A burst much
+        shorter than 1/(20 Hz) has a FLAT spectrum there, S = 1 exactly; a
+        standing offset puts everything in one bin, S = 2n-1 (79 at a 2 s
+        window). Burst-relative, and independent of fc.
+
+Both are read on a FIXED onset-aligned analysis window (`ANALYSIS_S`), so
+leading silence and trailing padding cannot move them: a statistic that
+depends on how long you watched was the CY's phi (0.888 -> 0.391 when the clip
+went 0.6 -> 2.4 s, dc_blocker.py), and is the reason this one is windowed
+by declaration.
+
+ABSOLUTE band energy is reported beside every share. Removing LF raises an
+HF share without adding HF (`share_change_kind`).
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import os
+import pathlib
+import re
+import subprocess
+import sys
+from dataclasses import dataclass
+
+import numpy as np
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "model"))
+sys.path.insert(0, str(ROOT / "tools"))
+
+from finite_number import is_finite_number  # noqa: E402
+
+FS = 32768.0                       # int16 full scale
+LSB = 1.0 / FS
+
+# ===========================================================================
+# DECLARED BEFORE ANY MODEL OR CORPUS DATA WAS READ (git history carries the
+# ordering: this block lands in the commit that adds the module, with the
+# estimator still a stub and the tests red).
+# ===========================================================================
+ANALYSIS_S = 2.0          # fixed onset-aligned window; clips shorter -> REFUSED
+STABILITY_S = 1.0         # beta/S are recomputed on the first 1.0 s: must agree
+ONSET_FRAC = 0.02         # onset = first |x| > 2 % of peak (as dc_blocker.onset_index)
+# Class limits. Justified from the PRIOR dc_blocker.py --screen record, not from
+# anything measured here: its beta separated offset (CY 0.98, CH 0.97) from
+# skirt (RS 0.38, HT 0.36, BD 0.45) with a gap 0.45..0.97; the limits sit in the
+# gap with margin for its own window drift (BD moved 0.375 -> 0.455 = 0.08).
+BETA_OFFSET_MIN = 0.80
+BETA_SKIRT_MAX = 0.60
+BETA_STABLE_TOL = 0.10    # |beta(1.0 s) - beta(2.0 s)| above this -> REFUSED
+# S limits: a flat spectrum is S = 1; allow 2x for a burst that is not
+# infinitely short. A standing offset is S = 2n-1 = 79; 8 is ~10 % of that.
+S_SKIRT_MAX = 2.0
+S_OFFSET_MIN = 8.0
+TAIL_RING_MAX = 0.05      # the last 10 % of the window may ring at <= 5 % of peak
+MIN_PEAK_LSB = 16.0       # a clip peaking below this is silence for this purpose
+MIN_BINS_BELOW_FC = 4     # band resolution at use
+MIN_BINS_SUB20 = 10
+RES_MARGIN_DB = 6.0       # sub-20 energy must clear the quantisation floor by this
+OFFSET_PEAK_FRAC = 0.02   # a "standing offset defect" needs |window mean| >= 2 % of peak
+HF_ADDED_DB = 3.0         # absolute 5-20 kHz rise that counts as synthesis
+HF_FLAT_DB = 0.2          # ... and below which a share rise is LF removal
+CH_REST_TOL_DB = 1.0      # H_CH: float causal-from-rest prediction vs measured
+CH_SHORTFALL_MIN_DB = 3.0 # H_CH is only interesting if steady - measured >= this
+WINDOW_EDGES_MS = (0.0, 10.0, 50.0, 200.0, 1000.0, 2000.0)   # onset-relative
+
+BANDS = {"sub20": (0.0, 20.0), "body": (20.0, 700.0), "mid": (700.0, 5000.0),
+         "hf": (5000.0, 20000.0)}
+
+# Frozen conditions. `confirm` is NOT inspected until the limits above are
+# committed; it changes gain, velocity AND render length, and it must not
+# change a verdict. Limits are not revisited after it is read.
+CONDITIONS = {
+    "dev":     dict(seconds=2.40, gain=0.45, vel=1.00),
+    "confirm": dict(seconds=4.80, gain=0.75, vel=0.60),
+}
+SUBJECTS = ("CH", "RS")
+CONTROLS = ("BD", "HT")
+SCREEN_VOICES = ("BD", "SD", "LT", "LC", "MT", "MC", "HT", "HC", "RS", "CL",
+                 "CP", "MA", "CB", "OH", "CH")          # every voice except CY
+LEAD_FRAMES = 10
+
+
+# ===========================================================================
+# Estimators. Pure functions of (samples, sample rate, corner in Hz).
+# ===========================================================================
+def onesided(x, sr):
+    """(power, freqs): one-sided power spectrum, every bin but DC/Nyquist
+    doubled, so Parseval is exact. Rectangular window, nothing normalised."""
+    x = np.asarray(x, float)
+    p = np.abs(np.fft.rfft(x)) ** 2
+    p[1:(-1 if len(x) % 2 == 0 else None)] *= 2.0
+    return p, np.fft.rfftfreq(len(x), 1.0 / sr)
+
+
+def band_db(x, sr, lo, hi):
+    """ABSOLUTE band energy, dB re full scale (mean-square form). Falls when
+    energy is removed; does not rise when other energy is."""
+    x = np.asarray(x, float) / FS
+    p, f = onesided(x, sr)
+    p = p / len(x) ** 2
+    return 10.0 * math.log10(float(p[(f >= lo) & (f < hi)].sum()) + 1e-30)
+
+
+def band_share_pct(x, sr, lo, hi):
+    """NORMALISED. Never a verdict."""
+    p, f = onesided(np.asarray(x, float), sr)
+    return 100.0 * float(p[(f >= lo) & (f < hi)].sum()) / (float(p.sum()) + 1e-30)
+
+
+def onset_index(x, frac=ONSET_FRAC):
+    a = np.abs(np.asarray(x, float))
+    pk = float(a.max()) if a.size else 0.0
+    return int(np.argmax(a > frac * pk)) if pk > 0 else 0
+
+
+def quantisation_floor_db(sr, hi=20.0):
+    """dB re FS that white 16-bit quantisation noise puts in [0, hi) Hz, in
+    `band_db`'s units: (LSB^2/12) * hi / (sr/2)."""
+    return 10.0 * math.log10((LSB ** 2 / 12.0) * hi / (sr / 2.0))
+
+
+def corner_hz(k, sr):
+    """The implemented blocker's corner for pole 1 - 2^-K (dc_blocker.py)."""
+    return sr / (2.0 * math.pi * (1 << int(k)))
+
+
+class Estimator:
+    """The measuring instrument as one replaceable object, so the injected-bug
+    controls can swap a single decision and run the SAME fixtures."""
+
+    def window(self, x, sr):
+        """Onset-aligned fixed window. Returns (segment, onset) or raises
+        Refused when the clip cannot supply `ANALYSIS_S` after its onset."""
+        x = np.asarray(x, float)
+        i0 = onset_index(x)
+        n = int(round(ANALYSIS_S * sr))
+        if len(x) - i0 < n:
+            raise Refused(f"only {(len(x) - i0) / sr:.2f} s after the onset, "
+                          f"{ANALYSIS_S:.2f} s declared")
+        return x[i0:i0 + n], i0
+
+    def prep(self, seg):
+        return seg
+
+    def stats(self, x, sr, fc):
+        seg, i0 = self.window(x, sr)
+        seg = self.prep(seg)
+        return _stats_of(seg, sr, fc, i0)
+
+    def band(self, x, sr, lo, hi):
+        return band_db(x, sr, lo, hi)
+
+
+def _stats_of(seg, sr, fc, i0=0):
+    p, f = onesided(seg, sr)
+    m20 = f < 20.0
+    sub = float(p[m20].sum())
+    n20 = int(m20.sum())
+    nfc = int((f < fc).sum())
+    phi = float(p[0]) / (sub + 1e-30)
+    beta = float(p[f < fc].sum()) / (sub + 1e-30)
+    return dict(n=len(seg), n20=n20, nfc=nfc, phi=phi, flat=phi * (2 * n20 - 1),
+                beta=beta, sub20_db=band_db(seg, sr, 0.0, 20.0), onset=i0,
+                peak_lsb=float(np.abs(seg).max()))
+
+
+class Refused(Exception):
+    """The apparatus cannot answer. A first-class outcome, not a failure."""
+
+
+def tail_ring_frac(seg, tail=0.10):
+    """Std of the LAST `tail` of the window (linear trend removed) over the
+    window's peak. A voice still ringing at the window end is not finished,
+    and beta/S then depend on where the window was cut. Time-domain on
+    purpose: the first version brick-wall filtered at 20 Hz and read the
+    pulse's own sinc ringing as 'sounding' (wrong-then-right #2)."""
+    seg = np.asarray(seg, float)
+    pk = float(np.abs(seg).max())
+    if pk <= 0:
+        return 0.0
+    t = seg[int(len(seg) * (1.0 - tail)):]
+    n = np.arange(len(t))
+    r = t - np.polyval(np.polyfit(n, t, 1), n)
+    return float(r.std()) / pk
+
+
+REAL = Estimator()
+
+
+def label_from_stats(beta, flat):
+    """The frozen OFFSET / SKIRT / MIXED rule. One definition, called by
+    `classify` and by `row_problems`, so a record's label is re-derived under
+    the same rule that produced it."""
+    off = beta >= BETA_OFFSET_MIN and flat >= S_OFFSET_MIN
+    skirt = beta <= BETA_SKIRT_MAX and flat <= S_SKIRT_MAX
+    return "OFFSET" if off else "SKIRT" if skirt else "MIXED"
+
+
+def classify(x, sr, fc, est: Estimator = REAL):
+    """(label, detail). label is one of OFFSET, SKIRT, MIXED, REFUSED.
+    MIXED = the two independent statistics disagree: reported, not forced."""
+    x = np.asarray(x, float)
+    if not np.all(np.isfinite(x)):
+        return "REFUSED", dict(reason="non-finite samples")
+    if float(np.abs(x).max()) < MIN_PEAK_LSB:
+        return "REFUSED", dict(reason="silent / below 16 LSB peak")
+    try:
+        st = est.stats(x, sr, fc)
+    except Refused as e:
+        return "REFUSED", dict(reason=str(e))
+    seg, _ = est.window(x, sr)
+    if st["nfc"] < MIN_BINS_BELOW_FC or st["n20"] < MIN_BINS_SUB20:
+        return "REFUSED", dict(reason=f"band resolution: {st['nfc']} bins below fc, "
+                                      f"{st['n20']} below 20 Hz", **st)
+    ring = tail_ring_frac(est.prep(seg))
+    st["tail_ring"] = ring
+    if ring > TAIL_RING_MAX:
+        return "REFUSED", dict(reason=f"still sounding at the window end: last 10 % rings at "
+                                      f"{100 * ring:.1f} % of peak (limit {100 * TAIL_RING_MAX:.0f} %)", **st)
+    floor = quantisation_floor_db(sr)
+    st["margin_db"] = st["sub20_db"] - floor
+    if st["margin_db"] < RES_MARGIN_DB:
+        return "REFUSED", dict(reason=f"sub-20 Hz energy {st['margin_db']:+.1f} dB over the "
+                                      f"quantisation floor, {RES_MARGIN_DB} required", **st)
+    # stability: the same statistic on the first STABILITY_S of the window
+    h = _stats_of(est.prep(seg[:int(round(STABILITY_S * sr))]), sr, fc)
+    st["beta_half"], st["flat_half"] = h["beta"], h["flat"]
+    if abs(h["beta"] - st["beta"]) > BETA_STABLE_TOL:
+        return "REFUSED", dict(reason=f"beta moves {h['beta']:.2f} -> {st['beta']:.2f} with the window", **st)
+    return label_from_stats(st["beta"], st["flat"]), st
+
+
+def window_means(x, sr, edges_ms=WINDOW_EDGES_MS):
+    """Mean sample value (LSB) in onset-relative windows. Leading silence is
+    cut at the onset; a window past the clip's end is nan, never zero."""
+    x = np.asarray(x, float)
+    i0 = onset_index(x)
+    out = []
+    for a, b in zip(edges_ms[:-1], edges_ms[1:]):
+        s, e = i0 + int(a * sr / 1e3), i0 + int(b * sr / 1e3)
+        out.append(float(x[s:e].mean()) if e <= len(x) and e > s else float("nan"))
+    return out
+
+
+def share_change_kind(base, cand, sr, est=None):
+    """Read a candidate against its baseline: LF_REMOVAL, HF_ADDED or OTHER.
+    A share rise with flat ABSOLUTE HF is LF removal and not an improvement.
+    `est.band` is the HF reading (replaceable by an injected defect)."""
+    band = (est or REAL).band
+    d_hf = band(cand, sr, *BANDS["hf"]) - band(base, sr, *BANDS["hf"])
+    d_sh = band_share_pct(cand, sr, *BANDS["hf"]) - band_share_pct(base, sr, *BANDS["hf"])
+    if d_hf >= HF_ADDED_DB:
+        return "HF_ADDED", d_hf, d_sh
+    if d_sh > 0 and abs(d_hf) <= HF_FLAT_DB:
+        return "LF_REMOVAL", d_hf, d_sh
+    return "OTHER", d_hf, d_sh
+
+
+# ===========================================================================
+# Independently known synthetic signals. The answer to "offset or skirt" is
+# fixed by CONSTRUCTION, never by running the estimator on the model.
+# ===========================================================================
+def _t(sr, seconds):
+    return np.arange(int(round(seconds * sr))) / sr
+
+
+def _q(x):
+    """Quantise to int16 the way the block's output does."""
+    return np.clip(np.round(np.asarray(x, float) * FS), -32768, 32767)
+
+
+def tone_burst(sr, f0=300.0, tau=0.03, amp=0.3, seconds=ANALYSIS_S + 0.4):
+    """Zero-mean decaying sine: audible content, no DC by construction."""
+    t = _t(sr, seconds)
+    return amp * np.exp(-t / tau) * np.sin(2 * np.pi * f0 * t)
+
+
+def fx_offset(sr=48000, off=0.08):
+    """GROUND TRUTH: a STANDING OFFSET. Zero-mean ring plus a constant that
+    persists for the whole clip. Class OFFSET by construction."""
+    x = tone_burst(sr)
+    return _q(x + off)
+
+
+def fx_skirt(sr=48000, amp=0.3, dur=0.010):
+    """GROUND TRUTH: a FINITE BURST with non-zero mean (a 10 ms half-sine
+    pulse) -- sub-20 Hz energy exists and is entirely the pulse's skirt.
+    Its spectrum is flat to 20 Hz (|X(20)|/|X(0)| = 0.99). Class SKIRT."""
+    n = int(round(ANALYSIS_S * sr)) + int(0.4 * sr)
+    x = np.zeros(n)
+    m = int(round(dur * sr))
+    x[:m] = amp * np.sin(np.pi * np.arange(m) / m)
+    return _q(x)
+
+
+def fx_zero_mean(sr=48000, amp=0.3):
+    """GROUND TRUTH: zero-mean short burst (Hann-windowed integer-cycle 2 kHz
+    sine). Nothing for a blocker to do and nothing to classify: the answer is
+    SKIRT or REFUSED, and never OFFSET."""
+    n = int(round(ANALYSIS_S * sr)) + int(0.4 * sr)
+    m = int(round(0.010 * sr))
+    t = np.arange(m) / sr
+    x = np.zeros(n)
+    x[:m] = amp * np.hanning(m) * np.sin(2 * np.pi * 2000.0 * t)
+    return _q(x)
+
+
+def add_hf(x, sr=48000, amp=0.05, f0=9000.0, tau=0.05):
+    """GENUINELY ADDED high frequency: a decaying 9 kHz ring."""
+    t = np.arange(len(x)) / sr
+    return _q(np.asarray(x, float) / FS + amp * np.exp(-t / tau) * np.sin(2 * np.pi * f0 * t))
+
+
+def remove_offset(x, off_lsb):
+    """The LF-removal counterpart: same signal, standing offset taken out."""
+    return np.asarray(x, float) - off_lsb
+
+
+# ===========================================================================
+# Injected defects: each swaps ONE decision of the instrument. The suite must
+# turn red on every one (`controls_matrix`). The first is the exact wrong
+# conditioner this issue names (whole-clip-mean subtraction, the old
+# `excitation_energy.condition_meansub`).
+# ===========================================================================
+class MeanSubtract(Estimator):
+    """Subtracts the window's mean first: erases the very offset it classifies."""
+    name = "whole-clip-mean subtraction"
+
+    def prep(self, seg):
+        return seg - seg.mean()
+
+
+class ClipStartWindow(Estimator):
+    """Windows from the clip start, not the onset: leading silence leaks in."""
+    name = "clip-start window (not onset-relative)"
+
+    def window(self, x, sr):
+        x = np.asarray(x, float)
+        n = int(round(ANALYSIS_S * sr))
+        if len(x) < n:
+            raise Refused("short")
+        return x[:n], 0
+
+
+class WholeClipWindow(Estimator):
+    """Whole clip, not a fixed window: trailing padding changes the answer."""
+    name = "whole-clip window (padding-dependent)"
+
+    def window(self, x, sr):
+        x = np.asarray(x, float)
+        i0 = onset_index(x)
+        return x[i0:], i0
+
+
+class FixedRate(Estimator):
+    """Assumes 48 kHz whatever the clip's rate: bins are mislabelled."""
+    name = "fixed 48 kHz bin map"
+
+    def stats(self, x, sr, fc):
+        return super().stats(x, 48000, fc)
+
+
+class ShareBand(Estimator):
+    """Reads the HF band as a SHARE: LF removal looks like HF synthesis."""
+    name = "HF as normalised share"
+
+    def band(self, x, sr, lo, hi):
+        return 10.0 * math.log10(band_share_pct(x, sr, lo, hi) / 100.0 + 1e-30)
+
+
+MUTANTS = (MeanSubtract, ClipStartWindow, WholeClipWindow, FixedRate, ShareBand)
+
+
+# ===========================================================================
+# Properties: each is a predicate on an Estimator, true for the real one.
+# `controls_matrix` runs every property against every injected defect.
+# VALIDATED DOMAIN of each: 48 kHz (and 96 kHz for P_rate), corner 7.46 Hz,
+# clips with >= ANALYSIS_S after onset, int16-quantised, amplitude >= 0.05 FS.
+# ===========================================================================
+FC = 7.46
+
+
+def _cls(est, x, sr=48000):
+    return classify(x, sr, FC, est)[0]
+
+
+def p_offset_is_offset(est):
+    return _cls(est, fx_offset()) == "OFFSET"
+
+
+def p_burst_is_skirt(est):
+    return _cls(est, fx_skirt()) == "SKIRT"
+
+
+def p_zero_mean_never_offset(est):
+    return _cls(est, fx_zero_mean()) in ("SKIRT", "REFUSED")
+
+
+def p_added_hf_not_confused_with_lf_removal(est):
+    """HF really added -> HF_ADDED. Offset removed -> LF_REMOVAL (share rises,
+    absolute HF flat). Both must be read correctly by the same rule."""
+    base = fx_offset()
+    k_add = share_change_kind(base, add_hf(base), 48000, est)[0]
+    k_rem = share_change_kind(base, remove_offset(base, 0.08 * FS), 48000, est)[0]
+    return k_add == "HF_ADDED" and k_rem == "LF_REMOVAL"
+
+
+def p_lead_silence_invariant(est):
+    for mk in (fx_offset, fx_skirt):
+        x = mk()
+        y = np.concatenate([np.zeros(int(0.5 * 48000)), x])
+        a, b = est.stats(x, 48000, FC), est.stats(y, 48000, FC)
+        if not all(math.isclose(a[k], b[k], rel_tol=1e-9, abs_tol=1e-9) for k in ("phi", "beta", "flat")):
+            return False
+    return True
+
+
+def p_pad_invariant(est):
+    for mk in (fx_offset, fx_skirt):
+        x = mk()
+        y = np.concatenate([x, np.zeros(int(5.0 * 48000))])
+        a, b = est.stats(x, 48000, FC), est.stats(y, 48000, FC)
+        if not all(math.isclose(a[k], b[k], rel_tol=1e-9, abs_tol=1e-9) for k in ("phi", "beta", "flat")):
+            return False
+    return True
+
+
+def p_polarity_invariant(est):
+    return all(_cls(est, s * mk()) == _cls(est, mk()) for mk in (fx_offset, fx_skirt) for s in (-1.0,)) \
+        and _cls(est, -fx_offset()) == "OFFSET"
+
+
+def p_scale_invariant(est):
+    for mk, want in ((fx_offset, "OFFSET"), (fx_skirt, "SKIRT")):
+        for g in (0.5, 2.0):
+            x = mk()
+            if _cls(est, _q(x / FS * g)) != want:
+                return False
+    return True
+
+
+def p_rate_invariant(est):
+    """Same analogue signal at 8 and 96 kHz, corner given in Hz: same class."""
+    return all(_cls(est, fx_offset(sr), sr) == "OFFSET" and _cls(est, fx_skirt(sr), sr) == "SKIRT"
+               for sr in (8000, 96000))
+
+
+PROPERTIES = (
+    ("offset->OFFSET", p_offset_is_offset),
+    ("burst->SKIRT", p_burst_is_skirt),
+    ("zero-mean!=OFFSET", p_zero_mean_never_offset),
+    ("HF-add vs LF-removal", p_added_hf_not_confused_with_lf_removal),
+    ("lead-silence", p_lead_silence_invariant),
+    ("tail-pad", p_pad_invariant),
+    ("polarity", p_polarity_invariant),
+    ("scale", p_scale_invariant),
+    ("sample-rate", p_rate_invariant),
+)
+
+
+def controls_matrix():
+    """{defect name: {property: MOVED|BLIND}} plus the clean row. MOVED = the
+    property turned red under the defect (the control did its job)."""
+    rows = {"(clean)": {n: ("ok" if f(REAL) else "RED") for n, f in PROPERTIES}}
+    for M in MUTANTS:
+        est = M()
+        row = {}
+        for n, f in PROPERTIES:
+            try:
+                ok = f(est)
+            except Refused:
+                ok = False
+            row[n] = "blind" if ok else "MOVED"
+        rows[M.name] = row
+    return rows
+
+
+def print_matrix(rows):
+    names = [n for n, _ in PROPERTIES]
+    print("%-40s" % "defect \\ property" + " ".join("%-20s" % n for n in names))
+    for d, r in rows.items():
+        print("%-40s" % d + " ".join("%-20s" % r[n] for n in names))
+
+
+# ===========================================================================
+# External reference gate. What a recording can and cannot establish.
+# ===========================================================================
+REFS_ENV = "GF180_TR808_REFS"
+REFS_FALLBACKS = ("/tmp/tr808-ref", str(pathlib.Path.home() / "dev" / "refs"))
+
+
+def reference_gate(path=None, environ=None):
+    """Assert the reference apparatus at the point of use. Returns a dict:
+
+      status  REFUSED | AVAILABLE
+      dc      REFUSED | PERMITTED   (may the recording's DC be read?)
+      reasons list of strings
+
+    The manifest schema is THIS PROBE'S requirement, not the corpus's: a
+    manifest.json with `files: [{name, sha256}]`, `sample_rate`, and
+    `capture_coupling` in {"ac", "dc"}. A corpus whose manifest lacks them is
+    REFUSED here, and the fix is to add the declaration, not to relax this.
+
+    **A capture that is AC-coupled or does not say cannot establish absence of
+    DC.** Its zero mean is the capture chain's, so `dc` is REFUSED: a recording
+    lacking an offset is not evidence the machine lacks one."""
+    environ = os.environ if environ is None else environ
+    cands = [path] if path else [environ.get(REFS_ENV), *REFS_FALLBACKS]
+    cands = [c for c in cands if c]
+    root = next((pathlib.Path(c) for c in cands if pathlib.Path(c).is_dir()), None)
+    if root is None:
+        return dict(status="REFUSED", dc="REFUSED", root=None,
+                    reasons=[f"no reference directory ({REFS_ENV} unset or missing; tried "
+                             f"{', '.join(cands) or 'nothing'})"])
+    mf = root / "manifest.json"
+    if not mf.is_file():
+        return dict(status="REFUSED", dc="REFUSED", root=str(root),
+                    reasons=[f"{mf} absent: no manifest, no hashes, no provenance"])
+    try:
+        m = json.loads(mf.read_text())
+    except Exception as e:                                   # noqa: BLE001
+        return dict(status="REFUSED", dc="REFUSED", root=str(root), reasons=[f"manifest unreadable: {e}"])
+    if not isinstance(m, dict):
+        return dict(status="REFUSED", dc="REFUSED", root=str(root), reasons=["manifest is not a JSON object"])
+    reasons = []
+    files = m.get("files")
+    if not isinstance(files, list) or not files:
+        reasons.append("manifest lists no files")
+    else:
+        for f in files:
+            if not isinstance(f, dict):
+                reasons.append(f"file entry {f!r} is not an object")
+                continue
+            fp = root / str(f.get("name", ""))
+            if not fp.is_file():
+                reasons.append(f"{f.get('name')}: listed but missing")
+            elif hashlib.sha256(fp.read_bytes()).hexdigest() != f.get("sha256"):
+                reasons.append(f"{f.get('name')}: sha256 does not match the manifest")
+    sr = m.get("sample_rate")
+    if not isinstance(sr, int) or isinstance(sr, bool) or sr <= 0:      # bool is an int subclass
+        reasons.append("manifest declares no sample_rate")
+    coupling = m.get("capture_coupling")
+    if coupling not in ("ac", "dc"):
+        reasons.append("manifest does not declare capture_coupling (ac|dc)")
+    if reasons:
+        return dict(status="REFUSED", dc="REFUSED", root=str(root), reasons=reasons)
+    if coupling == "ac":
+        return dict(status="AVAILABLE", dc="REFUSED", root=str(root), sample_rate=m["sample_rate"],
+                    reasons=["capture is AC-coupled: its absence of DC is the capture chain's, "
+                             "so no raw-DC inference is permitted (shape/band comparison only)"])
+    return dict(status="AVAILABLE", dc="PERMITTED", root=str(root), sample_rate=m["sample_rate"], reasons=[])
+
+
+# ===========================================================================
+# The model: production baseline, raw bus, clamped output
+# ===========================================================================
+LEAD = LEAD_FRAMES
+
+
+def git(*a):
+    try:
+        return subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:                                        # noqa: BLE001
+        return "?"
+
+
+def provenance(cond_name=None):
+    import drums_fx as dx
+    dirty = "-dirty" if git("status", "--porcelain") else ""
+    c = CONDITIONS.get(cond_name or "dev")
+    init = dx.DrumsFx().couple_en
+    ref = reference_gate()
+    return (f"commit {git('rev-parse', '--short=12', 'HEAD')}{dirty}  SR {dx.SR}  "
+            f"condition {cond_name or '-'} {c}  analysis {ANALYSIS_S:.1f}s onset-aligned  "
+            f"K {dx.COUPLE_K} ({corner_hz(dx.COUPLE_K, dx.SR):.3f} Hz)\n"
+            f"production init: DrumsFx().couple_en = {init} (A_COUPLE=0x{dx.A_COUPLE:02X}; the enable "
+            f"is OFF after reset and nothing in the shipped writes sets it); the '+coupling' column "
+            f"writes A_COUPLE=1 at frame 0 -- a DIAGNOSTIC TOGGLE, an experiment, not a production state\n"
+            f"reference: {ref['status']} dc-inference={ref['dc']} {'; '.join(ref['reasons'])}")
+
+
+_MEMO = {}
+_BUSES = {}
+
+
+def render_bus(sound, enable, seconds, gain, vel):
+    """(raw_bus int64, out int16, n_clip). raw = the bus sum BEFORE the output
+    stage's clamp; out = the clamped int16 the block emits. Deterministic and
+    integer, so memoised."""
+    key = (sound, int(enable), seconds, gain, vel)
+    if key in _MEMO:
+        return _MEMO[key]
+    import drums_fx as dx
+    n = int(round(seconds * dx.SR))
+    kit = dx.kit_with_sounds(sound)
+    w = dx.hit_writes([(LEAD, dx.SOUND_STOP[sound], vel)], kit)
+    if enable:
+        w = sorted(list(w) + [(0, dx.A_COUPLE, 1)], key=lambda t: t[0])
+    d = dx.DrumsFx()
+    dmix, body = d.play(w, n)
+    assert d.couple_en == int(bool(enable)), (d.couple_en, enable)   # the toggle is the toggle
+    g = dx.accent_reg(gain)
+    raw = (np.asarray(dmix, np.int64) * g + np.asarray(body, np.int64) * g) >> 15
+    out = dx.output_fx(np.zeros(n), 0, dmix, g, body, g)
+    n_clip = int(((raw > 32767) | (raw < -32768)).sum())
+    _MEMO[key] = (raw, out, n_clip)
+    _BUSES[key] = (np.asarray(dmix, np.int64), np.asarray(body, np.int64), g)
+    return _MEMO[key]
+
+
+SCALES = (1, 8, 64)
+CH_SURR_TOL_DB = 1.0       # H_CH2: integer surrogate vs the production render
+# H_CH2: a variant "reaches" when its attenuation is within this of the steady
+# bound computed on ITS OWN baseline -- TWO-SIDED. CHANGED AFTER THE DEV ROW WAS
+# READ (#614 review): the first rule was one-sided against the PRODUCTION bound,
+# and a variant that moves its own baseline cleared it (21.22 vs 11.66 dB). The
+# tolerance value is unchanged; the comparison it applies to is. Confirm is the
+# first data this form of the rule sees.
+CH_REACH_TOL_DB = 1.0
+
+
+def steady_bound_db(seg, sr, k):
+    """Sub-20 Hz attenuation the implemented discrete one-pole (pole 1 - 2^-K)
+    would give in steady state on `seg`'s own spectrum: -10 log10 of the
+    |H|^2-weighted share of the 0-20 Hz energy. A bound for THAT baseline only."""
+    p, f = onesided(np.asarray(seg, float), sr)
+    m = f < 20.0
+    a = 1.0 - 2.0 ** -k
+    z = np.exp(-1j * 2 * np.pi * f[m] / sr)
+    h2 = np.abs((1 - z) / (1 - a * z)) ** 2
+    return -10 * math.log10(float((p[m] * h2).sum()) / (float(p[m].sum()) + 1e-30) + 1e-30)
+
+
+def integer_scale_probe(x, i0, sr, k, scales=SCALES):
+    """Sub-20 Hz attenuation of the integer blocker (`DcBlockFx`, bit for bit)
+    on `x * s` for each integer scale `s`, from rest, on one fixed window.
+
+    An LTI filter's attenuation does not depend on the signal's scale. The
+    integer loop `y = x - floor(acc / 2^K)` estimates the mean as an INTEGER,
+    so a mean below 1 LSB is invisible to it until `acc` crosses 2^K, and its
+    attenuation DOES depend on scale. Scaling the input by an exact integer
+    adds no quantisation: it is an intervention, not a re-render. Returns
+    [(scale, attenuation_dB)]."""
+    import drums_fx as dx
+    x = np.asarray(x, np.int64)
+    res = []
+    for sc in scales:
+        y = dx.dc_block(x * sc, k)
+        a = band_db(window_slice(x * sc, i0, sr).astype(float), sr, 0.0, 20.0)
+        b = band_db(window_slice(y, i0, sr).astype(float), sr, 0.0, 20.0)
+        res.append((sc, a - b))
+    return res
+
+
+def bus_variants(sound, c, i0, sr, scales=(1, 8, 64)):
+    """Re-run the production coupling on the PRE-blocker buses, in three
+    arithmetics, to say WHICH quantiser limits the attenuation:
+
+      production   bus blockers (MIX_BITS / BODY_BITS), then `(d*g + b*g) >> 15`
+      float-out    the same blocked buses, output NOT truncated (acc / 2^15)
+      xS           buses multiplied by an exact integer S (a louder signal at
+                   the same quantisation), production arithmetic
+
+    The surrogate is only used if its production variant is BIT-EXACT against
+    the model's own A_COUPLE=1 render (`exact`); otherwise the caller must
+    REFUSE it. Each variant changes its own BASELINE as well as its blocked
+    side, so each carries the steady bound of its own baseline (`bounds`), and
+    only that bound is a valid comparison for its attenuation.
+    Returns dict(exact, rows=[(label, attenuation_dB)], bounds={label: dB})."""
+    import drums_fx as dx
+    d0, b0, g = _BUSES[(sound, 0, c["seconds"], c["gain"], c["vel"])]
+    d1, b1, _ = _BUSES[(sound, 1, c["seconds"], c["gain"], c["vel"])]
+    f1, f2 = dx.DcBlockFx(dx.COUPLE_K, in_bits=dx.MIX_BITS), dx.DcBlockFx(dx.COUPLE_K, in_bits=dx.BODY_BITS)
+    dm = np.array([f1.step(int(v)) for v in d0], np.int64)
+    bd = np.array([f2.step(int(v)) for v in b0], np.int64)
+    exact = bool(np.array_equal(dm, d1) and np.array_equal(bd, b1))
+
+    def acc(d, b, sc=1):
+        return ((d * sc * g + b * sc * g) >> 15).astype(float)
+
+    def att(base, cand):
+        return (band_db(window_slice(base, i0, sr), sr, 0.0, 20.0)
+                - band_db(window_slice(cand, i0, sr), sr, 0.0, 20.0))
+    pairs = [("production", acc(d0, b0), acc(dm, bd)),
+             ("float-out", (d0 * g + b0 * g) / 32768.0, (dm * g + bd * g) / 32768.0)]
+    for sc in scales[1:]:
+        pairs.append((f"buses x{sc}", acc(d0, b0, sc), acc(dm, bd, sc)))
+    rows = [(n, att(b, c)) for n, b, c in pairs]
+    bounds = {n: steady_bound_db(window_slice(b, i0, sr), sr, dx.COUPLE_K) for n, b, _ in pairs}
+    return dict(exact=exact, rows=rows, bounds=bounds)
+
+
+def window_slice(x, i0, sr):
+    return np.asarray(x, float)[i0:i0 + int(round(ANALYSIS_S * sr))]
+
+
+# ===========================================================================
+# The output stage's final quantisation (#618). The production stage computes
+# ONE int64 accumulator, floors it with `>> 15` and clamps once (`output_fx`;
+# RTL voice_dp.v: `tacc`, `tsh = tacc >>> 15`, `sat16t`). This apparatus
+# retains that ONE accumulator per render and derives from it, without
+# re-rendering:
+#
+#   floor   the production output -- must equal `output_fx` sample for sample
+#           before anything is interpreted (the identity guard);
+#   exact   the exact integer round-half-even of acc / 2^15 under the SAME
+#           rails, by quotient/remainder only.
+#
+# The measured quantities are the residue distribution, the pre-rail floor
+# error against the exact rational accumulator, the signed floor-minus-round
+# output difference (LSB and % of baseline peak) and the pre-rail clip counts
+# (kept OUT of the attribution population). The comparison, the voice
+# population (SCREEN_VOICES, CH the hypothesis subject, the rest controls)
+# and every refusal rule below were frozen in the commit that added them,
+# BEFORE the confirm condition was read. No expected value anywhere comes
+# from `output_fx` or from this apparatus: the fixtures' answers are integer
+# arithmetic, written by hand.
+# ===========================================================================
+FLOOR_SCHEMA = "residual-dc-output-floor/1"
+Q15 = 1 << 15
+HALF15 = Q15 >> 1
+ACC_BOUND = 1 << 38        # |tacc| < 2^38 (voice_dp.v:281 "the whole sum, |.| < 2^38")
+
+
+def floor_out(acc):
+    """The production output stage, re-derived from the RTL description
+    (arithmetic shift right 15 = floor, then the ONE rail). The oracle the
+    fixtures check; `output_fx` is checked against THIS, never the reverse."""
+    return np.clip(np.asarray(acc, np.int64) >> 15, -32768, 32767)
+
+
+def rint_out(acc):
+    """EXACT integer round-half-even of acc / 2^15. Quotient/remainder only:
+    `>> 15` is floor, so r = acc - (q << 15) is always in [0, 32767]; the tie
+    r == 32768/2 resolves to the EVEN quotient, which is also correct for
+    negative ties (q = -1, r = half -> 0; q = -2, r = half -> -2). No float
+    conversion, and the rounding happens before the rail, never on an
+    already-shifted bus."""
+    acc = np.asarray(acc, np.int64)
+    q = acc >> 15
+    r = acc - (q << 15)
+    up = (r > HALF15) | ((r == HALF15) & ((q & 1) == 1))
+    return np.clip(q + up.astype(np.int64), -32768, 32767)
+
+
+def acc_of(dmix, body, gain):
+    """The output stage's int64 accumulator, exactly as `output_fx` forms it
+    for the drum path (v = 0): dmix*g + body*g, once, retained."""
+    g = int(gain)
+    return np.asarray(dmix, np.int64) * g + np.asarray(body, np.int64) * g
+
+
+class FloorProbe:
+    """The output-stage instrument. Every decision is a method so an injected
+    control swaps exactly ONE decision and runs the same fixtures."""
+
+    name = "exact round-half-even vs production floor (clean)"
+
+    def floor(self, acc):
+        return floor_out(acc)
+
+    def exact(self, acc):
+        return rint_out(acc)
+
+    def window(self, i0, n_avail):
+        """The declared shared window: onset-relative, and the onset is the
+        BASELINE's (an independent onset would measure a different population)."""
+        if n_avail - i0 < int(round(ANALYSIS_S * 48000.0)):
+            raise Refused(f"only {(n_avail - i0) / 48000.0:.2f} s after the baseline "
+                          f"onset, {ANALYSIS_S:.2f} s declared")
+        return i0, i0 + int(round(ANALYSIS_S * 48000.0))
+
+    def identity(self, floor_variant, production_out):
+        """The saturated production samples must match `output_fx` exactly --
+        checked, not assumed; a probe that always says yes is a control."""
+        return bool(np.array_equal(np.asarray(floor_variant, np.int64),
+                                   np.asarray(production_out, np.int64)))
+
+
+REAL_FLOOR = FloorProbe()
+
+
+# ---- injected defects: one decision each ----------------------------------
+class TieAlwaysUp(FloorProbe):
+    """Negative-tie mishandling: ties always round up (half-up), so q even
+    (e.g. -2 at -1.5) goes to the wrong side."""
+    name = "ties always up (negative ties mishandled)"
+
+    def exact(self, acc):
+        acc = np.asarray(acc, np.int64)
+        q, r = acc >> 15, acc - ((acc >> 15) << 15)
+        return np.clip(q + (r >= HALF15).astype(np.int64), -32768, 32767)
+
+
+class RoundAfterShift(FloorProbe):
+    """Rounding an already-shifted bus IN FLOAT: floor(acc/32768.0 + 0.5) is
+    half-up through a float conversion -- both named sins of the class."""
+    name = "round after the shift, in float (half-up)"
+
+    def exact(self, acc):
+        return np.clip(np.floor(np.asarray(acc, np.float64) / FS + 0.5), -32768, 32767).astype(np.int64)
+
+
+class WrongGain(FloorProbe):
+    """Reconstructs the accumulator with a doubled gain: the identity guard
+    must refuse it, not measure it."""
+    name = "accumulator at the wrong gain"
+
+    def accumulate(self, dmix, body, gain):
+        return acc_of(dmix, body, int(gain) * 2)
+
+
+class IndependentOnset(FloorProbe):
+    """Windows from onset+1: a different population than the declared one."""
+    name = "independent onset selection (baseline onset + 1)"
+
+    def window(self, i0, n_avail):
+        return super().window(i0 + 1, n_avail)
+
+
+class NoRails(FloorProbe):
+    """Clipping omitted -- the exact `INJECT_BUG_VOICE_OUT_SAT` control the
+    RTL carries (`sample <= tsh[15:0]`)."""
+    name = "final rails omitted"
+
+    def floor(self, acc):
+        return np.asarray(acc, np.int64) >> 15
+
+    def exact(self, acc):
+        a = np.asarray(acc, np.int64)
+        q, r = a >> 15, a - ((a >> 15) << 15)
+        up = (r > HALF15) | ((r == HALF15) & ((q & 1) == 1))
+        return q + up.astype(np.int64)
+
+
+class IdentityAlwaysOk(FloorProbe):
+    """The baseline identity guard stubbed to pass: the guard's own defect."""
+    name = "baseline identity falsely accepted"
+
+    def identity(self, floor_variant, production_out):
+        return True
+
+
+FloorProbe.accumulate = staticmethod(acc_of)   # swappable like the rest
+
+FLOOR_MUTANTS = (TieAlwaysUp, RoundAfterShift, WrongGain, IndependentOnset,
+                 NoRails, IdentityAlwaysOk)
+
+
+def floor_guards(acc, peak_lsb):
+    """Point-of-use preconditions, each with its named refusal. Order matters:
+    the cheapest refusals first. Returns a reason string or None. (Window
+    coverage is asserted before this runs, in `FloorProbe.window`.)"""
+    if acc.size == 0 or not np.all(np.isfinite(acc)):
+        return "non-finite or empty accumulator"
+    if peak_lsb < MIN_PEAK_LSB:
+        return f"insufficient level: window peak {peak_lsb:.1f} LSB < {MIN_PEAK_LSB:.0f}"
+    m = int(np.abs(acc).max()) if acc.size else 0
+    if m >= ACC_BOUND:
+        return f"accumulator overflow: max |acc| {m} >= 2^38 (the RTL tacc bound); the model arithmetic is not what ships"
+    return None
+
+
+def output_floor_row(sound, c, probe: FloorProbe = REAL_FLOOR):
+    """One voice, one condition: the same-accumulator floor-vs-exact row.
+    `c` is a conditions dict (seconds, gain, vel). REFUSED is a first-class
+    outcome; every refusal names its reason through the row's `status`."""
+    import drums_fx as dx
+    try:
+        raw, out, _n_clip = render_bus(sound, 0, c["seconds"], c["gain"], c["vel"])
+    except Refused as e:
+        return dict(voice=sound, status="REFUSED", reason=f"render refused: {e}")
+    dmix, body, g = _BUSES[(sound, 0, c["seconds"], c["gain"], c["vel"])]
+    acc = probe.accumulate(dmix, body, g)                   # swappable: a wrong-gain accumulator must die on the identity guard
+    if g != dx.accent_reg(c["gain"]):
+        return dict(voice=sound, status="REFUSED",
+                    reason=f"requested gain {c['gain']} did not reach the render (accent reg {g})")
+    i0 = onset_index(out)                                   # the BASELINE's onset
+    try:
+        a, b = probe.window(i0, len(out))
+    except Refused as e:
+        return dict(voice=sound, status="REFUSED", reason=f"window: {e}")
+    accw = acc[a:b]
+    floorw, exactw = probe.floor(accw), probe.exact(accw)
+    prodw = np.asarray(out[a:b], np.int64)
+    if not probe.identity(floorw, prodw):
+        return dict(voice=sound, status="REFUSED",
+                    reason="baseline identity FAILED: the floor variant is not the production "
+                           "output sample for sample; refusing to interpret either")
+    why = floor_guards(accw, float(np.abs(prodw).max()))
+    if why:
+        return dict(voice=sound, status="REFUSED", reason=why)
+    q = accw >> 15
+    r = accw - (q << 15)
+    n = accw.size
+    n_tie = int((r == HALF15).sum())
+    res = dict(n_frames=n,
+               n_res_zero=int((r == 0).sum()),
+               n_res_low=int(((r > 0) & (r < HALF15)).sum()),
+               n_res_tie=n_tie,
+               n_res_high=int((r > HALF15).sum()))
+    assert sum(res[k] for k in ("n_res_zero", "n_res_low", "n_res_tie", "n_res_high")) == n
+    err_num = (q << 15) - accw          # PRE-rail floor error, over Q15: q*2^15 - acc == -r; the post-rail
+                                        # floorw would fold the clamp into the error (a rail is a rail, not a bias)
+    dsum = int((floorw.astype(np.int64) - exactw.astype(np.int64)).sum())
+    up = (r > HALF15) | ((r == HALF15) & ((q & 1) == 1))    # the SAME increment rint_out applies, ties included
+    clip_floor = int(((q > 32767) | (q < -32768)).sum())
+    qe = q + up.astype(np.int64)
+    clip_exact = int(((qe > 32767) | (qe < -32768)).sum())
+    peak = float(np.abs(prodw).max())
+    return dict(voice=sound, status="OK", window=[int(a), int(b)], peak_lsb=peak,
+                gain=int(g), acc_sha256=hashlib.sha256(accw.tobytes()).hexdigest()[:16],
+                mean_floor_err_lsb=float(err_num.sum()) / (n * Q15),
+                mean_diff_lsb=dsum / n, diff_sum=int(dsum),
+                diff_pct_of_peak=100.0 * (dsum / n) / peak,
+                floor_err_pct_of_peak=100.0 * (float(err_num.sum()) / (n * Q15)) / peak,
+                max_abs_diff=int(np.abs(floorw.astype(np.int64) - exactw.astype(np.int64)).max()),
+                clip_floor=clip_floor, clip_exact=clip_exact, **res)
+
+
+def bias_ending(rows_by_cond):
+    """The standing-bias ending for ONE voice, frozen rules, both conditions.
+    Distinct endings: REFUSED / NO BIAS POSSIBLE (nothing was rounded) /
+    NO NET BIAS (rounding happened, integer sum exactly 0) / BIAS CONFIRMED.
+    A generic 'mean != 0' bias assertion is defeated by a nonzero signal whose
+    accumulators are all exact multiples of 32768 -- covered by a fixture."""
+    if not isinstance(rows_by_cond, dict) or sorted(rows_by_cond) != sorted(CONDITIONS):
+        return "REFUSED (need one row per declared condition)"
+    for c, r in rows_by_cond.items():
+        if r.get("status") == "REFUSED":
+            return f"REFUSED ({c}: {r.get('reason')})"
+        if r.get("status") != "OK":
+            return f"REFUSED ({c}: row status {r.get('status')!r})"
+    rounded = [r["n_res_zero"] < r["n_frames"] for r in rows_by_cond.values()]
+    sums = {c: r["diff_sum"] for c, r in rows_by_cond.items()}
+    if not any(rounded):
+        return ("NO BIAS POSSIBLE: every accumulator in the window is an exact multiple of "
+                "32768 in both conditions; floor and round agree bit for bit")
+    # Every figure is looked up by its condition NAME and printed beside that
+    # name. Never by position: sorted() puts `confirm` before `dev`, and an
+    # index-labelled formatter printed every pair swapped (PR #653 review).
+    order = tuple(CONDITIONS)                               # declaration order: dev, confirm
+    sums = {c: sums[c] for c in order}
+    conf = [c for c in order if sums[c] != 0]
+    if not conf:
+        return ("NO NET BIAS: residues present, but the integer sum of floor-minus-round is "
+                "exactly 0 in both conditions (residue asymmetry, not a net level)")
+    if len(conf) == len(order) and len({sums[c] > 0 for c in order}) == 1:
+        def each(key, unit, fmt):
+            return " / ".join(f"{rows_by_cond[c][key]:{fmt}} {unit} ({c})" for c in order)
+        return (f"BIAS CONFIRMED (model-side): floor sits {each('mean_diff_lsb', 'LSB', '+.4f')} "
+                f"from exact round-half-even ({each('diff_pct_of_peak', '%', '+.4f')} of baseline peak); "
+                f"pre-rail floor error {each('mean_floor_err_lsb', 'LSB', '+.4f')}. "
+                f"Model arithmetic only: no audibility, sound-defect or RTL-delivery claim.")
+    return (f"BIAS IS CONDITION-DEPENDENT: confirmed in {conf or 'neither'} only "
+            f"(diff sums {sums}); reported, not forced into one verdict")
+
+
+FLOOR_ROW_FIELDS = ("mean_floor_err_lsb", "mean_diff_lsb", "diff_pct_of_peak",
+                    "floor_err_pct_of_peak")
+
+
+def declared_window_frames():
+    return int(round(ANALYSIS_S * 48000.0))
+
+
+def _close(a, b):
+    return math.isclose(a, b, rel_tol=1e-9, abs_tol=1e-12)
+
+
+def floor_arithmetic_problems(row):
+    """Why an OK row's figures are IMPOSSIBLE, given finite numbers and
+    non-negative integer counts that partition n_frames (checked first).
+
+    The arithmetic being reconciled (`output_floor_row`): per sample the floor
+    variant is clip(q) and the exact one clip(q + up), up in {0, 1}, with the
+    SAME monotone rails, so floor - round is -1 or 0 and nothing else. Hence:
+      * diff_sum <= 0, max_abs_diff in {0, 1}, and max_abs_diff == 1 iff
+        diff_sum != 0;
+      * -diff_sum <= n_res_high + n_res_tie (only a high residue or an
+        odd-quotient tie increments), and -diff_sum >= n_res_high - clip_floor
+        - clip_exact (a high residue's -1 can only be hidden by a rail);
+      * mean_diff_lsb == diff_sum / n_frames, diff_pct_of_peak == 100 *
+        mean_diff_lsb / peak_lsb, floor_err_pct_of_peak likewise;
+      * the pre-rail error is -r / 2^15 per sample, r in [1, 2^14) low,
+        2^14 tie, (2^14, 2^15) high, 0 exact: its mean sits in the interval the
+        residue counts allow;
+      * n_frames is the declared window, > 0, and `window` spans exactly it;
+        peak_lsb is the level the guard admitted and no more than full scale;
+        clip counts do not exceed n_frames.
+    Defeater carried as a permanent control (PR #653 review): every BD row
+    rewritten to diff_sum=96000, mean_diff_lsb=1.0, diff_pct_of_peak=100/peak,
+    counts untouched -- it used to reach BIAS CONFIRMED +1.0000 LSB."""
+    out = []
+    n, ds = row["n_frames"], row["diff_sum"]
+    zero, low, tie, high = (row[k] for k in ("n_res_zero", "n_res_low", "n_res_tie", "n_res_high"))
+    cf, ce, mx, peak = row["clip_floor"], row["clip_exact"], row["max_abs_diff"], row["peak_lsb"]
+    want_n = declared_window_frames()
+    if n <= 0:
+        return [f"n_frames {n}: an OK row with no frames measured nothing"]
+    if n != want_n:
+        out.append(f"n_frames {n} is not the declared window ({want_n} frames = {ANALYSIS_S} s)")
+    w = row.get("window")
+    if not (isinstance(w, list) and len(w) == 2 and all(isinstance(x, int) and not isinstance(x, bool) for x in w)
+            and 0 <= w[0] and w[1] - w[0] == n):
+        out.append(f"window {w!r} does not span exactly n_frames={n} from a non-negative onset")
+    if not MIN_PEAK_LSB <= peak <= FS:
+        out.append(f"peak_lsb {peak!r} outside [{MIN_PEAK_LSB}, {FS}] (the level guard and full scale)")
+    for k, c in (("clip_floor", cf), ("clip_exact", ce)):
+        if c > n:
+            out.append(f"{k} {c} exceeds n_frames {n}")
+    if ds > 0:
+        out.append(f"diff_sum {ds} > 0: floor minus round-half-even under shared rails is -1 or 0 per sample")
+    elif -ds > high + tie:
+        out.append(f"diff_sum {ds}: more -1s than high residues + ties ({high} + {tie})")
+    elif -ds < high - cf - ce:
+        out.append(f"diff_sum {ds}: fewer -1s than high residues not hidden by a rail "
+                   f"({high} - {cf} - {ce})")
+    if mx not in (0, 1):
+        out.append(f"max_abs_diff {mx} is not 0 or 1")
+    elif mx != (1 if ds else 0):
+        out.append(f"max_abs_diff {mx} disagrees with diff_sum {ds}")
+    md, fe = row["mean_diff_lsb"], row["mean_floor_err_lsb"]
+    if not _close(md, ds / n):
+        out.append(f"mean_diff_lsb {md!r} != diff_sum / n_frames = {ds / n!r}")
+    if peak > 0:
+        if not _close(row["diff_pct_of_peak"], 100.0 * md / peak):
+            out.append(f"diff_pct_of_peak {row['diff_pct_of_peak']!r} != 100 * mean_diff_lsb / peak_lsb "
+                       f"= {100.0 * md / peak!r}")
+        if not _close(row["floor_err_pct_of_peak"], 100.0 * fe / peak):
+            out.append(f"floor_err_pct_of_peak {row['floor_err_pct_of_peak']!r} != 100 * "
+                       f"mean_floor_err_lsb / peak_lsb = {100.0 * fe / peak!r}")
+    lo = -(0.5 * low + 0.5 * tie + high) / n                # every residue at its largest
+    hi = -(low / Q15 + 0.5 * tie + (0.5 + 1 / Q15) * high) / n   # ... at its smallest
+    if not (lo - 1e-12 <= fe <= hi + 1e-12):
+        out.append(f"mean_floor_err_lsb {fe!r} outside [{lo!r}, {hi!r}], the interval the residue counts allow")
+    return out
+
+
+def floor_row_problems(rows):
+    """Why a `--output-floor` record's rows cannot reach an ending, validated
+    where the JSON is read. Reconciliation: every row is OK or REFUSED; an OK
+    row carries finite measurements, non-negative integer counts whose residue
+    classes sum to n_frames, and figures that are POSSIBLE for floor-minus-round
+    (`floor_arithmetic_problems`); a REFUSED row carries a reason."""
+    if not isinstance(rows, list):
+        return [f"rows is not a list: {type(rows).__name__}"]
+    out, voices = [], []
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            out.append(f"row {i} is not an object")
+            continue
+        v = row.get("voice")
+        voices.append(v)
+        if not isinstance(v, str) or not v:
+            out.append(f"row {i} has no voice")
+        st = row.get("status")
+        if st not in ("OK", "REFUSED"):
+            out.append(f"row {i} ({v}) status {st!r} not OK|REFUSED")
+            continue
+        if st == "REFUSED":
+            if not isinstance(row.get("reason"), str) or not row["reason"]:
+                out.append(f"row {i} ({v}) REFUSED without a reason")
+            continue
+        n_before = len(out)
+        for k in FLOOR_ROW_FIELDS + ("peak_lsb",):
+            if not finite_real(row.get(k)):
+                out.append(f"row {i} ({v}) {k} {row.get(k)!r} is not a finite real number")
+        for k in ("n_frames", "n_res_zero", "n_res_low", "n_res_tie", "n_res_high",
+                  "clip_floor", "clip_exact", "max_abs_diff"):
+            x = row.get(k)
+            if not isinstance(x, int) or isinstance(x, bool) or x < 0:
+                out.append(f"row {i} ({v}) {k} {x!r} is not a non-negative integer")
+        ds = row.get("diff_sum")
+        if not isinstance(ds, int) or isinstance(ds, bool):
+            out.append(f"row {i} ({v}) diff_sum {ds!r} is not an integer (it is a SIGNED sum)")
+        if all(isinstance(row.get(k), int) for k in ("n_frames", "n_res_zero", "n_res_low",
+                                                     "n_res_tie", "n_res_high")) \
+                and sum(row[k] for k in ("n_res_zero", "n_res_low", "n_res_tie", "n_res_high")) != row["n_frames"]:
+            out.append(f"row {i} ({v}) residue classes do not sum to n_frames")
+        if len(out) == n_before:                            # shape is sound: now the arithmetic
+            out += [f"row {i} ({v}) {p}" for p in floor_arithmetic_problems(row)]
+    dup = sorted({v for v in voices if isinstance(v, str) and voices.count(v) > 1})
+    if dup:
+        out.append(f"duplicate rows for {dup}")
+    return out
+
+
+def floor_record(cond_name, rows):
+    """The `--output-floor --rows-out` record: rows plus what a later reader
+    must check (schema, commit, dirty, limits, the exact command)."""
+    cmd = (f"tools/probes/residual_dc.py --output-floor --condition {cond_name} "
+           f"--voices {','.join(SCREEN_VOICES)}")
+    return dict(schema=FLOOR_SCHEMA, condition=cond_name, commit=git("rev-parse", "HEAD"),
+                dirty=bool(git("status", "--porcelain")), command=cmd,
+                limits=_jsonable(declared_limits()), rows=_jsonable(rows))
+
+
+def output_floor_screen(cond_name, voices=SCREEN_VOICES, rows_out=None):
+    """The frozen population: every SCREEN_VOICE, CH the hypothesis subject,
+    the rest controls. Every row is accounted for; usable/refused counts are
+    printed, never implied."""
+    print(provenance(cond_name))
+    print("\nOUTPUT-STAGE FLOOR vs EXACT ROUND-HALF-EVEN "
+          "(uncoupled production baseline; CH subject, others controls; model arithmetic only)")
+    rows = []
+    for v in voices:
+        r = output_floor_row(v, CONDITIONS[cond_name])
+        rows.append(r)
+        if r["status"] == "REFUSED":
+            print(f"  {v:3s} REFUSED  {r['reason']}", flush=True)
+        else:
+            print(f"  {v:3s} mean floor err {r['mean_floor_err_lsb']:+.4f} LSB "
+                  f"({r['floor_err_pct_of_peak']:+.3f} % of peak)  "
+                  f"floor-round {r['mean_diff_lsb']:+.4f} LSB ({r['diff_pct_of_peak']:+.3f} %)  "
+                  f"max|d| {r['max_abs_diff']}  residues 0/{r['n_res_zero']} low/{r['n_res_low']} "
+                  f"tie/{r['n_res_tie']} high/{r['n_res_high']}  "
+                  f"clip floor/{r['clip_floor']} round/{r['clip_exact']}", flush=True)
+    ok = sum(1 for r in rows if r["status"] == "OK")
+    print(f"  rows: {ok} usable + {len(rows) - ok} refused = {len(rows)} "
+          f"(population {len(voices)} x condition {cond_name})")
+    if rows_out:
+        p = pathlib.Path(rows_out)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(floor_record(cond_name, rows), indent=1))
+    return rows
+
+
+def floor_verdicts(records):
+    """Per-voice bias ending from two `--output-floor` records. REFUSED when
+    the records cannot be combined (same guards as `verdicts`), else the
+    frozen `bias_ending` per voice. Returns (status, {voice: ending}, reasons)."""
+    if not isinstance(records, (list, tuple)) or not all(isinstance(r, dict) for r in records):
+        return "REFUSED", {}, ["each record must be a JSON object"]
+    reasons = []
+    conds = [r.get("condition") for r in records]
+    if (sorted(map(str, conds)) != sorted(CONDITIONS) or len(conds) != len(CONDITIONS)
+            or any(r.get("schema") != FLOOR_SCHEMA for r in records)):
+        reasons.append(f"need one {FLOOR_SCHEMA} record per condition {sorted(CONDITIONS)}, got {conds}")
+    if any(r.get("dirty", True) is not False for r in records):
+        reasons.append("a record was rendered from a dirty tree (or carries no boolean dirty=false)")
+    commits = [r.get("commit") for r in records]
+    invalid = [r.get("condition") for r in records if not valid_commit(r.get("commit"))]
+    if invalid:
+        reasons.append(f"record(s) {invalid} carry no valid source commit (need 40 lowercase hex)")
+    elif len(set(commits)) != 1:
+        reasons.append(f"records come from different commits: {[str(c)[:12] for c in commits]}")
+    want = _jsonable(declared_limits())
+    bad = [r.get("condition") for r in records if r.get("limits") != want]
+    if bad:
+        reasons.append(f"declared limits differ from this module's in {bad}")
+    for r in records:
+        reasons += [f"{r.get('condition')}: {p}" for p in floor_row_problems(r.get("rows"))]
+    if reasons:
+        return "REFUSED", {}, reasons
+    by = {r["condition"]: {row["voice"]: row for row in r["rows"]} for r in records}
+    voices = [v for v in SCREEN_VOICES if any(v in by[c] for c in by)]
+    voices += sorted({v for c in by for v in by[c]} - set(voices))
+    out = {}
+    for v in voices:
+        missing = [c for c in sorted(by) if v not in by[c]]
+        out[v] = (f"NO VERDICT ({', '.join(missing)} has no row for {v})" if missing
+                  else bias_ending({c: by[c][v] for c in sorted(by)}))
+    return "OK", out, []
+
+
+def floor_summary(records):
+    """Every narrative figure for the #618 write-up, derived from the records
+    and carried WITH the (condition, voice) it came from, so prose cannot
+    attach a number to the wrong row. Usable rows only; counts are explicit.
+    Raises Refused unless `floor_verdicts` accepts the records: a figure is
+    never derived from a record the ending would refuse (PR #653 review)."""
+    status, _ends, why = floor_verdicts(records)
+    if status != "OK":
+        raise Refused("; ".join(why))
+    ok = [(r["condition"], row) for r in records for row in r["rows"] if row.get("status") == "OK"]
+    refused = sum(1 for r in records for row in r["rows"] if row.get("status") != "OK")
+
+    def at(cond, row, key):
+        return dict(condition=cond, voice=row["voice"], value=row[key])
+
+    def ext(key, pick):
+        cond, row = pick(ok, key=lambda cr: abs(cr[1][key]))
+        return at(cond, row, key)
+
+    by_row = {(c, row["voice"]): dict(
+        exact_multiple=row["n_res_zero"], n_frames=row["n_frames"],
+        exact_multiple_pct=100.0 * row["n_res_zero"] / row["n_frames"],
+        ties=row["n_res_tie"], high=row["n_res_high"], low=row["n_res_low"],
+        mean_diff_lsb=row["mean_diff_lsb"], diff_pct_of_peak=row["diff_pct_of_peak"],
+        mean_floor_err_lsb=row["mean_floor_err_lsb"], diff_sum=row["diff_sum"])
+        for c, row in ok}
+    return dict(
+        usable=len(ok), refused=refused,
+        clipped=sum(row["clip_floor"] + row["clip_exact"] for _, row in ok),
+        max_abs_diff=max(row["max_abs_diff"] for _, row in ok),
+        diff_min=ext("mean_diff_lsb", min), diff_max=ext("mean_diff_lsb", max),
+        pct_max=ext("diff_pct_of_peak", max),
+        err_min=ext("mean_floor_err_lsb", min), err_max=ext("mean_floor_err_lsb", max),
+        zero_tie_rows=sorted((c, row["voice"]) for c, row in ok if row["n_res_tie"] == 0),
+        # floor-minus-round = -(high residues) - (odd-quotient ties); with any
+        # high residue the integer sum is nonzero whatever the ties do.
+        rows_without_high=sorted((c, row["voice"]) for c, row in ok if row["n_res_high"] == 0),
+        by_row=by_row)
+
+
+def floor_summary_text(s):
+    """The generated block quoted by docs/residual-dc/README.md (#618)."""
+    def at(e, fmt):
+        return f"{e['value']:{fmt}} ({e['voice']} {e['condition']})"
+    order = [c for c in CONDITIONS]
+    lines = [
+        f"rows: {s['usable']} usable + {s['refused']} refused; clipped frames (floor+round): "
+        f"{s['clipped']}; max per-sample |floor-round|: {s['max_abs_diff']} LSB",
+        f"mean floor-round, smallest |.|: {at(s['diff_min'], '+.4f')} LSB; "
+        f"largest: {at(s['diff_max'], '+.4f')} LSB",
+        f"largest |floor-round| as % of baseline peak: {at(s['pct_max'], '+.4f')} %",
+        f"pre-rail mean floor error, smallest |.|: {at(s['err_min'], '+.4f')} LSB; "
+        f"largest: {at(s['err_max'], '+.4f')} LSB",
+        f"rows with zero ties: {len(s['zero_tie_rows'])} of {s['usable']} "
+        f"({', '.join(f'{v} {c}' for c, v in s['zero_tie_rows']) or 'none'})",
+        f"rows with no high residue (bias would rest on ties alone): "
+        f"{len(s['rows_without_high'])} ({', '.join(f'{v} {c}' for c, v in s['rows_without_high']) or 'none'})",
+        "",
+        "| voice | cond | exact multiples | ties | high | floor err LSB | floor-round LSB | % of peak |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    voices = [v for v in SCREEN_VOICES if any((c, v) in s["by_row"] for c in order)]
+    for v in voices:
+        for c in order:
+            r = s["by_row"].get((c, v))
+            if r is None:
+                continue
+            lines.append(f"| {v} | {c} | {r['exact_multiple']}/{r['n_frames']} "
+                         f"({r['exact_multiple_pct']:.2f} %) | {r['ties']} | {r['high']} | "
+                         f"{r['mean_floor_err_lsb']:+.4f} | {r['mean_diff_lsb']:+.4f} | "
+                         f"{r['diff_pct_of_peak']:+.4f} |")
+    return "```\n" + "\n".join(lines[:6]) + "\n```\n\n" + "\n".join(lines[7:]) + "\n"
+
+
+def floor_summary_cli(path):
+    """`--floor-summary`: the README block, or a named REFUSED with exit 2 and
+    no measurement block at all."""
+    try:
+        rep = json.loads(pathlib.Path(path).read_text())
+        if not isinstance(rep, dict):
+            raise Refused(f"report is a {type(rep).__name__}, not a JSON object")
+        text = floor_summary_text(floor_summary(rep.get("records")))
+    except (OSError, ValueError, Refused) as e:
+        print(f"FLOOR SUMMARY REFUSED: {e}")
+        return 2
+    print(text, end="")
+    return 0
+
+
+def refresh_endings(path):
+    """Re-derive a saved report's endings from the records it already carries,
+    without re-rendering: the rows (and their accumulator hashes) are untouched,
+    only `endings`/`status`/`refused_reasons` are recomputed by the current
+    `floor_verdicts`. REFUSES (exit 2, file unchanged) if the records no longer
+    combine -- e.g. this module's declared limits moved since they were rendered."""
+    p = pathlib.Path(path)
+    try:
+        rep = json.loads(p.read_text())
+    except (OSError, ValueError) as e:
+        print(f"REFUSED: cannot read the report: {e}")
+        return 2
+    if not isinstance(rep, dict):
+        print(f"REFUSED: report is a {type(rep).__name__}, not a JSON object")
+        return 2
+    status, ends, why = floor_verdicts(rep.get("records"))
+    if status != "OK":
+        print("REFUSED: " + "; ".join(why))
+        return 2
+    changed = sorted(v for v in ends if (rep.get("endings") or {}).get(v) != ends[v])
+    rep.update(status=status, endings=ends, refused_reasons=why)
+    p.write_text(json.dumps(_jsonable(rep), indent=1))
+    print(f"endings refreshed from the saved records ({len(changed)} changed: {', '.join(changed) or 'none'})")
+    return 0
+
+
+def floor_report(paths, json_out=None):
+    """The deliverable table: provenance, the dev/confirm rows, the frozen
+    endings, the apparatus controls, and the reference gate's current result."""
+    try:
+        recs = [json.loads(pathlib.Path(p).read_text()) for p in paths]
+    except (OSError, ValueError) as e:
+        print(f"OUTPUT-FLOOR ENDING from {', '.join(paths)}\nREFUSED: cannot read a record: {e}")
+        return 2
+    status, ends, why = floor_verdicts(recs)
+    ref = reference_gate()
+    rep = dict(schema="residual-dc-output-floor-report/1",
+               commit=git("rev-parse", "HEAD"), dirty=bool(git("status", "--porcelain")),
+               reference=dict(status=ref["status"], dc=ref["dc"], reasons=ref["reasons"]),
+               records=recs,
+               controls=_jsonable(floor_controls_matrix()),
+               status=status, endings=ends if status == "OK" else None,
+               refused_reasons=why)
+    if json_out:
+        p = pathlib.Path(json_out)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(_jsonable(rep), indent=1))
+    print(f"OUTPUT-FLOOR ENDING from {', '.join(paths)}")
+    if status == "REFUSED":
+        print("REFUSED: " + "; ".join(why))
+        return 2
+    for v, e in ends.items():
+        print(f"  {v:3s} {e}")
+    print("  (fidelity for every voice: capability REFUSED unless a verified DC-coupled "
+          "reference exists; reference gate now: "
+          f"{ref['status']} dc-inference={ref['dc']})")
+    return 0
+
+
+# ---- properties for the output-floor apparatus ----------------------------
+def _floor_row_probe(probe, c=None):
+    """A row on the full dev condition: the declared 2.0 s window must FIT, so
+    a short fixture render would REFUSE before any property could read the
+    row. The render is memoised (`render_bus`), so the whole controls matrix
+    costs one CH dev render."""
+    return output_floor_row("CH", c or CONDITIONS["dev"], probe)
+
+
+def p_oracle_fixture_floor(est):
+    """The hand table: every accumulator's floor AND round output, predicted by
+    integer arithmetic written in the test, under the probe's own methods."""
+    for acc, fl, ex in ORACLE_FIXTURES:
+        if est.floor(np.int64(acc)) != np.int64(fl) or est.exact(np.int64(acc)) != np.int64(ex):
+            return False
+    return True
+
+
+def p_mean_diff_known(est):
+    """Constructed residue blocks: all r = Q15/4 -> floor error -0.25 LSB and
+    zero diff; all r = 3Q15/4 -> -0.75 LSB and diff exactly -1; half-ties on
+    even quotients -> both agree. Predicted by integer arithmetic."""
+    a1 = np.arange(64, dtype=np.int64) * Q15 + Q15 // 4
+    a2 = np.arange(64, dtype=np.int64) * Q15 + 3 * (Q15 // 4)
+    a3 = np.arange(64, dtype=np.int64) * Q15 + HALF15      # ties, q = 0..63 even/odd mix
+    for acc, e_err, e_diff in ((a1, -0.25, 0.0), (a2, -0.75, -1.0)):
+        f, x = est.floor(acc), est.exact(acc)
+        if abs(float(((f.astype(np.int64) << 15) - acc).sum()) / (acc.size * Q15) - e_err) > 1e-12:
+            return False
+        if float((f - x).sum()) != e_diff * acc.size:
+            return False
+    f, x = est.floor(a3), est.exact(a3)
+    # ties: even quotient stays, odd quotient goes up; floor differs by exactly the odd half
+    want = np.where(np.arange(64) % 2 == 1, 1, 0)
+    return bool(np.array_equal(x - f, want))
+
+
+def p_production_identity(est):
+    """floor(accumulate(buses)) IS the shipped `output_fx` on a synthetic bus
+    triple, formed through the probe's OWN accumulate. A probe whose output
+    stage is not the production stage cannot measure production."""
+    import drums_fx as dx
+    rng = np.random.default_rng(11)
+    dmix = rng.integers(-10 ** 5, 10 ** 5, 4096).astype(np.int64)
+    body = rng.integers(-10 ** 5, 10 ** 5, 4096).astype(np.int64)
+    g = dx.accent_reg(0.45)
+    acc = est.accumulate(dmix, body, g)
+    return bool(np.array_equal(est.floor(acc),
+                               dx.output_fx(np.zeros(4096), 0, dmix, g, body, g)))
+
+
+def p_identity_guard_fires(est):
+    """A doctored (wrong-gain) accumulator through THIS probe's full row path
+    is REFUSED on the identity guard, not measured. The probe under test is
+    composed with the wrong-gain mutant, so a stubbed identity
+    (`IdentityAlwaysOk`) is caught here: the doctored accumulator sails
+    through and the property reads an OK row where only a refusal may be."""
+    base = type(est)
+    doctored = (est if base is WrongGain
+                else type("_Doctored", (WrongGain, base), {})())
+    row = _floor_row_probe(doctored)
+    return row["status"] == "REFUSED" and "identity" in row["reason"]
+
+
+def p_no_bias_possible(est):
+    """The integer-resolvable defeater: a nonzero signal whose accumulators
+    are ALL exact multiples of 32768 must end NO BIAS POSSIBLE -- a generic
+    'nonzero mean => bias' assertion would be wrong here."""
+    acc = np.arange(64, dtype=np.int64) * Q15 * 3            # exact multiples, nonzero
+    row = dict(status="OK", n_frames=acc.size, n_res_zero=acc.size, n_res_low=0,
+               n_res_tie=0, n_res_high=0, diff_sum=0, mean_diff_lsb=0.0,
+               diff_pct_of_peak=0.0, mean_floor_err_lsb=0.0, floor_err_pct_of_peak=0.0)
+    e = bias_ending({c: row for c in sorted(CONDITIONS)})
+    return e.startswith("NO BIAS POSSIBLE")
+
+
+def p_clip_counts(est):
+    """Both rails: pre-rail clip counts are correct, and clipped frames agree
+    after the rails (round >= floor, so a clipped frame cannot differ)."""
+    lo, hi = -32768 * Q15 - Q15 // 2, 32768 * Q15 + 3 * Q15
+    acc = np.array([hi, hi - 1, lo, lo - 1, 0, Q15], np.int64)
+    f, x = est.floor(acc), est.exact(acc)
+    if est is REAL_FLOOR:
+        if int(((acc >> 15) > 32767).sum()) != 2 or int(((acc >> 15) < -32768).sum()) != 2:
+            return False
+        if not (np.all(f[[0, 1]] == 32767) and np.all(f[[2, 3]] == -32768)):
+            return False
+    return bool(np.all(f[[0, 1, 2, 3]] == x[[0, 1, 2, 3]]))
+
+
+def p_window_shared(est):
+    """The row's window is the baseline's onset window, once (an independent
+    onset measures a different population and must be caught)."""
+    row = _floor_row_probe(est)
+    if row["status"] != "OK":
+        return False
+    _, out, _ = render_bus("CH", 0, **CONDITIONS["dev"])
+    i0 = onset_index(out)
+    return row["window"] == [i0, i0 + int(round(ANALYSIS_S * 48000.0))]
+
+
+FLOOR_PROPERTIES = (
+    ("oracle-fixture", p_oracle_fixture_floor),
+    ("mean-diff-known", p_mean_diff_known),
+    ("production-identity", p_production_identity),
+    ("identity-guard-fires", p_identity_guard_fires),
+    ("no-bias-possible", p_no_bias_possible),
+    ("clip-counts", p_clip_counts),
+    ("window-shared", p_window_shared),
+)
+
+
+def floor_controls_matrix():
+    """{defect: {property: MOVED|BLIND}} for the output-floor apparatus, plus
+    the clean row. Same contract as `controls_matrix`."""
+    rows = {"(clean)": {n: ("ok" if f(REAL_FLOOR) else "RED") for n, f in FLOOR_PROPERTIES}}
+    for M in FLOOR_MUTANTS:
+        est = M()
+        row = {}
+        for n, f in FLOOR_PROPERTIES:
+            try:
+                ok = f(est)
+            except Refused:
+                ok = False
+            row[n] = "blind" if ok else "MOVED"
+        rows[M.name] = row
+    return rows
+
+
+ORACLE_FIXTURES = (
+    # (accumulator, floor, exact round-half-even) -- hand integer arithmetic.
+    # `floor` is the POST-rail production output (a rail is a rail): at and
+    # past the rails floor and exact AGREE, which is itself the expectation.
+    (0, 0, 0),
+    (Q15, 1, 1), (2 * Q15, 2, 2),                       # exact multiples: agree
+    (Q15 - 1, 0, 1), (Q15 + 1, 1, 1),
+    (HALF15, 0, 0), (HALF15 - 1, 0, 0), (HALF15 + 1, 0, 1),   # +tie: q=0 even
+    (3 * Q15 // 2, 1, 2), (3 * Q15 // 2 - 1, 1, 1),           # +tie: q=1 odd -> 2
+    (-1, -1, 0), (1 - Q15, -1, -1),
+    (-HALF15, -1, 0),                                          # -tie: q=-1 odd -> 0
+    (-HALF15 - 1, -1, -1),                                     # just past the tie
+    (-3 * Q15 // 2, -2, -2),                                   # -tie: q=-2 even -> -2
+    (-3 * Q15 // 2 - 1, -2, -2), (-3 * Q15 // 2 + 1, -2, -1),
+    (32767 * Q15, 32767, 32767),                        # at the rail, exact
+    (32767 * Q15 + HALF15, 32767, 32767),               # tie just under the rail
+    (32767 * Q15 + HALF15 + 1, 32767, 32767),           # round would exceed: rail
+    (32768 * Q15, 32767, 32767),                        # high rail: both clip
+    (32768 * Q15 + 5, 32767, 32767),
+    (-32768 * Q15, -32768, -32768),                     # low rail exactly
+    (-32768 * Q15 - 1, -32768, -32768),                 # low rail: both clip
+    (-32768 * Q15 - HALF15, -32768, -32768),            # -tie past the rail: clips
+    ((1 << 38) - 1, 32767, 32767),                      # inside the RTL bound, clips
+)
+
+
+def voice_row(sound, cond_name):
+    """The uncoupled production baseline's classification, both signals."""
+    import drums_fx as dx
+    c = CONDITIONS[cond_name]
+    raw, out, n_clip = render_bus(sound, 0, c["seconds"], c["gain"], c["vel"])
+    fc = corner_hz(dx.COUPLE_K, dx.SR)
+    lo, do = classify(out, dx.SR, fc)
+    lr, dr = classify(raw, dx.SR, fc)
+    i0 = onset_index(out)
+    seg = window_slice(out, i0, dx.SR)
+    pk = float(np.abs(seg).max()) or 1.0
+    return dict(voice=sound, cond=cond_name, label=lo, detail=do, raw_label=lr, n_clip=n_clip,
+                means=window_means(out, dx.SR), mean_frac=float(seg.mean()) / pk,
+                peak_dbfs=20 * math.log10(pk / FS + 1e-30))
+
+
+def fmt_row(r):
+    d = r["detail"]
+    if r["label"] == "REFUSED":
+        return f"  {r['voice']:3s} REFUSED  {d.get('reason')}   (peak {r['peak_dbfs']:.1f} dBFS, clip {r['n_clip']})"
+    return (f"  {r['voice']:3s} {r['label']:6s} beta {d['beta']:.3f}  S {d['flat']:7.2f}  "
+            f"sub20 {d['sub20_db']:7.1f} dBFS (+{d['margin_db']:.0f} over floor)  "
+            f"mean/peak {100 * r['mean_frac']:+6.2f} %  ring {100 * d['tail_ring']:.2f} %  "
+            f"peak {r['peak_dbfs']:.1f} dBFS  clip {r['n_clip']}  raw={r['raw_label']}")
+
+
+DECLARED = ("ANALYSIS_S", "STABILITY_S", "BETA_OFFSET_MIN", "BETA_SKIRT_MAX", "BETA_STABLE_TOL",
+            "S_SKIRT_MAX", "S_OFFSET_MIN", "TAIL_RING_MAX", "MIN_PEAK_LSB", "RES_MARGIN_DB",
+            "OFFSET_PEAK_FRAC", "HF_ADDED_DB", "HF_FLAT_DB", "CH_REST_TOL_DB", "CH_SHORTFALL_MIN_DB",
+            "CH_REACH_TOL_DB")
+ROWS_SCHEMA = "residual-dc-screen-rows/1"
+
+
+def declared_limits():
+    return {k: globals()[k] for k in DECLARED} | {"CONDITIONS": CONDITIONS}
+
+
+def _jsonable(o):
+    if isinstance(o, dict):
+        return {str(k): _jsonable(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_jsonable(v) for v in o]
+    if isinstance(o, np.generic):
+        return o.item()
+    return o
+
+
+def rows_record(cond_name, rows):
+    """What `--screen --rows-out` writes: the rows plus what a later reader
+    must check before combining two of them (commit, dirty, limits)."""
+    return dict(schema=ROWS_SCHEMA, condition=cond_name, commit=git("rev-parse", "HEAD"),
+                dirty=bool(git("status", "--porcelain")), limits=_jsonable(declared_limits()),
+                rows=_jsonable(rows))
+
+
+def screen(cond_name, voices=SCREEN_VOICES, rows_out=None):
+    rec_head = rows_record(cond_name, [])            # provenance read BEFORE any output is written
+    print(provenance(cond_name))
+    print("\nNON-CY SCREEN (uncoupled production baseline; class from beta AND S; nothing here is a sound verdict)")
+    rows = []
+    for v in voices:
+        r = voice_row(v, cond_name)
+        rows.append(r)
+        print(fmt_row(r), flush=True)
+    if rows_out:
+        p = pathlib.Path(rows_out)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(dict(rec_head, rows=_jsonable(rows)), indent=1))
+    return rows
+
+
+def all_refused(rows):
+    """True for an empty screen or one where every row REFUSED: no evidence,
+    which `run_all.py` must not read as a pass (exit 2 = did not run)."""
+    return not rows or all(r["label"] == "REFUSED" for r in rows)
+
+
+_SHA = re.compile(r"[0-9a-f]{40}")
+LABELS = ("OFFSET", "SKIRT", "MIXED", "REFUSED")
+
+
+def valid_commit(c):
+    """A full lowercase 40-hex SHA, as `git rev-parse HEAD` prints. Rejects
+    absent/None/""/the "?" failure sentinel, abbreviations and non-strings."""
+    return isinstance(c, str) and _SHA.fullmatch(c) is not None
+
+
+def finite_real(x):
+    """A JSON number that is finite. bool is excluded: abs(True) == 1.
+    The one definition lives in `finite_number` (#718)."""
+    return is_finite_number(x)
+
+
+def label_problems(label, detail):
+    """Why a non-REFUSED row's label does not follow from its own detail under
+    the frozen limits (#654). `classify` only returns OFFSET / SKIRT / MIXED
+    after every gate below has passed, so a record whose detail fails one was
+    not produced by it. Checked: beta and flat finite and giving `label`; the
+    stored resolution, tail-ring, margin and half-window stability gates.
+    Defeater carried as a permanent control: a SKIRT row relabelled OFFSET with
+    detail and mean_frac untouched used to reach MODEL-SIDE STANDING OFFSET."""
+    out = []
+    num = {k: detail.get(k) for k in ("beta", "flat", "beta_half", "tail_ring", "margin_db", "nfc", "n20")}
+    for k, x in num.items():
+        if not finite_real(x):
+            out.append(f"detail[{k!r}] {x!r} is not a finite real number")
+    if out:
+        return out
+    want = label_from_stats(num["beta"], num["flat"])
+    if want != label:
+        out.append(f"label {label!r} but detail beta={num['beta']!r} flat={num['flat']!r} give {want!r} "
+                   f"under the frozen limits")
+    if num["nfc"] < MIN_BINS_BELOW_FC:
+        out.append(f"detail['nfc'] {num['nfc']!r} is below the {MIN_BINS_BELOW_FC} bins required")
+    if num["n20"] < MIN_BINS_SUB20:
+        out.append(f"detail['n20'] {num['n20']!r} is below the {MIN_BINS_SUB20} bins required")
+    if num["tail_ring"] > TAIL_RING_MAX:
+        out.append(f"detail['tail_ring'] {num['tail_ring']!r} exceeds {TAIL_RING_MAX}")
+    if num["margin_db"] < RES_MARGIN_DB:
+        out.append(f"detail['margin_db'] {num['margin_db']!r} is under the {RES_MARGIN_DB} dB required")
+    if abs(num["beta_half"] - num["beta"]) > BETA_STABLE_TOL:
+        out.append(f"detail['beta_half'] {num['beta_half']!r} vs beta {num['beta']!r} moves more than {BETA_STABLE_TOL}")
+    return out
+
+
+def row_problems(rows):
+    """Why a record's rows cannot reach an ending, validated at the JSON
+    consumption boundary. Verdict-bearing fields: voice, label, detail and --
+    for any row that is not REFUSED -- mean_frac (finite real). A REFUSED row's
+    magnitude cannot reach an ending (subject_verdict stops at the refusal)."""
+    if not isinstance(rows, list):
+        return [f"rows is not a list: {type(rows).__name__}"]
+    out = []
+    voices = []
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            out.append(f"row {i} is not an object")
+            continue
+        v = row.get("voice")
+        if not isinstance(v, str) or not v:
+            out.append(f"row {i} has no voice")
+        voices.append(v)
+        if row.get("label") not in LABELS:
+            out.append(f"row {i} ({v}) label {row.get('label')!r} not one of {LABELS}")
+        if not isinstance(row.get("detail"), dict):
+            out.append(f"row {i} ({v}) detail is not an object")
+        if row.get("label") != "REFUSED" and not finite_real(row.get("mean_frac")):
+            out.append(f"row {i} ({v}) mean_frac {row.get('mean_frac')!r} is not a finite real number")
+        if row.get("label") in LABELS and row.get("label") != "REFUSED" and isinstance(row.get("detail"), dict):
+            out += [f"row {i} ({v}) {p}" for p in label_problems(row["label"], row["detail"])]
+    dup = sorted({v for v in voices if isinstance(v, str) and voices.count(v) > 1})
+    if dup:
+        out.append(f"duplicate rows for {dup}")
+    return out
+
+
+def verdicts(records):
+    """Per-subject ending from two `rows_record`s, one per declared condition.
+    Returns (status, {voice: ending}, reasons). status is REFUSED when the two
+    records cannot be combined:
+
+      - the conditions are not exactly {dev, confirm}, once each
+      - either record is not from a clean commit, or they are from different commits
+      - either record's declared limits differ from this module's (limits are
+        not revisited after confirm is read; a record taken under other limits
+        is a different experiment)
+
+      - either record's commit is not a full 40-hex SHA (absent, null, empty, or
+        the "?" that `git()` emits on failure never qualifies -- two missing
+        commits agree with each other and with nothing)
+      - either record has a malformed row, or a non-REFUSED row whose mean_frac
+        is not a finite real number (json.loads accepts NaN/Infinity; NaN fails
+        every threshold comparison and would read as "below the magnitude")
+
+    A voice present in only one record ends NO VERDICT (that condition has no row)."""
+    if not isinstance(records, (list, tuple)) or not all(isinstance(r, dict) for r in records):
+        return "REFUSED", {}, ["each record must be a JSON object"]
+    reasons = []
+    conds = [r.get("condition") for r in records]
+    if (sorted(map(str, conds)) != sorted(CONDITIONS) or len(conds) != len(CONDITIONS)
+            or any(r.get("schema") != ROWS_SCHEMA for r in records)):
+        reasons.append(f"need one {ROWS_SCHEMA} record per condition {sorted(CONDITIONS)}, got {conds}")
+    if any(r.get("dirty", True) is not False for r in records):
+        reasons.append("a record was rendered from a dirty tree (or carries no boolean dirty=false): "
+                       "not reproducible from a commit")
+    commits = [r.get("commit") for r in records]
+    invalid = [r.get("condition") for r in records if not valid_commit(r.get("commit"))]
+    if invalid:
+        reasons.append(f"record(s) {invalid} carry no valid source commit (need 40 lowercase hex): "
+                       f"{[repr(c)[:14] for c in commits]}")
+    elif len(set(commits)) != 1:
+        reasons.append(f"records come from different commits: {[c[:12] for c in commits]}")
+    want = _jsonable(declared_limits())
+    bad = [r.get("condition") for r in records if r.get("limits") != want]
+    if bad:
+        reasons.append(f"declared limits differ from this module's in {bad}")
+    for r in records:
+        reasons += [f"{r.get('condition')}: {p}" for p in row_problems(r.get("rows"))]
+    if reasons:
+        return "REFUSED", {}, reasons
+    by = {r["condition"]: {row["voice"]: row for row in r["rows"]} for r in records}
+    voices = [v for v in SCREEN_VOICES if any(v in by[c] for c in by)]
+    voices += sorted({v for c in by for v in by[c]} - set(voices))
+    out = {}
+    for v in voices:
+        missing = [c for c in sorted(by) if v not in by[c]]
+        out[v] = (f"NO VERDICT ({', '.join(missing)} has no row for {v})" if missing
+                  else subject_verdict({c: by[c][v] for c in sorted(by)}))
+    return "OK", out, []
+
+
+def _sub20_atten_db(base, cand, i0, sr):
+    return (band_db(window_slice(base, i0, sr), sr, 0.0, 20.0)
+            - band_db(window_slice(cand, i0, sr), sr, 0.0, 20.0))
+
+
+def detail_row(sound, cond_name):
+    """Uncoupled vs production-register coupled, on the SAME absolute window."""
+    import drums_fx as dx
+    from scipy.signal import lfilter
+    c = CONDITIONS[cond_name]
+    sr = dx.SR
+    rb, ob, nb = render_bus(sound, 0, c["seconds"], c["gain"], c["vel"])
+    rc, oc, nc = render_bus(sound, 1, c["seconds"], c["gain"], c["vel"])
+    i0 = onset_index(ob)                                   # ONE onset for both sides
+    k = dx.COUPLE_K
+    fc = corner_hz(k, sr)
+    wb, wc = window_slice(ob, i0, sr), window_slice(oc, i0, sr)
+    measured = _sub20_atten_db(ob, oc, i0, sr)
+    # STEADY bound: |H|^2 of the implemented discrete one-pole on the baseline spectrum
+    a = 1.0 - 2.0 ** -k
+    steady = steady_bound_db(wb, sr, k)
+    # FROM REST: an independent float one-pole (scipy) run causally over the baseline
+    # raw bus -- not the integer DcBlockFx -- then the same window. No truncation LSB.
+    yf = lfilter([1.0, -1.0], [1.0, -a], np.asarray(rb, float))
+    yf = np.clip(yf, -32768, 32767)
+    rest = _sub20_atten_db(ob, yf, i0, sr)
+    bands = {n: band_db(wc, sr, *BANDS[n]) - band_db(wb, sr, *BANDS[n]) for n in BANDS}
+    bv = bus_variants(sound, c, i0, sr)
+    mean_lsb = float(np.asarray(wb, float).mean())
+    kind, d_hf, d_sh = share_change_kind(wb, wc, sr)
+    cls_b = classify(ob, sr, fc)
+    return dict(voice=sound, cond=cond_name, steady_db=steady, rest_db=rest, measured_db=measured,
+                bands_db=bands, hf_kind=kind, hf_share_delta=d_sh, clip=(nb, nc),
+                peak_delta_db=20 * math.log10((np.abs(wc).max() + 1e-9) / (np.abs(wb).max() + 1e-9)),
+                label=cls_b[0], beta=cls_b[1].get("beta"), S=cls_b[1].get("flat"),
+                reason=cls_b[1].get("reason"),
+                bv=bv, mean_lsb=mean_lsb,
+                sub20_base_db=band_db(wb, sr, 0.0, 20.0), sub20_coupled_db=band_db(wc, sr, 0.0, 20.0))
+
+
+def fmt_detail(r):
+    b = r["bands_db"]
+    lab = f"{r['label']}" + (f" ({r['reason']})" if r["label"] == "REFUSED" else
+                             f" beta {r['beta']:.3f} S {r['S']:.2f}")
+    return (f"  {r['voice']:3s} [{lab}]\n"
+            f"      sub-20 attenuation  steady-state bound {r['steady_db']:6.2f} dB   "
+            f"causal-from-rest (float one-pole) {r['rest_db']:6.2f} dB   "
+            f"measured (production A_COUPLE=1) {r['measured_db']:6.2f} dB\n"
+            f"      absolute band change  sub20 {b['sub20']:+7.2f}  body {b['body']:+7.2f}  "
+            f"mid {b['mid']:+7.2f}  HF {b['hf']:+7.2f} dB   peak {r['peak_delta_db']:+.2f} dB   "
+            f"clip base/coupled {r['clip'][0]}/{r['clip'][1]}\n"
+            f"      bus-level surrogate (bit-exact vs production: {r['bv']['exact']}): "
+            + "  ".join(f"{n} {a:.2f} dB (own bound {r['bv']['bounds'][n]:.2f})" for n, a in r["bv"]["rows"])
+            + f"   window mean {r['mean_lsb']:+.3f} LSB\n"
+            f"      HF share change {r['hf_share_delta']:+.2f} pp -> read as {r['hf_kind']}")
+
+
+def reach_kind(att, own_bound, tol=CH_REACH_TOL_DB):
+    """REACHES | SHORT | OVERSHOOTS, against the variant's OWN steady bound."""
+    if att > own_bound + tol:
+        return "OVERSHOOTS"
+    return "REACHES" if att >= own_bound - tol else "SHORT"
+
+
+def _h_ch2(bv):
+    """H_CH2 verdict from a `bus_variants` result. Each variant is compared ONLY
+    with the steady bound of its own baseline, two-sided. A variant that
+    OVERSHOOTS its own bound is not like-for-like (a causal one-pole does not
+    beat its steady-state attenuation), so it supports nothing; if no variant
+    reaches and one overshoots, the answer is NO VERDICT, not NOT SUPPORTED."""
+    if not bv["exact"]:
+        return "NO VERDICT: the bus-level surrogate is not bit-exact against the A_COUPLE=1 render; it is not what ships"
+    if "bounds" not in bv:
+        return "NO VERDICT: variants carry no own-baseline bound; the production bound is not a valid comparison"
+    att, own = dict(bv["rows"]), bv["bounds"]
+    kinds = {n: reach_kind(a, own[n]) for n, a in bv["rows"] if n != "production"}
+    xs = max((n for n in kinds if n.startswith("buses x")), key=lambda n: int(n[7:]), default=None)
+    desc = ", ".join(f"{n} {att[n]:.2f} dB vs own bound {own[n]:.2f} ({kinds.get(n, 'baseline')})"
+                     for n, _ in bv["rows"])
+    if kinds.get("float-out") == "REACHES":
+        return f"SUPPORTED by intervention (output truncation): {desc}"
+    if xs and kinds[xs] == "REACHES":
+        return f"SUPPORTED by intervention (bus-level integer resolution): {desc}"
+    if "OVERSHOOTS" in kinds.values():
+        return f"NO VERDICT: a variant overshoots its own steady bound by > {CH_REACH_TOL_DB} dB (not like-for-like): {desc}"
+    return f"NOT SUPPORTED: no variant reaches its own steady bound: {desc}"
+
+
+def hypotheses(rows):
+    """H_CH and H_RS as predeclared tests. Each states what it establishes."""
+    out = []
+    ch = rows.get("CH")
+    if ch:
+        short = ch["steady_db"] - ch["measured_db"]
+        close = abs(ch["rest_db"] - ch["measured_db"])
+        if ch["label"] == "REFUSED":
+            v = f"NO VERDICT (class REFUSED: {ch['reason']})"
+        elif short < CH_SHORTFALL_MIN_DB:
+            v = f"NOT APPLICABLE: shortfall {short:.2f} dB < {CH_SHORTFALL_MIN_DB} dB, nothing to explain"
+        elif close <= CH_REST_TOL_DB:
+            v = (f"CONSISTENT: shortfall {short:.2f} dB vs steady bound; float causal-from-rest prediction "
+                 f"within {close:.2f} dB of measured. (A prediction that fits; not an intervention.)")
+        else:
+            v = f"NOT SUPPORTED: from-rest prediction differs from measured by {close:.2f} dB (> {CH_REST_TOL_DB})"
+        out.append(("H_CH  attenuation < steady bound because the causal blocker starts from rest", v))
+    if ch and ch["label"] != "REFUSED" and "bv" in ch:
+        v = _h_ch2(ch["bv"])
+        out.append(("H_CH2 (post-hoc, formed after the dev row; rule revised to own-baseline two-sided after "
+                    "the dev row too: confirm is its only test) "
+                    "the shortfall is an integer quantiser, not the filter", v))
+    rs = rows.get("RS")
+    if rs:
+        if rs["label"] == "REFUSED":
+            v = f"NO VERDICT (class REFUSED: {rs['reason']})"
+        elif rs["label"] == "SKIRT":
+            v = (f"SUPPORTED as a measurement: S {rs['S']:.2f} (flat = 1), beta {rs['beta']:.3f}: the 0-20 Hz band "
+                 f"is the skirt of a finite burst; steady bound {rs['steady_db']:.2f} dB.")
+        else:
+            v = f"NOT SUPPORTED: class {rs['label']} (S {rs['S']:.2f}, beta {rs['beta']:.3f})"
+        out.append(("H_RS  sub-20 Hz energy is largely the onset skirt", v))
+    return out
+
+
+def subject_verdict(rows_by_cond):
+    """Per-subject ending, from the baseline rows of BOTH conditions. Never a
+    sound-fidelity claim: that is a capability refusal while no DC-coupled
+    reference exists. REFUSED unless exactly the declared conditions are
+    present: one row agrees with itself and no rows agree vacuously."""
+    if not isinstance(rows_by_cond, dict) or sorted(rows_by_cond) != sorted(CONDITIONS):
+        got = sorted(rows_by_cond) if isinstance(rows_by_cond, dict) else type(rows_by_cond).__name__
+        return f"REFUSED (need one row per declared condition {sorted(CONDITIONS)}, got {got})"
+    labs = {c: r["label"] for c, r in rows_by_cond.items()}
+    if "REFUSED" in labs.values():
+        why = "; ".join(f"{c}: {r['detail'].get('reason')}" for c, r in rows_by_cond.items() if r["label"] == "REFUSED")
+        return f"NO VERDICT (apparatus REFUSED: {why})"
+    if len(set(labs.values())) != 1:
+        return f"NO VERDICT (class differs across predeclared conditions: {labs}); limits NOT revisited"
+    lab = next(iter(labs.values()))
+    if lab == "SKIRT":
+        return "NO STANDING OFFSET ESTABLISHED: sub-20 Hz energy is onset skirt in both conditions; a DC blocker cannot remove it"
+    if lab == "MIXED":
+        return "MIXED in both conditions: offset vs skirt not separable by the two statistics; no defect established"
+    if all(abs(r["mean_frac"]) >= OFFSET_PEAK_FRAC for r in rows_by_cond.values()):
+        return ("MODEL-SIDE STANDING OFFSET in both conditions (|mean|/peak >= "
+                f"{100 * OFFSET_PEAK_FRAC:.0f} %); SOUND-FIDELITY DEFECT: capability REFUSED (no DC-coupled reference)")
+    return "OFFSET-like but |mean|/peak below the declared magnitude: no defect established"
+
+
+def detail(cond_name, voices=SUBJECTS + CONTROLS):
+    print(provenance(cond_name))
+    print("\nDETAIL: subjects CH, RS; controls BD, HT (diagnostic coupling toggle = experiment)")
+    rows = {}
+    for v in voices:
+        rows[v] = detail_row(v, cond_name)
+        print(fmt_detail(rows[v]), flush=True)
+    print("\nHYPOTHESES (predeclared limits; status labelled)")
+    for h, v in hypotheses(rows):
+        print(f"  {h}\n      -> {v}")
+    return rows
+
+
+def rows_path(cond):
+    return f"build/residual-dc-screen-{cond}.json"
+
+
+def batch_spec():
+    py = "python3 tools/probes/residual_dc.py"
+    jobs = [f"{py} --screen --condition dev --rows-out {rows_path('dev')}",
+            f"{py} --screen --condition confirm --rows-out {rows_path('confirm')}",
+            f"{py} --detail --condition dev", f"{py} --detail --condition confirm"]
+    return ('python3 tools/run_all.py --jobs 2 --timeout 3600 --json build/residual-dc-batch.json \\\n    '
+            + " \\\n    ".join(f'"{j}"' for j in jobs)
+            + f" \\\n  && {py} --verdict {rows_path('dev')} {rows_path('confirm')}")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    for flag in ("declared", "controls", "reference", "screen", "detail", "batch-spec",
+                 "output-floor"):
+        ap.add_argument("--" + flag, action="store_true")
+    ap.add_argument("--condition", choices=sorted(CONDITIONS), default="dev")
+    ap.add_argument("--voices", default=None)
+    ap.add_argument("--rows-out", default=None,
+                    help="with --screen or --output-floor: write the rows as JSON for --verdict/--floor-verdict")
+    ap.add_argument("--verdict", nargs="+", metavar="ROWS_JSON",
+                    help="per-subject ending from one --rows-out record per condition (dev and confirm)")
+    ap.add_argument("--floor-verdict", nargs="+", metavar="FLOOR_JSON",
+                    help="per-voice bias ending from one --output-floor record per condition (dev and confirm)")
+    ap.add_argument("--floor-summary", metavar="REPORT_JSON",
+                    help="print the README's generated #618 figures from a saved --floor-verdict report")
+    ap.add_argument("--refresh-endings", metavar="REPORT_JSON",
+                    help="recompute a saved --floor-verdict report's endings from its OWN records, in place; no render")
+    a = ap.parse_args(argv)
+    vs = tuple(a.voices.split(",")) if a.voices else None
+    if a.floor_summary:
+        return floor_summary_cli(a.floor_summary)
+    if a.refresh_endings:
+        return refresh_endings(a.refresh_endings)
+    if a.floor_verdict:
+        return floor_report(a.floor_verdict, a.rows_out)
+    if a.verdict:
+        try:
+            recs = [json.loads(pathlib.Path(p).read_text()) for p in a.verdict]
+        except (OSError, ValueError) as e:
+            recs, load_err = None, f"cannot read a record: {e}"
+        status, ends, why = verdicts(recs) if recs is not None else ("REFUSED", {}, [load_err])
+        print(f"PER-SUBJECT ENDING from {', '.join(a.verdict)}")
+        if status == "REFUSED":
+            print("REFUSED: " + "; ".join(why))
+            return 2
+        for v, e in ends.items():
+            print(f"  {v:3s} {e}")
+        print("  (sound fidelity for every subject: capability REFUSED until a verified DC-coupled reference exists)")
+        return 0
+    if a.declared:
+        for k in DECLARED:
+            print(f"{k} = {globals()[k]}")
+        print("CONDITIONS =", json.dumps(CONDITIONS))
+    if a.controls:
+        rows = controls_matrix()
+        print_matrix(rows)
+        bad = [d for d, r in rows.items() if d != "(clean)" and "MOVED" not in r.values()]
+        return 1 if bad or any(v == "RED" for v in rows["(clean)"].values()) else 0
+    if a.reference:
+        g = reference_gate()
+        print(json.dumps(g, indent=1))
+    rc = 0
+    if a.screen:
+        if all_refused(screen(a.condition, vs or SCREEN_VOICES, a.rows_out)):
+            print("NO EVIDENCE: every row REFUSED (exit 2)")
+            rc = 2
+    if a.output_floor:
+        rows = output_floor_screen(a.condition, vs or SCREEN_VOICES, a.rows_out)
+        if not rows or all(r["status"] == "REFUSED" for r in rows):
+            print("NO EVIDENCE: every row REFUSED (exit 2)")
+            rc = 2
+    if a.detail:
+        detail(a.condition, vs or (SUBJECTS + CONTROLS))
+    if a.__dict__["batch_spec"]:
+        print(batch_spec())
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())

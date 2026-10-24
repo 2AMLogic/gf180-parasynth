@@ -1,0 +1,38 @@
+{
+ "n_dev": 7,
+ "n_usable": 3,
+ "refused": {
+  "LT25": "808-route-disagreement",
+  "HT25": "no-tuning-reference",
+  "HT50": "no-tuning-reference",
+  "HT75": "no-tuning-reference"
+ },
+ "status": "REFUSED",
+ "reason": "not-identifiable: 3 usable development rows < 4",
+ "from_record": {
+  "path": "docs/scorecard/tom-pitch-drop-592/development.json",
+  "sha256": "975b307d5d0b2d0988bf8991cf5c70e62e6f1fe0eed244e7df40c00e86be4e06"
+ },
+ "inject": [],
+ "provenance": {
+  "commit": "bd33dbe88aa70b1ef676c50a6eff99c6a2823b03",
+  "dirty": false,
+  "read_at": "start",
+  "origin_main": "6d5b335c4c452e9f138b451bdc6e1f2a05056145",
+  "prereg_sha256": "3856c14e7877538d1f12799b1d8d0f200c393bc845b8efd89f92f61bc66769e9",
+  "refs": null,
+  "argv": [
+   "tools/probes/tom_pitch_drop_fischer.py",
+   "fit",
+   "docs/scorecard/tom-pitch-drop-592/development.json",
+   "--out",
+   "docs/scorecard/tom-pitch-drop-592/fit.json"
+  ],
+  "python": "3.12.3",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "commit_at_end": "bd33dbe88aa70b1ef676c50a6eff99c6a2823b03",
+  "head_moved_during_run": false,
+  "dirty_at_end": false
+ }
+}

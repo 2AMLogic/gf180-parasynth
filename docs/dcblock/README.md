@@ -15,7 +15,7 @@ python3 -m pytest tools/probes/dc_blocker.py tools/probes/test_dc_blocker_appara
 
 ## What the measurement says
 
-`COUPLE_K` is deliberately not in `docs/sensitivity/registry.json` yet: nothing ships (`COUPLE_OFF`), the corner is read off C49 / R176‖R177 rather than chosen, and `cutoff.txt` already sweeps K = 8…13 against a closed-form prediction; it must be registered in #510 before anything enables a corner.
+**Superseded note (2026-10-09): `coupling-k.json` is now in the registry (#551); the sentence below is the prototype-era record, kept as written.** `COUPLE_K` is deliberately not in `docs/sensitivity/registry.json` yet: nothing ships (`COUPLE_OFF`), the corner is read off C49 / R176‖R177 rather than chosen, and `cutoff.txt` already sweeps K = 8…13 against a closed-form prediction; it must be registered in #510 before anything enables a corner.
 
 At the circuit's own corner (`COUPLE_K = 10`, 7.46 Hz, read off the BD's C49 /
 R176‖R177 network), coupling on the drum bus before the output stage's clamp:
@@ -183,3 +183,10 @@ real work with its own verifiable deliverables — a register-contract decision
 (enable bit, whether K is a field), the RTL stage, bit-exactness against the
 model, then the I²S decode through `fpga/verify_fixture.py`. That is **#510**, filed rather than
 smuggled in here.
+
+## Residual-voice follow-up (2026-10-09, #152)
+
+The non-cymbal residual screen, the CH/RS detail and the offset-vs-skirt
+apparatus live in [`docs/residual-dc/`](../residual-dc/README.md). This
+directory's prototype findings are unchanged; one inherited explanation (the
+start-up tail as the cause of CH's shortfall) is NOT SUPPORTED there.

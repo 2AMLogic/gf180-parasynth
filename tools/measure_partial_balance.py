@@ -33,6 +33,8 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am                      # noqa: E402
 import partial_trajectory as PT                 # noqa: E402
+import preparation_contract as pc               # noqa: E402
+import run_case as rc                           # noqa: E402
 
 import run_case as rc  # noqa: E402
 
@@ -40,9 +42,10 @@ REFDIR = rc.configured_refs()
 REF_MAIN = {"RS": "rs8/RS.WAV", "CB": "cb8/CB.WAV"}
 
 
-class Refused(Exception):
-    """A precondition of the apparatus failed. REFUSED is a first-class outcome
-    here, distinct from pass and from fail."""
+# A precondition of the apparatus failed. REFUSED is a first-class outcome here,
+# distinct from pass and from fail. The same class `run_case.prepare` and the
+# preparation contract raise, so the CLI's handler below catches all three.
+Refused = pc.Refused
 
 
 # --- the scorecard's two estimators, verbatim, so this compares like with like
@@ -60,24 +63,31 @@ def band_pair_db(x, sr, band_a, band_b):
     return 10.0 * math.log10(e_a / e_b)
 
 
-def window(y, sr, t0, t1):
-    a = int(t0 * sr)
-    return y[a: len(y) if t1 is None else min(len(y), int(t1 * sr))]
+# --- both sides, prepared by run_case.prepare (#132: the lead is guaranteed, not
+# clamped) and windowed by run_case.window. A private copy of either is how this
+# file came to carry the #101 clamp after run_case had moved on (#636).
+window = rc.window
 
 
-# --- both sides, prepared exactly as run_case.py prepares them
-def prepare(x, sr):
-    x = np.asarray(x, dtype=np.float64)
-    if am.is_silent(x):
-        return x
-    pk = float(np.abs(x).max())
-    i = int(np.argmax(np.abs(x) > 0.02 * pk))
-    lead = max(0, i - int(1e-3 * sr))
-    if lead >= int(5e-3 * sr):
-        x = x - float(x[:lead].mean())
-    y = x[lead:]
-    p = float(np.abs(y).max())
-    return y / p if p > 0 else y
+def prepared(x, sr, side):
+    return rc.prepare(x, sr, side=side)
+
+
+def origin(y, sr):
+    """`y` from the window origin (TRIM_MS before the onset), dropping the
+    guaranteed silent lead -- for the trajectory code, which times its windows
+    from sample 0 and does no zero-phase filtering across the edge."""
+    return y[rc.required_lead_samples(sr):]
+
+
+def prepare_pair(ref, ours):
+    """Prepare both sides, then REFUSE -- naming every violating field -- unless
+    they are in the same apparatus state. `ref` and `ours` are (x, sr, side
+    name); returns the two prepared arrays. Both sides are prepared by the same
+    function, which is what #101 looked like too: the check is on the result."""
+    ry, oy = prepared(*ref), prepared(*ours)
+    pc.check_prepared_pair(pc.Side(ref[2], ry, ref[1]), pc.Side(ours[2], oy, ours[1]))
+    return ry, oy
 
 
 def sha(p):
@@ -85,6 +95,7 @@ def sha(p):
 
 
 def load_reference(voice):
+    """The recording, UNPREPARED: the caller prepares it, so the pair can be checked."""
     if not REFDIR.exists():
         raise Refused(f"reference corpus not at {REFDIR} -- clone "
                       f"tidalcycles/sounds-tr808-fischer or point GF180_TR808_REFS at it")
@@ -97,10 +108,11 @@ def load_reference(voice):
         x = x.mean(axis=1)
     if am.is_silent(x / 32768.0):
         raise Refused(f"reference recording {REF_MAIN[voice]} is silent")
-    return prepare(x / 32768.0, sr), sr, REF_MAIN[voice], sha(path)
+    return x / 32768.0, sr, REF_MAIN[voice], sha(path)
 
 
 def render_ours(voice, seconds=2.2, accent=1.0):
+    """Our render, UNPREPARED (see load_reference)."""
     import drums_fx as dx
     n = int(seconds * dx.SR)
     d = dx.DrumsFx()
@@ -108,7 +120,7 @@ def render_ours(voice, seconds=2.2, accent=1.0):
                                   dx.kit_with_sounds(voice)), n)
     g = dx.accent_reg(0.45)
     out = dx.output_fx(np.zeros(n), 0, dm, g, bd, g)
-    return prepare(np.asarray(out, dtype=np.float64) / 32768.0, dx.SR), dx.SR
+    return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR
 
 
 # Operating points, each with the error VALIDATE establishes for it.
@@ -213,16 +225,22 @@ def cmd_measure():
         print(f"\n{'='*94}\n{voice}   (estimator error +-{op['err_db']:.1f} dB, "
               f"floor margin {FLOOR_MARGIN_DB:.0f} dB)\n{'='*94}")
         sides = {}
+        raw = {}
+        x, sr, rel, h = load_reference(voice)
+        raw["reference"] = (x, sr, f"the reference recording {rel}", f"{rel} {h}")
+        x, sr = render_ours(voice)
+        raw["ours"] = (x, sr, f"our {voice} render", "drums_fx render, accent 1.0, bus 0.45")
+        prep = dict(zip(("reference", "ours"),
+                        prepare_pair(raw["reference"][:3], raw["ours"][:3])))
         for side in ("reference", "ours"):
-            if side == "reference":
-                x, sr, rel, h = load_reference(voice); tag = f"{rel} {h}"
-            else:
-                x, sr = render_ours(voice); tag = "drums_fx render, accent 1.0, bus 0.45"
+            sr, tag = raw[side][1], raw[side][3]
+            y = prep[side]
+            x = origin(y, sr)
             nf = float(np.sqrt(np.mean(x[int(0.90 * len(x)):] ** 2)))
             f_lo = PT.find_partial(x, sr, *op["lo"], seconds=op["t_end"])
             f_hi = PT.find_partial(x, sr, *op["hi"], seconds=op["t_end"])
             tl, a_l, th, a_h = balance_traj(x, sr, f_lo, f_hi, op)
-            sides[side] = dict(x=x, sr=sr, nf=nf, f_lo=f_lo, f_hi=f_hi, tl=tl, al=a_l, th=th, ah=a_h)
+            sides[side] = dict(x=y, sr=sr, nf=nf, f_lo=f_lo, f_hi=f_hi, tl=tl, al=a_l, th=th, ah=a_h)
             print(f"  {side:10s} {tag}")
             print(f"             lines actually present: low {f_lo:8.2f} Hz   high {f_hi:8.2f} Hz"
                   f"   record floor RMS {nf:.2e}")
@@ -255,7 +273,10 @@ def cmd_apparatus():
     """Two unrelated circuits failing one check is what a shared apparatus term
     looks like, so it is tested rather than assumed.
 
-    `prepare()` trims to 1 ms before the onset only when the lead-in is at least
+    (HISTORICAL premise, #636: since #132 `run_case.prepare` guarantees the
+    lead, so padding the RAW recording is expected to move nothing; this command
+    now checks that. What follows describes the clamp this tool used to carry.)
+    The old private `prepare()` trimmed to 1 ms before the onset only when the lead-in was at least
     5 ms. The Fischer WAVs begin AT the strike (onset sample 6 and 10), so they
     get lead = 0 and no trim; our renders lead with 10 ms of digital silence, so
     they get trimmed to exactly 1 ms of lead-in. The two sides' windows therefore
@@ -275,20 +296,23 @@ def cmd_apparatus():
              "tone_ratio_db(800/540) 0-100 ms  [unfiltered -- no filtfilt edge, but a fixed window]")):
         xr, srr, rel, h = load_reference(voice)
         xo, sro = render_ours(voice)
+        rside, oside = f"the reference recording {rel}", f"our {voice} render"
         print(f"\n{voice}  {lbl}")
         print(f"  {'pad ms':>9s} {'reference':>11s} {'ours':>10s} {'error':>9s} {'worst':>7s}   note")
         base = None
         for ms in (0.0, 0.5, 1.0, 2.0, 5.0, 10.0):
-            a, b = est(pad(xr, srr, ms), srr), est(pad(xo, sro, ms), sro)
+            a = est(prepared(pad(xr, srr, ms), srr, rside), srr)
+            b = est(prepared(pad(xo, sro, ms), sro, oside), sro)
             if a is None or b is None:
                 print(f"  {ms:9.2f}   REFUSED"); continue
             if base is None:
                 base = a
             note = "both sides as the scorecard has them" if ms == 0.0 else "both sides padded equally"
             print(f"  {ms:9.2f} {a:11.3f} {b:10.3f} {b-a:9.3f} {abs(b-a)/3.0:7.2f}   {note}")
-        print(f"  reference padded alone (ours already carries prepare()'s 1 ms lead-in):")
+        print(f"  reference padded alone (run_case.prepare makes this free; it must not move):")
         for ms in (0.5, 1.0, 2.0, 5.0):
-            a, b = est(pad(xr, srr, ms), srr), est(xo, sro)
+            a = est(prepared(pad(xr, srr, ms), srr, rside), srr)
+            b = est(prepared(xo, sro, oside), sro)
             if a is None or b is None:
                 continue
             print(f"  ref+{ms:5.1f} {a:11.3f} {b:10.3f} {b-a:9.3f} {abs(b-a)/3.0:7.2f}   "

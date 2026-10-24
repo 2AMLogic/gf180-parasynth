@@ -246,6 +246,72 @@ def test_descent_test_flags_a_true_re_pressing(tmp_path):
     assert "re-pressing" in rows[0]["verdict"]
 
 
+def _noise_identity_rows(tmp_path, **kw):
+    """Candidate is BIT-IDENTICAL i.i.d. noise to its reference, driven through
+    the public descent_test path. i.i.d. noise has no smoothness to forgive a
+    one-sample resample: the identity must be scored as the identity."""
+    rng = np.random.default_rng(7)
+    sr, n = 48000, 4000
+    sig = rng.normal(size=n)
+
+    class _Ref:
+        name = "REF01.WAV"
+
+    rows = mh.descent_test(
+        _make_candidate_files(tmp_path, ["candidate.wav"]),
+        lambda p: dict(voice="X", refs=[_Ref()]), lambda p: (sig, sr),
+        _prepare_noop, read_candidate=lambda p: (sig.copy(), sr),
+        window_s=n / sr, **kw)
+    return rows[0]
+
+
+def test_descent_test_scores_identical_noise_as_the_identity(tmp_path):
+    """Start-red record: on the unfixed code np.arange(0.90, 1.1001, 0.0025)
+    put 0.9999999999999979 nearest 1.0, int(4000 * ratio) == 3999, the
+    identity was resampled, and best_correlation for an identical i.i.d.
+    noise file fell short of 1 (see PR #361 for the captured value)."""
+    row = _noise_identity_rows(tmp_path)
+    assert row["best_correlation"] == pytest.approx(1.0, abs=1e-9)
+    assert row["at_resample_ratio"] == 1.0
+    assert "re-pressing" in row["verdict"]
+
+
+def test_descent_test_control_perturbed_identity_candidate_goes_red(tmp_path, monkeypatch):
+    """INJECTED CONTROL: re-inject the original defect (grid point 1 - 1e-12
+    in place of exact 1.0, so int(len*ratio) is one short). The identity test's
+    assertion must then fail for the intended reason: correlation below 1."""
+    real = mh._ratio_grid
+    monkeypatch.setattr(mh, "_ratio_grid", lambda *a: np.where(real(*a) == 1.0, 1.0 - 1e-12, real(*a)))
+    row = _noise_identity_rows(tmp_path)
+    assert row["best_correlation"] < 1.0 - 1e-6
+
+
+def test_descent_test_control_removed_identity_candidate_is_not_a_match(tmp_path):
+    """INJECTED CONTROL: an interval that excludes 1.0 has no identity
+    candidate, so identical noise must NOT be called a re-pressing."""
+    row = _noise_identity_rows(tmp_path, min_ratio=1.0025, max_ratio=1.05)
+    assert row["best_correlation"] < 0.95
+    assert row["verdict"] == "no reference file matches it"
+
+
+def test_ratio_grid_has_exact_one_and_preserves_custom_grids():
+    g = mh._ratio_grid(0.90, 1.1001, 0.0025)
+    assert 1.0 in g.tolist() and g[0] == 0.90 and len(g) == 81
+    assert np.allclose(g, 0.90 + 0.0025 * np.arange(81))
+    # custom grid containing 1.0 (not on the default lattice)
+    g = mh._ratio_grid(0.95, 1.06, 0.01)
+    assert 1.0 in g.tolist() and g[0] == 0.95
+    # 1.0 inside the interval but off the lattice: inserted exactly once
+    g = mh._ratio_grid(0.903, 1.1, 0.01)
+    assert g.tolist().count(1.0) == 1 and len(g) == 21 and np.all(np.diff(g) > 0)
+    # interval without 1.0: untouched, no 1.0 member invented
+    g = mh._ratio_grid(1.0025, 1.05, 0.0025)
+    assert 1.0 not in g.tolist() and g[0] == 1.0025 and g[-1] < 1.05
+    # 1.0 as an excluded upper bound stays excluded (half-open interval)
+    g = mh._ratio_grid(0.9, 1.0, 0.025)
+    assert 1.0 not in g.tolist()
+
+
 def test_descent_test_control_does_not_call_an_unrelated_recording_a_match(tmp_path):
     """INJECTED CONTROL: an independent recording (uncorrelated noise, not a
     re-pressing of anything) must NOT be called a re-pressing. A check that
@@ -341,3 +407,47 @@ def test_assert_precondition_control_refuses_a_nan_difference(measured, referenc
     `assert_precondition` fails every case here."""
     with pytest.raises(SystemExit, match="REFUSED"):
         mh.assert_precondition(measured, reference, tol=1e300, what="test")
+
+
+def _one(tmp_path, exc):
+    def classify(path):
+        return dict(voice="X", refs=["placeholder"])
+
+    def read_candidate(path):
+        raise exc
+
+    return mh.descent_test(_make_candidate_files(tmp_path, ["a.wav"]), classify,
+                           lambda p: (np.zeros(4), 48000), _prepare_noop,
+                           read_candidate=read_candidate)[0]
+
+
+def test_a_reader_bug_is_not_reported_as_an_unreadable_file(tmp_path):
+    """#610 start-red: a TypeError in the reader read as status=unreadable."""
+    r = _one(tmp_path, TypeError("read_candidate() got an unexpected argument"))
+    assert r["status"] == "error" and r["error_type"] == "TypeError"
+    assert "TypeError" in r["why"]
+
+
+def test_an_unreadable_file_keeps_its_exception_type(tmp_path):
+    r = _one(tmp_path, OSError("truncated file"))
+    assert r["status"] == "unreadable" and r["error_type"] == "OSError"
+    assert "truncated file" in r["why"]
+
+
+def test_a_reader_bug_raising_valueerror_is_still_unreadable_known_gap(tmp_path):
+    """Rule 8: the input that defeats `_DATA_ERRORS`, pinned as an accepted limit.
+
+    A BUG in the reader that raises ValueError (here a shape mismatch) is
+    indistinguishable by `status` from a bad file: both are "unreadable". The
+    mitigation is `error_type`/`why`, which a reader of the rows uses to tell
+    them apart. If this test starts failing because the classification was
+    narrowed, that is an improvement: update it and the comment on
+    `_DATA_ERRORS`."""
+    (tmp_path / "bug").mkdir()
+    (tmp_path / "bad").mkdir()
+    bug = _one(tmp_path / "bug", ValueError("could not broadcast input array "
+                                             "from shape (3,) into shape (2,)"))
+    bad = _one(tmp_path / "bad", OSError("Error opening 'a.wav': truncated"))
+    assert bug["status"] == bad["status"] == "unreadable"   # the known gap
+    assert bug["error_type"] == "ValueError" and bad["error_type"] == "OSError"
+    assert bug["why"].startswith("ValueError:")              # the mitigation

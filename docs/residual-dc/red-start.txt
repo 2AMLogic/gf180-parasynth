@@ -1,0 +1,15 @@
+# red start: _stats_of stubbed to NaN; every fixture executed; failures above are assertion failures
+FAILED tools/probes/test_residual_dc.py::test_property_holds_on_the_real_estimator[offset->OFFSET]
+FAILED tools/probes/test_residual_dc.py::test_property_holds_on_the_real_estimator[burst->SKIRT]
+FAILED tools/probes/test_residual_dc.py::test_property_holds_on_the_real_estimator[zero-mean!=OFFSET]
+FAILED tools/probes/test_residual_dc.py::test_property_holds_on_the_real_estimator[lead-silence]
+FAILED tools/probes/test_residual_dc.py::test_property_holds_on_the_real_estimator[tail-pad]
+FAILED tools/probes/test_residual_dc.py::test_property_holds_on_the_real_estimator[polarity]
+FAILED tools/probes/test_residual_dc.py::test_property_holds_on_the_real_estimator[scale]
+FAILED tools/probes/test_residual_dc.py::test_property_holds_on_the_real_estimator[sample-rate]
+FAILED tools/probes/test_residual_dc.py::test_every_injected_defect_turns_something_red
+FAILED tools/probes/test_residual_dc.py::test_the_mean_subtracting_conditioner_is_the_named_wrong_one
+FAILED tools/probes/test_residual_dc.py::test_known_answers_on_the_synthetic_statistics
+FAILED tools/probes/test_residual_dc.py::test_spectral_flatness_is_the_closed_form_for_a_pulse
+FAILED tools/probes/test_residual_dc.py::test_refuses_sub20_energy_that_does_not_clear_the_quantisation_floor
+13 failed, 11 passed in 1.36s

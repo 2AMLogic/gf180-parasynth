@@ -1,0 +1,110 @@
+{
+ "issue": 558,
+ "frozen": "2026-10-09, before any run of a candidate or of any non-50 take through this probe",
+ "corpus": {
+  "repo": "https://github.com/tidalcycles/sounds-tr808-fischer",
+  "commit": "85fbecf",
+  "sha256_16": {
+   "lt8/LT00.WAV": "a324073813003398",
+   "lt8/LT25.WAV": "fdd8fbb073407dce",
+   "lt8/LT50.WAV": "d3720682985a9621",
+   "lt8/LT75.WAV": "17386b1ed8d6eb28",
+   "lt8/LT10.WAV": "b5f6c19876ce2353",
+   "mt8/MT00.WAV": "b649329207aec14f",
+   "mt8/MT25.WAV": "9a0a847a29f4b0d4",
+   "mt8/MT50.WAV": "81bbc63110a21c5d",
+   "mt8/MT75.WAV": "7c070b28f1cd916a",
+   "mt8/MT10.WAV": "50b81a0a9ab88871",
+   "ht8/HT00.WAV": "96d0de026d7421e0",
+   "ht8/HT25.WAV": "5ed0365551d140da",
+   "ht8/HT50.WAV": "7e0b9eddd9537929",
+   "ht8/HT75.WAV": "c312ac79a02ced12",
+   "ht8/HT10.WAV": "aef7d50fc43965c3",
+   "lc8/LC00.WAV": "a00777a5d2831b16",
+   "lc8/LC25.WAV": "fd6593c88a75de8a",
+   "lc8/LC50.WAV": "6591f57bbbdb8918",
+   "lc8/LC75.WAV": "442942b82e73a719",
+   "lc8/LC10.WAV": "8c8e0224afb3f2fd",
+   "mc8/MC00.WAV": "3c4857ddc26e4d5d",
+   "mc8/MC25.WAV": "a3ca42608916815e",
+   "mc8/MC50.WAV": "8175efe26c67f5af",
+   "mc8/MC75.WAV": "347afdc65ba86694",
+   "mc8/MC10.WAV": "e0b10cfaac26f357",
+   "hc8/HC00.WAV": "e1c3328d5943e08b",
+   "hc8/HC25.WAV": "3476e81b5a43031d",
+   "hc8/HC50.WAV": "ee4354b1fb79126e",
+   "hc8/HC75.WAV": "660f956127198dc5",
+   "hc8/HC10.WAV": "21a3b7dfb1d87e8a"
+  },
+  "cross_check": "the six TUNING 5.0 hashes equal the ones docs/scorecard/results/D03A..D08A.json record"
+ },
+ "engine": "the shipped kit (model/drums_fx.py kit_with_sounds + hit_writes, accent 1.0, render_drum_solo's render) on a bank with nums=16; at ratio 1.0 with no candidate it must equal run_case.render_drum_solo bit-exactly or the run REFUSES",
+ "tuning": "f0 x r and Q x r (tau held), r = the take's gate pitch-track median / the TUNING 5.0 take's, so TUNING 5.0 renders the shipped f0 exactly; the host's diode-drop law reads the retuned f0 (its TUNING term moves as a host's would)",
+ "accent": "1.0 only. The Fischer corpus has one take per TUNING setting at an undocumented accent, so NO accent condition can be held out: accent generalisation is NOT tested here (stated, not assumed)",
+ "split_of": {
+  "LT00": "untouched",
+  "LT25": "development",
+  "LT50": "seen-in-diagnosis",
+  "LT75": "development",
+  "LT10": "untouched",
+  "MT00": "untouched",
+  "MT25": "untouched",
+  "MT50": "seen-in-diagnosis",
+  "MT75": "untouched",
+  "MT10": "untouched",
+  "HT00": "untouched",
+  "HT25": "development",
+  "HT50": "seen-in-diagnosis",
+  "HT75": "development",
+  "HT10": "untouched",
+  "LC00": "untouched",
+  "LC25": "untouched",
+  "LC50": "seen-in-diagnosis",
+  "LC75": "untouched",
+  "LC10": "untouched",
+  "MC00": "untouched",
+  "MC25": "development",
+  "MC50": "seen-in-diagnosis",
+  "MC75": "development",
+  "MC10": "untouched",
+  "HC00": "untouched",
+  "HC25": "untouched",
+  "HC50": "seen-in-diagnosis",
+  "HC75": "untouched",
+  "HC10": "untouched"
+ },
+ "split_rule": "development = LT, HT, MC at TUNING 2.5 and 7.5 (two toms, one conga; both sides of centre). untouched = every other voice/tuning except TUNING 5.0, including MT, LC and HC at EVERY tuning (three voices never seen by selection). TUNING 5.0 (the gate's ranked targets) was looked at in diagnosis before this file was written, so it is reported but is neither development nor confirmation.",
+ "prior_use_of_these_recordings": [
+  "LC50/MC50/HC50 fitted TOM_HW_TAU's three conga time constants (drums_fx.py) -- decay on those takes is not independent",
+  "the six TUNING 5.0 takes are the R1 cases D03A..D08A on which #351 (tools/probe_tom_numerator.py) selected the BP numerator for BODY SPECTRUM; this experiment's feature (gate pitch_shape) and its conditions (other tunings) were not used there",
+  "the diode-drop law (TOM_DROP_*) was fitted on 808 From Mars, not on any Fischer take",
+  "perceptual_gate.WEAK_R is the median of the 12 adjacent tom/conga pairs' pitch distance; it sets the WEAK bar of single-take sounds only, not these six sounds' bars"
+ ],
+ "mechanism_hypothesis": "H1 (shared, all six): the gate's onset pitch excess is the circuit's band-pass numerator (a DC zero: cos-phase onset) that our all-pole RAW mode lacks -- tools/probes/tom_conga_gate.py knownanswer: a float all-pole resonator reads 0-5 cents at the first frame, the same poles with (1 - z^-2) read 37-39 cents, at every one of the six f0/tau. H2 (toms only, additive): the remainder on LT/MT/HT is the diode drop, which the shipped law already models. H3 (impulse, all six): the BODY half of `impulse` reads the recording's stationary floor, not a strike (knownanswer: a white floor at -100/-85/-70 dB moves the body statistic -23/-9/+5 dB; the 808 bodies read -1.6..+6.3, ours -11..-14).",
+ "candidates": {
+  "BP": "BP",
+  "BP+X4": "BP+X4"
+ },
+ "candidate_source": "tools/probe_tom_numerator.py's frozen set (#351); HP is not carried (a double DC zero, which the bridged-T has not got). No new candidate, no parameter sweep: the only continuous quantities (amp, exciter x4) are fixed by #351's rule, so there is nothing to register under tools/sensitivity.py",
+ "rules": {
+  "targets": [
+   "pitch_shape"
+  ],
+  "preserve_rel": 1.1,
+  "preserve_abs": 0.1,
+  "preserve_note": "every gate feature except the target: candidate ratio <= 1.10 x shipped ratio + 0.10 on the same condition; plus the render's raw peak within peak_db of shipped (amp is compensated at f0, so silence or a level change cannot win)",
+  "peak_db": 1.0,
+  "select": "on development: among candidates with ZERO preservation violations, the largest median relative pitch_shape reduction. None admissible -> nothing is selected and nothing can be confirmed.",
+  "confirm_improved_frac": 0.75,
+  "confirm_median_reduction": 0.25,
+  "confirm": "the selected candidate, once, on untouched: pitch_shape ratio lower than shipped on >= 75 % of conditions AND median relative reduction >= 25 % AND zero preservation violations"
+ },
+ "attribution": {
+  "floor_gain_db": [
+   0.0,
+   -20.0
+  ],
+  "rule": "H3 is supported if adding the take's own last-100 ms floor (high-passed 1 kHz) to the SHIPPED render at its own level puts `impulse` within its bar on >= 75 % of the 30 conditions, and at -20 dB on <= 25 % (dose response). The same table reports `modulation` (LT's 14.8x) and `pitch_shape` (which the floor must NOT fix: a negative control)."
+ },
+ "not_a_pass_bar": "the same-unit bar is a diagnostic ranking bar (gate-379 README sections 5-8): a real second 808 fails it. Improvement is judged against the shipped engine on the same condition, never by absolute PASS, and the bar is not loosened."
+}

@@ -39,6 +39,8 @@ pnr/shuttle/librelane/density.yaml
 # .json beside it; tools/r0_capture.py refuses an altered one. Physical capture
 # takes (captures/) stay ignored: they are archived with their hashes (#208).
 !fpga/release/evidence/r0-reference/*.wav
+# ...and R1's (#324), rendered on the build box from R1's frozen sources.
+!fpga/release/evidence/r1-reference/*.wav
 # ...and a second, for the same reason. docs/scorecard/drum-d02a-i2s/ is the
 # evidence that D02A's board row was measured on the chip rather than the model,
 # and the record's own `decoded_i2s_sha256` binds this artefact -- a hash with no
@@ -86,14 +88,20 @@ refprofile/cache/
 .loom/claims/
 .loom/locks/
 .loom/signals/
+.loom/sweep-dispatch-tap/
 .loom/status/
 .loom/retry-state/
 .loom/exit-codes/
 .loom/sweep-checkpoint/
+.loom/private-jobs/
 .loom/sweep-run/
+.loom/targets/
+.loom/target*/
+.cargo-target*/
+.loom-target/
+/target-*/
 .loom/state/*
 !.loom/state/detect-unlabeled-epics-dismissed
-.loom/concierge/
 .loom/stats/
 .loom/diagnostics/
 .loom/guide-docs-state.json

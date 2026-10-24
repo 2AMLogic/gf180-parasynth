@@ -99,6 +99,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 import audio_measure as am                                          # noqa: E402
 import fixed                                                        # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import ring_estimator as re_                                        # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 from dsp import SR                                                  # noqa: E402
 
@@ -133,13 +134,18 @@ class Refused(RuntimeError):
 # ===========================================================================
 # the coefficient law, and its inverse
 # ===========================================================================
-def g_exact_q16(cut_hz) -> np.ndarray:
+def g_exact_q16(cut_hz, law=None) -> np.ndarray:
     """The shipped coefficient law at infinite precision: `g = 1 - exp(-2 pi f'
     / f_os)` in Q0.16 as a FLOAT, where `f' = f * CUT_TRIM * fcr(f)` is
     `fixed.tuned_cutoff`. This is the thing the ROM is a quantisation of, and
-    so is the known answer the ROM read is measured against."""
+    so is the known answer the ROM read is measured against.
+
+    `law`, when given, replaces `fixed.tuned_cutoff` with another callable
+    `commanded Hz -> tuned Hz` -- issue #257's refitted tuning law. Default
+    None is byte-identical to before the parameter existed."""
     c = np.clip(np.asarray(cut_hz, dtype=np.float64), 20.0, FS_OS * 0.45)
-    return (1.0 - np.exp(-2.0 * math.pi * fixed.tuned_cutoff(c) / FS_OS)) * 65536.0
+    tuned = fixed.tuned_cutoff(c) if law is None else np.asarray(law(c), dtype=np.float64)
+    return (1.0 - np.exp(-2.0 * math.pi * tuned / FS_OS)) * 65536.0
 
 
 def cutoff_from_g(g_q16) -> np.ndarray:
@@ -273,13 +279,16 @@ def rom_size_sweep(bits_range, cuts=None) -> dict:
     return out
 
 
-def refit_rom_entries(bits: int = None) -> np.ndarray:
+def refit_rom_entries(bits: int = None, law=None) -> np.ndarray:
     """The 2^bits + 1 Q0.16 entries that minimise the INTERPOLATED read error,
     instead of sampling the law at the bin edges. Same table shape, same read,
     same ROM bits, no datapath change -- a ROM-build-time change of exactly DR
     0011's class. Reported, not shipped: moving the table moves DR 0006's `k`
     ROM, the contract revision and every bit-exact expectation, which is a
-    decision record and not an audit."""
+    decision record and not an audit.
+
+    `law` refits against a different tuning law (see `g_exact_q16`); issue
+    #257 takes this win in the same revision as its resonance correction."""
     bits = vf.GROM_BITS if bits is None else bits
     cuts = np.arange(vf.CUT_MIN, vf.CUT_MAX + 1, 1)
     fb = 15 - bits
@@ -289,8 +298,11 @@ def refit_rom_entries(bits: int = None) -> np.ndarray:
     A = np.zeros((len(cuts), n))
     A[np.arange(len(cuts)), i] = 1.0 - frac
     A[np.arange(len(cuts)), i + 1] = frac
-    want = cutoff_from_g(g_exact_q16(cuts))
-    e = vf.make_g_rom(bits=bits).astype(np.float64)
+    want = cutoff_from_g(g_exact_q16(cuts, law))
+    if law is None:
+        e = vf.make_g_rom(bits=bits).astype(np.float64)
+    else:                                   # start from the law's own edge samples
+        e = np.clip(np.round(g_exact_q16(np.arange(n) * (1 << fb), law)), 0, 65535)
     for _ in range(6):                                   # Gauss-Newton on cents
         g = A @ e
         r = _cents(cutoff_from_g(g), want)
@@ -362,18 +374,16 @@ def refit_tuning(cuts, degree: int, slope: float = None) -> tuple[np.ndarray, fl
 # ===========================================================================
 def _ring_ratio(dev, cut: float, res: float, seconds: float = 0.8) -> float:
     """`f_osc / commanded` from the fixed-point filter's own free ring, by the
-    same rule `model/reference_compare.py`'s tracking stage uses: the
-    zero-crossing frequency when it agrees with the spectral peak inside 2 %,
-    the peak otherwise."""
+    shared sustained-ring policy in `model/ring_estimator.py`: REFUSES a record
+    that is not a sustained ring (a decay, or the fixed-point dead-band limit
+    cycle a below-onset ring ends in) and one on which the zero-crossing and
+    spectral estimates disagree (issue #548). There is no fallback to the
+    spectral peak."""
     y = dev.ring(cut, res, seconds=seconds)
-    e = am.dominant_frequency(y, 20.0, 20000.0, SR)
-    z = am.zero_crossing_frequency(y, SR)
-    if z.ok and e.ok and abs(z.value - e.value) / e.value < 0.02:
-        f = z.value
-    elif e.ok:
-        f = e.value
-    else:
-        raise Refused(f"the ring at {cut:.0f} Hz, res {res} has no measurable frequency")
+    try:
+        f = re_.ring_frequency(y, SR)
+    except re_.Refused as exc:
+        raise Refused(f"the ring at {cut:.0f} Hz, res {res}: {exc}") from exc
     return f / float(cut)
 
 

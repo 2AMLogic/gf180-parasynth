@@ -132,9 +132,15 @@ help:
 ## are gated here for the same reason the shared module is -- a change to the
 ## synthesis must not be able to move their numbers unnoticed. Both print the
 ## TR-808 corpus's absence as a result and exit 0 without it.
+## #354: the all-maximum `extremes` image alone, OSC2X+FILTER2X (960 frames,
+## ~7 s). R1's 25-bit ladder `xg` wrapped on it and the continuing full-set
+## voice carried the wrong state into `audition`; #364 widened it. This is the
+## clean half; `controls` runs the retained R1 width (INJECT_BUG_LADDER_XG25)
+## on the same image and requires R1's recorded signature, first divergence
+## y19 at frame 62 and 387 samples (--expect-first), not merely a failure.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -142,6 +148,7 @@ verify:
 	  "$(PY) rtl-sketch/verify_synth_top.py --osc2x" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --osc2x --outdir build/voice-osc2x" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --outdir build/voice-filter2x" \
+	  "$(PY) tools/verify_voice_scoped.py --extremes-index 0 --osc2x --filter2x --outdir build/voice-allmax-354" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --outdir build/top-m5a-filter2x" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --outdir build/top-drum-solo-smoke" \
 	  "$(PY) tools/gen_rate_conv_2x.py --check" \
@@ -167,7 +174,8 @@ verify:
 	  "$(PY) tools/probes/estimator_fixtures.py" \
 	  "$(PY) tools/probes/estimator_domains.py" \
 	  "$(PY) tools/probes/verify_109_claims.py" \
-	  "$(PY) tools/sensitivity.py check"
+	  "$(PY) tools/sensitivity.py check" \
+	  "$(PY) tools/check_iverilog_generate_case_string.py"
 
 ## Fast sound-development checks, separate from the broad repository suite.
 ## A valid M5A mismatch remains a passing verification job: this checks that
@@ -200,6 +208,13 @@ verify:
 ## bench's start-red on the pre-#315 file, and the publication rung's controls,
 ## would be checks that only ever ran on a developer's machine. 2.5 s measured
 ## together, against a 600 s cap.
+## fpga/test_publish_binding.py (the publisher's drift-refusing evidence
+## binding, fpga/ARTY.md) and fpga/test_arty_sd_top.py (the arty_a7_sd_top
+## pin/MMCM replay) are in the same bundle for the same reason: they sit on the
+## Arty publication path and nothing else in CI collected them (#692). Measured
+## 1.2 s and 2.2 s on Python 3.12. test_arty_sd_top compiles with iverilog and
+## SKIPs without it; the m5a-fast job installs iverilog before `make
+## verify-fast` (rungs.yml), so it runs there.
 ##
 ## THE TIMEOUT IS PER JOB, SO THE SHAPE OF THE SPLIT IS THE GATE'S HEADROOM.
 ## tools/test_run_case.py is its own job rather than a member of the big one
@@ -236,8 +251,8 @@ verify:
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest tools/test_run_case.py -q" \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
- 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py tools/test_check_arty_evidence_binding.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
+ 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py tools/test_check_arty_evidence_binding.py fpga/test_publish_binding.py fpga/test_arty_sd_top.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py fpga/test_named_r1.py fpga/test_named_r2.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
@@ -268,7 +283,7 @@ verify-fast:
 verify-full:
 	@$(RUN) --timeout 7200 --json build/verification/verify-full.json \
 	  "$(PY) tools/score_ensemble_i2s.py --case E1A --jobs 1 --reuse --simulator verilator --out build/scorecard/E1A-integrated-rtl.json --audio build/scorecard/E1A-integrated-rtl-mix.wav --twin build/scorecard/E1A-fixed-model-twin.json" \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -336,7 +351,8 @@ verify-full:
 ##   the correct one. Measured both ways with verify_synth_top.py --rtl against
 ##   the pre-integration drum section: 124 of 256 before, 156 of 256 after, no
 ##   overrun either way. verify_synth_top.py prints a NOTE whenever the strobe is
-##   past 128. The control still fires against i2s_tx on its own bench.
+##   past 128. The control fires on rtl-sketch/verify_i2s_tx.py instead (listed
+##   below), whose bench strobes at cycle 20 so the right channel is observable.
 ##
 ##   VOICE_MIX_SAT -- the voice's pre-ladder mixer never reaches its rail on this
 ##   patch, so the control is silent here. It is verify_voice.py's (BUGS) and
@@ -452,6 +468,17 @@ verify-full:
 ## measurement that cannot change without a threshold changing does not belong
 ## in a per-push target.
 ##
+## coupling_controls.py (#551) is the injected-defect inventory for contract
+## 15.10's shared-bus DC coupling: eighteen named defects of the model (a
+## bypassed enable, a misplaced bus or clamp, the wrong signed shift, a charge
+## or output word one bit narrow, a charge cleared by a hit, retune or accent,
+## a reset that keeps the charge or the enable, a frozen-while-bypassed charge,
+## reserved bits, an aliased address), each declared against the ONE property of
+## model/test_drums_fx.py::test_coupling_* that must catch it, plus the clean
+## run, which must be green. CAUGHT / BLIND / NO VERDICT, and a properties x
+## defects matrix. Pure Python, no corpus, about 12 minutes on one core
+## (the model is an integer Python loop; 13 properties x 19 runs).
+##
 ## estimator_ground_truth.py controls (#517) is the same shape one level up:
 ## the ground-truth suite in `verify` is a gate on sixty-four estimator
 ## checks, and this is the run in which those checks are REQUIRED to go red.
@@ -468,6 +495,9 @@ controls:
 	  "$(PY) tools/control_capability_verdicts.py" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
 	  "$(PY) tools/probes/estimator_ground_truth.py controls" \
+	  "$(PY) tools/probes/coupling_controls.py" \
+	  "$(PY) tools/pytest_collection_inventory.py controls" \
+	  "$(PY) tools/r1_harvest_controls.py" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \
@@ -477,6 +507,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_LEAKFLOOR --expect-fail --outdir build/voice-drift-leakfloor" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_MEANSTEP --expect-fail --outdir build/voice-drift-meanstep" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --inject SHARK_BLAMP_SIGN --expect-fail --outdir build/voice-shark-blamp-sign" \
+	  "$(PY) tools/verify_voice_scoped.py --extremes-index 0 --osc2x --filter2x --define INJECT_BUG_LADDER_XG25 --expect-fail --expect-first y19@62:387 --outdir build/voice-allmax-354-xg25" \
 	  "$(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail --outdir build/ctl-data24" \
@@ -491,6 +522,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject VOICE_OUT_SAT --expect-fail --outdir build/top-outsat" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail --outdir build/top-i2sshift" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject I2S_DELAY --expect-fail --outdir build/top-i2sdelay" \
+	  "$(PY) rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail --outdir build/i2s-swap" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_ADDR7 --expect-fail --outdir build/top-addr7" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_DATA24 --expect-fail --outdir build/top-data24" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_NOSEC --expect-fail --outdir build/top-nosec" \
@@ -555,10 +587,13 @@ controls:
 	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused" \
-	  "$(PY) tools/probes/permitted_differences.py --controls"
+	  "$(PY) tools/probes/permitted_differences.py --controls" \
+	  "$(PY) tools/check_iverilog_generate_case_string.py --inject NO_IVERILOG --expect refused" \
+	  "$(PY) tools/check_iverilog_generate_case_string.py --inject BROKEN_REPRO --expect refused" \
+	  "$(PY) tools/check_iverilog_generate_case_string.py --inject GARBAGE --expect refused"
 
 test:
-	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q
+	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q
 
 ## Re-derive every marked prose claim in this tree from the evidence it names.
 ## Three outcomes, and the third is the point: OK, STALE (the tree contradicts

@@ -152,6 +152,15 @@ untested by the sweep too.
 
 ## 4. The apparatus term, and it is bigger than the tolerance
 
+> **Pre-#132 figures (annotated in #636).** Every number in this section and the
+> 6.07 dB headline below was measured with this tool's private `prepare()`, which
+> clamped the lead (`max(0, onset - 1 ms)`, the #101 defect). The tool now calls
+> `run_case.prepare`, which guarantees the lead, so the `+1 ms` / `+10 ms` lead
+> columns are expected to read ~0 when re-run. **That re-run has NOT been done**:
+> the reference corpus (`GF180_TR808_REFS`) is not on the host that made this
+> change, so the tables below are unchanged and are the *historical* figures, not
+> the current ones.
+
 Each perturbation below leaves the machine and the strike untouched and changes
 only the apparatus. Per signal and per perturbation, because **a floor that is
 not constant must not be published as one** (#92; a constant floor that was not

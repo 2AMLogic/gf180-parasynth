@@ -62,6 +62,7 @@ import cymbal_candidate as cc            # noqa: E402
 import cymbal_bands as cb                # noqa: E402
 import cymbal_tone_knob as ctk           # noqa: E402
 import cymbal_tone_nodal as tn           # noqa: E402
+from finite_number import is_finite_number as _finite  # noqa: E402
 
 CENTRE = {"low": "3175", "decay": "10079", "short": "10079"}
 # Revision 4's low band leaves the chain at M_CYH1B, not M_CYH1.
@@ -544,14 +545,304 @@ def print_report(res: dict):
           + ("all true" if not badh else f"FAILED {badh}"))
 
 
+# ---------------------------------------------------------------------------
+# 7. (#413) the knob renderer on the SHIPPED structure: anchor, DECAY, 25 settings
+# ---------------------------------------------------------------------------
+# `test_discrimination.kit_at("CY", ...)` was not the shipped instrument: TONE was
+# solved for the reference's own band ratio and DECAY ran through a clamp whose
+# E_CYL time constant fell off the end of the Q0.16 rate register. The renderer
+# below is `cymbal_candidate.shipped_knob_kit` -- it writes nothing at the anchor,
+# so the anchor IS render_drum_solo("CY") -- and everything here is the gate that
+# says so, with the saturation that used to ship injected as a control.
+#
+# THE MEASURE. The issue asks for the late T20. `cymbal_bands.measure` REFUSES it
+# on the shipped structure at the anchor (H) and at DECAY 7.5/10 (H, L and Ln):
+# "late decay is not one exponential", on a 9 s record, so it is not a short-record
+# artefact. A gate that required it would be unsatisfiable (verification rule: run
+# a gate against the current state before committing it). The gate therefore
+# stands on EDT10 -- qualified at every position, direction taken from the same
+# Fischer records -- and the late T20 is REPORTED wherever the frozen instrument
+# qualifies it and gated only for monotonicity among those positions. The
+# refusals are listed, never counted as passes.
+SWEEP_SECONDS = 7.0
+FISCHER_DEADBAND = 0.02        # the 808's own step below this establishes no direction
+MIN_H_EDT_STEP = 0.05          # H EDT10 must rise by >= 5 % per DECAY step
+PASS, FAIL, REFUSED = "PASS", "FAIL", "REFUSED"
+DECAY_ORDER = ("00", "25", "50", "75", "10")      # by knob value, NOT by filename
+
+
+def render_shipped_knob(tone, decay, sound="CY", seconds=None):
+    """render_drum_solo's exact path (one strike at accent 1.0, both buses at
+    0.45, the kit's own length unless `seconds` says otherwise) on the knob
+    image. Every sound, the anchor included, goes through here."""
+    n = int((seconds or rc.SOLO_SECONDS.get(sound, 2.2)) * dx.SR)
+    kit = cc.shipped_knob_kit(tone, decay, sound=sound)
+    dm, bd = dx.DrumsFx().play(
+        dx.hit_writes([(rc.DRUM_SOLO_HIT_FRAME, dx.SOUND_STOP[sound], 1.0)], kit), n)
+    g = dx.accent_reg(0.45)
+    return np.asarray(dx.output_fx(np.zeros(n), 0, dm, g, bd, g), dtype=np.float64) / 32768.0
+
+
+def anchor_equivalence() -> dict:
+    """The knob image at the anchor against the shipped kit: registers first
+    (exact, free), then the audio of render_drum_solo("CY")."""
+    base = dict(dx.kit_with_sounds("CY"))
+    img = dict(cc.shipped_knob_kit(cc.TONE_ANCHOR, cc.DECAY_ANCHOR))
+    diff = sorted(a for a in set(base) | set(img) if base.get(a) != img.get(a))
+    ref, _ = rc.render_drum_solo("CY")
+    y = render_shipped_knob(cc.TONE_ANCHOR, cc.DECAY_ANCHOR)
+    same = bool(len(ref) == len(y) and np.array_equal(ref, y))
+    return {"registers_differing": [f"0x{a:02X}" for a in diff],
+            "audio_bit_identical": same,
+            "status": PASS if (not diff and same) else FAIL}
+
+
+def owned_addresses_check(tone, decay) -> dict:
+    """Every register the knob image changes against the shipped image, and
+    whether it is one the cymbal's envelopes own. All sounds, all 25 settings."""
+    own = cc.shipped_knob_owned_addresses()
+    stray = {}
+    for s in dx.SOUND_NAMES:
+        base = dict(dx.kit_with_sounds(s))
+        got = dict(cc.shipped_knob_kit(tone, decay, sound=s))
+        bad = sorted(a for a in set(base) | set(got) if base.get(a) != got.get(a) and a not in own)
+        if bad:
+            stray[s] = [f"0x{a:02X}" for a in bad]
+    return {"stray": stray, "status": PASS if not stray else FAIL}
+
+
+def decay_row_verdict(row: dict, identical: dict, fischer_h_edt: dict | None) -> dict:
+    """The named properties of ONE TONE row across the five DECAY positions.
+
+    row         {decay_code: {"H_edt10_ms", "L_edt10_ms", "H_t20_late_ms", "L_t20_late_ms"}}
+    identical   {(a, b): bool} -- whether the AUDIO at DECAY a and b is bit-identical,
+                for every adjacent pair and the endpoints
+    fischer_h_edt   the 808's H EDT10 per DECAY code at the same TONE, or None
+
+    A missing or non-finite number is REFUSED, never PASS and never FAIL: a gate
+    that answers when its input is absent looks exactly like data."""
+    out = {}
+    pairs = list(zip(DECAY_ORDER, DECAY_ORDER[1:])) + [(DECAY_ORDER[0], DECAY_ORDER[-1])]
+    missing = [p for p in pairs if p not in identical]
+    if missing:
+        out["distinct-renders"] = {"status": REFUSED, "why": f"no audio comparison for {missing}"}
+    else:
+        same = [f"{a}={b}" for a, b in pairs if identical[(a, b)]]
+        out["distinct-renders"] = {"status": FAIL if same else PASS, "identical_pairs": same,
+                                   "what": "adjacent DECAY positions and the endpoints render "
+                                           "different audio (the old path made 7.5 == 10.0)"}
+    for key, name, step in (("H_edt10_ms", "h-edt10-rises", MIN_H_EDT_STEP),
+                            ("L_edt10_ms", "l-edt10-rises", 0.0)):
+        v = [row.get(d, {}).get(key) for d in DECAY_ORDER]
+        if not all(_finite(x) for x in v):
+            out[name] = {"status": REFUSED, "value": v, "why": "a position has no finite EDT10"}
+            continue
+        steps = [round(b / a - 1.0, 4) for a, b in zip(v, v[1:])]
+        out[name] = {"status": PASS if all(x > step for x in steps) else FAIL,
+                     "value": v, "rel_steps": steps, "min_step": step,
+                     "what": f"{key} rises with DECAY by more than {step:.0%} per step"}
+    if fischer_h_edt is None:
+        out["h-edt10-direction-matches-808"] = {"status": REFUSED, "why": "no Fischer record"}
+    else:
+        f = [fischer_h_edt.get(d) for d in DECAY_ORDER]
+        h = out["h-edt10-rises"].get("value")
+        if not all(_finite(x) for x in f) or not all(_finite(x) for x in h):
+            out["h-edt10-direction-matches-808"] = {"status": REFUSED, "why": "non-finite input"}
+        else:
+            # The 808's own H EDT10 plateaus at TONE 10 (137.10 -> 136.19 ms from
+            # DECAY 7.5 to 10): a reference that does not move there establishes
+            # no direction there. A step inside the deadband is UNDETERMINED and
+            # not required of us; a determined step must agree. (First version
+            # demanded all four rise and so was unsatisfiable on that row by the
+            # reference's own data -- wrong-then-right 5.)
+            fstep = [b / a - 1.0 for a, b in zip(f, f[1:])]
+            ostep = [b / a - 1.0 for a, b in zip(h, h[1:])]
+            det = [abs(x) > FISCHER_DEADBAND for x in fstep]
+            agree = [(x > 0) == (y > 0) for x, y, d in zip(fstep, ostep, det) if d]
+            out["h-edt10-direction-matches-808"] = {
+                "status": PASS if (agree and all(agree)) else (REFUSED if not agree else FAIL),
+                "fischer": f, "ours": h, "fischer_rel_steps": [round(x, 4) for x in fstep],
+                "undetermined_steps": [f"{a}->{b}" for (a, b), d in
+                                       zip(zip(DECAY_ORDER, DECAY_ORDER[1:]), det) if not d],
+                "deadband": FISCHER_DEADBAND}
+    # the issue's qualified measure: reported where qualified, never faked
+    t20 = {}
+    for b in ("H", "L"):
+        vals = {d: row.get(d, {}).get(f"{b}_t20_late_ms") for d in DECAY_ORDER}
+        q = [(d, v) for d, v in vals.items() if _finite(v)]
+        refused = [d for d, v in vals.items() if not _finite(v)]
+        mono = all(y > x for (_, x), (_, y) in zip(q, q[1:]))
+        t20[b] = {"qualified_at": [d for d, _ in q], "refused_at": refused,
+                  "values": vals, "monotone_where_qualified": bool(mono),
+                  "status": (REFUSED if refused else (PASS if mono else FAIL))}
+    out["late-t20"] = {"status": (FAIL if any(v["status"] == FAIL for v in t20.values())
+                                  else REFUSED if any(v["status"] == REFUSED for v in t20.values())
+                                  else PASS),
+                       "bands": t20,
+                       "what": "the frozen late-T20 measure; REFUSED where it does not qualify"}
+    return out
+
+
+def sweep_row(tone, kit_fn=None, seconds=SWEEP_SECONDS, decays=DECAY_ORDER, _audio=None):
+    """Render one TONE row across DECAY and measure it. `kit_fn(tone, decay)`
+    defaults to the shipped constructor; a control passes a mutant. Returns the
+    row metrics and the audio-identity map."""
+    audio, row = {}, {}
+    for d in decays:
+        if _audio and d in _audio:
+            y = _audio[d]
+        elif kit_fn is None:
+            y = render_shipped_knob(tone, d, seconds=seconds)
+        else:
+            n = int(seconds * dx.SR)
+            dm, bd = dx.DrumsFx().play(dx.hit_writes(
+                [(rc.DRUM_SOLO_HIT_FRAME, dx.SOUND_STOP["CY"], 1.0)], kit_fn(tone, d)), n)
+            g = dx.accent_reg(0.45)
+            y = np.asarray(dx.output_fx(np.zeros(n), 0, dm, g, bd, g), dtype=np.float64) / 32768.0
+        audio[d] = y
+        m = cb.measure(rc.prepare(y, dx.SR, side=f"knob CY{tone}{d}"), dx.SR)
+        row[d] = {"H_edt10_ms": m["H"]["edt10_ms"], "L_edt10_ms": m["L"]["edt10_ms"],
+                  "H_t20_late_ms": m["H"]["t20_late_ms"], "L_t20_late_ms": m["L"]["t20_late_ms"],
+                  "H_t20_refused": m["H"].get("t20_refused"), "L_t20_refused": m["L"].get("t20_refused"),
+                  "H_minus_L_db": m["H_minus_L_db"]}
+    ident = {(a, b): bool(np.array_equal(audio[a], audio[b]))
+             for a, b in list(zip(DECAY_ORDER, DECAY_ORDER[1:])) + [(DECAY_ORDER[0], DECAY_ORDER[-1])]
+             if a in audio and b in audio}
+    return row, ident, audio
+
+
+def hat_preservation(tones=CODES, decays=DECAY_ORDER) -> dict:
+    """OH and CH share the 7.1 kHz band-pass with the cymbal. Bit-exact against
+    render_drum_solo at every requested knob position."""
+    res = {}
+    for s in ("OH", "CH"):
+        ref, _ = rc.render_drum_solo(s)
+        for t in tones:
+            for d in decays:
+                y = render_shipped_knob(t, d, sound=s)
+                res[f"{s}@TONE{t}/DECAY{d}"] = bool(len(ref) == len(y) and np.array_equal(ref, y))
+    return res
+
+
+def fischer_h_edt(tone: str, path=None) -> dict:
+    p = path or (ROOT / "docs" / "scorecard" / "cymbal-369" / "fischer.json")
+    if not p.exists():
+        raise Refused(f"{p} is absent")
+    blob = json.loads(p.read_text())
+    return {d: blob[f"CY{tone}{d}"]["H"]["edt10_ms"] for d in DECAY_ORDER}
+
+
+_REAL_DECAY_SCALE = cc.decay_scale
+
+
+def saturated_decay_scale(code: str) -> float:
+    """THE HISTORICAL DEFECT as a control: DECAY 10.0 asks for what 7.5 asked
+    for. The old path got there through a clamp on a fitted scale (k <= 8) that
+    pushed E_CYL's tau past the Q0.16 rate register's floor; the observable was
+    the same -- two knob positions, one register image, one waveform."""
+    return _REAL_DECAY_SCALE("75" if code == "10" else code)
+
+
+def saturated_kit(tone, decay):
+    """`shipped_knob_kit` with the saturation injected. Builds and executes."""
+    cc.decay_scale = saturated_decay_scale
+    try:
+        return cc.shipped_knob_kit(tone, decay)
+    finally:
+        cc.decay_scale = _REAL_DECAY_SCALE
+
+
+def rate_register_floor() -> dict:
+    """What the DECAY law asks of E_CYL and E_CYD against what the Q0.16 rate
+    register can carry. The register's slowest decay is rate 1: tau = 2^16 / SR
+    seconds. Anything slower collapses onto it."""
+    out = {"slowest_tau_s": round(65536.0 / dx.SR, 4), "positions": {}}
+    for d in DECAY_ORDER:
+        k = cc.decay_scale(d)
+        row = {}
+        for name, e, tau in (("E_CYD", dx.E_CYD, dx.CY_TAU_DECAY), ("E_CYL", dx.E_CYL, dx.CY_TAU_LOW)):
+            reg = dx.rate_reg(tau * k)
+            row[name] = {"asked_tau_s": round(tau * k, 4), "rate_reg": reg,
+                         "realised_tau_s": round(65536.0 / reg / dx.SR, 4),
+                         "at_floor": reg == 1}
+        out["positions"][d] = row
+    return out
+
+
+def run_knob_render(out: pathlib.Path) -> int:
+    """The committed #413 record: anchor, ownership, 25 settings, hats, control."""
+    try:
+        fi = {t: fischer_h_edt(t) for t in CODES}
+        anchor = anchor_equivalence()
+        rows, verdicts, audio50 = {}, {}, None
+        for t in CODES:
+            row, ident, audio = sweep_row(t)
+            rows[t] = row
+            verdicts[t] = decay_row_verdict(row, ident, fi[t])
+            if t == cc.TONE_ANCHOR:
+                audio50 = audio
+            print(f"TONE {t}: " + " ".join(f"{k}={v['status']}" for k, v in verdicts[t].items()),
+                  flush=True)
+        owned = {f"CY{t}{d}": owned_addresses_check(t, d) for t in CODES for d in DECAY_ORDER}
+        hats = hat_preservation()
+        # the control: the clean 00/25/50, the saturated 75/10, TONE anchor row
+        mrow, mident, _ = sweep_row(cc.TONE_ANCHOR, kit_fn=saturated_kit,
+                                    _audio={d: audio50[d] for d in ("00", "25", "50")})
+        mutant = decay_row_verdict(mrow, mident, fi[cc.TONE_ANCHOR])
+    except Refused as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 3
+    # The DECAY gate the command enforces: the four clean properties must PASS on
+    # every TONE row, and the saturation control must redden its intended
+    # observables. late-t20 is deliberately absent from both: it is the deferred
+    # #656 gap, kept visible in the record, never a pass requirement here.
+    _CLEAN_GATES = ("distinct-renders", "h-edt10-rises", "l-edt10-rises",
+                    "h-edt10-direction-matches-808")
+    _MUTANT_MUST_REDDEN = ("distinct-renders", "h-edt10-rises", "l-edt10-rises")
+    clean_misses = [f"TONE {t}/{k}" for t in CODES for k in _CLEAN_GATES
+                    if verdicts[t][k]["status"] != PASS]
+    mutant_misses = [k for k in _MUTANT_MUST_REDDEN if mutant[k]["status"] != FAIL]
+    res = {
+        "issue": 413, "sweep_seconds": SWEEP_SECONDS,
+        "anchor": anchor, "owned_addresses": owned, "hats_bit_identical": hats,
+        "rows": rows, "verdicts": verdicts,
+        "split": {f"CY{t}{d}": ("development" if f"CY{t}{d}" in cb.DEVELOPMENT else "confirmation")
+                  for t in CODES for d in DECAY_ORDER},
+        "rate_register_floor": rate_register_floor(),
+        "saturation_control": {"verdict": mutant,
+                               "red": [k for k, v in mutant.items() if v["status"] == FAIL],
+                               "blind": [k for k, v in mutant.items() if v["status"] == PASS],
+                               "misses": mutant_misses},
+        "commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
+                                 text=True).stdout.strip(),
+        "sources_dirty": subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "model", "tools"],
+                                        cwd=ROOT).returncode != 0,
+    }
+    bad = (anchor["status"] != PASS or any(v["status"] != PASS for v in owned.values())
+           or not all(hats.values()) or bool(clean_misses) or bool(mutant_misses))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=tn.json_leaf) + "\n")
+    print("anchor:", anchor["status"],
+          "| owned:", "PASS" if all(v["status"] == PASS for v in owned.values()) else "see record",
+          "| hats all bit-identical:", all(hats.values()),
+          "| decay gate:", "PASS" if not clean_misses else f"see record ({clean_misses})",
+          "| control red:", res["saturation_control"]["red"],
+          "| control misses:", mutant_misses)
+    return 1 if bad else 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", type=pathlib.Path, required=True)
     ap.add_argument("--fischer", type=pathlib.Path, default=None)
     ap.add_argument("--wavs", type=pathlib.Path, default=None)
+    ap.add_argument("--knob-render", action="store_true",
+                    help="#413: the shipped-structure knob renderer record (anchor, DECAY, 25 settings)")
     ap.add_argument("--skip-preservation", action="store_true",
                     help="diagnostic only; the record marks itself incomplete")
     a = ap.parse_args(argv)
+    if a.knob_render:
+        return run_knob_render(a.out)
     try:
         pre = assert_realisation_is_the_validated_one()
         cal = calibrate()

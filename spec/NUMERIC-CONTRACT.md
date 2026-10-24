@@ -1,6 +1,6 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 15 — 2026-09-27 — status: PROPOSED. Not ratified.**
+**Revision 17 — 2026-10-08 — status: PROPOSED. Not ratified.**
 
 Revision 13 is one normative change: the shark-tooth's triangle share now
 carries a **polyBLAMP** correction on its two corners as well as the PolyBLEP
@@ -8,7 +8,11 @@ its saw share already carried (6.4, 6.6, 6.6.5; DR 0017). Nothing else moves.
 Revision 14 is the clap's final strike (15.3, `ENV_FRATE`). Revision 15 changes
 no register and no arithmetic: it is two values in the reference kit (Appendix
 G), the rimshot's two bridged-T modes' relative drive and the level re-balance
-that follows it (#388). Section 18 has all three.
+that follows it (#388). Revision 16 adds one register, the shared-bus DC
+coupling's enable at drum-page `0x30` (15.10, DR 0025; #551), reset off, with
+no RTL yet. Revision 17 changes nothing: it records in 5.1 and 5.2 the seven
+registers and the fourth `wave` bit that revision 9 shipped (#321). Section 18
+has all five.
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -18,7 +22,7 @@ TR-808-shaped set of eleven stops whose bodies and filters are the modal
 resonator bank — producing one signed 16-bit sample per frame. It is written
 from the committed reference model and claims nothing the model does not do.
 It becomes the specification RTL is verified against only when ratified
-through the two-key process this fleet uses; until then it is revision 15,
+through the two-key process this fleet uses; until then it is revision 16,
 proposed, and the status line above must not be read as
 anything else (the rule is gf180-drone-fc DR-0005's: the status field must not
 claim ratification before that act has happened).
@@ -258,8 +262,9 @@ product the host's job (5.5).
 | Register | Width | Per | Meaning | Model |
 |---|---:|---|---|---|
 | `inc_tgt[k]` | 24 u | osc | phase-increment target; `inc[k] = inc_acc[k] >> 8` is what the phase accumulator adds (6.7) | `OscFx.inc_tgt` |
-| `wave[k]` | 3 | osc | one of saw, square, pulse25, tri, sine (encoding in 5.2) | `waves[k]` |
+| `wave[k]` | 4 | osc | one of nine shapes, codes 0–8; 9–15 are sine (table in 6.4, encoding in 5.2) | `waves[k]` |
 | `w[k]` | 16 u | osc | mixer weight, Q0.15 | `weights[k]` |
+| `WN` | 16 u | voice | noise mixer weight, Q0.15, the fourth term of 7; the noise colour is `NSEL` (6.10) | `weights[3]` |
 | `a_inc`, `d_dec`, `sus` | 24 u | env ×2 | attack increment, decay decrement, sustain level, Q0.24 | `AdsrFx.a_inc`, `.d_dec`, `.sus` |
 | `rate` | 24 u | env ×2 | release fraction as 16-bit Q0.16 mantissa + 8-bit binary exponent | `AdsrFx.rate` |
 | `gate` | 1 | voice | envelope gate (both envelopes) | `VoiceFx.gate` |
@@ -269,6 +274,12 @@ product the host's job (5.5).
 | `k` | 17 u | voice | ladder resonance, 4·res in Q3.14, before the compensation of 10.2 | `LadderFx.regs`, `VoiceFx.k_reg` |
 | `gain` | 20 u | voice | ladder input gain, drive·2.6 in Q4.16 | same |
 | `ogain` | 20 u | voice | ladder output gain, (1+2·res)/2.6 in Q4.16 | same |
+| `NSEL` | 1 | voice | noise colour: clear puts white in the mixer and pink on the modulation bus, set puts pink and red (6.10) | `nsel` |
+| `MROUTE` | 3 | voice | modulation routing: bit 0 OSC, bit 1 FILT, bit 2 OSC-3 as a destination (6.9) | `mroute` |
+| `MMIX` | 16 u | voice | MOD MIX pan between oscillator 3 and noise, Q1.15, values above 32768 clamp to 32768 (6.9) | `mmix` |
+| `MWHEEL` | 16 u | voice | modulation amount, Q1.15; 0 is bit-identical to no modulation path (6.9) | `mwheel` |
+| `MPD` | 16 u | voice | oscillator modulation depth: the full-scale (`amt` = 1.0) swing in octaves, Q3.12 (6.9) | `mpd` |
+| `MFD` | 16 u | voice | filter modulation depth: the full-scale swing in octaves, Q3.12 (6.9) | `mfd` |
 | `drift` | 16 u | voice | per-oscillator drift depth, Q0.16; 0 is off and bit-identical to no drift at all (6.11) | `VoiceFx.drift` |
 
 The two envelopes are `amp` (section 9) and `filt` (section 10); each has its
@@ -307,13 +318,16 @@ and `seg` per envelope (section 8.1), the ladder's `y[0..3]`, `w[0..3]`,
 | Write | Effect at the next frame boundary (4.3) |
 |---|---|
 | SET_INC k, v, jump | `inc_tgt[k] ← v`. If `jump = 1` or `glide = 0`, `inc_acc[k] ← v << 8` at once; otherwise the slew of 6.7 walks it there frame by frame. Whenever `inc_acc[k] >> 8` changes, `(e[k], r[k])` MUST be recomputed by 6.6.1 before it is next used, i.e. before the next sample's PolyBLEP. `phase[k]` is not touched. |
-| SET_WAVE k, s | `wave[k] ← s`. Takes effect from the next sample, mid-note. |
-| SET_WEIGHT k, v | `w[k] ← v`. |
+| SET_WAVE k, s | `wave[k] ← s` (4 bits). Takes effect from the next sample, mid-note. |
+| SET_WEIGHT k, v | `w[k] ← v`. `WN ← v` is the noise term's weight. |
 | SET_ENV e, a_inc/d_dec/sus/rate | the named parameter of envelope e ← v. The envelope update at the end of the frame in which the write was applied already uses it. |
 | SET_CUT lo/hi/track | the named cutoff register ← v. |
 | SET_LADDER k/gain/ogain | the named coefficient ← v. Held for the whole frame (both passes). |
 | SET_GLIDE v | `glide ← v`. |
 | SET_VOL v | `vol ← v`. |
+| SET_NSEL v | `NSEL ← v[0]`. Selects the noise colours of 6.10. |
+| SET_MROUTE v | `MROUTE ← v[2:0]`. Read by the next frame's modulation step (6.9). |
+| SET_MOD v | `MMIX`, `MWHEEL`, `MPD` or `MFD` ← v (16 bits). `mod_sig` is computed at the end of a frame and read at the start of the next (6.9), so the write is seen by the following frame's pan and the next frame's amount. |
 | SET_DRIFT v | `drift ← v`. Takes effect on the next frame's deviation (6.11), not at the next walk update: the three walks advance whether `drift` is zero or not, so when drift was switched on does not change what it does. |
 | GATE_ON | `gate ← 1`, and for both envelopes `seg ← ATTACK` with `level` unchanged (8.5, DR 0003). Nothing else changes: no phase, no ladder state. |
 | TRIG | for both envelopes `seg ← ATTACK` with `level` and `gate` unchanged (8.5): the multi-trigger retrigger while a key is held. |
@@ -326,14 +340,17 @@ bits, a page bit, an 8-bit address and 32 data bits,
 1's 32-bit frame could not address the drum image of 15.1 at all, and the
 measurement is in that record). `SEC` = 0 is this page. The addresses
 (DR 0007 section 3): `INC_TGT[k]` 0x00–0x02 with `F` = jump; `WAVE[k]`
-0x04–0x06; `W[k]` 0x08–0x0A; `GLIDE` 0x0C; `VOL` 0x0D; amp envelope
+0x04–0x06; `W[k]` 0x08–0x0A; `WN` 0x0B; `GLIDE` 0x0C; `VOL` 0x0D; amp envelope
 `a_inc, d_dec, sus, rate` 0x10–0x13 and filter envelope 0x14–0x17;
-`CUT_LO, CUT_HI, TRACK_HZ` 0x18–0x1A; `K, GAIN, OGAIN` 0x1C–0x1E; `GATE_ON`
-0x20, `GATE_OFF` 0x21, `TRIG` 0x22, `RESET` 0x23 (data ignored); `NOP` 0x3F.
+`CUT_LO, CUT_HI, TRACK_HZ` 0x18–0x1A; `NSEL` 0x1B; `K, GAIN, OGAIN` 0x1C–0x1E;
+`MROUTE` 0x1F; `GATE_ON`
+0x20, `GATE_OFF` 0x21, `TRIG` 0x22, `RESET` 0x23 (data ignored); `MMIX` 0x24,
+`MWHEEL` 0x25, `MPD` 0x26, `MFD` 0x27; `NOP` 0x3F.
 `BVOL` is 0x2C, `DVOL` 0x0E (12) and `DRIFT` 0x2D (6.11). A register narrower than 32 bits takes
 the low bits of `D`; the rest MUST be zero. `SEC` = 1 selects the drum
-section's page, whose map is 15.1's unchanged. **`wave[k]`: 0 saw, 1 square, 2 pulse25, 3 tri, 4 sine, and 5–7 also
-sine** (bit 2 set selects sine, so every 3-bit value is defined). The chip
+section's page, whose map is 15.1's unchanged. **`wave[k]` is four bits: 0 saw, 1 square, 2 pulse25, 3 tri, 4 sine, 5 shark-tooth,
+6 reverse saw, 7 pulse29, 8 pulse15, and 9–15 also sine** (6.4's table is
+normative; every 4-bit value is defined, and the register keeps `D[3:0]`). The chip
 adds registers outside this voice — the drum bus level, the drum routing
 and the drum filter, 0x0E, 0x0F, 0x28–0x2B, and the drum section's 0x40–0x7F
 — which `docs/ARCHITECTURE.md` and the drum section's own record define.
@@ -1282,6 +1299,12 @@ sample = sat16( (v · vol + dmix · dvol + body · bvol) >> 15 )
              exact sum of three products (under 2^38), one arithmetic shift, ONE clamp
 ```
 
+(**Revision 16**: with the coupling of 15.10 enabled the two drum terms are the
+COUPLED buses, `dmix` 23 bits and `body` 20 bits signed, so the exact sum is
+under 2^38 + 2^36 < 2^39 and needs **40 bits signed**, one more than the
+uncoupled sum's 39. The shift and the single clamp are unchanged and stay
+after the sum.)
+
 With `dvol = bvol = 0` — or with no drum section — this is rev 3's
 `sat16((v · vol) >> 15)` bit for bit, and every rev-3 reference sequence is
 unchanged. Rev 5 adds the two drum terms (DR 0008) so that the two drum buses
@@ -1456,6 +1479,7 @@ legal; nothing is rejected for range. Writes apply at frame boundaries by
 | `0x00` | `STOPS` | 11 | the stop mask; bit s is stop s (15.2) |
 | `0x10 + s` | `ACCENT[s]` | 16 u | Q0.15 strike level of stop s; 32768 = 1.0, 65535 = 2.0 (15.3) |
 | `0x20 + i` | `OSC_INC[i]` | 24 u | phase increment of square oscillator i = 0..5 (15.4) |
+| `0x30` | `COUPLE` | 1 | **revision 16** (15.10): bit 0 enables the shared-bus DC coupling, K = 10 fixed; bits 31..1 reserved, ignored on write; resets to 0 = bypass |
 | `0x40 + 4e` | `ENV_CTL[e]` | 27 | `[3:0] stop`, `[7:4] choke`, `[15:8] hold`, `[17:16] bursts`, `[26:18] period` (15.3); a stop or choke index ≥ `N_STOPS` means never |
 | `0x41 + 4e` | `ENV_PEAK[e]` | 24 u | Q0.24 level at a strike, before the accent |
 | `0x42 + 4e` | `ENV_RATE[e]` | 16 u | Q0.16 decay rate, the voice's `rate` (8.3) |
@@ -1908,6 +1932,9 @@ revision 14's `ENV_FRATE`) and every state register (including `fcap`) to 0, exc
 path is OFF, every mode has zero coefficients and amp, no stop can fire
 (no bit is set), and both buses are 0 until the host writes a kit. The
 output stage's `dvol` and `bvol` reset to 0 with the voice's `vol` (14).
+**Revision 16 (15.10)**: the same RESET (`0xFF`, or the hardware reset) clears
+`COUPLE` to 0 and both coupling charge registers to 0. The voice page's RESET
+(`SEC` = 0, `0x23`) touches neither.
 
 ### 15.9 Cycles and area (informative)
 
@@ -1947,6 +1974,93 @@ with 4; 0.188 for rev 3's four with two), `drum_kit` 0.646 mm² (0.605 with
 `synth -booth`) and 0.461 mm² at 8 modes / 8 envelopes / 12 paths. The
 cost is state and its muxing, ≈120 bits per envelope and ≈100 per mode,
 not the multipliers. Whether the product takes 8 or 12 modes is 17.13.
+
+
+### 15.10 Shared-bus DC coupling (revision 16; DR 0025; #551, part of #510)
+
+`drums_fx.DrumsFx` (`write`, `frame`) and `drums_fx.DcBlockFx` are the
+specification of this subsection; `model/test_drums_fx.py::test_coupling_*` is
+its executable form and `tools/probes/coupling_controls.py` its injected
+defects. **No RTL implements it yet (#552)** and no sound claim is made here
+(#553): this subsection fixes the arithmetic so the RTL and the acoustic
+qualification have one thing to be measured against.
+
+**Register.** `COUPLE` at drum-page address `0x30`. Bit 0 is the enable; bits
+31..1 are reserved: ignored on write, with no read-back. Address `0x30` was
+audited against the model map (`0x00`, `0x10..0x1A`, `0x20..0x25`,
+`0x40..0x87`, `0x90..0xA6`, `0xB0..0xEF`, `0xFF`) and against the decoder in
+`rtl-sketch/drum_regs.v` (no literal `8'h30`, no range containing it). It is
+inside the unused gap `0x26..0x3F`, away from both blocks that have already
+grown once. Reset value 0 (bypass). A write to `COUPLE` changes nothing else.
+
+**The filter** (`DcBlockFx`, K = 10 fixed; it is not a register):
+
+```
+d   = acc >> 10            arithmetic shift: floor, not truncation toward zero
+y   = x - d
+acc = acc + y              (no saturation, no wrap: see the widths)
+```
+
+`H(z) = (1 - z^-1) / (1 - (1 - 2^-10) z^-1)`: an exact zero at DC, a pole at
+`1 - 2^-10`, corner `SR / (2 pi 2^10)` = 7.457 Hz at 48 kHz. Constants: `+1`
+gives 1024 samples of `1` then `0`; `-1` gives one sample of `-1` then `0`
+(floor is not odd-symmetric); an impulse below 2^10 is never discharged
+(`y = 0` thereafter, `acc` keeps it). For a constant `x` the charge rests in
+`[x 2^10, x 2^10 + 2^10 - 1]` with `y = 0`: from rest a positive constant stops
+at the bottom of that interval, a negative one at the top.
+
+**Placement.** One filter per bus, two total, on the two buses that leave the
+drum section: `dmix` (22 bits signed, exact, 15.5) and `body` (19 bits signed,
+15.6), each AFTER the bank and BEFORE the output stage's multiplications and
+its single clamp (12). Nothing else is filtered: not an excitation, not a
+path, not the voice's `v`. Both buses are filtered or neither is; there is one
+enable.
+
+**Widths** (`n` = the declared bus width, `K` = 10; bounds proven in the
+`DcBlockFx` docstring and driven to their ends by the near-limit tests):
+
+| signal | `dmix` | `body` | rule |
+|---|---:|---:|---|
+| input `x` | 22 s | 19 s | `-2^(n-1) <= x < 2^(n-1)`; outside is a contract violation (the model asserts; RTL is not required to saturate) |
+| charge `acc` | 32 s | 29 s | `n + K` bits; the update `acc - floor(acc / 2^K)` is nondecreasing, so `[-2^(n+K-1), 2^(n+K-1) - 1]` is closed; reachable extremes `hi 2^K` and `lo 2^K + 2^K - 1` need every bit |
+| output `y` | 23 s | 20 s | `n + 1` bits: `y` spans `lo - hi .. hi - lo`; a full-scale reversal reaches it |
+
+The output stage's exact sum of three products grows to 40 bits signed (12).
+Subtraction `x - d` and the charge update are exact in these widths. There is
+no rounding other than the floor of the shift.
+
+**Enable and disable.** Both filters run on every frame regardless of the
+enable; the enable only selects what leaves the block (`y` when 1, the raw bus
+`x` when 0). So (a) with enable 0 the buses are the previous design's bit for
+bit, including every output sample; (b) the charge tracks the bus while
+bypassed; (c) re-enabling reads the charge the whole history produced, so the
+output steps from `x` to `x - floor(acc / 2^10)` at the first frame of the
+write and then follows the recurrence; nothing is cleared, warmed up or
+ramped. A write lands at the start of its frame (4.3), like every drum-page
+write. The alternative (a frozen charge while bypassed) was rejected: it makes
+the re-enable output depend on how long the bypass lasted, not on the signal.
+
+**Lifecycle.** The charge is state of the circuit, not of a voice: a stop
+firing, an envelope choke, an accent write and a mode-coefficient retune
+leave it untouched (the five exclusive pairs share one circuit and a retune
+mid-ring must carry it across). `RESET` (`SEC` = 1, `0xFF`) and the hardware
+reset clear both charges and the enable. The voice page's `RESET` (`0x23`)
+does not reach the drum page and so does not touch the coupling.
+
+**Experimental modes.** `DrumsFx(couple=..., couple_k=...)` remains a probe
+instrument for `tools/probes/dc_blocker.py` (placements, the K sweep). It is
+not the product: `SynthTopModel` never passes it, the register path always
+uses K = 10 whatever `couple_k` is, and writing `COUPLE` to a block built with
+an experimental mode raises instead of silently choosing one.
+
+**Why K = 10, and what that rationale does not establish.** K = 10 is read off
+the bass drum's output network, C49 0.47 uF into R176 || R177 = 45.05 kOhm,
+7.52 Hz (reference 2), 0.8 % from 7.457 Hz. That is a rationale for the BD
+network only. It does not establish the cymbal's physical corner: the CY
+passes through different circuitry, and `docs/sensitivity/coupling-k.json`
+records the K = 8..13 sweep of the CY's residual sub-20 Hz energy as the
+evidence that K = 10 is a point on a measured curve. Whether 10 is the right
+point for the CY is open until #553's acoustic acceptance.
 
 ---
 
@@ -2298,6 +2412,35 @@ record that extends this document; none may be resolved by picking a reading.
 ---
 
 ## 18. Revision history
+
+- **Rev 17 (2026-10-08)** — **records what revision 9 already shipped in 5.1
+  and 5.2** (#321; found while writing Rev 9's own entry, #301). **No behaviour
+  change**: no arithmetic, width, address, clamp or reset value moves, and no
+  pinned table, hash or reference sequence changes. Revision 9 added seven
+  host-writable voice registers — `WN` 0x0B (16 u), `NSEL` 0x1B (1), `MROUTE`
+  0x1F (3), `MMIX` 0x24, `MWHEEL` 0x25, `MPD` 0x26, `MFD` 0x27 (16 u each) —
+  and widened `wave[k]` from 3 to 4 bits, and described them in 6.4, 6.9, 6.10
+  and 7 but never in the control-interface sections, so 5.1 and 5.2 still
+  specified a 3-bit `wave` that could not reach six of 6.4's nine codes. 5.1
+  now lists the seven and states `wave[k]` as 4 bits; 5.2 lists their
+  addresses and rewrites the encoding sentence to 6.4's nine codes with 9–15
+  sine. Widths were read from `model/synth_top_model.py` (the `W1`/`W3`/`W4`/
+  `W16` masks) and `rtl-sketch/voice_dp.v`'s write case, which agree.
+  `spec/reference/test_register_map.py` is the gate that keeps the two halves
+  from drifting again: every address the model decodes must appear in 5.2, the
+  model and RTL decode the same set, the stated widths equal the enforced ones,
+  and every 6.4 code fits `wave[k]`'s width.
+
+- **Rev 16 (2026-10-07)** — **the shared-bus DC coupling's numeric contract**
+  (15.10; DR 0025; #551, part of #510). Model and contract only: a `COUPLE`
+  enable at drum-page `0x30` (reset off), a fixed K = 10 one-pole blocker on
+  each of `dmix` and `body` before the output stage, widths 22/32/23 and
+  19/29/20, tracking-while-bypassed enable semantics, charge preserved across
+  hits, chokes and retunes and cleared by the drum RESET only. With the enable
+  at its reset value every stream is unchanged (the pinned hashes in
+  `test_coupling_reset_off_reproduces_the_previous_stream_exactly` were taken
+  on the bypass model). Section 12's exact sum grows by one bit. **No RTL, no
+  kit change, no sound claim.**
 
 - **Rev 15 (2026-09-27)** — **the rimshot's two bridged-T modes' relative
   drive** (15.5, Appendix G; #388). No register, no state, no arithmetic and no

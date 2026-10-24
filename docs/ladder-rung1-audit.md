@@ -95,6 +95,9 @@ going to close it. A resonance-dependent term is measurably tractable
 over after fitting the offset as a quadratic in resonance alone), but it is a
 datapath change and not the ROM-build-time class `fcr`/`CUT_TRIM` are, so it
 is deferred, bundled with §3 and §4 as planned, to **issue #257**.
+(Issue #257's model-level candidate, all three together, is
+`spec/decision-records/0024-resonance-keyed-cutoff-correction.md`: travel
+106 -> 5.5 cents on an untouched grid. The RTL is not built yet.)
 `spec/decision-records/0011-cutoff-tuning-polynomial.md`'s amendment has the
 evidence and the reasoning; the new injected control is
 `test_control_a_resonance_dependent_cutoff_skew_moves_the_travel_a_uniform_one_cannot`,

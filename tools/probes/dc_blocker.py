@@ -11,6 +11,7 @@
     python3 tools/probes/dc_blocker.py --cutoff      the corner sweep
     python3 tools/probes/dc_blocker.py --continuous  repeated hits, chokes, retunes
     python3 tools/probes/dc_blocker.py --records     regenerate docs/dcblock/ entirely
+    python3 tools/probes/dc_blocker.py --k-sweep     the COUPLE_K record's evidence (#551)
     python3 -m pytest tools/probes/dc_blocker.py tools/probes/test_dc_blocker_apparatus.py -q
 
 THE ANSWER, SO IT IS NOT BURIED IN NINE RECORDS
@@ -1286,6 +1287,74 @@ def report_cutoff(ks=(8, 9, 10, 11, 12, 13), placement=dx.COUPLE_BUS):
     return 0
 
 
+K_PLAN = ROOT / "docs" / "sensitivity" / "coupling-k-plan.json"
+K_SWEEP_ARTIFACT = ROOT / "docs" / "sensitivity" / "coupling-k-sweep.txt"
+
+
+class Refused(Exception):
+    """An apparatus precondition failed: REFUSED, not a result."""
+
+
+def report_k_sweep(path=None):
+    """The COUPLE_K sweep behind docs/sensitivity/coupling-k.json (#551).
+
+    Grid and rule come from the committed plan, never from this function, and
+    the sweep REFUSES unless the plan is committed and unmodified: a grid
+    stated after the results is not a grid. Also refuses unless the CY's
+    baseline is the standing offset the sweep is about (beta >= 0.9, window-stable) and unless
+    the K = 10 point through the experimental bus placement equals the
+    production register path bit for bit, so the swept thing is the thing that
+    ships. Writes a fixed-width table for tools/sensitivity.py to re-extract.
+    """
+    import json
+    plan = json.loads(K_PLAN.read_text())
+    st = subprocess.run(["git", "status", "--porcelain", "--", str(K_PLAN)], cwd=ROOT,
+                        capture_output=True, text=True)
+    tracked = subprocess.run(["git", "ls-files", "--error-unmatch", str(K_PLAN)], cwd=ROOT,
+                             capture_output=True, text=True)
+    if st.returncode != 0 or st.stdout.strip() or tracked.returncode != 0:
+        raise Refused(f"{K_PLAN.name} is not committed and clean: the grid must precede the points")
+    grid = [int(v) for v in plan["grid"]]
+    base, nb = render("CY", dx.COUPLE_OFF)
+    phi = dc_fraction(base)
+    beta = sub20_below_fc_frac(base, dx.COUPLE_K)
+    # beta, not phi: phi is the f = 0 bin's share and its width is 1/T (0.888 at
+    # 0.60 s, 0.391 at 2.40 s for the same cymbal); beta is window-stable
+    if beta < 0.9:
+        raise Refused(f"the CY baseline has beta = {beta:.3f} < 0.9: its sub-20 Hz energy is not "
+                      "below the corner, so there is no standing offset to sweep")
+    # the swept filter is the shipped one: bus placement at K = 10 == the register path
+    n = int(RENDER_S * SR)
+    kit = dx.kit_with_sounds("CY")
+    w = dx.hit_writes([(LEAD_FRAMES, dx.SOUND_STOP["CY"], 1.0)], kit)
+    a, b = dx.DrumsFx(couple=dx.COUPLE_BUS, couple_k=10).play(w, n)
+    c, d = dx.DrumsFx().play(sorted(list(w) + [(0, dx.A_COUPLE, 1)], key=lambda t: t[0]), n)
+    if not (np.array_equal(a, c) and np.array_equal(b, d)):
+        raise Refused("experimental bus placement at K = 10 differs from the production register path")
+    lines = [f"Issue #551 COUPLE_K sweep -- written by `python3 tools/probes/dc_blocker.py --k-sweep`.",
+             f"Grid, rule and prediction: docs/sensitivity/coupling-k-plan.json (committed before this ran).",
+             f"provenance: {provenance()}",
+             f"wrong-then-right: {len(plan.get('amendments', []))} figure(s) in the plan were wrong before they were right "
+             "(phi 0.888 quoted from the 0.60 s window, 0.391 at this 2.40 s window; caught by this instrument's own "
+             "precondition before any point was rendered); see `amendments` in the plan",
+             f"CY baseline phi (f = 0 bin, window-dependent) = {phi:.4f}, beta (below the K = 10 corner) = {beta:.4f}; sub20 baseline {band_energy_dbfs(base, *SUB20):.2f} dBfs",
+             "", "coupling_k -- CY residual sub-20 Hz energy against K, bus placement, uncoupled = 100",
+             "COUPLE_K fc_hz sub20_db sub20_resid_pct steady_db steady_resid_pct"]
+    for k in grid:
+        out, ncl = render("CY", dx.COUPLE_BUS, k)
+        db = band_energy_dbfs(out, *SUB20) - band_energy_dbfs(base, *SUB20)
+        steady = steadystate_sub20_attenuation_db(base, k)
+        if -db > steady + 0.05:
+            raise Refused(f"K = {k}: measured attenuation {-db:.2f} dB exceeds the closed-form upper "
+                          f"bound {steady:.2f} dB: the integer filter and the transfer function disagree")
+        lines.append(f"{k} {SR / (2 * np.pi * (1 << k)):.3f} {db:.2f} {100.0 * 10 ** (db / 10.0):.3f} "
+                     f"{-steady:.2f} {100.0 * 10 ** (-steady / 10.0):.3f}")
+    text = "\n".join(lines) + "\n"
+    pathlib.Path(path or K_SWEEP_ARTIFACT).write_text(text)
+    print(text)
+    return 0
+
+
 # ===========================================================================
 # Continuous playing: the state a blocker carries
 # ===========================================================================
@@ -1437,6 +1506,8 @@ def main(argv=None):
     ap.add_argument("--measure", action="store_true")
     ap.add_argument("--cutoff", action="store_true")
     ap.add_argument("--continuous", action="store_true")
+    ap.add_argument("--k-sweep", action="store_true",
+                    help="the COUPLE_K sweep for docs/sensitivity/coupling-k.json (#551)")
     ap.add_argument("--decay", action="store_true",
                     help="the decay gate's own precondition, per voice")
     ap.add_argument("--clipping", action="store_true",
@@ -1450,6 +1521,12 @@ def main(argv=None):
                          "committed records are regenerated by one command "
                          "rather than by nine redirections")
     a = ap.parse_args(argv)
+    if a.k_sweep:
+        try:
+            return report_k_sweep()
+        except Refused as e:
+            print(f"REFUSED: {e}")
+            return 3
     if a.records:
         return write_records(pathlib.Path(a.records), a.k)
     if not any((a.limits, a.resolution, a.screen, a.placement, a.measure,

@@ -267,13 +267,16 @@ def test_chip_negative_control_fails_the_recorded_way(bug, where, tmp_path):
 
 
 @needs_sim
-def test_chip_channel_swap_shows_as_a_channel_swap(tmp_path):
-    """I2S_SWAP must fail as L != R and NOT as a wrong sample value: the left
-    channel still carries the right word. A bench that only compared one
-    channel would call this green, and that is the bug that shipped in trial1."""
-    assert verify_synth_top.main(["--short", "--inject", "I2S_SWAP", "--outdir", str(tmp_path)]) == 1
-    got = verify_synth_top.LAST
-    assert got["swap"] > 0 and got["wire_mismatch"] == 0 and got["core_bad"] == 0, got
+def test_chip_channel_swap_is_blind_at_the_pins_and_caught_on_the_serialiser_bench(tmp_path):
+    """I2S_SWAP does not discriminate at the whole chip: the core strobes past cycle
+    127, so `held` still equals `cur` at the right slot (#619). That is asserted
+    here so the blindness cannot go unnoticed, and the control is carried by
+    verify_i2s_tx.py, which must see the right channel differ and the left not."""
+    assert verify_synth_top.main(["--short", "--inject", "I2S_SWAP", "--outdir", str(tmp_path / "chip")]) == 0
+    assert verify_synth_top.LAST["worst_strobe_cycle"] >= 128, verify_synth_top.LAST
+    import verify_i2s_tx
+    assert verify_i2s_tx.main(["--outdir", str(tmp_path / "ok")]) == 0
+    assert verify_i2s_tx.main(["--inject", "I2S_SWAP", "--expect-fail", "--outdir", str(tmp_path / "swap")]) == 0
 
 
 @needs_sim

@@ -211,10 +211,21 @@ def pct(a: float, b: float) -> float:
 
 
 PARAM = r"^\s*(?:parameter|localparam)\s+(?:\w+\s+)?{name}\s*=\s*(-?\d+)\s*[,;)]"
+# A module-level integer constant in a Python model, `NAME = 12` (optionally
+# annotated, optionally followed by a comment) at column 0. Column 0 because an
+# indented assignment is a local or a class attribute, not the module's value.
+PY_CONST = r"^{name}\s*(?::\s*[\w\[\]., ]+)?=\s*(-?\d+)\s*(?:#.*)?$"
+KIND_PATTERN = {"verilog-parameter": PARAM, "python-constant": PY_CONST}
 
 
-def parse_parameter(text: str, name: str, where: str) -> float:
-    hits = re.findall(PARAM.format(name=re.escape(name)), text, re.MULTILINE)
+def declarations(text: str, name: str, where: str, kind: str) -> list[str]:
+    if kind not in KIND_PATTERN:
+        raise Refused(f"{where}: unknown parameter kind {kind!r}")
+    return re.findall(KIND_PATTERN[kind].format(name=re.escape(name)), text, re.MULTILINE)
+
+
+def parse_parameter(text: str, name: str, where: str, kind: str = "verilog-parameter") -> float:
+    hits = declarations(text, name, where, kind)
     if len(hits) != 1:
         raise Refused(f"{where}: found {len(hits)} declarations of {name}, expected exactly 1")
     return float(hits[0])
@@ -225,16 +236,22 @@ def shipped_value(rec: dict, root: Path = ROOT, overrides: dict | None = None) -
     key = (p["source"], p["name"])
     if overrides and key in overrides:
         return float(overrides[key])
-    if p.get("kind") != "verilog-parameter":
+    if p.get("kind") not in KIND_PATTERN:
         raise Refused(f"{rec['id']}: unknown parameter kind {p.get('kind')!r}")
     path = root / p["source"]
     if not path.exists():
         raise Refused(f"{rec['id']}: parameter source {p['source']} is missing")
-    return parse_parameter(path.read_text(), p["name"], p["source"])
+    return parse_parameter(path.read_text(), p["name"], p["source"], p["kind"])
 
 
 def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
-    """The parameter's value at a git ref, or None if the file is not there."""
+    """The parameter's value at a git ref, or None if it is not there yet.
+
+    Not there yet means the file is missing at the ref, or the file exists and
+    declares no such parameter (a newly registered constant in an existing
+    file). Two or more declarations still refuse: that is ambiguity, not
+    absence.
+    """
     p = rec["parameter"]
     r = subprocess.run(["git", "show", f"{ref}:{p['source']}"],
                        cwd=root, capture_output=True, text=True)
@@ -242,7 +259,11 @@ def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
         if "exists on disk, but not in" in r.stderr or "does not exist" in r.stderr:
             return None
         raise Refused(f"cannot read {p['source']} at {ref}: {r.stderr.strip()}")
-    return parse_parameter(r.stdout, p["name"], f"{p['source']}@{ref}")
+    kind = p.get("kind", "verilog-parameter")
+    where = f"{p['source']}@{ref}"
+    if not declarations(r.stdout, p["name"], where, kind):
+        return None
+    return parse_parameter(r.stdout, p["name"], where, kind)
 
 
 # --------------------------------------------------------------------------

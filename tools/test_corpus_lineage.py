@@ -16,6 +16,7 @@ actually take -- not an obvious corruption.
 from __future__ import annotations
 
 import json
+import re
 import pathlib
 import shutil
 import sys
@@ -283,6 +284,227 @@ def test_every_documented_pack_in_the_committed_manifest_names_a_serial():
     assert docd
     for p in docd:
         assert cl.names_a_unit(p["unit"]), f"{p['id']}: {p['unit']!r} names no serial"
+
+
+# ---------------------------------------------------------------------------
+# R3b serial grammar (#527) -- a serial is ASSERTED by syntax, not by a digit
+# run that happens to sit near the word "serial"
+# ---------------------------------------------------------------------------
+#: Each of these says, or implies, that the serial is NOT known, and carries an
+#: unrelated number (a purchase or production year) close to the keyword. The
+#: first is the exact historical bypass (#527): under the old bounded-gap regex
+#: `\D{0,20}` it reported `0 FALSE`, while the same sentence with a 22-char gap
+#: was caught -- a boundary decided by punctuation, not meaning.
+SERIAL_NOT_ASSERTED = [
+    "TR-808, serial unknown, bought 1984",                  # the historical bypass
+    "serial ???, 1982 production",
+    "serial: see 1982 invoice",
+    "TR-808, serial not recorded; bought 1984",             # same meaning, longer gap
+    "TR-808, Serial Unknown -- bought 1984",
+    "TR-808,serial unknown,bought 1984",
+    "TR-808 (serial unknown) bought in 1984",
+    "serial no. unknown, 1983",
+    "serial number: tbd, bought 1984",
+    "S/N unknown, 1984",
+    "s.n. ?, 1984",
+    "serialised 1984 by the vendor",                        # not the keyword
+    "a deserialized dump from 1984",                        # not the keyword
+    "deserial 1984",                                        # keyword must start a word
+    "pads/n 1984",                                          # `s/n` inside a word
+    "bus.n. 1984",                                          # `s.n.` inside a word
+    "TR-808 bought 1984, serial unknown",                   # year BEFORE the keyword
+    "number 103852",                                        # no serial keyword at all
+    # PR #536 Judge review: negation BEFORE the keyword. Each is an explicit
+    # DENIAL that a serial is known, and each passed the right-hand-only grammar
+    # on the year that follows -- the #527 shape with the negation moved left.
+    "TR-808, no serial 1984 purchase",
+    "TR-808, missing serial: 1984 receipt only",
+    "TR-808, unknown serial #1984",
+    "TR-808, no serial. 1984 production",
+    "TR-808, without serial 1984",
+    "TR-808, lost s/n 1984",
+    "TR-808, serial plate removed; no-serial 1984",
+    "TR-808 (unrecorded serial 1984)",
+    # PR #536 second review: the slot read only the letters after the last
+    # `/`, so a slash abbreviation was seen as `a` / `o` and could never be
+    # denied. `n/a` is the commonest placeholder there is; `w/o` is `without`.
+    "TR-808, n/a serial 1984",
+    "TR-808, N/A serial #1984",
+    "TR-808, w/o serial 1984",
+    "TR-808, n / a serial 1984",                            # spaced, as `s / n` is
+    # ...and a Unicode dash was not a slot separator, though `-` is.
+    "TR-808, no—serial 1984",                          # em dash
+    "TR-808, no–serial 1984",                          # en dash
+    # A placeholder in the serial slot reads as established (the pass-1 shape).
+    "TR-808, s/n 0000",
+    "serial 000",
+    # A negation as ANY `/` component of the slot token is a denial (PR #536
+    # third review): the whole-token read let `used / no` through.
+    "TR-808, used / no serial 1984",
+    "TR-808, boxed/no serial 1984",
+    "TR-808 kit / unknown serial #1984",
+    "TR-808, working / missing serial: 1984",
+    "TR-808, yes/no serial no. 103852",       # fail-closed over-rejection, pinned
+    "serial no. 1111",
+    "S/N: 99999",
+    # `.` ends a sentence: the keyword may not reach across it to a number.
+    "serial. 1984 bought",
+    "TR-808, serial. 103852",
+]
+
+#: Explicit serial assertions in every form the grammar promises to accept,
+#: including both committed-manifest phrasings verbatim.
+SERIAL_ASSERTED = [
+    "serial no. 103852 -- a real machine, explicitly not samples of samples",
+    "Legowelt's 1970s Minimoog, serial no. 5529 -- the one unit in the whole corpus",
+    "serial no. 103852", "Serial No. 103852", "SERIAL NO. 103852", "serial no 103852",
+    "serial no.103852", "serial number 103852", "serial number: 103852",
+    "Serial Number: 103852", "serial-number 103852", "serial: 103852", "serial 103852",
+    "serial #103852", "serial # 103852", "serial no. #103852",
+    "s/n 103852", "S/N 103852", "S/N: 103852", "s / n 103852",
+    "s.n. 103852", "S.N. 103852", "s.n.103852",
+    "TR-808, bought 1984, serial no. 103852",               # a year elsewhere is harmless
+    "(serial no. 103852)",
+    # The negation deny-list is a fixed slot, not a word search: these words
+    # elsewhere, or as a keyword's own suffix, must not reject a real serial.
+    "no-nonsense TR-808, serial no. 103852",
+    "TR-808, nothing missing, serial no. 103852",
+    "the lost-and-found TR-808, s/n 103852",
+    "serial no. 103852 -- no repairs, nothing removed",
+    "S/N 100001",                                           # repeated digits, not ALL one digit
+    # A slashed word in the slot is read WHOLE, so an ordinary one is not a
+    # negation. (`yes/no` is a fail-closed residual: see SERIAL_NOT_ASSERTED.)
+    "TR-808, factory/original serial no. 103852",
+    "TR-808, rack—serial no. 103852",                  # em dash, ordinary word
+]
+
+
+@pytest.mark.parametrize("unit", SERIAL_NOT_ASSERTED)
+def test_names_a_unit_rejects_a_nearby_number_that_is_not_an_asserted_serial(unit):
+    assert not cl.names_a_unit(unit), f"{unit!r} counted as naming a unit"
+
+
+@pytest.mark.parametrize("unit", SERIAL_ASSERTED)
+def test_names_a_unit_accepts_every_explicit_serial_form(unit):
+    assert cl.names_a_unit(unit), f"{unit!r} is an explicit serial and was rejected"
+
+
+@pytest.mark.parametrize("unit", SERIAL_NOT_ASSERTED)
+def test_r3b_fires_through_check_when_a_nearby_year_is_not_a_serial(tree, unit):
+    """The acceptance path, not just the helper: the #527 bypass end to end.
+    `boutique-808` relabelled `documented`, placed in `held-out-validation`,
+    with no `unit_identity_why` -- a verdict backed by a machine nobody has
+    identified. Must be an R3 FALSE naming the pack."""
+    m = tree.load()
+    p = tree.pack(m, "boutique-808")
+    p["unit"] = unit
+    p.pop("unit_identity_why", None)
+    p["lineage_status"] = "documented"
+    p["roles"] = ["held-out-validation"]
+    tree.save(m)
+    f = tree.check()
+    assert any(x["rule"] == "R3" and x["status"] == "FALSE" and "boutique-808" in x["what"]
+               for x in f), f"unit={unit!r} + documented + held-out passed R3"
+
+
+def test_r3b_through_check_still_accepts_an_explicit_serial_on_the_same_pack(tree):
+    """Satisfiability of the tightened grammar on the same mutated pack: the
+    rejection above is about the syntax, not about `boutique-808`."""
+    m = tree.load()
+    p = tree.pack(m, "boutique-808")
+    p["unit"] = "TR-808, bought 1984, S/N: 104417"
+    p.pop("unit_identity_why", None)
+    p["lineage_status"] = "documented"
+    tree.save(m)
+    assert not any(x["rule"] == "R3" and "boutique-808" in x["what"] for x in tree.check())
+
+
+def test_r3b_alternative_identity_route_still_rescues_a_unit_with_no_serial(tree):
+    """The non-serial route is untouched: the historical bypass text PLUS a
+    written `unit_identity_why` passes, because that is a visible claim."""
+    m = tree.load()
+    p = tree.pack(m, "boutique-808")
+    p["unit"] = "TR-808, serial unknown, bought 1984"
+    p["unit_identity_why"] = ("Serial plate missing; identity pinned by the purchase "
+                              "receipt and the repair log's board photographs.")
+    p["lineage_status"] = "documented"
+    tree.save(m)
+    assert not any(x["rule"] == "R3" and "boutique-808" in x["what"] for x in tree.check())
+
+
+def test_r3b_residual_a_false_serial_assertion_is_accepted_by_syntax_alone():
+    """The input that defeats the guard (rule 8), pinned so it is stated rather
+    than hidden: R3b checks that a serial is ASSERTED, not that it is TRUE. An
+    author who writes the purchase year in the serial slot passes. This test
+    documents the boundary; if it ever fails, the docstring's residual note is
+    stale."""
+    assert cl.names_a_unit("serial no. 1984")
+
+
+#: Inputs that still defeat R3b after the PR #536 negation fix, pinned so the
+#: residual is a stated boundary rather than a discovery (rule 8). Each one
+#: DENIES or hedges the serial and still passes, because the deny-list looks at
+#: exactly one slot -- the word directly before the keyword -- and nothing to
+#: the right of the digits. Widening the slot is the bounded-gap regex (#527)
+#: pointed the other way, so it is not done; these are what that costs.
+SERIAL_NEGATION_RESIDUALS = [
+    "TR-808, no recorded serial 1984",           # negation two words before the keyword
+    "TR-808, missing the serial 1984",           # an article in the slot
+    "TR-808, serial 1984 (not really: purchase year)",  # denial AFTER the digits
+    "TR-808, unknown, serial 1984",              # a comma is a clause boundary, not the slot
+]
+
+
+@pytest.mark.parametrize("unit", SERIAL_NEGATION_RESIDUALS)
+def test_r3b_residual_a_denial_outside_the_one_word_slot_is_not_seen(unit):
+    """If any of these starts failing, the residual list in `SERIAL_RE`'s
+    comment, the R3 docstring and docs/corpus-lineage.md is stale."""
+    assert cl.names_a_unit(unit)
+
+
+#: The deny-list is finite: a negation word that is not in `SERIAL_NEGATIONS`
+#: passes even IN the slot. Pinned, not chased -- every vocabulary addition is
+#: one synonym behind, which is why R3b is a positive grammar first.
+SERIAL_DENY_LIST_RESIDUALS = [
+    "TR-808, undocumented serial 1984",
+    "TR-808, unspecified serial 1984",
+    "TR-808, nonexistent serial 1984",
+]
+
+
+@pytest.mark.parametrize("unit", SERIAL_DENY_LIST_RESIDUALS)
+def test_r3b_residual_a_negation_word_not_in_the_deny_list_is_not_seen(unit):
+    """If any of these starts failing, the residual list in `SERIAL_RE`'s
+    comment, the R3 docstring and docs/corpus-lineage.md is stale."""
+    word = unit.split(", ")[1].split()[0]
+    assert word not in cl.SERIAL_NEGATIONS
+    assert cl.names_a_unit(unit)
+
+
+#: Inputs whose rejection depends on the slot reading a slashed word whole and
+#: treating a Unicode dash as a separator.
+SLOT_SHAPE_DEPENDENT = [
+    "TR-808, n/a serial 1984",
+    "TR-808, N/A serial #1984",
+    "TR-808, w/o serial 1984",
+    "TR-808, no—serial 1984",
+    "TR-808, no–serial 1984",
+]
+
+#: The slot as it was before the PR #536 second review: letters only, ASCII `-`.
+_PRE_REVIEW_SLOT_RE = re.compile(r"([a-z]+)[\s\-(\[\"'`]*\Z", re.I)
+
+
+@pytest.mark.parametrize("unit", SLOT_SHAPE_DEPENDENT)
+def test_injected_bug_reverting_the_slot_reader_lets_the_denial_through(monkeypatch, unit):
+    """Injected-bug control: with the pre-review slot reader put back (and
+    `n/a`, `w/o` still in the deny-list), each denial is accepted again. So the
+    rejections above are carried by the slot's SHAPE, not by the vocabulary --
+    adding words to `SERIAL_NEGATIONS` alone fixes none of them."""
+    assert "n/a" in cl.SERIAL_NEGATIONS and "w/o" in cl.SERIAL_NEGATIONS
+    assert not cl.names_a_unit(unit)
+    monkeypatch.setattr(cl, "_PRECEDING_WORD_RE", _PRE_REVIEW_SLOT_RE)
+    assert cl.names_a_unit(unit), f"{unit!r}: control did not go red without the slot fix"
 
 
 def test_r3_does_not_fire_on_a_documented_unit_with_an_open_chain(tree):

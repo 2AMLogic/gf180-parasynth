@@ -1,0 +1,511 @@
+{
+  "schema": "noise-fixture-duration-v1",
+  "provenance": {
+    "commit": "9dd22ff941cfe06f275384f9c684f27ee35a2ee2",
+    "dirty": false,
+    "behind_origin_main": "2",
+    "command": "tools/probes/noise_fixture_duration.py --json docs/noise-fixture-duration-results.json",
+    "utc": "2026-10-05T12:19:47Z",
+    "python": "3.12.11",
+    "numpy": "2.5.3",
+    "scipy": "1.18.1",
+    "machine": "arm64",
+    "system": "Darwin",
+    "cpus": 18,
+    "load": [
+      31.88134765625,
+      31.6123046875,
+      32.20263671875
+    ]
+  },
+  "grid": [
+    2.0,
+    4.0
+  ],
+  "baseline": 2.0,
+  "predicted_ratio": 0.699205898780101,
+  "invariance_max_delta": 6.106226635438361e-16,
+  "candidates": [
+    {
+      "seconds": 2.0,
+      "rows": {
+        "noise/psd_slope": {
+          "cal_worst": 0.14810824835217268,
+          "cal_p95": 0.12118327451891645,
+          "cal_std": 0.03771279987139029,
+          "ms_per_trial": 80.03726104895274,
+          "threshold": 0.6,
+          "validate_verdict": "PASS",
+          "validate_refusals": 0
+        },
+        "noise/centroid": {
+          "cal_worst": 0.014510317782416998,
+          "cal_p95": 0.011406068189103086,
+          "cal_std": 0.003550159504750993,
+          "ms_per_trial": 55.40504306554794,
+          "threshold": 0.059000000000000004,
+          "validate_verdict": "PASS",
+          "validate_refusals": 0
+        },
+        "noise/waveform_max_db": {
+          "cal_worst": 1.2176242262934525,
+          "cal_p95": 3.8741314844730788,
+          "cal_std": 0.5562710625083664,
+          "ms_per_trial": 23.167801400025684,
+          "floor_room": 13.217624226293452,
+          "threshold": -12.0,
+          "validate_verdict": "PASS",
+          "validate_refusals": 0
+        }
+      },
+      "calibrate_s": 15.226732969284058,
+      "SINGLE_WINDOW_SLOPE": {
+        "case": "noise/psd_slope",
+        "state": "CAUGHT",
+        "why": "",
+        "residual": 0.6287619590283524,
+        "margin": 1.0479365983805875,
+        "threshold": 0.6,
+        "residuals": [
+          0.03183934803805445,
+          0.13792646600167538,
+          0.6017894363485765,
+          0.6287619590283524,
+          0.1422789202585889,
+          0.3007903339382323,
+          0.15098496210951048,
+          0.5396539598363299,
+          0.39916422607031943,
+          0.41940615592395586,
+          0.30399307025880185,
+          0.19480462610847615
+        ]
+      },
+      "SHORT_WINDOW_SPECTRUM": {
+        "case": "noise/centroid",
+        "state": "CAUGHT",
+        "why": "",
+        "residual": 0.11053011652902982,
+        "margin": 1.8733918055767764,
+        "threshold": 0.059000000000000004,
+        "residuals": [
+          0.04512374989710923,
+          0.011736708671012024,
+          0.014879276042913898,
+          0.052823125422142445,
+          0.11053011652902982,
+          0.01205995989771186,
+          0.0026537224310475924,
+          0.025974787770303272,
+          0.051608033103291,
+          0.01962628986153885,
+          0.01092585996599706,
+          0.009789641944270287
+        ]
+      },
+      "recal": [
+        {
+          "pop": 0,
+          "worst": 0.1750861279664949,
+          "threshold": 0.71,
+          "survives": false
+        },
+        {
+          "pop": 1,
+          "worst": 0.16759040264710914,
+          "threshold": 0.68,
+          "survives": false
+        },
+        {
+          "pop": 2,
+          "worst": 0.1657875968955414,
+          "threshold": 0.67,
+          "survives": false
+        },
+        {
+          "pop": 3,
+          "worst": 0.21748495425907982,
+          "threshold": 0.87,
+          "survives": false
+        },
+        {
+          "pop": 4,
+          "worst": 0.1853542565951988,
+          "threshold": 0.75,
+          "survives": false
+        },
+        {
+          "pop": 5,
+          "worst": 0.2149322677466609,
+          "threshold": 0.86,
+          "survives": false
+        },
+        {
+          "pop": 6,
+          "worst": 0.24592631254194142,
+          "threshold": 0.99,
+          "survives": false
+        },
+        {
+          "pop": 7,
+          "worst": 0.1484077026964302,
+          "threshold": 0.6,
+          "survives": true
+        }
+      ],
+      "select": {
+        "control": {
+          "CAUGHT": 23,
+          "MISSED": 17
+        },
+        "neighbour": {
+          "CAUGHT": 36,
+          "MISSED": 4
+        },
+        "clean": {
+          "noise/psd_slope": {
+            "PASS": 40
+          },
+          "noise/centroid": {
+            "PASS": 40
+          },
+          "noise/waveform_max_db": {
+            "PASS": 40
+          }
+        }
+      },
+      "select_groups": 40
+    },
+    {
+      "seconds": 4.0,
+      "rows": {
+        "noise/psd_slope": {
+          "cal_worst": 0.1379751162493622,
+          "cal_p95": 0.08502361657020734,
+          "cal_std": 0.026655181755116282,
+          "ms_per_trial": 226.97956363360086,
+          "threshold": 0.56,
+          "validate_verdict": "PASS",
+          "validate_refusals": 0
+        },
+        "noise/centroid": {
+          "cal_worst": 0.010705596292670708,
+          "cal_p95": 0.00799565425337707,
+          "cal_std": 0.0025693557316203847,
+          "ms_per_trial": 179.47306235631308,
+          "threshold": 0.043000000000000003,
+          "validate_verdict": "PASS",
+          "validate_refusals": 0
+        },
+        "noise/waveform_max_db": {
+          "cal_worst": 1.4841147505185395,
+          "cal_p95": 3.8980178962417282,
+          "cal_std": 0.5059222751388409,
+          "ms_per_trial": 42.58292665084203,
+          "floor_room": 13.48411475051854,
+          "threshold": -12.0,
+          "validate_verdict": "PASS",
+          "validate_refusals": 0
+        }
+      },
+      "calibrate_s": 43.1085000038147,
+      "SINGLE_WINDOW_SLOPE": {
+        "case": "noise/psd_slope",
+        "state": "CAUGHT",
+        "why": "",
+        "residual": 0.6287619590283524,
+        "margin": 1.1227892125506291,
+        "threshold": 0.56,
+        "residuals": [
+          0.03183934803805459,
+          0.13792646600167544,
+          0.6017894363485765,
+          0.6287619590283524,
+          0.14227892025858854,
+          0.3007903339382323,
+          0.15098496210951096,
+          0.5396539598363297,
+          0.3991642260703194,
+          0.41940615592395586,
+          0.30399307025880123,
+          0.19480462610847604
+        ]
+      },
+      "SHORT_WINDOW_SPECTRUM": {
+        "case": "noise/centroid",
+        "state": "CAUGHT",
+        "why": "",
+        "residual": 0.11053011652902982,
+        "margin": 2.570467826256507,
+        "threshold": 0.043000000000000003,
+        "residuals": [
+          0.04512374989710905,
+          0.011736708671012024,
+          0.014879276042913898,
+          0.052823125422142445,
+          0.11053011652902982,
+          0.01205995989771186,
+          0.002653722431047774,
+          0.02597478777030308,
+          0.051608033103290825,
+          0.01962628986153885,
+          0.01092585996599724,
+          0.009789641944269928
+        ]
+      },
+      "recal": [
+        {
+          "pop": 0,
+          "worst": 0.13985582836865573,
+          "threshold": 0.56,
+          "survives": true
+        },
+        {
+          "pop": 1,
+          "worst": 0.13850029933232416,
+          "threshold": 0.56,
+          "survives": true
+        },
+        {
+          "pop": 2,
+          "worst": 0.10519908701818567,
+          "threshold": 0.43,
+          "survives": true
+        },
+        {
+          "pop": 3,
+          "worst": 0.12460481918759754,
+          "threshold": 0.5,
+          "survives": true
+        },
+        {
+          "pop": 4,
+          "worst": 0.1005513551272573,
+          "threshold": 0.41000000000000003,
+          "survives": true
+        },
+        {
+          "pop": 5,
+          "worst": 0.10232192483724602,
+          "threshold": 0.41000000000000003,
+          "survives": true
+        },
+        {
+          "pop": 6,
+          "worst": 0.11290744414037196,
+          "threshold": 0.46,
+          "survives": true
+        },
+        {
+          "pop": 7,
+          "worst": 0.11300370855967427,
+          "threshold": 0.46,
+          "survives": true
+        }
+      ],
+      "select": {
+        "control": {
+          "CAUGHT": 26,
+          "MISSED": 14
+        },
+        "neighbour": {
+          "CAUGHT": 40
+        },
+        "clean": {
+          "noise/psd_slope": {
+            "PASS": 40
+          },
+          "noise/centroid": {
+            "PASS": 40
+          },
+          "noise/waveform_max_db": {
+            "PASS": 40
+          }
+        }
+      },
+      "select_groups": 40
+    }
+  ],
+  "decision": {
+    "selected": 4.0,
+    "selection_says_ship": true,
+    "why": [
+      "all four conditions hold"
+    ],
+    "literal_margin_criterion": true,
+    "final_seconds": 2.0
+  },
+  "confirmation": {
+    "by_seconds": {
+      "2.0": {
+        "seconds": 2.0,
+        "groups": 10,
+        "rows": {
+          "ls/decay_tau": {
+            "PASS": 10
+          },
+          "ls/schroeder_t20": {
+            "PASS": 10
+          },
+          "ls/onset_time": {
+            "PASS": 10
+          },
+          "pol/norm_rms_db": {
+            "PASS": 10
+          },
+          "pol/centroid": {
+            "PASS": 10
+          },
+          "pol/correlated_mix_db": {
+            "PASS": 10
+          },
+          "gain/norm_rms_db": {
+            "PASS": 10
+          },
+          "gain/centroid": {
+            "PASS": 10
+          },
+          "gain/decay_tau": {
+            "PASS": 10
+          },
+          "gain/accent_ratio_db": {
+            "PASS": 10
+          },
+          "gain/accent_second_only": {
+            "PASS": 10
+          },
+          "noise/psd_slope": {
+            "PASS": 10
+          },
+          "noise/centroid": {
+            "PASS": 10
+          },
+          "noise/decay_tau": {
+            "PASS": 10
+          },
+          "noise/waveform_max_db": {
+            "PASS": 10
+          },
+          "phase/centroid": {
+            "PASS": 10
+          },
+          "phase/band_ratio_db": {
+            "PASS": 10
+          },
+          "phase/sample_rms_db": {
+            "PASS": 10
+          }
+        },
+        "pairs": {
+          "SINGLE_WINDOW_SLOPE|noise/psd_slope": {
+            "CAUGHT": 7,
+            "MISSED": 3
+          },
+          "SHORT_WINDOW_SPECTRUM|noise/centroid": {
+            "MISSED": 2,
+            "CAUGHT": 8
+          },
+          "TWO_POINT_TAIL_DECAY|noise/decay_tau": {
+            "CAUGHT": 10
+          },
+          "PHASE_SENSITIVE_SPECTRUM|phase/centroid": {
+            "CAUGHT": 10
+          },
+          "PHASE_SENSITIVE_SPECTRUM|phase/band_ratio_db": {
+            "CAUGHT": 10
+          }
+        },
+        "wall_s": 169.94179797172546
+      },
+      "4.0": {
+        "seconds": 4.0,
+        "groups": 10,
+        "rows": {
+          "ls/decay_tau": {
+            "PASS": 10
+          },
+          "ls/schroeder_t20": {
+            "PASS": 10
+          },
+          "ls/onset_time": {
+            "PASS": 10
+          },
+          "pol/norm_rms_db": {
+            "PASS": 10
+          },
+          "pol/centroid": {
+            "PASS": 10
+          },
+          "pol/correlated_mix_db": {
+            "PASS": 10
+          },
+          "gain/norm_rms_db": {
+            "PASS": 10
+          },
+          "gain/centroid": {
+            "PASS": 10
+          },
+          "gain/decay_tau": {
+            "PASS": 10
+          },
+          "gain/accent_ratio_db": {
+            "PASS": 10
+          },
+          "gain/accent_second_only": {
+            "PASS": 10
+          },
+          "noise/psd_slope": {
+            "PASS": 10
+          },
+          "noise/centroid": {
+            "PASS": 10
+          },
+          "noise/decay_tau": {
+            "PASS": 10
+          },
+          "noise/waveform_max_db": {
+            "PASS": 10
+          },
+          "phase/centroid": {
+            "PASS": 10
+          },
+          "phase/band_ratio_db": {
+            "PASS": 10
+          },
+          "phase/sample_rms_db": {
+            "PASS": 10
+          }
+        },
+        "pairs": {
+          "SINGLE_WINDOW_SLOPE|noise/psd_slope": {
+            "CAUGHT": 8,
+            "MISSED": 2
+          },
+          "SHORT_WINDOW_SPECTRUM|noise/centroid": {
+            "CAUGHT": 10
+          },
+          "TWO_POINT_TAIL_DECAY|noise/decay_tau": {
+            "CAUGHT": 10
+          },
+          "PHASE_SENSITIVE_SPECTRUM|phase/centroid": {
+            "CAUGHT": 10
+          },
+          "PHASE_SENSITIVE_SPECTRUM|phase/band_ratio_db": {
+            "CAUGHT": 10
+          }
+        },
+        "wall_s": 199.7896866798401
+      }
+    },
+    "contradictions": {
+      "2.0": [
+        "SINGLE_WINDOW_SLOPE|noise/psd_slope: MISSED in 3/10 groups",
+        "SHORT_WINDOW_SPECTRUM|noise/centroid: MISSED in 2/10 groups"
+      ],
+      "4.0": [
+        "SINGLE_WINDOW_SLOPE|noise/psd_slope: MISSED in 2/10 groups"
+      ]
+    }
+  },
+  "runtime_s": 933.640841960907
+}

@@ -92,3 +92,51 @@ def test_rms_envelope_dependencies_are_pinned():
         if name in defs:
             used = {n.id for n in ast.walk(defs[name]) if isinstance(n, ast.Name)} & module_names
             assert used <= set(verifier.AUDIO_MEASURE_BASIS) | {name}, (name, used - set(verifier.AUDIO_MEASURE_BASIS))
+
+
+# --- #215: an unreachable source_commit must REFUSE, not surface git's exit 128 ---
+
+def _with_commit(tmp_path, commit):
+    record = json.loads(REPORT.read_text())
+    record["source_commit"] = commit
+    for row in record["rows"]:
+        audio = Path(row["audio"]).name
+        (tmp_path / audio).symlink_to(REPORT.parent / audio)
+    out = tmp_path / "report.json"
+    out.write_text(json.dumps(record))
+    return out
+
+
+def test_absent_source_commit_refuses_clearly(tmp_path):
+    """A rebased-away SHA (object not present at all) names the cause and the remedy."""
+    with pytest.raises(verifier.Refused, match="source_commit .* not reachable.*regenerate"):
+        verifier.verify(_with_commit(tmp_path, "1" * 40))
+
+
+def test_dangling_source_commit_refuses(tmp_path):
+    """The input that defeats a bare existence check: the object IS in this clone's
+    object database (as it is in the clone that made the pre-rebase commit) but is
+    not an ancestor of HEAD, so a fresh CI checkout would not have it."""
+    import subprocess
+    root = verifier.producer.ROOT
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip()
+    dangling = subprocess.check_output(["git", "commit-tree", tree, "-m", "dangling #215 control"],
+                                       cwd=root, text=True,
+                                       env={**__import__("os").environ, "GIT_AUTHOR_NAME": "t",
+                                            "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+                                            "GIT_COMMITTER_EMAIL": "t@t"}).strip()
+    subprocess.check_call(["git", "cat-file", "-e", dangling], cwd=root)  # control: it exists
+    with pytest.raises(verifier.Refused, match="not an ancestor of HEAD"):
+        verifier.verify(_with_commit(tmp_path, dangling))
+
+
+def test_guard_defeated_goes_red(tmp_path, monkeypatch):
+    """Injected-bug control: with the guard disabled the old opaque failure returns."""
+    import subprocess
+    monkeypatch.setattr(verifier, "require_reachable", lambda *a, **k: None)
+    with pytest.raises(subprocess.CalledProcessError):
+        verifier.verify(_with_commit(tmp_path, "1" * 40))
+
+
+def test_refused_is_an_assertion_error():
+    assert issubclass(verifier.Refused, AssertionError)

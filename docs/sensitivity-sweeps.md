@@ -120,6 +120,19 @@ Written down because a gate whose limits are unstated gets trusted past them.
   artefact. If `fpga/reports/mode_sweep.txt` is regenerated with different
   numbers, the gate goes red (the record no longer transcribes it) — which is
   the intended behaviour, but the gate is not what re-synthesised anything.
+- **Calibration-only statistics are exempt, and `p` is the one exemption.**
+  The registry covers parameters that *ship* a value: `evaluate()` compares the
+  shipped constant against the grid, so a statistic with no shipped constant
+  has nothing to compare. The gate-379 `p` dial is such a statistic. It is a
+  float, the calibration is REFUSED, so no value ships, and the sweep over it
+  is the committed `calibration.selection.by_p.<p>.mean_rate` in
+  `docs/scorecard/gate-379/mars-calibration-v2/between.json`. It is therefore
+  not registered, and `tools/sensitivity.py` has no float kind or "no value
+  ships" state (issue #682). **Trigger:** the moment a bar for `p` is selected,
+  `p` ships a value and must be registered in that same PR — the "register when
+  the change is proposed" rule above, applied at the point a value exists.
+  Nothing checks that the exemption lapses; a `p` that ships without a record
+  is the "does not see the argument" case in the first bullet.
 - **It says nothing about correctness.** `docs/verification-rules.md` rule 3:
   a cell count is not evidence that the circuit computes anything.
 - **It does not subsume the per-feature sweep instruments.**
@@ -128,9 +141,9 @@ Written down because a gate whose limits are unstated gets trusted past them.
   parameter would mean teaching `sensitivity.py` a second evidence format; it
   has one, `fixed-width-table`, and the record names which it uses.
 
-## The two records that exist
+## The records that exist
 
-Both are **retrofits** of the case in `docs/failure-modes.md` mechanism 5, and
+The first two are **retrofits** of the case in `docs/failure-modes.md` mechanism 5, and
 both say so in the record.
 
 - **`drum-kit-modes.json`** — `MODES` against `drum_kit` cell area, `NUMS` held
@@ -147,3 +160,32 @@ sentence: *the dial that was argued about is flat across the range that was
 argued about, and the dial nobody looked at is the one the objective responds
 to.* `tools/test_sensitivity.py` asserts both from the committed measurements
 rather than restating them, so the claim goes red if either moves.
+
+The next two are **prospective** (issue #257). Their grids, rules and shape
+predictions were committed in `docs/res-tuning/plan.json` before any point was
+measured. Both use the second parameter kind, `python-constant`, a column-0
+integer in a Python model. Their dials do not exist in RTL yet.
+
+- **`res-cut-law-degree.json`** — `LAW_DEGREE` against the select grid's worst
+  offset in cents. `MIXED` [0], [3, 4], which matches the prediction.
+- **`res-cut-correction-entries.json`** — `CORR_ENTRIES` against mean-offset
+  travel in cents. `MIXED`. **Its prediction failed.** The relative 25 % rule
+  separates 17 and 33 entries, at 1–2 cents. The record states the failed
+  prediction in `limits` and carries no prediction block. It does not carry a
+  rewritten one, because a prediction edited after the measurement is no
+  longer a prediction.
+
+The fifth is **prospective** and is the first whose parameter is a *fixed*
+design constant rather than something a register can change (issue #551):
+
+- **`coupling-k.json`** — `COUPLE_K` (the shared-bus DC blocker's pole,
+  `1 - 2^-K`) against the CY's residual sub-20 Hz energy, K = 8..13.
+  `SENSITIVE`, as predicted: **0.39, 1.24, 3.27, 7.34, 14.59, 26.17 %**, every
+  adjacent pair 1.8x to 3.2x apart. The plan, `coupling-k-plan.json`, was
+  committed before any point was rendered, and its premise was corrected once
+  before any point too: the sweep instrument's own precondition refused on the
+  CY's `phi` (0.391 at the probe's 2.40 s window, not the 0.888 the plan and
+  `dc_blocker.py`'s docstring quote from 0.60 s), which is why the instrument
+  now keys on the window-stable `beta`. The record says in so many words that
+  the BD output network's 7.52 Hz rationale for K = 10 does not establish the
+  cymbal's corner.

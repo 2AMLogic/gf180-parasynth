@@ -54,16 +54,7 @@ loom_test_require_daemon_bin "$SCRIPTS_DIR" "worktree-base"
 REPO_ROOT="$(cd "$SCRIPTS_DIR/../.." && pwd)"
 LIB="$SCRIPTS_DIR/lib/default-branch.sh"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m'
-
-TESTS_RUN=0
-TESTS_PASSED=0
-TESTS_FAILED=0
-
-pass() { TESTS_RUN=$((TESTS_RUN + 1)); TESTS_PASSED=$((TESTS_PASSED + 1)); echo -e "  ${GREEN}PASS${NC}: $1"; }
-fail() { TESTS_RUN=$((TESTS_RUN + 1)); TESTS_FAILED=$((TESTS_FAILED + 1)); echo -e "  ${RED}FAIL${NC}: $1"; }
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/assert.sh"
 
 assert_contains() {
     local haystack="$1" needle="$2" what="$3"
@@ -172,7 +163,7 @@ if [[ -n "$UTF8_LOCALE" ]]; then
         fi
     done
 else
-    echo "  SKIP: no non-C UTF-8 locale on this host — cannot exercise the locale-collation case"
+    loom_test_skip "no non-C UTF-8 locale on this host — cannot exercise the locale-collation case"
 fi
 
 # The refusal has to be usable: it names the offending ref (so a log grep and a
@@ -549,5 +540,5 @@ rm -rf "$MP"
 
 # --- Summary ----------------------------------------------------------------
 echo ""
-echo "Tests run: $TESTS_RUN, Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
+echo "Tests run: $TESTS_RUN, Passed: $TESTS_PASSED, Failed: $TESTS_FAILED, Skipped: ${TESTS_SKIPPED:-0}"
 [[ $TESTS_FAILED -eq 0 ]] || exit 1

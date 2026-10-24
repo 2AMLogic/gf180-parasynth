@@ -133,7 +133,7 @@ def _pair(a: np.ndarray, b: np.ndarray) -> tuple:
     return (np.pad(a, (0, n - len(a))), np.pad(b, (0, n - len(b))))
 
 
-def distances(a: np.ndarray, b: np.ndarray) -> dict:
+def distances(a: np.ndarray, b: np.ndarray, sr: int) -> dict:
     """Four published multi-scale spectral distances, on one pair.
 
     `mss_l1`    DDSP's multi-scale spectrogram term, L1 on linear magnitude,
@@ -149,6 +149,10 @@ def distances(a: np.ndarray, b: np.ndarray) -> dict:
     `mel_dac`   the Descript Audio Codec's multi-scale mel L1, at its own
                 published window lengths and mel-bin counts, mean absolute log
                 difference in nats.
+
+    `sr` is REQUIRED, with no default: the mel filterbank's band edges are
+    functions of the sample rate, so a silent 48 kHz default put every band of
+    every Fischer (44.1 kHz) reading 8.8 % from where the code said (#533).
     """
     a, b = _pair(np.asarray(a, float), np.asarray(b, float))
     out = {k: 0.0 for k in ("mss_l1", "mss_log", "mrstft", "mel_dac")}
@@ -164,7 +168,7 @@ def distances(a: np.ndarray, b: np.ndarray) -> dict:
         out["mrstft"] += sc + float(np.abs(np.log(Ac) - np.log(Bc)).mean())
     for k in out:
         out[k] /= len(SCALES)
-    out["mel_dac"] = _mel_dac(a, b)
+    out["mel_dac"] = _mel_dac(a, b, sr)
     return out
 
 
@@ -204,7 +208,7 @@ def _mel_filters(n_fft: int, n_mels: int, sr: int) -> np.ndarray:
 _MELCACHE: dict = {}
 
 
-def _mel_dac(a: np.ndarray, b: np.ndarray, sr: int = 48000) -> float:
+def _mel_dac(a: np.ndarray, b: np.ndarray, sr: int) -> float:
     total = 0.0
     for n_fft, n_mels in DAC_MEL:
         key = (n_fft, n_mels, sr)
@@ -334,8 +338,8 @@ def e0_ground_truth() -> dict:
     """Known answers, computed before anything else is trusted."""
     rng = np.random.default_rng(20260918)
     x = rng.standard_normal(24000) * 0.3
-    same = distances(x, x)
-    doubled = distances(x, x * 2.0)
+    same = distances(x, x, 48000)
+    doubled = distances(x, x * 2.0, 48000)
     checks = {
         "identical -> 0": {k: same[k] for k in same},
         "x2 gain": {k: doubled[k] for k in doubled},
@@ -364,9 +368,9 @@ def e0_ground_truth() -> dict:
 
 
 def e1_determinism() -> dict:
-    a, _ = render_lt(1.7)
+    a, sr = render_lt(1.7)
     b, _ = render_lt(1.7)
-    d = distances(norm(a), norm(b))
+    d = distances(norm(a), norm(b), sr)
     d["bit_identical"] = bool(np.array_equal(a, b))
     return d
 
@@ -374,20 +378,20 @@ def e1_determinism() -> dict:
 def e2_e3_alignment(x: np.ndarray, sr: int) -> dict:
     out = {}
     for k in (1, 2, 4, 8, 16, 48, 96, 240, 480):
-        out[f"{k} samples ({1000.0 * k / sr:.3f} ms)"] = distances(x, shift(x, k))
+        out[f"{k} samples ({1000.0 * k / sr:.3f} ms)"] = distances(x, shift(x, k), sr)
     return out
 
 
 def e4_sweeps(x: np.ndarray, sr: int) -> dict:
     out = {}
-    out["decay_pct"] = {f"{p:g}": distances(x, perturb_decay(x, sr, p))
+    out["decay_pct"] = {f"{p:g}": distances(x, perturb_decay(x, sr, p), sr)
                         for p in (0.0, MACHINE_FLOOR["t20_pct"], 2.5, 5.0, 10.0, 25.0, 50.0)}
-    out["gain_db"] = {f"{p:g}": distances(x, perturb_gain(x, sr, p))
+    out["gain_db"] = {f"{p:g}": distances(x, perturb_gain(x, sr, p), sr)
                       for p in (0.0, 0.05, 0.159, 0.5, 1.0, 3.0, 6.0)}
-    out["tilt_db"] = {f"{p:g}": distances(x, perturb_tilt(x, sr, p))
+    out["tilt_db"] = {f"{p:g}": distances(x, perturb_tilt(x, sr, p), sr)
                       for p in (0.0, MACHINE_FLOOR["band_db"], 0.5, 1.0, 3.0, 8.0)}
     cents_floor = 1200.0 * math.log2(1.0 + MACHINE_FLOOR["f0_pct"] / 100.0)
-    out["f0_cents"] = {f"{p:g}": distances(x, perturb_f0(x, sr, p))
+    out["f0_cents"] = {f"{p:g}": distances(x, perturb_f0(x, sr, p), sr)
                        for p in (0.0, cents_floor, 50.0, 100.0, 165.0, 400.0, 1200.0)}
     out["f0_cents_floor_equivalent"] = cents_floor
     return out
@@ -436,7 +440,7 @@ def e4b_pure_f0() -> dict:
         hz = base_hz * 2.0 ** (c / 1200.0)
         b, s2 = render_bd(hz)
         b = norm(rc.prepare(b, s2))
-        d = distances(a, b)
+        d = distances(a, b, sr)
         d["f0_hz"] = hz
         d["f0_error_pct"] = 100.0 * (hz - base_hz) / base_hz
         out["rungs"][f"{c:g} cents"] = d
@@ -464,8 +468,8 @@ def e5_tom(seconds_full: float = 1.2) -> dict:
         if k == "1.70 shipped":
             continue
         out["vs_shipped"][k] = {
-            "full": distances(base, y),
-            "first_60ms": distances(base[:n60], y[:n60]),
+            "full": distances(base, y, sr),
+            "first_60ms": distances(base[:n60], y[:n60], sr),
         }
     # what the per-property estimator reads, for the same renders
     out["per_property_pitch_drop_hz"] = {}
@@ -479,15 +483,15 @@ def e5_tom(seconds_full: float = 1.2) -> dict:
     a, _ = render_lt(1.7, seconds_full)
     b, _ = render_lt(1.7, seconds_full)
     out["floor_same_patch_twice"] = distances(norm(rc.prepare(a, sr)),
-                                              norm(rc.prepare(b, sr)))
-    out["floor_1_sample_shift"] = distances(base, shift(base, 1))
-    out["floor_1_sample_shift_first_60ms"] = distances(base[:n60], shift(base, 1)[:n60])
+                                              norm(rc.prepare(b, sr)), sr)
+    out["floor_1_sample_shift"] = distances(base, shift(base, 1), sr)
+    out["floor_1_sample_shift_first_60ms"] = distances(base[:n60], shift(base, 1)[:n60], sr)
     # The alignment floor on THE SAME SIGNAL as the defect. Comparing the tom's
     # defect against a bass drum's shift sweep would be comparing two different
     # signals' floors, which is the sort of cross-signal borrowing this
     # repository has been bitten by before.
     out["alignment_on_this_signal"] = {
-        f"{k} samples ({1000.0 * k / sr:.3f} ms)": distances(base, shift(base, k))
+        f"{k} samples ({1000.0 * k / sr:.3f} ms)": distances(base, shift(base, k), sr)
         for k in (1, 4, 16, 48, 96, 240, 480)}
     return out
 
@@ -530,7 +534,7 @@ def e8_blind_spot() -> dict:
     import run_case as rc
     a, sr = render_bd()
     base = norm(rc.prepare(a, sr))
-    floor = distances(base, shift(base, 1))
+    floor = distances(base, shift(base, 1), sr)
     out = {"floor_1_sample_shift": floor, "injections": {}}
     for name, fn, note in (
             ("hf_tone -40 dBFS 12 kHz", inject_hf_tone,
@@ -541,7 +545,7 @@ def e8_blind_spot() -> dict:
              "a noise floor that does not decay with the voice"),
     ):
         y = norm(fn(base, sr))
-        rec = {"note": note, "distances": distances(base, y), "per_property": {}}
+        rec = {"note": note, "distances": distances(base, y, sr), "per_property": {}}
         for mname, units, est, tol in rc.DRUM_PLAN["BD"]:
             ea, eb = est(base, sr), est(y, sr)
             if not (ea.ok and eb.ok):
@@ -569,16 +573,16 @@ def e6_exchange(x: np.ndarray, sr: int) -> dict:
     If that gain is small, the scalar cannot tell a level mistake from a decay
     mistake -- and our renders are peak-normalised, so a level mistake is the
     one error the board deliberately does not score."""
-    target = distances(x, perturb_decay(x, sr, 5.0))
+    target = distances(x, perturb_decay(x, sr, 5.0), sr)
     out = {"target_5pct_decay": target, "equivalent_gain_db": {}}
     for key in ("mss_l1", "mss_log", "mrstft", "mel_dac"):
         lo, hi = 0.0, 12.0
-        if distances(x, perturb_gain(x, sr, hi))[key] < target[key]:
+        if distances(x, perturb_gain(x, sr, hi), sr)[key] < target[key]:
             out["equivalent_gain_db"][key] = ">12"
             continue
         for _ in range(40):
             mid = 0.5 * (lo + hi)
-            if distances(x, perturb_gain(x, sr, mid))[key] < target[key]:
+            if distances(x, perturb_gain(x, sr, mid), sr)[key] < target[key]:
                 lo = mid
             else:
                 hi = mid
@@ -602,7 +606,11 @@ def e7_ceiling() -> dict:
             continue
         a = norm(rc.prepare(a, sa))
         b = norm(rc.prepare(b, sb))
-        out[f"{pa} vs {pb}"] = distances(a, b)
+        if sa != sb:
+            out[f"{pa} vs {pb}"] = (f"refused: {pa} is {sa} Hz but {pb} is {sb} Hz; "
+                                    "one mel filterbank cannot serve both")
+            continue
+        out[f"{pa} vs {pb}"] = distances(a, b, sa)
     return out
 
 
@@ -630,11 +638,11 @@ def e9_noise_floor() -> dict:
     for db in (-60.0, -50.0, -40.0):
         g = x.copy()
         g[np.abs(g) < pk * 10.0 ** (db / 20.0)] = 0.0
-        out[f"gated below {db:g} dBFS"] = distances(x, g)
+        out[f"gated below {db:g} dBFS"] = distances(x, g, sr)
     z = x.copy()
     i = min(len(z), int(1.0 * sr))
     z[i:] = 0.0
-    out["tail after 1.0 s zeroed"] = distances(x, z)
+    out["tail after 1.0 s zeroed"] = distances(x, z, sr)
     # NOT a noise-floor estimate, and kept with that said out loud because it
     # read -3.6 dBFS and looked like one. `run_case.prepare` has already
     # trimmed the signal to 1 ms before the onset, so this window is the front

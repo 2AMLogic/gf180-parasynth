@@ -228,6 +228,16 @@ def test_a_re_measurement_under_the_same_rubric_adds_no_history(tmp_path):
     assert "rubric_history" not in fresh
 
 
+def test_a_corrupt_record_refuses_rather_than_dropping_its_history(tmp_path):
+    """#600's class: a present-but-unparseable record used to read as `old =
+    None`, so its rubric_history was silently dropped and then overwritten.
+    Absent is no history (above); corrupt is REFUSED."""
+    dest = tmp_path / "D13A.json"
+    dest.write_text('{"rubric_history": [{"kind": "rubric-change"')    # truncated
+    with pytest.raises(rc.Refused, match="D13A.json"):
+        rc.carry_rubric_history(CASE, dest, with_purpose(sc.DEFECT_CEILING))
+
+
 # --- a number that is not a number is no verdict, under EITHER purpose -----------
 #
 # Review of #241: `max(0, error) / tolerance` certified NaN and -inf errors as a

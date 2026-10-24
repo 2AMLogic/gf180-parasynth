@@ -33,7 +33,17 @@
 # success, so requiring it stays possible.
 name: trials
 
-on: [push, pull_request, workflow_dispatch]
+# Triggers (#540, #463; operator ruling 2026-10-15): `push` is limited to main
+# plus measure/** and release/** -- branches that land work with no PR, so no
+# pull_request copy verifies them. A branch with an open PR runs once, as the
+# PR, instead of twice (a bare push + pull_request ran every PR commit twice).
+# moog-acceptance.yml keeps its own triggers (#264 header). Measured 7 days to
+# 2026-10-06: ~74 main job-min/day (5%) saved by this and the cancel rule.
+on:
+  push:
+    branches: [main, 'measure/**', 'release/**']
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   # Which suites this change can affect: tools/ci_changes.py. Every job below
@@ -58,7 +68,8 @@ jobs:
     timeout-minutes: 75
     concurrency:
       group: trials-${{ github.event.pull_request.number || github.ref }}
-      cancel-in-progress: true
+      # Only a PR run is superseded; a started main run is never cancelled.
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -145,7 +156,13 @@ jobs:
         run: python tools/trial_env.py bootstrap --no-toolchain
       - name: the committed R0 reference set is the release's
         run: python tools/r0_reference.py check fpga/release/evidence/r0-reference
+      - name: the shipped host emits R1's pinned command bytes under --image r1 (#324)
+        run: python tools/r0_reference.py --image r1 bytes
+      - name: R0 and R1 refuse each other's references, sessions and transcripts (#324)
+        run: |
+          python tools/r0_capture.py cross-image-controls --image r1 --out build/cross-r1
+          python tools/r0_capture.py cross-image-controls --image r0 --out build/cross-r0
       - name: capture analysis tests, and T-PHYSICAL end to end without a capture
         # the last test runs the registered trial through tools/trial.py and
         # asserts NO VERDICT (operator-blocked) with every synthetic defect caught
-        run: python -m pytest tools/test_r0_capture.py -q
+        run: python -m pytest tools/test_r0_capture.py tools/test_r1_capture.py -q

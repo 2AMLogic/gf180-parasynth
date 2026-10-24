@@ -190,7 +190,8 @@ def main(argv=None) -> int:
     print(f"verify_fixture: link {link.name} -- {len(truth)} transactions, "
           f"{len(truth) * TX_BYTES} bytes, one every {link.tx_period_ps / FRAME_PS:.3f} frames "
           f"({link.tx_period_ps / 1e6:.3f} us); musical events quantised by at most "
-          f"{st['anchor_jitter_us']:.1f} us ({st['anchor_jitter']} of them)")
+          f"{st['anchor_jitter_us']:.1f} us ({st['anchor_jitter']} of them); "
+          f"BD window width change worst {st['window_stretch_frames']:+d} frames")
 
     # ---- what is actually SENT ---------------------------------------------
     sent_w, note = corrupt(laid, a.wrong)

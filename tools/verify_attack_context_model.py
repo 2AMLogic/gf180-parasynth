@@ -44,6 +44,33 @@ def audio_measure_basis(source: str) -> dict:
     return found
 
 
+class Refused(AssertionError):
+    """The evidence cannot be checked in this state; distinct from a measured mismatch."""
+
+
+def require_reachable(commit: str, root: Path) -> None:
+    """Refuse unless `commit` is an ancestor of HEAD (#215).
+
+    A rebase (e.g. the conflict-only bot's `git rebase` + force-push) mints new
+    commit objects, so a recorded SHA can vanish while the report content is
+    unchanged. Bare existence is NOT enough: the clone that made the original
+    commit still holds it as a dangling object, so the check passes there and
+    fails in a fresh CI checkout. Reachable-from-HEAD is what a fresh checkout
+    of this branch will have.
+    """
+    fix = "regenerate the report with tools/compare_mono_attack_context.py on the rebased branch"
+    if not isinstance(commit, str) or not commit:
+        raise Refused(f"source_commit is missing from the report; {fix}")
+    exists = subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], cwd=root, capture_output=True)
+    if exists.returncode != 0:
+        raise Refused(f"source_commit {commit} not reachable: no such commit in this checkout "
+                      f"(rebased away, or a shallow clone); {fix}")
+    anc = subprocess.run(["git", "merge-base", "--is-ancestor", commit, "HEAD"], cwd=root, capture_output=True)
+    if anc.returncode != 0:
+        raise Refused(f"source_commit {commit} not reachable: it exists here but is not an ancestor of HEAD "
+                      f"(dangling after a rebase/force-push); {fix}")
+
+
 def verify(report_path: Path) -> dict:
     root = producer.ROOT
     ref = producer.context.ref
@@ -52,6 +79,7 @@ def verify(report_path: Path) -> dict:
     reference_path = root / "docs/scorecard/mono-attack-context/report.json"
     assert ref.sha256(reference_path) == report["reference_report_sha256"], "reference report changed"
     assert ref.sha256(lead.MANIFEST) == report["envelope_calibration_manifest_sha256"], "calibration changed"
+    require_reachable(report.get("source_commit"), root)
     changed_sources = []
     # The stored audio remains evidence for its original engine commit.
     # Verify that historical identity without relabelling it as today's engine.

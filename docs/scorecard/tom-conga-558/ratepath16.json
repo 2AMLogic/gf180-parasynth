@@ -1,0 +1,345 @@
+{
+ "BD": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   16.855,
+   1.0259
+  ],
+  "native": {
+   "impulse_db": [
+    13.8949,
+    -13.5277
+   ],
+   "impulse_ratio": 4.8512
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    13.9291,
+    0.5169
+   ],
+   "impulse_ratio": 0.9753
+  }
+ },
+ "SD": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   10.4339,
+   12.3345
+  ],
+  "native": {
+   "impulse_db": [
+    10.3988,
+    10.3654
+   ],
+   "impulse_ratio": 0.6564
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    10.4043,
+    10.3781
+   ],
+   "impulse_ratio": 0.6521
+  }
+ },
+ "LT": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   16.5525,
+   6.3099
+  ],
+  "native": {
+   "impulse_db": [
+    13.7344,
+    -14.1302
+   ],
+   "impulse_ratio": 4.7953
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    13.4134,
+    0.1372
+   ],
+   "impulse_ratio": 1.4481
+  }
+ },
+ "LC": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   16.1917,
+   1.2981
+  ],
+  "native": {
+   "impulse_db": [
+    14.7456,
+    -13.6098
+   ],
+   "impulse_ratio": 4.9693
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    14.6276,
+    0.249
+   ],
+   "impulse_ratio": 0.5213
+  }
+ },
+ "MT": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   16.7699,
+   0.6376
+  ],
+  "native": {
+   "impulse_db": [
+    14.5498,
+    -12.33
+   ],
+   "impulse_ratio": 4.3225
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    14.398,
+    0.1643
+   ],
+   "impulse_ratio": 0.7906
+  }
+ },
+ "MC": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   16.4341,
+   2.202
+  ],
+  "native": {
+   "impulse_db": [
+    14.9635,
+    -11.2811
+   ],
+   "impulse_ratio": 4.4944
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    14.8926,
+    0.0398
+   ],
+   "impulse_ratio": 0.7207
+  }
+ },
+ "HT": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   16.0623,
+   1.6777
+  ],
+  "native": {
+   "impulse_db": [
+    14.8303,
+    -13.1321
+   ],
+   "impulse_ratio": 4.9366
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    14.7189,
+    -0.8072
+   ],
+   "impulse_ratio": 0.8283
+  }
+ },
+ "HC": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   16.2364,
+   -1.6399
+  ],
+  "native": {
+   "impulse_db": [
+    15.0247,
+    -13.0792
+   ],
+   "impulse_ratio": 3.7541
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    14.971,
+    -0.8597
+   ],
+   "impulse_ratio": 0.4153
+  }
+ },
+ "RS": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   12.7743,
+   7.1572
+  ],
+  "native": {
+   "impulse_db": [
+    9.5013,
+    7.8274
+   ],
+   "impulse_ratio": 1.091
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    9.4952,
+    7.802
+   ],
+   "impulse_ratio": 1.093
+  }
+ },
+ "CL": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   5.742,
+   3.7747
+  ],
+  "native": {
+   "impulse_db": [
+    5.0319,
+    2.9848
+   ],
+   "impulse_ratio": 0.2633
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    5.0291,
+    2.9838
+   ],
+   "impulse_ratio": 0.2636
+  }
+ },
+ "CP": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   10.3922,
+   13.6818
+  ],
+  "native": {
+   "impulse_db": [
+    9.811,
+    10.8836
+   ],
+   "impulse_ratio": 0.9327
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    9.8266,
+    10.8751
+   ],
+   "impulse_ratio": 0.9356
+  }
+ },
+ "MA": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   9.1998,
+   9.5408
+  ],
+  "native": {
+   "impulse_db": [
+    8.7373,
+    8.9161
+   ],
+   "impulse_ratio": 0.2082
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    8.6608,
+    8.949
+   ],
+   "impulse_ratio": 0.1973
+  }
+ },
+ "CB": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   10.0778,
+   12.0523
+  ],
+  "native": {
+   "impulse_db": [
+    12.0471,
+    11.8362
+   ],
+   "impulse_ratio": 0.6564
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    12.0337,
+    11.8359
+   ],
+   "impulse_ratio": 0.652
+  }
+ },
+ "CY": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   9.5339,
+   11.786
+  ],
+  "native": {
+   "impulse_db": [
+    11.5098,
+    13.0587
+   ],
+   "impulse_ratio": 0.6586
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    11.498,
+    13.0592
+   ],
+   "impulse_ratio": 0.6547
+  }
+ },
+ "OH": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   10.0118,
+   11.6029
+  ],
+  "native": {
+   "impulse_db": [
+    10.0525,
+    11.9619
+   ],
+   "impulse_ratio": 0.1197
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    10.0338,
+    11.9605
+   ],
+   "impulse_ratio": 0.1192
+  }
+ },
+ "CH": {
+  "target_sr": 44100,
+  "target_impulse_db": [
+   12.7848,
+   12.4091
+  ],
+  "native": {
+   "impulse_db": [
+    11.1142,
+    11.5234
+   ],
+   "impulse_ratio": 0.5569
+  },
+  "via-take-rate": {
+   "impulse_db": [
+    11.1153,
+    11.5195
+   ],
+   "impulse_ratio": 0.5565
+  }
+ },
+ "provenance": {
+  "commit": "b824f5bac2f8a17198d3eaca3d03d013c3732959",
+  "model_tools_dirty": false,
+  "origin_main": "cd066543744827276c5dbcb2f381991199fb038e",
+  "prereg_sha256_16": "b60c35fab40769a8",
+  "refs": "/tmp/refs558/sounds-tr808-fischer"
+ }
+}
