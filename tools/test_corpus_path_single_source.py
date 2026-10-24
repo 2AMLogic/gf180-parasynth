@@ -20,13 +20,23 @@ The scan is over the AST, not text. Outside docstrings it flags:
   environment read (a message naming the variable, not a read of it).
 
 "Is" is evaluated after constant-folding `+`, implicit concatenation, f-string
-literal parts, `/` on paths, `Path(...)`/`PurePath(...)` arguments,
-`os.path.join(...)` and `"sep".join([...])` -- the idiomatic ways to satisfy a
+literal parts, `/` on paths, `%` and `.format(...)` with constant arguments,
+`.upper()/.lower()/.strip()`, constant f-string interpolations (a banned
+variable-NAME constant interpolated into an f-string folds to the name it holds,
+so `f"${rc.REFS_ENV}/bd8"` is the shell reference it expands to),
+`Path(...)`/`PurePath(...)` arguments, `os.path.join(...)` and
+`"sep".join([...])` -- the idiomatic ways to satisfy a
 grep while violating the intent. Docstrings and comments may still *talk about*
 the variable.
 
 Known gaps -- inputs this static scan cannot catch, and why (rule 8):
 
+- Renamed environment readers: `from os import getenv as g` then
+  `g(f"x{rc.REFS_ENV}"[1:])`, or `E = os.environ` then `E.get(...)`. Reader
+  detection matches the callee's spelling (`environ`, `getenv`); following an
+  alias is data flow. (Importing the banned constant, with or without `as`, IS
+  caught.) Likewise a message-shaped f-string that is sliced or otherwise
+  transformed into a key (`f"x{rc.REFS_ENV}"[1:]`) is not folded.
 - Data flow across statements: `k = f"{rc.REFS_ENV} "` on one line and
   `os.environ.get(k.strip())` on another. The f-string has literal text and is
   not itself an environment key, so it looks like a message; telling the two
@@ -89,6 +99,25 @@ def _is_str(node) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
+STR_METHODS = {"upper", "lower", "strip", "lstrip", "rstrip", "format"}
+
+
+def _fold_piece(v) -> str:
+    """One part of an f-string. A banned NAME constant (REFS_ENV / REFS_ALIAS_ENV)
+    folds to the variable name it holds, so f"${rc.REFS_ENV}/bd8" is seen as the
+    shell reference it expands to; a constant interpolation folds to its value; an
+    interpolation that is not constant contributes nothing."""
+    if _is_str(v):
+        return v.value
+    if isinstance(v, ast.FormattedValue) and v.format_spec is None and v.conversion == -1:
+        e = v.value
+        attr = e.attr if isinstance(e, ast.Attribute) else getattr(e, "id", None)
+        if attr in MESSAGE_OK_ATTRS:
+            return getattr(rc, attr)
+        return _fold(e) or ""
+    return ""
+
+
 def _fold(node):
     """Constant-fold the string- and path-building forms a reader would use, so
     "TR808_" + "REFS", Path("/tmp") / "tr808-ref", os.path.join(...) and
@@ -96,7 +125,17 @@ def _fold(node):
     if _is_str(node):
         return node.value
     if isinstance(node, ast.JoinedStr):
-        return "".join(v.value for v in node.values if _is_str(v))
+        return "".join(_fold_piece(v) for v in node.values)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+        a = _fold(node.left)
+        rhs = node.right.elts if isinstance(node.right, ast.Tuple) else [node.right]
+        b = [_fold(e) for e in rhs]
+        if a is None or any(x is None for x in b):
+            return None
+        try:
+            return a % tuple(b)
+        except (TypeError, ValueError):
+            return None
     if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Div)):
         a, b = _fold(node.left), _fold(node.right)
         if a is None or b is None:
@@ -105,6 +144,15 @@ def _fold(node):
     if isinstance(node, ast.Call) and not node.keywords:
         f = node.func
         name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
+        if isinstance(f, ast.Attribute) and name in STR_METHODS:
+            recv = _fold(f.value)
+            args = [_fold(a) for a in node.args]
+            if recv is None or any(a is None for a in args):
+                return None
+            try:
+                return getattr(recv, name)(*args)
+            except (TypeError, ValueError, IndexError, KeyError):
+                return None
         if name == "join" and isinstance(f, ast.Attribute) and _is_str(f.value):
             if len(node.args) == 1 and isinstance(node.args[0], (ast.List, ast.Tuple)):
                 items = [_fold(e) for e in node.args[0].elts]
@@ -181,6 +229,12 @@ def violations(source: str, allow_in: frozenset[str] = frozenset()) -> list[str]
         if isinstance(n, ast.Attribute) and n.attr in BANNED_ATTRS:
             if id(n) not in message or n.attr not in MESSAGE_OK_ATTRS:
                 out.append(f"line {n.lineno}: .{n.attr}")
+        elif isinstance(n, ast.ImportFrom):
+            # importing the constant IS the use: `from run_case import REFS_ENV as E`
+            # leaves the later `E` unrecognisable
+            for a in n.names:
+                if a.name in BANNED_ATTRS:
+                    out.append(f"line {n.lineno}: import {a.name}")
         elif isinstance(n, ast.Name) and n.id in BANNED_ATTRS:
             if id(n) not in message or n.id not in MESSAGE_OK_ATTRS:
                 out.append(f"line {n.lineno}: {n.id}")
@@ -265,6 +319,26 @@ DEFEATS_OF_V1 = [
 
 @pytest.mark.parametrize("src", DEFEATS_OF_V1)
 def test_inputs_that_defeated_the_first_scan_are_caught(src):
+    assert violations(src), src
+
+
+# Inputs that defeated the second version (Judge, PR #535, second pass).
+DEFEATS_OF_V2 = [
+    'from run_case import REFS_DEFAULT as D\nx = D\n',
+    'import os\nfrom run_case import REFS_ENV as E\nx = os.environ.get(E)\n',
+    'import os, run_case as rc\nx = os.path.expandvars(f"${rc.REFS_ENV}/bd8")\n',
+    'import subprocess, run_case as rc\nsubprocess.run(f"ls ${{{rc.REFS_ENV}}}/bd8", shell=True)\n',
+    'import os\nx = os.environ.get("GF180_TR808_%s" % "REFS")\n',
+    'import os\nx = os.environ.get("GF180_TR808_{}".format("REFS"))\n',
+    'import os\nx = os.environ.get(f"{\'GF180_TR808\'}_REFS")\n',
+    'x = f"/tmp/tr808{\'-\'}ref"\n',
+    'x = "/tmp/tr808%sref" % "-"\n',
+    'import os\nx = os.environ.get("gf180_tr808_refs".upper())\n',
+]
+
+
+@pytest.mark.parametrize("src", DEFEATS_OF_V2)
+def test_inputs_that_defeated_the_second_scan_are_caught(src):
     assert violations(src), src
 
 

@@ -463,7 +463,7 @@ def test_the_boundary_control_turns_red_under_the_pre_132_clamp(monkeypatch):
 def _probe(monkeypatch, tmp_path, *, prepare_refuses_for=()):
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "probes"))
     import preparation_contract_current_state as probe
-    monkeypatch.setenv(rc.REFS_ENV, str(tmp_path))
+    monkeypatch.setattr(rc, "configured_refs", lambda: tmp_path)
     monkeypatch.setattr(rc, "REF_MAIN", {"a": 0, "b": 0, "c": 0})
     ok = np.concatenate([np.zeros(48), np.ones(480) * 0.5])
     monkeypatch.setattr(rc, "load_reference", lambda v, d: (ok, 48000, f"{v}.wav", None))
