@@ -2,6 +2,12 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-24
+
+- **Issue #560** (closed): [gate] a between-recording bar for #379 needs data the MARS pack cannot supply (rule v2 refused: no p satisfies seeds and stays-green together)
+- **PR #535**: Single corpus-path resolver: configured_refs() reaches every reader (#522)
+- **Issue #522** (closed): Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
+
 ### 2026-10-21
 
 - **PR #733**: Bump Repo Skills 0.24.3 -> 0.24.7
