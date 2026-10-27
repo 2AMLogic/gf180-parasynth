@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "kind": "generic",
+  "status": "pass",
+  "t1_item": 9,
+  "summary": "T1 item 9 (Testbenches shipped): 28/28 attestation checks passed (klt signoff --attest)",
+  "source": "manifests/inventories/item-9.json",
+  "attestation": {
+    "producer": "klt signoff --attest",
+    "inventory_schema_version": 1,
+    "hash_algorithm": "sha256-raw-bytes",
+    "check_count": 28,
+    "passed_count": 28,
+    "checks": [
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "model/fixed.py",
+        "passed": true,
+        "content_hash": "sha256:eec1c66158a611dc480212de6977d644fddf196331c00ac38f673b24f7f257b3"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "model/modal_fixed.py",
+        "passed": true,
+        "content_hash": "sha256:d5f642012774db57b3f2bb9b53c242984fdcdd007d2236068f28095d7e818670"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "model/synth_top_model.py",
+        "passed": true,
+        "content_hash": "sha256:144ac659b899e243a1cfcf0c5ee091b096052acc18c2e5ca7246cd7678e049f4"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/stubs/ladder_dp_stub.v",
+        "passed": true,
+        "content_hash": "sha256:e47bd45ef1998be49f0002afc567ad7077ee83a8e8773663e6605df73190c084"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/stubs/voice_dp_stub.v",
+        "passed": true,
+        "content_hash": "sha256:64b0c2d75cc29b57dfa52357a0bcc544fae043b6f3802583776256fcbb56b942"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/tb_ctl.v",
+        "passed": true,
+        "content_hash": "sha256:0e22bdd27fa13d9a51cd202d83a23fdec8587534c2e3c642b39022af4ff9fda2"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/tb_drums.v",
+        "passed": true,
+        "content_hash": "sha256:50e94b7e5e5c21ba48bb461d08bf63053208959e00efc4c344c724cdcdc9d342"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/tb_i2s_tx.v",
+        "passed": true,
+        "content_hash": "sha256:2217ceed8727c37ac8359611e352f9ca77871c12001e215a7a70a21715ba8aff"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/tb_ladder.v",
+        "passed": true,
+        "content_hash": "sha256:ba1f058ff540a19c0e4a913805342f01032c3125558c4db89221c03d57bc7b8f"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/tb_ladder_n.v",
+        "passed": true,
+        "content_hash": "sha256:bff15655ba6a29a3c7e3ee1a1b1ab86afe2e1fe2a1fc14b65f8ec1be59b855ca"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/tb_modal_fx.v",
+        "passed": true,
+        "content_hash": "sha256:306b7ca1a0e4583ac154d5e7d079d370d81c5798470025e0796be41ee3f2aa1f"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/tb_synth_top.v",
+        "passed": true,
+        "content_hash": "sha256:87bdeb17fe0733a8edb7c6b92eb0a5a2406aaaeed50fb99bade2f3634c9359df"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/tb_voice.v",
+        "passed": true,
+        "content_hash": "sha256:c9788785fd9a0572b3648f88a5c346a49a04a4f2fe31a3dfdd3bda36ee8c5198"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/verify_ctl.py",
+        "passed": true,
+        "content_hash": "sha256:1707771a21accced7df9d90a301143284990b8077d7ace5055140c9446d7924d"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/verify_drums.py",
+        "passed": true,
+        "content_hash": "sha256:9af7bae4d8e73d888234b106a07a9d451c24824ee1c155da42cec94749cec27d"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/verify_i2s_tx.py",
+        "passed": true,
+        "content_hash": "sha256:e283b215d0b9bd8235e334212b738ea35941068b86d6cada0e8fb7d0ba08c6e7"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/verify_ladder.py",
+        "passed": true,
+        "content_hash": "sha256:1bf055213b37a756b11da0882b107fd9c2cc9d8c49f324c59c7e30971c592814"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/verify_modal.py",
+        "passed": true,
+        "content_hash": "sha256:e3e76991f79b2c025c439c2cf61559061b9a6627a24b1f117695f9647c91c000"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/verify_synth_top.py",
+        "passed": true,
+        "content_hash": "sha256:e08bfdc06fb31c7a31c4a7855287b4b524d59257c9945446230942b84bddc785"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "rtl-sketch/verify_voice.py",
+        "passed": true,
+        "content_hash": "sha256:472fdc5c4e1bd44746c748c989fa8975ff902e3f2b871e958f9c98b05e0ff4c8"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "spec/trial-environment.json",
+        "passed": true,
+        "content_hash": "sha256:7813252b1b48000a84ec7e05368328924df19db8f16fddbff4a76c127fd6031c"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "tools/item9_cold_start.py",
+        "passed": true,
+        "content_hash": "sha256:d007690bbdf0e3f84542d273aff910795b5332d9c0d817fdd5a7fd199f9f02e2"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "tools/run_all.py",
+        "passed": true,
+        "content_hash": "sha256:1275130b115735f1f3a514867f5cbcdca73b9bd7bdb6f12af6f1a1cd571c5846"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "tools/setup_ci_oss_cad.py",
+        "passed": true,
+        "content_hash": "sha256:6033d175c89109c992fa01a4a86590908a9a5e32697787d0fa4d5f7bed78734f"
+      },
+      {
+        "check": "present",
+        "role": "testbench",
+        "path": "tools/trial_env.py",
+        "passed": true,
+        "content_hash": "sha256:3bd9b5afbd800fc892eff8658bacc818a1ce483fbbf8e82196dfbabf07cfbc54"
+      },
+      {
+        "check": "command",
+        "role": "cold_start",
+        "argv": [
+          "python3",
+          "tools/item9_cold_start.py"
+        ],
+        "cwd": ".",
+        "exit_status": 0,
+        "passed": true,
+        "local_only": true
+      },
+      {
+        "check": "pin",
+        "role": "pdk",
+        "passed": true,
+        "value": {
+          "name": "gf180mcuD",
+          "revision": "ciel gf180mcu 54435919abffb937387ec956209f9cf5fd2dfbee"
+        }
+      },
+      {
+        "check": "pin",
+        "role": "tools",
+        "passed": true,
+        "value": {
+          "iverilog": "14.0 (devel) (s20260301-476-g1a23d1ffd)",
+          "klt": "0.8.0",
+          "numpy": "2.5.3",
+          "oss-cad-suite": "2026-09-21 sha256:fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c",
+          "pytest": "9.1.1",
+          "python": "3.12",
+          "pyyaml": "6.0.3",
+          "scipy": "1.18.1"
+        }
+      }
+    ]
+  },
+  "provenance": {
+    "klt_version": "0.8.0",
+    "klayout_version": null,
+    "pdk": null,
+    "deck": null,
+    "input": {
+      "path": {
+        "path": "manifests/inventories/item-9.json",
+        "scope": "repo"
+      },
+      "content_hash": "sha256:ad0f020da701f3dbc18c292cee939f071fbcbb27cf70dca72aebe7482977659a"
+    }
+  }
+}
