@@ -1,6 +1,6 @@
 block: gf180-parasynth  kind: digital
 tier: none
-T1: 1/11 items met
+T1: 2/11 items met
 
 [UNMET] T1 #1 Design sources
         reason: no_evidence
@@ -18,8 +18,10 @@ T1: 1/11 items met
         reason: no_evidence
 [UNMET] T1 #8 Characterization report
         reason: no_evidence
-[UNMET] T1 #9 Testbenches shipped
-        reason: no_evidence
+[MET  ] T1 #9 Testbenches shipped
+        cite: manifests/evidence/item-9.json (kind=generic, status=pass, content_hash=sha256:ad0f020da701f3dbc18c292cee939f071fbcbb27cf70dca72aebe7482977659a, exit_status=0)
+        input: re-hashed the artifact this envelope names -- matches
+        bound: T1 item #9 -> manifests/inventories/item-9.json (content_hash=sha256:ad0f020da701f3dbc18c292cee939f071fbcbb27cf70dca72aebe7482977659a)
 [MET  ] T1 #10 Repo hygiene
         cite: manifests/evidence/item-10.json (kind=generic, status=pass, content_hash=sha256:f31777a5354363c89a6f1e2983ff1d524245c377e82f6e338a2643713aa5c308, exit_status=0)
         input: re-hashed the artifact this envelope names -- matches

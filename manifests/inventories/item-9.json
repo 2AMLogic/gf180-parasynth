@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "kind": "t1-attestation-inventory",
+  "t1_item": 9,
+  "description": "Benches backing README status-table rows 3 and 4 (RTL bit-exact to the model; synth_top bit-exact at its pins). Cold start: python3 tools/item9_cold_start.py -- bootstraps the pinned venv + oss-cad-suite, then runs 8 positive runs (ladder, ladder --nch 2, modal, ctl, i2s_tx, synth_top, voice --set quick, drums) and 32 injected-defect controls that must exit 1 (mismatch), never 2 (did not run); about 7.5 min on 2 workers, ~5 min of it verify_drums; local_only because it needs the toolchain download, so CI re-checks the committed outcome rather than re-running it. NOT run by the cold start (cost stated, exceeds klt's 1800 s command cap): verify_voice.py --set full (383,460 frames, ~20 min, README row 3) -- the cold start runs --set quick (74,144 frames); the controls not listed (voice has 23 injectable defects, the cold start runs 3; drums 14, runs 4; ladder/modal all) are in `make controls`. KNOWN GAPS, not hidden: (a) rtl-sketch/stubs/voice_dp_stub.v is listed as a testbench input but its README 'red run' does not run on main -- tb_voice.v probes dut.drift_acc, the stub has none, iverilog aborts, verify_voice exits 2 -- so only the ladder stub control is in the cold start; (b) verify_drums.py simulates 204,999 frames on main while README row 3 says 172,063. PDK pin provenance: pnr/orfs/evidence/synth_top/ records NO gf180mcu revision (README.md and joined-d1e5068/config.mk say only PLATFORM = gf180). The revision below is recovered from the repo's own records: docs/pnr-first-run.md section 1 ('gf180mcuD at ciel 54435919...'), pnr/klt/ladder_dp/synth_response.json provenance.pdk.version ('open_pdks 54435919abffb937387ec956209f9cf5fd2dfbee') and rtl-sketch/area/results/README.md. The synth_top run itself used the liberty inside openroad/orfs:26Q3-296-gda37dce1c@sha256:ebc8142da6d65d1a1e9a528aa2cedcde356243465dd859af8d3ade51075f8cb2 (pnr/orfs/run-orfs.sh); docs/pnr-first-run.md says that liberty has the same 229-cell set as the pinned PDK -- a cell-set comparison, not a byte hash, so the pin is the project's declared PDK, not a proven identity with the image's copy.",
+  "testbenches": [
+    "rtl-sketch/tb_ladder.v",
+    "rtl-sketch/tb_ladder_n.v",
+    "rtl-sketch/tb_modal_fx.v",
+    "rtl-sketch/tb_voice.v",
+    "rtl-sketch/tb_drums.v",
+    "rtl-sketch/tb_ctl.v",
+    "rtl-sketch/tb_i2s_tx.v",
+    "rtl-sketch/tb_synth_top.v",
+    "rtl-sketch/verify_ladder.py",
+    "rtl-sketch/verify_modal.py",
+    "rtl-sketch/verify_voice.py",
+    "rtl-sketch/verify_drums.py",
+    "rtl-sketch/verify_ctl.py",
+    "rtl-sketch/verify_i2s_tx.py",
+    "rtl-sketch/verify_synth_top.py",
+    "rtl-sketch/stubs/ladder_dp_stub.v",
+    "rtl-sketch/stubs/voice_dp_stub.v",
+    "model/fixed.py",
+    "model/modal_fixed.py",
+    "model/synth_top_model.py",
+    "tools/item9_cold_start.py",
+    "tools/run_all.py",
+    "tools/trial_env.py",
+    "spec/trial-environment.json",
+    "tools/setup_ci_oss_cad.py"
+  ],
+  "cold_start": {
+    "argv": [
+      "python3",
+      "tools/item9_cold_start.py"
+    ],
+    "local_only": true
+  },
+  "pins": {
+    "pdk": {
+      "name": "gf180mcuD",
+      "revision": "ciel gf180mcu 54435919abffb937387ec956209f9cf5fd2dfbee"
+    },
+    "tools": {
+      "python": "3.12",
+      "numpy": "2.5.3",
+      "scipy": "1.18.1",
+      "pytest": "9.1.1",
+      "pyyaml": "6.0.3",
+      "oss-cad-suite": "2026-09-21 sha256:fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c",
+      "iverilog": "14.0 (devel) (s20260301-476-g1a23d1ffd)",
+      "klt": "0.8.0"
+    }
+  }
+}
