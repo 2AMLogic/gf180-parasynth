@@ -3,7 +3,6 @@
   "kind": "t1-attestation-inventory",
   "t1_item": 10,
   "hygiene": [
-    "README.md",
     "LICENSE",
     ".github/workflows/arty.yml",
     ".github/workflows/attack_context_model.yml",
