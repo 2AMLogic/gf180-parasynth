@@ -1,0 +1,37 @@
+block: gf180-parasynth  kind: digital
+tier: none
+T1: 1/11 items met
+
+[UNMET] T1 #1 Design sources
+        reason: no_evidence
+[UNMET] T1 #2 Layout
+        reason: no_evidence
+[UNMET] T1 #3 DRC clean
+        reason: no_evidence
+[UNMET] T1 #4 LVS clean
+        reason: no_evidence
+[UNMET] T1 #5 Full corner verification vs a ratified spec
+        reason: no_evidence
+[UNMET] T1 #6 Statistical claims carry Monte Carlo evidence
+        reason: no_evidence
+[UNMET] T1 #7 Post-layout verification
+        reason: no_evidence
+[UNMET] T1 #8 Characterization report
+        reason: no_evidence
+[UNMET] T1 #9 Testbenches shipped
+        reason: no_evidence
+[MET  ] T1 #10 Repo hygiene
+        cite: manifests/evidence/item-10.json (kind=generic, status=pass, content_hash=sha256:f31777a5354363c89a6f1e2983ff1d524245c377e82f6e338a2643713aa5c308, exit_status=0)
+        input: re-hashed the artifact this envelope names -- matches
+        bound: T1 item #10 -> manifests/inventories/item-10.json (content_hash=sha256:f31777a5354363c89a6f1e2983ff1d524245c377e82f6e338a2643713aa5c308)
+[UNMET] T1 #11 Power delivery (structural)
+        reason: no_evidence
+[UNMET] T2 #- T2 — signoff-validated
+        reason: tier_not_supported
+[UNMET] T3 #- T3 — silicon-validated
+        reason: tier_not_supported
+[UNMET] T4 #- T4 — production-validated
+        reason: tier_not_supported
+
+source: docs/design-evidence-tiers.md (content_hash=sha256:a26b90262320d0fbd32b3f549a02b6300832706041797a559d8bf6bdb62efdc7)
+build: klt 0.8.0

@@ -1,0 +1,75 @@
+# T1 item 10 (repo hygiene) attestation and the committed `klt signoff` verdict.
+#
+# manifests/gf180-parasynth.json is the block manifest; manifests/evidence/
+# item-10.json is the tool-produced attestation envelope for
+# manifests/inventories/item-10.json; manifests/verdict.txt is the committed
+# `klt signoff --manifest` rendering. This job re-derives both with klt PINNED
+# to the release that first ships `--attest`, and fails on any difference, so
+# an edit to the manifest, the inventory, README.md, LICENSE or a workflow that
+# is not followed by a regeneration cannot land.
+#
+# It is its own workflow so a failing tools/check_workflows.py (one of the
+# inventory's declared checks) is not tangled with another job's failure.
+#
+# `--with pyyaml`: the inventory's checks run `python3` INSIDE uvx's
+# environment, where tools/check_workflows.py exits 2 without pyyaml ("no
+# evidence, not no problem"). Without it the attestation is red, not skipped.
+#
+# NO DIRECTORY FILTER and no cancel-in-progress: the attested files are the
+# README and every workflow, so a path filter would exempt the very edits this
+# exists to catch.
+#
+# To regenerate (same pinned klt):
+#   K="uvx --with pyyaml --from klayout-tools==0.8.0 klt"
+#   $K signoff --attest 10 --inventory manifests/inventories/item-10.json \
+#       -o manifests/evidence/item-10.json
+#   # set evidence.10.content_hash in the manifest to the envelope's
+#   # provenance.input.content_hash, then
+#   $K signoff --manifest manifests/gf180-parasynth.json --no-color \
+#       > manifests/verdict.txt     # exit 3 is normal: the block is not T1
+name: signoff
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  regrade:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      KLT: uvx --with pyyaml --from klayout-tools==0.8.0 klt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install uv
+
+      - name: item 10 attestation still reproduces and passes
+        run: |
+          $KLT signoff --attest 10 \
+              --inventory manifests/inventories/item-10.json \
+              --check manifests/evidence/item-10.json --format json \
+              > "$RUNNER_TEMP/attest-check.json"
+          cat "$RUNNER_TEMP/attest-check.json"
+
+      - name: the declared checks actually ran (none skipped)
+        run: |
+          python3 - "$RUNNER_TEMP/attest-check.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          skipped = d.get("skipped_checks")
+          assert skipped == [], f"skipped_checks must be empty, got {skipped!r}"
+          print("skipped_checks == []")
+          PY
+
+      - name: committed verdict equals a fresh grade
+        run: |
+          # exit 3 is the grade ("not T1"), not a failure of the render.
+          rc=0
+          $KLT signoff --manifest manifests/gf180-parasynth.json --no-color \
+              > "$RUNNER_TEMP/verdict.txt" || rc=$?
+          test "$rc" -eq 3 || test "$rc" -eq 0
+          diff -u manifests/verdict.txt "$RUNNER_TEMP/verdict.txt"

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "kind": "t1-attestation-inventory",
+  "t1_item": 10,
+  "hygiene": [
+    "README.md",
+    "LICENSE",
+    ".github/workflows/arty.yml",
+    ".github/workflows/attack_context_model.yml",
+    ".github/workflows/dag.yml",
+    ".github/workflows/fpga_selected.yml",
+    ".github/workflows/moog-acceptance.yml",
+    ".github/workflows/nightly.yml",
+    ".github/workflows/provenance.yml",
+    ".github/workflows/pulse_audio.yml",
+    ".github/workflows/rungs.yml",
+    ".github/workflows/signoff.yml",
+    ".github/workflows/trials.yml"
+  ],
+  "checks": [
+    {
+      "name": "workflows-parse-and-declare-triggers",
+      "argv": [
+        "python3",
+        "tools/check_workflows.py"
+      ]
+    }
+  ]
+}

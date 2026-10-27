@@ -1,0 +1,10 @@
+{
+  "block": "gf180-parasynth",
+  "kind": "digital",
+  "evidence": {
+    "10": {
+      "file": "manifests/evidence/item-10.json",
+      "content_hash": "sha256:f31777a5354363c89a6f1e2983ff1d524245c377e82f6e338a2643713aa5c308"
+    }
+  }
+}
