@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "kind": "generic",
+  "status": "pass",
+  "t1_item": 10,
+  "summary": "T1 item 10 (Repo hygiene): 14/14 attestation checks passed (klt signoff --attest)",
+  "source": "manifests/inventories/item-10.json",
+  "attestation": {
+    "producer": "klt signoff --attest",
+    "inventory_schema_version": 1,
+    "hash_algorithm": "sha256-raw-bytes",
+    "check_count": 14,
+    "passed_count": 14,
+    "checks": [
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/arty.yml",
+        "passed": true,
+        "content_hash": "sha256:1d2799f201a64da3ba89d0be0fcc3f7a697675357b133396fa4fab17ccd27bc6"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/attack_context_model.yml",
+        "passed": true,
+        "content_hash": "sha256:43f762fe4f8ebfa95e6abc3309356ef5592ece502ca0b167b3820a4824683e86"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/dag.yml",
+        "passed": true,
+        "content_hash": "sha256:ddc1735e7faca8015fa87991584eb2a5de16fa0c602d8ef50ec74652d24c0784"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/fpga_selected.yml",
+        "passed": true,
+        "content_hash": "sha256:27e3ee646145b776d56179bf677917f6af920ee7875fe00be9cf606ce309ccdf"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/moog-acceptance.yml",
+        "passed": true,
+        "content_hash": "sha256:6207fec90d7a8b40c80a093c30913c1e8262a8839e0fcce6ee9c5eebfda2ad86"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/nightly.yml",
+        "passed": true,
+        "content_hash": "sha256:ecd47adf58fb8d83af926130257c3d667beeb8eb3fa105bb739053473b20446f"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/provenance.yml",
+        "passed": true,
+        "content_hash": "sha256:487cc630a66398cfa91c5115c9cf71a424138816ea953ba32709e01ccab1d71d"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/pulse_audio.yml",
+        "passed": true,
+        "content_hash": "sha256:7137b55b9cd1a646ac031a791c2bf544d93bfcb7a39f8f08caaa11154ea075d4"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/rungs.yml",
+        "passed": true,
+        "content_hash": "sha256:2f85ca8264b52c5a84729887088cec342eb662ebe8ae4ebb2d9557f2c6cce138"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/signoff.yml",
+        "passed": true,
+        "content_hash": "sha256:0a36c28ad2bc9e0bb740a1dadc890727b03d0b5b30918b506a819e94df01f70b"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": ".github/workflows/trials.yml",
+        "passed": true,
+        "content_hash": "sha256:d8b8f19ecdad9e73f7a0afedc1352687ac6b6927a9dd4bd397d0071c2d898499"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": "LICENSE",
+        "passed": true,
+        "content_hash": "sha256:d47483eb3e7e0b8cdc6f5252d857935661943f6c10bcecf49ae4b8dfe8c26317"
+      },
+      {
+        "check": "present",
+        "role": "hygiene",
+        "path": "README.md",
+        "passed": true,
+        "content_hash": "sha256:45f5c82f498702836244b23ef520ea4f177105dfb4093c1cc3fd3a01863b0d52"
+      },
+      {
+        "check": "command",
+        "role": "audit",
+        "name": "workflows-parse-and-declare-triggers",
+        "argv": [
+          "python3",
+          "tools/check_workflows.py"
+        ],
+        "cwd": ".",
+        "exit_status": 0,
+        "passed": true
+      }
+    ]
+  },
+  "provenance": {
+    "klt_version": "0.8.0",
+    "klayout_version": null,
+    "pdk": null,
+    "deck": null,
+    "input": {
+      "path": {
+        "path": "manifests/inventories/item-10.json",
+        "scope": "repo"
+      },
+      "content_hash": "sha256:f31777a5354363c89a6f1e2983ff1d524245c377e82f6e338a2643713aa5c308"
+    }
+  }
+}

@@ -24,6 +24,8 @@ block benches; the mm² figures are gf180mcu cell area at tt/5 V with `*_1`
 cells allowed, and **cell area is not die area** — see ARCHITECTURE.md
 section 10 for where the chip sits against the wafer.space quarter slot.
 
+The T1 evidence-tier verdict for this block, graded by `klt signoff --manifest` and re-graded in CI, is committed at [manifests/verdict.txt](manifests/verdict.txt) (item 10, repo hygiene, is the only item attested; every other item is `unmet` with its reason).
+
 ## Where we are
 
 ### The board
