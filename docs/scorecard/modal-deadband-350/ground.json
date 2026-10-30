@@ -1,0 +1,141 @@
+{
+ "gate": {
+  "status": "REFUSED",
+  "dc": "REFUSED",
+  "root": "/tmp/tr808-ref",
+  "reasons": [
+   "/tmp/tr808-ref/manifest.json absent: no manifest, no hashes, no provenance"
+  ]
+ },
+ "refdir": "/tmp/tr808-ref",
+ "voices": {
+  "BD": {
+   "status": "REFUSED",
+   "sha256": "2ca93cd7a3b19f6e",
+   "sr": 44100,
+   "seconds": 1.5,
+   "tail_ac_peak_dbfs": -55.91,
+   "tail_mean_dbfs": -96.22,
+   "reason": "last 100 ms is still decaying (not a noise floor)"
+  },
+  "SD": {
+   "status": "REFUSED",
+   "sha256": "6dcbf8acd5cee6d6",
+   "sr": 44100,
+   "seconds": 0.5,
+   "tail_ac_peak_dbfs": -70.15,
+   "tail_mean_dbfs": -92.14,
+   "reason": "last 100 ms is still decaying (not a noise floor)"
+  },
+  "LT": {
+   "status": "MEASURED",
+   "sha256": "d3720682985a9621",
+   "sr": 44100,
+   "seconds": 1.0,
+   "tail_ac_peak_dbfs": -70.46,
+   "tail_mean_dbfs": -91.98,
+   "reason": ""
+  },
+  "HT": {
+   "status": "MEASURED",
+   "sha256": "7e0b9eddd9537929",
+   "sr": 44100,
+   "seconds": 1.0,
+   "tail_ac_peak_dbfs": -72.99,
+   "tail_mean_dbfs": -93.98,
+   "reason": ""
+  },
+  "CH": {
+   "status": "REFUSED",
+   "reason": "capture shorter than 300 ms"
+  },
+  "OH": {
+   "status": "REFUSED",
+   "sha256": "84ae3220fab23963",
+   "sr": 44100,
+   "seconds": 0.5,
+   "tail_ac_peak_dbfs": -74.72,
+   "tail_mean_dbfs": -90.16,
+   "reason": "last 100 ms is still decaying (not a noise floor)"
+  },
+  "CP": {
+   "status": "MEASURED",
+   "sha256": "376429bb81cb48d1",
+   "sr": 44100,
+   "seconds": 2.0,
+   "tail_ac_peak_dbfs": -69.07,
+   "tail_mean_dbfs": -95.85,
+   "reason": ""
+  },
+  "CB": {
+   "status": "MEASURED",
+   "sha256": "1468cbd6c75a1f23",
+   "sr": 44100,
+   "seconds": 1.5,
+   "tail_ac_peak_dbfs": -75.42,
+   "tail_mean_dbfs": -97.26,
+   "reason": ""
+  },
+  "LC": {
+   "status": "REFUSED",
+   "sha256": "6591f57bbbdb8918",
+   "sr": 44100,
+   "seconds": 0.5,
+   "tail_ac_peak_dbfs": -48.42,
+   "tail_mean_dbfs": -87.64,
+   "reason": "last 100 ms is still decaying (not a noise floor)"
+  },
+  "MT": {
+   "status": "REFUSED",
+   "sha256": "81bbc63110a21c5d",
+   "sr": 44100,
+   "seconds": 1.0,
+   "tail_ac_peak_dbfs": -74.62,
+   "tail_mean_dbfs": -89.57,
+   "reason": "last 100 ms is still decaying (not a noise floor)"
+  },
+  "MC": {
+   "status": "REFUSED",
+   "sha256": "8175efe26c67f5af",
+   "sr": 44100,
+   "seconds": 0.5,
+   "tail_ac_peak_dbfs": -73.13,
+   "tail_mean_dbfs": -92.54,
+   "reason": "last 100 ms is still decaying (not a noise floor)"
+  },
+  "HC": {
+   "status": "MEASURED",
+   "sha256": "ee4354b1fb79126e",
+   "sr": 44100,
+   "seconds": 0.5,
+   "tail_ac_peak_dbfs": -72.73,
+   "tail_mean_dbfs": -97.52,
+   "reason": ""
+  },
+  "RS": {
+   "status": "REFUSED",
+   "reason": "capture shorter than 300 ms"
+  },
+  "CL": {
+   "status": "REFUSED",
+   "reason": "capture shorter than 300 ms"
+  },
+  "MA": {
+   "status": "REFUSED",
+   "reason": "capture shorter than 300 ms"
+  },
+  "CY": {
+   "status": "MEASURED",
+   "sha256": "6bec4a9d12d10c93",
+   "sr": 44100,
+   "seconds": 2.0,
+   "tail_ac_peak_dbfs": -73.65,
+   "tail_mean_dbfs": -92.2,
+   "reason": ""
+  }
+ },
+ "corpus_git_head": "85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+ "corpus_tree_clean": true,
+ "pin": "85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+ "pinned_ok": true
+}
