@@ -1,0 +1,7676 @@
+{
+ "anchors": {
+  "bd2550": {
+   "category": "tonal_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 1.50002268,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "bd5050": {
+   "category": "tonal_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 1.50002268,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "cb": {
+   "category": "metallic",
+   "pack": "fischer-tr808-103852",
+   "seconds": 1.50002268,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "ch": {
+   "category": "metallic",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.25,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "cl": {
+   "category": "tonal_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.25,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "cp": {
+   "category": "noisy_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 2.00002268,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "cy5025": {
+   "category": "metallic",
+   "pack": "fischer-tr808-103852",
+   "seconds": 2.00002268,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "cy7550": {
+   "category": "metallic",
+   "pack": "fischer-tr808-103852",
+   "seconds": 2.50002268,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "ht75": {
+   "category": "tonal_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 1.00002268,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "lc50": {
+   "category": "tonal_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.500022676,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "legowelt-resonance-zone": {
+   "category": "sustained_synth",
+   "pack": "legowelt-minimoog-5529",
+   "seconds": null,
+   "split": "development",
+   "sr": null,
+   "status": "REFUSED",
+   "why": "legowelt-resonance-zone: not frozen -- as legowelt-thin-square"
+  },
+  "legowelt-thin-square": {
+   "category": "sustained_synth",
+   "pack": "legowelt-minimoog-5529",
+   "seconds": null,
+   "split": "development",
+   "sr": null,
+   "status": "REFUSED",
+   "why": "legowelt-thin-square: not frozen -- no host that wrote this file had the Legowelt pack; an operator with it mounted runs `challenge_set.py freeze`, which fills this in and changes definition_sha256 -- a visible re-freeze"
+  },
+  "lt50": {
+   "category": "tonal_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 1.00002268,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "ma": {
+   "category": "noisy_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.25,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "mt25": {
+   "category": "tonal_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 1.00002268,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "oh10": {
+   "category": "metallic",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.750022676,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "oh50": {
+   "category": "metallic",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.500022676,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "rs": {
+   "category": "tonal_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.250022676,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "sd0050": {
+   "category": "noisy_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.500022676,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "sd2575": {
+   "category": "noisy_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.500022676,
+   "split": "validation",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "sd5050": {
+   "category": "noisy_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.500022676,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "sd7525": {
+   "category": "noisy_drum",
+   "pack": "fischer-tr808-103852",
+   "seconds": 0.25,
+   "split": "calibration",
+   "sr": 44100,
+   "status": "OK",
+   "why": null
+  },
+  "surge-drive-0db": {
+   "category": "sustained_synth",
+   "pack": "refprofile",
+   "seconds": 0.23,
+   "split": "development",
+   "sr": 48000,
+   "status": "OK",
+   "why": null
+  },
+  "surge-drive-m12db": {
+   "category": "sustained_synth",
+   "pack": "refprofile",
+   "seconds": 0.23,
+   "split": "development",
+   "sr": 48000,
+   "status": "OK",
+   "why": null
+  }
+ },
+ "apparatus": {
+  "docs/challenge-set.json": "7c66e3cd4f23b5472ac4ceee0b68bf963697e043a32da858d4cbb26f00761688",
+  "model/audio_measure.py": "9ad2c9f238ba3149e52ae31f12030d7f8208d1914b17bdf2a33cbcb46fba452f",
+  "tools/probes/audio_distance_floor.py": "3a29f68fcea6bc24f9a1a9290c6205d81909652965a7cfe73662379912d87a45",
+  "tools/probes/challenge_set.py": "0f82747ba7a1d21b8a630db086fa7b01e31bd468ab10c81c6566de72f90ea395",
+  "tools/probes/estimator_domains.py": "f4862db9f3ae22574de17eaf8dfd27832e4cf8041ee2268c9cb8dd966bcda20b",
+  "tools/probes/estimator_fixtures.py": "7245d93c29e19a67d3867f4b7cc5687e7ad9f86ea044643ef15784e70b8b4061",
+  "tools/probes/estimator_ground_truth.py": "f31dc0aba2380e126c9ea607dff7fc909044a013e96c162ae796971df31a7b11",
+  "tools/probes/permitted_differences.py": "8a977b768a14c543fd519f3d5acd28e0bce4c0ac720cc121ebae259c371858be",
+  "tools/probes/perturbation_ladder.py": "ef4abec62a5007606084efc71ef2c5e77e263f6b3d0bd5ab5befd897bc137b29",
+  "tools/run_case.py": "bc6bdc3e497333481284d6982959a269dc6971a4bcc2c17d687da63ef99697bc"
+ },
+ "definition_sha256": "62c7e497f8f06c849095d25b77a57936bd62f62f7f8b9bae7bc3446cce3a146b",
+ "full_results_sha256": "f96fa83357e850462e05e7c670d473301946760e366638e34cd62ec9c382abba",
+ "matrix": {
+  "band_pair_db": {
+   "clip_fraction": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "delay_ms": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "escape_hf_tone": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "escape_requantise_6bit": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "escape_tail_noise": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "gain_db": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "genuine_pitch": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "correction",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "narrowband_tone_rel_db": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "noise_broadband_snr_db": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "noise_tail_snr_db": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "pd_gain": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "pd_leading_silence": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "pd_polarity": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "quantisation_bits": {
+    "anchors_refused": 20,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 8,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 10,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   }
+  },
+  "decay_tau": {
+   "clip_fraction": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 28,
+      "refused": 28,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 1,
+      "no_verdict": 14,
+      "refused": 14,
+      "scored": 1,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 1,
+      "no_verdict": 14,
+      "refused": 14,
+      "scored": 1,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 2,
+    "no_verdict": 28,
+    "nv_reasons": {
+     "refused: not a single exponential": 28
+    },
+    "refused": 28,
+    "scored": 2,
+    "tracked": 0
+   },
+   "delay_ms": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 30,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 15,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 15,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 30,
+    "tracked": 0
+   },
+   "escape_hf_tone": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 4,
+      "refused": 4,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 3,
+      "refused": 3,
+      "scored": 0,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 1,
+      "refused": 1,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "ABSTAINS",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 4,
+    "nv_reasons": {
+     "refused: not a single exponential": 4
+    },
+    "refused": 4,
+    "scored": 2,
+    "tracked": 0
+   },
+   "escape_requantise_6bit": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 6,
+      "refused": 6,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 3,
+      "refused": 3,
+      "scored": 0,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 3,
+      "refused": 3,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "ABSTAINS",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 6,
+    "nv_reasons": {
+     "refused: not a single exponential": 6
+    },
+    "refused": 6,
+    "scored": 0,
+    "tracked": 0
+   },
+   "escape_tail_noise": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 3,
+      "refused": 3,
+      "scored": 3,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 2,
+      "refused": 2,
+      "scored": 1,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 1,
+      "refused": 1,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "ABSTAINS",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 3,
+    "nv_reasons": {
+     "refused: not a single exponential": 3
+    },
+    "refused": 3,
+    "scored": 3,
+    "tracked": 0
+   },
+   "gain_db": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 36,
+    "tracked": 0
+   },
+   "genuine_pitch": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 24,
+      "tracked": 24
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 12
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 12
+     }
+    },
+    "cls": "correction",
+    "label": "TRACKS",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 24,
+    "tracked": 24
+   },
+   "narrowband_tone_rel_db": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 22,
+      "refused": 22,
+      "scored": 14,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 12,
+      "refused": 12,
+      "scored": 6,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 10,
+      "refused": 10,
+      "scored": 8,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "ABSTAINS",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 22,
+    "nv_reasons": {
+     "refused: not a single exponential": 22
+    },
+    "refused": 22,
+    "scored": 14,
+    "tracked": 0
+   },
+   "noise_broadband_snr_db": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 14,
+      "refused": 14,
+      "scored": 22,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 7,
+      "refused": 7,
+      "scored": 11,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 7,
+      "refused": 7,
+      "scored": 11,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "ABSTAINS",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 14,
+    "nv_reasons": {
+     "refused: not a single exponential": 14
+    },
+    "refused": 14,
+    "scored": 22,
+    "tracked": 0
+   },
+   "noise_tail_snr_db": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 36,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 18,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 18,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 36,
+    "nv_reasons": {
+     "the transform did not change the record": 36
+    },
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "pd_gain": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 9,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 9,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 18,
+    "tracked": 0
+   },
+   "pd_leading_silence": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 9,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 9,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 18,
+    "tracked": 0
+   },
+   "pd_polarity": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 6,
+    "tracked": 0
+   },
+   "quantisation_bits": {
+    "anchors_refused": 16,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 6,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 15,
+      "refused": 15,
+      "scored": 21,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 8,
+      "refused": 8,
+      "scored": 10,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 2,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 7,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 7,
+      "refused": 7,
+      "scored": 11,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "ABSTAINS",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 15,
+    "nv_reasons": {
+     "refused: not a single exponential": 15
+    },
+    "refused": 15,
+    "scored": 21,
+    "tracked": 0
+   }
+  },
+  "inharmonic_fraction_db": {
+   "clip_fraction": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 5,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 5,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 5,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 5,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 10,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 10,
+    "tracked": 0
+   },
+   "delay_ms": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 7,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 4,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 5,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 3,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 5,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "FALSE-ALARM",
+    "mistracked": 0,
+    "moved": 7,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 10,
+    "tracked": 0
+   },
+   "escape_hf_tone": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 1,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 1,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 1,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 1,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 2,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 2,
+    "tracked": 0
+   },
+   "escape_requantise_6bit": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 1,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 1,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 1,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 1,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 2,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 2,
+    "tracked": 0
+   },
+   "escape_tail_noise": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 1,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 1,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 1,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 1,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 2,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 2,
+    "tracked": 0
+   },
+   "gain_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 12,
+    "tracked": 0
+   },
+   "genuine_pitch": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 8,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 8,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 4,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 4,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 4,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 4,
+      "tracked": 0
+     }
+    },
+    "cls": "correction",
+    "label": "NOT-DERIVABLE",
+    "mistracked": 0,
+    "moved": 8,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 8,
+    "tracked": 0
+   },
+   "narrowband_tone_rel_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 12,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 12,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 12,
+    "tracked": 0
+   },
+   "noise_broadband_snr_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 5,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 5,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 10,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 12,
+    "tracked": 0
+   },
+   "noise_tail_snr_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 12,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 6,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 6,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 12,
+    "nv_reasons": {
+     "the transform did not change the record": 12
+    },
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "pd_gain": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 6,
+    "tracked": 0
+   },
+   "pd_leading_silence": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 3,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 3,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "FALSE-ALARM",
+    "mistracked": 0,
+    "moved": 6,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 6,
+    "tracked": 0
+   },
+   "pd_polarity": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 1,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 1,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 2,
+    "tracked": 0
+   },
+   "quantisation_bits": {
+    "anchors_refused": 0,
+    "by_category": {
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 5,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 5,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 10,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 12,
+    "tracked": 0
+   }
+  },
+  "mel_dac": {
+   "clip_fraction": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 29,
+      "no_verdict": 1,
+      "refused": 0,
+      "scored": 29,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 30,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 30,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 40,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 40,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 50,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 50,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 49,
+      "no_verdict": 1,
+      "refused": 0,
+      "scored": 49,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 109,
+    "no_verdict": 1,
+    "nv_reasons": {
+     "the transform changed only 16 sample(s), under 1 ms": 1
+    },
+    "refused": 0,
+    "scored": 109,
+    "tracked": 0
+   },
+   "delay_ms": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 30,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 30,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 30,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 30,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 40,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 40,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 50,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 50,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 50,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 50,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "FALSE-ALARM",
+    "mistracked": 0,
+    "moved": 110,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 110,
+    "tracked": 0
+   },
+   "escape_hf_tone": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 8,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 8,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 22,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 22,
+    "tracked": 0
+   },
+   "escape_requantise_6bit": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 8,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 8,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 22,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 22,
+    "tracked": 0
+   },
+   "escape_tail_noise": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 2,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 8,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 8,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 2,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 20,
+    "no_verdict": 2,
+    "nv_reasons": {
+     "the transform did not change the record": 2
+    },
+    "refused": 0,
+    "scored": 20,
+    "tracked": 0
+   },
+   "gain_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 48,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 60,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 60,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 132,
+    "tracked": 0
+   },
+   "genuine_pitch": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 24,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 24,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 24,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 24,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 8,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 8,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 32,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 32,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 40,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 40,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 8,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 8,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 40,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 40,
+      "tracked": 0
+     }
+    },
+    "cls": "correction",
+    "label": "FLAGS-CORRECTION",
+    "mistracked": 0,
+    "moved": 88,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 88,
+    "tracked": 0
+   },
+   "narrowband_tone_rel_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 32,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 35,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 12,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 48,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 48,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 57,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 60,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 12,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 58,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 60,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 127,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 132,
+    "tracked": 0
+   },
+   "noise_broadband_snr_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 30,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 31,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 12,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 48,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 48,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 55,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 60,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 12,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 54,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 60,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 121,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 132,
+    "tracked": 0
+   },
+   "noise_tail_snr_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 36,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 36,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 12,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 48,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 60,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 12,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 60,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 132,
+    "nv_reasons": {
+     "the transform changed only 1 sample(s), under 1 ms": 30,
+     "the transform changed only 2 sample(s), under 1 ms": 12,
+     "the transform did not change the record": 90
+    },
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "pd_gain": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 24,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 30,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 30,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 66,
+    "tracked": 0
+   },
+   "pd_leading_silence": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 18,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 18,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 24,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 24,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 30,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 30,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 30,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 30,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "FALSE-ALARM",
+    "mistracked": 0,
+    "moved": 66,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 66,
+    "tracked": 0
+   },
+   "pd_polarity": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 8,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 10,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 22,
+    "tracked": 0
+   },
+   "quantisation_bits": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 32,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     },
+     "noisy_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 31,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     },
+     "sustained_synth": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     },
+     "tonal_drum": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 48,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 48,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 56,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 60,
+      "tracked": 0
+     },
+     "development": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 55,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 60,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 121,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 132,
+    "tracked": 0
+   }
+  },
+  "tone_ratio_db": {
+   "clip_fraction": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 14,
+      "no_verdict": 5,
+      "refused": 4,
+      "scored": 25,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 7,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 15,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 7,
+      "no_verdict": 5,
+      "refused": 4,
+      "scored": 10,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 14,
+    "no_verdict": 5,
+    "nv_reasons": {
+     "refused: denominator: no line within +-10 % of 540.0 Hz: no prominent line in the band": 1,
+     "refused: numerator: no line within +-10 % of 800.0 Hz: no prominent line in the band": 3,
+     "the transform changed only 16 sample(s), under 1 ms": 1
+    },
+    "refused": 4,
+    "scored": 25,
+    "tracked": 0
+   },
+   "delay_ms": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 9,
+      "no_verdict": 2,
+      "refused": 2,
+      "scored": 28,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 5,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 15,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 4,
+      "no_verdict": 2,
+      "refused": 2,
+      "scored": 13,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "FALSE-ALARM",
+    "mistracked": 0,
+    "moved": 9,
+    "no_verdict": 2,
+    "nv_reasons": {
+     "refused: denominator: no line within +-10 % of 540.0 Hz: no prominent line in the band": 2
+    },
+    "refused": 2,
+    "scored": 28,
+    "tracked": 0
+   },
+   "escape_hf_tone": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "BLIND",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 6,
+    "tracked": 0
+   },
+   "escape_requantise_6bit": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 5,
+      "no_verdict": 1,
+      "refused": 1,
+      "scored": 5,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 3,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 1,
+      "refused": 1,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 5,
+    "no_verdict": 1,
+    "nv_reasons": {
+     "refused: denominator: no line within +-10 % of 540.0 Hz: no prominent line in the band": 1
+    },
+    "refused": 1,
+    "scored": 5,
+    "tracked": 0
+   },
+   "escape_tail_noise": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 4,
+      "no_verdict": 1,
+      "refused": 0,
+      "scored": 5,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 2,
+      "no_verdict": 1,
+      "refused": 0,
+      "scored": 2,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 4,
+    "no_verdict": 1,
+    "nv_reasons": {
+     "the transform did not change the record": 1
+    },
+    "refused": 0,
+    "scored": 5,
+    "tracked": 0
+   },
+   "gain_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 36,
+    "tracked": 0
+   },
+   "genuine_pitch": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 17,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 24,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 8,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 9,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 12,
+      "tracked": 0
+     }
+    },
+    "cls": "correction",
+    "label": "NOT-DERIVABLE",
+    "mistracked": 0,
+    "moved": 17,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 24,
+    "tracked": 0
+   },
+   "narrowband_tone_rel_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 36,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "BLIND",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 36,
+    "tracked": 0
+   },
+   "noise_broadband_snr_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 22,
+      "no_verdict": 8,
+      "refused": 8,
+      "scored": 28,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 12,
+      "no_verdict": 3,
+      "refused": 3,
+      "scored": 15,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 10,
+      "no_verdict": 5,
+      "refused": 5,
+      "scored": 13,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 22,
+    "no_verdict": 8,
+    "nv_reasons": {
+     "refused: denominator: no line within +-10 % of 540.0 Hz: no prominent line in the band": 6,
+     "refused: numerator: no line within +-10 % of 800.0 Hz: no prominent line in the band": 2
+    },
+    "refused": 8,
+    "scored": 28,
+    "tracked": 0
+   },
+   "noise_tail_snr_db": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 36,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 18,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 18,
+      "refused": 0,
+      "scored": 0,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "NO-VERDICT",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 36,
+    "nv_reasons": {
+     "the transform changed only 1 sample(s), under 1 ms": 6,
+     "the transform changed only 2 sample(s), under 1 ms": 6,
+     "the transform did not change the record": 24
+    },
+    "refused": 0,
+    "scored": 0,
+    "tracked": 0
+   },
+   "pd_gain": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 18,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 9,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 9,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 18,
+    "tracked": 0
+   },
+   "pd_leading_silence": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 9,
+      "no_verdict": 3,
+      "refused": 3,
+      "scored": 15,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 6,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 9,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 3,
+      "no_verdict": 3,
+      "refused": 3,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "FALSE-ALARM",
+    "mistracked": 0,
+    "moved": 9,
+    "no_verdict": 3,
+    "nv_reasons": {
+     "refused: numerator: no line within +-10 % of 800.0 Hz: no prominent line in the band": 3
+    },
+    "refused": 3,
+    "scored": 15,
+    "tracked": 0
+   },
+   "pd_polarity": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 6,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 0,
+      "no_verdict": 0,
+      "refused": 0,
+      "scored": 3,
+      "tracked": 0
+     }
+    },
+    "cls": "permitted",
+    "label": "STILL",
+    "mistracked": 0,
+    "moved": 0,
+    "no_verdict": 0,
+    "nv_reasons": {},
+    "refused": 0,
+    "scored": 6,
+    "tracked": 0
+   },
+   "quantisation_bits": {
+    "anchors_refused": 0,
+    "by_category": {
+     "metallic": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 26,
+      "no_verdict": 5,
+      "refused": 5,
+      "scored": 31,
+      "tracked": 0
+     }
+    },
+    "by_split": {
+     "calibration": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 14,
+      "no_verdict": 1,
+      "refused": 1,
+      "scored": 17,
+      "tracked": 0
+     },
+     "validation": {
+      "anchors_refused": 0,
+      "mistracked": 0,
+      "moved": 12,
+      "no_verdict": 4,
+      "refused": 4,
+      "scored": 14,
+      "tracked": 0
+     }
+    },
+    "cls": "defect",
+    "label": "MOVED",
+    "mistracked": 0,
+    "moved": 26,
+    "no_verdict": 5,
+    "nv_reasons": {
+     "refused: denominator: no line within +-10 % of 540.0 Hz: no prominent line in the band": 4,
+     "refused: numerator: no line within +-10 % of 800.0 Hz: no prominent line in the band": 1
+    },
+    "refused": 5,
+    "scored": 31,
+    "tracked": 0
+   }
+  }
+ },
+ "mel_dac": {
+  "calibration_false_alarms_worst": [
+   {
+    "anchor": "sd7525",
+    "col": "pd_leading_silence",
+    "distance": 3.46843361,
+    "floor": 0.0195015844,
+    "ratio": 177.85394,
+    "strength": "trial 2"
+   },
+   {
+    "anchor": "ma",
+    "col": "pd_leading_silence",
+    "distance": 2.18138588,
+    "floor": 0.0155185901,
+    "ratio": 140.565984,
+    "strength": "trial 1"
+   },
+   {
+    "anchor": "ma",
+    "col": "pd_leading_silence",
+    "distance": 2.1690136,
+    "floor": 0.0155185901,
+    "ratio": 139.768728,
+    "strength": "trial 2"
+   },
+   {
+    "anchor": "sd5050",
+    "col": "pd_leading_silence",
+    "distance": 2.86095145,
+    "floor": 0.0208809304,
+    "ratio": 137.012642,
+    "strength": "trial 1"
+   },
+   {
+    "anchor": "rs",
+    "col": "pd_leading_silence",
+    "distance": 1.87070301,
+    "floor": 0.014845999,
+    "ratio": 126.007217,
+    "strength": "trial 0"
+   },
+   {
+    "anchor": "sd7525",
+    "col": "pd_leading_silence",
+    "distance": 2.44179023,
+    "floor": 0.0195015844,
+    "ratio": 125.209838,
+    "strength": "trial 1"
+   }
+  ],
+  "conditional": {
+   "exclude_columns": [
+    "delay_ms",
+    "pd_leading_silence"
+   ],
+   "k": 100,
+   "provenance": "POST-HOC: added after the first run showed those two columns set K_cal on their own. It is reported beside K_cal, labelled conditional, and never instead of it.",
+   "validation_at_k": {
+    "correction": {
+     "detected": 0,
+     "of": 40
+    },
+    "defect": {
+     "detected": 74,
+     "of": 259
+    },
+    "permitted": {
+     "detected": 6,
+     "of": 180
+    }
+   }
+  },
+  "detection_rule": "a rung is DETECTED when mel_dac(p, y) > K x floor(anchor). Absolute distance, absolute floor and the ratio are reported together for every rung; a ratio is never reported alone.",
+  "floor_definition": "floor(anchor) = mel_dac(p, shift(p, 1)), where p is the prepared, peak-normalised anchor and shift(p, 1) is p delayed by ONE sample and zero-padded back to length (audio_distance_floor.shift). This is the definition docs/audio-distance-metrics.md section 7 used, where it read 0.0085 on our own deterministic BD render; here it is measured on each real anchor. It is an APPARATUS floor (what the distance reads for a change no listener could hear), not the machine's session-to-session floor (0.264 in that document, constructed) and not an our-versus-reference baseline (never measured).",
+  "floor_max": 0.0372818153,
+  "floor_min": 0.0113149147,
+  "floors": {
+   "bd2550": 0.0113149147,
+   "bd5050": 0.0118464012,
+   "cb": 0.0218464713,
+   "ch": 0.0207066975,
+   "cl": 0.0163380428,
+   "cp": 0.0242509405,
+   "cy5025": 0.0271693173,
+   "cy7550": 0.0290908689,
+   "ht75": 0.0157489752,
+   "lc50": 0.0181367829,
+   "lt50": 0.0147321405,
+   "ma": 0.0155185901,
+   "mt25": 0.0159864614,
+   "oh10": 0.0372818153,
+   "oh50": 0.0359727615,
+   "rs": 0.014845999,
+   "sd0050": 0.0197939854,
+   "sd2575": 0.0220790295,
+   "sd5050": 0.0208809304,
+   "sd7525": 0.0195015844,
+   "surge-drive-0db": 0.0114245116,
+   "surge-drive-m12db": 0.011424842
+  },
+  "k_cal": 300,
+  "k_cal_refused_why": null,
+  "k_grid": [
+   1,
+   2,
+   5,
+   10,
+   30,
+   100,
+   300,
+   1000
+  ],
+  "k_selection": "K_cal = the smallest K in k_grid at which the CALIBRATION split shows zero false alarms over its permitted and correction columns. If none does, K_cal is REFUSED and the validation split gets no headline rate -- it gets the whole grid. Validation rates are read at K_cal and nowhere else.",
+  "per_column": {
+   "clip_fraction": {
+    "cls": "defect",
+    "distance_max": 4.90223327,
+    "distance_median": 2.36139397,
+    "distance_min": 0.63480078,
+    "n": 109,
+    "ratio_max": 429.097841,
+    "ratio_median": 121.470617,
+    "ratio_min": 20.8844798
+   },
+   "delay_ms": {
+    "cls": "permitted",
+    "distance_max": 0.914053788,
+    "distance_median": 0.275156774,
+    "distance_min": 0.0380129815,
+    "n": 110,
+    "ratio_max": 61.5690322,
+    "ratio_median": 14.5686941,
+    "ratio_min": 2.50362811
+   },
+   "escape_hf_tone": {
+    "cls": "defect",
+    "distance_max": 0.557927607,
+    "distance_median": 0.447368669,
+    "distance_min": 0.139015804,
+    "n": 22,
+    "ratio_max": 47.2496346,
+    "ratio_median": 24.7323358,
+    "ratio_min": 3.72878313
+   },
+   "escape_requantise_6bit": {
+    "cls": "defect",
+    "distance_max": 2.88430982,
+    "distance_median": 1.99046074,
+    "distance_min": 0.902969888,
+    "n": 22,
+    "ratio_max": 252.466793,
+    "ratio_median": 104.240789,
+    "ratio_min": 25.1014893
+   },
+   "escape_tail_noise": {
+    "cls": "defect",
+    "distance_max": 3.07816217,
+    "distance_median": 1.68319406,
+    "distance_min": 0.101194937,
+    "n": 20,
+    "ratio_max": 265.228583,
+    "ratio_median": 78.4172843,
+    "ratio_min": 5.18906232
+   },
+   "gain_db": {
+    "cls": "permitted",
+    "distance_max": 3.66868385e-14,
+    "distance_median": 4.28964048e-16,
+    "distance_min": 0.0,
+    "n": 132,
+    "ratio_max": 3.21114624e-12,
+    "ratio_median": 1.87404754e-14,
+    "ratio_min": 0.0
+   },
+   "genuine_pitch": {
+    "cls": "correction",
+    "distance_max": 0.591138108,
+    "distance_median": 0.428998119,
+    "distance_min": 0.289978894,
+    "n": 88,
+    "ratio_max": 40.7426152,
+    "ratio_median": 22.8884073,
+    "ratio_min": 11.9542823
+   },
+   "narrowband_tone_rel_db": {
+    "cls": "defect",
+    "distance_max": 1.41177921,
+    "distance_median": 0.472613451,
+    "distance_min": 0.0145971631,
+    "n": 132,
+    "ratio_max": 111.072722,
+    "ratio_median": 22.0494267,
+    "ratio_min": 0.396586921
+   },
+   "noise_broadband_snr_db": {
+    "cls": "defect",
+    "distance_max": 5.24766112,
+    "distance_median": 1.4797465,
+    "distance_min": 0.00441121674,
+    "n": 132,
+    "ratio_max": 459.333518,
+    "ratio_median": 63.6128172,
+    "ratio_min": 0.151635785
+   },
+   "pd_gain": {
+    "cls": "permitted",
+    "distance_max": 3.66731534e-14,
+    "distance_median": 7.90303368e-16,
+    "distance_min": 5.05111878e-19,
+    "n": 66,
+    "ratio_max": 3.2099484e-12,
+    "ratio_median": 4.51256974e-14,
+    "ratio_min": 2.4190104e-17
+   },
+   "pd_leading_silence": {
+    "cls": "permitted",
+    "distance_max": 3.46843361,
+    "distance_median": 1.13933096,
+    "distance_min": 0.377255649,
+    "n": 66,
+    "ratio_max": 221.190499,
+    "ratio_median": 62.6760441,
+    "ratio_min": 17.2684936
+   },
+   "pd_polarity": {
+    "cls": "permitted",
+    "distance_max": 0.0,
+    "distance_median": 0.0,
+    "distance_min": 0.0,
+    "n": 22,
+    "ratio_max": 0.0,
+    "ratio_median": 0.0,
+    "ratio_min": 0.0
+   },
+   "quantisation_bits": {
+    "cls": "defect",
+    "distance_max": 3.94756127,
+    "distance_median": 1.24471166,
+    "distance_min": 0.00443069218,
+    "n": 132,
+    "ratio_max": 345.534356,
+    "ratio_median": 67.7496019,
+    "ratio_min": 0.272282245
+   }
+  },
+  "rates_by_k": {
+   "1": {
+    "by_category": {
+     "metallic": {
+      "correction": {
+       "detected": 24,
+       "of": 24
+      },
+      "defect": {
+       "detected": 141,
+       "of": 155
+      },
+      "permitted": {
+       "detected": 48,
+       "of": 108
+      }
+     },
+     "noisy_drum": {
+      "correction": {
+       "detected": 24,
+       "of": 24
+      },
+      "defect": {
+       "detected": 145,
+       "of": 156
+      },
+      "permitted": {
+       "detected": 48,
+       "of": 108
+      }
+     },
+     "sustained_synth": {
+      "correction": {
+       "detected": 8,
+       "of": 8
+      },
+      "defect": {
+       "detected": 48,
+       "of": 50
+      },
+      "permitted": {
+       "detected": 16,
+       "of": 36
+      }
+     },
+     "tonal_drum": {
+      "correction": {
+       "detected": 32,
+       "of": 32
+      },
+      "defect": {
+       "detected": 208,
+       "of": 208
+      },
+      "permitted": {
+       "detected": 64,
+       "of": 144
+      }
+     }
+    },
+    "calibration": {
+     "correction": {
+      "detected": 40,
+      "of": 40
+     },
+     "defect": {
+      "detected": 248,
+      "of": 260
+     },
+     "permitted": {
+      "detected": 80,
+      "of": 180
+     }
+    },
+    "development": {
+     "correction": {
+      "detected": 8,
+      "of": 8
+     },
+     "defect": {
+      "detected": 48,
+      "of": 50
+     },
+     "permitted": {
+      "detected": 16,
+      "of": 36
+     }
+    },
+    "validation": {
+     "correction": {
+      "detected": 40,
+      "of": 40
+     },
+     "defect": {
+      "detected": 246,
+      "of": 259
+     },
+     "permitted": {
+      "detected": 80,
+      "of": 180
+     }
+    }
+   },
+   "10": {
+    "by_category": {
+     "metallic": {
+      "correction": {
+       "detected": 24,
+       "of": 24
+      },
+      "defect": {
+       "detected": 110,
+       "of": 155
+      },
+      "permitted": {
+       "detected": 33,
+       "of": 108
+      }
+     },
+     "noisy_drum": {
+      "correction": {
+       "detected": 24,
+       "of": 24
+      },
+      "defect": {
+       "detected": 125,
+       "of": 156
+      },
+      "permitted": {
+       "detected": 41,
+       "of": 108
+      }
+     },
+     "sustained_synth": {
+      "correction": {
+       "detected": 8,
+       "of": 8
+      },
+      "defect": {
+       "detected": 46,
+       "of": 50
+      },
+      "permitted": {
+       "detected": 14,
+       "of": 36
+      }
+     },
+     "tonal_drum": {
+      "correction": {
+       "detected": 32,
+       "of": 32
+      },
+      "defect": {
+       "detected": 183,
+       "of": 208
+      },
+      "permitted": {
+       "detected": 56,
+       "of": 144
+      }
+     }
+    },
+    "calibration": {
+     "correction": {
+      "detected": 40,
+      "of": 40
+     },
+     "defect": {
+      "detected": 211,
+      "of": 260
+     },
+     "permitted": {
+      "detected": 66,
+      "of": 180
+     }
+    },
+    "development": {
+     "correction": {
+      "detected": 8,
+      "of": 8
+     },
+     "defect": {
+      "detected": 46,
+      "of": 50
+     },
+     "permitted": {
+      "detected": 14,
+      "of": 36
+     }
+    },
+    "validation": {
+     "correction": {
+      "detected": 40,
+      "of": 40
+     },
+     "defect": {
+      "detected": 207,
+      "of": 259
+     },
+     "permitted": {
+      "detected": 64,
+      "of": 180
+     }
+    }
+   },
+   "100": {
+    "by_category": {
+     "metallic": {
+      "correction": {
+       "detected": 0,
+       "of": 24
+      },
+      "defect": {
+       "detected": 20,
+       "of": 155
+      },
+      "permitted": {
+       "detected": 3,
+       "of": 108
+      }
+     },
+     "noisy_drum": {
+      "correction": {
+       "detected": 0,
+       "of": 24
+      },
+      "defect": {
+       "detected": 40,
+       "of": 156
+      },
+      "permitted": {
+       "detected": 11,
+       "of": 108
+      }
+     },
+     "sustained_synth": {
+      "correction": {
+       "detected": 0,
+       "of": 8
+      },
+      "defect": {
+       "detected": 30,
+       "of": 50
+      },
+      "permitted": {
+       "detected": 6,
+       "of": 36
+      }
+     },
+     "tonal_drum": {
+      "correction": {
+       "detected": 0,
+       "of": 32
+      },
+      "defect": {
+       "detected": 95,
+       "of": 208
+      },
+      "permitted": {
+       "detected": 2,
+       "of": 144
+      }
+     }
+    },
+    "calibration": {
+     "correction": {
+      "detected": 0,
+      "of": 40
+     },
+     "defect": {
+      "detected": 81,
+      "of": 260
+     },
+     "permitted": {
+      "detected": 10,
+      "of": 180
+     }
+    },
+    "development": {
+     "correction": {
+      "detected": 0,
+      "of": 8
+     },
+     "defect": {
+      "detected": 30,
+      "of": 50
+     },
+     "permitted": {
+      "detected": 6,
+      "of": 36
+     }
+    },
+    "validation": {
+     "correction": {
+      "detected": 0,
+      "of": 40
+     },
+     "defect": {
+      "detected": 74,
+      "of": 259
+     },
+     "permitted": {
+      "detected": 6,
+      "of": 180
+     }
+    }
+   },
+   "1000": {
+    "by_category": {
+     "metallic": {
+      "correction": {
+       "detected": 0,
+       "of": 24
+      },
+      "defect": {
+       "detected": 0,
+       "of": 155
+      },
+      "permitted": {
+       "detected": 0,
+       "of": 108
+      }
+     },
+     "noisy_drum": {
+      "correction": {
+       "detected": 0,
+       "of": 24
+      },
+      "defect": {
+       "detected": 0,
+       "of": 156
+      },
+      "permitted": {
+       "detected": 0,
+       "of": 108
+      }
+     },
+     "sustained_synth": {
+      "correction": {
+       "detected": 0,
+       "of": 8
+      },
+      "defect": {
+       "detected": 0,
+       "of": 50
+      },
+      "permitted": {
+       "detected": 0,
+       "of": 36
+      }
+     },
+     "tonal_drum": {
+      "correction": {
+       "detected": 0,
+       "of": 32
+      },
+      "defect": {
+       "detected": 0,
+       "of": 208
+      },
+      "permitted": {
+       "detected": 0,
+       "of": 144
+      }
+     }
+    },
+    "calibration": {
+     "correction": {
+      "detected": 0,
+      "of": 40
+     },
+     "defect": {
+      "detected": 0,
+      "of": 260
+     },
+     "permitted": {
+      "detected": 0,
+      "of": 180
+     }
+    },
+    "development": {
+     "correction": {
+      "detected": 0,
+      "of": 8
+     },
+     "defect": {
+      "detected": 0,
+      "of": 50
+     },
+     "permitted": {
+      "detected": 0,
+      "of": 36
+     }
+    },
+    "validation": {
+     "correction": {
+      "detected": 0,
+      "of": 40
+     },
+     "defect": {
+      "detected": 0,
+      "of": 259
+     },
+     "permitted": {
+      "detected": 0,
+      "of": 180
+     }
+    }
+   },
+   "2": {
+    "by_category": {
+     "metallic": {
+      "correction": {
+       "detected": 24,
+       "of": 24
+      },
+      "defect": {
+       "detected": 136,
+       "of": 155
+      },
+      "permitted": {
+       "detected": 48,
+       "of": 108
+      }
+     },
+     "noisy_drum": {
+      "correction": {
+       "detected": 24,
+       "of": 24
+      },
+      "defect": {
+       "detected": 141,
+       "of": 156
+      },
+      "permitted": {
+       "detected": 48,
+       "of": 108
+      }
+     },
+     "sustained_synth": {
+      "correction": {
+       "detected": 8,
+       "of": 8
+      },
+      "defect": {
+       "detected": 48,
+       "of": 50
+      },
+      "permitted": {
+       "detected": 16,
+       "of": 36
+      }
+     },
+     "tonal_drum": {
+      "correction": {
+       "detected": 32,
+       "of": 32
+      },
+      "defect": {
+       "detected": 204,
+       "of": 208
+      },
+      "permitted": {
+       "detected": 64,
+       "of": 144
+      }
+     }
+    },
+    "calibration": {
+     "correction": {
+      "detected": 40,
+      "of": 40
+     },
+     "defect": {
+      "detected": 244,
+      "of": 260
+     },
+     "permitted": {
+      "detected": 80,
+      "of": 180
+     }
+    },
+    "development": {
+     "correction": {
+      "detected": 8,
+      "of": 8
+     },
+     "defect": {
+      "detected": 48,
+      "of": 50
+     },
+     "permitted": {
+      "detected": 16,
+      "of": 36
+     }
+    },
+    "validation": {
+     "correction": {
+      "detected": 40,
+      "of": 40
+     },
+     "defect": {
+      "detected": 237,
+      "of": 259
+     },
+     "permitted": {
+      "detected": 80,
+      "of": 180
+     }
+    }
+   },
+   "30": {
+    "by_category": {
+     "metallic": {
+      "correction": {
+       "detected": 0,
+       "of": 24
+      },
+      "defect": {
+       "detected": 74,
+       "of": 155
+      },
+      "permitted": {
+       "detected": 12,
+       "of": 108
+      }
+     },
+     "noisy_drum": {
+      "correction": {
+       "detected": 0,
+       "of": 24
+      },
+      "defect": {
+       "detected": 97,
+       "of": 156
+      },
+      "permitted": {
+       "detected": 22,
+       "of": 108
+      }
+     },
+     "sustained_synth": {
+      "correction": {
+       "detected": 8,
+       "of": 8
+      },
+      "defect": {
+       "detected": 44,
+       "of": 50
+      },
+      "permitted": {
+       "detected": 10,
+       "of": 36
+      }
+     },
+     "tonal_drum": {
+      "correction": {
+       "detected": 8,
+       "of": 32
+      },
+      "defect": {
+       "detected": 168,
+       "of": 208
+      },
+      "permitted": {
+       "detected": 30,
+       "of": 144
+      }
+     }
+    },
+    "calibration": {
+     "correction": {
+      "detected": 4,
+      "of": 40
+     },
+     "defect": {
+      "detected": 176,
+      "of": 260
+     },
+     "permitted": {
+      "detected": 34,
+      "of": 180
+     }
+    },
+    "development": {
+     "correction": {
+      "detected": 8,
+      "of": 8
+     },
+     "defect": {
+      "detected": 44,
+      "of": 50
+     },
+     "permitted": {
+      "detected": 10,
+      "of": 36
+     }
+    },
+    "validation": {
+     "correction": {
+      "detected": 4,
+      "of": 40
+     },
+     "defect": {
+      "detected": 163,
+      "of": 259
+     },
+     "permitted": {
+      "detected": 30,
+      "of": 180
+     }
+    }
+   },
+   "300": {
+    "by_category": {
+     "metallic": {
+      "correction": {
+       "detected": 0,
+       "of": 24
+      },
+      "defect": {
+       "detected": 0,
+       "of": 155
+      },
+      "permitted": {
+       "detected": 0,
+       "of": 108
+      }
+     },
+     "noisy_drum": {
+      "correction": {
+       "detected": 0,
+       "of": 24
+      },
+      "defect": {
+       "detected": 1,
+       "of": 156
+      },
+      "permitted": {
+       "detected": 0,
+       "of": 108
+      }
+     },
+     "sustained_synth": {
+      "correction": {
+       "detected": 0,
+       "of": 8
+      },
+      "defect": {
+       "detected": 14,
+       "of": 50
+      },
+      "permitted": {
+       "detected": 0,
+       "of": 36
+      }
+     },
+     "tonal_drum": {
+      "correction": {
+       "detected": 0,
+       "of": 32
+      },
+      "defect": {
+       "detected": 11,
+       "of": 208
+      },
+      "permitted": {
+       "detected": 0,
+       "of": 144
+      }
+     }
+    },
+    "calibration": {
+     "correction": {
+      "detected": 0,
+      "of": 40
+     },
+     "defect": {
+      "detected": 7,
+      "of": 260
+     },
+     "permitted": {
+      "detected": 0,
+      "of": 180
+     }
+    },
+    "development": {
+     "correction": {
+      "detected": 0,
+      "of": 8
+     },
+     "defect": {
+      "detected": 14,
+      "of": 50
+     },
+     "permitted": {
+      "detected": 0,
+      "of": 36
+     }
+    },
+    "validation": {
+     "correction": {
+      "detected": 0,
+      "of": 40
+     },
+     "defect": {
+      "detected": 5,
+      "of": 259
+     },
+     "permitted": {
+      "detected": 0,
+      "of": 180
+     }
+    }
+   },
+   "5": {
+    "by_category": {
+     "metallic": {
+      "correction": {
+       "detected": 24,
+       "of": 24
+      },
+      "defect": {
+       "detected": 127,
+       "of": 155
+      },
+      "permitted": {
+       "detected": 42,
+       "of": 108
+      }
+     },
+     "noisy_drum": {
+      "correction": {
+       "detected": 24,
+       "of": 24
+      },
+      "defect": {
+       "detected": 136,
+       "of": 156
+      },
+      "permitted": {
+       "detected": 42,
+       "of": 108
+      }
+     },
+     "sustained_synth": {
+      "correction": {
+       "detected": 8,
+       "of": 8
+      },
+      "defect": {
+       "detected": 46,
+       "of": 50
+      },
+      "permitted": {
+       "detected": 14,
+       "of": 36
+      }
+     },
+     "tonal_drum": {
+      "correction": {
+       "detected": 32,
+       "of": 32
+      },
+      "defect": {
+       "detected": 186,
+       "of": 208
+      },
+      "permitted": {
+       "detected": 56,
+       "of": 144
+      }
+     }
+    },
+    "calibration": {
+     "correction": {
+      "detected": 40,
+      "of": 40
+     },
+     "defect": {
+      "detected": 225,
+      "of": 260
+     },
+     "permitted": {
+      "detected": 70,
+      "of": 180
+     }
+    },
+    "development": {
+     "correction": {
+      "detected": 8,
+      "of": 8
+     },
+     "defect": {
+      "detected": 46,
+      "of": 50
+     },
+     "permitted": {
+      "detected": 14,
+      "of": 36
+     }
+    },
+    "validation": {
+     "correction": {
+      "detected": 40,
+      "of": 40
+     },
+     "defect": {
+      "detected": 224,
+      "of": 259
+     },
+     "permitted": {
+      "detected": 70,
+      "of": 180
+     }
+    }
+   }
+  },
+  "validation_at_k_cal": {
+   "correction": {
+    "detected": 0,
+    "of": 40
+   },
+   "defect": {
+    "detected": 5,
+    "of": 259
+   },
+   "permitted": {
+    "detected": 0,
+    "of": 180
+   }
+  }
+ },
+ "permitted_suite_519": {
+  "rows": [
+   {
+    "case": "ls/decay_tau",
+    "estimator": "decay_tau",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 4.28530604e-16,
+    "threshold": 1e-09,
+    "verdict": "PASS"
+   },
+   {
+    "case": "ls/schroeder_t20",
+    "estimator": "schroeder_t20",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 1.01122598e-15,
+    "threshold": 1e-09,
+    "verdict": "PASS"
+   },
+   {
+    "case": "ls/onset_time",
+    "estimator": "onsets[0]",
+    "exceedances": 0,
+    "policy": "tracks",
+    "refusals": 0,
+    "residual_worst": 1.42108547e-14,
+    "threshold": 0.05,
+    "verdict": "PASS"
+   },
+   {
+    "case": "pol/norm_rms_db",
+    "estimator": "peak-normalised RMS",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 0.0,
+    "threshold": 1e-09,
+    "verdict": "PASS"
+   },
+   {
+    "case": "pol/centroid",
+    "estimator": "spectral_centroid",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 0.0,
+    "threshold": 1e-09,
+    "verdict": "PASS"
+   },
+   {
+    "case": "pol/correlated_mix_db",
+    "estimator": "mix level vs self-mix",
+    "exceedances": 0,
+    "policy": "moves_below",
+    "refusals": 0,
+    "residual_worst": -300.0,
+    "threshold": -40.0,
+    "verdict": "PASS"
+   },
+   {
+    "case": "gain/norm_rms_db",
+    "estimator": "peak-normalised RMS",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 1.77635684e-15,
+    "threshold": 1e-09,
+    "verdict": "PASS"
+   },
+   {
+    "case": "gain/centroid",
+    "estimator": "spectral_centroid",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 6.49631391e-16,
+    "threshold": 1e-09,
+    "verdict": "PASS"
+   },
+   {
+    "case": "gain/decay_tau",
+    "estimator": "decay_tau",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 1.97295933e-15,
+    "threshold": 1e-09,
+    "verdict": "PASS"
+   },
+   {
+    "case": "gain/accent_ratio_db",
+    "estimator": "accent ratio",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 3.55271368e-15,
+    "threshold": 1e-09,
+    "verdict": "PASS"
+   },
+   {
+    "case": "gain/accent_second_only",
+    "estimator": "accent ratio",
+    "exceedances": 0,
+    "policy": "tracks",
+    "refusals": 0,
+    "residual_worst": 5.32907052e-15,
+    "threshold": 0.02,
+    "verdict": "PASS"
+   },
+   {
+    "case": "noise/psd_slope",
+    "estimator": "psd_slope_db_oct",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 0.0963348613,
+    "threshold": 0.6,
+    "verdict": "PASS"
+   },
+   {
+    "case": "noise/centroid",
+    "estimator": "spectral_centroid",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 0.0169722344,
+    "threshold": 0.059,
+    "verdict": "PASS"
+   },
+   {
+    "case": "noise/decay_tau",
+    "estimator": "decay_tau",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 0.000394284043,
+    "threshold": 0.0042,
+    "verdict": "PASS"
+   },
+   {
+    "case": "noise/waveform_max_db",
+    "estimator": "peak sample difference",
+    "exceedances": 0,
+    "policy": "moves_above",
+    "refusals": 0,
+    "residual_worst": 2.27719073,
+    "threshold": -12.0,
+    "verdict": "PASS"
+   },
+   {
+    "case": "phase/centroid",
+    "estimator": "spectral_centroid",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 8.14844655e-06,
+    "threshold": 7.9e-05,
+    "verdict": "PASS"
+   },
+   {
+    "case": "phase/band_ratio_db",
+    "estimator": "band ratio h1-2 / h3-6",
+    "exceedances": 0,
+    "policy": "permitted",
+    "refusals": 0,
+    "residual_worst": 0.000248482816,
+    "threshold": 0.0017,
+    "verdict": "PASS"
+   },
+   {
+    "case": "phase/sample_rms_db",
+    "estimator": "RMS of the difference",
+    "exceedances": 0,
+    "policy": "moves_above",
+    "refusals": 0,
+    "residual_worst": -1.75445769,
+    "threshold": -6.0,
+    "verdict": "PASS"
+   }
+  ],
+  "seed_base": "VALIDATE_BASE",
+  "trials": 12
+ },
+ "provenance": {
+  "command": "tools/probes/challenge_set.py run",
+  "commit": "be7bc77ee373c203f8ba4caac041e61d167052aa",
+  "dirty": false,
+  "note": "excluded from full_results_sha256: the same inputs give the same digest on any commit",
+  "refs": "/tmp/tr808-fischer-521"
+ },
+ "reports": {
+  "band_pair_db": {
+   "corrections": {
+    "genuine_pitch": {
+     "label": "NO-VERDICT",
+     "mistracked": 0,
+     "moved": 0,
+     "scored": 0,
+     "tracked": 0
+    }
+   },
+   "detectable_change": {
+    "clip_fraction": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "escape_hf_tone": {
+     "severity_ordered": false,
+     "weakest_detected": {}
+    },
+    "escape_requantise_6bit": {
+     "severity_ordered": false,
+     "weakest_detected": {}
+    },
+    "escape_tail_noise": {
+     "severity_ordered": false,
+     "weakest_detected": {}
+    },
+    "narrowband_tone_rel_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "noise_broadband_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "noise_tail_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "quantisation_bits": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    }
+   },
+   "estimator": "band_pair_db",
+   "false_alarms": {
+    "delay_ms": {
+     "moved": 0,
+     "scored": 0
+    },
+    "gain_db": {
+     "moved": 0,
+     "scored": 0
+    },
+    "pd_gain": {
+     "moved": 0,
+     "scored": 0
+    },
+    "pd_leading_silence": {
+     "moved": 0,
+     "scored": 0
+    },
+    "pd_polarity": {
+     "moved": 0,
+     "scored": 0
+    }
+   },
+   "false_alarms_synthetic_519": "no #519 row exercises band_pair_db",
+   "five_questions": {},
+   "known_answers": {
+    "not_in_suite": "NOT in #517's synthetic suite (that suite covers model/audio_measure.py; band_pair_db lives in tools/run_case.py). Its known-answer evidence is tools/probes/estimator_domains.py section 1, which is cited and NOT re-run here."
+   },
+   "missed_defects": {
+    "clip_fraction": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_hf_tone": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_requantise_6bit": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_tail_noise": {
+     "count": 0,
+     "examples": []
+    },
+    "narrowband_tone_rel_db": {
+     "count": 0,
+     "examples": []
+    },
+    "noise_broadband_snr_db": {
+     "count": 0,
+     "examples": []
+    },
+    "noise_tail_snr_db": {
+     "count": 0,
+     "examples": []
+    },
+    "quantisation_bits": {
+     "count": 0,
+     "examples": []
+    }
+   },
+   "no_verdicts": {
+    "anchor_level_refusals": 20,
+    "anchors_refused": {
+     "bd2550": "outside validated domain: detuning = 0.01357 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "bd5050": "outside validated domain: detuning = 0.01382 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "cb": "outside validated domain: decay_rate = 1.417 dB of A^2*tau bias the record's own two bands imply, above the validated maximum 0.5 dB of A^2*tau bias the record'",
+     "ch": "outside validated domain: detuning = 0.04121 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "cl": "outside validated domain: detuning = 0.01045 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "cp": "outside validated domain: detuning = 0.01944 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "cy5025": "outside validated domain: decay_rate = 10.82 dB of A^2*tau bias the record's own two bands imply, above the validated maximum 0.5 dB of A^2*tau bias the record'",
+     "cy7550": "outside validated domain: decay_rate = 16.32 dB of A^2*tau bias the record's own two bands imply, above the validated maximum 0.5 dB of A^2*tau bias the record'",
+     "ht75": "outside validated domain: detuning = 0.05187 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "lc50": "outside validated domain: detuning = 0.0578 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a re",
+     "lt50": "outside validated domain: detuning = 0.003408 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a ",
+     "ma": "outside validated domain: detuning = 0.09919 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "mt25": "outside validated domain: detuning = 0.009066 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a ",
+     "oh10": "outside validated domain: detuning = 0.03798 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "oh50": "outside validated domain: detuning = 0.03669 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "rs": "outside validated domain: decay_rate = -3.776 dB of A^2*tau bias the record's own two bands imply, below the validated minimum -0.5 dB of A^2*tau bias the recor",
+     "sd0050": "outside validated domain: detuning = 0.0006467 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a",
+     "sd2575": "outside validated domain: decay_rate = 18.4 dB of A^2*tau bias the record's own two bands imply, above the validated maximum 0.5 dB of A^2*tau bias the record's",
+     "sd5050": "outside validated domain: detuning = 0.03703 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r",
+     "sd7525": "outside validated domain: detuning = 0.09015 fraction of the band edge a resolved line must clear, below the validated minimum 0.1 fraction of the band edge a r"
+    },
+    "reasons": {},
+    "rung_level": 0
+   },
+   "out_of_remit_answers": {
+    "answered": {
+     "surge-drive-m12db": -19.7140063
+    },
+    "refused": 1
+   },
+   "rank_reversals": {
+    "count": 0,
+    "examples": []
+   },
+   "remit": "every drum anchor; its own validated-domain guard decides where it answers, and its refusals are counted as no-verdicts with their reasons",
+   "resolution": {
+    "relative": false,
+    "value": 0.2
+   },
+   "unit": "dB"
+  },
+  "decay_tau": {
+   "corrections": {
+    "genuine_pitch": {
+     "label": "TRACKS",
+     "mistracked": 0,
+     "moved": 0,
+     "scored": 24,
+     "tracked": 24
+    }
+   },
+   "detectable_change": {
+    "clip_fraction": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "bd2550": 0.5,
+      "bd5050": 0.5
+     }
+    },
+    "escape_hf_tone": {
+     "severity_ordered": false,
+     "weakest_detected": {}
+    },
+    "escape_requantise_6bit": {
+     "severity_ordered": false,
+     "weakest_detected": {}
+    },
+    "escape_tail_noise": {
+     "severity_ordered": false,
+     "weakest_detected": {}
+    },
+    "narrowband_tone_rel_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "noise_broadband_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "noise_tail_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "quantisation_bits": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    }
+   },
+   "estimator": "decay_tau",
+   "false_alarms": {
+    "delay_ms": {
+     "moved": 0,
+     "scored": 30
+    },
+    "gain_db": {
+     "moved": 0,
+     "scored": 36
+    },
+    "pd_gain": {
+     "moved": 0,
+     "scored": 18
+    },
+    "pd_leading_silence": {
+     "moved": 0,
+     "scored": 18
+    },
+    "pd_polarity": {
+     "moved": 0,
+     "scored": 6
+    }
+   },
+   "false_alarms_synthetic_519": [
+    {
+     "case": "ls/decay_tau",
+     "estimator": "decay_tau",
+     "exceedances": 0,
+     "policy": "permitted",
+     "refusals": 0,
+     "residual_worst": 4.28530604e-16,
+     "threshold": 1e-09,
+     "verdict": "PASS"
+    },
+    {
+     "case": "gain/decay_tau",
+     "estimator": "decay_tau",
+     "exceedances": 0,
+     "policy": "permitted",
+     "refusals": 0,
+     "residual_worst": 1.97295933e-15,
+     "threshold": 1e-09,
+     "verdict": "PASS"
+    },
+    {
+     "case": "noise/decay_tau",
+     "estimator": "decay_tau",
+     "exceedances": 0,
+     "policy": "permitted",
+     "refusals": 0,
+     "residual_worst": 0.000394284043,
+     "threshold": 0.0042,
+     "verdict": "PASS"
+    }
+   ],
+   "five_questions": {
+    "clip_fraction": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 4
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     }
+    },
+    "delay_ms": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 6,
+      "yes": 0
+     }
+    },
+    "gain_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 6,
+      "yes": 0
+     }
+    },
+    "narrowband_tone_rel_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     }
+    },
+    "noise_broadband_snr_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     }
+    },
+    "noise_tail_snr_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 6,
+      "yes": 0
+     }
+    },
+    "quantisation_bits": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     }
+    },
+    "resample_ratio": {
+     "q1_detects_above_resolution": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 6,
+      "yes": 0
+     }
+    }
+   },
+   "known_answers": {
+    "bias_pct": 0.0524324324,
+    "counts": {
+     "IDENTIFIED": 13,
+     "INSUFFICIENT": 32,
+     "NOT-MEASURED": 4,
+     "PASS": 37,
+     "REFUSED": 84
+    },
+    "failures": [],
+    "failures_total": 0,
+    "fixtures": 170,
+    "max_abs_err_pct": 0.93,
+    "mean_abs_err_pct": 0.164864865,
+    "parsed_errors": 37
+   },
+   "missed_defects": {
+    "clip_fraction": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_hf_tone": {
+     "count": 2,
+     "examples": [
+      "bd2550@named",
+      "lc50@named"
+     ]
+    },
+    "escape_requantise_6bit": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_tail_noise": {
+     "count": 3,
+     "examples": [
+      "mt25@named",
+      "ht75@named",
+      "lc50@named"
+     ]
+    },
+    "narrowband_tone_rel_db": {
+     "count": 14,
+     "examples": [
+      "bd5050@-80.0",
+      "bd5050@-60.0",
+      "bd2550@-80.0",
+      "bd2550@-60.0",
+      "bd2550@-40.0",
+      "lt50@-80.0"
+     ]
+    },
+    "noise_broadband_snr_db": {
+     "count": 22,
+     "examples": [
+      "bd5050@80.0",
+      "bd5050@60.0",
+      "bd5050@45.0",
+      "bd2550@80.0",
+      "bd2550@60.0",
+      "bd2550@45.0"
+     ]
+    },
+    "noise_tail_snr_db": {
+     "count": 0,
+     "examples": []
+    },
+    "quantisation_bits": {
+     "count": 21,
+     "examples": [
+      "bd5050@16.0",
+      "bd5050@12.0",
+      "bd5050@10.0",
+      "bd2550@16.0",
+      "bd2550@12.0",
+      "bd2550@10.0"
+     ]
+    }
+   },
+   "no_verdicts": {
+    "anchor_level_refusals": 16,
+    "anchors_refused": {
+     "cb": "not a single exponential",
+     "ch": "too few samples above the floor",
+     "cl": "not a single exponential",
+     "cp": "outside validated domain: record_length = 9.319 dB of envelope fall inside the analysed window, below the validated minimum 12 dB of envelope fall inside the an",
+     "cy5025": "too few samples above the floor",
+     "cy7550": "too few samples above the floor",
+     "ma": "too few samples above the floor",
+     "oh10": "outside validated domain: signal_class = 'stationary', validated on decaying",
+     "oh50": "outside validated domain: signal_class = 'stationary', validated on decaying",
+     "rs": "not a single exponential",
+     "sd0050": "not a single exponential",
+     "sd2575": "outside validated domain: record_length = 1.349 dB of envelope fall inside the analysed window, below the validated minimum 12 dB of envelope fall inside the an",
+     "sd5050": "outside validated domain: record_length = 8.89 dB of envelope fall inside the analysed window, below the validated minimum 12 dB of envelope fall inside the ana",
+     "sd7525": "not a single exponential",
+     "surge-drive-0db": "peak too close to the end",
+     "surge-drive-m12db": "peak too close to the end"
+    },
+    "reasons": {
+     "refused: not a single exponential": 92,
+     "the transform did not change the record": 36
+    },
+    "rung_level": 128
+   },
+   "out_of_remit_answers": {
+    "answered": {},
+    "refused": 0
+   },
+   "rank_reversals": {
+    "count": 0,
+    "examples": []
+   },
+   "remit": "every anchor -- on a sustained tone the correct answer is a refusal, which is how Q5 (does it abstain) gets a case",
+   "resolution": {
+    "relative": true,
+    "value": 0.08
+   },
+   "unit": "s"
+  },
+  "inharmonic_fraction_db": {
+   "corrections": {
+    "genuine_pitch": {
+     "label": "NOT-DERIVABLE",
+     "mistracked": 0,
+     "moved": 8,
+     "scored": 8,
+     "tracked": 0
+    }
+   },
+   "detectable_change": {
+    "clip_fraction": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "bd2550": 0.5,
+      "bd5050": 0.5
+     }
+    },
+    "escape_hf_tone": {
+     "severity_ordered": false,
+     "weakest_detected": {
+      "bd2550": "named",
+      "bd5050": "named"
+     }
+    },
+    "escape_requantise_6bit": {
+     "severity_ordered": false,
+     "weakest_detected": {
+      "bd2550": "named",
+      "bd5050": "named"
+     }
+    },
+    "escape_tail_noise": {
+     "severity_ordered": false,
+     "weakest_detected": {
+      "bd2550": "named",
+      "bd5050": "named"
+     }
+    },
+    "narrowband_tone_rel_db": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "bd2550": -80.0,
+      "bd5050": -80.0
+     }
+    },
+    "noise_broadband_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "bd2550": 60.0,
+      "bd5050": 60.0
+     }
+    },
+    "noise_tail_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "quantisation_bits": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "bd2550": 12.0,
+      "bd5050": 12.0
+     }
+    }
+   },
+   "estimator": "inharmonic_fraction_db",
+   "false_alarms": {
+    "delay_ms": {
+     "moved": 7,
+     "scored": 10
+    },
+    "gain_db": {
+     "moved": 0,
+     "scored": 12
+    },
+    "pd_gain": {
+     "moved": 0,
+     "scored": 6
+    },
+    "pd_leading_silence": {
+     "moved": 6,
+     "scored": 6
+    },
+    "pd_polarity": {
+     "moved": 0,
+     "scored": 2
+    }
+   },
+   "false_alarms_synthetic_519": "no #519 row exercises inharmonic_fraction_db",
+   "five_questions": {
+    "clip_fraction": {
+     "q1_detects_above_resolution": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     }
+    },
+    "delay_ms": {
+     "q1_detects_above_resolution": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     }
+    },
+    "gain_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 2
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     }
+    },
+    "narrowband_tone_rel_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     }
+    },
+    "noise_broadband_snr_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     }
+    },
+    "noise_tail_snr_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 2
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     }
+    },
+    "quantisation_bits": {
+     "q1_detects_above_resolution": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     }
+    },
+    "resample_ratio": {
+     "q1_detects_above_resolution": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 2,
+      "no": 0,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 2,
+      "yes": 0
+     }
+    }
+   },
+   "known_answers": {
+    "bias_pct": 1.135,
+    "counts": {
+     "NOT-MEASURED": 4,
+     "PASS": 6,
+     "REFUSED": 19,
+     "SKIP": 141
+    },
+    "failures": [],
+    "failures_total": 0,
+    "fixtures": 170,
+    "max_abs_err_pct": 3.62,
+    "mean_abs_err_pct": 1.135,
+    "parsed_errors": 6
+   },
+   "missed_defects": {
+    "clip_fraction": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_hf_tone": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_requantise_6bit": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_tail_noise": {
+     "count": 0,
+     "examples": []
+    },
+    "narrowband_tone_rel_db": {
+     "count": 0,
+     "examples": []
+    },
+    "noise_broadband_snr_db": {
+     "count": 2,
+     "examples": [
+      "bd5050@80.0",
+      "bd2550@80.0"
+     ]
+    },
+    "noise_tail_snr_db": {
+     "count": 0,
+     "examples": []
+    },
+    "quantisation_bits": {
+     "count": 2,
+     "examples": [
+      "bd5050@16.0",
+      "bd2550@16.0"
+     ]
+    }
+   },
+   "no_verdicts": {
+    "anchor_level_refusals": 0,
+    "anchors_refused": {},
+    "reasons": {
+     "the transform did not change the record": 12
+    },
+    "rung_level": 12
+   },
+   "out_of_remit_answers": {
+    "answered": {
+     "cb": -0.0317371627,
+     "cp": -0.501173501,
+     "cy5025": -0.909528877,
+     "cy7550": -0.667788716,
+     "ht75": -5.26761386,
+     "lc50": -52.3197381,
+     "lt50": -0.010155788,
+     "mt25": -0.105490687,
+     "oh10": -1.46718831,
+     "oh50": -2.28414986,
+     "sd0050": -0.648103165,
+     "sd2575": -1.69185384,
+     "sd5050": -1.52570405
+    },
+    "refused": 7
+   },
+   "rank_reversals": {
+    "count": 0,
+    "examples": []
+   },
+   "remit": "the bass drum only: perturbation_ladder.py reads it at a fixed f0 of 49.4 Hz, which is the BD's",
+   "resolution": {
+    "relative": false,
+    "value": 0.1
+   },
+   "unit": "dB"
+  },
+  "mel_dac": {
+   "corrections": {
+    "genuine_pitch": {
+     "label": "FLAGS-CORRECTION",
+     "mistracked": 0,
+     "moved": 88,
+     "scored": 88,
+     "tracked": 0
+    }
+   },
+   "detectable_change": {
+    "clip_fraction": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "bd2550": 0.5,
+      "bd5050": 0.5,
+      "cb": 0.5,
+      "ch": 0.2,
+      "cl": 0.5,
+      "cp": 0.5,
+      "cy5025": 0.5,
+      "cy7550": 0.5,
+      "ht75": 0.5,
+      "lc50": 0.5,
+      "lt50": 0.5,
+      "ma": 0.5,
+      "mt25": 0.5,
+      "oh10": 0.5,
+      "oh50": 0.5,
+      "rs": 0.5,
+      "sd0050": 0.5,
+      "sd2575": 0.5,
+      "sd5050": 0.5,
+      "sd7525": 0.5,
+      "surge-drive-0db": 0.5,
+      "surge-drive-m12db": 0.5
+     }
+    },
+    "escape_hf_tone": {
+     "severity_ordered": false,
+     "weakest_detected": {
+      "bd2550": "named",
+      "bd5050": "named",
+      "cb": "named",
+      "ch": "named",
+      "cl": "named",
+      "cp": "named",
+      "cy5025": "named",
+      "cy7550": "named",
+      "ht75": "named",
+      "lc50": "named",
+      "lt50": "named",
+      "ma": "named",
+      "mt25": "named",
+      "oh10": "named",
+      "oh50": "named",
+      "rs": "named",
+      "sd0050": "named",
+      "sd2575": "named",
+      "sd5050": "named",
+      "sd7525": "named",
+      "surge-drive-0db": "named",
+      "surge-drive-m12db": "named"
+     }
+    },
+    "escape_requantise_6bit": {
+     "severity_ordered": false,
+     "weakest_detected": {
+      "bd2550": "named",
+      "bd5050": "named",
+      "cb": "named",
+      "ch": "named",
+      "cl": "named",
+      "cp": "named",
+      "cy5025": "named",
+      "cy7550": "named",
+      "ht75": "named",
+      "lc50": "named",
+      "lt50": "named",
+      "ma": "named",
+      "mt25": "named",
+      "oh10": "named",
+      "oh50": "named",
+      "rs": "named",
+      "sd0050": "named",
+      "sd2575": "named",
+      "sd5050": "named",
+      "sd7525": "named",
+      "surge-drive-0db": "named",
+      "surge-drive-m12db": "named"
+     }
+    },
+    "escape_tail_noise": {
+     "severity_ordered": false,
+     "weakest_detected": {
+      "bd2550": "named",
+      "bd5050": "named",
+      "cb": "named",
+      "ch": "named",
+      "cl": "named",
+      "cp": "named",
+      "cy5025": "named",
+      "cy7550": "named",
+      "ht75": "named",
+      "lc50": "named",
+      "lt50": "named",
+      "ma": "named",
+      "mt25": "named",
+      "oh10": "named",
+      "oh50": "named",
+      "rs": "named",
+      "sd0050": "named",
+      "sd2575": "named",
+      "sd5050": "named",
+      "sd7525": "named"
+     }
+    },
+    "narrowband_tone_rel_db": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "bd2550": -80.0,
+      "bd5050": -80.0,
+      "cb": -80.0,
+      "ch": -80.0,
+      "cl": -80.0,
+      "cp": -80.0,
+      "cy5025": -60.0,
+      "cy7550": -60.0,
+      "ht75": -80.0,
+      "lc50": -80.0,
+      "lt50": -80.0,
+      "ma": -80.0,
+      "mt25": -80.0,
+      "oh10": -60.0,
+      "oh50": -60.0,
+      "rs": -80.0,
+      "sd0050": -80.0,
+      "sd2575": -80.0,
+      "sd5050": -80.0,
+      "sd7525": -60.0,
+      "surge-drive-0db": -80.0,
+      "surge-drive-m12db": -80.0
+     }
+    },
+    "noise_broadband_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "bd2550": 80.0,
+      "bd5050": 80.0,
+      "cb": 60.0,
+      "ch": 60.0,
+      "cl": 80.0,
+      "cp": 60.0,
+      "cy5025": 60.0,
+      "cy7550": 60.0,
+      "ht75": 80.0,
+      "lc50": 80.0,
+      "lt50": 80.0,
+      "ma": 80.0,
+      "mt25": 80.0,
+      "oh10": 60.0,
+      "oh50": 60.0,
+      "rs": 80.0,
+      "sd0050": 60.0,
+      "sd2575": 60.0,
+      "sd5050": 60.0,
+      "sd7525": 60.0,
+      "surge-drive-0db": 80.0,
+      "surge-drive-m12db": 80.0
+     }
+    },
+    "noise_tail_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "quantisation_bits": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "bd2550": 16.0,
+      "bd5050": 16.0,
+      "cb": 16.0,
+      "ch": 16.0,
+      "cl": 16.0,
+      "cp": 12.0,
+      "cy5025": 12.0,
+      "cy7550": 12.0,
+      "ht75": 16.0,
+      "lc50": 16.0,
+      "lt50": 16.0,
+      "ma": 16.0,
+      "mt25": 16.0,
+      "oh10": 12.0,
+      "oh50": 12.0,
+      "rs": 16.0,
+      "sd0050": 12.0,
+      "sd2575": 12.0,
+      "sd5050": 12.0,
+      "sd7525": 12.0,
+      "surge-drive-0db": 12.0,
+      "surge-drive-m12db": 12.0
+     }
+    }
+   },
+   "estimator": "mel_dac",
+   "false_alarms": {
+    "delay_ms": {
+     "moved": 110,
+     "scored": 110
+    },
+    "gain_db": {
+     "moved": 0,
+     "scored": 132
+    },
+    "pd_gain": {
+     "moved": 0,
+     "scored": 66
+    },
+    "pd_leading_silence": {
+     "moved": 66,
+     "scored": 66
+    },
+    "pd_polarity": {
+     "moved": 0,
+     "scored": 22
+    }
+   },
+   "false_alarms_synthetic_519": "no #519 row exercises mel_dac",
+   "known_answers": {
+    "identical": 0.0,
+    "identical_want": 0.0,
+    "log_clamp_deviation": 1.39575997e-05,
+    "ok": true,
+    "x2_gain": 0.693133223,
+    "x2_gain_want": 0.693147181
+   },
+   "missed_defects": {
+    "clip_fraction": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_hf_tone": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_requantise_6bit": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_tail_noise": {
+     "count": 0,
+     "examples": []
+    },
+    "narrowband_tone_rel_db": {
+     "count": 5,
+     "examples": [
+      "sd7525@-80.0",
+      "oh50@-80.0",
+      "oh10@-80.0",
+      "cy5025@-80.0",
+      "cy7550@-80.0"
+     ]
+    },
+    "noise_broadband_snr_db": {
+     "count": 11,
+     "examples": [
+      "sd5050@80.0",
+      "sd2575@80.0",
+      "sd7525@80.0",
+      "sd0050@80.0",
+      "cp@80.0",
+      "cb@80.0"
+     ]
+    },
+    "noise_tail_snr_db": {
+     "count": 0,
+     "examples": []
+    },
+    "quantisation_bits": {
+     "count": 11,
+     "examples": [
+      "sd5050@16.0",
+      "sd2575@16.0",
+      "sd7525@16.0",
+      "sd0050@16.0",
+      "cp@16.0",
+      "oh50@16.0"
+     ]
+    }
+   },
+   "no_verdicts": {
+    "anchor_level_refusals": 0,
+    "anchors_refused": {},
+    "reasons": {
+     "the transform changed only 1 sample(s), under 1 ms": 30,
+     "the transform changed only 16 sample(s), under 1 ms": 1,
+     "the transform changed only 2 sample(s), under 1 ms": 12,
+     "the transform did not change the record": 92
+    },
+    "rung_level": 135
+   },
+   "rank_reversals": {
+    "count": 18,
+    "examples": [
+     {
+      "anchor": "rs",
+      "column": "genuine_pitch vs escape_tail_noise",
+      "stronger": "correction x1.0274",
+      "stronger_reading": 0.428164724,
+      "tolerance": 0.014845999,
+      "weaker": "escape escape_tail_noise",
+      "weaker_reading": 0.17038055
+     },
+     {
+      "anchor": "cl",
+      "column": "genuine_pitch vs escape_tail_noise",
+      "stronger": "correction x1.0274",
+      "stronger_reading": 0.383691574,
+      "tolerance": 0.0163380428,
+      "weaker": "escape escape_tail_noise",
+      "weaker_reading": 0.158657958
+     },
+     {
+      "anchor": "sd5050",
+      "column": "genuine_pitch vs escape_hf_tone",
+      "stronger": "correction x1.0274",
+      "stronger_reading": 0.518402469,
+      "tolerance": 0.0208809304,
+      "weaker": "escape escape_hf_tone",
+      "weaker_reading": 0.331450183
+     },
+     {
+      "anchor": "sd2575",
+      "column": "genuine_pitch vs escape_hf_tone",
+      "stronger": "correction x1.0274",
+      "stronger_reading": 0.510498144,
+      "tolerance": 0.0220790295,
+      "weaker": "escape escape_hf_tone",
+      "weaker_reading": 0.320428782
+     },
+     {
+      "anchor": "sd7525",
+      "column": "genuine_pitch vs escape_hf_tone",
+      "stronger": "correction x1.0274",
+      "stronger_reading": 0.48765251,
+      "tolerance": 0.0195015844,
+      "weaker": "escape escape_hf_tone",
+      "weaker_reading": 0.287126519
+     },
+     {
+      "anchor": "sd7525",
+      "column": "genuine_pitch vs escape_tail_noise",
+      "stronger": "correction x1.0274",
+      "stronger_reading": 0.48765251,
+      "tolerance": 0.0195015844,
+      "weaker": "escape escape_tail_noise",
+      "weaker_reading": 0.101194937
+     }
+    ]
+   },
+   "remit": "every anchor. A paired distance, not a property: it reads a DIFFERENCE between an anchor and its transformed self, so moving is detection on a defect column and a false alarm on a permitted or correction column.",
+   "resolution": null,
+   "unit": "nats (mean absolute log mel-magnitude difference)"
+  },
+  "tone_ratio_db": {
+   "corrections": {
+    "genuine_pitch": {
+     "label": "NOT-DERIVABLE",
+     "mistracked": 0,
+     "moved": 17,
+     "scored": 24,
+     "tracked": 0
+    }
+   },
+   "detectable_change": {
+    "clip_fraction": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "ch": 0.1,
+      "cy5025": 0.05,
+      "cy7550": 0.05,
+      "oh10": 0.2,
+      "oh50": 0.5
+     }
+    },
+    "escape_hf_tone": {
+     "severity_ordered": false,
+     "weakest_detected": {}
+    },
+    "escape_requantise_6bit": {
+     "severity_ordered": false,
+     "weakest_detected": {
+      "cb": "named",
+      "cy5025": "named",
+      "cy7550": "named",
+      "oh10": "named",
+      "oh50": "named"
+     }
+    },
+    "escape_tail_noise": {
+     "severity_ordered": false,
+     "weakest_detected": {
+      "cy5025": "named",
+      "cy7550": "named",
+      "oh10": "named",
+      "oh50": "named"
+     }
+    },
+    "narrowband_tone_rel_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "noise_broadband_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "cb": 45.0,
+      "ch": 80.0,
+      "cy5025": 60.0,
+      "cy7550": 60.0,
+      "oh10": 45.0,
+      "oh50": 80.0
+     }
+    },
+    "noise_tail_snr_db": {
+     "severity_ordered": true,
+     "weakest_detected": {}
+    },
+    "quantisation_bits": {
+     "severity_ordered": true,
+     "weakest_detected": {
+      "cb": 12.0,
+      "ch": 16.0,
+      "cy5025": 10.0,
+      "cy7550": 10.0,
+      "oh10": 16.0,
+      "oh50": 16.0
+     }
+    }
+   },
+   "estimator": "tone_ratio_db",
+   "false_alarms": {
+    "delay_ms": {
+     "moved": 9,
+     "scored": 28
+    },
+    "gain_db": {
+     "moved": 0,
+     "scored": 36
+    },
+    "pd_gain": {
+     "moved": 0,
+     "scored": 18
+    },
+    "pd_leading_silence": {
+     "moved": 9,
+     "scored": 15
+    },
+    "pd_polarity": {
+     "moved": 0,
+     "scored": 6
+    }
+   },
+   "false_alarms_synthetic_519": "no #519 row exercises tone_ratio_db",
+   "five_questions": {
+    "clip_fraction": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 5,
+      "yes": 1
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 4,
+      "yes": 2
+     }
+    },
+    "delay_ms": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 4,
+      "yes": 2
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 5,
+      "yes": 1
+     }
+    },
+    "gain_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 6,
+      "yes": 0
+     }
+    },
+    "narrowband_tone_rel_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 6,
+      "yes": 0
+     }
+    },
+    "noise_broadband_snr_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 6,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 4,
+      "yes": 2
+     }
+    },
+    "noise_tail_snr_db": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 0,
+      "yes": 6
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 6,
+      "yes": 0
+     }
+    },
+    "quantisation_bits": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 0,
+      "no": 6,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 4,
+      "yes": 2
+     }
+    },
+    "resample_ratio": {
+     "q1_detects_above_resolution": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q2_tracks_introduced_magnitude": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q3_more_defect_more_error": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q4_false_unrelated_move": {
+      "n/a": 6,
+      "no": 0,
+      "yes": 0
+     },
+     "q5_abstains_when_insufficient": {
+      "n/a": 0,
+      "no": 5,
+      "yes": 1
+     }
+    }
+   },
+   "known_answers": {
+    "not_in_suite": "NOT in #517's suite (tools/run_case.py). Known-answer evidence: tools/probes/estimator_domains.py section 4(a), cited and not re-run here."
+   },
+   "missed_defects": {
+    "clip_fraction": {
+     "count": 11,
+     "examples": [
+      "cb@0.5",
+      "cb@0.2",
+      "cb@0.1",
+      "cb@0.05",
+      "cb@0.02",
+      "cy5025@0.5"
+     ]
+    },
+    "escape_hf_tone": {
+     "count": 6,
+     "examples": [
+      "cb@named",
+      "ch@named",
+      "oh50@named",
+      "oh10@named",
+      "cy5025@named",
+      "cy7550@named"
+     ]
+    },
+    "escape_requantise_6bit": {
+     "count": 0,
+     "examples": []
+    },
+    "escape_tail_noise": {
+     "count": 1,
+     "examples": [
+      "cb@named"
+     ]
+    },
+    "narrowband_tone_rel_db": {
+     "count": 36,
+     "examples": [
+      "cb@-80.0",
+      "cb@-60.0",
+      "cb@-40.0",
+      "cb@-30.0",
+      "cb@-20.0",
+      "cb@-10.0"
+     ]
+    },
+    "noise_broadband_snr_db": {
+     "count": 6,
+     "examples": [
+      "cb@80.0",
+      "cb@60.0",
+      "oh10@80.0",
+      "oh10@60.0",
+      "cy5025@80.0",
+      "cy7550@80.0"
+     ]
+    },
+    "noise_tail_snr_db": {
+     "count": 0,
+     "examples": []
+    },
+    "quantisation_bits": {
+     "count": 5,
+     "examples": [
+      "cb@16.0",
+      "cy5025@16.0",
+      "cy5025@12.0",
+      "cy7550@16.0",
+      "cy7550@12.0"
+     ]
+    }
+   },
+   "no_verdicts": {
+    "anchor_level_refusals": 0,
+    "anchors_refused": {},
+    "reasons": {
+     "refused: denominator: no line within +-10 % of 540.0 Hz: no prominent line in the band": 14,
+     "refused: numerator: no line within +-10 % of 800.0 Hz: no prominent line in the band": 9,
+     "the transform changed only 1 sample(s), under 1 ms": 6,
+     "the transform changed only 16 sample(s), under 1 ms": 1,
+     "the transform changed only 2 sample(s), under 1 ms": 6,
+     "the transform did not change the record": 25
+    },
+    "rung_level": 61
+   },
+   "out_of_remit_answers": {
+    "answered": {
+     "bd2550": -0.987802011,
+     "bd5050": 0.0949539098,
+     "cl": 0.0332541168,
+     "cp": 7.02145788,
+     "ht75": -5.34545643,
+     "lc50": -0.698202715,
+     "lt50": -6.9374202,
+     "ma": -4.94155586,
+     "mt25": -8.91664444,
+     "sd5050": 9.84142887,
+     "sd7525": 4.51015229
+    },
+    "refused": 5
+   },
+   "rank_reversals": {
+    "count": 11,
+    "examples": [
+     {
+      "anchor": "cb",
+      "column": "quantisation_bits",
+      "stronger": 6.0,
+      "stronger_reading": 0.895436737,
+      "tolerance": 0.05,
+      "weaker": 8.0,
+      "weaker_reading": 1.38718235
+     },
+     {
+      "anchor": "oh50",
+      "column": "quantisation_bits",
+      "stronger": 4.0,
+      "stronger_reading": 14.8233491,
+      "tolerance": 0.05,
+      "weaker": 6.0,
+      "weaker_reading": 16.9821356
+     },
+     {
+      "anchor": "oh50",
+      "column": "clip_fraction",
+      "stronger": 0.2,
+      "stronger_reading": 13.672697,
+      "tolerance": 0.05,
+      "weaker": 0.5,
+      "weaker_reading": 19.9554428
+     },
+     {
+      "anchor": "oh50",
+      "column": "clip_fraction",
+      "stronger": 0.1,
+      "stronger_reading": 16.9847695,
+      "tolerance": 0.05,
+      "weaker": 0.5,
+      "weaker_reading": 19.9554428
+     },
+     {
+      "anchor": "oh50",
+      "column": "clip_fraction",
+      "stronger": 0.05,
+      "stronger_reading": 18.6391075,
+      "tolerance": 0.05,
+      "weaker": 0.5,
+      "weaker_reading": 19.9554428
+     },
+     {
+      "anchor": "oh50",
+      "column": "clip_fraction",
+      "stronger": 0.02,
+      "stronger_reading": 17.2850921,
+      "tolerance": 0.05,
+      "weaker": 0.5,
+      "weaker_reading": 19.9554428
+     }
+    ]
+   },
+   "remit": "the voices built from the 540 Hz and 800 Hz square oscillators: cowbell, hats, cymbal",
+   "resolution": {
+    "relative": false,
+    "value": 0.05
+   },
+   "unit": "dB"
+  }
+ },
+ "schema": "challenge-set-results/1",
+ "status": "PARTIAL"
+}
