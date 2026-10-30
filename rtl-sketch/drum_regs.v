@@ -20,6 +20,7 @@
 //   0xB1 + 4m MODE_A2[m]      26 s        (16 modes: 0xB0..0xEF)
 //   0xB2 + 4m MODE_AMP[m]     16 u
 //   0xB3 + 4m MODE_NUM[m]      2
+//   0x30      COUPLE           1 (bit 0; 31..1 reserved, ignored)  contract 15.10: shared-bus DC coupling enable
 //   0xFF      RESET           --       every register and state of 15.8
 //
 // THE TWO BLOCKS MOVED IN REVISION 10 AND THE REASON IS THIS MODULE. At
@@ -68,7 +69,8 @@ module drum_regs #(
     output wire [MODES*26-1:0]     a1_bus,
     output wire [MODES*26-1:0]     a2_bus,
     output wire [MODES*16-1:0]     amp_bus,
-    output wire [MODES*2-1:0]      num_bus
+    output wire [MODES*2-1:0]      num_bus,
+    output reg                     couple_en        // COUPLE bit 0 (15.10), reset 0 = bypass
 );
 `ifdef INJECT_BUG_DRUM_RESET_ALIAS
     // NEGATIVE CONTROL: the revision-8 defect, relocated -- the top address of
@@ -119,6 +121,11 @@ module drum_regs #(
     always @(posedge clk) begin
         if (!rst_n) begin
             stops <= {STOPS{1'b0}};
+`ifdef INJECT_BUG_DRUM_COUPLE_EN_NORESET
+            if (!soft_rst) couple_en <= 1'b0;     // NEGATIVE CONTROL: the soft RESET leaves the enable on (15.10/15.8)
+`else
+            couple_en <= 1'b0;
+`endif
             for (i = 0; i < STOPS; i = i + 1) accent[i] <= 16'd0;
             for (i = 0; i < 6; i = i + 1)     osc[i]    <= 24'd0;
             for (i = 0; i < ENVS; i = i + 1)  begin ectl[i] <= 27'd0; peak[i] <= 24'd0; rate[i] <= 16'd0; frate[i] <= 16'd0; end
@@ -139,6 +146,7 @@ module drum_regs #(
             else if (wr_addr >= 8'h10 && wr_addr < 8'h10 + STOPS)        accent[a_idx[3:0]] <= wr_data[15:0];
 `endif
             else if (wr_addr >= 8'h20 && wr_addr < 8'h26)                osc[wr_addr[2:0]]    <= wr_data[23:0];
+            else if (wr_addr == 8'h30)                                   couple_en <= wr_data[0];     // 15.10; reserved bits ignored
             else if (wr_addr >= 8'h40 && wr_addr < 8'h40 + ENVS * 4) begin
                 if      (fld == 2'd0) ectl[e_idx] <= wr_data[26:0];      // 27 bits
                 else if (fld == 2'd1) peak[e_idx] <= wr_data[23:0];
