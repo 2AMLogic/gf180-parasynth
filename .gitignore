@@ -147,3 +147,6 @@ refprofile/cache/
 # repo-remote / build-box machine-local config (may hold credentials)
 .env
 .env.local
+
+# Repo Skills Codex-side machine-local install metadata (never committed)
+.agents/skills/repo/.install-local.json
