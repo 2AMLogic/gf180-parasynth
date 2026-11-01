@@ -252,8 +252,19 @@ def test_rho_is_invariant_to_record_gain():
     y, sr = lt.synth(tau_l=0.35, tau_m=0.875, a_m=0.35)
     a = lt.measure(y, sr)["rho"]["M"]
     b = lt.measure(0.01 * y, sr)["rho"]["M"]
+    assert set(a) == set(b), (a, b)
+    # A depth the instrument refuses (None) must be refused at both gains: a
+    # refusal that appears or vanishes with level IS gain dependence. pytest
+    # >= 9.2 raises TypeError on approx(None, rel=...), and 9.1.1 let it pass
+    # silently -- so None is compared explicitly, never handed to approx.
     for k in a:
-        assert b[k] == pytest.approx(a[k], rel=1e-9), (k, a[k], b[k])
+        assert (a[k] is None) == (b[k] is None), (k, a[k], b[k])
+        if a[k] is not None:
+            assert b[k] == pytest.approx(a[k], rel=1e-9), (k, a[k], b[k])
+    # Non-vacuous: for this record the -5 and -10 depths are measurable, so an
+    # all-None measure cannot pass by agreeing with itself.
+    for k in ("-5", "-10"):
+        assert a[k] is not None and b[k] is not None, (k, a, b)
 
 
 def test_detection_floor_is_monotone_and_states_where_rho_goes_blind():
