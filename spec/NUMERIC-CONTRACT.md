@@ -1981,7 +1981,10 @@ not the multipliers. Whether the product takes 8 or 12 modes is 17.13.
 `drums_fx.DrumsFx` (`write`, `frame`) and `drums_fx.DcBlockFx` are the
 specification of this subsection; `model/test_drums_fx.py::test_coupling_*` is
 its executable form and `tools/probes/coupling_controls.py` its injected
-defects. **No RTL implements it yet (#552)** and no sound claim is made here
+defects. **RTL (#552):** `drum_regs.v` decodes `0x30`; `drum_kit.v` (`drum_dcblock`, two
+instances, enable captured at `frame_tick`) implements the stage and `voice_dp.v` carries the
+widened 23/20-bit buses and a 40-bit `dacc`; `rtl-sketch/verify_couple.py`, `verify_outpath.py`,
+`verify_drums.py` and `verify_synth_top.py --couple` check it. No sound claim is made here
 (#553): this subsection fixes the arithmetic so the RTL and the acoustic
 qualification have one thing to be measured against.
 

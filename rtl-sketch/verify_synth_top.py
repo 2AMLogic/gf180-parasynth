@@ -149,7 +149,7 @@ def _voice_image(put, regs):
     for k, g in enumerate(regs["weights"]): put(0, 0, SEC_V, A.A_W + k, g)
 
 
-def script(short: bool = False):
+def script(short: bool = False, couple: bool = False):
     """(wait_frames, flag, sec, addr, data) in send order, the frames to run
     after the last write, and a COVERAGE claim -- what this stimulus says it
     reaches, checked in main() against the model rather than assumed.
@@ -176,8 +176,16 @@ def script(short: bool = False):
 
     # ---- 3. play. The voice first alone, then with drums, then through the filter ----
     gap = max(2, int(14 * S))
+    if couple:
+        # contract 15.10 (#552), through the link. First the writes that must NOT enable it:
+        # the neighbours of 0x30 (no register) and a datum with only reserved bits set. The
+        # first strikes below are therefore BYPASSED, and the model says so.
+        put(0, 0, SEC_D, 0x2F, 1); put(0, 0, SEC_D, 0x31, 1)
+        put(0, 0, SEC_D, dx.A_COUPLE, 0xFFFFFFFE)
     put(8, 0, SEC_V, A.A_GATE_ON, 0)                          # a note, drums silent
     strike(gap * 2, 1 << dx.BD)                               # bass drum
+    if couple:
+        put(gap, 0, SEC_D, dx.A_COUPLE, 0xFFFFFFFF)           # enable (reserved bits set too), BD ringing
     strike(gap, (1 << dx.CH) | (1 << dx.SD))
     strike(gap, 1 << dx.OH)                                   # the OH -> CH choke
     put(gap, 0, SEC_V, A.A_TRIG, 0)                           # re-trigger the voice under the ring
@@ -221,6 +229,13 @@ def script(short: bool = False):
     strike(gap, (1 << dx.BD) | (1 << dx.CH))
     put(gap, 0, SEC_V, A.A_DCUT, 400)                         # sweep the drum filter down
     strike(gap, (1 << dx.OH) | (1 << dx.SD))
+    if couple:
+        # disable and re-enable with the charge carried across (bit 0 only is the enable), and a
+        # hit and a coefficient retune while it is ON (the charge must survive both)
+        put(gap, 0, SEC_D, dx.A_COUPLE, 0x2)
+        strike(gap, 1 << dx.CY)
+        put(gap, 0, SEC_D, dx.A_COUPLE, 0x3)
+        strike(gap, 1 << dx.CY)
 
     # ---- 3d. CASE 3: simultaneous loud hits, which is what the clamp is for ----
     # Every accent at full scale, both drum gains at their top, every circuit in
@@ -247,6 +262,11 @@ def script(short: bool = False):
     for a, v in dx.kit_808():               put(0, 0, SEC_D, a, v)   # ... and the link still carries
     for st in range(dx.N_STOPS):            put(0, 0, SEC_D, dx.A_ACCENT + st, dx.accent_reg(1.0))
     strike(gap, ALL_STOPS)
+    if couple:
+        # the RESET cleared the enable and the charge: the strike above is RAW, and it is struck
+        # BEFORE this write precisely so that an enable that survived the RESET changes it
+        put(gap * 6, 0, SEC_D, dx.A_COUPLE, 1)
+        strike(gap, (1 << dx.SD) | (1 << dx.CY))
     put(gap, 0, SEC_V, A.A_GATE_ON, 0)                        # a note, then reset the voice under it
     put(gap, 0, SEC_V, A.A_RESET, 0)
     for k, v in enumerate(vf.VoiceFx.note_incs(45, regs["detune"])):
@@ -276,6 +296,7 @@ def script(short: bool = False):
     tail = int(1500 * S) if not short else int(260 * S)
     cover = dict(stops=sorted(fired), swapped=swapped,
                  sounds=len(fired) + len(swapped),
+                 couple_sent=sum(1 for c in w if c[2] == SEC_D and c[3] == dx.A_COUPLE),
                  drum_reset=sum(1 for c in w if c[2] == SEC_D and c[3] == dx.A_RESET),
                  voice_reset=sum(1 for c in w if c[2] == SEC_V and c[3] == A.A_RESET))
     return w, tail, cover
@@ -1236,6 +1257,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--inject", default=None); ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--short", action="store_true"); ap.add_argument("--frames", type=int, default=None)
+    ap.add_argument("--couple", action="store_true",
+                    help="#552: drive COUPLE (drum page 0x30) through the SPI link in the default stimulus and "
+                         "compare the wire against the model with the stage enabled")
     ap.add_argument("--osc2x", action="store_true",
                     help="select the measured 2x saw chain in RTL and Python model")
     ap.add_argument("--pulse2x", action="store_true", help="select 2x rectangular oscillators in model and RTL")
@@ -1298,6 +1322,8 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.drum_solo and (a.m5a or a.m5a_smoke or a.f1cal_smoke or a.clap_phrase or a.ensemble):
         ap.error("--drum-solo is its own stimulus")
+    if a.couple and (a.m5a or a.m5a_smoke or a.f1cal_smoke or a.clap_phrase or a.drum_solo or a.ensemble):
+        ap.error("--couple extends the default stimulus only")
     if a.f1cal_fault and not a.f1cal_smoke:
         ap.error("--f1cal-fault requires --f1cal-smoke")
     if a.schedule_out and not a.ensemble:
@@ -1368,7 +1394,7 @@ def main(argv=None) -> int:
             return 2
         cover = {}
     else:
-        cmds, tail, cover = script(a.short)
+        cmds, tail, cover = script(a.short, a.couple)
     # The stimulus must reach the cases this bench claims, or it is not the
     # bench it says it is. Checked BEFORE the simulation, so a stimulus edit
     # that quietly drops a circuit refuses instead of passing.
@@ -1579,6 +1605,21 @@ def main(argv=None) -> int:
     # ---- the model, on those frames ----------------------------------------
     m = stm.SynthTopModel(oversample_2x=a.osc2x, filter_2x=a.filter2x, pulse_2x=a.pulse2x).run(model_writes, n)
     exp_i2s, exp_s = m["i2s"], m["sample"]
+    if a.couple:
+        # What the enabled stimulus actually changes, from the MODEL: the same landed writes with
+        # every COUPLE write removed. Zero differing frames would mean this run proves nothing
+        # about the stage, so it REFUSES rather than passes.
+        cw = [g for g in wr if int(g[2]) == SEC_D and int(g[3]) == dx.A_COUPLE]
+        byp = stm.SynthTopModel(oversample_2x=a.osc2x, filter_2x=a.filter2x, pulse_2x=a.pulse2x).run(
+            [w_ for w_ in model_writes if not (w_[2] == SEC_D and w_[3] == dx.A_COUPLE)], n)
+        changed = int(np.sum(np.asarray(byp["sample"]) != np.asarray(exp_s)))
+        LAST.update(couple_delivered=len(cw), couple_sent=cover["couple_sent"], couple_changed_frames=changed)
+        print(f"verify_synth_top: COUPLE writes sent {cover['couple_sent']}, delivered at the register port "
+              f"{len(cw)} (frames {[int(g[0]) for g in cw]}, data {[hex(int(g[4])) for g in cw]}); "
+              f"the stage changes {changed} of {n} final samples vs the bypass model")
+        if len(cw) != cover["couple_sent"] or not changed:
+            print("verify_synth_top: REFUSED -- COUPLE writes not all delivered, or the stage changes no sample")
+            return 2
 
     # ---- the comparison: the WIRE against the MODEL -------------------------
     i2s = rows(out["i2s"])
