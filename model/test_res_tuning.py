@@ -175,6 +175,35 @@ def test_the_k_rom_cache_is_keyed_on_content_not_identity():
     assert not np.array_equal(a, b)
 
 
+def test_reference_rigs_k_rom_cache_survives_id_reuse():
+    """The defeating input for `reference_rigs._k_rom_for` (#547), made
+    deterministic: plant a STALE table under `id(rom_b)` as if rom_a had been
+    freed and rom_b had been handed its address. An id()-keyed cache returns
+    the planted table; a content-keyed one computes rom_b's own."""
+    rom_a = rt.g_rom_for(0, 1)
+    rom_b = rt.g_rom_for(3, 1)
+    assert not np.array_equal(rom_a, rom_b)
+    want_b = rt.k_rom_for(rom_b)
+    stale_a = rt.k_rom_for(rom_a)
+    saved = dict(rr._K_ROM_CACHE)
+    try:
+        rr._K_ROM_CACHE.clear()
+        rr._K_ROM_CACHE[id(rom_b)] = stale_a        # what a reused id would hand back
+        assert np.array_equal(rr._k_rom_for(rom_b), want_b)
+        # in-place mutation of the same object must not return the old table
+        rom_c = rom_a.copy()
+        first = rr._k_rom_for(rom_c).copy()
+        rom_c[:] = rom_b
+        assert np.array_equal(rr._k_rom_for(rom_c), want_b)
+        assert not np.array_equal(first, want_b)
+        # a view / other dtype normalises to the same key as the original
+        n = len(rr._K_ROM_CACHE)
+        rr._k_rom_for(rom_b.astype(np.int32)); rr._k_rom_for(rom_b[:])
+        assert len(rr._K_ROM_CACHE) == n
+    finally:
+        rr._K_ROM_CACHE.clear(); rr._K_ROM_CACHE.update(saved)
+
+
 # =============================================================================
 # 3. start red, then the committed verdict
 # =============================================================================
