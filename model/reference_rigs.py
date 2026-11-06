@@ -106,7 +106,7 @@ import rig_qualification as rq                                      # noqa: E402
 G_ROM = vf.make_g_rom()
 K_ROM = vf.make_k_rom()
 _REAL_LADDER = vf.LadderFx
-_K_ROM_CACHE: dict[int, np.ndarray] = {}
+_K_ROM_CACHE: dict[bytes, np.ndarray] = {}
 
 
 def _k_rom_for(g_rom: np.ndarray) -> np.ndarray:
@@ -115,7 +115,7 @@ def _k_rom_for(g_rom: np.ndarray) -> np.ndarray:
     changes one has to change the other or it measures two defects at once.
     Byte for byte the same construction as `_k_rom_for` in
     `model/test_moog_acceptance.py`."""
-    key = id(g_rom)
+    key = np.asarray(g_rom, dtype=np.int64).tobytes()   # content, not id(): ids are reused after free
     if key not in _K_ROM_CACHE:
         step = (1 << 15) >> vf.KROM_BITS
         _K_ROM_CACHE[key] = np.array(

@@ -108,7 +108,7 @@ def _k_rom_for(g_rom):
     """`make_k_rom` against a substituted cutoff ROM: the compensation is
     DERIVED from the cutoff coefficients, so a control that changes one has to
     change the other or it is measuring two defects at once."""
-    key = id(g_rom)
+    key = np.asarray(g_rom, dtype=np.int64).tobytes()   # content, not id(): ids are reused after free
     if key not in _K_ROM_CACHE:
         step = (1 << 15) >> vf.KROM_BITS
         _K_ROM_CACHE[key] = np.array(
