@@ -2,6 +2,13 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-10-27
+
+- **PR #740**: ci: attest T1 item 9 (testbenches shipped) with klt signoff
+- **PR #739**: ci: attest T1 item 10 with klt signoff and re-grade the committed verdict
+- **Issue #738** (closed): T1 item 9 (testbenches shipped): inventory of the RTL-vs-model benches and klt signoff --attest 9
+- **Issue #737** (closed): T1 item 10 (repo hygiene): klt signoff block manifest, committed verdict with CI re-grade, and --attest 10
+
 ### 2026-10-24
 
 - **Issue #560** (closed): [gate] a between-recording bar for #379 needs data the MARS pack cannot supply (rule v2 refused: no p satisfies seeds and stays-green together)
