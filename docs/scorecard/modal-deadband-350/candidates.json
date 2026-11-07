@@ -1,0 +1,110 @@
+{
+ "rounding_vs_floor_LT_ping_10000": {
+  "floor": {
+   "departs_ms": 410,
+   "float_level_state_lsb": 7873.8,
+   "float_level_q15_lsb": 7873.79,
+   "tail": {
+    "kind": "stuck",
+    "value": -7201
+   },
+   "one_over_1mr": 4244.0
+  },
+  "round-half-up": {
+   "departs_ms": 530,
+   "float_level_state_lsb": 2104.6,
+   "float_level_q15_lsb": 2104.64,
+   "tail": {
+    "kind": "stuck",
+    "value": -3599
+   },
+   "one_over_1mr": 4244.0
+  }
+ },
+ "state_q_sweep": {
+  "LT 90Hz Q25": {
+   "15": {
+    "departs_ms": 230,
+    "float_level_state_lsb": 6260.8,
+    "float_level_q15_lsb": 6260.81,
+    "tail": {
+     "kind": "stuck",
+     "value": -3
+    },
+    "one_over_1mr": 4244.0
+   },
+   "17": {
+    "departs_ms": 350,
+    "float_level_state_lsb": 6286.3,
+    "float_level_q15_lsb": 1571.58,
+    "tail": {
+     "kind": "stuck",
+     "value": -3
+    },
+    "one_over_1mr": 4244.0
+   },
+   "19": {
+    "departs_ms": 460,
+    "float_level_state_lsb": 7157.0,
+    "float_level_q15_lsb": 447.31,
+    "tail": {
+     "kind": "stuck",
+     "value": -1
+    },
+    "one_over_1mr": 4244.0
+   },
+   "21": {
+    "departs_ms": 610,
+    "float_level_state_lsb": 5248.9,
+    "float_level_q15_lsb": 82.01,
+    "tail": {
+     "kind": "stuck",
+     "value": -3
+    },
+    "one_over_1mr": 4244.0
+   }
+  },
+  "BD-like 50Hz Q22.3": {
+   "15": {
+    "departs_ms": 180,
+    "float_level_state_lsb": 41530.9,
+    "float_level_q15_lsb": 41530.89,
+    "tail": {
+     "kind": "stuck",
+     "value": -6
+    },
+    "one_over_1mr": 6814.0
+   },
+   "17": {
+    "departs_ms": 380,
+    "float_level_state_lsb": 40613.7,
+    "float_level_q15_lsb": 10153.43,
+    "tail": {
+     "kind": "stuck",
+     "value": -6
+    },
+    "one_over_1mr": 6814.0
+   },
+   "19": {
+    "departs_ms": 580,
+    "float_level_state_lsb": 39716.8,
+    "float_level_q15_lsb": 2482.3,
+    "tail": {
+     "kind": "stuck",
+     "value": -6
+    },
+    "one_over_1mr": 6814.0
+   },
+   "21": {
+    "departs_ms": 760,
+    "float_level_state_lsb": 44714.9,
+    "float_level_q15_lsb": 698.67,
+    "tail": {
+     "kind": "stuck",
+     "value": -23328
+    },
+    "one_over_1mr": 6814.0
+   }
+  }
+ }
+}
