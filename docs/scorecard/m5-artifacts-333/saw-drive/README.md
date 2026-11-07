@@ -114,6 +114,7 @@ aligned:
 | saw drive 0.35, 22-frame margin (tried, reverted) | 0, −17, −23, −40 |
 
 - **The drift predates this change.** The bench's stimulus already lands later notes early by up to 27 frames (0.56 ms) with no override. That is a property of every published M5 phrase, recorded here and not fixed in this PR.
+  - *Correction (#372):* the "published-style" row was run with the saw cutoff and volume overrides (`confirm/M5A.txt`: saw cutoff 20000 Hz, +5.22576 dB), which use the 16-frame reserve. With no override the same check gives 0, −5, −8, −13. Both rows were measured against the duration+silence cursor with the first event aligned. Against the scorer's `offset_samples` map, every gate in these two runs lands 40–91 frames **late** (0.8–1.9 ms). The stimulus now lands on that map exactly. These receipts are stale; see `../../mono-m5a-policy.md`, "Stimulus timing contract".
 - **The override does not add to it.** With the 16-frame margin, the saw-drive override stays inside that drift.
 - **The 22-frame reserve made it worse** (−40 frames), because the note lands early by the unused reserve. It was reverted. Wrong-then-right 1.
 - **Effect on the envelope measures.** Attack and release are durations measured on the envelope, so an offset under 1 ms does not change them. The scorer's spectral windows start 120 ms after the note.

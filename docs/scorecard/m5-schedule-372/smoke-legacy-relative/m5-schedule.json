@@ -1,0 +1,69 @@
+{
+ "verdict": "FAIL",
+ "tolerance_frames": 0,
+ "wire_delay_periods": 1,
+ "events": 4,
+ "target_on_frames": [
+  239,
+  959,
+  2639,
+  3359
+ ],
+ "target_off_frames": [
+  719,
+  1439,
+  3119,
+  3839
+ ],
+ "applied_on_frames": [
+  294,
+  1009,
+  2686,
+  3401
+ ],
+ "applied_off_frames": [
+  772,
+  1487,
+  3164,
+  3879
+ ],
+ "gate_on_offset_frames": [
+  55,
+  50,
+  47,
+  42
+ ],
+ "gate_off_offset_frames": [
+  53,
+  48,
+  45,
+  40
+ ],
+ "lead_in_frames": 55,
+ "gate_on_drift_frames": [
+  0,
+  -5,
+  -8,
+  -13
+ ],
+ "gate_length_error_frames": [
+  -2,
+  -2,
+  -2,
+  -2
+ ],
+ "worst_early_frames": 0,
+ "worst_late_frames": 55,
+ "violations": [
+  "segment 0 event 0 GATE_ON late by 55 frame(s) (+55)",
+  "segment 0 event 0 GATE_OFF late by 53 frame(s) (+53)",
+  "segment 0 event 1 GATE_ON late by 50 frame(s) (+50)",
+  "segment 0 event 1 GATE_OFF late by 48 frame(s) (+48)",
+  "segment 0 event 2 GATE_ON late by 47 frame(s) (+47)",
+  "segment 0 event 2 GATE_OFF late by 45 frame(s) (+45)",
+  "segment 0 event 3 GATE_ON late by 42 frame(s) (+42)",
+  "segment 0 event 3 GATE_OFF late by 40 frame(s) (+40)"
+ ],
+ "targets_from": "the stimulus's own smoke map (no reference)",
+ "schedule": "legacy-relative"
+}

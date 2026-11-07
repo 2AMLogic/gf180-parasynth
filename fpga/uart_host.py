@@ -742,9 +742,14 @@ def _phrase_events_m5a() -> tuple:
     if rtl not in sys.path:
         sys.path.insert(0, rtl)
     import verify_synth_top as top
+    # schedule="legacy-relative" is deliberate (#372): this is a UART smoke
+    # fixture with no timing-map claim, the "absolute" schedule's waits are
+    # solved for SPI landing and mean nothing on this link, and these are the
+    # bytes R1 pins as `run-m5a`. Re-deriving them is a release change.
     cmds, tail, _info = top.m5a_script(
         str(os.path.join(ROOT, "docs/scorecard/mono-m5a-miniv3/manifest.json")),
-        smoke=True, saw_cutoff_hz=20000, saw_volume_correction_db=-0.45428)
+        smoke=True, saw_cutoff_hz=20000, saw_volume_correction_db=-0.45428,
+        schedule="legacy-relative")
     f, prev, out = 0, None, []
     for wait, flag, sec, addr, data in cmds:
         f += wait
