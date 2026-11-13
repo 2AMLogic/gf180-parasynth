@@ -454,18 +454,34 @@ def extra_group(nm: str) -> str | None:
 # Self-tests. The study has withdrawn published figures before; nothing here
 # is quoted until these pass.
 # ===========================================================================
+def _square_periods(f0, sr, dur=0.24, jitter=0.0, seed=0):
+    """The WHOLE-SAMPLE period lengths `_square` actually emits.
+
+    Split out of `_square` because the jitter a caller asks for is not
+    necessarily the jitter it gets: each period is rounded to an integer
+    number of samples, so `jitter=0.001` at 440 Hz / 44.1 kHz (100.23 samples
+    per period) is rounded away entirely and the "jittered" clip is the
+    jitterless one under another name. Any test that uses a jittered stimulus
+    as a POSITIVE control has to assert that the jitter survived the
+    generator, and this is what it asserts on."""
+    rng = np.random.default_rng(seed)
+    ks, n, total = [], int(sr * dur), 0
+    while total < n:
+        p = (1.0 / f0) * (1.0 + jitter * rng.standard_normal())
+        k = max(2, int(round(sr * p)))
+        ks.append(k)
+        total += k
+    return ks
+
+
 def _square(f0, sr, dur=0.24, jitter=0.0, seed=0):
     """A square wave at f0, optionally with per-period length jitter. The
     jitter is what an analogue oscillator has and a phase accumulator does
     not, so it is the signal these features exist to see."""
-    rng = np.random.default_rng(seed)
-    out, t, ph = [], 0.0, 0.0
-    n = int(sr * dur)
-    while len(out) < n:
-        p = (1.0 / f0) * (1.0 + jitter * rng.standard_normal())
-        k = max(2, int(round(sr * p)))
+    out = []
+    for k in _square_periods(f0, sr, dur, jitter, seed):
         out += [1.0] * (k // 2) + [-1.0] * (k - k // 2)
-    return np.asarray(out[:n], float)
+    return np.asarray(out[:int(sr * dur)], float)
 
 
 def _resample(x, sr_in, sr_out):
@@ -479,19 +495,50 @@ def _resample(x, sr_in, sr_out):
     return resample_poly(x, int(sr_out) // g, int(sr_in) // g)
 
 
+# The stimulus panel the rate test runs. ONE stimulus is not a rate test:
+# `jit.dphase_ar1.seg0` moved 0.25 -> 0.35 on the 330 Hz clip (a gap a
+# 12 % relative tolerance happens to straddle depending on the numpy build)
+# and +0.23 -> -0.20 on the 440 Hz one -- a SIGN FLIP, which no tolerance
+# should ever admit and which the single-stimulus version of this test could
+# not see. #763. The jittered entry is the positive control: a floor that
+# silenced the column everywhere would pass a panel of jitterless clips.
+RATE_PANEL = (
+    ("330Hz", 330.0, 0.0, 0),
+    ("440Hz", 440.0, 0.0, 0),
+    ("660Hz", 660.0, 0.0, 0),
+    ("330Hz+0.1%jitter", 330.0, 0.001, 3),
+)
+
+
+def _rate_stimulus(f0, jitter, seed, sr=44100, dur=0.24, decay_s=0.08):
+    """One panel entry at `sr`, with the exponential decay the original
+    single-stimulus test used."""
+    x = _square(f0, sr, dur=dur, jitter=jitter, seed=seed)
+    return x * np.exp(-np.arange(len(x)) / (decay_s * sr))
+
+
 def test_extra_features_are_rate_independent():
     """THE test in this file. The reference is 44.1 kHz and our renders are
     48 kHz, so a feature that moves with the rate is a sample-rate detector
     wearing a measurement's name."""
-    a = _square(330.0, 44100) * np.exp(-np.arange(int(0.24 * 44100)) / (0.08 * 44100))
-    b = _resample(a, 44100, 48000)
-    va, names = extra_features(a, 44100)
-    vb, _ = extra_features(b, 48000)
     bad = []
-    for nm, x, y in zip(names, va, vb):
-        tol = max(RATE_TOL_REL * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(nm)])
-        if abs(x - y) > tol:
-            bad.append((nm, x, y))
+    for label, f0, jitter, seed in RATE_PANEL:
+        if jitter:
+            # the apparatus's precondition: a stimulus that was supposed to
+            # carry jitter and does not is a jitterless clip in disguise, and
+            # as a positive control it would prove nothing
+            ks = _square_periods(f0, 44100, jitter=jitter, seed=seed)
+            assert len(set(ks)) > 1, (
+                f"{label}: the generator rounded the jitter away; this panel "
+                "entry is not the positive control it claims to be")
+        a = _rate_stimulus(f0, jitter, seed)
+        b = _resample(a, 44100, 48000)
+        va, names = extra_features(a, 44100)
+        vb, _ = extra_features(b, 48000)
+        for nm, x, y in zip(names, va, vb):
+            tol = max(RATE_TOL_REL * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(nm)])
+            if abs(x - y) > tol:
+                bad.append((label, nm, round(x, 4), round(y, 4)))
     assert not bad, f"rate-dependent columns: {bad[:8]}"
 
 
