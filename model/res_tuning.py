@@ -253,22 +253,18 @@ def g_rom_for(degree: int, refit: int) -> np.ndarray:
     return np.frombuffer(_g_rom_cached(degree, refit), dtype=np.int64).copy()
 
 
-@lru_cache(maxsize=None)
-def _k_rom_cached(g_bytes: bytes) -> bytes:
-    """DR 0006's construction (`voice_fx.make_k_rom`) against a substituted g
-    ROM, cached on the ROM's BYTES. `reference_rigs._k_rom_for` caches on
-    `id(g_rom)`, which a garbage-collected candidate ROM can hand to the next
-    one -- a stale compensation table for a different filter."""
-    g = np.frombuffer(g_bytes, dtype=np.int64)
-    step = (1 << 15) >> vf.KROM_BITS
-    return np.array([int(round(vf.k_onset(min(max(vf.CUT_MIN, i * step), vf.CUT_MAX),
-                                          g, vf.GROM_BITS, 2)[0] / 4.0 * 32768))
-                     for i in range((1 << vf.KROM_BITS) + 1)], dtype=np.int64).tobytes()
-
-
 def k_rom_for(g_rom: np.ndarray) -> np.ndarray:
-    return np.frombuffer(_k_rom_cached(np.asarray(g_rom, dtype=np.int64).tobytes()),
-                         dtype=np.int64).copy()
+    """DR 0006's construction (`voice_fx.make_k_rom`) against a substituted g
+    ROM, cached on the ROM's BYTES.
+
+    This module used to carry its own third copy of that construction, written
+    when `reference_rigs._k_rom_for` still cached on `id(g_rom)` -- which a
+    garbage-collected candidate ROM can hand to the next one, a stale
+    compensation table for a different filter. #547 fixed that cache to key on
+    content and #759 removed the copy, so there is now one construction and one
+    cache. The `.copy()` keeps this function's contract of handing back a
+    private array, which `reference_rigs._k_rom_for` does not promise."""
+    return rr._k_rom_for(g_rom).copy()
 
 
 class CorrectedLadder(rr.OurLadder):

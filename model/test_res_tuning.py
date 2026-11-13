@@ -168,8 +168,10 @@ def test_the_compensation_is_re_derived_from_the_candidate_coefficients():
 
 
 def test_the_k_rom_cache_is_keyed_on_content_not_identity():
-    """`reference_rigs._k_rom_for` caches on id(g_rom); a freed array's id can
-    be reused by a different ROM. This module's cache keys on the bytes."""
+    """`rt.k_rom_for` and `reference_rigs._k_rom_for` are one construction
+    behind one cache (#759), and that cache keys on the ROM's BYTES, not on
+    `id(g_rom)` whose address a freed array can hand to a different ROM (#547).
+    Two different g ROMs must therefore not share a k table."""
     a = rt.k_rom_for(rt.g_rom_for(0, 1))
     b = rt.k_rom_for(rt.g_rom_for(3, 1))
     assert not np.array_equal(a, b)
@@ -179,7 +181,11 @@ def test_reference_rigs_k_rom_cache_survives_id_reuse():
     """The defeating input for `reference_rigs._k_rom_for` (#547), made
     deterministic: plant a STALE table under `id(rom_b)` as if rom_a had been
     freed and rom_b had been handed its address. An id()-keyed cache returns
-    the planted table; a content-keyed one computes rom_b's own."""
+    the planted table; a content-keyed one computes rom_b's own.
+
+    Since #759 that function is the only copy of the construction, so this
+    guards `rt.k_rom_for` and the acceptance suite's controls too -- it is no
+    longer possible to repair one of three caches and leave the others."""
     rom_a = rt.g_rom_for(0, 1)
     rom_b = rt.g_rom_for(3, 1)
     assert not np.array_equal(rom_a, rom_b)
