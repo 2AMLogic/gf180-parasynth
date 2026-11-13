@@ -32,6 +32,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
+- **#765**: Retire the three netlist patches in pnr/klt/ladder_dp/run-klt.sh: the klt bugs they work around were fixed upstream in September
 
 ## In Progress
 
@@ -43,12 +44,14 @@ Issues currently being built (`loom:building`).
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
+- **#759**: Consolidate the duplicated injected-defect ladder and k-ROM builder in model/ into one copy
+- **#763**: bug: test_extra_features_are_rate_independent fails on main -- jit.dphase_ar1.seg0 is rate-dependent
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-_None._
+- **#764**: refactor: keep one copy of the injected-defect ladder and the k-ROM builder
 
 ## Approved (Awaiting Merge)
 
@@ -111,6 +114,7 @@ Issues carrying `loom:curated`.
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)*
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig) *(curated)*
+- **#763**: bug: test_extra_features_are_rate_independent fails on main -- jit.dphase_ar1.seg0 is rate-dependent *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -119,8 +123,8 @@ Issues carrying `loom:curated`.
 - **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)*
 - **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)*
 - **#753**: Consolidate 16 duplicate file-sha256 helpers in tools/ into provenance.py *(hermit)*
-- **#759**: Consolidate the duplicated injected-defect ladder and k-ROM builder in model/ into one copy *(hermit)*
 - **#760**: Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September *(hermit)*
+- **#762**: Remove fpga/probe_uart_findings.py: it reports 2 false FAILs on the repaired host and nothing runs it *(hermit)*
 
 ## Epics
 
@@ -134,11 +138,11 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
 | Important | 4 |
-| Ready (`loom:issue`) | 4 |
-| In Progress (`loom:building`) | 6 |
-| PRs awaiting review | 0 |
+| Ready (`loom:issue`) | 5 |
+| In Progress (`loom:building`) | 8 |
+| PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 51 |
+| Curated | 52 |
 | Architect / Hermit proposals | 7 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
