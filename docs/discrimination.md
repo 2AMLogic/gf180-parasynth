@@ -647,7 +647,8 @@ bears on how the figures above should be read: `jit.cyclecorr` separates a
 rate-independence control's tolerance for that same column is
 `RATE_TOL_REL` x 1.0 = **0.12**. The control would not notice a rate
 dependence eight times larger than everything the column measures. That is a
-tolerance problem rather than a fold problem and was not changed here.
+tolerance problem rather than a fold problem and was not changed here; it is
+#775.
 
 **Promotion status (#138, 2026-10-01).** Estimators exist
 (`model/promoted_measures.py`: `lowband_level_db`, `dominant_period_ms`).

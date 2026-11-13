@@ -772,7 +772,7 @@ RATE_PANEL = (
 # fold. It is out of scope here and is carried as
 # `test_dominant_period_picks_a_different_octave_at_the_two_rates` below
 # rather than as six quarantine rows that would make the panel look weaker
-# than it is.
+# than it is. Filed as #774.
 
 RATE_PAIR = {44100: 48000, 48000: 44100}
 
@@ -924,7 +924,7 @@ def test_dominant_period_picks_a_different_octave_at_the_two_rates():
     measuring different partials -- which is why this clip is not in
     RATE_PANEL and why #767 did not repair it.
 
-    Filed separately; see the issue linked from this test's commit. What is
+    Filed as #774. What is
     asserted is that the octave error is still EXACTLY an octave, because a
     2.0 that drifted to 1.7 would be a different bug wearing this one's
     name."""
@@ -935,7 +935,7 @@ def test_dominant_period_picks_a_different_octave_at_the_two_rates():
     assert abs(tb / ta - 2.0) < 0.05, (
         f"the octave error no longer reproduces: {pa} samples at 48 kHz is "
         f"{ta * 1e3:.4f} ms, {pb} at 44.1 kHz is {tb * 1e3:.4f} ms, ratio "
-        f"{tb / ta:.4f}. Delete this test and close the issue it names")
+        f"{tb / ta:.4f}. Delete this test and close #774")
     # and it really is the autocorrelation's own choice, not a resampling
     # artefact: one period of the same clip correlates at least as well
     assert abs(880.0 - 44100.0 / pb) > 100.0, 44100.0 / pb
@@ -1138,7 +1138,7 @@ def test_jitter_separates_a_stable_oscillator_from_a_drifting_one():
     SMALLER than `RATE_TOL_REL` x 1.0 = 0.12, the tolerance the rate test
     applies to this column. The rate test would not notice a rate dependence
     in `jit.cyclecorr` the size of everything the column measures. That is a
-    tolerance problem, not a fold problem; filed, not fixed here."""
+    tolerance problem, not a fold problem; filed as #775, not fixed here."""
     sr = 44100
     read = lambda x, s=sr: dict(zip(*reversed(jitter_features(x, s))))  # noqa: E731
     graded = [read(_square(410.0, sr, jitter=j, seed=3))["jit.cyclecorr.seg0"]
