@@ -34,7 +34,12 @@ FILES = ["docs/sensitivity/registry.json",
          # issue #539's record: MEAN_TRIALS, the noise controls' detection statistic
          "docs/sensitivity/mean-trials.json",
          "docs/sensitivity/mean-trials-sweep.txt",
-         "tools/probes/permitted_differences.py"]
+         "tools/probes/permitted_differences.py",
+         # issue #763's record: JIT_DPHASE_FLOOR_PPM, the physical floor under
+         # jit.dphase_ar1.seg0 that replaced a 1e-20 epsilon
+         "docs/sensitivity/dphase-ar1-floor.json",
+         "docs/sensitivity/dphase-ar1-floor-sweep.txt",
+         "model/discrimination_features.py"]
 
 
 @pytest.fixture
@@ -75,6 +80,31 @@ def test_the_gate_passes_against_the_tree_it_ships_with():
     code, text = run(sens.ROOT)
     assert code == 0, text
     assert "MODES" in text and "NUMS" in text
+
+
+def test_the_fixture_copies_every_file_the_registry_actually_reads():
+    """FILES above is a hand-maintained mirror of the registry, and nothing
+    was checking it. Registering the #763 record left it stale and turned 15
+    of the 40 tests here red at once -- every one of them reporting REFUSED
+    ("parameter source ... is missing") about a tree the gate itself was
+    perfectly happy with. A REFUSED that means "the fixture is incomplete"
+    looks exactly like a REFUSED that means "the record is broken", which is
+    the one thing this repository's refusal convention exists to prevent.
+
+    So the list is now asserted against the registry rather than remembered.
+    Derived, not duplicated: a record names exactly two files outside
+    docs/sensitivity/ -- the source its parameter is read from and the
+    artefact its points are extracted from."""
+    needed = {"docs/sensitivity/registry.json"}
+    for name in sens.load_registry()["records"]:
+        needed.add(f"docs/sensitivity/{name}")
+        rec = json.loads((sens.ROOT / "docs/sensitivity" / name).read_text())
+        needed.add(rec["parameter"]["source"])
+        needed.add(rec["evidence"]["artifact"])
+    missing = sorted(needed - set(FILES))
+    assert not missing, (
+        f"FILES does not copy {missing}, so every test using the `root` "
+        "fixture will REFUSE on a tree that is not actually broken")
 
 
 def test_both_registered_parameters_ship_a_value_on_their_own_grid():

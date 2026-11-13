@@ -20,10 +20,12 @@ import pytest_collection_inventory as inv  # noqa: E402
 #: The four modules #564 found uncollected, with their in-file test counts on
 #: first collection. Pinned so a discovery change that silently drops one of
 #: them (scope, path, parsing) cannot let the real-tree check pass vacuously.
+#: A count here goes UP when a module gains a test -- #763 added
+#: test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13.
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
-    "model/discrimination_features.py": 12,
+    "model/discrimination_features.py": 13,
     "model/discrimination_trajectory.py": 6,
 }
 
