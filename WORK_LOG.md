@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-13
 
+- **Issue #763** (closed): bug: test_extra_features_are_rate_independent fails on main -- jit.dphase_ar1.seg0 is rate-dependent
+- **PR #769**: fix: refuse jit.dphase_ar1 below a physical floor instead of a 1e-20 epsilon
 - **Issue #759** (closed): Consolidate the duplicated injected-defect ladder and k-ROM builder in model/ into one copy
 - **PR #764**: refactor: keep one copy of the injected-defect ladder and the k-ROM builder
 - **Issue #755** (closed): Wire or remove tools/bd_pitch_predeclaration_mutants.py: unrun mutation control now REFUSES
