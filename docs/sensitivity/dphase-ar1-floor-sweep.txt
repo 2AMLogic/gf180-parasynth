@@ -1,0 +1,98 @@
+The floor under jit.dphase_ar1.seg0, swept through jitter_features' own
+dphase_floor_ppm override -- i.e. against the code that ships. #763.
+python 3.12.3, numpy 2.5.4, scipy 1.18.1.
+Shipped value: JIT_DPHASE_FLOOR_PPM = 20 (ppm of a period, read on the phase scatter).
+
+dphase_floor -- largest 44.1 kHz -> 48 kHz gap in the column over the rate
+  panel, in ar1 units, against the floor in ppm. sees_real is the
+  CONSTRAINT from the other side: mechanism-panel stimuli still reported,
+  of n_mech. Lower rate_gap is better; sees_real must stay at n_mech.
+floor_ppm  rate_gap  sees_real  n_mech
+0          0.4280    7          7
+0.2        0.3481    7          7
+2          0.0011    7          7
+20         0.0011    7          7
+200        0.0011    6          7
+2000       0.0011    6          7
+
+dphase_floor_rate_detail -- the rate panel per stimulus. pj is the phase
+  scatter in ppm, the quantity the floor is compared against; ds is the
+  per-cycle period error, the quantity the FIRST attempt gated on and the
+  reason it failed (see the module docstring).
+floor_ppm stimulus              pj_ref   pj_render      ds_ref   ar1_ref  ar1_render  refused
+        0 330Hz                 0.0000      0.7800      0.0000    0.3120      0.3481  no
+        0 440Hz                 0.0000      0.3176      0.0000    0.2253     -0.2027  no
+        0 660Hz                 0.0000      0.7109      0.0000    0.2944     -0.0479  no
+        0 330Hz+0.1%jit      5724.6344   5724.3144   1360.4914    0.6062      0.6051  no
+        0 410Hz+0.5%jit      9922.3170   9921.7129   3292.2650    0.5969      0.5968  no
+      0.2 330Hz                 0.0000      0.7800      0.0000    0.0000      0.3481  no
+      0.2 440Hz                 0.0000      0.3176      0.0000    0.0000     -0.2027  no
+      0.2 660Hz                 0.0000      0.7109      0.0000    0.0000     -0.0479  no
+      0.2 330Hz+0.1%jit      5724.6344   5724.3144   1360.4914    0.6062      0.6051  no
+      0.2 410Hz+0.5%jit      9922.3170   9921.7129   3292.2650    0.5969      0.5968  no
+        2 330Hz                 0.0000      0.7800      0.0000    0.0000      0.0000  yes
+        2 440Hz                 0.0000      0.3176      0.0000    0.0000      0.0000  yes
+        2 660Hz                 0.0000      0.7109      0.0000    0.0000      0.0000  yes
+        2 330Hz+0.1%jit      5724.6344   5724.3144   1360.4914    0.6062      0.6051  no
+        2 410Hz+0.5%jit      9922.3170   9921.7129   3292.2650    0.5969      0.5968  no
+       20 330Hz                 0.0000      0.7800      0.0000    0.0000      0.0000  yes
+       20 440Hz                 0.0000      0.3176      0.0000    0.0000      0.0000  yes
+       20 660Hz                 0.0000      0.7109      0.0000    0.0000      0.0000  yes
+       20 330Hz+0.1%jit      5724.6344   5724.3144   1360.4914    0.6062      0.6051  no
+       20 410Hz+0.5%jit      9922.3170   9921.7129   3292.2650    0.5969      0.5968  no
+      200 330Hz                 0.0000      0.7800      0.0000    0.0000      0.0000  yes
+      200 440Hz                 0.0000      0.3176      0.0000    0.0000      0.0000  yes
+      200 660Hz                 0.0000      0.7109      0.0000    0.0000      0.0000  yes
+      200 330Hz+0.1%jit      5724.6344   5724.3144   1360.4914    0.6062      0.6051  no
+      200 410Hz+0.5%jit      9922.3170   9921.7129   3292.2650    0.5969      0.5968  no
+     2000 330Hz                 0.0000      0.7800      0.0000    0.0000      0.0000  yes
+     2000 440Hz                 0.0000      0.3176      0.0000    0.0000      0.0000  yes
+     2000 660Hz                 0.0000      0.7109      0.0000    0.0000      0.0000  yes
+     2000 330Hz+0.1%jit      5724.6344   5724.3144   1360.4914    0.6062      0.6051  no
+     2000 410Hz+0.5%jit      9922.3170   9921.7129   3292.2650    0.5969      0.5968  no
+
+dphase_floor_mechanism_detail -- what the column must still answer on, at
+  44.1 kHz. A 'yes' here is the beating control going silent, not red.
+floor_ppm stimulus                  pj          ds       ar1  refused
+        0 detune+0.5Hz           54.53        4.56    0.9484  no
+        0 detune+2Hz          17473.00     2141.14    1.0000  no
+        0 detune+8Hz          82772.31    13739.72    0.9582  no
+        0 jitter0.1%          14534.04     2410.20    0.6772  no
+        0 jitter0.5%           9917.47     3292.21    0.5966  no
+        0 jitter2%            44374.26    11245.70    0.6416  no
+        0 glide               33833.59     2730.77    1.0000  no
+      0.2 detune+0.5Hz           54.53        4.56    0.9484  no
+      0.2 detune+2Hz          17473.00     2141.14    1.0000  no
+      0.2 detune+8Hz          82772.31    13739.72    0.9582  no
+      0.2 jitter0.1%          14534.04     2410.20    0.6772  no
+      0.2 jitter0.5%           9917.47     3292.21    0.5966  no
+      0.2 jitter2%            44374.26    11245.70    0.6416  no
+      0.2 glide               33833.59     2730.77    1.0000  no
+        2 detune+0.5Hz           54.53        4.56    0.9484  no
+        2 detune+2Hz          17473.00     2141.14    1.0000  no
+        2 detune+8Hz          82772.31    13739.72    0.9582  no
+        2 jitter0.1%          14534.04     2410.20    0.6772  no
+        2 jitter0.5%           9917.47     3292.21    0.5966  no
+        2 jitter2%            44374.26    11245.70    0.6416  no
+        2 glide               33833.59     2730.77    1.0000  no
+       20 detune+0.5Hz           54.53        4.56    0.9484  no
+       20 detune+2Hz          17473.00     2141.14    1.0000  no
+       20 detune+8Hz          82772.31    13739.72    0.9582  no
+       20 jitter0.1%          14534.04     2410.20    0.6772  no
+       20 jitter0.5%           9917.47     3292.21    0.5966  no
+       20 jitter2%            44374.26    11245.70    0.6416  no
+       20 glide               33833.59     2730.77    1.0000  no
+      200 detune+0.5Hz           54.53        4.56    0.0000  yes
+      200 detune+2Hz          17473.00     2141.14    1.0000  no
+      200 detune+8Hz          82772.31    13739.72    0.9582  no
+      200 jitter0.1%          14534.04     2410.20    0.6772  no
+      200 jitter0.5%           9917.47     3292.21    0.5966  no
+      200 jitter2%            44374.26    11245.70    0.6416  no
+      200 glide               33833.59     2730.77    1.0000  no
+     2000 detune+0.5Hz           54.53        4.56    0.0000  yes
+     2000 detune+2Hz          17473.00     2141.14    1.0000  no
+     2000 detune+8Hz          82772.31    13739.72    0.9582  no
+     2000 jitter0.1%          14534.04     2410.20    0.6772  no
+     2000 jitter0.5%           9917.47     3292.21    0.5966  no
+     2000 jitter2%            44374.26    11245.70    0.6416  no
+     2000 glide               33833.59     2730.77    1.0000  no

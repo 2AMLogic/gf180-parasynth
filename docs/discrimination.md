@@ -776,6 +776,25 @@ the reasons are results, not omissions.
   `jit.dphase_ar1.seg0` still exists, because a pairing rule naming a column
   that has been renamed away is unsatisfiable and reads exactly like one that
   is being followed.
+- **`jit.dphase_ar1` now REFUSES below a physical floor (2026-11-13, #763).**
+  It is the lag-1 autocorrelation of the per-cycle period error, and on a clip
+  whose period is perfectly stable there is no period error to correlate, so
+  it was reporting the autocorrelation of numerical noise — float rounding at
+  44.1 kHz, `resample_poly` residue at 48 kHz. Two different noises, so the
+  same clip read two different numbers: +0.225 against −0.203 on a 440 Hz
+  square, a *sign flip* between the reference rate and ours. The guard was
+  `d.std() > 1e-20`, which float rounding clears by four orders of magnitude.
+  It is now `phase scatter > JIT_DPHASE_FLOOR_PPM = 20` ppm of a period — the
+  same 20 ppm `RATE_TOL_ABS["ppm"]` already states for `jit.phasejit_ppm`,
+  swept over five decades in `docs/sensitivity/dphase-ar1-floor.json`. Below
+  it the column is zeroed, which is this module's existing refusal convention;
+  the rest of the row is still reported. **Read the two numbers below with
+  that pending**: the run on this page predates the floor, and how many of its
+  rows fall under it — on the 44.1 kHz reference side and on our 48 kHz render
+  side separately — is **not measured**; the reference corpus was not on the
+  host that made the repair. That count is issue #768, and until it is
+  answered the `jit.stability` attribution of +0.008 on line 232 of
+  `docs/discrimination-run-16.txt` is a figure whose inputs have changed.
 
 **Original promotion list (unexecuted as written):**
 

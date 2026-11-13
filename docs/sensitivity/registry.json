@@ -7,6 +7,7 @@
     "res-cut-law-degree.json",
     "res-cut-correction-entries.json",
     "coupling-k.json",
-    "mean-trials.json"
+    "mean-trials.json",
+    "dphase-ar1-floor.json"
   ]
 }
