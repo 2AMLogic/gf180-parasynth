@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-13
 
+- **Issue #759** (closed): Consolidate the duplicated injected-defect ladder and k-ROM builder in model/ into one copy
+- **PR #764**: refactor: keep one copy of the injected-defect ladder and the k-ROM builder
 - **Issue #755** (closed): Wire or remove tools/bd_pitch_predeclaration_mutants.py: unrun mutation control now REFUSES
 - **PR #757**: run the BD pitch mutation controls: retarget the bool mutant, wire make controls
 - **Issue #756** (closed): tools/probes/check_doc_claims_scope_control.py: a self-described control that no target runs
