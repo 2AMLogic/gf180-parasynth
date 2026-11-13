@@ -23,9 +23,9 @@ T1: 2/11 items met
         input: re-hashed the artifact this envelope names -- matches
         bound: T1 item #9 -> manifests/inventories/item-9.json (content_hash=sha256:ad0f020da701f3dbc18c292cee939f071fbcbb27cf70dca72aebe7482977659a)
 [MET  ] T1 #10 Repo hygiene
-        cite: manifests/evidence/item-10.json (kind=generic, status=pass, content_hash=sha256:f31777a5354363c89a6f1e2983ff1d524245c377e82f6e338a2643713aa5c308, exit_status=0)
+        cite: manifests/evidence/item-10.json (kind=generic, status=pass, content_hash=sha256:b3e6a45ea49d36c9f78b7c1170e2919462cd8f64b5412f8672a16aeaf8676230, exit_status=0)
         input: re-hashed the artifact this envelope names -- matches
-        bound: T1 item #10 -> manifests/inventories/item-10.json (content_hash=sha256:f31777a5354363c89a6f1e2983ff1d524245c377e82f6e338a2643713aa5c308)
+        bound: T1 item #10 -> manifests/inventories/item-10.json (content_hash=sha256:b3e6a45ea49d36c9f78b7c1170e2919462cd8f64b5412f8672a16aeaf8676230)
 [UNMET] T1 #11 Power delivery (structural)
         reason: no_evidence
 [UNMET] T2 #- T2 — signoff-validated

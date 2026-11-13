@@ -6,8 +6,10 @@
 # manifests/inventories/item-10.json; manifests/verdict.txt is the committed
 # `klt signoff --manifest` rendering. This job re-derives both with klt PINNED
 # to the release that first ships `--attest`, and fails on any difference, so
-# an edit to the manifest, the inventory, README.md, LICENSE or a workflow that
-# is not followed by a regeneration cannot land.
+# an edit to the manifest, the inventory, LICENSE or a workflow that is not
+# followed by a regeneration cannot land. README.md is deliberately NOT attested:
+# dag.yml regenerates it on every push to main (with GITHUB_TOKEN, so no workflow
+# runs on that commit), and a raw-bytes hash of it would drift after each one.
 #
 # It is its own workflow so a failing tools/check_workflows.py (one of the
 # inventory's declared checks) is not tangled with another job's failure.
@@ -17,7 +19,7 @@
 # evidence, not no problem"). Without it the attestation is red, not skipped.
 #
 # NO DIRECTORY FILTER and no cancel-in-progress: the attested files are the
-# README and every workflow, so a path filter would exempt the very edits this
+# LICENSE and every workflow, so a path filter would exempt the very edits this
 # exists to catch.
 #
 # Item 9's cold start (tools/item9_cold_start.py, ~8 min, downloads the pinned
