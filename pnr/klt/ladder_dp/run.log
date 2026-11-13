@@ -1,5 +1,21 @@
-klt 0.5.0+g604c4fb8a1ce
-synthesize: 100 s
-dangling all-x assigns removed: 2
-tie cells inserted for constant assigns: 3
-signed qualifiers left: 0
+klt klt 0.9.2.dev986+gaadc1d351523
+pdk gf180mcuD @ /tmp/klt765-pdkroot/ciel/gf180mcu/versions/54435919abffb937387ec956209f9cf5fd2dfbee
+driver pnr/klt/ladder_dp/run_klt.py (no netlist patches)
+netlist pnr/klt/ladder_dp/.klt/synthesize/run-1d73ba62b57b4466b9189a2dbee43d0b/ladder_dp_synth.v sha256:ea7cc228fd4013e7640f87078a1f0f4907b94565f53a21f153c0b4c5f25201c8
+
+[synthesize] klt synthesize --pdk gf180mcuD --pdk-root /tmp/klt765-pdkroot/ciel/gf180mcu/versions/54435919abffb937387ec956209f9cf5fd2dfbee /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-765/pnr/klt/ladder_dp/synth_request.json --format json
+[synthesize] exit=0 seconds=89 response_bytes=5678 response_parses=True verdict=ok
+[synthesize] stderr: empty
+
+[place-and-route] klt place-and-route --pdk gf180mcuD --pdk-root /tmp/klt765-pdkroot/ciel/gf180mcu/versions/54435919abffb937387ec956209f9cf5fd2dfbee /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-765/pnr/klt/ladder_dp/par_request.json --format json
+[place-and-route] exit=1 seconds=1 response_bytes=0 response_parses=False verdict=FAILED (exit 1)
+[place-and-route] stderr: 7 lines
+[place-and-route] | {
+[place-and-route] |   "schema_version": 1,
+[place-and-route] |   "error": {
+[place-and-route] |     "command": "place-and-route",
+[place-and-route] |     "message": "netlist not found: .klt/synthesize/ladder_dp_synth.v"
+[place-and-route] |   }
+[place-and-route] | }
+
+exit 1 (FAILED)

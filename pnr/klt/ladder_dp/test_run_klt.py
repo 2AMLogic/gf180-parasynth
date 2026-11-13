@@ -115,16 +115,25 @@ def test_a_pdk_without_the_requested_cell_library_refuses(tmp_path):
     assert any(CELL_LIBRARY in p for p in problems)
 
 
-def test_a_patched_sibling_netlist_refuses(tmp_path):
-    # The exact pathology this issue retired, written as the gate's input.
+@pytest.mark.parametrize(
+    "netlist",
+    [
+        # The exact pathology this issue retired, written as the gate's input.
+        ".klt/synthesize/ladder_dp_synth_unsigned.v",
+        # And the honest-looking literal path that is still not provably this
+        # run's netlist, because klt mints a fresh run_id per invocation.
+        ".klt/synthesize/ladder_dp_synth.v",
+    ],
+)
+def test_a_literal_netlist_path_refuses(tmp_path, netlist):
     here = _mirrored_here(tmp_path)
     request = json.loads((here / "par_request.json").read_text())
-    request["netlist"] = ".klt/synthesize/ladder_dp_synth_unsigned.v"
+    request["netlist"] = netlist
     (here / "par_request.json").write_text(json.dumps(request))
     problems = run_klt.check_preconditions(
         here=here, pdk_root=_fake_pdk(tmp_path), pdk=PDK, which=_which_all
     )
-    assert any("ladder_dp_synth_unsigned.v" in p for p in problems)
+    assert any(netlist in p for p in problems)
 
 
 def test_a_populated_route_output_directory_refuses(tmp_path):
@@ -149,9 +158,9 @@ def test_an_unparseable_request_refuses(tmp_path):
 
 # ----------------------------------------------------- the committed tree
 
-def test_the_committed_par_request_points_at_the_unpatched_netlist():
+def test_the_committed_par_request_defers_its_netlist_to_the_response():
     request = json.loads((HERE / "par_request.json").read_text())
-    assert request["netlist"] == ".klt/synthesize/ladder_dp_synth.v"
+    assert request["netlist"] == run_klt.NETLIST_SENTINEL
 
 
 def test_no_netlist_patch_survives_in_this_directory():
@@ -163,6 +172,41 @@ def test_no_netlist_patch_survives_in_this_directory():
     body = driver.split('"""', 2)[-1]  # the module docstring names them
     for forbidden in ("tiel", "tieh", "re.sub", "re.subn"):
         assert forbidden not in body, forbidden
+
+
+# ------------------------------------------------------- run-time binding
+
+def test_build_par_request_binds_the_reported_netlist(tmp_path):
+    here = _mirrored_here(tmp_path)
+    netlist = tmp_path / "run-deadbeef" / "ladder_dp_synth.v"
+    netlist.parent.mkdir()
+    netlist.write_text("module ladder_dp(); endmodule\n")
+    out, reason = run_klt.build_par_request(
+        here / "par_request.json", netlist, tmp_path / "derived" / "req.json"
+    )
+    assert reason is None and out is not None
+    derived = json.loads(out.read_text())
+    # Absolute, so the derived request works wherever it is written -- klt
+    # resolves a relative netlist against the request file's own directory.
+    assert derived["netlist"] == str(netlist.resolve())
+    assert pathlib.Path(derived["netlist"]).is_absolute()
+    # Everything else is the committed template, unchanged.
+    template = json.loads((here / "par_request.json").read_text())
+    assert {k: v for k, v in derived.items() if k != "netlist"} == {
+        k: v for k, v in template.items() if k != "netlist"
+    }
+
+
+def test_build_par_request_refuses_a_template_without_the_sentinel(tmp_path):
+    here = _mirrored_here(tmp_path)
+    request = json.loads((here / "par_request.json").read_text())
+    request["netlist"] = ".klt/synthesize/ladder_dp_synth_unsigned.v"
+    (here / "par_request.json").write_text(json.dumps(request))
+    out, reason = run_klt.build_par_request(
+        here / "par_request.json", tmp_path / "n.v", tmp_path / "req.json"
+    )
+    assert out is None
+    assert "ladder_dp_synth_unsigned.v" in reason
 
 
 # ------------------------------------------------------- step bookkeeping

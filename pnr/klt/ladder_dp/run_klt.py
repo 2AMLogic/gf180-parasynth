@@ -85,6 +85,17 @@ REQUIRED_BINARIES = ("klt", "yosys", "openroad")
 #: How much of a step's stderr goes into the committed ``run.log``.
 STDERR_TAIL_LINES = 200
 
+#: What the committed ``par_request.json`` carries in place of a netlist
+#: path. ``klt synthesize`` writes into ``.klt/synthesize/<run_id>/`` and
+#: ``run_id`` defaults to a fresh ``uuid4`` per invocation, so there is no
+#: static path a committed place-and-route request can name twice (pinning
+#: ``run_id`` makes the directory single-use: klt refuses to reuse one).
+#: This driver therefore binds the request at run time to the path the
+#: synthesize response itself reports -- which is also strictly stronger
+#: than a static path, since the netlist routed is by construction the
+#: netlist this run produced. Filed upstream; see docs/tool-findings.md.
+NETLIST_SENTINEL = "@synth_response.netlist_path"
+
 
 def sha256_file(path: Path) -> str:
     """Return ``sha256:<hex>`` over the raw bytes of ``path``."""
@@ -173,15 +184,17 @@ def check_preconditions(
         netlist = par_request.get("netlist")
         if not netlist:
             problems.append(f"{par_request_path} has no netlist field")
-        elif Path(netlist).name != "ladder_dp_synth.v":
+        elif netlist != NETLIST_SENTINEL:
             # The patched-sibling indirection this issue retired: par_request
             # pointed at `ladder_dp_synth_unsigned.v`, a hand-edited copy, so
             # the netlist that was routed was never the netlist klt emitted.
+            # Any literal path here is that same shape, because this driver
+            # applies no patches and klt's own netlist path is run-scoped.
             problems.append(
-                f"{par_request_path} netlist is {netlist!r}, not klt "
-                "synthesize's own 'ladder_dp_synth.v' -- this driver applies "
-                "no netlist patches, so a sibling path means the thing being "
-                "routed is not the thing klt produced"
+                f"{par_request_path} netlist is {netlist!r}, not the "
+                f"{NETLIST_SENTINEL!r} sentinel -- a literal path means the "
+                "netlist being routed is not necessarily the one this run's "
+                "klt synthesize produced"
             )
 
     pnr_out = here / ".klt" / "place-and-route"
@@ -305,7 +318,7 @@ def format_run_log(
     ``par_response.json`` could not be attributed to an invocation.
     """
     lines = [
-        f"klt {klt_version}",
+        klt_version,
         f"pdk {pdk} @ {pdk_root}",
         "driver pnr/klt/ladder_dp/run_klt.py (no netlist patches)",
         netlist_note,
@@ -373,6 +386,30 @@ def resolve_netlist(here: Path, synth_response_path: Path) -> tuple[Path | None,
     if not candidate.exists():
         return None, f"netlist: {rel} declared by the response does not exist"
     return candidate, f"netlist {rel}"
+
+
+def build_par_request(
+    template_path: Path, netlist: Path, out_path: Path
+) -> tuple[Path | None, str | None]:
+    """Write a place-and-route request bound to ``netlist``.
+
+    The committed template carries :data:`NETLIST_SENTINEL`; this substitutes
+    the **absolute** path ``klt synthesize`` reported, so the derived request
+    does not depend on where it is written. Returns ``(path, None)`` or
+    ``(None, reason)``.
+    """
+    template, reason = load_json(template_path)
+    if template is None:
+        return None, reason
+    if template.get("netlist") != NETLIST_SENTINEL:
+        return None, (
+            f"{template_path} netlist is {template.get('netlist')!r}, not "
+            f"{NETLIST_SENTINEL!r}"
+        )
+    template["netlist"] = str(netlist.resolve())
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(template, indent=2) + "\n")
+    return out_path, None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -461,8 +498,28 @@ def main(argv: list[str] | None = None) -> int:
         # "Check that the thing you are testing is the thing that ships."
         # Nothing in this driver edits the netlist; this hash pair is what
         # catches an in-place edit by anything that does, which is the one
-        # shape the par_request path check in check_preconditions cannot see.
+        # shape the par_request netlist check in check_preconditions cannot
+        # see.
         before = sha256_file(netlist)
+        derived, reason = build_par_request(
+            here / "par_request.json",
+            netlist,
+            here / ".klt" / "par_request.resolved.json",
+        )
+        if derived is None:
+            netlist_note = f"{netlist_note} {before} (not routed: {reason})"
+            (here / "run.log").write_text(
+                format_run_log(
+                    klt_version=klt_version,
+                    pdk_root=pdk_root,
+                    pdk=args.pdk,
+                    steps=steps,
+                    netlist_note=netlist_note,
+                    exit_code=EXIT_FAILED,
+                )
+            )
+            print(reason, file=sys.stderr)
+            return EXIT_FAILED
         steps.append(
             run_step(
                 "place-and-route",
@@ -470,7 +527,7 @@ def main(argv: list[str] | None = None) -> int:
                     "klt", "place-and-route",
                     "--pdk", args.pdk,
                     "--pdk-root", str(pdk_root),
-                    str(here / "par_request.json"),
+                    str(derived),
                     "--format", "json",
                 ],
                 par_response,
