@@ -209,6 +209,17 @@ def test_build_par_request_refuses_a_template_without_the_sentinel(tmp_path):
     assert "ladder_dp_synth_unsigned.v" in reason
 
 
+def test_the_derived_request_is_a_sibling_of_the_template_and_ignored():
+    # klt derives its output directory from the request FILE's directory, so a
+    # derived request written under `.klt/` routes into `.klt/.klt/place-and-
+    # route/` -- observed, then fixed. The precondition check for a populated
+    # output directory looks at `.klt/place-and-route`, so the two must agree.
+    assert not run_klt.DERIVED_PAR_REQUEST_NAME.startswith(".klt")
+    assert "/" not in run_klt.DERIVED_PAR_REQUEST_NAME
+    gitignore = (HERE.parents[2] / ".gitignore").read_text()
+    assert f"pnr/klt/*/{run_klt.DERIVED_PAR_REQUEST_NAME}" in gitignore
+
+
 # ------------------------------------------------------- step bookkeeping
 
 class _FakeCompleted:

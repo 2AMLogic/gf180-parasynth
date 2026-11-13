@@ -130,8 +130,11 @@ What we have already found and had NOT filed until someone asked:
   does not say so.** The flow completes and yields a plausible-looking layout
   with no power delivery. Now klayout-tools#2086.
 
-Both sat in `pnr/klt/ladder_dp/run-klt.sh` as comments for weeks. The work of
-discovering them was done; only the filing was missing.
+Both sat as comments in `pnr/klt/ladder_dp/run-klt.sh` for weeks. The work of
+discovering them was done; only the filing was missing. Both fixes landed
+upstream in September and the script's patches were retired in #765 -- the
+historical script is `git show b9930a4a:pnr/klt/ladder_dp/run-klt.sh`, and
+`pnr/klt/ladder_dp/run_klt.py` is what runs the flow now.
 
 **The rule.** If you work around a tool rather than a bug in our design, the
 workaround is evidence and it goes upstream -- `2AMLogic/klayout-tools` for

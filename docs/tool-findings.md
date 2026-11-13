@@ -73,7 +73,32 @@ Filed with the three table entries sourced against the installed PDK
 and with the cheapest fix regardless of the tables: **warn when `cell_library`
 matches no table.**
 
-Workaround in our tree: `pnr/klt/ladder_dp/run-klt.sh`.
+**Retired 2026-11-13, at klt `0.9.2.dev986+gaadc1d351523` (#765).** The three
+patches in `pnr/klt/ladder_dp/run-klt.sh` are gone and
+`pnr/klt/ladder_dp/run_klt.py` runs the flow with none. Re-run on the same PDK
+the original used (`gf180mcuD` @ ciel `54435919…`), so klt is the only variable
+that moved. The generated `synth_ladder_dp.run.ys` now carries all three things
+this finding said were missing for the 7t library -- `abc -constr
+ladder_dp_abc.constr -D 81380`, `setundef -zero`, and `hilomap -hicell
+gf180mcu_fd_sc_mcu7t5v0__tieh Z -locell gf180mcu_fd_sc_mcu7t5v0__tiel ZN` --
+and in the netlist each patch's target is now **zero**:
+
+| patch's target, counted in `ladder_dp_synth.v` | klt 0.5.0 | klt 0.9.2 |
+|---|---|---|
+| `signed` port/wire declarations (patch 1, `STA-0171`) | present | **0** |
+| bare `assign x = 1'h0;` constants (patch 2, `DRT-0305`) | 3 | **0** |
+| all-x `assign` with no load (patch 3, same GROUND net) | 2 | **0** |
+| klt's own `__tiel`/`__tieh` instances | 0 | **59** |
+
+The silent half is fixed too: `timing` is no longer `null` inside an `"ok"`
+envelope -- the same request now reports `critical_path_ps: 30288.33` against
+its `delay_target_ps: 81380` -- and `provenance` carries `klt_git_commit` and
+`klt_reinstall_spec` alongside `klt_version`, which is #2090.
+
+Not the same netlist: `instance_count` went 5328 -> 5703 and `area_um2`
+113292.0768 -> 117230.2656, which is what applying `-constr`, `setundef` and
+`hilomap` to this library costs. The committed `synth_response.json` is the new
+run; the 0.5.0 one is `git show b9930a4a:pnr/klt/ladder_dp/synth_response.json`.
 
 ### klayout-tools#2089 — `detailed_route` runs twice into the same `-output_drc` path, so the DRC count comes back doubled
 

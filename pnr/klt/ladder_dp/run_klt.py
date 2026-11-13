@@ -96,6 +96,11 @@ STDERR_TAIL_LINES = 200
 #: netlist this run produced. Filed upstream; see docs/tool-findings.md.
 NETLIST_SENTINEL = "@synth_response.netlist_path"
 
+#: Where the run-time-bound request is written. A sibling of the template,
+#: because klt resolves a request's output directory against the request
+#: file's own directory.
+DERIVED_PAR_REQUEST_NAME = "par_request.resolved.json"
+
 
 def sha256_file(path: Path) -> str:
     """Return ``sha256:<hex>`` over the raw bytes of ``path``."""
@@ -501,10 +506,14 @@ def main(argv: list[str] | None = None) -> int:
         # shape the par_request netlist check in check_preconditions cannot
         # see.
         before = sha256_file(netlist)
+        # Deliberately a sibling of the template, not inside `.klt/`: klt
+        # derives its output directory from the *request file's* directory, so
+        # a request under `.klt/` routes into `.klt/.klt/place-and-route/`.
+        # Gitignored (`pnr/klt/*/par_request.resolved.json`).
         derived, reason = build_par_request(
             here / "par_request.json",
             netlist,
-            here / ".klt" / "par_request.resolved.json",
+            here / DERIVED_PAR_REQUEST_NAME,
         )
         if derived is None:
             netlist_note = f"{netlist_note} {before} (not routed: {reason})"
