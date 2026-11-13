@@ -6,15 +6,29 @@
 Each mutant removes ONE guard from a scratch copy of the tree (never this
 checkout) and runs the focused controls named for it.  Every mutant must turn
 them RED (pytest exit 1); any other outcome is reported and the script exits 1.
+That reading of exit 1 is only sound because the baseline gate below has
+already proved the same selection GREEN on the unmutated tree.
 This backs the mutation-control claim in docs/bd-pitch-baseline-request.md with
 code: it covers the guards the start-red stub cannot reach one at a time (the
 stub replaces the whole validator, and does not touch
 tools/bd_glide_phase_sweep.py at all).
 
-Input that defeats it (rule 8): a mutant whose `old` text no longer appears
-exactly once in the source would silently mutate nothing and the suite would
-stay green -- reported as NOT RED, which is right, but for the wrong reason.
-So a target found 0 or 2+ times REFUSES (exit 2) before anything runs.
+Two inputs that defeat it (rule 8), both REFUSED (exit 2) before any verdict
+line is printed:
+
+  1. A mutant whose `old` text no longer appears exactly once in the source
+     would silently mutate nothing and the suite would stay green -- reported
+     as NOT RED, which is right, but for the wrong reason.  So a target found
+     0 or 2+ times REFUSES.
+  2. `pytest` exiting 1 for a reason that is not the removed guard.  `python -m
+     pytest` exits 1 when the module is not installed, so on a host without it
+     every mutant was counted RED with ZERO tests executed -- `all 12 mutants
+     red`, exit 0, nothing measured (PR #757 review, reproduced on a worker
+     whose system python3 has no pytest; Makefile's PY falls back to python3
+     when .venv is absent, so `make controls` reached it).  A baseline that is
+     already failing on the UNMUTATED tree, and a `-k` that selects no test at
+     all (exit 5), are the same hole.  So every selection is run on the
+     unmutated scratch copy first and must exit 0.
 Ported from doctor/601-alt-359303ec and re-targeted at this branch's code.
 
 That REFUSE fired for real (#755): commit b6590cb7 moved the local `_finite`
@@ -25,7 +39,7 @@ script.  The mutant now removes the bool rejection from the shared guard where
 it actually lives, that file joins the restore set, and `make controls` runs
 this script so the next such drift is red instead of unseen.  The fast half of
 that cover is `test_mutant_targets_still_match_exactly_once` in
-tools/test_bd_pitch_predeclaration.py, which `make verify` runs in
+tools/test_bd_pitch_predeclaration_mutants.py, which `make verify` runs in
 milliseconds; this script is the half that proves the controls go red.
 """
 from __future__ import annotations
@@ -88,6 +102,26 @@ MUTANTS = {
 # mutants that follow it.  A hand-maintained second list could.
 FILES = tuple(sorted({rel for rel, *_ in MUTANTS.values()}))
 
+# Each selection once, for the baseline gate: three mutants share
+# "invalid_baseline_numbers", and re-running it per mutant would pay for the
+# same evidence three times.
+SELECTIONS = tuple(sorted({k for *_, k in MUTANTS.values()}))
+
+
+def _focused(dst: pathlib.Path, k: str) -> subprocess.CompletedProcess:
+    """One focused control run inside the scratch tree -- the SAME command for
+    the baseline and for the mutant, so the baseline cannot pass by running
+    something easier than the thing whose exit code becomes a verdict."""
+    return subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                           TEST, "-k", k], cwd=dst, capture_output=True, text=True)
+
+
+def _tail(r: subprocess.CompletedProcess) -> str:
+    """Last line of output, falling back to stderr: a missing pytest writes
+    `No module named pytest` to stderr and NOTHING to stdout, which is how the
+    original defect rendered as a bare `<no output>` beside every RED."""
+    return ((r.stdout.strip() or r.stderr.strip()).splitlines() or ["<no output>"])[-1]
+
 
 def main() -> int:
     bad = 0
@@ -97,19 +131,28 @@ def main() -> int:
         shutil.copytree(ROOT, dst, ignore=shutil.ignore_patterns(
             ".git", ".loom", "build", "__pycache__", ".pytest_cache", "node_modules"))
         originals = {rel: (dst / rel).read_text() for rel in FILES}
+        # Precondition 1 (free): every mutant still aims at code.
         for name, (rel, old, new, _) in MUTANTS.items():
             n = originals[rel].count(old)
             if n != 1:
                 print(f"REFUSED: mutant {name}: target text found {n} times in {rel}")
                 return 2
+        # Precondition 2 (~4 s): every selection is GREEN on the UNMUTATED tree,
+        # so a later exit 1 can only mean the removed guard.  Without this, a
+        # host with no pytest reports all 12 RED having run nothing.
+        for k in SELECTIONS:
+            r = _focused(dst, k)
+            if r.returncode != 0:
+                print(f"REFUSED: baseline `pytest {TEST} -k {k}` exits {r.returncode} on the "
+                      f"UNMUTATED tree -- no mutant's exit code can mean anything: {_tail(r)}")
+                return 2
         for name, (rel, old, new, k) in MUTANTS.items():
             for r, src in originals.items():              # restore every file
                 (dst / r).write_text(src)
             (dst / rel).write_text(originals[rel].replace(old, new))
-            r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
-                                TEST, "-k", k], cwd=dst, capture_output=True, text=True)
-            tail = (r.stdout.strip().splitlines() or ["<no output>"])[-1]
-            red = r.returncode == 1
+            r = _focused(dst, k)
+            tail = _tail(r)
+            red = r.returncode == 1          # sound: the baseline gate proved 0
             bad += not red
             print(f"{name:36s} {'RED' if red else f'NOT RED (pytest exit {r.returncode})'}  {tail}")
     print(f"all {len(MUTANTS)} mutants red" if not bad else f"FAIL: {bad} mutant(s) not red")

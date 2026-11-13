@@ -499,7 +499,11 @@ verify-full:
 ## commit b6590cb7 moved into tools/finite_number.py, its own rule-8 precheck
 ## REFUSED (exit 2), and no target ran it, so none of the 12 executed for about
 ## four weeks while two documents asserted the result. Pure Python, no corpus,
-## ~5 s (12 runs of one focused pytest file). Its fast half --
+## ~12 s: 10 baseline runs of one focused pytest file that must all be GREEN on
+## the unmutated tree (without them a host with no pytest reports all 12 RED
+## having run nothing, #757), then the 12 mutant runs that must all be RED.
+## REFUSES (exit 2) rather than reporting if either precondition fails. Its
+## fast half --
 ## tools/test_bd_pitch_predeclaration_mutants.py, the same precheck read
 ## statically off the real tree -- runs under `verify`.
 controls:
