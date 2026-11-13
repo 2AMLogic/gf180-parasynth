@@ -2,12 +2,56 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-13
+
+- **Issue #755** (closed): Wire or remove tools/bd_pitch_predeclaration_mutants.py: unrun mutation control now REFUSES
+- **PR #757**: run the BD pitch mutation controls: retarget the bool mutant, wire make controls
+- **Issue #756** (closed): tools/probes/check_doc_claims_scope_control.py: a self-described control that no target runs
+- **PR #758**: docs: record the claim-checker scope control as a one-time #435 record
+
+### 2026-11-12
+
+- **PR #754**: Bump Repo Skills 0.25.10 -> 0.26.1
+
+### 2026-11-10
+
+- **Issue #572** (closed): Auditor guard telemetry: sql delete no where false positive on Python del
+
+### 2026-11-07
+
+- **PR #752**: Bump Repo Skills 0.25.1 -> 0.25.10
+
+### 2026-11-06
+
+- **Issue #749** (closed): Dedupe BS.1770 K-weighted loudness: 3 hand-copied implementations, already drifted
+- **Issue #570** (closed): Auditor guard telemetry: stash scope create redirect false positives
+- **Issue #571** (closed): Auditor guard telemetry: worktree write confinement blocks sweep checkpoint
+- **Issue #732** (closed): Consolidate duplicated compare_files/main scaffolding across three candidate comparators
+- **Issue #547** (closed): reference_rigs._k_rom_for caches on id(g_rom): a freed candidate ROM can hand its k table to the next
+- **PR #751**: fix(model): key substituted-ROM k cache on content, not id()
+
+### 2026-11-01
+
+- **PR #746**: Bump Repo Skills 0.24.7 -> 0.25.1
+- **Issue #747** (closed): tools: test_rho_is_invariant_to_record_gain fails on main (rho value is None)
+- **PR #748**: tools: compare refused rho depths by None-ness in the gain-invariance test
+
+### 2026-10-30
+
+- **Issue #745** (closed): Remove audition/physical.py: unreferenced float modal sketch
+
+### 2026-10-29
+
+- **Issue #742** (closed): CI regrade fails on main: committed item-10 attestation hashes a README.md the DAG bot regenerates
+- **PR #743**: signoff: stop attesting README.md, which dag.yml rewrites
+
 ### 2026-10-27
 
 - **PR #740**: ci: attest T1 item 9 (testbenches shipped) with klt signoff
 - **PR #739**: ci: attest T1 item 10 with klt signoff and re-grade the committed verdict
 - **Issue #738** (closed): T1 item 9 (testbenches shipped): inventory of the RTL-vs-model benches and klt signoff --attest 9
 - **Issue #737** (closed): T1 item 10 (repo hygiene): klt signoff block manifest, committed verdict with CI re-grade, and --attest 10
+- **Issue #744** (closed): main: item-10 attestation drifted after README regeneration (regrade red on every PR)
 
 ### 2026-10-24
 
