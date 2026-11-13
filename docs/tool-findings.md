@@ -100,6 +100,39 @@ Not the same netlist: `instance_count` went 5328 -> 5703 and `area_um2`
 `hilomap` to this library costs. The committed `synth_response.json` is the new
 run; the 0.5.0 one is `git show b9930a4a:pnr/klt/ladder_dp/synth_response.json`.
 
+### klayout-tools#5577 — `klt synthesize`'s netlist path carries a per-run uuid, so no committed `klt place-and-route` request can name it
+
+**New, 2026-11-13.** klt `0.9.2.dev986+gaadc1d351523`
+(`klt_git_commit` `aadc1d351523`), PDK `gf180mcuD` @ ciel `54435919…`,
+`gf180mcu_fd_sc_mcu7t5v0`, `tt_025C_5v00`.
+
+Found by #765 while retiring the #2088 workaround: with the patches gone, the
+re-run died in **one second**, before OpenROAD, with
+
+```
+{"schema_version": 1, "error": {"command": "place-and-route",
+ "message": "netlist not found: .klt/synthesize/ladder_dp_synth.v"}}
+```
+
+`klt synthesize` now writes into `.klt/synthesize/<run_id>/`, and `run_id`
+defaults to `f"run-{uuid.uuid4().hex}"` (`synthesize.py:1236`), so the path is
+unpredictable per invocation. Pinning `run_id` in the request does not fix it:
+`_create_run_directory` (`synthesize.py:1234`) claims the directory with
+`os.mkdir` and refuses an existing one — "each invocation needs a new run_id
+(prior evidence is retained)" — so a pinned path works **exactly once**. There
+is therefore no value of `netlist` a repository can commit and run twice.
+
+Same family as #2085 ("klt synthesize emits netlists its own place-and-route
+cannot consume"), for the netlist's *path* rather than its contents: #2085's
+three content defects are genuinely fixed, and this is what the next caller
+hits instead.
+
+Workaround in our tree, and it is a workaround: `pnr/klt/ladder_dp/run_klt.py`
+reads `netlist_path` out of the synthesize response and substitutes it into a
+derived place-and-route request. Filed with three fixes ranked by cost, the
+cheapest being a `synthesize_report` request field so place-and-route can name
+the *report* rather than the netlist.
+
 ### klayout-tools#2089 — `detailed_route` runs twice into the same `-output_drc` path, so the DRC count comes back doubled
 
 **New.** Same environment. Root cause in klt source: one `detailed_route_call`
@@ -300,14 +333,38 @@ today** and needs no tool fix — nobody wired it up. `docs/v0.3-scope.md` and
   but we have not established what klt could feasibly capture from the router,
   so it is not filed. **Next step: establish whether the skipped enclosure
   rules are checkable by `klt drc`'s gf180mcu deck instead.**
-- **`pnr/klt/ladder_dp/par_response.json` is 0 bytes.** `klt place-and-route
-  --format json` produced no output on a run that had written a routed DEF,
-  ODB, DRC report and metrics. A JSON-consuming caller gets a parse error
-  rather than a structured failure envelope. **Not filed:** stderr was not
-  captured, and the file's mtime (Sep 18 01:37) predates the route artefacts
-  (Sep 18 15:57), so we cannot establish which invocation produced it or why.
-  Re-running is out of scope for this pass. To file this, capture stderr and
-  the exit status.
+- **`pnr/klt/ladder_dp/par_response.json` is 0 bytes.** **Half-settled by #765,
+  and the half that is settled is not a defect.** The capture this entry asked
+  for was made — `pnr/klt/ladder_dp/run_klt.py` records every step's exit
+  status and stderr — and it shows the mechanism for an 0-byte response on a
+  **failed** run: `--format json` writes the error envelope to **stderr** and
+  nothing to stdout, so `… --format json > par_response.json` leaves a 0-byte
+  file behind on any error. Reproduced in one second, on both verbs, with a
+  request naming a file that does not exist:
+
+  ```
+  $ python3 tools/klt_error_stream_probe.py --pdk-root <pdk>
+  place-and-route  exit=1  stdout_bytes=0  stderr_bytes=132  envelope_stream=stderr
+  synthesize       exit=1  stdout_bytes=0  stderr_bytes=129  envelope_stream=stderr
+  ```
+
+  `tools/klt_error_stream_probe.py` is that measurement, committed, with its
+  own tests — the point of this entry's history is that the number was once
+  only available by accident.
+
+  **Not filed, because it is deliberate and documented in the source**:
+  `cli/output.py:139` — "``format == "json"`` writes the documented error
+  envelope to stderr" — which keeps stdout clean for the success report. The
+  cost is borne by the caller: a `>` redirect, which is how klt's own
+  request/response pairs are driven, turns every failure into a 0-byte
+  artefact. Our driver now captures both streams, so the envelope survives.
+
+  **Still unexplained, and this is the original claim:** the committed 0-byte
+  file followed a run that *had* written a routed DEF, ODB, DRC report and
+  metrics. A successful route should put a report on stdout. Nothing found in
+  #765 accounts for that case, and its mtime (Sep 18 01:37) still predates the
+  route artefacts (Sep 18 15:57). Filing it still needs a successful route
+  whose response is 0 bytes, which #765 did not produce.
 
 ---
 
