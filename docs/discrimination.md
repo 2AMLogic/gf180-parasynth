@@ -795,6 +795,36 @@ the reasons are results, not omissions.
   host that made the repair. That count is issue #768, and until it is
   answered the `jit.stability` attribution of +0.008 on line 232 of
   `docs/discrimination-run-16.txt` is a figure whose inputs have changed.
+- **The count still has no number, and now has an instrument (2026-11-13,
+  #768). The measurement is REFUSED for a missing capability, not pending for
+  want of effort.** What ships:
+  - `tools/dphase_floor_census.py` counts the rows per side —
+    `reported` / `floor_refused` / `degenerate_refused` / `row_invalid`,
+    read from `jitter_features`' own refusal decision and never from
+    `value == 0`. That distinction is the whole instrument: this module
+    zeroes *every* `jit.*` column when the window does not hold
+    `JIT_MIN_CYCLES`, so counting zeroes would credit the floor with rows it
+    never touched, and `degenerate_refused` keeps the two pre-#763
+    divide-by-zero legs out of the floor's tally as well.
+  - `model/discrimination_run.py --dphase-floor-ppm 0 --seed N` is the other
+    half: the A/B must be **two runs at one commit** differing only in the
+    floor. Comparing a fresh run against the +0.008 below would confound the
+    floor with every model change since `7078320bd8bd`, which is where that
+    figure was measured. #763 shipped the override on `jitter_features` but
+    nothing above it could reach the hook — `extra_features` passed neither
+    argument — so until this change a floor-off arm was not expressible and
+    an A/B driven from the CLI would have returned two identical arms.
+  - **Why there is still no number.** The run needs the Fischer corpus and
+    the pinned build box; the dispatch worker that built the instrument has
+    neither (`~/dev/refs` absent, `GF180_TR808_REFS` unset, no `.env`). The
+    census asserts both and exits 2 rather than printing a count, which is
+    the only honest output a host in that state can produce.
+  - **When it is run, the report must name the commit it was measured at.**
+    `jit.cycledshape.seg0` is in the same `jit.stability` bucket (six
+    columns: `cyclecorr`, `cycledshape`, `phasejit_ppm`, `phasecurv_ppm`,
+    `dphase_ar1`, `enstd_db`), so #767's repair will move this same
+    attribution figure again, and an undated +0.008 could not be told from
+    the one above it.
 
 **Original promotion list (unexecuted as written):**
 

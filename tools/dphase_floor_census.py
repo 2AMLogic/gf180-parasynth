@@ -231,9 +231,9 @@ def report(pre: dict, res: dict, out) -> None:
           f"numpy {np.__version__}", file=out)
     print(f"corpus {pre['refdir']}: {pre['n_wav']} WAVs, sha256 "
           f"{pre['corpus_sha256']}, split hash {pre['split_hash']}", file=out)
-    print(f"floor {res['floor_ppm']:g} ppm"
-          f"{' (shipped JIT_DPHASE_FLOOR_PPM)' if res['floor_is_shipped'] else ' (OVERRIDDEN)'}"
-          f"; arm {res['arm']}", file=out)
+    which = (" (shipped JIT_DPHASE_FLOOR_PPM)" if res["floor_is_shipped"]
+             else " (OVERRIDDEN)")
+    print(f"floor {res['floor_ppm']:g} ppm{which}; arm {res['arm']}", file=out)
     print(file=out)
     print("A row is counted from the REFUSAL DECISION, never from a zero value:", file=out)
     print("  reported            the column answered", file=out)
