@@ -58,13 +58,25 @@ perfectly while measuring nothing but the sample rate. That is the exact
 failure `docs/failure-modes.md` is about: an estimator that answers in the
 place where evidence belongs.
 
-So every period below is stated in SECONDS and converted with
-`round(sr * T)`, every band edge is stated in Hz, and the longest fold is
-constrained so that the integer rounding is under 1 % at both rates.
+So every period below is stated in SECONDS and every band edge in Hz.
 `test_extra_features_are_rate_independent` is the assertion, and
 `test_mpd_would_have_caught_a_sample_indexed_fold` is the red control that
 shows the test can fail -- a sample-indexed fold is carried alongside purely
 so that something in this file demonstrably separates 44.1 k from 48 k.
+
+AND STATING A PERIOD IN SECONDS IS NOT ENOUGH ON ITS OWN, WHICH IS #767. For
+most of this file's life the seconds were converted with `round(sr * T)` and
+the cycle fold used `dominant_period`, an integer lag, and the claim was that
+the rounding is "under 1 % at both rates". It is -- and under 1 % was not
+small enough. The FRACTIONAL part of a fold period is not the same at the two
+rates (5.0 ms is 220.5 samples at 44.1 kHz and exactly 240 at 48 kHz; a
+440 Hz period is 100.23 against 109.09), consecutive rows walk by that much
+per row, and the walk went into the row statistics as if it were the
+oscillator: `jit.cycledshape` read 0.0141 against 0.1729 on the same 880 Hz
+clip, eight times the tolerance. The periods are now EXACT and the rows are
+read by band-limited interpolation -- see FOLD_SINC_TAPS and `_fold_at` --
+and the worst gap anywhere on a 44-value f0 sweep in both resampling
+directions is 0.0142 against 0.0200.
 
 Run the self-tests:
 
@@ -162,6 +174,37 @@ RATE_TOL_ABS = {"ppm": 20.0, "db": 0.5, "ratio": 0.02, "ms": 0.05, "count": 1.0}
 # python-constant as one.
 JIT_DPHASE_FLOOR_PPM = 20
 
+# THE FOLD INTERPOLATOR, in samples of kernel half-width -- #767.
+#
+# The defect. Every fold in this file used to cut rows at an INTEGER number of
+# samples, and the fractional part of the period the row is supposed to be is
+# not the same at 44.1 kHz as at 48 kHz. Two consequences, measured:
+#   * `jit.cycledshape` folds at `dominant_period`, an integer lag. A 440 Hz
+#     period is 100.23 samples at 44.1 kHz and 109.09 at 48 kHz, so row i
+#     starts i*0.23 samples late on one side and i*0.09 early on the other --
+#     the rows WALK, and the walk is a property of the sample grid.
+#   * `mpd*` folds at `round(sr*T)`: 220 samples at 44.1 kHz where 5.0 ms is
+#     220.5, against exactly 240 at 48 kHz. The module docstring already says
+#     every period here is stated in SECONDS; `round` was the one place that
+#     quietly made it samples again.
+# Worst measured 44.1k->48k gap before the repair: 0.159 in
+# `jit.cycledshape.seg0` at 880 Hz against a 0.02 tolerance, 8x over.
+#
+# The repair is to fold at the EXACT period and read each row position by
+# band-limited interpolation -- `_fold_at`. This constant is that
+# interpolator's only dial: the half-width, in samples, of the Hann-windowed
+# sinc kernel. It is a point on a committed grid --
+# docs/sensitivity/fold-interpolator.json, which is where to argue about the
+# value -- and an integer because tools/sensitivity.py reads a shipped
+# python-constant as one.
+#
+# -1 is not a width. It selects the integer-lag fold that shipped BEFORE this
+# repair, and exists so `tools/probes/fold_rate_sweep.py` can measure the
+# defect against the code that SHIPS rather than against a copy of it. It is
+# never the shipped value; `test_the_fold_interpolator_ships_a_real_width`
+# asserts that.
+FOLD_SINC_TAPS = 16
+
 
 def _unit_of(name: str) -> str:
     if "ppm" in name:
@@ -190,6 +233,74 @@ def _fold(x: np.ndarray, p: int) -> np.ndarray:
     return x[:n * p].reshape(n, p) if n >= 2 else np.empty((0, p))
 
 
+def _read_at(x: np.ndarray, pos: np.ndarray, taps: int) -> np.ndarray:
+    """`x` read at FRACTIONAL sample positions, by Hann-windowed sinc.
+
+    Band-limited on purpose, for the reason `_resample` is: a linear
+    interpolation has its own high-frequency roll-off, and a roll-off that
+    varies with the sub-sample offset is exactly the kind of artefact that
+    looks like a rate-dependent feature and is not one.
+
+    Two properties are load-bearing:
+      * at an INTEGER position the kernel is 1 at that sample and exactly 0
+        at every other (`sinc` of a non-zero integer is 0), so this reduces
+        to plain indexing and a fold whose period happens to be whole
+        reproduces `_fold` to the bit. `test_the_fold_reduces_to_indexing_on_a_whole_period`
+        is that assertion.
+      * the kernel is normalised to unit sum, so the read has no DC droop
+        that varies with the offset. Normalising is a no-op at an integer
+        position, so it does not cost the property above.
+
+    Outside the clip `x` is zero, which is the same convention `_fold` has by
+    dropping the remainder.
+    """
+    x = np.asarray(x, float)
+    if taps <= 0:
+        return x[np.clip(np.rint(pos).astype(int), 0, len(x) - 1)]
+    xp = np.concatenate([np.zeros(taps), x, np.zeros(taps)])
+    i0 = np.floor(pos).astype(int)
+    out = np.zeros(pos.shape, float)
+    wsum = np.zeros(pos.shape, float)
+    for k in range(-taps + 1, taps + 1):
+        d = pos - (i0 + k)
+        w = np.where(np.abs(d) < taps,
+                     np.sinc(d) * (0.5 + 0.5 * np.cos(np.pi * d / taps)), 0.0)
+        out += w * xp[np.clip(i0 + k + taps, 0, len(xp) - 1)]
+        wsum += w
+    return out / np.where(np.abs(wsum) < _EPS, 1.0, wsum)
+
+
+def _fold_at(x: np.ndarray, period: float, taps: int | None = None) -> np.ndarray:
+    """(n_folds, P) at an EXACT, possibly fractional, `period`. #767.
+
+    `_fold`'s sibling and the one the shipped features use. Row i starts at
+    `i * period` samples -- not at `i * round(period)` -- so consecutive rows
+    stay aligned to the waveform however the period falls between two
+    samples, and the P = `round(period)` columns of a row are read at
+    `period / P` apart so a row still spans exactly one period. The row COUNT
+    and the column count are unchanged from `_fold`; only the alignment is.
+
+    `taps` overrides FOLD_SINC_TAPS and exists so the sweep instrument can
+    measure the shipped code rather than a copy of it. `taps < 0` selects the
+    integer-lag `_fold` that shipped before #767, which is how the probe
+    reproduces the defect.
+    """
+    taps = FOLD_SINC_TAPS if taps is None else int(taps)
+    P = int(round(period))
+    if P < 2 or not np.isfinite(period):
+        return np.empty((0, max(P, 1)))
+    if taps < 0:
+        return _fold(np.asarray(x, float), P)
+    x = np.asarray(x, float)
+    step = period / P
+    n = int(np.floor((len(x) - 1 - (P - 1) * step) / period)) + 1
+    if n < 2:
+        return np.empty((0, P))
+    pos = (np.arange(n, dtype=float)[:, None] * period
+           + np.arange(P, dtype=float)[None, :] * step)
+    return _read_at(x, pos, taps)
+
+
 def _fold_stats(F: np.ndarray) -> dict:
     """Statistics ACROSS folds. Every one is a ratio or a correlation, so a
     pure gain on the clip cancels and the numbers are comparable between a
@@ -214,13 +325,22 @@ def _fold_stats(F: np.ndarray) -> dict:
     return dict(shapevar=shapevar, dshape=dshape, rowcorr=rowcorr, enstd=enstd)
 
 
-def mpd_features(x: np.ndarray, sr: int) -> tuple:
-    """Multi-period fold at fixed periods stated in SECONDS."""
+def mpd_features(x: np.ndarray, sr: int, taps: int | None = None) -> tuple:
+    """Multi-period fold at fixed periods stated in SECONDS -- and folded at
+    `sr * T` exactly, not at `round(sr * T)`.
+
+    THE ROUNDING WAS THE ONE PLACE THIS MODULE STATED A PERIOD IN SECONDS AND
+    THEN USED SAMPLES. 5.0 ms is 220.5 samples at 44.1 kHz and exactly 240 at
+    48 kHz, so the rounded stride was 0.23 % short on one side of the study's
+    rate pair and exact on the other, and `rowcorr` on a tone whose period is
+    near-commensurate with the stride read the difference: -0.1339 against
+    -0.1613 at 660 Hz, against a 0.02 tolerance. See FOLD_SINC_TAPS and #767.
+
+    `taps` is the interpolator override, for the sweep instrument only."""
     vals, names = [], []
     for s, seg in enumerate(_segments(np.asarray(x, float), MPD_SEGS)):
         for T in MPD_PERIODS_S:
-            p = int(round(sr * T))
-            st = _fold_stats(_fold(seg, p)) if p >= 2 else _fold_stats(np.empty((0, 1)))
+            st = _fold_stats(_fold_at(seg, sr * T, taps))
             for k in ("shapevar", "dshape", "rowcorr", "enstd"):
                 vals.append(st[k])
                 names.append(f"mpd{T * 1e3:.2f}ms.{k}.seg{s}")
@@ -270,7 +390,7 @@ def refine_frequency(x: np.ndarray, sr: int, f0: float,
 
 
 def jitter_features(x: np.ndarray, sr: int, dphase_floor_ppm: float | None = None,
-                    trace: dict | None = None) -> tuple:
+                    trace: dict | None = None, taps: int | None = None) -> tuple:
     """Fold at the signal's OWN dominant period and ask whether consecutive
     cycles repeat. This is #56 as a number.
 
@@ -314,12 +434,22 @@ def jitter_features(x: np.ndarray, sr: int, dphase_floor_ppm: float | None = Non
     p = dominant_period(x, sr)
     if p < 4:
         return np.zeros(len(names)), names
-    F = _fold(x, p)
+    if len(x) // p < JIT_MIN_CYCLES:
+        return np.zeros(len(names)), names
+    # THE FOLD IS AT THE REFINED PERIOD, NOT AT THE INTEGER LAG. `p` is an
+    # argmax over whole sample lags, so it is the true period rounded; folding
+    # at it makes row i start i*(pr-p) samples out, and THAT walk -- not the
+    # oscillator -- was most of what `cycledshape` reported. It is also not
+    # the same walk at the two rates (100.23 samples at 44.1 kHz against
+    # 109.09 at 48 kHz for 440 Hz), which is #767. `p` still gates: it is the
+    # cycle count the refusal below is about, and it does not depend on the
+    # refinement succeeding.
+    f = refine_frequency(x, sr, sr / p)
+    pr = sr / f
+    F = _fold_at(x, pr, taps)
     if F.shape[0] < JIT_MIN_CYCLES:
         return np.zeros(len(names)), names
     st = _fold_stats(F)
-    f = refine_frequency(x, sr, sr / p)
-    pr = sr / f
     ncyc = int(len(x) / pr)
     if ncyc < JIT_MIN_CYCLES:
         return np.zeros(len(names)), names
@@ -478,9 +608,12 @@ def multiscale_features(x: np.ndarray, sr: int, floor_db: float = -80.0) -> tupl
 
 
 # ---------------------------------------------------------------------------
-def extra_features(x: np.ndarray, sr: int) -> tuple:
-    """Every column this module adds, in one fixed order."""
-    parts = [mpd_features(x, sr), jitter_features(x, sr),
+def extra_features(x: np.ndarray, sr: int, taps: int | None = None) -> tuple:
+    """Every column this module adds, in one fixed order.
+
+    `taps` overrides FOLD_SINC_TAPS for every fold below and is the sweep
+    instrument's handle on the shipped code; it defaults to off."""
+    parts = [mpd_features(x, sr, taps), jitter_features(x, sr, taps=taps),
              cqt_features(x, sr), multiscale_features(x, sr)]
     vals = np.concatenate([p[0] for p in parts])
     names = [n for p in parts for n in p[1]]
@@ -553,6 +686,33 @@ def _square(f0, sr, dur=0.24, jitter=0.0, seed=0):
     return np.asarray(out[:int(sr * dur)], float)
 
 
+def _bl_square(f0, sr, dur=0.24):
+    """A square wave whose period is EXACTLY 1/f0 seconds at any rate.
+
+    THE INPUT THAT DEFEATS THE REPAIR #767 MADE (verification-rules rule 8).
+    `_square` lays each period down as a whole number of samples, so a clip
+    built at 44.1 kHz is exactly integer-periodic THERE and fractional only on
+    the resampled side. A fold repair could therefore pass the rate test by
+    being right on one side of every pair, for the same reason the original
+    integer fold passed the single-stimulus version of the test. This
+    generator has no sample grid in it: odd harmonics at 1/k, summed
+    analytically up to 0.45*sr, so the period is 84.32 samples at 44.1 kHz and
+    91.78 at 48 kHz for the 523 Hz panel entry -- fractional at BOTH, and
+    neither side is the side the fold happens to be aligned to.
+
+    Band-limited at 0.45*sr rather than at Nyquist so that the two rates carry
+    the same harmonics up to 19.8 kHz and `_resample` is not the thing being
+    measured."""
+    n = int(sr * dur)
+    t = np.arange(n) / float(sr)
+    out = np.zeros(n)
+    k = 1
+    while k * f0 < 0.45 * sr:
+        out += np.sin(2 * np.pi * k * f0 * t) / k
+        k += 2
+    return (4.0 / np.pi) * out
+
+
 def _resample(x, sr_in, sr_out):
     """Band-limited, because the test must measure the FEATURE and not the
     resampler. A linear interpolation was used here first and its own
@@ -571,78 +731,257 @@ def _resample(x, sr_in, sr_out):
 # should ever admit and which the single-stimulus version of this test could
 # not see. #763. The jittered entry is the positive control: a floor that
 # silenced the column everywhere would pass a panel of jitterless clips.
+# THE PANEL IS THE CLASS, NOT THE THREE ROWS THAT WERE FILED. #767 arrived as
+# three `(stimulus, column)` entries and a sweep over f0 showed that was a
+# property of which f0 values this tuple happened to hold: `jit.cycledshape`
+# was over tolerance at 220, 440, 523, 587 and 880 Hz and `mpd7.07ms.rowcorr`
+# at 392, 523 and 880 Hz, none of which the panel contained. Every f0 the
+# sweep found is here now, so a repair that works at 440 Hz and not at 880 Hz
+# cannot pass.
+#
+# Three entries are controls rather than cases, and each is load-bearing:
+#   * the jittered one is the POSITIVE control -- a floor or a fold that
+#     silenced a column everywhere would pass a panel of jitterless clips.
+#   * `523Hz bandlimited` is the input that defeats the repair: `_square`
+#     builds whole-sample periods, so on every other entry one side of the
+#     pair is exactly integer-periodic and a fold could be right there by
+#     accident. `_bl_square` has no sample grid in it. See that function.
+#   * the two `@48k` entries reverse the resampling direction. Without them
+#     "follows the sample rate" and "follows whichever side was resampled"
+#     are the same measurement -- and they are not the same mechanism:
+#     `jit.cycledshape` turned out to follow the second and `mpd*.rowcorr`
+#     the first. tools/probes/fold_rate_sweep.py is where that is measured.
 RATE_PANEL = (
-    ("330Hz", 330.0, 0.0, 0),
-    ("440Hz", 440.0, 0.0, 0),
-    ("660Hz", 660.0, 0.0, 0),
-    ("330Hz+0.1%jitter", 330.0, 0.001, 3),
+    # label,              f0,    jitter, seed, kind,       build rate
+    ("220Hz",             220.0, 0.0,    0,    "square",   44100),
+    ("330Hz",             330.0, 0.0,    0,    "square",   44100),
+    ("392Hz",             392.0, 0.0,    0,    "square",   44100),
+    ("440Hz",             440.0, 0.0,    0,    "square",   44100),
+    ("523Hz",             523.0, 0.0,    0,    "square",   44100),
+    ("587Hz",             587.0, 0.0,    0,    "square",   44100),
+    ("660Hz",             660.0, 0.0,    0,    "square",   44100),
+    ("880Hz",             880.0, 0.0,    0,    "square",   44100),
+    ("330Hz+0.1%jitter",  330.0, 0.001,  3,    "square",   44100),
+    ("523Hz bandlimited", 523.0, 0.0,    0,    "blsquare", 44100),
+    ("523Hz@48k",         523.0, 0.0,    0,    "square",   48000),
 )
+# NOT IN THE PANEL, AND THE REASON IS A SECOND DEFECT: 880 Hz built at 48 kHz
+# and resampled DOWN (true period 50.53 samples at 44.1 kHz) makes
+# `dominant_period` return 101 -- two periods, an octave error -- so six jit
+# columns move between the rates for a reason that has nothing to do with the
+# fold. It is out of scope here and is carried as
+# `test_dominant_period_picks_a_different_octave_at_the_two_rates` below
+# rather than as six quarantine rows that would make the panel look weaker
+# than it is.
+
+RATE_PAIR = {44100: 48000, 48000: 44100}
 
 
-def _rate_stimulus(f0, jitter, seed, sr=44100, dur=0.24, decay_s=0.08):
+def _rate_stimulus(f0, jitter, seed, sr=44100, dur=0.24, decay_s=0.08,
+                   kind="square"):
     """One panel entry at `sr`, with the exponential decay the original
     single-stimulus test used."""
-    x = _square(f0, sr, dur=dur, jitter=jitter, seed=seed)
+    if kind == "blsquare":
+        assert not jitter, "_bl_square has no per-period length to jitter"
+        x = _bl_square(f0, sr, dur=dur)
+    elif kind == "square":
+        x = _square(f0, sr, dur=dur, jitter=jitter, seed=seed)
+    else:
+        raise AssertionError(f"unknown stimulus kind {kind!r}")
     return x * np.exp(-np.arange(len(x)) / (decay_s * sr))
 
 
-# Columns this panel finds rate-dependent that #763 did NOT repair, each with
-# the gap measured on BOTH numpy builds (1.26.4/scipy 1.11.4 and 2.5.4/scipy
-# 1.18.1 -- identical to four decimals) and a bound a little above it. Filed
-# as #767: the mechanism is fold geometry (an integer-sample fold period whose
-# FRACTIONAL part differs between the rates), not the missing physical
-# precondition #763 is about, and putting both in one PR would have left
-# neither with its own control.
-#
-# A quarantine is a tolerance widened to fit unless it is falsifiable in BOTH
-# directions, so the test below asserts each entry is STILL over tolerance as
-# well as still under its bound. A stale entry -- one whose column got fixed
-# -- turns this red, which is how #767 gets closed completely rather than
-# mostly.
-RATE_KNOWN_RED = {
-    ("440Hz", "jit.cycledshape.seg0"): 0.030,
-    ("660Hz", "mpd5.00ms.rowcorr.seg0"): 0.032,
-    ("660Hz", "mpd5.00ms.rowcorr.seg1"): 0.032,
-}
+# WHAT IS LEFT OF THE QUARANTINE. #763 landed three `(stimulus, column)`
+# entries here -- 440 Hz `jit.cycledshape.seg0` and the two 660 Hz
+# `mpd5.00ms.rowcorr` segments -- as a deliberately falsifiable holding pen
+# for #767. #767 repaired the mechanism (see FOLD_SINC_TAPS), the entries
+# stopped being over tolerance, and an entry that is no longer red turns this
+# test red by design, so they are gone rather than kept as decoration. The
+# dict stays because the machinery below is the thing that makes a future
+# quarantine falsifiable in BOTH directions, and writing that machinery is
+# the expensive part; an empty dict costs nothing and asserts nothing.
+RATE_KNOWN_RED: dict = {}
+
+
+def _rate_pair(label, f0, jitter, seed, kind, build_sr):
+    """One panel entry as the two clips the test compares, with the
+    apparatus's preconditions asserted at the point of use rather than
+    assumed -- a stimulus that is not what the panel says it is would make
+    this whole test a pass that means nothing."""
+    other = RATE_PAIR[build_sr]
+    if jitter:
+        # a clip that was supposed to carry jitter and does not is a
+        # jitterless clip in disguise, and as a positive control it would
+        # prove nothing
+        ks = _square_periods(f0, build_sr, jitter=jitter, seed=seed)
+        assert len(set(ks)) > 1, (
+            f"{label}: the generator rounded the jitter away; this panel "
+            "entry is not the positive control it claims to be")
+    if kind == "blsquare":
+        # the input that defeats the fold repair only defeats it if its
+        # period really is fractional at both rates
+        for sr in (build_sr, other):
+            frac = abs((sr / f0) - round(sr / f0))
+            assert frac > 0.2, (
+                f"{label}: {sr / f0:.3f} samples per period at {sr} is within "
+                f"{frac:.3f} of a whole number, so this entry does not test "
+                "what it is in the panel to test")
+    a = _rate_stimulus(f0, jitter, seed, sr=build_sr, kind=kind)
+    return a, build_sr, _resample(a, build_sr, other), other
+
+
+def _rate_gaps(taps=None):
+    """Every column of every panel entry that is over tolerance between the
+    two rates, as (label, name, value at the build rate, value at the other,
+    gap). `taps` overrides the fold interpolator so the SAME panel can be run
+    against the integer fold this repair replaced -- see
+    `test_the_integer_fold_this_replaced_is_still_red_on_this_panel`."""
+    over = []
+    for label, f0, jitter, seed, kind, build_sr in RATE_PANEL:
+        a, sr_a, b, sr_b = _rate_pair(label, f0, jitter, seed, kind, build_sr)
+        va, names = extra_features(a, sr_a, taps)
+        vb, _ = extra_features(b, sr_b, taps)
+        for nm, x, y in zip(names, va, vb):
+            tol = max(RATE_TOL_REL * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(nm)])
+            if abs(x - y) > tol:
+                over.append((label, nm, round(float(x), 4), round(float(y), 4),
+                             round(abs(float(x - y)), 4)))
+    return over
 
 
 def test_extra_features_are_rate_independent():
     """THE test in this file. The reference is 44.1 kHz and our renders are
     48 kHz, so a feature that moves with the rate is a sample-rate detector
     wearing a measurement's name."""
-    bad, quarantined = [], {}
-    for label, f0, jitter, seed in RATE_PANEL:
-        if jitter:
-            # the apparatus's precondition: a stimulus that was supposed to
-            # carry jitter and does not is a jitterless clip in disguise, and
-            # as a positive control it would prove nothing
-            ks = _square_periods(f0, 44100, jitter=jitter, seed=seed)
-            assert len(set(ks)) > 1, (
-                f"{label}: the generator rounded the jitter away; this panel "
-                "entry is not the positive control it claims to be")
-        a = _rate_stimulus(f0, jitter, seed)
-        b = _resample(a, 44100, 48000)
-        va, names = extra_features(a, 44100)
-        vb, _ = extra_features(b, 48000)
-        for nm, x, y in zip(names, va, vb):
-            tol = max(RATE_TOL_REL * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(nm)])
-            if abs(x - y) <= tol:
-                continue
-            if (label, nm) in RATE_KNOWN_RED:
-                quarantined[(label, nm)] = abs(x - y)
-                continue
-            bad.append((label, nm, round(x, 4), round(y, 4)))
+    over = _rate_gaps()
+    bad = [r for r in over if (r[0], r[1]) not in RATE_KNOWN_RED]
     assert not bad, f"rate-dependent columns: {bad[:8]}"
 
-    # the quarantine, checked from both sides
+    # the quarantine, checked from both sides, so a tolerance cannot be
+    # widened to fit by the back door
+    quarantined = {(r[0], r[1]): r[4] for r in over}
     grew = {k: (v, RATE_KNOWN_RED[k]) for k, v in quarantined.items()
             if v > RATE_KNOWN_RED[k]}
     assert not grew, (f"a known-red column got worse (gap, bound): {grew} -- "
-                      "#767, and this is not a bound to raise without a reason")
+                      "and this is not a bound to raise without a reason")
     stale = sorted(set(RATE_KNOWN_RED) - set(quarantined))
     assert not stale, (f"{stale} is in RATE_KNOWN_RED but is no longer "
-                       "rate-dependent: delete the entry (see #767). A "
-                       "quarantine nobody removes stops being a quarantine")
+                       "rate-dependent: delete the entry. A quarantine nobody "
+                       "removes stops being a quarantine")
+
+
+def test_the_integer_fold_this_replaced_is_still_red_on_this_panel():
+    """THE INJECTED-BUG CONTROL FOR THE TEST ABOVE, and the record of what
+    #767 actually was.
+
+    A green rate test proves nothing unless the same panel can be made red,
+    and the honest way to make it red is the code that used to ship: an
+    integer-lag fold, which `_fold_at(..., taps=-1)` still is. Every column
+    named below was over tolerance before the repair and is not after it, so
+    if this test ever goes quiet the repair has stopped being load-bearing
+    and `test_extra_features_are_rate_independent` has stopped being a test.
+
+    The nine f0 values are the point. #767 was filed with three
+    `(stimulus, column)` rows; the class is wider than the panel that found
+    it, and this asserts the WHOLE class is red on the old fold."""
+    over = _rate_gaps(taps=-1)
+    red = {(label, nm) for label, nm, _, _, _ in over}
+    must = {
+        ("220Hz", "jit.cycledshape.seg0"),
+        ("440Hz", "jit.cycledshape.seg0"),
+        ("523Hz", "jit.cycledshape.seg0"),
+        ("587Hz", "jit.cycledshape.seg0"),
+        ("880Hz", "jit.cycledshape.seg0"),
+        ("392Hz", "mpd7.07ms.rowcorr.seg0"),
+        ("523Hz", "mpd7.07ms.rowcorr.seg0"),
+        ("660Hz", "mpd5.00ms.rowcorr.seg0"),
+        ("660Hz", "mpd5.00ms.rowcorr.seg1"),
+        ("880Hz", "mpd7.07ms.rowcorr.seg0"),
+        # the two controls have to be red here too, or they are not controls:
+        ("523Hz bandlimited", "jit.cycledshape.seg0"),
+        ("523Hz@48k", "jit.cycledshape.seg0"),
+    }
+    missing = sorted(must - red)
+    assert not missing, (
+        f"the integer fold no longer moves {missing} between 44.1 k and 48 k, "
+        "so the rate test's green is not evidence that the fractional fold is "
+        "doing anything -- #767")
+
+
+def test_dominant_period_picks_a_different_octave_at_the_two_rates():
+    """A SECOND DEFECT, FOUND BY #767's SWEEP AND DELIBERATELY NOT FIXED BY
+    IT. It is here so the finding lives in the file that measures it and not
+    only in an issue, and so the day it stops reproducing somebody has to
+    come and delete this test.
+
+    880 Hz built at 48 kHz (54.55 samples per period, whole-sample rounded to
+    55 by `_square`) and resampled down to 44.1 kHz has a true period of
+    50.53 samples there. `dominant_period` is an argmax of the
+    autocorrelation over the whole 120..1200 Hz lag band, and on this clip
+    the peak at TWO periods wins: it returns 101, so `jit.period_ms` reads
+    2.22 ms against 1.15 ms on the other side of the same pair and five more
+    jit columns follow it. No fold geometry is involved -- the two sides are
+    measuring different partials -- which is why this clip is not in
+    RATE_PANEL and why #767 did not repair it.
+
+    Filed separately; see the issue linked from this test's commit. What is
+    asserted is that the octave error is still EXACTLY an octave, because a
+    2.0 that drifted to 1.7 would be a different bug wearing this one's
+    name."""
+    a = _rate_stimulus(880.0, 0.0, 0, sr=48000)
+    b = _resample(a, 48000, 44100)
+    pa, pb = dominant_period(a, 48000), dominant_period(b, 44100)
+    ta, tb = pa / 48000.0, pb / 44100.0
+    assert abs(tb / ta - 2.0) < 0.05, (
+        f"the octave error no longer reproduces: {pa} samples at 48 kHz is "
+        f"{ta * 1e3:.4f} ms, {pb} at 44.1 kHz is {tb * 1e3:.4f} ms, ratio "
+        f"{tb / ta:.4f}. Delete this test and close the issue it names")
+    # and it really is the autocorrelation's own choice, not a resampling
+    # artefact: one period of the same clip correlates at least as well
+    assert abs(880.0 - 44100.0 / pb) > 100.0, 44100.0 / pb
+
+
+def test_the_fold_interpolator_ships_a_real_width():
+    """`taps < 0` is the legacy integer fold, carried for the control above
+    and for the sweep instrument. It is not a width and must never be the
+    value that ships -- a probe hook left switched on is a repair that was
+    reverted without anyone editing the repair."""
+    assert FOLD_SINC_TAPS >= 1, FOLD_SINC_TAPS
+    assert FOLD_SINC_TAPS in (1, 2, 4, 8, 16, 32), (
+        f"{FOLD_SINC_TAPS} is not a point on the committed grid in "
+        "docs/sensitivity/fold-interpolator.json")
+
+
+def test_the_fold_reduces_to_indexing_on_a_whole_period():
+    """THE VALIDATION CASE WITH AN ANSWER THIS MODULE DID NOT PRODUCE.
+
+    When the period is a whole number of samples there is nothing to
+    interpolate, and the windowed sinc is 1 at that sample and exactly 0 at
+    every other, so `_fold_at` must reproduce `_fold` to float precision. The
+    answer comes from arithmetic -- `sinc` of a non-zero integer -- not from
+    a reference run of our own code, which is what makes it a validation and
+    not a regression lock.
+
+    300 Hz is the case that matters: 44100/300 = 147 and 48000/300 = 160 are
+    BOTH whole, so a fold at 300 Hz is exactly aligned at both rates and the
+    repair must be a no-op there. If it is not, the interpolator is adding
+    something of its own and every number above is partly that."""
+    sr = 44100
+    x = _rate_stimulus(300.0, 0.0, 0, sr=sr)
+    for period in (147, 160.0, 220.0):
+        a = _fold(x, int(period))
+        b = _fold_at(x, float(period))
+        assert a.shape == b.shape, (period, a.shape, b.shape)
+        assert np.max(np.abs(a - b)) < 1e-9, (period, np.max(np.abs(a - b)))
+    # ...and the end-to-end consequence: 300 Hz has no fold misalignment at
+    # either rate, so it was never one of #767's f0 values, on EITHER fold.
+    for taps in (-1, FOLD_SINC_TAPS):
+        va, names = extra_features(x, sr, taps)
+        vb, _ = extra_features(_resample(x, sr, 48000), 48000, taps)
+        d = dict(zip(names, va))
+        e = dict(zip(names, vb))
+        nm = "jit.cycledshape.seg0"
+        assert abs(d[nm] - e[nm]) < RATE_TOL_ABS["ratio"], (taps, d[nm], e[nm])
 
 
 def test_the_dphase_floor_refuses_the_input_that_defeats_it():
@@ -772,19 +1111,52 @@ def test_a_pure_gain_cancels():
 
 def test_jitter_separates_a_stable_oscillator_from_a_drifting_one():
     """#56, as a closed-form check. A phase-accumulator square repeats
-    exactly; give the same oscillator 0.5 % per-period jitter and the
-    cycle-to-cycle correlation must fall and the lag spread must rise."""
+    exactly; give the same oscillator per-period jitter and the
+    cycle-to-cycle correlation must fall, by more the more jitter it has.
+
+    THE MARGIN GOT SMALLER WHEN #767 LANDED, AND THAT IS THE REPAIR WORKING,
+    NOT A REGRESSION -- it is worth the paragraph because the number moved in
+    the direction that usually means something broke. This fold used to cut
+    rows at an INTEGER lag, so on a 410 Hz clip (107.56 samples per period)
+    every row started a fixed fraction of a sample later than the last
+    whether the oscillator was steady or not, and that walk was counted in
+    with the jitter. cyclecorr fell 0.0207 from stable to 0.5 %-jittered.
+    Folding at the exact period removes the walk and the fall is 0.0146:
+    the oscillator's own share of what used to be reported, with the sample
+    grid's share taken out.
+
+    AND THE THRESHOLD IS NO LONGER A BARE 0.02, which is what made this test
+    red when the walk was removed and which nothing anchored in the first
+    place. A feature has to separate the mechanism it exists to see by more
+    than it separates two sample rates of the same clip, so the margin is
+    read against THAT: the jittered clip's own 44.1k->48k gap in the same
+    column, measured here rather than quoted. It is 0.0002, and the margin
+    clears it by better than sixty times.
+
+    What this test cannot do anything about, recorded because it is the
+    uncomfortable half of the same measurement: 0.0146 is also eight times
+    SMALLER than `RATE_TOL_REL` x 1.0 = 0.12, the tolerance the rate test
+    applies to this column. The rate test would not notice a rate dependence
+    in `jit.cyclecorr` the size of everything the column measures. That is a
+    tolerance problem, not a fold problem; filed, not fixed here."""
     sr = 44100
+    read = lambda x, s=sr: dict(zip(*reversed(jitter_features(x, s))))  # noqa: E731
+    graded = [read(_square(410.0, sr, jitter=j, seed=3))["jit.cyclecorr.seg0"]
+              for j in (0.0, 0.001, 0.005, 0.02)]
+    assert graded[0] > 0.99, graded
+    assert all(b < a for a, b in zip(graded, graded[1:])), (
+        f"cyclecorr did not fall monotonically with jitter: {graded}")
+
     stable = _square(410.0, sr, jitter=0.0)
     drift = _square(410.0, sr, jitter=0.005, seed=3)
-    vs, names = jitter_features(stable, sr)
-    vd, _ = jitter_features(drift, sr)
-    d = dict(zip(names, vs))
-    j = dict(zip(names, vd))
+    d, j = read(stable), read(drift)
     assert d["jit.valid.seg0"] == 1.0 and j["jit.valid.seg0"] == 1.0
-    assert d["jit.cyclecorr.seg0"] > 0.99, d["jit.cyclecorr.seg0"]
-    assert j["jit.cyclecorr.seg0"] < d["jit.cyclecorr.seg0"] - 0.02, (
-        d["jit.cyclecorr.seg0"], j["jit.cyclecorr.seg0"])
+    # the anchor: the same column, the same clip, the two rates
+    j48 = read(_resample(drift, 44100, 48000), 48000)
+    rate_gap = abs(j["jit.cyclecorr.seg0"] - j48["jit.cyclecorr.seg0"])
+    assert rate_gap < 1e-3, rate_gap
+    margin = d["jit.cyclecorr.seg0"] - j["jit.cyclecorr.seg0"]
+    assert margin > 20.0 * max(rate_gap, 1e-6), (margin, rate_gap)
     assert j["jit.phasejit_ppm.seg0"] > 3.0 * max(d["jit.phasejit_ppm.seg0"], 1.0), (
         d["jit.phasejit_ppm.seg0"], j["jit.phasejit_ppm.seg0"])
 
@@ -902,6 +1274,51 @@ def test_static_detuning_is_not_reported_as_drift():
     assert stable["jit.phasejit_ppm.seg0"] < RATE_TOL_ABS["ppm"]
 
 
+def test_the_one_residual_the_fold_repair_cannot_reach_is_the_stimulus():
+    """WHAT #767 DID NOT FIX, MEASURED RATHER THAN ASSERTED.
+
+    Over 44 values of f0 in both resampling directions
+    (tools/probes/fold_rate_sweep.py), the repaired fold leaves exactly one
+    stimulus over tolerance that is not the octave error above: 200 Hz built
+    at 48 kHz, in `mpd2.50ms.rowcorr`, at a gap of 0.131 against 0.120.
+
+    It is not fold geometry and the control says so. 2.5 ms is 120 samples at
+    48 kHz and the 200 Hz period is 240, so consecutive rows are exact
+    negatives of each other and `rowcorr` saturates at -1.0000 -- where
+    RATE_TOL_REL x 1.0 is its whole scale and any difference at all shows up
+    full size. The difference is in the CLIP, not the fold: `_square` lays
+    down hard +-1 edges on the build rate's sample grid, and a half period of
+    110.25 samples cannot exist at 44.1 kHz, so the resampled side is a
+    band-limited square and the built side is an ideal one.
+
+    `_bl_square` is the falsifier: it is band-limited identically at both
+    rates, and on it the same column at the same f0 in the same direction
+    comes back inside tolerance. If that ever stopped being true the
+    diagnosis here would be wrong and the residual WOULD be the fold."""
+    f0, build_sr, nm = 200.0, 48000, "mpd2.50ms.rowcorr.seg0"
+
+    def gap(kind):
+        a = _rate_stimulus(f0, 0.0, 0, sr=build_sr, kind=kind)
+        b = _resample(a, build_sr, RATE_PAIR[build_sr])
+        va = dict(zip(*reversed(mpd_features(a, build_sr))))
+        vb = dict(zip(*reversed(mpd_features(b, RATE_PAIR[build_sr]))))
+        tol = max(RATE_TOL_REL * max(abs(va[nm]), abs(vb[nm])),
+                  RATE_TOL_ABS[_unit_of(nm)])
+        return abs(va[nm] - vb[nm]), tol, va[nm], vb[nm]
+
+    hard, tol, a, b = gap("square")
+    assert hard > tol, (
+        f"the 200 Hz residual no longer reproduces ({hard:.4f} against "
+        f"{tol:.4f}); re-run tools/probes/fold_rate_sweep.py and rewrite this")
+    assert round(a, 4) == -1.0, a      # the saturated side, which is the point
+    limited, tol2, _, _ = gap("blsquare")
+    assert limited < tol2, (
+        f"a stimulus band-limited the SAME WAY at both rates is also over "
+        f"tolerance ({limited:.4f} against {tol2:.4f}) -- then the residual "
+        "is the fold after all and this test's diagnosis is wrong")
+    assert limited < 0.1 * hard, (limited, hard)
+
+
 def test_a_fixed_stride_fold_is_not_a_drift_measure():
     """The MPD columns are a non-stationarity view, not a drift view, and the
     docstring says so. This is the arithmetic: the strides are not
@@ -914,9 +1331,12 @@ def test_a_fixed_stride_fold_is_not_a_drift_measure():
     x = np.sin(2 * np.pi * 131.0 * t)              # 366.4 samples per cycle
     walked = 0
     for T in MPD_PERIODS_S:
-        p = int(round(sr * T))
+        # the EXACT stride, because that is what `mpd_features` folds at
+        # since #767; `round(sr*T)` would be testing code that no longer
+        # ships. The non-commensurability is asserted on the same quantity.
+        p = sr * T
         assert abs(366.4 / p - round(366.4 / p)) > 0.02, (T, p)
-        if _fold_stats(_fold(x, p))["dshape"] > 0.05:
+        if _fold_stats(_fold_at(x, p))["dshape"] > 0.05:
             walked += 1
     assert walked == len(MPD_PERIODS_S), (
         "a stable tone did NOT walk between rows at every stride, so the fold "
