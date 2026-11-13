@@ -22,27 +22,27 @@ _None._
 - **#162**: The bass drum's entire attack is 18-23 dB short across 170-678 Hz
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
+- **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin
 
 ## Ready
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-- **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
+- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
+- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
+- **#325**: Consolidated physical setup session sheet (R0 first, then R1)
+- **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
-- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
-- **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails
-- **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158)
-- **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
+- **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
 
 ## PRs Awaiting Review
 
@@ -62,7 +62,6 @@ Issues carrying `loom:curated`.
 
 - **#33**: The joined chip does not fit in one quarter slot — two slots, or cut something *(curated)*
 - **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay *(curated)*
-- **#124**: Build a pedalboard-backed reference rig, with the same qualification discipline as the dawdreamer one *(curated)*
 - **#138**: We already have a discriminator at balanced accuracy 1.000 — the open question is what it is NOT measuring *(curated)*
 - **#152**: Residual drum DC coupling: qualify non-cymbal defects before proposing a repair *(curated)*
 - **#158**: Validate the judge: perturbation ladders on real recordings, synthetic fixtures with exact answers, and unit tests for the acceptance policy *(curated)*
@@ -91,7 +90,6 @@ Issues carrying `loom:curated`.
 - **#510**: Ship the cymbal DC coupling: register contract, RTL, and the I2S carry-through #165 did not trigger *(curated)*
 - **#512**: Turn the edge-straddle guard on for lowband_level_db, and re-read HT/LC 7.5 with it *(curated)*
 - **#521**: Detector coverage matrix + bounded first validation experiment (#158) *(curated)*
-- **#522**: Four corpus-path resolvers disagree, so $GF180_TR808_REFS does not reach every reader *(curated)*
 - **#530**: Permitted-differences suite: add the polarity x estimated-frequency rows #158 names *(curated)*
 - **#533**: audio_distance_floor.distances() computes mel_dac at 48 kHz on 44.1 kHz Fischer files *(curated)*
 - **#552**: Cymbal DC coupling 2/3: RTL shared-bus stage, drum_regs decoder, host init, bit-exact bench with mutants (#510) *(curated)*
@@ -112,6 +110,7 @@ Issues carrying `loom:curated`.
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)*
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)*
+- **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -119,7 +118,9 @@ Issues carrying `loom:curated`.
 - **#626**: Area sweep reports drop missing rows and can print stale results (mode_report.py, synth_area.py, run_all.sh) *(architect)*
 - **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)*
 - **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)*
-- **#732**: Consolidate duplicated compare_files/main scaffolding across three candidate comparators *(hermit)*
+- **#753**: Consolidate 16 duplicate file-sha256 helpers in tools/ into provenance.py *(hermit)*
+- **#759**: Consolidate the duplicated injected-defect ladder and k-ROM builder in model/ into one copy *(hermit)*
+- **#760**: Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September *(hermit)*
 
 ## Epics
 
@@ -132,12 +133,12 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
-| Important | 3 |
-| Ready (`loom:issue`) | 1 |
-| In Progress (`loom:building`) | 10 |
+| Important | 4 |
+| Ready (`loom:issue`) | 4 |
+| In Progress (`loom:building`) | 6 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 52 |
-| Architect / Hermit proposals | 5 |
+| Curated | 51 |
+| Architect / Hermit proposals | 7 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
