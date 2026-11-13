@@ -119,6 +119,49 @@ MS_BANDS_HZ = ((20.0, 200.0), (200.0, 700.0), (700.0, 2000.0),
 RATE_TOL_REL = 0.12
 RATE_TOL_ABS = {"ppm": 20.0, "db": 0.5, "ratio": 0.02, "ms": 0.05, "count": 1.0}
 
+# THE FLOOR UNDER `jit.dphase_ar1`, in ppm of a period -- a PHYSICAL floor,
+# not an epsilon, and it is read on the PHASE SCATTER, which is the quantity
+# `jit.phasejit_ppm` already reports and `RATE_TOL_ABS["ppm"]` above already
+# states a floor for. #763.
+#
+# The defect. `dphase_ar1` is the lag-1 autocorrelation of the per-cycle
+# period error. On a clip whose period is perfectly stable there is no period
+# error to correlate, so the column reported the autocorrelation of whatever
+# numerical noise was left -- and that noise is NOT the same at the two rates
+# this study compares. Measured (ppm of a period; ar1 on numpy 2.5.4):
+#
+#     stimulus                      phasejit 44.1k / 48k    dphase_ar1 44.1k / 48k
+#     330 Hz square, no jitter        0.000 /  0.780           +0.312 / +0.348
+#     440 Hz square, no jitter        0.000 /  0.318           +0.225 / -0.203   <- SIGN FLIP
+#     660 Hz square, no jitter        0.000 /  0.711           +0.294 / -0.048   <- SIGN FLIP
+#     330 Hz, 0.1 % jitter         5724.6   / 5724.3           +0.606 / +0.605
+#
+# At 44.1 kHz the generated square's periods are whole samples, so its phase
+# residual is float rounding; at 48 kHz it is `resample_poly` residue. Both
+# are under 1 ppm, which is the same ~0.8 ppm artefact `RATE_TOL_ABS["ppm"]`
+# is already set against -- and 20 ppm is already this module's statement of
+# what it cannot see. So 20 ppm is the floor here too: below it the column
+# REFUSES (returns the module's zero, as every other refusal in this file
+# does) rather than reporting the autocorrelation of a resampler. The rest of
+# the row is still reported; this is a refusal of one column.
+#
+# WHAT THE FIRST ATTEMPT GOT WRONG, because it is the more useful record.
+# The obvious quantity to floor is the one `ar1` is computed from -- the
+# per-cycle period error, `np.diff(lin).std()`. A 20 ppm floor on THAT
+# silences `test_static_detuning_is_not_reported_as_drift`: +0.5 Hz of static
+# detuning over 0.24 s is only 12 % of a beat cycle, so its per-cycle period
+# error is 4.56 ppm even though its phase scatter is 54.53 ppm and its `ar1`
+# is 0.948. A floor on the differenced residual has to fit between 0.80 and
+# 4.56 ppm; a floor on the phase scatter has between 0.78 and 54.53, which is
+# a factor of 70 rather than a factor of 5.7. The gate reads the phase
+# scatter for that reason, not because it is the handier variable.
+#
+# 20 is a point on the plateau of a committed sweep -- see
+# docs/sensitivity/dphase-ar1-floor.json, which is where to argue about the
+# value. An integer because tools/sensitivity.py reads a shipped
+# python-constant as one.
+JIT_DPHASE_FLOOR_PPM = 20
+
 
 def _unit_of(name: str) -> str:
     if "ppm" in name:
@@ -226,7 +269,8 @@ def refine_frequency(x: np.ndarray, sr: int, f0: float,
     return float(fs[int(np.argmax(m))])
 
 
-def jitter_features(x: np.ndarray, sr: int) -> tuple:
+def jitter_features(x: np.ndarray, sr: int, dphase_floor_ppm: float | None = None,
+                    trace: dict | None = None) -> tuple:
     """Fold at the signal's OWN dominant period and ask whether consecutive
     cycles repeat. This is #56 as a number.
 
@@ -252,7 +296,17 @@ def jitter_features(x: np.ndarray, sr: int) -> tuple:
     moves over the note rather than one that is noisy about a fixed pitch.
 
     Every column is refused -- zeroed, with `jit.valid` at 0 -- when the
-    window does not hold JIT_MIN_CYCLES of the winning period."""
+    window does not hold JIT_MIN_CYCLES of the winning period.
+    `jit.dphase_ar1` is refused on its own, with the rest of the row still
+    reported, when the phase scatter is below JIT_DPHASE_FLOOR_PPM -- there
+    is then no period instability for its autocorrelation to be about. See
+    that constant.
+
+    `dphase_floor_ppm` overrides that floor and exists so
+    `tools/dphase_floor_sweep.py` can sweep the dial against the code that
+    SHIPS rather than against a copy of it; `trace`, if a dict is passed,
+    receives the scatters the gate reads. Neither changes a shipped number:
+    both default to off."""
     x = np.asarray(x, float)
     names = ["jit.cyclecorr.seg0", "jit.cycledshape.seg0", "jit.phasejit_ppm.seg0",
              "jit.phasecurv_ppm.seg0", "jit.dphase_ar1.seg0", "jit.enstd_db.seg0",
@@ -325,14 +379,29 @@ def jitter_features(x: np.ndarray, sr: int) -> tuple:
     # but it is a gap, not an order of magnitude, and
     # `test_static_detuning_is_not_reported_as_drift` asserts its size so it
     # cannot quietly close.
+    #
+    # ...AND THE GATE UNDER IT IS PHYSICAL, NOT AN EPSILON. `d.std() > 1e-20`
+    # was the whole precondition until #763, and float rounding alone clears
+    # it by four orders of magnitude, so on a clip with no real period
+    # instability this column reported the autocorrelation of the noise --
+    # which is not the same noise at 44.1 kHz as at 48 kHz. The epsilon stays
+    # as what it actually is, a divide-by-zero guard; the REFUSAL is the
+    # physical floor. See JIT_DPHASE_FLOOR_PPM.
+    k = 1e6 / (2.0 * np.pi)
     d = np.diff(lin)
-    if len(d) >= 4 and d.std() > _EPS:
+    pjit = k * float(lin.std())         # phase scatter, ppm of a period
+    dscat = k * float(d.std())          # per-cycle period error, ppm of a period
+    floor = JIT_DPHASE_FLOOR_PPM if dphase_floor_ppm is None else float(dphase_floor_ppm)
+    refused = not (len(d) >= 4 and d.std() > _EPS and pjit > floor)
+    if trace is not None:
+        trace.update(phasejit_ppm=pjit, dphase_scatter_ppm=dscat,
+                     dphase_floor_ppm=floor, ncycles=float(ncyc), refused=refused)
+    if refused:
+        ar1 = 0.0
+    else:
         a1 = float(np.corrcoef(d[:-1], d[1:])[0, 1])
         ar1 = a1 if np.isfinite(a1) else 0.0
-    else:
-        ar1 = 0.0
-    k = 1e6 / (2.0 * np.pi)
-    vals = [st["rowcorr"], st["dshape"], k * float(lin.std()), k * float(quad), ar1,
+    vals = [st["rowcorr"], st["dshape"], pjit, k * float(quad), ar1,
             st["enstd"], 1e3 * pr / sr, float(ncyc), 1.0]
     return np.asarray(vals, float), names
 
@@ -454,18 +523,34 @@ def extra_group(nm: str) -> str | None:
 # Self-tests. The study has withdrawn published figures before; nothing here
 # is quoted until these pass.
 # ===========================================================================
+def _square_periods(f0, sr, dur=0.24, jitter=0.0, seed=0):
+    """The WHOLE-SAMPLE period lengths `_square` actually emits.
+
+    Split out of `_square` because the jitter a caller asks for is not
+    necessarily the jitter it gets: each period is rounded to an integer
+    number of samples, so `jitter=0.001` at 440 Hz / 44.1 kHz (100.23 samples
+    per period) is rounded away entirely and the "jittered" clip is the
+    jitterless one under another name. Any test that uses a jittered stimulus
+    as a POSITIVE control has to assert that the jitter survived the
+    generator, and this is what it asserts on."""
+    rng = np.random.default_rng(seed)
+    ks, n, total = [], int(sr * dur), 0
+    while total < n:
+        p = (1.0 / f0) * (1.0 + jitter * rng.standard_normal())
+        k = max(2, int(round(sr * p)))
+        ks.append(k)
+        total += k
+    return ks
+
+
 def _square(f0, sr, dur=0.24, jitter=0.0, seed=0):
     """A square wave at f0, optionally with per-period length jitter. The
     jitter is what an analogue oscillator has and a phase accumulator does
     not, so it is the signal these features exist to see."""
-    rng = np.random.default_rng(seed)
-    out, t, ph = [], 0.0, 0.0
-    n = int(sr * dur)
-    while len(out) < n:
-        p = (1.0 / f0) * (1.0 + jitter * rng.standard_normal())
-        k = max(2, int(round(sr * p)))
+    out = []
+    for k in _square_periods(f0, sr, dur, jitter, seed):
         out += [1.0] * (k // 2) + [-1.0] * (k - k // 2)
-    return np.asarray(out[:n], float)
+    return np.asarray(out[:int(sr * dur)], float)
 
 
 def _resample(x, sr_in, sr_out):
@@ -479,20 +564,160 @@ def _resample(x, sr_in, sr_out):
     return resample_poly(x, int(sr_out) // g, int(sr_in) // g)
 
 
+# The stimulus panel the rate test runs. ONE stimulus is not a rate test:
+# `jit.dphase_ar1.seg0` moved 0.25 -> 0.35 on the 330 Hz clip (a gap a
+# 12 % relative tolerance happens to straddle depending on the numpy build)
+# and +0.23 -> -0.20 on the 440 Hz one -- a SIGN FLIP, which no tolerance
+# should ever admit and which the single-stimulus version of this test could
+# not see. #763. The jittered entry is the positive control: a floor that
+# silenced the column everywhere would pass a panel of jitterless clips.
+RATE_PANEL = (
+    ("330Hz", 330.0, 0.0, 0),
+    ("440Hz", 440.0, 0.0, 0),
+    ("660Hz", 660.0, 0.0, 0),
+    ("330Hz+0.1%jitter", 330.0, 0.001, 3),
+)
+
+
+def _rate_stimulus(f0, jitter, seed, sr=44100, dur=0.24, decay_s=0.08):
+    """One panel entry at `sr`, with the exponential decay the original
+    single-stimulus test used."""
+    x = _square(f0, sr, dur=dur, jitter=jitter, seed=seed)
+    return x * np.exp(-np.arange(len(x)) / (decay_s * sr))
+
+
+# Columns this panel finds rate-dependent that #763 did NOT repair, each with
+# the gap measured on BOTH numpy builds (1.26.4/scipy 1.11.4 and 2.5.4/scipy
+# 1.18.1 -- identical to four decimals) and a bound a little above it. Filed
+# as #767: the mechanism is fold geometry (an integer-sample fold period whose
+# FRACTIONAL part differs between the rates), not the missing physical
+# precondition #763 is about, and putting both in one PR would have left
+# neither with its own control.
+#
+# A quarantine is a tolerance widened to fit unless it is falsifiable in BOTH
+# directions, so the test below asserts each entry is STILL over tolerance as
+# well as still under its bound. A stale entry -- one whose column got fixed
+# -- turns this red, which is how #767 gets closed completely rather than
+# mostly.
+RATE_KNOWN_RED = {
+    ("440Hz", "jit.cycledshape.seg0"): 0.030,
+    ("660Hz", "mpd5.00ms.rowcorr.seg0"): 0.032,
+    ("660Hz", "mpd5.00ms.rowcorr.seg1"): 0.032,
+}
+
+
 def test_extra_features_are_rate_independent():
     """THE test in this file. The reference is 44.1 kHz and our renders are
     48 kHz, so a feature that moves with the rate is a sample-rate detector
     wearing a measurement's name."""
-    a = _square(330.0, 44100) * np.exp(-np.arange(int(0.24 * 44100)) / (0.08 * 44100))
-    b = _resample(a, 44100, 48000)
-    va, names = extra_features(a, 44100)
-    vb, _ = extra_features(b, 48000)
-    bad = []
-    for nm, x, y in zip(names, va, vb):
-        tol = max(RATE_TOL_REL * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(nm)])
-        if abs(x - y) > tol:
-            bad.append((nm, x, y))
+    bad, quarantined = [], {}
+    for label, f0, jitter, seed in RATE_PANEL:
+        if jitter:
+            # the apparatus's precondition: a stimulus that was supposed to
+            # carry jitter and does not is a jitterless clip in disguise, and
+            # as a positive control it would prove nothing
+            ks = _square_periods(f0, 44100, jitter=jitter, seed=seed)
+            assert len(set(ks)) > 1, (
+                f"{label}: the generator rounded the jitter away; this panel "
+                "entry is not the positive control it claims to be")
+        a = _rate_stimulus(f0, jitter, seed)
+        b = _resample(a, 44100, 48000)
+        va, names = extra_features(a, 44100)
+        vb, _ = extra_features(b, 48000)
+        for nm, x, y in zip(names, va, vb):
+            tol = max(RATE_TOL_REL * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(nm)])
+            if abs(x - y) <= tol:
+                continue
+            if (label, nm) in RATE_KNOWN_RED:
+                quarantined[(label, nm)] = abs(x - y)
+                continue
+            bad.append((label, nm, round(x, 4), round(y, 4)))
     assert not bad, f"rate-dependent columns: {bad[:8]}"
+
+    # the quarantine, checked from both sides
+    grew = {k: (v, RATE_KNOWN_RED[k]) for k, v in quarantined.items()
+            if v > RATE_KNOWN_RED[k]}
+    assert not grew, (f"a known-red column got worse (gap, bound): {grew} -- "
+                      "#767, and this is not a bound to raise without a reason")
+    stale = sorted(set(RATE_KNOWN_RED) - set(quarantined))
+    assert not stale, (f"{stale} is in RATE_KNOWN_RED but is no longer "
+                       "rate-dependent: delete the entry (see #767). A "
+                       "quarantine nobody removes stops being a quarantine")
+
+
+def test_the_dphase_floor_refuses_the_input_that_defeats_it():
+    """THE GUARD SHIPS WITH THE INPUT THAT DEFEATS IT (verification-rules
+    rule 8). Ask it at write time: what satisfies `dphase_ar1 is a real
+    number` while violating its intent?
+
+    The answer is the 48 kHz side of this study's own rate pair. A square
+    generated at 44.1 kHz has whole-sample periods, so its phase residual is
+    float rounding and reads 0.000 ppm; band-limit it to 48 kHz and
+    `resample_poly` leaves 0.3-0.8 ppm of residue, which is not zero, is not
+    the instrument, and is enough for a lag-1 autocorrelation to come back
+    looking like a measurement -- +0.225 at 44.1 kHz against -0.203 at
+    48 kHz on the 440 Hz clip, a SIGN FLIP. That input is what this test
+    feeds the guard.
+
+    So the floor has to sit above that residue and below the smallest real
+    mechanism the column must still see. Both edges are asserted here, with
+    their margins, because a floor is only honest next to what it must not
+    hide -- the same contract `test_the_rate_tolerance_is_far_below_the_effect`
+    holds for the sibling column."""
+    def scatter(x, sr):
+        trace: dict = {}
+        vals, names = jitter_features(x, sr, trace=trace)
+        return (trace["phasejit_ppm"], dict(zip(names, vals))["jit.dphase_ar1.seg0"],
+                trace["refused"])
+
+    # 1. the defeating input, at BOTH rates: refused, and the column is zero
+    for label, f0 in (("330Hz", 330.0), ("440Hz", 440.0), ("660Hz", 660.0)):
+        a = _rate_stimulus(f0, 0.0, 0)
+        b = _resample(a, 44100, 48000)
+        for sr, x in ((44100, a), (48000, b)):
+            ppm, ar1, refused = scatter(x, sr)
+            assert refused and ar1 == 0.0, (label, sr, ppm, ar1)
+            assert ppm < 0.25 * JIT_DPHASE_FLOOR_PPM, (
+                f"{label} at {sr}: a clip with no period instability scatters "
+                f"{ppm:.3f} ppm, within 4x of the {JIT_DPHASE_FLOOR_PPM} ppm "
+                "floor -- the margin this guard needs has closed")
+
+    # 2. a pure stable tone is refused too: 0.47 ppm, and nothing to report
+    sr = 44100
+    t = np.arange(int(0.24 * sr)) / sr
+    ppm, ar1, refused = scatter(np.sin(2 * np.pi * 410.0 * t), sr)
+    assert refused and ar1 == 0.0, (ppm, ar1)
+
+    # 3. and the other edge: real jitter is still reported, at both rates,
+    #    with matching values. Its jitter must survive the generator first --
+    #    a positive control that is secretly jitterless proves the opposite
+    #    of what it claims (440 Hz at 44.1 kHz rounds 0.1 % away entirely).
+    ks = _square_periods(330.0, sr, jitter=0.001, seed=3)
+    assert len(set(ks)) > 1, "the generator rounded the jitter away"
+    a = _rate_stimulus(330.0, 0.001, 3)
+    b = _resample(a, 44100, 48000)
+    pa, ra, fa = scatter(a, 44100)
+    pb, rb, fb = scatter(b, 48000)
+    assert not fa and not fb, (pa, pb)
+    assert min(pa, pb) > 50.0 * JIT_DPHASE_FLOOR_PPM, (
+        f"0.1 % jitter scatters {min(pa, pb):.1f} ppm against a "
+        f"{JIT_DPHASE_FLOOR_PPM} ppm floor -- the gap the floor must leave "
+        "open has closed")
+    assert abs(ra - rb) <= RATE_TOL_ABS["ratio"], (ra, rb)
+    assert ra > 0.3 and rb > 0.3, (ra, rb)
+
+    # 4. the smallest mechanism the detuning control depends on: +0.5 Hz of
+    #    static detuning, 54.53 ppm of scatter against a 20 ppm floor. This
+    #    is the TIGHT edge -- 2.7x, not 50x -- and if it ever closes,
+    #    test_static_detuning_is_not_reported_as_drift goes silent rather
+    #    than red, which is the failure this assertion exists to prevent.
+    beat = np.sin(2 * np.pi * 410.0 * t) + 0.7 * np.sin(2 * np.pi * 410.5 * t)
+    ppm, ar1, refused = scatter(beat, sr)
+    assert not refused, (
+        f"+0.5 Hz detuning scatters {ppm:.2f} ppm and is refused by a "
+        f"{JIT_DPHASE_FLOOR_PPM} ppm floor -- the beating control cannot run")
+    assert ppm > 2.0 * JIT_DPHASE_FLOOR_PPM, ppm
+    assert ar1 > 0.80, ar1
 
 
 def test_the_rate_tolerance_is_far_below_the_effect():
