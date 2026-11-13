@@ -39,7 +39,11 @@ FILES = ["docs/sensitivity/registry.json",
          # jit.dphase_ar1.seg0 that replaced a 1e-20 epsilon
          "docs/sensitivity/dphase-ar1-floor.json",
          "docs/sensitivity/dphase-ar1-floor-sweep.txt",
-         "model/discrimination_features.py"]
+         "model/discrimination_features.py",
+         # issue #767's record: FOLD_SINC_TAPS, the fold interpolator that
+         # replaced an integer-lag fold (same source file as the one above)
+         "docs/sensitivity/fold-interpolator.json",
+         "docs/sensitivity/fold-interpolator-sweep.txt"]
 
 
 @pytest.fixture

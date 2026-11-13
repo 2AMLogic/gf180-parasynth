@@ -606,6 +606,50 @@ recommendation is to drop them.** Of the three borrowed views, the
 constant-Q ladder and the multi-scale windows pay for themselves and the
 multi-period fold does not.
 
+**BOTH OF THE PARAGRAPHS ABOVE WERE MEASURED ON A FOLD THAT PARTLY READ THE
+SAMPLE RATE (#767, 2026-11-13).** Every fold in
+`model/discrimination_features.py` used to cut its rows at an INTEGER number
+of samples -- `round(sr * T)` for the MPD strides, `dominant_period`'s integer
+lag for the cycle fold -- and the fractional part of a fold period is not the
+same at 44.1 kHz (the reference corpus) as at 48 kHz (our renders). Rows
+therefore walked by that fraction per row, and the walk went into the row
+statistics as if it were the instrument. Measured over 44 values of f0 in both
+resampling directions (`tools/probes/fold_rate_sweep.py`):
+
+| column | 44.1 kHz | 48 kHz | gap | tolerance |
+|---|---|---|---|---|
+| `jit.cycledshape.seg0`, 880 Hz square | 0.0141 | 0.1729 | 0.1588 | 0.0200 |
+| `jit.cycledshape.seg0`, 523 Hz square | 0.0236 | 0.1368 | 0.1132 | 0.0200 |
+| `mpd7.07ms.rowcorr.seg0`, 880 Hz | 0.0410 | 0.0843 | 0.0432 | 0.0200 |
+| `mpd5.00ms.rowcorr.seg0`, 660 Hz | -0.1339 | -0.1613 | 0.0274 | 0.0200 |
+
+The folds are now at the exact period, read by band-limited interpolation
+(`_fold_at`, `FOLD_SINC_TAPS`, swept in
+`docs/sensitivity/fold-interpolator.json`), and the worst gap anywhere on that
+sweep is 0.0142 against 0.0200. Two consequences for the numbers on this page:
+
+- **The `jit.stability` +0.008 and the `mpd.* <= +0.002` attributions were
+  derived with the old fold and this work did NOT re-derive them. REFUSED,
+  not "unchanged": the reference corpus is not on the host that made the
+  repair, so the permutation importances could not be recomputed.** The
+  direction is not even obvious -- `jit.cycledshape` is one of four columns in
+  the `jit.stability` bucket and the rate artefact was a nuisance variable
+  that the 44.1 kHz corpus and the 48 kHz renders do not share, so removing it
+  could move that bucket either way. Treat both figures as carrying an
+  unmeasured correction until someone with the corpus re-runs them.
+- **The recommendation to drop the MPD columns is unaffected**, and if
+  anything is firmer: the columns earned <= +0.002 while part of what they
+  were reading was the sample grid.
+
+A second, smaller finding from the same measurement, recorded because it
+bears on how the figures above should be read: `jit.cyclecorr` separates a
+0.5 %-jittered square from a steady one by **0.0146**, while the
+rate-independence control's tolerance for that same column is
+`RATE_TOL_REL` x 1.0 = **0.12**. The control would not notice a rate
+dependence eight times larger than everything the column measures. That is a
+tolerance problem rather than a fold problem and was not changed here; it is
+#775.
+
 **Promotion status (#138, 2026-10-01).** Estimators exist
 (`model/promoted_measures.py`: `lowband_level_db`, `dominant_period_ms`).
 They are DERIVED FROM the study's candidates, not identical to them: the
