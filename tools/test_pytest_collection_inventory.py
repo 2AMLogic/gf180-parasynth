@@ -21,11 +21,13 @@ import pytest_collection_inventory as inv  # noqa: E402
 #: first collection. Pinned so a discovery change that silently drops one of
 #: them (scope, path, parsing) cannot let the real-tree check pass vacuously.
 #: A count here goes UP when a module gains a test -- #763 added
-#: test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13.
+#: test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13; #768
+#: added test_the_floor_census_counts_a_refusal_from_the_decision_not_the_zero,
+#: 13 -> 14.
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
-    "model/discrimination_features.py": 13,
+    "model/discrimination_features.py": 14,
     "model/discrimination_trajectory.py": 6,
 }
 
