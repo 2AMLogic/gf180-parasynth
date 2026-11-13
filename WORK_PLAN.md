@@ -32,7 +32,6 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#765**: Retire the three netlist patches in pnr/klt/ladder_dp/run-klt.sh: the klt bugs they work around were fixed upstream in September
 
 ## In Progress
 
@@ -44,14 +43,14 @@ Issues currently being built (`loom:building`).
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
-- **#759**: Consolidate the duplicated injected-defect ladder and k-ROM builder in model/ into one copy
 - **#763**: bug: test_extra_features_are_rate_independent fails on main -- jit.dphase_ar1.seg0 is rate-dependent
+- **#765**: Retire the three netlist patches in pnr/klt/ladder_dp/run-klt.sh: the klt bugs they work around were fixed upstream in September
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#764**: refactor: keep one copy of the injected-defect ladder and the k-ROM builder
+- **#769**: fix: refuse jit.dphase_ar1 below a physical floor instead of a 1e-20 epsilon
 
 ## Approved (Awaiting Merge)
 
@@ -138,7 +137,7 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
 | Important | 4 |
-| Ready (`loom:issue`) | 5 |
+| Ready (`loom:issue`) | 4 |
 | In Progress (`loom:building`) | 8 |
 | PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 0 |
