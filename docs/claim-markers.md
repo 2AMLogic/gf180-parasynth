@@ -243,12 +243,30 @@ Naming documents on the command line still narrows deliberately, and skips the
 audit: that is how fixture runs and one-off checks work. Only the no-argument
 run — the one `make verify` reads — audits.
 
-The red-first control for all of this is
-`tools/probes/check_doc_claims_scope_control.py`: it injects a stale marker into
-a file the old set did not reach, runs the checker at `origin/main` and in the
-working tree, and requires the first to be green and silent while the second is
-red and names the file. It refuses rather than reporting a result if the
-`before` arm was already red for some other reason.
+`tools/probes/check_doc_claims_scope_control.py` is the **one-time** red-first
+record taken when #435 landed (`f2419e26`, 2026-09-28), and not a standing
+control: it injects a stale marker into a file the old set did not reach, runs
+the checker both at a named revision and as it stands in the working tree, and
+requires the first to be green and silent about that file while the second is
+red and names it — a differential that can only pass while `main`'s checker is
+still the *pre*-#435 one, so on every tree after `f2419e26` it refuses rather
+than reporting a result; the standing control for the document set is instead
+the scope tests in `tools/test_check_doc_claims.py`, which
+`.github/workflows/rungs.yml` runs by name, and the red-first one among them
+plants a marker outside the scanned set and requires the run to come back
+`REFUSED` rather than silent.
+<!-- claim: test=tools/test_check_doc_claims.py::test_a_marker_outside_the_scanned_set_is_refused_rather_than_silent -->
+
+Both ways of running the control refuse, measured 2026-11-13 at `a19f7cf4`
+(each 298 s wall): the default `--before origin/main` compares the widened
+checker against itself, so both arms are red at `pnr/orfs/README.md` and it
+exits 2 with `REFUSED: the 'before' arm was already red (exit 1)`; and pinning
+`--before f2419e26^` does not rescue it, because that older checker rejects the
+`mechanism` key current documents use and is therefore red before the injection
+can matter, exiting 2 with `REFUSED: the 'before' arm was already red (exit 2)`.
+The script stays in the tree, unchanged in behaviour, as the record of why this
+layer needed a control; it is deliberately not wired into a target, where it
+would be an unsatisfiable gate at about five minutes a run.
 
 ## Running it
 
@@ -256,7 +274,6 @@ red and names the file. It refuses rather than reporting a result if the
 make claims                                  # the whole scanned set, one run
 python3 tools/check_doc_claims.py            # the same thing
 python3 tools/check_doc_claims.py docs/failure-modes.md --quiet
-python3 tools/probes/check_doc_claims_scope_control.py   # the scope control
 ```
 
 `make claims` is also one of the jobs in `make verify`, and a job in
