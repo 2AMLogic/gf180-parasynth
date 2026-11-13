@@ -97,15 +97,19 @@ def test_the_instrument_reads_the_functions_that_ship():
     reimplementation. `read` must return exactly what `extra_features` puts
     in the vector, and its `taps=None` default must follow the shipped
     constant -- so moving FOLD_SINC_TAPS moves the probe with it."""
-    x = D._rate_stimulus(523.0, 0.0, 0)
-    shipped = dict(zip(*reversed(D.extra_features(x, 44100))))
-    got = S.read(x, 44100, None)
+    # the 48 kHz side of the pair, because a clip BUILT at 44.1 kHz has
+    # whole-sample periods there and the two folds agree on it by
+    # construction -- reading the comparison off that side would make this
+    # test pass whether or not the probe followed the constant
+    x = D._resample(D._rate_stimulus(523.0, 0.0, 0), 44100, 48000)
+    shipped = dict(zip(*reversed(D.extra_features(x, 48000))))
+    got = S.read(x, 48000, None)
     for nm, v in got.items():
         assert v == shipped[nm], nm
     # and it is the constant, not a literal 16 compiled into the probe
-    assert got["jit.cycledshape.seg0"] == S.read(x, 44100, D.FOLD_SINC_TAPS)[
+    assert got["jit.cycledshape.seg0"] == S.read(x, 48000, D.FOLD_SINC_TAPS)[
         "jit.cycledshape.seg0"]
-    assert got["jit.cycledshape.seg0"] != S.read(x, 44100, -1)["jit.cycledshape.seg0"]
+    assert got["jit.cycledshape.seg0"] != S.read(x, 48000, -1)["jit.cycledshape.seg0"]
 
 
 def test_the_instrument_refuses_the_octave_mismatch_rather_than_reporting():

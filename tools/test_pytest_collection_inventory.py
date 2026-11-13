@@ -25,7 +25,7 @@ import pytest_collection_inventory as inv  # noqa: E402
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
-    "model/discrimination_features.py": 13,
+    "model/discrimination_features.py": 18,
     "model/discrimination_trajectory.py": 6,
 }
 
