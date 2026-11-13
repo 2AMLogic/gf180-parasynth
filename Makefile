@@ -490,6 +490,22 @@ verify-full:
 ## checks x defects matrix rule 4 asks for and FAILS on any check that
 ## answered in the clean run and was reddened by nothing at all. Pure Python,
 ## no corpus, ~65 s.
+##
+## bd_pitch_predeclaration_mutants.py (#601, wired here by #755) is the same
+## shape for the #557 BD pitch freeze's guards: 12 text-replacement mutants,
+## each removing ONE guard from a scratch copy of the tree and running the
+## focused controls named for it, every one of which must go RED. It is here
+## because it was NOT: the mutant for the bool guard pointed at a helper that
+## commit b6590cb7 moved into tools/finite_number.py, its own rule-8 precheck
+## REFUSED (exit 2), and no target ran it, so none of the 12 executed for about
+## four weeks while two documents asserted the result. Pure Python, no corpus,
+## ~12 s: 10 baseline runs of one focused pytest file that must all be GREEN on
+## the unmutated tree (without them a host with no pytest reports all 12 RED
+## having run nothing, #757), then the 12 mutant runs that must all be RED.
+## REFUSES (exit 2) rather than reporting if either precondition fails. Its
+## fast half --
+## tools/test_bd_pitch_predeclaration_mutants.py, the same precheck read
+## statically off the real tree -- runs under `verify`.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
@@ -590,7 +606,8 @@ controls:
 	  "$(PY) tools/probes/permitted_differences.py --controls" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py --inject NO_IVERILOG --expect refused" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py --inject BROKEN_REPRO --expect refused" \
-	  "$(PY) tools/check_iverilog_generate_case_string.py --inject GARBAGE --expect refused"
+	  "$(PY) tools/check_iverilog_generate_case_string.py --inject GARBAGE --expect refused" \
+	  "$(PY) tools/bd_pitch_predeclaration_mutants.py"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q
