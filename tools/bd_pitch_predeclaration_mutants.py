@@ -16,6 +16,17 @@ exactly once in the source would silently mutate nothing and the suite would
 stay green -- reported as NOT RED, which is right, but for the wrong reason.
 So a target found 0 or 2+ times REFUSES (exit 2) before anything runs.
 Ported from doctor/601-alt-359303ec and re-targeted at this branch's code.
+
+That REFUSE fired for real (#755): commit b6590cb7 moved the local `_finite`
+helper out of tools/bd_pitch_predeclaration.py into the one shared guard
+(tools/finite_number.py, #718), so `bool-accepted-as-number` matched nothing
+and NONE of the 12 ran for about four weeks -- because nothing invoked this
+script.  The mutant now removes the bool rejection from the shared guard where
+it actually lives, that file joins the restore set, and `make controls` runs
+this script so the next such drift is red instead of unseen.  The fast half of
+that cover is `test_mutant_targets_still_match_exactly_once` in
+tools/test_bd_pitch_predeclaration.py, which `make verify` runs in
+milliseconds; this script is the half that proves the controls go red.
 """
 from __future__ import annotations
 
@@ -29,13 +40,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 TEST = "tools/test_bd_pitch_predeclaration.py"
 BPP = "tools/bd_pitch_predeclaration.py"
 SWP = "tools/bd_glide_phase_sweep.py"
+FIN = "tools/finite_number.py"      # the one shared finite-number guard (#718)
 
 # name: (file, old, new, pytest -k expression)
 MUTANTS = {
     # --- the nine named in the doc (third review round) ---
     "bool-accepted-as-number": (
-        BPP, "return not isinstance(x, bool) and isinstance(x, (int, float)) and math.isfinite(x)",
-        "return isinstance(x, (int, float)) and math.isfinite(x)",
+        FIN, "    if isinstance(x, (bool, np.bool_)):\n        return False\n",
+        "    if False:\n        return False\n",
         "invalid_baseline_numbers"),
     "negative-spread": (BPP, "if not _finite(v) or v < 0:", "if not _finite(v):",
                         "invalid_baseline_numbers"),
@@ -70,6 +82,12 @@ MUTANTS = {
                                  "non_dict_reading_entry"),
 }
 
+# Every file any mutant touches, DERIVED from MUTANTS rather than listed again:
+# main() restores all of these before each mutant, so retargeting a mutant at a
+# new file (#755 moved one to FIN) cannot leave that file mutated for the
+# mutants that follow it.  A hand-maintained second list could.
+FILES = tuple(sorted({rel for rel, *_ in MUTANTS.values()}))
+
 
 def main() -> int:
     bad = 0
@@ -78,7 +96,7 @@ def main() -> int:
         # the whole tree once: check() resolves probe paths anywhere in the repo
         shutil.copytree(ROOT, dst, ignore=shutil.ignore_patterns(
             ".git", ".loom", "build", "__pycache__", ".pytest_cache", "node_modules"))
-        originals = {rel: (dst / rel).read_text() for rel in (BPP, SWP)}
+        originals = {rel: (dst / rel).read_text() for rel in FILES}
         for name, (rel, old, new, _) in MUTANTS.items():
             n = originals[rel].count(old)
             if n != 1:
