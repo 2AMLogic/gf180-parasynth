@@ -95,6 +95,21 @@ EXPECT_CORPUS_SHA256 = "6e6af82198eb5b46"
 EXPECT_SPLIT_HASH = "ab381e78f9f4cc41"
 
 
+# The remediation half of the missing-corpus refusal. Exported as a constant so
+# the control in tools/test_dphase_floor_census.py can assert the refusal
+# carries it WITHOUT spelling the corpus directory name itself: that literal in
+# a module outside run_case is what tools/test_corpus_path_single_source.py
+# exists to flag. Anchoring the control here instead also means the message and
+# the assertion cannot drift apart.
+CORPUS_HOWTO = (
+    "The corpus is the public "
+    "tidalcycles/sounds-tr808-fischer at 85fbecf: "
+    "`git clone --depth 1 https://github.com/tidalcycles/"
+    "sounds-tr808-fischer /tmp/tr808-ref`, then --refs that path "
+    "(its ROOT, the directory holding bd8/, not bd8 itself)"
+)
+
+
 class Refused(Exception):
     """The census could not answer. Never reported as a count."""
 
@@ -125,12 +140,7 @@ def check_corpus(refdir: str, expect_sha: str, expect_split: str) -> dict:
 
     p = Path(refdir)
     if not p.is_dir():
-        raise Refused(
-            f"{refdir} is not a directory. The corpus is the public "
-            "tidalcycles/sounds-tr808-fischer at 85fbecf: "
-            "`git clone --depth 1 https://github.com/tidalcycles/"
-            "sounds-tr808-fischer /tmp/tr808-ref`, then --refs that path "
-            "(its ROOT, the directory holding bd8/, not bd8 itself)")
+        raise Refused(f"{refdir} is not a directory. {CORPUS_HOWTO}")
     sha, n = corpus_digest(refdir)
     if n == 0:
         raise Refused(f"{refdir} holds no .WAV files -- wrong directory, or an "

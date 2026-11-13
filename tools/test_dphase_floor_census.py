@@ -51,7 +51,7 @@ def test_a_missing_corpus_is_refused_and_names_how_to_get_one(tmp_path):
     with pytest.raises(dc.Refused) as e:
         dc.check_corpus(str(tmp_path / "nope"), dc.EXPECT_CORPUS_SHA256,
                         dc.EXPECT_SPLIT_HASH)
-    assert "sounds-tr808-fischer" in str(e.value), (
+    assert dc.CORPUS_HOWTO in str(e.value), (
         "a refusal that does not say how to satisfy it is a dead end")
 
 
