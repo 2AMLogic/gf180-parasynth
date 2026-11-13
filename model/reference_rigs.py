@@ -113,8 +113,15 @@ def _k_rom_for(g_rom: np.ndarray) -> np.ndarray:
     """DR 0006's compensation ROM built against a SUBSTITUTED cutoff ROM. The
     compensation is derived from the cutoff coefficients, so a device that
     changes one has to change the other or it measures two defects at once.
-    Byte for byte the same construction as `_k_rom_for` in
-    `model/test_moog_acceptance.py`."""
+
+    The ONE copy of this construction (#759): `model/test_moog_acceptance.py`
+    and `res_tuning.k_rom_for` import it rather than repeat it, because #547 --
+    the cache keyed on `id(g_rom)`, which a freed ROM can hand to the next one
+    -- had to be fixed in two places at once. The cache is keyed on the ROM's
+    CONTENT, and `model/test_res_tuning.py` carries the defeating input.
+
+    The returned array is the cache's own: callers who need a private array
+    must `.copy()` it (`res_tuning.k_rom_for` does)."""
     key = np.asarray(g_rom, dtype=np.int64).tobytes()   # content, not id(): ids are reused after free
     if key not in _K_ROM_CACHE:
         step = (1 << 15) >> vf.KROM_BITS
@@ -126,15 +133,26 @@ def _k_rom_for(g_rom: np.ndarray) -> np.ndarray:
 
 
 class _Variant(_REAL_LADDER):
-    """The model's inner loop with two knobs, byte for byte the same code as
-    `_LadderVariant` in `model/test_moog_acceptance.py` (which pins it to
-    `LadderFx` bit-exactly in its non-defective setting).
+    """A ladder that is NOT the model, for controls and comparisons: the
+    model's inner loop (contract 11.4) with two knobs.
 
-    `stages`  4 is the model; 2 is the dropped-pole defect
+    `stages`  how many one-poles are in the cascade; 4 is the model, 2 is the
+              dropped-pole defect
     `nonlin`  'every'    tanh in every stage -- the model, DR 0001
-              'feedback' four LINEAR poles and one saturating element in the
-                         feedback: the Stilson/Smith shape DR 0001 rejected
-              'input'    one tanh at the input, four linear poles
+              'feedback' ONE saturating element, on the feedback signal, with
+                         a hard-limited input stage and four LINEAR poles:
+                         the Stilson & Smith shape DR 0001 rejected
+              'input'    ONE tanh at the input stage, four linear poles
+
+    The ONE copy of this loop (#759); `model/test_moog_acceptance.py` imports
+    it rather than repeat it. Because a drifted control measures its own drift
+    and nothing else, it is pinned to `LadderFx` bit-exactly in its
+    non-defective setting from BOTH directions -- through the rig in
+    `test_reference_compare.test_the_variant_is_our_ladder_when_it_is_not_defective`
+    and through the acceptance suite's own probe in
+    `test_moog_acceptance.test_the_negative_control_is_the_model_when_it_is_not_defective`.
+    If either goes red, this class has drifted and every comparison that uses
+    it is void.
     """
 
     def __init__(self, *a, stages=4, nonlin="every", **kw):
@@ -163,7 +181,7 @@ class _Variant(_REAL_LADDER):
             for _ in range(os_):
                 fb = (d1 + d2) >> 1
                 if nl == "feedback":
-                    fb = shl(self.tanh_fx(fb), TQ)
+                    fb = shl(self.tanh_fx(fb), TQ)          # the one saturating element
                 u = sat(shl(xi * gain, TQ - 16) - ((k * fb) >> 14), SB)
                 w0 = self.tanh_fx(u) if nl != "feedback" else sat(shl(u, -TQ), 16)
                 for s in range(S):

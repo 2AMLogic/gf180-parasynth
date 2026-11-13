@@ -73,6 +73,14 @@ import voice_fx as vf                                               # noqa: E402
 import audio_measure as am                                          # noqa: E402
 import reference_movement as rm                                     # noqa: E402
 import alias_probe as ap                                            # noqa: E402
+# The injected-defect ladder and DR 0006's compensation ROM built against a
+# substituted cutoff ROM have ONE copy each, and it lives there (#759). This
+# suite used to carry a byte-identical second copy of both, which is why #547
+# had to be fixed in two files at once. `reference_movement` above already
+# imports `reference_rigs` at module level, so this costs no import the suite
+# was not already paying for, and `reference_rigs` loads its plugin stack
+# lazily inside its own functions, never at import.
+from reference_rigs import _Variant, _k_rom_for                     # noqa: E402
 from audio_measure import InsufficientEvidence      # noqa: E402,F401  (the stub controls below rely on it being an AssertionError)
 from dsp import SR                                                  # noqa: E402
 
@@ -104,21 +112,6 @@ def _ladder_regs(res, drive, cut, compensated=True, skew=1.0, g_rom=None):
     return g, k, gain, ogain
 
 
-def _k_rom_for(g_rom):
-    """`make_k_rom` against a substituted cutoff ROM: the compensation is
-    DERIVED from the cutoff coefficients, so a control that changes one has to
-    change the other or it is measuring two defects at once."""
-    key = np.asarray(g_rom, dtype=np.int64).tobytes()   # content, not id(): ids are reused after free
-    if key not in _K_ROM_CACHE:
-        step = (1 << 15) >> vf.KROM_BITS
-        _K_ROM_CACHE[key] = np.array(
-            [int(round(vf.k_onset(min(max(vf.CUT_MIN, i * step), vf.CUT_MAX),
-                                  g_rom, vf.GROM_BITS, 2)[0] / 4.0 * 32768))
-             for i in range((1 << vf.KROM_BITS) + 1)], dtype=np.int64)
-    return _K_ROM_CACHE[key]
-
-
-_K_ROM_CACHE = {}
 G_ROM_UNTUNED = vf.make_g_rom(tune=False)          # the ROM of contract revisions 1-6
 
 
@@ -269,65 +262,14 @@ def one_note(note=45, dur=0.5, **patch):
 
 # =============================================================================
 # deliberately-wrong ladders: the negative controls of DR 0001's argument
+#
+# `_Variant` is imported from `reference_rigs` (#759) -- one copy of the
+# model's inner loop with `stages` / `nonlin` knobs, not one per suite. The
+# bit-exact pin below is this suite's half of the two that hold it to
+# `LadderFx`; `test_reference_compare` holds the other.
 # =============================================================================
-class _LadderVariant(_REAL_LADDER):
-    """A ladder that is NOT the model, for controls and comparisons.
-
-    `stages`   how many one-poles are in the cascade (4 is the model)
-    `nonlin`   'every'    tanh in every stage -- the model (DR 0001)
-               'feedback' ONE saturating element, on the feedback signal, with
-                          a hard-limited input stage and four LINEAR poles:
-                          the Stilson & Smith shape DR 0001 rejected
-               'input'    ONE tanh at the input stage, four linear poles
-
-    This duplicates the model's inner loop (contract 11.4) with two knobs, so
-    `test_the_negative_control_is_the_model_when_it_is_not_defective` checks it
-    bit for bit against `LadderFx` in its non-defective setting. If that test
-    goes red, this class has drifted and every comparison below is void.
-    """
-
-    def __init__(self, *a, stages=4, nonlin="every", **kw):
-        super().__init__(*a, **kw)
-        self.stages, self.nonlin = stages, nonlin
-
-    def process(self, x_q15, cutoff_hz, res, drive=1.0, *, g_q16=None,
-                k=None, gain=None, ogain=None, k_q14=None):
-        from fixed import sat, shl
-        os_, SQ, SB, OB = self.os, self.SQ, self.SB, self.OB
-        n = len(x_q15)
-        g_tab, k_tab, gain, ogain = self.coefficients(
-            cutoff_hz, res, drive, g_q16=g_q16, n=n, k=k, gain=gain, ogain=ogain, k_q14=k_q14)
-        k_per_sample = np.ndim(k_tab) > 0
-        k = None if k_per_sample else int(k_tab)
-        out = np.empty(n, dtype=np.int16 if OB <= 16 else np.int32)
-        y, w = self.y, self.w
-        d1, d2 = self.d1, self.d2
-        TQ = SQ - 15
-        S, nl = self.stages, self.nonlin
-        for i in range(n):
-            xi = int(x_q15[i])
-            g = int(g_tab[i])
-            if k_per_sample:
-                k = int(k_tab[i])
-            for _ in range(os_):
-                fb = (d1 + d2) >> 1
-                if nl == "feedback":
-                    fb = shl(self.tanh_fx(fb), TQ)          # the one saturating element
-                u = sat(shl(xi * gain, TQ - 16) - ((k * fb) >> 14), SB)
-                w0 = self.tanh_fx(u) if nl != "feedback" else sat(shl(u, -TQ), 16)
-                for s in range(S):
-                    prev = w0 if s == 0 else w[s - 1]
-                    diff = prev - w[s]
-                    y[s] = sat(y[s] + ((g * shl(diff, TQ)) >> 16), SB)
-                    w[s] = self.tanh_fx(y[s]) if nl == "every" else sat(shl(y[s], -TQ), 16)
-                d2, d1 = d1, y[S - 1]
-            out[i] = sat((shl(y[S - 1], -TQ) * ogain) >> 16, OB)
-        self.y, self.w, self.d1, self.d2 = y, w, d1, d2
-        return out
-
-
 def test_the_negative_control_is_the_model_when_it_is_not_defective():
-    """[method] `_LadderVariant(stages=4, nonlin='every')` must be the model bit for
+    """[method] `_Variant(stages=4, nonlin='every')` must be the model bit for
     bit. Every comparison in this file rests on that: a control that has
     drifted from the model measures the drift, not the structure.
 
@@ -336,7 +278,7 @@ def test_the_negative_control_is_the_model_when_it_is_not_defective():
     n = int(0.2 * SR)
     x = np.round(0.9 * FS * np.sin(2 * math.pi * 220.0 * np.arange(n) / SR)).astype(np.int16)
     a = ladder_render(x, 3000, 0.8, 2.0, ladder=_REAL_LADDER(**vf.LADDER_CFG))
-    b = ladder_render(x, 3000, 0.8, 2.0, ladder=_LadderVariant(**vf.LADDER_CFG))
+    b = ladder_render(x, 3000, 0.8, 2.0, ladder=_Variant(**vf.LADDER_CFG))
     assert np.array_equal(a, b)
 
 
@@ -576,7 +518,7 @@ def test_the_nonlinearity_is_in_every_stage(cut, drive):
     x = np.round(0.95 * FS * np.sin(2 * math.pi * f0 * np.arange(n) / SR)).astype(np.int16)
     ours = ladder_render(x, cut, 0.9, drive, ladder=_REAL_LADDER(**vf.LADDER_CFG))
     lin = ladder_render(x, cut, 0.9, drive,
-                        ladder=_LadderVariant(nonlin="feedback", **vf.LADDER_CFG))
+                        ladder=_Variant(nonlin="feedback", **vf.LADDER_CFG))
     h_ours = am.harmonic_powers(ours, f0, range(6, 11)).sum() / am.harmonic_powers(ours, f0, [1])[0]
     h_lin = am.harmonic_powers(lin, f0, range(6, 11)).sum() / am.harmonic_powers(lin, f0, [1])[0]
     hotter = 10 * math.log10(h_lin / h_ours)
@@ -609,8 +551,8 @@ def test_driving_it_thickens_where_the_linearised_structure_flat_tops():
 
     lo_ours = peak_at(1.0, _REAL_LADDER(**vf.LADDER_CFG))
     hi_ours = peak_at(6.0, _REAL_LADDER(**vf.LADDER_CFG))
-    lo_lin = peak_at(1.0, _LadderVariant(nonlin="feedback", **vf.LADDER_CFG))
-    hi_lin = peak_at(6.0, _LadderVariant(nonlin="feedback", **vf.LADDER_CFG))
+    lo_lin = peak_at(1.0, _Variant(nonlin="feedback", **vf.LADDER_CFG))
+    hi_lin = peak_at(6.0, _Variant(nonlin="feedback", **vf.LADDER_CFG))
     assert 20 * math.log10(hi_ours / lo_ours) > 4.0, (lo_ours, hi_ours)
     assert 20 * math.log10(hi_lin / lo_lin) < 0.5, (lo_lin, hi_lin)
 
@@ -1555,7 +1497,7 @@ def test_control_moving_the_vca_before_the_filter(monkeypatch):
     _expect_red(test_a_high_resonance_note_reaches_exactly_zero_after_its_release)
 
 
-class _ThreePoleLadder(_LadderVariant):
+class _ThreePoleLadder(_Variant):
     """Defect: a stage dropped from the cascade (contract 11.4)."""
 
     def __init__(self, *a, **kw):
