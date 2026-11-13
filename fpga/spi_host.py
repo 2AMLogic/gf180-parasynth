@@ -322,7 +322,7 @@ def _write_order_key(w: Write) -> tuple:
     """
     tag_order = {
         "inc": 10, "track": 20, "glide": 30, "mwheel": 40,
-        "accent": 50, "kit": 55, "knob-cutoff": 60, "knob-res": 61,
+        "accent": 50, "kit": 55, "couple": 56, "knob-cutoff": 60, "knob-res": 61,
         "knob-decay": 62, "knob-volume": 63,
         "bd-attack-hot": 70, "tom-bend": 71,
         "stops-on": 80, "gate": 81, "trig": 82, "stops-off": 90,
@@ -460,7 +460,14 @@ class MusicHost:
     for). A host that does not track its image cannot do the attack window."""
 
     def __init__(self, patch: dict = None, kit: list = None, *, stop_hold: int = 2,
-                 coef_seq: bool = True, keyhost: vf.KeyHost = None):
+                 coef_seq: bool = True, keyhost: vf.KeyHost = None,
+                 coupling: bool = False):
+        # `coupling` (#552, contract 15.10): initialise a COUPLING-CAPABLE image by writing
+        # COUPLE (SEC 1, 0x30) = 1 in load(), after the kit. It is OFF by default and
+        # nothing is sent: the frozen R0/R1 images have no such register, their write lists and
+        # hashed kit lists must not change, and no released image defaults it on without
+        # #553's qualification and a separately bound release. The kit list is never touched.
+        self.coupling = bool(coupling)
         self.regs = dict(patch or vf.VoiceFx.patch_regs())
         self.kit = list(kit if kit is not None else dx.kit_808())
         self.image = dict(self.kit)                # SEC = 1 register image
@@ -507,6 +514,8 @@ class MusicHost:
             self.drum(frame, a, v, tag="kit")
         for st, lvl in enumerate(accents or [1.0] * dx.N_STOPS):
             self.drum(frame, dx.A_ACCENT + st, dx.accent_reg(lvl), tag="accent")
+        if self.coupling:
+            self.drum(frame, dx.A_COUPLE, 1, tag="couple")
         self.events.append((frame, f"load: patch + kit ({len(self.w)} writes)"))
         # which writes ARE the configuration image, by position: the tags
         # cannot say (a hit writes "accent" and a key writes "glide" too),
