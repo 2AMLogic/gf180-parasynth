@@ -115,6 +115,41 @@ def stimulus(f0: float, sr: int, jitter: float = 0.0, seed: int = 0,
     return D._rate_stimulus(f0, jitter, seed, sr=sr, kind=kind)
 
 
+OCTAVE_TOL_REL = 0.05
+
+
+def octave_refused(a: np.ndarray, sr_a: int, b: np.ndarray, sr_b: int,
+                   octave_margin: float | None = None) -> bool:
+    """THE APPARATUS'S PRECONDITION FOR EVERY jit COLUMN, as one predicate.
+
+    The jit columns answer about the partial `dominant_period` picked, so two
+    sides of a rate pair that picked DIFFERENT partials are not measuring the
+    same thing and a fold-geometry gap read off them is not about fold
+    geometry. True means the pair is REFUSED for the objective -- a third
+    outcome, not a pass.
+
+    It lives here, as the one definition, because #774's dial is swept against
+    exactly this statistic: `tools/probes/octave_margin_sweep.py` imports it
+    rather than restating it, so a margin that drives this probe's `refused`
+    count to zero cannot be a margin measured against a different test.
+    `octave_margin` is passed through to `dominant_period` so the sweep drives
+    the shipped function."""
+    ta = D.dominant_period(a, sr_a, octave_margin=octave_margin) / float(sr_a)
+    tb = D.dominant_period(b, sr_b, octave_margin=octave_margin) / float(sr_b)
+    return not (ta > 0 and tb > 0 and abs(tb / ta - 1.0) < OCTAVE_TOL_REL)
+
+
+def period_ratio(a: np.ndarray, sr_a: int, b: np.ndarray, sr_b: int,
+                 octave_margin: float | None = None) -> float:
+    """`dominant_period`'s period at `sr_b` over its period at `sr_a`, for the
+    same clip. 1.0 when the two rates agree; ~2 or ~0.5 on an octave error.
+    The continuous form of `octave_refused`, so the dial has an objective that
+    is a measurement rather than a count of threshold crossings."""
+    ta = D.dominant_period(a, sr_a, octave_margin=octave_margin) / float(sr_a)
+    tb = D.dominant_period(b, sr_b, octave_margin=octave_margin) / float(sr_b)
+    return (tb / ta) if ta > 0 else float("nan")
+
+
 def pair(f0: float, build_sr: int, taps: int, kind: str = "square") -> dict:
     """One (f0, direction, taps) row: build at `build_sr`, resample to the
     other rate, read both sides."""
@@ -127,22 +162,19 @@ def pair(f0: float, build_sr: int, taps: int, kind: str = "square") -> dict:
         if not (nm in JIT_COLS or (nm.startswith("mpd") and ".rowcorr." in nm)):
             continue
         gaps[nm] = (abs(ra[nm] - rb[nm]), tolerance(nm, ra[nm], rb[nm]), ra[nm], rb[nm])
-    # THE APPARATUS'S PRECONDITION, ASSERTED HERE RATHER THAN ASSUMED. The
-    # jit columns answer about the partial `dominant_period` picked, and on a
-    # few clips it picks a DIFFERENT ONE at the two rates -- 880 Hz built at
-    # 48 kHz and resampled down returns 101 samples, two periods, an octave
-    # error. The two sides are then not measuring the same thing, so a
-    # fold-geometry gap read off them is not a measurement of fold geometry.
-    # The row is kept and reported, and REFUSED for the objective, which is a
-    # third outcome and not a pass. The mpd columns do not use
-    # `dominant_period` and are unaffected.
-    ta = D.dominant_period(a, build_sr) / float(build_sr)
-    tb = D.dominant_period(b, other) / float(other)
-    refused = not (ta > 0 and tb > 0 and abs(tb / ta - 1.0) < 0.05)
+    # THE APPARATUS'S PRECONDITION, ASSERTED RATHER THAN ASSUMED: a pair whose
+    # two sides picked different partials is REFUSED for the objective, which
+    # is a third outcome and not a pass. The mpd columns do not use
+    # `dominant_period` and are unaffected. #774 repaired the octave pick, so
+    # this now refuses nothing on the shipped grid -- it is kept because a
+    # precondition that stops being checked the day it stops firing is not a
+    # precondition.
+    # `octave_refused` is the single definition of this predicate -- see it.
+    refused = octave_refused(a, build_sr, b, other)
     return {
         "f0": f0, "build_sr": build_sr, "other_sr": other, "taps": taps, "kind": kind,
         "gaps": gaps, "jit_refused": refused,
-        "period_ratio": (tb / ta) if ta > 0 else float("nan"),
+        "period_ratio": period_ratio(a, build_sr, b, other),
         "dp_err_build": dp_fractional_error_pct(a, build_sr, f0),
         "dp_err_other": dp_fractional_error_pct(b, other, f0),
     }
@@ -303,7 +335,23 @@ def main(argv=None) -> int:
     ap.add_argument("--f0", type=float, nargs="+", default=list(F0_GRID))
     ap.add_argument("--detail", action="store_true", default=False)
     ap.add_argument("--no-detail", dest="detail", action="store_false")
+    ap.add_argument("--octave-margin", type=int, default=None, metavar="PERMILLE",
+                    help="override JIT_OCTAVE_MARGIN_PERMILLE for the whole run; "
+                         "0 selects the bare argmax that shipped before #774")
     a = ap.parse_args(argv)
+    if a.octave_margin is not None:
+        # THE SECOND PROBE HOOK ON THIS INSTRUMENT, and it exists for the same
+        # reason `--taps -1` does: to price a repair against the code that
+        # SHIPS rather than against a copy of it. `dominant_period` reads this
+        # constant, and `jitter_features` reads `dominant_period`, so the only
+        # way to run the whole fold family at the pre-#774 octave pick is to
+        # set the constant for the duration of the run. It is why the
+        # `refused` column of this report could be reproduced at 3 after #774
+        # drove it to 0 -- which is the control that separates "the repair
+        # changed the objective" from "a different numpy changed it".
+        # `test_the_octave_margin_ships_a_real_margin` asserts 0 is never the
+        # value that ships.
+        D.JIT_OCTAVE_MARGIN_PERMILLE = a.octave_margin
     rows = sweep(tuple(a.taps), tuple(a.f0))
     text = report(rows, detail=a.detail or a.out is not None)
     sys.stdout.write(text)

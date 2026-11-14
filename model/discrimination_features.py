@@ -205,6 +205,57 @@ JIT_DPHASE_FLOOR_PPM = 20
 # asserts that.
 FOLD_SINC_TAPS = 16
 
+# THE OCTAVE MARGIN, in thousandths of a normalised autocorrelation -- #774.
+#
+# The defect. `dominant_period` was a bare argmax of the autocorrelation over
+# the whole 120..1200 Hz lag band, and on a clip whose true period falls near
+# a HALF SAMPLE it returned TWO periods: 880 Hz built at 48 kHz (where
+# `_square` emits 55-sample periods) and resampled down to 44.1 kHz has a true
+# period of 50.53 samples there, and the function returned 101. `jit.period_ms`
+# then read 2.22 ms against 1.15 ms on the other side of the same rate pair,
+# and the five columns folded at that period followed it -- a pitch error
+# reported as a pitch measurement, on the fourth-ranked attribution bucket in
+# docs/discrimination.md.
+#
+# THE MECHANISM, MEASURED, AND IT IS NOT THE ONE #774 SUSPECTED. The issue
+# guessed the lag-T peak was "split between two integer lags while the lag-2T
+# peak is not". Taking the autocorrelation's max over +-2 lags, so a split
+# peak cannot hide, refutes that: r[T] at the best integer lag near a
+# fractional T is simply LOWER (0.9857 -> 0.9660), because the waveform does
+# not line up there. Meanwhile 2T is fractional too, but when frac(T) ~ 0.5
+# the lag 2T lands NEAR an integer (frac(T)=0.531 => dist(2T,int)=0.062), so
+# r[2T] barely moves. The deciding margin is only +0.0029 to +0.0053, against
+# an intrinsic preference for T of -0.0141 on an aligned clip.
+# tools/probes/dominant_period_octave.py is that measurement, and it is where
+# the numbers in this paragraph come from.
+#
+# The repair is NOT a different estimator. It is a bound on the choice between
+# octave candidates: among the integer SUBMULTIPLES of the winning lag, return
+# the shortest one that is a local peak of the autocorrelation and is within
+# this margin of the winning peak. Submultiples only, because the defect is an
+# integer-multiple pick and a rule over every lag in the band would change the
+# estimator on clips that have no octave problem; a local peak, because a clip
+# that is not periodic at all has an autocorrelation that DECAYS from lag 0,
+# so every shorter lag beats the winner on height while none of them is a
+# peak. See `_octave_corrected`.
+#
+# 20 thousandths is not fitted to the failing clips. RATE_TOL_ABS["ratio"] is
+# 0.02: it is the resolution this module already states for a correlation-unit
+# column, i.e. the difference below which it declines to call two such numbers
+# different. A margin at that resolution is 3.8x the +0.0053 the worst failing
+# clip needs and is the same anchoring JIT_DPHASE_FLOOR_PPM takes from
+# RATE_TOL_ABS["ppm"]. It is a point on a committed grid --
+# docs/sensitivity/dominant-period-octave-margin.json, which is where to argue
+# about the value -- and an integer in thousandths because
+# tools/sensitivity.py reads a shipped python-constant as an integer.
+#
+# 0 is not a margin. It selects the bare argmax that shipped BEFORE this
+# repair and is on the grid so the sweep prices the repair and not only the
+# dial inside it, exactly as -1 is on FOLD_SINC_TAPS's grid and 0 is on
+# dphase-ar1-floor's. It is never the shipped value;
+# `test_the_octave_margin_ships_a_real_margin` asserts that.
+JIT_OCTAVE_MARGIN_PERMILLE = 20
+
 
 def _unit_of(name: str) -> str:
     if "ppm" in name:
@@ -348,13 +399,76 @@ def mpd_features(x: np.ndarray, sr: int, taps: int | None = None) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ) -> int:
-    """Lag of the largest autocorrelation peak inside `band`, in samples.
+def _octave_corrected(r: np.ndarray, lo: int, hi: int, best: int,
+                      margin: float) -> int:
+    """The shortest integer submultiple of `best` that is a local peak of `r`
+    and within `margin` of `r[best]`, in units of `r[0]`. #774.
 
-    Deterministic and signal-derived: an argmax over a stated lag range, no
-    threshold tuned on anything. Returns 0 when the window holds fewer than
-    JIT_MIN_CYCLES of the winning lag, and the caller must then refuse rather
-    than report -- a drift slope over three cycles is not a measurement."""
+    THE ARGMAX IS NOT WRONG ABOUT WHICH LAGS CORRELATE; IT IS WRONG ABOUT
+    WHICH OF TWO OCTAVES TO RETURN. So this does not search the band -- it
+    searches `best/k` for integer k, shortest candidate first, and returns
+    `best` unchanged when none of them qualifies. Two conditions, and each is
+    load-bearing:
+
+      * +-1 LAG of `round(best/k)` is searched, and one lag is enough by
+        arithmetic rather than by result: `best` is `k * T` rounded to a whole
+        sample, so `best / k` is within `0.5 / k` of the true `T` and
+        `round(best / k)` is within 1 of it. A wider window would start
+        admitting lags that are not the submultiple.
+      * THE CANDIDATE MUST BE A LOCAL PEAK. This is the condition that keeps
+        the rule from changing anything on a clip with no octave problem: an
+        aperiodic clip's autocorrelation DECAYS from lag 0, so every shorter
+        lag is taller than the winner while none of them is a peak, and a
+        height-only rule would halve the period of every noise burst in the
+        corpus.
+
+    What defeats it, stated rather than left to be discovered
+    (docs/verification-rules.md rule 8): a signal whose true period really is
+    the longer lag AND which has a real local autocorrelation peak at half of
+    it within `margin` -- a pulse train whose alternate cycles differ by less
+    than the margin, for instance. Such a clip is reported an octave high, and
+    how shallow an alternation that takes is the constraint column of
+    docs/sensitivity/dominant-period-octave-margin.json rather than a
+    reassurance here. `test_the_octave_margin_refuses_the_input_that_defeats_it`
+    is the executable form."""
+    if margin <= 0.0 or best <= lo:
+        return best
+    floor = r[best] - margin * r[0]
+    for k in range(best // lo, 1, -1):
+        c = int(round(best / k))
+        cand = [j for j in range(max(lo, c - 1), min(hi - 1, c + 1) + 1)
+                if j >= 1 and r[j] >= r[j - 1] and r[j] >= r[j + 1]]
+        if not cand:
+            continue
+        j = max(cand, key=lambda j: r[j])
+        if r[j] >= floor:
+            return j
+    return best
+
+
+def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ,
+                    octave_margin: float | None = None) -> int:
+    """Lag of the largest autocorrelation peak inside `band`, in samples,
+    resolved to the shortest octave that peak is consistent with.
+
+    Deterministic and signal-derived: an argmax over a stated lag range, then
+    one comparison against the stated JIT_OCTAVE_MARGIN_PERMILLE. Returns 0
+    when the window holds fewer than JIT_MIN_CYCLES of the winning lag, and
+    the caller must then refuse rather than report -- a drift slope over three
+    cycles is not a measurement.
+
+    THE BARE ARGMAX RETURNED TWO PERIODS ON SOME CLIPS and the record is worth
+    more than the fix: 880 Hz built at 48 kHz and resampled to 44.1 kHz came
+    back as 101 samples against 55 on the other side of the same rate pair, an
+    OCTAVE, so `jit.period_ms` reported 2.22 ms and 1.15 ms for one clip read
+    at two rates. It was not a fold-geometry defect and #767's repair could
+    not reach it; it is #774. See JIT_OCTAVE_MARGIN_PERMILLE for the measured
+    mechanism and `_octave_corrected` for what the margin bounds.
+
+    `octave_margin` overrides that constant, in the same thousandths, and
+    exists so `tools/probes/octave_margin_sweep.py` can sweep the dial against
+    the code that SHIPS rather than against a copy of it. It does not change a
+    shipped number: it defaults to off. 0 selects the bare argmax."""
     x = np.asarray(x, float)
     if not np.any(x):
         return 0
@@ -374,7 +488,10 @@ def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ) -> int:
     r = np.fft.irfft(X * np.conj(X), n)[:hi + 1]
     if r[0] <= 0:
         return 0
-    return int(lo + np.argmax(r[lo:hi + 1]))
+    best = int(lo + np.argmax(r[lo:hi + 1]))
+    permille = (JIT_OCTAVE_MARGIN_PERMILLE if octave_margin is None
+                else float(octave_margin))
+    return _octave_corrected(r, lo, hi, best, permille / 1000.0)
 
 
 def refine_frequency(x: np.ndarray, sr: int, f0: float,
@@ -765,14 +882,21 @@ RATE_PANEL = (
     ("523Hz bandlimited", 523.0, 0.0,    0,    "blsquare", 44100),
     ("523Hz@48k",         523.0, 0.0,    0,    "square",   48000),
 )
-# NOT IN THE PANEL, AND THE REASON IS A SECOND DEFECT: 880 Hz built at 48 kHz
-# and resampled DOWN (true period 50.53 samples at 44.1 kHz) makes
-# `dominant_period` return 101 -- two periods, an octave error -- so six jit
-# columns move between the rates for a reason that has nothing to do with the
-# fold. It is out of scope here and is carried as
-# `test_dominant_period_picks_a_different_octave_at_the_two_rates` below
-# rather than as six quarantine rows that would make the panel look weaker
-# than it is. Filed as #774.
+# WHY 880 Hz BUILT AT 48 kHz IS STILL NOT IN THE PANEL, now that the reason it
+# was excluded has gone. It was kept out because `dominant_period` returned
+# 101 samples there -- two periods, an octave error -- so six jit columns moved
+# between the rates for a reason that had nothing to do with the fold. #774
+# repaired that, and the clip's `jit.cycledshape.seg0` gap at the shipped width
+# is now 0.0182 against this module's own 0.0200 tolerance, so it would PASS
+# here. It is still out, and the reason is the 9 % of headroom in that
+# sentence: what is left on that clip is a fold-geometry residual at the top of
+# the dial, and #775 is the open question of whether a 0.12 relative tolerance
+# on a column whose whole range is 0.02 means anything. Adding this entry is a
+# one-line change the day #775 settles that; adding it now would couple the
+# module's main rate test to the tightest margin on the grid. The octave claim
+# itself is asserted directly, by
+# `test_dominant_period_returns_the_same_octave_at_both_rates` below, over the
+# whole class rather than this one clip.
 
 RATE_PAIR = {44100: 48000, 48000: 44100}
 
@@ -908,37 +1032,197 @@ def test_the_integer_fold_this_replaced_is_still_red_on_this_panel():
         "doing anything -- #767")
 
 
-def test_dominant_period_picks_a_different_octave_at_the_two_rates():
-    """A SECOND DEFECT, FOUND BY #767's SWEEP AND DELIBERATELY NOT FIXED BY
-    IT. It is here so the finding lives in the file that measures it and not
-    only in an issue, and so the day it stops reproducing somebody has to
-    come and delete this test.
+# THE CLASS #774 WAS ABOUT, as the panel the repair is read against.
+# `_square` quantises its period to whole samples of the BUILD rate, so the
+# variable is not f0: the whole class is three emitted periods -- 56 and 55
+# samples at 48 kHz and 51 at 44.1 kHz -- which is why a 1 Hz ladder finds
+# every failure inside 850..880 Hz built at 48 kHz and 857..873 Hz built at
+# 44.1 kHz, and nothing outside it. See
+# docs/sensitivity/dominant-period-octave-margin.json.
+#
+# THE SPLIT IS LOAD-BEARING. #774 was filed with three f0 values, all built at
+# 48 kHz, because the sweep instrument that found them shipped with a 25 Hz
+# ladder that has no value between 855 and 870. The 44.1 kHz-built half of the
+# class was invisible in that framing, so it is the half nothing about this
+# repair was selected against: the margin's value is RATE_TOL_ABS["ratio"] and
+# the three filed values are the selection set, and CONFIRM is a set neither
+# touched.
+OCTAVE_SELECT = ((850.0, 48000), (875.0, 48000), (880.0, 48000))
+OCTAVE_CONFIRM = ((860.0, 44100), (865.0, 44100), (870.0, 44100))
+# Immediately outside the band in both directions. They passed before the
+# repair too, which is the point: a margin that changed them would be
+# reporting its own presence rather than the signal's period.
+OCTAVE_EDGES = ((845.0, 48000), (885.0, 48000), (856.0, 44100), (874.0, 44100))
 
-    880 Hz built at 48 kHz (54.55 samples per period, whole-sample rounded to
-    55 by `_square`) and resampled down to 44.1 kHz has a true period of
-    50.53 samples there. `dominant_period` is an argmax of the
-    autocorrelation over the whole 120..1200 Hz lag band, and on this clip
-    the peak at TWO periods wins: it returns 101, so `jit.period_ms` reads
-    2.22 ms against 1.15 ms on the other side of the same pair and five more
-    jit columns follow it. No fold geometry is involved -- the two sides are
-    measuring different partials -- which is why this clip is not in
-    RATE_PANEL and why #767 did not repair it.
 
-    Filed as #774. What is
-    asserted is that the octave error is still EXACTLY an octave, because a
-    2.0 that drifted to 1.7 would be a different bug wearing this one's
-    name."""
-    a = _rate_stimulus(880.0, 0.0, 0, sr=48000)
-    b = _resample(a, 48000, 44100)
-    pa, pb = dominant_period(a, 48000), dominant_period(b, 44100)
-    ta, tb = pa / 48000.0, pb / 44100.0
-    assert abs(tb / ta - 2.0) < 0.05, (
-        f"the octave error no longer reproduces: {pa} samples at 48 kHz is "
-        f"{ta * 1e3:.4f} ms, {pb} at 44.1 kHz is {tb * 1e3:.4f} ms, ratio "
-        f"{tb / ta:.4f}. Delete this test and close #774")
-    # and it really is the autocorrelation's own choice, not a resampling
-    # artefact: one period of the same clip correlates at least as well
-    assert abs(880.0 - 44100.0 / pb) > 100.0, 44100.0 / pb
+def _octave_ratio(f0, build_sr, octave_margin=None):
+    """The period `dominant_period` reports for one clip read at both rates,
+    as a ratio. 1.0 for an estimator that agrees with itself about which
+    partial it is measuring; ~2 or ~0.5 on an octave error."""
+    other = RATE_PAIR[build_sr]
+    a = _rate_stimulus(f0, 0.0, 0, sr=build_sr)
+    b = _resample(a, build_sr, other)
+    pa = dominant_period(a, build_sr, octave_margin=octave_margin)
+    pb = dominant_period(b, other, octave_margin=octave_margin)
+    assert pa > 0 and pb > 0, (f0, build_sr, pa, pb)
+    return (pb / float(other)) / (pa / float(build_sr))
+
+
+def test_dominant_period_returns_the_same_octave_at_both_rates():
+    """#774, AND IT REPLACES A TEST THAT ASSERTED THE DEFECT WAS PRESENT.
+
+    `test_dominant_period_picks_a_different_octave_at_the_two_rates` lived here
+    until the repair landed: it asserted that 880 Hz built at 48 kHz and
+    resampled down came back as 101 samples against 55 on the other side --
+    EXACTLY an octave -- so that the day it stopped reproducing somebody had to
+    come and delete it. This is that deletion, and the assertion is now the
+    other way round.
+
+    Both halves of the class are checked and the second one matters more: the
+    44.1 kHz-built rows are not what the repair was selected against. The
+    tolerance is the 5 % `tools/probes/fold_rate_sweep.py` refuses its own
+    pairs at, so a clip this test calls agreed is a clip that instrument does
+    not refuse."""
+    for name, panel in (("selected on", OCTAVE_SELECT),
+                        ("held out from selection", OCTAVE_CONFIRM),
+                        ("outside the band", OCTAVE_EDGES)):
+        for f0, build_sr in panel:
+            ratio = _octave_ratio(f0, build_sr)
+            assert abs(ratio - 1.0) < 0.05, (
+                f"{f0} Hz built at {build_sr} ({name}): dominant_period reports "
+                f"periods {ratio:.4f} apart at the two rates, which is not the "
+                "same partial -- #774")
+
+
+def test_the_bare_argmax_this_replaced_is_still_wrong_on_that_class():
+    """THE INJECTED-BUG CONTROL FOR THE TEST ABOVE, and the record of what
+    #774 actually was.
+
+    A green octave test proves nothing unless the same panel can be made red,
+    and the honest way to make it red is the code that used to ship: a bare
+    argmax over the lag band, which `octave_margin=0` still is. Every value in
+    both halves of the class must be an octave out there -- the FULL class,
+    not the three rows #774 was filed with, because a repair selected on half
+    its class is how the one-directional framing happened in the first
+    place.
+
+    The edges are asserted from the other side in the same breath: if a margin
+    were doing the work there too, this control would make them red as well
+    and the panel would stop being able to tell the two apart."""
+    for f0, build_sr in OCTAVE_SELECT + OCTAVE_CONFIRM:
+        ratio = _octave_ratio(f0, build_sr, octave_margin=0)
+        assert abs(ratio - 2.0) < 0.05 or abs(ratio - 0.5) < 0.05, (
+            f"{f0} Hz built at {build_sr}: the bare argmax no longer returns a "
+            f"different octave ({ratio:.4f}), so the green above is not "
+            "evidence that the margin is doing anything -- #774")
+    for f0, build_sr in OCTAVE_EDGES:
+        assert abs(_octave_ratio(f0, build_sr, octave_margin=0) - 1.0) < 0.05, (
+            f"{f0} Hz built at {build_sr} is outside the class and must agree "
+            "with the bare argmax too; if it does not, OCTAVE_EDGES is not the "
+            "control it claims to be")
+
+
+def test_the_octave_margin_ships_a_real_margin():
+    """0 is not a margin. It selects the bare argmax that shipped before #774,
+    is carried for the control above and for the sweep instrument, and must
+    never be the value that ships -- a probe hook left switched on is a repair
+    that was reverted without anyone editing the repair."""
+    assert JIT_OCTAVE_MARGIN_PERMILLE >= 1, JIT_OCTAVE_MARGIN_PERMILLE
+    assert JIT_OCTAVE_MARGIN_PERMILLE in (5, 10, 20, 30, 50, 100, 200), (
+        f"{JIT_OCTAVE_MARGIN_PERMILLE} is not a point on the committed grid in "
+        "docs/sensitivity/dominant-period-octave-margin.json")
+
+
+def _alternating_square(f0, sr, depth, dur=0.24):
+    """A square at `f0` whose alternate periods are scaled by `1 - depth`, so
+    its TRUE period is two of `_square`'s periods. The same construction
+    `tools/probes/octave_margin_sweep.py` sweeps the dial's constraint on."""
+    x = _square(f0, sr, dur=dur)
+    period = round(sr / f0)
+    return x * np.where((np.arange(len(x)) // period) % 2 == 1, 1.0 - depth, 1.0)
+
+
+def test_the_octave_margin_refuses_the_input_that_defeats_it():
+    """A GUARD SHIPS WITH THE INPUT THAT DEFEATS IT --
+    docs/verification-rules.md rule 8. This is that input, and it defeats the
+    margin rather than being defeated by it.
+
+    A square whose alternate periods are scaled by `1 - depth` really has
+    period 2P, and really does have a local autocorrelation peak at P. So a
+    margin wide enough to swallow the gap between them reports the clip an
+    octave HIGH -- the mirror image of #774. What is asserted is the BOUNDARY,
+    in both directions, so neither side can move unnoticed:
+
+      * at depth 0.20 the gap is +0.0137, under the shipped 20 thousandths,
+        and the shipped function returns P. That is the defeat, asserted, not
+        a possibility mentioned in a docstring.
+      * at depth 0.25 the gap is +0.0292, over it, and the shipped function
+        returns the true 2P. So the margin is not simply blind to period
+        doubling.
+      * at depth 0.10 the gap is NEGATIVE and the BARE ARGMAX returns P too.
+        That bounds what the margin costs: the window it loses and the argmax
+        did not is 0.12..0.25 of alternation depth, not every period-doubled
+        signal.
+
+    400 Hz at both rates, because 2P must fall inside the 120..1200 Hz lag
+    band for the estimator to be able to choose it at all."""
+    for sr in (44100, 48000):
+        period = round(sr / 400.0)
+        for depth, expect, why in ((0.20, period, "the margin swallows the gap"),
+                                   (0.25, 2 * period, "the gap exceeds the margin")):
+            x = _alternating_square(400.0, sr, depth)
+            got = dominant_period(x, sr)
+            assert got == expect, (
+                f"{sr} Hz, alternation depth {depth}: dominant_period returns "
+                f"{got}, expected {expect} ({why}). The dial's constraint has "
+                "moved -- re-run tools/probes/octave_margin_sweep.py and read "
+                "keeps_2t in docs/sensitivity/dominant-period-octave-margin.json")
+        shallow = _alternating_square(400.0, sr, 0.10)
+        assert dominant_period(shallow, sr, octave_margin=0) == period, (
+            f"{sr} Hz, alternation depth 0.10: the BARE ARGMAX no longer "
+            "returns the half period, so this depth no longer bounds what the "
+            "margin itself costs")
+
+
+def test_the_octave_margin_does_not_move_the_rate_panel():
+    """WHAT THE REPAIR MUST NOT HAVE CHANGED, asserted rather than assumed.
+
+    #774's margin is a change to the estimator every `jit.*` column is seeded
+    by, so the honest question is not only "did it fix the class" but "did it
+    move anything else". RATE_PANEL is the panel every number on
+    `docs/discrimination.md` about the `jit.stability` bucket was measured on,
+    and that page says those numbers are unaffected by this repair. This is
+    that claim: every clip of every panel entry, at both rates, returns the
+    SAME lag under the shipped margin as under the bare argmax it replaced.
+
+    If this ever goes red, the `jit.stability` figures on that page are
+    carrying an unmeasured correction from #774 as well as from #767, and the
+    page says they are not."""
+    for label, f0, jitter, seed, kind, build_sr in RATE_PANEL:
+        a, sr_a, b, sr_b = _rate_pair(label, f0, jitter, seed, kind, build_sr)
+        for x, sr, side in ((a, sr_a, "built"), (b, sr_b, "resampled")):
+            bare = dominant_period(x, sr, octave_margin=0)
+            assert bare > 0, (label, side)
+            assert dominant_period(x, sr) == bare, (
+                f"{label} ({side} at {sr}): the octave margin moves this clip "
+                f"from {bare} samples, so the jit.stability numbers in "
+                "docs/discrimination.md are not the numbers they were -- #774")
+
+
+def test_the_octave_check_does_not_touch_a_whole_sample_period():
+    """THE VALIDATION CASE WITH AN ANSWER THIS MODULE DID NOT PRODUCE.
+
+    300 Hz divides both 44100 and 48000, so the period is a whole number of
+    samples at both rates and the lag is arithmetic: 147 and 160. An octave
+    rule that moved these would be reporting its own threshold rather than the
+    signal's period, and the margin must therefore be invisible here at every
+    width on its grid -- which is `exact` in the sweep artefact, asserted here
+    against hand-written numbers rather than against the sweep."""
+    for sr, lag in ((44100, 147), (48000, 160)):
+        x = _rate_stimulus(300.0, 0.0, 0, sr=sr)
+        for margin in (0, 5, 10, 20, 30, 50, 100, 200):
+            assert dominant_period(x, sr, octave_margin=margin) == lag, (
+                f"{sr} Hz at margin {margin}: expected the arithmetic {lag}")
 
 
 def test_the_fold_interpolator_ships_a_real_width():

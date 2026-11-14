@@ -113,28 +113,65 @@ def test_the_instrument_reads_the_functions_that_ship():
 
 
 def test_the_instrument_refuses_the_octave_mismatch_rather_than_reporting():
-    """REFUSED IS A FIRST-CLASS OUTCOME. 880 Hz built at 48 kHz and resampled
-    down makes `dominant_period` return two periods at 44.1 kHz and one at
-    48 kHz, so the two sides of that pair are not measuring the same partial
-    and a fold-geometry gap read off them is not about fold geometry. The
-    instrument must mark that row refused and keep it out of the objective
-    -- a tool that answers when it cannot is worse than one that is absent,
-    because its output looks exactly like data.
+    """REFUSED IS A FIRST-CLASS OUTCOME, AND #774 TURNED IT OFF ON THE SHIPPED
+    GRID WITHOUT REMOVING IT.
 
-    The forward direction of the same f0 is the control: it is NOT refused,
-    so `jit_refused` is not just on for everything at 880 Hz."""
-    bad = S.pair(880.0, 48000, D.FOLD_SINC_TAPS)
-    assert bad["jit_refused"]
-    assert abs(bad["period_ratio"] - 2.0) < 0.05, bad["period_ratio"]
+    880 Hz built at 48 kHz and resampled down USED to make `dominant_period`
+    return two periods at 44.1 kHz and one at 48 kHz, so the two sides of that
+    pair were not measuring the same partial and a fold-geometry gap read off
+    them was not about fold geometry. The instrument marked that row refused
+    and kept it out of the objective -- a tool that answers when it cannot is
+    worse than one that is absent, because its output looks exactly like data.
+
+    #774 repaired the octave pick, so on the shipped constant that pair is now
+    CLEAN and the objective scores it like any other row. A precondition that
+    stops being checked the day it stops firing is not a precondition, so what
+    is asserted here is the machinery rather than the defect: the refusal still
+    fires on the pair when the pre-#774 octave pick is restored
+    (`octave_margin=0`, the same hook `--octave-margin` exposes), it does not
+    fire at the shipped margin, and `summarise` still keeps a refused row out
+    of the objective. The 44.1 kHz-built direction remains the control that
+    `jit_refused` was never simply on for everything at 880 Hz."""
+    a = S.stimulus(880.0, 48000)
+    b = D._resample(a, 48000, 44100)
+    # the defect, through the shipped function at the pre-#774 margin
+    assert S.octave_refused(a, 48000, b, 44100, octave_margin=0)
+    assert abs(S.period_ratio(a, 48000, b, 44100, octave_margin=0) - 2.0) < 0.05
+    # and the repair, through the shipped constant
+    now = S.pair(880.0, 48000, D.FOLD_SINC_TAPS)
+    assert not now["jit_refused"], now["period_ratio"]
+    assert abs(now["period_ratio"] - 1.0) < 0.05, now["period_ratio"]
     good = S.pair(880.0, 44100, D.FOLD_SINC_TAPS)
     assert not good["jit_refused"], good["period_ratio"]
 
-    rows = [bad, good]
-    summary = S.summarise(rows)
+    # THE REPORTING MACHINERY, exercised on a row that really is refused, so
+    # that `refused` and the objective's exclusion rule are still tested now
+    # that no shipped row triggers them.
+    refused = dict(now, jit_refused=True)
+    summary = S.summarise([refused, good])
     assert len(summary) == 1
     assert summary[0]["refused"] == 1
-    # the objective is the unrefused row's gap, not the refused row's 0.66
+    # the objective is the unrefused row's gap, not the refused row's
     assert summary[0]["rate_gap"] == round(good["gaps"][S.OBJECTIVE_COL][0], 4)
+
+
+def test_the_octave_margin_hook_drives_the_shipped_constant():
+    """`--octave-margin` is a probe hook on a module constant, which is the
+    one kind of override that can silently outlive the run that set it. What
+    is asserted is that it is the CONSTANT the shipped function reads -- so
+    the control above is pricing the repair and not a copy of it -- and that
+    the module is left as it was found."""
+    before = D.JIT_OCTAVE_MARGIN_PERMILLE
+    x = S.stimulus(865.0, 48000)
+    y = D._resample(x, 48000, 44100)
+    try:
+        D.JIT_OCTAVE_MARGIN_PERMILLE = 0
+        assert S.octave_refused(x, 48000, y, 44100)
+        D.JIT_OCTAVE_MARGIN_PERMILLE = before
+        assert not S.octave_refused(x, 48000, y, 44100)
+    finally:
+        D.JIT_OCTAVE_MARGIN_PERMILLE = before
+    assert D.JIT_OCTAVE_MARGIN_PERMILLE == before
 
 
 def test_the_two_controls_bound_the_dial_from_the_other_side():
