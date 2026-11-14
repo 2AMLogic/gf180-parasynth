@@ -447,7 +447,8 @@ def dct_ii(x: np.ndarray, n_out: int) -> np.ndarray:
     return (np.cos(np.pi * k * (2 * m + 1) / (2 * n)) @ x) * np.sqrt(2.0 / n)
 
 
-def features(x: np.ndarray, sr: int, floor_clamp: bool = True, extra: bool = False) -> tuple:
+def features(x: np.ndarray, sr: int, floor_clamp: bool = True, extra: bool = False,
+             dphase_floor_ppm: float | None = None) -> tuple:
     """Returns (vector, names). 40 log-mel bands x 4 segments (mean) plus
     20 MFCCs x 4 segments (mean and std) = 320 numbers.
 
@@ -456,7 +457,11 @@ def features(x: np.ndarray, sr: int, floor_clamp: bool = True, extra: bool = Fal
     constant-Q sub-bands and the multi-scale windows. They are deterministic
     transforms handed to the SAME classifier and read on the SAME
     knob-equivalent yardstick -- not a learned judge, and the arm is reported
-    both ways so the cost of the addition is visible."""
+    both ways so the cost of the addition is visible.
+
+    `dphase_floor_ppm` reaches `discrimination_features.jitter_features` and
+    is #768's floor-off arm. It is inert without `extra`, because the 320
+    base columns do not contain `jit.dphase_ar1.seg0`."""
     lm = logmel(x, sr, floor_clamp)
     mf = dct_ii(lm, N_MFCC)
     bounds = np.linspace(0, lm.shape[1], N_SEG + 1).astype(int)
@@ -474,7 +479,7 @@ def features(x: np.ndarray, sr: int, floor_clamp: bool = True, extra: bool = Fal
             names.append(f"mfcc{c:02d}.seg{s}.std")
     if extra:
         import discrimination_features as dfx
-        ev, en = dfx.extra_features(x, sr)
+        ev, en = dfx.extra_features(x, sr, dphase_floor_ppm=dphase_floor_ppm)
         vals = list(vals) + list(ev)
         names = names + en
     return np.asarray(vals, dtype=float), names
@@ -1720,6 +1725,45 @@ def _tone(f, sr=44100, dur=WINDOW_S + 0.05, tau=0.05, seed=0):
     t = np.arange(int(dur * sr)) / sr
     rng = np.random.default_rng(seed)
     return np.sin(2 * np.pi * f * t) * np.exp(-t / tau) + 1e-4 * rng.standard_normal(len(t))
+
+
+def test_the_dphase_floor_override_reaches_the_column_the_run_reports():
+    """CHECK THAT THE THING BEING TESTED IS THE THING THAT SHIPS (#768).
+
+    The floor-off arm is only a control over #763 if the flag travels the
+    whole path the run uses -- argparse, `discrimination_run._featurise`,
+    `features`, `discrimination_features.extra_features`, `jitter_features`
+    -- and arrives at the column. The hooks existed from #763 and reached
+    none of it: `extra_features` called `jitter_features(x, sr)` with neither
+    argument, so a run could not turn the floor off however the flag was
+    spelled, and an A/B driven from the CLI would have produced two identical
+    arms and a confident null result.
+
+    The second half matters as much as the first: the override must move
+    `jit.dphase_ar1.seg0` and NOTHING else. If it moved a second column the
+    A/B would be a test of the floor plus whatever else came with it."""
+    import discrimination_features as dfx  # noqa: F401  (the module under the flag)
+    sr = 44100
+    t = np.arange(int(0.24 * sr)) / sr
+    under = np.sin(2 * np.pi * 410.0 * t)   # 0.47 ppm: under any sane floor
+
+    on, names = features(under, sr, True, True)
+    off, _ = features(under, sr, True, True, dphase_floor_ppm=0.0)
+    i = names.index("jit.dphase_ar1.seg0")
+    assert on[i] == 0.0, on[i]
+    assert off[i] != 0.0, (
+        "with the floor off this column must report the autocorrelation of "
+        "the numerical noise -- that is the pre-#763 behaviour the A/B is "
+        "the control for, and if it is still zero the flag did not arrive")
+
+    moved = [nm for nm, x, y in zip(names, on, off) if x != y]
+    assert moved == ["jit.dphase_ar1.seg0"], (
+        f"the floor override moved {moved}: the A/B would not isolate #763")
+
+    # the base 320 do not contain the column, so the flag is inert there
+    b_on, _ = features(under, sr, True, False)
+    b_off, _ = features(under, sr, True, False, dphase_floor_ppm=0.0)
+    assert np.array_equal(b_on, b_off)
 
 
 def test_window_is_shorter_than_every_reference_file():
