@@ -30,6 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
+import discrimination_features as dfx
 import test_discrimination as td
 from test_discrimination import (ARM_DOC, ARM_VOICES, ARMS, EQUIV_MARGIN, EXP_EMULATION,
                                  EXP_SOUND_MATCHING, FIT_KNOBS, GRADED_CONTROL_ARMS,
@@ -69,44 +70,59 @@ def split_hash(clips) -> str:
 
 
 # ---------------------------------------------------------------------------
-def _featurise(x, sr, sets):
+def _featurise(x, sr, sets, dphase_floor_ppm=None):
     """Every (level-match, floor-clamp, feature-set) view of one signal, made
     once. `sets` is the feature sets wanted: False is the study's original
-    320 columns, True those plus the 190 from discrimination_features."""
+    320 columns, True those plus the 190 from discrimination_features.
+
+    `dphase_floor_ppm` is #768's floor-off arm: None is the shipped
+    JIT_DPHASE_FLOOR_PPM, 0 is the pre-#763 behaviour (the epsilon
+    divide-by-zero guard and nothing else). It reaches only the `plus`
+    columns -- the `base` 320 are identical either way, which is what makes
+    the A/B a test of the floor rather than of the run."""
     out = {}
     for lm in (True, False):
         seg = condition(x, sr, lm)
         for fc in (True, False):
             for ex in sets:
-                out[(lm, fc, ex)] = features(seg, sr, fc, ex)[0]
+                out[(lm, fc, ex)] = features(seg, sr, fc, ex,
+                                             dphase_floor_ppm=dphase_floor_ppm)[0]
     out["interp"] = td.interpretable_features(condition(x, sr, True), sr)
     return out
 
 
 def _render_one(job):
-    voice, knobs, arm, laws, sets = job
+    voice, knobs, arm, laws, sets, floor = job
     x, sr = render(voice, knobs, laws, arm)
-    return (voice, knobs, arm), _featurise(x, sr, sets)
+    return (voice, knobs, arm), _featurise(x, sr, sets, floor)
 
 
 def _real_one(job):
-    voice, knobs, path, sets = job
+    voice, knobs, path, sets, floor = job
     x, sr = read_wav(path)
-    return (voice, knobs, "real"), _featurise(x, sr, sets)
+    return (voice, knobs, "real"), _featurise(x, sr, sets, floor)
 
 
-def build_cache(refs, arms, laws, jobs, names_holder, sets=(False,)):
+def build_cache(refs, arms, laws, jobs, names_holder, sets=(False,),
+                dphase_floor_ppm=None):
     """Render and featurise everything once, in parallel, into a cache keyed
     by (voice, knobs, side). Every downstream experiment reads this, so no
     signal is ever conditioned twice and the passes cannot drift apart."""
-    work_r = [(c.voice, c.knobs, c.path, sets) for c in refs]
+    work_r = [(c.voice, c.knobs, c.path, sets, dphase_floor_ppm) for c in refs]
     work_o = []
     for arm in arms:
         vs = ARM_VOICES.get(arm)
         for c in refs:
             if vs is None or c.voice in vs:
-                work_o.append((c.voice, c.knobs, arm, laws, sets))
-    cache = {}
+                work_o.append((c.voice, c.knobs, arm, laws, sets, dphase_floor_ppm))
+    # A FRESH DICT PER CALL, AND NOTHING ON DISK. #768 runs this twice at one
+    # commit differing only in the floor, and the key is (voice, knobs, side)
+    # with no floor in it -- so two arms sharing one cache would silently
+    # report the first arm's numbers twice. They cannot: this is local, it is
+    # returned rather than memoised, and no branch here writes a file. The
+    # floor is stamped into the cache so a reader of the returned object can
+    # still say which arm built it.
+    cache = {"_dphase_floor_ppm": dphase_floor_ppm}
     with ProcessPoolExecutor(max_workers=jobs) as ex:
         for k, v in ex.map(_real_one, work_r, chunksize=4):
             cache[k] = v
@@ -273,7 +289,7 @@ def _feature_set_pass(a, refs, laws, cache, names, arms, curve_voices, extra, re
 
     print("\n== arms: held-out (emulation) balanced accuracy, level-matched ==")
     for arm in arms:
-        s = run_arm(refs, arm, cache, names, True, True, extra=extra)
+        s = run_arm(refs, arm, cache, names, True, True, seed=a.seed, extra=extra)
         if s is None:
             print(f"  {arm:14s} {V_NONE} (not enough held-out settings)")
             continue
@@ -293,7 +309,7 @@ def _feature_set_pass(a, refs, laws, cache, names, arms, curve_voices, extra, re
     for lab, lm, fc in (("level-matched + floor clamp", True, True),
                         ("UNMATCHED level", False, True),
                         ("no floor clamp", True, False)):
-        s = run_arm(refs, "ours", cache, names, lm, fc, extra=extra)
+        s = run_arm(refs, "ours", cache, names, lm, fc, seed=a.seed, extra=extra)
         if s:
             abl[lab] = s
             print(f"  {lab:28s} {fmt(s)}")
@@ -314,7 +330,7 @@ def _feature_set_pass(a, refs, laws, cache, names, arms, curve_voices, extra, re
         out["fd_mel"] = {"_refused": "not scale-free across heterogeneous units"}
         fd = None
     else:
-        fd = fd_rows(refs, arms, cache, extra=extra)
+        fd = fd_rows(refs, arms, cache, seed=a.seed, extra=extra)
     if fd is not None:
         for k, v in sorted(fd.items(), key=lambda kv: (kv[0].startswith("_"), 0)):
             if not k.startswith("_"):
@@ -406,6 +422,17 @@ def main(argv=None) -> int:
                          "deterministic vocoder-discriminator columns; both = run each "
                          "and report the difference")
     ap.add_argument("--no-pairs", action="store_true")
+    ap.add_argument("--seed", type=int, default=0,
+                    help="the classifier split, the grouped bootstrap, the "
+                         "permutation importance and the FD balance all read "
+                         "this. #768 repeats one arm over several seeds to get "
+                         "the run-to-run spread an attribution change must "
+                         "clear before it counts as a change")
+    ap.add_argument("--dphase-floor-ppm", type=float, default=None,
+                    help="override JIT_DPHASE_FLOOR_PPM for this run (#768's "
+                         "A/B). Omitted = the shipped floor; 0 = the pre-#763 "
+                         "behaviour, i.e. the epsilon divide-by-zero guard and "
+                         "no physical floor. Touches the `plus` columns only")
     a = ap.parse_args(argv)
     arms = [x for x in a.arms.split(",") if x]
     all16 = a.sounds == "16"
@@ -416,6 +443,15 @@ def main(argv=None) -> int:
     print(f"revision {rev['described']} ({rev['commit'][:12]}), model sha {rev['model_sha256']}")
     print(f"sounds: {'all sixteen' if all16 else 'the published eight'}; "
           f"feature sets: {a.features}")
+    # #768: two runs are comparable only if the commit, the seed and the split
+    # hash match and ONLY the floor differs, so all four are printed up here
+    # where a reader cannot quote a number without them. The split hash is
+    # printed below, once the clips are indexed.
+    shipped = dfx.JIT_DPHASE_FLOOR_PPM
+    print(f"seed {a.seed}; jit.dphase_ar1 floor "
+          + (f"{shipped:g} ppm (shipped JIT_DPHASE_FLOOR_PPM)"
+             if a.dphase_floor_ppm is None else
+             f"{a.dphase_floor_ppm:g} ppm (OVERRIDDEN, shipped is {shipped:g})"))
 
     norm = corpus_is_level_normalised(a.refs)
     print(f"\ncorpus level check: {norm['at_ceiling']}/{norm['n']} files within 1 % of the "
@@ -440,12 +476,15 @@ def main(argv=None) -> int:
 
     print(f"\nrendering {len(arms)} arms on {a.jobs} workers...")
     names_holder = []
-    cache = build_cache(refs, arms, laws, a.jobs, names_holder, sets)
+    cache = build_cache(refs, arms, laws, a.jobs, names_holder, sets,
+                        dphase_floor_ppm=a.dphase_floor_ppm)
     names_by_set = dict(names_holder)
 
     curve_voices = ("BD", "SD", "CY") if all16 else ("BD", "SD")
     results = dict(revision=rev, split_hash=split_hash(refs), corpus_level=norm,
                    sounds=16 if all16 else 8, feature_sets=a.features,
+                   seed=a.seed, dphase_floor_ppm=a.dphase_floor_ppm,
+                   dphase_floor_shipped_ppm=shipped,
                    fit_knobs=FIT_KNOBS, test_knobs=TEST_KNOBS, equiv_margin=EQUIV_MARGIN,
                    n_for_margin=n_for_margin(), arm_doc=ARM_DOC, no_knob=nokn,
                    laws={k: repr(v) for k, v in laws.items() if not k.startswith("_")},

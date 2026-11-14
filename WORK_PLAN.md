@@ -19,7 +19,9 @@ _None._
 
 `loom:important`; taken before unlabelled work.
 
+- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#162**: The bass drum's entire attack is 18-23 dB short across 170-678 Hz
+- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin
@@ -32,7 +34,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#765**: Retire the three netlist patches in pnr/klt/ladder_dp/run-klt.sh: the klt bugs they work around were fixed upstream in September
+- **#768**: measure: how many discrimination rows fall under the new jit.dphase_ar1 floor (REFUSED in #763 -- no corpus on that host)
 
 ## In Progress
 
@@ -44,15 +46,17 @@ Issues currently being built (`loom:building`).
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
-- **#767**: bug: jit.cycledshape and mpd5.00ms.rowcorr are rate-dependent on the extended stimulus panel
-- **#768**: measure: how many discrimination rows fall under the new jit.dphase_ar1 floor (REFUSED in #763 -- no corpus on that host)
+- **#765**: Retire the three netlist patches in pnr/klt/ladder_dp/run-klt.sh: the klt bugs they work around were fixed upstream in September
+- **#774**: bug: dominant_period picks a different octave at 44.1 kHz and 48 kHz on some clips
+- **#775**: bug: RATE_TOL_REL is 8x larger than everything jit.cyclecorr measures
+- **#780**: bug: repeat_period returns four times the true repeat period on a signal that repeats exactly
+- **#789**: docs/milestones.md milestone 3 and the README's T1 sentence contradict the tree
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#773**: feat: count dphase_ar1 floor refusals per side, and plumb the floor-off arm
-- **#776**: fix: fold at the exact period so jit.cycledshape and mpd*.rowcorr stop reading the sample rate
+- **#786**: docs: roadmap as of 2026-11-13
 
 ## Approved (Awaiting Merge)
 
@@ -115,8 +119,12 @@ Issues carrying `loom:curated`.
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)*
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig) *(curated)*
-- **#767**: bug: jit.cycledshape and mpd5.00ms.rowcorr are rate-dependent on the extended stimulus panel *(curated)*
 - **#768**: measure: how many discrimination rows fall under the new jit.dphase_ar1 floor (REFUSED in #763 -- no corpus on that host) *(curated)*
+- **#774**: bug: dominant_period picks a different octave at 44.1 kHz and 48 kHz on some clips *(curated)*
+- **#775**: bug: RATE_TOL_REL is 8x larger than everything jit.cyclecorr measures *(curated)*
+- **#780**: bug: repeat_period returns four times the true repeat period on a signal that repeats exactly *(curated)*
+- **#788**: DAG nodes M5 and D4 read TODO against closed issues: give each evidence or retire it *(curated)*
+- **#789**: docs/milestones.md milestone 3 and the README's T1 sentence contradict the tree *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -127,7 +135,9 @@ Issues carrying `loom:curated`.
 - **#753**: Consolidate 16 duplicate file-sha256 helpers in tools/ into provenance.py *(hermit)*
 - **#760**: Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September *(hermit)*
 - **#762**: Remove fpga/probe_uart_findings.py: it reports 2 false FAILs on the repaired host and nothing runs it *(hermit)*
-- **#772**: Remove the stale pre-#109 scorecard estimator copies and the unrun apparatus command from tools/measure_partial_balance.py *(hermit)*
+- **#784**: Give Refused a shared base class: 113 unrelated definitions make two refusals report as a crash and an execution error *(hermit)*
+- **#785**: Consolidate 4 copies of the release staleness comparison: two generations already disagree on a record that ships with nulls *(hermit)*
+- **#792**: Two probes label the retired pre-#150 corner estimator "SHIPPED": #150 landed 2026-09-19 and the columns are now inverted *(hermit)*
 
 ## Epics
 
@@ -140,12 +150,12 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
-| Important | 4 |
+| Important | 6 |
 | Ready (`loom:issue`) | 5 |
-| In Progress (`loom:building`) | 8 |
-| PRs awaiting review | 2 |
+| In Progress (`loom:building`) | 11 |
+| PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 53 |
-| Architect / Hermit proposals | 8 |
+| Curated | 57 |
+| Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
