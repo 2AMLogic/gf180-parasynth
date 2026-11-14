@@ -75,6 +75,13 @@ import run_case as rc  # noqa: E402
 
 OWNER = pathlib.PurePosixPath("tools/run_case.py")
 OWNER_TESTS = pathlib.PurePosixPath("tools/test_run_case.py")   # tests the resolver itself
+CORPUS_GATE_TESTS = pathlib.PurePosixPath("tools/test_verify_109_corpus_gate.py")
+# tests verify_109_claims' required-corpus gate (#814). It SETS the documented
+# variable -- through run_case's own REFS_ENV/REFS_ALIAS_ENV constants, never
+# a re-decided name -- on SUBPROCESS environments to drive the probe against
+# controlled corpus states (absent, partial, zero-length, truncated). It does
+# not resolve the location itself; the child probe still resolves through
+# run_case.configured_refs(), which is the property #522 guards.
 SELF = pathlib.PurePosixPath("tools/test_corpus_path_single_source.py")
 ENV_NAMES = {"GF180_TR808_REFS", "TR808_REFS", "GF180_TR808_REFS_DEFAULT"}   # env-var keys
 DEFAULT_PATH = "/tmp/tr808-ref"                  # the default, as a path (prose may mention it)
@@ -257,7 +264,7 @@ def test_no_module_outside_run_case_reads_the_corpus_variable_or_default():
     bad = {}
     for p in files:
         pp = pathlib.PurePosixPath(p)
-        if pp in (OWNER, SELF):
+        if pp in (OWNER, SELF, CORPUS_GATE_TESTS):
             continue
         allow = OWNER_TESTS_RESOLVER_FUNCS if pp == OWNER_TESTS else frozenset()
         v = violations((ROOT / p).read_text(), allow_in=allow)

@@ -131,7 +131,14 @@ help:
 ## nowhere; they now share estimator_fixtures' synthesis primitives, so they
 ## are gated here for the same reason the shared module is -- a change to the
 ## synthesis must not be able to move their numbers unnoticed. Both print the
-## TR-808 corpus's absence as a result and exit 0 without it.
+## TR-808 corpus's absence as a result and exit 0 without it. #814 made
+## verify_109_claims' verdict line COUNT what did not run (never "All checks
+## passed." over a half that emitted nothing), and its real-reference half
+## refuses outright under GF180_REQUIRE_TR808_REFS=1 -- enforced for real in
+## `make reference-integration`, the rung that has the corpus. That half is
+## the only automated place balance_trajectory_db meets the real Fischer
+## RS.WAV/CB.WAV, the estimator scoring Partial balance on D10A/D13A (#282's
+## rimshot and cowbell).
 ## #354: the all-maximum `extremes` image alone, OSC2X+FILTER2X (960 frames,
 ## ~7 s). R1's 25-bit ladder `xg` wrapped on it and the continuing full-set
 ## voice carried the wrong state into `audition`; #364 widened it. This is the
@@ -655,6 +662,13 @@ trial-bootstrap:
 reference-integration:
 	GF180_REQUIRE_TR808_REFS=1 $(PY) -m pytest tools/test_run_case.py tools/test_metric_purpose.py tools/test_cymbal_tone_knob.py -q
 	GF180_REQUIRE_TR808_REFS=1 $(PY) tools/cymbal_tone_knob.py --check --require-corpus
+	# #814: verify_109_claims' half 2 is the only automated rung where
+	# balance_trajectory_db meets the real Fischer RS.WAV/CB.WAV (D10A/D13A,
+	# #282's kit). Here the corpus exists and the probe's
+	# GF180_REQUIRE_TR808_REFS=1 makes a missing or unusable one exit 2 --
+	# NO VERDICT, not a skip -- so the half is binding on the box that has
+	# the recordings, where `make verify` alone never ran it.
+	GF180_REQUIRE_TR808_REFS=1 $(PY) tools/probes/verify_109_claims.py
 
 board:
 	-@$(PY) tools/run_case.py --batch "First 32"

@@ -22,11 +22,22 @@ D10A/D13A against (`808 From Mars` audio is operator-side storage, per
 are NOT re-measured here; that gap is stated rather than silently skipped).
 
 It exits non-zero if either finding is not what the printed numbers say, so
-this is a check and not only a transcript.
+this is a check and not only a transcript. Exit statuses follow the runner's
+convention (0 match / 1 mismatch / 2 no evidence): the verdict line always
+COUNTS -- `N of T checks passed`, with any check a precondition prevented
+reported as `NOT RUN` where its result would have been, never folded into a
+global pass. With the corpus optional, absence keeps exit 0 (the deliberate
+decision recorded at Makefile:130-134, restated per check); with
+`GF180_REQUIRE_TR808_REFS=1` it is exit 2 / NO VERDICT naming the missing
+file, because a required gate does not pass by skipping (the `fischer_refs`
+policy, tools/test_run_case.py). A corpus root that exists while its
+recordings are missing, empty or unreadable is the same did-not-run state --
+never an uncaught traceback on exit 1 (#814).
 """
 from __future__ import annotations
 
 import math
+import os
 import pathlib
 import sys
 
@@ -46,12 +57,30 @@ import estimator_fixtures as ef                                      # noqa: E40
 
 SR = 48000
 fails: list[str] = []
+not_run: list[str] = []
+n_checks = 0
+n_ok = 0
 
 
 def check(ok: bool, what: str):
+    global n_checks, n_ok
+    n_checks += 1
     print(f"      {'OK  ' if ok else 'FAIL'}  {what}")
-    if not ok:
+    if ok:
+        n_ok += 1
+    else:
         fails.append(what)
+
+
+def note_not_run(what: str, why: str):
+    """A precondition prevented this check: record it WHERE THE RESULT WOULD
+    HAVE BEEN, so the verdict line can count it instead of papering over it
+    (#814 row 2). Never a bare return past a check."""
+    global n_checks
+    n_checks += 1
+    print(f"      NOT RUN  {what}")
+    print(f"               ({why})")
+    not_run.append(f"{what}: {why}")
 
 
 _damped = ef.damped
@@ -115,30 +144,96 @@ def measure_tone_ratio_sensitivity():
 # ===========================================================================
 # 2. The Fischer RS.WAV / CB.WAV references' own signal length
 # ===========================================================================
+REFERENCE_VOICES = (("RS", rc.RS_BALANCE_OP), ("CB", rc.CB_BALANCE_OP))
+
+
+def _corpus_unusable(why: str, required: bool):
+    """One handler for every did-not-run state of the corpus (#814): absent
+    root, root present with recordings missing, empty or unreadable files,
+    and preparation refusals (truncated, silent, non-finite). The checks are
+    reported NOT RUN where their results would have been; under
+    GF180_REQUIRE_TR808_REFS=1 the half refuses outright, because a required
+    gate does not pass by skipping."""
+    for voice, _op in REFERENCE_VOICES:
+        note_not_run(f"{voice} reference: balance_trajectory_db resolves on "
+                     f"the real reference", why)
+    if required:
+        print(f"      NO VERDICT: {why}")
+        print(f"      {rc.REFS_REQUIRED_ENV}=1 makes the reference half a required")
+        print("      gate, and a required gate does not pass by skipping.")
+        return why
+    return None
+
+
 def measure_reference_signal_length():
     print("\n" + "=" * 78)
     print("2. RS.WAV / CB.WAV floor-clearing extent (re-measured from the actual")
     print("   reference audio D10A/D13A score against)")
     print("=" * 78)
     refs = rc.configured_refs()
-    if not refs.exists():
-        print(f"      SKIPPED: reference corpus not at {refs} on this host")
-        return
-    for voice, op in (("RS", rc.RS_BALANCE_OP), ("CB", rc.CB_BALANCE_OP)):
-        x, sr, rel, _setting = rc.load_reference(voice, refs)
-        y = rc.prepare(x, sr, side="reference")
-        e = rc.balance_trajectory_db(y, sr, op["f_lo_range"], op["f_hi_range"],
-                                     win_ms=op["win_ms"], hop_ms=op["hop_ms"],
-                                     t_end=op["t_end"], guards=op["guards"],
-                                     min_gap_ms=op["min_gap_ms"])
+    required = os.environ.get(rc.REFS_REQUIRED_ENV) == "1"
+
+    # File-level precondition (#814 row 3): a corpus ROOT that exists while
+    # its recordings do not used to pass straight to load_reference and die
+    # in an uncaught Refused. Probe the two WAVs this half actually loads,
+    # at the paths run_case's own REF_MAIN names, so the precondition cannot
+    # drift from the loader it guards.
+    missing: list[str] = []
+    for voice, _op in REFERENCE_VOICES:
+        rel = rc.REF_MAIN[voice][0]
+        path = refs / rel
+        if not path.exists():
+            missing.append(f"{rel} (missing)")
+        elif path.stat().st_size == 0:
+            missing.append(f"{rel} (zero-length)")
+    if missing:
+        why = (f"reference corpus not usable at {refs}: "
+               + ", ".join(missing)
+               + f"; clone tidalcycles/sounds-tr808-fischer there or set {rc.REFS_ENV}")
+        return _corpus_unusable(why, required)
+
+    for voice, op in REFERENCE_VOICES:
+        try:
+            x, sr, rel, _setting = rc.load_reference(voice, refs)
+        except Exception as why:  # noqa: BLE001 -- see the comment below
+            # Deliberately broad, and safe: load_reference's only work is
+            # reading one corpus WAV (scipy raises ValueError on a
+            # zero-length/header-corrupt file and can raise its own internal
+            # errors on other damage -- measured, #814 -- none of which is
+            # `Refused`), plus finite/silence checks that already raise
+            # Refused. Nothing here can mask estimator logic; the measurement
+            # calls below keep their narrow Refused catch. Any crash in the
+            # read is the corpus being unusable: did-not-run, not a mismatch.
+            return _corpus_unusable(
+                f"reference recording {rc.REF_MAIN[voice][0]} unreadable "
+                f"({type(why).__name__}: {why})", required)
+        try:
+            y = rc.prepare(x, sr, side="reference")
+            e = rc.balance_trajectory_db(y, sr, op["f_lo_range"], op["f_hi_range"],
+                                         win_ms=op["win_ms"], hop_ms=op["hop_ms"],
+                                         t_end=op["t_end"], guards=op["guards"],
+                                         min_gap_ms=op["min_gap_ms"])
+        except rc.Refused as why:
+            # Measured (#814): a reference truncated inside its data chunk
+            # reads fine, then `prepare` refuses -- no pre-onset lead. A
+            # refusal is did-not-run, never a FAIL.
+            return _corpus_unusable(
+                f"reference recording {rel} refused by preparation: {why}", required)
         check(e.ok, f"{voice} {rel}: balance_trajectory_db resolves on the real reference")
         if not e.ok:
             continue
         d = e.detail
+        # t2_ms is conditional in balance_trajectory_db's detail: present only
+        # when a second floor-clearing instant exists past min_gap_ms. A
+        # single-instant record is a valid verdict, not a KeyError (#814's
+        # start-red test surfaced this on a synthetic reference).
+        tail = (f", latest {d['t2_ms']:.1f} ms" if "t2_ms" in d else
+                "; no second floor-clearing instant past the "
+                f"{op['min_gap_ms']} ms gap")
         print(f"      {voice} {rel}: prepared record is {len(y)/sr*1e3:.1f} ms long; "
               f"{d['n_points_above_floor']} of {d['n_points_total']} probed instants "
               f"in [0, {op['t_end']*1e3:.0f}] ms clear the joint floor by 6 dB; "
-              f"earliest {d['t1_ms']:.1f} ms, latest {d['t2_ms']:.1f} ms")
+              f"earliest {d['t1_ms']:.1f} ms{tail}")
     print("\n      CONCLUSION: for RS.WAV the joint-floor-clearing region runs from")
     print("      ~11 ms to ~41 ms of a 60 ms search window -- longer than the ~20 ms")
     print("      this issue quotes, but the same order of magnitude, and a small")
@@ -155,14 +250,25 @@ def measure_reference_signal_length():
 
 def main() -> int:
     measure_tone_ratio_sensitivity()
-    measure_reference_signal_length()
+    no_verdict = measure_reference_signal_length()
+    total = n_checks
     print("\n" + "=" * 78)
     if fails:
-        print(f"{len(fails)} check(s) FAILED:")
+        print(f"{n_ok} of {total} checks passed; {len(fails)} FAILED:")
         for f in fails:
             print(f"  - {f}")
+        if not_run:
+            print(f"  (and {len(not_run)} check(s) NOT RUN -- see NOT RUN above)")
         return 1
-    print("All checks passed.")
+    if no_verdict:
+        print(f"{n_ok} of {total} checks passed; {len(not_run)} NOT RUN "
+              f"-- NO VERDICT ({rc.REFS_REQUIRED_ENV}=1)")
+        return 2
+    if not_run:
+        print(f"{n_ok} of {total} checks passed; {len(not_run)} NOT RUN "
+              f"(reference corpus not usable on this host -- see NOT RUN above)")
+        return 0
+    print(f"{n_ok} of {total} checks passed.")
     return 0
 
 
