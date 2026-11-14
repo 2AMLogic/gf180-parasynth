@@ -189,6 +189,28 @@ def test_the_period_grid_is_read_once_and_shared_by_both_consumers():
         "the reduction is not a known case, so start_red and injected_bugs miss it"
 
 
+def test_the_absorbing_aggregate_audit_still_finds_the_defect_it_was_written_for():
+    """#801's class search, kept honest. The audit reports ZERO sites on this
+    tree, and a scan that finds nothing is indistinguishable from a scan that
+    CANNOT find anything -- so what is asserted here is its power, not its
+    verdict: it must still flag the pre-repair site (pasted verbatim from
+    origin/main @ 344ed6e7) and must not flag the repaired one.
+
+    Deliberately NOT a repo-wide "zero sites" gate. The audit is a triage list
+    whose blind spots it prints itself (`--defeat`), and a legitimately
+    guarded aggregate it cannot follow would turn such a gate red for the
+    wrong reason -- an unsatisfiable gate trains everyone to ignore gates."""
+    import absorbing_aggregate_audit as aaa
+    assert aaa.main(["--self-test"]) == 0
+    for label, src, want in aaa.SELF_TEST:
+        assert bool(aaa.scan_source(src, label)) is want, label
+    # The power assertion, stated once more against the shipped file rather
+    # than a pasted fixture: the repaired reduction is not flagged.
+    shipped = (ROOT / "tools" / "measure_promoted_bands.py").read_text(encoding="utf-8")
+    hits = [r for r in aaa.scan_source(shipped, "measure_promoted_bands.py")]
+    assert not hits, hits
+
+
 def test_the_refusal_policy_probe_passes_all_five_conditions():
     """The committed instrument from #801, run as a gate rather than quoted:
     `tools/probes/period_error_refusal_policy.py --check` exercises the real

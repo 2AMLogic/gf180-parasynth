@@ -74,6 +74,14 @@ PINNED_LO, PINNED_HI = 0.0, 0.1
 PUBLISHED_PCT = 0.068
 
 
+def _is_published(worst) -> bool:
+    """Is this the figure `model/promoted_measures.py` and
+    `docs/discrimination.md` quote? Checked as well as finiteness, because a
+    function that refused everything and a function that answered a DIFFERENT
+    number would both satisfy "not green on the stubs"."""
+    return math.isclose(float(worst), PUBLISHED_PCT, abs_tol=0.002)
+
+
 def _satisfies(worst) -> bool:
     """Does this reading satisfy the pinned bound -- i.e. would it have passed
     green? Coerced to a Python `bool` deliberately: the estimators return
@@ -141,7 +149,8 @@ def conditions() -> list:
     rows.append(("A real estimator", rendering, _satisfies(worst),
                  answered, total,
                  "must be finite and reproduce "
-                 f"{PUBLISHED_PCT} %: {'yes' if math.isclose(worst, PUBLISHED_PCT, abs_tol=0.002) else 'NO'}"))
+                 f"{PUBLISHED_PCT} %: "
+                 f"{'yes' if _is_published(worst) else 'NO'}"))
 
     saved = pm.dominant_period_ms
     try:
@@ -198,8 +207,9 @@ def main(argv=None) -> int:
     # satisfy "not green on the stubs". Read from the single run above -- a
     # second `conditions()` call would walk the twelve-case grid twice.
     try:
-        if not math.isclose(float(worst_a), PUBLISHED_PCT, abs_tol=0.002):
-            gaps.append(f"A does not reproduce the published {PUBLISHED_PCT} %: {worst_a}")
+        if not _is_published(worst_a):
+            gaps.append(f"A does not reproduce the published "
+                        f"{PUBLISHED_PCT} %: {worst_a}")
     except ValueError:
         gaps.append(f"A did not return a number: {worst_a}")
 
