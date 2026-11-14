@@ -1,37 +1,67 @@
 {
-  "D2": {
-    "detail": "105 passed in 470.08s (0:07:50)",
+  "D1": {
+    "detail": "verify_drums: PASS -- 409998 samples, RTL identical to model",
     "passed": true,
-    "sha": "c03c64e17554e207163d7b5886104b04ec53e775"
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+  },
+  "D2": {
+    "detail": "105 passed in 321.90s (0:05:21)",
+    "passed": true,
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "D3": {
     "detail": "model/sound_report.py exit 1",
     "passed": false,
-    "sha": "c03c64e17554e207163d7b5886104b04ec53e775"
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+  },
+  "F1": {
+    "detail": "verify_ladder: PASS -- 28800 samples, RTL identical to model",
+    "passed": true,
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+  },
+  "F2": {
+    "detail": "verify_modal: PASS -- 57600 samples, RTL identical to model",
+    "passed": true,
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "F3": {
-    "detail": "153 passed in 3.77s",
+    "detail": "153 passed in 3.09s",
     "passed": true,
-    "sha": "c03c64e17554e207163d7b5886104b04ec53e775"
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+  },
+  "I1": {
+    "detail": "verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in",
+    "passed": true,
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+  },
+  "I2": {
+    "detail": "verify_synth_top: PASS -- 2851 I2S periods decoded from the wire, every one identical to t",
+    "passed": true,
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+  },
+  "M1": {
+    "detail": "verify_voice: deadline at launch cycle 8: worst strobe cycle 171 (slack 83), worst last-bu",
+    "passed": true,
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "M2": {
-    "detail": "115 passed in 244.91s (0:04:04)",
+    "detail": "115 passed in 190.10s (0:03:10)",
     "passed": true,
-    "sha": "c03c64e17554e207163d7b5886104b04ec53e775"
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "M3": {
     "detail": "docs/reference-compare-results.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "c03c64e17554e207163d7b5886104b04ec53e775"
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "S1": {
     "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "c03c64e17554e207163d7b5886104b04ec53e775"
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "S3": {
     "detail": "fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "c03c64e17554e207163d7b5886104b04ec53e775"
+    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   }
 }
