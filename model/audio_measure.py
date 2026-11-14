@@ -2920,8 +2920,10 @@ def psd_slope_db_oct(x, band, sr: int = SR_DEFAULT, *, nfft: int = 8192,
 #: 60-record exactly-repeating panel, an unbiased NCCF with no submultiple rule
 #: scores 17/60 against the overlap correction that shipped before it at 27/60
 #: -- WORSE, because a correct normaliser turns a near-tie into an exact one
-#: and hands the answer to FFT round-off. A tie has to be broken by a rule, and
-#: this margin is the rule's one number.
+#: and hands the answer to FFT round-off. A tie has to be broken by a rule,
+#: this margin is the rule's one number, and the rule is the half that carries
+#: the repair: see `repeat_period`'s docstring for the three-statistic table
+#: that makes that split measurable rather than asserted.
 #:
 #: 1 IS NOT FITTED TO THE FAILING RECORDS, and the exactly-repeating panel
 #: cannot choose it: every margin from 1 to 200 thousandths scores 60/60 there,
@@ -3057,12 +3059,39 @@ def repeat_period(x, sr: int = SR_DEFAULT, *, min_lag_s: float = 0.05,
     So the statistic is now an NCCF -- each lag normalised by the MEAN ENERGY OF
     THE TWO WINDOWS ACTUALLY OVERLAPPED, which cannot exceed 1.0 and reaches it
     only when those windows match in energy as well as in shape -- and the
-    octave is chosen by
-    `_shortest_submultiple`. BOTH HALVES ARE LOAD-BEARING and the controls in
-    `tools/probes/estimator_ground_truth_controls.py` revert each on its own:
-    the NCCF alone scores 17/60 (worse than what it replaced) because a correct
-    normaliser ties at EVERY multiple, and a submultiple rule cannot be applied
-    to a statistic that is not comparable across lags.
+    octave is chosen by `_shortest_submultiple`.
+
+    THE TWO HALVES DO NOT DO THE SAME JOB, and the measurement says so against
+    the expectation the issue was filed with. Over 60 exactly-repeating
+    records, from `tools/probes/repeat_period_multiple.py`:
+
+        statistic   no rule     with the rule   reports corr > 1.0
+        mean         43 wrong     0 wrong          0 / 60
+        overlap      33 wrong     0 wrong         28 / 60
+        geometric    44 wrong     0 wrong          0 / 60
+
+    THE SUBMULTIPLE RULE IS THE HALF THAT FIXES THE PERIOD. All three
+    statistics return the true period on all 60 once it is on -- including the
+    overlap correction this docstring blames -- and all three are wrong on a
+    third to three quarters of them without it. An unbiased normaliser alone is
+    not merely insufficient, it is WORSE than the biased one it replaces (43
+    and 44 against 33), because a correct normaliser ties at every multiple of
+    a true period by construction and hands the answer to FFT round-off.
+
+    THE NORMALISER IS FOR THE UNITS AND THE GATE, not for the period. The
+    overlap expression calls 1.0004 a correlation on 28 of those same 60
+    records, so `detail['corr']` has no upper bound and `min_corr` is a
+    threshold on a quantity that can exceed its own maximum -- which is the
+    reading the issue was filed on. Its effect on the reported period is real
+    but narrow: one record in the ground-truth catalogue's 29
+    `harmonic_mixture` members, at 20 dB SNR.
+
+    Each decision is reverted on its own by a control, in the place where that
+    control was measured to have power: `--inject NO_SUBMULTIPLE_RULE` and
+    `--inject OVERLAP_NORMALISER` in the probe above (43/60 and 28/60), and the
+    arithmetic-against-geometric choice in
+    `tools/probes/estimator_ground_truth_controls.py`, whose `two_modes` and
+    `transient_then_ring` families are what separate those two.
 
     `submultiple_margin` overrides REPEAT_SUBMULTIPLE_MARGIN_PERMILLE, in the
     same thousandths, and exists so `tools/probes/repeat_period_multiple.py`

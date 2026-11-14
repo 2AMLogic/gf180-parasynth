@@ -1101,6 +1101,58 @@ def c_glide_law(fx):
                  f"confident law for a record whose frequency does not move"))
 
 
+def _unreported_submultiple(value: float, period: float, fx,
+                            min_lag_s: float = 0.05, tol: float = 0.02):
+    """`(lag_s, n_periods)` of an integer divisor of `value` that is still in
+    the estimator's lag band and is itself a whole number of carrier periods --
+    or None. #780.
+
+    THIS IS THE PREDICATE THAT USED TO BE MISSING, and its absence is why this
+    suite reported green while `repeat_period` returned 4x the true period on
+    half of its own domain (#780). "A whole multiple of the carrier" was the
+    only thing asked, and 22x satisfies it exactly as well as 11x does. On a
+    STATIONARY record both are true statements and only the shortest is the
+    answer, so the check has to ask the second question.
+
+    Only integer DIVISORS of the reported lag are searched, which is neither
+    laziness nor a coincidence: it is exactly what
+    `audio_measure._shortest_submultiple` guarantees and nothing more. A
+    predicate demanding the globally shortest in-band repeat would fail
+    legitimately -- a 110 Hz carrier at 48 kHz has a period of 436.36 samples,
+    so its only whole-period lags that are also whole SAMPLE counts are
+    multiples of 11 periods, and 4800 samples really is the shortest repeat in
+    band even though 2618 is nearer `min_lag`.
+
+    `tol` IS AN ABSOLUTE TOLERANCE IN PERIODS, not the lag-relative one the
+    enclosing check uses, and the difference is load-bearing at high period
+    counts: a 660 Hz carrier reported at 77 periods has a candidate at 38.5
+    periods, which is HALF A PERIOD OUT and not a repeat of anything, yet half
+    a period is only 0.65 % of a 77-period lag. The first draft of this helper
+    used the relative form and flagged exactly that candidate on two records.
+    An absolute 0.02 periods also removes any dependence on `round`'s
+    half-to-even rule, which is what turns 38.5 into 38.
+
+    THE INHARMONIC CARVE-OUT IS DECLARED BY THE FIXTURE, not fitted to the
+    failures. A record carrying a planted inharmonic partial
+    (`truth['inharmonic_share_db']`) does not repeat at a multiple of its
+    carrier at all -- the partial only realigns further out -- so a submultiple
+    of the carrier is not a repeat and declining to fold to it is correct. Those
+    three records are the catalogue's own evidence that the margin in
+    `REPEAT_SUBMULTIPLE_MARGIN_PERMILLE` must stay small: measured, the -30 dB
+    member is folded to 11x from 5 thousandths upward and is right at 1.
+    """
+    if fx.truth.get("inharmonic_share_db") is not None:
+        return None
+    for k in range(2, max(2, int(value / min_lag_s)) + 1):
+        cand = value / k
+        if cand < min_lag_s - 1e-12:
+            break
+        m = cand / period
+        if abs(m - round(m)) <= tol and round(m) >= 1:
+            return cand, int(round(m))
+    return None
+
+
 def c_repeat_period(fx):
     if fx.kind == "repeated_hits":
         want = fx.truth["period_s"]
@@ -1156,9 +1208,18 @@ def c_repeat_period(fx):
     best = min((abs(e.value / pp - round(e.value / pp)) * pp / e.value, pp)
                for pp in periods)
     if best[0] <= 0.02:
+        folded = _unreported_submultiple(e.value, best[1], fx)
+        if folded is not None:
+            return _bad(f"reported {e.value*1e3:.2f} ms = "
+                        f"{e.value/best[1]:.3f} x the {best[1]*1e3:.4f} ms "
+                        f"carrier, but {folded[0]*1e3:.2f} ms ({folded[1]} x "
+                        f"the same carrier) is an integer submultiple of it "
+                        f"and is still inside the lag band -- a whole multiple "
+                        f"of a repeat is not the repeat (#780)")
         return _ok(f"{e.value*1e3:.2f} ms = {e.value/best[1]:.3f} x the "
                    f"{best[1]*1e3:.4f} ms carrier period, to "
-                   f"{100*best[0]:.2f} %")
+                   f"{100*best[0]:.2f} %, with no integer submultiple of it "
+                   f"left in band")
     return _bad(f"reported {e.value*1e3:.2f} ms, which is not a whole number "
                 f"of any known carrier period "
                 f"({[round(e.value/pp, 3) for pp in periods]})")

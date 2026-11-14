@@ -420,6 +420,80 @@ def _harmonic_powers_off_f0():
     return mutant
 
 
+def _repeat_period_statistic(kind: str):
+    """`repeat_period` with its per-lag normaliser replaced -- the two
+    statistics #780 measured and rejected, reverted one at a time.
+
+    `kind="overlap"` is the expression that SHIPPED BEFORE #780:
+    `(ac / ac[0]) * n / (n - L)`. For a record that repeats exactly that is
+    algebraically `meansq(x[0 : n - L]) / meansq(x[0 : n])`, a front/back
+    energy ratio in a correlation's units, which is why it could exceed 1.0
+    and why the argmax over it landed on the longest multiple in band
+    whenever the record's head was hotter than its mean.
+
+    `kind="geometric"` is the textbook scale-invariant NCCF,
+    `ac[L] / sqrt(E_head * E_tail)`. It is the version that was written FIRST
+    for #780 and it was wrong before it was right: scale invariance means a
+    decaying record's quiet tail correlates with its loud head in SHAPE, so it
+    scored a 0.6 s 81->60 Hz glide-then-ring at 0.530 where the shipped
+    arithmetic mean scores 0.484, turning a correct refusal into a confident
+    64.69 ms -- 3.88 carrier periods and not a repeat. Keeping it as a control
+    is the point: the decision between the two means is not a detail, and
+    without this entry nothing in the tree would turn red if someone
+    "simplified" it back.
+
+    THE SUBMULTIPLE RULE IS LEFT ON in both, deliberately. Reverting two things
+    at once cannot tell you which one the check saw, and #780's test plan asks
+    for each half separately."""
+    if kind not in ("overlap", "geometric"):
+        raise ValueError(kind)                               # pragma: no cover
+
+    def mutant(x, sr=am.SR_DEFAULT, *, min_lag_s=0.05, max_lag_s=12.0,
+               min_corr=0.5, submultiple_margin=None):
+        x = am._as_float(x)
+        if am.is_silent(x):
+            return am._fail("silent")
+        x = x - x.mean()
+        n = len(x)
+        max_lag = min(int(max_lag_s * sr), n // 2)
+        min_lag = int(min_lag_s * sr)
+        if max_lag <= min_lag + 16:
+            return am._fail("record too short for this lag range", samples=n)
+        nf = 1 << int(math.ceil(math.log2(2 * n)))
+        X = np.fft.rfft(x, nf)
+        ac = np.fft.irfft(X * np.conj(X), nf)[:max_lag + 1]
+        if ac[0] <= 0:
+            return am._fail("degenerate autocorrelation")
+        lags = np.arange(max_lag + 1)
+        if kind == "overlap":
+            overlap = (n - lags).astype(np.float64)
+            r = (ac / ac[0]) * (n / np.maximum(overlap, 1.0))
+        else:
+            c2 = np.concatenate(([0.0], np.cumsum(x * x)))
+            r = ac / np.sqrt(np.maximum((c2[n - lags] - c2[0])
+                                        * (c2[n] - c2[lags]), 1e-300))
+        best = min_lag + int(np.argmax(r[min_lag:max_lag + 1]))
+        peak = float(r[best])
+        if peak < min_corr:
+            return am._fail("no repeat: autocorrelation never approaches 1 in "
+                            "this lag range",
+                            best_corr=peak, best_lag_s=best / sr)
+        permille = (am.REPEAT_SUBMULTIPLE_MARGIN_PERMILLE
+                    if submultiple_margin is None else float(submultiple_margin))
+        lag = am._shortest_submultiple(r, min_lag, max_lag, best, permille / 1000.0)
+        corr = float(r[lag])
+        if corr < min_corr:
+            return am._fail("no repeat: the shortest submultiple that the "
+                            "margin admits is itself below min_corr",
+                            best_corr=corr, best_lag_s=lag / sr,
+                            argmax_corr=peak, argmax_lag_s=best / sr)
+        return am.Estimate(lag / sr, True, "",
+                           dict(corr=corr, argmax_lag_s=best / sr,
+                                argmax_corr=peak))
+    mutant.__name__ = f"mutant_repeat_period_{kind}"
+    return mutant
+
+
 #: (label, attribute on `audio_measure`, factory, the ONE pair it must redden)
 #:
 #: Each label is a defect CLASS, not a typo: a wrong weighting, a removed
@@ -518,6 +592,37 @@ MUTANTS = (
     ("repeat_period with its minimum-lag floor removed",
      "repeat_period", lambda: _wrap("repeat_period", min_lag_s=0.0),
      ("repeat_period", "damped_sine")),
+    # #780's repair has TWO load-bearing halves and one measured choice inside
+    # the first. Each is reverted on its own: a control that disables both at
+    # once cannot say which half the check saw, and the halves fail
+    # differently -- the normaliser alone scores WORSE than what it replaced.
+    # THE NCCF HALF IS NOT CONTROLLED FROM HERE, and the reason is measured
+    # rather than assumed. `_repeat_period_statistic("overlap")` -- the
+    # pre-#780 expression -- reddens exactly ONE record in the whole
+    # catalogue: harmonic_mixture[12], a 220 Hz band-limited saw at 20 dB SNR,
+    # which the evenly-spaced reduced control set does not carry. Naming it
+    # here would print NOT-CAUGHT, and a control that cannot activate is worse
+    # than no control (this file's docstring, and rule 8). The factory is kept
+    # above because it is the mutant, and the honest reading is that these
+    # seven quasi-periodic families have almost no power over the NORMALISER
+    # even with #780's tightened predicate -- they have plenty over the
+    # submultiple rule and over the arithmetic/geometric choice, which is why
+    # those two ARE named below.
+    #
+    # The control that does have power over it lives where the exactly-
+    # repeating records live:
+    #     tools/probes/repeat_period_multiple.py --inject OVERLAP_NORMALISER
+    # which goes red at 43 of 60 instead of 1 of 29. `make controls` runs it.
+    ("repeat_period with its shortest-submultiple rule disabled, so a whole "
+     "multiple of the period wins on any record where the multiples tie (the "
+     "rule half of #780 removed, NCCF left on)",
+     "repeat_period", lambda: _wrap("repeat_period", submultiple_margin=0),
+     ("repeat_period", "harmonic_mixture")),
+    ("repeat_period normalising by the GEOMETRIC instead of the arithmetic "
+     "mean of the two overlapped window energies, so it is scale-invariant "
+     "and a decaying record's quiet tail reads as a repeat of its loud head",
+     "repeat_period", lambda: _repeat_period_statistic("geometric"),
+     ("repeat_period", "two_modes")),
     ("harmonic_powers read 1 % off the commanded f0",
      "harmonic_powers", _harmonic_powers_off_f0,
      ("harmonic_powers", "harmonic_mixture")),

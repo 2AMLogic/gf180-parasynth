@@ -230,6 +230,85 @@ def lfsr16(n: int, seed: int = 0xACE1) -> np.ndarray:
     return out
 
 
+def inharmonic_panel() -> list[tuple[str, np.ndarray, int, int]]:
+    """`(label, signal, sr, true_lag_samples)` for the ground-truth
+    catalogue's OWN planted-inharmonic records -- the external bound on the
+    margin.
+
+    THIS PANEL IS NOT MINE, which is the whole reason it is here. Everything
+    else in this file is a record I constructed to show a defect I had already
+    characterised, and `docs/failure-modes.md` is explicit that an estimator
+    calibrated on its author's own signals is not validated. These three come
+    from `tools/probes/estimator_fixtures.py`'s `harmonic_mixture` family,
+    were built for #158 years before this issue, and carry a planted
+    inharmonic partial at -10, -30 and -60 dB. A record with an inharmonic
+    partial does NOT repeat at a multiple of its carrier -- the partial only
+    realigns further out -- so its shortest true repeat is 22 carrier periods
+    and folding it to 11 is an octave error.
+
+    Measured, they form a ladder that cuts the dial from the same side the
+    fold panel does and independently of it:
+
+        inharmonic   folded to 11x from   so wrong from
+        -10 dB       never                 never
+        -30 dB       5 thousandths         5
+        -60 dB       1 thousandth          1
+
+    so the column reads 0 wrong at margin 0, 1 at margin 1, and 2 from 5
+    upward: it cuts from the same side as the fold panel, and it is the only
+    panel here whose records somebody else built.
+
+    THE TRUE LAG IS DERIVED FROM THE FIXTURE'S CONSTRUCTION, NEVER FROM THE
+    ESTIMATOR. `estimator_fixtures._harmonic_mixture` plants the partial at
+    `1.5 * f0`, so the carrier series and the partial share a common
+    sub-frequency of `0.5 * f0` and the record's exact period is `2 / f0` --
+    two carrier periods, not one. The reported lag must also be a whole number
+    of SAMPLES, and `2 * sr / f0` is 436.36 samples at 220 Hz, so the shortest
+    exact repeat that is also a whole sample count is 11 of those, 4800
+    samples, which is 22 carrier periods and 100 ms. That number comes out of
+    `f0` and `sr` alone; calling `repeat_period` to find it would make this
+    column agree with whatever the estimator does, which is the circular
+    fixture `builder-pr.md` warns about and would have read 0 wrong at the
+    shipped margin by construction. (It did, in the first draft.)
+
+    REFUSES rather than guessing if the catalogue stops carrying them, because
+    a constraint column that silently becomes empty reads as a satisfied
+    constraint."""
+    import estimator_fixtures as ef
+
+    out = []
+    for fx in ef.catalogue(["harmonic_mixture"]):
+        share = fx.truth.get("inharmonic_share_db")
+        if share is None:
+            continue
+        f0 = fx.truth.get("f0") or fx.truth.get("f")
+        if not f0:
+            raise Refused(f"{fx.label}: no carrier in truth")
+        # the exact period of carrier + a 1.5*f0 partial, in samples
+        per = 2.0 * fx.sr / f0
+        min_lag = int(0.05 * fx.sr)
+        true_lag = None
+        for k in range(1, int(2 * fx.n / per) + 2):
+            lag = k * per
+            if abs(lag - round(lag)) > 1e-6 or round(lag) < min_lag:
+                continue
+            true_lag = int(round(lag))
+            break
+        if true_lag is None:
+            raise Refused(f"{fx.label}: no whole-sample multiple of the "
+                          f"{per:.4f}-sample exact period lands in the lag band")
+        if true_lag > fx.n // 2:
+            raise Refused(f"{fx.label}: its exact repeat at {true_lag} samples "
+                          f"is outside the estimator's lag band (n//2 = "
+                          f"{fx.n // 2}), so this record cannot bound anything")
+        out.append((f"inharmonic={share:g}dB", fx.x, fx.sr, true_lag))
+    if len(out) < 3:
+        raise Refused(f"the harmonic_mixture family carries {len(out)} "
+                      f"planted-inharmonic records, expected at least 3 -- "
+                      f"this constraint column has gone empty")
+    return out
+
+
 # ---------------------------------------------------------------------------
 # the pre-repair estimator, kept verbatim so "before" is a measurement
 # ---------------------------------------------------------------------------
@@ -335,6 +414,7 @@ def measure() -> dict:
             got.append(1.0 - float(r[FOLD_HALF_PERIOD]))
         fold_shortfalls.append((d, float(np.mean(got)), fold_shortfall(d)))
 
+    inharm = inharmonic_panel()
     rows = []
     detail = []
     for m in GRID_PERMILLE:
@@ -353,10 +433,16 @@ def measure() -> dict:
                     bad += 1
             per_depth[d] = bad
             fold_wrong += bad
+        inh_wrong = 0
+        for label, sig, isr, true_lag in inharm:
+            e = am.repeat_period(sig, isr, submultiple_margin=m)
+            if not (e.ok and abs(int(round(e.value * isr)) - true_lag) <= 1):
+                inh_wrong += 1
         rows.append(dict(margin_permille=m, wrong=ex_wrong + fold_wrong,
                          exact_wrong=ex_wrong, fold_wrong=fold_wrong,
                          n_exact=len(exact_sigs), n_fold=len(fold_sigs),
-                         need_worst=need_worst))
+                         need_worst=need_worst, inharm_wrong=inh_wrong,
+                         n_inharm=len(inharm)))
         detail.append((m, per_depth))
 
     base_wrong = sum(0 if is_right(baseline[k][0], k[0]) else 1 for k in baseline)
@@ -396,8 +482,12 @@ def report(res: dict, fh=sys.stdout) -> None:
     print("  objective and lower is better. need_worst is the CONSTRAINT from the", file=fh)
     print("  other side: the largest margin any realistic near-exact loop requires,", file=fh)
     print("  in the same thousandths, which the shipped value must stay above.", file=fh)
+    print("  inharm_wrong is the EXTERNAL constraint -- the ground-truth catalogue's", file=fh)
+    print("  own planted-inharmonic records, of n_inharm, reported at the wrong", file=fh)
+    print("  period. Those three were built for #158, not for this issue, and they", file=fh)
+    print("  cut the dial at 1 thousandth independently of the panels above.", file=fh)
     cols = ("margin_permille", "wrong", "exact_wrong", "fold_wrong",
-            "n_exact", "n_fold", "need_worst")
+            "n_exact", "n_fold", "need_worst", "inharm_wrong", "n_inharm")
     print(" ".join(f"{c}" for c in cols), file=fh)
     for r in res["rows"]:
         print(" ".join(f"{r[c]:g}" if c != "need_worst" else f"{r[c]:.4f}"
@@ -444,12 +534,163 @@ def report(res: dict, fh=sys.stdout) -> None:
           f"is {ship / max(res['need_worst'], 1e-12):.1f}x it)", file=fh)
 
 
+# ---------------------------------------------------------------------------
+# the injected-defect controls (rule 1 / rule 5)
+# ---------------------------------------------------------------------------
+#: Each entry reverts ONE of the three decisions in #780's repair, and each is
+#: named against the panel on which it was MEASURED to have power. Reverting
+#: them one at a time is the point, and doing so refuted the framing this issue
+#: was filed with, so the numbers are here rather than in a sentence:
+#:
+#:   exact panel (60 exactly-repeating records), wrong / reports corr > 1.0
+#:     statistic   margin 0 (no rule)   margin 1 (rule)   corr > 1.0
+#:     mean         43 wrong             0 wrong           0 / 60
+#:     overlap      33 wrong             0 wrong          28 / 60
+#:     geometric    44 wrong             0 wrong           0 / 60
+#:
+#: THE SUBMULTIPLE RULE IS THE HALF THAT FIXES THE PERIOD, and the normaliser
+#: is not: every one of the three statistics returns the true period on all 60
+#: records once the rule is on, including the pre-#780 overlap correction the
+#: issue blames. The issue's own expectation was that both halves would be
+#: load-bearing for the period; on this panel that is false, and
+#: `OVERLAP_NORMALISER` reported "the injection changed nothing" the first time
+#: it ran, which is how it was found rather than by reading the code.
+#:
+#: WHAT THE NORMALISER IS FOR, then, stated where it can be checked: the
+#: overlap expression reports a "correlation" ABOVE 1.0 on 28 of the same 60
+#: records -- the 1.0004 the issue was filed on -- so `detail['corr']` is not a
+#: correlation and `min_corr` is a gate on a quantity with no upper bound. That
+#: is the property `OVERLAP_NORMALISER` reverts and it is decisive, while the
+#: period is not. Its effect on the reported PERIOD is real but narrow: one
+#: record in the ground-truth catalogue's 29 harmonic_mixture members, at
+#: 20 dB SNR.
+#:
+#: `GEOMETRIC_NORMALISER` is deliberately NOT here. The arithmetic/geometric
+#: choice is about REFUSALS on records whose energy is front-loaded, and the
+#: panel with power over it is the ground-truth catalogue's own `two_modes` and
+#: `transient_then_ring` families, where it is named in
+#: tools/probes/estimator_ground_truth_controls.py. Two decaying records built
+#: here were tried first and discriminated nothing -- the shipped estimator
+#: answers a 50 ms tau ring at 0.648 and refuses a 40 ms noise burst at 0.037,
+#: and so does the geometric mean -- so the control lives where the records
+#: that separate them already live.
+INJECTIONS = {
+    "NO_SUBMULTIPLE_RULE": (
+        "the shortest-submultiple rule disabled (margin 0), NCCF left on",
+        "period"),
+    "OVERLAP_NORMALISER": (
+        "the pre-#780 overlap correction restored, submultiple rule left on",
+        "corr_bound"),
+}
+
+
+def _statistic(x, sr, max_lag, kind):
+    """The three per-lag statistics, one of which ships. Returns `r`."""
+    n = len(x)
+    nf = 1 << int(math.ceil(math.log2(2 * n)))
+    X = np.fft.rfft(x, nf)
+    ac = np.fft.irfft(X * np.conj(X), nf)[:max_lag + 1]
+    lags = np.arange(max_lag + 1)
+    if kind == "overlap":
+        return (ac / ac[0]) * (n / np.maximum((n - lags).astype(np.float64), 1.0))
+    c2 = np.concatenate(([0.0], np.cumsum(x * x)))
+    head, tail = c2[n - lags] - c2[0], c2[n] - c2[lags]
+    if kind == "geometric":
+        return ac / np.sqrt(np.maximum(head * tail, 1e-300))
+    if kind == "mean":
+        return ac / np.maximum(0.5 * (head + tail), 1e-300)
+    raise Refused(f"unknown statistic {kind!r}")
+
+
+def _estimate(x, sr, kind, margin_permille, min_lag_s=0.05, max_lag_s=12.0,
+              min_corr=0.5):
+    """`repeat_period`'s decision with the statistic and margin named. Used
+    ONLY by the injections -- the clean path always calls the shipped
+    estimator, so a green run is never produced by this copy."""
+    x = np.asarray(x, dtype=np.float64)
+    x = x - x.mean()
+    n = len(x)
+    max_lag = min(int(max_lag_s * sr), n // 2)
+    min_lag = int(min_lag_s * sr)
+    r = _statistic(x, sr, max_lag, kind)
+    best = min_lag + int(np.argmax(r[min_lag:max_lag + 1]))
+    if float(r[best]) < min_corr:
+        return None
+    lag = am._shortest_submultiple(r, min_lag, max_lag, best,
+                                   margin_permille / 1000.0)
+    if float(r[lag]) < min_corr:
+        return None
+    return lag / sr
+
+
+def injected(name: str) -> dict:
+    """Run the named injection and report whether its panel went red.
+
+    Every injection asserts its own baseline first: the SHIPPED estimator must
+    be green on the panel before the mutant is run, because a control measured
+    against an already-red baseline reports CAUGHT for nothing. A failed
+    precondition REFUSES (exit 2) rather than passing or failing."""
+    if name not in INJECTIONS:
+        raise Refused(f"unknown injection {name!r}; have {sorted(INJECTIONS)}")
+    why, panel = INJECTIONS[name]
+    kind, margin = {
+        "NO_SUBMULTIPLE_RULE": ("mean", 0),
+        "OVERLAP_NORMALISER": ("overlap", am.REPEAT_SUBMULTIPLE_MARGIN_PERMILLE),
+    }[name]
+    rows, wrong, total = [], 0, 0
+    for P in EXACT_PERIODS:
+        for s in range(EXACT_SEEDS):
+            x = exact_loop(P, s)
+            clean = am.repeat_period(x, SR)
+            total += 1
+            if not is_right(clean.value if clean.ok else None, P):
+                raise Refused(
+                    f"the SHIPPED estimator is wrong on exact_loop(P={P}, "
+                    f"seed={s}) -- the control cannot measure an injection "
+                    f"against a baseline that is already red")
+            if float(clean.detail["corr"]) > 1.0 + 1e-12:
+                raise Refused(
+                    f"the SHIPPED estimator reports corr "
+                    f"{clean.detail['corr']} > 1 on exact_loop(P={P}, "
+                    f"seed={s}) -- its own baseline violates the property "
+                    f"OVERLAP_NORMALISER exists to check")
+            got = _estimate(x, SR, kind, margin)
+            if panel == "period":
+                if not is_right(got, P):
+                    wrong += 1
+                    if len(rows) < 6:
+                        rows.append(f"P={P} seed={s}: "
+                                    + (f"{got * SR / P:.3f} x the true period"
+                                       if got else "refused"))
+            else:
+                xx = x - x.mean()
+                n = len(xx)
+                max_lag = min(int(12.0 * SR), n // 2)
+                r = _statistic(xx, SR, max_lag, kind)
+                lag = int(round((got if got else 0.0) * SR))
+                value = float(r[lag]) if got else float("nan")
+                if not (value <= 1.0 + 1e-12):
+                    wrong += 1
+                    if len(rows) < 6:
+                        rows.append(f"P={P} seed={s}: reports corr "
+                                    f"{value:.6f} -- above 1.0, so it is not "
+                                    f"a correlation")
+    return dict(name=name, why=why, panel=panel, wrong=wrong, total=total,
+                rows=rows)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("-o", "--out", type=pathlib.Path, default=None,
                     help="write the report here instead of stdout")
     ap.add_argument("--baseline", action="store_true",
                     help="print only the pre-repair class width and exit")
+    ap.add_argument("--inject", choices=sorted(INJECTIONS), default=None,
+                    help="revert one decision in the repair; with --expect-fail "
+                         "the run is a control and exits 0 only when its panel "
+                         "goes red")
+    ap.add_argument("--expect-fail", action="store_true",
+                    help="require the injected run to go red (exit 1 if it does not)")
     args = ap.parse_args(argv)
     try:
         if args.baseline:
@@ -463,6 +704,24 @@ def main(argv=None) -> int:
             print(f"pre-repair: {n - len(bad)}/{n} correct, {len(bad)} wrong")
             print("multiples returned:", sorted({b[2] for b in bad}))
             return 0
+        if args.inject:
+            res = injected(args.inject)
+            print(f"INJECT {res['name']}: {res['why']}")
+            label = ("records reported at the wrong period"
+                     if res["panel"] == "period"
+                     else "records reporting a correlation above 1.0")
+            print(f"  panel {res['panel']!r}: {res['wrong']} of "
+                  f"{res['total']} {label}")
+            for r in res["rows"]:
+                print(f"    {r}")
+            if args.expect_fail:
+                if res["wrong"] == 0:
+                    print("FAIL: the injection changed nothing -- this control "
+                          "has no power over the decision it reverts")
+                    return 1
+                print(f"OK: red as required ({res['wrong']}/{res['total']})")
+                return 0
+            return 0 if res["wrong"] == 0 else 1
         res = measure()
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
