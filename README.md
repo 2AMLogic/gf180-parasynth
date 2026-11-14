@@ -75,13 +75,11 @@ graph LR
     M2["✓ Matches our own spec"]
     M3["· Matches software references"]
     M4["✗ Matches real hardware"]
-    M5["○ Noise, osc-3 modulation, full waveform set"]
   end
   subgraph drums["TR-808 drums"]
     D1["! Drum kit bit-exact"]
     D2["· Is an 808, per the reference"]
     D3["✗ Per-voice measured against targets"]
-    D4["○ Complete 808 -- all 16 sounds"]
   end
   subgraph integration["Integration"]
     I1["○ Control link carries every write"]
@@ -97,12 +95,10 @@ graph LR
   F3 --> M2
   M2 --> M3
   M3 --> M4
-  M2 --> M5
   F2 --> D1
   D1 --> D2
   F3 --> D2
   D2 --> D3
-  D2 --> D4
   M1 --> I1
   D1 --> I1
   I1 --> I2
@@ -116,11 +112,9 @@ graph LR
   style M2 fill:#0E6B5E,color:#fff
   style M3 fill:#3f8f5f,color:#fff
   style M4 fill:#8E2438,color:#fff
-  style M5 fill:#5a6468,color:#fff
   style D1 fill:#9A6510,color:#fff
   style D2 fill:#3f8f5f,color:#fff
   style D3 fill:#8E2438,color:#fff
-  style D4 fill:#5a6468,color:#fff
   style I1 fill:#5a6468,color:#fff
   style I2 fill:#5a6468,color:#fff
   style S1 fill:#3f8f5f,color:#fff
@@ -137,11 +131,9 @@ graph LR
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
-| `M5` | Noise, osc-3 modulation, full waveform set | **TODO** | issue #48 |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
 | `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 285.35s (0:04:45) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
-| `D4` | Complete 808 -- all 16 sounds | **TODO** | issue #22 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `I2` | Whole chip at its pins | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `S1` | Routed on gf180, DRC clean | **GREEN** | pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared |

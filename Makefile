@@ -509,6 +509,7 @@ verify-full:
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
+	  "$(PY) tools/control_dag_issue_only.py" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
 	  "$(PY) tools/probes/estimator_ground_truth.py controls" \
 	  "$(PY) tools/probes/coupling_controls.py" \
