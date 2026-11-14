@@ -1861,6 +1861,50 @@ def c_dc_plateau_db(fx):
                       f"{m.value:.4f} dB, not {want + shift:.4f}"))
 
 
+def c_corner_dc_referenced(fx):
+    """`corner_dc_referenced` against the same `filtered_noise` corner truth
+    `c_corner_from_curve` uses, driven with the arguments `c_dc_plateau_db`
+    hands `dc_plateau_db` -- because this estimator is the two of them
+    composed, and a band it refuses is a band it must refuse here too.
+
+    WHAT THIS CHECK DOES NOT COVER, and it is the thing a later reader will
+    get wrong: a green verdict here does NOT qualify the DC-referenced
+    CONVENTION. The reason `corner_dc_referenced` exists is the moving-band
+    bias of #546 -- a reference band whose top approaches a fixed grid floor
+    as the commanded cutoff falls, so the band median carries a different
+    amount of the filter's own droop at each cutoff. This family cannot
+    provoke it: its band top is a FIXED fraction (fc/4) of the cutoff, so the
+    plateau- and median-referenced corners agree to within 0.1 % on every
+    member -- worst 0.0985 % on the order=1 fc=1200 Hz member, better than
+    0.014 % on the rest -- against the 2 % tolerance below, so a mutant
+    restoring the median fallback is BLIND here (measured, reddens 0 of the
+    16, which is why the control declared against this pair in
+    `estimator_ground_truth_controls.py` is a -6 dB convention error and not
+    that fallback). The convention's own ground truth is algebraic and lives
+    in `tools/probes/corner_reference_convention.py`, which derives the corner
+    from four identical real poles and carries its own `--inject` controls.
+    What this check covers is the composition: the gates, the argument
+    plumbing, and that the answer tracks a truth that moves over the grid's
+    four cutoffs, which a constant cannot follow."""
+    if fx.kind != "filtered_noise":
+        return _nm("defined on a MEASURED frequency-response curve, not on a "
+                   "time record")
+    if fx.truth["kind"] != "lowpass":
+        return _nm("reads its reference by extrapolating a LOW-pass passband "
+                   "to DC; a highpass has no DC passband and a resonant "
+                   "response has no plateau, which is the same gate "
+                   "dc_plateau_db is checked behind")
+    f, db_ = _curve(fx)
+    want = fx.truth["corner_hz"]
+    e = am.corner_dc_referenced(f, db_, ref_band=(f[0], fx.truth["fc"] / 4),
+                                scale_hz=fx.truth["fc"])
+    if not e.ok:
+        return _ref(e.reason)
+    return (_ok(f"{_err(e.value, want)} against the DC-extrapolated plateau "
+                f"{e.detail.get('plateau_db', float('nan')):.4f} dB")
+            if near(e.value, want, 0.02) else _bad(_err(e.value, want)))
+
+
 def c_spectrum(fx):
     """The definitional check: the largest bin of a stationary record at a
     known f0 is at f0, to within half a bin."""
@@ -2079,6 +2123,8 @@ SPECS = [
     Spec("slope_db_oct", c_slope_db_oct, RESPONSE, _WHY_RESPONSE),
     Spec("plateau_db", c_plateau_db, RESPONSE, _WHY_RESPONSE),
     Spec("dc_plateau_db", c_dc_plateau_db, RESPONSE, _WHY_RESPONSE),
+    Spec("corner_dc_referenced", c_corner_dc_referenced, RESPONSE,
+         _WHY_RESPONSE),
 ]
 
 #: STRUCK is used by the shorthands above; named so a reader can see the four
