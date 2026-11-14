@@ -205,6 +205,57 @@ JIT_DPHASE_FLOOR_PPM = 20
 # asserts that.
 FOLD_SINC_TAPS = 16
 
+# THE OCTAVE MARGIN, in thousandths of a normalised autocorrelation -- #774.
+#
+# The defect. `dominant_period` was a bare argmax of the autocorrelation over
+# the whole 120..1200 Hz lag band, and on a clip whose true period falls near
+# a HALF SAMPLE it returned TWO periods: 880 Hz built at 48 kHz (where
+# `_square` emits 55-sample periods) and resampled down to 44.1 kHz has a true
+# period of 50.53 samples there, and the function returned 101. `jit.period_ms`
+# then read 2.22 ms against 1.15 ms on the other side of the same rate pair,
+# and the five columns folded at that period followed it -- a pitch error
+# reported as a pitch measurement, on the fourth-ranked attribution bucket in
+# docs/discrimination.md.
+#
+# THE MECHANISM, MEASURED, AND IT IS NOT THE ONE #774 SUSPECTED. The issue
+# guessed the lag-T peak was "split between two integer lags while the lag-2T
+# peak is not". Taking the autocorrelation's max over +-2 lags, so a split
+# peak cannot hide, refutes that: r[T] at the best integer lag near a
+# fractional T is simply LOWER (0.9857 -> 0.9660), because the waveform does
+# not line up there. Meanwhile 2T is fractional too, but when frac(T) ~ 0.5
+# the lag 2T lands NEAR an integer (frac(T)=0.531 => dist(2T,int)=0.062), so
+# r[2T] barely moves. The deciding margin is only +0.0029 to +0.0053, against
+# an intrinsic preference for T of -0.0141 on an aligned clip.
+# tools/probes/dominant_period_octave.py is that measurement, and it is where
+# the numbers in this paragraph come from.
+#
+# The repair is NOT a different estimator. It is a bound on the choice between
+# octave candidates: among the integer SUBMULTIPLES of the winning lag, return
+# the shortest one that is a local peak of the autocorrelation and is within
+# this margin of the winning peak. Submultiples only, because the defect is an
+# integer-multiple pick and a rule over every lag in the band would change the
+# estimator on clips that have no octave problem; a local peak, because a clip
+# that is not periodic at all has an autocorrelation that DECAYS from lag 0,
+# so every shorter lag beats the winner on height while none of them is a
+# peak. See `_octave_corrected`.
+#
+# 20 thousandths is not fitted to the failing clips. RATE_TOL_ABS["ratio"] is
+# 0.02: it is the resolution this module already states for a correlation-unit
+# column, i.e. the difference below which it declines to call two such numbers
+# different. A margin at that resolution is 3.8x the +0.0053 the worst failing
+# clip needs and is the same anchoring JIT_DPHASE_FLOOR_PPM takes from
+# RATE_TOL_ABS["ppm"]. It is a point on a committed grid --
+# docs/sensitivity/dominant-period-octave-margin.json, which is where to argue
+# about the value -- and an integer in thousandths because
+# tools/sensitivity.py reads a shipped python-constant as an integer.
+#
+# 0 is not a margin. It selects the bare argmax that shipped BEFORE this
+# repair and is on the grid so the sweep prices the repair and not only the
+# dial inside it, exactly as -1 is on FOLD_SINC_TAPS's grid and 0 is on
+# dphase-ar1-floor's. It is never the shipped value;
+# `test_the_octave_margin_ships_a_real_margin` asserts that.
+JIT_OCTAVE_MARGIN_PERMILLE = 20
+
 
 def _unit_of(name: str) -> str:
     if "ppm" in name:
@@ -348,13 +399,76 @@ def mpd_features(x: np.ndarray, sr: int, taps: int | None = None) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ) -> int:
-    """Lag of the largest autocorrelation peak inside `band`, in samples.
+def _octave_corrected(r: np.ndarray, lo: int, hi: int, best: int,
+                      margin: float) -> int:
+    """The shortest integer submultiple of `best` that is a local peak of `r`
+    and within `margin` of `r[best]`, in units of `r[0]`. #774.
 
-    Deterministic and signal-derived: an argmax over a stated lag range, no
-    threshold tuned on anything. Returns 0 when the window holds fewer than
-    JIT_MIN_CYCLES of the winning lag, and the caller must then refuse rather
-    than report -- a drift slope over three cycles is not a measurement."""
+    THE ARGMAX IS NOT WRONG ABOUT WHICH LAGS CORRELATE; IT IS WRONG ABOUT
+    WHICH OF TWO OCTAVES TO RETURN. So this does not search the band -- it
+    searches `best/k` for integer k, shortest candidate first, and returns
+    `best` unchanged when none of them qualifies. Two conditions, and each is
+    load-bearing:
+
+      * +-1 LAG of `round(best/k)` is searched, and one lag is enough by
+        arithmetic rather than by result: `best` is `k * T` rounded to a whole
+        sample, so `best / k` is within `0.5 / k` of the true `T` and
+        `round(best / k)` is within 1 of it. A wider window would start
+        admitting lags that are not the submultiple.
+      * THE CANDIDATE MUST BE A LOCAL PEAK. This is the condition that keeps
+        the rule from changing anything on a clip with no octave problem: an
+        aperiodic clip's autocorrelation DECAYS from lag 0, so every shorter
+        lag is taller than the winner while none of them is a peak, and a
+        height-only rule would halve the period of every noise burst in the
+        corpus.
+
+    What defeats it, stated rather than left to be discovered
+    (docs/verification-rules.md rule 8): a signal whose true period really is
+    the longer lag AND which has a real local autocorrelation peak at half of
+    it within `margin` -- a pulse train whose alternate cycles differ by less
+    than the margin, for instance. Such a clip is reported an octave high, and
+    how shallow an alternation that takes is the constraint column of
+    docs/sensitivity/dominant-period-octave-margin.json rather than a
+    reassurance here. `test_the_octave_margin_refuses_the_input_that_defeats_it`
+    is the executable form."""
+    if margin <= 0.0 or best <= lo:
+        return best
+    floor = r[best] - margin * r[0]
+    for k in range(best // lo, 1, -1):
+        c = int(round(best / k))
+        cand = [j for j in range(max(lo, c - 1), min(hi - 1, c + 1) + 1)
+                if j >= 1 and r[j] >= r[j - 1] and r[j] >= r[j + 1]]
+        if not cand:
+            continue
+        j = max(cand, key=lambda j: r[j])
+        if r[j] >= floor:
+            return j
+    return best
+
+
+def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ,
+                    octave_margin: float | None = None) -> int:
+    """Lag of the largest autocorrelation peak inside `band`, in samples,
+    resolved to the shortest octave that peak is consistent with.
+
+    Deterministic and signal-derived: an argmax over a stated lag range, then
+    one comparison against the stated JIT_OCTAVE_MARGIN_PERMILLE. Returns 0
+    when the window holds fewer than JIT_MIN_CYCLES of the winning lag, and
+    the caller must then refuse rather than report -- a drift slope over three
+    cycles is not a measurement.
+
+    THE BARE ARGMAX RETURNED TWO PERIODS ON SOME CLIPS and the record is worth
+    more than the fix: 880 Hz built at 48 kHz and resampled to 44.1 kHz came
+    back as 101 samples against 55 on the other side of the same rate pair, an
+    OCTAVE, so `jit.period_ms` reported 2.22 ms and 1.15 ms for one clip read
+    at two rates. It was not a fold-geometry defect and #767's repair could
+    not reach it; it is #774. See JIT_OCTAVE_MARGIN_PERMILLE for the measured
+    mechanism and `_octave_corrected` for what the margin bounds.
+
+    `octave_margin` overrides that constant, in the same thousandths, and
+    exists so `tools/probes/octave_margin_sweep.py` can sweep the dial against
+    the code that SHIPS rather than against a copy of it. It does not change a
+    shipped number: it defaults to off. 0 selects the bare argmax."""
     x = np.asarray(x, float)
     if not np.any(x):
         return 0
@@ -374,7 +488,10 @@ def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ) -> int:
     r = np.fft.irfft(X * np.conj(X), n)[:hi + 1]
     if r[0] <= 0:
         return 0
-    return int(lo + np.argmax(r[lo:hi + 1]))
+    best = int(lo + np.argmax(r[lo:hi + 1]))
+    permille = (JIT_OCTAVE_MARGIN_PERMILLE if octave_margin is None
+                else float(octave_margin))
+    return _octave_corrected(r, lo, hi, best, permille / 1000.0)
 
 
 def refine_frequency(x: np.ndarray, sr: int, f0: float,
