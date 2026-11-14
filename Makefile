@@ -603,6 +603,8 @@ controls:
 	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused" \
+	  "$(PY) tools/sensitivity.py check --inject OBJECTIVE_ZERO --expect refused" \
+	  "$(PY) tools/sensitivity.py check --inject OBJECTIVE_NEGATIVE --expect refused" \
 	  "$(PY) tools/probes/permitted_differences.py --controls" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py --inject NO_IVERILOG --expect refused" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py --inject BROKEN_REPRO --expect refused" \

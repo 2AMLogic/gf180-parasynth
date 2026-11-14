@@ -299,6 +299,11 @@ def evaluate(rec: dict, root: Path = ROOT, overrides: dict | None = None) -> dic
                       "carries no retrofit block saying so")
 
     measured = extract_points(rec, root)
+    if overrides:
+        patch = overrides.get(("__injected_objective__", ident))
+        if patch is not None:
+            first, _ = measured[0]
+            measured = [(v, patch if v == first else o) for v, o in measured]
     grid = [float(v) for v in rec["grid"]["values"]]
     if sorted(grid) != [v for v, _ in measured]:
         problems.append(
@@ -405,6 +410,8 @@ INJECTIONS = {
     "SHIPPED_OFF_GRID": "the shipped parameter value moved off the grid",
     "PREDICTION_WRONG": "the independent prediction contradicts the measurement",
     "RULE_UNSTATED": "the decision rule removed (must REFUSE, not pass)",
+    "OBJECTIVE_ZERO": "one measured objective set to exactly 0 among nonzero (must REFUSE)",
+    "OBJECTIVE_NEGATIVE": "one measured objective set negative (must REFUSE, not read FLAT)",
 }
 
 
@@ -433,6 +440,14 @@ def inject(name: str, records: list[dict], overrides: dict) -> None:
         rec["prediction"]["runs"] = [[v for v in rec["grid"]["values"]]]
     elif name == "RULE_UNSTATED":
         rec["decision_rule"].pop("flat_within_relative", None)
+    elif name in ("OBJECTIVE_ZERO", "OBJECTIVE_NEGATIVE"):
+        # A relative spread is undefined across, at, or below zero. runs()
+        # never sees rec["points"] -- it sees the points re-derived from the
+        # artefact -- and rewriting the artefact file in place would mutate
+        # the real checkout under `make controls`. Thread the patch through
+        # overrides and let evaluate() apply it to `measured` in memory.
+        overrides[("__injected_objective__", rec["id"])] = (
+            0.0 if name == "OBJECTIVE_ZERO" else -1.0)
 
 
 # --------------------------------------------------------------------------
