@@ -1,0 +1,25 @@
+dominant_period_octave_margin -- #774. JIT_OCTAVE_MARGIN_PERMILLE is the
+margin, in thousandths of a normalised autocorrelation, within which
+`dominant_period` prefers a SHORTER octave to the bare argmax; 0 is the
+bare argmax that shipped before the repair.
+
+ratio_err is the objective: the worst |period(b)/period(a) - 1| over
+402 (f0, direction) pairs, where the same clip read at 44.1 kHz and
+at 48 kHz should report the same period in seconds. n_mismatch counts the
+pairs over the 5 % `fold_rate_sweep` REFUSES at, split by which rate the
+clip was built at; mm_44k is the half of the class the margin was NOT
+selected against. keeps_2t is the constraint from the other side: of 16
+period-doubled clips the bare argmax gets right, how many a margin this
+wide still gets right. exact is 4 clips whose period is a whole number of
+samples, where the answer is arithmetic rather than this module's.
+
+  margin  ratio_err  n_mismatch  mm_44k  mm_48k  keeps_2t  exact
+       0     1.0019          48      17      31        16      4
+       5     0.9988          16       0      16        14      4
+      10     0.0093           0       0       0        12      4
+      20     0.0093           0       0       0        10      4
+      30     0.0093           0       0       0         8      4
+      50     0.0093           0       0       0         7      4
+     100     0.0093           0       0       0         4      4
+     200     0.0093           0       0       0         0      4
+

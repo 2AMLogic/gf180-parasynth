@@ -43,7 +43,12 @@ FILES = ["docs/sensitivity/registry.json",
          # issue #767's record: FOLD_SINC_TAPS, the fold interpolator that
          # replaced an integer-lag fold (same source file as the one above)
          "docs/sensitivity/fold-interpolator.json",
-         "docs/sensitivity/fold-interpolator-sweep.txt"]
+         "docs/sensitivity/fold-interpolator-sweep.txt",
+         # issue #774's record: JIT_OCTAVE_MARGIN_PERMILLE, the margin that
+         # bounds dominant_period's choice between octave candidates and
+         # replaced a bare argmax (same source file as the two above)
+         "docs/sensitivity/dominant-period-octave-margin.json",
+         "docs/sensitivity/dominant-period-octave-margin-sweep.txt"]
 
 
 @pytest.fixture
