@@ -143,3 +143,66 @@ def test_the_tool_exits_2_rather_than_0_when_it_cannot_answer(tmp_path):
     """REFUSED is a first-class outcome and must not be mistakable for a
     pass by anything reading the exit status."""
     assert dc.main(["--refs", str(tmp_path / "absent")]) == 2
+
+
+def test_the_floor_refusal_set_only_grows_with_the_floor():
+    """The premise under #768's criterion 2, asserted instead of assumed.
+
+    The census measures 0 floor refusals at the shipped 20 ppm. Criterion 2
+    asks what the `--dphase-floor-ppm 0` arm does, and the cheap answer is a
+    DERIVATION rather than a second heavy A/B: the floor leg is monotone in
+    the floor, so 0 refusals at 20 ppm forces 0 refusals at every floor below
+    it, hence an identical `jit.dphase_ar1.seg0` column, an identical feature
+    matrix and an unchanged `jit.stability` attribution.
+
+    That derivation is only as good as its premise, and a valid derivation
+    from an unverified premise is indistinguishable from a verified one (this
+    repository's third root cause). So the premise is the thing under test
+    here, and it is tested WITHOUT the Fischer corpus, so CI re-checks it on
+    every commit rather than only on a host that happens to hold the corpus.
+
+    The arithmetic being pinned: `jitter_features` sets
+
+        refused = not (len(d) >= 4 and d.std() > _EPS and pjit > floor)
+
+    and `dphase_row_state` calls the floor leg when `pjit <= floor`. For
+    floor' < floor, `pjit <= floor'` implies both `pjit <= floor` and
+    `not (pjit > floor')`, so ROW_FLOOR at floor' implies ROW_FLOOR at floor.
+    The refused set is monotone non-decreasing in the floor; it can never
+    acquire a row by LOWERING the floor.
+
+    Non-vacuity is asserted too, because a ladder on which nothing ever
+    refuses would satisfy every implication above and prove nothing -- the
+    same two-identical-arms defect the census itself exists to avoid."""
+    from model.discrimination_features import (ROW_FLOOR, _square,
+                                               dphase_row_state)
+
+    sr = 44100
+    ladder = [0.0, 1.0, 20.0, 1e3, 1e9]
+    clips = [("stable", _square(300.0, sr)),
+             ("tiny_jitter", _square(300.0, sr, jitter=1e-6, seed=1)),
+             ("small_jitter", _square(300.0, sr, jitter=1e-4, seed=2)),
+             ("drifting", _square(300.0, sr, jitter=3e-3, seed=3))]
+
+    seen_floor = 0
+    for name, x in clips:
+        flags = [dphase_row_state(x, sr, f)[0] == ROW_FLOOR for f in ladder]
+        seen_floor += sum(flags)
+        # monotone: once it refuses at some floor it must refuse at every
+        # larger floor. Equivalently, no True may be followed by a False.
+        for i in range(len(ladder) - 1):
+            if flags[i]:
+                assert flags[i + 1], (
+                    f"{name}: the floor refused at {ladder[i]:g} ppm but "
+                    f"REPORTED at the larger {ladder[i + 1]:g} ppm. The floor "
+                    "leg is not monotone, so 'no refusals at 20 ppm' no "
+                    "longer implies none at 0 and #768's criterion 2 needs "
+                    "the two-arm run after all")
+
+    assert seen_floor > 0, (
+        "no clip on this ladder was floor-refused at any floor, so every "
+        "implication above held vacuously and this control proves nothing "
+        "about monotonicity")
+    assert seen_floor < len(clips) * len(ladder), (
+        "every clip was floor-refused at every floor, which is also vacuous: "
+        "a constant predicate is trivially monotone")
