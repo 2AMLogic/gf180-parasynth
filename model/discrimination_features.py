@@ -608,16 +608,105 @@ def multiscale_features(x: np.ndarray, sr: int, floor_db: float = -80.0) -> tupl
 
 
 # ---------------------------------------------------------------------------
-def extra_features(x: np.ndarray, sr: int, taps: int | None = None) -> tuple:
+def extra_features(x: np.ndarray, sr: int, taps: int | None = None, *,
+                   dphase_floor_ppm: float | None = None,
+                   jit_trace: dict | None = None) -> tuple:
     """Every column this module adds, in one fixed order.
 
     `taps` overrides FOLD_SINC_TAPS for every fold below and is the sweep
-    instrument's handle on the shipped code; it defaults to off."""
-    parts = [mpd_features(x, sr, taps), jitter_features(x, sr, taps=taps),
+    instrument's handle on the shipped code; it defaults to off.
+
+    `dphase_floor_ppm` and `jit_trace` are `jitter_features`' two hooks,
+    forwarded. Until #768 they stopped here -- the hooks shipped with #763 but
+    nothing above this function could reach them, so the floor could be swept
+    (`tools/dphase_floor_sweep.py` calls `jitter_features` directly) and could
+    not be turned OFF in a discrimination run. Both default to off, so a
+    caller that passes neither gets exactly the shipped numbers.
+
+    WHY `taps` STAYS THIRD AND THE #768 HOOKS ARE KEYWORD-ONLY. This signature
+    is a merge resolution (#773), and the obvious union --
+    `(x, sr, dphase_floor_ppm=None, jit_trace=None, taps=None)` -- is WRONG in
+    a way that passes its own tests. Four call sites below pass taps THIRD and
+    POSITIONALLY (`_rate_gaps`, and the `for taps in (-1, FOLD_SINC_TAPS)`
+    arm comparison); under the union order they would hand a TAP COUNT to
+    `dphase_floor_ppm` and silently take the default taps. The arm comparison
+    would then differ in the ppm FLOOR instead of in the fold interpolator --
+    two arms identical in the variable under test, reporting a confident null,
+    with both arms internally consistent so nothing turns red. That is the same
+    shape of defect this PR exists to fix, so the resolution refuses to
+    reintroduce it two ways at once: `taps` keeps its third positional slot,
+    AND the two new parameters are keyword-only, so no future caller can
+    pass them positionally either. `*` is the part a test cannot forget."""
+    parts = [mpd_features(x, sr, taps),
+             jitter_features(x, sr, dphase_floor_ppm=dphase_floor_ppm,
+                             trace=jit_trace, taps=taps),
              cqt_features(x, sr), multiscale_features(x, sr)]
     vals = np.concatenate([p[0] for p in parts])
     names = [n for p in parts for n in p[1]]
     return vals, names
+
+
+#: The four states one clip's `jit.dphase_ar1.seg0` can be in. They are
+#: distinct on purpose: `value == 0` cannot tell them apart, because
+#: `jitter_features` zeroes EVERY `jit.*` column when the window does not hold
+#: JIT_MIN_CYCLES, and zeroes this one alone when the floor refuses it. A
+#: census that counted zeroes would report the first as the second.
+ROW_REPORTED = "reported"
+ROW_FLOOR = "floor_refused"
+ROW_DEGENERATE = "degenerate_refused"
+ROW_INVALID = "row_invalid"
+ROW_STATES = (ROW_REPORTED, ROW_FLOOR, ROW_DEGENERATE, ROW_INVALID)
+
+
+def dphase_row_state(x: np.ndarray, sr: int,
+                     dphase_floor_ppm: float | None = None) -> tuple[str, dict]:
+    """Which of ROW_STATES this clip's `jit.dphase_ar1.seg0` is in, and the
+    trace the decision was read from. #768's counting primitive.
+
+    READ FROM THE REFUSAL DECISION, NEVER FROM THE VALUE. `jitter_features`
+    sets `refused` from three conditions at once --
+
+        refused = not (len(d) >= 4 and d.std() > _EPS and pjit > floor)
+
+    -- and only the third is the physical floor #763 added. The other two are
+    the pre-existing divide-by-zero guard. A census that reported every
+    refusal as a floor refusal would credit the floor with rows it did not
+    touch, which is the direction that would make #763 look bigger than it is.
+    So `floor_refused` is asserted to be the third condition specifically, and
+    a refusal for either of the other two is reported as `degenerate_refused`.
+
+    `row_invalid` is the fourth state and it is NOT a refusal of this column:
+    it is the whole row being refused (`jit.valid.seg0` is 0) because the
+    window did not hold JIT_MIN_CYCLES of the winning period. Those early
+    returns leave before `trace.update`, so an empty trace is exactly that
+    case -- the one signal that separates "already invalid" from
+    "floor-refused" without re-deriving the gate here."""
+    trace: dict = {}
+    vals, names = extra_features(x, sr, dphase_floor_ppm=dphase_floor_ppm,
+                                 jit_trace=trace)
+    row = dict(zip(names, vals))
+    if not trace:
+        assert row["jit.valid.seg0"] == 0.0, (
+            "an empty trace with jit.valid set: jitter_features returned "
+            "through a path that neither filled the trace nor zeroed the row, "
+            "so this census cannot say which state the row is in")
+        return ROW_INVALID, trace
+    if not trace["refused"]:
+        return ROW_REPORTED, trace
+    # refused -- now say BY WHAT. The floor is the `pjit > floor` leg.
+    if trace["phasejit_ppm"] <= trace["dphase_floor_ppm"]:
+        return ROW_FLOOR, trace
+    return ROW_DEGENERATE, trace
+
+
+def census_counts(states) -> dict:
+    """ROW_STATES -> how many, every key present even at zero. A side with no
+    refusals is printed as `0 / total`, not omitted (#768's edge case)."""
+    out = {k: 0 for k in ROW_STATES}
+    for s in states:
+        out[s] += 1
+    out["total"] = sum(out[k] for k in ROW_STATES)
+    return out
 
 
 def extra_names(sr: int = 44100, n: int = 4096) -> list:
@@ -1059,6 +1148,90 @@ def test_the_dphase_floor_refuses_the_input_that_defeats_it():
     assert ar1 > 0.80, ar1
 
 
+def test_the_floor_census_counts_a_refusal_from_the_decision_not_the_zero():
+    """#768's counter, with the input that defeats it and the inverted
+    comparison that must turn it red.
+
+    WHAT THE COUNTER IS FOR. #768 asks how many rows of the published
+    sixteen-voice run fall under JIT_DPHASE_FLOOR_PPM, on the 44.1 kHz
+    reference side and our 48 kHz render side separately. The obvious
+    implementation counts `jit.dphase_ar1.seg0 == 0`, and it is wrong: this
+    module zeroes EVERY `jit.*` column when the window does not hold
+    JIT_MIN_CYCLES, so a row that was already invalid before #763 existed
+    reads as a floor refusal and the floor gets credited with it. The three
+    states are therefore separated here, and the separation is asserted on
+    inputs whose state is known independently of the counter.
+
+    THE INPUT THAT DEFEATS IT (verification-rules rule 8): a silent window.
+    `np.zeros` is refused by the floor on the value test -- its column is 0.0
+    -- and is NOT a floor refusal; it never reaches the gate at all. That is
+    the first case below, and `ROW_INVALID` is what distinguishes it.
+
+    NO CONTROL FOR `degenerate_refused`, stated rather than skipped. That
+    state is the pre-#763 `len(d) >= 4 and d.std() > _EPS` leg, with
+    _EPS = 1e-20. JIT_MIN_CYCLES = 6 already forces `len(d) >= 5`, and no
+    synthetic input was found that clears six cycles while scattering less
+    than 1e-20 of a period -- float rounding alone is four orders of
+    magnitude above it, which is the measurement #763 was built on. The state
+    is counted separately anyway, so if one ever occurs it is not silently
+    added to the floor's tally."""
+    sr = 44100
+    t = np.arange(int(0.24 * sr)) / sr
+
+    # 1. silence: the whole row is refused, so it is NOT the floor's doing
+    state, trace = dphase_row_state(np.zeros(int(0.24 * sr)), sr)
+    assert state == ROW_INVALID, (state, trace)
+    assert trace == {}, trace
+
+    # 2. under the floor: a stable tone, 0.47 ppm against 20 ppm
+    under = np.sin(2 * np.pi * 410.0 * t)
+    state, trace = dphase_row_state(under, sr)
+    assert state == ROW_FLOOR, (state, trace)
+    assert trace["phasejit_ppm"] <= JIT_DPHASE_FLOOR_PPM, trace
+
+    # 3. over the floor: 0.1 % per-period jitter, ~1e3 ppm. Its jitter must
+    #    survive the generator first, or this is a jitterless clip wearing a
+    #    positive control's name (the same precondition the sweep asserts).
+    ks = _square_periods(330.0, sr, jitter=0.001, seed=3)
+    assert len(set(ks)) > 1, "the generator rounded the jitter away"
+    over = _square(330.0, sr, jitter=0.001, seed=3)
+    state, trace = dphase_row_state(over, sr)
+    assert state == ROW_REPORTED, (state, trace)
+    assert trace["phasejit_ppm"] > JIT_DPHASE_FLOOR_PPM, trace
+
+    # 4. the counts, with every key present even at zero
+    c = census_counts([dphase_row_state(x, sr)[0] for x in (under, over, under)])
+    assert c == {ROW_REPORTED: 1, ROW_FLOOR: 2, ROW_DEGENERATE: 0,
+                 ROW_INVALID: 0, "total": 3}, c
+
+    # 5. START RED. The counter's one comparison is `phasejit_ppm <= floor`.
+    #    Invert it and the two rows whose state is known swap, so cases 2 and
+    #    3 above are load-bearing rather than decorative. This is the defect
+    #    the control exists for, run here rather than asserted to have been
+    #    run once.
+    def inverted(x):
+        """dphase_row_state with its one comparison the wrong way round."""
+        trace: dict = {}
+        extra_features(x, sr, jit_trace=trace)
+        if not trace:
+            return ROW_INVALID
+        if not trace["refused"]:
+            return ROW_REPORTED
+        return (ROW_FLOOR if trace["phasejit_ppm"] >= trace["dphase_floor_ppm"]
+                else ROW_DEGENERATE)
+
+    assert inverted(under) == ROW_DEGENERATE, (
+        "the inverted comparison still calls the under-floor row a floor "
+        "refusal: case 2 is not testing the comparison")
+    assert dphase_row_state(under, sr)[0] != inverted(under)
+
+    # 6. ...and the floor is what decides it, not the signal. Turn the floor
+    #    off the way the A/B arm does and the under-floor row is reported.
+    state, trace = dphase_row_state(under, sr, dphase_floor_ppm=0.0)
+    assert state == ROW_REPORTED, (state, trace)
+    assert trace["dphase_floor_ppm"] == 0.0, trace
+
+
 def test_the_rate_tolerance_is_far_below_the_effect():
     """A tolerance is only honest next to the effect it must not hide. The
     phase-jitter column's rate artefact is ~0.8 ppm and its floor is 20 ppm;
@@ -1341,3 +1514,60 @@ def test_a_fixed_stride_fold_is_not_a_drift_measure():
     assert walked == len(MPD_PERIODS_S), (
         "a stable tone did NOT walk between rows at every stride, so the fold "
         "might be cycle-aligned after all")
+
+
+def test_the_merge_order_that_would_feed_a_tap_count_to_the_ppm_floor_is_red():
+    """#773's merge resolution, asserted at the point of use rather than left
+    to review. `extra_features` grew `taps` (#767: third, positional) on one
+    branch and the #768 floor hooks on another, and the obvious union --
+    `(x, sr, dphase_floor_ppm=None, jit_trace=None, taps=None)` -- is wrong in
+    the way this repository keeps producing: it PASSES ITS OWN TESTS. Four
+    call sites in this module pass taps third and positionally, so under the
+    union they would hand a TAP COUNT to `dphase_floor_ppm` and take the
+    default taps; the `for taps in (-1, FOLD_SINC_TAPS)` arm comparison would
+    then differ in the ppm FLOOR and not in the interpolator -- two arms
+    identical in the variable under test, both internally consistent, nothing
+    red, a confident null.
+
+    Three assertions, because each alone is defeatable. (1) `taps` is STILL
+    third positionally, so the existing callers mean what they say -- checked
+    by behaviour, not by name, since a renamed third parameter would satisfy a
+    name check while breaking them. (2) The two hooks are KEYWORD-ONLY, so a
+    future caller cannot regrow the hazard positionally. (3) The defeating
+    input is EXECUTED: passing a floor in the fourth positional slot -- the
+    union signature's shape -- must raise rather than land somewhere."""
+    x = _square(300.0, 44100)
+
+    # (1) the third positional slot is taps, read from behaviour: -1 is the
+    # arm comparison's "off" value and changes the columns, so positional and
+    # keyword forms agreeing pins the slot to taps and not merely to a name.
+    pos, _ = extra_features(x, 44100, -1)
+    kw, _ = extra_features(x, 44100, taps=-1)
+    assert np.array_equal(pos, kw), (
+        "the third positional argument of extra_features is no longer taps: "
+        "the four positional call sites in this module are now passing a tap "
+        "count to whatever took its place")
+    shipped, _ = extra_features(x, 44100)
+    assert not np.array_equal(pos, shipped), (
+        "taps=-1 did not change any column, so assertion (1) above compares "
+        "two identical arms and proves nothing -- the same defect shape it "
+        "exists to catch")
+
+    # (2) the #768 hooks cannot be reached positionally.
+    import inspect
+    sig = inspect.signature(extra_features)
+    for name in ("dphase_floor_ppm", "jit_trace"):
+        assert sig.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY, (
+            f"{name} is positionally reachable again; a caller that passes it "
+            "third or fourth silently swaps it with taps")
+
+    # (3) the union signature's own call shape, executed.
+    try:
+        extra_features(x, 44100, FOLD_SINC_TAPS, 25.0)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError(
+            "extra_features(x, sr, taps, 25.0) was accepted, so the union "
+            "merge order is buildable again and a ppm floor can arrive in a "
+            "positional slot")
