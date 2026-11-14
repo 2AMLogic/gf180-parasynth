@@ -335,7 +335,23 @@ def main(argv=None) -> int:
     ap.add_argument("--f0", type=float, nargs="+", default=list(F0_GRID))
     ap.add_argument("--detail", action="store_true", default=False)
     ap.add_argument("--no-detail", dest="detail", action="store_false")
+    ap.add_argument("--octave-margin", type=int, default=None, metavar="PERMILLE",
+                    help="override JIT_OCTAVE_MARGIN_PERMILLE for the whole run; "
+                         "0 selects the bare argmax that shipped before #774")
     a = ap.parse_args(argv)
+    if a.octave_margin is not None:
+        # THE SECOND PROBE HOOK ON THIS INSTRUMENT, and it exists for the same
+        # reason `--taps -1` does: to price a repair against the code that
+        # SHIPS rather than against a copy of it. `dominant_period` reads this
+        # constant, and `jitter_features` reads `dominant_period`, so the only
+        # way to run the whole fold family at the pre-#774 octave pick is to
+        # set the constant for the duration of the run. It is why the
+        # `refused` column of this report could be reproduced at 3 after #774
+        # drove it to 0 -- which is the control that separates "the repair
+        # changed the objective" from "a different numpy changed it".
+        # `test_the_octave_margin_ships_a_real_margin` asserts 0 is never the
+        # value that ships.
+        D.JIT_OCTAVE_MARGIN_PERMILLE = a.octave_margin
     rows = sweep(tuple(a.taps), tuple(a.f0))
     text = report(rows, detail=a.detail or a.out is not None)
     sys.stdout.write(text)
