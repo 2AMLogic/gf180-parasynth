@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import pathlib
 import shutil
+import signal
 import subprocess
 import sys
 
@@ -167,10 +168,19 @@ def test_no_netlist_patch_survives_in_this_directory():
     # The three retired patches were a `sed` on `signed`, a tie-cell heredoc
     # and an all-x assign strip. None of them belongs here any more, in any
     # language -- including a re-introduced shell script.
+    #
+    # What this checks, and why it is not the cell name: the driver now
+    # *counts* `__tiel`/`__tieh` instances (`audit_retired_patches`), so
+    # "mentions the cell" stopped separating a patch from a measurement. A
+    # patch is a netlist **mutation**, so that is what is forbidden -- the
+    # `re.sub`/`re.subn` the heredoc used, the `klt_tie_` instance names it
+    # minted, and any write to the netlist. The guard against a mutation
+    # this static check cannot see is the runtime one: `main()` hashes the
+    # netlist either side of place-and-route (see this module's docstring).
     assert not (HERE / "run-klt.sh").exists()
     driver = (HERE / "run_klt.py").read_text()
     body = driver.split('"""', 2)[-1]  # the module docstring names them
-    for forbidden in ("tiel", "tieh", "re.sub", "re.subn"):
+    for forbidden in ("re.sub", "re.subn", "klt_tie_", "netlist.write"):
         assert forbidden not in body, forbidden
 
 
@@ -222,17 +232,58 @@ def test_the_derived_request_is_a_sibling_of_the_template_and_ignored():
 
 # ------------------------------------------------------- step bookkeeping
 
-class _FakeCompleted:
-    def __init__(self, returncode, stdout, stderr):
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
+class _FakePopen:
+    """Enough of ``subprocess.Popen`` for the verdict mapping.
+
+    ``timeout`` raises ``TimeoutExpired`` from ``communicate`` the way the
+    real one does, and records whether it was killed, so the orphan-reaping
+    path is observable without starting a real process.
+    """
+
+    def __init__(self, returncode=0, stdout=b"", stderr=b"", timeout=False):
+        self._returncode = returncode
+        self._stdout = stdout
+        self._stderr = stderr
+        self._timeout = timeout
+        self.returncode = None
+        self.pid = 4242
+        self.killed = False
+        self.waits = 0
+
+    def communicate(self, timeout=None):
+        if self._timeout:
+            self._timeout = False  # the post-kill drain succeeds
+            raise subprocess.TimeoutExpired(["klt"], timeout or 0.0)
+        self.returncode = self._returncode
+        return self._stdout, self._stderr
+
+    def wait(self, timeout=None):
+        self.waits += 1
+        self.returncode = self._returncode
+        return self.returncode
+
+    def kill(self):
+        self.killed = True
 
 
-def _runner(returncode=0, stdout=b"", stderr=b""):
-    def run(argv, **kwargs):
-        return _FakeCompleted(returncode, stdout, stderr)
-    return run
+def _popen(returncode=0, stdout=b"", stderr=b"", timeout=False):
+    made = {}
+
+    def factory(argv, **kwargs):
+        # The orphan fix is only real if klt gets its own process group.
+        assert kwargs.get("start_new_session") is True, (
+            "run_step must start klt in its own process group, or a timeout "
+            "kills klt and leaves its grandchildren running (#765)"
+        )
+        made["process"] = _FakePopen(returncode, stdout, stderr, timeout)
+        return made["process"]
+
+    factory.made = made
+    return factory
+
+
+def _no_containers(here):
+    return []
 
 
 def test_a_zero_byte_response_on_exit_zero_is_a_failure(tmp_path):
@@ -242,7 +293,7 @@ def test_a_zero_byte_response_on_exit_zero_is_a_failure(tmp_path):
     out = tmp_path / "par_response.json"
     step = run_klt.run_step(
         "place-and-route", ["klt", "place-and-route"], out, 60.0,
-        runner=_runner(returncode=0, stdout=b"", stderr=b"boom\n"),
+        popen=_popen(returncode=0, stdout=b"", stderr=b"boom\n"),
     )
     assert step.returncode == 0
     assert step.response_bytes == 0
@@ -255,7 +306,7 @@ def test_an_unparseable_response_on_exit_zero_is_a_failure(tmp_path):
     out = tmp_path / "par_response.json"
     step = run_klt.run_step(
         "place-and-route", ["klt", "place-and-route"], out, 60.0,
-        runner=_runner(returncode=0, stdout=b"Traceback (most recent call"),
+        popen=_popen(returncode=0, stdout=b"Traceback (most recent call"),
     )
     assert not step.ok
     assert "unparseable" in step.verdict
@@ -265,7 +316,7 @@ def test_a_nonzero_exit_is_a_failure_and_keeps_stderr(tmp_path):
     out = tmp_path / "synth_response.json"
     step = run_klt.run_step(
         "synthesize", ["klt", "synthesize"], out, 60.0,
-        runner=_runner(returncode=1, stdout=b"{}", stderr=b"[ERROR STA-0171]\n"),
+        popen=_popen(returncode=1, stdout=b"{}", stderr=b"[ERROR STA-0171]\n"),
     )
     assert not step.ok
     assert step.verdict == "FAILED (exit 1)"
@@ -273,12 +324,11 @@ def test_a_nonzero_exit_is_a_failure_and_keeps_stderr(tmp_path):
 
 
 def test_a_timeout_is_no_verdict_not_a_failure(tmp_path):
-    def run(argv, **kwargs):
-        raise subprocess.TimeoutExpired(argv, 60.0, output=b"", stderr=b"")
-
     out = tmp_path / "par_response.json"
     step = run_klt.run_step(
-        "place-and-route", ["klt", "place-and-route"], out, 60.0, runner=run
+        "place-and-route", ["klt", "place-and-route"], out, 60.0,
+        popen=_popen(timeout=True), container_reaper=_no_containers,
+        grace_s=0.0,
     )
     assert step.timed_out
     assert step.verdict == "NO-VERDICT (timeout)"
@@ -291,7 +341,7 @@ def test_a_good_pair_of_steps_exits_zero(tmp_path):
         steps.append(
             run_klt.run_step(
                 name, ["klt", name], tmp_path / f"{name}.json", 60.0,
-                runner=_runner(returncode=0, stdout=b'{"status": "ok"}'),
+                popen=_popen(returncode=0, stdout=b'{"status": "ok"}'),
             )
         )
     assert all(s.ok for s in steps)
@@ -305,11 +355,11 @@ def test_the_run_log_records_every_step_exit_status(tmp_path):
     steps = [
         run_klt.run_step(
             "synthesize", ["klt", "synthesize"], tmp_path / "s.json", 60.0,
-            runner=_runner(returncode=0, stdout=b'{"status": "ok"}'),
+            popen=_popen(returncode=0, stdout=b'{"status": "ok"}'),
         ),
         run_klt.run_step(
             "place-and-route", ["klt", "place-and-route"], tmp_path / "p.json",
-            60.0, runner=_runner(returncode=2, stdout=b"", stderr=b"DRT-0305\n"),
+            60.0, popen=_popen(returncode=2, stdout=b"", stderr=b"DRT-0305\n"),
         ),
     ]
     text = run_klt.format_run_log(
@@ -334,7 +384,9 @@ def test_an_in_place_netlist_edit_is_reported():
     # record instead of passing as "the netlist klt emitted".
     source = (HERE / "run_klt.py").read_text()
     assert "MUTATED DURING RUN" in source
-    assert source.count("sha256_file(netlist)") == 2
+    assert "before = sha256_file(netlist)" in source
+    assert "after = sha256_file(netlist)" in source
+    assert "if before != after:" in source
 
 
 def test_the_exit_codes_are_four_distinct_outcomes():
@@ -346,3 +398,248 @@ def test_the_exit_codes_are_four_distinct_outcomes():
     }
     assert len(codes) == 4
     assert run_klt.EXIT_REFUSED not in (run_klt.EXIT_OK, run_klt.EXIT_FAILED)
+
+
+# ------------------------------------------- the retirement, as a live check
+
+#: A netlist carrying one instance of each shape the three retired patches
+#: existed to fix. This is the input that must defeat the audit -- a guard
+#: ships with it, or with a stated reason none exists (`docs/verification-
+#: rules.md` rule 8). Lines 1-3 are transcribed from what klt 0.5.0 actually
+#: emitted, as quoted in `git show b9930a4a:pnr/klt/ladder_dp/run-klt.sh`.
+_PATCHED_ERA_NETLIST = """\
+module ladder_dp(x_in, y_out);
+  input signed [15:0] x_in;
+  output signed [15:0] y_out;
+  wire _0001_;
+  assign zero_ = 1'h0;
+  assign one_ = 1'b1;
+  assign \\sat_s$func$rtl-sketch/ladder_dp.v:131$5.v  = 28'hxxxxxxx;
+endmodule
+"""
+
+#: What klt 0.9.2 emits instead, reduced to the shapes the audit reads.
+_CURRENT_NETLIST = """\
+module ladder_dp(x_in, y_out);
+  input [15:0] x_in;
+  output [15:0] y_out;
+  gf180mcu_fd_sc_mcu7t5v0__tiel klt_tie_lo_1 (.ZN(zero_));
+  gf180mcu_fd_sc_mcu7t5v0__tieh klt_tie_hi_1 (.Z(one_));
+  assign y_out[15] = _0001_;
+endmodule
+"""
+
+
+def test_the_audit_turns_red_on_the_netlist_the_patches_were_written_for(
+    tmp_path,
+):
+    # The injected-defect control for this whole issue: feed the audit the
+    # era it retired and every gated count must come back non-zero, with the
+    # patch named. A guard that cannot do this is decoration.
+    netlist = tmp_path / "ladder_dp_synth.v"
+    netlist.write_text(_PATCHED_ERA_NETLIST)
+    counts, complaints = run_klt.audit_retired_patches(netlist)
+    assert counts["patch 1 (sed, STA-0171)"] == 2
+    assert counts["patch 2 (tie cells, DRT-0305)"] == 2
+    assert counts["patch 3 (all-x assigns, DRT-0305)"] == 1
+    assert len(complaints) == 3
+    assert all("would still have work" in c for c in complaints)
+    joined = " ".join(complaints)
+    for label, _pattern, _what in run_klt.RETIRED_PATCHES:
+        assert label in joined
+
+
+def test_the_audit_is_green_on_what_klt_0_9_2_emits(tmp_path):
+    netlist = tmp_path / "ladder_dp_synth.v"
+    netlist.write_text(_CURRENT_NETLIST)
+    counts, complaints = run_klt.audit_retired_patches(netlist)
+    assert complaints == []
+    assert counts["patch 1 (sed, STA-0171)"] == 0
+    assert counts["patch 2 (tie cells, DRT-0305)"] == 0
+    assert counts["patch 3 (all-x assigns, DRT-0305)"] == 0
+    assert counts["klt's own tie-cell instances"] == 2
+
+
+def test_the_tie_cell_count_is_reported_and_never_gates(tmp_path):
+    # A netlist with no constants to tie legitimately has no tie cells. A
+    # `> 0` gate here would be red on a correct netlist, which is worse than
+    # no gate -- so this pins that it stays an observation.
+    netlist = tmp_path / "ladder_dp_synth.v"
+    netlist.write_text("module m(); assign a = b; endmodule\n")
+    counts, complaints = run_klt.audit_retired_patches(netlist)
+    assert complaints == []
+    assert counts["klt's own tie-cell instances"] == 0
+
+
+def test_a_wide_constant_assign_is_counted_but_not_gated(tmp_path):
+    # Stated limitation, under test: patch 2 only ever matched 1-bit
+    # constants, so a wider one is the same defect class in a shape that
+    # patch never handled. It is reported next to the gated counts and does
+    # not fail the run.
+    netlist = tmp_path / "ladder_dp_synth.v"
+    netlist.write_text("module m();\n  assign q = 4'h0;\nendmodule\n")
+    counts, complaints = run_klt.audit_retired_patches(netlist)
+    assert complaints == []
+    assert counts["patch 2 (tie cells, DRT-0305)"] == 0
+    assert counts["wider-than-1-bit constant assigns (reported, not gated)"] == 1
+
+
+def test_the_audit_counts_reach_the_run_log(tmp_path):
+    steps = [
+        run_klt.run_step(
+            "synthesize", ["klt", "synthesize"], tmp_path / "s.json", 60.0,
+            popen=_popen(returncode=0, stdout=b'{"status": "ok"}'),
+        )
+    ]
+    text = run_klt.format_run_log(
+        klt_version="klt 9.9.9",
+        pdk_root=tmp_path / "pdk",
+        pdk=PDK,
+        steps=steps,
+        netlist_note="netlist x.v",
+        exit_code=run_klt.EXIT_OK,
+        patch_audit={"patch 1 (sed, STA-0171)": 0},
+    )
+    assert "retired-patch audit" in text
+    assert "patch 1 (sed, STA-0171): 0" in text
+
+
+# ------------------------------------------- nothing may outlive the caller
+
+def test_a_timeout_kills_the_process_group_not_just_klt(tmp_path, monkeypatch):
+    # subprocess.run(timeout=...) kills the direct child only, so a timed-out
+    # klt leaves `openroad` running. That is how a routed DEF landed in this
+    # directory five hours after the run that was supposed to produce it.
+    signalled = []
+    monkeypatch.setattr(run_klt.os, "getpgid", lambda pid: 9001)
+    monkeypatch.setattr(
+        run_klt.os, "killpg", lambda pgid, sig: signalled.append((pgid, sig))
+    )
+    factory = _popen(timeout=True)
+    step = run_klt.run_step(
+        "place-and-route", ["klt", "place-and-route"],
+        tmp_path / "par_response.json", 60.0,
+        popen=factory, container_reaper=_no_containers, grace_s=0.0,
+    )
+    assert step.timed_out
+    assert step.group_killed
+    assert (9001, signal.SIGTERM) in signalled
+
+
+def test_a_timeout_also_stops_the_openroad_containers_of_this_run(tmp_path):
+    # A container is in no process group of ours; killpg cannot reach it.
+    reaped = []
+
+    def reaper(here):
+        reaped.append(here)
+        return ["c0ffee1234567890"]
+
+    step = run_klt.run_step(
+        "place-and-route", ["klt", "place-and-route"],
+        tmp_path / "par_response.json", 60.0,
+        here=tmp_path, popen=_popen(timeout=True), container_reaper=reaper,
+        grace_s=0.0,
+    )
+    assert reaped == [tmp_path]
+    assert step.containers_stopped == ["c0ffee1234567890"]
+    text = run_klt.format_run_log(
+        klt_version="klt 9.9.9", pdk_root=tmp_path, pdk=PDK, steps=[step],
+        netlist_note="netlist x.v", exit_code=run_klt.EXIT_NO_VERDICT,
+    )
+    assert "containers stopped=1" in text
+    assert "c0ffee123456" in text
+
+
+def test_a_successful_step_reaps_nothing(tmp_path):
+    def reaper(here):  # pragma: no cover - must not be called
+        raise AssertionError("a run that exited on its own has nothing to reap")
+
+    step = run_klt.run_step(
+        "synthesize", ["klt", "synthesize"], tmp_path / "s.json", 60.0,
+        here=tmp_path, popen=_popen(returncode=0, stdout=b"{}"),
+        container_reaper=reaper,
+    )
+    assert step.ok
+    assert step.containers_stopped == []
+
+
+def test_only_containers_holding_a_path_inside_this_run_are_ours(tmp_path):
+    # The ownership test that matters: the host runs OpenROAD containers for
+    # other repositories at the same time (two were 13 days old when this was
+    # written). Killing one of those is not an option, so the test is the
+    # narrow one -- an absolute path, inside `here`, in the container's argv.
+    mine = tmp_path / "pnr" / "klt" / "ladder_dp"
+    mine.mkdir(parents=True)
+    others = {
+        "aaaa": ["openroad", "-metrics", "/elsewhere/soc_top_route_metrics.json"],
+        "bbbb": ["openroad", "-metrics", str(mine / ".klt" / "m.json")],
+        "cccc": ["postgres"],
+        # A parent of `here` is NOT ours: the main checkout contains every
+        # worktree, so a mount- or prefix-of-parent test would kill a
+        # sibling agent's run.
+        "dddd": ["openroad", str(tmp_path / "other.tcl")],
+    }
+
+    def runner(argv, **kwargs):
+        class R:
+            returncode = 0
+            stdout = ""
+        if argv[1] == "ps":
+            R.stdout = "\n".join(others) + "\n"
+        else:
+            R.stdout = json.dumps(others[argv[-1]])
+        return R
+
+    assert run_klt.own_openroad_containers(mine, runner=runner) == ["bbbb"]
+
+
+def test_a_docker_that_is_absent_or_failing_reaps_nothing(tmp_path):
+    def runner(argv, **kwargs):
+        class R:
+            returncode = 127
+            stdout = ""
+        return R
+
+    assert run_klt.own_openroad_containers(tmp_path, runner=runner) == []
+    assert run_klt.stop_own_openroad_containers(tmp_path, runner=runner) == []
+
+
+# ------------------------------------------------------- the bounded run
+
+def test_the_committed_request_still_asks_for_a_full_route():
+    # --target-stage exists so a dispatch worker can produce an attributable
+    # partial record. What this repository asks for must not become whatever
+    # last fitted in a time budget, so the override lands in the derived
+    # request only.
+    request = json.loads((HERE / "par_request.json").read_text())
+    assert request["target_stage"] == "route"
+
+
+def test_a_bounded_target_stage_reaches_only_the_derived_request(tmp_path):
+    here = _mirrored_here(tmp_path)
+    netlist = tmp_path / "ladder_dp_synth.v"
+    netlist.write_text(_CURRENT_NETLIST)
+    out = tmp_path / "par_request.resolved.json"
+    derived, reason = run_klt.build_par_request(
+        here / "par_request.json", netlist, out, target_stage="cts"
+    )
+    assert reason is None
+    assert json.loads(derived.read_text())["target_stage"] == "cts"
+    template = json.loads((here / "par_request.json").read_text())
+    assert template["target_stage"] == "route"
+
+
+def test_a_bounded_run_log_says_what_it_did_not_attempt(tmp_path):
+    text = run_klt.format_run_log(
+        klt_version="klt 9.9.9", pdk_root=tmp_path, pdk=PDK, steps=[],
+        netlist_note="netlist x.v", exit_code=run_klt.EXIT_OK,
+        target_stage="cts",
+    )
+    assert "BOUNDED RUN" in text
+    assert "says nothing" in text
+    full = run_klt.format_run_log(
+        klt_version="klt 9.9.9", pdk_root=tmp_path, pdk=PDK, steps=[],
+        netlist_note="netlist x.v", exit_code=run_klt.EXIT_OK,
+        target_stage="route",
+    )
+    assert "BOUNDED RUN" not in full
