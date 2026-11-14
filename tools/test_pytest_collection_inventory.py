@@ -22,10 +22,12 @@ import pytest_collection_inventory as inv  # noqa: E402
 #: them (scope, path, parsing) cannot let the real-tree check pass vacuously.
 #: A count here goes UP when a module gains a test -- #763 added
 #: test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13.
+#: #781's octave fix reworked model/discrimination_features.py's tests,
+#: six added and one replaced, 18 -> 23.
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
-    "model/discrimination_features.py": 18,
+    "model/discrimination_features.py": 23,
     "model/discrimination_trajectory.py": 6,
 }
 
