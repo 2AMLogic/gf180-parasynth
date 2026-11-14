@@ -52,7 +52,7 @@
         "role": "hygiene",
         "path": ".github/workflows/nightly.yml",
         "passed": true,
-        "content_hash": "sha256:ecd47adf58fb8d83af926130257c3d667beeb8eb3fa105bb739053473b20446f"
+        "content_hash": "sha256:6899fd6c15923b5da2c59f2d7c9053d8feec1305f667c725e56eeffef6aec0c5"
       },
       {
         "check": "present",

@@ -50,28 +50,36 @@ jobs:
       # left nothing recorded at all: exactly the loss this job exists to
       # prevent.
       - name: record the slow evidence for the roadmap
-        run: python tools/compile_dag.py --run --slow || true   # a RED node is a result, not an error
+        # The `|| true` is broader than "a RED node is a result": without
+        # --check --strict the tool already exits 0 on a RED node, so what the
+        # tolerance actually buys is surviving a hard failure (a crashed
+        # verifier, a missing README marker) so one broken node cannot lose
+        # the other nodes' records. The hard failure is still caught one step
+        # later: the commit step re-runs the tool with no tolerance, and the
+        # strict check after that gates the job.
+        run: python tools/compile_dag.py --run --slow || true
 
       # Carry the records to main. Until this step existed they lived only in
       # this job's artifact, and the README's F1/M1/D1/I1/I2 rows read STALE
       # or "never run" against evidence that had actually passed (#787). The
       # README is regenerated from the same records in the same step, so the
-      # committed table and the committed records cannot disagree. The
-      # `[dag]` subject is load-bearing: dag.yml's job-level `if:` skips any
-      # push whose head commit message contains it, so this push cannot
-      # re-trigger the per-push job into a loop.
-      - name: commit the records if they moved
-        run: |
-          python tools/compile_dag.py
-          if git diff --quiet -- README.md docs/dag-results.json; then
-            echo "the records are unchanged"; exit 0
-          fi
-          git config user.name  "dag-bot"
-          git config user.email "noreply@anthropic.com"
-          git add README.md docs/dag-results.json
-          git commit -m "[dag] regenerate the roadmap from evidence" \
-                     -m "Automated. Status is derived by running each node's evidence, not asserted. See tools/compile_dag.py."
-          git push
+      # committed table and the committed records cannot disagree.
+      #
+      # The commit-and-push is tools/push_dag_records.py, not a bare `git
+      # push`: over the 14 days measured in the #818 review, commits landed on
+      # main inside this ~2h job's window about one night in three, and a bare
+      # push is rejected non-fast-forward on exactly those nights -- records
+      # written, job red, nothing persisted but the artifact. The tool
+      # rebase-retries onto the moved main (bounded), union-merging the
+      # records: slow nodes keep tonight's evidence, fast nodes take
+      # origin/main's fresher dag.yml records, and the README block is
+      # re-rendered from the merge. The `[dag]` subject it commits with is
+      # load-bearing -- dag.yml's job-level `if:` skips any push whose head
+      # commit message contains it, so this push cannot re-trigger the
+      # per-push job into a loop -- and is pinned against that guard by
+      # test_check_workflows.py.
+      - name: commit the records if they moved (retries onto a moved main)
+        run: python tools/push_dag_records.py
 
       # The nightly CAN refresh the slow evidence, so it is the job entitled to
       # demand that nothing is RED or STALE. The per-push job only asserts the
