@@ -246,6 +246,16 @@ def cyclecorr_margin() -> dict:
     mechanism). The point of measuring it here is that for the correlation
     column the middle term is on the WRONG SIDE of the third, and no value of
     RATE_TOL_REL moves it.
+
+    That citation is about the SHAPE of a margin and nothing else, because
+    `jit.phasejit_ppm` is not a quotable number on its own: it cannot tell a
+    drifting oscillator from two steady partials beating, and `jit.dphase_ar1`
+    -- the lag-1 autocorrelation of the per-cycle period error -- is the column
+    that can, so the two are never quoted apart (`docs/discrimination.md` 5c;
+    `test_phasejit_is_not_promoted` enforces it). The 20 ppm floor above is the
+    same `RATE_TOL_ABS["ppm"]` that `jit.dphase_ar1` refuses below as
+    `JIT_DPHASE_FLOOR_PPM` (#763), which is why a reader checking this margin
+    should check that one too rather than read phase jitter alone.
     """
     sr = SR_A
     read = lambda x, s=sr: dict(zip(*reversed(D.jitter_features(x, s))))  # noqa: E731
