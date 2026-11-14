@@ -74,6 +74,22 @@ def run(root, **kw):
         return 2, f"REFUSED: {exc}"
 
 
+def make_every_point_perfect(root):
+    """Zero the drum-kit objective column in the artefact and make the
+    record self-consistent with it: an all-zero plateau that must evaluate
+    (issue #793 -- a dial that is perfect everywhere cannot be
+    unregisterable). The zeros form a plateau, so no spread crosses zero."""
+    art = root / "fpga/reports/mode_sweep.txt"
+    for old in ("519777.3", "607141.8", "603118.0", "606843.3", "607051.8"):
+        art.write_text(art.read_text().replace(old, "0.0"))
+    path, rec = record(root)
+    rec["points"] = [{"value": v, "objective": 0.0} for v in rec["grid"]["values"]]
+    rec["prediction"]["runs"] = [[v for v in rec["grid"]["values"]]]
+    rec["verdict"]["state"] = "FLAT"
+    rec["verdict"]["runs"] = [[v for v in rec["grid"]["values"]]]
+    write(path, rec)
+
+
 # --------------------------------------------------------------------------
 # satisfiable as committed
 
@@ -244,20 +260,21 @@ def test_an_artefact_with_one_zero_objective_refuses_naming_column_and_value(roo
 def test_a_perfect_plateau_record_is_registerable_end_to_end(root):
     """Every point perfect: the record evaluates green with the shipped value
     on the grid -- a dial that works everywhere cannot be unregisterable."""
-    art = root / "fpga/reports/mode_sweep.txt"
-    for old in ("519777.3", "607141.8", "603118.0", "606843.3", "607051.8"):
-        art.write_text(art.read_text().replace(old, "0.0"))
-    path, rec = record(root)
-    rec["points"] = [{"value": v, "objective": 0.0} for v in rec["grid"]["values"]]
-    rec["prediction"]["runs"] = [[v for v in rec["grid"]["values"]]]
-    rec["verdict"]["state"] = "FLAT"
-    rec["verdict"]["runs"] = [[v for v in rec["grid"]["values"]]]
-    write(path, rec)
+    make_every_point_perfect(root)
     code, text = run(root)
     assert code == 0, text
     _, reread = record(root)            # from disk, not the patched dict
     row = sens.evaluate(reread, root)
     assert row["best_move_pct"] is None and row["state"] == "FLAT"
+
+
+def test_an_all_zero_column_with_the_shipped_value_off_grid_is_red_not_a_crash(root):
+    """The curation's edge: best_move_pct is None by the off-grid path, so a
+    zero column must not newly raise there either."""
+    make_every_point_perfect(root)
+    move(root, "parameter MODES = 16,", "parameter MODES = 13,")
+    code, text = run(root)
+    assert code == 1 and "no sweep evidence" in text, text
 
 
 # --------------------------------------------------------------------------
@@ -529,15 +546,7 @@ def test_a_move_from_a_zero_objective_prints_the_verdict_without_a_price(repo):
     """The old value's objective is 0 (an all-zero plateau, the only way a
     zero base reaches this code): pct() has no price there, so the verdict
     must print without a percentage rather than raise TypeError."""
-    art = repo / "fpga/reports/mode_sweep.txt"
-    for old in ("519777.3", "607141.8", "603118.0", "606843.3", "607051.8"):
-        art.write_text(art.read_text().replace(old, "0.0"))
-    path, rec = record(repo)
-    rec["points"] = [{"value": v, "objective": 0.0} for v in rec["grid"]["values"]]
-    rec["prediction"]["runs"] = [[v for v in rec["grid"]["values"]]]
-    rec["verdict"]["state"] = "FLAT"
-    rec["verdict"]["runs"] = [[v for v in rec["grid"]["values"]]]
-    write(path, rec)
+    make_every_point_perfect(repo)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
                     "commit", "-qam", "zero"], cwd=repo, check=True, capture_output=True)
     move(repo, "parameter MODES = 16,", "parameter MODES = 12,")

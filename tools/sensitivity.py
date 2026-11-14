@@ -171,27 +171,59 @@ def runs(points: list[tuple[float, float]], tol: float) -> list[list[float]]:
     Two points are in the same group when the group's own spread stays within
     the record's stated relative tolerance. Greedy from the low end; the
     objective is a cost curve over an ordered dial, so a group is an interval.
+
+    A relative tolerance needs a strictly positive base. The exception is an
+    exact plateau -- when every objective in the extended group is equal the
+    spread is zero on any scale, so the group forms without a division (a
+    column of perfect zeros reads FLAT). Any other spread that touches or
+    crosses zero is unmeasurable and REFUSES; evaluate() raises the same
+    refusal with the column name in hand before the transcription checks,
+    and this guard covers direct callers.
     """
     out: list[list[float]] = []
     values: list[float] = []
     lo = hi = 0.0
     for value, objective in points:
-        if values:
-            nlo, nhi = min(lo, objective), max(hi, objective)
-            # the epsilon makes "within 2 %" include exactly 2 %: 102/100 - 1
-            # is 0.020000000000000018 in binary floating point, and a stated
-            # rule should not turn on that
-            if nhi / nlo - 1.0 > tol * (1.0 + 1e-9):
-                out.append(values)
-                values, lo, hi = [value], objective, objective
-                continue
-            lo, hi = nlo, nhi
-            values.append(value)
-        else:
+        if not values:
             values, lo, hi = [value], objective, objective
+            continue
+        nlo, nhi = min(lo, objective), max(hi, objective)
+        if nlo == nhi:
+            pass  # zero spread: identical by any scale, no division needed
+        elif nlo <= 0 or nhi <= 0:
+            raise Refused(
+                f"objective {objective:g} at grid value {value:g}: a relative "
+                "flat_within_relative rule cannot measure spread across or "
+                "below zero")
+        # the epsilon makes "within 2 %" include exactly 2 %: 102/100 - 1
+        # is 0.020000000000000018 in binary floating point, and a stated
+        # rule should not turn on that
+        elif nhi / nlo - 1.0 > tol * (1.0 + 1e-9):
+            out.append(values)
+            values, lo, hi = [value], objective, objective
+            continue
+        lo, hi = nlo, nhi
+        values.append(value)
     if values:
         out.append(values)
     return out
+
+
+def refuse_unmeasurable_objective(ident: str, column: str,
+                                  points: list[tuple[float, float]]) -> None:
+    """A relative rule cannot measure an objective that crosses or sits below
+    zero. The one admission is the exact plateau: a column whose every value
+    is equal -- including all-zero -- has zero spread on any scale and
+    evaluates. Fired from evaluate() right after extract_points(), so the
+    refusal names the column and fires before the transcription checks add
+    unrelated noise."""
+    objectives = [o for _, o in points]
+    if min(objectives) > 0 or all(o == objectives[0] for o in objectives):
+        return
+    value, objective = next((v, o) for v, o in points if o <= 0)
+    raise Refused(f"{ident}: objective column {column!r} is {objective:g} at "
+                  f"grid value {value:g}; a relative flat_within_relative rule "
+                  "cannot measure spread across or below zero")
 
 
 def state_of(groups: list[list[float]], n_points: int) -> str:
@@ -202,7 +234,13 @@ def state_of(groups: list[list[float]], n_points: int) -> str:
     return "MIXED"
 
 
-def pct(a: float, b: float) -> float:
+def pct(a: float, b: float) -> float | None:
+    """Percent change from a to b; None when the base is 0, where a relative
+    move has no price. A zero base reaching here is an exact plateau (any
+    spread over zero is refused upstream), and no move out of a perfect
+    score can be priced relatively."""
+    if a == 0:
+        return None
     return (b / a - 1.0) * 100.0
 
 
@@ -304,6 +342,7 @@ def evaluate(rec: dict, root: Path = ROOT, overrides: dict | None = None) -> dic
         if patch is not None:
             first, _ = measured[0]
             measured = [(v, patch if v == first else o) for v, o in measured]
+    refuse_unmeasurable_objective(ident, rec["evidence"]["objective_column"], measured)
     grid = [float(v) for v in rec["grid"]["values"]]
     if sorted(grid) != [v for v, _ in measured]:
         problems.append(
@@ -485,6 +524,13 @@ def run_check(root: Path = ROOT, changed_since: str | None = None,
             delta = pct(objective[was], objective[row["ships"]])
             same = group_index(row["runs"], was) == group_index(row["runs"], row["ships"])
             verdict = ("FLAT-MOVE" if same else "PRICED")
+            if delta is None:
+                # the old value's objective is 0: an exact plateau, so the
+                # move has no relative price to quote
+                print(f"{verdict} {row['id']}: {name} {was:g} -> {row['ships']:g}; the old "
+                      f"value's {row['objective']} is zero, so the sweep cannot price "
+                      "the move", file=out)
+                continue
             print(f"{verdict} {row['id']}: {name} {was:g} -> {row['ships']:g} moves "
                   f"{row['objective']} by {delta:+.2f}%"
                   + (f" (inside the {row['tolerance']:.0%} rule -- this change is not a "
