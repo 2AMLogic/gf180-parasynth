@@ -22,13 +22,13 @@ import pytest_collection_inventory as inv  # noqa: E402
 #: them (scope, path, parsing) cannot let the real-tree check pass vacuously.
 #: A count here goes UP when a module gains a test.
 #:
-#: model/discrimination_features.py, 13 -> 20, and this line is RE-DERIVED BY
+#: model/discrimination_features.py, 13 -> 21, and this line is RE-DERIVED BY
 #: COLLECTION rather than picked from either side of a merge: #773 landed with
 #: this line conflicting, and NEITHER side was right (merge-base 13, this
 #: branch 14, origin/main 18 -- the two branches added disjoint tests, so
 #: neither number describes the merged tree). Re-derive it with
 #: `inv.expected_nodes("model/discrimination_features.py", src)`, never by
-#: adding the two diffs. The twenty, by the side that added each:
+#: adding the two diffs. The twenty-one, by the side that added each:
 #:   13  the merge base (#763's
 #:       test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13)
 #:   +5  origin/main, the #767 fold interpolator:
@@ -42,10 +42,13 @@ import pytest_collection_inventory as inv  # noqa: E402
 #:   +1  #773, this merge resolution -- the guard on the signature order the
 #:       merge itself could have got wrong:
 #:       test_the_merge_order_that_would_feed_a_tap_count_to_the_ppm_floor_is_red
+#:   +1  #768's remaining increment -- the `degenerate_refused` control the
+#:       census test above stated, correctly, that it did not have:
+#:       test_a_doubly_degenerate_row_is_not_credited_to_the_floor
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
-    "model/discrimination_features.py": 20,
+    "model/discrimination_features.py": 21,
     "model/discrimination_trajectory.py": 6,
 }
 
