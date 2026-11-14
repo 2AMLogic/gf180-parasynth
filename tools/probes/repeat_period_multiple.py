@@ -216,17 +216,24 @@ def near_exact_cases() -> list[tuple[str, np.ndarray, int]]:
 def lfsr16(n: int, seed: int = 0xACE1) -> np.ndarray:
     """A maximal 16-bit LFSR as +-1, period 65535 samples.
 
-    The same taps as `model/test_reference_voice.lfsr16`, duplicated here
-    rather than imported because that module is a test file and a probe that
-    imports a test file cannot be run without the test environment. The two
-    are pinned to each other by
-    `tools/probes/test_repeat_period_multiple.py::test_the_lfsr_matches_the_one_the_voice_tests_use`."""
-    state = seed
+    A Galois LFSR, x^16 + x^14 + x^13 + x^11 + 1 -- byte-for-byte the one in
+    `model/test_reference_voice.lfsr16`, duplicated here rather than imported
+    because that module is a test file and a probe that imports a test file
+    cannot be run without the test environment. The two are pinned to each
+    other by
+    `test_repeat_period_multiple.py::test_the_lfsr_matches_the_one_the_voice_tests_use`,
+    which is not decoration: the first draft of this function used a
+    different tap set, also of period 65535, and that test is what found it.
+    A need panel measuring a different sequence from the one the voice tests
+    assert against would be reporting on nothing in particular."""
+    st = seed
     out = np.empty(n, dtype=np.float64)
     for i in range(n):
-        bit = ((state >> 0) ^ (state >> 2) ^ (state >> 3) ^ (state >> 5)) & 1
-        state = (state >> 1) | (bit << 15)
-        out[i] = 1.0 if (state & 1) else -1.0
+        lsb = st & 1
+        st >>= 1
+        if lsb:
+            st ^= 0xB400
+        out[i] = 1.0 if lsb else -1.0
     return out
 
 
@@ -343,6 +350,78 @@ def _overlap_corrected_baseline(x, sr: int = SR, *, min_lag_s: float = 0.05,
     return (min_lag + i) / sr, peak
 
 
+#: The filters and durations the LFSR condition panel crosses. Chosen to span
+#: what a noise source in this instrument actually passes through -- a one-pole
+#: and a two/four-pole lowpass, a highpass, and a single-pole resonator -- at
+#: the record lengths `noise_report` and `stage_noise` are called with, NOT
+#: chosen from the conditions the defect was already known to break.
+LFSR_FILTERS = ("none", "onepole0.95", "onepole0.99", "butter2_500",
+                "butter4_200", "butter2_hp2000", "ar1_0.5")
+LFSR_DURATIONS = (4.0, 6.0, 8.0, 10.0)
+
+
+def _lfsr_filtered(name: str, x: np.ndarray) -> np.ndarray:
+    import scipy.signal as ss
+
+    if name == "none":
+        return x
+    if name == "onepole0.95":
+        return ss.lfilter([0.05], [1.0, -0.95], x)
+    if name == "onepole0.99":
+        return ss.lfilter([0.01], [1.0, -0.99], x)
+    if name == "butter2_500":
+        return ss.lfilter(*ss.butter(2, 500.0 / (SR / 2)), x)
+    if name == "butter4_200":
+        return ss.lfilter(*ss.butter(4, 200.0 / (SR / 2)), x)
+    if name == "butter2_hp2000":
+        return ss.lfilter(*ss.butter(2, 2000.0 / (SR / 2), "high"), x)
+    if name == "ar1_0.5":
+        return ss.lfilter([1.0], [1.0, -0.5], x)
+    raise Refused(f"unknown filter {name!r}")
+
+
+def lfsr_conditions() -> list[dict]:
+    """The LIVE CALLER'S exposure, across conditions that did not pick anything.
+
+    `model/reference_voice.noise_report` is the one caller of `repeat_period`
+    in the tree, and what it hands it is a noise source that has been through
+    the instrument -- i.e. filtered. This panel crosses `LFSR_FILTERS` with
+    `LFSR_DURATIONS` under the caller's own lag band
+    (`max_lag_s = min(5.0, dur/2 - 0.1)`) and reports the pre-repair and the
+    shipped answer for each. Every condition is 65535 samples of period, so
+    the right answer is 1.000x in all 28 and no condition here was used to
+    choose the margin or the statistic -- which is what `CLAUDE.md` means by
+    confirming an improvement on conditions not used to select it.
+
+    WHY A GRID AND NOT ONE EXAMPLE. The unfiltered LFSR is +-1 valued, so all
+    its prefixes have the same mean square and the pre-repair statistic ties to
+    within 3e-7 at every multiple -- `np.argmax` then returns the shortest and
+    the estimator looks correct. It stays correct at every duration here. Put
+    the same sequence through a lowpass and it breaks, but NOT at every length:
+    the first version of this measurement tried 8 s with a one-pole at 0.95,
+    found 1.000x, and would have reported that the defect does not reach the
+    live caller at all. It does -- on 13 of these 28 conditions, at 2x and 3x
+    -- and whether it bites depends on the record length as much as on the
+    filter."""
+    out = []
+    lf = lfsr16(int(max(LFSR_DURATIONS) * SR))
+    for dur in LFSR_DURATIONS:
+        n = int(dur * SR)
+        for name in LFSR_FILTERS:
+            sig = _lfsr_filtered(name, lf[:n])
+            max_lag_s = min(5.0, dur / 2 - 0.1)
+            before, bcorr = _overlap_corrected_baseline(sig, SR,
+                                                        max_lag_s=max_lag_s)
+            e = am.repeat_period(sig, SR, max_lag_s=max_lag_s)
+            out.append(dict(
+                filt=name, dur_s=dur,
+                before_mult=(before * SR / 65535 if before else float("nan")),
+                before_corr=bcorr,
+                after_mult=(e.value * SR / 65535 if e.ok else float("nan")),
+                after_corr=(e.detail["corr"] if e.ok else float("nan"))))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # the measurement
 # ---------------------------------------------------------------------------
@@ -445,6 +524,7 @@ def measure() -> dict:
                          n_inharm=len(inharm)))
         detail.append((m, per_depth))
 
+    lfsr = lfsr_conditions()
     base_wrong = sum(0 if is_right(baseline[k][0], k[0]) else 1 for k in baseline)
     by_period = []
     for P in EXACT_PERIODS:
@@ -458,6 +538,7 @@ def measure() -> dict:
                               worst_before_mult=(max(bad) if bad else 1.0),
                               remainder=int(EXACT_DUR_S * SR) % P))
     return dict(rows=rows, detail=detail, need=need, need_worst=need_worst,
+                lfsr=lfsr,
                 fold_shortfalls=fold_shortfalls, by_period=by_period,
                 base_wrong=base_wrong, n_exact=len(exact_sigs),
                 n_fold=len(fold_sigs))
@@ -532,6 +613,26 @@ def report(res: dict, fh=sys.stdout) -> None:
               f"{rp:9.6f}", file=fh)
     print(f"  (worst {res['need_worst']:.4f} thousandths; shipped margin {ship} "
           f"is {ship / max(res['need_worst'], 1e-12):.1f}x it)", file=fh)
+    print(file=fh)
+
+    print("lfsr_filter_conditions -- the LIVE CALLER's exposure, on conditions that", file=fh)
+    print("  chose nothing. A 16-bit LFSR is 65535 samples of period, so the right", file=fh)
+    print("  answer is 1.000 in every row. `noise_report` is the one caller in the", file=fh)
+    print("  tree and its own lag band is used here. The unfiltered rows were right", file=fh)
+    print("  before the repair too -- a +-1 sequence has constant |x|, so the old", file=fh)
+    print("  statistic tied at every multiple and argmax returned the shortest by", file=fh)
+    print("  accident. Filter it and the accident stops, though not at every length.", file=fh)
+    bad = sum(1 for r in res["lfsr"] if abs(r["before_mult"] - 1.0) > MULT_TOL)
+    worst = max(res["lfsr"], key=lambda r: r["before_corr"])
+    print("filter dur_s before_mult before_corr after_mult after_corr", file=fh)
+    for r in res["lfsr"]:
+        print(f"{r['filt']:15s} {r['dur_s']:5.1f} {r['before_mult']:11.3f} "
+              f"{r['before_corr']:11.6f} {r['after_mult']:10.3f} "
+              f"{r['after_corr']:10.6f}", file=fh)
+    print(f"  ({bad} of {len(res['lfsr'])} conditions wrong before the repair, "
+          f"0 after; the largest 'correlation' the old statistic reported is "
+          f"{worst['before_corr']:.6f} on {worst['filt']} at {worst['dur_s']:g} s)",
+          file=fh)
 
 
 # ---------------------------------------------------------------------------
