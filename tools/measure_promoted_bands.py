@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import pathlib
 import subprocess
@@ -62,6 +63,78 @@ GLIDE_TAU_S = 0.03
 def _tone(f, dur=0.24, tau=0.1, sr=SR):
     t = np.arange(int(dur * sr)) / sr
     return np.sin(2 * np.pi * f * t) * np.exp(-t / tau)
+
+
+#: The known period cases: (f0, detune) over steady exponentially decaying
+#: sines, whose period is 1000/f ms in closed form. ONE definition (#801).
+#: It was written twice, byte-identical, and the two copies had drifted on the
+#: only thing that mattered -- `known_cases` tested `.ok` before reading
+#: `.value` and `period_error_on_known_cases` did not -- so a refusing
+#: estimator was reported as a red case by one and silently dropped by the
+#: other's `max()`. A duplicated grid is not a style complaint: it is two
+#: refusal policies where the file intends one.
+PERIOD_GRID = tuple((f0, detune) for f0 in (60.0, 90.0, 190.0, 410.0)
+                    for detune in (0.0, 0.02, 0.07))
+
+
+def _period_ok(e) -> bool:
+    """Is this period `Estimate` an ANSWER? The grid's one refusal policy.
+
+    `e.value is not None` and not `e.value` (the truthiness test used at
+    `glide_cases`): the two call sites divide different ways round. A glide
+    reads `1000.0 / e.value`, where a stub answering 0.0 ms would raise out of
+    the harness, so there 0.0 must be refused. Here the division is
+    `e.value / want`, so 0.0 is an ANSWER -- a wrong one, 100 % error, which
+    has to stay RED BY TOLERANCE rather than become a refusal. Collapsing the
+    two would hide the `answers 0.0` stub behind the refusal path and cost the
+    start-red run its power over this grid.
+
+    `None` is excluded because `Estimate.value` is `float | None`
+    (`model/audio_measure.py`), and before #801 a `None` refusal reaching the
+    reduction was a `TypeError` at the division -- a crash where `REFUSED`
+    belongs, which CLAUDE.md calls NO VERDICT rather than a result."""
+    return bool(e.ok) and e.value is not None
+
+
+def period_grid_estimates() -> list:
+    """[(f, want_ms, Estimate)] over `PERIOD_GRID`, read once.
+
+    Returned as a list rather than yielded because both consumers in
+    `known_cases()` -- the twelve per-case tolerance checks and the worst-case
+    reduction -- must read the SAME twelve estimates. A generator would have
+    them call the estimator twice over, which is how the duplicate this
+    replaces came to disagree with its original."""
+    out = []
+    for f0, detune in PERIOD_GRID:
+        f = f0 * (1 + detune)
+        out.append((f, 1000.0 / f, pm.dominant_period_ms(_tone(f), SR, (40.0, f0 * 2.0))))
+    return out
+
+
+def _period_error_from(estimates) -> tuple:
+    """(worst |relative error| in %, answered, total) over already-read
+    estimates.
+
+    `worst` is `nan` unless EVERY case answered. The worst case over a subset
+    is not the worst case, and before #801 this was `max(worst, ...)` over an
+    unguarded `.value`: `max()` returns its first argument when the comparison
+    is False, so `max(0.068, nan) -> 0.068` dropped every refusal. An
+    estimator refusing nine of these twelve and answering three EXACTLY
+    reported 0.034 % -- better than the true 0.068 % -- and passed the pinned
+    `0.0 < err < 0.1` bound green
+    (`tools/probes/period_error_refusal_policy.py`, condition C).
+
+    This is the `vacuous_guard_audit` class (#620) one step in: not an empty
+    population, a silently SHRUNKEN one, which that audit's docstring names as
+    a blind spot. So the count travels with the number, and `answered` is what
+    the control asserts -- a refusal count alone would be defeated by a stub
+    answering all twelve with a plausible wrong number (verification-rules.md
+    rule 8), which is why the magnitude is still gated too."""
+    errs = [abs(e.value / want - 1.0) * 100.0
+            for _f, want, e in estimates if _period_ok(e)]
+    total = len(estimates)
+    worst = float(max(errs)) if len(errs) == total and total else float("nan")
+    return worst, len(errs), total
 
 
 def _glide(f_end: float, depth: float, *, glide_tau=GLIDE_TAU_S, dur=0.24,
@@ -134,13 +207,24 @@ def known_cases() -> list:
         e = pm.lowband_level_db(x, SR)
         out.append((f"lowband a_hi={a_hi}", e.ok and abs(e.value - want) < LOWBAND_TOL_DB,
                     f"want {want:.3f} got {e.value if e.ok else e.reason}"))
-    for f0 in (60.0, 90.0, 190.0, 410.0):
-        for detune in (0.0, 0.02, 0.07):
-            f = f0 * (1 + detune)
-            e = pm.dominant_period_ms(_tone(f), SR, (40.0, f0 * 2.0))
-            want = 1000.0 / f
-            out.append((f"period {f:.1f} Hz", e.ok and abs(e.value / want - 1) < PERIOD_TOL,
-                        f"want {want:.4f} got {e.value if e.ok else e.reason}"))
+    periods = period_grid_estimates()
+    for f, want, e in periods:
+        out.append((f"period {f:.1f} Hz",
+                    _period_ok(e) and abs(e.value / want - 1) < PERIOD_TOL,
+                    f"want {want:.4f} got {e.value if e.ok else e.reason}"))
+    # The REDUCTION is a case in its own right, which is what brings
+    # `period_error_on_known_cases` inside this file's control sets (#801): it
+    # is now reached by `start_red`'s two stubs and by `injected_bugs`, and
+    # before this line it was reached by neither, which is why the
+    # partial-refusal defect went unnoticed in a file that has a start-red
+    # harness. Both halves are asserted, because each defeats the other's
+    # blind spot: `answered == total` catches a shrunken population, which a
+    # magnitude bound cannot see, and the magnitude catches a stub that
+    # answers all twelve with a plausible wrong number, which a count cannot.
+    worst, answered, total = _period_error_from(periods)
+    out.append(("period worst-case figure covers all twelve cases",
+                answered == total and worst == worst and worst < PERIOD_TOL * 100.0,
+                f"{answered}/{total} answered, worst {worst:.4f} %"))
     # Gain cancels exactly.
     x = np.sin(2 * np.pi * 90 * t) + 0.3 * np.sin(2 * np.pi * 1500 * t)
     a, b = pm.lowband_level_db(x, SR), pm.lowband_level_db(0.01 * x, SR)
@@ -455,6 +539,37 @@ def _arithmetic_mean_tolerance():
     return mutant
 
 
+def _refuses_three_of_every_four_periods():
+    """The estimator answers one period case in four, EXACTLY, and refuses the
+    rest -- #801's condition C, carried as an injected bug.
+
+    This is the control the file was missing. Its two existing stubs
+    (`start_red`) refuse everything or answer a constant; neither models a
+    PARTIALLY refusing estimator, and a worst-case reduction that drops
+    refusals is invisible to both -- a population of twelve and a population
+    of three both produce a plausible number, and the smaller one looks
+    BETTER. Measured before the repair: 0.034 % against a true 0.068 %,
+    passing the pinned `0.0 < err < 0.1` bound green
+    (`tools/probes/period_error_refusal_policy.py`).
+
+    The answers it does give are the real estimator's, deliberately: a stub
+    that answered three cases WRONGLY would be caught by the per-case
+    tolerance checks, so it would not isolate the reduction. Refusing with
+    `nan` rather than `None` is also deliberate -- `None` reached the old
+    reduction as a `TypeError`, which is loud, and the quiet case is the one
+    worth a control."""
+    real = pm.dominant_period_ms
+    calls = {"n": 0}
+
+    def stub(x, sr, band, *a, **k):
+        calls["n"] += 1
+        if calls["n"] % 4 != 0:
+            return pm.Estimate(float("nan"), False, "injected: refuses 3 of 4", {})
+        return real(x, sr, band, *a, **k)
+
+    return stub
+
+
 #: (control, module holding the thing replaced, its attribute, factory for the
 #: replacement, the NAMED known case that must go red). Each satisfies rule
 #: 5's three conditions, which `injected_bugs` checks rather than assumes: the
@@ -475,6 +590,12 @@ MUTANTS = (
      lambda: _wrap("dominant_period_ms", sr=48000), "period 90.0 Hz"),
     ("prominence check disabled (any argmax is a period)", pm, "dominant_period_ms",
      lambda: _wrap("dominant_period_ms", min_prominence_db=-np.inf), "noise has no period"),
+    # The REDUCTION over the period grid, not the estimator: the named case is
+    # the worst-case figure's own, and this mutant is the only one that turns
+    # it red while leaving the reduction's code untouched. #801's condition C.
+    ("estimator refuses 9 of the 12 period cases and answers 3 exactly",
+     pm, "dominant_period_ms", _refuses_three_of_every_four_periods,
+     "period worst-case figure covers all twelve cases"),
     # The time-resolved reading. Each of these is a way a windowed number could
     # be a number for a window other than the one named.
     ("onset window taken from 160 ms instead of the onset", pm, "lowband_onset_db",
@@ -603,18 +724,32 @@ STUB_MAY_PASS = {
 }
 
 
+def period_error_report() -> tuple:
+    """(worst |relative error| in %, answered, total) over the known period
+    cases -- the figure WITH the size of the population it was computed over.
+
+    Prefer this to `period_error_on_known_cases` wherever the number is
+    reported, so a reader sees `12/12` next to it rather than having to trust
+    that twelve is what was measured."""
+    return _period_error_from(period_grid_estimates())
+
+
 def period_error_on_known_cases() -> float:
     """Worst |relative error| of `dominant_period_ms` over the known period
-    cases, in %. These are STEADY exponentially decaying sines; the estimator's
-    error on a GLIDE is a different and larger number, and is
-    `glide_error_vs_settled_pct` below."""
-    worst = 0.0
-    for f0 in (60.0, 90.0, 190.0, 410.0):
-        for detune in (0.0, 0.02, 0.07):
-            f = f0 * (1 + detune)
-            e = pm.dominant_period_ms(_tone(f), SR, (40.0, f0 * 2.0))
-            worst = max(worst, abs(e.value / (1000.0 / f) - 1.0) * 100.0)
-    return worst
+    cases, in %, or `nan` if ANY of the twelve refused. These are STEADY
+    exponentially decaying sines; the estimator's error on a GLIDE is a
+    different and larger number, and is `glide_error_vs_settled_pct` below.
+
+    The refusal policy is `_period_error_from`'s and the reason is there. The
+    policy is `nan` rather than a raise because the two citations of this
+    figure read it as a float -- but `nan` is silently False in a `<`
+    comparison, so EVERY caller that quotes it must assert it finite rather
+    than merely obtain it (verification-rules.md rule 8). The two that do:
+    `cmd_validate` below counts a non-finite figure as a validation failure,
+    which makes `measure` REFUSE; and
+    `test_period_error_on_steady_tones_is_far_below_a_one_percent_difference`
+    asserts `math.isfinite` and `answered == total` before the bound."""
+    return period_error_report()[0]
 
 
 def glide_error_vs_settled_pct() -> float:
@@ -666,8 +801,18 @@ def cmd_validate() -> int:
         print(f"{'CAUGHT' if caught else 'NOT-CAUGHT'}  injected: {label} -> "
               f"'{case}' {'red' if caught else 'NOT red'} ({detail})")
         bad += not caught
-    print(f"period estimator worst error on steady decaying tones: "
-          f"{period_error_on_known_cases():.3f} %")
+    # Asserted finite AT THE POINT IT IS QUOTED, not merely produced: `nan`
+    # is silently False in every comparison, so a refusal that is only
+    # returned is a refusal nobody reads (#801).
+    worst_period, answered, total = period_error_report()
+    if not math.isfinite(worst_period) or answered != total:
+        print(f"REFUSED  period estimator worst error: only {answered}/{total} "
+              f"of the known period cases answered; the worst case over a "
+              f"subset is not the worst case")
+        bad += 1
+    else:
+        print(f"period estimator worst error on steady decaying tones: "
+              f"{worst_period:.3f} % ({answered}/{total} cases answered)")
     print(f"period estimator worst error against a GLIDE's settled frequency "
           f"({', '.join(f'{d*100:.0f}' for d in GLIDE_DEPTHS)} % depth): "
           f"{glide_error_vs_settled_pct():.3f} %")

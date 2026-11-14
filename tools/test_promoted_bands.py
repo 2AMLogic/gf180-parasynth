@@ -75,9 +75,130 @@ def test_a_rectangular_window_cannot_pass_any_lowband_case(monkeypatch):
 
 def test_period_error_on_steady_tones_is_far_below_a_one_percent_difference():
     """What the period estimator's own error is, on what it was validated on:
-    steady decaying sines (no glide). Pinned so the text quoting it is true."""
-    err = mpb.period_error_on_known_cases()
-    assert 0.0 < err < 0.1, err
+    steady decaying sines (no glide). Pinned so the text quoting it is true.
+
+    The population is asserted BEFORE the bound (#801). `0.0 < err < 0.1` was
+    satisfied by a figure computed over three of the twelve cases, and
+    `max()` drops `nan` silently, so the bound alone cannot tell twelve
+    answered from three. It is also asserted FINITE rather than merely
+    obtained: `nan` is silently False in a `<` comparison, so the repaired
+    function's refusal would have been read as a quiet pass by exactly the
+    assertion that is supposed to catch it (verification-rules.md rule 8)."""
+    worst, answered, total = mpb.period_error_report()
+    assert total == len(mpb.PERIOD_GRID) == 12, (total, mpb.PERIOD_GRID)
+    assert answered == total, f"only {answered}/{total} known period cases answered"
+    assert math.isfinite(worst), worst
+    assert 0.0 < worst < 0.1, worst
+    # The figure quoted in `model/promoted_measures.py` and
+    # `docs/discrimination.md` as the discrimination floor for drum pitch. It
+    # must not move: the "6-30 times that" multiplier in the second is the
+    # observed tuning spread DIVIDED by it.
+    assert worst == pytest.approx(0.068, abs=0.001), worst
+    assert mpb.period_error_on_known_cases() == pytest.approx(worst), "wrapper disagrees"
+
+
+def test_a_partially_refusing_estimator_cannot_report_a_worst_case(monkeypatch):
+    """#801's defect, as a control: NINE of the twelve known period cases
+    refuse, three answer EXACTLY, and the worst-case figure must be `nan`.
+
+    Before the repair this returned 0.034 % -- smaller than the true 0.068 %,
+    because the worst of three is below the worst of twelve -- and passed the
+    bound above green. A silently SHRUNKEN population, which is the gap
+    `tools/vacuous_guard_audit.py` (#620) names in its own docstring: it
+    models an EMPTY population, not a reduced one.
+
+    The three answers are the real estimator's on purpose. A stub answering
+    three cases wrongly would be caught by the per-case tolerance checks, so
+    it would not isolate the reduction."""
+    real = pm.dominant_period_ms
+    calls = {"n": 0}
+
+    def stub(x, sr, band, *a, **k):
+        calls["n"] += 1
+        if calls["n"] % 4 != 0:
+            return pm.Estimate(float("nan"), False, "test refuses 3 of 4", {})
+        return real(x, sr, band, *a, **k)
+
+    monkeypatch.setattr(pm, "dominant_period_ms", stub)
+    worst, answered, total = mpb.period_error_report()
+    assert (answered, total) == (3, 12), (answered, total)
+    assert not math.isfinite(worst), worst
+    # The exact false green this replaces: the old bound, applied to the old
+    # return value, passed. Asserted as the negation so the control states
+    # what it defeats rather than only what it requires.
+    assert not (0.0 < mpb.period_error_on_known_cases() < 0.1), "the false green is back"
+
+
+def test_a_none_refusal_is_refused_rather_than_crashing(monkeypatch):
+    """`Estimate.value` is `float | None` (`model/audio_measure.py`), and every
+    refusal path in `model/promoted_measures.py` constructs `Estimate(None,
+    False, ...)` -- so `None` is the refusal the SHIPPING estimators actually
+    produce. Before #801 it reached the reduction's division and raised
+    `TypeError`: a crash where `REFUSED` belongs, which CLAUDE.md calls NO
+    VERDICT rather than a result."""
+    monkeypatch.setattr(pm, "dominant_period_ms",
+                        lambda *a, **k: pm.Estimate(None, False, "test refuses", {}))
+    worst, answered, total = mpb.period_error_report()
+    assert (answered, total) == (0, 12), (answered, total)
+    assert not math.isfinite(worst), worst
+
+
+def test_a_zero_answering_stub_is_caught_by_magnitude_not_by_the_refusal_count():
+    """The guard-defeating input for the check above (verification-rules.md
+    rule 8), named and run rather than only described: a stub answering all
+    twelve cases `ok=True` with 0.0 ms satisfies `answered == total`
+    completely. Counting refusals has no power against it; only the magnitude
+    does, which is why the shipped case gates BOTH.
+
+    This is also why `mpb._period_ok` tests `value is not None` rather than
+    the truthiness test used in `glide_cases`: treating 0.0 as a refusal here
+    would move this stub from red-by-tolerance into the refusal path, and the
+    `answers 0.0` start-red stub would lose its power over this grid."""
+    estimates = [(f, want, pm.Estimate(0.0, True, "", {}))
+                 for f, want, _e in mpb.period_grid_estimates()]
+    worst, answered, total = mpb._period_error_from(estimates)
+    assert (answered, total) == (12, 12), "a 0.0 answer is an ANSWER, not a refusal"
+    assert worst == pytest.approx(100.0), worst
+    assert not (0.0 < worst < 0.1), worst
+
+
+def test_the_period_grid_is_read_once_and_shared_by_both_consumers():
+    """The structural half of #801: the twelve-case grid existed TWICE,
+    byte-identical, and the duplicate was the copy without a refusal policy.
+    Two copies of a grid are two refusal policies where the file intends one.
+
+    Counted rather than asserted by inspection, because a reader cannot see a
+    duplicate by looking at one of them: `known_cases()` makes exactly 17
+    `dominant_period_ms` calls -- 12 for the grid, 1 for `noise has no
+    period`, 4 for `glide_cases` -- and a re-introduced second walk of the
+    grid makes it 29."""
+    real = pm.dominant_period_ms
+    calls = []
+
+    def spy(*a, **k):
+        calls.append(1)
+        return real(*a, **k)
+
+    pm.dominant_period_ms = spy
+    try:
+        cases = {l: ok for l, ok, _d in mpb.known_cases()}
+    finally:
+        pm.dominant_period_ms = real
+    assert len(calls) == 17, f"{len(calls)} calls: the grid is walked more than once"
+    assert "period worst-case figure covers all twelve cases" in cases, \
+        "the reduction is not a known case, so start_red and injected_bugs miss it"
+
+
+def test_the_refusal_policy_probe_passes_all_five_conditions():
+    """The committed instrument from #801, run as a gate rather than quoted:
+    `tools/probes/period_error_refusal_policy.py --check` exercises the real
+    estimator plus four stubs (all-refuse `nan`, all-refuse `None`, partial
+    refusal, and the rule-8 `answers 0.0` input) and requires that only the
+    real one produces a number satisfying the pinned bound.
+
+    It exits 1 against the pre-repair tree, on condition C. 0.4 s."""
+    import period_error_refusal_policy as perp
+    assert perp.main(["--check"]) == 0
 
 
 def test_the_whole_clip_hann_all_but_ignores_the_first_30_ms():
