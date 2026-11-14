@@ -8,6 +8,7 @@
     "res-cut-correction-entries.json",
     "coupling-k.json",
     "mean-trials.json",
-    "dphase-ar1-floor.json"
+    "dphase-ar1-floor.json",
+    "fold-interpolator.json"
   ]
 }

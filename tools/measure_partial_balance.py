@@ -2,24 +2,26 @@
 """The TR-808 rimshot's and cowbell's partial balance, measured from hardware,
 against what model/drums_fx.py ships.
 
-WHAT THE SCORECARD MEANS BY "Partial balance" -- two different things under one
-name, both from tools/run_case.py on origin/tools/case-runner, the branch that
-produced the stored D10A/D13A results:
+WHAT IS MEASURED -- the quantity the scorecard scores, not a second one beside
+it. Since #109 both D10A (RS) and D13A (CB) "Partial balance" are scored by
+`run_case.balance_trajectory_db`: the two REAL lines' amplitude ratio,
+20*log10( A_high(t) / A_low(t) ), read from each line's own decay trajectory,
+with the lines located by search rather than probed at a nominal frequency
+(#108). It is NOT a fixed window's filtered energy ratio -- that quantity is
+A^2*tau, so it double-charges the decay already scored by "tail decay".
 
-    D10A  RS  band_pair_db((1500,2100), (380,560)) over 0-60 ms
-              = 10*log10( energy 1500-2100 Hz / energy 380-560 Hz ), where each
-                energy is a zero-phase 4th-order Butterworth band divided by the
-                slice's total energy.
-    D13A  CB  tone_ratio_db(800, 540) over 0-100 ms
-              = 20*log10( |projection at 800 Hz| / |projection at 540 Hz| ), a
-                rectangular-window coherent projection at each NOMINAL frequency.
-
-Both are scored against a 3.0 dB tolerance ("energy ratio, the half-power
+This tool reports that ratio as a trajectory, at every time point in the
+operating point's `at` list, so a balance that falls through the note is
+visible rather than sampled once at whatever instant a single window lands on.
+Both rows are scored against a 3.0 dB tolerance ("energy ratio, the half-power
 convention"), and `worst` on the board is |error| / tolerance.
+
+The operating points are TAKEN FROM `run_case.RS_BALANCE_OP` / `CB_BALANCE_OP`
+(see OP below), never copied, so the window, hop, search ranges and `t_end`
+here cannot drift from the ones D10A/D13A are scored at.
 
     python tools/measure_partial_balance.py validate    # start red, then the known cases
     python tools/measure_partial_balance.py measure     # the recordings, floor-gated
-    python tools/measure_partial_balance.py apparatus   # is the failure the window, not the voice?
 
 Needs the Fischer corpus (tidalcycles/sounds-tr808-fischer) at $GF180_TR808_REFS (alias
 $TR808_REFS), else /tmp/tr808-ref. REFUSES rather than reports when it is absent.
@@ -36,8 +38,6 @@ import partial_trajectory as PT                 # noqa: E402
 import preparation_contract as pc               # noqa: E402
 import run_case as rc                           # noqa: E402
 
-import run_case as rc  # noqa: E402
-
 REFDIR = rc.configured_refs()
 REF_MAIN = {"RS": "rs8/RS.WAV", "CB": "cb8/CB.WAV"}
 
@@ -48,27 +48,12 @@ REF_MAIN = {"RS": "rs8/RS.WAV", "CB": "cb8/CB.WAV"}
 Refused = pc.Refused
 
 
-# --- the scorecard's two estimators, verbatim, so this compares like with like
-def tone_ratio_db(x, sr, hz_num, hz_den):
-    a, b = am.tone_amplitude(x, hz_num, sr), am.tone_amplitude(x, hz_den, sr)
-    if not (a.ok and b.ok) or a.value <= 0 or b.value <= 0:
-        return None
-    return 20.0 * math.log10(a.value / b.value)
-
-
-def band_pair_db(x, sr, band_a, band_b):
-    e_a, e_b = am.band_energy(x, (tuple(band_a), tuple(band_b)), sr)
-    if e_a <= 0.0 or e_b <= 0.0:
-        return None
-    return 10.0 * math.log10(e_a / e_b)
-
-
-# --- both sides, prepared by run_case.prepare (#132: the lead is guaranteed, not
-# clamped) and windowed by run_case.window. A private copy of either is how this
-# file came to carry the #101 clamp after run_case had moved on (#636).
-window = rc.window
-
-
+# --- both sides, prepared by run_case.prepare (#132: the lead is guaranteed,
+# not clamped). A private copy is how this file came to carry the #101 clamp
+# after run_case had moved on (#636), and how it went on carrying pre-#108
+# `tone_ratio_db`/`band_pair_db` after #109 retired both from these two rows
+# (#772). Nothing here is reimplemented; `tools/test_measure_partial_balance.py`
+# pins that.
 def prepared(x, sr, side):
     return rc.prepare(x, sr, side=side)
 
@@ -123,12 +108,21 @@ def render_ours(voice, seconds=2.2, accent=1.0):
     return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR
 
 
-# Operating points, each with the error VALIDATE establishes for it.
+# Operating points. The window, hop, search ranges and `t_end` are READ FROM the
+# scorecard's own rows, so this tool cannot measure at a different operating
+# point than the one it is a diagnostic for. `guards`/`min_gap_ms` are
+# deliberately not taken: this tool reads the trajectory at chosen instants
+# (`at`) rather than letting the estimator pick the earliest floor-clearing one,
+# so it has no in-gap candidate to guard. `at` and `err_db` -- the error VALIDATE
+# establishes for this tool at that operating point -- are its own.
+def _op(scored, *, at, err_db):
+    return dict(win_ms=scored["win_ms"], hop_ms=scored["hop_ms"], t_end=scored["t_end"],
+                lo=scored["f_lo_range"], hi=scored["f_hi_range"], at=at, err_db=err_db)
+
+
 OP = {
-    "RS": dict(win_ms=6.0, hop_ms=0.25, lo=(380, 620), hi=(1450, 2150), t_end=0.060,
-               at=(0.004, 0.006, 0.008, 0.010, 0.012, 0.016), err_db=2.4),
-    "CB": dict(win_ms=20.0, hop_ms=2.0, lo=(460, 700), hi=(700, 1000), t_end=0.600,
-               at=(0.030, 0.060, 0.100, 0.200, 0.300, 0.400), err_db=1.1),
+    "RS": _op(rc.RS_BALANCE_OP, at=(0.004, 0.006, 0.008, 0.010, 0.012, 0.016), err_db=2.4),
+    "CB": _op(rc.CB_BALANCE_OP, at=(0.030, 0.060, 0.100, 0.200, 0.300, 0.400), err_db=1.1),
 }
 FLOOR_MARGIN_DB = 6.0          # issue #92: refuse rather than report inside the floor
 
@@ -187,21 +181,17 @@ def cmd_validate():
         if worst > op["err_db"]:
             return 1
 
-    print("\nWHAT THE SCORECARD'S OWN ESTIMATORS DO ON THE SAME KNOWN SIGNALS.")
-    x = two_partial(540, 0.200, 1.0, 800, 0.200, 1.0, 0.100, SR)     # truth 0.000 dB
-    print(f"    tone_ratio_db(800/540), lines exactly on nominal : "
-          f"{tone_ratio_db(x, SR, 800.0, 540.0):+7.2f} dB  (truth 0.00)")
-    for pct in (1.0, 5.0, 8.7):
-        x = two_partial(540 * (1 + pct / 100), 0.200, 1.0, 800 * (1 + pct / 100), 0.200, 1.0, 0.100, SR)
-        print(f"    tone_ratio_db(800/540), lines +{pct:.1f} % off nominal : "
-              f"{tone_ratio_db(x, SR, 800.0, 540.0):+7.2f} dB  (truth 0.00)")
-    x = two_partial(540, 0.200, 1.0, 800, 0.030, 1.0, 0.100, SR)
-    print(f"    tone_ratio_db(800/540), equal A0 but tau 200/30 ms: "
-          f"{tone_ratio_db(x, SR, 800.0, 540.0):+7.2f} dB  (truth 0.00 at the strike)")
-    print("\n    WITHDRAWN, by its own control: band_pair_db applied to a 6 ms SLICE is")
-    print("    biased up to 22.6 dB on signals of known balance -- a 380-560 Hz band-pass")
-    print("    rings for about as long as the slice, so it cannot settle inside it. Slice")
-    print("    the trajectory, never the filter's input.")
+    print("\nWhy a fixed window was retired from these two rows, and where the\n"
+          "evidence now lives (#772 -- it was reproduced here from pre-#108 copies\n"
+          "that no longer matched the shipped estimators of the same name):\n"
+          "    a nominal-frequency probe's detuning loss -- tools/test_run_case.py\n"
+          "      ::test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses\n"
+          "      and ::test_tone_ratio_db_refuses_rather_than_falling_back_to_nominal\n"
+          "    a filtered band's A^2*tau and band-edge terms -- tools/run_case.py\n"
+          "      `band_pair_db`'s declared domain, and tools/test_run_case.py\n"
+          "      ::test_band_pair_db_refuses_partials_that_decay_at_different_rates\n"
+          "    both measured against the CURRENT estimators -- tools/probes/\n"
+          "      estimator_domains.py and tools/probes/verify_109_claims.py")
     return 0
 
 
@@ -258,74 +248,22 @@ def cmd_measure():
             f = lambda v: f"{v:11.2f}" if v is not None else f"{'REFUSED':>11s}"
             e = f"{vo-vr:9.2f}" if (vr is not None and vo is not None) else f"{'-':>9s}"
             print(f"  {t*1e3:8.1f} {f(vr)} {f(vo)} {e}   ref {rh:5.1f}/{rl:5.1f}  ours {oh:5.1f}/{ol:5.1f}")
-
-        print(f"\n  the scorecard's own number, reproduced:")
-        for side in ("ours", "reference"):
-            d = sides[side]
-            v = (band_pair_db(window(d["x"], d["sr"], 0.0, 0.060), d["sr"], (1500, 2100), (380, 560))
-                 if voice == "RS" else
-                 tone_ratio_db(window(d["x"], d["sr"], 0.0, 0.100), d["sr"], 800.0, 540.0))
-            print(f"    {side:10s} {v:+8.4f} dB")
     return 0
 
 
-def cmd_apparatus():
-    """Two unrelated circuits failing one check is what a shared apparatus term
-    looks like, so it is tested rather than assumed.
-
-    (HISTORICAL premise, #636: since #132 `run_case.prepare` guarantees the
-    lead, so padding the RAW recording is expected to move nothing; this command
-    now checks that. What follows describes the clamp this tool used to carry.)
-    The old private `prepare()` trimmed to 1 ms before the onset only when the lead-in was at least
-    5 ms. The Fischer WAVs begin AT the strike (onset sample 6 and 10), so they
-    get lead = 0 and no trim; our renders lead with 10 ms of digital silence, so
-    they get trimmed to exactly 1 ms of lead-in. The two sides' windows therefore
-    start at different places relative to their own onsets, and `sosfiltfilt`'s
-    odd extension of a segment that starts at full amplitude manufactures an
-    edge. Where a band is nearly empty that edge can more than double it.
-
-    The test: prepend silence to each side and watch the number. An edge term
-    moves; the voice does not."""
-    def pad(x, sr, ms):
-        return np.concatenate([np.zeros(int(ms * 1e-3 * sr)), x]) if ms > 0 else x
-
-    for voice, est, lbl in (
-            ("RS", lambda x, sr: band_pair_db(window(x, sr, 0.0, 0.060), sr, (1500, 2100), (380, 560)),
-             "band_pair_db((1500,2100),(380,560)) 0-60 ms  [filtered -- the edge term lives here]"),
-            ("CB", lambda x, sr: tone_ratio_db(window(x, sr, 0.0, 0.100), sr, 800.0, 540.0),
-             "tone_ratio_db(800/540) 0-100 ms  [unfiltered -- no filtfilt edge, but a fixed window]")):
-        xr, srr, rel, h = load_reference(voice)
-        xo, sro = render_ours(voice)
-        rside, oside = f"the reference recording {rel}", f"our {voice} render"
-        print(f"\n{voice}  {lbl}")
-        print(f"  {'pad ms':>9s} {'reference':>11s} {'ours':>10s} {'error':>9s} {'worst':>7s}   note")
-        base = None
-        for ms in (0.0, 0.5, 1.0, 2.0, 5.0, 10.0):
-            a = est(prepared(pad(xr, srr, ms), srr, rside), srr)
-            b = est(prepared(pad(xo, sro, ms), sro, oside), sro)
-            if a is None or b is None:
-                print(f"  {ms:9.2f}   REFUSED"); continue
-            if base is None:
-                base = a
-            note = "both sides as the scorecard has them" if ms == 0.0 else "both sides padded equally"
-            print(f"  {ms:9.2f} {a:11.3f} {b:10.3f} {b-a:9.3f} {abs(b-a)/3.0:7.2f}   {note}")
-        print(f"  reference padded alone (run_case.prepare makes this free; it must not move):")
-        for ms in (0.5, 1.0, 2.0, 5.0):
-            a = est(prepared(pad(xr, srr, ms), srr, rside), srr)
-            b = est(prepared(xo, sro, oside), sro)
-            if a is None or b is None:
-                continue
-            print(f"  ref+{ms:5.1f} {a:11.3f} {b:10.3f} {b-a:9.3f} {abs(b-a)/3.0:7.2f}   "
-                  f"reference moved {a-base:+.3f} dB")
-    print("\n  Read it as: how far the number moves is how much of it is the window.")
-    return 0
+# The CLI, as data: `tools/test_measure_partial_balance.py` checks the usage
+# block in the module docstring against this table, because `apparatus` stayed
+# advertised there for months after nothing ran it (#772).
+COMMANDS = {"validate": cmd_validate, "measure": cmd_measure}
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "validate"
+    if cmd not in COMMANDS:
+        print(f"unknown command {cmd!r}; expected one of {', '.join(COMMANDS)}")
+        sys.exit(64)
     try:
-        sys.exit({"validate": cmd_validate, "measure": cmd_measure,
-                  "apparatus": cmd_apparatus}[cmd]())
+        sys.exit(COMMANDS[cmd]())
     except Refused as e:
         print(f"REFUSED  {e}")
         sys.exit(2)
