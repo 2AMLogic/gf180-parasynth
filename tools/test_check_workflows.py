@@ -363,3 +363,27 @@ def test_main_exits_1_on_a_dangling_path(monkeypatch):
                         lambda: [("w.yml", [(1, "cat docs/nope-nope.md")])])
     monkeypatch.setattr(cw, "tracked_files", lambda: TRACKED)
     assert cw.main() == 1
+
+
+# =============================================================================
+# #787: the nightly now pushes its own records commit to main. dag.yml skips
+# any push whose head commit message contains `[dag]` -- that guard is what
+# stops the nightly's push from re-triggering the per-push job into a commit
+# loop. The coupling is only as strong as the two strings staying in step
+# (rule 8: the input that defeats the guard is a reworded subject), so pin
+# both sides of the contract against the real files.
+# =============================================================================
+def test_every_commit_the_nightly_pushes_carries_the_dag_guard_string():
+    nightly = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "nightly.yml").read_text())
+    commits = [str(s.get("run", ""))
+               for j in (nightly.get("jobs") or {}).values()
+               for s in (j.get("steps") or []) if isinstance(s, dict)
+               if "git commit" in str(s.get("run", ""))]
+    assert commits, "the nightly no longer writes any commit"
+    assert all("[dag]" in c for c in commits), \
+        "a nightly commit without [dag] would re-trigger dag.yml's per-push job"
+
+    dag = yaml.safe_load((REPO / ".github" / "workflows" / "dag.yml").read_text())
+    guard = str((dag.get("jobs") or {}).get("regenerate", {}).get("if", ""))
+    assert "[dag]" in guard, "dag.yml's own-commit guard has been removed or reworded"

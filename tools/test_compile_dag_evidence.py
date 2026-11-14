@@ -94,3 +94,50 @@ def test_an_absent_results_file_is_still_no_evidence(tmp_path, monkeypatch):
 def test_the_committed_results_file_loads():
     """Run the gate against the current state before committing it."""
     assert isinstance(cd.load_results(), dict)
+
+
+# ---------------------------------------------------------------------------
+# #787: a `--run` WITHOUT `--slow` must leave the nightly's slow records alone
+# ---------------------------------------------------------------------------
+def test_a_run_without_slow_preserves_the_slow_records(tmp_path, monkeypatch):
+    """The per-push `dag and board` job runs `compile_dag.py --run` WITHOUT
+    `--slow`, minutes after the nightly has written the slow nodes' records
+    into the same file. The skip in the --run loop means "do not touch", not
+    "overwrite with an empty record" -- the #600 docstring already records
+    how a merge once deleted the slow stamps wholesale.
+
+    Injected-bug control (docs/verification-rules.md rule 2): replacing the
+    skip with `res[i] = {}` must turn this test red.
+    """
+    nodes = {
+        "F1": {"name": "slow node", "verifier": "rtl-sketch/verify_ladder.py",
+               "slow": True, "covers": ["rtl-sketch/ladder_dp.v"]},
+        "F3": {"name": "fast node", "suite": "model/test_ladder_model.py"},
+    }
+    dag, results = tmp_path / "dag.json", tmp_path / "dag-results.json"
+    dag.write_text(json.dumps({"nodes": nodes}))
+    slow_record = {"passed": True, "sha": "1" * 40, "detail": "PASS -- 28800 samples"}
+    seed = {"F1": dict(slow_record),
+            "F3": {"passed": True, "sha": "2" * 40, "detail": "older fast run"}}
+    results.write_text(json.dumps(seed))
+
+    monkeypatch.setattr(cd, "DAG", dag)
+    monkeypatch.setattr(cd, "RESULTS", results)
+    # What is under test is the MERGE, not the verifiers: evidence answers are
+    # stubbed, and `git` returns a fresh sha for rev-parse and "nothing newer"
+    # for every staleness probe, so classify() cannot interfere.
+    monkeypatch.setattr(cd, "run_evidence", lambda nid, n: (True, "fresh run"))
+    monkeypatch.setattr(cd, "git",
+                        lambda *a: "f" * 40 if a[:2] == ("rev-parse", "HEAD") else "")
+    monkeypatch.setattr(cd.sc, "checkout_staleness", lambda: None)
+
+    # `--print` keeps the test off README.md: the per-push job's merge happens
+    # in its `--run` invocation, and the README render is a separate one.
+    monkeypatch.setattr(sys, "argv", ["compile_dag.py", "--run", "--print"])
+    assert cd.main() == 0
+
+    res = json.loads(results.read_text())
+    assert res["F1"] == slow_record, \
+        "the slow record was clobbered by a run that never ran the slow nodes"
+    assert res["F3"]["sha"] == "f" * 40 and res["F3"]["detail"] == "fresh run", \
+        "the non-slow node's record was not refreshed"
