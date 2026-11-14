@@ -1,0 +1,73 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "rate-tol-rel",
+  "parameter": {
+    "name": "RATE_TOL_REL",
+    "source": "model/discrimination_features.py",
+    "kind": "python-constant",
+    "what": "the RELATIVE half of what test_extra_features_are_rate_independent is allowed to call 'the same number' at 44.1 kHz and 48 kHz. The comparison is max(RATE_TOL_REL * peak, RATE_TOL_ABS[unit]), so this is the relative term only and the five per-unit floors are held fixed. Registered with the proposal that moved it (#775), not after it landed. 0.12 shipped until then, which on jit.cyclecorr.seg0 is 0.1183 against the 0.0146 that column reports for 0.5 % per-period jitter -- 8.10x the whole effect, so the control could not see a rate dependence eight times the size of the only mechanism the column exists to detect. tools/sensitivity.py could not even read the constant before this record: PY_CONST matched an integer literal only and parse_parameter refused a float with 'found 0 declarations'."
+  },
+  "objective": {
+    "name": "pairs the control catches on the integer fold",
+    "units": "columns",
+    "lower_is_better": false,
+    "why": "the dial's job is how much real 44.1k<->48k dependence the rate-independence control can SEE, so the objective is that, counted on the honest injected defect rather than on a synthetic perturbation: the integer-lag fold that shipped before #767, which test_the_integer_fold_this_replaced_is_still_red_on_this_panel already uses as its control. Counted as (panel entry, column) pairs over tolerance across the wide panel. It is deliberately NOT the only thing the dial trades: the count rises monotonically as the tolerance narrows, so on this objective alone zero wins, and the cost column in the same artefact -- clean-fold pairs going red, split by unit -- is the constraint from the other side. jit.* columns are excluded on any entry where dominant_period disagrees between the rates by more than 5 %, because the two sides are then measuring different partials (#774) and a gap read off them is not about this dial."
+  },
+  "grid": {
+    "stated_before_results": true,
+    "values": [0.0, 0.00625, 0.0146, 0.02, 0.03, 0.06, 0.12],
+    "range_basis": [
+      "0.12 is what shipped. It is on the grid so the record prices the CHANGE and not only the dial, the same reason -1 is on fold-interpolator's grid and 0 is on dphase-ar1-floor's.",
+      "0.06 and 0.03 are the first two halvings of that value; the third halving, 0.015, is within 3 % of 0.0146 and is represented by it.",
+      "0.02 = RATE_TOL_ABS['ratio'] / 1.0. max() means a pair stops responding to this dial once RATE_TOL_REL * peak falls under its unit's absolute floor, so 0.02 is the value below which the relative term can no longer bind on a correlation column saturating at +-1 -- which is every column #775 is about. The most load-bearing point on the grid, and the one that ships.",
+      "0.0146 is the whole effect jit.cyclecorr.seg0 reports between a steady 410 Hz square and the same square with 0.5 % per-period jitter. A tolerance at or above the effect cannot assert a margin below it, so this is the break-even point and it is a measured row rather than an assertion.",
+      "0.00625 = RATE_TOL_ABS['db'] / 80 dB. cqt_features and multiscale_features clamp at floor_db = -80.0, so 80 dB is the largest magnitude the vector can carry; below 0.00625 no dB column responds to the dial either, and 147 of the 191 columns are dB.",
+      "0.0 removes the relative term entirely: every comparison becomes RATE_TOL_ABS[unit]. The endpoint whose behaviour is arithmetic rather than measurement, and the bound on what this dial can achieve at all."
+    ],
+    "held_fixed": {}
+  },
+  "decision_rule": {
+    "stated_before_results": true,
+    "flat_within_relative": 0.00001,
+    "why": "the objective is an INTEGER COUNT of (entry, column) pairs. Two counts are equal or they are not; there is no 'within' for a count, so the rule has to be exact equality. The wide panel is at most 92 entries x 191 columns = 17572 pairs, so any relative tolerance below 1/17572 = 5.7e-5 is exact equality by construction, and 1e-5 is below that with a factor of 5.7 to spare. Stated from the objective's own granularity and the panel's size, both known before the sweep ran, and not from the spread of the data. Tighter than the granularity is the conservative direction: a rule finer than the objective can split points the objective would call equal, which can only add groups, never manufacture a plateau."
+  },
+  "evidence": {
+    "artifact": "docs/sensitivity/rate-tol-rel-sweep.txt",
+    "format": "fixed-width-table",
+    "table": "rate_tol_rel",
+    "value_column": "tol_rel",
+    "objective_column": "caught",
+    "held_fixed": {},
+    "regenerate": "tools/probes/rate_tol_sweep.py -o docs/sensitivity/rate-tol-rel-sweep.txt",
+    "instrument": "rate_tolerance itself, through its tol_rel override -- the shipped comparison, called and not restated, which is the reason that override exists. tools/probes/test_rate_tol_sweep.py asserts that the instrument's re-evaluated reds are the SAME (entry, column) pairs _rate_gaps(tol_rel=...) returns on the shipped panel at three values of the dial, so the re-evaluation cannot drift from the comparison the test applies. Stimuli are the module's own _square, _bl_square and band-limited _resample, so the rate pair is the one the rate-independence test compares. Each panel entry asserts its own preconditions through _rate_pair (a jittered entry really carries jitter, a band-limited entry really is fractional at both rates) and an AssertionError there REFUSES the whole sweep. Measured on python 3.12.3 / numpy 2.5.4 / scipy 1.18.1, and re-run on numpy 1.26.4 / scipy 1.11.4: the eleven-entry panel's reds are identical to four decimals on both.",
+    "grid_commit": "b591cbc1 -- docs/sensitivity/rate-tol-rel-plan.json, committed before the instrument was run. tools/probes/rate_tol_sweep.py refuses to measure while that file is uncommitted or dirty, which is the only temporal proof available; tools/sweep_m1a_attack.py's refusal on a dirty attack-sweep/grid.json is the precedent."
+  },
+  "points": [
+    {"value": 0.0, "objective": 714},
+    {"value": 0.00625, "objective": 714},
+    {"value": 0.0146, "objective": 678},
+    {"value": 0.02, "objective": 636},
+    {"value": 0.03, "objective": 547},
+    {"value": 0.06, "objective": 358},
+    {"value": 0.12, "objective": 191}
+  ],
+  "prediction": {
+    "runs": [[0.0, 0.00625], [0.0146], [0.02], [0.03], [0.06], [0.12]],
+    "basis": "Derived from the max() and from the vector's per-unit magnitude ceilings, neither of which is a point on this sweep, and committed in docs/sensitivity/rate-tol-rel-plan.json at b591cbc1 before the instrument was run. (a) MONOTONE: lowering RATE_TOL_REL can only lower each pair's tolerance, so caught is non-increasing in the dial and every group is an interval. (b) A pair responds to the dial only while RATE_TOL_REL > floor/peak, and the ceilings are fixed by the module: dB is clamped at floor_db = -80 so floor/peak bottoms out at 0.5/80 = 0.00625; a ratio column's largest peak on a square is 1.86, so 0.0108, and for the saturating correlations 0.02/1.0 = 0.02; ms is 0.05/2.27 = 0.022; count is 1.0/102 = 0.0098; ppm is identically 0 on a jitterless clip and only the two 0.1 %-jitter control entries make it live, at 20/5.7e3 = 0.0035. (c) So below 0.00625 the dial is inert for every family except ppm on two of the 92 entries, where a crossing would need a 44.1k<->48k phase-scatter gap landing in the single narrow band (20, 35.6] ppm out of a quantity spanning 0.8 ppm to 5.7e3 ppm: [0.0, 0.00625] is ONE group. (d) Above 0.00625 each interval opens a wide band of responding magnitudes -- (0.00625, 0.0146] opens dB 34-80, (0.0146, 0.02] opens dB 25-34 and ratio peaks 1.00-1.37 where the saturating rowcorr and cyclecorr columns sit, (0.02, 0.03] opens dB 17-25 and ratio 0.67-1.00, (0.03, 0.06] dB 8.3-17 and ratio 0.33-0.67, (0.06, 0.12] dB 4.2-8.3 and ratio 0.17-0.33 -- and 44 values of f0 in both resampling directions put a continuum of gaps into each, so five singletons. MIXED, 6 groups over 7 points. The WIDE panel is the subject on purpose: the eleven-entry panel's trade was already measured during #775's curation (tools/probes/rate_tol_feasibility.py, f46732a3 on branch curator/775-feasibility) and published in the issue, so a prediction restating that would not be a prediction.",
+    "independent_of_measurement": true
+  },
+  "verdict": {
+    "state": "MIXED",
+    "runs": [[0.0, 0.00625], [0.0146], [0.02], [0.03], [0.06], [0.12]],
+    "summary": "The dial is a staircase with one plateau, and the plateau is at the bottom where the prediction said it would be: 191 pairs caught at the 0.12 that shipped, 358 at 0.06, 547 at 0.03, 636 at 0.02, 678 at 0.0146, then 714 at both 0.00625 and 0.0 -- the two points below which no dB column can respond and the dial is inert. 0.02 ships, and the reason is not the objective, which keeps rising below it: 0.02 is where the relative term stops binding on a correlation saturating at +-1, so it is everything this dial can do for the columns #775 was filed about, and going lower buys only dB and costs one more quarantined panel entry. The narrowing takes the control from 191 to 636 pairs over 92 entries, and on the correlation family alone from 187 to 541. The cost is ENTIRELY dB: cost_ratio is 2 at every value of the dial including the old 0.12, and both of those two are the separately diagnosed 200 Hz mpd2.50ms.rowcorr residue. On the eleven-entry RATE_PANEL that ships, 11 pairs go red at 0.02 against 0 at 0.12, every one a dB column, and all eleven are in RATE_KNOWN_RED with a mechanism and a falsifier rather than a bound."
+  },
+  "limits": [
+    "THE OBJECTIVE ALONE WOULD CHOOSE 0.0, AND 0.0 IS NOT WHAT SHIPS. tools/sensitivity.py reads only the caught column, where more is always better, so the verdict it recomputes cannot by itself justify 0.02. Two things in the same artefact do: the cost column (97 clean-fold pairs red at 0.02, 124 at 0.0) and the arithmetic that below 0.02 the dial no longer binds on a correlation saturating at +-1 at all. This is the same shape as dphase-ar1-floor's sees_real, and it is stated here for the same reason: a reader who quotes the gate's one-line verdict is quoting half the record.",
+    "NO VALUE OF THIS DIAL CAN GIVE jit.cyclecorr.seg0 A MARGIN, and that is #775's answer rather than a caveat. The smallest tolerance RATE_TOL_REL can put on that column is RATE_TOL_ABS['ratio'] = 0.02, which is 1.37x the 0.0146 the column reports -- so the test_the_rate_tolerance_is_far_below_the_effect equivalent the issue asked for falls on its recorded-reason branch. The dial took the ratio from 8.10x to 1.37x and the term that remains is the floor. test_no_relative_tolerance_can_reach_the_cyclecorr_effect carries the measurement and will go red the day RATE_TOL_ABS['ratio'] drops under the effect, which is when the margin test becomes writable.",
+    "THE REAL DEFECT UNDER THE dB COST IS A SECOND ONE AND IS NOT FIXED HERE. A relative tolerance is dimensionally meaningless on an offset scale: RATE_TOL_REL x |-80 dB| hands a cqt bin sitting at the floor_db clamp 9.6 dB of licence at 0.12 and 1.6 dB at 0.02, and 7.0 dB of real 44.1k<->48k movement was sitting under the old licence at 440 Hz. Narrowing the single relative term exposes 121 such pairs at 0.0 and 95 at 0.02 across the wide panel, every one of them dB. The repair is a per-unit tolerance -- RATE_TOL_REL keyed by unit the way RATE_TOL_ABS already is -- which #775 puts out of scope on purpose, and is filed as #782 citing this record. The eleven RATE_KNOWN_RED entries are the holding pen until it lands and each one names it.",
+    "ONE CLAIM IN THE PREDICTION'S BASIS WAS WRONG, and it is recorded rather than edited out. Clause (b) said a count-unit gap 'can never be red at all' because a cycle-count gap is an integer >= 1 against a tolerance that never falls below 1.0. That is true for a gap of 1 and false for a gap of 2: 700 Hz built at 44.1 kHz reads jit.ncycles.seg0 two cycles apart on a peak of 165, which crosses at 0.0121 and is the count=1 entry in the cost_by_unit table at 0.00625 and 0.0. It did not change the runs -- the crossing falls inside an interval dB columns already separate, and it contributes equally to both plateau points -- but the clause was wrong and the prediction's shape held for the other reasons it gave, which is weaker evidence than it looked.",
+    "THE PANEL IS SYNTHETIC. 44 values of f0 as _square and _bl_square in both resampling directions, plus the two control shapes. It establishes what the dial does to the rate-independence control on generated squares; how many rows of a real discrimination run on the reference corpus would move is a separate, unmeasured question, and the corpus is not on this host.",
+    "27 jit.* pairs are REFUSED rather than counted, on the entries where dominant_period picks a different octave at the two rates (#774). Pricing this dial with that defect folded in would attribute another issue's gap to this one. If #774 is repaired, those pairs re-enter both counts and this record has to be re-measured; the refused column in the artefact is how a reader sees it is still 27.",
+    "MOVING THIS DIAL TOUCHES TWO OTHER RECORDS' STATED REASONING, checked rather than assumed. fold-interpolator.json's decision rule derived its 10 % from two legs, 'tighter than RATE_TOL_REL = 0.12' and 'tighter than RATE_TOL_ABS[ratio] = 0.02 given an objective under 0.19'. The first leg no longer holds at 0.02 and that record's why has been amended to rest on the second, which is untouched; the threshold itself does not move, so no re-measurement is needed. dphase-ar1-floor.json's 2 % rule derives from RATE_TOL_ABS['ratio'] = 0.02 only, which this change holds fixed, so it is unaffected."
+  ]
+}
