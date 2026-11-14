@@ -229,3 +229,40 @@ def test_held_note_evidence_of_other_bytes_refuses(tmp_path, monkeypatch):
     monkeypatch.setattr(rm, "EVIDENCE_DIR", d)
     verdict, detail = rm.check()
     assert verdict == "REFUSED" and "not what the CLI emits now" in detail
+
+
+def test_control_a_key_dropped_from_the_derivation_is_stale_not_bound(monkeypatch):
+    """The absent-vs-explicit-null hole (#785), through the gate that issues the
+    verdict rather than through its comparison helper.
+
+    `presets.default.calibration` ships as an explicit `null` in
+    baseline-2025.1.json, so a derivation that stops emitting the key AT ALL
+    must read STALE: the committed record no longer equals `build()`, and the
+    pre-#785 comparator's `a.get(k)` / `b.get(k)` made absent and `null`
+    indistinguishable, so this gate reported BOUND on a record that no longer
+    matched its derivation -- docs/verification-rules.md rule 8 exactly.
+
+    The three conditions of rule 5 are asserted, not assumed: the clean run is
+    BOUND before the mutant means anything; the substitution is shown to be a
+    real change against the committed record (a committed explicit null, a key
+    the derivation really does emit); and the verdict must name EXACTLY the
+    dropped path, so a STALE arising for some other reason does not count.
+    """
+    committed = json.loads(rm.MANIFEST.read_text())
+    assert committed["presets"]["default"]["calibration"] is None, \
+        "the control needs a committed explicit null; it no longer has one"
+    assert rm.check()[0] == "BOUND", "clean run must pass before the mutant proves anything"
+
+    emit = rm.presets
+
+    def presets_without_calibration():
+        out = emit()
+        assert "calibration" in out["default"], "the mutant did not activate"
+        del out["default"]["calibration"]
+        return out
+
+    monkeypatch.setattr(rm, "presets", presets_without_calibration)
+    verdict, detail = rm.check()
+    assert verdict == "STALE", \
+        f"a derivation that stopped emitting presets.default.calibration read {verdict}: {detail}"
+    assert "presets.default.calibration" in detail, detail
