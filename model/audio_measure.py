@@ -2907,16 +2907,172 @@ def psd_slope_db_oct(x, band, sr: int = SR_DEFAULT, *, nfft: int = 8192,
     return Estimate(float(a), True, "", dict(residual_db=resid, n_bins=len(xs)))
 
 
+#: How far below the winning NCCF peak a shorter integer submultiple may sit
+#: and still be the lag `repeat_period` returns, in thousandths of the
+#: correlation unit. #780.
+#:
+#: THE NORMALISER CANNOT CHOOSE THE OCTAVE, AND NO CORRECT ONE EVER WILL. On a
+#: signal that repeats exactly, `x[i + kP] == x[i]`, so the two windows the
+#: NCCF at lag `kP` normalises by hold the SAME energy and the statistic is
+#: exactly 1.0 at every multiple of the true period. That is not a defect in
+#: the normaliser; it is the correct answer to the question a normaliser asks.
+#: It is also why the normaliser alone is not the repair: measured over #780's
+#: 60-record exactly-repeating panel, an unbiased NCCF with no submultiple rule
+#: scores 17/60 against the overlap correction that shipped before it at 27/60
+#: -- WORSE, because a correct normaliser turns a near-tie into an exact one
+#: and hands the answer to FFT round-off. A tie has to be broken by a rule, and
+#: this margin is the rule's one number.
+#:
+#: 1 IS NOT FITTED TO THE FAILING RECORDS, and the exactly-repeating panel
+#: cannot choose it: every margin from 1 to 200 thousandths scores 60/60 there,
+#: because the shortfall at the true period is float round-off (~1e-15). A
+#: sweep built only on that panel would be vacuous -- rule 8. The panel that
+#: DOES choose it is the alternating loop in
+#: `tools/probes/repeat_period_multiple.py`, whose true period is 2P and which
+#: near-repeats at P to a stated depth. Its shortfall has a closed form,
+#: derived before it was measured and confirmed to four decimals: an
+#: alternation of depth d leaves `1 - nccf[P] = d**2 / (2 - 2d + d**2)`. So the
+#: margin converts DIRECTLY into the shallowest genuine 2T loop this estimator
+#: reports an octave low -- depth `sqrt(2 * margin)`, i.e. 4.5 % at 1
+#: thousandth and 20 % at 20 -- and smaller is strictly safer. The sweep's
+#: objective is monotone in that direction from 1 upward.
+#:
+#: WHAT BOUNDS IT FROM BELOW is the other panel, measured rather than assumed:
+#: the largest margin any realistic near-exact loop needs is 0.0169 thousandths
+#: (a loop carrying 10 % independent noise; a one-pole-filtered 16-bit LFSR, the
+#: case that reaches the live caller, needs 0.0000). So 1 ships with 59x
+#: headroom on the side that must not close, and is the smallest positive value
+#: its unit can express: `tools/sensitivity.py` reads a shipped python-constant
+#: as an INTEGER, so thousandths is the resolution of the dial as well as of the
+#: record. A finer unit would score better on the objective and is a named
+#: limit of docs/sensitivity/repeat-period-submultiple-margin.json, not a
+#: silent choice.
+#:
+#: THIS IS DELIBERATELY NOT discrimination_features.JIT_OCTAVE_MARGIN_PERMILLE,
+#: which is 20 for the same rule applied to `dominant_period` (#774). The rules
+#: are the same; the dials are not, and the reason is measured: `dominant_period`
+#: searches a 120-1200 Hz pitch band on decaying corpus clips where the
+#: autocorrelation at the true period is genuinely depressed, and its worst
+#: failing clip needs +0.0053. Under an NCCF on an exact repeat the true period
+#: ties at 1.0, so the need here is three orders of magnitude smaller and the
+#: fold risk is the only live constraint. Do not propagate either value to the
+#: other call site.
+#:
+#: THE INPUT THAT DEFEATS IT (docs/verification-rules.md rule 8): a loop whose
+#: true period is 2P and whose alternate halves differ in amplitude by less
+#: than 4.5 % is reported at P -- an octave low, confidently, at corr 0.9999.
+#: `test_the_submultiple_margin_refuses_the_input_that_defeats_it` is the
+#: executable form, and how shallow that alternation has to be is the
+#: constraint column of the sweep record rather than a reassurance here.
+#:
+#: 0 IS NOT A MARGIN: it selects the bare NCCF argmax, the 17/60 row above, and
+#: is on the grid so the sweep prices the REPAIR and not only the dial inside
+#: it -- the same reason 0 is on dphase-ar1-floor's grid. It is never the
+#: shipped value; `test_the_submultiple_margin_ships_a_real_margin` asserts it.
+REPEAT_SUBMULTIPLE_MARGIN_PERMILLE = 1
+
+#: Guards the NCCF denominator where both overlapped windows carry no energy.
+#: Not a tolerance: `max_lag <= n // 2`, so a window is never shorter than half
+#: the record and this floor is unreachable for any signal that got past
+#: `is_silent`. It exists so the division cannot produce an inf that an argmax
+#: would then select.
+_NCCF_DEN_FLOOR = 1e-300
+
+
+def _shortest_submultiple(r: np.ndarray, lo: int, hi: int, best: int,
+                          margin: float) -> int:
+    """The shortest integer submultiple of `best` that is a local peak of `r`
+    and sits within `margin` of `r[best]`, in units of `r[0]`. #780.
+
+    THE ARGMAX IS NOT WRONG ABOUT WHICH LAGS CORRELATE; IT IS WRONG ABOUT
+    WHICH OF SEVERAL MULTIPLES TO RETURN. So this does not search the band --
+    it searches `best / k` for integer k, shortest candidate first, and returns
+    `best` unchanged when none of them qualifies. Two conditions, each
+    load-bearing:
+
+      * +-1 LAG of `round(best / k)` is searched, and one lag is enough by
+        arithmetic rather than by result: `best` is `k * T` rounded to a whole
+        sample, so `best / k` is within `0.5 / k` of the true `T` and
+        `round(best / k)` is within 1 of it. A wider window would start
+        admitting lags that are not the submultiple.
+      * THE CANDIDATE MUST BE A LOCAL PEAK. On an exactly-repeating record the
+        condition is free -- #780 measures 60/60 with and without it -- and it
+        is kept because it is what stops the rule changing anything on a record
+        with no multiple problem: a record that is not periodic has an
+        autocorrelation that decays from lag 0, so every shorter lag beats the
+        winner on height while none of them is a peak, and a height-only rule
+        would halve the reported period of every such record.
+
+    `margin` is scaled by `r[0]` so that this function is literally the same
+    rule as `discrimination_features._octave_corrected`, which is written
+    against an unnormalised autocorrelation; under the NCCF `r[0]` is 1.0 by
+    construction, so the margin is already in correlation units. Keeping the
+    scaling is what makes factoring the two into one function a pure move
+    rather than a behaviour change -- see #780's PR for that follow-up.
+
+    What defeats it is stated at REPEAT_SUBMULTIPLE_MARGIN_PERMILLE rather than
+    here, because the defeating input is a property of the margin's VALUE."""
+    if margin <= 0.0 or best <= lo:
+        return best
+    floor = r[best] - margin * r[0]
+    for k in range(best // lo, 1, -1):
+        c = int(round(best / k))
+        cand = [j for j in range(max(lo, c - 1), min(hi - 1, c + 1) + 1)
+                if j >= 1 and r[j] >= r[j - 1] and r[j] >= r[j + 1]]
+        if not cand:
+            continue
+        j = max(cand, key=lambda j: r[j])
+        if r[j] >= floor:
+            return j
+    return best
+
+
 def repeat_period(x, sr: int = SR_DEFAULT, *, min_lag_s: float = 0.05,
-                  max_lag_s: float = 12.0, min_corr: float = 0.5) -> Estimate:
+                  max_lag_s: float = 12.0, min_corr: float = 0.5,
+                  submultiple_margin: float | None = None) -> Estimate:
     """The lag at which a signal repeats itself, in seconds, from the
-    normalised autocorrelation -- or a refusal when it does not repeat.
+    normalised cross-correlation -- or a refusal when it does not repeat.
 
     This is the measurement that says whether a synthesiser's "noise" is a
     short LFSR going round. A maximal 16-bit LFSR clocked at 48 kHz repeats
     every 65535 samples = 1.365 s, which is audibly a loop on a held note;
     true noise has no such peak at all, and the estimator must report that as
-    a refusal rather than as the largest accident in the record."""
+    a refusal rather than as the largest accident in the record.
+
+    IT RETURNED A WHOLE MULTIPLE OF THE PERIOD ON ROUGHLY HALF OF ITS OWN
+    DOMAIN and the record is worth more than the fix (#780). What shipped
+    before divided the FFT autocorrelation by its overlap, `ac * n / (n - L)`,
+    to undo the linear taper. For a signal that repeats exactly that is
+    algebraically `meansq(x[0 : n - L]) / meansq(x[0 : n])` and nothing else --
+    a FRONT/BACK ENERGY RATIO wearing a correlation's units, which is why it
+    reported 1.0004. Every multiple of the true period shares the same partial
+    remainder `r = n mod P`, so the sign of
+    `meansq(x[0:r]) - meansq(one period)` decided whether the argmax landed on
+    the longest multiple in band or on the period, and 27 of 60 exactly-
+    repeating records came back right for no reason the estimator knew about.
+    The two repairs that suggest themselves are both measurably insufficient:
+    dividing before normalising is the same expression, and clamping at 1.0
+    turns the near-tie into an exact tie that `np.argmax` resolves first-wins.
+
+    So the statistic is now an NCCF -- each lag normalised by the MEAN ENERGY OF
+    THE TWO WINDOWS ACTUALLY OVERLAPPED, which cannot exceed 1.0 and reaches it
+    only when those windows match in energy as well as in shape -- and the
+    octave is chosen by
+    `_shortest_submultiple`. BOTH HALVES ARE LOAD-BEARING and the controls in
+    `tools/probes/estimator_ground_truth_controls.py` revert each on its own:
+    the NCCF alone scores 17/60 (worse than what it replaced) because a correct
+    normaliser ties at EVERY multiple, and a submultiple rule cannot be applied
+    to a statistic that is not comparable across lags.
+
+    `submultiple_margin` overrides REPEAT_SUBMULTIPLE_MARGIN_PERMILLE, in the
+    same thousandths, and exists so `tools/probes/repeat_period_multiple.py`
+    sweeps the dial against the code that SHIPS rather than a copy of it. It
+    does not change a shipped number: it defaults to off. 0 selects the bare
+    argmax that shipped before the rule.
+
+    `detail['corr']` is the NCCF at the lag RETURNED, not at the argmax;
+    `detail['argmax_lag_s']` and `detail['argmax_corr']` are the pick before
+    the submultiple rule, so a caller can see the two differ."""
     x = _as_float(x)
     if is_silent(x):
         return _fail("silent")
@@ -2931,19 +3087,56 @@ def repeat_period(x, sr: int = SR_DEFAULT, *, min_lag_s: float = 0.05,
     ac = np.fft.irfft(X * np.conj(X), nf)[:max_lag + 1]
     if ac[0] <= 0:
         return _fail("degenerate autocorrelation")
-    # UNBIASED: an FFT autocorrelation at lag L only overlaps n - L samples, so
-    # the raw sequence tapers linearly with lag and its maximum is always at
-    # the shortest lag examined. Without this division the estimator reports
-    # `min_lag` for every signal, repeating or not.
-    overlap = (n - np.arange(max_lag + 1)).astype(np.float64)
-    ac = (ac / ac[0]) * (n / np.maximum(overlap, 1.0))
-    seg = ac[min_lag:max_lag + 1]
-    i = int(np.argmax(seg))
-    peak = float(seg[i])
+    # NCCF, and the comment this replaces was half right: the raw sequence does
+    # taper, because the sum at lag L only runs over n - L products. Dividing
+    # by the overlap is not how to undo it -- that rescales a correlation by a
+    # count and produces values above 1. What undoes it is normalising each lag
+    # by the energy of the two windows it actually correlated, x[0 : n - L]
+    # against x[L : n]. `c2` is the prefix energy that makes both O(1) to read.
+    #
+    # THE NORMALISER IS THE ARITHMETIC MEAN OF THE TWO WINDOW ENERGIES, NOT
+    # THEIR GEOMETRIC MEAN, and that is the difference between a repeat
+    # detector and a shape detector. Both are bounded by 1 (AM-GM, then
+    # Cauchy-Schwarz) and both are exactly 1.0 at every multiple of a true
+    # period, because an exact repeat makes x[kP : n] the same sequence as
+    # x[0 : n - kP] and so makes the two energies EQUAL. They differ when the
+    # energies are not equal, which is precisely the case this estimator must
+    # refuse: a record that decays has a quiet tail that correlates with its
+    # loud head in SHAPE, and the geometric mean -- being scale-invariant --
+    # scores that as a repeat. Measured: the geometric mean raises a 0.6 s
+    # 81->60 Hz glide-then-ring from 0.383 to 0.530 and so turns the refusal it
+    # shipped with into a confident 64.69 ms, which is 3.88 carrier periods and
+    # not a repeat of anything. The arithmetic mean scores the same record
+    # 0.484 and it refuses. `2*sqrt(E1*E2)/(E1+E2)` is the amplitude-balance
+    # factor between them, 1.0 exactly when the windows match in energy, and
+    # folding it in is what keeps `min_corr` a gate on REPETITION rather than
+    # on self-similarity. A signal that repeats does not decay.
+    c2 = np.concatenate(([0.0], np.cumsum(x * x)))
+    lags = np.arange(max_lag + 1)
+    e_head = c2[n - lags] - c2[0]
+    e_tail = c2[n] - c2[lags]
+    den = np.maximum(0.5 * (e_head + e_tail), _NCCF_DEN_FLOOR)
+    r = ac / den
+    best = min_lag + int(np.argmax(r[min_lag:max_lag + 1]))
+    peak = float(r[best])
     if peak < min_corr:
         return _fail("no repeat: autocorrelation never approaches 1 in this lag range",
-                     best_corr=peak, best_lag_s=(min_lag + i) / sr)
-    return Estimate((min_lag + i) / sr, True, "", dict(corr=peak))
+                     best_corr=peak, best_lag_s=best / sr)
+    permille = (REPEAT_SUBMULTIPLE_MARGIN_PERMILLE if submultiple_margin is None
+                else float(submultiple_margin))
+    lag = _shortest_submultiple(r, min_lag, max_lag, best, permille / 1000.0)
+    corr = float(r[lag])
+    # THE NUMBER REPORTED MUST PASS THE GATE THE REPORT IS MADE UNDER, not just
+    # the argmax that selected it. Unreachable at the shipped 1 thousandth
+    # whenever the argmax cleared min_corr by more than that, and reachable by
+    # the sweep, which drives the margin to 200.
+    if corr < min_corr:
+        return _fail("no repeat: the shortest submultiple that the margin admits "
+                     "is itself below min_corr",
+                     best_corr=corr, best_lag_s=lag / sr,
+                     argmax_corr=peak, argmax_lag_s=best / sr)
+    return Estimate(lag / sr, True, "",
+                    dict(corr=corr, argmax_lag_s=best / sr, argmax_corr=peak))
 
 
 def segment_shape(y, sr: int = SR_DEFAULT) -> Estimate:
