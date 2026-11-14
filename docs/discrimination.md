@@ -922,15 +922,54 @@ the reasons are results, not omissions.
     `dphase_ar1`, `enstd_db`), so #767's repair will move this same
     attribution figure again, and an undated +0.008 could not be told from
     the one above it.
-  - **Still open (#768 follow-up, not blocking):** `degenerate_refused` is
-    reached by elimination rather than asserted -- if `d.std() <= _EPS` and
-    `pjit <= floor` were ever true together the row would be credited to the
-    **floor**, the over-crediting this module exists to prevent. The trace
-    already carries `dphase_scatter_ppm`, so the leg can be asserted with one
-    comparison. The measured 0 degenerate rows support the stated reason for
-    having no control (`JIT_MIN_CYCLES = 6` forces `len(d) >= 5`, `_EPS =
-    1e-20` is four orders below float rounding), but support is not an
-    assertion.
+  - **Closed (#768, the increment after the census).**
+    `degenerate_refused` was reached by *elimination*: `dphase_row_state`
+    returned `floor_refused` on `pjit <= floor` and fell through, so a row
+    where a pre-#763 leg and the floor were true together was credited to the
+    **floor** -- the over-crediting this module exists to prevent, and the
+    direction that makes #763 look bigger than it is. It is now read from the
+    decision: `dphase_state_from_trace` tests both pre-#763 legs first and
+    returns `degenerate_refused` when either fires.
+    - **Two legs, not one.** An earlier note here said the leg "can be
+      asserted with one comparison". That was wrong, and the correction is
+      the useful part: `refused` is
+      `not (len(d) >= 4 and d.std() > _EPS and pjit > floor)`, so there are
+      **two** non-floor legs. The trace already carried both --
+      `dphase_scatter_ppm` for the epsilon and `ncycles` for `len(d) >= 4`
+      (`len(d) == ncycles - 1`, so the leg is `ncycles >= 5`). Both are now
+      module-level constants in the trace's own units
+      (`JIT_DPHASE_SCATTER_EPS_PPM`, `JIT_DPHASE_MIN_NCYCLES`), because the
+      `k = 1e6/2pi` that scales the epsilon into ppm is a local inside
+      `jitter_features`.
+    - **The `ncycles` leg is dead today and asserted anyway.**
+      `JIT_MIN_CYCLES = 6` returns early below six cycles, so nothing can
+      reach the classifier with fewer. Asserting it is what makes that
+      deadness *checked* instead of assumed: lower `JIT_MIN_CYCLES` and the
+      leg starts firing, counted as the degeneracy it is.
+    - **A refused row with no leg firing now REFUSES** rather than returning
+      a state. That combination is impossible only while `refused` is the
+      formula the classifier assumes, and nothing previously noticed if it
+      changed.
+    - **Control, start red and executed rather than claimed.** The
+      over-crediting row is unreachable from any waveform, so the control
+      constructs the trace and tests the classifier at the seam the decision
+      is made on; `test_a_doubly_degenerate_row_is_not_credited_to_the_floor`
+      carries a verbatim copy of the pre-repair tail and asserts it calls
+      that trace a floor refusal. Its own defeating input is closed in the
+      same test: a constructed-trace control passes even if the shipped path
+      never populates the keys the classifier reads, so one case asserts a
+      **real** clip's trace carries every key in `DPHASE_TRACE_KEYS`.
+    - **No published number moves, and this is a derivation, not a re-run.**
+      All **232** rows of the census above (116 ref + 116 render) are
+      `reported`, with `floor_refused` and `degenerate_refused` both **0**.
+      `reported` means `refused` is false, and the classifier returns on
+      `if not trace["refused"]` *before* any leg is tested -- so on this
+      corpus the changed code is never reached. Reclassification could in any
+      case only move a row *between* the two refusal states, and both are
+      zero. The counts in `docs/dphase-floor-census-16.txt` and the
+      `jit.stability` +0.008 reading are therefore unchanged **by
+      derivation**; the census was not re-run, and this change needed no
+      corpus and no build box.
 
 **Original promotion list (unexecuted as written):**
 
