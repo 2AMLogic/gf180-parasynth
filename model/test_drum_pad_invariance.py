@@ -82,7 +82,15 @@ def test_read_wav_still_removes_standing_offset(tmp_path):
 
 def _dp_whole_buffer(x, sr, band=df.JIT_BAND_HZ):
     """Injected defect: the pre-#617 `dominant_period`, whose cycle gate and mean
-    are taken over the whole buffer including any padding."""
+    are taken over the whole buffer including any padding.
+
+    ONE DEFECT, NOT TWO. The octave resolution #774 added is taken from the
+    shipped module (`df._octave_corrected`) rather than reimplemented or left
+    out, so the only thing this copy does differently from the function that
+    ships is the whole-buffer mean and gate -- which is the defect it is here
+    to inject. A copy that also went back to a bare argmax would make
+    `test_dominant_period_control_is_red` red for either reason and tell you
+    nothing about which."""
     x = np.asarray(x, float)
     if len(x) < 16 or not np.any(x):
         return 0
@@ -93,7 +101,11 @@ def _dp_whole_buffer(x, sr, band=df.JIT_BAND_HZ):
     n = 1 << int(np.ceil(np.log2(2 * len(x))))
     X = np.fft.rfft(x - x.mean(), n)
     r = np.fft.irfft(X * np.conj(X), n)[:hi + 1]
-    return int(lo + np.argmax(r[lo:hi + 1])) if r[0] > 0 else 0
+    if r[0] <= 0:
+        return 0
+    best = int(lo + np.argmax(r[lo:hi + 1]))
+    return df._octave_corrected(r, lo, hi, best,
+                                df.JIT_OCTAVE_MARGIN_PERMILLE / 1000.0)
 
 
 @pytest.mark.parametrize("offset", [0.0, 0.05])
