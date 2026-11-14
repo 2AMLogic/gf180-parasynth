@@ -1,7 +1,7 @@
 {
   "schema": "klt.place_and_route.request/1",
   "engine": "openroad",
-  "netlist": ".klt/synthesize/ladder_dp_synth_unsigned.v",
+  "netlist": "@synth_response.netlist_path",
   "hdl_toplevel": "ladder_dp",
   "pdk": {
     "cell_library": "gf180mcu_fd_sc_mcu7t5v0",
