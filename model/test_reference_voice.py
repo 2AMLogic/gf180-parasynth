@@ -156,13 +156,143 @@ def test_psd_slope_refuses_a_tone():
     assert not e.ok, e.value
 
 
+def _multiples_in_band(n: int, max_lag_s: float, period: int = 65535) -> int:
+    """How many whole multiples of `period` the estimator's lag band admits.
+
+    THE PRECONDITION OF EVERY TEST BELOW, asserted rather than assumed. The
+    band is `min(max_lag_s * sr, n // 2)` and the `n // 2` is usually what
+    binds -- which is how the original version of
+    `test_repeat_period_finds_a_16_bit_lfsr_at_its_exact_period` came to prove
+    nothing: it used a 3.5 s record, so the band ended at 84000 samples, only
+    k=1 was in it, and the test could not fail at any seed on an estimator
+    that returned ANY multiple (#780)."""
+    return min(int(max_lag_s * SR), n // 2) // period
+
+
+def _one_pole(x, a: float = 0.95):
+    """`y[n] = a y[n-1] + (1-a) x[n]`. scipy because a Python loop over 384000
+    samples is the slowest thing in this file; `model/test_tom_pitch_probe.py`
+    already depends on it."""
+    import scipy.signal as ss
+
+    return ss.lfilter([1.0 - a], [1.0, -a], np.asarray(x, float))
+
+
 def test_repeat_period_finds_a_16_bit_lfsr_at_its_exact_period():
     """65535 samples at 48 kHz = 1.365313 s. This is the number the noise
-    target is written against."""
-    e = am.repeat_period(lfsr16(int(3.5 * SR)), SR, max_lag_s=3.0)
+    target is written against.
+
+    EIGHT SECONDS, NOT THREE AND A HALF, and the assertion on the band is the
+    point of the change: at 3.5 s only k=1 was in the lag band, so this test
+    passed against an estimator that returned 4x the true period on half of
+    its own domain (#780). The length and the band here are
+    `model/reference_voice.noise_report`'s own -- 8 s and
+    `min(5.0, dur/2 - 0.1)` -- so the test exercises what ships.
+
+    LENGTHENING IT IS NOT WHAT GAVE IT POWER, and the measurement says so:
+    this test in its new 8 s form still PASSES against the pre-#780
+    estimator. Two multiples are in band and it picks the right one anyway,
+    because a +-1 sequence has constant |x| and the old statistic tied at
+    every multiple to within 3e-7. The length is fixed here so the test is
+    honest about its own band; the power is in
+    `test_repeat_period_finds_a_FILTERED_lfsr_at_its_exact_period`, which
+    does fail against that estimator. Do not delete that one as a duplicate
+    of this one -- they differ in exactly the property that matters."""
+    n = int(8.0 * SR)
+    max_lag_s = min(5.0, 8.0 / 2 - 0.1)
+    assert _multiples_in_band(n, max_lag_s) >= 2, (
+        "the band admits only one multiple, so this test cannot fail on a "
+        "multiple error -- which is exactly how it used to pass")
+    e = am.repeat_period(lfsr16(n), SR, max_lag_s=max_lag_s)
     assert e.ok, e.reason
     assert abs(e.value - 65535 / SR) < 2.0 / SR, (e.value, 65535 / SR)
     assert e.detail["corr"] > 0.95, e.detail
+    assert e.detail["corr"] <= 1.0 + 1e-12, (
+        f"corr {e.detail['corr']} is above 1, so it is not a correlation")
+
+
+def test_repeat_period_finds_a_FILTERED_lfsr_at_its_exact_period():
+    """The case that reaches the live caller, and the one the bare LFSR cannot
+    test.
+
+    A maximal LFSR is +-1 valued, so every prefix of it has the same mean
+    square and the pre-#780 statistic tied at EVERY multiple to within 3e-7 --
+    `np.argmax` returned the shortest and the estimator looked right by
+    accident, at any length. What `noise_report` is handed is a noise source
+    that has been through the instrument, i.e. filtered, and the accident then
+    stops: measured over 7 filters x 4 durations in
+    `tools/probes/repeat_period_multiple.py`, the pre-repair estimator was
+    wrong on 13 of 28 such conditions, at 2x and 3x, reporting a
+    'correlation' of up to 1.017.
+
+    Six seconds with a one-pole at 0.99 is the worst of those 28 and is the
+    row this asserts, so a regression lands on the condition that broke
+    hardest rather than on an average."""
+    n = int(6.0 * SR)
+    max_lag_s = min(5.0, 6.0 / 2 - 0.1)
+    assert _multiples_in_band(n, max_lag_s) >= 2, "the band admits one multiple"
+    x = _one_pole(lfsr16(n), 0.99)
+    assert np.std(np.abs(x)) / np.mean(np.abs(x)) > 0.1, (
+        "|x| is still nearly constant, so this record is no harder than the "
+        "bare LFSR and the test has not gained the power it exists for")
+    e = am.repeat_period(x, SR, max_lag_s=max_lag_s)
+    assert e.ok, e.reason
+    assert abs(e.value - 65535 / SR) < 2.0 / SR, (
+        f"{e.value:.6f} s is {e.value * SR / 65535:.3f} x the LFSR's period")
+    assert e.detail["corr"] <= 1.0 + 1e-12, e.detail
+
+
+def test_the_submultiple_margin_ships_a_real_margin():
+    """0 is on the sweep's grid and is the behaviour before the rule. It must
+    never be the shipped value, and the dial must stay an integer in
+    thousandths because `tools/sensitivity.py` reads a shipped python-constant
+    with an integer pattern."""
+    m = am.REPEAT_SUBMULTIPLE_MARGIN_PERMILLE
+    assert isinstance(m, int) and m >= 1, m
+    assert m <= 200, f"{m} is above the top of the swept grid"
+
+
+def test_the_submultiple_margin_refuses_the_input_that_defeats_it():
+    """docs/verification-rules.md rule 8, executable.
+
+    What defeats the rule is a loop whose true period is 2P and whose
+    alternate halves differ in amplitude by LESS than about sqrt(2 * margin):
+    that one is reported at P, an octave low, confidently. The closed form is
+    `1 - nccf[P] = d^2 / (2 - 2d + d^2)`, so at the shipped 1 thousandth the
+    boundary is 4.5 % of depth. This test asserts BOTH sides of it -- a 2 %
+    loop is folded and a 10 % loop is not -- because a test that only showed
+    the rule working would leave the cost of the margin undocumented, and a
+    test that only showed it failing could be satisfied by a rule that folds
+    everything."""
+    half, dur = 20000, 6.0
+    margin = am.REPEAT_SUBMULTIPLE_MARGIN_PERMILLE / 1000.0
+
+    def loop(depth):
+        rng = np.random.default_rng(0)
+        base = rng.standard_normal(half)
+        reps = int(math.ceil(dur * SR / half))
+        reps += reps % 2
+        return np.concatenate([base * ((1.0 - depth) if (i % 2) else 1.0)
+                               for i in range(reps)])[:int(dur * SR)]
+
+    shallow, deep = 0.02, 0.10
+    assert (shallow ** 2 / (2 - 2 * shallow + shallow ** 2)) < margin, (
+        "the shallow case is no longer inside the margin, so it no longer "
+        "demonstrates what defeats the rule")
+    assert (deep ** 2 / (2 - 2 * deep + deep ** 2)) > margin, (
+        "the deep case is now inside the margin too, so the margin has grown "
+        "past what this test bounds")
+
+    e = am.repeat_period(loop(shallow), SR)
+    assert e.ok and abs(e.value * SR / half - 1.0) < 0.02, (
+        f"a {shallow:.0%} alternating loop reported {e.value * SR / (2 * half):.3f} "
+        f"x its true 2P period; the defeating input no longer defeats it, which "
+        f"means the margin or the rule has changed and rule 8's statement is stale")
+    e = am.repeat_period(loop(deep), SR)
+    assert e.ok and abs(e.value * SR / (2 * half) - 1.0) < 0.02, (
+        f"a {deep:.0%} alternating loop was folded to {e.value * SR / half:.3f} x P; "
+        f"the margin is now wide enough to fold a genuine 2T loop that the "
+        f"sweep says it must not")
 
 
 def test_repeat_period_refuses_noise_that_does_not_repeat():

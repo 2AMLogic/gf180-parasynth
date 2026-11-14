@@ -1,0 +1,108 @@
+The submultiple margin under `repeat_period`, swept through the estimator's own
+`submultiple_margin` override -- i.e. against the code that ships. #780.
+python 3.12.3, numpy 2.5.4.
+Shipped value: REPEAT_SUBMULTIPLE_MARGIN_PERMILLE = 1 (thousandths of the correlation unit).
+
+repeat_submultiple_margin -- records reported at the wrong period over the
+  exact + fold panels, against the margin in thousandths. `wrong` is the
+  objective and lower is better. need_worst is the CONSTRAINT from the
+  other side: the largest margin any realistic near-exact loop requires,
+  in the same thousandths, which the shipped value must stay above.
+  inharm_wrong is the EXTERNAL constraint -- the ground-truth catalogue's
+  own planted-inharmonic records, of n_inharm, reported at the wrong
+  period. Those three were built for #158, not for this issue, and they
+  cut the dial at 1 thousandth independently of the panels above.
+margin_permille wrong exact_wrong fold_wrong n_exact n_fold need_worst inharm_wrong n_inharm
+0 55 43 12 60 18 0.0169 0 3
+1 6 0 6 60 18 0.0169 1 3
+5 9 0 9 60 18 0.0169 2 3
+10 12 0 12 60 18 0.0169 2 3
+20 12 0 12 60 18 0.0169 2 3
+30 15 0 15 60 18 0.0169 2 3
+50 15 0 15 60 18 0.0169 2 3
+100 15 0 15 60 18 0.0169 2 3
+200 18 0 18 60 18 0.0169 2 3
+
+repeat_period_class_width -- the defect's width before the repair and after,
+  by true period, 6 seeds each. before_wrong is the shipped-before estimator
+  (`_overlap_corrected_baseline`); after_wrong is the estimator as it ships
+  now. worst_before_mult is the largest whole multiple it returned, and
+  `remainder` is n mod P -- the 0 rows are the exact-tie records whose
+  winner is decided by FFT round-off and which move with the numpy build.
+period_samples n_seeds remainder before_wrong after_wrong worst_before_mult
+65535 6 25860 3 0 2
+49152 6 42240 4 0 2
+32768 6 25856 5 0 4
+32767 6 25864 5 0 4
+24000 6 0 3 0 6
+20000 6 8000 3 0 7
+16384 6 9472 4 0 8
+12000 6 0 2 0 11
+8192 6 1280 2 0 17
+4096 6 1280 2 0 35
+  (total 33 of 60 wrong before, 0 after)
+
+repeat_submultiple_fold_detail -- the input that defeats the rule, shipped
+  with it. A loop whose true period is 2P, near-repeating at P to `depth`.
+  shortfall is the measured 1 - nccf[P]; closed_form is d^2/(2-2d+d^2),
+  derived before the measurement. folded_from is the smallest margin on
+  the grid that reports this loop an octave low.
+depth_pct shortfall closed_form folded_from_permille
+1 0.000051 0.000051 1
+2 0.000204 0.000204 1
+5 0.001314 0.001314 5
+10 0.005525 0.005525 10
+20 0.024392 0.024390 30
+40 0.117655 0.117647 200
+
+repeat_submultiple_need_detail -- the constraint panel. `need` is how much
+  margin the rule requires for the TRUE period to beat the bare argmax on
+  a loop that repeats almost but not exactly. The shipped margin must sit
+  above every row here; the headroom is the ratio.
+case need_permille argmax_lag argmax_over_P nccf_argmax nccf_true
+lfsr16_raw                 0.0000     131070         2.000    1.000000  1.000000
+lfsr16_onepole             0.0000      65535         1.000    0.999979  0.999979
+lfsr16_butter2_500         0.0000      65535         1.000    0.999930  0.999930
+noise_loop_exact           0.0000      65536         2.000    1.000000  1.000000
+noise_loop_decaying        0.0000      32768         1.000    0.985611  0.985611
+noise_loop_plus_1pct       0.0004      98304         3.000    0.999900  0.999899
+noise_loop_plus_10pct      0.0169      65536         2.000    0.989989  0.989972
+  (worst 0.0169 thousandths; shipped margin 1 is 59.2x it)
+
+lfsr_filter_conditions -- the LIVE CALLER's exposure, on conditions that
+  chose nothing. A 16-bit LFSR is 65535 samples of period, so the right
+  answer is 1.000 in every row. `noise_report` is the one caller in the
+  tree and its own lag band is used here. The unfiltered rows were right
+  before the repair too -- a +-1 sequence has constant |x|, so the old
+  statistic tied at every multiple and argmax returned the shortest by
+  accident. Filter it and the accident stops, though not at every length.
+filter dur_s before_mult before_corr after_mult after_corr
+none              4.0       1.000    1.000000      1.000   1.000000
+onepole0.95       4.0       1.000    1.000516      1.000   0.999948
+onepole0.99       4.0       1.000    1.003439      1.000   0.999754
+butter2_500       4.0       1.000    1.000180      1.000   0.999824
+butter4_200       4.0       1.000    1.004363      1.000   0.999726
+butter2_hp2000    4.0       1.000    0.999999      1.000   1.000000
+ar1_0.5           4.0       1.000    0.999901      1.000   1.000000
+none              6.0       1.000    1.000000      1.000   1.000000
+onepole0.95       6.0       2.000    1.001810      1.000   0.999971
+onepole0.99       6.0       2.000    1.017022      1.000   0.999863
+butter2_500       6.0       2.000    1.000952      1.000   0.999900
+butter4_200       6.0       2.000    1.010089      1.000   0.999845
+butter2_hp2000    6.0       1.000    0.999965      1.000   1.000000
+ar1_0.5           6.0       2.000    1.000712      1.000   1.000000
+none              8.0       1.000    1.000000      1.000   1.000000
+onepole0.95       8.0       1.000    0.999917      1.000   0.999979
+onepole0.99       8.0       2.000    1.001705      1.000   0.999902
+butter2_500       8.0       1.000    0.999738      1.000   0.999930
+butter4_200       8.0       2.000    1.001160      1.000   0.999890
+butter2_hp2000    8.0       1.000    1.000000      1.000   1.000000
+ar1_0.5           8.0       2.000    1.000061      1.000   1.000000
+none             10.0       1.000    1.000000      1.000   1.000000
+onepole0.95      10.0       3.000    1.001842      1.000   0.999984
+onepole0.99      10.0       3.000    1.010400      1.000   0.999926
+butter2_500      10.0       3.000    1.001798      1.000   0.999946
+butter4_200      10.0       3.000    1.007209      1.000   0.999916
+butter2_hp2000   10.0       1.000    0.999987      1.000   1.000000
+ar1_0.5          10.0       3.000    1.000367      1.000   1.000000
+  (13 of 28 conditions wrong before the repair, 0 after; the largest 'correlation' the old statistic reported is 1.017022 on onepole0.99 at 6 s)

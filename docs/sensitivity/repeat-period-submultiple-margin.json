@@ -1,0 +1,72 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "repeat-period-submultiple-margin",
+  "parameter": {
+    "name": "REPEAT_SUBMULTIPLE_MARGIN_PERMILLE",
+    "source": "model/audio_measure.py",
+    "kind": "python-constant",
+    "what": "how far below the winning NCCF peak a shorter integer submultiple may sit and still be the lag `repeat_period` returns, in thousandths of the correlation unit. Registered when the dial was proposed (#780), in the same PR that introduced it: the rule it bounds is the half of that repair which actually fixes the reported period, so a dial nobody swept would be carrying the whole fix."
+  },
+  "objective": {
+    "name": "records reported at the wrong period over the exact + fold panels",
+    "units": "count",
+    "lower_is_better": true,
+    "why": "the dial makes exactly one decision -- fold to the shorter submultiple, or do not -- and both ways of getting that decision wrong are a record whose reported period is not its period. The exact panel (60 tiled noise loops) is the defect #780 was filed on and needs the margin to be non-zero; the fold panel (18 loops whose true period is 2P and which near-repeat at P) needs it to be small. One count over both is the cost curve. It is deliberately NOT the only thing the dial trades: `inharm_wrong` in the same artefact is an EXTERNAL constraint from records this issue did not build, and it is read alongside, exactly as sees_real is in dphase-ar1-floor."
+  },
+  "grid": {
+    "stated_before_results": true,
+    "values": [0, 1, 5, 10, 20, 30, 50, 100, 200],
+    "range_basis": [
+      "The nine points were fixed before the panels were run, from the fold law rather than from any result: an alternating loop of depth d leaves 1 - nccf[P] = d^2 / (2 - 2d + d^2), so a margin m folds every loop shallower than about sqrt(2m) and the grid is chosen to put that boundary between the panel's depths. 1 thousandth bites at 4.5 % depth and 200 at 63 %, which brackets the 1 %..40 % the fold panel carries.",
+      "0 is not a margin -- it selects the bare argmax that shipped before the submultiple rule -- and it is on the grid so the sweep prices the REPAIR and not only the dial inside it, the same reason 0 is on dphase-ar1-floor's grid and -1 is on fold-interpolator's.",
+      "20 is on the grid because it is the value the SAME rule ships with at the other call site, discrimination_features.JIT_OCTAVE_MARGIN_PERMILLE (#774). Having it as a measured row is what makes 'do not propagate that value to this estimator' a result rather than an assertion: it costs 12 wrong against 6 here.",
+      "200 is far above anything the constraint panels can justify and is on the grid on purpose, so the upper bound is a measured row."
+    ],
+    "held_fixed": {}
+  },
+  "decision_rule": {
+    "stated_before_results": true,
+    "flat_within_relative": 0.02,
+    "why": "the objective is a count of records, so its own granularity is ONE record, and 2 % of every grid value at or below 50 is less than one record. The rule is therefore strictly TIGHTER than the instrument's resolution across the whole usable part of the dial: it can only split points the panel could actually tell apart, never manufacture a plateau. Above 50 records 2 % does exceed one record, which would be the loose direction -- it does not arise, because the only row up there is margin 0 at 55 and its nearest neighbour is 6, a factor of nine away."
+  },
+  "evidence": {
+    "artifact": "docs/sensitivity/repeat-period-submultiple-margin-sweep.txt",
+    "format": "fixed-width-table",
+    "table": "repeat_submultiple_margin",
+    "value_column": "margin_permille",
+    "objective_column": "wrong",
+    "held_fixed": {},
+    "regenerate": "tools/probes/repeat_period_multiple.py -o docs/sensitivity/repeat-period-submultiple-margin-sweep.txt",
+    "instrument": "`model.audio_measure.repeat_period` itself, through its `submultiple_margin` override -- the shipped estimator and the shipped rule, not a reimplementation. The pre-repair column in the same artefact comes from `_overlap_corrected_baseline`, which is the expression removed from that function kept verbatim, because a before/after table whose 'before' is a paraphrase is not a measurement. The fold panel's shortfall is printed beside its closed form so the agreement is checkable; they match to four decimals on every depth. Measured on python 3.12.3 / numpy 2.5.4 / scipy 1.18.1."
+  },
+  "points": [
+    {"value": 0, "objective": 55},
+    {"value": 1, "objective": 6},
+    {"value": 5, "objective": 9},
+    {"value": 10, "objective": 12},
+    {"value": 20, "objective": 12},
+    {"value": 30, "objective": 15},
+    {"value": 50, "objective": 15},
+    {"value": 100, "objective": 15},
+    {"value": 200, "objective": 18}
+  ],
+  "prediction": {
+    "runs": [[0], [1], [5], [10, 20], [30, 50, 100], [200]],
+    "basis": "Derived from the fold law before the sweep ran, and the law itself was derived before it was measured. (a) On the exact panel the shortfall at the true period is float round-off, of order 1e-15, so every non-zero margin on the grid admits it and the exact column must be 0 everywhere except margin 0 -- where a correct normaliser ties at every multiple and round-off picks, giving an error count of order half the panel. (b) On the fold panel a loop of depth d is folded exactly when d^2/(2-2d+d^2) <= margin/1000, which for the six depths 1, 2, 5, 10, 20 and 40 % gives shortfalls 0.000051, 0.000204, 0.001314, 0.005525, 0.024390 and 0.117647. Counting three seeds per depth, the fold column is therefore 3 x #{depths at or below the margin}: 6 at margin 1 (1 and 2 %), 9 at 5, 12 at 10 AND at 20 (because 20 %'s shortfall of 0.02439 is above 0.020, so the pair must tie), 15 at 30, 50 and 100 (40 %'s 0.1176 is above 0.100, so those three must tie), and 18 at 200. (c) Margin 0 is its own group because its exact column is of order 30 and no other point exceeds 18. The predicted grouping is thus the one above, and note it predicts two non-trivial TIES -- 10 with 20, and 30 with 50 with 100 -- from the closed form rather than from the measurement, which is the part that could have failed.",
+    "independent_of_measurement": true
+  },
+  "verdict": {
+    "state": "MIXED",
+    "runs": [[0], [1], [5], [10, 20], [30, 50, 100], [200]],
+    "summary": "The dial is a cliff and then a staircase. Margin 0 -- the bare argmax, i.e. the submultiple rule absent -- costs 55 wrong of 78, 43 of them on the exactly-repeating panel the defect was filed on. Any non-zero margin fixes that panel completely (0 of 60 at every point from 1 to 200), so the REPAIR is worth 43 records and the dial inside it is worth the difference between 6 and 18. From 1 upward the objective only rises, because the exact panel is already perfect and every further thousandth folds one more genuine 2T loop down to T: 6 at 1 thousandth, 9 at 5, 12 at 10-20, 15 at 30-100, 18 at 200. The grid's smallest positive value is therefore the best point on it, and the two constraint columns agree from the other side rather than fighting it -- need_worst says the largest margin any realistic near-exact loop requires is 0.0169 thousandths, 59x below the shipped 1, and inharm_wrong (the ground-truth catalogue's own planted-inharmonic records, which this issue did not build) goes from 1 wrong at margin 1 to 2 wrong from 5 upward. Nothing on this grid argues for a larger margin and three independent panels argue for a smaller one; 1 ships because it is the smallest value the unit can express, not because it won a fit."
+  },
+  "limits": [
+    "The objective weights two panels of unequal size, 60 exactly-repeating records against 18 alternating ones, and that weighting is arbitrary. It is stated rather than hidden because it changes nothing structural: the exact column is 0 at every non-zero margin, so above margin 0 the objective IS the fold count and the weighting only affects how far margin 0 sits from the rest.",
+    "A finer unit would score better and cannot be expressed. The objective falls monotonically as the margin shrinks and the lower bound from the need panel is 0.0169 thousandths, so a dial in parts per million could sit around 100 ppm -- a fold boundary at 1.4 % depth instead of 4.5 % -- at 5x the measured headroom. `tools/sensitivity.py` reads a shipped python-constant as an INTEGER (its PY_CONST pattern captures `-?\\d+`), so thousandths is the finest this record can express at all. That is a limit of the gate, not a measured optimum.",
+    "The exactly-repeating panel cannot choose this dial and must not be read as having done so: every margin from 1 to 200 thousandths scores 60/60 on it. Three of the nine rows of this record would be identical if the fold and inharmonic panels were dropped, which is what docs/verification-rules.md rule 8 is about. The dial is chosen entirely by the two constraint panels.",
+    "The objective never reaches 0 and that is a property of the GATE, not of the dial. `tools/sensitivity.py::runs` forms its groups from `nhi / nlo`, so an objective column holding an exact 0.0 raises ZeroDivisionError and the record cannot be evaluated at all. The shallowest fold depth on the panel (1 %) is folded by any margin at or above 0.05 thousandths, so this column is strictly positive without that being arranged -- but a sweep whose dial really does reach zero cost currently cannot be registered, which is filed separately.",
+    "`inharm_wrong` reads 0 at margin 0 and 1 at the shipped margin, so on that column alone the bare argmax wins. It is a constraint and not the objective for exactly this reason: margin 0 is 43 records wrong on the panel the issue was filed on. The column's value is that it bounds the dial from the same side as the fold panel using records built for #158 rather than for this issue, and it says the usable range stops at 1 thousandth -- not that the repair should be reverted.",
+    "The fold panel's loops alternate in AMPLITUDE at the half period. That is the shape whose shortfall has a closed form, which is why it was chosen, and it is not the only way a loop can near-repeat -- an alternation in timing, filtering or spectrum would have a different shortfall and so a different fold boundary for the same margin. How the boundary moves under those is unmeasured.",
+    "Every record here is synthetic except the three inharmonic ones, and those are synthetic too -- they are merely somebody else's. No corpus audio is in this sweep. The one live caller is `model/reference_voice.noise_report`, whose own exposure is argued from the filtered-LFSR case in the need panel rather than measured on reference recordings; the corpus is not on the host that ran this."
+  ]
+}
