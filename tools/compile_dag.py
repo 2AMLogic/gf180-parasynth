@@ -18,6 +18,8 @@ Status is derived, never asserted:
   STALE     the evidence passed, but a file the node `covers` has changed
             since -- the result no longer describes this code
   RED       the evidence ran and FAILED
+  REFUSED   the evidence EXISTS but declares no verdict this tool can read, so
+            no verdict is reported for it -- distinct from both pass and fail
   BLOCKED   the node declares what it is waiting for
   TODO      no evidence yet; an issue number if one is filed
 
@@ -77,6 +79,53 @@ def tag_is_ancestor(tag: str) -> bool:
     return r.returncode == 0
 
 
+# The top-level keys a JSON evidence file may use to declare its own verdict.
+# Named once: run_evidence() honours them, unjudged() asks whether any is there.
+VERDICT_KEYS = ("passed", "ok", "success", "green")
+
+
+def unjudged(n: dict) -> str | None:
+    """Why this node's `evidence_file` declares NO verdict this tool can read.
+
+    Returns the reason, or None when a verdict is declared (or when the question
+    does not apply). THIS IS THE SINGLE DEFINITION of "no verdict declared" --
+    `run_evidence` must not return a pass for it, `classify` renders it REFUSED
+    rather than green, and `--run` logs it as a refusal. Two copies of this
+    predicate would be the instance-not-class failure this file's own comments
+    exist to catch: the same branch has now been repaired three times (file
+    existence for `suite`, then the falsy verdict in #140, then this).
+
+    Deliberately NOT a reason to abstain, because each is already judged
+    elsewhere and folding it in here would hide a real failure behind a
+    REFUSED:
+      * a node with no `evidence_file` at all -- classify() handles it;
+      * a missing file -- an evidence file that is not there is a FAILURE;
+      * a file that is unreadable or is not the JSON it claims to be -- also a
+        failure. `run_evidence` returns False for both, and must keep doing so.
+    """
+    if "evidence_file" not in n:
+        return None
+    if n.get("evidence_requires"):
+        return None                       # the node declares what makes it pass
+    fp = ROOT / n["evidence_file"]
+    if not fp.exists():
+        return None                       # missing is a failure, not an abstention
+    if fp.suffix != ".json":
+        return (f"{n['evidence_file']} is not JSON and the node declares no "
+                f"`evidence_requires` -- there is no verdict to read")
+    try:
+        doc = json.loads(fp.read_text())
+    except Exception:
+        return None                       # malformed is a failure, not an abstention
+    if not isinstance(doc, dict):
+        return (f"{n['evidence_file']} is a JSON {type(doc).__name__}, not an "
+                f"object that could carry a verdict key")
+    if any(k in doc for k in VERDICT_KEYS):
+        return None
+    return (f"{n['evidence_file']} carries no "
+            f"{'/'.join(VERDICT_KEYS)} key -- no verdict to read")
+
+
 def run_evidence(nid: str, n: dict) -> tuple[bool, str]:
     """Actually execute this node's evidence. Returns (passed, detail).
 
@@ -121,15 +170,19 @@ def run_evidence(nid: str, n: dict) -> tuple[bool, str]:
                 doc = json.loads(body)
             except Exception as exc:
                 return False, f"{n['evidence_file']} is not valid JSON: {type(exc).__name__}"
-            for key in ("passed", "ok", "success", "green"):
+            for key in VERDICT_KEYS:
                 if isinstance(doc, dict) and key in doc:
                     good = bool(doc[key])
                     return good, f"{n['evidence_file']} {key}={doc[key]!r}"
         if need:
             return True, f"{n['evidence_file']} contains {need!r}"
-        # Nothing declared and no verdict found. Say so, rather than implying
-        # the file was read and approved.
-        return True, f"{n['evidence_file']} EXISTS ONLY -- no verdict declared"
+        # Nothing declared and no verdict found. This used to `return True` with
+        # the words EXISTS ONLY in the detail string -- which said so honestly in
+        # prose and then rendered the node GREEN anyway (#791). A file we never
+        # judged is not a pass. It is not a failure either, so classify() reports
+        # it REFUSED rather than RED; the False here only keeps run_evidence from
+        # being the one that claims the pass.
+        return False, unjudged(n) or f"{n['evidence_file']} declares no verdict"
     if "tool" in n:
         r = subprocess.run([sys.executable, n["tool"]], cwd=ROOT,
                            capture_output=True, text=True, timeout=3600)
@@ -182,6 +235,14 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     if missing:
         return "TODO", "missing: " + ", ".join(missing)
 
+    # Can this node be judged AT ALL? Asked from the node's DECLARATION, before
+    # any recorded boolean or tag is trusted, because an unjudged node's record
+    # and stamp are both claims about a verdict that was never read (#791). A
+    # third status is needed rather than RED: nothing failed here, we declined.
+    why = unjudged(n)
+    if why:
+        return "REFUSED", why
+
     rec = load_results().get(nid)
 
     # A tag IS evidence: it was cut after a verified run, at a known commit.
@@ -222,8 +283,13 @@ def classify_all(nodes: dict) -> dict:
 
       * only GREEN/STAMPED are downgraded; a node's own RED/BLOCKED/TODO/STALE
         is never overwritten (it is already not a green claim);
-      * only RED/BLOCKED deps propagate. TODO and STALE are not known-failing,
-        and propagating them would turn most of the graph red on a stale stamp;
+      * only RED/BLOCKED deps propagate. TODO, STALE and REFUSED are not
+        known-failing, and propagating them would turn most of the graph red on
+        a stale stamp. REFUSED joins TODO here for the same reason and on
+        purpose: it means "we do not know", and a dependent whose OWN evidence
+        ran and passed is not made false by an unjudged prerequisite. #791
+        checked that no dependent rests green on one today (M3's and S1's only
+        dependents, M4 and S2, are both already BLOCKED);
       * a cycle or an unknown dep is REFUSED (BLOCKED with the reason), never
         guessed past.
     """
@@ -263,9 +329,13 @@ def classify_all(nodes: dict) -> dict:
 
 
 def mermaid(nodes: dict, status: dict) -> str:
+    # Every status MUST appear in both dicts below. `mark` is a bare index, so an
+    # unregistered status raises KeyError here rather than rendering wrong -- that
+    # is deliberate, and it is why adding a status means editing both.
     fill = {"STAMPED": "#0E6B5E,color:#fff", "GREEN": "#3f8f5f,color:#fff",
             "STALE": "#9A6510,color:#fff", "BLOCKED": "#8E2438,color:#fff",
-            "RED": "#8E2438,color:#fff", "TODO": "#5a6468,color:#fff"}
+            "RED": "#8E2438,color:#fff", "TODO": "#5a6468,color:#fff",
+            "REFUSED": "#5B4B8A,color:#fff"}
     out = ["```mermaid", "graph LR"]
     for g, label in GROUPS.items():
         ids = [i for i, n in nodes.items() if n.get("group") == g]
@@ -275,7 +345,8 @@ def mermaid(nodes: dict, status: dict) -> str:
         for i in ids:
             st = status[i][0]
             mark = {"STAMPED": "✓", "GREEN": "·", "STALE": "!",
-                    "BLOCKED": "✗", "RED": "✗", "TODO": "○"}[st]
+                    "BLOCKED": "✗", "RED": "✗", "TODO": "○",
+                    "REFUSED": "?"}[st]
             out.append(f'    {i}["{mark} {nodes[i]["name"]}"]')
         out.append("  end")
     for i, n in nodes.items():
@@ -309,6 +380,10 @@ def main() -> int:
                     help="execute each node's evidence and record the result")
     ap.add_argument("--slow", action="store_true",
                     help="with --run, also execute nodes marked slow (iverilog; hours)")
+    ap.add_argument("--only", metavar="ID[,ID...]",
+                    help="with --run, execute ONLY these nodes and leave every "
+                         "other record untouched. REFUSES an unknown id rather "
+                         "than silently recording nothing for it.")
     args = ap.parse_args()
 
     # stderr UNCONDITIONALLY, unlike tools/scorecard.py's tty-conditional
@@ -324,7 +399,22 @@ def main() -> int:
     if args.run:
         sha = git("rev-parse", "HEAD")
         res = load_results()
+        # --only exists because re-recording ONE node otherwise means re-running
+        # every fast node (two of which are 4- and 8-minute pytest suites), which
+        # rewrites their shas and buries the change you meant to make. An unknown
+        # id REFUSES: silently recording nothing for a typo'd node id would read
+        # exactly like a node that had no evidence to run.
+        only = None
+        if args.only:
+            only = [i.strip() for i in args.only.split(",") if i.strip()]
+            unknown = [i for i in only if i not in nodes]
+            if unknown:
+                print(f"REFUSED: --only names no such node: {', '.join(unknown)}",
+                      file=sys.stderr)
+                return 2
         for i, n in nodes.items():
+            if only is not None and i not in only:
+                continue
             if n.get("blocked") or not any(k in n for k in
                                            ("suite", "verifier", "tool", "evidence_file")):
                 continue
@@ -332,7 +422,13 @@ def main() -> int:
                 continue                       # nightly runs these
             ok, detail = run_evidence(i, n)
             res[i] = {"passed": ok, "sha": sha, "detail": detail}
-            print(f"  {'PASS' if ok else 'FAIL'}  {i:3s} {detail}", file=sys.stderr)
+            # REFUSE, not FAIL: `ok` is False for an unjudged file so that nothing
+            # claims a pass, but printing FAIL would assert a failure that never
+            # happened. Same predicate classify() renders REFUSED from.
+            mark = "PASS" if ok else ("REFUSE" if unjudged(n) else "FAIL")
+            print(f"  {mark:6s} {i:3s} {detail}", file=sys.stderr)
+        # Merged into the loaded records, never written from a partial dict --
+        # that was #600, where a partial --run deleted the slow nodes' stamps.
         RESULTS.write_text(json.dumps(res, indent=2, sort_keys=True) + "\n")
 
     status = classify_all(nodes)
@@ -381,6 +477,13 @@ def main() -> int:
     # which the per-push job cannot do -- would be a gate demanding something
     # the job cannot satisfy, and this project has built three of those
     # already. The nightly, which CAN refresh the slow evidence, uses --strict.
+    # REFUSED is deliberately NOT here. --strict's job is to catch evidence that
+    # RAN AND FAILED or has gone out from under a green claim; an unjudged node
+    # is neither, and three of them exist the moment this lands (#791), so
+    # including it would be a gate unsatisfiable on arrival -- the failure this
+    # project has built three of. The fidelity audit below is what surfaces an
+    # unjudged node: REFUSED is not in its ("GREEN", "STAMPED") set, so M3 going
+    # REFUSED correctly restores the minimoog UNVALIDATED warning (#45).
     bad = [i for i in nodes if status[i][0] in ("STALE", "RED")]
     for i in bad:
         print(f"{status[i][0]}: {i} -- {status[i][1]}", file=sys.stderr)

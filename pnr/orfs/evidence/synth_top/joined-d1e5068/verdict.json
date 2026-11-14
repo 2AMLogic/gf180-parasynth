@@ -1,0 +1,125 @@
+{
+  "checks": [
+    {
+      "label": "detailed-route DRC errors",
+      "metric": "detailedroute__route__drc_errors",
+      "ok": true,
+      "requires": "== 0",
+      "source": "5_2_route.json",
+      "value": 0
+    },
+    {
+      "label": "antenna-violating nets",
+      "metric": "detailedroute__antenna__violating__nets",
+      "ok": true,
+      "requires": "== 0",
+      "source": "5_2_route.json",
+      "value": 0
+    },
+    {
+      "label": "antenna-violating pins",
+      "metric": "detailedroute__antenna__violating__pins",
+      "ok": true,
+      "requires": "== 0",
+      "source": "5_2_route.json",
+      "value": 0
+    },
+    {
+      "label": "router flow errors",
+      "metric": "detailedroute__flow__errors__count",
+      "ok": true,
+      "requires": "== 0",
+      "source": "5_2_route.json",
+      "value": 0
+    },
+    {
+      "label": "finish flow errors",
+      "metric": "finish__flow__errors__count",
+      "ok": true,
+      "requires": "== 0",
+      "source": "6_report.json",
+      "value": 0
+    },
+    {
+      "label": "setup violations",
+      "metric": "finish__timing__drv__setup_violation_count",
+      "ok": true,
+      "requires": "== 0",
+      "source": "6_report.json",
+      "value": 0
+    },
+    {
+      "label": "hold violations",
+      "metric": "finish__timing__drv__hold_violation_count",
+      "ok": true,
+      "requires": "== 0",
+      "source": "6_report.json",
+      "value": 0
+    },
+    {
+      "label": "setup worst slack (ns)",
+      "metric": "finish__timing__setup__ws",
+      "ok": true,
+      "requires": "> 0",
+      "source": "6_report.json",
+      "value": 43.5918
+    },
+    {
+      "label": "hold worst slack (ns)",
+      "metric": "finish__timing__hold__ws",
+      "ok": true,
+      "requires": "> 0",
+      "source": "6_report.json",
+      "value": 0.600246
+    }
+  ],
+  "claim": "Routed on gf180 with zero detailed-route DRC and antenna violations and positive setup/hold slack.",
+  "derived_by": "pnr/orfs/make_verdict.py",
+  "detail": "routed, 0 router DRC / 0 antenna / 0 setup+hold violations, positive setup and hold slack",
+  "disclosed_not_gating": [
+    {
+      "label": "max-capacitance violations",
+      "metric": "finish__timing__drv__max_cap",
+      "source": "6_report.json",
+      "value": 2
+    },
+    {
+      "label": "max-capacitance worst limit",
+      "metric": "finish__timing__drv__max_cap_limit",
+      "source": "6_report.json",
+      "value": -0.025588
+    },
+    {
+      "label": "max-slew violations",
+      "metric": "finish__timing__drv__max_slew",
+      "source": "6_report.json",
+      "value": 0
+    },
+    {
+      "label": "ORFS fmax (Hz)",
+      "metric": "finish__timing__fmax",
+      "source": "6_report.json",
+      "value": 26463300.0
+    },
+    {
+      "label": "routed wirelength (um)",
+      "metric": "detailedroute__route__wirelength",
+      "source": "5_2_route.json",
+      "value": 3362120
+    },
+    {
+      "label": "core utilisation",
+      "metric": "finish__design__instance__utilization",
+      "source": "6_report.json",
+      "value": 0.601144
+    }
+  ],
+  "disclosed_reason": "max-capacitance violations are recorded, not gated: S1's claim is a routed, geometrically clean die, and max-cap is an electrical DRV against the ORFS max_cap limit at a target with +43.6 ns of setup slack. docs/pnr-synth-top.md section 4.1 discloses the same number. Gating on it would assert a failure the repo's own analysis of this run does not find.",
+  "evidence_dir": "joined-d1e5068",
+  "not_established_by_this_verdict": [
+    "No sign-off DRC: ORFS's gf180 platform ships no KLayout DRC deck, so every DRC count here is the detailed router's own (docs/pnr-synth-top.md s.8).",
+    "No LVS was run.",
+    "A clean route says nothing about whether the design computes the right samples (docs/verification-rules.md rule 3)."
+  ],
+  "passed": true
+}

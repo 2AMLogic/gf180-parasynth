@@ -98,7 +98,7 @@
         "model/reference_rigs.py"
       ],
       "evidence_file": "docs/reference-compare-results.json",
-      "note": "the committed comparison RESULT, not the estimator unit tests -- those consume no reference audio and cannot show we compared anything"
+      "note": "the committed comparison RESULT, not the estimator unit tests -- those consume no reference audio and cannot show we compared anything. REFUSED on purpose and correctly: this file is a dict of 49 per-case measurement ARRAYS with no top-level verdict key, so compile_dag has nothing to read. It is left unjudged rather than given an evidence_requires, because the only candidate substring is already defeated by the committed file -- it contains '\"ok\": true' 133 times AND '\"ok\": false' 8 times, so a substring guard would PASS a file carrying 8 failing comparisons (rule 8). Clearing this needs a re-run of the reference comparison that emits a top-level verdict over all 49 cases; until then the minimoog UNVALIDATED warning this restores is the true state (#45, #791)."
     },
     "M4": {
       "name": "Matches real hardware",
@@ -202,7 +202,7 @@
       "name": "Routed on gf180, DRC clean",
       "group": "silicon",
       "class": "implementation",
-      "evidence_file": "pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json",
+      "evidence_file": "pnr/orfs/evidence/synth_top/joined-d1e5068/verdict.json",
       "deps": [
         "I2"
       ],
@@ -218,7 +218,8 @@
         "rtl-sketch/spi_ctl.v",
         "rtl-sketch/i2s_tx.v",
         "spec/reference/tables"
-      ]
+      ],
+      "note": "the verdict is DERIVED by pnr/orfs/make_verdict.py from the run's own stage metrics, not read from 6_report.json: that file declares no verdict AND carries no DRC count of any kind (grep -ic drc returns 0), so the 'DRC clean' in this node's name lives in 5_2_route.json. Regenerate with `python pnr/orfs/make_verdict.py pnr/orfs/evidence/synth_top/joined-d1e5068`; `--check` and pnr/orfs/test_make_verdict.py fail on a hand-edited verdict. max-capacitance violations are 2 and are disclosed-not-gating in the verdict (docs/pnr-synth-top.md s.4.1). No sign-off DRC deck exists on gf180 and no LVS was run."
     },
     "S2": {
       "name": "Fits a real shuttle padframe",
@@ -251,7 +252,9 @@
         "spec/reference/tables",
         "fpga/Makefile",
         "fpga/rtl"
-      ]
+      ],
+      "evidence_requires": "RESULT: routed.",
+      "note": "'RESULT: routed.' is emitted by fpga/scripts/pnr_report.py ONLY for its ROUTED verdict, which requires nextpnr exit 0, a populated utilisation block, 'Routing complete.', a Max-frequency line AFTER that marker, every post stage exit 0 and a non-empty bitstream -- and that script refuses to overwrite a committed report on any other verdict (its DOES-NOT-FIT and REFUSED states write 'RESULT: DOES NOT FIT' / 'RESULT: REFUSED' instead). Rule 8, what satisfies this substring while violating its intent: (a) a bare 'PASS at' substring would have been satisfied by the post-placement ESTIMATE line even with a failing post-route line, which is why the substring is the routed verdict and not the Fmax; (b) a HAND-EDITED or STALE committed report -- the substring tests committed text, not the run. The guards against (b) are this node's `covers` list (any RTL change turns it STALE) and fpga/test_pnr_report.py, not the substring. Says nothing about whether the design computes the right samples (rule 3)."
     }
   }
 }
