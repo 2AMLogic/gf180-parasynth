@@ -45,6 +45,8 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "rtl-sketch"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+import record_compare as rc                      # noqa: E402
+
 RECORD = HERE / "r2-candidate.json"
 EVIDENCE = ROOT / "fpga/reports/r2/summary.json"   # the settled set (r2-candidate/ is history)
 NAME = "R2 candidate"
@@ -76,7 +78,14 @@ def sha(p) -> str:
 
 
 def _rel(p) -> str:
-    return str(Path(p).resolve().relative_to(ROOT))
+    return rc.rel(p, ROOT)
+
+
+#: the shared staleness comparison -- fpga/record_compare.py (#785) carries the
+#: divergence table, the type-strictness decision and the inputs that defeat
+#: it. A module-level NAME, because check() calls it as a global and
+#: fpga/release/test_stale_controls.py patches it there.
+_diff = rc.diff
 
 
 TREE = ROOT                                 # the working tree: read for drift only, never bound
@@ -216,9 +225,9 @@ def check(record: Path = RECORD) -> tuple:
     if not record.exists():
         return "REFUSED", f"no record at {_rel(record)}"
     committed = json.loads(record.read_text())
-    if committed != fresh:
-        keys = sorted(k for k in set(committed) | set(fresh) if committed.get(k) != fresh.get(k))
-        return "STALE", f"differs from a fresh derivation at {keys}"
+    diffs = _diff(committed, fresh)
+    if diffs:
+        return "STALE", "differs from a fresh derivation at: " + ", ".join(diffs[:20])
     drift = tree_drift(fresh["rtl"])
     note = f"; NOTE: working tree has moved past R2 in {drift}" if drift else ""
     return "BOUND", (f"{_rel(record)} equals a fresh derivation (differs from R1's "
