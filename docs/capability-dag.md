@@ -286,6 +286,14 @@ cannot adjudicate them at all — the cowbell is documented wrong and
 *unconfirmable* here. LT/HT/OH have only 2 held-out settings, below what
 excludes chance. And there is **no real-vs-real floor** in this dataset.
 
+> **Dated 2026-11-14 (#788): the paragraph below is a pre-revision-10
+> planning passage, kept for its reasoning and no longer a statement of where
+> we stand.** All eleven circuits are built and all sixteen sounds reachable
+> (`docs/drum-verification.md` §10); the cymbal question it closes on was
+> answered by building CY, and the bank went 12 modes / 6 `NUMS` to 16 / 11.
+> It is retained because the units argument — circuits are not modes — is the
+> section's own point and is still right.
+
 Three of eleven circuits are missing, and the cymbal can share the hats' six
 square oscillators (205.3/369.6/304.4/522.7/800/540 Hz) — but **only the
 oscillators**, not the modes. The full library is **+3 circuits and +4 to +7
@@ -304,13 +312,90 @@ more crosses the `MW = 5` cliff and costs **+228 k µm²**, four times as much.
 That is a question about CY's three Sallen-Key high-passes, for whoever
 implements CY — not one to settle from an area budget.
 
+## Retired nodes
+
+Two nodes were removed from `docs/dag.json` on 2026-11-14 (issue #788). They
+are recorded here rather than deleted quietly, because a node vanishing from a
+status document is exactly the kind of silent edit this graph exists to stop.
+
+| retired | cited | why it went | which node carries the capability now |
+|---|---|---|---|
+| `M5` Noise, osc-3 modulation, full waveform set | #48, closed as **completed** | the capability is verified; the node was not | `M1` (RTL) and `M2` (model) |
+| `D4` Complete 808 — all 16 sounds | #22, closed as **not planned** | the sixteen sounds were built in contract revision 10 | `D1` (bit-exact) and `D2` (is-an-808) |
+
+**What was actually wrong with them.** Each declared an issue number and no
+evidence key, so `tools/compile_dag.py` rendered it `TODO  issue #N` — a status
+asserted rather than derived, in the one document whose whole claim is the
+opposite. Worse, both issues were already **closed**, so the pointer led to a
+decision already taken: the graph reported two working capabilities as not
+started. They were written as *roadmap* entries, an issue number standing in
+for work not yet done, and were never revisited when the work landed.
+
+**The evidence that made them redundant**, measured rather than assumed:
+
+- M5's three named capabilities are each covered by `M2`'s suite
+  (`model/test_moog_acceptance.py`): `test_the_model_d_waveform_set_is_complete`
+  for the waveform set; `test_the_three_noise_colours_leave_at_the_same_level`,
+  `test_nothing_in_the_noise_path_reaches_the_rail`,
+  `test_the_noise_selector_swaps_both_pairs_at_once` and
+  `test_noise_through_the_ladder_is_a_swept_band_of_noise` for noise; and
+  `test_osc_3_control_takes_oscillator_3_off_the_modulation_bus` for oscillator
+  3 as a modulator — each with an injected-defect control beside it
+  (`test_control_noise_colours_that_are_not_level_matched`,
+  `test_control_oscillator_3_left_on_the_modulation_bus`). `M1`'s verifier
+  carries the same three as RTL scenarios named `waveforms`, `noise` and
+  `modulation`. Pointing M5 at that suite would have made it a duplicate of
+  M2's row carrying no information M2 did not already carry.
+- D4's sixteen sounds are built: §10 of `docs/drum-verification.md` documents
+  all sixteen on eleven circuits at contract revision 10, `model/drum_verify.py`
+  defaults `--voices` to all sixteen, and `D2`'s suite
+  (`model/test_808_acceptance.py`) references every one of the sixteen
+  abbreviations.
+
+**Reconciled with the rule above**, "Nodes are never un-stamped and their tests
+are never deleted": that rule protects *stamped* nodes and the suites that
+stamped them. Neither M5 nor D4 was ever stamped — neither had a tag, a named
+test set, controls, an area figure or a statement of what it did not cover, and
+neither carried a test of its own. **No test was deleted here, and no stamp was
+withdrawn.** There is precedent for discussing a capability that is not a node:
+the next section's `DL` is not in `docs/dag.json` at all.
+
+**What stops the shape coming back.**
+`tools/test_compile_dag_deps.py::test_no_committed_node_cites_an_issue_as_its_only_source`
+fails on any node that declares an `issue` with no evidence key and no `blocked`
+reason. It runs under `pytest tools/` on every push. Its own docstring names the
+inputs that defeat it — chiefly that *any* evidence key satisfies it, including
+a verdict-less `evidence_file`, which renders GREEN on file existence alone
+(#791).
+
+**Three alternatives were rejected**, and the reasons are the useful part:
+
+- *Point M5 at `rtl-sketch/verify_voice.py`.* That verifier is `slow`, and no
+  committed record carries its result to `main`, so M5 would have read `TODO
+  never run` — one dishonest status traded for another, and newly dependent on
+  #787.
+- *Point either node at a committed `evidence_file` receipt.* The
+  `voice-fullset-354` receipts carry `verify_voice_exit`, not
+  `passed`/`ok`/`success`/`green`, so without `evidence_requires` they land on
+  `run_evidence`'s "EXISTS ONLY — no verdict declared" branch, which **returns
+  pass**. That renders a node GREEN because a file is on disk, which is the
+  precise failure `tools/compile_dag.py` was written to prevent.
+- *Keep the nodes and mark them `blocked`.* They were not blocked; the work was
+  done. That trades a false TODO for a false BLOCKED.
+
 ## What integration does NOT depend on
 
 **A real-Minimoog recording (M3) and the complete drum library (DL) are not
 prerequisites for integration.** An earlier draft of this graph routed both
 into I1, which would have blocked the most valuable work in the repository on
-an audio clip we do not have and on eight voices we have not built. Neither is
-needed to establish that the instrument we already have works end to end.
+an audio clip we do not have and — at the time this was written — on eight
+voices we had not built. Neither was needed to establish that the instrument we
+already have works end to end.
+
+**The drum half of that is now moot**: contract revision 10 built all sixteen
+sounds on eleven circuits (`docs/drum-verification.md` §10), so `DL` is a
+completed goal rather than a deferred one. The point the paragraph was making
+stands on M3 alone, which is still `BLOCKED` on a recording.
 
 They are genuine goals; they are not gates. The gates for integration are the
 voice (M1, M2) and the drum coefficients and audio we already have.
@@ -345,7 +430,7 @@ exploratory task — an agent chasing a measurement does not need a milestone.
 |---|---|---|
 | **v0.1 known baseline** | The existing voice, its controls and its audio output reproduce from a clean checkout. **The actual note count is stated, not implied.** | F1, M1, M2 — all green |
 | **v0.2 the voice through the whole path** | The existing voice reaching real audio out through the real control path: SPI in, mix bus, master clamp, I2S out, verified against the model | I1, I2, I3 |
-| **v0.3 voice + the eight drums we have** | Real drums **connected to the top level**; solo hits and a combined groove; accent, choking and mixing correct | D-coef/audio, I4 |
+| **v0.3 voice + the eight drums of revision 8** | Real drums **connected to the top level**; solo hits and a combined groove; accent, choking and mixing correct | D-coef/audio, I4 |
 | **v0.4 four-note behaviour** | A fourth oscillator, defined note allocation and retrigger, one shared filter, a verified per-sample cycle deadline | P0, P1, **after v0.3** |
 | **v0.5 complete 808** | The missing circuits added **one family at a time**, every earlier check still green | the per-voice table |
 | **v0.6 extensions** | Extra routing and experimental voices, each with an audible reason to exist | — |
