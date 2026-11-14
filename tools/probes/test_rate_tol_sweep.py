@@ -160,7 +160,7 @@ def test_the_absolute_floor_is_above_the_cyclecorr_effect():
     m = S.cyclecorr_margin()
     assert m["tol_floor_only"] == D.RATE_TOL_ABS["ratio"]
     assert m["floor_over_effect"] > 1.0, m
-    assert m["shipped_over_effect"] > m["floor_over_effect"], m
+    assert m["at_012_over_effect"] > m["floor_over_effect"], m
     assert m["effect_over_gap"] > 10.0, (
         "the column's own rate reproducibility is not far below its effect, "
         "so the effect is not the thing a margin should be stated against")

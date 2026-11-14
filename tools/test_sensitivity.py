@@ -43,7 +43,12 @@ FILES = ["docs/sensitivity/registry.json",
          # issue #767's record: FOLD_SINC_TAPS, the fold interpolator that
          # replaced an integer-lag fold (same source file as the one above)
          "docs/sensitivity/fold-interpolator.json",
-         "docs/sensitivity/fold-interpolator-sweep.txt"]
+         "docs/sensitivity/fold-interpolator-sweep.txt",
+         # issue #775's record: RATE_TOL_REL, the relative half of the
+         # rate-independence tolerance -- and the first FLOAT parameter under
+         # the gate, which is why PY_CONST had to widen
+         "docs/sensitivity/rate-tol-rel.json",
+         "docs/sensitivity/rate-tol-rel-sweep.txt"]
 
 
 @pytest.fixture

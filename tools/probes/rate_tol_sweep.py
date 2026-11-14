@@ -255,12 +255,16 @@ def cyclecorr_margin() -> dict:
     b = read(D._resample(jit, SR_A, SR_B), SR_B)[CYCLECORR]
     effect = float(steady - a)
     gap = abs(float(a - b))
+    # The two tolerances are named by their VALUE of the dial, not by "the
+    # shipped one": the artefact has to say the same thing before and after
+    # #775 moves what ships, or the record stops transcribing it.
+    at_012 = D.rate_tolerance(CYCLECORR, a, b, 0.12)
+    floor = D.rate_tolerance(CYCLECORR, a, b, 0.0)
     return {
         "effect": effect, "rate_gap": gap,
-        "tol_shipped": D.rate_tolerance(CYCLECORR, a, b),
-        "tol_floor_only": D.rate_tolerance(CYCLECORR, a, b, 0.0),
-        "shipped_over_effect": D.rate_tolerance(CYCLECORR, a, b) / effect,
-        "floor_over_effect": D.rate_tolerance(CYCLECORR, a, b, 0.0) / effect,
+        "tol_at_012": at_012, "tol_floor_only": floor,
+        "at_012_over_effect": at_012 / effect,
+        "floor_over_effect": floor / effect,
         "effect_over_gap": effect / gap,
     }
 
@@ -396,17 +400,19 @@ def report(res: dict, plan: dict, out) -> None:
     w("  separation jit.cyclecorr.seg0 reports between a steady 410 Hz square and")
     w("  the same square with 0.5 % per-period jitter; rate_gap is that jittered")
     w("  clip's own 44.1k->48k movement in the same column, i.e. the noise the")
-    w("  effect stands out from. tol_shipped is the tolerance the rate test applies")
-    w("  at RATE_TOL_REL = 0.12; tol_floor_only is the tolerance at RATE_TOL_REL =")
-    w("  0, which is RATE_TOL_ABS['ratio'] and is the SMALLEST this dial can ever")
-    w("  make it. floor_over_effect above 1 means no value of RATE_TOL_REL puts the")
-    w("  tolerance under the effect: the binding term is the floor, not the dial.")
+    w("  effect stands out from. tol_at_012 is the tolerance the rate test applied")
+    w("  at the RATE_TOL_REL = 0.12 that shipped before #775; tol_floor_only is the")
+    w("  tolerance at RATE_TOL_REL = 0, which is RATE_TOL_ABS['ratio'] and is the")
+    w("  SMALLEST this dial can ever make it. floor_over_effect above 1 means no")
+    w("  value of RATE_TOL_REL puts the tolerance under the effect: the binding")
+    w("  term is the floor, not the dial, which is why #775's margin test lands on")
+    w("  its recorded-reason branch.")
     w()
     for line in _table([res["margin"]],
-                       ["effect", "rate_gap", "tol_shipped", "tol_floor_only",
-                        "shipped_over_effect", "floor_over_effect",
+                       ["effect", "rate_gap", "tol_at_012", "tol_floor_only",
+                        "at_012_over_effect", "floor_over_effect",
                         "effect_over_gap"],
-                       [9, 10, 13, 16, 21, 19, 16]):
+                       [9, 10, 12, 16, 20, 19, 16]):
         w(line)
     w()
     w("The pairs this dial can reach, on the shipped fold, worst first: the value of")

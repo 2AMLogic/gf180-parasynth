@@ -1,0 +1,104 @@
+The relative half of the 44.1 kHz <-> 48 kHz rate tolerance, swept through
+rate_tolerance's own tol_rel override -- i.e. against the comparison that
+ships. #775.
+python 3.12.3, numpy 2.5.4, scipy 1.18.1.
+Shipped value: RATE_TOL_REL = 0.02. Held fixed: RATE_TOL_ABS = {'ppm': 20.0, 'db': 0.5, 'ratio': 0.02, 'ms': 0.05, 'count': 1.0}, FOLD_SINC_TAPS = 16.
+Grid committed at b591cbc1 in docs/sensitivity/rate-tol-rel-plan.json.
+Panel: 92 entries, 17572 (entry, column) pairs. 27 jit.* pairs refused
+for the octave error in dominant_period (#774); they are excluded from both
+counts. 11938 pairs have a non-zero gap that no value of this
+dial can reach, because the gap is already under the unit's absolute floor.
+
+rate_tol_rel -- the objective and the cost over the wide panel. caught is
+  (entry, column) pairs the control turns red on the INTEGER FOLD #767
+  replaced (taps=-1), the honest injected defect; higher is better. cost is
+  the same count on the SHIPPED fold -- a clean panel going red. The _ratio
+  columns are the correlation family #775 is about; note that cost_ratio and
+  cost are not the same story, which is why the cost is also split by unit
+  below.
+
+  tol_rel   caught   cost  cost_db  cost_ratio  caught_ratio  refused
+        0      714    124      121           2           592       27
+  0.00625      714    124      121           2           592       27
+   0.0146      678    108      106           2           572       27
+     0.02      636     97       95           2           541       27
+     0.03      547     89       87           2           460       27
+     0.06      358     54       52           2           306       27
+     0.12      191      6        4           2           187       27
+
+rate_tol_rel_cost_by_unit -- the cost of the SHIPPED fold going red, split
+  by the unit whose absolute floor applies. The acceptance criterion asks
+  for this split because the floors stand in completely different relations
+  to their columns' magnitudes: 0.02 against a correlation of ~1, 0.5 dB
+  against a cqt column clamped at -80 dB.
+
+  tol_rel     count        db        ms       ppm     ratio
+        0         1       121         0         0         2
+  0.00625         1       121         0         0         2
+   0.0146         0       106         0         0         2
+     0.02         0        95         0         0         2
+     0.03         0        87         0         0         2
+     0.06         0        52         0         0         2
+     0.12         0         4         0         0         2
+
+rate_tol_rel_shipped_panel -- the same cost on the ELEVEN-ENTRY RATE_PANEL,
+  read through _rate_gaps(tol_rel=...) itself rather than re-evaluated
+  here. This is the count that decides whether the suite is green, and
+  every pair it reports needs a RATE_KNOWN_RED entry WITH A STATED REASON
+  or a fix. panel_entries is how many distinct panel entries are involved.
+
+  tol_rel  panel_red  panel_red_ratio  panel_entries
+        0         12                0              5
+  0.00625         12                0              5
+   0.0146         11                0              5
+     0.02         11                0              5
+     0.03          9                0              4
+     0.06          4                0              2
+     0.12          0                0              0
+
+rate_tol_rel_cyclecorr_margin -- the column #775 was filed on, and the
+  reason this dial alone cannot give it a margin. effect is the whole
+  separation jit.cyclecorr.seg0 reports between a steady 410 Hz square and
+  the same square with 0.5 % per-period jitter; rate_gap is that jittered
+  clip's own 44.1k->48k movement in the same column, i.e. the noise the
+  effect stands out from. tol_at_012 is the tolerance the rate test applied
+  at the RATE_TOL_REL = 0.12 that shipped before #775; tol_floor_only is the
+  tolerance at RATE_TOL_REL = 0, which is RATE_TOL_ABS['ratio'] and is the
+  SMALLEST this dial can ever make it. floor_over_effect above 1 means no
+  value of RATE_TOL_REL puts the tolerance under the effect: the binding
+  term is the floor, not the dial, which is why #775's margin test lands on
+  its recorded-reason branch.
+
+   effect  rate_gap  tol_at_012  tol_floor_only  at_012_over_effect  floor_over_effect effect_over_gap
+ 0.014602  0.000216    0.118274            0.02            8.099841           1.369678       67.696461
+
+The pairs this dial can reach, on the shipped fold, worst first: the value of
+RATE_TOL_REL at or below which each goes red. A pair whose gap is already
+under its unit's absolute floor is unreachable at any value and is not here.
+
+ crosses_below entry                    column                       unit          gap       peak
+      0.317751 1000Hz@44k               msd4-10ms.200-700Hz.seg0     db         4.4252    13.9266
+      0.236869 990Hz@48k                msd4-10ms.200-700Hz.seg0     db         4.3874    18.5225
+      0.236869 1000Hz@48k               msd4-10ms.200-700Hz.seg0     db         4.3874    18.5225
+      0.167707 800Hz@44k                msd10-25ms.200-700Hz.seg0    db         0.6115     3.6464
+      0.131346 200Hz@48k                mpd2.50ms.rowcorr.seg0       ratio      0.1313     1.0000
+      0.129037 200Hz@48k                mpd2.50ms.rowcorr.seg1       ratio      0.1290     1.0000
+      0.102349 1000Hz@44k               msd10-25ms.200-700Hz.seg0    db         0.8560     8.3635
+      0.089475 450Hz@44k                cqt3225Hz.seg0               db         7.1580    80.0000
+      0.089475 450Hz@44k                cqt3225Hz.seg1               db         7.1580    80.0000
+      0.089009 350Hz@44k                cqt3225Hz.seg0               db         7.1207    80.0000
+      0.089009 350Hz@44k                cqt3225Hz.seg1               db         7.1207    80.0000
+      0.087552 425Hz@44k                cqt3225Hz.seg0               db         7.0042    80.0000
+      0.087500 425Hz@44k                cqt3225Hz.seg1               db         7.0000    80.0000
+      0.087467 440Hz@44k                cqt3225Hz.seg0               db         6.9974    80.0000
+      0.087451 440Hz@44k                cqt3225Hz.seg1               db         6.9961    80.0000
+      0.087449 523Hz@44k                cqt3225Hz.seg1               db         6.9205    79.1380
+      0.087449 525Hz@44k                cqt3225Hz.seg1               db         6.9205    79.1380
+      0.087449 523Hz@44k                cqt3225Hz.seg0               db         6.9205    79.1380
+      0.087449 525Hz@44k                cqt3225Hz.seg0               db         6.9205    79.1380
+      0.084054 550Hz@44k                cqt3225Hz.seg1               db         6.7243    80.0000
+      0.084046 550Hz@44k                cqt3225Hz.seg0               db         6.7237    80.0000
+      0.082090 600Hz@44k                cqt3225Hz.seg0               db         6.5672    80.0000
+      0.082051 600Hz@44k                cqt3225Hz.seg1               db         6.5641    80.0000
+      0.081454 990Hz@48k                ms4ms.200-700Hz.seg0         db         4.5402    55.7394
+

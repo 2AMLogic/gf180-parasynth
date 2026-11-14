@@ -644,11 +644,41 @@ sweep is 0.0142 against 0.0200. Two consequences for the numbers on this page:
 A second, smaller finding from the same measurement, recorded because it
 bears on how the figures above should be read: `jit.cyclecorr` separates a
 0.5 %-jittered square from a steady one by **0.0146**, while the
-rate-independence control's tolerance for that same column is
+rate-independence control's tolerance for that same column was
 `RATE_TOL_REL` x 1.0 = **0.12**. The control would not notice a rate
 dependence eight times larger than everything the column measures. That is a
-tolerance problem rather than a fold problem and was not changed here; it is
-#775.
+tolerance problem rather than a fold problem and was not changed by #767; it
+was #775.
+
+**#775's outcome (2026-11-14).** `RATE_TOL_REL` is now **0.02**, a swept
+record (`docs/sensitivity/rate-tol-rel.json`, instrument
+`tools/probes/rate_tol_sweep.py`). Over a 92-entry panel -- 44 values of f0 in
+both resampling directions plus the two control shapes -- the narrowing takes
+what the control catches on the integer fold #767 replaced from **191**
+(entry, column) pairs to **636**, and on the correlation family alone from 187
+to 541. Two things to carry forward when reading the figures above:
+
+- **The margin test does not exist, for a measured reason.** `max()` floors
+  every tolerance at `RATE_TOL_ABS[unit]`, so the smallest tolerance any value
+  of `RATE_TOL_REL` can put on `jit.cyclecorr.seg0` is **0.02** -- already
+  **1.37x** the 0.0146 effect. The dial took the ratio from 8.10x to 1.37x and
+  the term that remains is the floor, which is a different dial and a separate
+  issue. `jit.cyclecorr` **stays** in the vector: it resolves its own effect at
+  68x its own 44.1k<->48k reproducibility (0.0146 against 0.000216), so what
+  was eight times too coarse was the control's tolerance, not the column.
+- **The cost is entirely dB, and it is a second defect.** `RATE_TOL_REL` x
+  `|-80 dB|` handed a `cqt` bin sitting at the `floor_db` clamp 9.6 dB of
+  licence at 0.12 and hands it 1.6 dB at 0.02 -- and 7.0 dB of real
+  44.1k<->48k movement was sitting under the old licence at 440 Hz. Eleven dB
+  pairs on the shipped `RATE_PANEL` are now in `RATE_KNOWN_RED`, each with a
+  mechanism (a band holding no odd harmonic of its own stimulus, reading 68-79
+  dB under that clip's loudest bin) and a falsifier
+  (`test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them`: a
+  band that DOES hold a harmonic must stay inside tolerance). No `ratio`
+  column is quarantined and
+  `test_the_rate_quarantine_holds_no_correlation_column` makes that mechanical,
+  because quarantining one would absorb #775's own repair. The per-unit
+  tolerance that retires all eleven is **#782**.
 
 **Promotion status (#138, 2026-10-01).** Estimators exist
 (`model/promoted_measures.py`: `lowband_level_db`, `dominant_period_ms`).
