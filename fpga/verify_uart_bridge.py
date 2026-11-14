@@ -173,10 +173,19 @@ def phrase_items(*, smoke=True):
     contract: boot image live, then every phrase write as an EVENT at the frame
     the link schedule names. Dues keep their spacing; if the contract refuses
     (a due that upload speed cannot beat), the whole phrase shifts later in
-    whole frames -- the schedule is the device's, never the host's sleep."""
+    whole frames -- the schedule is the device's, never the host's sleep.
+
+    schedule="legacy-relative" is deliberate (#372). This phrase is a UART
+    SMOKE fixture with no claim on the scorer's timing map: its waits are read
+    here as frame counts on the UART link, while the "absolute" schedule solves
+    its waits against SPI landing (tb_top_bx_timing) and would be silently
+    reinterpreted on this link. It is also the rendering R1 froze as `run-m5a`
+    (fpga/release/r1-2025.1.json); changing it is a release change, not a side
+    effect of the SPI M5 case."""
     cmds, tail, _info = top.m5a_script(
         str(ROOT / "docs/scorecard/mono-m5a-miniv3/manifest.json"), smoke=smoke,
-        saw_cutoff_hz=20000, saw_volume_correction_db=-0.45428)
+        saw_cutoff_hz=20000, saw_volume_correction_db=-0.45428,
+        schedule="legacy-relative")
     items = boot_items()
     f = 0
     for wait, flag, sec, addr, data in cmds:

@@ -95,6 +95,54 @@ def test_the_host_default_selection_is_not_r1s_bytes():
     assert rr.command_bytes_problems(m)
 
 
+# ---- #372: the SPI M5 schedule change must not reach R1's UART phrase ---------
+def test_r1_run_m5a_bytes_are_unchanged():
+    """#372 changed `m5a_script`'s default schedule to "absolute" for the SPI
+    M5 case. The UART `--fixture m5a` phrase is R1's frozen `run-m5a`; its
+    bytes must still be the pinned ones."""
+    m = rr.load_manifest(rr.IMAGES["r1"]["manifest"])
+    assert "run-m5a" in m["commands"]
+    assert rr.command_bytes_problems(m, keys=["run-m5a"]) == []
+
+
+def test_r1_run_m5a_pin_sees_the_absolute_schedule(monkeypatch):
+    """The control for the test above -- the input that defeats it: if the
+    UART host rendered the phrase with the "absolute" schedule (what the #372
+    default did before the FPGA callers were pinned), R1's pin refuses. If it
+    did not, the test above could not see the regression it guards."""
+    import verify_synth_top as top
+    real = top.m5a_script
+
+    def forced(*a, **kw):
+        kw["schedule"] = "absolute"
+        return real(*a, **kw)
+
+    monkeypatch.setattr(top, "m5a_script", forced)
+    m = rr.load_manifest(rr.IMAGES["r1"]["manifest"])
+    probs = rr.command_bytes_problems(m, keys=["run-m5a"])
+    assert probs and "run-m5a" in probs[0]
+
+
+def test_every_fpga_m5a_caller_pins_the_legacy_schedule(monkeypatch):
+    """Both FPGA consumers of `m5a_script` -- the UART host's `--fixture m5a`
+    and the bridge bench's `phrase_items()` -- must ask for "legacy-relative"
+    explicitly: their waits are UART frame counts, not SPI landing solutions,
+    and an omitted argument would silently follow the SPI default."""
+    import uart_host as uh
+    import verify_synth_top as top
+    import verify_uart_bridge as vub
+    real, seen = top.m5a_script, []
+
+    def spy(*a, **kw):
+        seen.append(kw.get("schedule"))
+        return real(*a, **kw)
+
+    monkeypatch.setattr(top, "m5a_script", spy)
+    uh._phrase_events_m5a()
+    vub.phrase_items()
+    assert seen == ["legacy-relative", "legacy-relative"]
+
+
 # ---- the renderer refuses a tree that is not the image's ----------------------
 def test_render_refuses_a_tree_whose_sources_are_not_the_images(tmp_path, capsys):
     """Main has moved past R1's freeze (voice_dp.v etc.); a reference rendered
