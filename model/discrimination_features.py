@@ -217,6 +217,34 @@ def _unit_of(name: str) -> str:
         return "count"
     return "ratio"
 
+
+def rate_tolerance(name: str, x: float, y: float, tol_rel: float | None = None) -> float:
+    """What the rate-independence control is allowed to call "the same number"
+    for column `name` read as `x` at one rate and `y` at the other.
+
+    THE ONE PLACE THE EXPRESSION LIVES. It used to be written out three times
+    -- in `_rate_gaps`, in
+    `test_the_one_residual_the_fold_repair_cannot_reach_is_the_stimulus` and in
+    tools/probes/fold_rate_sweep.py -- and a tolerance that is three copies is
+    three tolerances the day one of them is edited. #775.
+
+    `tol_rel` overrides RATE_TOL_REL for a sweep, the same shape of override
+    `_rate_gaps` already carries for the fold width: tools/probes/rate_tol_sweep.py
+    prices the dial by calling through the shipped comparison rather than by
+    restating it.
+
+    Note which term binds. `max()` means the floor wins whenever
+    `tol_rel * peak` falls under it, so for a correlation column pinned near
+    1.0 the relative term stops mattering at all below
+    `RATE_TOL_ABS["ratio"] / 1.0 = 0.02` -- which is why narrowing
+    RATE_TOL_REL cannot bring the tolerance on `jit.cyclecorr.seg0` under the
+    0.0146 that column measures. See
+    `test_no_relative_tolerance_can_reach_the_cyclecorr_effect`.
+    """
+    rel = RATE_TOL_REL if tol_rel is None else tol_rel
+    return max(rel * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(name)])
+
+
 _EPS = 1e-20
 
 
@@ -830,19 +858,22 @@ def _rate_pair(label, f0, jitter, seed, kind, build_sr):
     return a, build_sr, _resample(a, build_sr, other), other
 
 
-def _rate_gaps(taps=None):
+def _rate_gaps(taps=None, tol_rel=None):
     """Every column of every panel entry that is over tolerance between the
     two rates, as (label, name, value at the build rate, value at the other,
     gap). `taps` overrides the fold interpolator so the SAME panel can be run
     against the integer fold this repair replaced -- see
-    `test_the_integer_fold_this_replaced_is_still_red_on_this_panel`."""
+    `test_the_integer_fold_this_replaced_is_still_red_on_this_panel`.
+    `tol_rel` overrides RATE_TOL_REL the same way, so
+    tools/probes/rate_tol_sweep.py prices that dial through the shipped
+    comparison instead of a copy of it (#775)."""
     over = []
     for label, f0, jitter, seed, kind, build_sr in RATE_PANEL:
         a, sr_a, b, sr_b = _rate_pair(label, f0, jitter, seed, kind, build_sr)
         va, names = extra_features(a, sr_a, taps)
         vb, _ = extra_features(b, sr_b, taps)
         for nm, x, y in zip(names, va, vb):
-            tol = max(RATE_TOL_REL * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(nm)])
+            tol = rate_tolerance(nm, x, y, tol_rel)
             if abs(x - y) > tol:
                 over.append((label, nm, round(float(x), 4), round(float(y), 4),
                              round(abs(float(x - y)), 4)))
@@ -1302,8 +1333,7 @@ def test_the_one_residual_the_fold_repair_cannot_reach_is_the_stimulus():
         b = _resample(a, build_sr, RATE_PAIR[build_sr])
         va = dict(zip(*reversed(mpd_features(a, build_sr))))
         vb = dict(zip(*reversed(mpd_features(b, RATE_PAIR[build_sr]))))
-        tol = max(RATE_TOL_REL * max(abs(va[nm]), abs(vb[nm])),
-                  RATE_TOL_ABS[_unit_of(nm)])
+        tol = rate_tolerance(nm, va[nm], vb[nm])
         return abs(va[nm] - vb[nm]), tol, va[nm], vb[nm]
 
     hard, tol, a, b = gap("square")

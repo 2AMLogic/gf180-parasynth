@@ -211,10 +211,22 @@ def pct(a: float, b: float) -> float:
 
 
 PARAM = r"^\s*(?:parameter|localparam)\s+(?:\w+\s+)?{name}\s*=\s*(-?\d+)\s*[,;)]"
-# A module-level integer constant in a Python model, `NAME = 12` (optionally
-# annotated, optionally followed by a comment) at column 0. Column 0 because an
-# indented assignment is a local or a class attribute, not the module's value.
-PY_CONST = r"^{name}\s*(?::\s*[\w\[\]., ]+)?=\s*(-?\d+)\s*(?:#.*)?$"
+# A module-level numeric constant in a Python model, `NAME = 12` or
+# `NAME = 0.12` (optionally annotated, optionally followed by a comment) at
+# column 0. Column 0 because an indented assignment is a local or a class
+# attribute, not the module's value.
+#
+# A PLAIN DECIMAL LITERAL ONLY, and the refusals are the point (#775 needed
+# RATE_TOL_REL = 0.12, which the integer-only pattern could not read). The
+# digits must be there on both sides of the point, so `.5`, `3.`, `1e-3`,
+# `f(3)`, `3 + 1` and a commented-out `# N = 3` all still find no declaration
+# and `parse_parameter` still refuses rather than picking a digit out of an
+# expression -- which is what `float()` would happily do with `1e-3` if the
+# pattern let it through, and the gate has no business reading a value out of
+# a form nobody writes a swept constant in.
+# `test_a_python_constant_that_is_not_a_plain_decimal_literal_refuses` carries
+# every one of those cases.
+PY_CONST = r"^{name}\s*(?::\s*[\w\[\]., ]+)?=\s*(-?\d+(?:\.\d+)?)\s*(?:#.*)?$"
 KIND_PATTERN = {"verilog-parameter": PARAM, "python-constant": PY_CONST}
 
 

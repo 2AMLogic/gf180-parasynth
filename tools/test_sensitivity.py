@@ -347,10 +347,30 @@ def test_a_python_constant_is_read_at_column_zero_only():
     assert sens.parse_parameter("N: int = 33\n", "N", "x", "python-constant") == 33
 
 
-def test_a_python_constant_that_is_not_an_integer_literal_refuses():
-    """`N = f(3)` or `N = 3.5` is not a value the gate can read; it must refuse
-    rather than pick up a digit from inside the expression."""
-    for text in ("N = f(3)\n", "N = 3.5\n", "N = 3 + 1\n", "# N = 3\n"):
+def test_a_python_constant_can_be_a_plain_decimal(root):
+    """#775 registers RATE_TOL_REL = 0.12, a float. The integer-only pattern
+    refused it ("found 0 declarations"), which is why this case exists: a gate
+    that cannot read the constant it is asked to gate is an unsatisfiable gate.
+    Read against the shipped module, not only a literal, so the pattern is
+    checked against the form the value is actually written in."""
+    assert sens.parse_parameter("N = 3.5\n", "N", "x", "python-constant") == 3.5
+    assert sens.parse_parameter("N = -0.5\n", "N", "x", "python-constant") == -0.5
+    assert sens.parse_parameter("N: float = 0.12  # why\n", "N", "x",
+                                "python-constant") == 0.12
+    src = (root / "model/discrimination_features.py").read_text()
+    assert sens.parse_parameter(src, "RATE_TOL_REL", "m", "python-constant") > 0.0
+
+
+def test_a_python_constant_that_is_not_a_plain_decimal_literal_refuses():
+    """`N = f(3)` is not a value the gate can read; it must refuse rather than
+    pick up a digit from inside the expression. Widening the pattern for #775
+    moved the line but did not move it far: the digits have to be there on both
+    sides of the point, so a bare `.5`, a trailing `3.`, exponent notation and
+    a dict entry (`RATE_TOL_ABS["ratio"]`, which is why that one is NOT
+    registered) all still refuse."""
+    for text in ("N = f(3)\n", "N = 3 + 1\n", "# N = 3\n", "N = .5\n",
+                 "N = 3.\n", "N = 1e-3\n", "N = 1_000\n",
+                 'N = {"ratio": 0.02}\n', "N = 0.1, 0.2\n"):
         with pytest.raises(sens.Refused, match="found 0 declarations"):
             sens.parse_parameter(text, "N", "x", "python-constant")
 
