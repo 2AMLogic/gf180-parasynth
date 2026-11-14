@@ -73,11 +73,17 @@ Filed with the three table entries sourced against the installed PDK
 and with the cheapest fix regardless of the tables: **warn when `cell_library`
 matches no table.**
 
-**Retired 2026-11-13, at klt `0.9.2.dev986+gaadc1d351523` (#765).** The three
-patches in `pnr/klt/ladder_dp/run-klt.sh` are gone and
-`pnr/klt/ladder_dp/run_klt.py` runs the flow with none. Re-run on the same PDK
-the original used (`gf180mcuD` @ ciel `54435919…`), so klt is the only variable
-that moved. The generated `synth_ladder_dp.run.ys` now carries all three things
+**Retired 2026-11-13/14, measured at klt `0.9.2.dev986+gaadc1d351523` and
+again at `0.9.2.dev1029+g76f47afa48f1` (#765).** The three patches in
+`pnr/klt/ladder_dp/run-klt.sh` are gone and `pnr/klt/ladder_dp/run_klt.py` runs
+the flow with none. Re-run on the same PDK the original used (`gf180mcuD` @
+ciel `54435919…`), so klt is the only variable that moved -- and the two klt
+builds emit a **byte-identical** netlist
+(`sha256:ea7cc228fd4013e7640f87078a1f0f4907b94565f53a21f153c0b4c5f25201c8`),
+so the counts below are not one build's accident. The committed `run.log`,
+`synth_response.json` and `par_response.json` are the `dev1029` run.
+
+The generated `synth_ladder_dp.run.ys` now carries all three things
 this finding said were missing for the 7t library -- `abc -constr
 ladder_dp_abc.constr -D 81380`, `setundef -zero`, and `hilomap -hicell
 gf180mcu_fd_sc_mcu7t5v0__tieh Z -locell gf180mcu_fd_sc_mcu7t5v0__tiel ZN` --
@@ -90,6 +96,24 @@ and in the netlist each patch's target is now **zero**:
 | all-x `assign` with no load (patch 3, same GROUND net) | 2 | **0** |
 | klt's own `__tiel`/`__tieh` instances | 0 | **59** |
 
+**These counts are re-measured on every run, not quoted from here.**
+`run_klt.audit_retired_patches` runs each retired patch's *own* matcher over
+the netlist klt emitted, where the patch used to run, and the run FAILS in a
+second if any of the three is non-zero -- otherwise a regression would surface
+where it originally did, hours into OpenSTA or TritonRoute as an opaque error
+with nothing pointing back at the netlist. Its control is the netlist the
+patches were written for, which must turn all three red
+(`test_the_audit_turns_red_on_the_netlist_the_patches_were_written_for`). What
+it cannot see is stated with it: patch 2 only ever matched **1-bit** constants,
+so a wider constant assign is the same defect class in a shape that patch never
+handled -- counted and reported next to the gated counts, never gated on.
+
+**`STA-0171` is cleared live, not only by counting.** The `dev1029` run reaches
+`cts` with `setup_violation_count: 0` and `hold_violation_count: 0` at both
+`place` and `cts` (`par_response.json` `stages[]`), i.e. OpenSTA read the
+unpatched netlist and built a timing graph from it. That is the error patch 1
+existed to avoid, and it does not occur.
+
 The silent half is fixed too: `timing` is no longer `null` inside an `"ok"`
 envelope -- the same request now reports `critical_path_ps: 30288.33` against
 its `delay_target_ps: 81380` -- and `provenance` carries `klt_git_commit` and
@@ -99,6 +123,29 @@ Not the same netlist: `instance_count` went 5328 -> 5703 and `area_um2`
 113292.0768 -> 117230.2656, which is what applying `-constr`, `setundef` and
 `hilomap` to this library costs. The committed `synth_response.json` is the new
 run; the 0.5.0 one is `git show b9930a4a:pnr/klt/ladder_dp/synth_response.json`.
+
+**What the committed record does NOT establish: `DRT-0305` on a finished
+route.** The committed run is bounded at `cts` (`run.log` says so in those
+words), because floorplan + place + cts is **17 s** here while a full
+detailed route of this design is about **5 h** -- 64 rip-up/reroute
+iterations, then a `repair_antennas` pass and a second full `detailed_route`
+-- which no dispatch step can hold. So `DRT-0305`'s *cause* is measured gone
+(zero constant assigns, zero all-x assigns, 59 tie cells klt inserted itself)
+and the error itself is not re-observed. Tracked for a verdict-grade run on
+the build box; see #808.
+
+A full route was nonetheless *seen* to complete, and this is deliberately not
+offered as evidence: the artefacts were written by the orphaned container of
+klayout-tools#5726, whose klt had already been reaped, so no invocation can be
+named for them. For whatever it is worth to a later run, and labelled as not a
+verdict: it reached `flow__errors__count: 0`, `timing__fmax: 28.04 MHz`, 36,945
+vias, 340,174 um of wirelength, and **9** residual `Metal Spacing` violations
+between signal nets and `VSS`, all on `Metal2` -- which the router did not
+clear in its remaining ~37 iterations. The same artefacts reproduce #2089's
+doubling exactly (9 unique `bbox` sites, 18 report lines,
+`route__drc_errors: 18` against `route_pass:0__route__drc_errors: 9`), at
+`dev986`, so that finding is still live. Treat every number in this paragraph
+as a lead for #808 to confirm, not as a result.
 
 ### klayout-tools#5577 — `klt synthesize`'s netlist path carries a per-run uuid, so no committed `klt place-and-route` request can name it
 
@@ -133,6 +180,53 @@ derived place-and-route request. Filed with three fixes ranked by cost, the
 cheapest being a `synthesize_report` request field so place-and-route can name
 the *report* rather than the netlist.
 
+### klayout-tools#5726 — the OpenROAD container outlives the caller, so a killed klt leaves an orphaned route writing unattributable artefacts
+
+**New, 2026-11-14 (#765).** klt `0.9.2.dev986+gaadc1d351523` and
+`0.9.2.dev1029+g76f47afa48f1`; `openroad` =
+`openroad/orfs@sha256:bb7f3169…` (`26Q3-1510-g6cb3f2b704`) through the wrapper
+klayout-tools' own `scripts/install-openroad-docker.sh` generates.
+
+`openroad` on the provisioned hosts is not a binary: it is a containerised
+wrapper, and `_openroad_engine.py` drives it with `subprocess.run` (lines 226,
+272). Kill the **klt process** -- a caller's timeout, or a sweep reaping its
+agent -- and the container client dies while the container itself does not.
+OpenROAD finishes the route and writes `*.def`, `*.odb`, `*_route_drc.rpt` and
+`*_route_metrics.json` into the caller's repository with no response, no stage
+`commit.json`, and no live parent.
+
+Twice in this directory, and both times into git-tracked space:
+
+| | response | route artefacts | gap |
+|---|---|---|---|
+| 2026-09-18 | `par_response.json`, 0 bytes, 01:37 | DEF/ODB/DRC/metrics 15:57 | 14 h 20 m |
+| 2026-11-13 | `par_response.json`, 0 bytes, 16:15 | DEF/ODB/DRC/metrics 23:19 | 5 h 03 m |
+
+The 2026-11-13 chain is fully reconstructable: the route stage's
+`openroad-logs/<id>/stdout.log` stops mid-`[INFO DRT-0195] Start 27th stubborn
+tiles iteration` at 19:06, when its klt was reaped, and has **no
+`invocation.json`**; the DEF (10.6 MB), the as-built Verilog, the route ODB,
+the DRC report and the metrics all carry mtime 23:19 and are owned by `root`,
+the container's user. On the same host, two containers of that image were still
+running **13 days** after the sweep that started them ended.
+
+Why it is klt's and not merely a container fact: it is klayout-tools' own
+wrapper and recommended install path; a correct caller doing
+`start_new_session` + `os.killpg` still cannot reach a container; and it
+undermines klt's own preconditions -- `--resume` reuses "each leading stage
+whose `commit.json` matches and whose artifacts are on disk", which after a
+killed run may be racing a live writer with no way to detect it. Filed with
+four fixes ranked by cost, the cheapest being three lines in the wrapper: a
+`--cidfile` plus a `trap` that stops that id on `EXIT INT TERM`.
+
+Workaround in our tree, and it is a workaround: `run_klt.py` runs klt in its
+own process group, kills the group on timeout, then stops the OpenROAD
+containers that are demonstrably its own -- ownership being an absolute path
+inside the run's directory in the container's argv, deliberately **not** a
+bind mount, because the wrapper mounts `$PWD` and a mount test on a shared
+host would match a container started from a parent directory and stop another
+agent's run.
+
 ### klayout-tools#2089 — `detailed_route` runs twice into the same `-output_drc` path, so the DRC count comes back doubled
 
 **New.** Same environment. Root cause in klt source: one `detailed_route_call`
@@ -162,8 +256,15 @@ run's "2 detailed-route DRC violations" are **one** site listed twice
 
 ### klayout-tools#2090 — `provenance.klt_version` reports the package version, not the build version
 
-**New.** `klt version` prints `0.5.0+g604c4fb8a1ce`; the committed
-`synth_response.json` says `"klt_version": "0.5.0"`.
+**Fixed upstream; confirmed 2026-11-14 (#765).** The committed
+`synth_response.json` now carries `"klt_version":
+"0.9.2.dev1029+g76f47afa48f1"` plus `klt_git_commit` and
+`klt_reinstall_spec`, so the identity is in the record without our wrapper
+having to recover it. What follows is the original finding, kept because the
+harm it did is the reason the record is checked at all.
+
+`klt version` printed `0.5.0+g604c4fb8a1ce`; the then-committed
+`synth_response.json` said `"klt_version": "0.5.0"`.
 `build_identity.build_version()` (#1202) exists precisely for this and is wired
 only into the CLI banner (`cli/__init__.py:22`, `cli/parser.py:111`);
 `_provenance.py:356` → `_klt_version()` returns `klayout_tools.__version__`,
@@ -322,6 +423,22 @@ today** and needs no tool fix — nobody wired it up. `docs/v0.3-scope.md` and
 
 ### Candidates left on the table, with what is missing
 
+- **A `klt place-and-route` report does not say what stage was *asked* for.**
+  Measured 2026-11-14 at `0.9.2.dev1029+g76f47afa48f1` (#765): a request with
+  `"target_stage": "cts"` produces a response carrying `"stage_reached":
+  "cts"` and **no `target_stage` key at all**, and `stage_reached` is set from
+  the requested stage rather than observed
+  (`place_and_route.py:2302`, `"stage_reached": target_stage`). So a committed
+  report cannot be told apart from one whose caller asked for `route` — the
+  distinction between "bounded on purpose" and "stopped short" is not in the
+  artefact, only in the caller's own log. It bites `--check REPORT` hardest:
+  verifying this field against its request compares a value with itself.
+  **Why not filed yet:** klt only reaches the response on success, so this is
+  a report-contract gap rather than a wrong answer, and we have not checked
+  whether `coverage`/`applied` is the intended place for it. **Next step:
+  read `--check`'s field list and propose the echo there.** Our own driver
+  does not depend on the fix — `run.log` records the override in words — which
+  is exactly why this could sit unnoticed.
 - **`[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported.
   Skipping for layer Via1`** — and the same for Via2, Via3, Via4, in every
   routing log we have (`pnr/orfs/work/ladder_dp.log:127`,
@@ -359,12 +476,34 @@ today** and needs no tool fix — nobody wired it up. `docs/v0.3-scope.md` and
   request/response pairs are driven, turns every failure into a 0-byte
   artefact. Our driver now captures both streams, so the envelope survives.
 
-  **Still unexplained, and this is the original claim:** the committed 0-byte
-  file followed a run that *had* written a routed DEF, ODB, DRC report and
-  metrics. A successful route should put a report on stdout. Nothing found in
-  #765 accounts for that case, and its mtime (Sep 18 01:37) still predates the
-  route artefacts (Sep 18 15:57). Filing it still needs a successful route
-  whose response is 0 bytes, which #765 did not produce.
+  **Settled in full, 2026-11-14 (#765), and the remaining half is not a defect
+  either -- it is klayout-tools#5726.** The original claim was that the 0-byte
+  file "followed a run that *had* written a routed DEF, ODB, DRC report and
+  metrics", so a successful route had produced no report. Both halves of that
+  are now measured:
+
+  1. **A successful run does write a report.** The `dev1029` run's
+     `par_response.json` is **25,304 bytes** and parses -- the first non-empty
+     one this directory has had. So a 0-byte response cannot have come from a
+     success, and the inference "the route succeeded, therefore klt dropped the
+     report" was wrong.
+  2. **The artefacts did not come from the run that wrote the 0-byte file.**
+     `openroad` is a containerised wrapper; when klt is killed the container
+     keeps routing and writes the DEF, ODB, DRC report and metrics **hours
+     later, with no live parent**. The 14 h 20 m gap that made this entry
+     unfilable (response 01:37, artefacts 15:57) is the signature of that
+     leak, not of a dropped report -- and the committed 0.5.0 `run.log`
+     agrees: it stops after `signed qualifiers left: 0` and never prints a
+     `place-and-route:` timing line, because `run-klt.sh` was killed before
+     reaching it.
+
+  Reproduced on 2026-11-13 with the same shape and a 5 h 03 m gap, from a run
+  of our own driver, which is what identified the mechanism. **Filed as
+  klayout-tools#5726**; the evidence and the four ranked fixes are in that
+  section above. `run_klt.py` now reaps its own containers on timeout, so this
+  directory cannot grow another unattributable artefact set from a driver
+  timeout -- only from the whole agent being killed, which is what the
+  upstream fix covers.
 
 ---
 
