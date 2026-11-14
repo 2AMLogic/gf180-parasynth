@@ -13,6 +13,7 @@ from scipy.io import wavfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import measure_mono_m5a_reference as ref
+import ring_estimator
 
 EVENTS = ({"note": 36, "on_s": .1, "gate_s": .6},
           {"note": 43, "on_s": 2.1, "gate_s": .6},
@@ -401,6 +402,14 @@ def qualify_envelope_basis():
             "initial_failures": "100 ms spectral window refused below 12 periods; 5 ms envelope window failed known release; early h4 window could not resolve the short filter transient"}
 
 
+def ring_hz(y) -> float:
+    """The bass cutoff ring's frequency, or `ref.Refused` -- never a default."""
+    try:
+        return ring_estimator.ring_frequency(y, ref.SR)
+    except ring_estimator.Refused as exc:
+        raise ref.Refused(f"bass cutoff ring refused: {exc}") from exc
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", type=Path, default=ROOT / "docs/scorecard/mono-m1a-miniv3")
@@ -479,7 +488,7 @@ def main(argv=None):
         for _ in range(3):
             rig = ref.rr.MiniV3Rig(block=ref.BLOCK)
             y = rig.ring(PATCH["filter_cutoff"][2], .98, seconds=1.2)
-            rings.append(ref.am.dominant_frequency(y, 25, 15000, ref.SR).require("bass cutoff ring"))
+            rings.append(ring_hz(y))
         if np.ptp(rings) > 10:
             raise ref.Refused("bass cutoff ring is not repeatable")
         report = {"schema": "mono-m1a-reference-v1", "case_id": "M1A", "valid": True,

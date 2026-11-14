@@ -22,11 +22,9 @@ Not routed, by reading (verification-rules rule 8 -- why no defeating input):
     Assumed from names and docstrings -- skimmed, not traced.
   * `tools/measure_mono_m1a_reference.py`, `tools/measure_mono_m5a_reference.py`
     (Mini V3 free rings -- `_measure_open_cutoff`, M1A's three-ring phrase):
-    STILL on `am.dominant_frequency`, deliberately. Both files are hashed into
-    the attack qualification (`suite-v3.json` `sources_sha256`) and the
-    attack-context analysis basis; editing them makes those records REFUSED
-    as stale, and re-running them needs the Mini V3 rig this host lacks.
-    Routing them is a follow-up that must regenerate those records.
+    routed in #706; call-site controls at the end of this file. Both files are
+    hashed into the attack qualification (`suite-v3.json` `sources_sha256`) and
+    the attack-context analysis basis, which need regenerating on a rig host.
 """
 import math
 import os
@@ -163,3 +161,54 @@ def test_reference_integrity_tracking_still_answers_sustained_rings(monkeypatch)
     monkeypatch.setattr(rr, "OurLadder", L, raising=True)
     errs = ri._tracking_once("ours", {})
     assert all(v is not None and abs(v - 1.0) < 0.05 for v in errs.values()), errs
+
+
+# ---- #706: the hash-pinned Mini V3 readers -------------------------------------
+import measure_mono_m1a_reference as m1a                            # noqa: E402
+import measure_mono_m5a_reference as m5a                            # noqa: E402
+
+
+class _FakeRig:
+    def __init__(self, ring_fn, block=16):
+        self.p = {}
+        self.ring_fn = ring_fn
+        self.block = block
+
+    def ring(self, knob, res, seconds=0.5):
+        return self.ring_fn(self.block, seconds)
+
+
+@pytest.mark.parametrize("make", BAD)
+def test_m1a_bass_ring_refuses(make):
+    with pytest.raises(m1a.ref.Refused):
+        m1a.ring_hz(make())
+
+
+def test_m1a_bass_ring_still_answers():
+    assert abs(m1a.ring_hz(sustained()) - 1000.0) < 1.0
+
+
+def _patch_rig(monkeypatch, ring_fn):
+    monkeypatch.setattr(m5a.rr, "MiniV3Rig", lambda block=16: _FakeRig(ring_fn, block))
+    monkeypatch.setattr(m5a, "_readback", lambda *a, **k: 0.0)
+
+
+@pytest.mark.parametrize("make", BAD)
+def test_m5a_open_cutoff_refuses_on_non_ring(monkeypatch, make):
+    _patch_rig(monkeypatch, lambda block, seconds: make(seconds=seconds))
+    with pytest.raises(m5a.Refused):
+        m5a._measure_open_cutoff()
+
+
+def test_m5a_open_cutoff_still_answers(monkeypatch):
+    _patch_rig(monkeypatch, lambda block, seconds: sustained(
+        1000.0 if block == 16 else 1500.0, seconds))
+    out = m5a._measure_open_cutoff()
+    assert abs(out["f0_hz"] - 1000.0) < 1.0 and out["wrong_block_control"]["caught"]
+
+
+def test_m5a_wrong_block_control_refuses_on_non_ring(monkeypatch):
+    _patch_rig(monkeypatch, lambda block, seconds: (
+        decay(seconds=seconds) if block == 512 else sustained(1000.0, seconds)))
+    with pytest.raises(m5a.Refused, match="wrong-block"):
+        m5a._measure_open_cutoff()
