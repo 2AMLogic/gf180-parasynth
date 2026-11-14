@@ -24,7 +24,10 @@ block benches; the mm² figures are gf180mcu cell area at tt/5 V with `*_1`
 cells allowed, and **cell area is not die area** — see ARCHITECTURE.md
 section 10 for where the chip sits against the wafer.space quarter slot.
 
-The T1 evidence-tier verdict for this block, graded by `klt signoff --manifest` and re-graded in CI, is committed at [manifests/verdict.txt](manifests/verdict.txt) (item 10, repo hygiene, is the only item attested; every other item is `unmet` with its reason).
+The T1 evidence-tier verdict for this block, graded by `klt signoff --manifest` and re-graded in CI, is committed at [manifests/verdict.txt](manifests/verdict.txt): **2 of 11 items met** — item 9, testbenches shipped, and item 10, repo hygiene. Every other item is `unmet` with its reason.
+<!-- claim: grep="^T1: 2/11 items met$" in=manifests/verdict.txt issue=789 note="the count this sentence quotes; when a third item is attested this goes red and the sentence must be rewritten, which is the point" -->
+<!-- claim: grep="^\[MET  \] T1 #9 Testbenches shipped$" in=manifests/verdict.txt issue=789 note="the first attested item this sentence names" -->
+<!-- claim: grep="^\[MET  \] T1 #10 Repo hygiene$" in=manifests/verdict.txt issue=789 note="the second" -->
 
 ## Where we are
 
