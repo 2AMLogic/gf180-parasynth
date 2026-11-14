@@ -13,12 +13,27 @@ was REFUSED for want of the corpus. This answers it.
 
 WHY THE SIDES ARE COUNTED SEPARATELY AND WHAT WOULD BE DAMNING. Our renders
 come from a phase accumulator, which is the "no real period instability" case
-by construction, so the render side is predicted to sit mostly under the floor.
-If a large share of render rows were under it while reference rows were not,
-then before #763 this column was partly separating the two sides on numerical
-noise and `jit.stability`'s +0.008 attribution is partly an artefact. That is
-a prediction, and the point of this file is that it is cheap to check and was
-being argued about instead.
+by construction, so the render side was PREDICTED to sit mostly under the
+floor. If a large share of render rows were under it while reference rows were
+not, then before #763 this column was partly separating the two sides on
+numerical noise and `jit.stability`'s +0.008 attribution is partly an
+artefact. That was a prediction, and the point of this file is that it is
+cheap to check and was being argued about instead.
+
+THE PREDICTION IS REFUTED. MEASURED, 2026-11-14, at the shipped 20 ppm over
+the corpus at 85fbecf: 0 of 116 reference rows and 0 of 116 render rows are
+floor-refused -- 0 on every one of the sixteen voices, both sides, with 0
+degenerate and 0 invalid rows as well. Not "mostly": none. So the render side
+does NOT sit under the floor, this column was NOT separating the two sides on
+numerical noise, and the worry that `jit.stability`'s +0.008 is partly an
+artefact of it is dead. That is the best outcome this check could have had,
+and it is recorded here -- at the prediction -- rather than only in
+docs/discrimination.md, because a reader who finds the prediction should not
+have to go looking for whether it survived.
+
+Measured twice independently, which is why the refutation is stated this
+flatly: once during the #773 review (numpy 1.26.4) and once resolving it
+(numpy 2.5.4, a different host), same 0/116 both sides, same three pins.
 
 WHAT IS NOT COUNTED, AND THIS IS THE WHOLE DESIGN. Not `value == 0`.
 `jitter_features` zeroes EVERY `jit.*` column when the window does not hold
@@ -82,13 +97,28 @@ from model.discrimination_features import (  # noqa: E402
 
 SR_REF, SR_RENDER = 44100, 48000
 
-#: Read from docs/discrimination.md, NOT re-measured here -- this host has no
-#: corpus, which is why #768 exists. Line 1490 of that file: 116 WAVs, digest
-#: over sorted relative path then bytes (`model/condition_boundary.provenance`
+#: Originally read from docs/discrimination.md line 1490 (116 WAVs, digest over
+#: sorted relative path then bytes -- `model/condition_boundary.provenance`
 #: computes it the same way, so the definition is shipped code rather than a
 #: third one invented here). The OTHER digest quoted on that page,
 #: e3ad2d77a79cda4a, is the same corpus under a walk-order-dependent
 #: definition; it is deliberately not the one pinned.
+#:
+#: NOW RE-MEASURED, so this is no longer a transcribed pin (2026-11-14). The
+#: corpus is a public 20 MB shallow clone, which is what the earlier
+#: "no host here has the corpus" caveat got wrong: the capability was absent
+#: from the host but OBTAINABLE in under a minute, and this tool's own
+#: CORPUS_HOWTO printed the command. An unsatisfiable-looking gate that is
+#: actually satisfiable is the failure this repository calls over-conservative
+#: REFUSED, and it trains readers to ignore the gates that work.
+#:
+#:   git clone --depth 1 https://github.com/tidalcycles/sounds-tr808-fischer
+#:   git -C <clone> rev-parse HEAD  -> 85fbecf1bec32553395625ea659e2a56dfd7c0e1
+#:   corpus_digest(<clone>)         -> ("6e6af82198eb5b46", 116)
+#:
+#: i.e. the shipped definition above, run as shipped, reproduces both pins
+#: exactly -- and so does split_hash, ab381e78f9f4cc41. Confirmed on two
+#: hosts under numpy 1.26.4 and 2.5.4.
 EXP_N_WAV = 116
 EXPECT_CORPUS_SHA256 = "6e6af82198eb5b46"
 #: docs/discrimination.md line 65, the sixteen-sound split.
@@ -280,6 +310,10 @@ def main(argv=None) -> int:
     sys.path.insert(0, str(ROOT / "tools"))
     import run_case
     ap.add_argument("--refs", default=str(run_case.configured_refs()))
+    # The default assumes a DEDICATED host (the pinned build box, 8 cores).
+    # On a shared dispatch worker it takes 7 of 8 cores for one census, so
+    # pass --jobs 2 there; both measurements recorded in this file's docstring
+    # were taken with --jobs 2 for that reason.
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 4) - 1))
     ap.add_argument("--arm", default="ours")
     ap.add_argument("--dphase-floor-ppm", type=float, default=None,

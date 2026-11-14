@@ -839,36 +839,98 @@ the reasons are results, not omissions.
   host that made the repair. That count is issue #768, and until it is
   answered the `jit.stability` attribution of +0.008 on line 232 of
   `docs/discrimination-run-16.txt` is a figure whose inputs have changed.
-- **The count still has no number, and now has an instrument (2026-11-13,
-  #768). The measurement is REFUSED for a missing capability, not pending for
-  want of effort.** What ships:
-  - `tools/dphase_floor_census.py` counts the rows per side —
+- **ANSWERED (2026-11-14, #768 criterion 1, measured in #773). 0 of 116 rows
+  under the floor on each side.** The 2026-11-13 record below this one said
+  `REFUSED - no corpus, no build box on this host`. That verdict was honest
+  about what was *installed* and wrong about what was *obtainable*: the corpus
+  is a public 20 MB shallow clone, and `tools/dphase_floor_census.py`'s own
+  `CORPUS_HOWTO` printed the command to get it. It took under a minute.
+
+  ```
+  tools/dphase_floor_census.py --refs <clone of tidalcycles/sounds-tr808-fischer@85fbecf> --jobs 2
+  corpus: 116 WAVs, sha256 6e6af82198eb5b46, split hash ab381e78f9f4cc41
+  floor 20 ppm (shipped JIT_DPHASE_FLOOR_PPM); arm ours
+
+  side        rate     reported  floor_refused  degenerate_refused  row_invalid  total
+  ref        44100          116              0                   0            0    116
+  render     48000          116              0                   0            0    116
+  ```
+
+  `0/...` on every one of the sixteen voices, both sides. Exit 0. All three
+  pins (corpus digest, WAV count, split hash) re-measured rather than
+  transcribed. **Both arms, the per-voice breakdown and the refusal path are
+  in `docs/dphase-floor-census-16.txt`**, which also records the exact clone
+  and command that produced them. Measured twice independently -- during the #773 review
+  (numpy 1.26.4) and resolving it (numpy 2.5.4, a different host) -- same
+  numbers both times.
+
+  Three consequences, and they cut against the census's own prediction:
+
+  - **The prediction is refuted, which is the best outcome the check could
+    have had.** The census predicted the render side would "sit mostly under
+    the floor" because our renders come from a phase accumulator, with the
+    corollary that `jit.stability`'s +0.008 would then be *partly an
+    artefact*. It is 0/116, not "mostly". This column was **not** separating
+    the two sides on numerical noise, and that worry is dead. The refutation
+    is recorded in `tools/dphase_floor_census.py`'s docstring at the point
+    where the prediction is stated, not only here.
+  - **Criterion 2 is closed at census cost, not A/B cost.** The floor enters
+    only through `refused = not (len(d) >= 4 and d.std() > _EPS and pjit >
+    floor)`, which is monotone in `floor`: lowering it can only reduce
+    refusals. With 0 floor refusals and 0 degenerate refusals at 20 ppm, the
+    `--dphase-floor-ppm 0` arm reports every row too, so the
+    `jit.dphase_ar1.seg0` column is identical on all 232 rows, the feature
+    matrix is identical, and the +0.008 is **unchanged**. Measured, not only
+    derived: re-running the census with `--dphase-floor-ppm 0` gives 0/116
+    again on both sides (exit 0). The monotonicity premise the derivation
+    rests on is asserted by
+    `tools/test_dphase_floor_census.py::test_the_floor_refusal_set_only_grows_with_the_floor`,
+    which needs no corpus, so CI re-checks it every commit.
+  - **Criterion 3 resolves to "none", now on evidence.** #763's floor refuses
+    nothing in the published sixteen-voice set, so **no published figure needs
+    re-deriving** because of it. It remains the right guard -- it stops the
+    column reporting the autocorrelation of numerical noise -- but it changes
+    no number here.
+
+  **The two-arm `discrimination_run.py` A/B was NOT run** and is not needed
+  for the above; the identical-column result is a derivation from the census
+  plus monotonicity, both of which are measured. If the A/B is ever wanted for
+  its own sake it must still be two runs at ONE commit, since comparing a
+  fresh run against the +0.008 below would confound the floor with every model
+  change since `7078320bd8bd`.
+
+  What ships, unchanged from the instrument built on 2026-11-13:
+
+  - `tools/dphase_floor_census.py` counts the rows per side --
     `reported` / `floor_refused` / `degenerate_refused` / `row_invalid`,
     read from `jitter_features`' own refusal decision and never from
     `value == 0`. That distinction is the whole instrument: this module
     zeroes *every* `jit.*` column when the window does not hold
     `JIT_MIN_CYCLES`, so counting zeroes would credit the floor with rows it
     never touched, and `degenerate_refused` keeps the two pre-#763
-    divide-by-zero legs out of the floor's tally as well.
-  - `model/discrimination_run.py --dphase-floor-ppm 0 --seed N` is the other
-    half: the A/B must be **two runs at one commit** differing only in the
-    floor. Comparing a fresh run against the +0.008 below would confound the
-    floor with every model change since `7078320bd8bd`, which is where that
-    figure was measured. #763 shipped the override on `jitter_features` but
-    nothing above it could reach the hook — `extra_features` passed neither
-    argument — so until this change a floor-off arm was not expressible and
-    an A/B driven from the CLI would have returned two identical arms.
-  - **Why there is still no number.** The run needs the Fischer corpus and
-    the pinned build box; the dispatch worker that built the instrument has
-    neither (`~/dev/refs` absent, `GF180_TR808_REFS` unset, no `.env`). The
-    census asserts both and exits 2 rather than printing a count, which is
-    the only honest output a host in that state can produce.
-  - **When it is run, the report must name the commit it was measured at.**
+    divide-by-zero legs out of the floor's tally as well. Its default
+    `--jobs` assumes a dedicated box; on a shared worker pass `--jobs 2`.
+  - `model/discrimination_run.py --dphase-floor-ppm 0 --seed N` makes a
+    floor-off arm expressible from the CLI at all. #763 shipped the override
+    on `jitter_features` but nothing above it could reach the hook --
+    `extra_features` passed neither argument -- so before this change an A/B
+    driven from the CLI would have returned **two identical arms** and
+    reported a confident null.
+  - **A report must name the commit it was measured at.**
     `jit.cycledshape.seg0` is in the same `jit.stability` bucket (six
     columns: `cyclecorr`, `cycledshape`, `phasejit_ppm`, `phasecurv_ppm`,
     `dphase_ar1`, `enstd_db`), so #767's repair will move this same
     attribution figure again, and an undated +0.008 could not be told from
     the one above it.
+  - **Still open (#768 follow-up, not blocking):** `degenerate_refused` is
+    reached by elimination rather than asserted -- if `d.std() <= _EPS` and
+    `pjit <= floor` were ever true together the row would be credited to the
+    **floor**, the over-crediting this module exists to prevent. The trace
+    already carries `dphase_scatter_ppm`, so the leg can be asserted with one
+    comparison. The measured 0 degenerate rows support the stated reason for
+    having no control (`JIT_MIN_CYCLES = 6` forces `len(d) >= 5`, `_EPS =
+    1e-20` is four orders below float rounding), but support is not an
+    assertion.
 
 **Original promotion list (unexecuted as written):**
 
