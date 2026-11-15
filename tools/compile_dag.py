@@ -330,10 +330,24 @@ def main() -> int:
                 continue
             if n.get("slow") and not args.slow:
                 continue                       # nightly runs these
-            ok, detail = run_evidence(i, n)
+            try:
+                ok, detail = run_evidence(i, n)
+            except Exception as exc:
+                # A raise here -- a verifier TimeoutExpired above all -- used
+                # to escape the loop, so the single write after it never ran
+                # and the run's verdicts were discarded (#823). A raising node
+                # is RED evidence carrying the exception type, not a skip.
+                # `except Exception` leaves KeyboardInterrupt and the REFUSED
+                # SystemExit of load_results() loud (#600).
+                ok = False
+                detail = f"{type(exc).__name__}: {exc}"[:90]
             res[i] = {"passed": ok, "sha": sha, "detail": detail}
             print(f"  {'PASS' if ok else 'FAIL'}  {i:3s} {detail}", file=sys.stderr)
-        RESULTS.write_text(json.dumps(res, indent=2, sort_keys=True) + "\n")
+            # Written after EVERY node, not once after the loop: a job-level
+            # kill (the nightly's timeout-minutes, a runner eviction, SIGKILL)
+            # cannot be handled, only out-saved. What is already on disk
+            # survives it; a handler alone would not.
+            RESULTS.write_text(json.dumps(res, indent=2, sort_keys=True) + "\n")
 
     status = classify_all(nodes)
 
