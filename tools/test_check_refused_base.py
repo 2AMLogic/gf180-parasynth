@@ -107,5 +107,29 @@ def test_the_baseline_only_shrinks(tmp_path):
                     str(tmp_path / "absent.json")]) == 3
 
 
+def test_baseline_keys_are_repo_relative_and_travel_between_roots(tmp_path):
+    # The defect the CI red exposed: keys built from absolute paths can only
+    # match the checkout that wrote the baseline. The same tree content under
+    # two different roots must yield identical, repo-relative keys.
+    for name in ("checkout-a", "checkout-b"):
+        root = tmp_path / name
+        (root / "tools").mkdir(parents=True)
+        (root / "pkg").mkdir()
+        (root / "tools" / "refusal.py").write_text(
+            "class Refused(Exception):\n    pass\n")
+        (root / "pkg" / "fix_bare.py").write_text(
+            "class Refused(RuntimeError):\n    pass\n")
+    keys = []
+    for name in ("checkout-a", "checkout-b"):
+        root = tmp_path / name
+        bad, total = cb.nonconforming(
+            sorted(root.glob("*/*.py")), root)
+        assert total == 1
+        keys.append([k for k, *_ in bad])
+    assert keys[0] == keys[1], keys
+    assert keys[0] == ["pkg/fix_bare.py:Refused(RuntimeError)"]
+    assert not any(k.startswith("/") for k in keys[0])
+
+
 def test_the_committed_tree_matches_its_baseline():
     assert cb.main([]) == 0

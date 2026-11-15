@@ -188,9 +188,17 @@ def base_repr(node: ast.expr) -> str:
     return ".".join(parts)
 
 
-def key_for(path: str, name: str, node: ast.ClassDef) -> str:
+def key_for(path: str, name: str, node: ast.ClassDef, root: Path) -> str:
+    """The baseline key: repo-relative POSIX, so the committed baseline is
+    machine-independent (an absolute key can only ever match the checkout
+    that wrote it). Same convention as Index._index_file's `rel`."""
+    p = Path(path)
+    try:
+        p = p.relative_to(root)
+    except ValueError:
+        pass                               # a fixture outside the tree: as given
     bases = ";".join(sorted(base_repr(b) for b in node.bases))
-    return f"{path}:{name}({bases})"
+    return f"{p.as_posix()}:{name}({bases})"
 
 
 def nonconforming(files: list[Path], root: Path) -> tuple[list[tuple[str, int, str, str]], int]:
@@ -210,7 +218,7 @@ def nonconforming(files: list[Path], root: Path) -> tuple[list[tuple[str, int, s
         if _conforms(ix, path, name, frozenset()):
             continue
         bases = ", ".join(base_repr(b) for b in node.bases) or "(none)"
-        out.append((key_for(path, name, node), node.lineno, name, bases))
+        out.append((key_for(path, name, node, root), node.lineno, name, bases))
     # the canonical anchor class is exempt by definition, never reportable
     total = len(ix.classes) - (1 if (ix.canonical, CANONICAL_CLASS) in ix.classes else 0)
     return out, total
