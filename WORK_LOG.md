@@ -2,11 +2,18 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-15
+
+- **Issue #801** (closed): Remove the duplicated period grid in measure_promoted_bands.py: the unguarded copy reports 0.034 % when 9 of 12 known cases refuse
+- **PR #806**: fix: refuse the period worst-case figure when any of its twelve known cases refuses
+
 ### 2026-11-14
 
 - **Issue #772** (closed): Remove the stale pre-#109 scorecard estimator copies and the unrun apparatus command from tools/measure_partial_balance.py
 - **PR #773**: feat: count dphase_ar1 floor refusals per side, and plumb the floor-off arm
 - **PR #779**: refactor: drop the retired fixed-window estimators from the balance diagnostic
+- **Issue #785** (closed): Consolidate 4 copies of the release staleness comparison: two generations already disagree on a record that ships with nulls
+- **PR #802**: fix: one release staleness comparison, with the absent-vs-null hole closed
 
 ### 2026-11-13
 
