@@ -46,12 +46,12 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **2513 commits over 1405 hours.**
+Measured from git, not remembered. **2529 commits over 1408 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 3698 | 2.6 |
-| injected controls | 290 | 0.2 |
+| tests | 3719 | 2.6 |
+| injected controls | 297 | 0.2 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,189 | 8 |
 
@@ -75,13 +75,11 @@ graph LR
     M2["✓ Matches our own spec"]
     M3["· Matches software references"]
     M4["✗ Matches real hardware"]
-    M5["○ Noise, osc-3 modulation, full waveform set"]
   end
   subgraph drums["TR-808 drums"]
     D1["! Drum kit bit-exact"]
     D2["· Is an 808, per the reference"]
     D3["✗ Per-voice measured against targets"]
-    D4["○ Complete 808 -- all 16 sounds"]
   end
   subgraph integration["Integration"]
     I1["○ Control link carries every write"]
@@ -97,12 +95,10 @@ graph LR
   F3 --> M2
   M2 --> M3
   M3 --> M4
-  M2 --> M5
   F2 --> D1
   D1 --> D2
   F3 --> D2
   D2 --> D3
-  D2 --> D4
   M1 --> I1
   D1 --> I1
   I1 --> I2
@@ -116,11 +112,9 @@ graph LR
   style M2 fill:#0E6B5E,color:#fff
   style M3 fill:#3f8f5f,color:#fff
   style M4 fill:#8E2438,color:#fff
-  style M5 fill:#5a6468,color:#fff
   style D1 fill:#9A6510,color:#fff
   style D2 fill:#3f8f5f,color:#fff
   style D3 fill:#8E2438,color:#fff
-  style D4 fill:#5a6468,color:#fff
   style I1 fill:#5a6468,color:#fff
   style I2 fill:#5a6468,color:#fff
   style S1 fill:#3f8f5f,color:#fff
@@ -132,16 +126,14 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STALE** | rtl-sketch/ladder_dp.v changed since node/F1-ladder was cut |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal (not re-run; verifier is slow) |
-| `F3` | Measurement ground truth | **GREEN** | 153 passed in 3.89s |
+| `F3` | Measurement ground truth | **GREEN** | 153 passed in 2.50s |
 | `M1` | One Moog voice bit-exact | **STALE** | rtl-sketch/voice_dp.v changed since node/M1-voice was cut |
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
-| `M5` | Noise, osc-3 modulation, full waveform set | **TODO** | issue #48 |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 476.21s (0:07:56) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 243.21s (0:04:03) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
-| `D4` | Complete 808 -- all 16 sounds | **TODO** | issue #22 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `I2` | Whole chip at its pins | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `S1` | Routed on gf180, DRC clean | **GREEN** | pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared |
@@ -502,6 +494,7 @@ locks it.
 | `model/` | The fixed-point voice (`voice_fx.py`) and filter (`fixed.py`), their sizing sweeps, renderers, and regression tests |
 | `rtl-sketch/` | The chip's RTL: `synth_top.v` (the top), `spi_ctl.v` (the link) + `stubs/spi_ctl_dr7rev1.v` (revision 1, kept as a control), `drum_regs.v` (the drum control image), `voice_dp.v` + `recip_div.v` (the voice), `ladder_dp.v` / `ladder_dp_n.v` (the ladder, one or N contexts), `modal_dp.v` / `modal_dp_rom.v` (the bank), the drum section (`drum_dp.v` + `drum_kit.v`), `i2s_tx.v`; their benches and the `verify_*.py` drivers, each bit-exact against its model with negative controls (`test_rtl.py`); `area/` (the gf180mcu synthesis flow) |
 | `docs/ARCHITECTURE.md` | The chip: block diagram, signal path, the 256-cycle schedule, multipliers, clock and reset, pins, register map, measured area, what is verified |
+| `docs/ROADMAP.md` | Now / Next / Later: the hand-written ordering of the work, what is blocked and on what. The board and capability graph above stay the source for status |
 | `docs/pnr-synth-top.md` | `synth_top` placed and routed on gf180mcu: die and core (fixed inputs), the utilisation actually achieved, DRC, STA at tt/ss/ff, where the area went block by block, and what `DONT_USE_CELLS` costs |
 | `spec/NUMERIC-CONTRACT.md` | The voice and the drum section as a numeric contract, revision 8, **proposed, not ratified**: every per-sample operation, the seven tables pinned by SHA-256, and the open items. `spec/reference/gen_tables.py --check` fails if any table or hash stops being the model's |
 | `spec/decision-records/` | Why things are the way they are: the filter model (0001), the product (0002), note-on semantics (0003), glide (0004), gain structure (0005), resonance compensation (0006), the control interface (0007), the drum section on the modal bank (0008), the bass drum's frequency (0009), one gate per oscillator (0010) — all proposed |

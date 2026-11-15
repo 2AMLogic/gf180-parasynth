@@ -520,6 +520,7 @@ verify-full:
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
+	  "$(PY) tools/control_dag_issue_only.py" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
 	  "$(PY) tools/probes/estimator_ground_truth.py controls" \
 	  "$(PY) tools/probes/coupling_controls.py" \
@@ -614,6 +615,8 @@ controls:
 	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused" \
+	  "$(PY) tools/probes/repeat_period_multiple.py --inject NO_SUBMULTIPLE_RULE --expect-fail" \
+	  "$(PY) tools/probes/repeat_period_multiple.py --inject OVERLAP_NORMALISER --expect-fail" \
 	  "$(PY) tools/probes/permitted_differences.py --controls" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py --inject NO_IVERILOG --expect refused" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py --inject BROKEN_REPRO --expect refused" \

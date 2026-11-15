@@ -10,6 +10,7 @@
     "mean-trials.json",
     "dphase-ar1-floor.json",
     "fold-interpolator.json",
-    "rate-tol-rel.json"
+    "rate-tol-rel.json",
+    "repeat-period-submultiple-margin.json"
   ]
 }

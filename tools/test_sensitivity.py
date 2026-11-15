@@ -48,7 +48,12 @@ FILES = ["docs/sensitivity/registry.json",
          # rate-independence tolerance -- and the first FLOAT parameter under
          # the gate, which is why PY_CONST had to widen
          "docs/sensitivity/rate-tol-rel.json",
-         "docs/sensitivity/rate-tol-rel-sweep.txt"]
+         "docs/sensitivity/rate-tol-rel-sweep.txt",
+         # issue #780's record: REPEAT_SUBMULTIPLE_MARGIN_PERMILLE, the margin
+         # bounding repeat_period's shortest-submultiple rule
+         "docs/sensitivity/repeat-period-submultiple-margin.json",
+         "docs/sensitivity/repeat-period-submultiple-margin-sweep.txt",
+         "model/audio_measure.py"]
 
 
 @pytest.fixture
