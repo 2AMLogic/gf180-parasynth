@@ -48,7 +48,12 @@ FILES = ["docs/sensitivity/registry.json",
          # bounds dominant_period's choice between octave candidates and
          # replaced a bare argmax (same source file as the two above)
          "docs/sensitivity/dominant-period-octave-margin.json",
-         "docs/sensitivity/dominant-period-octave-margin-sweep.txt"]
+         "docs/sensitivity/dominant-period-octave-margin-sweep.txt",
+         # issue #780's record: REPEAT_SUBMULTIPLE_MARGIN_PERMILLE, the margin
+         # bounding repeat_period's shortest-submultiple rule
+         "docs/sensitivity/repeat-period-submultiple-margin.json",
+         "docs/sensitivity/repeat-period-submultiple-margin-sweep.txt",
+         "model/audio_measure.py"]
 
 
 @pytest.fixture
