@@ -75,6 +75,21 @@ import run_case as rc  # noqa: E402
 
 OWNER = pathlib.PurePosixPath("tools/run_case.py")
 OWNER_TESTS = pathlib.PurePosixPath("tools/test_run_case.py")   # tests the resolver itself
+CORPUS_GATE_TESTS = pathlib.PurePosixPath("tools/test_verify_109_corpus_gate.py")
+# tests verify_109_claims' required-corpus gate (#814). It SETS the documented
+# variable -- through run_case's own REFS_ENV/REFS_ALIAS_ENV constants, never
+# a re-decided name -- on SUBPROCESS environments to drive the probe against
+# controlled corpus states (absent, partial, zero-length, truncated). It does
+# not resolve the location itself; the child probe still resolves through
+# run_case.configured_refs(), which is the property #522 guards. The
+# exemption is FUNCTION-scoped, not file-wide: only the two functions that
+# set or assert the variable names are allowed, so a future hand-rolled
+# `os.environ.get("GF180_TR808_REFS")` anywhere else in the file still trips
+# the scan.
+CORPUS_GATE_FUNCS = frozenset({
+    "run_probe",     # sets REFS_ENV / unsets the alias on the child environment
+    "test_corpus_root_absent_required_exits_2",   # asserts NO VERDICT names REFS_ENV
+})
 SELF = pathlib.PurePosixPath("tools/test_corpus_path_single_source.py")
 ENV_NAMES = {"GF180_TR808_REFS", "TR808_REFS", "GF180_TR808_REFS_DEFAULT"}   # env-var keys
 DEFAULT_PATH = "/tmp/tr808-ref"                  # the default, as a path (prose may mention it)
@@ -259,7 +274,9 @@ def test_no_module_outside_run_case_reads_the_corpus_variable_or_default():
         pp = pathlib.PurePosixPath(p)
         if pp in (OWNER, SELF):
             continue
-        allow = OWNER_TESTS_RESOLVER_FUNCS if pp == OWNER_TESTS else frozenset()
+        allow = (CORPUS_GATE_FUNCS if pp == CORPUS_GATE_TESTS
+                 else OWNER_TESTS_RESOLVER_FUNCS if pp == OWNER_TESTS
+                 else frozenset())
         v = violations((ROOT / p).read_text(), allow_in=allow)
         if v:
             bad[p] = v

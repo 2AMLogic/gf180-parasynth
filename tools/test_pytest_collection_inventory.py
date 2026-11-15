@@ -22,13 +22,13 @@ import pytest_collection_inventory as inv  # noqa: E402
 #: them (scope, path, parsing) cannot let the real-tree check pass vacuously.
 #: A count here goes UP when a module gains a test.
 #:
-#: model/discrimination_features.py, 13 -> 25, and this line is RE-DERIVED BY
+#: model/discrimination_features.py, 13 -> 26, and this line is RE-DERIVED BY
 #: COLLECTION rather than picked from either side of a merge: #773 landed with
 #: this line conflicting, and NEITHER side was right (merge-base 13, this
 #: branch 14, origin/main 18 -- the two branches added disjoint tests, so
 #: neither number describes the merged tree). Re-derive it with
 #: `inv.expected_nodes("model/discrimination_features.py", src)`, never by
-#: adding the two diffs. The twenty-five, by the side that added each:
+#: adding the two diffs. The twenty-six, by the side that added each:
 #:   13  the merge base (#763's
 #:       test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13)
 #:   +5  origin/main, the #767 fold interpolator:
@@ -51,10 +51,14 @@ import pytest_collection_inventory as inv  # noqa: E402
 #:       test_the_octave_margin_does_not_move_the_rate_panel,
 #:       test_the_octave_margin_refuses_the_input_that_defeats_it,
 #:       test_the_octave_margin_ships_a_real_margin
+#:   +1  origin/main, #768's remaining increment -- the `degenerate_refused`
+#:       control the census test above stated, correctly, that it did not
+#:       have (it landed on main while this branch was open):
+#:       test_a_doubly_degenerate_row_is_not_credited_to_the_floor
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
-    "model/discrimination_features.py": 25,
+    "model/discrimination_features.py": 26,
     "model/discrimination_trajectory.py": 6,
 }
 
