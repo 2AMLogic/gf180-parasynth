@@ -13,7 +13,8 @@
     "against an EXTERNAL reference. A subsystem with no fidelity evidence is",
     "UNVALIDATED however many implementation tests pass -- see issue #45.",
     "covers: files whose change invalidates this node's evidence -> STALE. slow: too slow for a push; status is read from docs/dag-results.json, which the nightly job writes. GREEN means the evidence RAN AND PASSED at a commit, never merely that a file exists.",
-    "covers must name EVERY input whose change invalidates the node. S1 and S3 once listed only synth_top.v, so they stayed GREEN through voice RTL and ROM changes -- compiling a status document does not fix an incomplete definition of what the evidence depends on."
+    "covers must name EVERY input whose change invalidates the node. S1 and S3 once listed only synth_top.v, so they stayed GREEN through voice RTL and ROM changes -- compiling a status document does not fix an incomplete definition of what the evidence depends on.",
+    "M5 ('Noise, osc-3 modulation, full waveform set', #48) and D4 ('Complete 808 -- all 16 sounds', #22) were RETIRED, not deleted quietly: both cited a closed issue as their only source, so both rendered 'TODO issue #N' for capabilities M1/M2 and D1/D2 already verify. Neither was ever stamped and neither carried tests. docs/capability-dag.md 'Retired nodes' says which node now carries each capability; tools/test_compile_dag_deps.py forbids the shape returning. Issue #788."
   ],
   "nodes": {
     "F1": {
@@ -109,15 +110,6 @@
         "M3"
       ]
     },
-    "M5": {
-      "name": "Noise, osc-3 modulation, full waveform set",
-      "group": "minimoog",
-      "class": "implementation",
-      "issue": 48,
-      "deps": [
-        "M2"
-      ]
-    },
     "D1": {
       "name": "Drum kit bit-exact",
       "group": "drums",
@@ -158,15 +150,6 @@
       "covers": [
         "model/drums_fx.py",
         "model/voice_fx.py"
-      ]
-    },
-    "D4": {
-      "name": "Complete 808 -- all 16 sounds",
-      "group": "drums",
-      "class": "implementation",
-      "issue": 22,
-      "deps": [
-        "D2"
       ]
     },
     "I1": {
