@@ -4,6 +4,17 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-15
 
+- **PR #786**: docs: roadmap as of 2026-11-13
+- **PR #799**: retire DAG nodes M5 and D4, and forbid the issue-only shape returning
+- **Issue #788** (closed): DAG nodes M5 and D4 read TODO against closed issues: give each evidence or retire it
+- **PR #807**: fix: assert degenerate_refused from the trace instead of by elimination
+- **PR #809**: fix(pnr): retire the three klt netlist patches, and make the record attributable to an invocation
+- **Issue #765** (closed): Retire the three netlist patches in pnr/klt/ladder_dp/run-klt.sh: the klt bugs they work around were fixed upstream in September
+- **PR #813**: test: ground-truth corner_dc_referenced against filtered_noise, with a -6 dB control
+- **Issue #794** (closed): bug: make verify is red on main -- estimator_ground_truth reports corner_dc_referenced undeclared
+- **Issue #540** (closed): CI: verify the #709 cancel/duplicate-run fixes live and re-measure main job-minutes (steps 3-4 deferred)
+- **PR #821**: verify_109_claims counts its verdict, refuses when the reference half is required
+- **Issue #814** (closed): verify_109_claims' real-reference half is binding on no host and FAILs on a partial corpus: the cymbal-369 row-7 defect, unsearched
 - **Issue #801** (closed): Remove the duplicated period grid in measure_promoted_bands.py: the unguarded copy reports 0.034 % when 9 of 12 known cases refuse
 - **PR #806**: fix: refuse the period worst-case figure when any of its twelve known cases refuses
 
