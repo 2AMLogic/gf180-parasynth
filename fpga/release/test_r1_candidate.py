@@ -267,3 +267,39 @@ def test_r1_scorecard_view_is_current():
     import r1_scorecard
     with contextlib.redirect_stdout(io.StringIO()):
         assert r1_scorecard.main(["--check"]) == 0
+
+
+def test_control_a_key_dropped_from_the_derivation_is_stale_not_bound(monkeypatch):
+    """The absent-vs-explicit-null hole (#785), on the R1 candidate's own gate.
+
+    r1-candidate.json ships `presets.default.calibration` as an explicit `null`
+    (3 such nulls in the record), and `r1_candidate.build()` sources that
+    subtree from `release_manifest.presets()`. A derivation that stops emitting
+    the key must read STALE; before #785 this gate's comparator compared
+    `a.get(k)` with `b.get(k)`, so absent and `null` were the same input and the
+    gate reported BOUND on a record that no longer equalled its derivation.
+
+    Same three conditions as the manifest control (rule 5): clean run BOUND,
+    the substitution shown to be a real change, and the verdict must name
+    exactly the dropped path.
+    """
+    import release_manifest as rm
+
+    committed = json.loads(r1c.RECORD.read_text())
+    assert committed["presets"]["default"]["calibration"] is None, \
+        "the control needs a committed explicit null; it no longer has one"
+    assert r1c.check()[0] == "BOUND", "clean run must pass before the mutant proves anything"
+
+    emit = rm.presets
+
+    def presets_without_calibration():
+        out = emit()
+        assert "calibration" in out["default"], "the mutant did not activate"
+        del out["default"]["calibration"]
+        return out
+
+    monkeypatch.setattr(rm, "presets", presets_without_calibration)
+    verdict, detail = r1c.check()
+    assert verdict == "STALE", \
+        f"a derivation that stopped emitting presets.default.calibration read {verdict}: {detail}"
+    assert "presets.default.calibration" in detail, detail

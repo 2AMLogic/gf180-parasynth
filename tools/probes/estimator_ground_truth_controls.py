@@ -370,6 +370,53 @@ def _corner_from_curve_as_highpass():
     return mutant
 
 
+def _corner_dc_referenced_at_minus_6db():
+    """`corner_dc_referenced` reading its corner where the response is 6 dB
+    below the DC plateau instead of 3 dB: half AMPLITUDE where the contract is
+    half POWER.
+
+    A convention confusion in the one family this estimator belongs to, which
+    is what doctrine 2 in this file's header asks a mutant to be -- not a typo
+    but a thing a caller writing the composition by hand would plausibly get
+    wrong. The real `dc_plateau_db` reference is kept, so what moves is only
+    the target. Measured over the 16 lowpass members: red on all 16 against
+    the check's 2 % tolerance, +31.5 % on the 2-pole at fc=200 Hz (262.8 Hz
+    for a corner at 199.8 Hz) and +72.2 % at worst on the order=1 member.
+
+    THE SIGN MATTERS, and it is spelled out because it was got wrong once
+    already: `corner_from_curve` subtracts its own 3 dB from whatever `ref_db`
+    it is handed, so `ref.value - 3.0` gives a target 6 dB down, while
+    `ref.value + 3.0` puts the target AT the plateau, which the real function
+    rejects with "the passband reference band is already below -3 dB" --
+    REFUSED on 15 of the 16 members, and `_had_power` counts a refusal as
+    green. So the `+3.0` version carries almost no power and reaches CAUGHT,
+    if at all, through the single member that still answers; on the reduced
+    control catalogue it can be fully blind. A mutant that mostly converts
+    PASS into REFUSED is not the control it looks like.
+
+    NOT the mutant this check's own repair most obviously implies. Restoring
+    the median fallback #546 removed is BLIND on this family -- it reddens 0
+    of the 16, because the plateau- and median-referenced corners agree to
+    within 0.1 % here (worst 0.0985 %): the #546 bias needs a band that moves
+    toward a fixed grid floor, and this family's band top is a fixed fc/4.
+    Measured, and recorded here rather than shipped, for the same reason the
+    `tonality_db` note above is: a control that cannot fire reports CAUGHT
+    for nothing."""
+    real_dc = am.dc_plateau_db
+    real_corner = am.corner_from_curve
+
+    def mutant(freqs, gain_db, *, ref_band, scale_hz):
+        ref = real_dc(freqs, gain_db, ref_band, scale_hz=scale_hz)
+        if not ref.ok:
+            return am.Estimate(None, False,
+                               "no passband reference to measure a corner "
+                               "against: " + ref.reason, dict(ref.detail or {}))
+        return real_corner(freqs, gain_db, ref_band=ref_band,
+                           ref_db=ref.value - 3.0)
+    mutant.__name__ = "mutant_corner_dc_referenced"
+    return mutant
+
+
 def _step_ratio_over_max():
     def mutant(x):
         d = np.abs(np.diff(np.asarray(x, float)))
@@ -505,6 +552,10 @@ MUTANTS = (
      "plateau comes from the wrong end of it",
      "corner_from_curve", _corner_from_curve_as_highpass,
      ("corner_from_curve", "filtered_noise")),
+    ("corner_dc_referenced taking its corner 6 dB below the DC plateau "
+     "instead of 3 dB -- half amplitude where the contract is half power",
+     "corner_dc_referenced", _corner_dc_referenced_at_minus_6db,
+     ("corner_dc_referenced", "filtered_noise")),
     ("envelope_ripple_db as the envelope's own standard deviation, with no "
      "high-pass (so a curve reads as stepping)",
      "envelope_ripple_db", _envelope_ripple_from_std,

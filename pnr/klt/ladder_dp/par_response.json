@@ -1,0 +1,1148 @@
+{
+  "schema_version": 1,
+  "engine": "openroad",
+  "engine_version": "26Q3-1510-g6cb3f2b704",
+  "engine_logs": [
+    {
+      "invocation_id": "fd1643c3ce6d44ac85a333634c198120",
+      "script_name": "pnr_ladder_dp_floorplan.tcl",
+      "script_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/pnr_ladder_dp_floorplan.tcl",
+        "scope": "repo"
+      },
+      "script_sha256": "15d5f6d79342dc2798b149f383d4d9933f48af9a176b074c782465b5a2b5ae7c",
+      "metrics_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_floorplan_metrics.json",
+        "scope": "repo"
+      },
+      "outcome": "exited",
+      "returncode": 0,
+      "directory": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/fd1643c3ce6d44ac85a333634c198120",
+        "scope": "repo"
+      },
+      "stdout_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/fd1643c3ce6d44ac85a333634c198120/stdout.log",
+        "scope": "repo"
+      },
+      "stderr_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/fd1643c3ce6d44ac85a333634c198120/stderr.log",
+        "scope": "repo"
+      },
+      "metadata_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/fd1643c3ce6d44ac85a333634c198120/invocation.json",
+        "scope": "repo"
+      },
+      "retention_errors": []
+    },
+    {
+      "invocation_id": "9c39ecf48307434e847e0eeb8e60af0e",
+      "script_name": "pnr_ladder_dp_place.tcl",
+      "script_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/pnr_ladder_dp_place.tcl",
+        "scope": "repo"
+      },
+      "script_sha256": "18aae0cb6b4ce82564546f4b8597a65d3cc209749cf8814a39e6e415b8a7c3c4",
+      "metrics_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_place_metrics.json",
+        "scope": "repo"
+      },
+      "outcome": "exited",
+      "returncode": 0,
+      "directory": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/9c39ecf48307434e847e0eeb8e60af0e",
+        "scope": "repo"
+      },
+      "stdout_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/9c39ecf48307434e847e0eeb8e60af0e/stdout.log",
+        "scope": "repo"
+      },
+      "stderr_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/9c39ecf48307434e847e0eeb8e60af0e/stderr.log",
+        "scope": "repo"
+      },
+      "metadata_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/9c39ecf48307434e847e0eeb8e60af0e/invocation.json",
+        "scope": "repo"
+      },
+      "retention_errors": []
+    },
+    {
+      "invocation_id": "f24d8bdfcd55471c9613cdd01cf318a1",
+      "script_name": "pnr_ladder_dp_cts.tcl",
+      "script_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/pnr_ladder_dp_cts.tcl",
+        "scope": "repo"
+      },
+      "script_sha256": "14cc99556a5571c96f56e6e67e5ce1d1be1b102e30b4b3ed3cc217be16c08af7",
+      "metrics_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_cts_metrics.json",
+        "scope": "repo"
+      },
+      "outcome": "exited",
+      "returncode": 0,
+      "directory": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/f24d8bdfcd55471c9613cdd01cf318a1",
+        "scope": "repo"
+      },
+      "stdout_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/f24d8bdfcd55471c9613cdd01cf318a1/stdout.log",
+        "scope": "repo"
+      },
+      "stderr_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/f24d8bdfcd55471c9613cdd01cf318a1/stderr.log",
+        "scope": "repo"
+      },
+      "metadata_path": {
+        "path": "pnr/klt/ladder_dp/.klt/place-and-route/openroad-logs/f24d8bdfcd55471c9613cdd01cf318a1/invocation.json",
+        "scope": "repo"
+      },
+      "retention_errors": []
+    }
+  ],
+  "hdl_toplevel": "ladder_dp",
+  "netlist": {
+    "path": "pnr/klt/ladder_dp/.klt/synthesize/run-7af9487a57ab4058a7d4db728aba2b8a/ladder_dp_synth.v",
+    "scope": "repo"
+  },
+  "status": "ok",
+  "stage_reached": "cts",
+  "seed": 1,
+  "power_basis": {
+    "activity_source": "engine_default",
+    "activity": null,
+    "duty": null,
+    "parasitics": "estimate_only"
+  },
+  "applied": {
+    "placement_density": 0.6,
+    "route_congestion_iterations": null,
+    "route_allow_congestion": false,
+    "signal_layers": "Metal2-Metal5"
+  },
+  "coverage": {
+    "metal_density_fill": {
+      "status": "unsupported",
+      "inserted": false,
+      "reason": "no metal density fill is inserted at any stage; standard-cell gap fillers are not metal fill"
+    },
+    "density_compliance": {
+      "status": "unsupported",
+      "evaluated": false,
+      "reason": "metal density rules are not evaluated by place-and-route; a zero route_drc_violation_count does not imply density compliance"
+    }
+  },
+  "interconnect_corner": "nom",
+  "die_area_um2": 238349,
+  "core_area_um2": 233288,
+  "utilization_pct": 52.408,
+  "wirelength_um": 191832,
+  "worst_slack_ns": 46.9817,
+  "total_negative_slack_ns": 0,
+  "fmax_mhz": 29.0712,
+  "setup_violation_count": 0,
+  "hold_violation_count": 0,
+  "nominal_hold_slack_ns": 0.815,
+  "antenna_violation_count": null,
+  "route_drc_violation_count": null,
+  "estimated_power_mw": 27.931,
+  "clock_skew_ns": 0.05476,
+  "worst_setup_slack_ns": null,
+  "worst_hold_slack_ns": null,
+  "corners": null,
+  "congestion": null,
+  "max_transition_violation_count": null,
+  "max_capacitance_violation_count": null,
+  "max_transition_violation_count_vs_library": null,
+  "max_capacitance_violation_count_vs_library": null,
+  "timing_status": "constrained",
+  "stages": [
+    {
+      "name": "floorplan",
+      "die_area_um2": 238349,
+      "core_area_um2": 233288,
+      "utilization_pct": 51.1847,
+      "worst_slack_ns": 50.5027,
+      "total_negative_slack_ns": 0,
+      "timing_status": "constrained"
+    },
+    {
+      "name": "place",
+      "die_area_um2": 238349,
+      "core_area_um2": 233288,
+      "utilization_pct": 51.8039,
+      "worst_slack_ns": 47.3323,
+      "total_negative_slack_ns": 0,
+      "wirelength_um": 187799,
+      "fmax_mhz": 29.3706,
+      "estimated_power_mw": 26.3519,
+      "setup_violation_count": 0,
+      "hold_violation_count": 0,
+      "nominal_hold_slack_ns": 0.80762,
+      "timing_status": "constrained"
+    },
+    {
+      "name": "cts",
+      "die_area_um2": 238349,
+      "core_area_um2": 233288,
+      "utilization_pct": 52.408,
+      "worst_slack_ns": 46.9817,
+      "total_negative_slack_ns": 0,
+      "wirelength_um": 191832,
+      "fmax_mhz": 29.0712,
+      "estimated_power_mw": 27.931,
+      "clock_skew_ns": 0.05476,
+      "setup_violation_count": 0,
+      "hold_violation_count": 0,
+      "nominal_hold_slack_ns": 0.815,
+      "timing_status": "constrained"
+    }
+  ],
+  "macros": [],
+  "def_path": null,
+  "pins": [
+    {
+      "name": "VDD",
+      "edge": "north",
+      "x_um": 244.16,
+      "y_um": 451.92,
+      "layer": "Metal5"
+    },
+    {
+      "name": "VSS",
+      "edge": "north",
+      "x_um": 244.16,
+      "y_um": 407.12,
+      "layer": "Metal5"
+    },
+    {
+      "name": "clk",
+      "edge": "north",
+      "x_um": 138.32,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[0]",
+      "edge": "north",
+      "x_um": 243.6,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[10]",
+      "edge": "north",
+      "x_um": 187.6,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[11]",
+      "edge": "north",
+      "x_um": 245.84,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[12]",
+      "edge": "north",
+      "x_um": 161.84,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[13]",
+      "edge": "north",
+      "x_um": 198.8,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[14]",
+      "edge": "north",
+      "x_um": 223.44,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[15]",
+      "edge": "north",
+      "x_um": 249.2,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[1]",
+      "edge": "north",
+      "x_um": 160.72,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[2]",
+      "edge": "north",
+      "x_um": 236.88,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[3]",
+      "edge": "north",
+      "x_um": 250.32,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[4]",
+      "edge": "north",
+      "x_um": 139.44,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[5]",
+      "edge": "north",
+      "x_um": 159.6,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[6]",
+      "edge": "north",
+      "x_um": 230.16,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[7]",
+      "edge": "north",
+      "x_um": 195.44,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[8]",
+      "edge": "north",
+      "x_um": 255.92,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "g[9]",
+      "edge": "north",
+      "x_um": 158.48,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[0]",
+      "edge": "north",
+      "x_um": 194.32,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[10]",
+      "edge": "north",
+      "x_um": 218.96,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[11]",
+      "edge": "north",
+      "x_um": 208.88,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[12]",
+      "edge": "north",
+      "x_um": 193.2,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[13]",
+      "edge": "north",
+      "x_um": 238.0,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[14]",
+      "edge": "north",
+      "x_um": 147.28,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[15]",
+      "edge": "north",
+      "x_um": 192.08,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[16]",
+      "edge": "north",
+      "x_um": 216.72,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[17]",
+      "edge": "north",
+      "x_um": 157.36,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[18]",
+      "edge": "north",
+      "x_um": 190.96,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[19]",
+      "edge": "north",
+      "x_um": 231.28,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[1]",
+      "edge": "north",
+      "x_um": 207.76,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[2]",
+      "edge": "north",
+      "x_um": 189.84,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[3]",
+      "edge": "north",
+      "x_um": 146.16,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[4]",
+      "edge": "north",
+      "x_um": 257.04,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[5]",
+      "edge": "north",
+      "x_um": 188.72,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[6]",
+      "edge": "north",
+      "x_um": 234.64,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[7]",
+      "edge": "north",
+      "x_um": 254.8,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[8]",
+      "edge": "north",
+      "x_um": 156.24,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "gain[9]",
+      "edge": "north",
+      "x_um": 212.24,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[0]",
+      "edge": "north",
+      "x_um": 233.52,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[10]",
+      "edge": "north",
+      "x_um": 141.68,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[11]",
+      "edge": "north",
+      "x_um": 145.04,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[12]",
+      "edge": "north",
+      "x_um": 221.2,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[13]",
+      "edge": "north",
+      "x_um": 185.36,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[14]",
+      "edge": "north",
+      "x_um": 210.0,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[15]",
+      "edge": "north",
+      "x_um": 214.48,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[16]",
+      "edge": "north",
+      "x_um": 184.24,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[1]",
+      "edge": "north",
+      "x_um": 143.92,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[2]",
+      "edge": "north",
+      "x_um": 244.72,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[3]",
+      "edge": "north",
+      "x_um": 183.12,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[4]",
+      "edge": "north",
+      "x_um": 196.56,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[5]",
+      "edge": "north",
+      "x_um": 140.56,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[6]",
+      "edge": "north",
+      "x_um": 182.0,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[7]",
+      "edge": "north",
+      "x_um": 258.16,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[8]",
+      "edge": "north",
+      "x_um": 178.64,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "k[9]",
+      "edge": "north",
+      "x_um": 180.88,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[0]",
+      "edge": "north",
+      "x_um": 205.52,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[10]",
+      "edge": "north",
+      "x_um": 261.52,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[11]",
+      "edge": "north",
+      "x_um": 179.76,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[12]",
+      "edge": "north",
+      "x_um": 155.12,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[13]",
+      "edge": "north",
+      "x_um": 232.4,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[14]",
+      "edge": "north",
+      "x_um": 171.92,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[15]",
+      "edge": "north",
+      "x_um": 203.28,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[16]",
+      "edge": "north",
+      "x_um": 226.8,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[17]",
+      "edge": "north",
+      "x_um": 177.52,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[18]",
+      "edge": "north",
+      "x_um": 248.08,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[19]",
+      "edge": "north",
+      "x_um": 154.0,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[1]",
+      "edge": "north",
+      "x_um": 176.4,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[2]",
+      "edge": "north",
+      "x_um": 201.04,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[3]",
+      "edge": "north",
+      "x_um": 242.48,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[4]",
+      "edge": "north",
+      "x_um": 175.28,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[5]",
+      "edge": "north",
+      "x_um": 152.88,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[6]",
+      "edge": "north",
+      "x_um": 227.92,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[7]",
+      "edge": "north",
+      "x_um": 174.16,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[8]",
+      "edge": "north",
+      "x_um": 259.28,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "ogain[9]",
+      "edge": "north",
+      "x_um": 222.32,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "rst_n",
+      "edge": "north",
+      "x_um": 251.44,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "sample_valid",
+      "edge": "north",
+      "x_um": 173.04,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[0]",
+      "edge": "north",
+      "x_um": 197.68,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[10]",
+      "edge": "north",
+      "x_um": 220.08,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[11]",
+      "edge": "north",
+      "x_um": 199.92,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[12]",
+      "edge": "north",
+      "x_um": 151.76,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[13]",
+      "edge": "north",
+      "x_um": 260.4,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[14]",
+      "edge": "north",
+      "x_um": 217.84,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[15]",
+      "edge": "north",
+      "x_um": 224.56,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[1]",
+      "edge": "north",
+      "x_um": 170.8,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[2]",
+      "edge": "north",
+      "x_um": 239.12,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[3]",
+      "edge": "north",
+      "x_um": 215.6,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[4]",
+      "edge": "north",
+      "x_um": 164.08,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[5]",
+      "edge": "north",
+      "x_um": 169.68,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[6]",
+      "edge": "north",
+      "x_um": 150.64,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[7]",
+      "edge": "north",
+      "x_um": 213.36,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[8]",
+      "edge": "north",
+      "x_um": 235.76,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "x_in[9]",
+      "edge": "north",
+      "x_um": 168.56,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[0]",
+      "edge": "north",
+      "x_um": 252.56,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[10]",
+      "edge": "north",
+      "x_um": 211.12,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[11]",
+      "edge": "north",
+      "x_um": 246.96,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[12]",
+      "edge": "north",
+      "x_um": 167.44,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[13]",
+      "edge": "north",
+      "x_um": 229.04,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[14]",
+      "edge": "north",
+      "x_um": 149.52,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[15]",
+      "edge": "north",
+      "x_um": 186.48,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[16]",
+      "edge": "north",
+      "x_um": 166.32,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[17]",
+      "edge": "north",
+      "x_um": 240.24,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[18]",
+      "edge": "north",
+      "x_um": 206.64,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[1]",
+      "edge": "north",
+      "x_um": 253.68,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[2]",
+      "edge": "north",
+      "x_um": 165.2,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[3]",
+      "edge": "north",
+      "x_um": 262.64,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[4]",
+      "edge": "north",
+      "x_um": 204.4,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[5]",
+      "edge": "north",
+      "x_um": 148.4,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[6]",
+      "edge": "north",
+      "x_um": 142.8,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[7]",
+      "edge": "north",
+      "x_um": 241.36,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[8]",
+      "edge": "north",
+      "x_um": 202.16,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_out[9]",
+      "edge": "north",
+      "x_um": 225.68,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    },
+    {
+      "name": "y_valid",
+      "edge": "north",
+      "x_um": 162.96,
+      "y_um": 487.95,
+      "layer": "Metal4"
+    }
+  ],
+  "pin_abutment": [],
+  "instance_groups": [],
+  "unrouted_def_path": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-765/pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp.cts.def",
+  "gds_path": null,
+  "layer_map": null,
+  "def_net_names": null,
+  "min_area_repair": null,
+  "via_pad_trim": null,
+  "gds_dbu_um": null,
+  "verilog_path": null,
+  "spef_sta": null,
+  "power": {
+    "preset": null,
+    "connects_overridden": false,
+    "pdn": true,
+    "global_connect": true,
+    "power_net": "VDD",
+    "ground_net": "VSS",
+    "tapcell_master": "gf180mcu_fd_sc_mcu7t5v0__filltie",
+    "tapless": false,
+    "endcap_master": "gf180mcu_fd_sc_mcu7t5v0__endcap",
+    "tapcell_distance_um": 100,
+    "filler_masters": [],
+    "straps": [
+      {
+        "layer": "Metal1",
+        "spacing_um": null
+      },
+      {
+        "layer": "Metal4",
+        "spacing_um": 0.56
+      },
+      {
+        "layer": "Metal5",
+        "spacing_um": null
+      }
+    ],
+    "connects": [
+      {
+        "layers": [
+          "Metal1",
+          "Metal4"
+        ],
+        "max_columns": 5,
+        "ongrid": [
+          "Metal2",
+          "Metal3",
+          "Metal4"
+        ],
+        "split_cuts": {
+          "layer": "Metal3",
+          "width_um": 0.128
+        }
+      },
+      {
+        "layers": [
+          "Metal4",
+          "Metal5"
+        ],
+        "max_columns": null,
+        "ongrid": null,
+        "split_cuts": null
+      }
+    ],
+    "row_rail": {
+      "emitted": false,
+      "layer": null,
+      "power_net": null,
+      "ground_net": null,
+      "filler_masters": []
+    },
+    "placed": {
+      "evidence": "def",
+      "def_path": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-765/pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp.cts.def",
+      "unavailable_reason": null,
+      "status": "complete",
+      "missing": [],
+      "components": 6106,
+      "tapcells": 250,
+      "endcaps": 246,
+      "fillers": 0,
+      "special_nets": [
+        {
+          "name": "VDD",
+          "use": "POWER",
+          "followpin_segments": 62,
+          "stripe_segments": 28033,
+          "other_segments": 682,
+          "stripe_layers": [
+            "Metal5",
+            "Metal4",
+            "Metal3",
+            "Metal2",
+            "Metal1"
+          ],
+          "vias": 28017
+        },
+        {
+          "name": "VSS",
+          "use": "GROUND",
+          "followpin_segments": 62,
+          "stripe_segments": 28033,
+          "other_segments": 682,
+          "stripe_layers": [
+            "Metal5",
+            "Metal4",
+            "Metal3",
+            "Metal2",
+            "Metal1"
+          ],
+          "vias": 28017
+        }
+      ]
+    }
+  },
+  "warnings": [],
+  "provenance": {
+    "klt_version": "0.9.2.dev1029+g76f47afa48f1",
+    "klt_git_commit": "76f47afa48f144640d67a7337e5c01b95bc88c7b",
+    "klt_reinstall_spec": "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@76f47afa48f144640d67a7337e5c01b95bc88c7b",
+    "klayout_version": "0.30.13",
+    "pdk": {
+      "name": "gf180mcuD",
+      "source": "--pdk-root flag",
+      "version": "open_pdks 54435919abffb937387ec956209f9cf5fd2dfbee",
+      "compatibility": {
+        "status": "mismatch",
+        "package": "open_pdks-gf180mcu",
+        "expected": "open_pdks f6eeac7dad085ffcc829ccfd721f7b4ce39edcf7"
+      }
+    },
+    "deck": {
+      "name": "gf180mcu_fd_sc_mcu7t5v0__tt_025C_5v00",
+      "content_hash": "sha256:330aa9439255e3870ad7adfb987cd4d7bcfa7b6f9fb0cd0a712400e9bd80e38a",
+      "released": false,
+      "path": {
+        "path": null,
+        "scope": "external"
+      }
+    },
+    "input": {
+      "content_hash": "sha256:ea7cc228fd4013e7640f87078a1f0f4907b94565f53a21f153c0b4c5f25201c8",
+      "role": "netlist"
+    }
+  }
+}
