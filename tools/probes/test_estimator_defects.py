@@ -26,6 +26,16 @@ that has never seen the defect it exists to catch is not a control):
    `nan` grep over `model/`, which the ~40 bare-float nan returns there
    (none of them refusals) and `estimator_defects.py`'s own probe-local
    nan convention would fail on false premises.
+4. defect 1's prepend-silence invariance BASELINE is asserted before the
+   FIRST `.value` read, table print included. Its guard originally sat
+   below a print loop that formatted the same readings it protects, so a
+   None-encoded refusal -- the shipped encoding, pinned by (3) -- raised
+   TypeError at the print and the guard was unreachable (`_prepend_
+   silence_invariance` exposes `shipped=`/`repaired=` seams so these
+   controls can rig either estimator; the None-encoded controls are
+   red-first against that defeat, the nan-encoded one is a regression
+   pin, and the real-estimator run is the boundary that stops the guard
+   widening into refusing everything).
 """
 from __future__ import annotations
 
@@ -121,6 +131,75 @@ def test_trailing_silence_invariance_holds_on_a_clean_decay(
     ed._trailing_silence_invariance()
     assert ed.refusals == []
     assert ed.fails == []
+
+
+# ---------------------------------------------------------------------------
+# 1b. defect 1's prepend-silence invariance BASELINE refuses (#805 AC4/AC8)
+# ---------------------------------------------------------------------------
+def test_prepend_silence_baseline_refusal_none_encoded_is_refused_not_typeerror(
+        _reset_verdict_lists, capsys):
+    """INJECTED DEFECT: the SHIPPED-side estimator refuses, None-encoded --
+    the encoding defect 1's site actually meets on the shipped path. The
+    guard used to sit BELOW the table print, which formatted the same
+    readings it protects, so this input died at the print with TypeError
+    (NO VERDICT) and the refusal branch was unreachable. The repaired
+    helper guards before the first `.value` read: REFUSED recorded,
+    nothing in `fails`, no TypeError."""
+    def refusing_shipped(p, sr):
+        return am._fail("injected: the shipped side refuses", n=len(p))
+    ed._prepend_silence_invariance(shipped=refusing_shipped)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 1
+    assert ed.fails == []
+    assert "REFUSED" in out
+    assert "injected: the shipped side refuses" in out
+
+
+def test_prepend_silence_repaired_side_refusal_none_encoded_is_refused(
+        _reset_verdict_lists, capsys):
+    """The same defeat on the OTHER column: the print loop formatted
+    `n.value` on the same line, so a None-encoded refusal from the
+    repaired estimator raised the identical TypeError with the guard
+    still unreached. Same precondition, same verdict required."""
+    def refusing_repaired(p, sr):
+        return am._fail("injected: the repaired side refuses", n=len(p))
+    ed._prepend_silence_invariance(repaired=refusing_repaired)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 1
+    assert ed.fails == []
+    assert "REFUSED" in out
+    assert "injected: the repaired side refuses" in out
+
+
+def test_prepend_silence_refusal_nan_encoded_is_refused_not_failed(
+        _reset_verdict_lists, capsys):
+    """Regression pin (this encoding already refused on the pre-repair
+    tree, once the guard was reached): a nan-carrying refusal must print
+    no plausible `nan` table row and record REFUSED, never a FAILED
+    swing measured against a reading that does not exist."""
+    def nan_repaired(p, sr):
+        return am.Estimate(float("nan"), False, "injected: nan refusal", {}, None)
+    ed._prepend_silence_invariance(repaired=nan_repaired)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 1
+    assert ed.fails == []
+    assert "REFUSED" in out
+    assert "shipped swings" not in out, "no swing was measured, none may print"
+
+
+def test_prepend_silence_invariance_holds_on_a_clean_synthetic_strike(
+        _reset_verdict_lists, capsys):
+    """No injection, the real estimators: every reading on the synthetic
+    strike is fine, the table prints, and the two invariance checks run
+    and hold -- the boundary control that stops the guard quietly
+    widening into refusing everything (the AC5 shape, on defect 1's
+    site). Needs no corpus: the strike is synthetic."""
+    ed._prepend_silence_invariance()
+    out = capsys.readouterr().out
+    assert ed.refusals == []
+    assert ed.fails == []
+    assert "shipped swings" in out
+    assert "the repaired path is invariant to prepended silence" in out
 
 
 # ---------------------------------------------------------------------------

@@ -442,6 +442,24 @@ def test_run_ladder_refuses_per_estimator_when_its_own_file_is_missing(tmp_path)
         "rs8" in result["estimators"]["band_pair_db"]["why"]
 
 
+def test_run_ladder_refuses_per_estimator_when_the_base_reads_non_finite_but_ok(
+        tmp_path, monkeypatch):
+    """INJECTED DEFECT for run_ladder's baseline guard (#805 AC8): a base
+    reading that CLAIMS ok but carries a non-finite value. The `not
+    base.ok` guard alone let it through to `sweep_one`, whose own entry
+    assert then raised `rc.Refused` that nothing in run_ladder catches --
+    the whole sweep died instead of emitting one BASE_REFUSED row. The
+    guard must apply the same triple `sweep_one` asserts."""
+    _build_fake_corpus(tmp_path)
+    monkeypatch.setattr(pl, "ESTIMATOR_CASES", [
+        pl.EstimatorCase("probe", "RS",
+                         lambda y, sr: am.Estimate(float("nan"), True, "", {}, None),
+                         0.01, False, 5000.0)])
+    result = pl.run_ladder(tmp_path)
+    assert result["estimators"]["probe"]["status"] == "BASE_REFUSED"
+    assert "finite" in result["estimators"]["probe"]["why"]
+
+
 # ---------------------------------------------------------------------------
 # 11. main() end to end
 # ---------------------------------------------------------------------------
