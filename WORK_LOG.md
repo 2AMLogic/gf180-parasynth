@@ -2,6 +2,30 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-15
+
+- **PR #786**: docs: roadmap as of 2026-11-13
+- **PR #799**: retire DAG nodes M5 and D4, and forbid the issue-only shape returning
+- **Issue #788** (closed): DAG nodes M5 and D4 read TODO against closed issues: give each evidence or retire it
+- **PR #807**: fix: assert degenerate_refused from the trace instead of by elimination
+- **PR #809**: fix(pnr): retire the three klt netlist patches, and make the record attributable to an invocation
+- **Issue #765** (closed): Retire the three netlist patches in pnr/klt/ladder_dp/run-klt.sh: the klt bugs they work around were fixed upstream in September
+- **PR #813**: test: ground-truth corner_dc_referenced against filtered_noise, with a -6 dB control
+- **Issue #794** (closed): bug: make verify is red on main -- estimator_ground_truth reports corner_dc_referenced undeclared
+- **Issue #540** (closed): CI: verify the #709 cancel/duplicate-run fixes live and re-measure main job-minutes (steps 3-4 deferred)
+- **PR #821**: verify_109_claims counts its verdict, refuses when the reference half is required
+- **Issue #814** (closed): verify_109_claims' real-reference half is binding on no host and FAILs on a partial corpus: the cymbal-369 row-7 defect, unsearched
+- **Issue #801** (closed): Remove the duplicated period grid in measure_promoted_bands.py: the unguarded copy reports 0.034 % when 9 of 12 known cases refuse
+- **PR #806**: fix: refuse the period worst-case figure when any of its twelve known cases refuses
+
+### 2026-11-14
+
+- **Issue #772** (closed): Remove the stale pre-#109 scorecard estimator copies and the unrun apparatus command from tools/measure_partial_balance.py
+- **PR #773**: feat: count dphase_ar1 floor refusals per side, and plumb the floor-off arm
+- **PR #779**: refactor: drop the retired fixed-window estimators from the balance diagnostic
+- **Issue #785** (closed): Consolidate 4 copies of the release staleness comparison: two generations already disagree on a record that ships with nulls
+- **PR #802**: fix: one release staleness comparison, with the absent-vs-null hole closed
+
 ### 2026-11-13
 
 - **Issue #763** (closed): bug: test_extra_features_are_rate_independent fails on main -- jit.dphase_ar1.seg0 is rate-dependent
@@ -12,6 +36,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 - **PR #757**: run the BD pitch mutation controls: retarget the bool mutant, wire make controls
 - **Issue #756** (closed): tools/probes/check_doc_claims_scope_control.py: a self-described control that no target runs
 - **PR #758**: docs: record the claim-checker scope control as a one-time #435 record
+- **Issue #767** (closed): bug: jit.cycledshape and mpd5.00ms.rowcorr are rate-dependent on the extended stimulus panel
+- **PR #776**: fix: fold at the exact period so jit.cycledshape and mpd*.rowcorr stop reading the sample rate
 
 ### 2026-11-12
 

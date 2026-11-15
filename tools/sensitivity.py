@@ -211,10 +211,22 @@ def pct(a: float, b: float) -> float:
 
 
 PARAM = r"^\s*(?:parameter|localparam)\s+(?:\w+\s+)?{name}\s*=\s*(-?\d+)\s*[,;)]"
-# A module-level integer constant in a Python model, `NAME = 12` (optionally
-# annotated, optionally followed by a comment) at column 0. Column 0 because an
-# indented assignment is a local or a class attribute, not the module's value.
-PY_CONST = r"^{name}\s*(?::\s*[\w\[\]., ]+)?=\s*(-?\d+)\s*(?:#.*)?$"
+# A module-level numeric constant in a Python model, `NAME = 12` or
+# `NAME = 0.12` (optionally annotated, optionally followed by a comment) at
+# column 0. Column 0 because an indented assignment is a local or a class
+# attribute, not the module's value.
+#
+# A PLAIN DECIMAL LITERAL ONLY, and the refusals are the point (#775 needed
+# RATE_TOL_REL = 0.12, which the integer-only pattern could not read). The
+# digits must be there on both sides of the point, so `.5`, `3.`, `1e-3`,
+# `f(3)`, `3 + 1` and a commented-out `# N = 3` all still find no declaration
+# and `parse_parameter` still refuses rather than picking a digit out of an
+# expression -- which is what `float()` would happily do with `1e-3` if the
+# pattern let it through, and the gate has no business reading a value out of
+# a form nobody writes a swept constant in.
+# `test_a_python_constant_that_is_not_a_plain_decimal_literal_refuses` carries
+# every one of those cases.
+PY_CONST = r"^{name}\s*(?::\s*[\w\[\]., ]+)?=\s*(-?\d+(?:\.\d+)?)\s*(?:#.*)?$"
 KIND_PATTERN = {"verilog-parameter": PARAM, "python-constant": PY_CONST}
 
 
@@ -368,10 +380,19 @@ def evaluate(rec: dict, root: Path = ROOT, overrides: dict | None = None) -> dic
     }
 
 
+def rule_label(tol: float) -> str:
+    """The decision rule as a reader can act on it. `.0%` renders anything
+    under half a percent as "0%", which reads like a rule that was never
+    stated -- and rate-tol-rel's rule really is 1e-5, exact equality for an
+    integer count objective (#775). Below half a percent, say the number."""
+    return f"{tol:.0%}" if tol >= 0.005 else f"{tol:g} relative"
+
+
 def describe(row: dict) -> str:
     groups = ["-".join(f"{v:g}" for v in (g[0], g[-1])) if len(g) > 1 else f"{g[0]:g}"
               for g in row["runs"]]
-    return f"{row['state']:<9} runs [{', '.join(groups)}] at {row['tolerance']:.0%}"
+    return (f"{row['state']:<9} runs [{', '.join(groups)}] "
+            f"at {rule_label(row['tolerance'])}")
 
 
 def print_table(rows: list[dict], out=sys.stdout) -> None:
@@ -386,8 +407,8 @@ def print_table(rows: list[dict], out=sys.stdout) -> None:
         if r["ships_on_grid"] and len(r["ships_run"]) > 1:
             lo, hi = r["ships_run"][0], r["ships_run"][-1]
             print(f"{'':<8} -> anything in {lo:g}..{hi:g} is the same {r['objective']} to "
-                  f"within {r['tolerance']:.0%}: arguing inside that range cannot move it",
-                  file=out)
+                  f"within {rule_label(r['tolerance'])}: arguing inside that range "
+                  "cannot move it", file=out)
         if r["lower_is_better"] and r["best_move_pct"] is not None and r["best_move_pct"] < -0.0:
             print(f"{'':<8} -> cheapest point on the grid: {r['parameter']}="
                   f"{r['best_value']:g}, {r['best_move_pct']:+.1f}% of {r['objective']} "

@@ -644,11 +644,41 @@ sweep is 0.0142 against 0.0200. Two consequences for the numbers on this page:
 A second, smaller finding from the same measurement, recorded because it
 bears on how the figures above should be read: `jit.cyclecorr` separates a
 0.5 %-jittered square from a steady one by **0.0146**, while the
-rate-independence control's tolerance for that same column is
+rate-independence control's tolerance for that same column was
 `RATE_TOL_REL` x 1.0 = **0.12**. The control would not notice a rate
 dependence eight times larger than everything the column measures. That is a
-tolerance problem rather than a fold problem and was not changed here; it is
-#775.
+tolerance problem rather than a fold problem and was not changed by #767; it
+was #775.
+
+**#775's outcome (2026-11-14).** `RATE_TOL_REL` is now **0.02**, a swept
+record (`docs/sensitivity/rate-tol-rel.json`, instrument
+`tools/probes/rate_tol_sweep.py`). Over a 92-entry panel -- 44 values of f0 in
+both resampling directions plus the two control shapes -- the narrowing takes
+what the control catches on the integer fold #767 replaced from **191**
+(entry, column) pairs to **636**, and on the correlation family alone from 187
+to 541. Two things to carry forward when reading the figures above:
+
+- **The margin test does not exist, for a measured reason.** `max()` floors
+  every tolerance at `RATE_TOL_ABS[unit]`, so the smallest tolerance any value
+  of `RATE_TOL_REL` can put on `jit.cyclecorr.seg0` is **0.02** -- already
+  **1.37x** the 0.0146 effect. The dial took the ratio from 8.10x to 1.37x and
+  the term that remains is the floor, which is a different dial and a separate
+  issue. `jit.cyclecorr` **stays** in the vector: it resolves its own effect at
+  68x its own 44.1k<->48k reproducibility (0.0146 against 0.000216), so what
+  was eight times too coarse was the control's tolerance, not the column.
+- **The cost is entirely dB, and it is a second defect.** `RATE_TOL_REL` x
+  `|-80 dB|` handed a `cqt` bin sitting at the `floor_db` clamp 9.6 dB of
+  licence at 0.12 and hands it 1.6 dB at 0.02 -- and 7.0 dB of real
+  44.1k<->48k movement was sitting under the old licence at 440 Hz. Eleven dB
+  pairs on the shipped `RATE_PANEL` are now in `RATE_KNOWN_RED`, each with a
+  mechanism (a band holding no odd harmonic of its own stimulus, reading 68-79
+  dB under that clip's loudest bin) and a falsifier
+  (`test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them`: a
+  band that DOES hold a harmonic must stay inside tolerance). No `ratio`
+  column is quarantined and
+  `test_the_rate_quarantine_holds_no_correlation_column` makes that mechanical,
+  because quarantining one would absorb #775's own repair. The per-unit
+  tolerance that retires all eleven is **#782**.
 
 **Promotion status (#138, 2026-10-01).** Estimators exist
 (`model/promoted_measures.py`: `lowband_level_db`, `dominant_period_ms`).
@@ -922,15 +952,54 @@ the reasons are results, not omissions.
     `dphase_ar1`, `enstd_db`), so #767's repair will move this same
     attribution figure again, and an undated +0.008 could not be told from
     the one above it.
-  - **Still open (#768 follow-up, not blocking):** `degenerate_refused` is
-    reached by elimination rather than asserted -- if `d.std() <= _EPS` and
-    `pjit <= floor` were ever true together the row would be credited to the
-    **floor**, the over-crediting this module exists to prevent. The trace
-    already carries `dphase_scatter_ppm`, so the leg can be asserted with one
-    comparison. The measured 0 degenerate rows support the stated reason for
-    having no control (`JIT_MIN_CYCLES = 6` forces `len(d) >= 5`, `_EPS =
-    1e-20` is four orders below float rounding), but support is not an
-    assertion.
+  - **Closed (#768, the increment after the census).**
+    `degenerate_refused` was reached by *elimination*: `dphase_row_state`
+    returned `floor_refused` on `pjit <= floor` and fell through, so a row
+    where a pre-#763 leg and the floor were true together was credited to the
+    **floor** -- the over-crediting this module exists to prevent, and the
+    direction that makes #763 look bigger than it is. It is now read from the
+    decision: `dphase_state_from_trace` tests both pre-#763 legs first and
+    returns `degenerate_refused` when either fires.
+    - **Two legs, not one.** An earlier note here said the leg "can be
+      asserted with one comparison". That was wrong, and the correction is
+      the useful part: `refused` is
+      `not (len(d) >= 4 and d.std() > _EPS and pjit > floor)`, so there are
+      **two** non-floor legs. The trace already carried both --
+      `dphase_scatter_ppm` for the epsilon and `ncycles` for `len(d) >= 4`
+      (`len(d) == ncycles - 1`, so the leg is `ncycles >= 5`). Both are now
+      module-level constants in the trace's own units
+      (`JIT_DPHASE_SCATTER_EPS_PPM`, `JIT_DPHASE_MIN_NCYCLES`), because the
+      `k = 1e6/2pi` that scales the epsilon into ppm is a local inside
+      `jitter_features`.
+    - **The `ncycles` leg is dead today and asserted anyway.**
+      `JIT_MIN_CYCLES = 6` returns early below six cycles, so nothing can
+      reach the classifier with fewer. Asserting it is what makes that
+      deadness *checked* instead of assumed: lower `JIT_MIN_CYCLES` and the
+      leg starts firing, counted as the degeneracy it is.
+    - **A refused row with no leg firing now REFUSES** rather than returning
+      a state. That combination is impossible only while `refused` is the
+      formula the classifier assumes, and nothing previously noticed if it
+      changed.
+    - **Control, start red and executed rather than claimed.** The
+      over-crediting row is unreachable from any waveform, so the control
+      constructs the trace and tests the classifier at the seam the decision
+      is made on; `test_a_doubly_degenerate_row_is_not_credited_to_the_floor`
+      carries a verbatim copy of the pre-repair tail and asserts it calls
+      that trace a floor refusal. Its own defeating input is closed in the
+      same test: a constructed-trace control passes even if the shipped path
+      never populates the keys the classifier reads, so one case asserts a
+      **real** clip's trace carries every key in `DPHASE_TRACE_KEYS`.
+    - **No published number moves, and this is a derivation, not a re-run.**
+      All **232** rows of the census above (116 ref + 116 render) are
+      `reported`, with `floor_refused` and `degenerate_refused` both **0**.
+      `reported` means `refused` is false, and the classifier returns on
+      `if not trace["refused"]` *before* any leg is tested -- so on this
+      corpus the changed code is never reached. Reclassification could in any
+      case only move a row *between* the two refusal states, and both are
+      zero. The counts in `docs/dphase-floor-census-16.txt` and the
+      `jit.stability` +0.008 reading are therefore unchanged **by
+      derivation**; the census was not re-run, and this change needed no
+      corpus and no build box.
 
 **Original promotion list (unexecuted as written):**
 
