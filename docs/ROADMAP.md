@@ -33,7 +33,8 @@ the tracker (#724, #33) pauses gf180mcu ASIC work behind it.
   runs their verifiers: the result is uploaded as an artifact and never reaches
   `docs/dag-results.json` on `main`. M5 and D4 read TODO against issues that
   are closed (#48 completed, #22 not planned).
-- **Nightly:** red five scheduled runs in a row (2026-11-09 to 11-13). Failing
+- **Nightly:** red twelve scheduled runs in a row (2026-11-02 to 11-13, every
+  run in the visible window). Failing
   jobs on the last run: `sound-report` (a locked property moved or a target is
   missed), `full-rtl` (the strict staleness step only), `reference-freshness`
   (snapshot absent or stale). `controls` passes.
@@ -55,14 +56,14 @@ listed so nobody duplicates it.
 
 | What | Done when | Issue |
 |---|---|---|
-| Estimator defects: the two the exact-period fold repair found (#774, #775) and `repeat_period` (#780) | each bug has a failing-then-passing test on `main` | #774, #775 in progress; #780 awaiting curation |
-| Count discrimination rows under the `jit.dphase_ar1` floor | the count is committed with its provenance | #768 in progress (PR #773 has changes requested) |
+| Estimator defects: the two the exact-period fold repair found (#774, #775) and `repeat_period` (#780) | each bug has a failing-then-passing test on `main` | #774, #775, #780 in progress (#780 curated) |
+| Count discrimination rows under the `jit.dphase_ar1` floor | the count is committed with its provenance | PR #773 merged; criterion 1 answered on `main` (`5df5b3f1`: 0 of 116 rows under the floor); #768 `loom:building` |
 | Retire the three netlist patches in `pnr/klt/ladder_dp/run-klt.sh` | the script runs without them against current klayout-tools | #765 in progress |
-| Remove stale estimator copies from `tools/measure_partial_balance.py` | the copies are gone and the suite passes | #772 in progress; PR #779 approved |
-| Carry the nightly's slow evidence to `main` | after one nightly, `docs/dag-results.json` on `main` has records for F1, M1, D1, I1, I2 and the README table shows them | none; seed 1 |
-| Give DAG nodes M5 and D4 evidence, or retire them | neither node cites a closed issue; each names a suite, verifier or a written reason | none; seed 2 |
-| Correct `docs/milestones.md` milestone 3 and the README's T1 sentence | neither contradicts `rtl-sketch/synth_top.v` or `manifests/verdict.txt` | none; seed 3 |
-| Aggregate characterization report from the committed route evidence (T1 item 8) | one report under `docs/` built by a script from `pnr/orfs/evidence/synth_top/joined-d1e5068/`, and the `klt signoff` result for item 8 recorded, met or refused | none; seed 4 |
+| Remove stale estimator copies from `tools/measure_partial_balance.py` | the copies are gone and the suite passes | landed: #772 closed completed, PR #779 merged |
+| Carry the nightly's slow evidence to `main` | after one nightly, `docs/dag-results.json` on `main` has records for F1, M1, D1, I1, I2 and the README table shows them | #787 (`loom:building`) |
+| Give DAG nodes M5 and D4 evidence, or retire them | neither node cites a closed issue; each names a suite, verifier or a written reason | #788 (`loom:building`) |
+| Correct `docs/milestones.md` milestone 3 and the README's T1 sentence | neither contradicts `rtl-sketch/synth_top.v` or `manifests/verdict.txt` | #789 (`loom:building`) |
+| Aggregate characterization report from the committed route evidence (T1 item 8) | one report under `docs/` built by a script from `pnr/orfs/evidence/synth_top/joined-d1e5068/`, and the `klt signoff` result for item 8 recorded, met or refused | #790 (curated, unclaimed) |
 
 ## Next
 
@@ -76,7 +77,7 @@ the build box.
 | Build-box re-capture for drum contract rev 18 | deadline monitor, UART-bridge record and latency pin committed | #693, #453 | the build box; unblocks PR #662 (#656) |
 | Cymbal DECAY off the Q0.16 rate floor | late-T20 qualified and monotone at DECAY 7.5 and 10 | #656 (PR #662) | #693 |
 | Cymbal DC coupling through RTL to decoded I2S | bit-exact bench with mutants, paired qualification | #510, #552, #553 (PR #657) | #678 (post-R2 image key and verification directory) |
-| Drum sound repairs the gate names | each `[sound]` case moves to pass on the board, confirmed on untouched conditions | #556, #557, #558, #559, #593, #162 | their `loom:blocked` holds; #588 is a gate defect behind the BD and tom/conga impulse readings, and #591 waits on #350 |
+| Drum sound repairs the gate names | each `[sound]` case moves to pass on the board, confirmed on untouched conditions | #556, #557, #558, #559, #593, #162 | `loom:blocked` on #556, #558, #593 and #162; #557 waits on a provisioned capability (`loom:needs-capability`); #559 is being built now; #588 is a gate defect behind the BD and tom/conga impulse readings, and #591 waits on #350 |
 | Cowbell partial balance | case within tolerance on the board | #335, #107 | related PR #377 (per-partial envelopes), which is held |
 | Mono coverage: 29 of 32 cases not run | cases carry a valid verdict | #337, #122, #497 | a qualified reference rig (#124, #497) |
 | Judge validation | detector coverage matrix and first bounded experiment committed | #158, #521 (PR #534), #530 | review changes on PR #534 |
@@ -105,9 +106,12 @@ Direction; each needs its question answered first.
 52 open issues carry `loom:blocked`, and 12 of the 20 open pull requests are
 held or have changes requested; `WORK_PLAN.md` lists them. The causes group as:
 
-- **Needs a host with the reference corpus or the reference rig:** #778, #768,
-  #705, #700, #676, #497, #706 (PR #750), and the nightly `reference-freshness` job.
-- **Needs the build box or the board:** #693, #453, #205, #208.
+- **Needs a host with the reference corpus or the reference rig:** #778,
+  #705, #700, #676, #497, and the nightly `reference-freshness` job. #706 is
+  being built (`loom:building`) against PR #750, which is held (`loom:blocked`).
+- **Needs the build box or the board:** #693, #453, #205, #208 (#208 carries
+  `loom:curated` only, no `loom:blocked`; the open question is who runs the
+  bench session).
 - **Needs an operator decision** (`loom:operator`): #152, #247, #324, #562,
   #124, #760, #762, and PR #750.
 - **Needs review changes on a held PR:** #306 (PR #563), #372 (PR #647), #350
@@ -115,8 +119,8 @@ held or have changes requested; `WORK_PLAN.md` lists them. The causes group as:
 - **Upstream:** none open that this repo links; the klayout-tools bugs behind
   the `run-klt.sh` patches were fixed upstream (#765).
 
-Dispatchable today: the four unfiled items under Now, and #780 once curated.
-Everything else that is ready is already claimed.
+Dispatchable today: #790 under Now (curated, unclaimed). Everything else that
+is ready is already claimed.
 
 ## Not planned
 
