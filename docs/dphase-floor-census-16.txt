@@ -136,14 +136,43 @@ Exit 2 is this repository's "could not answer", which is not the same as
 tool's own and not tail's.
 
 ===========================================================================
-WHAT IS STILL OPEN (not blocking, #768 follow-up)
+WHAT WAS STILL OPEN -- NOW CLOSED (#768, after this census)
 ===========================================================================
-`degenerate_refused` is reached by ELIMINATION, not asserted: if
-`d.std() <= _EPS` and `pjit <= floor` were ever true together the row would
-be credited to the FLOOR -- the over-crediting this module exists to
-prevent. The 0 degenerate rows above SUPPORT the stated reason for having no
+EVERY NUMBER ABOVE IS UNCHANGED. This section is a note appended after the
+run, not a re-run: no measurement in this file was recomputed, and none
+needed to be. The derivation is at the foot of this note.
+
+What was open: `degenerate_refused` was reached by ELIMINATION, not
+asserted. `dphase_row_state` returned FLOOR on `pjit <= floor` and fell
+through, so if a pre-#763 leg and the floor were true together the row was
+credited to the FLOOR -- the over-crediting this module exists to prevent.
+The 0 degenerate rows above SUPPORTED the stated reason for having no
 control (JIT_MIN_CYCLES = 6 forces len(d) >= 5, and _EPS = 1e-20 is four
-orders below float rounding), but support is not an assertion. The trace
-already carries dphase_scatter_ppm = k * d.std(), so the leg can be asserted
-with one comparison, consistent with this module's own "read from the
-decision, never by elimination" rule.
+orders below float rounding), but support is not an assertion.
+
+What closed it: `dphase_state_from_trace` now tests both pre-#763 legs
+FIRST and returns `degenerate_refused` when either fires, so the state is
+read from the decision -- this module's own "read from the decision, never
+by elimination" rule, applied to the one place it did not follow it.
+
+ONE CORRECTION TO THE NOTE ABOVE, which is the useful part. It said the leg
+"can be asserted with one comparison". There are TWO non-floor legs:
+`refused` is `not (len(d) >= 4 and d.std() > _EPS and pjit > floor)`, and
+`len(d) == ncycles - 1`, so the second leg is `ncycles >= 5` and the trace
+already carried `ncycles` as well as `dphase_scatter_ppm`. Both are now
+asserted. A refused row where NO leg fires raises rather than returning a
+state, because that is impossible only while `refused` is the formula the
+classifier assumes.
+
+WHY NO NUMBER ABOVE MOVES, as a derivation. All 232 rows (116 ref + 116
+render) are `reported`. `reported` means `refused` is false, and the
+classifier returns before any leg is tested, so on this corpus the changed
+code is never reached. Reclassification could in any case only move a row
+BETWEEN `floor_refused` and `degenerate_refused`, and both are 0.
+
+See docs/discrimination.md for the same record where the attribution
+figures are read, and
+model/discrimination_features.py's
+test_a_doubly_degenerate_row_is_not_credited_to_the_floor for the control
+(constructed-trace, start-red, plus a real-clip assertion that the shipped
+path emits every key the classifier reads).
