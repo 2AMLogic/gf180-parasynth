@@ -1,0 +1,149 @@
+How many rows of the published sixteen-voice discrimination set fall under the
+jit.dphase_ar1.seg0 floor (#763), per side. Issue #768, criterion 1, measured
+while resolving PR #773 on 2026-11-14.
+
+HOW THIS WAS PRODUCED, so the numbers are reproducible and not prose:
+
+  git clone --depth 1 https://github.com/tidalcycles/sounds-tr808-fischer <c>
+  git -C <c> rev-parse HEAD   -> 85fbecf1bec32553395625ea659e2a56dfd7c0e1
+  tools/dphase_floor_census.py --refs <c> --jobs 2
+  tools/dphase_floor_census.py --refs <c> --jobs 2 --dphase-floor-ppm 0
+
+--jobs 2 because this ran on a SHARED dispatch worker, not the pinned build
+box; the tool's default would have taken 7 of 8 cores. The corpus is a public
+20 MB shallow clone, which is why this was measurable at all on a host that
+has neither ~/dev/refs nor a build-box .env -- the earlier REFUSED verdict
+read a missing INSTALL as a missing CAPABILITY.
+
+THE HEADLINE: 0 of 116 on each side, at the shipped floor AND at floor 0.
+The census's own prediction -- that our phase-accumulator renders would "sit
+mostly under the floor", making jit.stability's +0.008 partly an artefact --
+is REFUTED. Not "mostly": none.
+
+Measured twice independently, which is why it is stated this flatly: once
+during the #773 review (numpy 1.26.4) and once resolving it (numpy 2.5.4, a
+different host). Same 0/116 both sides, same three pins.
+
+===========================================================================
+ARM 1 -- the shipped floor (JIT_DPHASE_FLOOR_PPM = 20 ppm)
+===========================================================================
+How many rows of the sixteen-voice discrimination set fall under the
+jit.dphase_ar1.seg0 floor, per side. #768.
+commit f1044b7b481f; numpy 2.5.4
+corpus /tmp/doctor773-corpus/corpus: 116 WAVs, sha256 6e6af82198eb5b46, split hash ab381e78f9f4cc41
+floor 20 ppm (shipped JIT_DPHASE_FLOOR_PPM); arm ours
+
+A row is counted from the REFUSAL DECISION, never from a zero value:
+  reported            the column answered
+  floor_refused       phase scatter <= the floor -- what #763 added
+  degenerate_refused  the pre-#763 divide-by-zero legs, NOT the floor
+  row_invalid         the whole row refused, jit.valid = 0, before
+                      the floor is reached at all
+
+side        rate            reported       floor_refused  degenerate_refused         row_invalid  total
+ref        44100                 116                   0                   0                   0    116
+render     48000                 116                   0                   0                   0    116
+
+ref side: 0 / 116 refused by the floor, 0 / 116 already invalid
+render side: 0 / 116 refused by the floor, 0 / 116 already invalid
+
+per voice (floor_refused / total), both sides
+voice           ref       render
+BD             0/25         0/25
+CB              0/1          0/1
+CH              0/1          0/1
+CL              0/1          0/1
+CP              0/1          0/1
+CY             0/25         0/25
+HC              0/5          0/5
+HT              0/5          0/5
+LC              0/5          0/5
+LT              0/5          0/5
+MA              0/1          0/1
+MC              0/5          0/5
+MT              0/5          0/5
+OH              0/5          0/5
+RS              0/1          0/1
+SD             0/25         0/25
+
+===========================================================================
+ARM 2 -- the control, floor 0 ppm (the pre-#763 behaviour)
+===========================================================================
+This is #768's criterion 2 at census cost instead of A/B cost. The floor
+enters only through
+
+    refused = not (len(d) >= 4 and d.std() > _EPS and pjit > floor)
+
+which is monotone in `floor`: lowering it can only reduce refusals. 0 floor
+refusals and 0 degenerate refusals at 20 ppm therefore force every row to
+report at floor 0 as well, so jit.dphase_ar1.seg0 is identical on all 232
+rows, the feature matrix is identical, and jit.stability's +0.008 is
+UNCHANGED by the floor. The run below measures that rather than leaving it
+derived. The monotonicity premise itself is asserted corpus-free by
+tools/test_dphase_floor_census.py::test_the_floor_refusal_set_only_grows_with_the_floor,
+so CI re-checks it every commit.
+
+How many rows of the sixteen-voice discrimination set fall under the
+jit.dphase_ar1.seg0 floor, per side. #768.
+commit f1044b7b481f DIRTY; numpy 2.5.4
+corpus /tmp/doctor773-corpus/corpus: 116 WAVs, sha256 6e6af82198eb5b46, split hash ab381e78f9f4cc41
+floor 0 ppm (OVERRIDDEN); arm ours
+
+A row is counted from the REFUSAL DECISION, never from a zero value:
+  reported            the column answered
+  floor_refused       phase scatter <= the floor -- what #763 added
+  degenerate_refused  the pre-#763 divide-by-zero legs, NOT the floor
+  row_invalid         the whole row refused, jit.valid = 0, before
+                      the floor is reached at all
+
+side        rate            reported       floor_refused  degenerate_refused         row_invalid  total
+ref        44100                 116                   0                   0                   0    116
+render     48000                 116                   0                   0                   0    116
+
+ref side: 0 / 116 refused by the floor, 0 / 116 already invalid
+render side: 0 / 116 refused by the floor, 0 / 116 already invalid
+
+per voice (floor_refused / total), both sides
+voice           ref       render
+BD             0/25         0/25
+CB              0/1          0/1
+CH              0/1          0/1
+CL              0/1          0/1
+CP              0/1          0/1
+CY             0/25         0/25
+HC              0/5          0/5
+HT              0/5          0/5
+LC              0/5          0/5
+LT              0/5          0/5
+MA              0/1          0/1
+MC              0/5          0/5
+MT              0/5          0/5
+OH              0/5          0/5
+RS              0/1          0/1
+SD             0/25         0/25
+
+===========================================================================
+THE REFUSAL PATH, checked in the same session
+===========================================================================
+With no corpus the tool must REFUSE rather than report, and does:
+
+  $ tools/dphase_floor_census.py --refs <nonexistent> --jobs 2 ; echo $?
+  REFUSED: /tmp/doctor773-corpus/nonexistent is not a directory. The corpus is the public tidalcycles/sounds-tr808-fischer at 85fbecf: `git clone --depth 1 https://github.com/tidalcycles/sounds-tr808-fischer /tmp/tr808-ref`, then --refs that path (its ROOT, the directory holding bd8/, not bd8 itself)
+  2
+
+Exit 2 is this repository's "could not answer", which is not the same as
+"no problem". Checked without a pipe in front of it, so the status is the
+tool's own and not tail's.
+
+===========================================================================
+WHAT IS STILL OPEN (not blocking, #768 follow-up)
+===========================================================================
+`degenerate_refused` is reached by ELIMINATION, not asserted: if
+`d.std() <= _EPS` and `pjit <= floor` were ever true together the row would
+be credited to the FLOOR -- the over-crediting this module exists to
+prevent. The 0 degenerate rows above SUPPORT the stated reason for having no
+control (JIT_MIN_CYCLES = 6 forces len(d) >= 5, and _EPS = 1e-20 is four
+orders below float rounding), but support is not an assertion. The trace
+already carries dphase_scatter_ppm = k * d.std(), so the leg can be asserted
+with one comparison, consistent with this module's own "read from the
+decision, never by elimination" rule.

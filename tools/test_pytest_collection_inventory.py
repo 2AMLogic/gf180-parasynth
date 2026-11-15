@@ -20,12 +20,32 @@ import pytest_collection_inventory as inv  # noqa: E402
 #: The four modules #564 found uncollected, with their in-file test counts on
 #: first collection. Pinned so a discovery change that silently drops one of
 #: them (scope, path, parsing) cannot let the real-tree check pass vacuously.
-#: A count here goes UP when a module gains a test -- #763 added
-#: test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13.
+#: A count here goes UP when a module gains a test.
+#:
+#: model/discrimination_features.py, 13 -> 20, and this line is RE-DERIVED BY
+#: COLLECTION rather than picked from either side of a merge: #773 landed with
+#: this line conflicting, and NEITHER side was right (merge-base 13, this
+#: branch 14, origin/main 18 -- the two branches added disjoint tests, so
+#: neither number describes the merged tree). Re-derive it with
+#: `inv.expected_nodes("model/discrimination_features.py", src)`, never by
+#: adding the two diffs. The twenty, by the side that added each:
+#:   13  the merge base (#763's
+#:       test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13)
+#:   +5  origin/main, the #767 fold interpolator:
+#:       test_dominant_period_picks_a_different_octave_at_the_two_rates,
+#:       test_the_fold_interpolator_ships_a_real_width,
+#:       test_the_fold_reduces_to_indexing_on_a_whole_period,
+#:       test_the_integer_fold_this_replaced_is_still_red_on_this_panel,
+#:       test_the_one_residual_the_fold_repair_cannot_reach_is_the_stimulus
+#:   +1  #768, this branch:
+#:       test_the_floor_census_counts_a_refusal_from_the_decision_not_the_zero
+#:   +1  #773, this merge resolution -- the guard on the signature order the
+#:       merge itself could have got wrong:
+#:       test_the_merge_order_that_would_feed_a_tap_count_to_the_ppm_floor_is_red
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
-    "model/discrimination_features.py": 18,
+    "model/discrimination_features.py": 20,
     "model/discrimination_trajectory.py": 6,
 }
 

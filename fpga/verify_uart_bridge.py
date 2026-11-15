@@ -77,6 +77,7 @@ for _p in ("fpga", "rtl-sketch", "model"):
 import uart_host as uh                              # noqa: E402
 import verify_synth_top as top                      # noqa: E402
 from build_arty import roms                         # noqa: E402
+import record_compare as rc                         # noqa: E402
 
 BENCH = ROOT / "rtl-sketch/tb_uart_bx.v"
 WRAPPER = ROOT / "fpga/rtl/arty_a7_top.v"
@@ -428,8 +429,7 @@ def _sha(path) -> str:
 
 
 def _rel(p) -> str:
-    p = Path(p).resolve()
-    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+    return rc.rel(p, ROOT)
 
 
 def simulator_identity(iverilog, vvp) -> dict:
