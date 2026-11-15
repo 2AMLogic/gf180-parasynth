@@ -5,14 +5,14 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "D2": {
-    "detail": "105 passed in 321.90s (0:05:21)",
+    "detail": "105 passed in 323.92s (0:05:23)",
     "passed": true,
-    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+    "sha": "24f6623e6235e46346aa50ed6fcf3d164f230431"
   },
   "D3": {
     "detail": "model/sound_report.py exit 1",
     "passed": false,
-    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+    "sha": "24f6623e6235e46346aa50ed6fcf3d164f230431"
   },
   "F1": {
     "detail": "verify_ladder: PASS -- 28800 samples, RTL identical to model",
@@ -25,9 +25,9 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "F3": {
-    "detail": "153 passed in 3.09s",
+    "detail": "153 passed in 3.01s",
     "passed": true,
-    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+    "sha": "24f6623e6235e46346aa50ed6fcf3d164f230431"
   },
   "I1": {
     "detail": "verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in",
@@ -45,23 +45,23 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "M2": {
-    "detail": "115 passed in 190.10s (0:03:10)",
+    "detail": "115 passed in 192.01s (0:03:12)",
     "passed": true,
-    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+    "sha": "24f6623e6235e46346aa50ed6fcf3d164f230431"
   },
   "M3": {
     "detail": "docs/reference-compare-results.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+    "sha": "24f6623e6235e46346aa50ed6fcf3d164f230431"
   },
   "S1": {
     "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+    "sha": "24f6623e6235e46346aa50ed6fcf3d164f230431"
   },
   "S3": {
     "detail": "fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
+    "sha": "24f6623e6235e46346aa50ed6fcf3d164f230431"
   }
 }

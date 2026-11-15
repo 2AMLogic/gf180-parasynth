@@ -46,11 +46,11 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **2483 commits over 1377 hours.**
+Measured from git, not remembered. **2491 commits over 1396 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 3673 | 2.7 |
+| tests | 3679 | 2.6 |
 | injected controls | 289 | 0.2 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,189 | 8 |
@@ -132,14 +132,14 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STAMPED** | node/F1-ladder |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal |
-| `F3` | Measurement ground truth | **GREEN** | 153 passed in 3.09s |
+| `F3` | Measurement ground truth | **GREEN** | 153 passed in 3.01s |
 | `M1` | One Moog voice bit-exact | **STAMPED** | node/M1-voice |
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `M5` | Noise, osc-3 modulation, full waveform set | **TODO** | issue #48 |
 | `D1` | Drum kit bit-exact | **STAMPED** | node/D-drums-bitexact |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 321.90s (0:05:21) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 323.92s (0:05:23) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `D4` | Complete 808 -- all 16 sounds | **TODO** | issue #22 |
 | `I1` | Control link carries every write | **GREEN** | verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in |

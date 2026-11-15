@@ -445,9 +445,13 @@ verify-full:
 ## and DO run there.
 ##
 ## measure_promoted_bands.py validate (#138) is here because it IS a set of
-## injected controls -- thirteen mutants of the three promoted estimators and
+## injected controls -- fourteen mutants of the three promoted estimators and
 ## of the floor reader, each named against the one known case it must turn red,
-## plus the two start-red stub runs. It shipped in PR #507 wired to nothing,
+## plus the two start-red stub runs. The fourteenth (#801) mutates no code: it
+## makes the period estimator refuse nine of its twelve known cases and answer
+## three EXACTLY, because a worst-case reduction that drops refusals reports a
+## SMALLER error over the survivors and neither start-red stub models a
+## partial refusal. It shipped in PR #507 wired to nothing,
 ## which is the state this target exists to prevent: a control nobody runs is
 ## indistinguishable from a control that passes. Pure Python, no corpus, ~3 s.
 ##
