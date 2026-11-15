@@ -25,6 +25,8 @@ _None._
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin
+- **#804**: Collapse the three exit statuses that mean REFUSED: run_all.py reports the cymbal low-tail refusal as FAIL(1), a RESULT
+- **#814**: verify_109_claims' real-reference half is binding on no host and FAILs on a partial corpus: the cymbal-369 row-7 defect, unsearched
 
 ## Ready
 
@@ -34,7 +36,10 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#768**: measure: how many discrimination rows fall under the new jit.dphase_ar1 floor (REFUSED in #763 -- no corpus on that host)
+- **#787**: Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run"
+- **#793**: bug: tools/sensitivity.py raises ZeroDivisionError on an objective that reaches zero
+- **#804**: Collapse the three exit statuses that mean REFUSED: run_all.py reports the cymbal low-tail refusal as FAIL(1), a RESULT
+- **#814**: verify_109_claims' real-reference half is binding on no host and FAILs on a partial corpus: the cymbal-369 row-7 defect, unsearched
 
 ## In Progress
 
@@ -47,22 +52,33 @@ Issues currently being built (`loom:building`).
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
 - **#765**: Retire the three netlist patches in pnr/klt/ladder_dp/run-klt.sh: the klt bugs they work around were fixed upstream in September
+- **#768**: measure: how many discrimination rows fall under the new jit.dphase_ar1 floor (REFUSED in #763 -- no corpus on that host)
 - **#774**: bug: dominant_period picks a different octave at 44.1 kHz and 48 kHz on some clips
 - **#775**: bug: RATE_TOL_REL is 8x larger than everything jit.cyclecorr measures
 - **#780**: bug: repeat_period returns four times the true repeat period on a signal that repeats exactly
+- **#788**: DAG nodes M5 and D4 read TODO against closed issues: give each evidence or retire it
 - **#789**: docs/milestones.md milestone 3 and the README's T1 sentence contradict the tree
+- **#791**: compile_dag renders a node GREEN when its evidence file declares no verdict: M3, S1 and S3 are green on existence alone
+- **#794**: bug: make verify is red on main -- estimator_ground_truth reports corner_dc_referenced undeclared
+- **#801**: Remove the duplicated period grid in measure_promoted_bands.py: the unguarded copy reports 0.034 % when 9 of 12 known cases refuse
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#786**: docs: roadmap as of 2026-11-13
+- **#783**: fix: narrow RATE_TOL_REL to 0.02, and record why no margin test can exist
+- **#796**: fix: normalise repeat_period per overlapped window and resolve its multiple
+- **#799**: retire DAG nodes M5 and D4, and forbid the issue-only shape returning
+- **#806**: fix: refuse the period worst-case figure when any of its twelve known cases refuses
+- **#807**: fix: assert degenerate_refused from the trace instead of by elimination
+- **#809**: fix(pnr): retire the three klt netlist patches, and make the record attributable to an invocation
+- **#813**: test: ground-truth corner_dc_referenced against filtered_noise, with a -6 dB control
 
 ## Approved (Awaiting Merge)
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-_None._
+- **#798**: docs: repair milestone 3 and the README T1 sentence, and put both under check_doc_claims
 
 ## Proposed
 
@@ -123,8 +139,13 @@ Issues carrying `loom:curated`.
 - **#774**: bug: dominant_period picks a different octave at 44.1 kHz and 48 kHz on some clips *(curated)*
 - **#775**: bug: RATE_TOL_REL is 8x larger than everything jit.cyclecorr measures *(curated)*
 - **#780**: bug: repeat_period returns four times the true repeat period on a signal that repeats exactly *(curated)*
+- **#784**: Give Refused a shared base class: 113 unrelated definitions make two refusals report as a crash and an execution error *(curated)*
+- **#787**: Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run" *(curated)*
 - **#788**: DAG nodes M5 and D4 read TODO against closed issues: give each evidence or retire it *(curated)*
 - **#789**: docs/milestones.md milestone 3 and the README's T1 sentence contradict the tree *(curated)*
+- **#791**: compile_dag renders a node GREEN when its evidence file declares no verdict: M3, S1 and S3 are green on existence alone *(curated)*
+- **#793**: bug: tools/sensitivity.py raises ZeroDivisionError on an objective that reaches zero *(curated)*
+- **#794**: bug: make verify is red on main -- estimator_ground_truth reports corner_dc_referenced undeclared *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -136,8 +157,9 @@ Issues carrying `loom:curated`.
 - **#760**: Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September *(hermit)*
 - **#762**: Remove fpga/probe_uart_findings.py: it reports 2 false FAILs on the repaired host and nothing runs it *(hermit)*
 - **#784**: Give Refused a shared base class: 113 unrelated definitions make two refusals report as a crash and an execution error *(hermit)*
-- **#785**: Consolidate 4 copies of the release staleness comparison: two generations already disagree on a record that ships with nulls *(hermit)*
 - **#792**: Two probes label the retired pre-#150 corner estimator "SHIPPED": #150 landed 2026-09-19 and the columns are now inverted *(hermit)*
+- **#800**: Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site *(hermit)*
+- **#812**: verify-fast re-runs 40 test files that sibling jobs in the same workflow already collect wholesale, on the stale premise that no CI job does *(hermit)*
 
 ## Epics
 
@@ -150,12 +172,12 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
-| Important | 6 |
-| Ready (`loom:issue`) | 5 |
-| In Progress (`loom:building`) | 11 |
-| PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 0 |
-| Curated | 57 |
-| Architect / Hermit proposals | 10 |
+| Important | 8 |
+| Ready (`loom:issue`) | 8 |
+| In Progress (`loom:building`) | 16 |
+| PRs awaiting review | 7 |
+| Approved PRs awaiting merge | 1 |
+| Curated | 62 |
+| Architect / Hermit proposals | 11 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
