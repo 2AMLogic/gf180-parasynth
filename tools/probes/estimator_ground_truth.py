@@ -1101,6 +1101,58 @@ def c_glide_law(fx):
                  f"confident law for a record whose frequency does not move"))
 
 
+def _unreported_submultiple(value: float, period: float, fx,
+                            min_lag_s: float = 0.05, tol: float = 0.02):
+    """`(lag_s, n_periods)` of an integer divisor of `value` that is still in
+    the estimator's lag band and is itself a whole number of carrier periods --
+    or None. #780.
+
+    THIS IS THE PREDICATE THAT USED TO BE MISSING, and its absence is why this
+    suite reported green while `repeat_period` returned 4x the true period on
+    half of its own domain (#780). "A whole multiple of the carrier" was the
+    only thing asked, and 22x satisfies it exactly as well as 11x does. On a
+    STATIONARY record both are true statements and only the shortest is the
+    answer, so the check has to ask the second question.
+
+    Only integer DIVISORS of the reported lag are searched, which is neither
+    laziness nor a coincidence: it is exactly what
+    `audio_measure._shortest_submultiple` guarantees and nothing more. A
+    predicate demanding the globally shortest in-band repeat would fail
+    legitimately -- a 110 Hz carrier at 48 kHz has a period of 436.36 samples,
+    so its only whole-period lags that are also whole SAMPLE counts are
+    multiples of 11 periods, and 4800 samples really is the shortest repeat in
+    band even though 2618 is nearer `min_lag`.
+
+    `tol` IS AN ABSOLUTE TOLERANCE IN PERIODS, not the lag-relative one the
+    enclosing check uses, and the difference is load-bearing at high period
+    counts: a 660 Hz carrier reported at 77 periods has a candidate at 38.5
+    periods, which is HALF A PERIOD OUT and not a repeat of anything, yet half
+    a period is only 0.65 % of a 77-period lag. The first draft of this helper
+    used the relative form and flagged exactly that candidate on two records.
+    An absolute 0.02 periods also removes any dependence on `round`'s
+    half-to-even rule, which is what turns 38.5 into 38.
+
+    THE INHARMONIC CARVE-OUT IS DECLARED BY THE FIXTURE, not fitted to the
+    failures. A record carrying a planted inharmonic partial
+    (`truth['inharmonic_share_db']`) does not repeat at a multiple of its
+    carrier at all -- the partial only realigns further out -- so a submultiple
+    of the carrier is not a repeat and declining to fold to it is correct. Those
+    three records are the catalogue's own evidence that the margin in
+    `REPEAT_SUBMULTIPLE_MARGIN_PERMILLE` must stay small: measured, the -30 dB
+    member is folded to 11x from 5 thousandths upward and is right at 1.
+    """
+    if fx.truth.get("inharmonic_share_db") is not None:
+        return None
+    for k in range(2, max(2, int(value / min_lag_s)) + 1):
+        cand = value / k
+        if cand < min_lag_s - 1e-12:
+            break
+        m = cand / period
+        if abs(m - round(m)) <= tol and round(m) >= 1:
+            return cand, int(round(m))
+    return None
+
+
 def c_repeat_period(fx):
     if fx.kind == "repeated_hits":
         want = fx.truth["period_s"]
@@ -1156,9 +1208,18 @@ def c_repeat_period(fx):
     best = min((abs(e.value / pp - round(e.value / pp)) * pp / e.value, pp)
                for pp in periods)
     if best[0] <= 0.02:
+        folded = _unreported_submultiple(e.value, best[1], fx)
+        if folded is not None:
+            return _bad(f"reported {e.value*1e3:.2f} ms = "
+                        f"{e.value/best[1]:.3f} x the {best[1]*1e3:.4f} ms "
+                        f"carrier, but {folded[0]*1e3:.2f} ms ({folded[1]} x "
+                        f"the same carrier) is an integer submultiple of it "
+                        f"and is still inside the lag band -- a whole multiple "
+                        f"of a repeat is not the repeat (#780)")
         return _ok(f"{e.value*1e3:.2f} ms = {e.value/best[1]:.3f} x the "
                    f"{best[1]*1e3:.4f} ms carrier period, to "
-                   f"{100*best[0]:.2f} %")
+                   f"{100*best[0]:.2f} %, with no integer submultiple of it "
+                   f"left in band")
     return _bad(f"reported {e.value*1e3:.2f} ms, which is not a whole number "
                 f"of any known carrier period "
                 f"({[round(e.value/pp, 3) for pp in periods]})")
@@ -1861,6 +1922,50 @@ def c_dc_plateau_db(fx):
                       f"{m.value:.4f} dB, not {want + shift:.4f}"))
 
 
+def c_corner_dc_referenced(fx):
+    """`corner_dc_referenced` against the same `filtered_noise` corner truth
+    `c_corner_from_curve` uses, driven with the arguments `c_dc_plateau_db`
+    hands `dc_plateau_db` -- because this estimator is the two of them
+    composed, and a band it refuses is a band it must refuse here too.
+
+    WHAT THIS CHECK DOES NOT COVER, and it is the thing a later reader will
+    get wrong: a green verdict here does NOT qualify the DC-referenced
+    CONVENTION. The reason `corner_dc_referenced` exists is the moving-band
+    bias of #546 -- a reference band whose top approaches a fixed grid floor
+    as the commanded cutoff falls, so the band median carries a different
+    amount of the filter's own droop at each cutoff. This family cannot
+    provoke it: its band top is a FIXED fraction (fc/4) of the cutoff, so the
+    plateau- and median-referenced corners agree to within 0.1 % on every
+    member -- worst 0.0985 % on the order=1 fc=1200 Hz member, better than
+    0.014 % on the rest -- against the 2 % tolerance below, so a mutant
+    restoring the median fallback is BLIND here (measured, reddens 0 of the
+    16, which is why the control declared against this pair in
+    `estimator_ground_truth_controls.py` is a -6 dB convention error and not
+    that fallback). The convention's own ground truth is algebraic and lives
+    in `tools/probes/corner_reference_convention.py`, which derives the corner
+    from four identical real poles and carries its own `--inject` controls.
+    What this check covers is the composition: the gates, the argument
+    plumbing, and that the answer tracks a truth that moves over the grid's
+    four cutoffs, which a constant cannot follow."""
+    if fx.kind != "filtered_noise":
+        return _nm("defined on a MEASURED frequency-response curve, not on a "
+                   "time record")
+    if fx.truth["kind"] != "lowpass":
+        return _nm("reads its reference by extrapolating a LOW-pass passband "
+                   "to DC; a highpass has no DC passband and a resonant "
+                   "response has no plateau, which is the same gate "
+                   "dc_plateau_db is checked behind")
+    f, db_ = _curve(fx)
+    want = fx.truth["corner_hz"]
+    e = am.corner_dc_referenced(f, db_, ref_band=(f[0], fx.truth["fc"] / 4),
+                                scale_hz=fx.truth["fc"])
+    if not e.ok:
+        return _ref(e.reason)
+    return (_ok(f"{_err(e.value, want)} against the DC-extrapolated plateau "
+                f"{e.detail.get('plateau_db', float('nan')):.4f} dB")
+            if near(e.value, want, 0.02) else _bad(_err(e.value, want)))
+
+
 def c_spectrum(fx):
     """The definitional check: the largest bin of a stationary record at a
     known f0 is at f0, to within half a bin."""
@@ -2079,6 +2184,8 @@ SPECS = [
     Spec("slope_db_oct", c_slope_db_oct, RESPONSE, _WHY_RESPONSE),
     Spec("plateau_db", c_plateau_db, RESPONSE, _WHY_RESPONSE),
     Spec("dc_plateau_db", c_dc_plateau_db, RESPONSE, _WHY_RESPONSE),
+    Spec("corner_dc_referenced", c_corner_dc_referenced, RESPONSE,
+         _WHY_RESPONSE),
 ]
 
 #: STRUCK is used by the shorthands above; named so a reader can see the four

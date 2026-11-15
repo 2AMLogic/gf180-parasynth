@@ -219,6 +219,25 @@ def _unit_of(name: str) -> str:
 
 _EPS = 1e-20
 
+#: `_EPS` in the units the trace carries. `jitter_features` reports
+#: `dphase_scatter_ppm = k * d.std()` with `k = 1e6 / (2*pi)` a LOCAL inside
+#: that function, so its divide-by-zero guard `d.std() > _EPS` becomes this
+#: number once the trace has scaled it. Expressed here so
+#: `dphase_state_from_trace` reads the guard's own threshold instead of
+#: re-deriving a second literal beside it that could drift from this one.
+JIT_DPHASE_SCATTER_EPS_PPM = (1e6 / (2.0 * np.pi)) * _EPS
+
+#: The other pre-#763 leg, in the units the trace carries. `refused` tests
+#: `len(d) >= 4` where `d = np.diff(lin)` over `ncycles` phase points, so
+#: `len(d) == ncycles - 1` and the leg is `ncycles >= 5`.
+#:
+#: DEAD TODAY, AND THAT IS THE POINT. JIT_MIN_CYCLES = 6 returns early below
+#: six cycles, so no row can reach the classifier with fewer than six. The
+#: leg is asserted anyway, which is what makes its deadness CHECKED rather
+#: than assumed: if JIT_MIN_CYCLES is ever lowered, this leg begins firing and
+#: is counted as the degeneracy it is instead of being credited to #763.
+JIT_DPHASE_MIN_NCYCLES = 5
+
 
 # ---------------------------------------------------------------------------
 def _segments(x: np.ndarray, n_seg: int):
@@ -657,6 +676,74 @@ ROW_DEGENERATE = "degenerate_refused"
 ROW_INVALID = "row_invalid"
 ROW_STATES = (ROW_REPORTED, ROW_FLOOR, ROW_DEGENERATE, ROW_INVALID)
 
+#: Every trace key `dphase_state_from_trace` reads, declared rather than
+#: hand-copied into its test. This is the answer to the control's own
+#: defeating input (docs/verification-rules.md rule 8): a constructed-trace
+#: control stays green even if the SHIPPED path never populates these keys, so
+#: the controls would pass over a `KeyError` on every real clip. The test
+#: asserts a real clip's trace carries all of them.
+DPHASE_TRACE_KEYS = ("refused", "ncycles", "dphase_scatter_ppm",
+                     "phasejit_ppm", "dphase_floor_ppm")
+
+
+def dphase_state_from_trace(trace: dict) -> str:
+    """Which refusal state a NON-EMPTY `jitter_features` trace is in, read leg
+    by leg from the decision `refused` was actually made on.
+
+    This is the seam #768's missing control needs. The over-crediting case
+    below is not reachable from any waveform, so the only way to test it is to
+    hand the classifier a trace directly; `dphase_row_state` is this function
+    plus the row-invalid case, and remains the only caller that renders a
+    waveform.
+
+    ASSERTED, NOT REACHED BY ELIMINATION. `refused` is three legs at once --
+
+        refused = not (len(d) >= 4 and d.std() > _EPS and pjit > floor)
+
+    -- and only the third is #763's physical floor. The two pre-#763 legs are
+    tested FIRST, so a row where a degeneracy and the floor are true together
+    is counted as the degeneracy. The code this replaced returned `ROW_FLOOR`
+    on `pjit <= floor` and fell through to `ROW_DEGENERATE`, which credited
+    such a row to the floor -- the direction that makes #763 look bigger than
+    it is, and the exact over-crediting the census's own docstring says it
+    exists to prevent. Measured before the repair: a trace with
+    `dphase_scatter_ppm = 0.0` and `phasejit_ppm = 0.47` classified as
+    `floor_refused`.
+
+    WHICH WAY EACH BOUNDARY FALLS, since both are non-strict on one side.
+    `refused` needs `len(d) >= 4` AND `d.std() > _EPS` to be true to NOT
+    refuse, so a refusal is `ncycles < JIT_DPHASE_MIN_NCYCLES` or
+    `dphase_scatter_ppm <= JIT_DPHASE_SCATTER_EPS_PPM`: scatter exactly AT the
+    epsilon is degenerate, and `ncycles` exactly at 5 is not.
+
+    THE DRIFT GUARD. If `refused` is true and none of the three legs fires,
+    the formula above is no longer the formula this function assumes, and the
+    attribution it would return is meaningless. That combination is
+    unreachable today; it REFUSES rather than returning a state, because a
+    classifier that keeps answering after its premise has changed emits
+    numbers that look exactly like data."""
+    missing = [k for k in DPHASE_TRACE_KEYS if k not in trace]
+    assert not missing, (
+        f"jitter_features' trace is missing {missing}, so this census cannot "
+        f"say which leg refused the row; trace carries {sorted(trace)}")
+    if not trace["refused"]:
+        return ROW_REPORTED
+    # The two pre-#763 legs FIRST -- see ASSERTED, NOT REACHED BY ELIMINATION.
+    if (trace["ncycles"] < JIT_DPHASE_MIN_NCYCLES
+            or trace["dphase_scatter_ppm"] <= JIT_DPHASE_SCATTER_EPS_PPM):
+        return ROW_DEGENERATE
+    if trace["phasejit_ppm"] <= trace["dphase_floor_ppm"]:
+        return ROW_FLOOR
+    raise AssertionError(
+        "a REFUSED row where none of `refused`'s three legs fires: "
+        f"ncycles={trace['ncycles']!r}, "
+        f"dphase_scatter_ppm={trace['dphase_scatter_ppm']!r}, "
+        f"phasejit_ppm={trace['phasejit_ppm']!r}, "
+        f"dphase_floor_ppm={trace['dphase_floor_ppm']!r}. `refused` is no "
+        "longer `not (len(d) >= 4 and d.std() > _EPS and pjit > floor)`, so "
+        "this census cannot attribute the refusal and refuses to guess "
+        "rather than crediting it to the floor by elimination.")
+
 
 def dphase_row_state(x: np.ndarray, sr: int,
                      dphase_floor_ppm: float | None = None) -> tuple[str, dict]:
@@ -691,12 +778,7 @@ def dphase_row_state(x: np.ndarray, sr: int,
             "through a path that neither filled the trace nor zeroed the row, "
             "so this census cannot say which state the row is in")
         return ROW_INVALID, trace
-    if not trace["refused"]:
-        return ROW_REPORTED, trace
-    # refused -- now say BY WHAT. The floor is the `pjit > floor` leg.
-    if trace["phasejit_ppm"] <= trace["dphase_floor_ppm"]:
-        return ROW_FLOOR, trace
-    return ROW_DEGENERATE, trace
+    return dphase_state_from_trace(trace), trace
 
 
 def census_counts(states) -> dict:
@@ -1167,14 +1249,17 @@ def test_the_floor_census_counts_a_refusal_from_the_decision_not_the_zero():
     -- and is NOT a floor refusal; it never reaches the gate at all. That is
     the first case below, and `ROW_INVALID` is what distinguishes it.
 
-    NO CONTROL FOR `degenerate_refused`, stated rather than skipped. That
-    state is the pre-#763 `len(d) >= 4 and d.std() > _EPS` leg, with
-    _EPS = 1e-20. JIT_MIN_CYCLES = 6 already forces `len(d) >= 5`, and no
-    synthetic input was found that clears six cycles while scattering less
-    than 1e-20 of a period -- float rounding alone is four orders of
-    magnitude above it, which is the measurement #763 was built on. The state
-    is counted separately anyway, so if one ever occurs it is not silently
-    added to the floor's tally."""
+    THE CONTROL FOR `degenerate_refused` IS THE NEXT TEST IN THIS FILE,
+    `test_a_doubly_degenerate_row_is_not_credited_to_the_floor`. It is a
+    CONSTRUCTED-TRACE control because the state is unreachable from a
+    waveform: that state is the pre-#763 `len(d) >= 4 and d.std() > _EPS`
+    leg with _EPS = 1e-20, JIT_MIN_CYCLES = 6 already forces `len(d) >= 5`,
+    and no synthetic input was found that clears six cycles while scattering
+    less than 1e-20 of a period -- float rounding alone is four orders of
+    magnitude above it, which is the measurement #763 was built on. What that
+    test adds, and what was genuinely missing here, is the row where a
+    degeneracy and the floor are true AT ONCE: this module used to credit it
+    to the floor by falling through the floor comparison."""
     sr = 44100
     t = np.arange(int(0.24 * sr)) / sr
 
@@ -1230,6 +1315,112 @@ def test_the_floor_census_counts_a_refusal_from_the_decision_not_the_zero():
     state, trace = dphase_row_state(under, sr, dphase_floor_ppm=0.0)
     assert state == ROW_REPORTED, (state, trace)
     assert trace["dphase_floor_ppm"] == 0.0, trace
+
+
+def test_a_doubly_degenerate_row_is_not_credited_to_the_floor():
+    """#768's last gap: `degenerate_refused` was reached by ELIMINATION.
+
+    THE DEFECT, AND THE DIRECTION IT ERRS IN. `dphase_row_state` used to
+    return `ROW_FLOOR` on `pjit <= floor` and fall through to
+    `ROW_DEGENERATE`, so a row where a pre-#763 leg AND the floor were true
+    together was counted as a floor refusal. That inflates #763's tally with
+    rows it did not touch -- the one direction this census exists to prevent,
+    and the one place the module did not follow its own rule of reading the
+    attribution from the decision instead of by elimination.
+
+    WHY THIS CONTROL CONSTRUCTS A TRACE rather than rendering a clip. The
+    state is unreachable from any waveform (see the test above for the
+    measurement). A control that cannot be built from an input is not a
+    reason to ship without one; it is a reason to test the classifier at the
+    seam the decision is actually made on, which is what
+    `dphase_state_from_trace` exists to be.
+
+    ...AND THE INPUT THAT DEFEATS THAT CHOICE, run here rather than argued
+    (docs/verification-rules.md rule 8). A constructed-trace control stays
+    green even if the SHIPPED path never populates the keys the classifier
+    reads -- cases 1-5 below would all pass over a `KeyError` on every real
+    clip, which is the same shape of defect as a hook that cannot reach the
+    code it is a control over. Case 6 closes it on a real clip's trace."""
+    sr = 44100
+    t = np.arange(int(0.24 * sr)) / sr
+    floor = float(JIT_DPHASE_FLOOR_PPM)
+
+    def by_elimination(trace):
+        """`dphase_row_state`'s tail BEFORE this repair, verbatim, so the
+        start-red is executed here and cannot rot into a claim that it was
+        once run."""
+        if not trace["refused"]:
+            return ROW_REPORTED
+        if trace["phasejit_ppm"] <= trace["dphase_floor_ppm"]:
+            return ROW_FLOOR
+        return ROW_DEGENERATE
+
+    # 1. START RED, the over-crediting case itself: the divide-by-zero guard
+    #    and the floor both true. 0.47 ppm is the stable tone's measured
+    #    phase scatter (case 2 of the test above), so this is that row with
+    #    its per-cycle scatter degenerate as well.
+    both = dict(refused=True, ncycles=12.0, dphase_scatter_ppm=0.0,
+                phasejit_ppm=0.47, dphase_floor_ppm=floor)
+    assert by_elimination(both) == ROW_FLOOR, (
+        "the pre-repair classifier no longer credits a doubly-degenerate row "
+        "to the floor, so this control is not testing the repair")
+    assert dphase_state_from_trace(both) == ROW_DEGENERATE, both
+
+    # 2. the OTHER pre-#763 leg, dead today and asserted so its deadness is
+    #    checked: fewer than JIT_DPHASE_MIN_NCYCLES cycles, also under the
+    #    floor.
+    few = dict(both, dphase_scatter_ppm=5.0, ncycles=4.0)
+    assert by_elimination(few) == ROW_FLOOR, few
+    assert dphase_state_from_trace(few) == ROW_DEGENERATE, few
+    #    ...and the boundary falls where `len(d) >= 4` does: five cycles is
+    #    not this leg, so the comparison cannot be off by one unnoticed.
+    assert dphase_state_from_trace(dict(few, ncycles=5.0)) == ROW_FLOOR, few
+
+    # 3. each leg ALONE still lands where it did, so case 1 is not a
+    #    classifier that answers ROW_DEGENERATE to everything.
+    assert dphase_state_from_trace(dict(both, dphase_scatter_ppm=5.0)) == ROW_FLOOR
+    assert dphase_state_from_trace(
+        dict(both, dphase_scatter_ppm=0.0, phasejit_ppm=50.0 * floor)
+    ) == ROW_DEGENERATE
+    assert dphase_state_from_trace(dict(both, refused=False)) == ROW_REPORTED
+
+    # 4. the epsilon boundary exactly, which way it falls. `refused` needs
+    #    `d.std() > _EPS` to be true to NOT refuse, so scatter AT the epsilon
+    #    is degenerate and one float above it is not.
+    at = dict(both, dphase_scatter_ppm=JIT_DPHASE_SCATTER_EPS_PPM,
+              phasejit_ppm=50.0 * floor)
+    assert dphase_state_from_trace(at) == ROW_DEGENERATE, at
+    just_over = dict(both, phasejit_ppm=0.47, dphase_scatter_ppm=float(
+        np.nextafter(JIT_DPHASE_SCATTER_EPS_PPM, np.inf)))
+    assert dphase_state_from_trace(just_over) == ROW_FLOOR, just_over
+
+    # 5. THE DRIFT GUARD. `refused` true with no leg firing is impossible
+    #    only while `refused` is the formula this classifier assumes. It must
+    #    REFUSE rather than attribute the refusal to something.
+    impossible = dict(both, dphase_scatter_ppm=5.0, phasejit_ppm=50.0 * floor)
+    assert by_elimination(impossible) == ROW_DEGENERATE, (
+        "the pre-repair classifier returned a state here by elimination; "
+        "that is the behaviour this case exists to replace")
+    try:
+        dphase_state_from_trace(impossible)
+    except AssertionError as e:
+        assert "none of `refused`" in str(e), str(e)
+    else:
+        raise AssertionError(
+            "a refused row with no leg firing returned a state instead of "
+            "refusing: the classifier is still attributing refusals it "
+            "cannot explain")
+
+    # 6. THE SHIPPED PATH, which is what cases 1-5 cannot check. Every key the
+    #    classifier reads must actually be emitted by `jitter_features` on a
+    #    real clip, or the controls above are green over a KeyError.
+    trace: dict = {}
+    extra_features(np.sin(2 * np.pi * 410.0 * t), sr, jit_trace=trace)
+    missing = [k for k in DPHASE_TRACE_KEYS if k not in trace]
+    assert not missing, (
+        f"jitter_features does not emit {missing} on a real clip, so the "
+        "constructed-trace controls above are testing a trace shape that "
+        "never ships")
 
 
 def test_the_rate_tolerance_is_far_below_the_effect():
