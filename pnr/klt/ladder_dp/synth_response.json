@@ -1,51 +1,79 @@
 {
   "schema_version": 2,
   "engine": "yosys",
-  "engine_version": "0.68+post",
+  "engine_version": "0.67+post",
   "hdl_toplevel": "ladder_dp",
+  "parameters": {},
+  "defines": {},
+  "run_id": "run-7af9487a57ab4058a7d4db728aba2b8a",
   "status": "ok",
-  "instance_count": 5328,
-  "area_um2": 113292.0768,
-  "sequential_area_um2": 20180.4736,
+  "instance_count": 5703,
+  "area_um2": 117230.2656,
+  "sequential_area_um2": 20371.456,
   "instance_counts_by_type": {
-    "gf180mcu_fd_sc_mcu7t5v0__and2_1": 168,
+    "gf180mcu_fd_sc_mcu7t5v0__and2_1": 182,
     "gf180mcu_fd_sc_mcu7t5v0__and3_1": 29,
-    "gf180mcu_fd_sc_mcu7t5v0__and4_1": 11,
-    "gf180mcu_fd_sc_mcu7t5v0__aoi211_1": 24,
-    "gf180mcu_fd_sc_mcu7t5v0__aoi21_1": 408,
-    "gf180mcu_fd_sc_mcu7t5v0__aoi221_1": 46,
-    "gf180mcu_fd_sc_mcu7t5v0__aoi222_1": 5,
-    "gf180mcu_fd_sc_mcu7t5v0__aoi22_1": 126,
-    "gf180mcu_fd_sc_mcu7t5v0__clkinv_1": 340,
-    "gf180mcu_fd_sc_mcu7t5v0__dffq_1": 317,
-    "gf180mcu_fd_sc_mcu7t5v0__mux2_1": 19,
-    "gf180mcu_fd_sc_mcu7t5v0__mux4_1": 34,
-    "gf180mcu_fd_sc_mcu7t5v0__nand2_1": 1222,
-    "gf180mcu_fd_sc_mcu7t5v0__nand3_1": 77,
-    "gf180mcu_fd_sc_mcu7t5v0__nand4_1": 18,
-    "gf180mcu_fd_sc_mcu7t5v0__nor2_1": 608,
-    "gf180mcu_fd_sc_mcu7t5v0__nor3_1": 33,
-    "gf180mcu_fd_sc_mcu7t5v0__nor4_1": 8,
-    "gf180mcu_fd_sc_mcu7t5v0__oai211_1": 44,
-    "gf180mcu_fd_sc_mcu7t5v0__oai21_1": 482,
-    "gf180mcu_fd_sc_mcu7t5v0__oai221_1": 29,
-    "gf180mcu_fd_sc_mcu7t5v0__oai222_1": 1,
-    "gf180mcu_fd_sc_mcu7t5v0__oai22_1": 29,
-    "gf180mcu_fd_sc_mcu7t5v0__oai31_1": 39,
-    "gf180mcu_fd_sc_mcu7t5v0__oai32_1": 10,
-    "gf180mcu_fd_sc_mcu7t5v0__oai33_1": 3,
-    "gf180mcu_fd_sc_mcu7t5v0__or2_1": 180,
-    "gf180mcu_fd_sc_mcu7t5v0__or3_1": 26,
-    "gf180mcu_fd_sc_mcu7t5v0__or4_1": 3,
-    "gf180mcu_fd_sc_mcu7t5v0__xnor2_1": 328,
-    "gf180mcu_fd_sc_mcu7t5v0__xnor3_1": 87,
-    "gf180mcu_fd_sc_mcu7t5v0__xor2_1": 444,
-    "gf180mcu_fd_sc_mcu7t5v0__xor3_1": 130
+    "gf180mcu_fd_sc_mcu7t5v0__and4_1": 12,
+    "gf180mcu_fd_sc_mcu7t5v0__aoi211_1": 26,
+    "gf180mcu_fd_sc_mcu7t5v0__aoi21_1": 349,
+    "gf180mcu_fd_sc_mcu7t5v0__aoi221_1": 51,
+    "gf180mcu_fd_sc_mcu7t5v0__aoi222_1": 2,
+    "gf180mcu_fd_sc_mcu7t5v0__aoi22_1": 131,
+    "gf180mcu_fd_sc_mcu7t5v0__buf_1": 230,
+    "gf180mcu_fd_sc_mcu7t5v0__clkbuf_1": 3,
+    "gf180mcu_fd_sc_mcu7t5v0__clkinv_1": 370,
+    "gf180mcu_fd_sc_mcu7t5v0__dffq_1": 320,
+    "gf180mcu_fd_sc_mcu7t5v0__inv_1": 2,
+    "gf180mcu_fd_sc_mcu7t5v0__mux2_1": 27,
+    "gf180mcu_fd_sc_mcu7t5v0__mux4_1": 27,
+    "gf180mcu_fd_sc_mcu7t5v0__nand2_1": 1290,
+    "gf180mcu_fd_sc_mcu7t5v0__nand3_1": 96,
+    "gf180mcu_fd_sc_mcu7t5v0__nand4_1": 20,
+    "gf180mcu_fd_sc_mcu7t5v0__nor2_1": 592,
+    "gf180mcu_fd_sc_mcu7t5v0__nor3_1": 39,
+    "gf180mcu_fd_sc_mcu7t5v0__nor4_1": 6,
+    "gf180mcu_fd_sc_mcu7t5v0__oai211_1": 68,
+    "gf180mcu_fd_sc_mcu7t5v0__oai21_1": 466,
+    "gf180mcu_fd_sc_mcu7t5v0__oai221_1": 21,
+    "gf180mcu_fd_sc_mcu7t5v0__oai22_1": 33,
+    "gf180mcu_fd_sc_mcu7t5v0__oai31_1": 38,
+    "gf180mcu_fd_sc_mcu7t5v0__oai32_1": 13,
+    "gf180mcu_fd_sc_mcu7t5v0__oai33_1": 5,
+    "gf180mcu_fd_sc_mcu7t5v0__or2_1": 183,
+    "gf180mcu_fd_sc_mcu7t5v0__or3_1": 9,
+    "gf180mcu_fd_sc_mcu7t5v0__or4_1": 1,
+    "gf180mcu_fd_sc_mcu7t5v0__tiel": 59,
+    "gf180mcu_fd_sc_mcu7t5v0__xnor2_1": 335,
+    "gf180mcu_fd_sc_mcu7t5v0__xnor3_1": 86,
+    "gf180mcu_fd_sc_mcu7t5v0__xor2_1": 468,
+    "gf180mcu_fd_sc_mcu7t5v0__xor3_1": 114
   },
+  "macros": [],
+  "macro_instance_counts_by_type": {},
+  "macro_instance_count": 0,
+  "cells_without_area": [],
   "leakage_power_nw": null,
   "leakage_by_type_nw": null,
-  "timing": null,
+  "timing": {
+    "source": "abc_stime",
+    "wire_load": null,
+    "critical_path_ps": 30288.33,
+    "delay_target_ps": 81380,
+    "regions": [
+      {
+        "module": "ladder_dp",
+        "critical_path_ps": 30288.33
+      }
+    ]
+  },
+  "clock_targets": {
+    "clocks": [],
+    "delay_target_ps": 81380,
+    "delay_target_basis": "clock_period_ns",
+    "per_clock_enforced": false
+  },
   "sta": null,
+  "sta_unavailable_reason": "the optional klt_statime_native extension is not installed (it is not shipped with the published klayout-tools package), so no gate-level static timing analysis was attempted -- from a repo checkout, run `uv sync --group statime` (or `maturin develop --release` inside native/statime/) and re-run to populate `sta`; from an installed package, `klt sta` with a `verilog` request gives a netlist-level timing estimate (needs OpenSTA)",
   "structural": {
     "latches": 0,
     "expected_latches": 0,
@@ -54,30 +82,70 @@
     "multi_driven": 0,
     "has_critical": false
   },
+  "cell_exclusions": {
+    "mode": "additive",
+    "requested": [],
+    "library_defaults": [],
+    "effective": [],
+    "validated": null,
+    "engine_supports_dont_use": null
+  },
+  "abc_constr": {
+    "source": "builtin",
+    "driving_cell": "gf180mcu_fd_sc_mcu7t5v0__buf_4",
+    "load_ff": 13.43
+  },
   "warnings": {
     "total": 0,
     "by_category": {},
     "representatives": []
   },
+  "memory_mapping": {
+    "status": "lowered_to_logic",
+    "reason": null,
+    "modules": [
+      {
+        "module": "ladder_dp",
+        "status": "lowered_to_logic",
+        "elaborated_memories": 3,
+        "elaborated_memory_bits": 432,
+        "pre_lowering_memories": 3,
+        "final_memories": 0
+      }
+    ],
+    "script_path": {
+      "path": "pnr/klt/ladder_dp/.klt/synthesize/run-7af9487a57ab4058a7d4db728aba2b8a/ladder_dp_memory_evidence.ys",
+      "scope": "repo"
+    }
+  },
+  "blackbox_modules": [],
   "netlist_path": {
-    "path": "pnr/klt/ladder_dp/.klt/synthesize/ladder_dp_synth.v",
+    "path": "pnr/klt/ladder_dp/.klt/synthesize/run-7af9487a57ab4058a7d4db728aba2b8a/ladder_dp_synth.v",
     "scope": "repo"
   },
+  "netlist_sha256": "ea7cc228fd4013e7640f87078a1f0f4907b94565f53a21f153c0b4c5f25201c8",
   "script_path": {
-    "path": "pnr/klt/ladder_dp/.klt/synthesize/synth_ladder_dp.ys",
+    "path": "pnr/klt/ladder_dp/.klt/synthesize/run-7af9487a57ab4058a7d4db728aba2b8a/synth_ladder_dp.ys",
     "scope": "repo"
   },
   "run_script_path": {
-    "path": "pnr/klt/ladder_dp/.klt/synthesize/synth_ladder_dp.run.ys",
+    "path": "pnr/klt/ladder_dp/.klt/synthesize/run-7af9487a57ab4058a7d4db728aba2b8a/synth_ladder_dp.run.ys",
     "scope": "repo"
   },
   "provenance": {
-    "klt_version": "0.5.0",
-    "klayout_version": "0.30.12",
+    "klt_version": "0.9.2.dev1029+g76f47afa48f1",
+    "klt_git_commit": "76f47afa48f144640d67a7337e5c01b95bc88c7b",
+    "klt_reinstall_spec": "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@76f47afa48f144640d67a7337e5c01b95bc88c7b",
+    "klayout_version": "0.30.13",
     "pdk": {
       "name": "gf180mcuD",
-      "source": "PDK_ROOT environment variable",
-      "version": "open_pdks 54435919abffb937387ec956209f9cf5fd2dfbee"
+      "source": "--pdk-root flag",
+      "version": "open_pdks 54435919abffb937387ec956209f9cf5fd2dfbee",
+      "compatibility": {
+        "status": "mismatch",
+        "package": "open_pdks-gf180mcu",
+        "expected": "open_pdks f6eeac7dad085ffcc829ccfd721f7b4ce39edcf7"
+      }
     },
     "deck": {
       "name": "gf180mcu_fd_sc_mcu7t5v0__tt_025C_5v00",
@@ -85,8 +153,11 @@
       "released": false
     },
     "input": {
-      "content_hash": "sha256:ce7467fdb44298db8c4d4b7e89d92c22fd2b0d8f103b6a029bd9f6adea72c3cc"
-    }
+      "content_hash": "sha256:14e743dc2df68a3792ea770a8b08005f3bcf1e0b14b449cac82fae20ccff389d",
+      "role": "source"
+    },
+    "parameters": {},
+    "defines": {}
   },
   "equivalence": null,
   "restructuring": null,
