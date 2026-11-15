@@ -46,11 +46,11 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **2529 commits over 1408 hours.**
+Measured from git, not remembered. **2534 commits over 1412 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 3719 | 2.6 |
+| tests | 3738 | 2.6 |
 | injected controls | 297 | 0.2 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,189 | 8 |
@@ -68,7 +68,7 @@ graph LR
   subgraph foundation["Foundation"]
     F1["✓ Ladder bit-exact"]
     F2["✓ Modal bank bit-exact"]
-    F3["· Measurement ground truth"]
+    F3["! Measurement ground truth"]
   end
   subgraph minimoog["Minimoog voice"]
     M1["✓ One Moog voice bit-exact"]
@@ -107,7 +107,7 @@ graph LR
   I2 --> S3
   style F1 fill:#0E6B5E,color:#fff
   style F2 fill:#0E6B5E,color:#fff
-  style F3 fill:#3f8f5f,color:#fff
+  style F3 fill:#9A6510,color:#fff
   style M1 fill:#0E6B5E,color:#fff
   style M2 fill:#0E6B5E,color:#fff
   style M3 fill:#3f8f5f,color:#fff
@@ -126,13 +126,13 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STAMPED** | node/F1-ladder |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal |
-| `F3` | Measurement ground truth | **GREEN** | 153 passed in 2.50s |
+| `F3` | Measurement ground truth | **STALE** | model/audio_measure.py changed since this was last run |
 | `M1` | One Moog voice bit-exact | **STAMPED** | node/M1-voice |
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `D1` | Drum kit bit-exact | **STAMPED** | node/D-drums-bitexact |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 243.21s (0:04:03) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 241.27s (0:04:01) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `I1` | Control link carries every write | **GREEN** | verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in |
 | `I2` | Whole chip at its pins | **GREEN** | verify_synth_top: PASS -- 2851 I2S periods decoded from the wire, every one identical to t |
