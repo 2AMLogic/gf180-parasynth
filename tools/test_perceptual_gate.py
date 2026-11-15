@@ -231,3 +231,45 @@ def test_a_noise_floor_does_not_buy_a_better_match():
     T = g.Target(*tgt, "LT", "t")
     dc, dn = T.distance(*clean, "c", match_rate=True), T.distance(*noisy, "n", match_rate=True)
     assert dn["spec"] > dc["spec"] and dn["decay"] >= dc["decay"], (dc, dn)
+
+
+# --- loudness_db known answers (#828): the rule the listening packs import ---
+
+
+def test_loudness_db_reads_the_bs1770_known_answer():
+    # A 0 dBFS 1 kHz sine: mean-square is exactly 1/2 (-3.0103 dB) and every
+    # 50 ms block is identical, so the 20 dB gate passes all of them. The
+    # published K-filter has +0.6977 dB gain at 1 kHz, so the known answer is
+    # -2.3126 dB; through BS.1770's -0.691 offset that is -3.0036 LKFS, against
+    # the published -3.01 LKFS calibration tone (997 Hz). The pin is external
+    # to anything in this repo: a retyped coefficient anywhere in the chain
+    # turns it red.
+    x = np.sin(2 * np.pi * 1000.0 * np.arange(5 * SR) / SR)
+    assert g.loudness_db(x) == pytest.approx(-2.3126, abs=5e-4)
+
+
+def test_loudness_db_scales_exactly_with_amplitude():
+    # the gate selects the same blocks at any scale, so the reading must move
+    # by exactly 20*log10(A) -- level-matching the listening packs relies on it.
+    x = np.sin(2 * np.pi * 1000.0 * np.arange(int(0.5 * SR)) / SR)
+    base = g.loudness_db(x)
+    for amp in (10 ** (-23 / 20), 0.1, 0.5):
+        assert g.loudness_db(amp * x) - base == pytest.approx(20 * math.log10(amp), abs=1e-6)
+
+
+def test_loudness_db_agrees_with_the_rule_the_pack_tools_used_to_carry():
+    # tools/ab_808_loud.py and tools/make_cymbal_pack.py each carried their own
+    # loud() until #828; the drift was in the edge cases (epsilon 1e-20 vs
+    # 1e-30, no zero-pad), not the assembly. The old formula over the shared
+    # kweight must match loudness_db to < 0.001 dB on a hit-like clip.
+    x, _ = strike(f=200.0, tau=0.15, noise=0.05, seed=7)
+    y = g.kweight(x); blk = int(0.05 * SR)
+    e = np.array([np.mean(y[i:i + blk] ** 2) for i in range(0, len(y) - blk, blk // 2)])
+    old = 10 * np.log10(np.mean(e[e >= e.max() * 10 ** (-2)]) + 1e-20)
+    assert abs(g.loudness_db(x) - old) < 1e-3
+
+
+def test_loudness_db_survives_a_clip_shorter_than_one_block():
+    # the pack tools' old loud() raised ValueError here (e.max() of an empty
+    # array); loudness_db zero-pads and answers.
+    assert np.isfinite(g.loudness_db(np.ones(100)))
