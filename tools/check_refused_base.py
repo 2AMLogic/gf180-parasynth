@@ -44,9 +44,7 @@ from pathlib import Path
 CANONICAL_REL = "tools/refusal.py"
 CANONICAL_CLASS = "Refused"
 CLASS_NAMES = ("Refused", "Refusal")
-DEFAULT_BASELINE = Path("tools/refused_base_baseline.json")
-SIMPLE_BASES = {"Exception", "RuntimeError", "ValueError", "SystemExit",
-                "AssertionError", "BaseException", "object"}
+DEFAULT_BASELINE_REL = Path("tools/refused_base_baseline.json")
 BASELINE_SCHEMA = "refused-base-baseline/1"
 
 
@@ -261,8 +259,10 @@ def _collect(root: Path, paths: list[str] | None) -> list[Path]:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE,
-                    help="baseline JSON (default: %(default)s)")
+    ap.add_argument("--baseline", type=Path, default=None,
+                    help="baseline JSON (default: <repo-root>/%s, anchored at the "
+                         "repository this guard is part of)"
+                         % DEFAULT_BASELINE_REL)
     ap.add_argument("--paths", nargs="*", default=None,
                     help="check these files instead of every tracked *.py")
     ap.add_argument("--write-baseline", action="store_true",
@@ -271,6 +271,8 @@ def main(argv=None) -> int:
 
     try:
         root = repo_root()
+        if a.baseline is None:                     # repo-anchored default, not cwd
+            a.baseline = root / DEFAULT_BASELINE_REL
         found, total = nonconforming(_collect(root, a.paths), root)
     except SystemExit as exc:                    # git failure (2) or a parse refusal (3)
         return int(exc.code or 0)

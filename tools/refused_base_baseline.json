@@ -39,6 +39,7 @@
   "tools/bd_pitch_predeclaration.py:Refused(RuntimeError)",
   "tools/before_after_prepare_corpus.py:Refused(Exception)",
   "tools/capture_m1a_phase_cycle.py:Refused(ref.Refused)",
+  "tools/characterize_synth_top.py:Refused(Exception)",
   "tools/check_decision_record_numbers.py:Refused(Exception)",
   "tools/check_iverilog_generate_case_string.py:Refusal(Exception)",
   "tools/check_surge_waveform_comment.py:Refused(Exception)",
