@@ -97,3 +97,100 @@ def test_end_to_end_with_real_own_evidence(tmp_path):
     st = cd.classify_all(nodes)
     assert st["A"][0] == "BLOCKED"
     assert st["B"][0] not in ("GREEN", "STAMPED")
+
+
+# ---------------------------------------------------------------------------
+# #788: an issue number is not evidence
+# ---------------------------------------------------------------------------
+# M5 ("Noise, osc-3 modulation, full waveform set") cited #48 and D4 ("Complete
+# 808 -- all 16 sounds") cited #22. Both issues are CLOSED -- #48 as completed,
+# #22 as not planned -- so both nodes rendered `TODO  issue #N`: a status
+# pointing at a decision already taken, in a graph whose whole claim is that
+# status is derived from evidence rather than asserted. Both capabilities were
+# in fact already covered (M5 by M1's `waveforms`/`noise`/`modulation`
+# scenarios and M2's suite, D4 by D1/D2 and all sixteen abbreviations), so both
+# nodes were retired and the reason recorded in docs/capability-dag.md.
+#
+# The guard is deliberately LOCAL: it reads the committed docs/dag.json and
+# nothing else. The rejected alternative -- a committed list of issue states --
+# decays silently in exactly the way that produced this defect (the list
+# records #48 as open, #48 closes, the guard still passes) and would need
+# network access or manual upkeep in CI.
+#
+# THE INPUTS THAT DEFEAT THIS GUARD (docs/verification-rules.md rule 8 -- a
+# guard ships with them, so the next reader knows its boundary):
+#
+#   1. Adding ANY recognised evidence key satisfies "not issue-only" while
+#      leaving the node unevidenced. Specifically an `evidence_file` with
+#      neither a verdict key (passed/ok/success/green) nor `evidence_requires`
+#      lands on run_evidence's "EXISTS ONLY -- no verdict declared" branch,
+#      which returns PASS, so the node renders GREEN on file existence alone.
+#      That hole is real and is NOT closed here: M3, S1 and S3 already render
+#      GREEN through that branch today, so a guard forbidding verdict-less
+#      `evidence_file` nodes would be unsatisfiable the moment it landed --
+#      worse than no guard, per CLAUDE.md. Tracked as #791.
+#   2. Deleting the `issue` key instead of resolving the node. That renders
+#      `TODO  no evidence declared`, which this guard permits. It is a weaker
+#      defeat than it looks: the node then states plainly that it has no
+#      evidence, where `issue #48` implied a live pointer. No node in
+#      docs/dag.json has that shape today.
+EVIDENCE_KEYS = ("suite", "verifier", "tool", "evidence_file")
+
+
+def _committed_nodes() -> dict:
+    """The DAG as committed -- the artefact the README is rendered from."""
+    return json.loads(cd.DAG.read_text())["nodes"]
+
+
+def _is_issue_only(n: dict) -> bool:
+    """The forbidden shape: an issue number standing in for evidence.
+
+    A `blocked` reason is the intended escape. A node that says what it is
+    waiting for renders BLOCKED with that reason, which is a statement about
+    the world rather than a stale pointer, so it may carry an `issue` too.
+    """
+    return ("issue" in n
+            and not any(k in n for k in EVIDENCE_KEYS)
+            and not n.get("blocked"))
+
+
+def test_no_committed_node_cites_an_issue_as_its_only_source():
+    """The #788 guard, run against the artefact that ships."""
+    offenders = sorted(i for i, n in _committed_nodes().items() if _is_issue_only(n))
+    assert not offenders, (
+        f"{offenders} declare an `issue` with no evidence key and no `blocked` "
+        f"reason, so tools/compile_dag.py renders them `TODO  issue #N` -- a "
+        f"status that is asserted, not derived, and that survives the issue "
+        f"being closed. Fix it one of three ways: name evidence "
+        f"({'/'.join(EVIDENCE_KEYS)}), declare what the node is blocked on, or "
+        f"retire the node and record in docs/capability-dag.md which node now "
+        f"carries the capability.")
+
+
+def test_the_guard_turns_red_on_an_injected_issue_only_node():
+    """The injected-defect control, in code rather than by hand.
+
+    A guard that has never failed is not evidence (docs/verification-rules.md).
+    This pins all three dispositions the failure message offers, including the
+    `blocked` escape -- and the defeating input from note 1 above, so the
+    boundary is asserted rather than merely described.
+    """
+    assert _is_issue_only({"issue": 99999})
+    # the escape hatch is intended and must stay green
+    assert not _is_issue_only({"issue": 99999, "blocked": "waiting on silicon"})
+    # ... and so is real evidence
+    assert not _is_issue_only({"issue": 99999, "suite": "model/test_moog_acceptance.py"})
+    # the defeating input: an evidence key with no verdict behind it passes
+    # this guard. #791.
+    assert not _is_issue_only({"issue": 99999, "evidence_file": "docs/nothing.json"})
+
+
+def test_an_issue_only_node_renders_todo_against_that_issue():
+    """Why the shape is forbidden -- the mechanism, not just the data.
+
+    If classify() ever stopped rendering the bare issue number, the guard above
+    would be forbidding a shape that no longer misleads anyone. Pin the link.
+    """
+    assert cd.classify("X", {"issue": 99999}) == ("TODO", "issue #99999")
+    assert cd.classify("X", {}) == ("TODO", "no evidence declared")
+    assert cd.classify("X", {"issue": 99999, "blocked": "a recording"})[0] == "BLOCKED"
