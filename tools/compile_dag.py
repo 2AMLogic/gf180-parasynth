@@ -20,6 +20,9 @@ Status is derived, never asserted:
   RED       the evidence ran and FAILED
   BLOCKED   the node declares what it is waiting for
   TODO      no evidence yet; an issue number if one is filed
+  REFUSED   the evidence cannot be judged at all -- a record whose commit
+            left this history, or evidence with no covered files to measure
+            (#824); never rendered as current
 
 A GREEN/STAMPED node above a RED or BLOCKED dependency is reported BLOCKED
 (see classify_all).
@@ -70,6 +73,23 @@ def tag_is_ancestor(tag: str) -> bool:
     if not tag or tag not in git("tag", "-l").split():
         return False
     sha = git("rev-list", "-n1", tag)
+    if not sha:
+        return False
+    r = subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+                       cwd=ROOT, capture_output=True)
+    return r.returncode == 0
+
+
+def sha_is_ancestor(sha: str) -> bool:
+    """A sha that is not an ancestor of HEAD cannot measure staleness (#824).
+
+    Reads a RETURN CODE, not stdout -- exactly why `git()` cannot be used
+    here: its stdout-only contract conflates "command failed" with "no
+    output", which is the defect. And `--is-ancestor`, not `cat-file -e`:
+    a sha still in the object store but no longer reachable (force-pushed
+    away before gc) must refuse too, or the range query would silently
+    answer about a divergent history.
+    """
     if not sha:
         return False
     r = subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"],
@@ -191,6 +211,16 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     # honestly: the moment a file the node covers changes, the stamp goes
     # STALE rather than sitting there looking verified.
     tag = n.get("tag", "")
+    # #824, rule 8: the input that defeats the sha guard. Staleness is
+    # measured over `covers`; evidence with no covered files named -- a
+    # passing record, or an in-history stamp -- has nothing to go stale, and
+    # the loop would measure nothing and answer "not stale". A FAILING
+    # record stays RED instead: the run's verdict is already stated, and is
+    # more precise than a refusal.
+    if not n.get("covers", []) and ((rec and rec.get("passed"))
+                                    or tag_is_ancestor(tag)):
+        return "REFUSED", ("evidence exists but the node declares no "
+                           "covered files -- staleness cannot be measured")
     if not rec and tag_is_ancestor(tag):
         tag_sha = git("rev-list", "-n1", tag)
         changed = stale_against(n, tag_sha)
@@ -203,7 +233,22 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     if not rec.get("passed"):
         return "RED", rec.get("detail", "failed")
 
-    changed = stale_against(n, rec.get("sha", ""))
+    # #824: staleness is measured against a sha in this history. A record
+    # with no commit stamp, or a sha that left this history (squash-merged,
+    # force-pushed, or a clone too shallow to contain it, where the range
+    # query reads "failed" as "nothing changed"), cannot be checked at all
+    # -- REFUSED, never rendered current. Matches the tag path, which has
+    # refused unanchored tags through tag_is_ancestor all along.
+    rec_sha = rec.get("sha", "")
+    if not rec_sha:
+        return "REFUSED", ("the record carries no commit sha -- staleness "
+                           "cannot be measured")
+    if not sha_is_ancestor(rec_sha):
+        return "REFUSED", (f"recorded sha {rec_sha[:8]} is not in this "
+                           f"history -- cannot tell whether "
+                           f"{len(n.get('covers', []))} covered file(s) changed")
+
+    changed = stale_against(n, rec_sha)
     if changed:
         return "STALE", f"{changed} changed since this was last run"
 
@@ -222,8 +267,9 @@ def classify_all(nodes: dict) -> dict:
 
       * only GREEN/STAMPED are downgraded; a node's own RED/BLOCKED/TODO/STALE
         is never overwritten (it is already not a green claim);
-      * only RED/BLOCKED deps propagate. TODO and STALE are not known-failing,
-        and propagating them would turn most of the graph red on a stale stamp;
+      * only RED/BLOCKED deps propagate. TODO, STALE and REFUSED are not
+        known-failing, and propagating them would turn most of the graph
+        red on a stale stamp;
       * a cycle or an unknown dep is REFUSED (BLOCKED with the reason), never
         guessed past.
     """
@@ -265,7 +311,8 @@ def classify_all(nodes: dict) -> dict:
 def mermaid(nodes: dict, status: dict) -> str:
     fill = {"STAMPED": "#0E6B5E,color:#fff", "GREEN": "#3f8f5f,color:#fff",
             "STALE": "#9A6510,color:#fff", "BLOCKED": "#8E2438,color:#fff",
-            "RED": "#8E2438,color:#fff", "TODO": "#5a6468,color:#fff"}
+            "RED": "#8E2438,color:#fff", "TODO": "#5a6468,color:#fff",
+            "REFUSED": "#5E4B8A,color:#fff"}
     out = ["```mermaid", "graph LR"]
     for g, label in GROUPS.items():
         ids = [i for i, n in nodes.items() if n.get("group") == g]
@@ -275,7 +322,8 @@ def mermaid(nodes: dict, status: dict) -> str:
         for i in ids:
             st = status[i][0]
             mark = {"STAMPED": "✓", "GREEN": "·", "STALE": "!",
-                    "BLOCKED": "✗", "RED": "✗", "TODO": "○"}[st]
+                    "BLOCKED": "✗", "RED": "✗", "TODO": "○",
+                    "REFUSED": "?"}[st]
             out.append(f'    {i}["{mark} {nodes[i]["name"]}"]')
         out.append("  end")
     for i, n in nodes.items():
@@ -303,7 +351,8 @@ def main() -> int:
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if README does not match the evidence")
     ap.add_argument("--strict", action="store_true",
-                    help="with --check, ALSO exit 1 if any node is RED or STALE")
+                    help="with --check, ALSO exit 1 if any node is RED, "
+                         "STALE or REFUSED")
     ap.add_argument("--print", action="store_true", help="write to stdout, not README")
     ap.add_argument("--run", action="store_true",
                     help="execute each node's evidence and record the result")
@@ -381,7 +430,7 @@ def main() -> int:
     # which the per-push job cannot do -- would be a gate demanding something
     # the job cannot satisfy, and this project has built three of those
     # already. The nightly, which CAN refresh the slow evidence, uses --strict.
-    bad = [i for i in nodes if status[i][0] in ("STALE", "RED")]
+    bad = [i for i in nodes if status[i][0] in ("STALE", "RED", "REFUSED")]
     for i in bad:
         print(f"{status[i][0]}: {i} -- {status[i][1]}", file=sys.stderr)
     for w in warn:
