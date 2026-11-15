@@ -587,6 +587,7 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
 	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
 	  "$(PY) -m pytest tools/test_check_surge_waveform_comment.py -q -k issue_271" \
+	  "$(PY) -m pytest tools/test_compile_dag_evidence.py -q -k issue_824" \
 	  "$(PY) -m pytest model/test_rig_qualification.py -q -k discrimination_matrix" \
 	  "$(PY) -m pytest model/test_modeld_pedalboard_rig.py -q -k 'refuses or REFUS or uncorrectable'" \
 	  "$(PY) tools/check_decision_record_numbers.py --expect ok" \
