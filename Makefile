@@ -175,6 +175,7 @@ verify:
 	  "$(PY) tools/check_f1_rtl_record.py" \
 	  "$(PY) tools/holdout.py check" \
 	  "$(PY) tools/check_decision_record_numbers.py" \
+	  "$(PY) tools/check_refused_base.py" \
 	  "$(PY) tools/external_claim.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi" \
 	  "$(PY) tools/probes/estimator_ground_truth.py check" \
