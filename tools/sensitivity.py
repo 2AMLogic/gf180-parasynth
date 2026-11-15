@@ -519,6 +519,13 @@ def show(ident: str, root: Path = ROOT, out=sys.stdout) -> int:
     return 0
 
 
+# exit code -> the --expect token `main()` compares against. One source of
+# truth: tools/test_sensitivity.py derives each control's required
+# `--expect` mode from this map, so a copied literal there would be the same
+# wiring-drift defect issue #836 exists to catch.
+EXIT_MODES = {0: "pass", 1: "fail", 2: "refused"}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -548,7 +555,7 @@ def main(argv=None) -> int:
         code = 2
     if not a.expect:
         return code
-    got = {0: "pass", 1: "fail", 2: "refused"}[code]
+    got = EXIT_MODES[code]
     if got == a.expect:
         print(f"control OK: expected {a.expect}, got {got}")
         return 0

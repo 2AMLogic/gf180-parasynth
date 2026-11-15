@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 import math
 import pathlib
-import re
 import subprocess
 
 import numpy as np
@@ -32,6 +31,7 @@ import yaml
 
 import check_workflows as cw
 import manifest as mf
+from makefile_recipe import makefile_recipe
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -39,23 +39,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 # =============================================================================
 # The gate on this suite's own wiring
 # =============================================================================
-def _makefile_recipe(target: str) -> str:
-    """The recipe lines of one Makefile target, joined. Used to assert that a
-    check is enumerated where CI will actually reach it."""
-    lines = (ROOT / "Makefile").read_text().split("\n")
-    out, inside = [], False
-    for line in lines:
-        if re.match(rf"^{re.escape(target)}\s*:", line):
-            inside = True
-            continue
-        if inside:
-            if line and not line[0].isspace():
-                break
-            out.append(line)
-    assert out, f"no recipe found for Makefile target {target!r}"
-    return "\n".join(out)
-
-
 def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
     """"Check that the thing you are testing is the thing that ships"
     (CLAUDE.md), applied to this suite itself.
@@ -67,7 +50,7 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
     comment states the rule: a gate nothing invokes fails exactly the same way
     as one that passes. This test fails if that wiring is ever removed.
     """
-    recipe = _makefile_recipe("verify-fast")
+    recipe = makefile_recipe("verify-fast")
     assert "tools/test_manifest.py" in recipe, (
         "tools/test_manifest.py must be enumerated in `make verify-fast`, which "
         "is the target rungs.yml's m5a-fast job runs; the broad `pytest tools/` "
