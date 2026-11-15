@@ -46,11 +46,11 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **2534 commits over 1412 hours.**
+Measured from git, not remembered. **2547 commits over 1415 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 3738 | 2.6 |
+| tests | 3768 | 2.7 |
 | injected controls | 297 | 0.2 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,189 | 8 |
@@ -132,7 +132,7 @@ graph LR
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `D1` | Drum kit bit-exact | **STAMPED** | node/D-drums-bitexact |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 241.27s (0:04:01) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 473.23s (0:07:53) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `I1` | Control link carries every write | **GREEN** | verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in |
 | `I2` | Whole chip at its pins | **GREEN** | verify_synth_top: PASS -- 2851 I2S periods decoded from the wire, every one identical to t |
