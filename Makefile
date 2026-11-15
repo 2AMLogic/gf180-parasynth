@@ -428,8 +428,8 @@ verify-full:
 ##                                      itself all BLIND -- yosys resolves the
 ##                                      don't-care, so the netlist simulates
 ##                                      x-free and the area moves 0.1 %
-##   area_provenance clean              summarize.py exit 0, ratio 1.87 printed
-##   area_provenance UTILIZATION_TARGET summarize.py exit 2, ratio withheld
+##   area_provenance clean              summarize.py refuses the OpenROAD#12303 duplicate metrics (#835) AND still attributes the ratio (1.87)
+##   area_provenance UTILIZATION_TARGET summarize.py exit 2, ratio withheld, circular-die-area named
 ##   area_provenance CORE_UTILIZATION_SET  ditto, the ORFS spelling
 ##
 ## THE CONSTRAINT-BINDING CONTROLS (#436) close rule 5 on #315: the UART-RX
