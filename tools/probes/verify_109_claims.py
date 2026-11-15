@@ -147,22 +147,18 @@ def measure_tone_ratio_sensitivity():
 REFERENCE_VOICES = (("RS", rc.RS_BALANCE_OP), ("CB", rc.CB_BALANCE_OP))
 
 
-def _corpus_unusable(why: str, required: bool):
-    """One handler for every did-not-run state of the corpus (#814): absent
-    root, root present with recordings missing, empty or unreadable files,
-    and preparation refusals (truncated, silent, non-finite). The checks are
-    reported NOT RUN where their results would have been; under
-    GF180_REQUIRE_TR808_REFS=1 the half refuses outright, because a required
-    gate does not pass by skipping."""
-    for voice, _op in REFERENCE_VOICES:
-        note_not_run(f"{voice} reference: balance_trajectory_db resolves on "
-                     f"the real reference", why)
-    if required:
-        print(f"      NO VERDICT: {why}")
-        print(f"      {rc.REFS_REQUIRED_ENV}=1 makes the reference half a required")
-        print("      gate, and a required gate does not pass by skipping.")
-        return why
-    return None
+def _refuse_voice(voice: str, why: str, refusals: list[str]):
+    """One voice's did-not-run state (#814): the check is reported NOT RUN
+    where its result would have been, and the reason is recorded so the half
+    can refuse outright at the end under GF180_REQUIRE_TR808_REFS=1. The
+    refusal is PER VOICE, not per half (review round 1, measured): the
+    half-wide handler this replaces was called from inside the per-voice
+    loop, so a mixed corpus -- one recording usable, one damaged -- counted
+    the measured voice twice (once OK, once NOT RUN blaming the other
+    voice's file) and inflated the verdict total from 8 to 9."""
+    note_not_run(f"{voice} reference: balance_trajectory_db resolves on "
+                 f"the real reference", why)
+    refusals.append(why)
 
 
 def measure_reference_signal_length():
@@ -172,27 +168,25 @@ def measure_reference_signal_length():
     print("=" * 78)
     refs = rc.configured_refs()
     required = os.environ.get(rc.REFS_REQUIRED_ENV) == "1"
-
-    # File-level precondition (#814 row 3): a corpus ROOT that exists while
-    # its recordings do not used to pass straight to load_reference and die
-    # in an uncaught Refused. Probe the two WAVs this half actually loads,
-    # at the paths run_case's own REF_MAIN names, so the precondition cannot
-    # drift from the loader it guards.
-    missing: list[str] = []
-    for voice, _op in REFERENCE_VOICES:
-        rel = rc.REF_MAIN[voice][0]
-        path = refs / rel
-        if not path.exists():
-            missing.append(f"{rel} (missing)")
-        elif path.stat().st_size == 0:
-            missing.append(f"{rel} (zero-length)")
-    if missing:
-        why = (f"reference corpus not usable at {refs}: "
-               + ", ".join(missing)
-               + f"; clone tidalcycles/sounds-tr808-fischer there or set {rc.REFS_ENV}")
-        return _corpus_unusable(why, required)
+    refusals: list[str] = []
+    measured: set[str] = set()
 
     for voice, op in REFERENCE_VOICES:
+        # File-level precondition (#814 row 3), PER VOICE: the WAV this half
+        # loads is probed at the path run_case's own REF_MAIN names, so the
+        # precondition cannot drift from the loader it guards; missing and
+        # zero-length are named in one message. Only the unusable voice is
+        # refused -- the other voice's measurement is kept.
+        rel = rc.REF_MAIN[voice][0]
+        path = refs / rel
+        if not path.exists() or path.stat().st_size == 0:
+            state = "missing" if not path.exists() else "zero-length"
+            _refuse_voice(
+                voice,
+                f"reference recording {rel} ({state}) at {refs}; clone "
+                f"tidalcycles/sounds-tr808-fischer there or set {rc.REFS_ENV}",
+                refusals)
+            continue
         try:
             x, sr, rel, _setting = rc.load_reference(voice, refs)
         except Exception as why:  # noqa: BLE001 -- see the comment below
@@ -204,9 +198,11 @@ def measure_reference_signal_length():
             # Refused. Nothing here can mask estimator logic; the measurement
             # calls below keep their narrow Refused catch. Any crash in the
             # read is the corpus being unusable: did-not-run, not a mismatch.
-            return _corpus_unusable(
+            _refuse_voice(
+                voice,
                 f"reference recording {rc.REF_MAIN[voice][0]} unreadable "
-                f"({type(why).__name__}: {why})", required)
+                f"({type(why).__name__}: {why})", refusals)
+            continue
         try:
             y = rc.prepare(x, sr, side="reference")
             e = rc.balance_trajectory_db(y, sr, op["f_lo_range"], op["f_hi_range"],
@@ -217,11 +213,15 @@ def measure_reference_signal_length():
             # Measured (#814): a reference truncated inside its data chunk
             # reads fine, then `prepare` refuses -- no pre-onset lead. A
             # refusal is did-not-run, never a FAIL.
-            return _corpus_unusable(
-                f"reference recording {rel} refused by preparation: {why}", required)
+            _refuse_voice(
+                voice,
+                f"reference recording {rel} refused by preparation: {why}",
+                refusals)
+            continue
         check(e.ok, f"{voice} {rel}: balance_trajectory_db resolves on the real reference")
         if not e.ok:
             continue
+        measured.add(voice)
         d = e.detail
         # t2_ms is conditional in balance_trajectory_db's detail: present only
         # when a second floor-clearing instant exists past min_gap_ms. A
@@ -234,18 +234,34 @@ def measure_reference_signal_length():
               f"{d['n_points_above_floor']} of {d['n_points_total']} probed instants "
               f"in [0, {op['t_end']*1e3:.0f}] ms clear the joint floor by 6 dB; "
               f"earliest {d['t1_ms']:.1f} ms{tail}")
-    print("\n      CONCLUSION: for RS.WAV the joint-floor-clearing region runs from")
-    print("      ~11 ms to ~41 ms of a 60 ms search window -- longer than the ~20 ms")
-    print("      this issue quotes, but the same order of magnitude, and a small")
-    print("      minority of the case's nominal window either way. For CB.WAV it")
-    print("      runs to ~589 ms of a 600 ms window. Neither number is a single")
-    print("      constant 'signal length' -- floor-clearing is intermittent, not a")
-    print("      contiguous prefix -- which is the concrete reason this fix gates")
-    print("      each instant against its own measured floor (#92) instead of")
-    print("      trying to pick one better window length (#101).")
+
+    if len(measured) == len(REFERENCE_VOICES):
+        # The CONCLUSION compares both voices' measured extents, so it is
+        # printed only when both produced measurements this run: a half-run
+        # keeps its per-voice detail lines and NOT RUN records without
+        # asserting the numbers of the voice that did not run.
+        print("\n      CONCLUSION: for RS.WAV the joint-floor-clearing region runs from")
+        print("      ~11 ms to ~41 ms of a 60 ms search window -- longer than the ~20 ms")
+        print("      this issue quotes, but the same order of magnitude, and a small")
+        print("      minority of the case's nominal window either way. For CB.WAV it")
+        print("      runs to ~589 ms of a 600 ms window. Neither number is a single")
+        print("      constant 'signal length' -- floor-clearing is intermittent, not a")
+        print("      contiguous prefix -- which is the concrete reason this fix gates")
+        print("      each instant against its own measured floor (#92) instead of")
+        print("      trying to pick one better window length (#101).")
     print("\n      The '808-from-mars' 26 ms / 39 ms rimshot figures are NOT")
     print("      re-measured here: that pack's audio is operator-side storage")
     print("      (refaudio/README.md) and was not available on this host.")
+
+    if refusals and required:
+        # A required gate does not pass by skipping: one refused voice is
+        # enough to refuse the half (the `fischer_refs` policy).
+        for r in refusals:
+            print(f"      NO VERDICT: {r}")
+        print(f"      {rc.REFS_REQUIRED_ENV}=1 makes the reference half a required")
+        print("      gate, and a required gate does not pass by skipping.")
+        return "; ".join(refusals)
+    return None
 
 
 def main() -> int:

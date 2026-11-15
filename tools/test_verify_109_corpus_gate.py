@@ -97,6 +97,48 @@ def write_wavs(root: pathlib.Path, frames: int = 5000, drop_last: int = 0,
         path.write_bytes(blob[: len(blob) - drop_last])
 
 
+RS_PARTIALS = (455.0, 1786.0)   # RS's own nominal two-mode pair (as in the full-corpus test)
+
+
+def good_wav(f1: float, f2: float) -> bytes:
+    """The full-corpus test's synthesis recipe, as a blob: a record that
+    loads, prepares and MEASURES (verdict whatever the estimator says)."""
+    import math
+
+    import numpy as np
+
+    sr = 44100
+    t = np.arange(int(0.30 * sr)) / sr
+    x = 0.6 * np.sin(2 * math.pi * f1 * t) * np.exp(-t / 0.006) \
+        + 0.3 * np.sin(2 * math.pi * f2 * t) * np.exp(-t / 0.0015)
+    lead = np.zeros(int(0.02 * sr))
+    x = np.concatenate([lead, x])
+    pcm = (x / np.abs(x).max() * 30000).astype("<i2")
+    buf = io.BytesIO()
+    wav = wave.open(buf, "wb")
+    wav.setnchannels(1)
+    wav.setsampwidth(2)
+    wav.setframerate(sr)
+    wav.writeframes(pcm.tobytes())
+    wav.close()
+    return buf.getvalue()
+
+
+def truncated_wav(frames: int = 5000, drop_last: int = 900) -> bytes:
+    """write_wavs' truncation recipe, as a blob: a valid header claiming
+    `frames`, the data chunk cut short -- reads without error, then
+    rc.prepare refuses (no pre-onset lead)."""
+    buf = io.BytesIO()
+    wav = wave.open(buf, "wb")
+    wav.setnchannels(1)
+    wav.setsampwidth(2)
+    wav.setframerate(44100)
+    wav.writeframes(b"\x00\x01" * frames)
+    wav.close()
+    blob = buf.getvalue()
+    return blob[: len(blob) - drop_last]
+
+
 VERDICT = re.compile(r"^\s*(\d+) of (\d+) checks passed(?:; (\d+) NOT RUN)?")
 
 
@@ -255,6 +297,51 @@ def test_full_corpus_still_measured(tmp_path):
         rel = rc.REF_MAIN[voice][0]
         assert f"{voice} {rel}" in out, f"voice {voice} produced no result line:\n{out}"
     assert "SKIPPED" not in out
+
+
+@pytest.mark.parametrize("required", [False, True])
+def test_mixed_corpus_counts_each_voice_once(required, tmp_path):
+    """The asymmetric corpus state -- one recording usable, the other damaged
+    -- is #814's own motivating scenario: the corpus lives at /tmp/tr808-ref
+    on a worker running many sweeps, and partial population is PER FILE, so a
+    copy interrupted mid-corpus leaves one good recording and one broken one.
+    The refusal must be PER VOICE: the measured voice keeps its OK, the
+    damaged voice is the only NOT RUN with its OWN file named, and no voice
+    lands in two buckets. Measured on the pre-fix probe: the half-wide
+    handler inflated the verdict total from 8 to 9 and printed RS both as OK
+    and as NOT RUN blaming CB's file -- output that looks exactly like data
+    and is false."""
+    refs = tmp_path / "refs"
+    blobs = {"RS": good_wav(*RS_PARTIALS),
+             "CB": truncated_wav(frames=5000, drop_last=900)}
+    for voice, blob in blobs.items():
+        path = refs / rc.REF_MAIN[voice][0]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(blob)
+    p = run_probe(refs, required=required)
+    assert "Traceback" not in p.stderr, p.stderr
+    m = parse_verdict(p.stdout)
+    ok, total, not_run = (int(m.group(i)) for i in (1, 2, 3))
+    assert total == 8, f"the probe has 8 checks; the verdict counted {total}\n{p.stdout}"
+    assert not_run == 1, f"expected exactly the damaged voice NOT RUN\n{p.stdout}"
+    assert ok == 7, p.stdout
+    assert total == ok + not_run
+    assert ok == len(re.findall(r"^      OK  ", p.stdout, re.M)), \
+        f"verdict says {ok} passed but {len(re.findall(r'^      OK  ', p.stdout, re.M))} OK lines emitted"
+    # Each voice in exactly one bucket: RS measured, CB refused, and CB's
+    # refusal names CB's file -- not the measured voice's.
+    rs_ok = len(re.findall(r"^      OK\s+RS rs8/RS\.WAV", p.stdout, re.M))
+    rs_nr = len(re.findall(r"^      NOT RUN  RS reference:", p.stdout, re.M))
+    cb_ok = len(re.findall(r"^      OK\s+CB cb8/CB\.WAV", p.stdout, re.M))
+    cb_nr = len(re.findall(r"^      NOT RUN  CB reference:", p.stdout, re.M))
+    assert (rs_ok, rs_nr) == (1, 0), f"RS must appear only as OK\n{p.stdout}"
+    assert (cb_ok, cb_nr) == (0, 1), f"CB must appear only as NOT RUN\n{p.stdout}"
+    assert rc.REF_MAIN["CB"][0] in p.stdout
+    if required:
+        assert p.returncode == 2, f"exit {p.returncode}\n{p.stdout}"
+        assert "NO VERDICT" in p.stdout
+    else:
+        assert p.returncode == 0, f"exit {p.returncode}\n{p.stdout}"
 
 
 @pytest.mark.parametrize("required", [False, True])

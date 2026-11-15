@@ -30,7 +30,11 @@ Counts on the tree this landed on (base origin/main 881c4631, before #814's
 repair): 26 REFUSE, 8 SKIP, 29 ?. After #814's repair of
 `tools/probes/verify_109_claims.py` -- the one gated non-test SKIP, repaired
 to refuse under GF180_REQUIRE_TR808_REFS=1 and to report NOT RUN per check
-otherwise -- the SKIP bucket is 7, and every SKIP member is in no gate.
+otherwise -- the SKIP bucket is 7, of which exactly ONE remains gated:
+`tools/test_run_case.py` (Makefile, CI:rungs.yml). That is the correct
+pattern, not a defect: its `fischer_refs` fixture is the test OF the
+required-corpus gate and honours GF180_REQUIRE_TR808_REFS, so its skips are
+named rather than silent. No gated NON-TEST skipper remains.
 
 Spot-check of the ? bucket's four gate members, read from the source by
 #814's Builder (the regex's own stated limit, recorded rather than left
