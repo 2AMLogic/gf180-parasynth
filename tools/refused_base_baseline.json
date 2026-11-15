@@ -92,6 +92,7 @@
   "tools/probes/hihat/hh_probe5.py:Refused(SystemExit)",
   "tools/probes/mean_statistic_sweep.py:Refused(Exception)",
   "tools/probes/noise_fixture_duration.py:Refused(Exception)",
+  "tools/probes/repeat_period_multiple.py:Refused(RuntimeError)",
   "tools/probes/residual_dc.py:Refused(Exception)",
   "tools/probes/rs_guard_band.py:Refused(Exception)",
   "tools/probes/rs_mode_drive.py:Refused(Exception)",
