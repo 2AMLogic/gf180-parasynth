@@ -153,7 +153,36 @@ MS_BANDS_HZ = ((20.0, 200.0), (200.0, 700.0), (700.0, 2000.0),
 # exist through this dial -- see
 # `test_no_relative_tolerance_can_reach_the_cyclecorr_effect`, which records
 # that measured reason and the decision that the column stays in the vector.
-RATE_TOL_REL = 0.02
+#
+# THE DB TERM IS ITS OWN DIAL NOW (#782), because a relative tolerance is
+# dimensionally meaningless on an offset scale: `RATE_TOL_REL x |-80 dB|`
+# handed a cqt bin sitting at the `floor_db` clamp 9.6 dB of licence at the
+# 0.12 above and hands it 1.6 dB at 0.02 -- the licence grows with the bin's
+# distance from 0 dB, which for a dB column is backwards, and 7.0 dB of real
+# 44.1k<->48k movement sat under the old licence at 440 Hz. The other four
+# units are magnitudes on their own scales -- a correlation of ~1, a period
+# in ms, a cycle count, a ppm scatter -- where one relative term is the right
+# shape and stays at 0.02.
+#
+# FIVE SCALARS, NOT A DICT LITERAL. tools/sensitivity.py's python-constant
+# pattern reads a plain decimal at column 0 and refuses a dict literal ON
+# PURPOSE (`test_a_python_constant_that_is_not_a_plain_decimal_literal_refuses`
+# carries `N = {"ratio": 0.02}` as a case, and RATE_TOL_ABS is unregistered
+# for exactly that reason), so a dict-valued constant would be unreadable by
+# the gate that governs it -- an unreadable registered parameter looks like a
+# passing check rather than an absent one. The registered names are the
+# scalars below; the dict is composed from them so `rate_tolerance` reads one
+# value per unit, mirroring RATE_TOL_ABS's five-key shape. The dB value is a
+# swept record: docs/sensitivity/rate-tol-rel-by-unit.json, instrument
+# tools/probes/rate_tol_sweep.py --unit db.
+RATE_TOL_REL_PPM = 0.02
+RATE_TOL_REL_DB = 0.02
+RATE_TOL_REL_MS = 0.02
+RATE_TOL_REL_COUNT = 0.02
+RATE_TOL_REL_RATIO = 0.02
+RATE_TOL_REL = {"ppm": RATE_TOL_REL_PPM, "db": RATE_TOL_REL_DB,
+                "ms": RATE_TOL_REL_MS, "count": RATE_TOL_REL_COUNT,
+                "ratio": RATE_TOL_REL_RATIO}
 RATE_TOL_ABS = {"ppm": 20.0, "db": 0.5, "ratio": 0.02, "ms": 0.05, "count": 1.0}
 
 # THE FLOOR UNDER `jit.dphase_ar1`, in ppm of a period -- a PHYSICAL floor,
@@ -294,7 +323,8 @@ def _unit_of(name: str) -> str:
     return "ratio"
 
 
-def rate_tolerance(name: str, x: float, y: float, tol_rel: float | None = None) -> float:
+def rate_tolerance(name: str, x: float, y: float,
+                   tol_rel: float | dict | None = None) -> float:
     """What the rate-independence control is allowed to call "the same number"
     for column `name` read as `x` at one rate and `y` at the other.
 
@@ -304,10 +334,16 @@ def rate_tolerance(name: str, x: float, y: float, tol_rel: float | None = None) 
     tools/probes/fold_rate_sweep.py -- and a tolerance that is three copies is
     three tolerances the day one of them is edited. #775.
 
-    `tol_rel` overrides RATE_TOL_REL for a sweep, the same shape of override
-    `_rate_gaps` already carries for the fold width: tools/probes/rate_tol_sweep.py
-    prices the dial by calling through the shipped comparison rather than by
-    restating it.
+    `tol_rel` overrides the relative term for a sweep, the same shape of
+    override `_rate_gaps` already carries for the fold width: tools/probes/
+    rate_tol_sweep.py prices the dial by calling through the shipped comparison
+    rather than by restating it. A FLOAT overrides every unit -- the single
+    scalar this dial was before #782, which is how the probe's scalar mode
+    still prices #775's dial -- and a DICT overrides only the units it names,
+    merged over the shipped values, which is how the probe's `--unit db` mode
+    moves the dB term alone while the other four sit at their shipped values.
+    A dict naming a unit that does not exist is a typo'd dial and refuses
+    rather than silently overriding nothing.
 
     Note which term binds. `max()` means the floor wins whenever
     `tol_rel * peak` falls under it, so for a correlation column pinned near
@@ -317,8 +353,20 @@ def rate_tolerance(name: str, x: float, y: float, tol_rel: float | None = None) 
     0.0146 that column measures. See
     `test_no_relative_tolerance_can_reach_the_cyclecorr_effect`.
     """
+    unit = _unit_of(name)
     rel = RATE_TOL_REL if tol_rel is None else tol_rel
-    return max(rel * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(name)])
+    if isinstance(rel, dict):
+        if tol_rel is not None:
+            unknown = set(rel) - set(RATE_TOL_ABS)
+            if unknown:
+                raise ValueError(
+                    f"tol_rel names unit(s) {sorted(unknown)}, which no "
+                    f"column carries; the units are {sorted(RATE_TOL_ABS)}")
+            rel = {**RATE_TOL_REL, **rel}
+        r = rel[unit]
+    else:
+        r = float(rel)
+    return max(r * max(abs(x), abs(y)), RATE_TOL_ABS[unit])
 
 
 _EPS = 1e-20

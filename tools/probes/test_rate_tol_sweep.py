@@ -63,7 +63,10 @@ def test_the_reevaluated_counts_match_rate_gaps_itself():
 
     Run on the shipped eleven-entry RATE_PANEL at three values of the dial
     including the shipped one, which is about twenty seconds and is the whole
-    reason to trust every other number this instrument prints.
+    reason to trust every other number this instrument prints. The shipped
+    value is the per-unit dict since #782, so the first pass exercises the
+    dict path through both sides; the scalars are #775's dial, which overrides
+    every unit at once.
     """
     rows = S.measure_panel(D.RATE_PANEL, None)
     for tol_rel in (D.RATE_TOL_REL, 0.03, 0.0):
@@ -73,6 +76,45 @@ def test_the_reevaluated_counts_match_rate_gaps_itself():
             f"at tol_rel={tol_rel}: only the sweep says "
             f"{sorted(mine - theirs)[:4]}, only _rate_gaps says "
             f"{sorted(theirs - mine)[:4]}")
+
+
+def test_the_reevaluated_counts_match_rate_gaps_through_a_per_unit_override():
+    """The `--unit db` mode's comparison is also the shipped comparison: a
+    `{"db": value}` override through `red` must return exactly the pairs
+    `_rate_gaps(tol_rel={"db": value})` returns, with the other four units at
+    their shipped terms on both sides. This is the case that would catch the
+    per-unit merge drifting from what the test applies."""
+    rows = S.measure_panel(D.RATE_PANEL, None)
+    for override in ({"db": 0.057}, {"db": 0.09}, {"db": 0.0}, {"ms": 0.3}):
+        mine = {(r["label"], r["column"]) for r in S.red(rows, override)}
+        theirs = {(label, nm) for label, nm, _, _, _ in D._rate_gaps(tol_rel=override)}
+        assert mine == theirs, (
+            f"at tol_rel={override}: only the sweep says "
+            f"{sorted(mine - theirs)[:4]}, only _rate_gaps says "
+            f"{sorted(theirs - mine)[:4]}")
+
+
+def test_a_per_unit_override_leaves_other_units_at_their_shipped_terms():
+    """The override merges over the shipped values, it does not replace them:
+    moving the dB term alone must leave a ratio column's tolerance at its
+    shipped value, and vice versa. A `--unit db` sweep that leaked into other
+    units would attribute their movement to the dB dial."""
+    col_ratio, col_db = "jit.cyclecorr.seg0", "cqt3225Hz.seg0"
+    base_r = D.rate_tolerance(col_ratio, 1.0, 0.0)
+    base_d = D.rate_tolerance(col_db, 80.0, 0.0)
+    assert D.rate_tolerance(col_ratio, 1.0, 0.0, {"db": 0.09}) == base_r
+    assert D.rate_tolerance(col_db, 80.0, 0.0, {"db": 0.09}) > base_d
+    assert D.rate_tolerance(col_db, 80.0, 0.0, {"ratio": 0.09}) == base_d
+    # and the shipped comparison itself is unchanged by the machinery
+    assert D.rate_tolerance(col_ratio, 1.0, 0.0) == base_r
+
+
+def test_a_per_unit_override_naming_an_unknown_unit_refuses():
+    """A typo'd unit key (`{"Db": 0.1}`) would silently override nothing and
+    the sweep would price the shipped dial while believing it had moved one.
+    It must refuse rather than answer."""
+    with pytest.raises(ValueError, match="names unit"):
+        D.rate_tolerance("cqt3225Hz.seg0", 80.0, 0.0, {"Db": 0.1})
 
 
 def test_the_dial_changes_only_the_comparison_not_the_measurement():
@@ -136,6 +178,22 @@ def test_the_counts_are_monotone_in_the_dial():
     assert caught == sorted(caught, reverse=True), caught
     assert cost == sorted(cost, reverse=True), cost
     assert caught[0] >= caught[-1] > 0, "the injected fold must be red somewhere"
+
+
+def test_the_per_unit_counts_are_monotone_in_the_dial():
+    """Same argument, per-unit dial (#782): raising one unit's relative term
+    can only loosen that unit's tolerance, so every count is non-increasing.
+    If caught_db rose anywhere, the `{"db": value}` override leaked into
+    another unit and the sweep is not pricing one dial."""
+    res = S.measure([0.0, 0.02, 0.09], S.wide_panel(TWO_F0),
+                    panel_11=False, unit="db")
+    caught = [r["caught"] for r in res["rows"]]
+    caught_db = [r["caught_db"] for r in res["rows"]]
+    cost = [r["cost"] for r in res["rows"]]
+    assert caught == sorted(caught, reverse=True), caught
+    assert caught_db == sorted(caught_db, reverse=True), caught_db
+    assert cost == sorted(cost, reverse=True), cost
+    assert caught_db[0] > 0, "the injected fold must be red in the swept unit"
 
 
 def test_the_integer_fold_is_caught_more_than_the_shipped_one_everywhere():
