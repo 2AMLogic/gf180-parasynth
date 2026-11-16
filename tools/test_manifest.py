@@ -873,3 +873,41 @@ def test_the_ledger_write_keeps_its_format_and_ignores_a_stale_tmp_sibling(tmp_p
         "the atomic write changed the ledger's serialisation")
     assert list(loaded) == [rec["case_id"]] and stale.read_bytes() == b'{"garbage": true', (
         "a stale tmp sibling was consumed as history or clobbered by the new write")
+
+
+# =============================================================================
+# load_json_refused: a record truncated mid-UTF-8-character is REFUSED, not a
+# bare traceback (#909)
+# =============================================================================
+@pytest.mark.parametrize("glyph", ["é", "—", "\U0001D11E"])  # 2-, 3- and 4-byte sequences
+def test_load_json_refused_refuses_a_record_truncated_mid_multibyte_utf8(tmp_path, glyph):
+    """A ledger truncated inside a multi-byte UTF-8 character dies in
+    `Path.read_text()` with `UnicodeDecodeError` -- not `JSONDecodeError` --
+    so the #883 helper's single except clause let it escape as a bare
+    traceback instead of a `Refused` naming the path and the restore step
+    (#909). Truncation is exercised at the 2-, 3- and 4-byte sequence
+    boundaries; every one refuses with the same shape as a torn-JSON record."""
+    p = tmp_path / "ledger.json"
+    good = json.dumps({"case_id": "SD/01", "note": f"kept {glyph} intact"},
+                      ensure_ascii=False).encode()
+    i = good.index(glyph.encode())
+    p.write_bytes(good[: i + 1])  # cut mid-character: the #842 kill's leftover shape
+
+    with pytest.raises(mf.Refused,
+                       match=r"ledger\.json.*not valid UTF-8.*unexpected end of data"
+                             r".*git checkout"):
+        mf.load_json_refused(p, "bound ledger")
+
+
+def test_load_json_refused_refuses_invalid_utf8_that_is_not_a_truncation(tmp_path):
+    """Invalid UTF-8 that is not a truncation -- a lone continuation byte
+    after an ASCII character -- dies the same way and gets the same refusal,
+    so the branch cannot be written to only answer the truncated-tail case."""
+    p = tmp_path / "record.json"
+    good = json.dumps({"case_id": "SD/01"}).encode()
+    p.write_bytes(good.replace(b"SD", b"S\x80"))
+
+    with pytest.raises(mf.Refused,
+                       match=r"record\.json.*not valid UTF-8.*invalid start byte"
+                             r".*git checkout"):
+        mf.load_json_refused(p, "analysis record")
