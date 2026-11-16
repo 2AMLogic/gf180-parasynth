@@ -44,6 +44,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # the branch the reader will assume it describes.
 sys.path.insert(0, str(ROOT / "tools"))
 import scorecard as sc                                              # noqa: E402
+import run_all as ra                                                # noqa: E402
 
 DAG = ROOT / "docs" / "dag.json"
 README = ROOT / "README.md"
@@ -395,8 +396,13 @@ def main() -> int:
             # Written after EVERY node, not once after the loop: a job-level
             # kill (the nightly's timeout-minutes, a runner eviction, SIGKILL)
             # cannot be handled, only out-saved. What is already on disk
-            # survives it; a handler alone would not.
-            RESULTS.write_text(json.dumps(res, indent=2, sort_keys=True) + "\n")
+            # survives it; a handler alone would not. Atomic replace, not
+            # write_text: a kill inside a truncate-then-write leaves truncated
+            # JSON that load_results() REFUSES on until git restores it
+            # (#842). fsync stays: os.replace alone covers the process-kill
+            # threat named above, and the fsync adds machine-loss durability
+            # on the persistent workspaces where this runs, for ~1 KB a node.
+            ra.write_json_atomic(RESULTS, res, sort_keys=True)
 
     status = classify_all(nodes)
 

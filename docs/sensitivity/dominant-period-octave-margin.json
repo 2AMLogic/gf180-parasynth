@@ -1,0 +1,71 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "dominant-period-octave-margin",
+  "parameter": {
+    "name": "JIT_OCTAVE_MARGIN_PERMILLE",
+    "source": "model/discrimination_features.py",
+    "kind": "python-constant",
+    "what": "the margin, in thousandths of a normalised autocorrelation, within which `dominant_period` returns a SHORTER octave than the bare argmax: among the integer submultiples of the winning lag, the shortest one that is a local autocorrelation peak and whose peak is within this margin of the winner. Registered with the proposal that introduced it (#774), not after it landed: the repair replaces an unqualified argmax, and an argmax with no margin is a value nobody swept, the same shape as the `round()` FOLD_SINC_TAPS replaced and the 1e-20 epsilon JIT_DPHASE_FLOOR_PPM replaced. 0 is not a margin; it selects the bare argmax that shipped BEFORE the repair, and is on the grid so the sweep prices the repair itself rather than only the dial inside it."
+  },
+  "objective": {
+    "name": "worst 44.1k<->48k period-ratio error from dominant_period",
+    "units": "ratio",
+    "lower_is_better": true,
+    "why": "the defect the dial exists to fix, stated as a measurement rather than as a count of threshold crossings: the same clip read at the two rates must report the same period in SECONDS, so |period(b)/period(a) - 1| is zero for an estimator that agrees with itself and ~1.0 for one that returns an octave. Worst over 201 values of f0 in BOTH resampling directions, because the three f0 values #774 was filed with turned out to be a one-directional grid artefact of the 25 Hz ladder #767's instrument shipped with -- a margin selected on those three would have been selected on half its own class. It is deliberately NOT the only thing the dial trades: the objective improves monotonically as the margin widens and then stops, so on this objective alone the widest margin on the grid wins; keeps_2t in the same artefact is the constraint from the other side, and the verdict below is read against both."
+  },
+  "grid": {
+    "stated_before_results": true,
+    "values": [0, 5, 10, 20, 30, 50, 100, 200],
+    "range_basis": [
+      "The grid brackets two quantities that are measured outside this sweep, by tools/probes/dominant_period_octave.py: the largest margin the failing class NEEDS (r[2T] - r[T] = +0.0053 on the worst clip, i.e. 5.3 thousandths) and the intrinsic preference for T on an aligned clip (-0.0141). 5 is on the grid DELIBERATELY BELOW the first of those, so the record holds a margin that is real and still insufficient rather than only margins that work; 10 is just above it at 1.9x, and 20 is RATE_TOL_ABS['ratio'], the resolution this module already states for a correlation-unit column, at 3.8x.",
+      "0 is the behaviour that shipped before #774: a bare argmax over the lag band, with no comparison between octave candidates at all. It is on the grid for the same reason -1 is on fold-interpolator's and 0 is on dphase-ar1-floor's.",
+      "30, 50, 100 and 200 are above every positive gap measured on the f0 ladder, so the objective cannot improve there and only the CONSTRAINT can move. They are on the grid on purpose: the dial's upper bound is then a measured row rather than an assertion, and 200 is where the period-doubled panel is lost entirely."
+    ],
+    "held_fixed": {}
+  },
+  "decision_rule": {
+    "stated_before_results": true,
+    "flat_within_relative": 0.02,
+    "why": "the decision this dial serves is whether a margin changes what the rate-agreement predicate can see, so the threshold comes from that predicate's own granularity. The predicate is `|period(b)/period(a) - 1| < 0.05` -- fold_rate_sweep.OCTAVE_TOL_REL, the statistic that REFUSES a pair -- and this objective never exceeds 1.0019 anywhere on the grid, so 2 % relative is at most 0.020 in the objective's own units, strictly TIGHTER than the 0.05 it is read against. Tighter is the conservative direction: a rule finer than the predicate can split points the predicate would call equal, which can only add groups, never manufacture a plateau."
+  },
+  "evidence": {
+    "artifact": "docs/sensitivity/dominant-period-octave-margin-sweep.txt",
+    "format": "fixed-width-table",
+    "table": "dominant_period_octave_margin",
+    "value_column": "margin",
+    "objective_column": "ratio_err",
+    "held_fixed": {},
+    "regenerate": "tools/probes/octave_margin_sweep.py -o docs/sensitivity/dominant-period-octave-margin-sweep.txt",
+    "instrument": "dominant_period itself, through its `octave_margin` override -- the shipped function, not a reimplementation of it -- read through fold_rate_sweep.octave_refused and fold_rate_sweep.period_ratio, which are the SAME predicate and ratio #767's sweep instrument refuses its own pairs on, imported rather than restated so a margin that zeroes this probe's count cannot be a margin measured against a different test. Stimuli are the module's own _square under its own _rate_stimulus decay and its band-limited _resample, so the rate pair is the one test_extra_features_are_rate_independent compares. The f0 ladder is 5 Hz over 200-1000 Hz plus every whole Hz over 840-890 Hz, 201 values in two directions. Measured on python 3.12.3 / numpy 1.26.4 / scipy 1.11.4; the mechanism panel behind the grid is identical to four decimals at numpy 2.5.2.",
+    "detail": "the same artefact carries n_mismatch (the count the acceptance criterion is written in), mm_44k and mm_48k (that count split by which rate the clip was built at, so the half of the class the margin was not selected against is legible), keeps_2t (the constraint) and exact (four clips whose period is a whole number of samples, where the answer is arithmetic). tools/sensitivity.py reads only the objective column; the rest are what it cannot see, and the verdict below is read against them."
+  },
+  "points": [
+    {"value": 0, "objective": 1.0019},
+    {"value": 5, "objective": 0.9988},
+    {"value": 10, "objective": 0.0093},
+    {"value": 20, "objective": 0.0093},
+    {"value": 30, "objective": 0.0093},
+    {"value": 50, "objective": 0.0093},
+    {"value": 100, "objective": 0.0093},
+    {"value": 200, "objective": 0.0093}
+  ],
+  "prediction": {
+    "runs": [[0, 5], [10, 20, 30, 50, 100, 200]],
+    "basis": "Stated from three quantities, none of which is a point on this sweep, so the measurement can contradict it. (a) The margin makes exactly ONE comparison per clip, against the set of positive r[2T]-r[T] gaps the ladder holds, which tools/probes/dominant_period_octave.py measures as {+0.0029, +0.0048, +0.0053} -- so two margins that fall in the same interval of that set must return bit-identical lags for every clip and cannot differ in any column. (b) The objective is a WORST over the ladder, and the worst clip is one of the +0.0053 ones, so every margin below 5.3 thousandths leaves that clip reporting an octave; |ratio - 1| for an octave error is 2 x (integer-lag quantisation) - 1, which is within a few per cent of 1.0 by construction, so 0 and 5 must be one group under any tolerance above a few per cent even though they do NOT behave identically. (c) Every margin at or above 5.3 thousandths flips every clip on the ladder, so from 10 up the returned lags are identical and the objective is bit-identical: one group, and it must be the last one. The objective must therefore show one cliff and no second one, and the point where it stops improving (10) must be BELOW the shipped value, which is what makes the constraint column rather than the objective the thing that chooses between 10 and 200.",
+    "independent_of_measurement": true
+  },
+  "verdict": {
+    "state": "MIXED",
+    "runs": [[0, 5], [10, 20, 30, 50, 100, 200]],
+    "summary": "On the objective the dial is a cliff and then a plateau: 1.0019 of period-ratio error at margin 0 and 0.9988 at 5 -- both an octave, because 5 thousandths is below the +0.0053 the worst clip of the class needs -- then 0.0093 at every margin from 10 up, that residue being the integer-lag quantisation of a correct octave and not the defect. 48 of the 402 pairs are octave-mismatched at margin 0 (31 built at 48 kHz, 17 at 44.1 kHz); 16 survive at margin 5, all of them 48 kHz-built; 0 survive from 10 up in both directions. THE CONSTRAINT IS WHAT PICKS A POINT ON THAT PLATEAU, and it is monotone against the objective: keeps_2t falls from 16 at margin 0 to 12 at 10, 10 at 20, 8 at 30, 7 at 50, 4 at 100 and 0 at 200, because a margin wide enough to swallow a genuine period doubling's autocorrelation gap reports that clip an octave HIGH. So the usable range is 10..50, and 20 is the shipped value: it is RATE_TOL_ABS['ratio'], the resolution this module already states for a correlation-unit column, rather than a number fitted to these rows, and it sits 3.8x above the largest gap the class needs while keeping every period doubling on the panel from depth 0.25 up."
+  },
+  "limits": [
+    "ratio_err alone is not a sufficient criterion for this dial and the record says so twice on purpose. tools/sensitivity.py reads only the objective column, so it reports a six-point plateau from 10 to 200; keeps_2t in the same artefact is what that cannot see, and it is strictly decreasing across the whole plateau -- there is no margin on this grid that is free. The cost at the shipped 20 is 6 of the 16 period-doubled clips, which is stated here rather than discovered later.",
+    "THE INPUT THAT DEFEATS THIS GUARD IS ON THE GRID, not an open question (docs/verification-rules.md rule 8): a square whose alternate periods are scaled by 1-depth has true period 2P and a real local autocorrelation peak at P, so a margin above its r[2P]-r[P] gap reports it an octave high. Measured at 400 Hz: the gap is +0.0025 at depth 0.15, +0.0088 at 0.18, +0.0137 at 0.20, +0.0292 at 0.25 and +0.1875 at 0.50, so the shipped 20 thousandths loses every alternation shallower than 0.25 and keeps 0.25 and deeper -- the gap crosses 20 thousandths between depth 0.20 and depth 0.25, which is the resolution this panel has and is not interpolated here. Below depth 0.12 the gap is NEGATIVE and the bare argmax reports the same clip an octave high too, so the margin's own cost is the window between depth 0.12 and depth 0.25 and not the whole class of period-doubled signals. test_the_octave_margin_refuses_the_input_that_defeats_it carries it, and the panel REFUSES rather than scores any entry the bare argmax already gets wrong.",
+    "The margin is NOT the only thing that bounds the rule, and the other bound is not swept here. `_octave_corrected` also requires the candidate to be a LOCAL PEAK of the autocorrelation, which is what keeps an aperiodic clip -- whose autocorrelation decays from lag 0, so every shorter lag is taller than the winner and none is a peak -- from having its period halved at any margin on this grid. That condition is a predicate, not a dial, so it has no grid; `exact` is 4 at every point above, which is the weak form of the same statement (four clips whose period is a whole number of samples, where the answer is arithmetic, are untouched by every margin here).",
+    "The class is a bounded band and the panel now contains its edges, but the variable is not f0. `_square` quantises its period to whole samples of the BUILD rate, so the ladder's 201 f0 values collapse onto far fewer emitted periods: the whole class is the three emitted periods 56 and 55 samples at 48 kHz and 51 at 44.1 kHz, which is why 850-880 Hz built at 48 kHz and 857-873 Hz built at 44.1 kHz fail while 849, 881, 856 and 874 do not. A 1 Hz ladder finds no refusal outside 850-880 Hz. What this does NOT establish is where the class lands for a stimulus whose period is not quantised to the build grid at all; `_bl_square` is in RATE_PANEL for that reason but is not on this ladder.",
+    "The octave error is impossible below about 240 Hz by construction and the ladder does not pretend otherwise: 2T must fall inside the 120-1200 Hz lag band for the argmax to be able to choose it, so f0 below sr/(2*hi) has no second candidate. The ladder starts at 200 Hz, where `dominant_period_octave.py` reports r[2T] as nan for that reason.",
+    "The panel is synthetic squares, not corpus audio, and the whole sweep is one clip length (0.24 s) and one decay (80 ms). How many rows of a real discrimination run have an autocorrelation whose octave candidates fall inside 20 thousandths of each other is a separate, unmeasured question -- the reference corpus is not on this host. It is the same gap #768 counts for the dphase floor.",
+    "The prediction above was written from the mechanism panel's gap set rather than from this sweep, which is what makes it a prediction, but both were produced in the same session and by the same author. Its tightest assertion is that 0 and 5 fall in one group: they differ by 0.3 % against a 2 % rule, so that is where it would break first, on another numpy or another f0 ladder."
+  ]
+}

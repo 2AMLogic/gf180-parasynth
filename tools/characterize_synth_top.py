@@ -130,15 +130,27 @@ REQUIRED_CORNER_FIELDS = (
     "implied_min_period_ns", "implied_fmax_mhz",
 )
 
-#: `implied_min_period_ns` is logged rounded to 2 dp (+-0.005) and
-#: `setup_wns_ns` to 3 dp (+-0.0005); `clock_period_ns` carries 6 dp.
-#: max total discrepancy from rounding alone is 0.0055.
-MIN_PERIOD_TOLERANCE_NS = 0.0055
-#: `implied_fmax_mhz` is logged rounded to 1 dp (+-0.05).
-FMAX_TOLERANCE_MHZ = 0.05
-#: `finish__timing__setup__ws` / `hold__ws` are full-precision floats; the log
-#: rounds to 3 dp (+-0.0005). TNS values are compared exactly.
+# Rounding half-ULPs, each derived from the field's own logged precision.
+#: `implied_min_period_ns` is logged rounded to 2 dp -- half a ULP is
+#: 0.005 ns. This is the one constant for that half-ULP: both
+#: MIN_PERIOD_TOLERANCE_NS below and the per-corner Fmax budget
+#: (`per_corner_fmax_tolerance_mhz`) derive from it, so the two cannot
+#: drift apart.
+MIN_PERIOD_HALF_ULP_NS = 0.005
+#: `setup_wns_ns` / `hold_wns_ns` are logged rounded to 3 dp -- half a ULP
+#: is 0.0005 ns. `clock_period_ns` carries 6 dp and the finish-stage ws
+#: floats are full precision, so neither contributes rounding of its own.
 WNS_TOLERANCE_NS = 0.0005
+#: `clock_period - setup_wns` vs `implied_min_period`: BOTH operands are
+#: log-rounded, so rounding alone allows the sum of the two half-ULPs,
+#: 0.005 + 0.0005 = 0.0055 ns.
+MIN_PERIOD_TOLERANCE_NS = MIN_PERIOD_HALF_ULP_NS + WNS_TOLERANCE_NS
+#: `implied_fmax_mhz` is logged rounded to 1 dp -- half a ULP is 0.05 MHz.
+#: Flat ONLY where it is the sole rounding source: the finish-stage Fmax
+#: check compares against the full-precision `finish__timing__fmax` float.
+#: The per-corner reciprocal check adds the propagated min-period term on
+#: top -- see `per_corner_fmax_tolerance_mhz` (issue #834).
+FMAX_TOLERANCE_MHZ = 0.05
 #: utilisation key vs std-cell-area / core-area recomputation, absolute.
 UTILIZATION_TOLERANCE = 1e-4
 
@@ -420,6 +432,23 @@ def _check(checks, name, a, b, tol, detail, sources):
                    "detail": detail, "sources": sources})
 
 
+def per_corner_fmax_tolerance_mhz(implied_min_period_ns: float) -> float:
+    """Budget for the `1000/implied_min_period vs implied_fmax` check.
+
+    Both operands are log-rounded: `implied_fmax_mhz` to 1 dp (half-ULP
+    FMAX_TOLERANCE_MHZ) and `implied_min_period_ns` to 2 dp (half-ULP
+    MIN_PERIOD_HALF_ULP_NS). The min-period rounding propagates through the
+    reciprocal: d(1000/T)/dT = -1000/T^2, so a +-0.005 ns perturbation of
+    the logged period moves 1000/T by up to 1000/T^2 * 0.005 MHz. At the
+    committed evidence's T = 37.79 ns that term is 0.0035 MHz (budget
+    0.0535); at T = 5 ns it is 0.2 MHz -- four times the flat half-ULP
+    alone -- so no single constant is right for all T and the budget is
+    computed per corner from the operand (issue #834).
+    """
+    return FMAX_TOLERANCE_MHZ \
+        + (1000.0 / implied_min_period_ns ** 2) * MIN_PERIOD_HALF_ULP_NS
+
+
 def cross_checks(report6, sta) -> list:
     checks = []
     clock = sta["clock_period_ns"]
@@ -436,11 +465,16 @@ def cross_checks(report6, sta) -> list:
             f"setup_wns_ns to 3 dp, so rounding alone allows "
             f"{MIN_PERIOD_TOLERANCE_NS} ns",
             [sta["header_source"], src])
+        t_ns = v["implied_min_period_ns"]
         _check(
             checks, f"{name}: 1000/implied_min_period vs implied_fmax",
-            1000.0 / v["implied_min_period_ns"], v["implied_fmax_mhz"],
-            FMAX_TOLERANCE_MHZ,
-            "implied_fmax_mhz is logged rounded to 1 dp",
+            1000.0 / t_ns, v["implied_fmax_mhz"],
+            per_corner_fmax_tolerance_mhz(t_ns),
+            f"implied_fmax_mhz is logged rounded to 1 dp and "
+            f"implied_min_period_ns to 2 dp; the min-period half-ULP "
+            f"propagates through the reciprocal as "
+            f"{(1000.0 / t_ns ** 2) * MIN_PERIOD_HALF_ULP_NS:.4f} MHz "
+            f"at T = {t_ns:g} ns",
             [src])
     _check(
         checks, "tt setup WNS vs finish-stage metrics",
@@ -455,6 +489,10 @@ def cross_checks(report6, sta) -> list:
         WNS_TOLERANCE_NS,
         "same rounding as the setup check",
         [tt_src, report6["finish__timing__hold__ws"]["source"]])
+    # Flat FMAX_TOLERANCE_MHZ here, NOT per_corner_fmax_tolerance_mhz: the
+    # other operand, finish__timing__fmax, is a full-precision Hz float, so
+    # implied_fmax_mhz's 1-dp rounding is the ONLY rounding source and the
+    # flat half-ULP is already the exact budget (issue #834).
     _check(
         checks, "tt implied Fmax vs finish-stage fmax",
         tt["implied_fmax_mhz"],
