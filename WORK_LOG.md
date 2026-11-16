@@ -4,6 +4,11 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-15
 
+- **PR #832**: tools: characterize synth_top from the committed route evidence
+- **Issue #790** (closed): T1 item 8: build one characterization report from the committed synth_top route evidence and record the klt signoff result
+- **PR #796**: fix: normalise repeat_period per overlapped window and resolve its multiple
+- **Issue #780** (closed): bug: repeat_period returns four times the true repeat period on a signal that repeats exactly
+- **Issue #768** (closed): measure: how many discrimination rows fall under the new jit.dphase_ar1 floor (REFUSED in #763 -- no corpus on that host)
 - **PR #786**: docs: roadmap as of 2026-11-13
 - **PR #799**: retire DAG nodes M5 and D4, and forbid the issue-only shape returning
 - **Issue #788** (closed): DAG nodes M5 and D4 read TODO against closed issues: give each evidence or retire it
