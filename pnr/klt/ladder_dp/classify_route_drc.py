@@ -119,10 +119,15 @@ def read_text_or_none(path: Path) -> tuple[str | None, str]:
 def parse_srcs(srcs: str) -> list[str]:
     """Net names from a ``srcs:`` field, in order, annotations stripped.
 
-    Handles ``net:_16820_ net:VSS`` (the committed klt/OpenROAD spelling),
-    a bare ``VSS (Metal2)`` shape, and escaped ``\\net:...`` names (kept
-    verbatim minus any annotation -- renaming them would corrupt the net
-    the classification keys on).
+    Handles ``net:_16820_ net:VSS`` (the committed klt/OpenROAD spelling)
+    and a bare ``VSS (Metal2)`` shape. The ``net:`` prefix removal is
+    textual, so a backslash-escaped ``\\net:...`` spelling is **not**
+    handled: its backslash survives as a spurious token of its own. No
+    committed report uses that spelling and klt's own counter never
+    parses srcs names, so it is documented as unsupported rather than
+    silently renamed -- renaming would corrupt the net the classification
+    keys on (issue #864, which dropped the earlier "kept verbatim"
+    claim as unestablished).
     """
     nets: list[str] = []
     stripped = srcs.replace("net:", " ")
@@ -237,8 +242,9 @@ def read_metrics(path: Path) -> tuple[dict[str, Any] | None, str]:
     also reports what a plain ``json.loads`` would see, so the two
     readings can disagree on the page. Current klt instead writes one
     authoritative value plus a ``klt__repeated_metrics`` history block;
-    that block is reported when present. Returns ``(report, "")`` or
-    ``(None, reason)``.
+    that block is reported when present. A root that is not an object
+    (a list, a bare scalar, ``null``) is a refusal reason, mirroring
+    ``read_par_response``. Returns ``(report, "")`` or ``(None, reason)``.
     """
     text, reason = read_text_or_none(path)
     if text is None:
@@ -261,6 +267,8 @@ def read_metrics(path: Path) -> tuple[dict[str, Any] | None, str]:
         pair_view = json.loads(text, object_pairs_hook=hook)
     except json.JSONDecodeError as exc:
         return None, f"{path} is not parseable JSON: {exc}"
+    if not isinstance(pair_view, dict):
+        return None, f"{path} is not a JSON object"
 
     # object_pairs_hook fires post-order, so the root object's call is
     # last; occurrences are a TOP-LEVEL reading only. The
@@ -392,8 +400,17 @@ def main(argv: list[str] | None = None) -> int:
     metrics_path = Path(args.metrics)
 
     refused: list[str] = []
+    text: str | None = None
     if not report_path.exists():
         refused.append(f"--drc-report {report_path} does not exist")
+    else:
+        # Read here, inside the refusal-collection block, so an
+        # existing-but-unreadable report (a directory, permissions)
+        # refuses with the documented exit 3 instead of the assert that
+        # used to stand in for this check (issue #864).
+        text, report_reason = read_text_or_none(report_path)
+        if text is None:
+            refused.append(report_reason)
     metrics, metrics_reason = read_metrics(metrics_path)
     if metrics is None:
         refused.append(metrics_reason)
@@ -416,8 +433,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {problem}", file=sys.stderr)
         return EXIT_REFUSED
 
-    text, _ = read_text_or_none(report_path)
-    assert text is not None  # existence checked above
+    # `refused` above is empty, so `text` is a str: every path that leaves
+    # it None appended a refusal first.
     parsed = parse_drc_report(text)
 
     power_nets = frozenset(args.power_nets.split(","))
