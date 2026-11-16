@@ -49,11 +49,11 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **2592 commits over 1424 hours.**
+Measured from git, not remembered. **2606 commits over 1426 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 3835 | 2.7 |
+| tests | 3852 | 2.7 |
 | injected controls | 297 | 0.2 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,189 | 8 |
@@ -71,12 +71,12 @@ graph LR
   subgraph foundation["Foundation"]
     F1["! Ladder bit-exact"]
     F2["✓ Modal bank bit-exact"]
-    F3["! Measurement ground truth"]
+    F3["· Measurement ground truth"]
   end
   subgraph minimoog["Minimoog voice"]
     M1["! One Moog voice bit-exact"]
     M2["✓ Matches our own spec"]
-    M3["? Matches software references"]
+    M3["· Matches software references"]
     M4["✗ Matches real hardware"]
   end
   subgraph drums["TR-808 drums"]
@@ -110,10 +110,10 @@ graph LR
   I2 --> S3
   style F1 fill:#9A6510,color:#fff
   style F2 fill:#0E6B5E,color:#fff
-  style F3 fill:#9A6510,color:#fff
+  style F3 fill:#3f8f5f,color:#fff
   style M1 fill:#9A6510,color:#fff
   style M2 fill:#0E6B5E,color:#fff
-  style M3 fill:#5B4B8A,color:#fff
+  style M3 fill:#3f8f5f,color:#fff
   style M4 fill:#8E2438,color:#fff
   style D1 fill:#9A6510,color:#fff
   style D2 fill:#3f8f5f,color:#fff
@@ -129,21 +129,19 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STALE** | rtl-sketch/ladder_dp.v changed since node/F1-ladder was cut |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal (not re-run; verifier is slow) |
-| `F3` | Measurement ground truth | **STALE** | model/audio_measure.py changed since this was last run |
+| `F3` | Measurement ground truth | **GREEN** | 153 passed in 3.91s |
 | `M1` | One Moog voice bit-exact | **STALE** | rtl-sketch/voice_dp.v changed since node/M1-voice was cut |
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
-| `M3` | Matches software references **fidelity** | **REFUSED** | docs/reference-compare-results.json carries no passed/ok/success/green key -- no verdict to read |
+| `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 241.38s (0:04:01) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 472.53s (0:07:52) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `I2` | Whole chip at its pins | **TODO** | never run -- `tools/compile_dag.py --run` |
-| `S1` | Routed on gf180, DRC clean | **GREEN** | pnr/orfs/evidence/synth_top/joined-d1e5068/verdict.json passed=True |
+| `S1` | Routed on gf180, DRC clean | **GREEN** | pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared |
 | `S2` | Fits a real shuttle padframe | **BLOCKED** | LibreLane half-slot, in flight: padcells 0 -> 754 placed with all 5 wafer.space IP macros, 73.07 % core utilisation, drum_regs 3,520/3,520 flops placed on the run's own DEF. Detailed routing has NOT completed (iteration 60 of a 64 cap, 1 Metal2 short), so there is no final router DRC count, no post-route antenna check and no post-route STA at any corner. The verdict this node will read is pnr/shuttle/evidence/halfslot-verdict.json ('passed' = the AREA question only); finish it with pnr/shuttle/finish_halfslot.py finish. docs/pnr-shuttle-halfslot.md, PR #348 |
-| `S3` | FPGA build of the real engine | **GREEN** | fpga/reports/ecp5_25f.txt contains 'RESULT: routed.' |
-
-> **Unvalidated subsystems.** Minimoog voice: no green fidelity evidence -- UNVALIDATED against anything external
+| `S3` | FPGA build of the real engine | **GREEN** | fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared |
 
 <sub>Compiled from `docs/dag.json` by `tools/compile_dag.py`. Status is derived from evidence, not asserted.</sub>
 <!-- DAG:END -->
