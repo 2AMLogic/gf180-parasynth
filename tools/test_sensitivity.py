@@ -9,6 +9,7 @@ injection REMOVED does not pass (not vacuous).
 """
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,7 @@ import sys
 import pytest
 
 import sensitivity as sens
+from makefile_recipe import live_recipe_lines, makefile_recipe
 
 FILES = ["docs/sensitivity/registry.json",
          "docs/sensitivity/drum-kit-modes.json",
@@ -161,6 +163,118 @@ EXPECT = {"VERDICT_ASSERTED": 1, "POINT_TRANSCRIBED": 1, "GRID_CHERRY_PICKED": 1
 def test_every_declared_injection_is_covered_here():
     """A control list that drifts from the tool is how a control stops firing."""
     assert set(EXPECT) == set(sens.INJECTIONS)
+
+
+# --------------------------------------------------------------------------
+# the make controls wiring (issue #836)
+#
+# EXPECT <-> INJECTIONS is pinned above, but nothing compared either set
+# against the `controls:` target in the root Makefile -- so an injection
+# registered here but omitted (or mis-`--expect`ed) there left the suite
+# green while `make controls` silently never ran it.
+
+
+def _unwired(recipe: str) -> list[str]:
+    """Names in EXPECT not enumerated in `recipe` with the --expect token
+    their exit code implies. Takes text so capability-to-fail is testable
+    in-process.
+
+    The written flag order is pinned deliberately: the pattern is
+    `--inject <NAME> --expect <mode>`, so the swapped order
+    (`--expect fail --inject NAME`) reads as unwired even though the control
+    would run correctly. Red is the safe direction -- do not "fix" the guard
+    to accept both orders."""
+    bad = []
+    for name, code in sorted(EXPECT.items()):
+        want = sens.EXIT_MODES[code]
+        pat = (rf"tools/sensitivity\.py\s+check\s+--inject\s+"
+               rf"{re.escape(name)}\s+--expect\s+{want}\b")
+        if not re.search(pat, recipe):
+            bad.append(f"{name} (want --expect {want})")
+    return bad
+
+
+def test_every_injection_is_wired_into_make_controls_with_its_own_expect_token():
+    """Row A of issue #836's table: the gate must be satisfiable as committed.
+    Each `make controls` line must invoke this tool on the injection with the
+    `--expect` mode its EXPECT exit code implies -- a bare substring mention
+    is not wiring."""
+    unwired = _unwired(makefile_recipe("controls"))
+    assert not unwired, (
+        f"{unwired}: every sens.INJECTIONS control must be enumerated in "
+        "`make controls` as `tools/sensitivity.py check --inject <NAME> "
+        "--expect <mode>`, with the mode its EXPECT exit code implies "
+        f"({sens.EXIT_MODES}) -- otherwise make controls silently never "
+        "runs it")
+
+
+def test_the_wiring_check_fails_when_a_recipe_line_is_deleted():
+    """Row B: an injection added to INJECTIONS + EXPECT but omitted from
+    `make controls` must turn this check red."""
+    recipe = makefile_recipe("controls")
+    mutated = "\n".join(ln for ln in recipe.split("\n")
+                        if "GRID_CHERRY_PICKED" not in ln)
+    assert mutated != recipe, "the mutation did not remove anything"
+    assert _unwired(mutated) == ["GRID_CHERRY_PICKED (want --expect fail)"]
+
+
+def test_the_wiring_check_fails_when_the_expect_token_is_wrong():
+    """Row C -- the defeater the naive `name in recipe` substring test
+    cannot see: RULE_UNSTATED must prove the tool REFUSES (exit 2). With
+    `--expect fail` the line still runs, still passes, and still mentions
+    the name, but the control no longer tests refusal."""
+    recipe = makefile_recipe("controls")
+    mutated = recipe.replace("--inject RULE_UNSTATED --expect refused",
+                             "--inject RULE_UNSTATED --expect fail")
+    assert mutated != recipe, "the mutation did not change anything"
+    assert _unwired(mutated) == ["RULE_UNSTATED (want --expect refused)"]
+    assert "RULE_UNSTATED" in mutated, (
+        "the naive substring form would pass here -- this line is what "
+        "makes the paired form necessary")
+
+
+def test_the_wiring_check_fails_when_the_name_survives_only_in_a_comment():
+    """Row D: the name still appears in the recipe after the line is
+    replaced by a comment, so a substring test stays green while `make
+    controls` no longer runs the control. This mutation *deletes* the
+    invocation text -- the strictly weaker form of the defeat; row E pins
+    the realistic one, where the text survives intact behind a `#`."""
+    lines = []
+    for ln in makefile_recipe("controls").split("\n"):
+        if "PREDICTION_WRONG" in ln:
+            ln = "# PREDICTION_WRONG covered elsewhere"
+        lines.append(ln)
+    recipe = "\n".join(lines)
+    assert "PREDICTION_WRONG" in recipe, (
+        "the naive substring form would pass here -- this line is what "
+        "makes the paired form necessary")
+    assert _unwired(recipe) == ["PREDICTION_WRONG (want --expect fail)"]
+
+
+def test_the_wiring_check_fails_when_a_line_is_commented_out_with_its_text_intact():
+    """Row E: mutation (a), the ordinary debugging form row D names but did
+    not take -- `#` after the leading tab, invocation text left intact:
+
+        \\t#  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG ..."
+
+    GNU make honours that silently: the line is dropped, every other control
+    still runs, `make controls` still exits 0 -- and `_unwired` over
+    unfiltered text stays green because its match sits behind the `#`. That
+    is verbatim the failure this gate exists to close, so the parser must
+    drop comment lines before any consumer sees the recipe text."""
+    recipe = makefile_recipe("controls")
+    mutated = "\n".join(
+        ln.replace("\t", "\t#  ", 1) if "PREDICTION_WRONG" in ln else ln
+        for ln in recipe.split("\n"))
+    assert mutated != recipe, "the mutation did not change anything"
+    assert "check --inject PREDICTION_WRONG --expect fail" in mutated, (
+        "mutation (a) must leave the invocation text intact -- deleting it "
+        "is row D's weaker form")
+    assert _unwired(mutated) == [], (
+        "the pre-fix defeat: unfiltered text matches the invocation behind "
+        "the `#` and stays green -- this is what makes the row necessary")
+    live = "\n".join(live_recipe_lines(mutated.split("\n")))
+    assert _unwired(live) == ["PREDICTION_WRONG (want --expect fail)"]
 
 
 @pytest.mark.parametrize("name,code", sorted(EXPECT.items()))

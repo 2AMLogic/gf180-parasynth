@@ -59,11 +59,11 @@ These figures are the finish-stage metrics at **tt_025C_5v00 only**; `sta_corner
 ## Cross-checks (all must hold, or nothing is written)
 
 - `tt: clock_period - setup_wns vs implied_min_period`: 37.788 vs 37.79, diff 0.002003 <= tolerance 0.0055
-- `tt: 1000/implied_min_period vs implied_fmax`: 26.462 vs 26.5, diff 0.037973 <= tolerance 0.05
+- `tt: 1000/implied_min_period vs implied_fmax`: 26.462 vs 26.5, diff 0.037973 <= tolerance 0.0535012
 - `ss: clock_period - setup_wns vs implied_min_period`: 71.207 vs 71.21, diff 0.003003 <= tolerance 0.0055
-- `ss: 1000/implied_min_period vs implied_fmax`: 14.043 vs 14, diff 0.0429715 <= tolerance 0.05
+- `ss: 1000/implied_min_period vs implied_fmax`: 14.043 vs 14, diff 0.0429715 <= tolerance 0.050986
 - `ff: clock_period - setup_wns vs implied_min_period`: 23.325 vs 23.32, diff 0.004997 <= tolerance 0.0055
-- `ff: 1000/implied_min_period vs implied_fmax`: 42.8816 vs 42.9, diff 0.0183533 <= tolerance 0.05
+- `ff: 1000/implied_min_period vs implied_fmax`: 42.8816 vs 42.9, diff 0.0183533 <= tolerance 0.0591942
 - `tt setup WNS vs finish-stage metrics`: 43.592 vs 43.5918, diff 0.0002 <= tolerance 0.0005
 - `tt hold WNS vs finish-stage metrics`: 0.6 vs 0.600246, diff 0.000246 <= tolerance 0.0005
 - `tt implied Fmax vs finish-stage fmax`: 26.5 vs 26.4633, diff 0.0367 <= tolerance 0.05

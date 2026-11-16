@@ -10,7 +10,7 @@ Fixing the instance and leaving the class is the repeating failure here, so
 these cases pin the class.
 """
 from __future__ import annotations
-import json, pathlib, subprocess, sys
+import json, os, pathlib, subprocess, sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -448,3 +448,93 @@ def test_issue_824_the_gate_fails_and_names_the_node_on_stderr(monkeypatch, caps
     assert rc == 1
     assert "REFUSED: F3 -- recorded sha deadbee" in err, \
         f"the gate must name the refused node on stderr; got:\n{err}"
+
+
+# ---------------------------------------------------------------------------
+# #842: the --run records write is atomic, so a kill cannot truncate it
+# ---------------------------------------------------------------------------
+# `RESULTS.write_text` is a truncate-then-write. A job-level kill landing
+# inside it (the nightly's timeout-minutes, a runner eviction, Ctrl-C in a
+# persistent workspace) leaves truncated JSON, and load_results() then REFUSES
+# on every later invocation until git restores the file. The per-node write
+# that #823 introduced multiplies the windows it can land in (7 per --run,
+# 13 with --slow). The write now goes through run_all.write_json_atomic
+# (tmp + fsync + os.replace), so a kill leaves either the previous complete
+# file or the new complete file -- never a truncated one.
+
+def _records_worktree(tmp_path, monkeypatch, seed):
+    """A --run whose evidence is injected, against a throwaway records file.
+
+    Points DAG and RESULTS at tmp_path so nothing here touches the real
+    docs/, and stubs run_evidence so no suite executes. ROOT stays the real
+    checkout: classify_all's git queries need a repo, and the record's sha
+    comes from it."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    results = docs / "dag-results.json"
+    if seed is not None:
+        results.write_text(json.dumps(seed, indent=2, sort_keys=True) + "\n")
+    (docs / "dag.json").write_text(json.dumps(
+        {"nodes": {"N": {"name": "control", "group": "foundation",
+                         "verifier": "no/such/tool.py"}}}))
+    monkeypatch.setattr(cd, "DAG", docs / "dag.json")
+    monkeypatch.setattr(cd, "RESULTS", results)
+    monkeypatch.setattr(cd, "run_evidence", lambda i, n: (True, "ctl pass"))
+    return results
+
+
+def test_a_kill_during_the_records_write_leaves_the_previous_file_complete(tmp_path, monkeypatch):
+    """THE CONTROL (start red): this failed against the bare `write_text`.
+
+    Both hooks simulate the same physical event -- a kill inside the write --
+    on whichever writer is live: truncate-then-half-write-then-die for
+    `write_text`, die-after-tmp-before-replace for `write_json_atomic`.
+    Pre-fix the first hook fired, the file was left truncated, and
+    load_results() REFUSED; post-fix the original record survives both."""
+    original = {"M1": {"passed": True, "sha": "abc", "detail": "old run"}}
+    results = _records_worktree(tmp_path, monkeypatch, original)
+
+    def kill_mid_truncate_write(self, data, *a, **k):
+        with self.open("w") as fh:
+            fh.write(data[: len(data) // 2])
+        raise RuntimeError("injected: killed mid truncate-then-write")
+
+    def kill_before_replace(src, dst):
+        raise RuntimeError("injected: killed after tmp write, before replace")
+
+    monkeypatch.setattr(pathlib.Path, "write_text", kill_mid_truncate_write)
+    monkeypatch.setattr(os, "replace", kill_before_replace)
+
+    monkeypatch.setattr(sys, "argv", ["compile_dag.py", "--run", "--print"])
+    with pytest.raises(RuntimeError):
+        cd.main()
+
+    # The pre-existing record is intact, parseable, and refused by nothing:
+    assert cd.load_results() == original, \
+        "a kill during the write corrupted the previous complete record"
+    leftovers = list((tmp_path / "docs").glob("*tmp*"))
+    assert leftovers == [], f"a tmp sibling survived the failed write: {leftovers}"
+
+
+def test_the_records_write_is_byte_identical_to_the_format_it_replaced(tmp_path, monkeypatch):
+    """The atomic writer must not reformat a git-tracked file: same bytes as
+    `json.dumps(res, indent=2, sort_keys=True) + "\\n"`, which is what the bare
+    write_text wrote. Seeded keys are inserted out of sorted order so a
+    dropped sort_keys reorders them and fails here rather than churning every
+    future commit. Also pins the success path: no tmp sibling survives."""
+    seed = {"M1": {"passed": True, "sha": "abc", "detail": "old"},
+            "A2": {"passed": False, "sha": "def", "detail": "older"}}
+    results = _records_worktree(tmp_path, monkeypatch, seed)
+
+    sha = cd.git("rev-parse", "HEAD")
+    expected = (json.dumps({**seed, "N": {"passed": True, "sha": sha,
+                                          "detail": "ctl pass"}},
+                           indent=2, sort_keys=True) + "\n").encode()
+
+    monkeypatch.setattr(sys, "argv", ["compile_dag.py", "--run", "--print"])
+    assert cd.main() == 0
+
+    assert results.read_bytes() == expected, \
+        "the atomic write changed the record's bytes -- tracked-file churn"
+    leftovers = list((tmp_path / "docs").glob("*tmp*"))
+    assert leftovers == [], f"a tmp sibling survived the successful write: {leftovers}"

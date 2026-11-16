@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 import math
 import pathlib
-import re
 import subprocess
 
 import numpy as np
@@ -32,6 +31,7 @@ import yaml
 
 import check_workflows as cw
 import manifest as mf
+from makefile_recipe import makefile_recipe
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -39,23 +39,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 # =============================================================================
 # The gate on this suite's own wiring
 # =============================================================================
-def _makefile_recipe(target: str) -> str:
-    """The recipe lines of one Makefile target, joined. Used to assert that a
-    check is enumerated where CI will actually reach it."""
-    lines = (ROOT / "Makefile").read_text().split("\n")
-    out, inside = [], False
-    for line in lines:
-        if re.match(rf"^{re.escape(target)}\s*:", line):
-            inside = True
-            continue
-        if inside:
-            if line and not line[0].isspace():
-                break
-            out.append(line)
-    assert out, f"no recipe found for Makefile target {target!r}"
-    return "\n".join(out)
-
-
 def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
     """"Check that the thing you are testing is the thing that ships"
     (CLAUDE.md), applied to this suite itself.
@@ -67,7 +50,7 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
     comment states the rule: a gate nothing invokes fails exactly the same way
     as one that passes. This test fails if that wiring is ever removed.
     """
-    recipe = _makefile_recipe("verify-fast")
+    recipe = makefile_recipe("verify-fast")
     assert "tools/test_manifest.py" in recipe, (
         "tools/test_manifest.py must be enumerated in `make verify-fast`, which "
         "is the target rungs.yml's m5a-fast job runs; the broad `pytest tools/` "
@@ -81,6 +64,26 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
         "rungs.yml's m5a-fast job no longer runs `make verify-fast` in a way "
         f"that can block a pull request -- this suite's only CI path is "
         f"gone or neutered: {reason}")
+
+
+def test_makefile_recipe_returns_only_live_lines(tmp_path):
+    """The shared parser drops comment lines, not just collects them. A
+    control disabled the ordinary debugging way -- `#` after the leading tab,
+    invocation text intact -- never runs: GNU make drops the line and exits 0
+    (issue #855). The substring assertions above are defeater-resistant only
+    because this filter sits in the parser both suites share; in raw recipe
+    text the disabled invocation would still match."""
+    (tmp_path / "Makefile").write_text(
+        "t:\n"
+        "\t@echo A \\\n"
+        "\t#  echo B \\\n"
+        "\techo C\n"
+    )
+    recipe = makefile_recipe("t", root=tmp_path)
+    assert "echo A" in recipe and "echo C" in recipe
+    assert "echo B" not in recipe, (
+        "echo B sits behind a `#`: make never runs it, so the parser must "
+        "not return it as recipe text")
 
 
 def test_every_permanent_injected_defect_still_has_something_to_inject_into():
