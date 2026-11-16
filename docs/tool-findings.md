@@ -29,11 +29,13 @@ not filed in the wrong repository.
 **Later passes, other upstreams.** This document is the 2026-09-18
 klayout-tools comb and is not extended in place. Findings against the other
 upstream named in `CLAUDE.md`, `rjwalters/loom`, live in their own dated
-write-ups:
+write-ups, or directly in the upstream report when the finding was filed
+straight upstream with no local write-up:
 
 | pass | finding | filed |
 |---|---|---|
 | [`loom-orphan-reap-2026-09-27.md`](loom-orphan-reap-2026-09-27.md) | orphan reaping is uid-blind: a dockerd-started (root-owned) orphan survives every Loom SIGKILL with EPERM, is logged as "uninterruptible I/O", and binds no dispatch decision | [rjwalters/loom#9160](https://github.com/rjwalters/loom/issues/9160) |
+| #850 re-curation pass, 2026-11-16 | `check-verified-corrections-preserved.sh` matches only `## ` headings: an h3 `### Verified corrections` section passes silently at exit 0 even when deleted wholesale, and an h2 section mid-body swallows following h3 subsections so unrelated `###` edits FAIL as lost corrections | [rjwalters/loom#13938](https://github.com/rjwalters/loom/issues/13938) |
 
 ---
 
