@@ -363,6 +363,20 @@ def _exceeds(value: float | None, resolution: float, relative: bool,
 # ===========================================================================
 def sweep_one(case: EstimatorCase, pert: Perturbation, x: np.ndarray, sr: int,
               base: am.Estimate) -> tuple[str, list[dict]]:
+    """One (estimator, perturbation) sweep.
+
+    Asserts its precondition at the point of use (#805): every delta below
+    is measured AGAINST `base`, so a refusing baseline poisons every row.
+    `run_ladder` guards this upstream and emits its own `BASE_REFUSED` row
+    (which stays); the assert here is for direct callers -- the
+    test suite calls `sweep_one` directly -- which must get REFUSED, not a
+    TypeError (`Estimate(None, False, ...)`), and not rows whose deltas are
+    silently `nan` against a nan-carrying refusal."""
+    if not base.ok or base.value is None or not math.isfinite(base.value):
+        raise rc.Refused(
+            f"sweep_one({case.name}, {pert.name}): the BASELINE refuses "
+            f"({base.reason or 'no reason given'}) -- every delta below would be "
+            "measured against a reading that does not exist")
     relation = relation_for(case.name, pert.name)
     rows = []
     for strength in pert.strengths:
@@ -512,10 +526,18 @@ def run_ladder(refs: pathlib.Path | None = None, *,
                                                  why=str(e))
             continue
         base = case.measure(x, sr)
-        if not base.ok:
+        if not base.ok or base.value is None or not math.isfinite(base.value):
             out["estimators"][case.name] = dict(
-                status="BASE_REFUSED", voice=case.voice, file=rel, why=base.reason)
+                status="BASE_REFUSED", voice=case.voice, file=rel,
+                why=base.reason or f"base reading is not a finite value "
+                                   f"({base.value!r})")
             continue
+        # The `base.value` reads below are safe ONLY because of the
+        # BASE_REFUSED guard above (#805): from here on base.ok holds and
+        # base.value is a finite float -- the same triple `sweep_one`
+        # asserts at its own entry, now checked at both layers. Keep these
+        # reads inside this guarded region -- moving one out resurrects
+        # the unguarded-baseline TypeError at JSON-emit time.
         est_out: dict = dict(status="OK", voice=case.voice, file=rel,
                              base_value=round(base.value, 6), perturbations={})
         for pname, pert in PERTURBATIONS.items():

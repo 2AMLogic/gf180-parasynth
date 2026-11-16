@@ -272,20 +272,165 @@ def test_an_fmax_disagreement_beyond_tolerance_refuses(tmp_path):
 
 
 def test_min_period_tolerance_boundary(tmp_path):
-    """0.004 ns off passes (inside 0.0055); 0.02 off refuses."""
-    for drift, expect_ok in ((0.004, True), (0.02, False)):
-        run_dir = copy_evidence(tmp_path / ("i" + str(expect_ok)))
-        log = run_dir / "sta_corners.log"
-        log.write_text(log.read_text().replace(
-            "implied_min_period_ns=37.79",
-            f"implied_min_period_ns={37.79 + drift:.2f}"))
-        result = run_tool(run_dir, tmp_path / ("outi" + str(expect_ok)))
-        assert (result.returncode == 0) == expect_ok, result.stderr
-        if not expect_ok:
-            assert "stated tolerance" in result.stderr
+    """Both sides of MIN_PERIOD_TOLERANCE_NS, at two levels.
+
+    Function level (the cst._check calls below): a fixed 0.004 ns drift is
+    accepted -- a sub-granularity value the committed evidence cannot
+    express through file injection, because `implied_min_period_ns` is
+    logged at 2 dp so the smallest injectable drift is 0.01 ns, already
+    larger than the 0.0055 ns tolerance. That is why the inside-boundary
+    arm lives here rather than at integration level, and why the drift is
+    the FIXED value 0.004 rather than anything derived from the constant:
+    this test fails if MIN_PERIOD_TOLERANCE_NS is ever reduced below
+    0.004 ns.
+
+    Integration level (the file-injection arm below): the committed
+    evidence with a 0.02 ns drift (37.79 -> 37.81, which does modify the
+    file) must refuse through the full tool path.
+
+    The 0.004 pass arm this test used to run at integration level injected
+    nothing: `f"{37.79 + 0.004:.2f}"` is `"37.79"`, byte-identical to the
+    target, so it re-ran clean evidence and asserted nothing beyond the
+    clean path (issue #834). The changed-file guard on the injection arm
+    below exists so that class cannot come back. Its known limit
+    (docs/verification-rules.md rule 8): an injection that changes the file
+    but at a line the asserted check never reads -- e.g. editing a corner
+    other than the one the refusal names -- still passes this guard.
+    """
+    # The tolerance is the derivation, not a number that drifted from it.
+    assert cst.MIN_PERIOD_TOLERANCE_NS == \
+        cst.MIN_PERIOD_HALF_ULP_NS + cst.WNS_TOLERANCE_NS
+
+    # Function level, inside side: fixed 0.004 ns, accepted.
+    cst._check([], "boundary inside", 0.0, 0.004,
+               cst.MIN_PERIOD_TOLERANCE_NS, "fixed 0.004 ns drift", [])
+
+    # Function level, exact boundary: diff == tol passes (the check refuses
+    # only beyond tol + 1e-12); one least-count above refuses.
+    cst._check([], "boundary exact", 0.0, cst.MIN_PERIOD_TOLERANCE_NS,
+               cst.MIN_PERIOD_TOLERANCE_NS, "diff == tol passes", [])
+    with pytest.raises(cst.Refused, match="boundary just outside"):
+        cst._check([], "boundary just outside", 0.0,
+                   cst.MIN_PERIOD_TOLERANCE_NS + 1e-9,
+                   cst.MIN_PERIOD_TOLERANCE_NS, "diff beyond tol", [])
+
+    # Integration level, outside side: 0.02 ns off refuses, and the
+    # injection is asserted to have changed the file -- a no-op injection
+    # would re-assert clean evidence (the #834 defect).
+    run_dir = copy_evidence(tmp_path / "i-refuse")
+    log = run_dir / "sta_corners.log"
+    original = log.read_text()
+    modified = original.replace(
+        "implied_min_period_ns=37.79",
+        f"implied_min_period_ns={37.79 + 0.02:.2f}")
+    assert modified != original, (
+        "injection was a no-op: replacement identical to the target, so "
+        "this arm would run clean evidence and assert nothing")
+    log.write_text(modified)
+    result = run_tool(run_dir, tmp_path / "outi-refuse")
+    assert result.returncode == 2, result.stderr
+    assert "stated tolerance" in result.stderr
+    assert_no_report(tmp_path / "outi-refuse")
+
+
+def test_per_corner_fmax_budget_tracks_the_min_period_rounding():
+    """The per-corner Fmax budget is T-dependent, not a widened constant.
+
+    #834 item 1. At the committed tt period the propagated min-period term
+    is 0.0035 MHz (budget 0.0535); at T = 5 ns it is 0.2 MHz, above the
+    whole flat 1-dp half-ULP. The expected values here are computed from
+    the issue's derivation independently of the tool's own formula. Just
+    outside the committed-T budget must still refuse, so the widening does
+    not become an acceptance of real disagreement.
+    """
+    assert cst.per_corner_fmax_tolerance_mhz(37.79) == pytest.approx(
+        0.0535, abs=5e-4)
+    assert cst.per_corner_fmax_tolerance_mhz(5.0) == pytest.approx(
+        0.25, abs=5e-4)
+    assert cst.per_corner_fmax_tolerance_mhz(5.0) > cst.FMAX_TOLERANCE_MHZ
+    assert cst.per_corner_fmax_tolerance_mhz(5.0) > \
+        cst.per_corner_fmax_tolerance_mhz(37.79)
+    # Just outside the committed-T budget refuses.
+    budget = cst.per_corner_fmax_tolerance_mhz(37.79)
+    with pytest.raises(cst.Refused, match="committed-T just outside"):
+        cst._check([], "committed-T just outside",
+                   1000.0 / 37.79, 1000.0 / 37.79 + budget + 1e-9, budget,
+                   "diff one epsilon beyond the budget", [])
+
+
+def test_arithmetically_consistent_fast_design_is_accepted(tmp_path):
+    """#834's predicted regression: T = 5 ns evidence must not be refused.
+
+    A producer logging a true period of 5.004 ns emits
+    implied_min_period_ns=5.00 (2 dp) and implied_fmax_mhz=199.8 (1 dp,
+    from the true reciprocal 199.840). 1000/5.00 = 200.0 differs from the
+    logged 199.8 by 0.2 MHz -- four times the flat half-ULP, yet pure
+    rounding of consistent evidence. Under the old flat tolerance this
+    refused (exit 2); the per-corner budget 0.05 + 1000/25 * 0.005 = 0.25
+    accepts it.
+    """
+    run_dir = copy_evidence(tmp_path / "fast")
+    log = run_dir / "sta_corners.log"
+    original = log.read_text()
+    modified = original.replace(
+        "setup_wns_ns=+43.592", "setup_wns_ns=+76.380"
+    ).replace(
+        "implied_min_period_ns=37.79", "implied_min_period_ns=5.00"
+    ).replace(
+        "implied_fmax_mhz=26.5", "implied_fmax_mhz=199.8")
+    assert modified != original, (
+        "injection was a no-op: replacement identical to the target")
+    log.write_text(modified)
+    report = json.loads((run_dir / "6_report.json").read_text())
+    report["finish__timing__setup__ws"] = 76.38
+    report["finish__timing__fmax"] = 1.9984e8
+    (run_dir / "6_report.json").write_text(json.dumps(report))
+    out = tmp_path / "out-fast"
+    result = run_tool(run_dir, out)
+    assert result.returncode == 0, result.stderr
+
+
+def test_the_committed_T_budget_is_wider_than_the_flat_half_ULP(tmp_path):
+    """The widening is exercised, not just derived.
+
+    An ff drift the flat 0.05 refuses (|1000/23.32 - 42.83| = 0.0516)
+    sits inside the per-corner budget 0.0592 and must now pass. Changing
+    ff's Fmax touches only the per-corner check: the finish-stage Fmax
+    check reads tt.
+    """
+    assert abs(1000.0 / 23.32 - 42.83) > cst.FMAX_TOLERANCE_MHZ
+    assert abs(1000.0 / 23.32 - 42.83) <= \
+        cst.per_corner_fmax_tolerance_mhz(23.32)
+    run_dir = copy_evidence(tmp_path / "ff")
+    log = run_dir / "sta_corners.log"
+    original = log.read_text()
+    modified = original.replace(
+        "implied_fmax_mhz=42.9", "implied_fmax_mhz=42.83")
+    assert modified != original, (
+        "injection was a no-op: replacement identical to the target")
+    log.write_text(modified)
+    out = tmp_path / "out-ff"
+    result = run_tool(run_dir, out)
+    assert result.returncode == 0, result.stderr
 
 
 def test_the_tolerances_are_stated_in_the_artifacts(clean_twin):
     assert clean_twin["tolerances"]["min_period_ns"] == 0.0055
     md = cst.render_markdown(clean_twin)
     assert "Cross-checks" in md and "tolerance" in md
+    tol_by_name = {c["check"]: c["tolerance"]
+                   for c in clean_twin["cross_checks"]}
+    # The finish-stage Fmax check keeps the FLAT 1-dp half-ULP: its other
+    # operand, finish__timing__fmax, is a full-precision Hz float, so that
+    # half-ULP is the whole budget. It must not grow the propagated term
+    # -- there is no second rounding source for it to absorb (#834).
+    assert tol_by_name["tt implied Fmax vs finish-stage fmax"] == \
+        cst.FMAX_TOLERANCE_MHZ
+    # Each per-corner budget exceeds the flat half-ULP by its own
+    # propagated term, recorded in the twin at full precision.
+    for corner in ("tt", "ss", "ff"):
+        t = clean_twin["per_corner_timing"][corner]["implied_min_period_ns"]
+        name = f"{corner}: 1000/implied_min_period vs implied_fmax"
+        assert tol_by_name[name] == \
+            pytest.approx(cst.per_corner_fmax_tolerance_mhz(t))
+        assert tol_by_name[name] > cst.FMAX_TOLERANCE_MHZ

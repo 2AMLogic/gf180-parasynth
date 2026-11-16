@@ -25,7 +25,6 @@ _None._
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin
-- **#804**: Collapse the three exit statuses that mean REFUSED: run_all.py reports the cymbal low-tail refusal as FAIL(1), a RESULT
 
 ## Ready
 
@@ -35,12 +34,25 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#768**: measure: how many discrimination rows fall under the new jit.dphase_ar1 floor (REFUSED in #763 -- no corpus on that host)
-- **#792**: Corner probes: date the pre-#150 columns, fix `corner_shipped`'s stale docstring, guard the refusal print
-- **#797**: spec/NUMERIC-CONTRACT.md item 29 says the chip still carries drum_section_placeholder and that nothing verifies the joined chip
-- **#805**: The BASELINE of a perturbation comparison is read unguarded while the comparison itself is guarded (2 probe sites)
-- **#824**: stale_against() reads an unresolvable sha as 'nothing changed', so a record whose commit left the history renders GREEN instead of STALE
-- **#835**: File upstream: ORFS 6_report.json emits finish__design__instance__area twice with two different meanings
+- **#778**: measure: re-derive the jit.stability +0.008 and mpd.* attributions with the exact-period fold (REFUSED in #767 -- no corpus on that host)
+- **#782**: bug: the relative rate tolerance is dimensionally meaningless on the 147 dB columns
+- **#787**: Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run"
+- **#811**: Wire or document tools/probes/check_doc_claims_789_marker_controls.py: a control no target runs (the #756 shape, again)
+- **#845**: estimator_defects.py section 6: nine unguarded `.value` arithmetic sites, including two that reach a check() verdict, owned by neither #792 nor #843
+- **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
+- **#852**: test_probe_labels gate (c) polices filter_corner_recalibration's module docstring, and goes red if it says "pre-#150"
+- **#858**: compile_dag classify(): the empty-covers REFUSED guard masks a FAILING record as REFUSED when the node also carries an in-history tag
+- **#863**: compile_dag: stale_against() answers a content question with a commit-range walk, so a merge-shaped conflict round renders fast nodes STALE (false positive; --full-history is NOT the fix)
+- **#864**: classify_route_drc.py crashes where it documents exit 3 REFUSED: 3 measured inputs return rc=1 with a traceback
+- **#867**: #781 residue: fold-interpolator verdict summary says 'Five' where its own runs field has four singleton groups, plus two merge-jammed lines
+- **#870**: probe_orphan_reap argv test drops true matches where a worktree path ends a longer token (--opt=<path>, <path>:<mount>)
+- **#873**: spec/NUMERIC-CONTRACT.md: PR #846's repaired sites cite figures and pointers that no marker guards
+- **#877**: File upstream (rjwalters/loom): loom-daemon's write guard gates issue creation on push/WRITE, refusing every public upstream where issues:write suffices
+- **#879**: docs: makefile_recipe comment-filter docstrings claim a silent exit 0 for a mutation that is loud mid-recipe
+- **#882**: Tracked-JSON experiment-record writers still truncate-then-write (class sweep remainder from #881)
+- **#884**: regrade: an attested-file edit fails as a bare 'exit 3' with the drift report swallowed, and nothing couples the edit to regenerating the evidence
+- **#885**: pytest_collection_inventory.py:78 comment says pnr/ is 'make verify only' — false once the pnr CI job lands (#851/#865)
+- **#888**: Post the #12307 correction of record as a comment on OpenROAD#12303
 
 ## In Progress
 
@@ -52,39 +64,23 @@ Issues currently being built (`loom:building`).
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
-- **#774**: bug: dominant_period picks a different octave at 44.1 kHz and 48 kHz on some clips
-- **#775**: bug: RATE_TOL_REL is 8x larger than everything jit.cyclecorr measures
-- **#780**: bug: repeat_period returns four times the true repeat period on a signal that repeats exactly
 - **#784**: Give Refused a shared base class: 113 unrelated definitions make two refusals report as a crash and an execution error
-- **#787**: Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run"
-- **#789**: docs/milestones.md milestone 3 and the README's T1 sentence contradict the tree
-- **#790**: T1 item 8: build one characterization report from the committed synth_top route evidence and record the klt signoff result
 - **#791**: compile_dag renders a node GREEN when its evidence file declares no verdict: M3, S1 and S3 are green on existence alone
-- **#793**: bug: tools/sensitivity.py raises ZeroDivisionError on an objective that reaches zero
-- **#803**: A probe's identical flag has #785's absent-vs-null hole, load-bearing: balance_input_invariance reports identical on a dropped key
-- **#804**: Collapse the three exit statuses that mean REFUSED: run_all.py reports the cymbal low-tail refusal as FAIL(1), a RESULT
-- **#823**: compile_dag.py --run writes docs/dag-results.json only after the whole loop, so one crashed verifier loses every node's records
-- **#828**: Dedupe BS.1770 K-weighted loudness: three copies of kweight/loudness in tools/
+- **#835**: File upstream: ORFS 6_report.json emits finish__design__instance__area twice with two different meanings
+- **#853**: 16 of 40 fpga/ test files are run by no CI job (23 more only via make verify-fast) -- the fpga half of the #404/#851 shape
+- **#881**: Class sweep for #842: tracked JSON still written by truncate-then-write outside compile_dag
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#781**: fix: resolve dominant_period's octave pick with a swept margin
-- **#810**: dag: report an evidence file that declares no verdict as REFUSED, not GREEN
-- **#831**: fix: compare balance_input_invariance images with fpga/record_compare
-- **#833**: DAG --run: guard the evidence loop and persist records per node
-- **#837**: [tools] one BS.1770 K-weighting implementation: the listening packs import perceptual_gate
+- **#849**: summarize.py refuses duplicated required metrics (OpenROAD#12303)
 
 ## Approved (Awaiting Merge)
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-- **#783**: fix: narrow RATE_TOL_REL to 0.02, and record why no margin test can exist
-- **#796**: fix: normalise repeat_period per overlapped window and resolve its multiple
-- **#798**: docs: repair milestone 3 and the README T1 sentence, and put both under check_doc_claims
-- **#822**: fix: sensitivity gate refuses, never divides, across or below a zero objective
-- **#832**: tools: characterize synth_top from the committed route evidence
+_None._
 
 ## Proposed
 
@@ -141,25 +137,33 @@ Issues carrying `loom:curated`.
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)*
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig) *(curated)*
-- **#768**: measure: how many discrimination rows fall under the new jit.dphase_ar1 floor (REFUSED in #763 -- no corpus on that host) *(curated)*
-- **#774**: bug: dominant_period picks a different octave at 44.1 kHz and 48 kHz on some clips *(curated)*
-- **#775**: bug: RATE_TOL_REL is 8x larger than everything jit.cyclecorr measures *(curated)*
-- **#780**: bug: repeat_period returns four times the true repeat period on a signal that repeats exactly *(curated)*
+- **#778**: measure: re-derive the jit.stability +0.008 and mpd.* attributions with the exact-period fold (REFUSED in #767 -- no corpus on that host) *(curated)*
+- **#782**: bug: the relative rate tolerance is dimensionally meaningless on the 147 dB columns *(curated)*
 - **#784**: Give Refused a shared base class: 113 unrelated definitions make two refusals report as a crash and an execution error *(curated)*
 - **#787**: Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run" *(curated)*
-- **#789**: docs/milestones.md milestone 3 and the README's T1 sentence contradict the tree *(curated)*
-- **#790**: T1 item 8: build one characterization report from the committed synth_top route evidence and record the klt signoff result *(curated)*
 - **#791**: compile_dag renders a node GREEN when its evidence file declares no verdict: M3, S1 and S3 are green on existence alone *(curated)*
-- **#792**: Corner probes: date the pre-#150 columns, fix `corner_shipped`'s stale docstring, guard the refusal print *(curated)*
-- **#793**: bug: tools/sensitivity.py raises ZeroDivisionError on an objective that reaches zero *(curated)*
-- **#797**: spec/NUMERIC-CONTRACT.md item 29 says the chip still carries drum_section_placeholder and that nothing verifies the joined chip *(curated)*
-- **#803**: A probe's identical flag has #785's absent-vs-null hole, load-bearing: balance_input_invariance reports identical on a dropped key *(curated)*
-- **#805**: The BASELINE of a perturbation comparison is read unguarded while the comparison itself is guarded (2 probe sites) *(curated)*
 - **#808**: Route ladder_dp to completion with the unpatched netlist on the build box: DRT-0305's cause is measured gone, the error is not re-observed *(curated)*
-- **#823**: compile_dag.py --run writes docs/dag-results.json only after the whole loop, so one crashed verifier loses every node's records *(curated)*
-- **#824**: stale_against() reads an unresolvable sha as 'nothing changed', so a record whose commit left the history renders GREEN instead of STALE *(curated)*
+- **#811**: Wire or document tools/probes/check_doc_claims_789_marker_controls.py: a control no target runs (the #756 shape, again) *(curated)*
 - **#829**: Run `make reference-integration` on the box: verify_109_claims' real-reference half has never been exercised against the real Fischer corpus *(curated)*
 - **#835**: File upstream: ORFS 6_report.json emits finish__design__instance__area twice with two different meanings *(curated)*
+- **#845**: estimator_defects.py section 6: nine unguarded `.value` arithmetic sites, including two that reach a check() verdict, owned by neither #792 nor #843 *(curated)*
+- **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
+- **#852**: test_probe_labels gate (c) polices filter_corner_recalibration's module docstring, and goes red if it says "pre-#150" *(curated)*
+- **#853**: 16 of 40 fpga/ test files are run by no CI job (23 more only via make verify-fast) -- the fpga half of the #404/#851 shape *(curated)*
+- **#856**: Provision the pinned build box for this checkout: no .env, no remote.env, and the dispatch worker's AWS identity has no EC2 access *(curated)*
+- **#858**: compile_dag classify(): the empty-covers REFUSED guard masks a FAILING record as REFUSED when the node also carries an in-history tag *(curated)*
+- **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)*
+- **#863**: compile_dag: stale_against() answers a content question with a commit-range walk, so a merge-shaped conflict round renders fast nodes STALE (false positive; --full-history is NOT the fix) *(curated)*
+- **#864**: classify_route_drc.py crashes where it documents exit 3 REFUSED: 3 measured inputs return rc=1 with a traceback *(curated)*
+- **#867**: #781 residue: fold-interpolator verdict summary says 'Five' where its own runs field has four singleton groups, plus two merge-jammed lines *(curated)*
+- **#870**: probe_orphan_reap argv test drops true matches where a worktree path ends a longer token (--opt=<path>, <path>:<mount>) *(curated)*
+- **#873**: spec/NUMERIC-CONTRACT.md: PR #846's repaired sites cite figures and pointers that no marker guards *(curated)*
+- **#877**: File upstream (rjwalters/loom): loom-daemon's write guard gates issue creation on push/WRITE, refusing every public upstream where issues:write suffices *(curated)*
+- **#879**: docs: makefile_recipe comment-filter docstrings claim a silent exit 0 for a mutation that is loud mid-recipe *(curated)*
+- **#881**: Class sweep for #842: tracked JSON still written by truncate-then-write outside compile_dag *(curated)*
+- **#882**: Tracked-JSON experiment-record writers still truncate-then-write (class sweep remainder from #881) *(curated)*
+- **#884**: regrade: an attested-file edit fails as a bare 'exit 3' with the drift report swallowed, and nothing couples the edit to regenerating the evidence *(curated)*
+- **#885**: pytest_collection_inventory.py:78 comment says pnr/ is 'make verify only' — false once the pnr CI job lands (#851/#865) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -185,12 +189,12 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
-| Important | 7 |
-| Ready (`loom:issue`) | 10 |
-| In Progress (`loom:building`) | 19 |
-| PRs awaiting review | 5 |
-| Approved PRs awaiting merge | 5 |
-| Curated | 70 |
+| Important | 6 |
+| Ready (`loom:issue`) | 23 |
+| In Progress (`loom:building`) | 11 |
+| PRs awaiting review | 1 |
+| Approved PRs awaiting merge | 0 |
+| Curated | 78 |
 | Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->

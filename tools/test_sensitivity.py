@@ -9,6 +9,7 @@ injection REMOVED does not pass (not vacuous).
 """
 import copy
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,7 @@ import sys
 import pytest
 
 import sensitivity as sens
+from makefile_recipe import live_recipe_lines, makefile_recipe
 
 FILES = ["docs/sensitivity/registry.json",
          "docs/sensitivity/drum-kit-modes.json",
@@ -44,7 +46,16 @@ FILES = ["docs/sensitivity/registry.json",
          # replaced an integer-lag fold (same source file as the one above)
          "docs/sensitivity/fold-interpolator.json",
          "docs/sensitivity/fold-interpolator-sweep.txt",
-         # issue #780's record: REPEAT_SUBMULTIPLE_MARGIN_PERMILLE, the margin
+         # issue #774's record: JIT_OCTAVE_MARGIN_PERMILLE, the margin that
+         # bounds dominant_period's choice between octave candidates and
+         # replaced a bare argmax (same source file as the two above)
+         "docs/sensitivity/dominant-period-octave-margin.json",
+         "docs/sensitivity/dominant-period-octave-margin-sweep.txt",
+         # issue #775's record: RATE_TOL_REL, the relative half of the
+         # rate-independence tolerance -- and the first FLOAT parameter under
+         # the gate, which is why PY_CONST had to widen
+         "docs/sensitivity/rate-tol-rel.json",
+         "docs/sensitivity/rate-tol-rel-sweep.txt",         # issue #780's record: REPEAT_SUBMULTIPLE_MARGIN_PERMILLE, the margin
          # bounding repeat_period's shortest-submultiple rule
          "docs/sensitivity/repeat-period-submultiple-margin.json",
          "docs/sensitivity/repeat-period-submultiple-margin-sweep.txt",
@@ -77,6 +88,22 @@ def run(root, **kw):
         return sens.run_check(root=root, out=out, **kw), out.getvalue()
     except sens.Refused as exc:
         return 2, f"REFUSED: {exc}"
+
+
+def make_every_point_perfect(root):
+    """Zero the drum-kit objective column in the artefact and make the
+    record self-consistent with it: an all-zero plateau that must evaluate
+    (issue #793 -- a dial that is perfect everywhere cannot be
+    unregisterable). The zeros form a plateau, so no spread crosses zero."""
+    art = root / "fpga/reports/mode_sweep.txt"
+    for old in ("519777.3", "607141.8", "603118.0", "606843.3", "607051.8"):
+        art.write_text(art.read_text().replace(old, "0.0"))
+    path, rec = record(root)
+    rec["points"] = [{"value": v, "objective": 0.0} for v in rec["grid"]["values"]]
+    rec["prediction"]["runs"] = [[v for v in rec["grid"]["values"]]]
+    rec["verdict"]["state"] = "FLAT"
+    rec["verdict"]["runs"] = [[v for v in rec["grid"]["values"]]]
+    write(path, rec)
 
 
 # --------------------------------------------------------------------------
@@ -129,12 +156,125 @@ def test_both_registered_parameters_ship_a_value_on_their_own_grid():
 
 
 EXPECT = {"VERDICT_ASSERTED": 1, "POINT_TRANSCRIBED": 1, "GRID_CHERRY_PICKED": 1,
-          "SHIPPED_OFF_GRID": 1, "PREDICTION_WRONG": 1, "RULE_UNSTATED": 2}
+          "SHIPPED_OFF_GRID": 1, "PREDICTION_WRONG": 1, "RULE_UNSTATED": 2,
+          "OBJECTIVE_ZERO": 2, "OBJECTIVE_NEGATIVE": 2}
 
 
 def test_every_declared_injection_is_covered_here():
     """A control list that drifts from the tool is how a control stops firing."""
     assert set(EXPECT) == set(sens.INJECTIONS)
+
+
+# --------------------------------------------------------------------------
+# the make controls wiring (issue #836)
+#
+# EXPECT <-> INJECTIONS is pinned above, but nothing compared either set
+# against the `controls:` target in the root Makefile -- so an injection
+# registered here but omitted (or mis-`--expect`ed) there left the suite
+# green while `make controls` silently never ran it.
+
+
+def _unwired(recipe: str) -> list[str]:
+    """Names in EXPECT not enumerated in `recipe` with the --expect token
+    their exit code implies. Takes text so capability-to-fail is testable
+    in-process.
+
+    The written flag order is pinned deliberately: the pattern is
+    `--inject <NAME> --expect <mode>`, so the swapped order
+    (`--expect fail --inject NAME`) reads as unwired even though the control
+    would run correctly. Red is the safe direction -- do not "fix" the guard
+    to accept both orders."""
+    bad = []
+    for name, code in sorted(EXPECT.items()):
+        want = sens.EXIT_MODES[code]
+        pat = (rf"tools/sensitivity\.py\s+check\s+--inject\s+"
+               rf"{re.escape(name)}\s+--expect\s+{want}\b")
+        if not re.search(pat, recipe):
+            bad.append(f"{name} (want --expect {want})")
+    return bad
+
+
+def test_every_injection_is_wired_into_make_controls_with_its_own_expect_token():
+    """Row A of issue #836's table: the gate must be satisfiable as committed.
+    Each `make controls` line must invoke this tool on the injection with the
+    `--expect` mode its EXPECT exit code implies -- a bare substring mention
+    is not wiring."""
+    unwired = _unwired(makefile_recipe("controls"))
+    assert not unwired, (
+        f"{unwired}: every sens.INJECTIONS control must be enumerated in "
+        "`make controls` as `tools/sensitivity.py check --inject <NAME> "
+        "--expect <mode>`, with the mode its EXPECT exit code implies "
+        f"({sens.EXIT_MODES}) -- otherwise make controls silently never "
+        "runs it")
+
+
+def test_the_wiring_check_fails_when_a_recipe_line_is_deleted():
+    """Row B: an injection added to INJECTIONS + EXPECT but omitted from
+    `make controls` must turn this check red."""
+    recipe = makefile_recipe("controls")
+    mutated = "\n".join(ln for ln in recipe.split("\n")
+                        if "GRID_CHERRY_PICKED" not in ln)
+    assert mutated != recipe, "the mutation did not remove anything"
+    assert _unwired(mutated) == ["GRID_CHERRY_PICKED (want --expect fail)"]
+
+
+def test_the_wiring_check_fails_when_the_expect_token_is_wrong():
+    """Row C -- the defeater the naive `name in recipe` substring test
+    cannot see: RULE_UNSTATED must prove the tool REFUSES (exit 2). With
+    `--expect fail` the line still runs, still passes, and still mentions
+    the name, but the control no longer tests refusal."""
+    recipe = makefile_recipe("controls")
+    mutated = recipe.replace("--inject RULE_UNSTATED --expect refused",
+                             "--inject RULE_UNSTATED --expect fail")
+    assert mutated != recipe, "the mutation did not change anything"
+    assert _unwired(mutated) == ["RULE_UNSTATED (want --expect refused)"]
+    assert "RULE_UNSTATED" in mutated, (
+        "the naive substring form would pass here -- this line is what "
+        "makes the paired form necessary")
+
+
+def test_the_wiring_check_fails_when_the_name_survives_only_in_a_comment():
+    """Row D: the name still appears in the recipe after the line is
+    replaced by a comment, so a substring test stays green while `make
+    controls` no longer runs the control. This mutation *deletes* the
+    invocation text -- the strictly weaker form of the defeat; row E pins
+    the realistic one, where the text survives intact behind a `#`."""
+    lines = []
+    for ln in makefile_recipe("controls").split("\n"):
+        if "PREDICTION_WRONG" in ln:
+            ln = "# PREDICTION_WRONG covered elsewhere"
+        lines.append(ln)
+    recipe = "\n".join(lines)
+    assert "PREDICTION_WRONG" in recipe, (
+        "the naive substring form would pass here -- this line is what "
+        "makes the paired form necessary")
+    assert _unwired(recipe) == ["PREDICTION_WRONG (want --expect fail)"]
+
+
+def test_the_wiring_check_fails_when_a_line_is_commented_out_with_its_text_intact():
+    """Row E: mutation (a), the ordinary debugging form row D names but did
+    not take -- `#` after the leading tab, invocation text left intact:
+
+        \\t#  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG ..."
+
+    GNU make honours that silently: the line is dropped, every other control
+    still runs, `make controls` still exits 0 -- and `_unwired` over
+    unfiltered text stays green because its match sits behind the `#`. That
+    is verbatim the failure this gate exists to close, so the parser must
+    drop comment lines before any consumer sees the recipe text."""
+    recipe = makefile_recipe("controls")
+    mutated = "\n".join(
+        ln.replace("\t", "\t#  ", 1) if "PREDICTION_WRONG" in ln else ln
+        for ln in recipe.split("\n"))
+    assert mutated != recipe, "the mutation did not change anything"
+    assert "check --inject PREDICTION_WRONG --expect fail" in mutated, (
+        "mutation (a) must leave the invocation text intact -- deleting it "
+        "is row D's weaker form")
+    assert _unwired(mutated) == [], (
+        "the pre-fix defeat: unfiltered text matches the invocation behind "
+        "the `#` and stays green -- this is what makes the row necessary")
+    live = "\n".join(live_recipe_lines(mutated.split("\n")))
+    assert _unwired(live) == ["PREDICTION_WRONG (want --expect fail)"]
 
 
 @pytest.mark.parametrize("name,code", sorted(EXPECT.items()))
@@ -177,6 +317,92 @@ def test_a_group_is_bounded_by_its_own_spread_not_by_adjacent_pairs():
 def test_tolerance_boundary_is_inclusive():
     assert sens.runs([(1, 100.0), (2, 102.0)], 0.02) == [[1, 2]]
     assert sens.runs([(1, 100.0), (2, 102.01)], 0.02) == [[1], [2]]
+
+
+# --------------------------------------------------------------------------
+# objectives that reach zero or cross it (issue #793)
+#
+# A relative spread is undefined across, at, or below zero. The one exception
+# is an exact plateau: when every objective is equal the spread is zero on
+# any scale, so a column of perfect zeros is measurable -- FLAT. Anything
+# else non-positive has no relative spread and must REFUSE, never raise and
+# never read FLAT at nine orders of magnitude.
+
+
+def test_an_all_zero_column_is_a_plateau_not_a_division():
+    """A dial that is perfect at every grid point must evaluate, not raise:
+    zero spread is zero on any scale, no division needed."""
+    points = [(1.0, 0.0), (2.0, 0.0), (3.0, 0.0)]
+    assert sens.runs(points, 0.02) == [[1.0, 2.0, 3.0]]
+    assert sens.state_of(sens.runs(points, 0.02), 3) == "FLAT"
+
+
+def test_zero_among_nonzero_objectives_refuses():
+    """The issue's repro: 0.0 against 0.5 has no relative spread. Refuse, do
+    not divide."""
+    for points in ([(0.0, 0.0), (1.0, 0.0), (2.0, 0.5)],
+                   [(0.0, 0.5), (1.0, 0.0)]):
+        with pytest.raises(sens.Refused, match="across or below zero"):
+            sens.runs(points, 0.02)
+
+
+def test_negative_and_mixed_sign_objectives_refuse_rather_than_reading_flat():
+    """The curation's measured table: under the old arithmetic a negative
+    column NEVER split -- a nine-order-of-magnitude spread read FLAT, a false
+    green in a gate `make verify` runs. Positive columns at the same
+    magnitudes still separate."""
+    for points in ([(0.0, -1.0), (1.0, -1000.0)],
+                   [(0.0, -1.0), (1.0, -1e9)],
+                   [(0.0, -1.0), (1.0, 1.0)]):
+        with pytest.raises(sens.Refused, match="across or below zero"):
+            sens.runs(points, 0.02)
+    assert sens.runs([(0.0, 1.0), (1.0, 1000.0)], 0.02) == [[0.0], [1.0]]
+    assert sens.runs([(0.0, 1.0), (1.0, 1e9)], 0.02) == [[0.0], [1.0]]
+
+
+def test_a_single_zero_point_is_measurable_and_prices_nothing():
+    """[(v, 0.0)] alone: nothing to spread, and pct() off a zero base has no
+    price -- it must yield None, not raise."""
+    assert sens.runs([(5.0, 0.0)], 0.02) == [[5.0]]
+    assert sens.state_of(sens.runs([(5.0, 0.0)], 0.02), 1) == "FLAT"
+    assert sens.pct(0.0, 0.0) is None
+    assert sens.pct(0.0, 5.0) is None
+
+
+def test_negative_zero_behaves_as_zero():
+    assert sens.runs([(1.0, -0.0), (2.0, -0.0)], 0.02) == [[1.0, 2.0]]
+    with pytest.raises(sens.Refused, match="across or below zero"):
+        sens.runs([(1.0, -0.0), (2.0, 0.5)], 0.02)
+
+
+def test_an_artefact_with_one_zero_objective_refuses_naming_column_and_value(root):
+    """End to end: the refusal names the objective column and the offending
+    grid value, and fires before the transcription checks add noise."""
+    art = root / "fpga/reports/mode_sweep.txt"
+    art.write_text(art.read_text().replace("607141.8", "0.0"))
+    code, text = run(root)
+    assert code == 2, text
+    assert "'um2'" in text and "at grid value 11" in text, text
+
+
+def test_a_perfect_plateau_record_is_registerable_end_to_end(root):
+    """Every point perfect: the record evaluates green with the shipped value
+    on the grid -- a dial that works everywhere cannot be unregisterable."""
+    make_every_point_perfect(root)
+    code, text = run(root)
+    assert code == 0, text
+    _, reread = record(root)            # from disk, not the patched dict
+    row = sens.evaluate(reread, root)
+    assert row["best_move_pct"] is None and row["state"] == "FLAT"
+
+
+def test_an_all_zero_column_with_the_shipped_value_off_grid_is_red_not_a_crash(root):
+    """The curation's edge: best_move_pct is None by the off-grid path, so a
+    zero column must not newly raise there either."""
+    make_every_point_perfect(root)
+    move(root, "parameter MODES = 16,", "parameter MODES = 13,")
+    code, text = run(root)
+    assert code == 1 and "no sweep evidence" in text, text
 
 
 # --------------------------------------------------------------------------
@@ -352,10 +578,30 @@ def test_a_python_constant_is_read_at_column_zero_only():
     assert sens.parse_parameter("N: int = 33\n", "N", "x", "python-constant") == 33
 
 
-def test_a_python_constant_that_is_not_an_integer_literal_refuses():
-    """`N = f(3)` or `N = 3.5` is not a value the gate can read; it must refuse
-    rather than pick up a digit from inside the expression."""
-    for text in ("N = f(3)\n", "N = 3.5\n", "N = 3 + 1\n", "# N = 3\n"):
+def test_a_python_constant_can_be_a_plain_decimal(root):
+    """#775 registers RATE_TOL_REL = 0.12, a float. The integer-only pattern
+    refused it ("found 0 declarations"), which is why this case exists: a gate
+    that cannot read the constant it is asked to gate is an unsatisfiable gate.
+    Read against the shipped module, not only a literal, so the pattern is
+    checked against the form the value is actually written in."""
+    assert sens.parse_parameter("N = 3.5\n", "N", "x", "python-constant") == 3.5
+    assert sens.parse_parameter("N = -0.5\n", "N", "x", "python-constant") == -0.5
+    assert sens.parse_parameter("N: float = 0.12  # why\n", "N", "x",
+                                "python-constant") == 0.12
+    src = (root / "model/discrimination_features.py").read_text()
+    assert sens.parse_parameter(src, "RATE_TOL_REL", "m", "python-constant") > 0.0
+
+
+def test_a_python_constant_that_is_not_a_plain_decimal_literal_refuses():
+    """`N = f(3)` is not a value the gate can read; it must refuse rather than
+    pick up a digit from inside the expression. Widening the pattern for #775
+    moved the line but did not move it far: the digits have to be there on both
+    sides of the point, so a bare `.5`, a trailing `3.`, exponent notation and
+    a dict entry (`RATE_TOL_ABS["ratio"]`, which is why that one is NOT
+    registered) all still refuse."""
+    for text in ("N = f(3)\n", "N = 3 + 1\n", "# N = 3\n", "N = .5\n",
+                 "N = 3.\n", "N = 1e-3\n", "N = 1_000\n",
+                 'N = {"ratio": 0.02}\n', "N = 0.1, 0.2\n"):
         with pytest.raises(sens.Refused, match="found 0 declarations"):
             sens.parse_parameter(text, "N", "x", "python-constant")
 
@@ -442,6 +688,20 @@ def test_a_duplicated_declaration_at_the_ref_still_refuses(repo):
 def test_an_unresolvable_ref_refuses_rather_than_passing_quietly(repo):
     code, text = run(repo, changed_since="no-such-ref")
     assert code == 2, text
+
+
+def test_a_move_from_a_zero_objective_prints_the_verdict_without_a_price(repo):
+    """The old value's objective is 0 (an all-zero plateau, the only way a
+    zero base reaches this code): pct() has no price there, so the verdict
+    must print without a percentage rather than raise TypeError."""
+    make_every_point_perfect(repo)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qam", "zero"], cwd=repo, check=True, capture_output=True)
+    move(repo, "parameter MODES = 16,", "parameter MODES = 12,")
+    code, text = run(repo, changed_since="HEAD")
+    assert code == 0, text
+    assert "FLAT-MOVE" in text and "cannot price the move" in text, text
+    assert "+0.00%" not in text and "-0.00%" not in text
 
 
 if __name__ == "__main__":

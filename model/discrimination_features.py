@@ -128,7 +128,32 @@ MS_BANDS_HZ = ((20.0, 200.0), (200.0, 700.0), (700.0, 2000.0),
 #                  44.1 k -> 48 k artefact on the same clip reads 0.78 ppm.
 #   dB   0.5    -- under the 1 dB the graded controls move.
 #   ratio 0.02  -- correlations and normalised RMS, on 0..1-ish scales.
-RATE_TOL_REL = 0.12
+#
+# THE RELATIVE TERM IS 0.02, NOT THE 0.12 THAT SHIPPED UNTIL #775, and the
+# value is a swept record: docs/sensitivity/rate-tol-rel.json, instrument
+# tools/probes/rate_tol_sweep.py. What 0.12 meant for the column #775 was
+# filed on: RATE_TOL_REL x 1.0 = 0.1183 on `jit.cyclecorr.seg0`, against the
+# 0.0146 that column reports for 0.5 % per-period jitter -- 8.10x the whole
+# effect, so the control could not see a 44.1k<->48k dependence eight times
+# the size of the only mechanism the column exists to detect.
+#
+# Why 0.02 and not lower. `max()` means a column stops responding to this
+# dial once `RATE_TOL_REL x peak` falls under its unit's floor, so for a
+# correlation saturating at +-1 the dial is inert below
+# RATE_TOL_ABS["ratio"] = 0.02: 0.02 is everything this dial can do for the
+# columns #775 is about, and the sweep measured the rest of the curve to say
+# so. Over 92 panel entries the narrowing takes what the control catches on
+# the integer fold #767 replaced from 191 (entry, column) pairs to 636, and on
+# the correlation family alone from 187 to 541.
+#
+# What it cannot do, and this is the issue's answer rather than a caveat: no
+# value of RATE_TOL_REL puts the tolerance on `jit.cyclecorr.seg0` BELOW its
+# 0.0146 effect, because the binding term there is the 0.02 floor, which is
+# already 1.37x the effect. The margin test #775 asked for therefore cannot
+# exist through this dial -- see
+# `test_no_relative_tolerance_can_reach_the_cyclecorr_effect`, which records
+# that measured reason and the decision that the column stays in the vector.
+RATE_TOL_REL = 0.02
 RATE_TOL_ABS = {"ppm": 20.0, "db": 0.5, "ratio": 0.02, "ms": 0.05, "count": 1.0}
 
 # THE FLOOR UNDER `jit.dphase_ar1`, in ppm of a period -- a PHYSICAL floor,
@@ -205,6 +230,57 @@ JIT_DPHASE_FLOOR_PPM = 20
 # asserts that.
 FOLD_SINC_TAPS = 16
 
+# THE OCTAVE MARGIN, in thousandths of a normalised autocorrelation -- #774.
+#
+# The defect. `dominant_period` was a bare argmax of the autocorrelation over
+# the whole 120..1200 Hz lag band, and on a clip whose true period falls near
+# a HALF SAMPLE it returned TWO periods: 880 Hz built at 48 kHz (where
+# `_square` emits 55-sample periods) and resampled down to 44.1 kHz has a true
+# period of 50.53 samples there, and the function returned 101. `jit.period_ms`
+# then read 2.22 ms against 1.15 ms on the other side of the same rate pair,
+# and the five columns folded at that period followed it -- a pitch error
+# reported as a pitch measurement, on the fourth-ranked attribution bucket in
+# docs/discrimination.md.
+#
+# THE MECHANISM, MEASURED, AND IT IS NOT THE ONE #774 SUSPECTED. The issue
+# guessed the lag-T peak was "split between two integer lags while the lag-2T
+# peak is not". Taking the autocorrelation's max over +-2 lags, so a split
+# peak cannot hide, refutes that: r[T] at the best integer lag near a
+# fractional T is simply LOWER (0.9857 -> 0.9660), because the waveform does
+# not line up there. Meanwhile 2T is fractional too, but when frac(T) ~ 0.5
+# the lag 2T lands NEAR an integer (frac(T)=0.531 => dist(2T,int)=0.062), so
+# r[2T] barely moves. The deciding margin is only +0.0029 to +0.0053, against
+# an intrinsic preference for T of -0.0141 on an aligned clip.
+# tools/probes/dominant_period_octave.py is that measurement, and it is where
+# the numbers in this paragraph come from.
+#
+# The repair is NOT a different estimator. It is a bound on the choice between
+# octave candidates: among the integer SUBMULTIPLES of the winning lag, return
+# the shortest one that is a local peak of the autocorrelation and is within
+# this margin of the winning peak. Submultiples only, because the defect is an
+# integer-multiple pick and a rule over every lag in the band would change the
+# estimator on clips that have no octave problem; a local peak, because a clip
+# that is not periodic at all has an autocorrelation that DECAYS from lag 0,
+# so every shorter lag beats the winner on height while none of them is a
+# peak. See `_octave_corrected`.
+#
+# 20 thousandths is not fitted to the failing clips. RATE_TOL_ABS["ratio"] is
+# 0.02: it is the resolution this module already states for a correlation-unit
+# column, i.e. the difference below which it declines to call two such numbers
+# different. A margin at that resolution is 3.8x the +0.0053 the worst failing
+# clip needs and is the same anchoring JIT_DPHASE_FLOOR_PPM takes from
+# RATE_TOL_ABS["ppm"]. It is a point on a committed grid --
+# docs/sensitivity/dominant-period-octave-margin.json, which is where to argue
+# about the value -- and an integer in thousandths because
+# tools/sensitivity.py reads a shipped python-constant as an integer.
+#
+# 0 is not a margin. It selects the bare argmax that shipped BEFORE this
+# repair and is on the grid so the sweep prices the repair and not only the
+# dial inside it, exactly as -1 is on FOLD_SINC_TAPS's grid and 0 is on
+# dphase-ar1-floor's. It is never the shipped value;
+# `test_the_octave_margin_ships_a_real_margin` asserts that.
+JIT_OCTAVE_MARGIN_PERMILLE = 20
+
 
 def _unit_of(name: str) -> str:
     if "ppm" in name:
@@ -216,6 +292,34 @@ def _unit_of(name: str) -> str:
     if "ncycles" in name:
         return "count"
     return "ratio"
+
+
+def rate_tolerance(name: str, x: float, y: float, tol_rel: float | None = None) -> float:
+    """What the rate-independence control is allowed to call "the same number"
+    for column `name` read as `x` at one rate and `y` at the other.
+
+    THE ONE PLACE THE EXPRESSION LIVES. It used to be written out three times
+    -- in `_rate_gaps`, in
+    `test_the_one_residual_the_fold_repair_cannot_reach_is_the_stimulus` and in
+    tools/probes/fold_rate_sweep.py -- and a tolerance that is three copies is
+    three tolerances the day one of them is edited. #775.
+
+    `tol_rel` overrides RATE_TOL_REL for a sweep, the same shape of override
+    `_rate_gaps` already carries for the fold width: tools/probes/rate_tol_sweep.py
+    prices the dial by calling through the shipped comparison rather than by
+    restating it.
+
+    Note which term binds. `max()` means the floor wins whenever
+    `tol_rel * peak` falls under it, so for a correlation column pinned near
+    1.0 the relative term stops mattering at all below
+    `RATE_TOL_ABS["ratio"] / 1.0 = 0.02` -- which is why narrowing
+    RATE_TOL_REL cannot bring the tolerance on `jit.cyclecorr.seg0` under the
+    0.0146 that column measures. See
+    `test_no_relative_tolerance_can_reach_the_cyclecorr_effect`.
+    """
+    rel = RATE_TOL_REL if tol_rel is None else tol_rel
+    return max(rel * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(name)])
+
 
 _EPS = 1e-20
 
@@ -367,13 +471,76 @@ def mpd_features(x: np.ndarray, sr: int, taps: int | None = None) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ) -> int:
-    """Lag of the largest autocorrelation peak inside `band`, in samples.
+def _octave_corrected(r: np.ndarray, lo: int, hi: int, best: int,
+                      margin: float) -> int:
+    """The shortest integer submultiple of `best` that is a local peak of `r`
+    and within `margin` of `r[best]`, in units of `r[0]`. #774.
 
-    Deterministic and signal-derived: an argmax over a stated lag range, no
-    threshold tuned on anything. Returns 0 when the window holds fewer than
-    JIT_MIN_CYCLES of the winning lag, and the caller must then refuse rather
-    than report -- a drift slope over three cycles is not a measurement."""
+    THE ARGMAX IS NOT WRONG ABOUT WHICH LAGS CORRELATE; IT IS WRONG ABOUT
+    WHICH OF TWO OCTAVES TO RETURN. So this does not search the band -- it
+    searches `best/k` for integer k, shortest candidate first, and returns
+    `best` unchanged when none of them qualifies. Two conditions, and each is
+    load-bearing:
+
+      * +-1 LAG of `round(best/k)` is searched, and one lag is enough by
+        arithmetic rather than by result: `best` is `k * T` rounded to a whole
+        sample, so `best / k` is within `0.5 / k` of the true `T` and
+        `round(best / k)` is within 1 of it. A wider window would start
+        admitting lags that are not the submultiple.
+      * THE CANDIDATE MUST BE A LOCAL PEAK. This is the condition that keeps
+        the rule from changing anything on a clip with no octave problem: an
+        aperiodic clip's autocorrelation DECAYS from lag 0, so every shorter
+        lag is taller than the winner while none of them is a peak, and a
+        height-only rule would halve the period of every noise burst in the
+        corpus.
+
+    What defeats it, stated rather than left to be discovered
+    (docs/verification-rules.md rule 8): a signal whose true period really is
+    the longer lag AND which has a real local autocorrelation peak at half of
+    it within `margin` -- a pulse train whose alternate cycles differ by less
+    than the margin, for instance. Such a clip is reported an octave high, and
+    how shallow an alternation that takes is the constraint column of
+    docs/sensitivity/dominant-period-octave-margin.json rather than a
+    reassurance here. `test_the_octave_margin_refuses_the_input_that_defeats_it`
+    is the executable form."""
+    if margin <= 0.0 or best <= lo:
+        return best
+    floor = r[best] - margin * r[0]
+    for k in range(best // lo, 1, -1):
+        c = int(round(best / k))
+        cand = [j for j in range(max(lo, c - 1), min(hi - 1, c + 1) + 1)
+                if j >= 1 and r[j] >= r[j - 1] and r[j] >= r[j + 1]]
+        if not cand:
+            continue
+        j = max(cand, key=lambda j: r[j])
+        if r[j] >= floor:
+            return j
+    return best
+
+
+def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ,
+                    octave_margin: float | None = None) -> int:
+    """Lag of the largest autocorrelation peak inside `band`, in samples,
+    resolved to the shortest octave that peak is consistent with.
+
+    Deterministic and signal-derived: an argmax over a stated lag range, then
+    one comparison against the stated JIT_OCTAVE_MARGIN_PERMILLE. Returns 0
+    when the window holds fewer than JIT_MIN_CYCLES of the winning lag, and
+    the caller must then refuse rather than report -- a drift slope over three
+    cycles is not a measurement.
+
+    THE BARE ARGMAX RETURNED TWO PERIODS ON SOME CLIPS and the record is worth
+    more than the fix: 880 Hz built at 48 kHz and resampled to 44.1 kHz came
+    back as 101 samples against 55 on the other side of the same rate pair, an
+    OCTAVE, so `jit.period_ms` reported 2.22 ms and 1.15 ms for one clip read
+    at two rates. It was not a fold-geometry defect and #767's repair could
+    not reach it; it is #774. See JIT_OCTAVE_MARGIN_PERMILLE for the measured
+    mechanism and `_octave_corrected` for what the margin bounds.
+
+    `octave_margin` overrides that constant, in the same thousandths, and
+    exists so `tools/probes/octave_margin_sweep.py` can sweep the dial against
+    the code that SHIPS rather than against a copy of it. It does not change a
+    shipped number: it defaults to off. 0 selects the bare argmax."""
     x = np.asarray(x, float)
     if not np.any(x):
         return 0
@@ -393,7 +560,10 @@ def dominant_period(x: np.ndarray, sr: int, band=JIT_BAND_HZ) -> int:
     r = np.fft.irfft(X * np.conj(X), n)[:hi + 1]
     if r[0] <= 0:
         return 0
-    return int(lo + np.argmax(r[lo:hi + 1]))
+    best = int(lo + np.argmax(r[lo:hi + 1]))
+    permille = (JIT_OCTAVE_MARGIN_PERMILLE if octave_margin is None
+                else float(octave_margin))
+    return _octave_corrected(r, lo, hi, best, permille / 1000.0)
 
 
 def refine_frequency(x: np.ndarray, sr: int, f0: float,
@@ -936,14 +1106,21 @@ RATE_PANEL = (
     ("523Hz bandlimited", 523.0, 0.0,    0,    "blsquare", 44100),
     ("523Hz@48k",         523.0, 0.0,    0,    "square",   48000),
 )
-# NOT IN THE PANEL, AND THE REASON IS A SECOND DEFECT: 880 Hz built at 48 kHz
-# and resampled DOWN (true period 50.53 samples at 44.1 kHz) makes
-# `dominant_period` return 101 -- two periods, an octave error -- so six jit
-# columns move between the rates for a reason that has nothing to do with the
-# fold. It is out of scope here and is carried as
-# `test_dominant_period_picks_a_different_octave_at_the_two_rates` below
-# rather than as six quarantine rows that would make the panel look weaker
-# than it is. Filed as #774.
+# WHY 880 Hz BUILT AT 48 kHz IS STILL NOT IN THE PANEL, now that the reason it
+# was excluded has gone. It was kept out because `dominant_period` returned
+# 101 samples there -- two periods, an octave error -- so six jit columns moved
+# between the rates for a reason that had nothing to do with the fold. #774
+# repaired that, and the clip's `jit.cycledshape.seg0` gap at the shipped width
+# is now 0.0182 against this module's own 0.0200 tolerance, so it would PASS
+# here. It is still out, and the reason is the 9 % of headroom in that
+# sentence: what is left on that clip is a fold-geometry residual at the top of
+# the dial, and #775 is the open question of whether a 0.12 relative tolerance
+# on a column whose whole range is 0.02 means anything. Adding this entry is a
+# one-line change the day #775 settles that; adding it now would couple the
+# module's main rate test to the tightest margin on the grid. The octave claim
+# itself is asserted directly, by
+# `test_dominant_period_returns_the_same_octave_at_both_rates` below, over the
+# whole class rather than this one clip.
 
 RATE_PAIR = {44100: 48000, 48000: 44100}
 
@@ -962,16 +1139,64 @@ def _rate_stimulus(f0, jitter, seed, sr=44100, dur=0.24, decay_s=0.08,
     return x * np.exp(-np.arange(len(x)) / (decay_s * sr))
 
 
-# WHAT IS LEFT OF THE QUARANTINE. #763 landed three `(stimulus, column)`
-# entries here -- 440 Hz `jit.cycledshape.seg0` and the two 660 Hz
-# `mpd5.00ms.rowcorr` segments -- as a deliberately falsifiable holding pen
-# for #767. #767 repaired the mechanism (see FOLD_SINC_TAPS), the entries
-# stopped being over tolerance, and an entry that is no longer red turns this
-# test red by design, so they are gone rather than kept as decoration. The
-# dict stays because the machinery below is the thing that makes a future
-# quarantine falsifiable in BOTH directions, and writing that machinery is
-# the expensive part; an empty dict costs nothing and asserts nothing.
-RATE_KNOWN_RED: dict = {}
+# THE QUARANTINE. `(stimulus, column) -> (bound, why)`. #763 landed three
+# entries here as a deliberately falsifiable holding pen for #767; #767
+# repaired the mechanism and they went, because an entry that is no longer red
+# turns this test red by design. The eleven below arrived with #775's
+# narrowing of RATE_TOL_REL from 0.12 to 0.02.
+#
+# A BOUND IS NOT A DISPOSITION, which is why the value is a PAIR. #775's own
+# acceptance criteria name filling this dict with whatever a narrower
+# tolerance turns red as the input that defeats its repair: the test goes
+# green from both sides while the dependence the narrowing was meant to expose
+# hides one layer down. Three things stop that here, and the first two are
+# mechanical rather than a convention:
+#   * every entry must carry a non-empty reason naming a MECHANISM --
+#     `test_every_rate_quarantine_entry_states_a_mechanism`.
+#   * no entry may be a `ratio` column -- `test_the_rate_quarantine_holds_no
+#     _correlation_column`. The correlations are what #775 is about, and
+#     quarantining one would be absorbing the repair exactly as the criterion
+#     warns. The sweep says none has to be: over 92 panel entries the clean
+#     fold's cost is 95 dB pairs and 2 ratio pairs AT EVERY VALUE OF THE DIAL
+#     INCLUDING THE OLD 0.12, and both of those two are the already-diagnosed
+#     200 Hz residual that is not on this panel at all.
+#   * the stated mechanism has its own falsifier, asserted in
+#     `test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them`:
+#     every quarantined column is a band that contains no odd harmonic of its
+#     own stimulus and reads 78-79 dB under that clip's loudest bin, so a 7 dB
+#     difference there is a difference between two resamplers' residues. If a
+#     cqt bin WITHIN 40 dB of the clip's peak ever goes red, the diagnosis is
+#     wrong and the entries are hiding something.
+#
+# THE REAL DEFECT UNDER ALL ELEVEN is that a relative tolerance is
+# dimensionally meaningless on an offset scale: `RATE_TOL_REL x |-80 dB|`
+# hands a bin sitting at the `floor_db` clamp 1.6 dB of licence at 0.02 and
+# handed it 9.6 dB at 0.12. The repair is a per-unit tolerance, which #775
+# puts out of scope on purpose and which is filed as #782; these entries are
+# the holding pen until it lands, and each one names it.
+_CQT_NULL = ("a cqt bin in a null between the odd harmonics of its own "
+             "stimulus: it reads 78-79 dB below that clip's loudest bin, so "
+             "both sides are resampler stopband residue and the gap is a "
+             "difference of residues, not of the feature. Held until the "
+             "per-unit tolerance redesign lands: #782")
+_MS_EMPTY = ("a multiscale band with no harmonic of its own stimulus in it "
+             "(200-700 Hz against an 880 Hz square, whose lowest partial is "
+             "880 Hz), so the band carries residue and its non-stationarity "
+             "is the residue's. Held until the per-unit tolerance redesign "
+             "lands: #782")
+RATE_KNOWN_RED: dict = {
+    ("440Hz", "cqt3225Hz.seg0"): (7.00, _CQT_NULL),
+    ("440Hz", "cqt3225Hz.seg1"): (7.00, _CQT_NULL),
+    ("523Hz", "cqt3225Hz.seg0"): (6.93, _CQT_NULL),
+    ("523Hz", "cqt3225Hz.seg1"): (6.93, _CQT_NULL),
+    ("523Hz bandlimited", "cqt3225Hz.seg0"): (1.59, _CQT_NULL),
+    ("523Hz bandlimited", "cqt3225Hz.seg1"): (1.59, _CQT_NULL),
+    ("523Hz@48k", "cqt4064Hz.seg0"): (4.07, _CQT_NULL),
+    ("523Hz@48k", "cqt4064Hz.seg1"): (4.07, _CQT_NULL),
+    ("880Hz", "cqt2874Hz.seg0"): (4.43, _CQT_NULL),
+    ("880Hz", "cqt2874Hz.seg1"): (4.43, _CQT_NULL),
+    ("880Hz", "msd10-25ms.200-700Hz.seg0"): (0.89, _MS_EMPTY),
+}
 
 
 def _rate_pair(label, f0, jitter, seed, kind, build_sr):
@@ -1001,19 +1226,22 @@ def _rate_pair(label, f0, jitter, seed, kind, build_sr):
     return a, build_sr, _resample(a, build_sr, other), other
 
 
-def _rate_gaps(taps=None):
+def _rate_gaps(taps=None, tol_rel=None):
     """Every column of every panel entry that is over tolerance between the
     two rates, as (label, name, value at the build rate, value at the other,
     gap). `taps` overrides the fold interpolator so the SAME panel can be run
     against the integer fold this repair replaced -- see
-    `test_the_integer_fold_this_replaced_is_still_red_on_this_panel`."""
+    `test_the_integer_fold_this_replaced_is_still_red_on_this_panel`.
+    `tol_rel` overrides RATE_TOL_REL the same way, so
+    tools/probes/rate_tol_sweep.py prices that dial through the shipped
+    comparison instead of a copy of it (#775)."""
     over = []
     for label, f0, jitter, seed, kind, build_sr in RATE_PANEL:
         a, sr_a, b, sr_b = _rate_pair(label, f0, jitter, seed, kind, build_sr)
         va, names = extra_features(a, sr_a, taps)
         vb, _ = extra_features(b, sr_b, taps)
         for nm, x, y in zip(names, va, vb):
-            tol = max(RATE_TOL_REL * max(abs(x), abs(y)), RATE_TOL_ABS[_unit_of(nm)])
+            tol = rate_tolerance(nm, x, y, tol_rel)
             if abs(x - y) > tol:
                 over.append((label, nm, round(float(x), 4), round(float(y), 4),
                              round(abs(float(x - y)), 4)))
@@ -1031,8 +1259,8 @@ def test_extra_features_are_rate_independent():
     # the quarantine, checked from both sides, so a tolerance cannot be
     # widened to fit by the back door
     quarantined = {(r[0], r[1]): r[4] for r in over}
-    grew = {k: (v, RATE_KNOWN_RED[k]) for k, v in quarantined.items()
-            if v > RATE_KNOWN_RED[k]}
+    grew = {k: (v, RATE_KNOWN_RED[k][0]) for k, v in quarantined.items()
+            if v > RATE_KNOWN_RED[k][0]}
     assert not grew, (f"a known-red column got worse (gap, bound): {grew} -- "
                       "and this is not a bound to raise without a reason")
     stale = sorted(set(RATE_KNOWN_RED) - set(quarantined))
@@ -1079,37 +1307,381 @@ def test_the_integer_fold_this_replaced_is_still_red_on_this_panel():
         "doing anything -- #767")
 
 
-def test_dominant_period_picks_a_different_octave_at_the_two_rates():
-    """A SECOND DEFECT, FOUND BY #767's SWEEP AND DELIBERATELY NOT FIXED BY
-    IT. It is here so the finding lives in the file that measures it and not
-    only in an issue, and so the day it stops reproducing somebody has to
-    come and delete this test.
+# THE CLASS #774 WAS ABOUT, as the panel the repair is read against.
+# `_square` quantises its period to whole samples of the BUILD rate, so the
+# variable is not f0: the whole class is three emitted periods -- 56 and 55
+# samples at 48 kHz and 51 at 44.1 kHz -- which is why a 1 Hz ladder finds
+# every failure inside 850..880 Hz built at 48 kHz and 857..873 Hz built at
+# 44.1 kHz, and nothing outside it. See
+# docs/sensitivity/dominant-period-octave-margin.json.
+#
+# THE SPLIT IS LOAD-BEARING. #774 was filed with three f0 values, all built at
+# 48 kHz, because the sweep instrument that found them shipped with a 25 Hz
+# ladder that has no value between 855 and 870. The 44.1 kHz-built half of the
+# class was invisible in that framing, so it is the half nothing about this
+# repair was selected against: the margin's value is RATE_TOL_ABS["ratio"] and
+# the three filed values are the selection set, and CONFIRM is a set neither
+# touched.
+OCTAVE_SELECT = ((850.0, 48000), (875.0, 48000), (880.0, 48000))
+OCTAVE_CONFIRM = ((860.0, 44100), (865.0, 44100), (870.0, 44100))
+# Immediately outside the band in both directions. They passed before the
+# repair too, which is the point: a margin that changed them would be
+# reporting its own presence rather than the signal's period.
+OCTAVE_EDGES = ((845.0, 48000), (885.0, 48000), (856.0, 44100), (874.0, 44100))
 
-    880 Hz built at 48 kHz (54.55 samples per period, whole-sample rounded to
-    55 by `_square`) and resampled down to 44.1 kHz has a true period of
-    50.53 samples there. `dominant_period` is an argmax of the
-    autocorrelation over the whole 120..1200 Hz lag band, and on this clip
-    the peak at TWO periods wins: it returns 101, so `jit.period_ms` reads
-    2.22 ms against 1.15 ms on the other side of the same pair and five more
-    jit columns follow it. No fold geometry is involved -- the two sides are
-    measuring different partials -- which is why this clip is not in
-    RATE_PANEL and why #767 did not repair it.
 
-    Filed as #774. What is
-    asserted is that the octave error is still EXACTLY an octave, because a
-    2.0 that drifted to 1.7 would be a different bug wearing this one's
-    name."""
-    a = _rate_stimulus(880.0, 0.0, 0, sr=48000)
-    b = _resample(a, 48000, 44100)
-    pa, pb = dominant_period(a, 48000), dominant_period(b, 44100)
-    ta, tb = pa / 48000.0, pb / 44100.0
-    assert abs(tb / ta - 2.0) < 0.05, (
-        f"the octave error no longer reproduces: {pa} samples at 48 kHz is "
-        f"{ta * 1e3:.4f} ms, {pb} at 44.1 kHz is {tb * 1e3:.4f} ms, ratio "
-        f"{tb / ta:.4f}. Delete this test and close #774")
-    # and it really is the autocorrelation's own choice, not a resampling
-    # artefact: one period of the same clip correlates at least as well
-    assert abs(880.0 - 44100.0 / pb) > 100.0, 44100.0 / pb
+def test_no_relative_tolerance_can_reach_the_cyclecorr_effect():
+    """#775'S ANSWER, AND IT IS THE SECOND BRANCH OF WHAT IT ASKED FOR.
+
+    #775 asked for a `test_the_rate_tolerance_is_far_below_the_effect`
+    equivalent for the correlation columns, or a recorded measured reason one
+    cannot exist. This is the reason, and it is arithmetic once the numbers are
+    in: `max()` floors every tolerance at `RATE_TOL_ABS[unit]`, so the
+    SMALLEST tolerance any value of RATE_TOL_REL can put on
+    `jit.cyclecorr.seg0` is 0.02 -- and 0.02 is already above the 0.0146 the
+    column reports for 0.5 % per-period jitter. The dial cannot get under the
+    effect. Narrowing it from 0.12 to 0.02 took the ratio from 8.10x to 1.37x,
+    which is the whole available improvement, and the term that is left is the
+    floor. Moving THAT is a different dial and a different record; it is the
+    follow-up this test names.
+
+    AND THE DECISION #775 ASKED FOR ALONGSIDE: `jit.cyclecorr` STAYS in the
+    vector. The column is not the problem -- it resolves its own effect at 68x
+    its own 44.1k<->48k reproducibility (0.0146 against 0.000216), which is a
+    better signal-to-noise ratio than the 20 ppm floor gives
+    `jit.phasejit_ppm`. What was eight times too coarse was the CONTROL's
+    tolerance for it, not the column's resolution, and that is now 1.37x.
+    A column that measures its mechanism 68x above its own noise is evidence;
+    deleting it because a tolerance was wrong would be removing the thermometer
+    because the scale was mislabelled."""
+    sr = 44100
+    read = lambda x, s=sr: dict(zip(*reversed(jitter_features(x, s))))  # noqa: E731
+    col = "jit.cyclecorr.seg0"
+    steady = read(_square(410.0, sr, jitter=0.0))[col]
+    jittered = _square(410.0, sr, jitter=0.005, seed=3)
+    a = read(jittered)[col]
+    b = read(_resample(jittered, 44100, 48000), 48000)[col]
+
+    effect = steady - a
+    assert round(effect, 4) == 0.0146, effect
+    # the column's own reproducibility across the rate pair: the noise the
+    # effect has to stand out from, which is what a floor should be set by
+    repro = abs(a - b)
+    assert effect / repro > 50.0, (effect, repro)
+
+    # the dial at its narrowest is still the floor, and the floor is above the
+    # effect. This is the whole finding; if RATE_TOL_ABS["ratio"] ever drops
+    # under the effect, delete this test and write the margin assertion.
+    floor_only = rate_tolerance(col, a, b, 0.0)
+    assert floor_only == RATE_TOL_ABS["ratio"]
+    assert floor_only > effect, (
+        f"RATE_TOL_ABS['ratio'] = {floor_only} is now BELOW the {effect:.4f} "
+        "effect, so a margin test for the correlation columns has become "
+        "possible: write it and delete this one")
+    assert 1.0 < floor_only / effect < 1.5, floor_only / effect
+
+    # and the shipped value really is at that narrowest point for this column
+    assert rate_tolerance(col, a, b) == floor_only, (
+        f"RATE_TOL_REL = {RATE_TOL_REL} still binds on {col} ahead of the "
+        "floor, so the dial has not been taken as far as it goes")
+    assert rate_tolerance(col, a, b, 0.12) / effect > 8.0, "the 0.12 that was"
+
+
+def test_narrowing_the_rate_tolerance_catches_what_the_old_value_missed():
+    """THE INJECTED-BUG CONTROL FOR THE VALUE ITSELF. #775 changed a number;
+    a changed number is only a repair if something that was invisible is now
+    visible, and the honest way to show it is the same integer-lag fold
+    `test_the_integer_fold_this_replaced_is_still_red_on_this_panel` uses.
+
+    The panel is walked ONCE at `taps=-1` and the two tolerances are applied
+    to the same gaps, because the dial changes the comparison and not the
+    measurement -- running it twice would be ten seconds spent proving that.
+    docs/sensitivity/rate-tol-rel.json has the same counts over a 92-entry
+    panel (191 -> 636 pairs); this asserts the direction on the eleven-entry
+    panel that ships."""
+    was, now = 0, 0
+    for label, f0, jitter, seed, kind, build_sr in RATE_PANEL:
+        a, sr_a, b, sr_b = _rate_pair(label, f0, jitter, seed, kind, build_sr)
+        va, names = extra_features(a, sr_a, -1)
+        vb, _ = extra_features(b, sr_b, -1)
+        for nm, x, y in zip(names, va, vb):
+            gap = abs(float(x - y))
+            was += gap > rate_tolerance(nm, x, y, 0.12)
+            now += gap > rate_tolerance(nm, x, y)
+    assert now > was, (
+        f"the narrowed tolerance catches {now} columns on the integer fold "
+        f"and 0.12 caught {was} -- if that is not an increase, the change to "
+        "RATE_TOL_REL bought nothing and should be reverted")
+    assert now >= 2 * was, (now, was)
+
+
+def test_every_rate_quarantine_entry_states_a_mechanism():
+    """A BOUND IS NOT A DISPOSITION, asserted rather than asked for.
+
+    #775 names filling RATE_KNOWN_RED with whatever a narrower tolerance turns
+    red as the input that defeats its own repair. A reason is what makes an
+    entry reviewable, so the dict's value is a pair and this is the check that
+    the second half is really there -- long enough to be a sentence, and
+    naming the follow-up that retires it."""
+    for key, value in RATE_KNOWN_RED.items():
+        assert isinstance(value, tuple) and len(value) == 2, (key, value)
+        bound, why = value
+        assert isinstance(bound, float) and bound > 0.0, (key, bound)
+        assert isinstance(why, str) and len(why.split()) >= 12, (key, why)
+        assert "redesign" in why or "#" in why, (
+            f"{key}'s reason does not say what retires the entry: {why!r}")
+
+
+def test_the_rate_quarantine_holds_no_correlation_column():
+    """THE GUARD AND THE INPUT THAT DEFEATS IT, in one place.
+
+    What would satisfy `test_extra_features_are_rate_independent` while
+    violating #775's intent is a `ratio` column in RATE_KNOWN_RED: the
+    correlations are the family #775 exists for, so quarantining one would
+    absorb the repair exactly as its acceptance criteria warn. The sweep
+    establishes that none has to be -- over 92 panel entries the clean fold's
+    cost is 95 dB pairs and 2 ratio pairs at EVERY value of the dial including
+    the old 0.12, and both of those two are the separately diagnosed 200 Hz
+    `mpd2.50ms.rowcorr` residue, which is not on this panel.
+
+    So this is a strict ban, and it is strict on purpose: a correlation column
+    that moves with the sample rate is the thing to FIX or to file, never to
+    bound."""
+    offenders = {k: _unit_of(k[1]) for k in RATE_KNOWN_RED
+                 if _unit_of(k[1]) != "db"}
+    assert not offenders, (
+        f"{offenders} is quarantined and is not a dB column. #775's repair is "
+        "about the correlation family; bounding one of those here hides the "
+        "dependence the narrowing exists to expose, one layer down. Fix it or "
+        "file it")
+
+
+def test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them():
+    """THE FALSIFIER FOR THE REASON THE ELEVEN ENTRIES CARRY.
+
+    Each quarantined cqt entry claims its band contains no odd harmonic of its
+    own stimulus, so both rates read resampler stopband residue and the gap is
+    a difference of residues. The band edges are geometric and exact
+    (`cqt_edges`, and the column name IS the lower edge), so that claim is
+    arithmetic and is checked here rather than believed. The level is checked
+    too: 40 dB under the clip's own loudest bin, measured at 68-79 dB.
+
+    AND THE OTHER DIRECTION, which is what makes it a falsifier: every cqt
+    band that DOES contain an odd harmonic must be inside tolerance on the
+    same panel. If one of those ever goes red, this diagnosis is wrong and the
+    quarantine is hiding something real."""
+    edges = cqt_edges()
+    f0_of = {"440Hz": 440.0, "523Hz": 523.0, "523Hz bandlimited": 523.0,
+             "523Hz@48k": 523.0, "880Hz": 880.0}
+    cqt_entries = [k for k in RATE_KNOWN_RED if k[1].startswith("cqt")]
+    assert len(cqt_entries) == 10, cqt_entries
+    for label, nm in cqt_entries:
+        lo = float(nm[3:nm.index("Hz")])
+        k = int(np.argmin(np.abs(edges - lo)))
+        assert abs(edges[k] - lo) < 1.0, (nm, edges[k])
+        hi, f0 = edges[k + 1], f0_of[label]
+        inside = [h * f0 for h in range(1, 200, 2) if lo <= h * f0 < hi]
+        assert not inside, (
+            f"{label} {nm}: band [{lo:.0f}, {hi:.0f}) Hz contains harmonic(s) "
+            f"{inside} of {f0:g} Hz, so it is not a null and the quarantine's "
+            "stated reason is wrong")
+
+    # the level, measured on the 44.1 kHz side of each entry
+    for label, nm in cqt_entries:
+        f0, kind = f0_of[label], ("blsquare" if "bandlimited" in label else "square")
+        sr = 48000 if label.endswith("@48k") else 44100
+        v, names = cqt_features(_rate_stimulus(f0, 0.0, 0, sr=sr, kind=kind), sr)
+        d = dict(zip(names, v))
+        peak = max(x for n, x in d.items() if n.endswith(nm[-5:]))
+        assert peak - d[nm] > 40.0, (
+            f"{label} {nm} is only {peak - d[nm]:.1f} dB under that clip's "
+            "loudest bin, so it is not residue and the reason is wrong")
+
+    # the falsifier: no cqt band holding a harmonic of its own stimulus is red
+    for label, nm, x, y, gap in _rate_gaps():
+        if not nm.startswith("cqt"):
+            continue
+        lo = float(nm[3:nm.index("Hz")])
+        k = int(np.argmin(np.abs(edges - lo)))
+        f0 = f0_of.get(label)
+        assert f0 is not None, (label, nm, "a new panel entry is red")
+        holds = [h * f0 for h in range(1, 200, 2) if lo <= h * f0 < edges[k + 1]]
+        assert not holds, (
+            f"{label} {nm} is over tolerance and its band holds harmonic(s) "
+            f"{holds}, so this is a real rate dependence in a band with signal "
+            "in it, not residue -- the quarantine's diagnosis is refuted")
+
+
+
+
+def _octave_ratio(f0, build_sr, octave_margin=None):
+    """The period `dominant_period` reports for one clip read at both rates,
+    as a ratio. 1.0 for an estimator that agrees with itself about which
+    partial it is measuring; ~2 or ~0.5 on an octave error."""
+    other = RATE_PAIR[build_sr]
+    a = _rate_stimulus(f0, 0.0, 0, sr=build_sr)
+    b = _resample(a, build_sr, other)
+    pa = dominant_period(a, build_sr, octave_margin=octave_margin)
+    pb = dominant_period(b, other, octave_margin=octave_margin)
+    assert pa > 0 and pb > 0, (f0, build_sr, pa, pb)
+    return (pb / float(other)) / (pa / float(build_sr))
+
+
+def test_dominant_period_returns_the_same_octave_at_both_rates():
+    """#774, AND IT REPLACES A TEST THAT ASSERTED THE DEFECT WAS PRESENT.
+
+    `test_dominant_period_picks_a_different_octave_at_the_two_rates` lived here
+    until the repair landed: it asserted that 880 Hz built at 48 kHz and
+    resampled down came back as 101 samples against 55 on the other side --
+    EXACTLY an octave -- so that the day it stopped reproducing somebody had to
+    come and delete it. This is that deletion, and the assertion is now the
+    other way round.
+
+    Both halves of the class are checked and the second one matters more: the
+    44.1 kHz-built rows are not what the repair was selected against. The
+    tolerance is the 5 % `tools/probes/fold_rate_sweep.py` refuses its own
+    pairs at, so a clip this test calls agreed is a clip that instrument does
+    not refuse."""
+    for name, panel in (("selected on", OCTAVE_SELECT),
+                        ("held out from selection", OCTAVE_CONFIRM),
+                        ("outside the band", OCTAVE_EDGES)):
+        for f0, build_sr in panel:
+            ratio = _octave_ratio(f0, build_sr)
+            assert abs(ratio - 1.0) < 0.05, (
+                f"{f0} Hz built at {build_sr} ({name}): dominant_period reports "
+                f"periods {ratio:.4f} apart at the two rates, which is not the "
+                "same partial -- #774")
+
+
+def test_the_bare_argmax_this_replaced_is_still_wrong_on_that_class():
+    """THE INJECTED-BUG CONTROL FOR THE TEST ABOVE, and the record of what
+    #774 actually was.
+
+    A green octave test proves nothing unless the same panel can be made red,
+    and the honest way to make it red is the code that used to ship: a bare
+    argmax over the lag band, which `octave_margin=0` still is. Every value in
+    both halves of the class must be an octave out there -- the FULL class,
+    not the three rows #774 was filed with, because a repair selected on half
+    its class is how the one-directional framing happened in the first
+    place.
+
+    The edges are asserted from the other side in the same breath: if a margin
+    were doing the work there too, this control would make them red as well
+    and the panel would stop being able to tell the two apart."""
+    for f0, build_sr in OCTAVE_SELECT + OCTAVE_CONFIRM:
+        ratio = _octave_ratio(f0, build_sr, octave_margin=0)
+        assert abs(ratio - 2.0) < 0.05 or abs(ratio - 0.5) < 0.05, (
+            f"{f0} Hz built at {build_sr}: the bare argmax no longer returns a "
+            f"different octave ({ratio:.4f}), so the green above is not "
+            "evidence that the margin is doing anything -- #774")
+    for f0, build_sr in OCTAVE_EDGES:
+        assert abs(_octave_ratio(f0, build_sr, octave_margin=0) - 1.0) < 0.05, (
+            f"{f0} Hz built at {build_sr} is outside the class and must agree "
+            "with the bare argmax too; if it does not, OCTAVE_EDGES is not the "
+            "control it claims to be")
+
+
+def test_the_octave_margin_ships_a_real_margin():
+    """0 is not a margin. It selects the bare argmax that shipped before #774,
+    is carried for the control above and for the sweep instrument, and must
+    never be the value that ships -- a probe hook left switched on is a repair
+    that was reverted without anyone editing the repair."""
+    assert JIT_OCTAVE_MARGIN_PERMILLE >= 1, JIT_OCTAVE_MARGIN_PERMILLE
+    assert JIT_OCTAVE_MARGIN_PERMILLE in (5, 10, 20, 30, 50, 100, 200), (
+        f"{JIT_OCTAVE_MARGIN_PERMILLE} is not a point on the committed grid in "
+        "docs/sensitivity/dominant-period-octave-margin.json")
+
+
+def _alternating_square(f0, sr, depth, dur=0.24):
+    """A square at `f0` whose alternate periods are scaled by `1 - depth`, so
+    its TRUE period is two of `_square`'s periods. The same construction
+    `tools/probes/octave_margin_sweep.py` sweeps the dial's constraint on."""
+    x = _square(f0, sr, dur=dur)
+    period = round(sr / f0)
+    return x * np.where((np.arange(len(x)) // period) % 2 == 1, 1.0 - depth, 1.0)
+
+
+def test_the_octave_margin_refuses_the_input_that_defeats_it():
+    """A GUARD SHIPS WITH THE INPUT THAT DEFEATS IT --
+    docs/verification-rules.md rule 8. This is that input, and it defeats the
+    margin rather than being defeated by it.
+
+    A square whose alternate periods are scaled by `1 - depth` really has
+    period 2P, and really does have a local autocorrelation peak at P. So a
+    margin wide enough to swallow the gap between them reports the clip an
+    octave HIGH -- the mirror image of #774. What is asserted is the BOUNDARY,
+    in both directions, so neither side can move unnoticed:
+
+      * at depth 0.20 the gap is +0.0137, under the shipped 20 thousandths,
+        and the shipped function returns P. That is the defeat, asserted, not
+        a possibility mentioned in a docstring.
+      * at depth 0.25 the gap is +0.0292, over it, and the shipped function
+        returns the true 2P. So the margin is not simply blind to period
+        doubling.
+      * at depth 0.10 the gap is NEGATIVE and the BARE ARGMAX returns P too.
+        That bounds what the margin costs: the window it loses and the argmax
+        did not is 0.12..0.25 of alternation depth, not every period-doubled
+        signal.
+
+    400 Hz at both rates, because 2P must fall inside the 120..1200 Hz lag
+    band for the estimator to be able to choose it at all."""
+    for sr in (44100, 48000):
+        period = round(sr / 400.0)
+        for depth, expect, why in ((0.20, period, "the margin swallows the gap"),
+                                   (0.25, 2 * period, "the gap exceeds the margin")):
+            x = _alternating_square(400.0, sr, depth)
+            got = dominant_period(x, sr)
+            assert got == expect, (
+                f"{sr} Hz, alternation depth {depth}: dominant_period returns "
+                f"{got}, expected {expect} ({why}). The dial's constraint has "
+                "moved -- re-run tools/probes/octave_margin_sweep.py and read "
+                "keeps_2t in docs/sensitivity/dominant-period-octave-margin.json")
+        shallow = _alternating_square(400.0, sr, 0.10)
+        assert dominant_period(shallow, sr, octave_margin=0) == period, (
+            f"{sr} Hz, alternation depth 0.10: the BARE ARGMAX no longer "
+            "returns the half period, so this depth no longer bounds what the "
+            "margin itself costs")
+
+
+def test_the_octave_margin_does_not_move_the_rate_panel():
+    """WHAT THE REPAIR MUST NOT HAVE CHANGED, asserted rather than assumed.
+
+    #774's margin is a change to the estimator every `jit.*` column is seeded
+    by, so the honest question is not only "did it fix the class" but "did it
+    move anything else". RATE_PANEL is the panel every number on
+    `docs/discrimination.md` about the `jit.stability` bucket was measured on,
+    and that page says those numbers are unaffected by this repair. This is
+    that claim: every clip of every panel entry, at both rates, returns the
+    SAME lag under the shipped margin as under the bare argmax it replaced.
+
+    If this ever goes red, the `jit.stability` figures on that page are
+    carrying an unmeasured correction from #774 as well as from #767, and the
+    page says they are not."""
+    for label, f0, jitter, seed, kind, build_sr in RATE_PANEL:
+        a, sr_a, b, sr_b = _rate_pair(label, f0, jitter, seed, kind, build_sr)
+        for x, sr, side in ((a, sr_a, "built"), (b, sr_b, "resampled")):
+            bare = dominant_period(x, sr, octave_margin=0)
+            assert bare > 0, (label, side)
+            assert dominant_period(x, sr) == bare, (
+                f"{label} ({side} at {sr}): the octave margin moves this clip "
+                f"from {bare} samples, so the jit.stability numbers in "
+                "docs/discrimination.md are not the numbers they were -- #774")
+
+
+def test_the_octave_check_does_not_touch_a_whole_sample_period():
+    """THE VALIDATION CASE WITH AN ANSWER THIS MODULE DID NOT PRODUCE.
+
+    300 Hz divides both 44100 and 48000, so the period is a whole number of
+    samples at both rates and the lag is arithmetic: 147 and 160. An octave
+    rule that moved these would be reporting its own threshold rather than the
+    signal's period, and the margin must therefore be invisible here at every
+    width on its grid -- which is `exact` in the sweep artefact, asserted here
+    against hand-written numbers rather than against the sweep."""
+    for sr, lag in ((44100, 147), (48000, 160)):
+        x = _rate_stimulus(300.0, 0.0, 0, sr=sr)
+        for margin in (0, 5, 10, 20, 30, 50, 100, 200):
+            assert dominant_period(x, sr, octave_margin=margin) == lag, (
+                f"{sr} Hz at margin {margin}: expected the arithmetic {lag}")
 
 
 def test_the_fold_interpolator_ships_a_real_width():
@@ -1497,12 +2069,16 @@ def test_jitter_separates_a_stable_oscillator_from_a_drifting_one():
     column, measured here rather than quoted. It is 0.0002, and the margin
     clears it by better than sixty times.
 
-    What this test cannot do anything about, recorded because it is the
-    uncomfortable half of the same measurement: 0.0146 is also eight times
-    SMALLER than `RATE_TOL_REL` x 1.0 = 0.12, the tolerance the rate test
-    applies to this column. The rate test would not notice a rate dependence
-    in `jit.cyclecorr` the size of everything the column measures. That is a
-    tolerance problem, not a fold problem; filed as #775, not fixed here."""
+    What this test could not do anything about, and what #775 then did:
+    0.0146 was also eight times SMALLER than the `RATE_TOL_REL` x 1.0 = 0.12
+    the rate test applied to this column, so that test would not have noticed
+    a rate dependence in `jit.cyclecorr` the size of everything the column
+    measures. #775 swept the dial to 0.02, which is as far as it goes for this
+    column -- the binding term below that is `RATE_TOL_ABS["ratio"]`, still
+    1.37x the effect, which is why the margin test #775 asked for cannot exist
+    through that dial. `test_no_relative_tolerance_can_reach_the_cyclecorr
+    _effect` carries the measurement; the margin BELOW is unaffected either
+    way, because it was never read against the rate tolerance."""
     sr = 44100
     read = lambda x, s=sr: dict(zip(*reversed(jitter_features(x, s))))  # noqa: E731
     graded = [read(_square(410.0, sr, jitter=j, seed=3))["jit.cyclecorr.seg0"]
@@ -1644,13 +2220,19 @@ def test_the_one_residual_the_fold_repair_cannot_reach_is_the_stimulus():
     Over 44 values of f0 in both resampling directions
     (tools/probes/fold_rate_sweep.py), the repaired fold leaves exactly one
     stimulus over tolerance that is not the octave error above: 200 Hz built
-    at 48 kHz, in `mpd2.50ms.rowcorr`, at a gap of 0.131 against 0.120.
+    at 48 kHz, in `mpd2.50ms.rowcorr`, at a gap of 0.131 -- against the 0.120
+    tolerance that applied when this was written and the 0.020 that applies
+    after #775 swept RATE_TOL_REL to 0.02. It was the only `ratio` pair over
+    tolerance on the wide panel at EVERY value of that dial, which is why
+    narrowing it added no correlation column to the quarantine.
 
     It is not fold geometry and the control says so. 2.5 ms is 120 samples at
     48 kHz and the 200 Hz period is 240, so consecutive rows are exact
-    negatives of each other and `rowcorr` saturates at -1.0000 -- where
-    RATE_TOL_REL x 1.0 is its whole scale and any difference at all shows up
-    full size. The difference is in the CLIP, not the fold: `_square` lays
+    negatives of each other and `rowcorr` saturates at -1.0000 -- where the
+    tolerance is the column's whole scale times the relative term (0.120 at
+    the 0.12 that shipped when this was written, 0.020 at the 0.02 #775 swept
+    it to, which is `RATE_TOL_ABS["ratio"]` and the floor) and any difference
+    at all shows up full size. The difference is in the CLIP, not the fold: `_square` lays
     down hard +-1 edges on the build rate's sample grid, and a half period of
     110.25 samples cannot exist at 44.1 kHz, so the resampled side is a
     band-limited square and the built side is an ideal one.
@@ -1666,8 +2248,7 @@ def test_the_one_residual_the_fold_repair_cannot_reach_is_the_stimulus():
         b = _resample(a, build_sr, RATE_PAIR[build_sr])
         va = dict(zip(*reversed(mpd_features(a, build_sr))))
         vb = dict(zip(*reversed(mpd_features(b, RATE_PAIR[build_sr]))))
-        tol = max(RATE_TOL_REL * max(abs(va[nm]), abs(vb[nm])),
-                  RATE_TOL_ABS[_unit_of(nm)])
+        tol = rate_tolerance(nm, va[nm], vb[nm])
         return abs(va[nm] - vb[nm]), tol, va[nm], vb[nm]
 
     hard, tol, a, b = gap("square")
