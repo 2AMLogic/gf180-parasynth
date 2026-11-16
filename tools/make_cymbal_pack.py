@@ -3,8 +3,8 @@
 
 For listening only; the measurements decide promotion. Each file is
 808, shipped, 808, candidate (0.25 s gaps), every hit matched to the 808's
-K-weighted loudness (tools/ab_808_loud.py's BS.1770 K filter and gating), then
-scaled together to -1 dBFS peak. Raw renders are written alongside.
+K-weighted loudness (tools/perceptual_gate.py's BS.1770 K filter and gating),
+then scaled together to -1 dBFS peak. Raw renders are written alongside.
 """
 from __future__ import annotations
 
@@ -22,23 +22,9 @@ import drums_fx as dx  # noqa: E402
 import run_case as rc  # noqa: E402
 import cymbal_candidate as cc  # noqa: E402
 import cymbal_candidate_eval as ev  # noqa: E402
+import perceptual_gate as pg  # noqa: E402
 
 SR = 48000
-
-
-def _kweight(x):
-    from scipy.signal import lfilter
-    b1, a1 = [1.53512485958697, -2.69169618940638, 1.19839281085285], [1.0, -1.69065929318241, 0.73248077421585]
-    b2, a2 = [1.0, -2.0, 1.0], [1.0, -1.99004745483398, 0.99007225036621]
-    return lfilter(b2, a2, lfilter(b1, a1, x))
-
-
-def _loud(x):
-    y = _kweight(x)
-    blk = int(0.05 * SR)
-    e = np.array([np.mean(y[i:i + blk] ** 2) for i in range(0, len(y) - blk, blk // 2)])
-    g = e >= e.max() * 10 ** (-2)
-    return 10 * np.log10(np.mean(e[g]) + 1e-20)
 
 
 def _trim(x):
@@ -61,9 +47,9 @@ def main(argv=None):
     cand, _ = cc.render(ev.kit_with_levels(cal["amps"]), "CY")
     a.out.mkdir(parents=True, exist_ok=True)
     clips = {"808": _trim(ref), "shipped": _trim(ship), "candidate": _trim(cand)}
-    lr = _loud(clips["808"])
+    lr = pg.loudness_db(clips["808"])
     for k in ("shipped", "candidate"):
-        clips[k] = clips[k] * 10 ** ((lr - _loud(clips[k])) / 20)
+        clips[k] = clips[k] * 10 ** ((lr - pg.loudness_db(clips[k])) / 20)
     pk = max(np.abs(v).max() for v in clips.values())
     for k in clips:
         clips[k] = clips[k] * (10 ** (-1 / 20) / pk)
