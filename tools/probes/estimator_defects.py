@@ -637,8 +637,44 @@ def corner_shipped(freqs, g, cut_hz):
     return am.corner_from_curve(freqs, g, ref_band=rc._ref_band(freqs, cut_hz))
 
 
-def defect_6():
+def _bad_corner(*estimates):
+    """Section 6's readings guard (#845): every `.value` this section reads
+    is a corner frequency or feeds a ratio of two, so return the reason the
+    first unusable reading is unusable, or None when they all stand. Unusable
+    means not ok, a None value (the shipped `_fail` encoding -- raised
+    TypeError at the first arithmetic), non-finite (a nan-carrying estimate
+    sailed through an `.ok`-only test and made every comparison silently
+    False -- FAILED where REFUSED is the truth, #805's pathology), or
+    nonpositive (a corner at or below 0 Hz is not a measurement: the
+    readback's division raised ZeroDivisionError at 0 and printed a
+    plausible percentage off a negative). GUARD-DEFEAT STATEMENT (rule 8):
+    this certifies that a reading exists and is a physically possible
+    frequency -- it cannot certify that the exhibit's wrong number is the
+    RIGHT wrong number; that is what the printed columns and the swing
+    verdicts are for. And each call sits ABOVE its block's first `.value`
+    read, print included -- a guard below the print is defect 1's defeat
+    note again: the None encoding dies at the print and the guard is never
+    reached."""
+    for e in estimates:
+        if not e.ok:
+            return e.reason or "no reason given"
+        if e.value is None:
+            return "a refusal carrying a None value"
+        if not math.isfinite(e.value):
+            return "a non-finite reading"
+        if e.value <= 0.0:
+            return f"a nonphysical corner ({e.value} Hz)"
+    return None
+
+
+def defect_6(shipped=None, repaired=None):
     import reference_compare as rcmp
+    # The two estimators this section reads, exposed as seams (#845) so
+    # `tools/probes/test_estimator_defects.py` can rig either one to refuse,
+    # the `_prepend_silence_invariance(shipped=, repaired=)` pattern. The
+    # defaults are the real things; a passing run is unchanged by them.
+    shipped = shipped or corner_shipped
+    repaired = repaired or rc.filt_corner
     print("\n" + "=" * 78)
     print("6. #150 -- the corner estimator droops, on a response that does not")
     print("=" * 78)
@@ -651,8 +687,17 @@ def defect_6():
           f"{'bias':>9}{'REPAIRED (#150)':>17}{'bias':>9}")
     for fc in (250.0, 400.0, 630.0, 1000.0, 1600.0, 2500.0, 4000.0):
         g = -40.0 * np.log10(1.0 + (F / fc) ** 2)
-        old = corner_shipped(F, g, fc)
-        new = rc.filt_corner(fc)(F, g)
+        old = shipped(F, g, fc)
+        new = repaired(fc)(F, g)
+        # Guarded above the FIRST `.value` read, the print included (#845):
+        # all four figures in this row are ratios of corner readings, so a
+        # refusing operand means the row does not exist.
+        bad = _bad_corner(old, new)
+        if bad is not None:
+            check_refused(
+                f"fc {fc:.0f}: defect 6's corner-estimator table refused "
+                f"({bad}) -- no row was printed for this cutoff")
+            continue
         print(f"   {fc:9.0f} {old.detail['plateau_db']:+14.3f}"
               f"{old.value/fc:19.4f}{100*(old.value/fc/true_ratio-1):+8.2f}%"
               f"{new.value/fc:17.4f}{100*(new.value/fc/true_ratio-1):+8.2f}%")
@@ -665,8 +710,24 @@ def defect_6():
     for fc in (250.0, 1000.0, 4000.0):
         ref_g = -40.0 * np.log10(1.0 + (F / fc) ** 2)
         got_g = -40.0 * np.log10(1.0 + (F / (fc * 0.84)) ** 2)
-        o = corner_shipped(F, got_g, fc).value / corner_shipped(F, ref_g, fc).value - 1
-        n = rc.filt_corner(fc)(F, got_g).value / rc.filt_corner(fc)(F, ref_g).value - 1
+        got_old = shipped(F, got_g, fc)
+        ref_old = shipped(F, ref_g, fc)
+        got_new = repaired(fc)(F, got_g)
+        ref_new = repaired(fc)(F, ref_g)
+        # Same guard, and this row is the DIVISION class (#845, the :501
+        # shape): the readback is got/ref - 1 over two `.value` reads, so a
+        # refusing-but-finite denominator raised ZeroDivisionError at 0 or
+        # produced a plausible percentage off a negative -- the nonpositive
+        # leg in `_bad_corner` is what catches it.
+        bad = _bad_corner(got_old, ref_old, got_new, ref_new)
+        if bad is not None:
+            check_refused(
+                f"fc {fc:.0f}: the constant-16 % readback refused ({bad}) "
+                "-- the readback is a ratio of two readings, so no "
+                "percentage was produced from a reading that does not exist")
+            continue
+        o = got_old.value / ref_old.value - 1
+        n = got_new.value / ref_new.value - 1
         print(f"   {fc:9.0f}{100*o:18.2f}%{100*n:16.2f}%")
     print("\n   #150's TWO READINGS, RECONCILED. Both are right; the difference is")
     print("   the grid, which neither number was stated with.\n")
@@ -674,12 +735,25 @@ def defect_6():
     for label, G in (("geomspace(40, 12000, 32)", F),
                      ("geomspace(20, 18000, 32)", np.geomspace(20.0, 18000.0, 32))):
         rs, es = [], []
+        refused = None
         for fc in (250.0, 1000.0, 4000.0):
             ref_g = -40.0 * np.log10(1.0 + (G / fc) ** 2)
             got_g = -40.0 * np.log10(1.0 + (G / (fc * 0.84)) ** 2)
-            rs.append(corner_shipped(G, ref_g, fc).value / fc)
-            es.append(100 * (corner_shipped(G, got_g, fc).value
-                             / corner_shipped(G, ref_g, fc).value - 1))
+            r_ref = shipped(G, ref_g, fc)
+            r_got = shipped(G, got_g, fc)
+            bad = _bad_corner(r_ref, r_got)
+            if bad is not None:
+                refused = (fc, bad)
+                break
+            rs.append(r_ref.value / fc)
+            es.append(100 * (r_got.value / r_ref.value - 1))
+        if refused is not None:
+            check_refused(
+                f"{label}: the grid reconciliation refused at fc "
+                f"{refused[0]:.0f} ({refused[1]}) -- the grid row was not "
+                "printed, and neither grid was reconciled from a reading "
+                "that does not exist")
+            continue
         print(f"   {label:<28}" + "".join(f"{v:9.4f}" for v in rs)
               + "   " + " ".join(f"{v:7.2f}" for v in es))
     print("   The first is the external audit's and is `reference_compare.FREQS`,")
@@ -691,10 +765,28 @@ def defect_6():
     for poles in (2, 4, 6):
         tr = math.sqrt(10 ** (3.0 / (10.0 * poles)) - 1.0)
         olds, news = [], []
+        refused = None
         for fc in (250.0, 400.0, 630.0, 1000.0, 1600.0, 2500.0, 4000.0):
             g = -(10.0 * poles) * np.log10(1.0 + (F / fc) ** 2)
-            olds.append(corner_shipped(F, g, fc).value / fc)
-            news.append(rc.filt_corner(fc)(F, g).value / fc)
+            old = shipped(F, g, fc)
+            new = repaired(fc)(F, g)
+            bad = _bad_corner(old, new)
+            if bad is not None:
+                refused = (fc, bad)
+                break
+            olds.append(old.value / fc)
+            news.append(new.value / fc)
+        if refused is not None:
+            # The verdict guard (#845, the :529/:531 shape -- the reason this
+            # issue exists): a nan operand made `max/min - 1 > 0.08` silently
+            # False, a FAILED verdict where REFUSED is the truth; a None
+            # operand raised at the append. A swing measured from a reading
+            # that does not exist is not a number, so NEITHER verdict runs.
+            check_refused(
+                f"{poles}-pole: the corner-estimator spread refused at "
+                f"fc {refused[0]:.0f} ({refused[1]}) -- NEITHER swing "
+                "verdict ran")
+            continue
         check(max(olds) / min(olds) - 1 > 0.08,
               f"{poles}-pole: the shipped estimator moves "
               f"{100*(max(olds)/min(olds)-1):.2f} % on a constant ratio")
