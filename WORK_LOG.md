@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-16
 
+- **Issue #835** (closed): File upstream: ORFS 6_report.json emits finish__design__instance__area twice with two different meanings
+- **PR #849**: summarize.py refuses duplicated required metrics (OpenROAD#12303)
 - **Issue #851** (closed): pnr/ test files run under make verify but under no CI job (6 of 8) -- the #404 shape, one directory over
 - **PR #865**: ci: collect pnr/ as a directory in CI; assert the docker precondition in container_progress
 - **Issue #868** (closed): refusal_exit_census: the sites_outside_set pin is keyed on line numbers, so an unrelated edit above cymbal_vca_drive.py:1525 reds the gate
