@@ -246,6 +246,9 @@ are committed in `docs/ARCHITECTURE.md` section 5: worst sample-strobe **154**
 stimulus (`tb_top_bx.v`), the drum buses ready at cycle 93 (worst 94) —
 measured with the real drum engine in place.
 <!-- claim: grep="154 of 256 cycles" in=docs/ARCHITECTURE.md issue=797 note="the current measured cycle figures, committed; the 150/66 figures above belong to the retired pre-17.23 configuration, so this repair cites them rather than re-measuring (issue 797: no bench runs)" -->
+<!-- claim: grep="mean 132" in=docs/ARCHITECTURE.md issue=873 note="the mean paired with the 154 worst above is still what ARCHITECTURE section 5 commits; a re-measurement that changes it grades this STALE (issue 873)" -->
+<!-- claim: grep="\*\*124\*\* \| worst sample-strobe cycle over the 2 040-frame" in=docs/ARCHITECTURE.md issue=873 note="the 124 row of ARCHITECTURE section 5, as cited above; the bold-plus-cell-text anchor is deliberate -- a bare 124 would be satisfied by any stray number in the file (docs/verification-rules.md rule 8)" -->
+<!-- claim: grep="\*\*93 / 94\*\* \| the drum buses ready" in=docs/ARCHITECTURE.md issue=873 note="the drum-bus-ready row (mean/worst), as cited above; same deliberate anchoring as the 124 marker" -->
 
 ---
 
@@ -2414,6 +2417,11 @@ record that extends this document; none may be resolved by picking a reading.
     <!-- claim: absent="^\s*(module\s+)?drum_section_placeholder" in=rtl-sketch/*.v,fpga/rtl/*.v issue=797 note="no stand-in module or instantiation is left. The pattern MUST stay anchored: synth_top.v:22 carries a header COMMENT saying the stand-in is gone, and an unanchored absent= on this string is satisfied by that comment -- i.e. it grades STALE on this tree, which is this marker's own defeating input (docs/verification-rules.md rule 8)" -->
     <!-- claim: grep="^\s*drum_kit #\(" in=rtl-sketch/synth_top.v issue=797 note="the shipping top level instantiates the real engine" -->
     <!-- claim: grep="rtl-sketch/verify_synth_top\.py" in=.github/workflows/nightly.yml issue=797 note="the joined chip IS verified at its pins, nightly (job I4)" -->
+    <!-- claim: grep="tsh = tacc >>> 15" in=rtl-sketch/voice_dp.v issue=873 note="the one shift this item asserts; the exact sum and the rail were already guarded by the issue 797 markers above, the shift was not" -->
+    <!-- claim: grep="\*\*0 samples clipped\*\*" in=docs/ARCHITECTURE.md issue=873 note="the section 4.3 gain-structure table still reports 0 samples clipped; bold-anchored to the measured cell so a re-measurement that clips grades this STALE" -->
+    <!-- claim: grep="## 9\. What is NOT done" in=docs/DESIGN.md issue=873 note="the sentences above cite DESIGN by section NUMBER -- this guards the heading, so a renumber or rename of section 9 goes stale instead of silent" -->
+    <!-- claim: grep="headroom_check\.py` must be re-run" in=docs/DESIGN.md issue=873 note="DESIGN section 9 still records the headroom re-run as owed, exactly as this item states" -->
+    <!-- claim: grep="not placed or routed" in=docs/DESIGN.md issue=873 note="DESIGN section 9 still records the joined top level as synthesised but not placed -- the area-flow thread this item calls the one still open" -->
 30. **The snare's two partials are balanced by MEASUREMENT, not from the
     schematic** (15.7). Roland states that VR8 TONE sets "the output ratio of
     the two" bridged-T resonators, and the reference unit at TONE 5.0 puts the
