@@ -169,6 +169,134 @@ def test_collect_never_attributes_sibling_prefix_worktrees(tmp_path):
             child.wait()
 
 
+def test_collect_attributes_paths_that_end_a_longer_token(tmp_path):
+    """Shapes the #860 predicate drops must be attributed again (issue #870).
+
+    `--out-dir=<path>` and `-v <path>:<path>` name the worktree only at the
+    end of a longer token: no following separator, and not a whole token.
+    Every child runs with cwd=/ so the cwd test cannot attribute it -- only
+    the argv test decides, matching the measurement that found the loss.
+    """
+    wt = (tmp_path / ".loom" / "worktrees" / "issue-775").resolve()
+    wt.mkdir(parents=True)
+    w = str(wt)
+    shapes = {
+        "final bare token": [w],
+        "mid token at a component boundary": [f"--metrics={w}/out.json"],
+        "end of a longer token": [f"--out-dir={w}"],
+        "trailing separator": [w + os.sep],
+        "colon mount token": ["-v", f"{w}:{w}", "-w", f"{w}/pnr/runs"],
+    }
+    children = {
+        label: subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"] + extra, cwd="/"
+        )
+        for label, extra in shapes.items()
+    }
+    try:
+        found = {
+            f.pid: f
+            for f in probe.collect(tmp_path, probe.worktree_dirs(tmp_path), os.getpid())
+        }
+        for label, child in children.items():
+            assert child.pid in found, f"{label}: child {child.pid} not attributed"
+            assert found[child.pid].worktrees == ["issue-775"], label
+    finally:
+        for child in children.values():
+            child.kill()
+            child.wait()
+
+
+def test_collect_rejects_name_extensions_in_the_longer_token_shapes(tmp_path):
+    """The #819 name-extension false positives stay rejected when the path
+    sits at the end of a longer token or before a colon (#870): `issue-77`
+    must not be attributed from `issue-775`, `issue-77-b` or `issue-77.x`
+    text, and `issue-775` not from `issue-775-b`.
+    """
+    wt77 = (tmp_path / ".loom" / "worktrees" / "issue-77").resolve()
+    wt775 = (tmp_path / ".loom" / "worktrees" / "issue-775").resolve()
+    wt77.mkdir(parents=True)
+    wt775.mkdir(parents=True)
+    w77, w775 = str(wt77), str(wt775)
+    children = {
+        "775, numeric extension of 77": subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)", f"--out-dir={w775}"],
+            cwd="/",
+        ),
+        "77, hyphen extension": subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import time; time.sleep(30)",
+                f"--config={w77}-b/thing.yaml",
+            ],
+            cwd="/",
+        ),
+        "77, dot extension": subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import time; time.sleep(30)",
+                f"--junit-xml={w77}.x",
+            ],
+            cwd="/",
+        ),
+        "775, hyphen extension": subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)", f"--out-dir={w775}-b"],
+            cwd="/",
+        ),
+    }
+    try:
+        found = {
+            f.pid: f
+            for f in probe.collect(tmp_path, probe.worktree_dirs(tmp_path), os.getpid())
+        }
+        for label, child in children.items():
+            mine = found.get(child.pid)
+            if mine is not None:
+                assert mine.worktrees == ["issue-775"], (
+                    f"{label}: attributed to {mine.worktrees}"
+                )
+    finally:
+        for child in children.values():
+            child.kill()
+            child.wait()
+
+
+def test_argv_names_matches_paths_that_end_a_longer_token():
+    w = "/repo/.loom/worktrees/issue-775"
+    for argv in (
+        w,  # final bare token
+        f"--out-dir={w}",  # end of a longer token
+        f"-v {w}:{w}",  # colon mount (#870's lost shape)
+        f"--metrics={w}/out.json",  # component boundary mid-token
+        w + "/",  # trailing separator
+        f"{w}\n--flag",  # newline boundary
+        f"{w}\t--flag",  # tab boundary
+    ):
+        assert probe._argv_names(argv, w), argv
+
+
+def test_argv_names_rejects_name_extensions_and_glued_text():
+    w = "/repo/.loom/worktrees/issue-77"
+    for argv in (
+        "--out-dir=/repo/.loom/worktrees/issue-775",  # numeric extension
+        f"--config={w}-b/thing.yaml",  # hyphen extension
+        f"--junit-xml={w}.x",  # dot extension
+        f"{w}5/a",  # glued digit mid-token
+    ):
+        assert not probe._argv_names(argv, w), argv
+
+
+def test_argv_names_treats_the_path_as_a_literal_not_a_pattern():
+    """A worktree path may contain regex metacharacters; an unescaped dot
+    would match text the path does not name."""
+    w = "/re.po/(wt)/worktrees+issue-7"
+    assert probe._argv_names(f"--out-dir={w}", w)
+    assert not probe._argv_names("/reXpo/(wt)/worktrees+issue-7", w)
+    assert not probe._argv_names("/re.po/XwtX/worktrees+issue-7", w)
+
+
 def test_main_exits_zero_when_repo_has_no_worktrees(tmp_path, capsys):
     assert probe.main(["--repo-root", str(tmp_path)]) == 0
     assert "no issue worktrees" in capsys.readouterr().out
