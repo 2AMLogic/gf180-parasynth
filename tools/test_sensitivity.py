@@ -43,6 +43,7 @@ FILES = ["docs/sensitivity/registry.json",
         # issue #782's record: RATE_TOL_REL_DB, the dB family's relative term
         # split out of the pre-#782 scalar RATE_TOL_REL
         "docs/sensitivity/rate-tol-rel-by-unit.json",
+        "docs/sensitivity/rate-tol-rel-by-unit-sweep.txt",
          "docs/sensitivity/dphase-ar1-floor-sweep.txt",
          "model/discrimination_features.py",
          # issue #767's record: FOLD_SINC_TAPS, the fold interpolator that
