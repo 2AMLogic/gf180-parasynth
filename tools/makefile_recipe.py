@@ -17,10 +17,23 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
-def makefile_recipe(target: str) -> str:
-    """The recipe lines of one Makefile target, joined. Used to assert that a
-    check is enumerated where CI will actually reach it."""
-    lines = (ROOT / "Makefile").read_text().split("\n")
+def live_recipe_lines(lines: list[str]) -> list[str]:
+    """The recipe lines make actually hands to the shell: comment lines
+    (leading whitespace then `#`) are dropped, because their text never runs.
+    Without this, a control disabled the ordinary debugging way -- `#` after
+    the leading tab, invocation text left intact -- still matches a regex or
+    substring test over the joined recipe, and the wiring check stays green
+    on exactly the mutation it exists to catch: GNU make silently drops the
+    line and exits 0 (issue #855, rule 8)."""
+    return [ln for ln in lines if not ln.lstrip().startswith("#")]
+
+
+def makefile_recipe(target: str, *, root: pathlib.Path = ROOT) -> str:
+    """The *live* recipe lines of one Makefile target, joined. Used to assert
+    that a check is enumerated where CI will actually reach it. `root` is
+    injectable so tests can pin the parser against a Makefile that does not
+    exist in this repository."""
+    lines = (root / "Makefile").read_text().split("\n")
     out, inside = [], False
     for line in lines:
         if re.match(rf"^{re.escape(target)}\s*:", line):
@@ -30,5 +43,6 @@ def makefile_recipe(target: str) -> str:
             if line and not line[0].isspace():
                 break
             out.append(line)
-    assert out, f"no recipe found for Makefile target {target!r}"
-    return "\n".join(out)
+    live = live_recipe_lines(out)
+    assert live, f"no recipe found for Makefile target {target!r}"
+    return "\n".join(live)

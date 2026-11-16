@@ -66,6 +66,26 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
         f"gone or neutered: {reason}")
 
 
+def test_makefile_recipe_returns_only_live_lines(tmp_path):
+    """The shared parser drops comment lines, not just collects them. A
+    control disabled the ordinary debugging way -- `#` after the leading tab,
+    invocation text intact -- never runs: GNU make drops the line and exits 0
+    (issue #855). The substring assertions above are defeater-resistant only
+    because this filter sits in the parser both suites share; in raw recipe
+    text the disabled invocation would still match."""
+    (tmp_path / "Makefile").write_text(
+        "t:\n"
+        "\t@echo A \\\n"
+        "\t#  echo B \\\n"
+        "\techo C\n"
+    )
+    recipe = makefile_recipe("t", root=tmp_path)
+    assert "echo A" in recipe and "echo C" in recipe
+    assert "echo B" not in recipe, (
+        "echo B sits behind a `#`: make never runs it, so the parser must "
+        "not return it as recipe text")
+
+
 def test_every_permanent_injected_defect_still_has_something_to_inject_into():
     """`tools/inject_manifest_defects.py` reintroduces each defect this module
     shipped and checks the test that catches it goes red. Those injections are
