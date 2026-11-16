@@ -22,6 +22,21 @@ prevent. The binding below therefore requires the pre-repair column to carry
 `pre-#150` and the repaired column to carry `#150` without `pre-`, and the
 injected controls turn that binding red.
 
+The policed population has its own defeating input (#900): a column header
+written without a format spec -- a plain string, or an f-string interpolation
+carrying none -- is outside the scan, and a newly added inverted header
+written that way moves no count. Measured on this tree (origin/main 754bce36,
+2026-11-16, standalone ast replication of the FCR half, pin 6): a new
+`SHIPPED (#150)` header as a plain string or bare f-string interpolation
+leaves the count at 6 and the binding green -- #900's rows (b) and (c),
+re-measured here, not copied; written the file's own way -- with a format
+spec -- it is policed, count 7, both gates red (row (d)). Stripping the spec
+from an existing header also leaves the scan, but drops the count below the
+pin, so the count assertion fails (row (a)): the count pin is what keeps the
+existing headers from leaving the set. This is recorded as a bound, not
+repaired -- policing spec-less strings again would reintroduce #852's false
+positives -- and the FCR control below pins row (b) as measured.
+
 Also pins the REFUSED path of `filter_corner_recalibration.py` section 1
 against genuinely refusing estimators at a cutoff where `rc.filt_corner`
 refuses on the F1 grid (100 Hz; #792's measured table), not a stub.
@@ -71,7 +86,12 @@ def _header_literals(text: str, lo: int, hi: int) -> list[tuple[int, str]]:
     not grepped, so quoting on the physical line cannot fool this; and
     prose -- docstrings, plain string arguments, bare f-string fragments and
     ``{n}`` interpolations without a format spec -- is not formatted into a
-    column, so it stays outside the policed set (#852)."""
+    column, so it stays outside the policed set (#852). The mirror bound
+    (#900): a *column header* written without a format spec is equally
+    outside this set -- the scan cannot tell it from prose -- so an existing
+    header is kept in the set by gate (c)'s count pins, not by this
+    predicate; see the module docstring's rule-8 paragraph for the measured
+    rows."""
     found = []
     for node in ast.walk(ast.parse(text)):
         if not (isinstance(node, ast.FormattedValue)
@@ -293,6 +313,23 @@ def test_control_real_inversion_in_an_fcr_header_turns_red():
     assert "SHIPPED (pre-#150)" in FCR_TEXT, "control target moved in FCR"
     text = FCR_TEXT.replace("SHIPPED (pre-#150)", "SHIPPED (#150)", 1)
     assert _fcr_gate(text)
+
+
+def test_control_new_header_without_format_spec_escapes_the_gate():
+    """Records #900's measured bound; it is not a pass to rely on. A NEW
+    column header written without a format spec -- row (b), a plain string;
+    row (c), a bare f-string interpolation, behaves identically -- is outside
+    the policed set and moves no count, so the gate stays green over an
+    inverted `SHIPPED (#150)` that arrived spec-less. If this control ever
+    fails, the predicate was widened over spec-less strings -- #852's false
+    positives are back -- and the module docstring's rule-8 paragraph and
+    this control must be updated together."""
+    text = FCR_TEXT + '\nprint("      SHIPPED (#150)       ")\n'
+    assert len(_header_literals(text, 1, len(text.splitlines()))) == 6, (
+        "the policed population moved -- a spec-less header was policed "
+        "after all; re-measure #900's rows (a)-(d) and update the rule-8 "
+        "statement")
+    assert _fcr_gate(text) == []
 
 
 # ---------------------------------------------------------------------------
