@@ -5,14 +5,14 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "D2": {
-    "detail": "105 passed in 325.34s (0:05:25)",
+    "detail": "105 passed in 241.38s (0:04:01)",
     "passed": true,
-    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
+    "sha": "e372569702cced22ae957c1bf173412f343f3706"
   },
   "D3": {
     "detail": "model/sound_report.py exit 1",
     "passed": false,
-    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
+    "sha": "e372569702cced22ae957c1bf173412f343f3706"
   },
   "F1": {
     "detail": "verify_ladder: PASS -- 28800 samples, RTL identical to model",
@@ -25,9 +25,9 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "F3": {
-    "detail": "153 passed in 3.14s",
+    "detail": "153 passed in 2.36s",
     "passed": true,
-    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
+    "sha": "e372569702cced22ae957c1bf173412f343f3706"
   },
   "I1": {
     "detail": "verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in",
@@ -45,23 +45,23 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "M2": {
-    "detail": "115 passed in 193.74s (0:03:13)",
+    "detail": "115 passed in 128.56s (0:02:08)",
     "passed": true,
-    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
+    "sha": "e372569702cced22ae957c1bf173412f343f3706"
   },
   "M3": {
     "detail": "docs/reference-compare-results.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
+    "sha": "e372569702cced22ae957c1bf173412f343f3706"
   },
   "S1": {
     "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
+    "sha": "e372569702cced22ae957c1bf173412f343f3706"
   },
   "S3": {
     "detail": "fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
+    "sha": "e372569702cced22ae957c1bf173412f343f3706"
   }
 }
