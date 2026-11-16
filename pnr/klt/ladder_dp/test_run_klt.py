@@ -570,6 +570,8 @@ def test_only_containers_holding_a_path_inside_this_run_are_ours(tmp_path):
     # narrow one -- an absolute path, inside `here`, in the container's argv.
     mine = tmp_path / "pnr" / "klt" / "ladder_dp"
     mine.mkdir(parents=True)
+    mine_v2 = tmp_path / "pnr" / "klt" / "ladder_dp_v2"
+    mine_v2.mkdir(parents=True)
     others = {
         "aaaa": ["openroad", "-metrics", "/elsewhere/soc_top_route_metrics.json"],
         "bbbb": ["openroad", "-metrics", str(mine / ".klt" / "m.json")],
@@ -578,7 +580,32 @@ def test_only_containers_holding_a_path_inside_this_run_are_ours(tmp_path):
         # worktree, so a mount- or prefix-of-parent test would kill a
         # sibling agent's run.
         "dddd": ["openroad", str(tmp_path / "other.tcl")],
+        # A sibling whose name merely *begins with* `here`'s basename is NOT
+        # ours either: `ladder_dp_v2` is not inside `ladder_dp`. The ownership
+        # test must match at a path-component boundary, not a string boundary
+        # (issue #819).
+        "eeee": ["openroad", "-metrics", str(mine_v2 / ".klt" / "m.json")],
     }
+
+    def runner(argv, **kwargs):
+        class R:
+            returncode = 0
+            stdout = ""
+        if argv[1] == "ps":
+            R.stdout = "\n".join(others) + "\n"
+        else:
+            R.stdout = json.dumps(others[argv[-1]])
+        return R
+
+    assert run_klt.own_openroad_containers(mine, runner=runner) == ["bbbb"]
+
+
+def test_an_argv_entry_equal_to_here_exactly_is_ours(tmp_path):
+    # The boundary test keeps its exact-equality arm: a container whose argv
+    # names `here` itself (not something under it) is still this run's.
+    mine = tmp_path / "pnr" / "klt" / "ladder_dp"
+    mine.mkdir(parents=True)
+    others = {"bbbb": ["openroad", str(mine)]}
 
     def runner(argv, **kwargs):
         class R:

@@ -236,10 +236,16 @@ slower. *Informative:* revision 3 adds six multiplies per frame to the front
 end — three glide slews, the kc interpolation, `k · kc` and the VCA — all on
 a shared multiplier; the output stage of 12 adds two more. The whole voice as
 sequenced in `rtl-sketch/voice_dp.v` (one multiplier, one divider, the ladder
-inside) measures 150 cycles in its worst frame — three reciprocals, three
-squares, the drum filter of `docs/ARCHITECTURE.md` on — and 66 in a steady one
-(`tb_synth_top.v`); that figure is the chip with the *placeholder* drum
-sources, not the drum section of 15 (17.23).
+inside) was measured at 150 cycles in its worst frame — three reciprocals,
+three squares, the drum filter of `docs/ARCHITECTURE.md` on — and 66 in a
+steady one (`tb_synth_top.v`), under the pre-17.23 configuration those
+figures date from; that configuration is retired (17.23 is closed: the drum
+section of 15 is in the chip). The measured figures for the chip as it ships
+are committed in `docs/ARCHITECTURE.md` section 5: worst sample-strobe **154**
+(mean 132, `tb_synth_top.v`), **124** over `rtl-sketch/verify_synth_top.py`'s
+stimulus (`tb_top_bx.v`), the drum buses ready at cycle 93 (worst 94) —
+measured with the real drum engine in place.
+<!-- claim: grep="154 of 256 cycles" in=docs/ARCHITECTURE.md issue=797 note="the current measured cycle figures, committed; the 150/66 figures above belong to the retired pre-17.23 configuration, so this repair cites them rather than re-measuring (issue 797: no bench runs)" -->
 
 ---
 
@@ -1348,17 +1354,27 @@ clip of its own to the path of a signal: the tap rail (7) and the state
 word (8) are reachable by register values only, and the reference kit is
 tested not to reach them (`test_bank_headroom_zero_and_nineteen_bits_hold_the_kits_loudest_hit`).
 
-*Informative:* `rtl-sketch/synth_top.v` does **not** yet implement the output
-stage above. It carries the placeholder drum section of
-`docs/ARCHITECTURE.md` section 4 — one 19-bit bus, two terms,
-`sample = sat16(((v · vol) >> 15) + ((d · dvol) >> 15))`, two shifts and two
-rails rather than the one exact sum of 12 — and with `dvol = 0`, or a silent
-drum section, that is this section's sample bit for bit, which is what
-`rtl-sketch/verify_voice.py` checks. Closing that gap is 17.23. In rev 1
+*Informative:* the output stage above **is** implemented — in
+`rtl-sketch/voice_dp.v`, where the master mix lives (`synth_top.v` only
+resolves the drum buses and hands them to the voice) — as 12's one exact sum:
+`tacc <= macc + dacc`, the three products summed with no intermediate shift,
+then one shift (`tacc >>> 15`) and one rail (`sat16t`, the chip's one rail);
+the two buses enter the gains unclipped. With `dacc` at zero — `dvol` at 0,
+or a silent drum section (`tb_voice.v` ties the drum buses to zero) — the sum
+is the voice term alone, which is the reduction
+`rtl-sketch/verify_voice.py`'s voice-only bench sits on. The forms 12
+forbids — a bus clipped to 16 bits before the gains, each product floored
+before the sum, no rail at all — exist only under the `INJECT_BUG_VOICE_*`
+negative controls, and the two mix-shape ones are asserted-red nightly jobs.
+17.23 is closed. In rev 1
 the ladder's output was 16 bits and clamp 5 was where four of the eight
 audition patches clipped; with the width, the VCA after the filter and the
 volume, the float-versus-fixed gap on `growl-bass` is −32 dB instead of
 −13 dB, the ladder's own quantisation (`voice_fx_render.py`).
+<!-- claim: grep="tacc <= macc \+ dacc" in=rtl-sketch/voice_dp.v issue=797 note="12's exact sum of three products, no intermediate shift" -->
+<!-- claim: grep="sample <= sat16t\(tsh\)" in=rtl-sketch/voice_dp.v issue=797 note="one rail, after the one shift" -->
+<!-- claim: grep="verify_synth_top\.py --inject VOICE_MASTER_PRESHIFT --expect-fail" in=.github/workflows/nightly.yml issue=797 note="the two-floor form is a nightly asserted-red control, so the exact sum cannot regress silently" -->
+<!-- claim: grep="verify_synth_top\.py --inject VOICE_DRUM_CLAMP16\s+--expect-fail" in=.github/workflows/nightly.yml issue=797 note="the 16-bit pre-clip form is likewise an asserted-red nightly control (the workflow aligns the flags with padding, so the gap is \s+, not one space)" -->
 
 ---
 
@@ -2376,17 +2392,28 @@ record that extends this document; none may be resolved by picking a reading.
     schematic supports that reading, or whether a further stage the
     walk-through missed does the band-limiting, is not settled;
     `docs/tr808-reference.md` §3 carries the amendment.
-29. **The chip does not yet carry this drum section** (12, 15):
-    `rtl-sketch/synth_top.v` instantiates `drum_section_placeholder` — the
-    modal bank alone on a single 19-bit bus, no sources of its own — and its
-    master mix is the two-term `sat16(((v · vol) >> 15) + ((d · dvol) >> 15))`
-    of `docs/ARCHITECTURE.md` section 4, not the one exact sum of 12.
-    `drum_kit.v` is verified bit-exact against `model/drums_fx.py`
-    standalone (`rtl-sketch/verify_drums.py`) and the placeholder is
-    verified through the pins (`rtl-sketch/verify_top.py`), but nothing
-    verifies the two joined. Replacing the placeholder with `drum_kit` and
-    the mix with 12's formula, and re-running `rtl-sketch/headroom_check.py`
-    and the area flow on the result, is unscheduled work, not a decision.
+29. **The chip carries this drum section, and the master mix is 12's one
+    exact sum** (12, 15): `rtl-sketch/synth_top.v` instantiates `drum_regs`
+    and `drum_kit`, and no stand-in module or instantiation is left anywhere
+    under `rtl-sketch/*.v` or `fpga/rtl/*.v`. The master mix lives in
+    `rtl-sketch/voice_dp.v`: `tacc <= macc + dacc`, the exact sum of the
+    three products with no intermediate shift, one shift (`tacc >>> 15`) and
+    one rail (`sat16t`). `drum_kit.v` remains verified bit-exact against
+    `model/drums_fx.py` standalone (`rtl-sketch/verify_drums.py`), and the
+    two joined are verified too: `rtl-sketch/verify_synth_top.py` compares
+    the whole chip at its pins against `model/synth_top_model.py` with no
+    tolerance, as the nightly "I4" job (`rtl-sketch/verify_top.py` measures
+    the frame schedule; its I2S comparison is a plumbing check — the
+    bit-exactness verdict lives in `verify_synth_top.py`). A gain-structure
+    table including drum-bus material at the master mix is committed
+    (`docs/ARCHITECTURE.md` section 4.3, 0 samples clipped), though
+    `docs/DESIGN.md` section 9 still records a `headroom_check.py` re-run as
+    owed — the two documents disagree and are not reconciled here. The area
+    flow on the joined top level is the one thread still open, recorded in
+    `docs/DESIGN.md` section 9 and `docs/ARCHITECTURE.md` section 10.
+    <!-- claim: absent="^\s*(module\s+)?drum_section_placeholder" in=rtl-sketch/*.v,fpga/rtl/*.v issue=797 note="no stand-in module or instantiation is left. The pattern MUST stay anchored: synth_top.v:22 carries a header COMMENT saying the stand-in is gone, and an unanchored absent= on this string is satisfied by that comment -- i.e. it grades STALE on this tree, which is this marker's own defeating input (docs/verification-rules.md rule 8)" -->
+    <!-- claim: grep="^\s*drum_kit #\(" in=rtl-sketch/synth_top.v issue=797 note="the shipping top level instantiates the real engine" -->
+    <!-- claim: grep="rtl-sketch/verify_synth_top\.py" in=.github/workflows/nightly.yml issue=797 note="the joined chip IS verified at its pins, nightly (job I4)" -->
 30. **The snare's two partials are balanced by MEASUREMENT, not from the
     schematic** (15.7). Roland states that VR8 TONE sets "the output ratio of
     the two" bridged-T resonators, and the reference unit at TONE 5.0 puts the

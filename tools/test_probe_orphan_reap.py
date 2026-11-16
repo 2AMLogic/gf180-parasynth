@@ -116,6 +116,59 @@ def test_collect_attributes_a_process_by_argv(tmp_path):
         child.wait()
 
 
+def test_collect_never_attributes_sibling_prefix_worktrees(tmp_path):
+    """Issue numbers are unpadded decimal, so one worktree name is a string
+    prefix of another whenever one number is a decimal prefix of the other
+    (`issue-77` / `issue-775`). Attribution must match at a path-component
+    boundary, in both the argv test and the cwd test, or `issue-775`'s work is
+    filed under `issue-77` as well (issue #819).
+    """
+    wt77 = (tmp_path / ".loom" / "worktrees" / "issue-77").resolve()
+    wt775 = (tmp_path / ".loom" / "worktrees" / "issue-775").resolve()
+    wt77.mkdir(parents=True)
+    wt775.mkdir(parents=True)
+    argv_child = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import time; time.sleep(30)",
+            str(wt775 / "pnr" / "config.yaml"),
+        ]
+    )
+    cwd_child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], cwd=str(wt775)
+    )
+    own_child = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import time; time.sleep(30)",
+            str(wt77 / "pnr" / "config.yaml"),
+        ]
+    )
+    try:
+        found = probe.collect(tmp_path, probe.worktree_dirs(tmp_path), os.getpid())
+        by_pid = {f.pid: f for f in found}
+        assert argv_child.pid in by_pid, (
+            f"issue-775 argv child {argv_child.pid} missing from {sorted(by_pid)}"
+        )
+        assert by_pid[argv_child.pid].worktrees == ["issue-775"]
+        assert cwd_child.pid in by_pid, (
+            f"issue-775 cwd child {cwd_child.pid} missing from {sorted(by_pid)}"
+        )
+        assert by_pid[cwd_child.pid].worktrees == ["issue-775"]
+        # The genuine issue-77 work is still attributed when the prefix
+        # sibling exists.
+        assert own_child.pid in by_pid, (
+            f"issue-77 child {own_child.pid} missing from {sorted(by_pid)}"
+        )
+        assert by_pid[own_child.pid].worktrees == ["issue-77"]
+    finally:
+        for child in (argv_child, cwd_child, own_child):
+            child.kill()
+            child.wait()
+
+
 def test_main_exits_zero_when_repo_has_no_worktrees(tmp_path, capsys):
     assert probe.main(["--repo-root", str(tmp_path)]) == 0
     assert "no issue worktrees" in capsys.readouterr().out
