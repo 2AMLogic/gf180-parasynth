@@ -35,12 +35,36 @@ import run_case as rc                                               # noqa: E402
 REFS = rc.configured_refs()
 SR = 48000
 fails: list[str] = []
+refusals: list[str] = []
 
 
 def check(ok: bool, what: str):
     print(f"      {'OK  ' if ok else 'FAIL'}  {what}")
     if not ok:
         fails.append(what)
+
+
+def check_refused(what: str):
+    """A precondition this probe could not establish -- REFUSED, a third
+    outcome distinct from OK and FAIL (#805). It is recorded in `refusals`,
+    never absorbed into `fails`: a refusal says the comparison could not be
+    made at all, which no FAIL verdict says, and it must not be traded down
+    to a failed invariant when the numbers could not be produced."""
+    print(f"      REFUSED  {what}")
+    refusals.append(what)
+
+
+def verdict_exit_code() -> int:
+    """2 = refused precondition (the corpus-absent code, :544-546's
+    convention), 1 = a failed invariant, 0 = every invariant held. REFUSED
+    is checked first and outranks FAILED (#805 AC3: a refused check exits
+    2, never 0 and never 1) -- a probe whose precondition did not hold has
+    made no comparison whose FAIL could be trusted."""
+    if refusals:
+        return 2
+    if fails:
+        return 1
+    return 0
 
 
 # ===========================================================================
@@ -72,6 +96,62 @@ def window_shipped(y, sr, t0, t1):
 def split_db_shipped(y, sr, sound, t0, t1):
     lo, hi = rc.BAND[sound]
     return rc.band_ratio_db(window_shipped(y, sr, t0, t1), sr, rc.SPLIT_HZ[sound], lo, hi)
+
+
+def _prepend_silence_invariance(
+        shipped=lambda p, sr: split_db_shipped(prepare_shipped(p, sr), sr,
+                                               "LC", 0.0, 0.150),
+        repaired=lambda p, sr: rc.DRUM_PLAN["LC"][1][2](rc.prepare(p, sr), sr),
+        pads=(0.0, 0.5, 5.0, 500.0)):
+    """Prepend-silence invariance on a synthetic strike -- defect 1's own
+    measurement, extracted so `tools/probes/test_estimator_defects.py` can
+    rig either estimator to refuse (#805 AC8), the seam
+    `_trailing_silence_invariance` exposes as `measure=`.
+
+    The BASELINE is asserted at the point of use (#805) -- and BEFORE THE
+    FIRST `.value` READ, the table print included. The guard originally
+    sat below a print loop that formatted the same readings it protects,
+    so a None-encoded refusal (the shipped encoding, pinned by AC7)
+    raised TypeError at the print and the guard below was never reached
+    -- guard-defeat note #1 from the issue's own write-time audit, one
+    loop up. Every reading is computed once here; the guard runs before
+    any of them is read; on the guarded path the table print and the
+    swing checks consume the guarded set."""
+    x = np.zeros(int(0.6 * SR))
+    t = np.arange(len(x) - 7) / SR
+    x[7:] = np.exp(-t / 0.040) * np.sin(2 * math.pi * 220 * t)
+    padded = {p: np.concatenate([np.zeros(int(p * 1e-3 * SR)), x]) for p in pads}
+    old = [shipped(padded[p], SR) for p in pads]
+    new = [repaired(padded[p], SR) for p in pads]
+    base_o, pad_o = old[0], old[1:]
+    base_n, pad_n = new[0], new[1:]
+    # The BASELINE is asserted at the point of use (#805), above the FIRST
+    # `.value` read: a swing measured from or against a refusing reading is
+    # not a number, and an unguarded read raised on the shipped encoding
+    # (TypeError, NO VERDICT) or printed a plausible nan on the other one.
+    readings = [base_o, base_n, *pad_o, *pad_n]
+    if any(not e.ok or e.value is None or not math.isfinite(e.value)
+           for e in readings):
+        bad = next(e for e in readings
+                   if not e.ok or e.value is None or not math.isfinite(e.value))
+        check_refused(
+            f"defect 1's prepend-silence invariance baseline refused "
+            f"({bad.reason or 'no reason given'}) -- the swing was NOT "
+            "measured, so neither 'shipped really moves' nor 'repaired is "
+            "invariant' was checked")
+        return
+    for pad_ms, o, n in zip(pads, old, new):
+        print(f"      prepend {pad_ms:6.1f} ms of silence:  shipped {o.value:8.3f} dB"
+              f"   repaired {n.value:8.3f} dB")
+    worst_o = max(abs(e.value - base_o.value) for e in pad_o)
+    worst_n = max(abs(e.value - base_n.value) for e in pad_n)
+    print(f"      shipped swings {worst_o:.3f} dB from prepended silence alone;"
+          f" repaired {worst_n:.6f} dB")
+    print("   On a synthetic strike the swing is under a dB; on the real congas above")
+    print("   it is 3.5-4.8 dB, because how much it is worth depends on how little")
+    print("   energy the numerator band holds -- which is the sound, not the filter.")
+    check(worst_o > 0.1, "the shipped path really was non-invariant (this is the defect)")
+    check(worst_n < 0.01, "the repaired path is invariant to prepended silence")
 
 
 def defect_1(voices):
@@ -113,30 +193,7 @@ def defect_1(voices):
     print("   The strike starts 7 samples in, which is where the Fischer references")
     print("   start: inside the clamp. Prepending silence takes it OUT of the clamp,")
     print("   and the shipped number moves although the sound did not.")
-    x = np.zeros(int(0.6 * SR))
-    t = np.arange(len(x) - 7) / SR
-    x[7:] = np.exp(-t / 0.040) * np.sin(2 * math.pi * 220 * t)
-    for pad_ms in (0.0, 0.5, 5.0, 500.0):
-        p = np.concatenate([np.zeros(int(pad_ms * 1e-3 * SR)), x])
-        o = split_db_shipped(prepare_shipped(p, SR), SR, "LC", 0.0, 0.150)
-        n = rc.DRUM_PLAN["LC"][1][2](rc.prepare(p, SR), SR)
-        print(f"      prepend {pad_ms:6.1f} ms of silence:  shipped {o.value:8.3f} dB"
-              f"   repaired {n.value:8.3f} dB")
-    base_o = split_db_shipped(prepare_shipped(x, SR), SR, "LC", 0.0, 0.150).value
-    worst_o = max(abs(split_db_shipped(prepare_shipped(
-        np.concatenate([np.zeros(int(p * 1e-3 * SR)), x]), SR), SR, "LC", 0.0, 0.150).value - base_o)
-        for p in (0.5, 5.0, 500.0))
-    base_n = rc.DRUM_PLAN["LC"][1][2](rc.prepare(x, SR), SR).value
-    worst_n = max(abs(rc.DRUM_PLAN["LC"][1][2](rc.prepare(
-        np.concatenate([np.zeros(int(p * 1e-3 * SR)), x]), SR), SR).value - base_n)
-        for p in (0.5, 5.0, 500.0))
-    print(f"      shipped swings {worst_o:.3f} dB from prepended silence alone;"
-          f" repaired {worst_n:.6f} dB")
-    print("   On a synthetic strike the swing is under a dB; on the real congas above")
-    print("   it is 3.5-4.8 dB, because how much it is worth depends on how little")
-    print("   energy the numerator band holds -- which is the sound, not the filter.")
-    check(worst_o > 0.1, "the shipped path really was non-invariant (this is the defect)")
-    check(worst_n < 0.01, "the repaired path is invariant to prepended silence")
+    _prepend_silence_invariance()
 
 
 # ===========================================================================
@@ -345,6 +402,36 @@ def _decay(tau, seconds, f=220.0, sr=SR):
     return np.exp(-t / tau) * np.sin(2 * math.pi * f * t)
 
 
+def _trailing_silence_invariance(measure=am.schroeder_t20,
+                                 pads=(0.2, 1.7, 5.0),
+                                 tau=0.040, dur=0.500):
+    """Trailing silence is EXACTLY invariant on a record that does contain
+    its decay -- #139's repaired verdict, re-checked every run.
+
+    The BASELINE is asserted at the point of use (#805): if it refuses, the
+    comparison is REFUSED, never FAILED. Before the repair an unguarded
+    `g.value - base.value` raised TypeError on the shipped `Estimate(None,
+    False, ...)` encoding (NO VERDICT), and a nan-carrying refusal made
+    `abs(nan - base) < 1e-12` silently False -- every pad row a wrong
+    FAILED verdict with a plausible-looking cause. `measure` is injectable
+    so `tools/probes/test_estimator_defects.py` can rig the BASELINE -- not
+    the perturbed reading -- to refuse."""
+    base = measure(_decay(tau, dur), SR)
+    if not base.ok or base.value is None or not math.isfinite(base.value):
+        check_refused(
+            f"the trailing-silence invariance BASELINE (schroeder_t20 of a "
+            f"clean {dur * 1e3:.0f} ms, tau {tau * 1e3:.0f} ms decay) refused "
+            f"({base.reason or 'no reason given'}) -- the invariance below was "
+            "NOT compared against it")
+        return
+    for pad_s in pads:
+        g = measure(np.concatenate([_decay(tau, dur),
+                                    np.zeros(int(pad_s * SR))]), SR)
+        check(g.ok and abs(g.value - base.value) < 1e-12,
+              f"{pad_s} s of trailing silence is EXACTLY invariant on a record "
+              "that does contain its decay")
+
+
 def defect_5():
     print("\n" + "=" * 78)
     print("5. #139 -- appending zeros turned a refusal into an accepted wrong answer")
@@ -376,13 +463,7 @@ def defect_5():
     check(not am.schroeder_t20(cut, SR).ok,
           "and refuses the unpadded cut it is made of -- the SAME verdict, which "
           "is the invariance")
-    base = am.schroeder_t20(_decay(0.040, 0.500), SR)
-    for pad_s in (0.2, 1.7, 5.0):
-        g = am.schroeder_t20(np.concatenate([_decay(0.040, 0.500),
-                                             np.zeros(int(pad_s * SR))]), SR)
-        check(g.ok and abs(g.value - base.value) < 1e-12,
-              f"{pad_s} s of trailing silence is EXACTLY invariant on a record "
-              "that does contain its decay")
+    _trailing_silence_invariance()
 
     print("\n   WHY THE OTHER TWO CANDIDATES IN #139 WERE NOT CHOSEN. Both were")
     print("   measured; the numbers are the reason, not a preference.\n")
@@ -552,13 +633,21 @@ def main() -> int:
     defect_5()
     defect_6()
     print("\n" + "=" * 78)
+    # Both summaries print before `verdict_exit_code()` decides the exit:
+    # a run with refusals AND fails must not name only the refusals -- the
+    # end-of-run summary is the part a reader quotes (#805 review).
+    if refusals:
+        print(f"{len(refusals)} check(s) REFUSED -- a precondition was not met, "
+              "so the comparison(s) above were not made:")
+        for r in refusals:
+            print(f"   {r}")
     if fails:
         print(f"{len(fails)} check(s) FAILED:")
         for f in fails:
             print(f"   {f}")
-        return 1
-    print("every repaired invariant holds, and every defect is still reproducible above")
-    return 0
+    if not refusals and not fails:
+        print("every repaired invariant holds, and every defect is still reproducible above")
+    return verdict_exit_code()
 
 
 if __name__ == "__main__":
