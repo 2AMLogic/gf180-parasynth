@@ -9,27 +9,40 @@ CLI exit path `make verify` invokes, and carries controls proving the gate
 CAN fail -- a doctored contract set, a site refusing with an undeclared
 status, or a pin emptied to accept such a site must each turn check() red.
 A gate that cannot fail is not a gate.
+
+Issue #868 re-keyed sites_outside_set from (file, line) pairs -- which reds
+on any unrelated edit above the pinned lines -- to
+(file, enclosing function, status) counts.  The #868 controls live here too:
+Control A (a line shift above the sites stays green) was run RED against the
+old pin before the re-key landed; Controls B (a new undeclared site, a third
+refusal in the pinned function) prove the re-key opened no hole.
 """
 from __future__ import annotations
 
+import ast
 import pathlib
 import sys
+import textwrap
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import refusal_exit_census as census_mod                     # noqa: E402
 
-# The documented exception sites (EXPECTED["sites_outside_set"], exit 1).
-VCA_SITES = [("tools/cymbal_vca_drive.py", 1525),
-             ("tools/cymbal_vca_drive.py", 1531)]
+# The documented exception sites, as (file, enclosing function, line) --
+# the shape handler_census produces.  The PIN is keyed on
+# (file, function, status, count) since #868, so the line here is
+# informational; the function is what the pin reads.
+VCA_SITES = [("tools/cymbal_vca_drive.py", "main", 1525),
+             ("tools/cymbal_vca_drive.py", "main", 1531)]
 
 
 def _result(no_evidence, handler_sites=None, constant_sites=None) -> dict:
     """A minimal census()-shaped result for the comparison logic.  Sites are
-    (file, line) pairs as handler_census/constant_census produce them."""
+    (file, function, line) triples as handler_census/constant_census
+    produce them (constant sites are module-level by construction)."""
     codes: dict[int, dict] = {}
     for c, sites in (handler_sites or {}).items():
         codes[c] = {"handler_sites": sites,
-                    "handler_files": sorted({f for f, _ in sites}),
+                    "handler_files": sorted({f for f, _, _ in sites}),
                     "constant_sites": []}
     for c, sites in (constant_sites or {}).items():
         codes.setdefault(c, {"handler_sites": [], "handler_files": [],
@@ -104,8 +117,8 @@ def test_control_a_line_shift_above_the_sites_stays_green(monkeypatch):
     one inserted comment line shifts both down one -- must leave --check
     green.  On the line-keyed pin this exact census was RED while the exit
     contract was untouched: the defect this issue repairs."""
-    shifted = [("tools/cymbal_vca_drive.py", 1526),
-               ("tools/cymbal_vca_drive.py", 1532)]
+    shifted = [("tools/cymbal_vca_drive.py", "main", 1526),
+               ("tools/cymbal_vca_drive.py", "main", 1532)]
     monkeypatch.setattr(census_mod, "census",
                         lambda: _result([2, 3, 126], handler_sites={1: shifted}))
     ok, lines = census_mod.check()
@@ -119,7 +132,7 @@ def test_control_b_new_undeclared_site_elsewhere_turns_check_red(monkeypatch):
     monkeypatch.setattr(census_mod, "census",
                         lambda: _result([2, 3, 126],
                                         handler_sites={1: VCA_SITES,
-                                                       4: [("tools/exit_probe_other.py", 40)]}))
+                                                       4: [("tools/exit_probe_other.py", "run", 40)]}))
     ok, lines = census_mod.check()
     assert not ok, "\n".join(lines)
     assert any("outside the declared set" in ln for ln in lines)
@@ -130,6 +143,35 @@ def test_control_b_third_refusal_in_the_pinned_function_turns_check_red(monkeypa
     function must turn --check red -- the count is part of the pin."""
     monkeypatch.setattr(census_mod, "census",
                         lambda: _result([2, 3, 126],
-                                        handler_sites={1: VCA_SITES + [("tools/cymbal_vca_drive.py", 1600)]}))
+                                        handler_sites={1: VCA_SITES + [("tools/cymbal_vca_drive.py", "main", 1600)]}))
     ok, lines = census_mod.check()
     assert not ok, "\n".join(lines)
+
+
+def test_module_level_handler_keys_as_module_not_crash():
+    """Edge case (issue #868): a refusal handler with no enclosing def keys
+    as "<module>", a distinct key that cannot collide with a function name."""
+    tree = ast.parse(textwrap.dedent("""
+        try:
+            risky()
+        except Refused:
+            pass
+    """))
+    found = census_mod._handlers_in_scope(tree)
+    assert [func for func, _ in found] == [census_mod.MODULE_LEVEL]
+
+
+def test_nested_function_handler_keys_on_the_innermost_def():
+    """Edge case (issue #868): a handler inside a nested def keys on the
+    innermost function, not the outer one."""
+    tree = ast.parse(textwrap.dedent("""
+        def outer():
+            def inner():
+                try:
+                    risky()
+                except Refused:
+                    return 4
+            return inner
+    """))
+    found = census_mod._handlers_in_scope(tree)
+    assert [func for func, _ in found] == ["inner"]
