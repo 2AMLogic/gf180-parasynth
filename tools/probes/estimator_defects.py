@@ -220,10 +220,11 @@ def inharmonic_shipped(x, f0, sr, guard=5):
     return 10.0 * math.log10(max(p[~harm].sum(), 1e-300) / p.sum())
 
 
-def defect_2():
+def defect_2(inharmonic=None):
     print("\n" + "=" * 78)
     print("2. #119 / #92 -- the aliasing floor is not -54 dB, it is whatever f0 makes it")
     print("=" * 78)
+    inharmonic = inharmonic or am.inharmonic_fraction_db
     n = int(0.5 * SR)
     print(f"   {'f0':>10}{'on a bin':>10}{'HANN floor':>12}{'BH4 floor':>12}"
           f"{'HANN answer':>13}{'BH4 answer':>12}{'answer moved':>14}")
@@ -232,9 +233,9 @@ def defect_2():
         onbin = abs(f0 / (SR / n) - round(f0 / (SR / n))) < 1e-9
         free, naive = _addsaw(f0, n), _naivesaw(f0, n)
         fh = inharmonic_shipped(free, f0, SR)
-        fb = am.inharmonic_fraction_db(free, f0, SR)
+        fb = inharmonic(free, f0, SR)
         ah = inharmonic_shipped(naive, f0, SR)
-        ab = am.inharmonic_fraction_db(naive, f0, SR)
+        ab = inharmonic(naive, f0, SR)
         swing.append(fh)
         print(f"   {f0:>10.3f}{str(onbin):>10}{fh:>12.2f}{fb.value:>12.2f}"
               f"{ah:>13.2f}{ab.value:>12.2f}{ab.value-ah:>14.2f}")
@@ -302,6 +303,41 @@ def tone_ratio_shipped(x, sr, hz_num, hz_den):
     return 20.0 * math.log10(a.value / b.value)
 
 
+def _defect4_row(label, y, sr):
+    """One comparison row of defect 4, extracted so the control can rig the
+    repaired-side estimators to refuse without the corpus (#843)."""
+    lo, hi = rc.find_line(y, sr, 540.0), rc.find_line(y, sr, 800.0)
+    old = tone_ratio_shipped(y, sr, 800.0, 540.0)
+    new = rc.tone_ratio_db(y, sr, 800.0, 540.0)
+    d_old = tone_ratio_shipped(y, sr, 260.0, 800.0)
+    d_new = rc.difference_tone_db(y, sr, 800.0, 540.0)
+    print(f"   {label}")
+    print(f"      lines found        {lo.value:8.2f} Hz ({lo.detail['offset_pct']:+5.2f} %"
+          f" off 540)   {hi.value:8.2f} Hz ({hi.detail['offset_pct']:+5.2f} % off 800)")
+    print(f"      partial balance    nominal probe {old:+8.2f} dB"
+          f"   measured lines {new.value:+8.2f} dB   moved {new.value-old:+6.2f}")
+    print(f"      difference tone    nominal 260 Hz {d_old:+8.2f} dB"
+          f"   at {d_new.detail['diff_hz']:6.2f} Hz {d_new.value:+8.2f} dB"
+          f"   moved {d_new.value-d_old:+6.2f}")
+    print(f"                         its own leakage floor {d_new.detail['floor_db']:+8.2f} dB,"
+          f" headroom {d_new.detail['headroom_db']:.1f} dB")
+
+
+def _defect4_synthetic_checks(tone_ratio=None, difference_tone=None):
+    """Defect 4's closing verdicts on a synthetic two-partial strike,
+    extracted so the control can rig either estimator to refuse (#843)."""
+    tone_ratio = tone_ratio or rc.tone_ratio_db
+    difference_tone = difference_tone or rc.difference_tone_db
+    t = np.arange(int(0.1 * SR)) / SR
+    two = 1.0 * np.sin(2 * math.pi * 823.70 * t) + 0.5 * np.sin(2 * math.pi * 558.35 * t)
+    check(abs(tone_ratio_shipped(two, SR, 800.0, 540.0) - 20 * math.log10(2.0)) > 1.0,
+          "the nominal probe is wrong on two partials at the machine's own frequencies")
+    check(abs(tone_ratio(two, SR, 800.0, 540.0).value - 20 * math.log10(2.0)) < 0.2,
+          "finding the lines gets the closed-form answer")
+    check(not difference_tone(two, SR, 800.0, 540.0).ok,
+          "and a difference tone that is not there is refused, not reported")
+
+
 def defect_4():
     print("\n" + "=" * 78)
     print("4. #108 -- the cowbell was probed at 540 / 800 Hz. Its lines are elsewhere.")
@@ -310,31 +346,10 @@ def defect_4():
     our_x, our_sr = rc.render_drum_solo("CB")
     for label, x, sr in (("reference " + rel, ref_x, ref_sr), ("ours", our_x, our_sr)):
         y = rc.window(rc.prepare(x, sr), sr, 0.0, 0.100)
-        lo, hi = rc.find_line(y, sr, 540.0), rc.find_line(y, sr, 800.0)
-        old = tone_ratio_shipped(y, sr, 800.0, 540.0)
-        new = rc.tone_ratio_db(y, sr, 800.0, 540.0)
-        d_old = tone_ratio_shipped(y, sr, 260.0, 800.0)
-        d_new = rc.difference_tone_db(y, sr, 800.0, 540.0)
-        print(f"   {label}")
-        print(f"      lines found        {lo.value:8.2f} Hz ({lo.detail['offset_pct']:+5.2f} %"
-              f" off 540)   {hi.value:8.2f} Hz ({hi.detail['offset_pct']:+5.2f} % off 800)")
-        print(f"      partial balance    nominal probe {old:+8.2f} dB"
-              f"   measured lines {new.value:+8.2f} dB   moved {new.value-old:+6.2f}")
-        print(f"      difference tone    nominal 260 Hz {d_old:+8.2f} dB"
-              f"   at {d_new.detail['diff_hz']:6.2f} Hz {d_new.value:+8.2f} dB"
-              f"   moved {d_new.value-d_old:+6.2f}")
-        print(f"                         its own leakage floor {d_new.detail['floor_db']:+8.2f} dB,"
-              f" headroom {d_new.detail['headroom_db']:.1f} dB")
+        _defect4_row(label, y, sr)
     print("   The difference tone moved by tens of dB on BOTH sides: a rectangular")
     print("   projection at 260 Hz was reading the two partials' leakage, not a tone.")
-    t = np.arange(int(0.1 * SR)) / SR
-    two = 1.0 * np.sin(2 * math.pi * 823.70 * t) + 0.5 * np.sin(2 * math.pi * 558.35 * t)
-    check(abs(tone_ratio_shipped(two, SR, 800.0, 540.0) - 20 * math.log10(2.0)) > 1.0,
-          "the nominal probe is wrong on two partials at the machine's own frequencies")
-    check(abs(rc.tone_ratio_db(two, SR, 800.0, 540.0).value - 20 * math.log10(2.0)) < 0.2,
-          "finding the lines gets the closed-form answer")
-    check(not rc.difference_tone_db(two, SR, 800.0, 540.0).ok,
-          "and a difference tone that is not there is refused, not reported")
+    _defect4_synthetic_checks()
 
 
 # ===========================================================================

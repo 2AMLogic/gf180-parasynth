@@ -54,6 +54,7 @@ sys.path.insert(0, str(ROOT / "tools" / "probes"))
 
 import audio_measure as am                                          # noqa: E402
 import estimator_defects as ed                                      # noqa: E402
+import run_case as rc                                               # noqa: E402
 
 SR = 48000
 
@@ -294,3 +295,165 @@ def test_no_estimate_construction_in_model_carries_a_nan():
                     offenders.append(f"{path.name}:L{node.lineno}")
     assert offenders == [], \
         f"shipped refusals must be None-encoded; nan-carrying Estimate(s): {offenders}"
+
+
+# ---------------------------------------------------------------------------
+# 4. the five remaining unguarded `.value` sites, ruled per site (#843)
+# ---------------------------------------------------------------------------
+def test_defect2_row_refusal_none_encoded_is_refused_not_typeerror(
+        _reset_verdict_lists, capsys):
+    """SITE a99a408e :183, defect 2's table row (`fb.value`, `ab.value`,
+    `ab.value-ah`). INJECTED DEFECT: the row's estimator refuses,
+    None-encoded. Before the repair the print raised TypeError on the
+    refusal's None value -- and on origin/main @ ade2e9ff this was not
+    latent: the validated-domain headroom gate makes the alias-free `fb`
+    refuse by design, so the probe died at its first row with NO VERDICT
+    for every section after it. One refusal per f0 row, no row printed,
+    the floor-vs-answer verdict not run against a reading that does not
+    exist."""
+    def refusing(x, f0, sr, **kw):
+        return am._fail("injected: the floor row refuses", f0=f0)
+    ed.defect_2(inharmonic=refusing)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 7, "one refusal per f0 row"
+    assert ed.fails == []
+    assert out.count("REFUSED") == 7
+    assert "answer moved" in out, "the header printed, no row under it did"
+    assert "nan" not in out, "no plausible nan row may print"
+    assert "the measured floor equals" not in out, "that verdict did not run"
+
+
+def test_defect2_row_refusal_nan_carrying_is_refused_not_a_plausible_row(
+        _reset_verdict_lists, capsys):
+    """The opposite encoding at the same site: an ok-carrying nan sails past
+    an `.ok`-only guard and used to print a plausible `nan` in the table and
+    make `ab.value-ah` nan. The isfinite leg must catch it."""
+    def nan_row(x, f0, sr, **kw):
+        return am.Estimate(float("nan"), True, "", {}, None)
+    ed.defect_2(inharmonic=nan_row)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 7
+    assert ed.fails == []
+    assert "nan" not in out
+
+
+def test_defect2_runs_green_on_the_real_estimators(_reset_verdict_lists, capsys):
+    """The boundary control (the AC5 shape): no injection, the real
+    estimator. defect 2's `fb` column asks for the floor ON PURPOSE
+    (`min_headroom_db=None` -- the alias-free control whose whole point is
+    that the reading IS the floor), so nothing refuses, every row prints,
+    and the floor-vs-answer verdict runs and holds. This control is the one
+    that would have caught the live TypeError: it needs no corpus, so it
+    runs wherever the tests run."""
+    ed.defect_2()
+    out = capsys.readouterr().out
+    assert ed.refusals == []
+    assert ed.fails == []
+    assert "answer moved" in out
+    assert "the Hann floor swings" in out
+
+
+def test_defect4_row_refusal_is_refused_not_typeerror(
+        _reset_verdict_lists, capsys, monkeypatch):
+    """SITES a99a408e :265 / :268, defect 4's per-signal rows (`new.value`,
+    `new.value-old`, `d_new.value`, `d_new.value-d_old`, and the same
+    statement's `lo.value` / `hi.value` prints the enumeration did not name
+    but the same guard protects -- a guard below that print would be
+    defect 1's defeat note again). INJECTED DEFECT: `find_line` refuses,
+    None-encoded -- the shipped encoding -- and `tone_ratio_db` and
+    `difference_tone_db` inherit the refusal through it. Covers defect 4's
+    rows: REFUSED once per row, no row printed."""
+    def refusing_find_line(x, sr, hz, *, search=0.1):
+        return am._fail("injected: no line here", nominal_hz=hz)
+    monkeypatch.setattr(rc, "find_line", refusing_find_line)
+    t = np.arange(int(0.1 * SR)) / SR
+    two = 1.0 * np.sin(2 * math.pi * 823.70 * t) + 0.5 * np.sin(2 * math.pi * 558.35 * t)
+    ed._defect4_row("ours", two, SR)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 1
+    assert ed.fails == []
+    assert "REFUSED" in out
+    assert "partial balance" not in out, "no row was printed"
+    assert "nan" not in out
+
+
+def test_defect4_row_nan_carrying_reading_is_refused_not_printed(
+        _reset_verdict_lists, capsys, monkeypatch):
+    """The opposite encoding at the same site: a nan-carrying ok=True
+    `tone_ratio_db` among healthy neighbours printed a plausible `+nan` in
+    the report line and made `new.value-old` nan. Covers defect 4's rows on
+    the isfinite leg."""
+    def nan_ratio(x, sr, hz_hi, hz_lo, **kw):
+        return am.Estimate(float("nan"), True, "", {}, None)
+    monkeypatch.setattr(rc, "tone_ratio_db", nan_ratio)
+    t = np.arange(int(0.1 * SR)) / SR
+    two = 1.0 * np.sin(2 * math.pi * 823.70 * t) + 0.5 * np.sin(2 * math.pi * 558.35 * t)
+    ed._defect4_row("ours", two, SR)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 1
+    assert ed.fails == []
+    assert "nan" not in out
+
+
+def test_closed_form_check_none_encoded_refusal_is_refused_not_typeerror(
+        _reset_verdict_lists, capsys):
+    """SITE a99a408e :277 -- the one with a verdict downstream: `.value` was
+    read INSIDE the `check(...)` predicate itself. INJECTED DEFECT:
+    None-encoded refusal. Before the repair `abs(None - ...) < 0.2` raised
+    TypeError -- NO VERDICT. REFUSED is required, and the neighbouring
+    difference-tone verdict, which is independent, must still run."""
+    def refusing(*a, **k):
+        return am._fail("injected: the closed-form reading refuses")
+    ed._defect4_synthetic_checks(tone_ratio=refusing)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 1
+    assert ed.fails == []
+    assert "REFUSED" in out
+    assert "finding the lines gets the closed-form answer" not in out, \
+        "the check did not run against a reading that does not exist"
+    assert "a difference tone that is not there is refused" in out, \
+        "the independent verdict still ran"
+
+
+def test_closed_form_check_nan_carrying_reading_is_refused_not_failed(
+        _reset_verdict_lists, capsys):
+    """The encoding this site is filed for: a nan-carrying reading made
+    `abs(nan - ...) < 0.2` silently False -- a FAILED verdict where REFUSED
+    is the truth, the exact pathology #805 was filed for, now with a
+    verdict downstream. Covers defect 4's closed-form check."""
+    def nan_ratio(*a, **k):
+        return am.Estimate(float("nan"), True, "", {}, None)
+    ed._defect4_synthetic_checks(tone_ratio=nan_ratio)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 1
+    assert ed.fails == [], "the predicate must not turn a nan into FAILED"
+    assert "FAIL" not in out
+
+
+def test_tone_ratio_shipped_exhibit_still_wrong_on_two_partials():
+    """SITE a99a408e :245, LEFT DELIBERATELY UNGUARDED -- the
+    exhibit-integrity AC. `tone_ratio_shipped` is a faithful pre-#108
+    reimplementation, and it must still reproduce the wrong answer that
+    makes it an exhibit: on two partials at the machine's own frequencies
+    the rectangular projection at the nominal points reads their leakage,
+    more than a dB off the closed form, and returns a plain float."""
+    t = np.arange(int(0.1 * SR)) / SR
+    two = 1.0 * np.sin(2 * math.pi * 823.70 * t) + 0.5 * np.sin(2 * math.pi * 558.35 * t)
+    old = ed.tone_ratio_shipped(two, SR, 800.0, 540.0)
+    assert isinstance(old, float)
+    assert abs(old - 20 * math.log10(2.0)) > 1.0, \
+        "the exhibit no longer exhibits the defect it exists to keep reproducible"
+
+
+def test_tone_ratio_shipped_exhibit_still_raises_on_a_refusing_reading(
+        monkeypatch):
+    """The other facet of the same AC: the exhibit is a faithful copy, so a
+    refusing `tone_amplitude` still raises TypeError exactly as the shipped
+    probe did -- NO VERDICT was the shipped behaviour, and the exhibit
+    keeps it. If a later edit 'fixes' the exhibit this goes red: the crash
+    is pinned behaviour, not an accident."""
+    def refusing(x, hz, sr, **kw):
+        return am._fail("injected: the shipped projection refuses")
+    monkeypatch.setattr(am, "tone_amplitude", refusing)
+    with pytest.raises(TypeError):
+        ed.tone_ratio_shipped(np.ones(int(0.1 * SR)), SR, 800.0, 540.0)
