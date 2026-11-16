@@ -69,10 +69,15 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
 def test_makefile_recipe_returns_only_live_lines(tmp_path):
     """The shared parser drops comment lines, not just collects them. A
     control disabled the ordinary debugging way -- `#` after the leading tab,
-    invocation text intact -- never runs: GNU make drops the line and exits 0
-    (issue #855). The substring assertions above are defeater-resistant only
-    because this filter sits in the parser both suites share; in raw recipe
-    text the disabled invocation would still match."""
+    invocation text intact -- never runs. The failure mode depends on the
+    line's position: a *final* recipe line is dropped silently (rc 0, one
+    entry gone), while a *mid-recipe* line -- this fixture's shape -- ends
+    the command at the `#` and fails loudly (`Error 127`), dropping every
+    later entry (issue #855). Either way the entry does not run, which is
+    why the filter is right in both cases. The substring assertions above
+    are defeater-resistant only because this filter sits in the parser both
+    suites share; in raw recipe text the disabled invocation would still
+    match."""
     (tmp_path / "Makefile").write_text(
         "t:\n"
         "\t@echo A \\\n"
