@@ -233,10 +233,35 @@ def defect_2(inharmonic=None):
         onbin = abs(f0 / (SR / n) - round(f0 / (SR / n))) < 1e-9
         free, naive = _addsaw(f0, n), _naivesaw(f0, n)
         fh = inharmonic_shipped(free, f0, SR)
-        fb = inharmonic(free, f0, SR)
+        # The alias-free saw's reading IS the floor, so `fb` asks for the
+        # floor ON PURPOSE (`min_headroom_db=None`, the mode the headroom
+        # gate's docstring names for exactly this control). The gate's 6 dB
+        # minimum refuses a reading at its own floor -- which is every row
+        # here -- and this was the one floor-on-purpose caller not updated
+        # when the gate landed (d4c89f03; measure_mono_case, measure_saw_
+        # alias_after_2x and estimator_domains all were): the print below
+        # raised TypeError on the refusal's None and the probe died at its
+        # first row, with NO VERDICT for every section after it (#843).
+        fb = inharmonic(free, f0, SR, min_headroom_db=None)
         ah = inharmonic_shipped(naive, f0, SR)
         ab = inharmonic(naive, f0, SR)
         swing.append(fh)
+        # Guarded ABOVE the first `.value` read, the print included (#805's
+        # defeat note): a None-encoded refusal raised TypeError at the
+        # print, a nan-carrying one printed a plausible nan row -- and both
+        # would have run the floor-vs-answer verdict against a reading that
+        # does not exist.
+        readings = (fb, ab)
+        bad = next((e for e in readings
+                    if not e.ok or e.value is None or not math.isfinite(e.value)),
+                   None)
+        if bad is not None:
+            check_refused(
+                f"f0 {f0}: the inharmonic-floor row refused "
+                f"({bad.reason or 'no reason given'}) -- no row was printed "
+                "and the floor-vs-answer verdict did not run against a "
+                "reading that does not exist")
+            continue
         print(f"   {f0:>10.3f}{str(onbin):>10}{fh:>12.2f}{fb.value:>12.2f}"
               f"{ah:>13.2f}{ab.value:>12.2f}{ab.value-ah:>14.2f}")
         check(abs(fb.detail["headroom_db"]) < 1.0,
@@ -299,18 +324,47 @@ def defect_3():
 # 4. #108 -- a rig that names a frequency instead of finding one
 # ===========================================================================
 def tone_ratio_shipped(x, sr, hz_num, hz_den):
+    """`tone_ratio_db` as it stood before #108: probe the NOMINAL frequency.
+
+    Deliberately UNGUARDED (#843, docs/verification-rules.md rule 8's stated
+    reason): the exhibit's unguarded `.value` reads are part of what it
+    exhibits. On a refusing reading the shipped probe raised TypeError --
+    NO VERDICT -- and on two partials a rectangular projection at the
+    nominal points reads the leakage between them for an answer. Guarding
+    these reads would make the exhibit refuse where the shipped code
+    crashed, and it would no longer be the code that was wrong.
+    `test_estimator_defects.py` pins the faithfulness both ways: the wrong
+    answer on two partials, and the TypeError on a refusing reading."""
     a, b = am.tone_amplitude(x, hz_num, sr), am.tone_amplitude(x, hz_den, sr)
     return 20.0 * math.log10(a.value / b.value)
 
 
 def _defect4_row(label, y, sr):
     """One comparison row of defect 4, extracted so the control can rig the
-    repaired-side estimators to refuse without the corpus (#843)."""
+    repaired-side estimators to refuse without the corpus (#843).
+
+    The guard sits ABOVE the first `.value` read -- the print it protects,
+    the defeat defect 1's own note describes, and it covers `lo.value` and
+    `hi.value` too, which the issue's enumeration did not name but the same
+    statement prints. The EXHIBIT calls stay outside the guard on purpose:
+    `tone_ratio_shipped` raising TypeError on a refusing shipped reading is
+    the shipped behaviour (see its docstring); what the guard owes the
+    reader is that a refusal of the repaired machinery refuses the ROW
+    instead of crashing the probe or printing a plausible nan."""
     lo, hi = rc.find_line(y, sr, 540.0), rc.find_line(y, sr, 800.0)
     old = tone_ratio_shipped(y, sr, 800.0, 540.0)
     new = rc.tone_ratio_db(y, sr, 800.0, 540.0)
     d_old = tone_ratio_shipped(y, sr, 260.0, 800.0)
     d_new = rc.difference_tone_db(y, sr, 800.0, 540.0)
+    readings = (lo, hi, new, d_new)
+    bad = next((e for e in readings
+                if not e.ok or e.value is None or not math.isfinite(e.value)), None)
+    if bad is not None:
+        check_refused(
+            f"defect 4's row for {label} refused ({bad.reason or 'no reason given'})"
+            " -- no row was printed and no ratio moved against a reading "
+            "that does not exist")
+        return
     print(f"   {label}")
     print(f"      lines found        {lo.value:8.2f} Hz ({lo.detail['offset_pct']:+5.2f} %"
           f" off 540)   {hi.value:8.2f} Hz ({hi.detail['offset_pct']:+5.2f} % off 800)")
@@ -325,15 +379,32 @@ def _defect4_row(label, y, sr):
 
 def _defect4_synthetic_checks(tone_ratio=None, difference_tone=None):
     """Defect 4's closing verdicts on a synthetic two-partial strike,
-    extracted so the control can rig either estimator to refuse (#843)."""
+    extracted so the control can rig either estimator to refuse (#843).
+
+    The closed-form check used to read `.value` INSIDE the `check(...)`
+    predicate itself: a nan-carrying reading made `abs(nan - ...) < 0.2`
+    silently False -- a FAILED verdict where REFUSED is the truth, the
+    exact shape #805 was filed for, now with a verdict downstream -- and a
+    None-encoded one raised TypeError with no verdict at all. The guard
+    runs before the predicate. The neighbouring difference-tone verdict is
+    independent of this reading, so it runs either way: a refusal here must
+    not quietly widen into skipping it."""
     tone_ratio = tone_ratio or rc.tone_ratio_db
     difference_tone = difference_tone or rc.difference_tone_db
     t = np.arange(int(0.1 * SR)) / SR
     two = 1.0 * np.sin(2 * math.pi * 823.70 * t) + 0.5 * np.sin(2 * math.pi * 558.35 * t)
     check(abs(tone_ratio_shipped(two, SR, 800.0, 540.0) - 20 * math.log10(2.0)) > 1.0,
           "the nominal probe is wrong on two partials at the machine's own frequencies")
-    check(abs(tone_ratio(two, SR, 800.0, 540.0).value - 20 * math.log10(2.0)) < 0.2,
-          "finding the lines gets the closed-form answer")
+    closed = tone_ratio(two, SR, 800.0, 540.0)
+    if not closed.ok or closed.value is None or not math.isfinite(closed.value):
+        check_refused(
+            "defect 4's closed-form answer check refused "
+            f"({closed.reason or 'no reason given'}) -- the two-partial "
+            "strike was NOT measured, so 'finding the lines gets the "
+            "closed-form answer' was neither confirmed nor denied")
+    else:
+        check(abs(closed.value - 20 * math.log10(2.0)) < 0.2,
+              "finding the lines gets the closed-form answer")
     check(not difference_tone(two, SR, 800.0, 540.0).ok,
           "and a difference tone that is not there is refused, not reported")
 

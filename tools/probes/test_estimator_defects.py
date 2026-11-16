@@ -409,8 +409,9 @@ def test_closed_form_check_none_encoded_refusal_is_refused_not_typeerror(
     assert len(ed.refusals) == 1
     assert ed.fails == []
     assert "REFUSED" in out
-    assert "finding the lines gets the closed-form answer" not in out, \
-        "the check did not run against a reading that does not exist"
+    assert out.count("finding the lines gets the closed-form answer") == 1, \
+        "the phrase may appear only in the refusal naming what was not " \
+        "checked -- never as a verdict line against a nonexistent reading"
     assert "a difference tone that is not there is refused" in out, \
         "the independent verdict still ran"
 
