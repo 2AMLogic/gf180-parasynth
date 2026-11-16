@@ -103,6 +103,7 @@ import drums_fx as dx                                                # noqa: E40
 import manifest                                                      # noqa: E402
 import provenance                                                    # noqa: E402
 import provenance_retention as pr                                    # noqa: E402
+import run_all                                                       # noqa: E402
 import sound_report as sr                                            # noqa: E402
 
 SOLO_SECONDS = 2.2
@@ -605,7 +606,14 @@ def ledger_for(root, seed: bool = True) -> pathlib.Path:
     p = pathlib.Path(root) / "bounds-history.json"
     if seed and not p.exists() and BOUNDS_TRACKED.exists():
         p.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(BOUNDS_TRACKED, p)
+        # Refuse here on a tracked ledger that no longer parses (#881),
+        # naming the tracked file: a truncated one needs `git checkout`, and
+        # copying the damage into scratch would have accept() die on a path
+        # that is not the file that is broken.
+        run_all.write_json_atomic(
+            str(p), manifest.load_json_refused(BOUNDS_TRACKED,
+                                               "tracked bound ledger"),
+            sort_keys=True)
     return p
 
 
@@ -938,7 +946,7 @@ def _read(root, kind: str, ident: str) -> dict:
     p = pathlib.Path(root) / name[0] / ident / name[1]
     if not p.exists():
         raise manifest.Refused(f"no {kind} record at {p}")
-    return json.loads(p.read_text())
+    return manifest.load_json_refused(p, f"{kind} record")
 
 
 def main(argv=None) -> int:
@@ -968,16 +976,30 @@ def main(argv=None) -> int:
 
     try:
         rc = _dispatch(a, root, ap)
+        if a.record_bounds:
+            _record_bounds(root)
     except manifest.Refused as e:
         print(f"REFUSED: {e}")
         return 2
-    if a.record_bounds:
-        led = ledger_for(root, seed=False)
-        if led.exists():
-            BOUNDS_TRACKED.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(led, BOUNDS_TRACKED)
-            print(f"recorded {led} -> {BOUNDS_TRACKED.relative_to(ROOT)}")
     return rc
+
+
+def _record_bounds(root) -> None:
+    """Move the scratch ledger over the tracked one -- the only thing that
+    moves the committed record, and a deliberate act that shows up as a diff.
+
+    Atomic and validating (#881): the destination is a file git tracks, so the
+    write goes through `run_all.write_json_atomic` and a kill mid-record
+    leaves the previous complete ledger, never a truncated one; and a scratch
+    ledger a kill already truncated is REFUSED here rather than copied over
+    the good tracked file."""
+    led = ledger_for(root, seed=False)
+    if led.exists():
+        BOUNDS_TRACKED.parent.mkdir(parents=True, exist_ok=True)
+        run_all.write_json_atomic(
+            str(BOUNDS_TRACKED), manifest.load_json_refused(led, "bound ledger"),
+            sort_keys=True)
+        print(f"recorded {led} -> {BOUNDS_TRACKED.relative_to(ROOT)}")
 
 
 def _dispatch(a, root, ap) -> int:

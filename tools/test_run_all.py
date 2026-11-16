@@ -10,7 +10,7 @@ The cases below are the ones that could produce a FALSE GREEN, which is the
 only failure mode of a runner that actually matters.
 """
 from __future__ import annotations
-import json, os, subprocess, sys, textwrap, time, threading
+import json, os, pathlib, subprocess, sys, textwrap, time, threading
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -269,4 +269,14 @@ def test_write_json_atomic_a_failure_before_the_replace_leaves_the_original_inta
     with pytest.raises(RuntimeError):
         ra.write_json_atomic(str(p), {"lost": True})
     assert p.read_bytes() == original
+    assert list(tmp_path.glob("*tmp*")) == []
+
+
+def test_write_json_atomic_passes_default_through_to_json_dump(tmp_path):
+    """#881: manifest's records serialise through its `_canonical` default, so
+    the helper must forward one rather than raise on the first non-native
+    value (or silently change that caller's bytes)."""
+    p = tmp_path / "r.json"
+    ra.write_json_atomic(str(p), {"v": {1, 2}}, sort_keys=True, default=sorted)
+    assert p.read_bytes() == (json.dumps({"v": [1, 2]}, indent=2, sort_keys=True) + "\n").encode()
     assert list(tmp_path.glob("*tmp*")) == []
