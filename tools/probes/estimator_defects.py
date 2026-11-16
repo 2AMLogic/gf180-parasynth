@@ -546,8 +546,8 @@ def defect_5():
 # 6. #150 -- a passband reference that moves with the commanded cutoff
 # ===========================================================================
 def corner_shipped(freqs, g, cut_hz):
-    """`filt_corner` exactly as it stood: -3 dB below the MEDIAN of a band
-    whose top edge is 0.25 * the commanded cutoff."""
+    """`filt_corner` exactly as it stood before #150: -3 dB below the MEDIAN of
+    a band whose top edge is 0.25 * the commanded cutoff."""
     return am.corner_from_curve(freqs, g, ref_band=rc._ref_band(freqs, cut_hz))
 
 
@@ -561,27 +561,27 @@ def defect_6():
     print(f"   an ideal 4-pole |H| = (1+(f/fc)^2)^-2 has its -3 dB point at")
     print(f"   f/fc = {true_ratio:.4f} for EVERY fc. Grid: geomspace("
           f"{F[0]:.0f}, {F[-1]:.0f}, {len(F)}), points {100*(F[1]/F[0]-1):.1f} % apart.\n")
-    print(f"   {'commanded':>10}{'plateau used':>15}{'SHIPPED ratio':>15}{'bias':>9}"
-          f"{'REPAIRED ratio':>16}{'bias':>9}")
+    print(f"   {'commanded':>10}{'plateau used':>15}{'SHIPPED (pre-#150)':>19}"
+          f"{'bias':>9}{'REPAIRED (#150)':>17}{'bias':>9}")
     for fc in (250.0, 400.0, 630.0, 1000.0, 1600.0, 2500.0, 4000.0):
         g = -40.0 * np.log10(1.0 + (F / fc) ** 2)
         old = corner_shipped(F, g, fc)
         new = rc.filt_corner(fc)(F, g)
         print(f"   {fc:9.0f} {old.detail['plateau_db']:+14.3f}"
-              f"{old.value/fc:15.4f}{100*(old.value/fc/true_ratio-1):+8.2f}%"
-              f"{new.value/fc:16.4f}{100*(new.value/fc/true_ratio-1):+8.2f}%")
+              f"{old.value/fc:19.4f}{100*(old.value/fc/true_ratio-1):+8.2f}%"
+              f"{new.value/fc:17.4f}{100*(new.value/fc/true_ratio-1):+8.2f}%")
     print("\n   The plateau is the mechanism: the band's top is 0.25*fc, where a")
     print("   4-pole is 2.58 dB down, and its bottom is pinned at the grid's first")
     print("   point, so the median catches a different droop at every cutoff.")
     print("   A reference 0.90 dB low puts the corner 15 % high; 0.04 dB low, 0.02 %.\n")
     print("   A CONSTANT 16 % tuning error, read back:")
-    print(f"   {'commanded':>10}{'SHIPPED':>12}{'REPAIRED':>12}")
+    print(f"   {'commanded':>10}{'SHIPPED (pre-#150)':>19}{'REPAIRED (#150)':>17}")
     for fc in (250.0, 1000.0, 4000.0):
         ref_g = -40.0 * np.log10(1.0 + (F / fc) ** 2)
         got_g = -40.0 * np.log10(1.0 + (F / (fc * 0.84)) ** 2)
         o = corner_shipped(F, got_g, fc).value / corner_shipped(F, ref_g, fc).value - 1
         n = rc.filt_corner(fc)(F, got_g).value / rc.filt_corner(fc)(F, ref_g).value - 1
-        print(f"   {fc:9.0f}{100*o:11.2f}%{100*n:11.2f}%")
+        print(f"   {fc:9.0f}{100*o:18.2f}%{100*n:16.2f}%")
     print("\n   #150's TWO READINGS, RECONCILED. Both are right; the difference is")
     print("   the grid, which neither number was stated with.\n")
     print(f"   {'grid':<28}{'250 Hz':>9}{'1 kHz':>9}{'4 kHz':>9}   constant-16 % readback")
