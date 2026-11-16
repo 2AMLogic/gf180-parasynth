@@ -303,9 +303,15 @@ def container_progress(cid: str, tail: int = 400) -> str | None:
 
     `docker logs` is the only source that is not behind: the run's log FILE is
     block-buffered and was observed ninety minutes stale on this run.
+
+    No `docker` binary on PATH is "could not tell" (None), like every other
+    way docker fails to answer -- asserted here, not assumed of the machine.
     """
-    p = subprocess.run(["docker", "logs", "--tail", str(tail), cid],
-                       capture_output=True, text=True)
+    try:
+        p = subprocess.run(["docker", "logs", "--tail", str(tail), cid],
+                           capture_output=True, text=True)
+    except FileNotFoundError:
+        return None
     if p.returncode != 0:
         return None
     text = p.stdout + p.stderr

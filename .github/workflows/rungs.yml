@@ -549,6 +549,94 @@ jobs:
       - name: every tools/ test, by directory
         run: python -m pytest tools/ -q
 
+  # The pnr suite, collected as a DIRECTORY (#404, one directory over from
+  # tools/). Before this job, 5 of the 7 pnr/**/test_*.py files on main ran
+  # under `make verify` on a build box and under NO CI job at all -- the same
+  # gap #404 closed for tools/, found the same way: by counting the
+  # hand-maintained list (Makefile:261 names two) against the directory.
+  # A new pnr/**/test_*.py is covered here by EXISTING, with no edit to any
+  # workflow or Makefile. (The Makefile list itself stays untouched: it is the
+  # subject of open operator decision #812, which keeps those two files on
+  # m5a-fast under every option.)
+  #
+  # Measured on the 8-vCPU worker (2026-11-15, origin/main @ 6be93eef):
+  # 197 passed in 0.81 s -- three orders of magnitude under the tools job --
+  # so the 10-minute cap is ~700x the measured runtime, the same headroom
+  # logic the tools job's 60 uses over its ~21 min.
+  #
+  # Default checkout depth: no pnr/ test reads origin/main or computes a
+  # merge-base, unlike tools/test_run_case.py (measured 2026-11-15). No
+  # iverilog or other EDA tool: the suite parses synthetic logs and
+  # monkeypatches its own precondition gates (pnr/klt/ladder_dp/test_run_klt.py
+  # says so in its docstring).
+  #
+  # docker is deliberately NOT installed here. That is a precondition, not an
+  # absence: the hosted ubuntu-24.04 image already provides it, and with
+  # docker hidden from PATH one test errored FileNotFoundError -- it did not
+  # skip -- until container_progress (pnr/shuttle/finish_halfslot.py) learned
+  # to answer None for "docker cannot answer". The precondition is asserted in
+  # the code, so a runner-image change degrades to a handled None, never to a
+  # bare crash.
+  pnr:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy pytest
+      - name: every pnr/ test, by directory
+        run: python -m pytest pnr/ -q
+      # A green run must be capable of being red -- the same control the
+      # `python` job carries for model/, and for the same reason: each mutation
+      # must compile and import, so a failure left after those steps is
+      # evidence the suite detects wrong arithmetic, not that Python rejects
+      # bad syntax.
+      - name: the suite detects wrong arithmetic, not just bad syntax
+        run: |
+          python - <<'PY'
+          import pathlib, subprocess, sys
+          p = pathlib.Path("pnr/shuttle/finish_halfslot.py")
+          orig = p.read_text()
+          # (label, exact source to replace, replacement) -- valid Python that
+          # returns a numerically wrong iteration time.
+          MUTANTS = [
+              ("elapsed seconds off by one",
+               "secs = int(m.group(4)) * 3600 + int(m.group(5)) * 60 + int(m.group(6))",
+               "secs = int(m.group(4)) * 3600 + int(m.group(5)) * 60 + int(m.group(6)) + 1"),
+          ]
+          failures = []
+          for label, old, new in MUTANTS:
+              if old not in orig:
+                  failures.append(f"{label}: anchor text not found -- control is stale")
+                  continue
+              p.write_text(orig.replace(old, new, 1))
+              try:
+                  # 1. it must still be valid Python ...
+                  compile(p.read_text(), str(p), "exec")
+                  # 2. ... and must still import, or we are testing the parser
+                  r = subprocess.run([sys.executable, "-c",
+                                      "import sys; sys.path.insert(0,'pnr/shuttle'); import finish_halfslot"],
+                                     capture_output=True)
+                  if r.returncode != 0:
+                      failures.append(f"{label}: mutant does not import -- tests the parser, not the suite")
+                      continue
+                  # 3. ... and NOW the suite must notice the wrong number.
+                  r = subprocess.run([sys.executable, "-m", "pytest", "pnr/", "-q"],
+                                     capture_output=True)
+                  if r.returncode == 0:
+                      failures.append(f"{label}: suite passed with wrong arithmetic")
+                  else:
+                      print(f"  caught: {label}")
+              finally:
+                  p.write_text(orig)
+          if failures:
+              sys.exit("negative control failed:\n  " + "\n  ".join(failures))
+          print("negative control OK -- wrong arithmetic turns the pnr suite red")
+          PY
+
   # A prose-only change still carries claim markers backed by real tests
   # (docs/claim-markers.md), so it runs the claim checker -- the whole default
   # document set, not just the changed files, because the checker's own
