@@ -363,10 +363,10 @@
         26.462026991267532,
         26.5
       ],
-      "tolerance": 0.05,
+      "tolerance": 0.053501194362432856,
       "diff": 0.037973009,
       "pass": true,
-      "detail": "implied_fmax_mhz is logged rounded to 1 dp",
+      "detail": "implied_fmax_mhz is logged rounded to 1 dp and implied_min_period_ns to 2 dp; the min-period half-ULP propagates through the reciprocal as 0.0035 MHz at T = 37.79 ns",
       "sources": [
         {
           "file": "sta_corners.log",
@@ -404,10 +404,10 @@
         14.04297149276787,
         14.0
       ],
-      "tolerance": 0.05,
+      "tolerance": 0.05098602524173346,
       "diff": 0.042971493,
       "pass": true,
-      "detail": "implied_fmax_mhz is logged rounded to 1 dp",
+      "detail": "implied_fmax_mhz is logged rounded to 1 dp and implied_min_period_ns to 2 dp; the min-period half-ULP propagates through the reciprocal as 0.0010 MHz at T = 71.21 ns",
       "sources": [
         {
           "file": "sta_corners.log",
@@ -445,10 +445,10 @@
         42.88164665523156,
         42.9
       ],
-      "tolerance": 0.05,
+      "tolerance": 0.05919417809932066,
       "diff": 0.018353345,
       "pass": true,
-      "detail": "implied_fmax_mhz is logged rounded to 1 dp",
+      "detail": "implied_fmax_mhz is logged rounded to 1 dp and implied_min_period_ns to 2 dp; the min-period half-ULP propagates through the reciprocal as 0.0092 MHz at T = 23.32 ns",
       "sources": [
         {
           "file": "sta_corners.log",
