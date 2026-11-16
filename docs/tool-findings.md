@@ -36,6 +36,7 @@ straight upstream with no local write-up:
 |---|---|---|
 | [`loom-orphan-reap-2026-09-27.md`](loom-orphan-reap-2026-09-27.md) | orphan reaping is uid-blind: a dockerd-started (root-owned) orphan survives every Loom SIGKILL with EPERM, is logged as "uninterruptible I/O", and binds no dispatch decision | [rjwalters/loom#9160](https://github.com/rjwalters/loom/issues/9160) |
 | #850 re-curation pass, 2026-11-16 | `check-verified-corrections-preserved.sh` matches only `## ` headings: an h3 `### Verified corrections` section passes silently at exit 0 even when deleted wholesale, and an h2 section mid-body swallows following h3 subsections so unrelated `###` edits FAIL as lost corrections | [rjwalters/loom#13938](https://github.com/rjwalters/loom/issues/13938) |
+| #877 upstream filing, 2026-11-16 | the #9548 write guard refuses `loom-daemon forge create-issue` on every foreign public repo (`NOT_IN_INSTALLATION`, "Loom writes need WRITE") although issue creation needs only `issues:write`: the same App token files there via `gh` with `push:false` — measured fresh on 0.19.1302, the check that fires is installation membership, not a push check, and it is not the #13306 in-installation staleness family (the repo is permanently outside the installation) | [rjwalters/loom#13978](https://github.com/rjwalters/loom/issues/13978) |
 
 ---
 
