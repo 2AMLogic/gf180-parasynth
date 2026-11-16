@@ -74,9 +74,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: The directories ``make verify`` (Makefile ``verify``/``verify-full``/
-#: ``test``) collects by directory. CI collects the same ones in two jobs
-#: (``pytest model/ spec/`` and ``pytest tools/``); fpga/ and pnr/ are covered
-#: by ``make verify`` only.
+#: ``test``) collects by directory. CI runs them too: ``python`` collects
+#: ``model/ spec/``, ``tools`` collects ``tools/`` by directory (#404), and
+#: ``fpga-uncovered`` (rungs.yml) collects ``fpga/release/`` plus the nine
+#: other fpga/ files no other job names (#853) -- on top of the 23 fpga/ files
+#: ``m5a-fast`` runs via ``make verify-fast``. pnr/ is still covered by
+#: ``make verify`` only (#851).
 GUARDED_DIRS = ("model", "spec", "tools", "fpga", "pnr")
 
 #: pytest's own defaults (``python_functions = test``,

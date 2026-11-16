@@ -549,6 +549,73 @@ jobs:
       - name: every tools/ test, by directory
         run: python -m pytest tools/ -q
 
+  # The 16 fpga/ test files no other CI job runs (#853) -- the fpga half of the
+  # #404 shape (tools/ above is the same repair; pnr/ is #851). Measured on a
+  # hosted-runner equivalent, 2026-11-16: all 16 pass under
+  # spec/trial-environment.json -- 320 tests in ~57 s; none needs Vivado, a
+  # flashed Arty or the TR808 corpus at runtime (the "hardware" strings in
+  # these files are paths and manifest keys -- measured, not device access).
+  #
+  # The pins are the point, not a nicety: three of the 16 (the release-bound
+  # trials) preflight the spec and return NO VERDICT on drift, and the pty
+  # harness refuses without pyserial -- so the unpinned
+  # `pip install numpy scipy pytest pyyaml` the other jobs use reads here as
+  # six red tests, not a pass. The spec, not hand-written versions, is the
+  # single source of pins; --no-toolchain because no file in this set runs the
+  # simulator (their trial manifests preflight no tools).
+  #
+  # No ignores and no deselects (the tools-job rule); there is nothing to
+  # deselect: all 16 measured runnable, zero skips. The floor step is the
+  # exclusion control: collection must stay >= 320, so an `--ignore`, a moved
+  # file or a deleted test cannot achieve an exclusion silently -- and
+  # tools/test_fpga_uncovered_workflow.py (run by the tools job, by directory)
+  # pins that floor to a live collection of the same paths, so the number
+  # itself cannot drift.
+  fpga-uncovered:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # ONE list, and both steps read it: the run executes it, the floor
+      # counts it. fpga/release/ is collected by directory so the seven
+      # release-evidence files cannot silently grow an eighth (#853).
+      FPGA_UNCOVERED_PATHS: >-
+        fpga/release/
+        fpga/test_bringup_arty.py
+        fpga/test_ext_io_extract.py
+        fpga/test_ext_io_timing.py
+        fpga/test_play_song.py
+        fpga/test_record_compare.py
+        fpga/test_uart_host_hold_refused.py
+        fpga/test_uart_host_pty.py
+        fpga/test_verify_flash.py
+        fpga/test_verify_live_midi_unwrap.py
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # trial receipts record HEAD / origin/main / merge-base provenance
+          # (tools/trial.py identities()); not answerable from a shallow clone.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      # Not set here, on purpose: GF180_TR808_REFS (the tools-job rule). No file
+      # in this set reads the corpus -- measured -- so nothing would skip; the
+      # rule costs nothing and keeps every suite job shaped the same.
+      - name: install the spec, not guesses (idempotent; refuses on drift)
+        run: python tools/trial_env.py bootstrap --no-toolchain
+      - name: the 16 fpga/ files no other CI job runs
+        run: python -m pytest $FPGA_UNCOVERED_PATHS -q
+      - name: collection floor -- an exclusion cannot be silent
+        run: |
+          FLOOR=320
+          n=$(python -m pytest $FPGA_UNCOVERED_PATHS --collect-only -q | tail -1 | awk '{print $1}')
+          echo "collected $n (floor $FLOOR)"
+          [ "$n" -ge "$FLOOR" ] || {
+            echo "REFUSED: collected $n < floor $FLOOR -- a test was silently lost or excluded"
+            exit 1
+          }
+
   # A prose-only change still carries claim markers backed by real tests
   # (docs/claim-markers.md), so it runs the claim checker -- the whole default
   # document set, not just the changed files, because the checker's own
