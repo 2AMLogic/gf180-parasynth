@@ -294,6 +294,33 @@ def test_unparseable_metrics_is_refused_not_guessed(tmp_path):
     assert "not parseable" in reason
 
 
+def test_non_object_metrics_root_is_refused_not_guessed(tmp_path):
+    """A JSON root that is not an object refuses, mirroring
+    ``read_par_response``'s isinstance guard (#864: a list or bare scalar
+    root crashed with an AttributeError, and an empty list or ``null``
+    returned a silent half-answer report)."""
+    for text in ("[1, 2, 3]", "[]", "42", "null"):
+        path = tmp_path / "metrics.json"
+        path.write_text(text)
+        metrics, reason = classify_route_drc.read_metrics(path)
+        assert metrics is None, f"root {text!r} must refuse"
+        assert "not a JSON object" in reason
+
+
+# ── parse_srcs ────────────────────────────────────────────────────────────
+
+
+def test_parse_srcs_escaped_net_spelling_is_documented_unsupported():
+    """#864: the docstring once claimed escaped ``\\net:`` names were kept
+    verbatim minus any annotation; the measured behaviour splits the
+    backslash off as a spurious token of its own. Whether TritonRoute ever
+    emits that spelling is unestablished -- no committed report uses it and
+    klt's own counter never parses srcs names -- so the claim was dropped
+    rather than inventing handling. This pins the measured behaviour so the
+    claim cannot silently return."""
+    assert classify_route_drc.parse_srcs(r"\net:_16820_") == ["\\", "_16820_"]
+
+
 # ── the route-Tcl multiplier reader ──────────────────────────────────────
 
 
@@ -407,6 +434,67 @@ def test_unparseable_metrics_is_refused(tmp_path, capsys):
         ["--drc-report", str(report), "--metrics", str(tmp_path / "top_route_metrics.json")]
     )
     assert rc == classify_route_drc.EXIT_REFUSED
+
+
+def test_directory_report_is_refused(tmp_path, capsys):
+    """``--drc-report`` naming an existing-but-unreadable path refuses
+    with exit 3 (#864: it crashed on an assert, exit 1)."""
+    _, metrics = _write_inputs(tmp_path, "", '{"route__drc_errors": 0}')
+    directory = tmp_path / "isdir.rpt"
+    directory.mkdir()
+    rc = classify_route_drc.main(
+        ["--drc-report", str(directory), "--metrics", str(metrics)]
+    )
+    assert rc == classify_route_drc.EXIT_REFUSED
+    assert "REFUSED" in capsys.readouterr().err
+
+
+def test_dangling_symlink_report_is_refused(tmp_path, capsys):
+    """Edge case from the issue's test plan: a symlink to a missing file
+    does not exist for reading purposes, so it refuses."""
+    _, metrics = _write_inputs(tmp_path, "", '{"route__drc_errors": 0}')
+    link = tmp_path / "dangling.rpt"
+    link.symlink_to(tmp_path / "absent-target.rpt")
+    rc = classify_route_drc.main(
+        ["--drc-report", str(link), "--metrics", str(metrics)]
+    )
+    assert rc == classify_route_drc.EXIT_REFUSED
+    assert "REFUSED" in capsys.readouterr().err
+
+
+def test_list_root_metrics_is_refused(tmp_path, capsys):
+    """#864: a list-root metrics file refused with exit 3, not an
+    AttributeError."""
+    report, _ = _write_inputs(tmp_path, _record("Short", "net:a", 1, 2, "Metal2"), "")
+    (tmp_path / "top_route_metrics.json").write_text("[1, 2, 3]")
+    rc = classify_route_drc.main(
+        ["--drc-report", str(report), "--metrics", str(tmp_path / "top_route_metrics.json")]
+    )
+    assert rc == classify_route_drc.EXIT_REFUSED
+    assert "not a JSON object" in capsys.readouterr().err
+
+
+def test_scalar_root_metrics_is_refused(tmp_path, capsys):
+    """#864: a bare-scalar metrics root likewise refuses with exit 3."""
+    report, _ = _write_inputs(tmp_path, _record("Short", "net:a", 1, 2, "Metal2"), "")
+    (tmp_path / "top_route_metrics.json").write_text("42")
+    rc = classify_route_drc.main(
+        ["--drc-report", str(report), "--metrics", str(tmp_path / "top_route_metrics.json")]
+    )
+    assert rc == classify_route_drc.EXIT_REFUSED
+    assert "not a JSON object" in capsys.readouterr().err
+
+
+def test_empty_object_metrics_still_classifies(tmp_path, capsys):
+    """Edge case from the issue's test plan: ``{}`` is an object, so it
+    classifies (zero occurrences), it does not refuse."""
+    report, metrics = _write_inputs(tmp_path, "", "{}")
+    rc = classify_route_drc.main(
+        ["--drc-report", str(report), "--metrics", str(metrics)]
+    )
+    assert rc == classify_route_drc.EXIT_OK
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["metrics"]["route__drc_errors"]["occurrence_count"] == 0
 
 
 def test_empty_report_classifies_as_zero(tmp_path, capsys):

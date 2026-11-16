@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import pathlib
 import subprocess
 
@@ -797,3 +798,88 @@ def test_retroactive_reanalysis_separates_the_sound_fix_from_the_measurement_fix
     # criterion 5 -- so this whole reanalysis was possible from disk alone.
     assert (runs / render_a["render_id"] / "raw.wav").exists()
     assert (runs / render_b["render_id"] / "raw.wav").exists()
+
+
+# =============================================================================
+# #881: the bound ledger is written atomically and read with a declared refusal
+# =============================================================================
+# `history_path.write_text(_dumps(history))` is the #842 shape on a *tracked*
+# file: truncate-then-write, so a kill landing inside it (a session reaped, a
+# laptop dying) leaves `spec/acceptance-bounds-history.json` short, and every
+# later `accept()` dies on a bare JSONDecodeError until a human restores the
+# file. The same injected-kill control PR #862 established for the DAG records.
+
+def test_a_kill_during_the_ledger_write_leaves_the_previous_ledger_intact(tmp_path, monkeypatch):
+    """THE CONTROL (start red): this failed against the bare `write_text`.
+
+    Both hooks simulate the same physical event -- a kill inside the write --
+    on whichever writer is live: truncate-then-half-write-then-die for
+    `write_text`, die-after-tmp-before-replace for `write_json_atomic`.
+    Pre-fix the first hook fired and the ledger was left truncated; post-fix
+    the original ledger survives both."""
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    analysis = _analysis_with(12.3, jobs, render_rec)
+    hist = jobs / "_bounds_history.json"
+    mf.accept(analysis, {"decay": {"lo": 0.0, "hi": 20.0, "rationale": "spec"}},
+              jobs_dir=jobs, history_path=hist)
+    original = hist.read_bytes()
+
+    def kill_mid_truncate_write(self, data, *a, **k):
+        with self.open("w") as fh:
+            fh.write(data[: len(data) // 2])
+        raise RuntimeError("injected: killed mid truncate-then-write")
+
+    def kill_before_replace(src, dst):
+        raise RuntimeError("injected: killed after tmp write, before replace")
+
+    monkeypatch.setattr(pathlib.Path, "write_text", kill_mid_truncate_write)
+    monkeypatch.setattr(os, "replace", kill_before_replace)
+
+    with pytest.raises(RuntimeError):
+        mf.accept(analysis, {"decay": {"lo": 2.0, "hi": 22.0, "rationale": "moved"}},
+                  jobs_dir=jobs, history_path=hist)
+
+    assert json.loads(hist.read_bytes()) == json.loads(original), (
+        "a kill during the ledger write corrupted the previous complete ledger")
+    assert list(jobs.glob("*tmp*")) == [], (
+        f"a tmp sibling survived the failed write: {list(jobs.glob('*tmp*'))}")
+
+
+def test_a_truncated_bound_ledger_is_refused_with_its_path_not_a_traceback(tmp_path):
+    """The read half of #842: a ledger left short by a killed write must make
+    the next accept() REFUSE -- naming the file and how to restore it -- not
+    die with a bare JSONDecodeError that reads as a bug in the reader rather
+    than a corrupted input."""
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    analysis = _analysis_with(12.3, jobs, render_rec)
+    hist = jobs / "_bounds_history.json"
+    hist.write_text('{"T1": {"decay": {"lo": 0.0')  # a kill's leftover
+
+    with pytest.raises(mf.Refused, match="_bounds_history\\.json"):
+        mf.accept(analysis, {"decay": {"lo": 0.0, "hi": 20.0, "rationale": "spec"}},
+                  jobs_dir=jobs, history_path=hist)
+
+
+def test_the_ledger_write_keeps_its_format_and_ignores_a_stale_tmp_sibling(tmp_path):
+    """The ledger's bytes stay the serialisation it already shipped
+    (`json.dumps(..., indent=2, sort_keys=True)` plus the atomic writer's
+    trailing newline), and a `.tmp-<pid>` leftover from an earlier killed run
+    is neither read as history nor picked up by the next write."""
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    analysis = _analysis_with(12.3, jobs, render_rec)
+    hist = jobs / "_bounds_history.json"
+    stale = jobs / "_bounds_history.json.tmp-999999"
+    jobs.mkdir(parents=True, exist_ok=True)
+    stale.write_text('{"garbage": true')  # a previous kill's leftover
+
+    rec = mf.accept(analysis, {"decay": {"lo": 0.0, "hi": 20.0, "rationale": "spec"}},
+                    jobs_dir=jobs, history_path=hist)
+
+    loaded = json.loads(hist.read_text())
+    assert hist.read_bytes() == (json.dumps(loaded, indent=2, sort_keys=True) + "\n").encode(), (
+        "the atomic write changed the ledger's serialisation")
+    assert list(loaded) == [rec["case_id"]] and stale.read_bytes() == b'{"garbage": true', (
+        "a stale tmp sibling was consumed as history or clobbered by the new write")

@@ -71,6 +71,7 @@ from typing import Callable
 import numpy as np
 
 import provenance
+import run_all
 
 ROOT = provenance.ROOT
 RUNS_DIR = ROOT / "runs"
@@ -147,6 +148,22 @@ def _dumps(obj) -> str:
     no faithful encoding is `Refused` here too, so a record on disk can never
     disagree with the id that names it."""
     return json.dumps(obj, indent=2, sort_keys=True, default=_canonical)
+
+
+def load_json_refused(path, what: str) -> dict:
+    """Parse JSON, refusing with the path instead of letting a bare
+    JSONDecodeError escape (#881). A truncated record is the #842 shape: the
+    reader strands until a human restores the file, so the refusal must name
+    the file and say how it is restored rather than look like a bug in the
+    reader."""
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError as e:
+        raise Refused(
+            f"{what} at {path} is not valid JSON ({e.msg} at line {e.lineno}, "
+            f"column {e.colno}) -- a partial write; restore a tracked file with "
+            f"`git checkout -- {path}`, delete a scratch one so the next run "
+            f"re-seeds it") from e
 
 
 def _single_path_component(label: str, value) -> str:
@@ -611,7 +628,7 @@ def accept(analysis: dict, criteria: dict, *, jobs_dir: pathlib.Path = JOBS_DIR,
     module exists to refuse.
     """
     history_path = history_path or BOUNDS_HISTORY
-    history = json.loads(history_path.read_text()) if history_path.exists() else {}
+    history = load_json_refused(history_path, "bound ledger") if history_path.exists() else {}
     if "case_id" not in analysis:
         raise Refused(
             "analysis record carries no case_id -- the bound ledger is keyed by "
@@ -663,8 +680,12 @@ def accept(analysis: dict, criteria: dict, *, jobs_dir: pathlib.Path = JOBS_DIR,
             "lo": lo, "hi": hi, "rationale": rationale,
             "job_id": analysis["job_id"], "accepted_at": provenance.now()}
 
-    history_path.parent.mkdir(parents=True, exist_ok=True)
-    history_path.write_text(_dumps(history))
+    # Atomic (#881): this ledger defaults to a file git tracks, so a kill
+    # mid-write must leave the previous complete ledger, never a truncated one
+    # every later accept() refuses on. `default=_canonical` keeps the exact
+    # bytes `_dumps` serialised, plus the atomic writer's trailing newline.
+    run_all.write_json_atomic(str(history_path), history, sort_keys=True,
+                              default=_canonical)
 
     record = {
         "stage": "accept",
