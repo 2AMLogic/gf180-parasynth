@@ -52,6 +52,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#882**: Tracked-JSON experiment-record writers still truncate-then-write (class sweep remainder from #881)
 - **#884**: regrade: an attested-file edit fails as a bare 'exit 3' with the drift report swallowed, and nothing couples the edit to regenerating the evidence
 - **#885**: pytest_collection_inventory.py:78 comment says pnr/ is 'make verify only' — false once the pnr CI job lands (#851/#865)
+- **#888**: Post the #12307 correction of record as a comment on OpenROAD#12303
 
 ## In Progress
 
@@ -189,7 +190,7 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
 | Important | 6 |
-| Ready (`loom:issue`) | 22 |
+| Ready (`loom:issue`) | 23 |
 | In Progress (`loom:building`) | 11 |
 | PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 0 |
