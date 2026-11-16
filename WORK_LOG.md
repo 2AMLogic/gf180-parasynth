@@ -2,8 +2,56 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-16
+
+- **Issue #851** (closed): pnr/ test files run under make verify but under no CI job (6 of 8) -- the #404 shape, one directory over
+- **PR #865**: ci: collect pnr/ as a directory in CI; assert the docker precondition in container_progress
+- **Issue #868** (closed): refusal_exit_census: the sites_outside_set pin is keyed on line numbers, so an unrelated edit above cymbal_vca_drive.py:1525 reds the gate
+- **PR #878**: fix: key census sites_outside_set on (file, function, status) counts, not lines
+- **Issue #866** (closed): fold-interpolator-sweep.txt's n_over column no longer reproduces: #775 narrowed RATE_TOL_REL and the artefact was not regenerated
+- **PR #880**: regenerate fold-interpolator n_over against RATE_TOL_REL 0.02 and record the dependency in limits
+- **Issue #842** (closed): compile_dag.py --run: the per-node records write is not atomic, in the change made for kill-safety
+- **PR #862**: fix: dag --run persists records through an atomic replace
+- **Issue #836** (closed): sensitivity controls: nothing cross-checks `make controls` against sens.INJECTIONS (the helper already exists)
+- **PR #855**: test: cross-check make controls against sens.INJECTIONS, paired with the --expect token
+- **Issue #834** (closed): characterize_synth_top: the per-corner Fmax tolerance omits min-period rounding, and its boundary test's pass arm is a no-op
+- **PR #872**: tools: per-corner Fmax budget absorbs the min-period rounding term
+- **Issue #850** (closed): File upstream (rjwalters/loom): check-verified-corrections-preserved.sh matches only '## ', so an h3 Verified-corrections section passes silently at exit 0
+- **PR #875**: docs: index rjwalters/loom#13938 (h3 blind spot in check-verified-corrections-preserved.sh) in the Loom pass table
+- **Issue #843** (closed): estimator_defects.py: five unguarded `.value` arithmetic sites remain after #805, outside #792's section 6
+- **PR #871**: fix: rule estimator_defects.py's five remaining unguarded .value reads per site
+- **Issue #797** (closed): spec/NUMERIC-CONTRACT.md item 29 says the chip still carries drum_section_placeholder and that nothing verifies the joined chip
+- **PR #846**: docs: numeric contract states the shipped drum section and exact-sum master mix
+- **Issue #848** (closed): File upstream: ORFS metrics JSON serialises every float metric at 6 significant figures (hard-coded setprecision(6))
+- **PR #861**: docs: ledger the OpenROAD 6-sf metrics serialisation defect (OpenROAD#12307)
+- **Issue #774** (closed): bug: dominant_period picks a different octave at 44.1 kHz and 48 kHz on some clips
+- **PR #781**: fix: resolve dominant_period's octave pick with a swept margin
+- **Issue #804** (closed): Collapse the three exit statuses that mean REFUSED: run_all.py reports the cymbal low-tail refusal as FAIL(1)
+- **PR #825**: runner: report every declared refusal status as NO-VERDICT, not FAIL
+- **Issue #789** (closed): docs/milestones.md milestone 3 and the README's T1 sentence contradict the tree
+- **PR #798**: docs: repair milestone 3 and the README T1 sentence, and put both under check_doc_claims
+- **Issue #819** (closed): run_klt.py container-ownership test matches a path prefix without a separator boundary
+- **PR #860**: fix: match prefix tests at a path-component boundary, not a string boundary
+- **PR #857**: pnr: add classify_route_drc.py, the #2089-aware DRC classifier #808's route record needs
+- **Issue #792** (closed): Corner probes: date the pre-#150 columns, fix `corner_shipped`'s stale docstring, guard the refusal print
+- **PR #840**: probe: date the corner probes' pre-#150 columns, fix corner_shipped's docstring, guard the refusal print
+- **Issue #805** (closed): The BASELINE of a perturbation comparison is read unguarded while the comparison itself is guarded (2 probe sites)
+- **PR #839**: fix: assert the baseline precondition of every perturbation comparison before reading it
+- **Issue #793** (closed): bug: tools/sensitivity.py raises ZeroDivisionError on an objective that reaches zero
+- **PR #822**: fix: sensitivity gate refuses, never divides, across or below a zero objective
+- **Issue #823** (closed): compile_dag.py --run writes docs/dag-results.json only after the whole loop, so one crashed verifier loses every node's records
+- **PR #833**: DAG --run: guard the evidence loop and persist records per node
+- **Issue #828** (closed): Dedupe BS.1770 K-weighted loudness: three copies of kweight/loudness in tools/
+- **PR #837**: [tools] one BS.1770 K-weighting implementation: the listening packs import perceptual_gate
+
 ### 2026-11-15
 
+- **Issue #824** (closed): stale_against() reads an unresolvable sha as 'nothing changed', so a record whose commit left the history renders GREEN instead of STALE
+- **PR #844**: fix: refuse DAG evidence whose staleness cannot be measured, never render it current
+- **Issue #803** (closed): A probe's identical flag has #785's absent-vs-null hole, load-bearing: balance_input_invariance reports identical on a dropped key
+- **PR #831**: fix: compare balance_input_invariance images with fpga/record_compare
+- **Issue #775** (closed): bug: RATE_TOL_REL is 8x larger than everything jit.cyclecorr measures
+- **PR #783**: fix: narrow RATE_TOL_REL to 0.02, and record why no margin test can exist
 - **PR #832**: tools: characterize synth_top from the committed route evidence
 - **Issue #790** (closed): T1 item 8: build one characterization report from the committed synth_top route evidence and record the klt signoff result
 - **PR #796**: fix: normalise repeat_period per overlapped window and resolve its multiple
