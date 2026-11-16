@@ -76,7 +76,11 @@ that parameter ship a value its own sweep does not cover.
    within which two points are the same value of the objective — plus a `why`
    that derives it from **the granularity of the decision**, not from the
    spread of the data. A threshold fitted to its own measurements makes every
-   curve flat.
+   curve flat. A relative rule cannot measure an objective that crosses or
+   sits below zero — the gate refuses such a column rather than guessing a
+   scale. A column that *reaches* zero is fine as long as the zeros form a
+   plateau (every point perfect reads FLAT); a lone zero among nonzero values
+   has no relative spread at that step and cannot be gated by this rule.
 3. **Sweep one dial.** `held_fixed` names everything pinned while it moved.
    `fpga/scripts/mode_sweep.sh` says it plainly: *every naive sweep moves
    both.* A point measured with two dials moved is not evidence about either,
