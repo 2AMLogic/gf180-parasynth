@@ -22,7 +22,7 @@ produced by commit `1e2ab5f` on the build box with a clean tree; `provenance` in
 | rate | 48 kHz; the 44.1 kHz takes are resampled up |
 | bandwidth | a causal 20 Hz high-pass (AC coupling) and a zero-phase 20 kHz low-pass (the audible band, inside the recordings' own 22.05 kHz) |
 | alignment | t = 0 is 1 ms before the first sample above 2 % of the signal's own peak. No cross-correlation search |
-| level | BS.1770 K-weighted loudness, gated to within 20 dB of the loudest 50 ms block (the rule `tools/ab_808_loud.py` uses for listening packs), set equal |
+| level | BS.1770 K-weighted loudness, gated to within 20 dB of the loudest 50 ms block (the rule `tools/perceptual_gate.py`'s `loudness_db` implements; the listening packs import it), set equal |
 | span | twice the target's −60 dB span + 50 ms, capped at 3 s, so a candidate that rings on is seen |
 | floor | 60 dB under the target's loudest cell, the same on both sides |
 
