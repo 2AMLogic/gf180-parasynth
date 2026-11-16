@@ -133,14 +133,14 @@ def run_all(cmds: list[str], *, serial: bool = False, timeout: float | None = No
     return results
 
 
-def write_json_atomic(path: str, value) -> None:
+def write_json_atomic(path: str, value, sort_keys: bool = False) -> None:
     """Replace a JSON report atomically so readers never see a partial file."""
     parent = os.path.dirname(os.path.abspath(path))
     os.makedirs(parent, exist_ok=True)
     temporary = f"{path}.tmp-{os.getpid()}"
     try:
         with open(temporary, "w") as fh:
-            json.dump(value, fh, indent=2)
+            json.dump(value, fh, indent=2, sort_keys=sort_keys)
             fh.write("\n")
             fh.flush()
             os.fsync(fh.fileno())
