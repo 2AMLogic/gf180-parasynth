@@ -175,6 +175,7 @@ verify:
 	  "$(PY) tools/check_f1_rtl_record.py" \
 	  "$(PY) tools/holdout.py check" \
 	  "$(PY) tools/check_decision_record_numbers.py" \
+	  "$(PY) tools/check_refused_base.py" \
 	  "$(PY) tools/external_claim.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi" \
 	  "$(PY) tools/probes/estimator_ground_truth.py check" \
@@ -429,8 +430,8 @@ verify-full:
 ##                                      itself all BLIND -- yosys resolves the
 ##                                      don't-care, so the netlist simulates
 ##                                      x-free and the area moves 0.1 %
-##   area_provenance clean              summarize.py exit 0, ratio 1.87 printed
-##   area_provenance UTILIZATION_TARGET summarize.py exit 2, ratio withheld
+##   area_provenance clean              summarize.py refuses the OpenROAD#12303 duplicate metrics (#835) AND still attributes the ratio (1.87)
+##   area_provenance UTILIZATION_TARGET summarize.py exit 2, ratio withheld, circular-die-area named
 ##   area_provenance CORE_UTILIZATION_SET  ditto, the ORFS spelling
 ##
 ## THE CONSTRAINT-BINDING CONTROLS (#436) close rule 5 on #315: the UART-RX
@@ -518,6 +519,18 @@ verify-full:
 ## fast half --
 ## tools/test_bd_pitch_predeclaration_mutants.py, the same precheck read
 ## statically off the real tree -- runs under `verify`.
+##
+## check_doc_claims_789_marker_controls.py (the probe PR #798 added, wired
+## here as a STANDING control by #811) is the
+## red-first record for the #789 claim markers:
+## unlike check_doc_claims_scope_control.py it is satisfiable on any tree and
+## sub-second (all 17 markers the two documents carry are grep=/absent=, no
+## test=), and it restores every file it injects into. Known residue, recorded
+## not designed around: on a runner timeout this runner SIGKILLs the job's
+## process group and the probe's finally-restore does not run, leaving
+## README.md and docs/milestones.md modified -- at ~0.5 s against this
+## target's 3600 s timeout that needs the probe to hang ~7200x its runtime.
+## Same note in docs/claim-markers.md, beside the scope_control paragraph.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
@@ -527,6 +540,7 @@ controls:
 	  "$(PY) tools/probes/coupling_controls.py" \
 	  "$(PY) tools/pytest_collection_inventory.py controls" \
 	  "$(PY) tools/r1_harvest_controls.py" \
+	  "$(PY) tools/probes/check_doc_claims_789_marker_controls.py" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \

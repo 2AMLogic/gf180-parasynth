@@ -1279,9 +1279,9 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path | None = None,
         rec["reasons"] = reasons
         rec["verdict"] = FAIL if reasons else PASS
         return rec
-    except Refused as exc:
-        rec["verdict"] = REFUSED
-        rec["reasons"] = [str(exc)]
+    except (Refused, rr.Refused) as exc:            # rr.Refused: a sibling class;
+        rec["verdict"] = REFUSED                    # a reference-side refusal is
+        rec["reasons"] = [str(exc)]                 # still a REFUSED verdict (#784)
         return rec
     except Exception as exc:                        # noqa: BLE001 -- deliberately total
         # An unexpected exception is an EXECUTION ERROR (plan090): not a
