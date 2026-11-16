@@ -114,8 +114,8 @@ def test_the_committed_results_file_loads():
 # stale" whatever the sha. Closed in the same change -- evidence with no
 # covered files to measure is REFUSED too. Pinned by
 # test_issue_824_a_passing_record_with_no_covers_is_refused.
-# (#863 later replaced the walk itself -- the range query had its own
-# false-green defect on merge-shaped history; see that section below.)
+# (#863 later replaced the walk itself -- a commit-range walk is the wrong
+# instrument for staleness on merge-shaped history; see that section below.)
 def _mini_repo(tmp_path, monkeypatch):
     """A throwaway two-commit git repo, so ancestry questions get real
     answers without touching this checkout's history.
@@ -382,27 +382,50 @@ def test_the_records_write_is_byte_identical_to_the_format_it_replaced(tmp_path,
 #     output" and render GREEN with nothing measured (#824's hole through a
 #     new door).
 def _merge_repo(tmp_path, monkeypatch, resolve="v2"):
-    """A throwaway repo reproducing the #863 shape, from the real round:
+    """A throwaway repo reproducing the #863 shape, from the real round
+    (round a4ae3529 on PR #818; commit times mirrored so the merge precedes
+    the stamp, as it did there):
 
         A: base, f=v1
-        W1: early work, f=v3          (common ancestor of both sides)
-        main2:  B(main2): f=v2        (main's fix; tip of main2)
-        stampside (from W1):
-          Sm: merge main2 -> f=v2     (an earlier round brought main in)
+        main:  B(main): f=v2          (main's fix; tip of main)
+        work (from A):
+          W: other work, f stays v1
+          M: merge main, resolving f to `resolve`
+        new (from A):
+          N1: merge main -> f=v2      (an earlier round had merged main)
           S: record stamp, f=v2       (the range base)
-        work (from W1, never merged B):
-          W2: other work, f stays v3
-          M: merge main2, resolving f to `resolve`
-        O: merge stampside into work  (HEAD descends from the stamp)
+          56: post-stamp commit
+        HEAD: merge new into work     (f=v2, identical to S)
 
-    M's parent1 (W2, f=v3) is in range with different content; its parent2
+    M's parent1 (W, f=v1) is in range with different content; its parent2
     (B, f=v2) is TREESAME for f but an ancestor of S, so outside S..HEAD.
-    Returns (g, stamp) -- an asserting git runner and the stamp sha. ROOT is
+    Every commit gets its own GIT_*_DATE, and the merge commits BEFORE the
+    stamp, as it did in the real round (9d45d85e at t=8018, the next stamp
+    0df2135b at t=81500). Both properties are load-bearing, measured on the
+    first drafts of this builder: with equal timestamps the limited walk's
+    order is undefined and the control flapped (fired 29/30); with distinct
+    timestamps but the merge AFTER the stamp it never fired at all (0/30).
+    Only the real order fires deterministically -- which is itself part of
+    the defect's shape, not an accident to normalize away. Returns (g,
+    stamp) -- an asserting git runner and the stamp sha. ROOT is
     monkeypatched here, as in _mini_repo.
     """
-    def g(*a, check=True):
+    clock = [0]
+
+    def dated(env_extra=None):
+        clock[0] += 60
+        stamp_date = f"2026-01-01 00:{clock[0] // 3600:02d}:" \
+                     f"{clock[0] // 60 % 60:02d}:{clock[0] % 60:02d} +0000"
+        return {"GIT_AUTHOR_DATE": stamp_date,
+                "GIT_COMMITTER_DATE": stamp_date,
+                **(env_extra or {})}
+
+    def g(*a, check=True, dated_=True):
+        env = dict(os.environ)
+        if dated_:
+            env.update(dated())
         r = subprocess.run(["git", *a], cwd=tmp_path, capture_output=True,
-                           text=True)
+                           text=True, env=env)
         if check and r.returncode != 0:
             raise AssertionError(f"git {' '.join(a)} failed: {r.stderr}")
         return r
@@ -425,20 +448,21 @@ def _merge_repo(tmp_path, monkeypatch, resolve="v2"):
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "dag.json").write_text("{}\n")
     (tmp_path / "f").write_text("v1\n")
-    commit("A: base")
-    (tmp_path / "f").write_text("v3\n")
-    commit("W1: early work, f=v3")
-    g("checkout", "-q", "-b", "main2")
+    a = commit("A: base")
+    g("checkout", "-q", "main")
     (tmp_path / "f").write_text("v2\n")
-    commit("B(main2): fix f=v2")
-    g("checkout", "-q", "-b", "stampside", "main2~1")
-    merge_resolve("main2", "v2", "Sm: merge main2 (earlier round)")
-    stamp = commit("S: record stamp", allow_empty=True)
-    g("checkout", "-q", "-b", "work", "main2~1")
+    commit("B(main): fix f=v2")
+    g("checkout", "-q", "-b", "work", a)
     (tmp_path / "other").write_text("w\n")
-    commit("W2: work, f stays v3")
-    merge_resolve("main2", resolve, "M: merge main2 (Doctor: resolve conflicts)")
-    g("merge", "--no-ff", "-m", "O: bring the stamp side in", "stampside")
+    commit("W: work, f stays v1")
+    merge_resolve("main", resolve, "M: merge main (Doctor: resolve conflicts)")
+    g("checkout", "-q", "-b", "new", a)
+    merge_resolve("main", "v2", "N1: merge main (earlier round)")
+    stamp = commit("S: record stamp", allow_empty=True)
+    (tmp_path / "p1").write_text("p\n")
+    commit("56: post-stamp commit")
+    g("checkout", "-q", "work")
+    g("merge", "--no-ff", "-m", "HEAD: bring the stamp side in", "new")
     head = g("rev-parse", "HEAD").stdout.strip()
 
     # Sensitivity guard, so this builder cannot drift into one of the naive
