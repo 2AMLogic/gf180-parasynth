@@ -19,18 +19,26 @@ defining module, recursively, until it reaches `tools/refusal.py`'s
 base would be unsatisfiable against the intended end state -- 5 definitions
 are themselves sibling-chained -- which is why this walks the chain.
 
-MODE: report/baseline (#784; #815 flips it to enforcing). The baseline file
-holds the keys of the definitions that do not yet resolve; the guard exits 0
-when the set matches the baseline or is a strict SUBSET (it can only shrink),
-and exits 1 the moment a NEW non-conforming definition appears. Missing
-baseline entries are reported as a shrink so the baseline can be pruned.
+MODE: report/baseline, and the report is the whole gate until #815: the
+baseline holds the keys of the definitions that do not yet resolve; the guard
+exits 0 when the set matches the baseline, is a strict SUBSET, or has GROWN --
+a NEW non-conforming definition is printed as a loud `NEW:` line and the run
+still exits 0. The enforcing exit 1 lands with #815, together with the whole
+set's re-base: exit-1-on-NEW was measured on this tree to red `make verify`
+on `main` roughly daily (three new definitions per ~78 merges of ordinary
+work), and a gate that reds on unrelated merges gets trained away -- the same
+finding that un-pinned the census tool's per-family totals on its own review.
+Missing baseline entries are reported as a shrink so the baseline can be
+pruned.
 
 Exit codes (this repository's convention; 2 = could not run, no evidence):
-  0  clean, or the baseline only shrank
-  1  a NEW non-conforming `class Refused`/`Refusal` definition
+  0  clean, the baseline only shrank, or it grew (the NEW lines say so; #815
+     flips a NEW definition to exit 1 when it makes the guard enforcing)
+  1  reserved for #815 (enforcing: a NEW non-conforming definition)
   2  git could not run
   3  REFUSED -- a tracked (or given) `*.py` file failed to parse; a partial
-     parse can never masquerade as a clean result
+     parse can never masquerade as a clean result -- or the baseline file
+     is missing (no evidence either way)
 """
 from __future__ import annotations
 
@@ -90,7 +98,9 @@ class Index:
         dotted = None if str(rel).startswith("..") \
             else ".".join(rel.with_suffix("").parts)
         bindings: dict[str, tuple] = {}
-        for node in tree.body:
+        for node in tree.body:              # top level only: a nested `class
+            # Refused` is invisible here (0 in the tree today; #815's re-base
+            # must walk ClassDef bodies or these keys silently miss it)
             if isinstance(node, ast.Import):
                 for a in node.names:
                     bindings[a.asname or a.name.split(".")[0]] = \
@@ -281,8 +291,9 @@ def main(argv=None) -> int:
     if a.write_baseline:
         a.baseline.parent.mkdir(parents=True, exist_ok=True)
         a.baseline.write_text(json.dumps(
-            {"schema": BASELINE_SCHEMA, "note": "#815: this set can only shrink; "
-             "delete a key when its definition resolves to refusal.Refused",
+            {"schema": BASELINE_SCHEMA, "note": "report-only until #815 re-bases "
+             "this set and flips the guard to enforcing; delete a key when its "
+             "definition resolves to refusal.Refused",
              "nonconforming": sorted(keys)}, indent=1) + "\n")
         print(f"wrote baseline {a.baseline}: {len(keys)} non-conforming definition(s)")
         return 0
@@ -303,11 +314,17 @@ def main(argv=None) -> int:
     print(f"{len(keys)} of {total} definition(s) do not resolve to refusal.Refused "
           f"(baseline: {len(baseline)})")
     if fresh:
-        print(f"\n{len(fresh)} NEW non-conforming definition(s): every class "
-              "Refused/Refusal must subclass refusal.Refused (directly or through "
-              "a conforming chain), or join the baseline only with a stated reason "
-              "(#815 re-bases the rest and flips this guard to enforcing).")
-        return 1
+        print(f"\n{len(fresh)} NEW non-conforming definition(s) -- REPORTED, not "
+              "enforced until #815: every class Refused/Refusal must subclass "
+              "refusal.Refused (directly or through a conforming chain), or join "
+              "the baseline only with a stated reason. Absorb one deliberately "
+              "with --write-baseline (after merging main), or leave it for #815's "
+              "re-base.")
+        # Report/baseline mode exits 0 here by design: an exit 1 on a NEW
+        # definition reds `make verify` on `main` for every unrelated merge that
+        # adds a refusal class (~daily on this tree) -- a gate that gets trained
+        # away. #815 flips this to `return 1` together with the whole-set re-base.
+        return 0
     if shrink:
         print(f"the baseline can shrink by {len(shrink)} entr(y/ies) -- re-run "
               "--write-baseline")

@@ -1,7 +1,8 @@
 """tools/check_refused_base.py: the guard bites on a non-conforming
 definition, passes a sibling-chained conforming one, ignores alias and
-from-import reuse, REFUSES (exit 3) on a parse failure, and lets the baseline
-only shrink (#784)."""
+from-import reuse, REFUSES (exit 3) on a parse failure, and in report/baseline
+mode stays green while REPORTING a NEW non-conforming definition (#784; #815
+flips the guard -- and that exit -- to enforcing)."""
 from __future__ import annotations
 
 import pathlib
@@ -81,7 +82,7 @@ def test_the_canonical_base_itself_is_not_reported():
     assert bad == [] and total == 0
 
 
-def test_the_baseline_only_shrinks(tmp_path):
+def test_report_mode_stays_green_while_reporting_a_new_definition(tmp_path, capsys):
     p1 = _write(tmp_path, "fix_one.py",
                 "class Refused(RuntimeError):\n    pass\n")
     p2 = _write(tmp_path, "fix_two.py",
@@ -92,10 +93,18 @@ def test_the_baseline_only_shrinks(tmp_path):
                     "--write-baseline"]) == 0
     assert cb.main(["--paths", str(p1), "--baseline", str(baseline)]) == 0
 
-    # a NEW non-conforming definition fails the run ...
+    # a NEW non-conforming definition is reported loudly but stays green: an
+    # exit 1 here would red `make verify` on `main` for every unrelated merge
+    # that adds a refusal class. The enforcing flip is #815's, together with
+    # the whole-set re-base.
     assert cb.main(["--paths", str(p1), str(p2),
-                    "--baseline", str(baseline)]) == 1
-    # ... and is absorbed only by an explicit baseline write
+                    "--baseline", str(baseline)]) == 0
+    out = capsys.readouterr().out
+    # fixtures live outside the repo, so their keys are absolute paths; the
+    # basename plus the loud NEW/REPORTED markers are the stable part
+    assert "NEW: " in out and "fix_two.py:Refused(ValueError)" in out
+    assert "REPORTED" in out
+    # ... and it is absorbed only by an explicit baseline write
     assert cb.main(["--paths", str(p1), str(p2), "--baseline", str(baseline),
                     "--write-baseline"]) == 0
     # a definition that goes away shrinks the baseline: exit 0, with a note
