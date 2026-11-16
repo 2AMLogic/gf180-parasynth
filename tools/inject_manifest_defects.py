@@ -200,7 +200,7 @@ INJECTIONS = [
 
     ("the suite is dropped from the one make target CI invokes",
      "Makefile",
-     "tools/test_run_all.py tools/test_manifest.py", "tools/test_run_all.py",
+     " tools/test_manifest.py", "",
      [f"{TESTS}::test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs"]),
 ]
 

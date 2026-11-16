@@ -305,6 +305,68 @@ def test_sweep_one_reports_the_signed_delta_from_base():
 
 
 # ---------------------------------------------------------------------------
+# 9b. sweep_one -- the BASELINE refuses (#805)
+#
+#     The reading that VARIES is guarded (`got.ok`); the reading everything
+#     is compared AGAINST was not. A control that only refuses the varying
+#     side has no power over that shape, so every control here refuses the
+#     BASELINE. The two shipped refusal encodings fail these sites in
+#     opposite directions and both are exercised: `Estimate(None, False, ..)`
+#     raised TypeError at the first `base.value` read (loud, NO VERDICT),
+#     while a nan-carrying refusal made `abs(nan - base) < tol` silently
+#     False -- a wrong FAILED verdict with a plausible-looking cause.
+# ---------------------------------------------------------------------------
+def _refusing_baseline(value, reason):
+    return am.Estimate(value, False, reason, {}, None)
+
+
+def test_sweep_one_refuses_when_the_baseline_refuses_none_encoded():
+    """#805 AC5: the baseline -- not the perturbed reading -- refuses, in
+    the shipped `Estimate(None, False, ...)` encoding. sweep_one must
+    refuse at entry, before any row exists: no row may carry
+    `refused=False` with a delta measured against a reading that is not
+    there."""
+    x = _damped(540.0, 0.05, 1.0, int(0.3 * SR))
+    case = pl.EstimatorCase("probe", "X", lambda y, sr: am.Estimate(
+        1.0, True, "", {}, None), 0.01, False, 5000.0)
+    pert = pl.PERTURBATIONS["gain_db"]
+    with pytest.raises(rc.Refused):
+        pl.sweep_one(case, pert, x, SR, _refusing_baseline(None, "stub refusal"))
+
+
+def test_sweep_one_refuses_when_the_baseline_refuses_nan_encoded():
+    """The opposite encoding, the same precondition: a nan-carrying refusal
+    used to propagate into `expected_delta` and the delta subtraction,
+    where the comparison came out silently False. REFUSED, never rows."""
+    x = _damped(540.0, 0.05, 1.0, int(0.3 * SR))
+    case = pl.EstimatorCase("probe", "X", lambda y, sr: am.Estimate(
+        1.0, True, "", {}, None), 0.01, False, 5000.0)
+    pert = pl.PERTURBATIONS["gain_db"]
+    with pytest.raises(rc.Refused):
+        pl.sweep_one(case, pert, x, SR,
+                     _refusing_baseline(float("nan"), "nan stub refusal"))
+
+
+def test_sweep_one_still_produces_rows_when_only_the_perturbed_side_refuses():
+    """The guard is on the BASELINE only (#805): a perturbed rung that
+    refuses is a normal Q5 abstention, not a precondition violation. A
+    guard that refused the whole sweep on a refusing rung would be as
+    wrong as no guard at all."""
+    def measure(y, sr):
+        peak = float(np.max(np.abs(y)))
+        if peak < 0.9:
+            return am.Estimate(None, False, "perturbed-side refusal", {}, None)
+        return am.Estimate(peak, True, "", {}, None)
+    x = _damped(540.0, 0.05, 1.0, int(0.3 * SR))
+    case = pl.EstimatorCase("probe", "X", measure, 0.01, False, 5000.0)
+    base = case.measure(x, SR)
+    pert = pl.PERTURBATIONS["gain_db"]
+    _relation, rows = pl.sweep_one(case, pert, x, SR, base)
+    assert any(r["refused"] for r in rows)
+    assert all((r["measured_value"] is not None) or r["refused"] for r in rows)
+
+
+# ---------------------------------------------------------------------------
 # 10. run_ladder -- end to end against a synthetic stand-in corpus
 # ---------------------------------------------------------------------------
 def _write_wav(path: pathlib.Path, x: np.ndarray, sr: int = SR) -> None:
@@ -378,6 +440,24 @@ def test_run_ladder_refuses_per_estimator_when_its_own_file_is_missing(tmp_path)
     assert result["estimators"]["band_pair_db"]["status"] == "REFUSED"
     assert "RS.WAV" in result["estimators"]["band_pair_db"]["why"] or \
         "rs8" in result["estimators"]["band_pair_db"]["why"]
+
+
+def test_run_ladder_refuses_per_estimator_when_the_base_reads_non_finite_but_ok(
+        tmp_path, monkeypatch):
+    """INJECTED DEFECT for run_ladder's baseline guard (#805 AC8): a base
+    reading that CLAIMS ok but carries a non-finite value. The `not
+    base.ok` guard alone let it through to `sweep_one`, whose own entry
+    assert then raised `rc.Refused` that nothing in run_ladder catches --
+    the whole sweep died instead of emitting one BASE_REFUSED row. The
+    guard must apply the same triple `sweep_one` asserts."""
+    _build_fake_corpus(tmp_path)
+    monkeypatch.setattr(pl, "ESTIMATOR_CASES", [
+        pl.EstimatorCase("probe", "RS",
+                         lambda y, sr: am.Estimate(float("nan"), True, "", {}, None),
+                         0.01, False, 5000.0)])
+    result = pl.run_ladder(tmp_path)
+    assert result["estimators"]["probe"]["status"] == "BASE_REFUSED"
+    assert "finite" in result["estimators"]["probe"]["why"]
 
 
 # ---------------------------------------------------------------------------

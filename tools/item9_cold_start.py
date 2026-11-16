@@ -48,10 +48,19 @@ BENCHES = [
 # Injected defects: `--expect-fail` exits 0 only when the bench exits 1 (mismatch),
 # never on exit 2 (did not run), so a missing simulator cannot pass as a caught bug.
 CONTROLS = (
-    [f"rtl-sketch/verify_ladder.py --inject {n} --expect-fail" for n in ("FB", "SAT", "TANH_CLAMP")]
+    # --outdir on every control: two controls of one family share the
+    # bench's default rtl-sketch/build/ otherwise, and run_all may run them
+    # concurrently (JOBS=2), each truncating the other's vectors/RTL-output
+    # files. Observed 2026-11-15: MODAL PREEXC (worker0 250-259s) overlapped
+    # EXC_NOCLEAR (worker1 253-261s) and read 44084 of 57600 samples back --
+    # a refusal (exit 2), NO-VERDICT, cold start exit 1. A bench cannot hit
+    # this (its family's next invocation is >=9 jobs later); a control pair
+    # is contiguous and can land on the two workers at once.
+    [f"rtl-sketch/verify_ladder.py --inject {n} --expect-fail --outdir build/item9/ladder-{n.lower()}"
+     for n in ("FB", "SAT", "TANH_CLAMP")]
     # CH_BLEED lives in ladder_dp_n.v: it only exists with more than one channel.
     + ["rtl-sketch/verify_ladder.py --nch 2 --inject CH_BLEED --expect-fail --outdir build/item9/ladder-ch-bleed"]
-    + [f"rtl-sketch/verify_modal.py --inject {n} --expect-fail"
+    + [f"rtl-sketch/verify_modal.py --inject {n} --expect-fail --outdir build/item9/modal-{n.lower()}"
        for n in ("SAT", "SHIFT", "NUM_HOLD", "PREEXC", "EXC_NOCLEAR")]
     + ["rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/item9/voice-env-rate-exp",
        "rtl-sketch/verify_voice.py --set quick --only default --inject OSC_SMOOTH_ON --expect-fail --outdir build/item9/voice-smooth-on",
