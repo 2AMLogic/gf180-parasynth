@@ -51,18 +51,19 @@ right; all five were caught by a control rather than by inspection.
 
 | | |
 |---|---|
-| ✅ | Complete Minimoog voice merged — noise, oscillator-3 modulation, full waveform set; `rtl-sketch/verify_voice.py --set full` is a named nightly job against `model/voice_fx.py` |
+| ✅ | Complete Minimoog voice merged — noise, oscillator-3 modulation, full waveform set; `rtl-sketch/verify_voice.py` is a slow node in `docs/dag.json`, executed nightly by the record step (`compile_dag.py --run --slow`) against `model/voice_fx.py`; the verifier's default set is full |
 | ✅ | Complete 808 built — **all 16 sounds on 11 circuits, 102 acceptance tests under STRICT** (`docs/drum-verification.md` §10.7) |
 | ✅ | The 808 is **on `main`** — `drum_kit.v`, `drum_dp.v`, `drum_regs.v`, `modal_dp.v` and their bench are in the tree, not on a branch |
 | ✅ | **`synth_top.v` instantiates the real engine** — `drum_regs` + `drum_kit`, and no `drum_section_placeholder` is left in the RTL (contract 17.23 closed) |
-| ✅ | **RTL reproduces the complete kit bit-exactly** — `verify_drums.py` compares `drum_kit.v` against `model/drums_fx.py` with no tolerance over the Appendix G kit's eleven circuits, and 9 of 9 injected defects plus write jitter turn it red. It is a named nightly job, so `main` is re-checked nightly rather than graded from this line |
+| ✅ | **RTL reproduces the complete kit bit-exactly** — `verify_drums.py` compares `drum_kit.v` against `model/drums_fx.py` with no tolerance over the Appendix G kit's eleven circuits, and 9 of 9 injected defects plus write jitter turn it red. It is a slow node in `docs/dag.json` that the nightly's record step executes, so `main` is re-checked nightly rather than graded from this line |
 | ⬜ | Playable access: the FPGA needs its SPI host, **including the timed writes the kick attack and tom pitch movement depend on** |
-<!-- claim: grep="rtl-sketch/verify_voice\.py --set full" in=.github/workflows/nightly.yml issue=789 note="row 1: the voice's full-set bench runs nightly" -->
+<!-- claim: grep="rtl-sketch/verify_voice\.py" in=docs/dag.json issue=789 note="row 1: the voice bench is a slow DAG node; the nightly's record step runs every slow node and verify_voice.py's default --set is full. The old in=nightly.yml binding died when the four bare verifier steps became the record step" -->
+<!-- claim: grep="tools/compile_dag\.py --run --slow" in=.github/workflows/nightly.yml issue=789 note="rows 1 and 5: the nightly's record step runs every slow DAG node -- the scheduling half of the bench coverage binding; the dag.json claims above are the naming half, so dropping the benches or the step each turns a claim stale" -->
 <!-- claim: grep="^\| `model/test_808_acceptance\.py`, `TR808_STRICT=1` \| \*\*102 passed\*\*" in=docs/drum-verification.md issue=789 note="row 2: the 102 STRICT acceptance tests" -->
 <!-- claim: grep="^module drum_kit" in=rtl-sketch/drum_kit.v issue=789 note="row 3: the engine is a file in this tree" -->
 <!-- claim: grep="^\s*drum_kit #\(" in=rtl-sketch/synth_top.v issue=789 note="row 4: the shipping top level instantiates it" -->
 <!-- claim: absent="^\s*(module\s+)?drum_section_placeholder" in=rtl-sketch/*.v,fpga/rtl/*.v issue=789 note="row 4: no placeholder module or instantiation is left. The pattern is anchored so the header COMMENT in synth_top.v saying the placeholder is gone does not satisfy it -- an unanchored absent= on this string is STALE on this tree, which is the control for this marker" -->
-<!-- claim: grep="rtl-sketch/verify_drums\.py" in=.github/workflows/nightly.yml issue=789 note="row 5: the kit's bit-exactness bench is a named nightly job" -->
+<!-- claim: grep="rtl-sketch/verify_drums\.py" in=docs/dag.json issue=789 note="row 5: the kit's bit-exactness bench is a slow DAG node, executed nightly by the record step" -->
 <!-- claim: grep="^\| `verify_drums` negative controls \| 9 of 9 caught" in=docs/drum-verification.md issue=789 note="row 5: the bench is shown to be able to fail" -->
 <!-- claim: grep="3 tom pitch drops" in=fpga/reports/control_path.txt issue=789 note="row 6: the timed writes the open row names are already bit-exact IN SIMULATION at the chip's pins" -->
 
