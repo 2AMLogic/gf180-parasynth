@@ -285,3 +285,17 @@ def test_container_progress_returns_none_when_docker_cannot_answer(monkeypatch):
         returncode, stdout, stderr = 1, "", "no such container"
     monkeypatch.setattr(fh.subprocess, "run", lambda *a, **k: P())
     assert fh.container_progress("abc") is None
+
+
+def test_container_progress_returns_none_when_docker_is_absent(monkeypatch):
+    """No docker binary is "could not tell" (None), not a crash.
+
+    This is reached without any `docker ps` guard in front of it -- a runner
+    image or developer machine without docker on PATH must get the documented
+    None, not FileNotFoundError. (It was the one pnr/ test that errored, not
+    skipped, on a python3-only PATH; issue #851.)
+    """
+    def raise_absent(*a, **k):
+        raise FileNotFoundError(2, "No such file or directory", "docker")
+    monkeypatch.setattr(fh.subprocess, "run", raise_absent)
+    assert fh.container_progress("abc") is None
