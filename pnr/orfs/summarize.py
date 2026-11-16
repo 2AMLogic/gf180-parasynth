@@ -58,7 +58,15 @@ REQUIRED_METRIC_SUFFIXES = (
 def load_metrics(p):
     """json.load's last-wins view plus every duplicated key's values in
     emission order -- emission order is the thing last-wins silently assumes,
-    so a strict read records it instead. ({}, {}) for a missing file."""
+    so a strict read records it instead. ({}, {}) for a missing file.
+
+    The duplicate map is the document ROOT's. `object_pairs_hook` fires
+    innermost-first, so the root is the hook's LAST call (`pairs[-1]`);
+    `pairs[0]` is the root only while the document is flat, and on a nested
+    document it reads some inner object -- reporting zero duplicates for the
+    root while last-wins publishes its ambiguous number (test_summarize.py
+    commits that defeating input as a control, docs/verification-rules.md
+    rule 8)."""
     pairs = []
 
     def hook(pairs_list):
@@ -71,7 +79,7 @@ def load_metrics(p):
     except FileNotFoundError:
         return {}, {}
     seen = {}
-    for k, v in pairs[0]:
+    for k, v in pairs[-1]:
         seen.setdefault(k, []).append(v)
     return data, {k: vs for k, vs in seen.items() if len(vs) > 1}
 

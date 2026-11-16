@@ -83,6 +83,33 @@ def test_the_order_swapped_variant_does_not_silently_pass():
     assert refusals[AREA_KEY] == list(reversed(JOINED_AREA_VALUES))
 
 
+def test_a_nested_object_does_not_hide_the_roots_duplicates():
+    """Rule 8 form 1: the defeating input, committed.
+
+    `object_pairs_hook` fires innermost-first, so the document root is the
+    hook's LAST call. A reader that builds the duplicate map from the first
+    call reads this input's nested object and reports zero duplicates for
+    the root -- exit 0, last-wins 2.0 published, no duplicate block (the
+    failure the Judge measured on #849's first pass). The nested duplicate
+    here is deliberately identical (9.0, 9.0) so a first-call reader finds
+    `dups` non-empty yet nothing to refuse: the check passes, the intent
+    fails. MetricsEntry::assembleJSON emits flat documents today, so the
+    shape is latent, not live -- exactly what rule 8 commits an input for.
+    """
+    raw = (f'{{"nest": {{"{AREA_KEY}": 9.0, "{AREA_KEY}": 9.0}},'
+           f' "{AREA_KEY}": 1.0, "{AREA_KEY}": 2.0}}')
+    with tempfile.TemporaryDirectory() as tmp:
+        p = pathlib.Path(tmp) / "6_report.json"
+        p.write_text(raw)
+        data, dups = sm.load_metrics(p)
+        refusals = dict(sm.duplicate_refusals(dups))
+    assert data["nest"] == {AREA_KEY: 9.0}, "the nested read is intact"
+    assert dups[AREA_KEY] == [1.0, 2.0], \
+        "the duplicate map is the root's, not the nested object's"
+    assert refusals[AREA_KEY] == [1.0, 2.0], \
+        "the root's differing duplicate is refused"
+
+
 def test_a_duplicated_required_key_with_identical_values_is_not_a_refusal():
     dups = {"finish__design__instance__count": [154246, 154246]}
     assert sm.duplicate_refusals(dups) == []
