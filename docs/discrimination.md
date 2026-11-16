@@ -626,7 +626,13 @@ resampling directions (`tools/probes/fold_rate_sweep.py`):
 The folds are now at the exact period, read by band-limited interpolation
 (`_fold_at`, `FOLD_SINC_TAPS`, swept in
 `docs/sensitivity/fold-interpolator.json`), and the worst gap anywhere on that
-sweep is 0.0142 against 0.0200. Two consequences for the numbers on this page:
+sweep is 0.0182 against 0.0200. (It was 0.0142 when #767 landed. The dial did
+not change: three of the sweep's 88 pairs were REFUSED rather than scored
+because `dominant_period` picked a different octave at the two rates, #774
+repaired that, and those three are now the worst scored rows at every width.
+The record, with the control that separates the repair from a numpy change, is
+the third `limits` entry of that sweep record.) Two consequences for the
+numbers on this page:
 
 - **The `jit.stability` +0.008 and the `mpd.* <= +0.002` attributions were
   derived with the old fold and this work did NOT re-derive them. REFUSED,
@@ -640,6 +646,44 @@ sweep is 0.0142 against 0.0200. Two consequences for the numbers on this page:
 - **The recommendation to drop the MPD columns is unaffected**, and if
   anything is firmer: the columns earned <= +0.002 while part of what they
   were reading was the sample grid.
+
+**AND THE `jit.period` +0.024 ABOVE WAS MEASURED ON AN ESTIMATOR THAT
+RETURNED THE WRONG OCTAVE ON SOME CLIPS (#774, 2026-11-14).** `jit.period` is
+the fourth-ranked bucket on this page and its columns are seeded by
+`dominant_period`, which was a bare argmax of the autocorrelation over the
+whole 120-1200 Hz lag band. On a clip whose true period falls near a half
+sample it returned TWO periods: an 880 Hz square built at 48 kHz and resampled
+to 44.1 kHz came back as 101 samples against 55 on the other side of the same
+pair, so `jit.period_ms` read 2.22 ms and 1.15 ms for one clip at two rates,
+and `jit.ncycles` followed it. Measured over a 5 Hz f0 ladder from 200 to
+1000 Hz plus every whole Hz from 840 to 890, in both resampling directions,
+the class is **48 of 402 pairs in both directions** at the bare argmax and
+**zero** after the repair (`tools/probes/octave_margin_sweep.py`,
+`docs/sensitivity/dominant-period-octave-margin.json`).
+
+- **Whether the `jit.period` +0.024 needs re-deriving is REFUSED, not
+  "unchanged".** The reference corpus is not on the host that made the repair,
+  so the permutation importances could not be recomputed. What can be said
+  without it, and is the reason the answer is not simply "re-run it": the
+  defect is a NUISANCE VARIABLE OF EXACTLY THE SHAPE THIS BUCKET IS MOST
+  EXPOSED TO. It fires only on clips whose period lands within about 0.05 of a
+  half sample at the rate they are read at, and the 44.1 kHz corpus and the
+  48 kHz renders do not land there on the same notes -- so on an affected note
+  the bucket was separating the two sides by an octave of reported pitch
+  rather than by anything either instrument did. That can only have inflated a
+  pitch bucket's apparent importance, never deflated it, so **+0.024 is an
+  upper bound on what the repaired columns will give** and the direction here
+  IS obvious, unlike the `jit.stability` case above. How large the correction
+  is depends on how many corpus rows fall in the band, which is the unmeasured
+  quantity. **#778 owns the re-derivation** and is parked on #774 for this
+  reason: the scarce corpus run should not be spent until the octave pick is
+  settled, and it now is.
+- **The `jit.stability` paragraph above is unaffected by this repair.**
+  `dominant_period` does not move on any entry of `RATE_PANEL`, which is
+  asserted rather than assumed: `test_the_octave_margin_does_not_move_the_rate_panel`
+  compares every panel clip at both rates, lag by lag, against the bare argmax
+  the margin replaced. So the stability columns' numbers on this page are the
+  same numbers they were, and if that test ever goes red this bullet is wrong.
 
 A second, smaller finding from the same measurement, recorded because it
 bears on how the figures above should be read: `jit.cyclecorr` separates a
