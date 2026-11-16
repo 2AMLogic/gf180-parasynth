@@ -201,6 +201,53 @@ def test_issue_824_a_passing_record_with_no_covers_is_refused(monkeypatch):
     assert st == "REFUSED" and "covered" in note
 
 
+def test_issue_824_858_a_failing_record_with_no_covers_stays_red_even_when_tagged(tmp_path, monkeypatch):
+    """#858 (rule 5, through classify(), where the verdict is issued): a
+    FAILING record is a stated verdict, more precise than a refusal -- but
+    the empty-covers guard's `or tag_is_ancestor(tag)` disjunct fired on the
+    tag alone, so a covers-less node carrying an in-history tag rendered
+    REFUSED ("cannot answer") instead of the failure it is. The guard must
+    keep refusing the PASSING case it exists for (#824); only the masked
+    failure moves to RED."""
+    v1, _ = _mini_repo(tmp_path, monkeypatch)
+    subprocess.run(["git", "tag", "ctl-858", v1], cwd=tmp_path,
+                   capture_output=True, text=True, check=True)
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": False, "detail": "suite exit 1",
+                                       "sha": v1}})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "tag": "ctl-858"})
+    assert (st, note) == ("RED", "suite exit 1"), \
+        f"a failing record on a covers-less tagged node rendered {st} -- {note}"
+    # Rule 8, the input that defeats the hoist: the same node with a PASSING
+    # record must still refuse -- the hoist must not widen the guard into a
+    # pass for the case #824 added it to catch.
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "detail": "ok",
+                                       "sha": v1}})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "tag": "ctl-858"})
+    assert st == "REFUSED" and "covered" in note, \
+        f"a passing record on a covers-less tagged node rendered {st} -- {note}"
+
+
+def test_issue_824_858_a_failing_record_with_no_covers_stays_red_without_a_tag(monkeypatch):
+    """The untagged half of the same shape, pinned before it is broken: with
+    no tag the guard's tag disjunct cannot fire, so the RED check answered
+    -- correct, but covered by nothing (all nine earlier issue_824 controls
+    drive passing records or no record). Also pins the rule-8 input both
+    paths share: a record with no `passed` key at all reads falsy and stays
+    RED, exactly as the covers case behaved."""
+    for rec, detail in ({"passed": False, "detail": "suite exit 1"},
+                        "suite exit 1"), \
+                       ({"detail": "no verdict key"},
+                        "no verdict key"):
+        monkeypatch.setattr(cd, "load_results", lambda r=rec: {"N": r})
+        st, note = cd.classify("N", {"evidence_file": "docs/dag.json"})
+        assert (st, note) == ("RED", detail), \
+            f"record {rec} rendered {st} -- {note}"
+
+
 def test_issue_824_a_reachable_sha_with_a_changed_file_is_still_stale(tmp_path, monkeypatch):
     """The guard must not overfire: a sha in this history whose covered file
     genuinely changed keeps the honest STALE verdict."""

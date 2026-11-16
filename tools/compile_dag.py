@@ -212,12 +212,20 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     # honestly: the moment a file the node covers changes, the stamp goes
     # STALE rather than sitting there looking verified.
     tag = n.get("tag", "")
+    # A FAILING record stays RED: the run's verdict is already stated, and
+    # is more precise than a refusal. Hoisted ABOVE the empty-covers guard
+    # below (#858): that guard's `or tag_is_ancestor(tag)` disjunct fired on
+    # the tag alone, so a failing record on a covers-less tagged node
+    # rendered REFUSED -- a known failure reported as a cannot-answer --
+    # instead of the failure it is. The only checks this jumps are the
+    # empty-covers guard itself and the `not rec`-gated ones below it, none
+    # of which a failing record could answer more precisely.
+    if rec and not rec.get("passed"):
+        return "RED", rec.get("detail", "failed")
     # #824, rule 8: the input that defeats the sha guard. Staleness is
     # measured over `covers`; evidence with no covered files named -- a
     # passing record, or an in-history stamp -- has nothing to go stale, and
-    # the loop would measure nothing and answer "not stale". A FAILING
-    # record stays RED instead: the run's verdict is already stated, and is
-    # more precise than a refusal.
+    # the loop would measure nothing and answer "not stale".
     if not n.get("covers", []) and ((rec and rec.get("passed"))
                                     or tag_is_ancestor(tag)):
         return "REFUSED", ("evidence exists but the node declares no "
@@ -231,8 +239,6 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
 
     if not rec:
         return "TODO", "never run -- `tools/compile_dag.py --run`"
-    if not rec.get("passed"):
-        return "RED", rec.get("detail", "failed")
 
     # #824: staleness is measured against a sha in this history. A record
     # with no commit stamp, or a sha that left this history (squash-merged,
