@@ -90,3 +90,46 @@ def test_the_documented_exceptions_satisfy_the_pin(monkeypatch):
                         lambda: _result([2, 3, 126], handler_sites={1: VCA_SITES}))
     ok, _ = census_mod.check()
     assert ok
+
+
+# ---------------------------------------------------------------- issue #868
+# The sites_outside_set pin was keyed on (file, line) pairs, so an unrelated
+# edit ABOVE the pinned lines in tools/cymbal_vca_drive.py reds --check with
+# the exit contract intact.  These controls pin the behaviour the re-keyed
+# pin must have; Control A was run RED against the line-keyed pin first
+# (docs/verification-rules.md rule 1).
+
+def test_control_a_line_shift_above_the_sites_stays_green(monkeypatch):
+    """Control A (issue #868): an unrelated edit above the pinned sites --
+    one inserted comment line shifts both down one -- must leave --check
+    green.  On the line-keyed pin this exact census was RED while the exit
+    contract was untouched: the defect this issue repairs."""
+    shifted = [("tools/cymbal_vca_drive.py", 1526),
+               ("tools/cymbal_vca_drive.py", 1532)]
+    monkeypatch.setattr(census_mod, "census",
+                        lambda: _result([2, 3, 126], handler_sites={1: shifted}))
+    ok, lines = census_mod.check()
+    assert ok, "\n".join(lines)
+
+
+def test_control_b_new_undeclared_site_elsewhere_turns_check_red(monkeypatch):
+    """Control B (issue #868): a new undeclared exit-4 refusal in another
+    function and file must still turn --check red -- re-keying the pin must
+    not open a hole the old pin did not have."""
+    monkeypatch.setattr(census_mod, "census",
+                        lambda: _result([2, 3, 126],
+                                        handler_sites={1: VCA_SITES,
+                                                       4: [("tools/exit_probe_other.py", 40)]}))
+    ok, lines = census_mod.check()
+    assert not ok, "\n".join(lines)
+    assert any("outside the declared set" in ln for ln in lines)
+
+
+def test_control_b_third_refusal_in_the_pinned_function_turns_check_red(monkeypatch):
+    """Control B (issue #868): a THIRD exit-1 refusal inside the same pinned
+    function must turn --check red -- the count is part of the pin."""
+    monkeypatch.setattr(census_mod, "census",
+                        lambda: _result([2, 3, 126],
+                                        handler_sites={1: VCA_SITES + [("tools/cymbal_vca_drive.py", 1600)]}))
+    ok, lines = census_mod.check()
+    assert not ok, "\n".join(lines)
