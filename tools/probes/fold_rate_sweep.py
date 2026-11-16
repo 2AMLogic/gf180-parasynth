@@ -78,9 +78,11 @@ OBJECTIVE_COL = "jit.cycledshape.seg0"
 
 
 def tolerance(name: str, a: float, b: float) -> float:
-    """The module's OWN tolerance expression, imported rather than restated so
-    the probe cannot drift from the test it explains."""
-    return max(D.RATE_TOL_REL * max(abs(a), abs(b)), D.RATE_TOL_ABS[D._unit_of(name)])
+    """The module's OWN tolerance expression, CALLED rather than restated so
+    the probe cannot drift from the test it explains. It was a restatement
+    until #775 made `rate_tolerance` the one place the expression lives; the
+    wrapper is kept so this file's call sites read the same."""
+    return D.rate_tolerance(name, a, b)
 
 
 def read(x: np.ndarray, sr: int, taps: int) -> dict:
