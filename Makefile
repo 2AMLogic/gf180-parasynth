@@ -182,6 +182,7 @@ verify:
 	  "$(PY) tools/probes/estimator_domains.py" \
 	  "$(PY) tools/probes/verify_109_claims.py" \
 	  "$(PY) tools/sensitivity.py check" \
+	  "$(PY) tools/refusal_exit_census.py --check" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py"
 
 ## Fast sound-development checks, separate from the broad repository suite.
@@ -258,7 +259,7 @@ verify:
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest tools/test_run_case.py -q" \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_refusal_exit_census.py tools/test_manifest.py tools/test_characterize_synth_top.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
  	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py tools/test_check_arty_evidence_binding.py fpga/test_publish_binding.py fpga/test_arty_sd_top.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py fpga/test_named_r1.py fpga/test_named_r2.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
@@ -587,6 +588,7 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
 	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
 	  "$(PY) -m pytest tools/test_check_surge_waveform_comment.py -q -k issue_271" \
+	  "$(PY) -m pytest tools/test_compile_dag_evidence.py -q -k issue_824" \
 	  "$(PY) -m pytest model/test_rig_qualification.py -q -k discrimination_matrix" \
 	  "$(PY) -m pytest model/test_modeld_pedalboard_rig.py -q -k 'refuses or REFUS or uncorrectable'" \
 	  "$(PY) tools/check_decision_record_numbers.py --expect ok" \
@@ -599,6 +601,7 @@ controls:
 	  "$(PY) model/sound_report.py --inject sd-centroid-amp-weighted" \
 	  "$(PY) tools/stage_case.py controls --root build/provenance-controls" \
 	  "$(PY) tools/inject_manifest_defects.py" \
+	  "$(PY) -m pytest tools/test_characterize_synth_top.py -q -k control" \
 	  "$(PY) pnr/report_synth_area.py --expect area --outdir build/pnr-area-clean" \
 	  "$(PY) pnr/report_synth_area.py --inject TANH_INDEX_OOR --expect refused-x --outdir build/pnr-area-tanh-oor" \
 	  "$(PY) pnr/orfs/area_provenance.py --expect ok --outdir build/pnr-die-clean" \
@@ -615,6 +618,8 @@ controls:
 	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused" \
+	  "$(PY) tools/sensitivity.py check --inject OBJECTIVE_ZERO --expect refused" \
+	  "$(PY) tools/sensitivity.py check --inject OBJECTIVE_NEGATIVE --expect refused" \
 	  "$(PY) tools/probes/repeat_period_multiple.py --inject NO_SUBMULTIPLE_RULE --expect-fail" \
 	  "$(PY) tools/probes/repeat_period_multiple.py --inject OVERLAP_NORMALISER --expect-fail" \
 	  "$(PY) tools/probes/permitted_differences.py --controls" \

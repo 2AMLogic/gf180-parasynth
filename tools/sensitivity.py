@@ -171,27 +171,59 @@ def runs(points: list[tuple[float, float]], tol: float) -> list[list[float]]:
     Two points are in the same group when the group's own spread stays within
     the record's stated relative tolerance. Greedy from the low end; the
     objective is a cost curve over an ordered dial, so a group is an interval.
+
+    A relative tolerance needs a strictly positive base. The exception is an
+    exact plateau -- when every objective in the extended group is equal the
+    spread is zero on any scale, so the group forms without a division (a
+    column of perfect zeros reads FLAT). Any other spread that touches or
+    crosses zero is unmeasurable and REFUSES; evaluate() raises the same
+    refusal with the column name in hand before the transcription checks,
+    and this guard covers direct callers.
     """
     out: list[list[float]] = []
     values: list[float] = []
     lo = hi = 0.0
     for value, objective in points:
-        if values:
-            nlo, nhi = min(lo, objective), max(hi, objective)
-            # the epsilon makes "within 2 %" include exactly 2 %: 102/100 - 1
-            # is 0.020000000000000018 in binary floating point, and a stated
-            # rule should not turn on that
-            if nhi / nlo - 1.0 > tol * (1.0 + 1e-9):
-                out.append(values)
-                values, lo, hi = [value], objective, objective
-                continue
-            lo, hi = nlo, nhi
-            values.append(value)
-        else:
+        if not values:
             values, lo, hi = [value], objective, objective
+            continue
+        nlo, nhi = min(lo, objective), max(hi, objective)
+        if nlo == nhi:
+            pass  # zero spread: identical by any scale, no division needed
+        elif nlo <= 0 or nhi <= 0:
+            raise Refused(
+                f"objective {objective:g} at grid value {value:g}: a relative "
+                "flat_within_relative rule cannot measure spread across or "
+                "below zero")
+        # the epsilon makes "within 2 %" include exactly 2 %: 102/100 - 1
+        # is 0.020000000000000018 in binary floating point, and a stated
+        # rule should not turn on that
+        elif nhi / nlo - 1.0 > tol * (1.0 + 1e-9):
+            out.append(values)
+            values, lo, hi = [value], objective, objective
+            continue
+        lo, hi = nlo, nhi
+        values.append(value)
     if values:
         out.append(values)
     return out
+
+
+def refuse_unmeasurable_objective(ident: str, column: str,
+                                  points: list[tuple[float, float]]) -> None:
+    """A relative rule cannot measure an objective that crosses or sits below
+    zero. The one admission is the exact plateau: a column whose every value
+    is equal -- including all-zero -- has zero spread on any scale and
+    evaluates. Fired from evaluate() right after extract_points(), so the
+    refusal names the column and fires before the transcription checks add
+    unrelated noise."""
+    objectives = [o for _, o in points]
+    if min(objectives) > 0 or all(o == objectives[0] for o in objectives):
+        return
+    value, objective = next((v, o) for v, o in points if o <= 0)
+    raise Refused(f"{ident}: objective column {column!r} is {objective:g} at "
+                  f"grid value {value:g}; a relative flat_within_relative rule "
+                  "cannot measure spread across or below zero")
 
 
 def state_of(groups: list[list[float]], n_points: int) -> str:
@@ -202,7 +234,13 @@ def state_of(groups: list[list[float]], n_points: int) -> str:
     return "MIXED"
 
 
-def pct(a: float, b: float) -> float:
+def pct(a: float, b: float) -> float | None:
+    """Percent change from a to b; None when the base is 0, where a relative
+    move has no price. A zero base reaching here is an exact plateau (any
+    spread over zero is refused upstream), and no move out of a perfect
+    score can be priced relatively."""
+    if a == 0:
+        return None
     return (b / a - 1.0) * 100.0
 
 
@@ -211,10 +249,22 @@ def pct(a: float, b: float) -> float:
 
 
 PARAM = r"^\s*(?:parameter|localparam)\s+(?:\w+\s+)?{name}\s*=\s*(-?\d+)\s*[,;)]"
-# A module-level integer constant in a Python model, `NAME = 12` (optionally
-# annotated, optionally followed by a comment) at column 0. Column 0 because an
-# indented assignment is a local or a class attribute, not the module's value.
-PY_CONST = r"^{name}\s*(?::\s*[\w\[\]., ]+)?=\s*(-?\d+)\s*(?:#.*)?$"
+# A module-level numeric constant in a Python model, `NAME = 12` or
+# `NAME = 0.12` (optionally annotated, optionally followed by a comment) at
+# column 0. Column 0 because an indented assignment is a local or a class
+# attribute, not the module's value.
+#
+# A PLAIN DECIMAL LITERAL ONLY, and the refusals are the point (#775 needed
+# RATE_TOL_REL = 0.12, which the integer-only pattern could not read). The
+# digits must be there on both sides of the point, so `.5`, `3.`, `1e-3`,
+# `f(3)`, `3 + 1` and a commented-out `# N = 3` all still find no declaration
+# and `parse_parameter` still refuses rather than picking a digit out of an
+# expression -- which is what `float()` would happily do with `1e-3` if the
+# pattern let it through, and the gate has no business reading a value out of
+# a form nobody writes a swept constant in.
+# `test_a_python_constant_that_is_not_a_plain_decimal_literal_refuses` carries
+# every one of those cases.
+PY_CONST = r"^{name}\s*(?::\s*[\w\[\]., ]+)?=\s*(-?\d+(?:\.\d+)?)\s*(?:#.*)?$"
 KIND_PATTERN = {"verilog-parameter": PARAM, "python-constant": PY_CONST}
 
 
@@ -299,6 +349,12 @@ def evaluate(rec: dict, root: Path = ROOT, overrides: dict | None = None) -> dic
                       "carries no retrofit block saying so")
 
     measured = extract_points(rec, root)
+    if overrides:
+        patch = overrides.get(("__injected_objective__", ident))
+        if patch is not None:
+            first, _ = measured[0]
+            measured = [(v, patch if v == first else o) for v, o in measured]
+    refuse_unmeasurable_objective(ident, rec["evidence"]["objective_column"], measured)
     grid = [float(v) for v in rec["grid"]["values"]]
     if sorted(grid) != [v for v, _ in measured]:
         problems.append(
@@ -368,10 +424,19 @@ def evaluate(rec: dict, root: Path = ROOT, overrides: dict | None = None) -> dic
     }
 
 
+def rule_label(tol: float) -> str:
+    """The decision rule as a reader can act on it. `.0%` renders anything
+    under half a percent as "0%", which reads like a rule that was never
+    stated -- and rate-tol-rel's rule really is 1e-5, exact equality for an
+    integer count objective (#775). Below half a percent, say the number."""
+    return f"{tol:.0%}" if tol >= 0.005 else f"{tol:g} relative"
+
+
 def describe(row: dict) -> str:
     groups = ["-".join(f"{v:g}" for v in (g[0], g[-1])) if len(g) > 1 else f"{g[0]:g}"
               for g in row["runs"]]
-    return f"{row['state']:<9} runs [{', '.join(groups)}] at {row['tolerance']:.0%}"
+    return (f"{row['state']:<9} runs [{', '.join(groups)}] "
+            f"at {rule_label(row['tolerance'])}")
 
 
 def print_table(rows: list[dict], out=sys.stdout) -> None:
@@ -386,8 +451,8 @@ def print_table(rows: list[dict], out=sys.stdout) -> None:
         if r["ships_on_grid"] and len(r["ships_run"]) > 1:
             lo, hi = r["ships_run"][0], r["ships_run"][-1]
             print(f"{'':<8} -> anything in {lo:g}..{hi:g} is the same {r['objective']} to "
-                  f"within {r['tolerance']:.0%}: arguing inside that range cannot move it",
-                  file=out)
+                  f"within {rule_label(r['tolerance'])}: arguing inside that range "
+                  "cannot move it", file=out)
         if r["lower_is_better"] and r["best_move_pct"] is not None and r["best_move_pct"] < -0.0:
             print(f"{'':<8} -> cheapest point on the grid: {r['parameter']}="
                   f"{r['best_value']:g}, {r['best_move_pct']:+.1f}% of {r['objective']} "
@@ -405,6 +470,8 @@ INJECTIONS = {
     "SHIPPED_OFF_GRID": "the shipped parameter value moved off the grid",
     "PREDICTION_WRONG": "the independent prediction contradicts the measurement",
     "RULE_UNSTATED": "the decision rule removed (must REFUSE, not pass)",
+    "OBJECTIVE_ZERO": "one measured objective set to exactly 0 among nonzero (must REFUSE)",
+    "OBJECTIVE_NEGATIVE": "one measured objective set negative (must REFUSE, not read FLAT)",
 }
 
 
@@ -433,6 +500,14 @@ def inject(name: str, records: list[dict], overrides: dict) -> None:
         rec["prediction"]["runs"] = [[v for v in rec["grid"]["values"]]]
     elif name == "RULE_UNSTATED":
         rec["decision_rule"].pop("flat_within_relative", None)
+    elif name in ("OBJECTIVE_ZERO", "OBJECTIVE_NEGATIVE"):
+        # A relative spread is undefined across, at, or below zero. runs()
+        # never sees rec["points"] -- it sees the points re-derived from the
+        # artefact -- and rewriting the artefact file in place would mutate
+        # the real checkout under `make controls`. Thread the patch through
+        # overrides and let evaluate() apply it to `measured` in memory.
+        overrides[("__injected_objective__", rec["id"])] = (
+            0.0 if name == "OBJECTIVE_ZERO" else -1.0)
 
 
 # --------------------------------------------------------------------------
@@ -470,6 +545,13 @@ def run_check(root: Path = ROOT, changed_since: str | None = None,
             delta = pct(objective[was], objective[row["ships"]])
             same = group_index(row["runs"], was) == group_index(row["runs"], row["ships"])
             verdict = ("FLAT-MOVE" if same else "PRICED")
+            if delta is None:
+                # the old value's objective is 0: an exact plateau, so the
+                # move has no relative price to quote
+                print(f"{verdict} {row['id']}: {name} {was:g} -> {row['ships']:g}; the old "
+                      f"value's {row['objective']} is zero, so the sweep cannot price "
+                      "the move", file=out)
+                continue
             print(f"{verdict} {row['id']}: {name} {was:g} -> {row['ships']:g} moves "
                   f"{row['objective']} by {delta:+.2f}%"
                   + (f" (inside the {row['tolerance']:.0%} rule -- this change is not a "

@@ -24,7 +24,10 @@ block benches; the mm² figures are gf180mcu cell area at tt/5 V with `*_1`
 cells allowed, and **cell area is not die area** — see ARCHITECTURE.md
 section 10 for where the chip sits against the wafer.space quarter slot.
 
-The T1 evidence-tier verdict for this block, graded by `klt signoff --manifest` and re-graded in CI, is committed at [manifests/verdict.txt](manifests/verdict.txt) (item 10, repo hygiene, is the only item attested; every other item is `unmet` with its reason).
+The T1 evidence-tier verdict for this block, graded by `klt signoff --manifest` and re-graded in CI, is committed at [manifests/verdict.txt](manifests/verdict.txt): **2 of 11 items met** — item 9, testbenches shipped, and item 10, repo hygiene. Every other item is `unmet` with its reason.
+<!-- claim: grep="^T1: 2/11 items met$" in=manifests/verdict.txt issue=789 note="the count this sentence quotes; when a third item is attested this goes red and the sentence must be rewritten, which is the point" -->
+<!-- claim: grep="^\[MET  \] T1 #9 Testbenches shipped$" in=manifests/verdict.txt issue=789 note="the first attested item this sentence names" -->
+<!-- claim: grep="^\[MET  \] T1 #10 Repo hygiene$" in=manifests/verdict.txt issue=789 note="the second" -->
 
 ## Where we are
 
@@ -46,11 +49,11 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **2529 commits over 1408 hours.**
+Measured from git, not remembered. **2592 commits over 1424 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 3719 | 2.6 |
+| tests | 3835 | 2.7 |
 | injected controls | 297 | 0.2 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,189 | 8 |
@@ -126,13 +129,13 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STALE** | rtl-sketch/ladder_dp.v changed since node/F1-ladder was cut |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal (not re-run; verifier is slow) |
-| `F3` | Measurement ground truth | **GREEN** | 153 passed in 2.50s |
+| `F3` | Measurement ground truth | **GREEN** | 153 passed in 2.36s |
 | `M1` | One Moog voice bit-exact | **STALE** | rtl-sketch/voice_dp.v changed since node/M1-voice was cut |
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 243.21s (0:04:03) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 241.38s (0:04:01) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `I2` | Whole chip at its pins | **TODO** | never run -- `tools/compile_dag.py --run` |
