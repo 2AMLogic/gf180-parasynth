@@ -171,7 +171,7 @@
         "role": "testbench",
         "path": "tools/run_all.py",
         "passed": true,
-        "content_hash": "sha256:9aef715e4460dd5c34f74b276f98800bdb37187b288c62907edd94cc0d7a95e9"
+        "content_hash": "sha256:6e3ef5f57c405802d61e000489137682c83ab8847696d8901ddaa0564839763b"
       },
       {
         "check": "present",

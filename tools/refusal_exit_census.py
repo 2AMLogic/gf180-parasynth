@@ -80,6 +80,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 MIN_PY_FILES = 300
 CONTRACT = pathlib.Path("tools") / "exit_contract.py"
 RUNNER = pathlib.Path("tools") / "run_all.py"
+# The key for a refusal site with no enclosing def (module-level handler or
+# constant), distinct from any function name so it can never collide (#868).
+MODULE_LEVEL = "<module>"
 
 # Exception classes that mean "a precondition is not met, so nothing was
 # measured".  Taken from the classes actually raised in this tree; a class
@@ -225,6 +228,27 @@ def _exit_contract_imports(tree: ast.Module) -> dict[str, str]:
     return out
 
 
+def _handlers_in_scope(tree: ast.Module) -> list[tuple[str, ast.ExceptHandler]]:
+    """(innermost enclosing function name, handler) for every except clause.
+    The function name is the pin key for sites_outside_set (issue #868): it
+    survives any edit that shifts lines, which a line number does not.  A
+    handler with no enclosing def keys as MODULE_LEVEL, not a crash."""
+    out: list[tuple[str, ast.ExceptHandler]] = []
+
+    def visit(node, func: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, child.name)
+            elif isinstance(child, ast.ExceptHandler):
+                out.append((func, child))
+                visit(child, func)
+            else:
+                visit(child, func)
+
+    visit(tree, MODULE_LEVEL)
+    return out
+
+
 def _handled_classes(node: ast.ExceptHandler) -> list[str]:
     t = node.type
     if t is None:
@@ -258,9 +282,10 @@ def _return_status(value, local: dict[str, int], imported: dict[str, str],
     return None
 
 
-def handler_census(files: list[str], contract: dict[str, int]) -> dict[int, list[tuple[str, int]]]:
-    """Per exit status, the `except <refusal>: ... return <status>` sites."""
-    by: dict[int, list[tuple[str, int]]] = collections.defaultdict(list)
+def handler_census(files: list[str], contract: dict[str, int]) -> dict[int, list[tuple[str, str, int]]]:
+    """Per exit status, the `except <refusal>: ... return <status>` sites,
+    each as (file, enclosing function, line)."""
+    by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
     for f in files:
         if pathlib.Path(f).name.startswith("test_") or f == str(CONTRACT):
             continue
@@ -270,24 +295,23 @@ def handler_census(files: list[str], contract: dict[str, int]) -> dict[int, list
             continue
         local = _module_int_assigns(tree)
         imported = _exit_contract_imports(tree)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ExceptHandler):
-                continue
+        for func, node in _handlers_in_scope(tree):
             if not (set(_handled_classes(node)) & REFUSAL_CLASSES):
                 continue
             for st in ast.walk(node):
                 status = _return_status(st.value, local, imported, contract) \
                     if isinstance(st, ast.Return) else None
                 if status is not None:
-                    by[status].append((f, st.lineno))
+                    by[status].append((f, func, st.lineno))
                     break
     return dict(by)
 
 
-def constant_census(files: list[str]) -> dict[int, list[tuple[str, int]]]:
+def constant_census(files: list[str]) -> dict[int, list[tuple[str, str, int]]]:
     """Per exit status, the module-level `REFUSED = <int>` declarations.  These
-    are invisible to `handler_census` when no handler returns the constant."""
-    by: dict[int, list[tuple[str, int]]] = collections.defaultdict(list)
+    are invisible to `handler_census` when no handler returns the constant.
+    Module-level by construction, so every site keys as MODULE_LEVEL."""
+    by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
     for f in files:
         if pathlib.Path(f).name.startswith("test_") or f == str(CONTRACT):
             continue
@@ -302,7 +326,7 @@ def constant_census(files: list[str]) -> dict[int, list[tuple[str, int]]]:
                 continue
             if isinstance(st.value, ast.Constant) and isinstance(st.value.value, int) \
                     and not isinstance(st.value.value, bool):
-                by[st.value.value].append((f, st.lineno))
+                by[st.value.value].append((f, MODULE_LEVEL, st.lineno))
     return dict(by)
 
 
@@ -324,7 +348,7 @@ def census() -> dict:
         "codes": {
             c: {
                 "handler_sites": sorted(handlers.get(c, [])),
-                "handler_files": sorted({f for f, _ in handlers.get(c, [])}),
+                "handler_files": sorted({f for f, _, _ in handlers.get(c, [])}),
                 "constant_sites": sorted(constants.get(c, [])),
                 # the column that matters: how run_all.py renders this family
                 "run_all_state": "NO-VERDICT" if c in no_evidence
@@ -351,9 +375,9 @@ def render(res: dict) -> str:
                   "docstring), not as NO-VERDICT:"]
     for c in misreported:
         d = res["codes"][c]
-        for f, ln in d["handler_sites"]:
-            lines.append(f"  exit {c}  {f}:{ln}")
-        for f, ln in d["constant_sites"]:
+        for f, func, ln in d["handler_sites"]:
+            lines.append(f"  exit {c}  {f}:{ln}  (in {func})")
+        for f, func, ln in d["constant_sites"]:
             lines.append(f"  exit {c}  {f}:{ln}  (REFUSED = {c})")
     if not misreported:
         lines.append("  none -- every refusal family is reported NO-VERDICT")
@@ -386,15 +410,29 @@ EXPECTED = {
     "no_evidence": [2, 3, 126],
 }
 
-# The exact refusal sites that sit OUTSIDE the declared set, pinned one by
-# one.  Both are in tools/cymbal_vca_drive.py and both are deliberate: the
-# --require-source exit 1 is in that tool's argparse help and in
-# docs/scorecard/cymbal-369/vca-drive/README.md; #804 scoped them out rather
-# than quietly change a documented contract.  A NEW site outside the set --
-# a future tool refusing with an undeclared status -- turns --check red here.
+# The refusal sites that sit OUTSIDE the declared set, pinned one by one --
+# keyed on [file, enclosing function, exit status, count], not on line
+# numbers.  WRONG BEFORE IT WAS RIGHT: the first pin keyed each site as a
+# (file, line) pair compared by exact equality, so an unrelated edit anywhere
+# above the sites in tools/cymbal_vca_drive.py -- a comment, an added argparse
+# flag, a reflow -- turned --check red while the exit contract itself stayed
+# intact (issue #868; Control A in its test file ran red on that pin before
+# this re-key landed).  The same shape #825's review round removed the
+# per-family totals pins for: a pin that reds on other people's unrelated
+# work gets trained away.  The function name is resolved by AST
+# (_handlers_in_scope), the same machinery that reads the contract; a site
+# with no enclosing def keys as "<module>".  A NEW site outside the set still
+# turns --check red -- a future tool refusing with an undeclared status
+# changes the key set, a third refusal in this function changes the count.
+# Known residual, accepted: swapping one `return 1` for another inside the
+# same function is not caught; the exit-code contract does not care which
+# statement refuses, only which statuses exist outside the declared set.
+# Both pinned sites are in tools/cymbal_vca_drive.py's main() and both are
+# deliberate: the --require-source exit 1 is in that tool's argparse help and
+# in docs/scorecard/cymbal-369/vca-drive/README.md; #804 scoped them out
+# rather than quietly change a documented contract.
 EXPECTED["sites_outside_set"] = [
-    ["tools/cymbal_vca_drive.py", 1525],
-    ["tools/cymbal_vca_drive.py", 1531],
+    ["tools/cymbal_vca_drive.py", "main", 1, 2],
 ]
 
 
@@ -419,15 +457,19 @@ def check() -> tuple[bool, list[str]]:
     # The control that makes the census mean something: every refusal site
     # outside the declared set must be one of the pinned, documented
     # exceptions -- or a refusal is being rendered as FAIL again, the defect
-    # this tool was originally written to count.
-    outside = sorted((f, ln) for c in res["codes"] if c != 0 and c not in res["no_evidence"]
-                     for (f, ln) in res["codes"][c]["handler_sites"])
-    outside += sorted((f, ln) for c in res["codes"] if c != 0 and c not in res["no_evidence"]
-                      for (f, ln) in res["codes"][c]["constant_sites"])
-    good = outside == [tuple(s) for s in EXPECTED["sites_outside_set"]]
+    # this tool was originally written to count.  Compared as
+    # (file, enclosing function, status) counts, not (file, line) pairs,
+    # so an edit that only shifts lines cannot red the gate (#868).
+    outside = sorted((f, func, c) for c in res["codes"] if c != 0 and c not in res["no_evidence"]
+                     for (f, func, ln) in res["codes"][c]["handler_sites"])
+    outside += sorted((f, func, c) for c in res["codes"] if c != 0 and c not in res["no_evidence"]
+                      for (f, func, ln) in res["codes"][c]["constant_sites"])
+    counted = sorted([*site, n] for site, n in collections.Counter(outside).items())
+    good = counted == [list(s) for s in EXPECTED["sites_outside_set"]]
     ok = ok and good
     out.append(f"  {'ok ' if good else 'RED'}  refusal sites outside the declared set are exactly "
-               f"the pinned, documented exceptions (got {outside})")
+               f"the pinned, documented exceptions (file, enclosing function, "
+               f"status, count) (got {counted})")
     return ok, out
 
 
