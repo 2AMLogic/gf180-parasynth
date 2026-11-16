@@ -210,6 +210,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import run_case as rc  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
+from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
 # FROZEN before this module was used to judge anything (#400 acceptance 1).
 LOW_BANDS = {"M": (891.0, 2828.0), "Mn": (891.0, 1782.0)}
@@ -947,7 +948,7 @@ def main(argv=None) -> int:
             print_summary(json.loads(a.report.read_text()))
         except Refused as e:
             print(f"REFUSED: {e}")
-            return 1
+            return REFUSED            # was 1: run_all.py reads 1 as a RESULT
         return 0
 
     if a.check:
@@ -964,7 +965,7 @@ def main(argv=None) -> int:
     print("\n".join(lines))
     if not ok:
         print("REFUSED: the measurement's own controls do not pass; no result is reported")
-        return 1
+        return REFUSED            # was 1: a refusal, not a mismatch -- no result exists
 
     settings = None if a.all_settings else ["CY5025"]
     res["windows"] = {}

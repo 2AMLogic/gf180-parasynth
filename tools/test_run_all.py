@@ -34,10 +34,19 @@ def test_prints_fail_but_exits_zero_is_reported_pass():
     assert r["rc"] == 0
 
 
-def test_prints_pass_but_exits_three_is_failure_with_its_own_code():
-    r = ra.run_one(f'{PY} -c "print(\'PASS\'); raise SystemExit(3)"')
+def test_prints_pass_but_exits_an_undeclared_code_is_failure_with_its_own_code():
+    r = ra.run_one(f'{PY} -c "print(\'PASS\'); raise SystemExit(7)"')
     assert r["state"] == ra.FAIL
-    assert r["rc"] == 3, "the child's own status must survive; 1 and 2 mean different things here"
+    assert r["rc"] == 7, "the child's own status must survive"
+
+
+def test_a_declared_refusal_is_no_verdict_with_its_own_code():
+    """2, 3 and 126 are the declared refusal statuses (tools/exit_contract.py):
+    nothing was measured, which is no evidence -- not a failed measurement."""
+    for code in (2, 3, 126):
+        r = ra.run_one(f'{PY} -c "print(\'REFUSED: synthetic\'); raise SystemExit({code})"')
+        assert r["state"] == ra.NO_VERDICT, code
+        assert r["rc"] == code, "the original status must still be recorded"
 
 
 def test_exit_one_inside_a_shell_command_is_captured():
@@ -79,20 +88,24 @@ def test_timeout_kills_the_grandchild_not_just_the_shell(tmp_path):
 
 
 def test_one_failure_among_successes_fails_overall_and_keeps_every_result():
-    # Exit 3, not 2: under this repo's convention 2 means "did not run", which
-    # is NO-VERDICT rather than FAIL. Using it here would have tested the
-    # wrong thing -- and did, until the convention was added.
+    # Exit 1, the mismatch status -- a RESULT, not a refusal. (2, 3 and 126
+    # are the declared refusals; this test is about a job that ran and
+    # disagreed.)
     res = ra.run_all([f'{PY} -c "pass"',
-                      f'{PY} -c "raise SystemExit(3)"',
+                      f'{PY} -c "raise SystemExit(1)"',
                       f'{PY} -c "pass"'])
     assert [r["state"] for r in res] == [ra.PASS, ra.FAIL, ra.PASS]
-    assert res[1]["rc"] == 3
-    assert ra.main([f'{PY} -c "pass"', f'{PY} -c "raise SystemExit(3)"']) == 1
+    assert res[1]["rc"] == 1
+    assert ra.main([f'{PY} -c "pass"', f'{PY} -c "raise SystemExit(1)"']) == 1
 
 
 def test_no_verdict_still_fails_the_overall_run():
     """It is not a pass. Missing evidence must not look like success."""
     assert ra.main([f'{PY} -c "pass"', f'{PY} -c "raise SystemExit(2)"']) == 1
+
+
+def test_a_refusal_from_the_alternate_family_still_fails_the_overall_run():
+    assert ra.main([f'{PY} -c "pass"', f'{PY} -c "raise SystemExit(3)"']) == 1
 
 
 # --- the exit-code bound -----------------------------------------------------
@@ -196,6 +209,13 @@ def test_verifier_exit_two_is_no_evidence_not_failure():
 def test_exit_two_is_an_ordinary_failure_for_a_non_verifier():
     r = ra.run_one(f'{PY} -c "raise SystemExit(2)"', verifier=False)
     assert r["state"] == ra.FAIL and r["rc"] == 2
+
+
+def test_a_declared_refusal_is_an_ordinary_failure_for_a_non_verifier():
+    """The escape hatch covers every declared status, not just 2."""
+    for code in (3, 126):
+        r = ra.run_one(f'{PY} -c "raise SystemExit({code})"', verifier=False)
+        assert r["state"] == ra.FAIL and r["rc"] == code, code
 
 
 def test_mismatch_and_did_not_run_are_distinguishable_in_the_summary():

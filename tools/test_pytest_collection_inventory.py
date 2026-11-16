@@ -22,13 +22,20 @@ import pytest_collection_inventory as inv  # noqa: E402
 #: them (scope, path, parsing) cannot let the real-tree check pass vacuously.
 #: A count here goes UP when a module gains a test.
 #:
-#: model/discrimination_features.py, 13 -> 21, and this line is RE-DERIVED BY
+#: model/discrimination_features.py, 13 -> 31, and this line is RE-DERIVED BY
 #: COLLECTION rather than picked from either side of a merge: #773 landed with
-#: this line conflicting, and NEITHER side was right (merge-base 13, this
+#: this line conflicting, and NEITHER side was right (merge-base 13, that
 #: branch 14, origin/main 18 -- the two branches added disjoint tests, so
-#: neither number describes the merged tree). Re-derive it with
+#: neither number describes the merged tree). #775 hit the SAME conflict here
+#: and the same way: this branch said 23, origin/main said 20, and the merged
+#: tree collects 25. Its second conflict with main repeated the pattern --
+#: this branch said 25, origin/main said 21, and the merged tree collects 26
+#: -- so the count below was re-derived by collection a third time. The #781
+#: merge with main is the fourth: both sides said 26, each describing its own
+#: tree, and the merged tree collects 31, re-derived by collection again.
+#: Re-derive it with
 #: `inv.expected_nodes("model/discrimination_features.py", src)`, never by
-#: adding the two diffs. The twenty-one, by the side that added each:
+#: adding the two diffs. The thirty-one, by the side that added each:
 #:   13  the merge base (#763's
 #:       test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13)
 #:   +5  origin/main, the #767 fold interpolator:
@@ -37,18 +44,30 @@ import pytest_collection_inventory as inv  # noqa: E402
 #:       test_the_fold_reduces_to_indexing_on_a_whole_period,
 #:       test_the_integer_fold_this_replaced_is_still_red_on_this_panel,
 #:       test_the_one_residual_the_fold_repair_cannot_reach_is_the_stimulus
-#:   +1  #768, this branch:
+#:   +1  #768, origin/main:
 #:       test_the_floor_census_counts_a_refusal_from_the_decision_not_the_zero
-#:   +1  #773, this merge resolution -- the guard on the signature order the
+#:   +1  #773, that merge resolution -- the guard on the signature order the
 #:       merge itself could have got wrong:
 #:       test_the_merge_order_that_would_feed_a_tap_count_to_the_ppm_floor_is_red
-#:   +1  #768's remaining increment -- the `degenerate_refused` control the
-#:       census test above stated, correctly, that it did not have:
+#:   #781, the octave-margin fix, reworked #767's octave pair: -1
+#:       test_dominant_period_picks_a_different_octave_at_the_two_rates
+#:     (its predicate is the fixed behaviour now, renamed below), +6:
+#:       test_dominant_period_returns_the_same_octave_at_both_rates,
+#:       test_the_bare_argmax_this_replaced_is_still_wrong_on_that_class,
+#:       test_the_octave_check_does_not_touch_a_whole_sample_period,
+#:       test_the_octave_margin_does_not_move_the_rate_panel,
+#:       test_the_octave_margin_refuses_the_input_that_defeats_it,
+#:       test_the_octave_margin_ships_a_real_margin
+#:   +1  origin/main, #768's remaining increment -- the `degenerate_refused`
+#:       control the census test above stated, correctly, that it did not
+#:       have (it landed on main while this branch was open):
 #:       test_a_doubly_degenerate_row_is_not_credited_to_the_floor
+#:   +5  #775, this branch: the cyclecorr margin finding, the injected control
+#:       for the new RATE_TOL_REL, and three on the quarantine
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
-    "model/discrimination_features.py": 21,
+    "model/discrimination_features.py": 31,
     "model/discrimination_trajectory.py": 6,
 }
 

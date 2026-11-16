@@ -29,11 +29,13 @@ not filed in the wrong repository.
 **Later passes, other upstreams.** This document is the 2026-09-18
 klayout-tools comb and is not extended in place. Findings against the other
 upstream named in `CLAUDE.md`, `rjwalters/loom`, live in their own dated
-write-ups:
+write-ups, or directly in the upstream report when the finding was filed
+straight upstream with no local write-up:
 
 | pass | finding | filed |
 |---|---|---|
 | [`loom-orphan-reap-2026-09-27.md`](loom-orphan-reap-2026-09-27.md) | orphan reaping is uid-blind: a dockerd-started (root-owned) orphan survives every Loom SIGKILL with EPERM, is logged as "uninterruptible I/O", and binds no dispatch decision | [rjwalters/loom#9160](https://github.com/rjwalters/loom/issues/9160) |
+| #850 re-curation pass, 2026-11-16 | `check-verified-corrections-preserved.sh` matches only `## ` headings: an h3 `### Verified corrections` section passes silently at exit 0 even when deleted wholesale, and an h2 section mid-body swallows following h3 subsections so unrelated `###` edits FAIL as lost corrections | [rjwalters/loom#13938](https://github.com/rjwalters/loom/issues/13938) |
 
 ---
 
@@ -314,6 +316,7 @@ the correct home so the next pass does not re-derive them.
 
 | Finding | Evidence | Upstream |
 |---|---|---|
+| **OpenROAD's metrics JSON serialises every float metric at 6 significant figures.** Explicit `std::setprecision(6)` in the templated `Logger::metric(std::string_view, T)` overload (`src/utl/include/utl/Logger.h:206` at `06a5a02279`; `:208` on `master` @ `77370d8802`, 2026-11-15) — not `assembleJSON`, which only formats the stored string. `report_cell_usage`'s total prints 3382067.81 µm² in the log, serialises as `3.38207e+06` (+2.19); the nine per-class areas sum to the log Total exactly (residual 0.00) yet fall **4.94 µm²** short of the stated whole after serialisation — a reconciliation gap that exists only in the JSON. Integer metrics unaffected. One-line fix proposed upstream (`max_digits10`); PR offered only if maintainers accept the golden-file churn. **Correction of record:** the `core__area` == fill-inclusive `instance__area` equality is a *real identity*, not a 6-sf coincidence as OpenROAD#12303's body (and PR #849's row) say — fillers tile the core, and each run's `CORE_AREA` w×h equals its log cell-usage total at full precision (1839.60 × 1838.48 = 3382067.808 vs 3382067.81; 1293.60 × 1293.60 = 1673400.960 vs 1673400.96). | `pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.log` lines 32-42 vs `6_report.json`; same shape in `placeholder-2a88c35` | [The-OpenROAD-Project/OpenROAD#12307](https://github.com/The-OpenROAD-Project/OpenROAD/issues/12307) |
 | **ORFS gf180 `TRACK_OPTION=7t` is broken out of the box.** `platforms/gf180/cells_adders.v` / `cells_latch.v` hard-code `gf180mcu_fd_sc_mcu9t5v0__addf_1`/`addh_1`/`latq_1`; with the 7t liberty yosys aborts with 414 `is used but has no driver` in `check -assert`. Workaround: `pnr/orfs/gf180_7t/`. | `docs/pnr-first-run.md` §1.1 item 1 | OpenROAD-flow-scripts |
 | **IR-drop aborts at every corner but WC.** `platforms/gf180/setRC.tcl` sets via resistances only when `CORNER=WC`; at TC `analyze_power_grid` dies with `[ERROR PSM-0021] Resistance map constains invalid values.` (typo upstream's), *after* the final DEF/ODB/SPEF/netlist are written but before `report_metrics`. Exact text in `pnr/orfs/work/ladder_dp.log:778`. | `docs/pnr-first-run.md` §1.1 item 4 | OpenROAD / ORFS gf180 platform |
 | **`DESIGN_CONFIG` is included before the platform config**, so platform variables set with plain `=` (e.g. `DONT_USE_CELLS = *_1`) can only be overridden on the make command line. | `pnr/orfs/README.md` | OpenROAD-flow-scripts |

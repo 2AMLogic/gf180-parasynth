@@ -344,6 +344,18 @@ def audit_retired_patches(netlist: Path) -> tuple[dict[str, int], list[str]]:
     return counts, complaints
 
 
+def _is_inside(candidate: str, root: str) -> bool:
+    """True when ``candidate`` is ``root`` or lies under it at a boundary.
+
+    A bare ``startswith(root)`` is a *string* prefix, not a *path* prefix: a
+    sibling directory whose name merely begins with ``root``'s basename
+    (``ladder_dp_v2`` beside ``ladder_dp``) would satisfy it. Requiring
+    ``root + os.sep`` (or exact equality) makes the match land on a path
+    component boundary (issue #819).
+    """
+    return candidate == root or candidate.startswith(root + os.sep)
+
+
 def own_openroad_containers(
     here: Path, *, runner=subprocess.run
 ) -> list[str]:
@@ -387,7 +399,7 @@ def own_openroad_containers(
         except (json.JSONDecodeError, TypeError):
             continue
         if any(
-            isinstance(arg, str) and arg.startswith(prefix) for arg in argv
+            isinstance(arg, str) and _is_inside(arg, prefix) for arg in argv
         ):
             mine.append(container)
     return mine

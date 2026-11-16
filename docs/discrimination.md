@@ -626,7 +626,13 @@ resampling directions (`tools/probes/fold_rate_sweep.py`):
 The folds are now at the exact period, read by band-limited interpolation
 (`_fold_at`, `FOLD_SINC_TAPS`, swept in
 `docs/sensitivity/fold-interpolator.json`), and the worst gap anywhere on that
-sweep is 0.0142 against 0.0200. Two consequences for the numbers on this page:
+sweep is 0.0182 against 0.0200. (It was 0.0142 when #767 landed. The dial did
+not change: three of the sweep's 88 pairs were REFUSED rather than scored
+because `dominant_period` picked a different octave at the two rates, #774
+repaired that, and those three are now the worst scored rows at every width.
+The record, with the control that separates the repair from a numpy change, is
+the third `limits` entry of that sweep record.) Two consequences for the
+numbers on this page:
 
 - **The `jit.stability` +0.008 and the `mpd.* <= +0.002` attributions were
   derived with the old fold and this work did NOT re-derive them. REFUSED,
@@ -641,14 +647,82 @@ sweep is 0.0142 against 0.0200. Two consequences for the numbers on this page:
   anything is firmer: the columns earned <= +0.002 while part of what they
   were reading was the sample grid.
 
+**AND THE `jit.period` +0.024 ABOVE WAS MEASURED ON AN ESTIMATOR THAT
+RETURNED THE WRONG OCTAVE ON SOME CLIPS (#774, 2026-11-14).** `jit.period` is
+the fourth-ranked bucket on this page and its columns are seeded by
+`dominant_period`, which was a bare argmax of the autocorrelation over the
+whole 120-1200 Hz lag band. On a clip whose true period falls near a half
+sample it returned TWO periods: an 880 Hz square built at 48 kHz and resampled
+to 44.1 kHz came back as 101 samples against 55 on the other side of the same
+pair, so `jit.period_ms` read 2.22 ms and 1.15 ms for one clip at two rates,
+and `jit.ncycles` followed it. Measured over a 5 Hz f0 ladder from 200 to
+1000 Hz plus every whole Hz from 840 to 890, in both resampling directions,
+the class is **48 of 402 pairs in both directions** at the bare argmax and
+**zero** after the repair (`tools/probes/octave_margin_sweep.py`,
+`docs/sensitivity/dominant-period-octave-margin.json`).
+
+- **Whether the `jit.period` +0.024 needs re-deriving is REFUSED, not
+  "unchanged".** The reference corpus is not on the host that made the repair,
+  so the permutation importances could not be recomputed. What can be said
+  without it, and is the reason the answer is not simply "re-run it": the
+  defect is a NUISANCE VARIABLE OF EXACTLY THE SHAPE THIS BUCKET IS MOST
+  EXPOSED TO. It fires only on clips whose period lands within about 0.05 of a
+  half sample at the rate they are read at, and the 44.1 kHz corpus and the
+  48 kHz renders do not land there on the same notes -- so on an affected note
+  the bucket was separating the two sides by an octave of reported pitch
+  rather than by anything either instrument did. That can only have inflated a
+  pitch bucket's apparent importance, never deflated it, so **+0.024 is an
+  upper bound on what the repaired columns will give** and the direction here
+  IS obvious, unlike the `jit.stability` case above. How large the correction
+  is depends on how many corpus rows fall in the band, which is the unmeasured
+  quantity. **#778 owns the re-derivation** and is parked on #774 for this
+  reason: the scarce corpus run should not be spent until the octave pick is
+  settled, and it now is.
+- **The `jit.stability` paragraph above is unaffected by this repair.**
+  `dominant_period` does not move on any entry of `RATE_PANEL`, which is
+  asserted rather than assumed: `test_the_octave_margin_does_not_move_the_rate_panel`
+  compares every panel clip at both rates, lag by lag, against the bare argmax
+  the margin replaced. So the stability columns' numbers on this page are the
+  same numbers they were, and if that test ever goes red this bullet is wrong.
+
 A second, smaller finding from the same measurement, recorded because it
 bears on how the figures above should be read: `jit.cyclecorr` separates a
 0.5 %-jittered square from a steady one by **0.0146**, while the
-rate-independence control's tolerance for that same column is
+rate-independence control's tolerance for that same column was
 `RATE_TOL_REL` x 1.0 = **0.12**. The control would not notice a rate
 dependence eight times larger than everything the column measures. That is a
-tolerance problem rather than a fold problem and was not changed here; it is
-#775.
+tolerance problem rather than a fold problem and was not changed by #767; it
+was #775.
+
+**#775's outcome (2026-11-14).** `RATE_TOL_REL` is now **0.02**, a swept
+record (`docs/sensitivity/rate-tol-rel.json`, instrument
+`tools/probes/rate_tol_sweep.py`). Over a 92-entry panel -- 44 values of f0 in
+both resampling directions plus the two control shapes -- the narrowing takes
+what the control catches on the integer fold #767 replaced from **191**
+(entry, column) pairs to **636**, and on the correlation family alone from 187
+to 541. Two things to carry forward when reading the figures above:
+
+- **The margin test does not exist, for a measured reason.** `max()` floors
+  every tolerance at `RATE_TOL_ABS[unit]`, so the smallest tolerance any value
+  of `RATE_TOL_REL` can put on `jit.cyclecorr.seg0` is **0.02** -- already
+  **1.37x** the 0.0146 effect. The dial took the ratio from 8.10x to 1.37x and
+  the term that remains is the floor, which is a different dial and a separate
+  issue. `jit.cyclecorr` **stays** in the vector: it resolves its own effect at
+  68x its own 44.1k<->48k reproducibility (0.0146 against 0.000216), so what
+  was eight times too coarse was the control's tolerance, not the column.
+- **The cost is entirely dB, and it is a second defect.** `RATE_TOL_REL` x
+  `|-80 dB|` handed a `cqt` bin sitting at the `floor_db` clamp 9.6 dB of
+  licence at 0.12 and hands it 1.6 dB at 0.02 -- and 7.0 dB of real
+  44.1k<->48k movement was sitting under the old licence at 440 Hz. Eleven dB
+  pairs on the shipped `RATE_PANEL` are now in `RATE_KNOWN_RED`, each with a
+  mechanism (a band holding no odd harmonic of its own stimulus, reading 68-79
+  dB under that clip's loudest bin) and a falsifier
+  (`test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them`: a
+  band that DOES hold a harmonic must stay inside tolerance). No `ratio`
+  column is quarantined and
+  `test_the_rate_quarantine_holds_no_correlation_column` makes that mechanical,
+  because quarantining one would absorb #775's own repair. The per-unit
+  tolerance that retires all eleven is **#782**.
 
 **Promotion status (#138, 2026-10-01).** Estimators exist
 (`model/promoted_measures.py`: `lowband_level_db`, `dominant_period_ms`).
