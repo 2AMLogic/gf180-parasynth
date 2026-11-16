@@ -306,12 +306,13 @@ def measure(grid, panel, panel_11=True, unit: str | None = None) -> dict:
     shipped = measure_panel(panel, None)
     injected = measure_panel(panel, -1)
     n_refused = sum(1 for r in shipped if r["refused"])
+    valcol = "tol_rel" if unit is None else f"rel_{unit}"
     rows = []
     for t in grid:
         c = red(injected, tol_at(t))
         s = red(shipped, tol_at(t))
         row = {
-            "tol_rel" if unit is None else f"rel_{unit}": t,
+            valcol: t,
             "caught": float(len(c)), "cost": float(len(s)),
             "cost_ratio": float(len(red(shipped, tol_at(t), "ratio"))),
             "caught_ratio": float(len(red(injected, tol_at(t), "ratio"))),
@@ -324,7 +325,7 @@ def measure(grid, panel, panel_11=True, unit: str | None = None) -> dict:
             row["cost_db"] = float(len(red(shipped, tol_at(t), unit)))
         rows.append(row)
     units = sorted(D.RATE_TOL_ABS)
-    by_unit = [{(unit or "tol_rel"): t,
+    by_unit = [{valcol: t,
                 **{u: float(len(red(shipped, tol_at(t), u))) for u in units}}
                for t in grid]
     panel_rows = []
@@ -332,7 +333,7 @@ def measure(grid, panel, panel_11=True, unit: str | None = None) -> dict:
         for t in grid:
             over = D._rate_gaps(tol_rel=tol_at(t))
             panel_rows.append({
-                (unit or "tol_rel"): t, "panel_red": float(len(over)),
+                valcol: t, "panel_red": float(len(over)),
                 "panel_red_ratio": float(sum(1 for r in over
                                              if D._unit_of(r[1]) == "ratio")),
                 "panel_entries": float(len({r[0] for r in over})),
