@@ -587,6 +587,7 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
 	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
 	  "$(PY) -m pytest tools/test_check_surge_waveform_comment.py -q -k issue_271" \
+	  "$(PY) -m pytest tools/test_compile_dag_evidence.py -q -k issue_824" \
 	  "$(PY) -m pytest model/test_rig_qualification.py -q -k discrimination_matrix" \
 	  "$(PY) -m pytest model/test_modeld_pedalboard_rig.py -q -k 'refuses or REFUS or uncorrectable'" \
 	  "$(PY) tools/check_decision_record_numbers.py --expect ok" \
@@ -616,6 +617,8 @@ controls:
 	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused" \
+	  "$(PY) tools/sensitivity.py check --inject OBJECTIVE_ZERO --expect refused" \
+	  "$(PY) tools/sensitivity.py check --inject OBJECTIVE_NEGATIVE --expect refused" \
 	  "$(PY) tools/probes/repeat_period_multiple.py --inject NO_SUBMULTIPLE_RULE --expect-fail" \
 	  "$(PY) tools/probes/repeat_period_multiple.py --inject OVERLAP_NORMALISER --expect-fail" \
 	  "$(PY) tools/probes/permitted_differences.py --controls" \

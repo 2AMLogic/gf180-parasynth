@@ -5,14 +5,14 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "D2": {
-    "detail": "105 passed in 473.23s (0:07:53)",
+    "detail": "105 passed in 325.34s (0:05:25)",
     "passed": true,
-    "sha": "0df2135b8d8364ec0d1e41d7569f0d0f006dc88c"
+    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
   },
   "D3": {
     "detail": "model/sound_report.py exit 1",
     "passed": false,
-    "sha": "0df2135b8d8364ec0d1e41d7569f0d0f006dc88c"
+    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
   },
   "F1": {
     "detail": "verify_ladder: PASS -- 28800 samples, RTL identical to model",
@@ -25,9 +25,9 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "F3": {
-    "detail": "153 passed in 3.90s",
+    "detail": "153 passed in 3.14s",
     "passed": true,
-    "sha": "0df2135b8d8364ec0d1e41d7569f0d0f006dc88c"
+    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
   },
   "I1": {
     "detail": "verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in",
@@ -45,23 +45,23 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "M2": {
-    "detail": "115 passed in 245.19s (0:04:05)",
+    "detail": "115 passed in 193.74s (0:03:13)",
     "passed": true,
-    "sha": "0df2135b8d8364ec0d1e41d7569f0d0f006dc88c"
+    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
   },
   "M3": {
     "detail": "docs/reference-compare-results.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "0df2135b8d8364ec0d1e41d7569f0d0f006dc88c"
+    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
   },
   "S1": {
     "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "0df2135b8d8364ec0d1e41d7569f0d0f006dc88c"
+    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
   },
   "S3": {
     "detail": "fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "0df2135b8d8364ec0d1e41d7569f0d0f006dc88c"
+    "sha": "3e934e23b3a8f56d818f5502ee7a8647fbeffada"
   }
 }
