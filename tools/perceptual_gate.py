@@ -22,9 +22,10 @@ per candidate:
               own peak (run_case's ONSET_FRAC / TRIM_MS). No cross-correlation
               search: a search is a fit.
   level       BS.1770 K-weighted loudness over the 50 ms blocks within 20 dB
-              of the loudest one, the rule tools/ab_808_loud.py uses for the
-              listening packs, set to the same value for every signal. So the
-              gate compares at the level the operator listens at.
+              of the loudest one -- loudness_db below, which the listening
+              packs (tools/ab_808_loud.py, tools/make_cymbal_pack.py) import
+              rather than re-type -- set to the same value for every signal. So
+              the gate compares at the level the operator listens at.
   span        from t = 0 to TWICE the last 10 ms frame where the TARGET is
               within 60 dB of its loudest frame (+50 ms), capped at 3.0 s, so a
               candidate that rings on is seen. Both sides are read over it.
@@ -211,8 +212,11 @@ def kweight(x):
 
 
 def loudness_db(x) -> float:
-    """tools/ab_808_loud.py's rule: K-weighted, 50 ms blocks at 50 % overlap,
-    gated to blocks within 20 dB of the loudest."""
+    """The listening packs' rule (tools/ab_808_loud.py, tools/make_cymbal_pack.py
+    import this): K-weighted, 50 ms blocks at 50 % overlap, gated to blocks
+    within 20 dB of the loudest. No BS.1770 -0.691 offset -- this is the gated
+    mean-square in dB, for matching; a 0 dBFS 1 kHz sine reads -2.3126 dB here,
+    the published -3.01 LKFS plus that constant (test_perceptual_gate.py pins it)."""
     y = kweight(x)
     blk = int(0.05 * SR)
     if len(y) < blk + 1:
