@@ -172,11 +172,23 @@ MS_BANDS_HZ = ((20.0, 200.0), (200.0, 700.0), (700.0, 2000.0),
 # the gate that governs it -- an unreadable registered parameter looks like a
 # passing check rather than an absent one. The registered names are the
 # scalars below; the dict is composed from them so `rate_tolerance` reads one
-# value per unit, mirroring RATE_TOL_ABS's five-key shape. The dB value is a
-# swept record: docs/sensitivity/rate-tol-rel-by-unit.json, instrument
-# tools/probes/rate_tol_sweep.py --unit db.
+# value per unit, mirroring RATE_TOL_ABS's five-key shape.
+#
+# THE DB VALUE IS 0.1, A POINT ON A COMMITTED GRID --
+# docs/sensitivity/rate-tol-rel-by-unit.json, instrument
+# tools/probes/rate_tol_sweep.py --unit db. The sweep measured the shipped
+# panel going from 11 quarantined null pairs at 0.02 to ZERO at 0.09 and at
+# 0.1 -- which is why all eleven RATE_KNOWN_RED entries below the quarantine
+# comment are gone -- while 0.09 and 0.1 are indistinguishable on every
+# column the artefact carries, so the extra 14.3 % of headroom over the worst
+# measured crossing (0.0875 = 7.00/80) costs the control nothing measured.
+# The sight the dial gives up (caught_db 95 -> 5 on the integer fold) is the
+# null-residue false alarms the quarantine was absorbing, not signal: a dB
+# band holding a harmonic of its own stimulus stays green at every grid
+# point, and with the quarantine empty any pair regrowing red fails
+# test_extra_features_are_rate_independent outright.
 RATE_TOL_REL_PPM = 0.02
-RATE_TOL_REL_DB = 0.02
+RATE_TOL_REL_DB = 0.1
 RATE_TOL_REL_MS = 0.02
 RATE_TOL_REL_COUNT = 0.02
 RATE_TOL_REL_RATIO = 0.02
@@ -1190,61 +1202,38 @@ def _rate_stimulus(f0, jitter, seed, sr=44100, dur=0.24, decay_s=0.08,
 # THE QUARANTINE. `(stimulus, column) -> (bound, why)`. #763 landed three
 # entries here as a deliberately falsifiable holding pen for #767; #767
 # repaired the mechanism and they went, because an entry that is no longer red
-# turns this test red by design. The eleven below arrived with #775's
-# narrowing of RATE_TOL_REL from 0.12 to 0.02.
+# turns this test red by design. The eleven that arrived with #775's narrowing
+# -- ten `cqt*` nulls and one `msd` band, all dB columns reading 68-79 dB
+# under their clip's loudest bin -- went the same way: #782 measured the
+# per-unit dB dial (docs/sensitivity/rate-tol-rel-by-unit.json) and shipped
+# RATE_TOL_REL_DB = 0.1, at which the shipped panel carries ZERO red pairs
+# and every entry was DELETED rather than re-bounded. The mechanism their
+# reasons stated -- a relative tolerance licensing a dB bin by its distance
+# from 0 dB, so the residue in a harmonic-free null got the largest licence
+# in the vector while real movement in signal bands got less -- is what the
+# per-unit dial repairs, and the falsifier that guarded the diagnosis stays,
+# running against the retired set with its finding unchanged.
 #
-# A BOUND IS NOT A DISPOSITION, which is why the value is a PAIR. #775's own
-# acceptance criteria name filling this dict with whatever a narrower
-# tolerance turns red as the input that defeats its repair: the test goes
-# green from both sides while the dependence the narrowing was meant to expose
-# hides one layer down. Three things stop that here, and the first two are
-# mechanical rather than a convention:
+# THE DICT STAYS, EMPTY. A BOUND IS NOT A DISPOSITION, which is why the value
+# is a PAIR, and the rules below bind whatever lands here next -- they are
+# what stopped #775's narrowing from being absorbed, and they are mechanical
+# rather than a convention:
 #   * every entry must carry a non-empty reason naming a MECHANISM --
 #     `test_every_rate_quarantine_entry_states_a_mechanism`.
 #   * no entry may be a `ratio` column -- `test_the_rate_quarantine_holds_no
 #     _correlation_column`. The correlations are what #775 is about, and
 #     quarantining one would be absorbing the repair exactly as the criterion
-#     warns. The sweep says none has to be: over 92 panel entries the clean
-#     fold's cost is 95 dB pairs and 2 ratio pairs AT EVERY VALUE OF THE DIAL
-#     INCLUDING THE OLD 0.12, and both of those two are the already-diagnosed
-#     200 Hz residual that is not on this panel at all.
-#   * the stated mechanism has its own falsifier, asserted in
+#     warns. #775's sweep says none has to be: over 92 panel entries the
+#     clean fold's cost is 2 ratio pairs AT EVERY VALUE OF THE SCALAR DIAL
+#     INCLUDING THE OLD 0.12, both the already-diagnosed 200 Hz residual,
+#     which is not on this panel at all.
+#   * any entry's stated mechanism has its own falsifier, asserted in
 #     `test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them`:
-#     every quarantined column is a band that contains no odd harmonic of its
-#     own stimulus and reads 78-79 dB under that clip's loudest bin, so a 7 dB
-#     difference there is a difference between two resamplers' residues. If a
-#     cqt bin WITHIN 40 dB of the clip's peak ever goes red, the diagnosis is
-#     wrong and the entries are hiding something.
-#
-# THE REAL DEFECT UNDER ALL ELEVEN is that a relative tolerance is
-# dimensionally meaningless on an offset scale: `RATE_TOL_REL x |-80 dB|`
-# hands a bin sitting at the `floor_db` clamp 1.6 dB of licence at 0.02 and
-# handed it 9.6 dB at 0.12. The repair is a per-unit tolerance, which #775
-# puts out of scope on purpose and which is filed as #782; these entries are
-# the holding pen until it lands, and each one names it.
-_CQT_NULL = ("a cqt bin in a null between the odd harmonics of its own "
-             "stimulus: it reads 78-79 dB below that clip's loudest bin, so "
-             "both sides are resampler stopband residue and the gap is a "
-             "difference of residues, not of the feature. Held until the "
-             "per-unit tolerance redesign lands: #782")
-_MS_EMPTY = ("a multiscale band with no harmonic of its own stimulus in it "
-             "(200-700 Hz against an 880 Hz square, whose lowest partial is "
-             "880 Hz), so the band carries residue and its non-stationarity "
-             "is the residue's. Held until the per-unit tolerance redesign "
-             "lands: #782")
-RATE_KNOWN_RED: dict = {
-    ("440Hz", "cqt3225Hz.seg0"): (7.00, _CQT_NULL),
-    ("440Hz", "cqt3225Hz.seg1"): (7.00, _CQT_NULL),
-    ("523Hz", "cqt3225Hz.seg0"): (6.93, _CQT_NULL),
-    ("523Hz", "cqt3225Hz.seg1"): (6.93, _CQT_NULL),
-    ("523Hz bandlimited", "cqt3225Hz.seg0"): (1.59, _CQT_NULL),
-    ("523Hz bandlimited", "cqt3225Hz.seg1"): (1.59, _CQT_NULL),
-    ("523Hz@48k", "cqt4064Hz.seg0"): (4.07, _CQT_NULL),
-    ("523Hz@48k", "cqt4064Hz.seg1"): (4.07, _CQT_NULL),
-    ("880Hz", "cqt2874Hz.seg0"): (4.43, _CQT_NULL),
-    ("880Hz", "cqt2874Hz.seg1"): (4.43, _CQT_NULL),
-    ("880Hz", "msd10-25ms.200-700Hz.seg0"): (0.89, _MS_EMPTY),
-}
+#     the band must contain no odd harmonic of its own stimulus and read far
+#     under that clip's loudest bin, and every cqt band that DOES hold a
+#     harmonic must stay inside tolerance. If one ever goes red, the
+#     diagnosis is wrong and the entries would be hiding something.
+RATE_KNOWN_RED: dict = {}
 
 
 def _rate_pair(label, f0, jitter, seed, kind, build_sr):
@@ -1315,6 +1304,24 @@ def test_extra_features_are_rate_independent():
     assert not stale, (f"{stale} is in RATE_KNOWN_RED but is no longer "
                        "rate-dependent: delete the entry. A quarantine nobody "
                        "removes stops being a quarantine")
+
+
+def test_the_feature_vector_is_still_191_columns():
+    """#782 touched only the comparison, never the extraction -- asserted
+    rather than eyeballed, because a column added or dropped anywhere would
+    silently re-key every (entry, column) pair the rate panel, the falsifier
+    and the sensitivity records name. 9 jit + 48 mpd + 30 ms/msd + 104 cqt."""
+    v, names = extra_features(_square(440.0, 44100), 44100)
+    assert len(v) == len(names) == 191, (len(v), len(names))
+    fam = {"jit": 0, "mpd": 0, "ms": 0, "cqt": 0}
+    for nm in names:
+        for f in fam:
+            if nm.startswith(f):
+                fam[f] += 1
+                break
+        else:
+            raise AssertionError(f"unrecognised column prefix: {nm}")
+    assert fam == {"jit": 9, "mpd": 48, "ms": 30, "cqt": 104}, fam
 
 
 def test_the_integer_fold_this_replaced_is_still_red_on_this_panel():
@@ -1505,23 +1512,51 @@ def test_the_rate_quarantine_holds_no_correlation_column():
 
 
 def test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them():
-    """THE FALSIFIER FOR THE REASON THE ELEVEN ENTRIES CARRY.
+    """THE FALSIFIER FOR THE DIAGNOSIS THE RETIRED ENTRIES CARRIED, kept
+    after the retirement (#782) because the diagnosis -- not the entries --
+    is what licenses RATE_TOL_REL_DB = 0.1.
 
-    Each quarantined cqt entry claims its band contains no odd harmonic of its
-    own stimulus, so both rates read resampler stopband residue and the gap is
-    a difference of residues. The band edges are geometric and exact
-    (`cqt_edges`, and the column name IS the lower edge), so that claim is
-    arithmetic and is checked here rather than believed. The level is checked
-    too: 40 dB under the clip's own loudest bin, measured at 68-79 dB.
+    History: #775's narrowing quarantined eleven dB pairs here (ten cqt nulls
+    and one msd band), every one on the theory that its band contains no odd
+    harmonic of its own stimulus, so both rates read resampler stopband
+    residue and the gap is a difference of residues. #782 swept the per-unit
+    dB dial and shipped 0.1, at which every entry's pair is inside tolerance
+    and the entries were DELETED from RATE_KNOWN_RED -- the retirement the
+    holding pen existed for. What does NOT retire with them is the check that
+    the theory was right, because the swept licence is justified by it: these
+    are the pairs whose 4.1-7.0 dB gaps the new licence covers.
+
+    The band edges are geometric and exact (`cqt_edges`, and the column name
+    IS the lower edge), so the claim is arithmetic and is checked here rather
+    than believed. The level is checked too: 40 dB under the clip's own
+    loudest bin, measured at 68-79 dB.
 
     AND THE OTHER DIRECTION, which is what makes it a falsifier: every cqt
     band that DOES contain an odd harmonic must be inside tolerance on the
-    same panel. If one of those ever goes red, this diagnosis is wrong and the
-    quarantine is hiding something real."""
+    same panel -- now asserted by `test_extra_features_are_rate_independent`
+    itself, which runs with an EMPTY quarantine, so any pair going red fails
+    outright with no holding pen to absorb it. If a retired band were ever
+    shown to hold a harmonic of its own stimulus, this diagnosis would be
+    wrong, the 0.1 licence would be covering real movement, and this test is
+    where that finding surfaces."""
     edges = cqt_edges()
     f0_of = {"440Hz": 440.0, "523Hz": 523.0, "523Hz bandlimited": 523.0,
              "523Hz@48k": 523.0, "880Hz": 880.0}
-    cqt_entries = [k for k in RATE_KNOWN_RED if k[1].startswith("cqt")]
+    # the eleven pairs RATE_KNOWN_RED carried until #782 retired them, kept
+    # here so the diagnosis stays checked against the pairs it justified
+    retired = (
+        ("440Hz", "cqt3225Hz.seg0"), ("440Hz", "cqt3225Hz.seg1"),
+        ("523Hz", "cqt3225Hz.seg0"), ("523Hz", "cqt3225Hz.seg1"),
+        ("523Hz bandlimited", "cqt3225Hz.seg0"),
+        ("523Hz bandlimited", "cqt3225Hz.seg1"),
+        ("523Hz@48k", "cqt4064Hz.seg0"), ("523Hz@48k", "cqt4064Hz.seg1"),
+        ("880Hz", "cqt2874Hz.seg0"), ("880Hz", "cqt2874Hz.seg1"),
+        ("880Hz", "msd10-25ms.200-700Hz.seg0"),
+    )
+    assert not any(k in RATE_KNOWN_RED for k in retired), (
+        "an entry this test retired is back in RATE_KNOWN_RED; a retirement "
+        "that re-quarantines is the failure this issue exists to end")
+    cqt_entries = [k for k in retired if k[1].startswith("cqt")]
     assert len(cqt_entries) == 10, cqt_entries
     for label, nm in cqt_entries:
         lo = float(nm[3:nm.index("Hz")])
@@ -1531,10 +1566,18 @@ def test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them():
         inside = [h * f0 for h in range(1, 200, 2) if lo <= h * f0 < hi]
         assert not inside, (
             f"{label} {nm}: band [{lo:.0f}, {hi:.0f}) Hz contains harmonic(s) "
-            f"{inside} of {f0:g} Hz, so it is not a null and the quarantine's "
-            "stated reason is wrong")
+            f"{inside} of {f0:g} Hz, so it is not a null and the diagnosis "
+            "behind RATE_TOL_REL_DB = 0.1 is wrong")
+    # the multiscale entry's band too: 200-700 Hz against an 880 Hz square,
+    # whose lowest partial is 880 Hz
+    lo, hi, f0 = 200.0, 700.0, f0_of["880Hz"]
+    inside = [h * f0 for h in range(1, 200, 2) if lo <= h * f0 < hi]
+    assert not inside, (
+        f"the retired msd band [{lo:.0f}, {hi:.0f}) Hz contains harmonic(s) "
+        f"{inside} of {f0:g} Hz, so the diagnosis behind RATE_TOL_REL_DB = "
+        "0.1 is wrong for it too")
 
-    # the level, measured on the 44.1 kHz side of each entry
+    # the level, measured on the 44.1 kHz side of each cqt entry
     for label, nm in cqt_entries:
         f0, kind = f0_of[label], ("blsquare" if "bandlimited" in label else "square")
         sr = 48000 if label.endswith("@48k") else 44100
@@ -1543,9 +1586,12 @@ def test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them():
         peak = max(x for n, x in d.items() if n.endswith(nm[-5:]))
         assert peak - d[nm] > 40.0, (
             f"{label} {nm} is only {peak - d[nm]:.1f} dB under that clip's "
-            "loudest bin, so it is not residue and the reason is wrong")
+            "loudest bin, so it is not residue and the diagnosis is wrong")
 
-    # the falsifier: no cqt band holding a harmonic of its own stimulus is red
+    # the falsifier, still armed: no cqt band holding a harmonic of its own
+    # stimulus is red. At the shipped licence this list is empty (measured,
+    # docs/sensitivity/rate-tol-rel-by-unit.json) -- the loop exists so the
+    # day it is not, the failure names the diagnosis and not just the pair.
     for label, nm, x, y, gap in _rate_gaps():
         if not nm.startswith("cqt"):
             continue
@@ -1557,7 +1603,8 @@ def test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them():
         assert not holds, (
             f"{label} {nm} is over tolerance and its band holds harmonic(s) "
             f"{holds}, so this is a real rate dependence in a band with signal "
-            "in it, not residue -- the quarantine's diagnosis is refuted")
+            "in it, not residue -- the diagnosis behind RATE_TOL_REL_DB = 0.1 "
+            "is refuted")
 
 
 

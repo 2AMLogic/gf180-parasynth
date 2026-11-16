@@ -722,7 +722,11 @@ to 541. Two things to carry forward when reading the figures above:
   column is quarantined and
   `test_the_rate_quarantine_holds_no_correlation_column` makes that mechanical,
   because quarantining one would absorb #775's own repair. The per-unit
-  tolerance that retires all eleven is **#782**.
+  tolerance that retires all eleven is **#782**, and it has: `RATE_TOL_REL_DB
+  = 0.1`, swept in `docs/sensitivity/rate-tol-rel-by-unit.json`, puts every
+  one of the eleven inside tolerance and the quarantine now ships EMPTY, with
+  the falsifier kept against the retired set and
+  `test_extra_features_are_rate_independent` running with nothing held out.
 
 **Promotion status (#138, 2026-10-01).** Estimators exist
 (`model/promoted_measures.py`: `lowband_level_db`, `dominant_period_ms`).

@@ -102,9 +102,11 @@ def test_a_per_unit_override_leaves_other_units_at_their_shipped_terms():
     col_ratio, col_db = "jit.cyclecorr.seg0", "cqt3225Hz.seg0"
     base_r = D.rate_tolerance(col_ratio, 1.0, 0.0)
     base_d = D.rate_tolerance(col_db, 80.0, 0.0)
-    assert D.rate_tolerance(col_ratio, 1.0, 0.0, {"db": 0.09}) == base_r
-    assert D.rate_tolerance(col_db, 80.0, 0.0, {"db": 0.09}) > base_d
-    assert D.rate_tolerance(col_db, 80.0, 0.0, {"ratio": 0.09}) == base_d
+    # 0.12 is above the shipped 0.1 on the committed grid, so the first
+    # assertion loosens rather than tightens whatever the shipped value is
+    assert D.rate_tolerance(col_ratio, 1.0, 0.0, {"db": 0.12}) == base_r
+    assert D.rate_tolerance(col_db, 80.0, 0.0, {"db": 0.12}) > base_d
+    assert D.rate_tolerance(col_db, 80.0, 0.0, {"ratio": 0.12}) == base_d
     # and the shipped comparison itself is unchanged by the machinery
     assert D.rate_tolerance(col_ratio, 1.0, 0.0) == base_r
 
