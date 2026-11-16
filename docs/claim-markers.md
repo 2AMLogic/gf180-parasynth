@@ -268,6 +268,20 @@ The script stays in the tree, unchanged in behaviour, as the record of why this
 layer needed a control; it is deliberately not wired into a target, where it
 would be an unsatisfiable gate at about five minutes a run.
 
+**Its neighbour by name is the opposite kind of thing.**
+`tools/probes/check_doc_claims_789_marker_controls.py` is a **standing
+control**, wired into `make controls` by #811, not a one-time record: unlike
+`scope_control` it is satisfiable on any tree and sub-second — every marker
+the #789 documents carry is a `grep=` or `absent=` row with no backing test,
+so the two-document run collects no pytest — which is why it is wired and
+`scope_control` is not. It injects its defects in place and restores what it
+read; the one way those restores do not run is a runner timeout
+(`tools/run_all.py` SIGKILLs the job's process group), which would leave
+`README.md` and `docs/milestones.md` modified — at ~0.5 s against `controls`'
+3600 s timeout that needs the probe to hang ~7200x its runtime, so it is
+recorded here rather than made hermetic (a rewrite of the probe, out of scope
+for #811).
+
 ## Running it
 
 ```bash
