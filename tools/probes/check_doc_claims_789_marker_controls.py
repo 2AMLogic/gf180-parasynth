@@ -32,14 +32,24 @@ when the guard worked and the tree was merely dirty. The precondition refuses
 exactly when the controls would be uninterpretable, not on WIP that leaves all
 claims green; that green-WIP state has its own refusal at the injection site
 (see "injection target" below), because a control whose replace target the WIP
-renamed would silently no-op and report a FAIL of its own. Every refusal --
-baseline, pre-existing injection file, missing injection target -- is checked
-BEFORE the first injection lands, so exit 2 never shares output with a
-control verdict: no evidence, not partial evidence.
+renamed would silently no-op and report a FAIL of its own. The dual refusal
+(#920): a control also REFUSES when the tree ALREADY satisfies the state it
+injects -- a hand-appended duplicate `T1: 3/11 items met` line in the
+generated verdict manifest, or any module whose name starts with
+`drum_kit_NOT_IN_TREE` (#927: the refusal's pattern IS the injected claim's
+own pattern, an unanchored prefix match, so a prefixed name like
+`drum_kit_NOT_IN_TREE_X` refuses too) -- because then the marker has nothing
+to fire at and "the control failed" is indistinguishable from "the tree was
+already wrong" (see "already satisfied" below). Every refusal -- baseline,
+pre-existing injection file, missing injection target, already-satisfied
+injection state -- is
+checked BEFORE the first injection lands, so exit 2 never shares output with
+a control verdict: no evidence, not partial evidence.
 """
 from __future__ import annotations
 
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -121,6 +131,36 @@ def inject_or_refuse(before: str, find: str, replace: str, what: str) -> str | N
     return staged
 
 
+def already_satisfied(path: pathlib.Path, pattern: str, what: str) -> bool:
+    """REFUSE when the tree already satisfies the state a control injects (#920).
+
+    The dual of inject_or_refuse's missing-target refusal. A control injects
+    a defect and requires its marker to go red; if the injected state is
+    ALREADY true on this tree -- a hand-appended duplicate summary line in
+    the generated verdict manifest, a module name the injected claim's own
+    pattern matches (#927: pattern equality is the contract; a narrower
+    guard here stayed silent on `drum_kit_NOT_IN_TREE_X`) -- the
+    marker has nothing to fire at and stays green no matter what the marker
+    does, so "the control failed" and "the tree was already wrong" are
+    indistinguishable and the control reports the tree as its finding.
+    Checked pre-injection, beside the other refusals, so exit 2 never shares
+    output with a control verdict. Returns True after printing the refusal,
+    False (printing nothing) when the state is genuinely absent.
+    """
+    if not path.exists():
+        return False  # a claim greps this file; the baseline check already refused
+    rx = re.compile(pattern)
+    rel = path.relative_to(ROOT)
+    if any(rx.search(line) for line in path.read_text(encoding="utf-8").splitlines()):
+        print(f"REFUSED: {rel} already contains a line matching {pattern!r}: "
+              f"the state {what} injects pre-exists on this tree, so its "
+              f"marker cannot fire and the control would misreport the tree "
+              f"as a failure. Remove the pre-existing state first.",
+              file=sys.stderr)
+        return True
+    return False
+
+
 def main() -> int:
     py = interpreter()
     if baseline_refused(py):
@@ -139,6 +179,9 @@ def main() -> int:
         "the README T1 count control")
     if staged_readme is None:
         return 2
+    if already_satisfied(ROOT / "manifests/verdict.txt", r"^T1: 3/11 items met$",
+                         "the README T1 count control"):
+        return 2
     ms = ROOT / "docs/milestones.md"
     orig_ms = ms.read_text(encoding="utf-8")
     staged_ms = inject_or_refuse(
@@ -148,6 +191,15 @@ def main() -> int:
         'in=rtl-sketch/drum_kit.v',
         "the milestone-3 control")
     if staged_ms is None:
+        return 2
+    # The guard pattern must BE the injected claim's own pattern -- an
+    # unanchored prefix match, per line (check_grep compiles with
+    # re.MULTILINE and rx.search-es each line). A trailing \b here would let
+    # `module drum_kit_NOT_IN_TREE_X` satisfy the claim while this refusal
+    # stayed silent (#927, red-first at 17fbfe45: FAIL exit=0, rc=1).
+    if already_satisfied(ROOT / "rtl-sketch/drum_kit.v",
+                         r"^module drum_kit_NOT_IN_TREE",
+                         "the milestone-3 control"):
         return 2
 
     results: list[bool] = []
