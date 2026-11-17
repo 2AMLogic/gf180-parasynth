@@ -224,6 +224,35 @@ def _derive_how(scratch: pathlib.Path, rel: str, candidate: str) -> str:
     return "swap" if re.search(pattern, candidate) else "append"
 
 
+def test_injected_state_ignores_an_injected_marker_inside_backticks():
+    """#962 red-first control (docs/verification-rules.md rule 8): the
+    input that defeats the old scan. `injected_state` must find exactly ONE
+    injected claim even when the staged text also carries the same marker
+    inside inline `backticks` -- inline documentation of the injection is an
+    example, not a second claim. The unfixed scan implemented the checker's
+    fence rule but not its backtick rule, so it counted both, found
+    len(bodies) == 2, and REFUSED (exit 2, no evidence) for a staged
+    injection that was fine. Measured red against the unfixed probe: the
+    assert below failed with derived None and "found 2" on stderr."""
+    sys.path.insert(0, str(ROOT / "tools" / "probes"))
+    import check_doc_claims_789_marker_controls as probe_mod
+    staged = "\n".join([
+        "A real injected claim:",
+        '<!-- claim: grep="drum_kit_NOT_IN_TREE_962" '
+        'in=tools/check_doc_claims.py -->',
+        'Inline docs: `<!-- claim: grep="drum_kit_NOT_IN_TREE_962" '
+        'in=tools/check_doc_claims.py -->` is an example, not a claim.',
+    ])
+    derived = probe_mod.injected_state(
+        staged, "drum_kit_NOT_IN_TREE_962", "the #962 control")
+    assert derived is not None, (
+        "injected_state refused on a backticked example marker (the #962 "
+        "divergence; the REFUSED detail above names it)")
+    files, pattern = derived
+    assert pattern == "drum_kit_NOT_IN_TREE_962"
+    assert files == [ROOT / "tools" / "check_doc_claims.py"]
+
+
 def _stage_already_satisfied(scratch: pathlib.Path, rel: str, how: str,
                              find: str, staged: str) -> None:
     """Write the pre-satisfied state into the scratch copy.
