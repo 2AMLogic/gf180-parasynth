@@ -291,7 +291,7 @@ the frozen phrase from 2.68 to 0.56 dB RMS.
 The mechanism: the model's ladder input stage is driven harder than the Mini
 V3's equivalent stage at this patch. That excess nonlinearity is what both
 darkens the upper partials and makes the odd partials swing with ψ.
-<!-- claim: grep="driven harder than the Mini V3" in=docs/scorecard/mono-m1a-miniv3/phase-aware-337/README.md mechanism=inferred note="only drive was varied, so the drive register is measured to carry the effect; that the Mini V3 has a correspondingly lighter input stage is a reading of that, not a measurement of the Mini" -->
+<!-- claim: grep="ladder input stage is driven harder" in=docs/scorecard/mono-m1a-miniv3/phase-aware-337/README.md mechanism=inferred note="only drive was varied, so the drive register is measured to carry the effect; that the Mini V3 has a correspondingly lighter input stage is a reading of that, not a measurement of the Mini. The pattern is anchored inside one prose line -- the original, spanning the Mini / V3 line wrap, matched only its own marker line and graded OK on itself until marker lines stopped counting as evidence (issue 949)" -->
 
 ### What this does not do, and what remains
 

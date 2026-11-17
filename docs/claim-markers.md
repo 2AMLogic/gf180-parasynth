@@ -50,16 +50,46 @@ must not be able to hide as free-form prose.
 A `grep=` pattern must match **exactly one** line across the files `in=`
 names; a pattern matching several lines is `REFUSED` — the checker cannot say
 which line the claim guards, and an unrelated line carrying the same text
-would keep the marker green while the cited figure moved (issue #904). Mind
-the marker's own line when `in=` names the marker's own document: the pattern
-appears verbatim inside it, punctuation included, so quoting a comma does not
-defuse the self-match. A regex's own source text never matches itself, so
-deferring one letter into a class (`erro[r]`, `wal[l]-clock`) matches the
-prose line while the marker quoting the pattern stays unmatched. The rule is
-enforced over the checker's default document set (`DEFAULT_INCLUDES`) —
-`.md` only — so a marker outside it (e.g. in a Python docstring) is checked
-only by its own bespoke test, not by `make claims`; a marker placed there
-needs that test named in the PR that adds it.
+would keep the marker green while the cited figure moved (issue #904).
+Disambiguating two *genuine* prose lines remains the author's job — a comma
+or other punctuation that only one of them carries (`timer, therefore`), or a
+tighter anchor. The rule is enforced over the checker's default document set
+(`DEFAULT_INCLUDES`) — `.md` only — so a marker outside it (e.g. in a Python
+docstring) is checked only by its own bespoke test, not by `make claims`; a
+marker placed there needs that test named in the PR that adds it.
+
+### A marker line is not evidence
+
+A marker quotes the pattern it searches for, so the marker's own line always
+matches its own `grep=` or `absent=` pattern. The checker therefore never
+counts a marker line — its own or any other marker's — as evidence for any
+claim (issue #949):
+
+- A `grep=` whose pattern matches **only** marker lines grades `STALE`
+  ("found in none of the files"), never `OK`. That is the state you are in
+  when the prose a claim guards has been deleted — or, as one live marker was
+  found (`docs/scorecard/mono-m1a-miniv3/phase-aware-337/README.md`), when
+  the prose wraps across two lines so no single line carries the pattern. A
+  marker sitting next to its prose keeps grading `OK` on the prose line alone.
+- An `absent=` whose pattern appears only on marker lines stays `OK`
+  ("matches nothing") — a marker line is not evidence that the thing exists,
+  either. Anchoring absence patterns (`^…`) remains the clearer form; an
+  unanchored one used to report `STALE` against its own marker.
+- One marker cannot back another: a pattern that lives only on other
+  markers' lines is in none of the files.
+
+This retires the self-match half of the uniqueness defence. Before #949 the
+marker's own line counted as a hit, so a pattern quoting its own text had to
+defer a letter into a character class (`erro[r]`, `sample[s]`) to keep the
+count at one; those brackets are no longer needed, and the worked examples
+below drop them. What remains necessary is the disambiguation of two genuine
+prose lines (the `, therefore` in the second example), and a deferred letter
+is still harmless if you keep one: it matches the prose either way, and the
+marker line is excluded regardless.
+
+A marker is the **single-line** HTML comment the checker parses. A comment
+broken across two lines parses as no marker at all — not a claim, and not
+excluded from evidence either.
 
 ### Modifiers
 
@@ -131,10 +161,10 @@ only keeps the claim about the test honest.
 A worked example, from issue #135 itself:
 
 Measured, and sound: two renders of the same Diva patch differ in 1,763,954 of 1,764,000 samples; Mini V3 is bit-identical across the same test.
-<!-- claim: grep="1,763,954 of 1,764,000 sample[s]" in=docs/claim-markers.md note="the effect -- re-derivable from this file. The bracket defers a letter so the prose line matches and the marker line quoting the pattern does not -- a pattern cannot match its own source text (issue #904)" -->
+<!-- claim: grep="1,763,954 of 1,764,000 samples" in=docs/claim-markers.md note="the effect -- re-derivable from this file. The plain pattern is enough: the marker's own line is not evidence (issue 949), so the sample[s] bracket #904 needed against self-match is retired here" -->
 
 Asserted, and never tested: that the cause is an artefact inserted on a wall-clock timer, therefore Diva is a positive control for a demo-artefact detector.
-<!-- claim: grep="wal[l]-clock timer, therefore" in=docs/claim-markers.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing. The bracket defers a letter (a pattern cannot match its own source text); the comma excludes line 66, which retells the story with 'timer and' (issue #904)" -->
+<!-- claim: grep="wall-clock timer, therefore" in=docs/claim-markers.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing. The comma excludes the retelling above, which has 'timer and': two genuine prose lines still need disambiguation (issue 904). The wal[l]-clock bracket #904 also carried is retired -- the marker's own line is not evidence (issue 949)" -->
 
 ## The three outcomes
 
