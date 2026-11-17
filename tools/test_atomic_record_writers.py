@@ -77,12 +77,17 @@ WRITERS = [
 #: serialiser inside a `print(...)` (measure_m1a_drive:235, phase_aware_m1a:378,
 #: analyse_m1a_phase_cycle:402 and :460, measure_m5a_pulse_duty:158) and none
 #: hands the serialised text to a file. Checked by exact COUNT per module and
-#: by print-line: a new serialise call in an allowlisted module raises the
-#: count and the guard goes red; deleting one of the verified prints lowers
-#: it and the guard goes red too, so the allowance cannot silently forgive
-#: either change. A new module needs no entry (default 0): its serialisation
-#: belongs through the seam, and stdout display earns its allowance here,
-#: consciously.
+#: by a position-aware print-line test -- a `json.dumps(` counts toward the
+#: allowance only if `print(` precedes it on the same line: a new serialise
+#: call raises the count and goes red, deleting a verified print lowers it and
+#: goes red too, and a record write whose line merely carries a `print(` token
+#: after the match goes red (`print-line-camouflage`, #944 review). What the
+#: test cannot see is a line crafted to carry a literal `print(` BEFORE the
+#: match (`print(); fh.write(json.dumps(x))`) -- a textual guard's ordinary
+#: limit, the same class as a mode passed as a variable -- which is why the
+#: count check and the committed probes carry the weight. A new module needs
+#: no entry (default 0): its serialisation belongs through the seam, and
+#: stdout display earns its allowance here, consciously.
 STDOUT_DUMPS_ALLOWLIST = {
     "measure_m1a_drive": 1,
     "phase_aware_m1a": 1,
@@ -116,7 +121,8 @@ def inline_record_write_findings(src: str, *, dumps_allowance: int = 0) -> list[
     """Every inline record-write shape `src` exhibits, as readable findings.
 
     Covered: `.write_text(`, `.write_bytes(`, `json.dump(` (handle form),
-    `json.dumps(` -- allowed only inside a verified stdout `print(`, exactly
+    `json.dumps(` -- allowed only as the serialiser inside a stdout `print(`
+    with `print(` preceding the match on the same line, exactly
     `dumps_allowance` of them, both directions of count drift -- and `open(` /
     `.open(` with a write/append/exclusive mode literal (positional or
     `mode=`, either quote style, one nesting level).
@@ -125,7 +131,9 @@ def inline_record_write_findings(src: str, *, dumps_allowance: int = 0) -> list[
     (`refprofile`'s `wavfile.write(` is a legitimate non-JSON write); a
     read-mode `open(`; a mode passed as a variable rather than a literal
     (`mode = "w"` defeats the literal match -- tracking values needs AST
-    analysis, rejected in #923 as more machinery than the gap warrants); and
+    analysis, rejected in #923 as more machinery than the gap warrants); a
+    serialiser inside a multi-line `print(` (`print(` must precede the match
+    on the same line, so one needs its own conscious extension); and
     `open(` arguments nested more than one paren deep.
     """
     findings: list[str] = []
@@ -140,8 +148,12 @@ def inline_record_write_findings(src: str, *, dumps_allowance: int = 0) -> list[
             findings.append(f"{name} at line {line_no}")
     dumps = list(re.finditer(r"json\.dumps\(", src))
     lines = src.splitlines()
-    off_print = [m for m in dumps
-                 if "print(" not in lines[src[: m.start()].count("\n")]]
+    off_print = []
+    for m in dumps:
+        line_no = src[: m.start()].count("\n")
+        col = m.start() - (src.rfind("\n", 0, m.start()) + 1)
+        if "print(" not in lines[line_no][:col]:
+            off_print.append(m)
     for m in off_print:
         line_no = src[: m.start()].count("\n") + 1
         findings.append(
@@ -225,12 +237,21 @@ def test_no_module_writes_a_record_inline_any_more(modname, fn):
         f"through the {fn} seam (run_all.write_json_atomic)")
 
 
-#: Probe 2 from #923 and its siblings: every spelling below defeated (or
-#: would defeat) the pre-widening guard -- a non-atomic truncate-then-write
-#: of serialised JSON that reported a clean bill. Each is a synthetic source
-#: snippet fed through the same `inline_record_write_findings` the tree guard
-#: runs, NOT an edit to a real module, so the guard's boundary is visible
-#: without touching the tree.
+#: Probe 2 from #923 and its siblings: inputs the guard must go red on, each
+#: a synthetic source snippet fed through the same `inline_record_write_findings`
+#: the tree guard runs, NOT an edit to a real module, so the guard's boundary
+#: is visible without touching the tree. The entries are not all the same kind
+#: of defeat, and the numbers matter:
+#: - 12 of 15 defeated the pre-widening guard: under origin/main's two patterns
+#:   (`.write_text(`, `json.dump(`) they were green -- a clean bill on a
+#:   non-atomic truncate-then-write of serialised JSON.
+#: - `write-text` and `json-dump-handle` are the old guard's OWN two patterns:
+#:   red then and red now, kept as regression pins, not defeats.
+#: - `print-line-camouflage` defeated THIS PR's first allowance check (#944
+#:   review, probe B): a record write whose line carries a `print(` token
+#:   satisfied the substring print-line test at full allowance. It is red only
+#:   under the position-aware test and exists to pin it -- remove the position
+#:   logic and this entry goes green.
 DEFEATING_SPELLINGS = {
     "open-w-then-write-dumps-probe2": (
         'with open(RECORD, "w") as fh:\n'
@@ -242,7 +263,7 @@ DEFEATING_SPELLINGS = {
     "path-open-method": ('fh = RECORD.open("w")\n', {}),
     "open-nested-first-arg": ('fh = open(str(tmp / "record.json"), "w")\n', {}),
     "write-bytes": ("RECORD.write_bytes(blob)\n", {}),
-    "write-text": ('RECORD.write_text(json.dumps(new) + "\\n")\n', {}),
+    "write-text": ("RECORD.write_text(blob)\n", {}),
     "json-dump-handle": ("json.dump(new, fh)\n", {}),
     "dumps-off-a-print-line": ('blob = json.dumps(new)\nfh.write(blob)\n', {}),
     "dumps-beyond-allowance": (
@@ -251,6 +272,8 @@ DEFEATING_SPELLINGS = {
         'print(json.dumps(summary))\n', {"dumps_allowance": 2}),
     "dumps-count-is-stale-high": (
         'print(json.dumps(summary))\n', {"dumps_allowance": 0}),
+    "print-line-camouflage": (
+        'fh.write(json.dumps(x))  # print(\n', {"dumps_allowance": 1}),
 }
 
 #: spellings that must stay green, with the reason each is legitimate.
@@ -269,8 +292,9 @@ GREEN_SPELLINGS = {
 def test_the_guard_goes_red_on_the_spellings_that_defeated_it(label):
     """#923's probe 2, committed: the guard must visibly go red on the
     input that used to defeat it, through the same helper the tree guard
-    runs. Each entry in DEFEATING_SPELLINGS is a shape the pre-widening
-    guard reported a clean bill on."""
+    runs. 12 of the 15 entries are shapes the pre-widening guard reported
+    a clean bill on; the provenance split (old-guard regression pins,
+    print-line camouflage) is on DEFEATING_SPELLINGS itself."""
     src, kwargs = DEFEATING_SPELLINGS[label]
     assert inline_record_write_findings(src, **kwargs), (
         f"the guard is green on {label!r} -- a non-atomic record write it "
