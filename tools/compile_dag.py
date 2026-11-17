@@ -25,8 +25,6 @@ Status is derived, never asserted:
             distinct from both pass and fail; never rendered as current
   BLOCKED   the node declares what it is waiting for
   TODO      no evidence yet; an issue number if one is filed
-  BLOCKED   the node declares what it is waiting for
-  TODO      no evidence yet; an issue number if one is filed
 
 A GREEN/STAMPED node above a RED or BLOCKED dependency is reported BLOCKED
 (see classify_all).
