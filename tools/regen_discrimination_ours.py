@@ -91,6 +91,7 @@ SHIPPED = os.path.join(ROOT, "docs", "reference-compare-results-shipped.json")
 
 sys.path.insert(0, MODEL)
 import reference_compare as rc                                      # noqa: E402
+import refusal
 
 OURS_DEVICES = rc.OURS + rc.CONTROLS + rc.PROBES
 REF_DEVICES = rc.REFS
@@ -116,7 +117,7 @@ REQUIRED_KEYS = ["tracking-ours", "response-ours", "response-ours-2pole",
                  "peakdrive-ours-2pole", "bigdrive-ours"]
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of this measurement is unmet. Distinct from a failed
     re-run: this script did not attempt to measure past it."""
 

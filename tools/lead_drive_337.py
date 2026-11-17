@@ -25,6 +25,7 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import mono_m5a_score as sc  # noqa: E402
+import refusal
 
 ROOT = sc.ROOT
 OUT = ROOT / "docs/scorecard/mono-m5-drive-337"
@@ -37,7 +38,7 @@ RECORD_TOL = 5e-3
 VOL_BASE_KEY = "vol"
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

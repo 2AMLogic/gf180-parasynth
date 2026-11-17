@@ -1,14 +1,14 @@
 {
   "engine": "fixed-model",
   "analysis_version": "attack-context-model-v1",
-  "source_commit": "a10a51056de1bf55b8d37bbfc63eeafab9744cbd",
+  "source_commit": "7039206b542bea79cde96f2cefab0f6c6adfe880",
   "source_sha256": {
     "tools/compare_mono_attack_context.py": "f697c93cff1dd2860612ec1a1802364c21fda88d9d4879185598bf3dacc74cca",
     "tools/measure_mono_attack_context.py": "b3e8020cc6b7ea71c27fc4a7202e94501f6d4a5eec8305efeafc9df5d9995c61",
-    "tools/measure_mono_m5a_reference.py": "7f4e6d4e820e10ef3e4742fbabce1ff57815325bbbf80472f865104a9978405f",
-    "tools/mono_m5a_score.py": "a27fbddee20a0827514978dc4a7951b8c4893e39d4e5c81c642b0b7d9f952d0a",
+    "tools/measure_mono_m5a_reference.py": "5c8b5a3fa1e4f8668d1ec5baacbadf016fb68fc515b2bd658e667c763a9c4a74",
+    "tools/mono_m5a_score.py": "4b9683181b279cff1adc5db6baefc345bbb0f49454c98a237ca477b3afe343f3",
     "model/voice_fx.py": "a19ef99b338c73e04c5bfd09eef2ba4a938acc11f4372a94874363f92c897e70",
-    "model/audio_measure.py": "5766eae46e2c3977f2e632d7e4c5d4a11ce50dae7e8a28ce582ca3bbf2326ff1",
+    "model/audio_measure.py": "dcae8826da819f4882eaef7267699926d1903eee7fdb00c5a38290b7eeb9141b",
     "model/filter_rate_chain.py": "134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798"
   },
   "reference_report_sha256": "19472d7f64f9b44dee0205d08cb508cb64ec0900eab23f4ef484d7449627e672",
@@ -254,7 +254,7 @@
         "valid": true,
         "attack_10_90_ms": 8.708333333333334,
         "release_t20_ms": 1234.2916666666667,
-        "held_rms": 0.18358293810958523,
+        "held_rms": 0.1835829381095852,
         "tail_db": -285.27664632279703,
         "release_complete_40db": true
       },
@@ -396,7 +396,7 @@
         "valid": true,
         "attack_10_90_ms": 8.520833333333334,
         "release_t20_ms": 1233.9375,
-        "held_rms": 0.18355762253252966,
+        "held_rms": 0.18355762253252972,
         "tail_db": -285.27544848015935,
         "release_complete_40db": true
       },
@@ -462,7 +462,7 @@
         "valid": true,
         "attack_10_90_ms": 8.729166666666666,
         "release_t20_ms": 1242.3958333333333,
-        "held_rms": 0.3050120744247324,
+        "held_rms": 0.30501207442473227,
         "tail_db": -289.6863406395415,
         "release_complete_40db": true
       },
@@ -528,7 +528,7 @@
         "valid": true,
         "attack_10_90_ms": 8.75,
         "release_t20_ms": 1242.4166666666667,
-        "held_rms": 0.3050075142461493,
+        "held_rms": 0.30500751424614925,
         "tail_db": -289.6862107774563,
         "release_complete_40db": true
       },
@@ -594,7 +594,7 @@
         "valid": true,
         "attack_10_90_ms": 8.75,
         "release_t20_ms": 1242.4166666666667,
-        "held_rms": 0.3050075142461493,
+        "held_rms": 0.30500751424614925,
         "tail_db": -289.6862107774563,
         "release_complete_40db": true
       },
@@ -665,7 +665,7 @@
         "valid": true,
         "attack_10_90_ms": 8.729166666666666,
         "release_t20_ms": 1241.9166666666667,
-        "held_rms": 0.3050046125250936,
+        "held_rms": 0.3050046125250935,
         "tail_db": -289.6861281429389,
         "release_complete_40db": true
       },

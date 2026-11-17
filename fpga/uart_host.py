@@ -111,6 +111,10 @@ for _p in ("model", "audition"):
     _q = os.path.join(ROOT, _p)
     if _q not in sys.path:
         sys.path.insert(0, _q)
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 # ---- the device contract (mirror of rtl-sketch/uart_bridge.v) ---------------
 CLK_HZ = 12_288_000
@@ -285,7 +289,7 @@ SEND_GATE_FRAMES = 120             # the send gate: send once the first due is a
                                    # coupled, and the preflight holds both.
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A first-class outcome, distinct from pass and fail: the link, the
     device or the schedule cannot deliver this. main() prints the reason and
     exits 2; it never falls through to a best-effort attempt."""

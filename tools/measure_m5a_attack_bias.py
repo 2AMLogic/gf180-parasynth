@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am  # noqa: E402
 from measure_mono_m5a_reference import envelope_timing  # noqa: E402
+import refusal
 import run_all  # noqa: E402
 
 SR = 48_000
@@ -39,7 +40,7 @@ TRUE_ATTACK_MS = 7.333333333333333
 RMS_MS = 5.0
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """Frozen-reference preconditions did not hold."""
 
 

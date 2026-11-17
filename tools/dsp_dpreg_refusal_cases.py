@@ -40,6 +40,12 @@ SIMULATOR = HERE / "dsp_dpreg_sim.py"
 ANALYSE_CHILD = r"""
 import importlib.util, pathlib, sys
 spec = importlib.util.spec_from_file_location("dsp_dpreg_analyse", sys.argv[1])
+# the loaded module's sibling imports (refusal) must resolve the way they do
+# when the analyser runs as a script: its own directory on sys.path. A bare
+# `python -c` puts the cwd there instead, and the module-scope import would
+# crash before any verdict -- an exit-1 traceback in the place where exit-3
+# NO VERDICT belongs.
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]).resolve().parent))
 mod = importlib.util.module_from_spec(spec)
 sys.modules["dsp_dpreg_analyse"] = mod
 spec.loader.exec_module(mod)
@@ -54,6 +60,9 @@ sys.exit(mod.main(["--evidence", str(d), "--drc", str(d / "drc.rpt")]))
 SIM_CHILD_FMT = r"""
 import importlib.util, pathlib, sys, hashlib
 spec = importlib.util.spec_from_file_location("dsp_dpreg_sim", sys.argv[1])
+# same as the analyse child: the simulator's sibling imports resolve against
+# its own directory, which a `python -c` loader does not provide on its own
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]).resolve().parent))
 mod = importlib.util.module_from_spec(spec)
 sys.modules["dsp_dpreg_sim"] = mod
 spec.loader.exec_module(mod)

@@ -19,32 +19,28 @@ defining module, recursively, until it reaches `tools/refusal.py`'s
 base would be unsatisfiable against the intended end state -- 5 definitions
 are themselves sibling-chained -- which is why this walks the chain.
 
-MODE: report/baseline, and the report is the whole gate until #815: the
-baseline holds the keys of the definitions that do not yet resolve; the guard
-exits 0 when the set matches the baseline, is a strict SUBSET, or has GROWN --
-a NEW non-conforming definition is printed as a loud `NEW:` line and the run
-still exits 0. The enforcing exit 1 lands with #815, together with the whole
-set's re-base: exit-1-on-NEW was measured on this tree to red `make verify`
-on `main` roughly daily (three new definitions per ~78 merges of ordinary
-work), and a gate that reds on unrelated merges gets trained away -- the same
-finding that un-pinned the census tool's per-family totals on its own review.
-Missing baseline entries are reported as a shrink so the baseline can be
-pruned.
+MODE: enforcing since #815 re-based the whole set: every definition must
+resolve to `refusal.Refused`; any that does not is printed as a loud
+`NON-CONFORMING:` line and the run exits 1. There is no baseline and no
+allowlist. The one exemption is a bare `class Refusal:`/`Refused:` (no bases)
+decorated `@dataclass`: it is a log record, not an exception -- it cannot be
+raised, so it cannot be a refusal (the only one in the tree today is
+fpga/midi_session.py's `Refusal`, #815). The exemption is keyed on no-bases +
+dataclass decorator, NOT on the name, so naming an exception class `Refusal`
+does not slip past it (rule 8), and every exempt key is printed for audit.
 
 Exit codes (this repository's convention; 2 = could not run, no evidence):
-  0  clean, the baseline only shrank, or it grew (the NEW lines say so; #815
-     flips a NEW definition to exit 1 when it makes the guard enforcing)
-  1  reserved for #815 (enforcing: a NEW non-conforming definition)
+  0  clean -- every definition resolves to refusal.Refused
+  1  at least one NON-CONFORMING definition (re-base it on refusal.Refused,
+     preserving its secondary bases; do not catch Exception instead)
   2  git could not run
   3  REFUSED -- a tracked (or given) `*.py` file failed to parse; a partial
-     parse can never masquerade as a clean result -- or the baseline file
-     is missing (no evidence either way)
+     parse can never masquerade as a clean result
 """
 from __future__ import annotations
 
 import argparse
 import ast
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -52,8 +48,6 @@ from pathlib import Path
 CANONICAL_REL = "tools/refusal.py"
 CANONICAL_CLASS = "Refused"
 CLASS_NAMES = ("Refused", "Refusal")
-DEFAULT_BASELINE_REL = Path("tools/refused_base_baseline.json")
-BASELINE_SCHEMA = "refused-base-baseline/1"
 
 
 def git(*args: str, cwd: Path) -> str:
@@ -99,8 +93,9 @@ class Index:
             else ".".join(rel.with_suffix("").parts)
         bindings: dict[str, tuple] = {}
         for node in tree.body:              # top level only: a nested `class
-            # Refused` is invisible here (0 in the tree today; #815's re-base
-            # must walk ClassDef bodies or these keys silently miss it)
+            # Refused` is invisible here (none in the tree today; one would
+            # have to be added to this walker, and the guard would not see it
+            # until then -- the reason nested definitions stay out of style)
             if isinstance(node, ast.Import):
                 for a in node.names:
                     bindings[a.asname or a.name.split(".")[0]] = \
@@ -209,27 +204,51 @@ def key_for(path: str, name: str, node: ast.ClassDef, root: Path) -> str:
     return f"{p.as_posix()}:{name}({bases})"
 
 
-def nonconforming(files: list[Path], root: Path) -> tuple[list[tuple[str, int, str, str]], int]:
-    """([(key, lineno, name, bases-string)], total definitions examined) for
-    every `class Refused`/`Refusal` that does not resolve, transitively, to
-    `refusal.Refused`. Raises SystemExit(3) on a parse failure rather than
-    reporting a partial result."""
+def _dataclass_record(node: ast.ClassDef) -> bool:
+    """A bare `class Refusal:`/`class Refused:` (no bases) decorated
+    `@dataclass` is a log record, not an exception: it cannot be raised (a
+    non-Exception cannot be raised at all), so it cannot be a refusal. The
+    exemption is keyed on no-bases + the dataclass decorator, NOT on the
+    name -- naming an exception class `Refusal` buys nothing (rule 8) -- and
+    a definition that gains any base stops being exempt and is checked
+    normally."""
+    if node.bases:
+        return False
+    for dec in node.decorator_list:
+        target = dec.func if isinstance(dec, ast.Call) else dec
+        if isinstance(target, ast.Name) and target.id == "dataclass":
+            return True
+        if isinstance(target, ast.Attribute) and target.attr == "dataclass":
+            return True
+    return False
+
+
+def nonconforming(files: list[Path], root: Path) -> tuple[list[tuple[str, int, str, str]], int, list[str]]:
+    """([(key, lineno, name, bases-string)], total definitions examined,
+    exempt keys) for every `class Refused`/`Refusal` that does not resolve,
+    transitively, to `refusal.Refused`; exempt keys are the dataclass-record
+    carve-outs (never raised, never caught -- see _dataclass_record). Raises
+    SystemExit(3) on a parse failure rather than reporting a partial result."""
     ix = Index(files, root)
     if ix.parse_errors:
         for path, msg in ix.parse_errors:
             print(f"REFUSED: {path} does not parse: {msg}", file=sys.stderr)
         raise SystemExit(3)
     out = []
+    exempt = []
     for (path, name), node in sorted(ix.classes.items()):
         if path == ix.canonical and name == CANONICAL_CLASS:
             continue                             # the base itself is conforming
+        if _dataclass_record(node):
+            exempt.append(key_for(path, name, node, root))
+            continue
         if _conforms(ix, path, name, frozenset()):
             continue
         bases = ", ".join(base_repr(b) for b in node.bases) or "(none)"
         out.append((key_for(path, name, node, root), node.lineno, name, bases))
     # the canonical anchor class is exempt by definition, never reportable
     total = len(ix.classes) - (1 if (ix.canonical, CANONICAL_CLASS) in ix.classes else 0)
-    return out, total
+    return out, total, exempt
 
 
 def _conforms(ix: Index, path: str, name: str, seen: frozenset) -> bool:
@@ -269,67 +288,28 @@ def _collect(root: Path, paths: list[str] | None) -> list[Path]:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--baseline", type=Path, default=None,
-                    help="baseline JSON (default: <repo-root>/%s, anchored at the "
-                         "repository this guard is part of)"
-                         % DEFAULT_BASELINE_REL)
     ap.add_argument("--paths", nargs="*", default=None,
                     help="check these files instead of every tracked *.py")
-    ap.add_argument("--write-baseline", action="store_true",
-                    help="write the current non-conforming set and exit 0")
     a = ap.parse_args(argv)
 
     try:
         root = repo_root()
-        if a.baseline is None:                     # repo-anchored default, not cwd
-            a.baseline = root / DEFAULT_BASELINE_REL
-        found, total = nonconforming(_collect(root, a.paths), root)
+        found, total, exempt = nonconforming(_collect(root, a.paths), root)
     except SystemExit as exc:                    # git failure (2) or a parse refusal (3)
         return int(exc.code or 0)
-    keys = [k for k, *_ in found]
 
-    if a.write_baseline:
-        a.baseline.parent.mkdir(parents=True, exist_ok=True)
-        a.baseline.write_text(json.dumps(
-            {"schema": BASELINE_SCHEMA, "note": "report-only until #815 re-bases "
-             "this set and flips the guard to enforcing; delete a key when its "
-             "definition resolves to refusal.Refused",
-             "nonconforming": sorted(keys)}, indent=1) + "\n")
-        print(f"wrote baseline {a.baseline}: {len(keys)} non-conforming definition(s)")
-        return 0
-
-    baseline: list[str] = []
-    if a.baseline.exists():
-        baseline = json.loads(a.baseline.read_text())["nonconforming"]
-    else:
-        print(f"REFUSED: baseline {a.baseline} is missing; run --write-baseline first",
-              file=sys.stderr)
-        return 3
-
-    fresh = sorted(set(keys) - set(baseline))
-    shrink = sorted(set(baseline) - set(keys))
     for k, line, name, bases in found:
-        if k in fresh:
-            print(f"  NEW: {k} <- [{bases}]")
-    print(f"{len(keys)} of {total} definition(s) do not resolve to refusal.Refused "
-          f"(baseline: {len(baseline)})")
-    if fresh:
-        print(f"\n{len(fresh)} NEW non-conforming definition(s) -- REPORTED, not "
-              "enforced until #815: every class Refused/Refusal must subclass "
-              "refusal.Refused (directly or through a conforming chain), or join "
-              "the baseline only with a stated reason. Absorb one deliberately "
-              "with --write-baseline (after merging main), or leave it for #815's "
-              "re-base.")
-        # Report/baseline mode exits 0 here by design: an exit 1 on a NEW
-        # definition reds `make verify` on `main` for every unrelated merge that
-        # adds a refusal class (~daily on this tree) -- a gate that gets trained
-        # away. #815 flips this to `return 1` together with the whole-set re-base.
-        return 0
-    if shrink:
-        print(f"the baseline can shrink by {len(shrink)} entr(y/ies) -- re-run "
-              "--write-baseline")
-    else:
-        print("the baseline matches the tree")
+        print(f"  NON-CONFORMING: {k} <- [{bases}]")
+    for k in exempt:
+        print(f"  exempt (dataclass record, not an exception): {k}")
+    print(f"{len(found)} of {total} definition(s) do not resolve to refusal.Refused "
+          f"({len(exempt)} exempt dataclass record(s))")
+    if found:
+        print(f"\nevery class Refused/Refusal must subclass refusal.Refused "
+              f"(directly or through a conforming chain), preserving every "
+              f"secondary base; the fix is the re-base, never `except Exception` "
+              f"(an unexpected exception is an EXECUTION ERROR, not a refusal).")
+        return 1
     return 0
 
 

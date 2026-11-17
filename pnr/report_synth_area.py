@@ -91,6 +91,10 @@ import re
 import shutil
 import subprocess
 import sys
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -102,7 +106,7 @@ LFSR_SEED = "64'h0123456789abcdef"
 LFSR_STEP = "lfsr = {lfsr[62:0], lfsr[63]^lfsr[60]^lfsr[58]^lfsr[55]};"
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """Nothing was measured. Distinct from both a pass and a failure."""
 
     def __init__(self, reason: str, detail: str):

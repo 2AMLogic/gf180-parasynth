@@ -70,6 +70,10 @@ import reference_rigs as rr          # noqa: E402
 import voice_fx as vf                # noqa: E402
 import mono_m5a_score as m5          # noqa: E402
 from filter_rate_chain import RateConvertedLadder   # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 CASES = ("F1A", "F1B", "F1C")
 DRIVE = 1.0          # OurLadder's drive: the F1 stimulus setting, held fixed
@@ -82,7 +86,7 @@ SUPERSEDED_AT = "c993946"     # origin/main this baseline was frozen on
 SAME = 5e-4          # the records are written to 4 decimals
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

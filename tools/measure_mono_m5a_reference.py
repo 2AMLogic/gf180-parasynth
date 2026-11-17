@@ -34,6 +34,7 @@ import audio_measure as am  # noqa: E402
 import reference_rigs as rr  # noqa: E402
 import reference_voice as rv  # noqa: E402
 import voice_fx as vf  # noqa: E402
+import refusal
 
 SR = 48_000
 BLOCK = 16
@@ -102,7 +103,7 @@ WAVE_PARAM = (48, "Wave Osc1")
 RANGE_READBACK = "8'"
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """The reference apparatus did not prove the conditions for measurement."""
 
 

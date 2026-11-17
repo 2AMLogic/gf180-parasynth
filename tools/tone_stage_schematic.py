@@ -222,6 +222,7 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import werner_fig9 as w9  # noqa: E402
+import refusal
 
 # ---------------------------------------------------------------------------
 # The source, pinned so the read below is reproducible rather than merely
@@ -278,7 +279,7 @@ ALPHA_K1 = 0.3977174262519643
 CY_BANDS_HZ = (3450.0, 7100.0)
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """Raised when a precondition this module needs is not met."""
 
 

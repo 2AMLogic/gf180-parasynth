@@ -2,24 +2,31 @@
   "state": "reproduced",
   "workflow_url": null,
   "produced_by": {
-    "host": "linux x86_64, python 3.12, numpy 1.26.4, scipy 1.11.4",
+    "host": "linux x86_64, python 3.12, numpy 2.5.3, scipy 1.18.1 (spec/trial-environment.json)",
     "command": "python3 tools/compare_mono_attack_context.py",
-    "why_not_ci": "the agent's token could not dispatch attack_context_model.yml (HTTP 403, 'Resource not accessible by integration': no actions:write). Both prior bindings were produced by Linux CI and that remains preferable; a maintainer with actions:write can dispatch the workflow on this branch and replace report.json, which the re-render below shows is reproducible either way."
+    "why_not_ci": "the agent's token could not dispatch attack_context_model.yml (HTTP 403, 'Resource not accessible by integration': no actions:write), as with the previous local binding; Linux CI remains preferable, and a maintainer with actions:write can dispatch the workflow on the branch and replace report.json. This re-render at the recorded source_commit reproduced the committed report.json and all 12 WAVs byte-for-byte in the spec-pinned environment (and again under numpy 2.5.5/scipy 1.18.1) -- demonstrated, not assumed."
   },
-  "source_commit": "a10a51056de1bf55b8d37bbfc63eeafab9744cbd",
-  "report_sha256": "8cb5cfde007eb99c810918aa77c9ee663e1513356eb815ff9b1ca3a25967a7c4",
+  "source_commit": "7039206b542bea79cde96f2cefab0f6c6adfe880",
+  "report_sha256": "f155f2664103baf37683f9691aca0ae76df572a4769d537ad603e8225c53991e",
   "rebound_from": {
-    "workflow_url": "https://github.com/2AMLogic/gf180-parasynth/actions/runs/36660843540",
-    "source_commit": "85f46ec7f0ce831d12c5a652643f57692af823f8",
-    "report_sha256": "dc80f6207ab5056e93369f1bfae4d406543e59834b4ce66f1fb2277af9e673b2",
-    "reason": "#134 changed model/audio_measure.py, which the verifier correctly refuses as a changed analysis basis. The change is a finiteness assertion at the module's single ingestion point, plus docstrings; it alters no measurement, which the re-render below demonstrates rather than assumes.",
-    "rebind": "re-rendered at the new source_commit; all 12 WAVs byte-identical to the committed ones (git reported only report.json modified); every attack/release crossing, every other model_timing field and all 6 history contrasts identical; 6 of 12 held_rms values differ in the last 1-2 ulp (max 1.11e-16, against the recorded 1e-14 relative tolerance). source_commit, source_sha256 and those 6 held_rms values are the whole delta.",
+    "workflow_url": null,
+    "source_commit": "a10a51056de1bf55b8d37bbfc63eeafab9744cbd",
+    "report_sha256": "8cb5cfde007eb99c810918aa77c9ee663e1513356eb815ff9b1ca3a25967a7c4",
+    "reason": "The #134 commit a10a5105 touched model/audio_measure.py -- a source this report hash-pins -- so the run-36660843540 CI binding went stale, and the verifier correctly refuses a changed analysis basis. Rendered locally because the agent's token could not dispatch the workflow; see rebind.",
+    "rebind": "re-rendered locally by tools/compare_mono_attack_context.py at a10a5105 (python 3.12, numpy 1.26.4, scipy 1.11.4); the agent's token could not dispatch attack_context_model.yml (HTTP 403, 'Resource not accessible by integration': no actions:write). Both prior bindings were produced by Linux CI and that remains preferable; a maintainer with actions:write can dispatch the workflow on the branch and replace report.json, which the re-render showed is reproducible either way.",
     "rebound_from": {
-      "workflow_url": "https://github.com/2AMLogic/gf180-parasynth/actions/runs/35666927724",
-      "source_commit": "1ae5071b038d93df507efb50b76cb3c83eb6d228",
-      "report_sha256": "a26768ca77798ee3e786a8f33cf15147166338e03ecaa086986d456a5cde363e",
-      "reason": "source_commit was orphaned by a rebase, so no checkout could resolve it (#403, #215)",
-      "rebind": "re-rendered in Linux CI at the new source_commit; all 12 WAVs byte-identical and every row and history contrast identical to the original report; only source_commit and source_sha256 changed"
+      "workflow_url": "https://github.com/2AMLogic/gf180-parasynth/actions/runs/36660843540",
+      "source_commit": "85f46ec7f0ce831d12c5a652643f57692af823f8",
+      "report_sha256": "dc80f6207ab5056e93369f1bfae4d406543e59834b4ce66f1fb2277af9e673b2",
+      "reason": "#134 changed model/audio_measure.py, which the verifier correctly refuses as a changed analysis basis. The change is a finiteness assertion at the module's single ingestion point, plus docstrings; it alters no measurement, which the re-render below demonstrates rather than assumes.",
+      "rebind": "re-rendered at the new source_commit; all 12 WAVs byte-identical to the committed ones (git reported only report.json modified); every attack/release crossing, every other model_timing field and all 6 history contrasts identical; 6 of 12 held_rms values differ in the last 1-2 ulp (max 1.11e-16, against the recorded 1e-14 relative tolerance). source_commit, source_sha256 and those 6 held_rms values are the whole delta.",
+      "rebound_from": {
+        "workflow_url": "https://github.com/2AMLogic/gf180-parasynth/actions/runs/35666927724",
+        "source_commit": "1ae5071b038d93df507efb50b76cb3c83eb6d228",
+        "report_sha256": "a26768ca77798ee3e786a8f33cf15147166338e03ecaa086986d456a5cde363e",
+        "reason": "source_commit was orphaned by a rebase, so no checkout could resolve it (#403, #215)",
+        "rebind": "re-rendered in Linux CI at the new source_commit; all 12 WAVs byte-identical and every row and history contrast identical to the original report; only source_commit and source_sha256 changed"
+      }
     }
   },
   "model_audio_files": 12,
@@ -43,6 +50,6 @@
   "wrong_then_right": {
     "sound_measurement_claims_corrected": 0,
     "publication_preconditions_corrected": 1,
-    "detail": "Exact dictionary equality rejected a 5.55e-17 held-RMS difference across ARM/x86. All time crossings, tail values, and audio hashes remain exact. The #134 re-bind reproduced the same class of difference (1.11e-16, this time between two Linux x86_64 hosts, so it is a summation-order/library property rather than an architecture one) and again left every crossing and every audio hash exact."
+    "detail": "Exact dictionary equality rejected a 5.55e-17 held-RMS difference across ARM/x86. All time crossings, tail values, and audio hashes remain exact. The #134 re-bind reproduced the same class of difference (1.11e-16, this time between two Linux x86_64 hosts, so it is a summation-order/library property rather than an architecture one) and again left every crossing and every audio hash exact. The #815 re-bind reproduced the class a third time (numpy 1.26.4/scipy 1.11.4 -> numpy 2.5.5/scipy 1.18.1), again exactly 1.1102230246251565e-16 max, with every crossing and every audio hash exact."
   }
 }
