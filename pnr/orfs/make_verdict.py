@@ -31,10 +31,15 @@ Usage:
 Exit: 0 verdict written/matches, 1 --check mismatch, 2 REFUSED.
 """
 from __future__ import annotations
-import argparse, json, os, sys
+import argparse, json, os, pathlib, sys
+
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 
-class Refusal(Exception):
+class Refusal(refusal.Refused, Exception):
     """A precondition of the measurement failed. Not a verdict either way."""
 
 
