@@ -283,8 +283,8 @@ the two-document run collects no pytest), which is why it is wired and
 tree, not a reason to unwire it. It injects its defects in place and
 restores what it read; the one way those restores do not run is a runner
 timeout (`tools/run_all.py` SIGKILLs the job's process group), which would
-leave `README.md` and `docs/milestones.md` modified — at a few seconds
-against `controls`' 3600 s timeout that needs the probe to hang ~1000x its
+leave `README.md` and `docs/milestones.md` modified — at ~0.6 s
+against `controls`' 3600 s timeout that needs the probe to hang ~6000x its
 runtime, so it is recorded here rather than made hermetic (a rewrite of the
 probe, out of scope for #811).
 
