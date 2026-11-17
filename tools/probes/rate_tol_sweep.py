@@ -211,10 +211,13 @@ def measure_panel(panel, taps) -> list[dict]:
     return rows
 
 
-def red(rows: list[dict], tol_rel: float, unit: str | None = None) -> list[dict]:
+def red(rows: list[dict], tol_rel: float | dict | None,
+        unit: str | None = None) -> list[dict]:
     """Which pairs are over tolerance at `tol_rel`. The tolerance comes from
     `rate_tolerance` itself -- the shipped expression, called with the
-    override, so this cannot drift from what the test applies."""
+    override, so this cannot drift from what the test applies -- and has the
+    same shape as that function's `tol_rel`: a scalar for the pre-#782 dial,
+    a per-unit dict for `--unit`, None for the shipped values."""
     out = []
     for r in rows:
         if r["refused"] or (unit is not None and r["unit"] != unit):
@@ -321,8 +324,11 @@ def measure(grid, panel, panel_11=True, unit: str | None = None) -> dict:
         if unit is None:
             row["cost_db"] = float(len(red(shipped, t, "db")))
         else:
-            row["caught_db"] = float(len(red(injected, tol_at(t), unit)))
-            row["cost_db"] = float(len(red(shipped, tol_at(t), unit)))
+            # the swept unit names its own columns (#937): `caught_db` here
+            # was right only for the run that swept db, and doubly misleading
+            # for every other `--unit`, whose counts printed under a dB name.
+            row[f"caught_{unit}"] = float(len(red(injected, tol_at(t), unit)))
+            row[f"cost_{unit}"] = float(len(red(shipped, tol_at(t), unit)))
         rows.append(row)
     units = sorted(D.RATE_TOL_ABS)
     by_unit = [{valcol: t,
@@ -433,8 +439,8 @@ def report(res: dict, plan: dict, out) -> None:
     w()
     cols = ([valcol, "caught", "cost", "cost_db", "cost_ratio", "caught_ratio",
              "refused"] if unit is None else
-            [valcol, "caught", "caught_db", "cost", "cost_db", "cost_ratio",
-             "caught_ratio", "refused"])
+            [valcol, "caught", f"caught_{unit}", "cost", f"cost_{unit}",
+             "cost_ratio", "caught_ratio", "refused"])
     widths = ([9, 9, 7, 9, 12, 14, 9] if unit is None else
               [8, 9, 11, 7, 9, 12, 14, 9])
     for line in _table(res["rows"], cols, widths):
