@@ -229,6 +229,56 @@ def stale_against(n: dict, at_sha: str) -> tuple[str, str]:
     return "fresh", ""
 
 
+# The tail of a pytest summary line is TIMING PRESENTATION, not evidence
+# (#967): "<counts> in <secs>", and past a minute "<counts> in <secs>
+# (H:MM:SS)". The counts sit BEFORE ` in ` and are kept, so stripping this
+# tail cannot hide a real change -- `105 passed in 3s` and `104 passed in 3s`
+# still differ after normalisation. The match is anchored at the END of the
+# detail, so a timing-shaped fragment mid-string (an evidence_requires
+# literal, a path) is left alone, and a tail that run_evidence()'s 90-char
+# truncation cut mid-unit fails to match. Every unmatched case keeps the old
+# behaviour (rewrite), which is the safe direction: a missed match can only
+# cost a suppression, never buy a false freshness.
+TIMING_TAIL = re.compile(
+    r"\s+in\s+\d[\d.,]*\s*(?:ms|s|m|h)(?:\s*\([\d:hmst., ]*\))?\s*$")
+
+
+def normalise_detail(detail: str) -> str:
+    """A detail with its wall-clock tail removed -- the part of an evidence
+    line that varies between two runs of identical code."""
+    return TIMING_TAIL.sub("", detail)
+
+
+def record_unchanged(n: dict, old: dict, ok: bool, detail: str) -> bool:
+    """Did re-running this node's evidence produce anything new? (#967)
+
+    dag.yml regenerates on every push to main and rewrites EVERY record's
+    `sha`, so a PR whose deliverable is a change to one of these records
+    conflicts with every merge to main while its CI runs (~41 min), and the
+    median gap between regenerations is about the same -- a livelock. The
+    writer fixes it: a re-run that shows the SAME verdict and the SAME
+    evidence line modulo timing leaves the old record byte-for-byte, so the
+    bot's next commit stops touching lines nothing observed changed.
+
+    The third leg is the freshness condition, and it is what keeps that
+    honest. `sha` is the staleness anchor classify() measures `covers`
+    against, so an old record may only survive while every covered file is
+    still byte-identical from the recorded sha to HEAD. A covered change
+    re-anchors the record to the new run's own sha even when verdict and
+    detail repeat -- otherwise the node would read GREEN forever off evidence
+    taken before the change. And anything UNMEASURABLE -- no recorded sha, a
+    sha outside this history, a git failure -- is not fresh either: rewrite,
+    the pre-#967 behaviour, rather than vouch for evidence that cannot be
+    anchored.
+    """
+    if old.get("passed") != ok:
+        return False
+    if normalise_detail(old.get("detail", "")) != normalise_detail(detail):
+        return False
+    state, _why = stale_against(n, old.get("sha", ""))
+    return state == "fresh"
+
+
 def classify(nid: str, n: dict) -> tuple[str, str]:
     """Return (status, note). Derived from evidence; never taken on trust."""
     if n.get("blocked"):
@@ -443,8 +493,18 @@ def main() -> int:
                 # SystemExit of load_results() loud (#600).
                 ok = False
                 detail = f"{type(exc).__name__}: {exc}"[:90]
-            res[i] = {"passed": ok, "sha": sha, "detail": detail}
-            print(f"  {'PASS' if ok else 'FAIL'}  {i:3s} {detail}", file=sys.stderr)
+            if i in res and record_unchanged(n, res[i], ok, detail):
+                # Same verdict, same evidence line modulo timing, and the
+                # recorded sha still fresh over `covers`: keep the old record
+                # byte-for-byte (#967). The evidence still RAN -- only the
+                # rewrite is suppressed -- so the status stays derived, not
+                # carried forward.
+                print(f"  keep  {i:3s} {res[i].get('detail', '')} "
+                      f"(unchanged since {res[i].get('sha', '')[:8]})",
+                      file=sys.stderr)
+            else:
+                res[i] = {"passed": ok, "sha": sha, "detail": detail}
+                print(f"  {'PASS' if ok else 'FAIL'}  {i:3s} {detail}", file=sys.stderr)
             # Written after EVERY node, not once after the loop: a job-level
             # kill (the nightly's timeout-minutes, a runner eviction, SIGKILL)
             # cannot be handled, only out-saved. What is already on disk
