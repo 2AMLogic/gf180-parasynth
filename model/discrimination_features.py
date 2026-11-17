@@ -118,6 +118,25 @@ MS_WINDOWS_S = (4.0e-3, 10.0e-3, 25.0e-3)
 MS_BANDS_HZ = ((20.0, 200.0), (200.0, 700.0), (700.0, 2000.0),
                (2000.0, 5000.0), (5000.0, 9000.0), (9000.0, 18000.0))
 
+
+def ms_window_ms_label(T: float) -> str:
+    """The integer-millisecond token `%.0f` renders a window duration as.
+
+    One expression for it because it is load-bearing twice: the `ms*` column
+    names built in `multiscale_features` and `extra_group`'s `ms.` buckets
+    are both derived from this token, so its being DISTINCT across
+    MS_WINDOWS_S is the precondition that keeps one attribution bucket per
+    window. That is a property of the committed values, not of the code --
+    `%.0f` is lossy, so a future window rounding onto another (4.4e-3 beside
+    4.0e-3, both "4") would silently merge two windows into one double-width
+    bucket: the failure shape #929 fixed for MPD, visible only as "one bucket
+    looks unusually large". A collision cannot be refused here without
+    hard-coding the windows a second time, so the assertion lives where it
+    runs on every suite pass: model/test_discrimination.py holds the
+    precondition for the committed windows and shows a synthetic colliding
+    tuple being reported (#939)."""
+    return f"{T * 1e3:.0f}"
+
 # What the rate-independence test is allowed to call "the same number" at
 # 44.1 kHz and 48 kHz: a relative tolerance, floored by an ABSOLUTE one in the
 # column's own units, because a relative test on a column whose correct value
@@ -848,7 +867,7 @@ def multiscale_features(x: np.ndarray, sr: int, floor_db: float = -80.0) -> tupl
             db = max(floor_db, 10.0 * np.log10(v + _EPS))
             tab[(T, lo)] = db
             vals.append(db)
-            names.append(f"ms{T * 1e3:.0f}ms.{lo:.0f}-{hi:.0f}Hz.seg0")
+            names.append(f"ms{ms_window_ms_label(T)}ms.{lo:.0f}-{hi:.0f}Hz.seg0")
     for a, b in zip(MS_WINDOWS_S[:-1], MS_WINDOWS_S[1:]):
         for lo, hi in MS_BANDS_HZ:
             vals.append(tab[(a, lo)] - tab[(b, lo)])
