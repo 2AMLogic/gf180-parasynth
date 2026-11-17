@@ -121,14 +121,21 @@ def test_end_to_end_with_real_own_evidence(tmp_path):
 # guard ships with them, so the next reader knows its boundary):
 #
 #   1. Adding ANY recognised evidence key satisfies "not issue-only" while
-#      leaving the node unevidenced. Specifically an `evidence_file` with
-#      neither a verdict key (passed/ok/success/green) nor `evidence_requires`
-#      lands on run_evidence's "EXISTS ONLY -- no verdict declared" branch,
-#      which returns PASS, so the node renders GREEN on file existence alone.
-#      That hole is real and is NOT closed here: M3, S1 and S3 already render
-#      GREEN through that branch today, so a guard forbidding verdict-less
-#      `evidence_file` nodes would be unsatisfiable the moment it landed --
-#      worse than no guard, per CLAUDE.md. Tracked as #791.
+#      leaving the node unevidenced. This WAS a real defeat: an `evidence_file`
+#      with neither a verdict key (passed/ok/success/green) nor
+#      `evidence_requires` landed on run_evidence's no-verdict branch, which
+#      returned PASS, so the node rendered GREEN on file existence alone --
+#      M3, S1 and S3 all did (#791). #810 closed it: the branch now returns
+#      False and classify() renders REFUSED, so the shape this guard permits
+#      is an honest decline, not a false pass -- and a stale issue pointer
+#      behind a REFUSED asserts nothing, because REFUSED never mentions the
+#      issue. The guard #791 deferred as unsatisfiable -- forbidding the
+#      verdict-less `evidence_file` declaration itself -- is therefore now
+#      satisfiable (S1 reads a derived verdict, S3 declares
+#      `evidence_requires`, M3 states in its note that REFUSED is deliberate)
+#      and lives in this file as
+#      test_no_committed_node_declares_a_verdict_less_evidence_file, with
+#      its controls in tools/control_dag_verdictless_evidence.py.
 #   2. Deleting the `issue` key instead of resolving the node. That renders
 #      `TODO  no evidence declared`, which this guard permits. It is a weaker
 #      defeat than it looks: the node then states plainly that it has no
@@ -180,8 +187,11 @@ def test_the_guard_turns_red_on_an_injected_issue_only_node():
     assert not _is_issue_only({"issue": 99999, "blocked": "waiting on silicon"})
     # ... and so is real evidence
     assert not _is_issue_only({"issue": 99999, "suite": "model/test_moog_acceptance.py"})
-    # the defeating input: an evidence key with no verdict behind it passes
-    # this guard. #791.
+    # an evidence key still satisfies "not issue-only" -- including a
+    # verdict-less `evidence_file`. Since #810 that shape renders REFUSED
+    # rather than the GREEN it used to, so what this guard permits is an
+    # honest decline (note 1 above); the declaration itself is policed by
+    # test_no_committed_node_declares_a_verdict_less_evidence_file below.
     assert not _is_issue_only({"issue": 99999, "evidence_file": "docs/nothing.json"})
 
 
@@ -194,3 +204,50 @@ def test_an_issue_only_node_renders_todo_against_that_issue():
     assert cd.classify("X", {"issue": 99999}) == ("TODO", "issue #99999")
     assert cd.classify("X", {}) == ("TODO", "no evidence declared")
     assert cd.classify("X", {"issue": 99999, "blocked": "a recording"})[0] == "BLOCKED"
+
+
+def test_no_committed_node_declares_a_verdict_less_evidence_file():
+    """A committed `evidence_file` must declare a verdict, or own its REFUSED.
+
+    #791's hole -- GREEN on file existence alone -- is closed in
+    compile_dag.py (#810): a node whose `evidence_file` carries no verdict key
+    and no `evidence_requires` now renders REFUSED, and REFUSED cannot lie.
+    What this guard adds is the declaration half: landing in that state by
+    ACCIDENT is a node the roadmap cannot answer, so a node that commits it
+    must say so in its own `note` -- the M3 pattern, whose note states that
+    REFUSED is deliberate and why no substring guard can replace the missing
+    verdict. #791 deferred this guard as unsatisfiable while M3, S1 and S3 all
+    rendered GREEN through the branch; #810 repaired S1 (a derived
+    verdict.json) and S3 (`evidence_requires`) and left M3 REFUSED with that
+    note, so this guard is satisfiable against the tree as committed -- run
+    against docs/dag.json before committing, per CLAUDE.md's
+    unsatisfiable-gate rule.
+
+    Rule 8, the inputs that defeat it, committed as controls in
+    tools/control_dag_verdictless_evidence.py:
+      * a verdict-less `evidence_file` with NO note -> this guard fires
+        (red control SILENT_VERDICTLESS_EVIDENCE_FILE_RETURNS);
+      * the same node WITH a REFUSED note is the permitted shape (green
+        control DECLARED_REFUSED_VERDICTLESS_STAYS_GREEN). The note is
+        checked as a substring, so it asserts acknowledgement, not truth --
+        the same trust model as the `blocked` reason the #788 guard accepts;
+        the damage a lying note can do is bounded, because the node renders
+        REFUSED in the roadmap regardless of what its note claims;
+      * `evidence_requires` is the other escape (green control
+        EVIDENCE_REQUIRES_ESCAPE_STAYS_GREEN).
+    Stated blind spots, not fixed here: a MISSING evidence file is unjudged()'s
+    None -- missing is a failure rendered TODO, so no false pass is possible;
+    and a hand-written `{"ok": true}` file satisfies unjudged() without any
+    run -- that hole belongs to the `covers`/staleness guards (#863), not
+    this one.
+    """
+    silent = sorted(
+        i for i, n in _committed_nodes().items()
+        if cd.unjudged(n) is not None and "REFUSED" not in n.get("note", ""))
+    assert not silent, (
+        f"{silent} commit an `evidence_file` carrying no verdict this tool can "
+        f"read (no passed/ok/success/green key, no `evidence_requires`), so "
+        f"tools/compile_dag.py renders them REFUSED -- an honest decline, but "
+        f"one the node must own. State it in the node's `note` (name REFUSED "
+        f"and why it is the true state -- M3 is the example), declare "
+        f"`evidence_requires`, or make the file carry a verdict key.")

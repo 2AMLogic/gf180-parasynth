@@ -541,6 +541,7 @@ controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
 	  "$(PY) tools/control_dag_issue_only.py" \
+	  "$(PY) tools/control_dag_verdictless_evidence.py" \
 	  "$(PY) -m pytest tools/test_rungs_gate.py -q" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
 	  "$(PY) tools/probes/estimator_ground_truth.py controls" \
