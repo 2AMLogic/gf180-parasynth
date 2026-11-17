@@ -180,14 +180,16 @@ def parse_attrs(body: str) -> tuple[dict[str, str], str | None]:
     return attrs, None
 
 
-def find_claims(doc: pathlib.Path) -> list[Claim]:
-    """Every marker in one document, with the nearest prose line above it.
+def live_marker_lines(lines: list[str]) -> dict[int, re.Match[str]]:
+    """MARKER match for every line that parses as a live claim marker.
 
-    The prose is only ever used for reporting -- it is what a reader needs to
-    see next to a STALE verdict. Nothing is inferred from it.
+    find_claims()'s collector: a marker inside a fenced code block or
+    `backticks` is an example, not a claim, so it is not a live marker line
+    here. check_grep() must NOT reuse this: an example is not evidence
+    either, and this state machine would leave it in -- it skips on the raw
+    MARKER shape instead (issue #949).
     """
-    out: list[Claim] = []
-    lines = doc.read_text(encoding="utf-8").splitlines()
+    out: dict[int, re.Match[str]] = {}
     fenced = False
     for i, line in enumerate(lines, start=1):
         if FENCE.match(line):
@@ -200,6 +202,20 @@ def find_claims(doc: pathlib.Path) -> list[Claim]:
             continue
         if line.count("`", 0, m.start()) % 2:
             continue                       # ...and so is one inside `backticks`
+        out[i] = m
+    return out
+
+
+def find_claims(doc: pathlib.Path) -> list[Claim]:
+    """Every marker in one document, with the nearest prose line above it.
+
+    The prose is only ever used for reporting -- it is what a reader needs to
+    see next to a STALE verdict. Nothing is inferred from it.
+    """
+    out: list[Claim] = []
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    for i, m in live_marker_lines(lines).items():
+        line = lines[i - 1]
         prose = ""
         for back in range(i - 1, max(0, i - 6), -1):
             cand = lines[back - 1].strip()
@@ -475,6 +491,28 @@ def _when(ts: int) -> str:
 
 
 def check_grep(c: Claim) -> None:
+    """Search the in= files for the pattern -- but never inside a marker.
+
+    A marker line is not evidence, for either polarity (issue #949), and
+    "marker line" is the raw MARKER shape, not the live-claim state machine:
+    a fenced or `backticks` EXAMPLE of a marker is skipped too. Filtering
+    through live_marker_lines() instead left such an example in the
+    evidence -- OK on a file with no live prose anywhere, a false green
+    that main's #904 rule still caught (example + the live marker's own
+    line = two hits). The shape test closes both polarities in one place.
+    For
+    grep= this is the self-match trap: the pattern is quoted inside the
+    marker carrying it, so the marker's own line always matches, and when the
+    guarded prose is gone -- deleted, or wrapped across two lines so no
+    single line carries it -- the only match left is the marker itself,
+    which graded OK. Skipping marker lines turns that into STALE. For
+    absent= it is the mirror image: an unanchored absence pattern matches
+    its own marker line, which the pre-fix checker read as the thing now
+    existing, STALE on a "not yet" line that was still true. Skipping marker
+    lines leaves that OK. The same skip removes one marker's ability to
+    back another: a pattern that lives only on other markers' lines is in
+    none of the files, not found.
+    """
     files, err = expand(c.attrs["in"])
     if err:
         c.refuse(err)
@@ -503,6 +541,11 @@ def check_grep(c: Claim) -> None:
             unreadable.append(f.relative_to(ROOT).as_posix())
             continue
         for n, line in enumerate(body.splitlines(), start=1):
+            if MARKER.search(line):
+                continue                  # a marker-shaped line is never
+                                          # evidence: not a live marker's own,
+                                          # another marker's, or an example of
+                                          # one inside a fence or `backticks`
             if rx.search(line):
                 hits.append(f"{f.relative_to(ROOT).as_posix()}:{n}")
     if c.kind == "grep":
@@ -516,13 +559,14 @@ def check_grep(c: Claim) -> None:
             # line and the marker stayed green by construction, and no
             # marker's uniqueness was ever re-derived. A marker that cannot
             # say WHICH line it guards guards nothing: that is REFUSED, and
-            # the author makes the pattern unique. The input that defeats the
-            # tightened authoring is the marker's own line when in= names the
-            # marker's own document: the pattern appears verbatim inside it,
-            # punctuation included, so quoting a comma does not defuse the
-            # self-match. A regex's own source text never matches itself, so
-            # deferring one letter into a class (`erro[r]`) matches the prose
-            # while the marker quoting it stays unmatched. `absent=` below is
+            # the author makes the pattern unique. The input that once
+            # defeated that authoring -- the marker's own line when in=
+            # names the marker's own document, the pattern quoted verbatim
+            # inside it -- is gone since #949: marker-shaped lines are
+            # excluded from the evidence above, so every hit counted here is
+            # genuine prose and two of them need real disambiguation.
+            # docs/claim-markers.md retires the `erro[r]`-style brackets
+            # this comment used to advise. `absent=` below is
             # deliberately unchanged -- for a "not yet" claim, ANY hit means
             # done, however many.
             c.refuse(f"{c.value!r} matches {len(hits)} lines, not one -- first "

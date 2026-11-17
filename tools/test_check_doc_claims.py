@@ -321,6 +321,202 @@ def test_an_unreadable_target_file_is_refused(fixtures):
 
 
 # --------------------------------------------------------------------------
+# a marker line is never evidence (issue #949)
+#
+# A grep= pattern is quoted inside the marker that carries it, so the marker's
+# own line always matches its own pattern. When the guarded prose is gone --
+# deleted, or wrapped across two lines so no single line carries it -- the
+# only match left IS the marker. Under #904's uniqueness rule that single hit
+# still graded OK; this rule removes it from the evidence entirely, so the
+# grade is STALE -- the input that satisfies the check while violating its
+# intent (docs/verification-rules.md rule 8).
+# --------------------------------------------------------------------------
+
+def test_a_grep_whose_only_match_is_its_own_marker_line_is_stale(fixtures):
+    """THE HEADLINE CASE (issue #949). Red first: on the pre-fix checker this
+    graded OK at the marker's own line."""
+    rel_doc = (fixtures / "doc.md").relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "selfonly": f'grep="the deleted figure is 42 dB" in={rel_doc}',
+    }))
+    assert v["selfonly"].status == cdc.STALE, v["selfonly"].detail
+    assert "in none of" in v["selfonly"].detail
+
+
+def test_an_absent_whose_only_hit_is_its_own_marker_line_stays_ok(fixtures):
+    """The same rule, other polarity. An unanchored absent= pattern appears
+    inside its own marker, so the pre-fix checker read the marker itself as
+    the thing that now exists and reported STALE on a "not yet" line that is
+    still true. A marker line is not evidence of existence either. Red
+    first: on the pre-fix checker this graded STALE."""
+    rel_doc = (fixtures / "doc.md").relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "absent-self": f'absent="qqq_not_built_yet_symbol" in={rel_doc}',
+    }))
+    assert v["absent-self"].status == cdc.OK, v["absent-self"].detail
+    assert "matches nothing" in v["absent-self"].detail
+
+
+def test_a_grep_matching_genuine_prose_stays_ok_even_when_the_marker_quotes_it(fixtures):
+    """The rule is not "a pattern must not appear in its own marker" -- it is
+    that marker lines are not EVIDENCE. A pattern naming the prose it guards
+    appears in both places (the marker quotes what it searches for), which
+    under #904's uniqueness rule alone is two lines and REFUSED; with marker
+    lines excluded from the count it is the single OK it must be, at the
+    prose line, never at the marker's own. Red first against #904's
+    checker; guards the composition against over-exclusion."""
+    rel_doc = (fixtures / "doc.md").relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "quoted": 'grep="The claim called quoted" in=' + rel_doc,
+    }))
+    assert v["quoted"].status == cdc.OK, v["quoted"].detail
+    assert ":3" in v["quoted"].detail, v["quoted"].detail
+    assert ":4" not in v["quoted"].detail, v["quoted"].detail
+
+
+def test_a_marker_line_backs_no_other_marker_either(fixtures):
+    """Two markers in one document: A's pattern lives only on marker lines --
+    its own (it names the pattern it searches for) and B's (note=b). Neither
+    counts, so A grades STALE: one marker cannot back another any more than
+    it can back itself. On #904's checker alone this REFUSED as a two-line
+    match; with marker lines out of the evidence the honest grade surfaces."""
+    rel_doc = (fixtures / "doc.md").relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "a": f'grep="note=b" in={rel_doc}',
+        "b": f'grep="the prose marker a really guards" in={rel_doc}',
+    }))
+    assert v["a"].status == cdc.STALE, v["a"].detail
+    assert v["b"].status == cdc.STALE, v["b"].detail
+
+
+def test_a_marker_line_in_one_file_does_not_shadow_prose_in_another(fixtures):
+    """An `in=` glob covering several files: the marker's own line is skipped
+    in the file that carries it, and the evidence is still read from the
+    other files the glob names -- at their prose, not at any marker. On
+    #904's checker alone this REFUSED (marker line + prose = two lines);
+    with the marker line out of the count the prose is found."""
+    rel_doc = (fixtures / "doc.md").relative_to(ROOT).as_posix()
+    other = fixtures / "other.md"
+    other.write_text("plain prose in another file: the deleted figure is 42 dB\n")
+    v = verdicts(write_doc(fixtures, {
+        "multi": 'grep="the deleted figure is 42 dB" in='
+                 f'{rel_doc},{other.relative_to(ROOT).as_posix()}',
+    }))
+    assert v["multi"].status == cdc.OK, v["multi"].detail
+    assert "other.md:1" in v["multi"].detail, v["multi"].detail
+
+
+def test_a_marker_split_across_lines_is_not_a_marker_at_all(tmp_path):
+    """The boundary, stated rather than implicit: a marker is the single-line
+    HTML comment the parser handles. A comment broken across two lines parses
+    as no marker (find_claims never sees it), so its lines are not marker
+    lines and are not excluded from grep= evidence either."""
+    doc = tmp_path / "d.md"
+    doc.write_text("\n".join([
+        "<!-- claim:",
+        '    grep="half a marker" in=x.md -->',
+        "",
+        "A real marker below, for contrast.",
+        "<!-- claim: commit=abc -->",
+    ]))
+    assert [c.line for c in cdc.find_claims(doc)] == [5]
+    assert set(cdc.live_marker_lines(
+        doc.read_text(encoding="utf-8").splitlines())) == {5}
+
+
+def test_a_fenced_marker_example_is_not_evidence_either(fixtures):
+    """A fenced code block holding an EXAMPLE of a marker parses as no live
+    claim, so live_marker_lines() -- correct for find_claims() -- excludes
+    it, and reusing that predicate for evidence made the excluded example
+    line count as a hit: OK on a document with no live prose anywhere. On
+    main the same shape REFUSED under #904 (example + the live marker's own
+    line = two hits), so this change turned a caught shape into a false
+    green -- rule 8's input, shipped as a control, both polarities. Red
+    first: on the pre-fix checker this graded OK at the fenced example's
+    own line."""
+    fenced = fixtures / "fenced.md"
+    fenced.write_text(
+        "Live claim below has NO live prose; only a fenced example carries "
+        "the text.\n"
+        "\n"
+        "```\n"
+        '<!-- claim: grep="the deleted figure is 42 dB" in=x.md -->\n'
+        "```\n")
+    rel = fenced.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "fenced": f'grep="the deleted figure is 42 dB" in={rel}',
+    }))
+    c = v["fenced"]
+    assert c.status == cdc.STALE, c.detail
+    assert "in none of" in c.detail
+
+
+def test_a_fenced_marker_example_is_not_evidence_of_existence(fixtures):
+    """The same hole, absent= polarity: the fenced example line read as the
+    thing now EXISTING -- STALE on a still-true 'not yet' claim. Not a
+    regression (main graded STALE too, any hit counted) but the same line
+    read, and docs/claim-markers.md says a marker line is not evidence that
+    the thing exists, either. Red first: on the pre-fix checker this graded
+    STALE at the fenced example's own line."""
+    fenced = fixtures / "fenced_absent.md"
+    fenced.write_text(
+        "Live claim below; its fenced example is the only hit.\n"
+        "\n"
+        "```\n"
+        '<!-- claim: absent="qqq_not_built_yet_symbol" in=x.md -->\n'
+        "```\n")
+    rel = fenced.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "absent-fenced": f'absent="qqq_not_built_yet_symbol" in={rel}',
+    }))
+    c = v["absent-fenced"]
+    assert c.status == cdc.OK, c.detail
+    assert "matches nothing" in c.detail
+
+
+def test_a_backticked_marker_example_is_not_evidence_either(fixtures):
+    """The inline case: live_marker_lines() excludes a marker inside
+    `backticks` (an example, not a claim) and the excluded line still
+    matched evidence -- the same false green, one line shorter. Red first:
+    on the pre-fix checker this graded OK at the backticked example's own
+    line."""
+    backticked = fixtures / "backticked.md"
+    backticked.write_text(
+        "An example, not a claim: "
+        '`<!-- claim: grep="the backticked figure is 7 dB" in=x.md -->`\n')
+    rel = backticked.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "backticked": f'grep="the backticked figure is 7 dB" in={rel}',
+    }))
+    c = v["backticked"]
+    assert c.status == cdc.STALE, c.detail
+    assert "in none of" in c.detail
+
+
+def test_a_fenced_example_does_not_shadow_real_prose(fixtures):
+    """The exclusion is of the example LINE, not the file's prose: a marker
+    guarding prose that shares a document with a fenced example still
+    grades OK at the prose line. Guards the shape test against
+    over-exclusion -- a checker that dropped fenced regions entirely would
+    pass the fenced controls above while hiding real evidence. Red first:
+    on the pre-fix checker this REFUSED (example + prose = two hits)."""
+    fenced = fixtures / "fenced_prose.md"
+    fenced.write_text(
+        "```\n"
+        '<!-- claim: grep="the deleted figure is 42 dB" in=x.md -->\n'
+        "```\n"
+        "\n"
+        "measured on the bench: the deleted figure is 42 dB\n")
+    rel = fenced.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "fenced-prose": f'grep="the deleted figure is 42 dB" in={rel}',
+    }))
+    c = v["fenced-prose"]
+    assert c.status == cdc.OK, c.detail
+    assert f"{rel}:5" in c.detail, c.detail
+
+
+# --------------------------------------------------------------------------
 # commit=
 # --------------------------------------------------------------------------
 
