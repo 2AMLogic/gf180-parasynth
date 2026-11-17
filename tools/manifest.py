@@ -165,6 +165,16 @@ def load_json_refused(path, what: str) -> dict:
             f"column {e.colno}) -- a partial write; restore a tracked file with "
             f"`git checkout -- {path}`, delete a scratch one so the next run "
             f"re-seeds it") from e
+    except UnicodeDecodeError as e:
+        # A record cut mid-UTF-8-character (#909) dies in `read_text()`
+        # before json.loads ever sees it: UnicodeDecodeError is not a
+        # JSONDecodeError, so a separate clause with its own attributes
+        # (`reason`/`start`; there is no `.msg`/`.lineno`/`.colno` to report).
+        raise Refused(
+            f"{what} at {path} is not valid UTF-8 ({e.reason} at byte "
+            f"{e.start}) -- a partial write; restore a tracked file with "
+            f"`git checkout -- {path}`, delete a scratch one so the next run "
+            f"re-seeds it") from e
 
 
 def _single_path_component(label: str, value) -> str:

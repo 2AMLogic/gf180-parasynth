@@ -70,10 +70,20 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
 def test_makefile_recipe_returns_only_live_lines(tmp_path):
     """The shared parser drops comment lines, not just collects them. A
     control disabled the ordinary debugging way -- `#` after the leading tab,
-    invocation text intact -- never runs: GNU make drops the line and exits 0
-    (issue #855). The substring assertions above are defeater-resistant only
-    because this filter sits in the parser both suites share; in raw recipe
-    text the disabled invocation would still match."""
+    invocation text intact -- never runs. The failure mode depends on the
+    recipe's shape, not position alone: a *final* recipe line is dropped
+    silently (rc 0, one entry gone), while a *mid-recipe* line ends the
+    command at the `#` and what happens next depends on that shape. In a
+    sequence of shell commands -- this fixture's shape -- `echo C` then runs
+    as its own command (rc 0 here) and `echo B` is the only entry dropped;
+    in a recipe that is one continued command taking quoted arguments, as
+    `controls:`/`verify-fast:` are, the orphaned argument string becomes a
+    bogus command and make fails loudly (`Error 127`), dropping every later
+    entry (issue #855). Either way the entry does not run, which is the only
+    property the assertion needs. The substring assertions above are
+    defeater-resistant only because this filter sits in the parser both
+    suites share; in raw recipe text the disabled invocation would still
+    match."""
     (tmp_path / "Makefile").write_text(
         "t:\n"
         "\t@echo A \\\n"
@@ -873,3 +883,41 @@ def test_the_ledger_write_keeps_its_format_and_ignores_a_stale_tmp_sibling(tmp_p
         "the atomic write changed the ledger's serialisation")
     assert list(loaded) == [rec["case_id"]] and stale.read_bytes() == b'{"garbage": true', (
         "a stale tmp sibling was consumed as history or clobbered by the new write")
+
+
+# =============================================================================
+# load_json_refused: a record truncated mid-UTF-8-character is REFUSED, not a
+# bare traceback (#909)
+# =============================================================================
+@pytest.mark.parametrize("glyph", ["é", "—", "\U0001D11E"])  # 2-, 3- and 4-byte sequences
+def test_load_json_refused_refuses_a_record_truncated_mid_multibyte_utf8(tmp_path, glyph):
+    """A ledger truncated inside a multi-byte UTF-8 character dies in
+    `Path.read_text()` with `UnicodeDecodeError` -- not `JSONDecodeError` --
+    so the #883 helper's single except clause let it escape as a bare
+    traceback instead of a `Refused` naming the path and the restore step
+    (#909). Truncation is exercised at the 2-, 3- and 4-byte sequence
+    boundaries; every one refuses with the same shape as a torn-JSON record."""
+    p = tmp_path / "ledger.json"
+    good = json.dumps({"case_id": "SD/01", "note": f"kept {glyph} intact"},
+                      ensure_ascii=False).encode()
+    i = good.index(glyph.encode())
+    p.write_bytes(good[: i + 1])  # cut mid-character: the #842 kill's leftover shape
+
+    with pytest.raises(mf.Refused,
+                       match=r"ledger\.json.*not valid UTF-8.*unexpected end of data"
+                             r".*git checkout"):
+        mf.load_json_refused(p, "bound ledger")
+
+
+def test_load_json_refused_refuses_invalid_utf8_that_is_not_a_truncation(tmp_path):
+    """Invalid UTF-8 that is not a truncation -- a lone continuation byte
+    after an ASCII character -- dies the same way and gets the same refusal,
+    so the branch cannot be written to only answer the truncated-tail case."""
+    p = tmp_path / "record.json"
+    good = json.dumps({"case_id": "SD/01"}).encode()
+    p.write_bytes(good.replace(b"SD", b"S\x80"))
+
+    with pytest.raises(mf.Refused,
+                       match=r"record\.json.*not valid UTF-8.*invalid start byte"
+                             r".*git checkout"):
+        mf.load_json_refused(p, "analysis record")

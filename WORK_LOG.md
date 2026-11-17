@@ -2,8 +2,40 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-17
+
+- **Issue #909** (closed): load_json_refused catches JSONDecodeError only: a damaged record that is also invalid UTF-8 escapes as a traceback
+- **PR #910**: fix: refuse a manifest record truncated mid-UTF-8 rather than a bare UnicodeDecodeError
+
 ### 2026-11-16
 
+- **Issue #864** (closed): classify_route_drc.py crashes where it documents exit 3 REFUSED: 3 measured inputs return rc=1 with a traceback
+- **PR #908**: fix: classify_route_drc refuses (exit 3) where it documented REFUSED
+- **Issue #881** (closed): Class sweep for #842: tracked JSON still written by truncate-then-write outside compile_dag
+- **PR #883**: fix: the tracked bounds ledger persists through an atomic replace (#881)
+- **Issue #900** (closed): Rule-8 statement for gate (c)'s narrowed header predicate: a column header with no format spec escapes the vintage pin
+- **PR #902**: docs: state gate (c)'s spec-less-header bound in the rule-8 paragraph, record it with a control
+- **Issue #845** (closed): estimator_defects.py section 6: nine unguarded `.value` arithmetic sites, including two that reach a check() verdict, owned by neither #792 nor #843
+- **PR #898**: probes: guard estimator_defects section 6's nine .value reads behind REFUSED
+- **Issue #873** (closed): spec/NUMERIC-CONTRACT.md: PR #846's repaired sites cite figures and pointers that no marker guards
+- **PR #901**: docs: guard NUMERIC-CONTRACT's cited figures and pointers with 8 grep claim markers
+- **Issue #863** (closed): compile_dag: stale_against() answers a content question with a commit-range walk, so a merge-shaped conflict round renders fast nodes STALE (false positive; --full-history is NOT the fix)
+- **PR #903**: fix: measure DAG staleness by content, not by a commit-range walk
+- **Issue #784** (closed): Give Refused a shared base class: 113 unrelated definitions make two refusals report as a crash and an execution error
+- **PR #841**: fix: refusals crossing a class boundary are verdicts again (refusal.Refused base + baseline-mode guard)
+- **Issue #811** (closed): Wire or document tools/probes/check_doc_claims_789_marker_controls.py: a control no target runs (the #756 shape, again)
+- **PR #897**: controls: wire check_doc_claims_789_marker_controls.py as a standing control
+- **Issue #877** (closed): File upstream (rjwalters/loom): loom-daemon's write guard gates issue creation on push/WRITE, refusing every public upstream where issues:write suffices
+- **PR #896**: docs: index rjwalters/loom#13978 (forge create-issue refused on every foreign public repo) in the Loom pass table
+- **Issue #858** (closed): compile_dag classify(): the empty-covers REFUSED guard masks a FAILING record as REFUSED when the node also carries an in-history tag
+- **PR #894**: fix: answer a failing evidence record RED before the empty-covers refusal
+- **Issue #870** (closed): probe_orphan_reap argv test drops true matches where a worktree path ends a longer token (--opt=<path>, <path>:<mount>)
+- **PR #893**: fix: restore worktree attribution for paths that end a longer argv token
+- **Issue #867** (closed): #781 residue: fold-interpolator verdict summary says 'Five' where its own runs field has four singleton groups, plus two merge-jammed lines
+- **PR #892**: fix: fold-interpolator verdict counts its four singleton widths; unjam two merge-residue lines
+- **Issue #852** (closed): test_probe_labels gate (c) polices filter_corner_recalibration's module docstring, and goes red if it says "pre-#150"
+- **PR #891**: fix: scope the probe-label vintage gate to column headers, name the file in violations
+- **Issue #890** (closed): Guide's WORK_PLAN Ready list carries forward omissions: #874 was eligible before the run and is absent on both sides of #889
 - **Issue #835** (closed): File upstream: ORFS 6_report.json emits finish__design__instance__area twice with two different meanings
 - **PR #849**: summarize.py refuses duplicated required metrics (OpenROAD#12303)
 - **Issue #851** (closed): pnr/ test files run under make verify but under no CI job (6 of 8) -- the #404 shape, one directory over
