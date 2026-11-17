@@ -63,6 +63,10 @@ sys.path.insert(0, str(HERE))
 
 import drums_fx as dx                                          # noqa: E402
 import tom_drop_fit as F                                       # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 REFERENCE = REPO / "docs" / "tr808-reference.md"
 VERIFICATION = REPO / "docs" / "drum-verification.md"
@@ -97,7 +101,7 @@ CONGA_MEDIAN_MAX = 0.010
 CONGA_WORST_MAX = 0.030
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition is not met; nothing was attempted."""
 
 

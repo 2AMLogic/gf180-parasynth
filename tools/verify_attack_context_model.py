@@ -14,6 +14,7 @@ import numpy as np
 from scipy.io import wavfile
 
 import compare_mono_attack_context as producer
+import refusal
 
 
 # audio_measure.py is hash-pinned as analysis basis, but this verifier reaches
@@ -44,7 +45,7 @@ def audio_measure_basis(source: str) -> dict:
     return found
 
 
-class Refused(AssertionError):
+class Refused(refusal.Refused, AssertionError):
     """The evidence cannot be checked in this state; distinct from a measured mismatch."""
 
 

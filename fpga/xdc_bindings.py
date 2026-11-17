@@ -35,6 +35,10 @@ import hashlib
 import re
 import sys
 from pathlib import Path
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 XDC = Path(__file__).resolve().parent / "boards/arty-a7-100.xdc"
 REPORT = "constraint_matches.rpt"
@@ -52,7 +56,7 @@ EXPECT = {
 _QUERY = re.compile(r"get_(cells|pins)\s+-hier\s+-regexp\s+\{([^}]*)\}")
 
 
-class Refused(ValueError):
+class Refused(refusal.Refused, ValueError):
     pass
 
 

@@ -60,6 +60,7 @@ sys.path.insert(0, str(ROOT / "model"))
 import numpy as np  # noqa: E402
 
 import run_case as rc  # noqa: E402
+import refusal
 import run_all  # noqa: E402
 
 OUT_DIR = ROOT / "docs" / "scorecard" / "clap-d12a"
@@ -94,7 +95,7 @@ CANDIDATES = [
 ]
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition failed: the probe says so instead of producing numbers."""
 
 

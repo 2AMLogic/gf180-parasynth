@@ -49,6 +49,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import run_case  # noqa: E402
 import scorecard  # noqa: E402
+import refusal
 
 CANDIDATE_ENGINE = "integrated-rtl"
 BASELINE_ENGINE = "fixed-model"
@@ -56,7 +57,7 @@ SOURCES = ("tools/compare_drum_i2s_candidate.py", "tools/score_drum_i2s.py",
            "tools/run_case.py", "tools/scorecard.py")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The two records cannot be compared, so there is no comparison."""
 
 

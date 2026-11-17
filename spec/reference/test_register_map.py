@@ -37,9 +37,14 @@ CONTRACT = os.path.join(ROOT, "spec", "NUMERIC-CONTRACT.md")
 VOICE_DP = os.path.join(ROOT, "rtl-sketch", "voice_dp.v")
 SYNTH_TOP = os.path.join(ROOT, "rtl-sketch", "synth_top.v")
 sys.path.insert(0, os.path.join(ROOT, "model"))
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The document cannot be read by this check: neither pass nor fail."""
 
 

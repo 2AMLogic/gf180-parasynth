@@ -65,6 +65,10 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "audition", ROOT / "rtl-s
         sys.path.insert(0, str(_p))
 
 import record_compare as rc                      # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 RECORD = HERE / "r1-candidate.json"
 EVIDENCE_DIR = ROOT / "fpga/reports/r1-candidate"
@@ -107,7 +111,7 @@ HOST_FILES = ("fpga/uart_host.py", "fpga/midi_session.py", "fpga/live_midi_contr
               "model/voice_fx.py", "model/drums_fx.py")
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """The candidate cannot be derived or the evidence does not belong to it."""
 
 

@@ -42,6 +42,7 @@ import json
 import pathlib
 import shutil
 import sys
+import refusal
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -71,7 +72,7 @@ WHY = {
 MARK_NAME = "retention.json"
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the grouping step was not met. Distinct from "nothing
     to upload": this is "something is here and it cannot be placed honestly"."""
 

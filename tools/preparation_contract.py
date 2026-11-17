@@ -58,6 +58,7 @@ import numbers
 from typing import Callable, NamedTuple
 
 import numpy as np
+import refusal
 
 #: The lead may differ from the guarantee by at most this many samples. A unit,
 #: not a dial: `prepare` subtracts a DC estimate and re-normalises, which can
@@ -69,7 +70,7 @@ LEAD_TOLERANCE_SAMPLES = 1
 SILENCE_FLOOR = 1e-9
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the apparatus failed. REFUSED is a first-class
     outcome, distinct from pass and from fail: the case is written as a
     no-verdict carrying this reason, and never as a number.

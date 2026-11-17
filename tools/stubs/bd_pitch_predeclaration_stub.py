@@ -4,12 +4,17 @@ refuses.  BPP_IMPL=bd_pitch_predeclaration_stub PYTHONPATH=tools/stubs runs
 tools/test_bd_pitch_predeclaration.py against it; every control must fail."""
 import json
 import pathlib
+import sys  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RECORD = ROOT / "docs" / "bd-pitch-predeclaration.json"
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

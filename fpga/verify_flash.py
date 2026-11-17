@@ -53,11 +53,15 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 PASS, FAIL, REFUSED = 0, 1, 2
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition did not hold, so no verdict is available."""
 
 

@@ -91,6 +91,11 @@ import ring_estimator                                               # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 from dsp import SR                                                  # noqa: E402
 from fixed import sat, shl                                          # noqa: E402
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 OVERSAMPLE = 2
 FS_OS = SR * OVERSAMPLE
@@ -105,7 +110,7 @@ FS_Q15 = 32768.0
 REF_OVERSAMPLE = 32
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the measurement is unmet, so nothing was measured.
 
     A first-class outcome, distinct from a candidate scoring badly: a tool that

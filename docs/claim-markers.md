@@ -47,6 +47,20 @@ must not be able to hide as free-form prose.
 `in=` takes one or more comma-separated repo-relative globs (`tools/*.py`,
 `model/*.py,spec/*.py`).
 
+A `grep=` pattern must match **exactly one** line across the files `in=`
+names; a pattern matching several lines is `REFUSED` — the checker cannot say
+which line the claim guards, and an unrelated line carrying the same text
+would keep the marker green while the cited figure moved (issue #904). Mind
+the marker's own line when `in=` names the marker's own document: the pattern
+appears verbatim inside it, punctuation included, so quoting a comma does not
+defuse the self-match. A regex's own source text never matches itself, so
+deferring one letter into a class (`erro[r]`, `wal[l]-clock`) matches the
+prose line while the marker quoting the pattern stays unmatched. The rule is
+enforced over the checker's default document set (`DEFAULT_INCLUDES`) —
+`.md` only — so a marker outside it (e.g. in a Python docstring) is checked
+only by its own bespoke test, not by `make claims`; a marker placed there
+needs that test named in the PR that adds it.
+
 ### Modifiers
 
 | key | meaning |
@@ -117,10 +131,10 @@ only keeps the claim about the test honest.
 A worked example, from issue #135 itself:
 
 Measured, and sound: two renders of the same Diva patch differ in 1,763,954 of 1,764,000 samples; Mini V3 is bit-identical across the same test.
-<!-- claim: grep="1,763,954 of 1,764,000 samples" in=docs/claim-markers.md note="the effect -- re-derivable from this file" -->
+<!-- claim: grep="1,763,954 of 1,764,000 sample[s]" in=docs/claim-markers.md note="the effect -- re-derivable from this file. The bracket defers a letter so the prose line matches and the marker line quoting the pattern does not -- a pattern cannot match its own source text (issue #904)" -->
 
 Asserted, and never tested: that the cause is an artefact inserted on a wall-clock timer, therefore Diva is a positive control for a demo-artefact detector.
-<!-- claim: grep="an artefact inserted on a wall-clock timer" in=docs/claim-markers.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing" -->
+<!-- claim: grep="wal[l]-clock timer, therefore" in=docs/claim-markers.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing. The bracket defers a letter (a pattern cannot match its own source text); the comma excludes line 66, which retells the story with 'timer and' (issue #904)" -->
 
 ## The three outcomes
 
@@ -283,8 +297,8 @@ the two-document run collects no pytest), which is why it is wired and
 tree, not a reason to unwire it. It injects its defects in place and
 restores what it read; the one way those restores do not run is a runner
 timeout (`tools/run_all.py` SIGKILLs the job's process group), which would
-leave `README.md` and `docs/milestones.md` modified — at a few seconds
-against `controls`' 3600 s timeout that needs the probe to hang ~1000x its
+leave `README.md` and `docs/milestones.md` modified — at ~0.6 s
+against `controls`' 3600 s timeout that needs the probe to hang ~6000x its
 runtime, so it is recorded here rather than made hermetic (a rewrite of the
 probe, out of scope for #811).
 

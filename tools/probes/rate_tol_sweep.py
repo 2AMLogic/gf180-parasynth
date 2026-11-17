@@ -88,6 +88,10 @@ sys.path.insert(0, str(ROOT))
 
 from model import discrimination_features as D  # noqa: E402
 from tools.probes import fold_rate_sweep as F  # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 PLAN = ROOT / "docs" / "sensitivity" / "rate-tol-rel-plan.json"
 PLAN_BY_UNIT = ROOT / "docs" / "sensitivity" / "rate-tol-rel-by-unit-plan.json"
@@ -113,7 +117,7 @@ JIT_PREFIX = "jit."
 OCTAVE_TOL = 0.05
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The sweep could not answer. Never reported as a pass."""
 
 

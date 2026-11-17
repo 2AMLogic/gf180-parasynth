@@ -376,7 +376,7 @@ def lowband_onset_db(x, sr: int, band=DEFAULT_LOWBAND_HZ,
     voice CAN be readable. What follows from that about SD -- where
     docs/discrimination.md 5c's -4.86..+6.79 dB finding is -- is a reading of
     indirect evidence and not a measurement of SD:
-    <!-- claim: grep="SD is READABLE AT THE DEFAULT BAND" in=model/promoted_measures.py mechanism=inferred issue=515 note="not measured for SD: needs the reference corpus. Two stated ways to be wrong, both in docs/discrimination.md 5c and EDGE_LEAK_MAX." -->
+    <!-- claim: grep="SD is READABLE AT THE DEFAULT BAN[D]" in=model/promoted_measures.py mechanism=inferred issue=515 note="not measured for SD: needs the reference corpus. Two stated ways to be wrong, both in docs/discrimination.md 5c and EDGE_LEAK_MAX. The bracket defers a letter so the prose line matches and the marker line quoting the pattern does not -- a pattern cannot match its own source text (issue #904)" -->
     SD is READABLE AT THE DEFAULT BAND AND WINDOW is INFERRED, not measured, and
     there are two measured ways for it to be false: 5c's own hedge (SD's shell
     resonance is in the low hundreds of Hz and may sit inside one main lobe of

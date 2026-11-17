@@ -74,6 +74,7 @@ import reference_rigs as rr          # noqa: E402
 import voice_fx as vf                # noqa: E402
 import f1_filter_path as fp          # noqa: E402
 import f1_selected_path as sp        # noqa: E402
+import refusal
 
 #: Every record this module contributes to names this engine.
 ENGINE = "integrated-rtl"
@@ -122,7 +123,7 @@ INJECTS_NOT_EXERCISED = {
 SETTLE_S, WINDOW_S = 0.06, 0.20
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """The apparatus cannot answer. Never a measurement."""
 
 

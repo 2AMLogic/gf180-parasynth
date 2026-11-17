@@ -37,6 +37,7 @@ import numpy as np
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "model"))
 sys.path.insert(0, os.path.join(ROOT, "audition"))
+import refusal
 
 RESULTS = os.path.join(ROOT, "docs", "reference-voice-results.json")
 KMAX = 12
@@ -57,7 +58,7 @@ STALE_OURS_DB = 0.15      # recorded 'ours' vs ours re-rendered now
 RULE = dict(held_out_gain=0.25, jnd_db=1.0, pole_spread=0.1)
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     pass
 
 

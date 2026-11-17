@@ -62,9 +62,13 @@ import cymbal_bands as cb  # noqa: E402
 import cymbal_low_tail as lt  # noqa: E402
 import cymbal_mid as cm  # noqa: E402
 import run_case as rc  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """The apparatus cannot answer. Distinct from pass and from fail."""
 
 
@@ -78,14 +82,17 @@ SOURCE_FILES = ("tools/cymbal_low_tail.py", "tools/cymbal_mid.py", "tools/cymbal
                 "model/voice_fx.py", "tools/probes/cymbal_400_production_tail.py")
 REF_FILE = "cy8/CY5025.WAV"
 
-#: Every refusal class the measured path can raise, normalized at the CLI boundary. The first
-#: freeze pinned only six files, none of the model modules the render path executes
-#: (`drums_fx` imports `modal_fixed`, `dsp`, `fixed`, `voice_fx`) nor the preparation
-#: dependencies (`run_case.prepare` asserts finiteness through `audio_measure` and refuses
-#: through `preparation_contract.Refused`) -- an edit to the modal bank after freeze changed
-#: the render under an unchanged guard. The file list is the direct dependency closure; the
-#: source-tree rule below is the enforcement for everything else the interpreter loads.
-REFUSED_TYPES = (Refused, rc.Refused, cb.Refused, lt.Refused)
+#: Refusals are normalized at the CLI boundary: `main()` catches
+#: `refusal.Refused`, which every module's refusal class now subclasses (#815).
+#: The hand-maintained `REFUSED_TYPES` tuple this replaced was the defect rule 8
+#: warns about -- its defeating input was a new sibling import whose `Refused`
+#: nobody added to the tuple, and the refusal silently stopped being one (the
+#: freeze's own history: the first freeze pinned only six files, none of the
+#: model modules the render path executes -- `drums_fx` imports `modal_fixed`,
+#: `dsp`, `fixed`, `voice_fx` -- nor the preparation dependencies, where
+#: `run_case.prepare` asserts finiteness through `audio_measure` and refuses
+#: through `preparation_contract.Refused`). The common base is the source-tree
+#: rule; `tools/check_refused_base.py` enforces it.
 
 FROZEN = {
     "issue": 400,
@@ -407,7 +414,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     try:
         return {"freeze": cmd_freeze, "measure": cmd_measure}[a.cmd](a)
-    except REFUSED_TYPES as e:
+    except refusal.Refused as e:
         # Downstream preconditions are normalized HERE, by class -- never by catching
         # Exception: an implementation error must still be a traceback, not a refusal.
         print(f"REFUSED / NO VERDICT: {e}")

@@ -15,6 +15,7 @@ shipped one.
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import shutil
 import sys
@@ -243,6 +244,80 @@ def test_a_glob_matching_zero_files_is_refused_for_both_polarities(fixtures):
     assert all(c.status == cdc.REFUSED for c in v.values()), {k: c.detail for k, c in v.items()}
     for k in v:
         assert "matched no files" in v[k].detail, v[k].detail
+
+
+# --------------------------------------------------------------------------
+# grep= uniqueness (issue #904): a pattern matching several lines cannot say
+# which one it guards, and a marker that cannot say that guards nothing.
+# --------------------------------------------------------------------------
+
+def test_a_grep_pattern_matching_several_lines_is_refused(fixtures):
+    """Issue #904. `check_grep()` used to stop at each file's first hit, so a
+    pattern matching 40 lines of one file graded OK identically to one
+    matching a single line -- the cited figure could drift onto the unrelated
+    line and the marker stayed green by construction. One match in total is
+    still exactly the OK case it always was, including under a glob spanning
+    several files."""
+    (fixtures / "u_multi_one_file.txt").write_text(
+        "first\nneedle here\nneedle again\nlast\n")
+    (fixtures / "u_multi_a.txt").write_text("needle in a\n")
+    (fixtures / "u_multi_b.txt").write_text("needle in b\n")
+    (fixtures / "u_single_c.txt").write_text("nothing to see\n")
+    rel = fixtures.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "two-in-one-file":
+            f'grep="needle" in={rel}/u_multi_one_file.txt',
+        "one-in-each-of-two-files":
+            f'grep="needle" in={rel}/u_multi_[ab].txt',
+        "unique-under-a-glob":
+            f'grep="needle in a" in={rel}/u_multi_[ab].txt,{rel}/u_single_c.txt',
+    }))
+    two = v["two-in-one-file"]
+    assert two.status == cdc.REFUSED, two.detail
+    assert "2 lines" in two.detail and "(+1 more)" in two.detail
+    spread = v["one-in-each-of-two-files"]
+    assert spread.status == cdc.REFUSED, spread.detail
+    assert "(+1 more)" in spread.detail
+    ok = v["unique-under-a-glob"]
+    assert ok.status == cdc.OK, ok.detail
+    assert "u_multi_a.txt:1" in ok.detail
+
+
+def test_absent_with_several_hits_is_stale_exactly_as_before(fixtures):
+    """The other polarity reads the same collected hits and keeps its old
+    semantics: for a 'not yet' claim ANY hit means done, so a multi-hit
+    absence stays STALE, never REFUSED -- issue #904 changed only the grep=
+    grade."""
+    (fixtures / "u_absent_hits.txt").write_text(
+        "gone? not yet:\nstill here\nstill here too\n")
+    rel = fixtures.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "absent-two-hits": f'absent="still here" in={rel}/u_absent_hits.txt',
+    }))
+    c = v["absent-two-hits"]
+    assert c.status == cdc.STALE, c.detail
+    assert "now EXISTS" in c.detail
+
+
+def test_an_unreadable_target_file_is_refused(fixtures):
+    """Test-plan edge: an unreadable target is 'could not examine', never
+    evidence -- for grep= when nothing else matched, and for absent=
+    unconditionally, since the unreadable file could be hiding exactly the
+    thing claimed absent."""
+    f = fixtures / "u_unreadable.txt"
+    f.write_text("needle\n")
+    f.chmod(0)
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        f.chmod(0o644)
+        pytest.skip("running as root: file permissions are not enforceable")
+    rel = fixtures.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "grep-unreadable": f'grep="needle" in={rel}/u_unreadable.txt',
+        "absent-unreadable": f'absent="needle" in={rel}/u_unreadable.txt',
+    }))
+    assert v["grep-unreadable"].status == cdc.REFUSED, v["grep-unreadable"].detail
+    assert "could not read" in v["grep-unreadable"].detail
+    assert v["absent-unreadable"].status == cdc.REFUSED, v["absent-unreadable"].detail
 
 
 # --------------------------------------------------------------------------

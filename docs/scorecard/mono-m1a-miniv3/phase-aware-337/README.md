@@ -286,7 +286,7 @@ included cell is within 0.78 dB.
 The measured effect: changing only the ladder input drive from 0.75 to 0.25,
 with level compensated in the patch, cuts the phase-matched harmonic error on
 the frozen phrase from 2.68 to 0.56 dB RMS.
-<!-- claim: grep="cuts the phase-matched harmonic error" in=docs/scorecard/mono-m1a-miniv3/phase-aware-337/README.md note="effect; report.json confirmation.baseline/candidate.e_conf_db" -->
+<!-- claim: grep="cuts the phase-matched harmonic erro[r]" in=docs/scorecard/mono-m1a-miniv3/phase-aware-337/README.md note="effect; report.json confirmation.baseline/candidate.e_conf_db. The bracket defers a letter so the prose matches and the marker line quoting the pattern does not (issue #904)" -->
 
 The mechanism: the model's ladder input stage is driven harder than the Mini
 V3's equivalent stage at this patch. That excess nonlinearity is what both
