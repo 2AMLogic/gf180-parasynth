@@ -66,6 +66,13 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import refprofile as rp        # noqa: E402
 import refusal
+import run_all                 # noqa: E402
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#947): a kill mid-write leaves the previous record
+    standing, not a truncated one a later reader strands on."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 OK, FAIL, REFUSED = 0, 1, 2
 OUT_DIR = ROOT / "docs" / "scorecard" / "f1-level" / "captures"
@@ -213,7 +220,7 @@ def worker(amp: float, take: int, out: pathlib.Path) -> dict:
         print(f"take {take} amp {amp} {cond}: readback {read} Hz peak {np.abs(y).max():.5f}",
               flush=True)
     rec["pinned_readback"] = dev.pinned_report()
-    (out / "take.json").write_text(json.dumps(rec, indent=1) + "\n")
+    write_json(out / "take.json", rec)
     return rec
 
 
@@ -314,7 +321,7 @@ def capture(work: pathlib.Path) -> dict:
         "take_to_take": t2t,
         "nominal_vs_frozen": vs_frozen,
     }
-    MANIFEST.write_text(json.dumps(manifest, indent=1) + "\n")
+    write_json(MANIFEST, manifest)
     return manifest
 
 

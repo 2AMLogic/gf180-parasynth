@@ -49,6 +49,13 @@ ref = m1a.ref
 am = ref.am
 sys.path.insert(0, str(ROOT / "model"))
 import reference_integrity as ri  # noqa: E402
+import run_all                    # noqa: E402
+
+
+def write_json(path, obj) -> None:
+    """Atomic replace (#947): a kill mid-write leaves the previous record
+    standing, not a truncated one a later reader strands on."""
+    run_all.write_json_atomic(str(path), obj)
 
 FROZEN = ROOT / "docs/scorecard/mono-m1a-miniv3"
 OUT = FROZEN / "phase-cycle-capture"
@@ -342,12 +349,12 @@ def main():
                                  "click_floor_db": CLICK_FLOOR_DB, "click_k_mad": CLICK_K, "osc1_cents": OSC1_CENTS,
                                  "osc2_cents": OSC2_CENTS},
                   "takes": takes}
-        (OUT / "capture.json").write_text(json.dumps(report, indent=1) + "\n")
+        write_json(OUT / "capture.json", report)
         (OUT / "refused.json").unlink(missing_ok=True)
         print("CAPTURED")
         return 0
     except (ref.Refused, OSError, ValueError, RuntimeError) as exc:
-        (OUT / "refused.json").write_text(json.dumps({"state": "REFUSED", "reason": str(exc)}, indent=1) + "\n")
+        write_json(OUT / "refused.json", {"state": "REFUSED", "reason": str(exc)})
         print(f"REFUSED: {exc}")
         return 2
 
