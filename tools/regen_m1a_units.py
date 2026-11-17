@@ -25,8 +25,16 @@ sys.path.insert(0, HERE)
 
 import mono_m1a_score as bass                       # noqa: E402
 import run_case                                     # noqa: E402
+import run_all                                      # noqa: E402
 
 RECORD = bass.ROOT / "docs/scorecard/results/M1A.json"
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous record
+    standing. This record is read back by the gates (check_m1a_selection,
+    capability_pack), so a truncated write strands them on it."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 
 def numeric(node, prefix=""):
@@ -111,7 +119,7 @@ def main() -> int:
         if prop.get("units") != old["diagnostics"]["properties"][name].get("units"):
             changed_labels.append(f"{name}: {old['diagnostics']['properties'][name]['units']}"
                                   f" -> {prop['units']}")
-    RECORD.write_text(json.dumps(new, indent=2) + "\n")
+    write_json(RECORD, new)
     print("regen_m1a_units: wrote", RECORD.relative_to(bass.ROOT))
     print("  metrics+properties: exact (", len([k for k in old_n if any(z in k for z in exact_zones)]),
           "published numeric fields )")
