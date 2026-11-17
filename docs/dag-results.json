@@ -5,14 +5,14 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "D2": {
-    "detail": "105 passed in 472.19s (0:07:52)",
+    "detail": "105 passed in 409.13s (0:06:49)",
     "passed": true,
-    "sha": "dfaf63097a28561897f3b09414054c92eedb3360"
+    "sha": "4fe488f1b08743d8eab105c80739032d1e0d4ddd"
   },
   "D3": {
     "detail": "model/sound_report.py exit 1",
     "passed": false,
-    "sha": "dfaf63097a28561897f3b09414054c92eedb3360"
+    "sha": "4fe488f1b08743d8eab105c80739032d1e0d4ddd"
   },
   "F1": {
     "detail": "verify_ladder: PASS -- 28800 samples, RTL identical to model",
@@ -25,9 +25,9 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "F3": {
-    "detail": "153 passed in 3.81s",
+    "detail": "153 passed in 4.07s",
     "passed": true,
-    "sha": "dfaf63097a28561897f3b09414054c92eedb3360"
+    "sha": "4fe488f1b08743d8eab105c80739032d1e0d4ddd"
   },
   "I1": {
     "detail": "verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in",
@@ -45,23 +45,23 @@
     "sha": "91398a0c42acd38b3f4d26efc513a28c6951bb2f"
   },
   "M2": {
-    "detail": "115 passed in 244.78s (0:04:04)",
+    "detail": "115 passed in 207.24s (0:03:27)",
     "passed": true,
-    "sha": "dfaf63097a28561897f3b09414054c92eedb3360"
+    "sha": "4fe488f1b08743d8eab105c80739032d1e0d4ddd"
   },
   "M3": {
     "detail": "docs/reference-compare-results.json carries no passed/ok/success/green key -- no verdict to read",
     "passed": false,
-    "sha": "89383ed99416e9534ec8467ef904243e8369b4e2"
+    "sha": "4fe488f1b08743d8eab105c80739032d1e0d4ddd"
   },
   "S1": {
     "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/verdict.json passed=True",
     "passed": true,
-    "sha": "89383ed99416e9534ec8467ef904243e8369b4e2"
+    "sha": "4fe488f1b08743d8eab105c80739032d1e0d4ddd"
   },
   "S3": {
     "detail": "fpga/reports/ecp5_25f.txt contains 'RESULT: routed.'",
     "passed": true,
-    "sha": "89383ed99416e9534ec8467ef904243e8369b4e2"
+    "sha": "4fe488f1b08743d8eab105c80739032d1e0d4ddd"
   }
 }

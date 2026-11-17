@@ -502,6 +502,28 @@ def test_a_marker_in_a_code_block_or_backticks_is_an_example_not_a_claim(tmp_pat
     assert [c.raw for c in found] == ["commit=abc"]
 
 
+def test_iter_claim_markers_applies_both_skip_rules_once():
+    """#962: the fence and inline-backtick skip grammar exists exactly once,
+    in `iter_claim_markers`, because two readers walk documents with it --
+    `find_claims` and the #789 probe's `injected_state` -- and a hand copy
+    in the probe had drifted (it lacked the backtick rule). Edge cases from
+    the issue's test plan: a ~~~ fence, an odd backtick count before a
+    marker on its own line, and an unterminated fence (everything after it
+    is inside the fence, so nothing further yields)."""
+    lines = [
+        "<!-- claim: commit=abc -->",        # 1: a plain claim
+        "~~~",                                # 2: tilde fence opens
+        "<!-- claim: grep=x -->",             # 3: inside the fence
+        "~~~",                                # 4: fence closes
+        "`odd <!-- claim: grep=y -->",        # 5: odd backticks before the marker
+        "`even` <!-- claim: grep=z -->",      # 6: balanced, so a claim
+        "```",                                # 7: fence opens, never closed
+        "<!-- claim: grep=w -->",             # 8: inside the unterminated fence
+    ]
+    found = [(i, m.group("body")) for i, _, m in cdc.iter_claim_markers(lines)]
+    assert found == [(1, "commit=abc"), (6, "grep=z")]
+
+
 def test_markers_are_found_with_the_prose_they_back(tmp_path):
     doc = tmp_path / "d.md"
     doc.write_text("\n".join([

@@ -63,31 +63,22 @@ DIRTY_CASES = [
 # exit=0`, rc=1, for a guard that had silently stopped reading the claim's
 # file. Measured before the fix on a git archive scratch tree.
 IN_DIVERGENCE_PRESATISFIED = [
-    # (claim's doc, unique content anchor locating the claim line, in= old,
-    #  in= new, evidence file copied, the copy's path, line appended to the
-    #  copy, needle naming the pre-satisfied state, needle naming the control)
-    # The anchor is the claim's note= prose: `in=manifests/verdict.txt` alone
-    # matches three claims, and the count's grep= is what the claim tracks
-    # (2/11 goes red by design when a third item lands). Content, not a line
-    # number: a hard-coded index broke this suite on every doc edit that
-    # inserted a marker above it (#904, #920/#927, #957, #960, #787).
-    ("README.md", 'note="the count this sentence quotes',
+    # (claim's doc, 1-based line of the claim, in= old, in= new,
+    #  evidence file copied, the copy's path, line appended to the copy,
+    #  needle naming the pre-satisfied state, needle naming the control)
+    ("README.md", 28,
      "in=manifests/verdict.txt", "in=manifests/verdict_copy.txt",
      "manifests/verdict.txt", "manifests/verdict_copy.txt",
      "T1: 3/11 items met\n",
      "T1: 3/11 items met", "the README T1 count control"),
 ]
 
-# #936, sibling shape: repointing the milestones drum_kit claim's (the
-# `in=rtl-sketch/drum_kit.v` marker) in= defeats control 3's injection by a
-# different door -- the find/replace string carries BOTH halves of the claim,
-# so the target stops matching and inject_or_refuse (#913) refuses. Covered on
-# main by mechanism; pinned here so it stays covered. The claim is located by
-# its unique in= content, not a line number: a hard-coded index broke this
-# suite on every doc edit that inserted a marker above it (#904, #920/#927,
-# #957, #960, #787's nightly-scheduling claim).
+# #936, sibling shape: repointing docs/milestones.md:62's in= defeats control 3's
+# injection by a different door -- the find/replace string carries BOTH halves
+# of the claim, so the target stops matching and inject_or_refuse (#913)
+# refuses. Covered on main by mechanism; pinned here so it stays covered.
 IN_DIVERGENCE_TARGET_MISSES = [
-    ("docs/milestones.md", "in=rtl-sketch/drum_kit.v",
+    ("docs/milestones.md", 62,
      "in=rtl-sketch/drum_kit.v", "in=rtl-sketch/drum_kit_copy.v",
      "rtl-sketch/drum_kit.v", "rtl-sketch/drum_kit_copy.v", "",
      "injection target", "the milestone-3 control"),
@@ -233,6 +224,35 @@ def _derive_how(scratch: pathlib.Path, rel: str, candidate: str) -> str:
     return "swap" if re.search(pattern, candidate) else "append"
 
 
+def test_injected_state_ignores_an_injected_marker_inside_backticks():
+    """#962 red-first control (docs/verification-rules.md rule 8): the
+    input that defeats the old scan. `injected_state` must find exactly ONE
+    injected claim even when the staged text also carries the same marker
+    inside inline `backticks` -- inline documentation of the injection is an
+    example, not a second claim. The unfixed scan implemented the checker's
+    fence rule but not its backtick rule, so it counted both, found
+    len(bodies) == 2, and REFUSED (exit 2, no evidence) for a staged
+    injection that was fine. Measured red against the unfixed probe: the
+    assert below failed with derived None and "found 2" on stderr."""
+    sys.path.insert(0, str(ROOT / "tools" / "probes"))
+    import check_doc_claims_789_marker_controls as probe_mod
+    staged = "\n".join([
+        "A real injected claim:",
+        '<!-- claim: grep="drum_kit_NOT_IN_TREE_962" '
+        'in=tools/check_doc_claims.py -->',
+        'Inline docs: `<!-- claim: grep="drum_kit_NOT_IN_TREE_962" '
+        'in=tools/check_doc_claims.py -->` is an example, not a claim.',
+    ])
+    derived = probe_mod.injected_state(
+        staged, "drum_kit_NOT_IN_TREE_962", "the #962 control")
+    assert derived is not None, (
+        "injected_state refused on a backticked example marker (the #962 "
+        "divergence; the REFUSED detail above names it)")
+    files, pattern = derived
+    assert pattern == "drum_kit_NOT_IN_TREE_962"
+    assert files == [ROOT / "tools" / "check_doc_claims.py"]
+
+
 def _stage_already_satisfied(scratch: pathlib.Path, rel: str, how: str,
                              find: str, staged: str) -> None:
     """Write the pre-satisfied state into the scratch copy.
@@ -255,7 +275,7 @@ def _stage_already_satisfied(scratch: pathlib.Path, rel: str, how: str,
         f.write_text(orig.replace(find, staged), encoding="utf-8")
 
 
-def _anchor_drum_kit_claim_as_960_does(scratch: pathlib.Path) -> None:
+def _anchor_claim_62_as_960_does(scratch: pathlib.Path) -> None:
     """Recreate PR #960's two edits on the SCRATCH copy: the anchored doc
     claim and the matching anchored find string in the probe (#960's diff
     touches nothing else this suite reads). The #957+#960 merged tree is
@@ -264,24 +284,16 @@ def _anchor_drum_kit_claim_as_960_does(scratch: pathlib.Path) -> None:
     Idempotent: on a tree where #960 already landed (the merged
     configuration) both forms are already anchored and this is a no-op --
     anything else fails the asserts loudly rather than staging a third
-    claim form. The claim line is found by its unique
-    `in=rtl-sketch/drum_kit.v` content, not an index: a hard-coded
-    `lines[61]` broke on every doc edit inserting a marker above it
-    (#904, #920/#927, #957, #960, #787's nightly-scheduling claim)."""
+    claim form."""
     doc = scratch / "docs/milestones.md"
     lines = doc.read_text(encoding="utf-8").splitlines(keepends=True)
-    hits = [i for i, ln in enumerate(lines)
-            if "in=rtl-sketch/drum_kit.v" in ln]
-    assert len(hits) == 1, \
-        f"drum_kit claim matches {len(hits)} lines, expected 1"
-    i = hits[0]
-    if 'grep="^module drum_kit" in=' in lines[i]:
-        lines[i] = lines[i].replace('grep="^module drum_kit" in=',
-                                    'grep="^module drum_kit #\\(" in=')
+    if 'grep="^module drum_kit" in=' in lines[61]:
+        lines[61] = lines[61].replace('grep="^module drum_kit" in=',
+                                      'grep="^module drum_kit #\\(" in=')
         doc.write_text("".join(lines), encoding="utf-8")
     else:
-        assert 'grep="^module drum_kit #\\(" in=' in lines[i], \
-            "drum_kit claim anchor not found (neither form)"
+        assert 'grep="^module drum_kit #\\(" in=' in lines[61], \
+            "claim 62 anchor not found (neither form)"
     probe = scratch / PROBE_REL
     text = probe.read_text(encoding="utf-8")
     old = "'grep=\"^module drum_kit\" in=rtl-sketch/drum_kit.v'"
@@ -368,7 +380,7 @@ def test_already_satisfied_staging_survives_an_anchored_claim_form(
     stays green, and the refusal must still name the file, the state and the
     control. Pins this tree against the anchored form whether or not #960
     ever lands."""
-    _anchor_drum_kit_claim_as_960_does(scratch)
+    _anchor_claim_62_as_960_does(scratch)
     _stage_already_satisfied(scratch, "rtl-sketch/drum_kit.v", "derive",
                              "module drum_kit #(", staged)
     before = _snapshot(scratch)
@@ -379,28 +391,23 @@ def test_already_satisfied_staging_survives_an_anchored_claim_form(
                     "drum_kit_NOT_IN_TREE", "the milestone-3 control")
 
 
-def _repoint_in(scratch: pathlib.Path, doc: str, anchor: str, old: str,
+def _repoint_in(scratch: pathlib.Path, doc: str, lineno: int, old: str,
                 new: str) -> None:
-    """Repoint ONE claim marker's in= (content-targeted: the same in= string
-    appears on several claims in these documents, so the line is found by its
-    unique `anchor` substring and asserted exactly one -- not a line number,
-    which drifts on every doc edit inserting a marker above it)."""
+    """Repoint ONE claim marker's in= (line-targeted: the same in= string
+    appears on several claims in these documents)."""
     f = scratch / doc
     lines = f.read_text(encoding="utf-8").splitlines(keepends=True)
-    hits = [i for i, ln in enumerate(lines) if anchor in ln]
-    assert len(hits) == 1, \
-        f"anchor {anchor!r} matches {len(hits)} lines in {doc}, expected 1"
-    assert old in lines[hits[0]], f"in= anchor not on {doc}:{hits[0] + 1}"
-    lines[hits[0]] = lines[hits[0]].replace(old, new)
+    assert old in lines[lineno - 1], f"in= anchor not on {doc}:{lineno}"
+    lines[lineno - 1] = lines[lineno - 1].replace(old, new)
     f.write_text("".join(lines), encoding="utf-8")
 
 
 @pytest.mark.parametrize(
-    "doc,anchor,old,new,src_rel,dst_rel,extra,needle,what",
+    "doc,lineno,old,new,src_rel,dst_rel,extra,needle,what",
     IN_DIVERGENCE_PRESATISFIED,
     ids=[c[0] for c in IN_DIVERGENCE_PRESATISFIED])
 def test_in_repointed_presatisfied_state_refuses(
-        scratch, doc, anchor, old, new, src_rel, dst_rel, extra, needle, what):
+        scratch, doc, lineno, old, new, src_rel, dst_rel, extra, needle, what):
     """#936, red-first: the issue's measured repro. Copy the evidence file,
     append the injected line to the copy (the claim still matches the copy, so
     the baseline is green), repoint the claim's in= at the copy. The guard used
@@ -413,7 +420,7 @@ def test_in_repointed_presatisfied_state_refuses(
     (scratch / dst_rel).write_text(
         (scratch / src_rel).read_text(encoding="utf-8") + extra,
         encoding="utf-8")
-    _repoint_in(scratch, doc, anchor, old, new)
+    _repoint_in(scratch, doc, lineno, old, new)
     before = _snapshot(scratch)
     p = _run_probe(scratch)
     blob = p.stdout + p.stderr
@@ -429,11 +436,11 @@ def test_in_repointed_presatisfied_state_refuses(
 
 
 @pytest.mark.parametrize(
-    "doc,anchor,old,new,src_rel,dst_rel,extra,needle,what",
+    "doc,lineno,old,new,src_rel,dst_rel,extra,needle,what",
     IN_DIVERGENCE_TARGET_MISSES,
     ids=[c[0] for c in IN_DIVERGENCE_TARGET_MISSES])
 def test_in_repointed_defeats_injection_target_refuses(
-        scratch, doc, anchor, old, new, src_rel, dst_rel, extra, needle, what):
+        scratch, doc, lineno, old, new, src_rel, dst_rel, extra, needle, what):
     """#936, sibling shape: control 3's find string carries BOTH halves of the
     claim, so an edited in= stops the injection from matching and #913's
     missing-target refusal fires (rc=2, no control lines). Pinned so the
@@ -441,7 +448,7 @@ def test_in_repointed_defeats_injection_target_refuses(
     (scratch / dst_rel).write_text(
         (scratch / src_rel).read_text(encoding="utf-8") + extra,
         encoding="utf-8")
-    _repoint_in(scratch, doc, anchor, old, new)
+    _repoint_in(scratch, doc, lineno, old, new)
     before = _snapshot(scratch)
     p = _run_probe(scratch)
     blob = p.stdout + p.stderr
@@ -463,7 +470,7 @@ def test_in_repointed_without_presatisfaction_still_measures(scratch):
     (scratch / "manifests/verdict_copy.txt").write_text(
         (scratch / "manifests/verdict.txt").read_text(encoding="utf-8"),
         encoding="utf-8")
-    _repoint_in(scratch, "README.md", 'note="the count this sentence quotes',
+    _repoint_in(scratch, "README.md", 28,
                 "in=manifests/verdict.txt", "in=manifests/verdict_copy.txt")
     before = _snapshot(scratch)
     p = _run_probe(scratch)
