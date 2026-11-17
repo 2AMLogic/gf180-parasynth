@@ -144,29 +144,49 @@ def _snapshot(root: pathlib.Path) -> dict[str, str]:
 
 
 def _archive_root_bytes(root: pathlib.Path) -> bytes:
-    """`git archive HEAD` of `root`, refusing when a merge is mid-flight.
+    """`git archive HEAD` of `root`, refusing a mid-flight worktree/HEAD
+    split.
 
     #964: mid-merge (`git merge --no-commit`, MERGE_HEAD present) HEAD is
     the PRE-merge parent -- the archive silently snapshots a tree without
     the merge and every control run on it is a green that is not evidence.
     Per docs/verification-rules.md an instrument in a wrong state refuses
     rather than reports: a merged-tree measurement needs a merge COMMIT, so
-    commit the merge and re-run the suite. The check goes through
-    `git rev-parse --git-path MERGE_HEAD`, which resolves the per-worktree
-    path (also where `.git` is a file) instead of a hard-coded `.git`.
+    commit the merge and re-run the suite.
+
+    #966: `git merge --squash` (SQUASH_MSG present, MERGE_HEAD deliberately
+    absent) produces the SAME split -- measured on a throwaway repo, the
+    worktree holds the staged merge while `git archive HEAD` does not and
+    the fixture used to answer anyway. The predicate follows the pathology
+    (a pending merge whose content the archive would miss) rather than one
+    of its causes, so both markers refuse; a squash-merge measurement also
+    needs a COMMIT (commit the squash, then re-run the suite).
+
+    The checks go through `git rev-parse --git-path <marker>`, which
+    resolves the per-worktree path (also where `.git` is a file) instead of
+    a hard-coded `.git`.
+
     Deliberately NOT refused: a rebase or cherry-pick in progress -- there
-    HEAD names a real commit whose archive is what it says, unlike the
-    mid-merge split between the worktree content and HEAD's tree.
+    HEAD names a real commit whose archive is what it says (rebase and
+    cherry-pick step HEAD onto commits that already carry the work), unlike
+    the mid-merge split between the worktree content and HEAD's tree. A
+    clean tree has no marker at all and runs as ever.
     """
-    probe = subprocess.run(["git", "rev-parse", "--git-path", "MERGE_HEAD"],
-                           cwd=root, capture_output=True, text=True)
-    if probe.returncode == 0:
-        merge_head = pathlib.Path(probe.stdout.strip())
-        if not merge_head.is_absolute():
-            merge_head = root / merge_head
-        if merge_head.exists():
-            pytest.fail("REFUSED: merge in progress; HEAD is pre-merge, "
-                        "commit the merge first")
+    for marker, refusal in [
+        ("MERGE_HEAD", "REFUSED: merge in progress; HEAD is pre-merge, "
+                       "commit the merge first"),
+        ("SQUASH_MSG", "REFUSED: squash merge in progress; the merge is "
+                       "staged but HEAD is pre-merge, commit the squash "
+                       "first"),
+    ]:
+        probe = subprocess.run(["git", "rev-parse", "--git-path", marker],
+                               cwd=root, capture_output=True, text=True)
+        if probe.returncode == 0:
+            marker_path = pathlib.Path(probe.stdout.strip())
+            if not marker_path.is_absolute():
+                marker_path = root / marker_path
+            if marker_path.exists():
+                pytest.fail(refusal)
     return subprocess.run(["git", "archive", "HEAD"], cwd=root,
                           capture_output=True, check=True).stdout
 
@@ -592,3 +612,80 @@ def test_archive_refuses_mid_merge_in_a_linked_worktree(tmp_path):
     assert "REFUSED" in str(exc.value)
     assert isinstance(_archive_root_bytes(repo), bytes), (
         "the guard leaked across the worktree boundary")
+
+
+# ---- #966: `git merge --squash` reproduces the split and must refuse ----
+
+
+def _merge_squash(repo: pathlib.Path, other: str = "side") -> None:
+    _git("merge", "--squash", other, cwd=repo)
+
+
+def test_archive_refuses_mid_squash_merge(tmp_path):
+    """#966, the injected defect: `git merge --squash` stages the merge into
+    the worktree and index but deliberately writes no MERGE_HEAD -- HEAD
+    stays the pre-merge parent, the exact worktree/HEAD split #964 refuses
+    `--no-commit` for, so the archive silently lacks the staged content and
+    every control on that snapshot is a green that is not evidence. The
+    premise is shown, not assumed -- the worktree holds side.txt, the raw
+    archive does not, and the MERGE_HEAD guard #964 shipped does not fire
+    on this state -- and then the fixture engine must REFUSE instead of
+    handing that snapshot to the suite."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    _merge_squash(repo)
+    assert (repo / "side.txt").exists(), (
+        "premise drifted: the squashed content is no longer staged")
+    bare = subprocess.run(["git", "archive", "HEAD"], cwd=repo,
+                          capture_output=True, check=True).stdout
+    assert "side.txt" not in _tar_names(bare), (
+        "premise drifted: the mid-squash archive now contains the merge")
+    assert not (repo / ".git" / "MERGE_HEAD").exists(), (
+        "premise drifted: squash now writes MERGE_HEAD, the #964 guard "
+        "alone covers this state")
+    with pytest.raises(pytest.fail.Exception) as exc:
+        _archive_root_bytes(repo)
+    assert "REFUSED" in str(exc.value)
+    assert "squash" in str(exc.value).lower()
+
+
+def test_archive_allows_a_committed_squash(tmp_path):
+    """#966 control: the same squash, COMMITTED, does not refuse -- and the
+    archive then contains the content -- so the gate is satisfiable exactly
+    when its premise is fixed (a squash-merge measurement needs a commit,
+    the same answer #964 gives for a --no-commit merge)."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    _merge_squash(repo)
+    _git("commit", "-m", "squash side", cwd=repo)
+    # measured (this git): committing the squash removes SQUASH_MSG, so the
+    # marker predicate is satisfiable exactly when the split is resolved
+    assert not (repo / ".git" / "SQUASH_MSG").exists(), (
+        "premise drifted: SQUASH_MSG survives the squash commit, the "
+        "marker predicate would refuse committed trees")
+    assert "side.txt" in _tar_names(_archive_root_bytes(repo))
+
+
+def test_archive_allows_a_rebase_in_progress(tmp_path):
+    """#966 AC edge: the docstring's "deliberately NOT refused" case must
+    survive the widened predicate -- mid-rebase HEAD names a real commit
+    whose archive is what it says, and a conflicting rebase leaves neither
+    MERGE_HEAD nor SQUASH_MSG behind, so this must still answer."""
+    repo = _scratch_repo(tmp_path / "repo")
+    # both branches rewrite base.txt, so rebasing side onto main conflicts
+    _git("checkout", "-b", "side", cwd=repo)
+    (repo / "base.txt").write_text("side version\n", encoding="utf-8")
+    _git("commit", "-am", "side rewrites base", cwd=repo)
+    _git("checkout", "main", cwd=repo)
+    (repo / "base.txt").write_text("main version\n", encoding="utf-8")
+    _git("commit", "-am", "main rewrites base", cwd=repo)
+    _git("checkout", "side", cwd=repo)
+    stopped = subprocess.run(["git", "rebase", "main"], cwd=repo,
+                             capture_output=True, text=True)
+    assert stopped.returncode != 0, (
+        "premise drifted: the rebase no longer conflicts, nothing is "
+        "mid-flight")
+    assert (repo / ".git" / "rebase-merge").exists() or \
+        (repo / ".git" / "rebase-apply").exists(), (
+        "premise drifted: no rebase state directory")
+    assert isinstance(_archive_root_bytes(repo), bytes)
