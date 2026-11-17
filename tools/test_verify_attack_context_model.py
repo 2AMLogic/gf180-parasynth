@@ -1,6 +1,7 @@
 """The stored-audio verifier must detect numerical and provenance mutations."""
 import ast
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -47,11 +48,31 @@ def test_changed_evidence_refuses(tmp_path, mutation):
 
 
 def _serve_audio_measure(monkeypatch, edit):
-    """Give the verifier `edit(current source)` as model/audio_measure.py."""
+    """Give the verifier `edit(current source)` as model/audio_measure.py.
+
+    WRONG BEFORE IT WAS RIGHT: this used to patch only `Path.read_text`, but
+    the verifier hashes sources through `ref.sha256`, which reads bytes via
+    `Path.open("rb")` -- so the served text never reached the hash and the
+    unrelated-edit control below passed only while the COMMITTED report's
+    audio_measure digest happened to be stale (basis-stable drift since its
+    generation). Regenerating the report (#815 re-based two of its bound
+    sources) refreshed that digest and exposed the latent defect. Both read
+    paths are now served the edited text, so the simulation is real and the
+    control passes on a fresh report.
+    """
     real = Path.read_text
     target = verifier.producer.ROOT / verifier.AUDIO_MEASURE
     monkeypatch.setattr(Path, "read_text",
                         lambda self, *a, **k: edit(real(self, *a, **k)) if self == target else real(self, *a, **k))
+    ref = verifier.producer.context.ref
+    real_sha = ref.sha256
+
+    def served_sha256(path):
+        if path != target:
+            return real_sha(path)
+        return hashlib.sha256(edit(real(target, encoding="utf-8")).encode()).hexdigest()
+
+    monkeypatch.setattr(ref, "sha256", served_sha256)
 
 
 def _mutate(old, new):
