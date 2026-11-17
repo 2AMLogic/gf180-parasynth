@@ -1,23 +1,23 @@
 {
   "D2": {
-    "detail": "105 passed in 324.33s (0:05:24)",
+    "detail": "105 passed in 472.19s (0:07:52)",
     "passed": true,
-    "sha": "d3abf3278d066ff3b186957847dffab61e8a1857"
+    "sha": "dfaf63097a28561897f3b09414054c92eedb3360"
   },
   "D3": {
     "detail": "model/sound_report.py exit 1",
     "passed": false,
-    "sha": "d3abf3278d066ff3b186957847dffab61e8a1857"
+    "sha": "dfaf63097a28561897f3b09414054c92eedb3360"
   },
   "F3": {
-    "detail": "153 passed in 3.30s",
+    "detail": "153 passed in 3.81s",
     "passed": true,
-    "sha": "d3abf3278d066ff3b186957847dffab61e8a1857"
+    "sha": "dfaf63097a28561897f3b09414054c92eedb3360"
   },
   "M2": {
-    "detail": "115 passed in 191.13s (0:03:11)",
+    "detail": "115 passed in 244.78s (0:04:04)",
     "passed": true,
-    "sha": "d3abf3278d066ff3b186957847dffab61e8a1857"
+    "sha": "dfaf63097a28561897f3b09414054c92eedb3360"
   },
   "M3": {
     "detail": "docs/reference-compare-results.json carries no passed/ok/success/green key -- no verdict to read",

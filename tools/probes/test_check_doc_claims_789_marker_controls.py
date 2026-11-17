@@ -12,7 +12,11 @@ CLAUDE.md, an instrument in a wrong state REFUSES (exit 2, no evidence)
 instead of reporting.
 
 These tests run the probe against a SCRATCH COPY of the committed tree
-(`git archive HEAD`), never the live checkout. The first draft staged the
+(`git archive HEAD`), never the live checkout. Mid-merge the fixture REFUSES
+instead (#964): `git merge --no-commit` leaves HEAD at the pre-merge parent,
+so the archive would silently lack the merge -- a merged-tree measurement
+needs a merge commit, so commit the merge and then run this suite. The first
+draft staged the
 dirty tree in the live checkout for the duration of a probe subprocess, which
 collided with the concurrent `tools/check_doc_claims.py` job inside `make
 verify`'s single run_all.py pool: the checker read the harness's staged edit
@@ -23,10 +27,12 @@ checkout, and `git archive HEAD` makes the clean-tree case clean by
 construction instead of skipped on a dirty live tree.
 """
 import hashlib
+import io
 import pathlib
 import re
 import subprocess
 import sys
+import tarfile
 
 import pytest
 
@@ -137,11 +143,38 @@ def _snapshot(root: pathlib.Path) -> dict[str, str]:
     return snap
 
 
+def _archive_root_bytes(root: pathlib.Path) -> bytes:
+    """`git archive HEAD` of `root`, refusing when a merge is mid-flight.
+
+    #964: mid-merge (`git merge --no-commit`, MERGE_HEAD present) HEAD is
+    the PRE-merge parent -- the archive silently snapshots a tree without
+    the merge and every control run on it is a green that is not evidence.
+    Per docs/verification-rules.md an instrument in a wrong state refuses
+    rather than reports: a merged-tree measurement needs a merge COMMIT, so
+    commit the merge and re-run the suite. The check goes through
+    `git rev-parse --git-path MERGE_HEAD`, which resolves the per-worktree
+    path (also where `.git` is a file) instead of a hard-coded `.git`.
+    Deliberately NOT refused: a rebase or cherry-pick in progress -- there
+    HEAD names a real commit whose archive is what it says, unlike the
+    mid-merge split between the worktree content and HEAD's tree.
+    """
+    probe = subprocess.run(["git", "rev-parse", "--git-path", "MERGE_HEAD"],
+                           cwd=root, capture_output=True, text=True)
+    if probe.returncode == 0:
+        merge_head = pathlib.Path(probe.stdout.strip())
+        if not merge_head.is_absolute():
+            merge_head = root / merge_head
+        if merge_head.exists():
+            pytest.fail("REFUSED: merge in progress; HEAD is pre-merge, "
+                        "commit the merge first")
+    return subprocess.run(["git", "archive", "HEAD"], cwd=root,
+                          capture_output=True, check=True).stdout
+
+
 @pytest.fixture(scope="session")
 def _archive_bytes() -> bytes:
     """The committed tree once, for every scratch copy."""
-    return subprocess.run(["git", "archive", "HEAD"], cwd=ROOT,
-                          capture_output=True, check=True).stdout
+    return _archive_root_bytes(ROOT)
 
 
 @pytest.fixture
@@ -461,3 +494,101 @@ def test_missing_interpreter_still_refuses_before_anything_else():
     with pytest.raises(SystemExit) as exc:
         probe_mod.interpreter()
     assert exc.value.code == 2
+
+
+# ---- #964: the archive engine must refuse a mid-merge tree ----
+
+
+def _git(*args: str, cwd: pathlib.Path) -> None:
+    subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
+                   check=True)
+
+
+def _scratch_repo(path: pathlib.Path) -> pathlib.Path:
+    """A throwaway repo with one commit on main, git-configured locally."""
+    path.mkdir(parents=True, exist_ok=True)
+    _git("init", "-b", "main", cwd=path)
+    _git("config", "user.email", "probe@example.invalid", cwd=path)
+    _git("config", "user.name", "probe", cwd=path)
+    (path / "base.txt").write_text("base\n", encoding="utf-8")
+    _git("add", "base.txt", cwd=path)
+    _git("commit", "-m", "base", cwd=path)
+    return path
+
+
+def _diverge(repo: pathlib.Path) -> None:
+    """One commit on `side`, one on `main`, both off the base commit."""
+    _git("checkout", "-b", "side", cwd=repo)
+    (repo / "side.txt").write_text("side\n", encoding="utf-8")
+    _git("add", "side.txt", cwd=repo)
+    _git("commit", "-m", "side", cwd=repo)
+    _git("checkout", "main", cwd=repo)
+    (repo / "main.txt").write_text("main\n", encoding="utf-8")
+    _git("add", "main.txt", cwd=repo)
+    _git("commit", "-m", "main", cwd=repo)
+
+
+def _merge_no_commit(repo: pathlib.Path, other: str = "side") -> None:
+    _git("merge", "--no-commit", "--no-ff", other, cwd=repo)
+
+
+def _tar_names(archive: bytes) -> list[str]:
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tf:
+        return tf.getnames()
+
+
+def test_archive_refuses_mid_merge_head_is_pre_merge(tmp_path):
+    """#964, the injected defect: mid `git merge --no-commit` the worktree
+    holds the merge but HEAD is the pre-merge parent, so `git archive HEAD`
+    silently snapshots a tree WITHOUT the merged content and every control
+    on that snapshot is a green that is not evidence. The premise is shown,
+    not assumed -- the raw archive lacks side.txt -- and then the fixture
+    engine must REFUSE instead of handing that snapshot to the suite."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    _merge_no_commit(repo)
+    bare = subprocess.run(["git", "archive", "HEAD"], cwd=repo,
+                          capture_output=True, check=True).stdout
+    assert "side.txt" not in _tar_names(bare), (
+        "premise drifted: the mid-merge archive now contains the merge")
+    with pytest.raises(pytest.fail.Exception) as exc:
+        _archive_root_bytes(repo)
+    assert "REFUSED" in str(exc.value)
+
+
+def test_archive_allows_a_committed_merge(tmp_path):
+    """#964 control: the same merge, COMMITTED, does not refuse -- and the
+    archive then contains the merge -- so the gate is satisfiable exactly
+    when its premise is fixed."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    _merge_no_commit(repo)
+    _git("commit", "--no-edit", cwd=repo)
+    assert "side.txt" in _tar_names(_archive_root_bytes(repo))
+
+
+def test_archive_allows_a_plain_clean_tree(tmp_path):
+    """#964 control: an ordinary committed tree with no merge anywhere does
+    not refuse. The rest of this module, running on the current checkout,
+    pins the same thing end to end; this pins the gate alone."""
+    repo = _scratch_repo(tmp_path / "plain")
+    assert isinstance(_archive_root_bytes(repo), bytes)
+
+
+def test_archive_refuses_mid_merge_in_a_linked_worktree(tmp_path):
+    """#964 AC edge: `.git` is a FILE in a linked worktree, so the guard
+    must reach MERGE_HEAD through `git rev-parse --git-path` (which
+    resolves the per-worktree path) rather than a hard-coded
+    `.git/MERGE_HEAD`. The merge is mid-flight in the worktree only --
+    MERGE_HEAD is per-worktree state -- so the worktree refuses while the
+    main repo of the same throwaway repo keeps answering."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    wt = tmp_path / "wt"
+    _git("worktree", "add", str(wt), "side", cwd=repo)
+    _merge_no_commit(wt, other="main")
+    with pytest.raises(pytest.fail.Exception) as exc:
+        _archive_root_bytes(wt)
+    assert "REFUSED" in str(exc.value)
+    assert isinstance(_archive_root_bytes(repo), bytes), (
+        "the guard leaked across the worktree boundary")
