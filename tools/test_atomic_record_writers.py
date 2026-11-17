@@ -242,12 +242,15 @@ def test_no_module_writes_a_record_inline_any_more(modname, fn):
 #: the tree guard runs, NOT an edit to a real module, so the guard's boundary
 #: is visible without touching the tree. The entries are not all the same kind
 #: of defeat, and the numbers matter:
-#: - 12 of 15 defeated the pre-widening guard: under origin/main's two patterns
-#:   (`.write_text(`, `json.dump(`) they were green -- a clean bill on a
-#:   non-atomic truncate-then-write of serialised JSON.
+#: - 13 of 15 were green under origin/main's two patterns (`.write_text(`,
+#:   `json.dump(`) -- a clean bill on a non-atomic truncate-then-write of
+#:   serialised JSON. Twelve ship for that reason alone; the thirteenth is
+#:   `print-line-camouflage`, which ships for the further reason below
+#:   (re-measured in the #944 re-review after it was added, so the count
+#:   covers all 15 entries rather than the 14 the first review saw).
 #: - `write-text` and `json-dump-handle` are the old guard's OWN two patterns:
 #:   red then and red now, kept as regression pins, not defeats.
-#: - `print-line-camouflage` defeated THIS PR's first allowance check (#944
+#: - `print-line-camouflage` ALSO defeated THIS PR's first allowance check (#944
 #:   review, probe B): a record write whose line carries a `print(` token
 #:   satisfied the substring print-line test at full allowance. It is red only
 #:   under the position-aware test and exists to pin it -- remove the position
@@ -292,7 +295,7 @@ GREEN_SPELLINGS = {
 def test_the_guard_goes_red_on_the_spellings_that_defeated_it(label):
     """#923's probe 2, committed: the guard must visibly go red on the
     input that used to defeat it, through the same helper the tree guard
-    runs. 12 of the 15 entries are shapes the pre-widening guard reported
+    runs. 13 of the 15 entries are shapes the pre-widening guard reported
     a clean bill on; the provenance split (old-guard regression pins,
     print-line camouflage) is on DEFEATING_SPELLINGS itself."""
     src, kwargs = DEFEATING_SPELLINGS[label]
