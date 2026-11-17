@@ -26,6 +26,14 @@ import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import mono_m5a_score as sc  # noqa: E402
 import refusal
+import run_all               # noqa: E402
+
+
+def write_json(path, obj) -> None:
+    """Atomic replace (#947): a kill mid-write leaves the previous report
+    standing, not a truncated one a later reader strands on. sort_keys and
+    default=float keep the shipped bytes' serialisation."""
+    run_all.write_json_atomic(str(path), obj, sort_keys=True, default=float)
 
 ROOT = sc.ROOT
 OUT = ROOT / "docs/scorecard/mono-m5-drive-337"
@@ -221,7 +229,7 @@ def main():
     run["worktree_dirty"] = bool(subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
                                                 cwd=ROOT, capture_output=True, text=True).stdout.strip())
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "report.json").write_text(json.dumps(run, indent=1, sort_keys=True, default=float) + "\n")
+    write_json(OUT / "report.json", run)
     print(json.dumps({w: (run["development"][w]["chosen_drive"], run["confirmation"][w]["verdict"])
                       for w in WAVES}))
 

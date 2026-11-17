@@ -39,6 +39,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(ROOT / "fpga"))
 
 
 #: (module, writer attribute) -- one entry per migrated write site; refprofile
@@ -57,6 +58,17 @@ WRITERS = [
     ("clap_d12a_probe", "write_json"),
     ("clap_burst_timing_qual", "write_json"),
     ("clap_final_strike_experiment", "write_json"),
+    # #947 remainder: every module still writing a tracked record
+    # truncate-then-write.
+    ("sweep_m1a_attack", "write_json"),
+    ("res_tuning", "write_json"),
+    ("regen_discrimination_ours", "write_json"),
+    ("measure_promoted_bands", "write_json"),
+    ("f1_level_capture", "write_json"),
+    ("diagnose_m1a_harmonic_phase", "write_json"),
+    ("capture_m1a_phase_cycle", "write_json"),
+    ("lead_drive_337", "write_json"),
+    ("sweep_live_midi", "write_json"),
 ]
 
 
@@ -106,7 +118,7 @@ def test_no_module_writes_a_record_inline_any_more(modname, fn):
     `RECORD.write_text(json.dumps(...))` and watching the kill control stay
     green). This guard reads each module's source and fails on ANY inline
     write -- `.write_text(` or `json.dump(`. Both are zero occurrences across
-    the twelve migrated modules today; a new tracked-JSON write belongs
+    the twenty-one migrated modules today; a new tracked-JSON write belongs
     through the shared seam, and a future plain-text `write_text` extends
     this list consciously rather than bypassing it."""
     module = importlib.import_module(modname)

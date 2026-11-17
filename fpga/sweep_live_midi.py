@@ -24,16 +24,23 @@ property -- a setting that admits the load by breaking something else shows it.
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "fpga"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 import live_midi_contract as C                      # noqa: E402
 import verify_live_midi as vlm                      # noqa: E402
 import drums_fx as dx                               # noqa: E402
+import run_all                                      # noqa: E402
+
+
+def write_json(path, obj) -> None:
+    """Atomic replace (#947): a kill mid-write leaves the previous record
+    standing, not a truncated one a later reader strands on."""
+    run_all.write_json_atomic(str(path), obj)
 
 OUT = ROOT / "fpga/reports/live-midi/sweep.json"
 
@@ -89,9 +96,9 @@ def main() -> int:
               f"{r['max_ms']:>6.2f} {r['pressure_refused']:>9} {r['redundant_writes']:>6} "
               f"{','.join(r['moved']) or '-'}")
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"tool": "fpga/sweep_live_midi.py", "workload": "sustained",
-                               "seed": C.SUSTAINED_SEED, "seconds": C.SUSTAINED_S,
-                               "rows": rows}, indent=1) + "\n")
+    write_json(OUT, {"tool": "fpga/sweep_live_midi.py", "workload": "sustained",
+                     "seed": C.SUSTAINED_SEED, "seconds": C.SUSTAINED_S,
+                     "rows": rows})
     return 0
 
 

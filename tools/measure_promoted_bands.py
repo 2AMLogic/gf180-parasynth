@@ -16,7 +16,6 @@ estimator, NOT the knob-equivalent rulers of docs/discrimination.md 3.1.
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import os
 import pathlib
@@ -33,6 +32,13 @@ import promoted_measures as pm  # noqa: E402
 import promoted_bands as pb     # noqa: E402
 
 import run_case as rc       # noqa: E402
+import run_all              # noqa: E402
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#947): a kill mid-write leaves the previous record
+    standing, not a truncated one a later reader strands on."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 REFS = rc.configured_refs()  # the Fischer repo root, <REFS>/bd8/... (#522)
 OUT = ROOT / "docs" / "promoted-bands-results.json"
@@ -905,7 +911,7 @@ def cmd_measure() -> int:
         machine_floor=pb.MACHINE_FLOOR, ceilings=ceilings, held_out=rows,
         tolerances={k: pb.band_tolerance(k.split("/")[0], k.split("/")[1], v["ceiling"])[1]
                     for k, v in ceilings.items()})
-    OUT.write_text(json.dumps(out, indent=1, default=float) + "\n")
+    write_json(OUT, out, default=float)
     print(f"wrote {OUT}")
     return 0
 

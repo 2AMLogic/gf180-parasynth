@@ -35,6 +35,13 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import mono_m1a_score as bass                                        # noqa: E402
 import measure_m1a_volume_mapping as volume                           # noqa: E402
+import run_all                                                        # noqa: E402
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#947): a kill mid-write leaves the previous record
+    under OUT standing, not a truncated record a later reader strands on."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/attack-sweep"
 GRID = OUT / "grid.json"
@@ -87,7 +94,7 @@ def render_point(ms):
            "audio": str(audio.relative_to(ROOT)), "sha256": bass.sha(audio),
            "measurements": measured, "components": volume.counts(measured),
            "metrics": bass.required_metrics(measured)}
-    (OUT / f"{point_name(ms)}.json").write_text(json.dumps(row, indent=2) + "\n")
+    write_json(OUT / f"{point_name(ms)}.json", row)
     print(ms, {k: v.get("error") for k, v in measured["properties"].items()}, flush=True)
     return row
 
@@ -215,10 +222,10 @@ def summarize():
               "exploratory": [r["patch_id"] for r in table if r["exploratory"]],
               "scope": "patch-only; no envelope implementation change; harmonic shape "
                        "remains an independent failure, so no point is a whole-case pass"}
-    (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    write_json(OUT / "report.json", report)
     report["reference_fits_in_qualified_domain"] = [
         e["reference_fit_in_qualified_domain"] for e in table[0]["per_event"]]
-    (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    write_json(OUT / "report.json", report)
     print(f"{'attack':>7} {'ev1':>7} {'ev2':>7} {'ev3':>7} {'worst':>7} {'hist m/r':>12}  state       preserved model-fit lost")
     for r in table:
         e = [x["error_ms"] for x in r["per_event"]]
