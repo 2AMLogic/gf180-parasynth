@@ -55,6 +55,10 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 PREFIX = "stale_control: "
 LEGACY_CAPTURE = HERE / "evidence" / "held-note" / "default-legacy" / "capture.cmds"
@@ -62,7 +66,7 @@ STALE_COMMAND = "held-default"
 BINDING_SUBSTITUTE = "rtl-sketch/voice_dp.v"
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

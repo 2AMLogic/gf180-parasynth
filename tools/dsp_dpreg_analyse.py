@@ -54,6 +54,7 @@ import json
 import pathlib
 import re
 import sys
+import refusal
 
 EVIDENCE = pathlib.Path(__file__).resolve().parents[1] / (
     "fpga/reports/arty/vivado-2025.1/dsp-dpreg-evidence")
@@ -77,7 +78,7 @@ MANDATORY_PROPS = ("SITE", "AREG", "BREG", "CREG", "DREG",
 OPMODE_BITS = frozenset(range(7))
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The apparatus is not in a state to answer. NO VERDICT, not a pass."""
 
 

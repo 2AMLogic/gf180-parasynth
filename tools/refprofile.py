@@ -129,6 +129,7 @@ sys.path.insert(0, str(ROOT / "audition"))
 # boundary (#134). `audio_measure` imports nothing but `math` and `numpy`, so
 # this costs a reader of the profile nothing.
 import audio_measure as am                                          # noqa: E402
+import refusal
 
 PROFILE_DIR = ROOT / "refprofile"
 PROFILE_JSON = PROFILE_DIR / "profile.json"
@@ -164,7 +165,7 @@ CLIP_PROSE_KEYS = ("why", "readback_note", "stimulus", "parts_note")
 OK, FAIL, REFUSED = 0, 1, 2
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the apparatus failed. REFUSED is a first-class
     outcome here, distinct from pass and from fail."""
 

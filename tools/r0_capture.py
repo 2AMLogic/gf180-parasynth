@@ -68,6 +68,7 @@ from scipy.signal import correlate
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import r0_reference as rr                                     # noqa: E402
+import refusal
 
 REFERENCES = rr.IMAGES["r0"]["refdir"]
 DEFAULT_BUNDLE = ROOT / "captures" / "r0"
@@ -158,7 +159,7 @@ PROPERTIES = ("routing", "silence", "clipping", "pitch", "clock", "timing", "gai
               "noise", "dropout", "stuck", "residual", "repeat", "channel-identity")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     pass
 
 

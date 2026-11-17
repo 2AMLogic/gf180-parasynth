@@ -46,6 +46,10 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "rtl-sketch"):
         sys.path.insert(0, str(_p))
 
 import record_compare as rc                      # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 RECORD = HERE / "r2-candidate.json"
 EVIDENCE = ROOT / "fpga/reports/r2/summary.json"   # the settled set (r2-candidate/ is history)
@@ -69,7 +73,7 @@ EXPECTED_CHANGES = {"rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/rec
                                                 "control INJECT_BUG_LADDER_XG25"}
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

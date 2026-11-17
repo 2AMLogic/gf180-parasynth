@@ -68,6 +68,10 @@ for _p in ("fpga", "model", "rtl-sketch"):
 import drums_fx as dx                               # noqa: E402
 import synth_top_model as stm                       # noqa: E402
 import uart_host as uh                              # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 ROM_V = ROOT / "fpga/rtl/pads_rom.v"
 R1_KIT = uh.R1_KIT
@@ -95,7 +99,7 @@ PRESS_LAT_CYC = 3                          # pin change in cycle T -> press latc
 KIND_PLAIN, KIND_RISE, KIND_DROP = 0, 1, 2
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The ROM cannot be trusted: it does not re-derive R1's kit."""
 
 

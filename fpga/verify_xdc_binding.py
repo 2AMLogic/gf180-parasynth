@@ -101,6 +101,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_arty as build          # noqa: E402
 import ext_io_timing as iotime      # noqa: E402
 import xdc_bindings as xb           # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 ROOT = build.ROOT
 WRAPPER = "arty_a7_top"
@@ -133,7 +137,7 @@ PROPERTIES = ("ports_declared", "ports_constrained", "hier_names",
 FLOP_PINS = {"D", "Q", "C", "CE", "R", "S", "CLR", "PRE"}
 
 
-class Refused(ValueError):
+class Refused(refusal.Refused, ValueError):
     """The check cannot be made -- distinct from the check failing."""
 
 

@@ -68,6 +68,7 @@ import numpy as np
 import run_case as rc
 import scorecard
 import verify_synth_top as vst
+import refusal
 
 SR = 48000
 STEM_PARTS = ("mix", "voice", "drum-mix", "body")
@@ -88,7 +89,7 @@ MEASUREMENT_SOURCES = (
 )
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """This apparatus could not answer. Distinct from a pass and from a fail."""
 
 

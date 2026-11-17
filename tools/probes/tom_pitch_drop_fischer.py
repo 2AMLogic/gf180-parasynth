@@ -67,12 +67,16 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 for _p in (ROOT / "tools", ROOT / "model", ROOT / "fpga", ROOT / "tools" / "probes"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 PREREG = ROOT / "docs" / "scorecard" / "tom-pitch-drop-592" / "prereg.json"
 TOMS = ("LT", "MT", "HT")
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A first-class outcome: the tool declines to produce a number."""
 
     def __init__(self, reason: str, detail: str = ""):

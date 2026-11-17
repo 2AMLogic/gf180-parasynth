@@ -51,13 +51,14 @@ import statistics
 import subprocess
 import sys
 from dataclasses import dataclass, asdict, field
+import refusal
 
 DEFAULT_WORKFLOW = "moog-acceptance.yml"
 DEFAULT_JOB = "acceptance"
 REFUSED = 2
 
 
-class Refusal(Exception):
+class Refusal(refusal.Refused, Exception):
     """The measurement could not be taken. Not a failure -- an absence."""
 
 

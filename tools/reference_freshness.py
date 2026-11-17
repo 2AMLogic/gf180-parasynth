@@ -25,6 +25,7 @@ docs/reference-compare-results.json is never read or modified here.
 """
 from __future__ import annotations
 import argparse, json, math, subprocess, sys, time
+import refusal
 
 DEVICES = ("ours", "surge-rk", "surge-huov", "miniv3")
 MAX_AGE_DAYS = 14
@@ -42,7 +43,7 @@ LIMIT = ("NOTE: this is COMMIT age. A recent commit does not prove a recent meas
          "or acoustic correctness; this check does not validate the synth.")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     pass
 
 

@@ -37,6 +37,10 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "audition"))
 import tom_pitch_probe as P
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 REPO = HERE.parent
 CACHE = REPO / "refaudio" / "cache" / "808-from-mars"
@@ -54,7 +58,7 @@ CENTRE_TUNING = 6          # 01..11 across the pot, so 06 is its centre
 POT_ENDS = (1, 6, 11)
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition is not met; nothing was attempted."""
 
 

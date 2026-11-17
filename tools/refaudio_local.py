@@ -27,13 +27,14 @@ Audio lands in refaudio/cache/ (gitignored), same as the ssh tool.
 """
 from __future__ import annotations
 import argparse, csv, hashlib, json, os, pathlib, sys, zipfile
+import refusal
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 REFAUDIO = REPO / "refaudio"
 FETCHED, FAIL, REFUSED = 0, 1, 2
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition is not met; nothing was attempted."""
 
 

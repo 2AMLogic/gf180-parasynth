@@ -159,6 +159,7 @@ if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
 import cymbal_candidate as cc  # noqa: E402
+import refusal
 
 SCORECARD = ROOT / "docs" / "scorecard" / "cymbal-369"
 BALANCE_ARTIFACT = SCORECARD / "balance" / "balance.json"
@@ -208,7 +209,7 @@ SN_CROPS = {
 }
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition failed. REFUSED is a verdict, distinct from a value."""
 
 

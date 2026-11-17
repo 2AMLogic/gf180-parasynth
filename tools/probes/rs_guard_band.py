@@ -108,6 +108,10 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import partial_trajectory as PT                  # noqa: E402
 import run_case as RC                            # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 OP = RC.RS_BALANCE_OP
 FLOOR_MARGIN_DB = 6.0
@@ -136,7 +140,7 @@ CANDIDATE_GUARDS = {
 }
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the apparatus failed. REFUSED is a first-class
     outcome here, distinct from pass and from fail."""
 

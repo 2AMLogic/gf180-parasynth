@@ -64,6 +64,7 @@ sys.path.insert(0, str(ROOT / "audition"))
 import audio_measure as am                                          # noqa: E402
 import dsp                                                          # noqa: E402
 import voice_fx as vf                                               # noqa: E402
+import refusal
 
 SR = dsp.SR
 # A3 .. A7: four octaves, so the pitch dependence is a trend and not two points.
@@ -72,7 +73,7 @@ REFERENCE_RIG_PATHS = ("/Library/Audio/Plug-Ins/VST3/Surge XT.vst3",
                        "/Library/Audio/Plug-Ins/VST3/Mini V3.vst3")
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition this tool asserts at the point of use failed. Raised
     rather than returned when the whole run cannot be answered."""
 

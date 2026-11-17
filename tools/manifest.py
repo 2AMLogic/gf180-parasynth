@@ -72,6 +72,7 @@ import numpy as np
 
 import provenance
 import run_all
+import refusal
 
 ROOT = provenance.ROOT
 RUNS_DIR = ROOT / "runs"
@@ -82,7 +83,7 @@ JOBS_DIR = ROOT / "jobs"
 BOUNDS_HISTORY = ROOT / "spec" / "acceptance-bounds-history.json"
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of this stage was not met. `REFUSED` is a first-class
     outcome here (CLAUDE.md), distinct from a measurement that ran and
     failed its bounds -- never silently absorbed into a number."""

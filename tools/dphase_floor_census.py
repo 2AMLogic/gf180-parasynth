@@ -94,6 +94,7 @@ from model.discrimination_features import (  # noqa: E402
     JIT_DPHASE_FLOOR_PPM, ROW_FLOOR, ROW_INVALID, ROW_STATES, census_counts,
     dphase_row_state,
 )
+import refusal
 
 SR_REF, SR_RENDER = 44100, 48000
 
@@ -140,7 +141,7 @@ CORPUS_HOWTO = (
 )
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The census could not answer. Never reported as a count."""
 
 

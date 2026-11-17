@@ -42,6 +42,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+import refusal
 
 ROOT = Path(__file__).resolve().parents[1]
 DIR = ROOT / "docs" / "sensitivity"
@@ -52,7 +53,7 @@ REGISTRY_SCHEMA = "sensitivity-registry-v1"
 STATES = ("FLAT", "MIXED", "SENSITIVE")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The gate could not answer. Never reported as a pass."""
 
 

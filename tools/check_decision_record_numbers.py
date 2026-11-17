@@ -86,6 +86,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import refusal
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 RECORDS = REPO / "spec" / "decision-records"
@@ -109,7 +110,7 @@ REFUSED_EXIT = 2
 CONTROL_UNMET_EXIT = 3
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """Nothing was checked. Carries the reason token, not just a message."""
 
     def __init__(self, reason: str, detail: str):
