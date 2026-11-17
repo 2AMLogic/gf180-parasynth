@@ -74,9 +74,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: The directories ``make verify`` (Makefile ``verify``/``verify-full``/
-#: ``test``) collects by directory. CI collects the same ones in two jobs
-#: (``pytest model/ spec/`` and ``pytest tools/``); fpga/ and pnr/ are covered
-#: by ``make verify`` only.
+#: ``test``) collects by directory. CI collects the same ones in three jobs
+#: (``pytest model/ spec/``, ``pytest tools/`` and ``pytest pnr/``); fpga/ is
+#: covered by ``make verify`` only.
 GUARDED_DIRS = ("model", "spec", "tools", "fpga", "pnr")
 
 #: pytest's own defaults (``python_functions = test``,
