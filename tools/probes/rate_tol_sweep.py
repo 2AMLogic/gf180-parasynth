@@ -437,12 +437,23 @@ def report(res: dict, plan: dict, out) -> None:
     w("  cost are not the same story, which is why the cost is also split by unit")
     w("  below.")
     w()
-    cols = ([valcol, "caught", "cost", "cost_db", "cost_ratio", "caught_ratio",
-             "refused"] if unit is None else
-            [valcol, "caught", f"caught_{unit}", "cost", f"cost_{unit}",
-             "cost_ratio", "caught_ratio", "refused"])
-    widths = ([9, 9, 7, 9, 12, 14, 9] if unit is None else
-              [8, 9, 11, 7, 9, 12, 14, 9])
+    if unit is None:
+        cols = [valcol, "caught", "cost", "cost_db", "cost_ratio", "caught_ratio",
+                "refused"]
+        widths = [9, 9, 7, 9, 12, 14, 9]
+    else:
+        # every name in these two lists derives from `unit`, and the two
+        # correlation-family columns only join when they are not themselves
+        # the swept unit's columns -- for `ratio` they are the same count
+        # computed twice (#937 review). The max() calls keep the db layout
+        # byte-identical while letting a longer unit's name widen its slot.
+        percol = [] if unit == "ratio" else ["cost_ratio", "caught_ratio"]
+        cols = [valcol, "caught", f"caught_{unit}", "cost", f"cost_{unit}",
+                *percol, "refused"]
+        widths = [max(8, len(valcol) + 2), 9,
+                  max(11, len(f"caught_{unit}") + 2),
+                  7, max(9, len(f"cost_{unit}") + 2),
+                  *([12, 14] if percol else []), 9]
     for line in _table(res["rows"], cols, widths):
         w(line)
     w()

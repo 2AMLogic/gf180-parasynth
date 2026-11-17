@@ -200,27 +200,33 @@ def test_the_per_unit_counts_are_monotone_in_the_dial():
     assert caught_unit[0] > 0, "the injected fold must be red in the swept unit"
 
 
-def test_a_non_db_unit_names_its_own_columns_not_the_dbs():
+@pytest.mark.parametrize("unit", ["ms", "ratio", "count"])
+def test_a_non_db_unit_names_its_own_columns_not_the_dbs(unit):
     """The swept unit names its own columns. #937: `measure` and `report`
     hardcoded the db names `caught_db`/`cost_db` for whatever unit was
     swept, so `--unit ms` printed a table whose columns claimed to be dB
     counts -- the apparatus answering in a vocabulary it was not asked, which
     is exactly how a mislabelled instrument ships: the db run was doubly
-    lucky, its literal names happened to be right, so nothing failed. ms is
-    the case where the literal and the unit disagree, and it is asserted by
-    NAME -- the counts on this small panel are 0 everywhere, which under the
-    old literals would have looked like a correct empty table."""
+    lucky, its literal names happened to be right, so nothing failed. These
+    three units each break differently: ms is where the literal and the unit
+    disagree; ratio is where the per-unit columns duplicate the
+    always-present correlation-family pair (`caught_ratio`/`cost_ratio`),
+    so the header carries a name twice; count is where the name does not
+    even fit the fixed width, so the rows stop tokenising. Asserted through
+    `sens.parse_fixed_width_tables` -- the real consumer of the artefact --
+    not a substring of the header."""
     res = S.measure([0.0, 0.12], S.wide_panel(TWO_F0), panel_11=False,
-                    unit="ms")
+                    unit=unit)
     row = res["rows"][0]
-    assert "caught_ms" in row and "cost_ms" in row, sorted(row)
+    assert f"caught_{unit}" in row and f"cost_{unit}" in row, sorted(row)
     assert "caught_db" not in row and "cost_db" not in row, sorted(row)
     out = io.StringIO()
     S.report(res, S.load_plan(allow_dirty=True, path=S.PLAN_BY_UNIT), out)
-    header = next(l for l in out.getvalue().splitlines()
-                  if l.strip().startswith("rel_ms"))
-    assert "caught_ms" in header and "cost_ms" in header, header
-    assert "caught_db" not in header and "cost_db" not in header, header
+    tables = sens.parse_fixed_width_tables(out.getvalue())
+    rows = tables[f"rate_tol_rel_{unit}"]
+    assert len(rows) == len(res["rows"]), sorted(tables)
+    assert f"caught_{unit}" in rows[0], rows[0]
+    assert "caught_db" not in rows[0] and "cost_db" not in rows[0], rows[0]
 
 
 def test_the_integer_fold_is_caught_more_than_the_shipped_one_everywhere():
