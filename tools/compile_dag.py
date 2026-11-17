@@ -104,6 +104,15 @@ def sha_is_ancestor(sha: str) -> bool:
 # Named once: run_evidence() honours them, unjudged() asks whether any is there.
 VERDICT_KEYS = ("passed", "ok", "success", "green")
 
+# The order run_evidence() dispatches evidence sources in: the FIRST key a
+# node declares wins, so a node naming two sources is judged by the earlier
+# one and the later declaration is context, not the verdict. THE ONE
+# DEFINITION of that precedence (#827); the readers below derive from it
+# rather than restating the keys -- four hand-maintained copies in three
+# different orders is the drift surface that produced #827. A fifth evidence
+# kind is added here, in dispatch position, and every reader follows.
+EVIDENCE_PRECEDENCE = ("suite", "verifier", "evidence_file", "tool")
+
 
 def unjudged(n: dict) -> str | None:
     """Why this node's `evidence_file` declares NO verdict this tool can read.
