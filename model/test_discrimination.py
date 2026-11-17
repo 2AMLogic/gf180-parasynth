@@ -1819,16 +1819,31 @@ def test_ms_windows_cannot_silently_share_a_grouping_label():
         f"ms.* buckets {sizes} != one bucket of {len(dfx.MS_BANDS_HZ)} per "
         f"window {expected}: a window's columns have merged or drifted")
 
-    # CONTROL: the same check on a tuple chosen to collide must report it.
-    _, labs_c = distinct((4.0e-3, 4.4e-3, 25.0e-3))
-    assert len(set(labs_c)) < len(labs_c), (
+    # CONTROL: the same check on a tuple chosen to collide must report it --
+    # through the predicate's OWN verdict, not a recomputation of it: a
+    # recomputation stays green under a defeated guard, which is exactly the
+    # input this control must turn red on.
+    ok_c, labs_c = distinct((4.0e-3, 4.4e-3, 25.0e-3))
+    assert not ok_c, (
         f"the distinctness guard passed on (4.0e-3, 4.4e-3, 25.0e-3) -> "
         f"{labs_c}: the control cannot collide, so the precondition above is "
         "unguarded and this test checks nothing")
-    assert f"ms.{labs_c[0]}ms" == f"ms.{labs_c[1]}ms", (
-        f"the colliding control's first two windows must land in the SAME "
-        f"bucket name ({labs_c[0]} vs {labs_c[1]}): that merged bucket is "
-        "the failure this guard exists to catch")
+
+    # ...and the harm is real, not just a repeated label: the shipped
+    # grouper merges BOTH colliding windows' band columns into ONE bucket of
+    # 2 * len(MS_BANDS_HZ) -- #929's double-width bucket, which grouped
+    # permutation importance shuffles as one.
+    coll_names = [f"ms{dfx.ms_window_ms_label(T)}ms.{lo:.0f}-{hi:.0f}Hz.seg0"
+                  for T in (4.0e-3, 4.4e-3) for lo, hi in dfx.MS_BANDS_HZ]
+    merged: dict = {}
+    for nm in coll_names:
+        g = dfx.extra_group(nm)
+        merged.setdefault(g, []).append(nm)
+    assert {b: len(cols) for b, cols in merged.items()} == {
+        f"ms.{labs_c[0]}ms": 2 * len(dfx.MS_BANDS_HZ)}, (
+        f"the shipped grouper did not merge both colliding windows into one "
+        f"double-width bucket ({dict(merged)}): the control does not "
+        "reproduce #929's failure shape, so the precondition is unguarded")
 
 
 def test_window_is_shorter_than_every_reference_file():
