@@ -327,6 +327,62 @@ def test_run_marks_a_failing_suite_fail_not_refuse(tmp_path, monkeypatch, capsys
     assert rec["passed"] is False, "the written record must still state the failure"
 
 
+# ---------------------------------------------------------------------------
+# #976: the refusal run_evidence() cannot reach through the shipped constant
+#
+# run_evidence()'s trailing raise -- "a key EVIDENCE_PRECEDENCE knows but
+# run_evidence() cannot execute" -- is unreachable while the constant holds
+# its shipped four keys: every key it knows has an executing branch above
+# the raise. The guard exists for the day a fifth key is added in dispatch
+# position without a branch, and a guard with no input that fires it has no
+# test either (rule 8: the guard ships with the input that defeats it). The
+# input is a monkeypatched constant, and the same patch is how main()
+# reaches the raise: its node gate is `any(k in n for k in
+# EVIDENCE_PRECEDENCE)`, so a patched key passes the gate, reaches
+# run_evidence(), and must REFUSE loudly rather than fall through.
+# ---------------------------------------------------------------------------
+def test_run_evidence_refuses_a_known_key_it_cannot_execute(monkeypatch):
+    """The raise is live when the constant gains a key with no branch."""
+    monkeypatch.setattr(cd, "EVIDENCE_PRECEDENCE",
+                        (*cd.EVIDENCE_PRECEDENCE, "oracle"))
+    with pytest.raises(SystemExit, match="REFUSED.*oracle"):
+        cd.run_evidence("X1", {"oracle": "model/oracle.py"})
+
+
+def test_main_propagates_the_run_refusal_instead_of_recording_red(
+        tmp_path, monkeypatch):
+    """Through main(), the refusal must stay loud -- SystemExit out of main,
+    and NO record for the node in RESULTS. main()'s run loop catches
+    `Exception` and records a RED `{passed: false}` line (#823), which is
+    right for a raising verifier but wrong here: a REFUSED is "this tool
+    cannot answer", not "the evidence failed", and converting the refusal
+    into a record would publish it as if it were a measurement. The shipped
+    `except Exception` lets SystemExit (a BaseException) escape, so the
+    refusal propagates and nothing is written. Red-first control for this
+    test: flip the loop's handler to `except BaseException` and this test
+    must fail -- the refusal is swallowed, a RED record is written, and
+    main() returns instead of raising."""
+    dag = tmp_path / "dag.json"
+    dag.write_text(json.dumps({"nodes": {"X1": {
+        "name": "oracle", "group": "foundation", "class": "implementation",
+        "oracle": "model/oracle.py"}}}))
+    monkeypatch.setattr(cd, "EVIDENCE_PRECEDENCE",
+                        (*cd.EVIDENCE_PRECEDENCE, "oracle"))
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    monkeypatch.setattr(cd, "DAG", dag)
+    monkeypatch.setattr(cd, "RESULTS", tmp_path / "dag-results.json")
+    monkeypatch.setattr(cd, "git", lambda *a: "deadbeef")
+    monkeypatch.setattr(cd.sc, "checkout_staleness", lambda: "")
+    monkeypatch.setattr(sys, "argv",
+                        ["compile_dag.py", "--run", "--only", "X1", "--print"])
+    with pytest.raises(SystemExit, match="REFUSED.*oracle"):
+        cd.main()
+    # The per-node write sits after run_evidence() inside the loop, so an
+    # escaped refusal leaves the results file unwritten entirely.
+    assert not cd.RESULTS.exists(), \
+        "a REFUSED that escaped main() must not leave a record behind"
+
+
 def test_the_minimoog_fidelity_warning_is_restored_on_the_real_dag():
     """#45, end to end on the COMMITTED graph -- the outcome #791 is for.
 
