@@ -71,17 +71,17 @@ graph LR
   subgraph foundation["Foundation"]
     F1["! Ladder bit-exact"]
     F2["✓ Modal bank bit-exact"]
-    F3["? Measurement ground truth"]
+    F3["· Measurement ground truth"]
   end
   subgraph minimoog["Minimoog voice"]
     M1["! One Moog voice bit-exact"]
-    M2["? Matches our own spec"]
+    M2["✓ Matches our own spec"]
     M3["? Matches software references"]
     M4["✗ Matches real hardware"]
   end
   subgraph drums["TR-808 drums"]
     D1["! Drum kit bit-exact"]
-    D2["? Is an 808, per the reference"]
+    D2["· Is an 808, per the reference"]
     D3["✗ Per-voice measured against targets"]
   end
   subgraph integration["Integration"]
@@ -110,13 +110,13 @@ graph LR
   I2 --> S3
   style F1 fill:#9A6510,color:#fff
   style F2 fill:#0E6B5E,color:#fff
-  style F3 fill:#5B4B8A,color:#fff
+  style F3 fill:#3f8f5f,color:#fff
   style M1 fill:#9A6510,color:#fff
-  style M2 fill:#5B4B8A,color:#fff
+  style M2 fill:#0E6B5E,color:#fff
   style M3 fill:#5B4B8A,color:#fff
   style M4 fill:#8E2438,color:#fff
   style D1 fill:#9A6510,color:#fff
-  style D2 fill:#5B4B8A,color:#fff
+  style D2 fill:#3f8f5f,color:#fff
   style D3 fill:#8E2438,color:#fff
   style I1 fill:#5a6468,color:#fff
   style I2 fill:#5a6468,color:#fff
@@ -129,13 +129,13 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STALE** | rtl-sketch/ladder_dp.v changed since node/F1-ladder was cut |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal (not re-run; verifier is slow) |
-| `F3` | Measurement ground truth | **REFUSED** | recorded sha d3abf327 is not in this history -- cannot tell whether 1 covered file(s) changed |
+| `F3` | Measurement ground truth | **GREEN** | 153 passed in 3.30s |
 | `M1` | One Moog voice bit-exact | **STALE** | rtl-sketch/voice_dp.v changed since node/M1-voice was cut |
-| `M2` | Matches our own spec | **REFUSED** | recorded sha d3abf327 is not in this history -- cannot tell whether 2 covered file(s) changed |
+| `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **REFUSED** | docs/reference-compare-results.json carries no passed/ok/success/green key -- no verdict to read |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
-| `D2` | Is an 808, per the reference **fidelity** | **REFUSED** | recorded sha d3abf327 is not in this history -- cannot tell whether 1 covered file(s) changed |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 324.33s (0:05:24) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `I2` | Whole chip at its pins | **TODO** | never run -- `tools/compile_dag.py --run` |
@@ -143,8 +143,7 @@ graph LR
 | `S2` | Fits a real shuttle padframe | **BLOCKED** | LibreLane half-slot, in flight: padcells 0 -> 754 placed with all 5 wafer.space IP macros, 73.07 % core utilisation, drum_regs 3,520/3,520 flops placed on the run's own DEF. Detailed routing has NOT completed (iteration 60 of a 64 cap, 1 Metal2 short), so there is no final router DRC count, no post-route antenna check and no post-route STA at any corner. The verdict this node will read is pnr/shuttle/evidence/halfslot-verdict.json ('passed' = the AREA question only); finish it with pnr/shuttle/finish_halfslot.py finish. docs/pnr-shuttle-halfslot.md, PR #348 |
 | `S3` | FPGA build of the real engine | **GREEN** | fpga/reports/ecp5_25f.txt contains 'RESULT: routed.' |
 
-> **Unvalidated subsystems.** Minimoog voice: no green fidelity evidence -- UNVALIDATED against anything external  
-> TR-808 drums: no green fidelity evidence -- UNVALIDATED against anything external
+> **Unvalidated subsystems.** Minimoog voice: no green fidelity evidence -- UNVALIDATED against anything external
 
 <sub>Compiled from `docs/dag.json` by `tools/compile_dag.py`. Status is derived from evidence, not asserted.</sub>
 <!-- DAG:END -->
