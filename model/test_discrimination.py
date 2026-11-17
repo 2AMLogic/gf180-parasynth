@@ -2120,6 +2120,40 @@ def test_the_extra_columns_append_and_never_reorder_the_original_320():
     assert "jit.stability" in g and "jit.period" in g and "ms.scale-difference" in g
 
 
+def test_each_mpd_stride_is_its_own_grouping_bucket():
+    """#929: `extra_group()` bucketed MPD columns by `nm.split(".")[1]`, which
+    is the DECIMALS of the stride, not the stride: `mpd10.00ms` and
+    `mpd5.00ms` both formatted to `mpd.00ms`, so six strides collapsed into
+    five buckets and grouped permutation importance shuffled 16 columns (two
+    strides x 4 stats x 2 segments) where every other MPD bucket shuffles 8.
+
+    Names are built through the real `mpd_features` naming via `extra_names()`
+    -- the same strings the study ships -- and asserted per stride, not by
+    count. The guard-defeating input (docs/verification-rules.md rule 8): a
+    bucket-count assertion alone would pass a fix that merged two strides and
+    split another to keep the total at six, and `%.2f` always renders one
+    `.`, so the test pins the exact bucket derived from each stride and the
+    equal 8-column size, not just the number of buckets.
+
+    Red on `main` as of 2026-11-17: `mpd.00ms` carries 16 columns, the other
+    four buckets 8 each."""
+    import discrimination_features as dfx
+    names = dfx.extra_names()
+    mpd_names = [nm for nm in names if nm.startswith("mpd")]
+    assert len(mpd_names) == 6 * 4 * dfx.MPD_SEGS, len(mpd_names)
+    for T in dfx.MPD_PERIODS_S:
+        prefix = f"mpd{T * 1e3:.2f}ms."
+        stride_names = [nm for nm in mpd_names if nm.startswith(prefix)]
+        assert len(stride_names) == 4 * dfx.MPD_SEGS, (prefix, stride_names)
+        expected = f"mpd.{T * 1e3:.2f}ms"
+        got = {dfx.extra_group(nm) for nm in stride_names}
+        assert got == {expected}, (prefix, got)
+    buckets = {k: len(v) for k, v in feature_groups(names).items()
+               if k.startswith("mpd.")}
+    assert set(buckets) == {f"mpd.{T * 1e3:.2f}ms" for T in dfx.MPD_PERIODS_S}, buckets
+    assert set(buckets.values()) == {4 * dfx.MPD_SEGS}, buckets
+
+
 def test_the_cross_validation_grouping_does_not_move_between_processes():
     """The defect that made this study's accuracies unreproducible: `hash()`
     on a str is salted per process, so the grouped inner CV saw different

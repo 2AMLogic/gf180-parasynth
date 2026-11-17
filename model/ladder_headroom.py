@@ -102,6 +102,11 @@ import reference_rigs as rr                                         # noqa: E402
 import ring_estimator as re_                                        # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 from dsp import SR                                                  # noqa: E402
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 OVERSAMPLE = 2
 FS_OS = SR * OVERSAMPLE
@@ -124,7 +129,7 @@ VERDICTS = ("worth pursuing", "available but small", "no further win available",
 _PROFILE = os.path.join(HERE, "..", "docs", "reference-compare-results.json")
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the measurement is unmet, so nothing was measured.
 
     Distinct from a failed audit: a tool that answers when it cannot is worse

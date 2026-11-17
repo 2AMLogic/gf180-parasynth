@@ -155,13 +155,17 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import partial_trajectory as PT                  # noqa: E402
 import run_case as RC                            # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 SR = 48000
 OPS = {"RS (D10A)": RC.RS_BALANCE_OP, "CB (D13A)": RC.CB_BALANCE_OP}
 NOISE_SECONDS = {"RS (D10A)": 0.25, "CB (D13A)": 0.75}
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the apparatus failed. REFUSED is a first-class
     outcome here, distinct from pass and from fail."""
 

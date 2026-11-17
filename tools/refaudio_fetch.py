@@ -29,13 +29,14 @@ the index is a FAIL -- the file on disk must be the file the index describes.
 """
 from __future__ import annotations
 import csv, json, os, pathlib, shlex, subprocess, sys
+import refusal
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 REFAUDIO = REPO / "refaudio"
 FETCHED, FAIL, REFUSED = 0, 1, 2
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition is not met; nothing was attempted."""
 
 

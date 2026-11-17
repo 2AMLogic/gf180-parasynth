@@ -56,6 +56,10 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "audition", ROOT / "rtl-s
         sys.path.insert(0, str(_p))
 
 import record_compare as rc                      # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 MANIFEST = HERE / "r1-2025.1.json"
 PUB_DIR = ROOT / "fpga/reports/arty/r1-player-preview-2025.1"
@@ -69,7 +73,7 @@ PERMITTED_EXCEPTIONS = ["i2s_bclk"]
 PREFIX = "r1_release: "
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """Selected artifacts disagree, or an input is missing."""
 
 
@@ -302,7 +306,7 @@ def rederive_ext_io(path: Path, commit: str | None = None) -> dict:
     paths = _need(path.parent / "ext_io_paths.txt")
     try:
         derived = json.loads(json.dumps(eie.evaluate(eie.parse(paths.read_text()))))
-    except eie.Refused as exc:
+    except refusal.Refused as exc:
         raise Refused(f"{EXT_IO}: the shipped ext_io_paths.txt does not evaluate: {exc}") from None
     unknown = sorted(set(rec) - set(derived) - set(EXT_IO_EXTRACTION_ONLY))
     missing = sorted((set(derived) | set(EXT_IO_EXTRACTION_ONLY)) - set(rec))
@@ -410,7 +414,7 @@ def host_binding() -> dict:
     try:
         cmds = rc.commands()
         kit = rc.kit_identity()
-    except rc.Refused as exc:
+    except refusal.Refused as exc:
         raise Refused(f"the host's R1 bytes are not the frozen R1 target: {exc}") from None
     for name, c in cmds.items():
         want = cand["commands"].get(name, {})

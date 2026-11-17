@@ -91,6 +91,11 @@ import drum_fit as df
 import drums_fx as dx
 from drums_fx import SR
 from modal_fixed import ModalFx, RAW, BP, HP
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 # The bands of docs/drum-verification.md section 8.3, and its interval.
 EDGES = [20, 80, 150, 300, 600, 2000]
@@ -118,7 +123,7 @@ KIT_TAU = 0.1e-3
 BD_F0, BD_TAU_MS = 49.4, 143.7
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the apparatus failed. Not a result, and not a fail."""
 
 

@@ -48,6 +48,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import voice_fx as vf  # noqa: E402
+import refusal
 
 SR = 48_000
 PHASE_ONE = 1 << vf.PHASE_BITS
@@ -66,7 +67,7 @@ INJECTIONS = ("ALIAS_NOBLEP", "DARKEN_LP4K", "SPUR_M70", "CLIP_2XFS",
 MOVE_DB = 1.0             # a dB property "moved" when it changed by more than this
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

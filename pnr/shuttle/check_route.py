@@ -36,6 +36,11 @@ import os
 import re
 import subprocess
 import sys
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -84,7 +89,7 @@ PAD_MASTER = re.compile(r"gf180mcu_(fd|ef)_io__", re.I)
 WS_IP_MASTER = re.compile(r"gf180mcu_ws_ip__", re.I)
 
 
-class Refusal(Exception):
+class Refusal(refusal.Refused, Exception):
     pass
 
 

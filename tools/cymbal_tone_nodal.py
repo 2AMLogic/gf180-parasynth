@@ -57,6 +57,7 @@ import cymbal_bands as cb                  # noqa: E402
 import cymbal_tone_knob as ctk             # noqa: E402
 import cymbal_tone_realisation as tr       # noqa: E402
 import tone_stage_schematic as ts          # noqa: E402
+import refusal
 
 SR = float(dx.SR)
 
@@ -140,7 +141,7 @@ SPAN_MIN_DB = 6.0
 MAP_LAST_MODE = (dx.A_RESET - dx.A_MODE) // dx.MODE_STRIDE      # 19
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition this instrument needs is not met. Not a failed check."""
 
 

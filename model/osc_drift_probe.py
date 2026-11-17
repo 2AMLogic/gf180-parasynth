@@ -100,6 +100,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from tom_pitch_probe import bandpass, crossings, read_wav, spectral_f0  # noqa: E402
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 # ---- the apparatus's constants ---------------------------------------------
 MIN_PERIODS = 24           # clean periods needed before anything is reported
@@ -152,7 +157,7 @@ CENTS_PER_OCT = 1200.0
 REFUSED, STABLE, PERIODIC, DRIFTING = "REFUSED", "STABLE", "PERIODIC", "DRIFTING"
 
 
-class Refusal(Exception):
+class Refusal(refusal.Refused, Exception):
     """A precondition of the measurement is unmet. Carries the code so the
     caller can tell WHICH precondition, and never a number."""
 

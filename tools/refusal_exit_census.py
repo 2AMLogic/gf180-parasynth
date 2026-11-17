@@ -74,6 +74,7 @@ import collections
 import pathlib
 import subprocess
 import sys
+import refusal
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -89,10 +90,13 @@ MODULE_LEVEL = "<module>"
 # missing here under-counts.  The per-family totals are printed in every
 # --check run precisely so such an under-count shows up as a changed table,
 # but no pin fires on a total; see EXPECTED below.
+# "REFUSED_TYPES" was removed in #815: the hand-maintained tuple is gone and
+# its two `except` sites catch `refusal.Refused`, which "Refused" (the attr
+# of a `refusal.Refused` handler) already counts.
 REFUSAL_CLASSES = frozenset({
     "Refused", "SourceUnavailable", "ScanRefused", "KitRefused",
     "MidiPortRefused", "ControlRefused", "StaleBase",
-    "Infeasible", "CalibrationError", "REFUSED_TYPES",
+    "Infeasible", "CalibrationError",
 })
 
 # WRONG BEFORE IT WAS RIGHT, recorded because the first table this tool printed
@@ -112,7 +116,7 @@ REFUSAL_CLASSES = frozenset({
 # excluded and the uart_host site is not counted.
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition failed.  REFUSED is a verdict, distinct from a value."""
 
 

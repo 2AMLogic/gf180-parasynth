@@ -44,6 +44,7 @@ import reference_rigs as rr          # noqa: E402
 import voice_fx as vf                # noqa: E402
 import mono_m5a_score as m5          # noqa: E402
 import f1_selected_path as sp        # noqa: E402
+import refusal
 
 #: What the official F1 cases measure. Changing either is a new result series.
 ENGINE_PROFILE = "selected"
@@ -52,7 +53,7 @@ DRIVE = 1.0          # the F1 stimulus setting
 PATH_VERSION = "f1-filter-path-v1"
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

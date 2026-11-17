@@ -22,6 +22,7 @@ import argparse, hashlib, json, os, pathlib, re, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import run_all as ra                                             # noqa: E402
 import run_case as rc                                            # noqa: E402
+import refusal
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BEFORE_DEFAULT, AFTER_DEFAULT = "6fbd1bd1^1", "6fbd1bd1"    # #690 merge parents
@@ -30,7 +31,7 @@ HEADLINE = "6.07"      # docs/conga-body-spectrum-spread.md historical headline
 REFUSED, FAILED, OK = "REFUSED", "FAILED", "OK"
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     pass
 
 

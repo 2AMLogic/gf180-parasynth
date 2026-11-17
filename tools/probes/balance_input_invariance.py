@@ -65,9 +65,13 @@ RECORD = ROOT / "docs" / "scorecard" / "cymbal-369" / "balance" / "balance-ablat
 # _install_drums_fx's sys.path edit runs only in the --emit subprocess.
 sys.path.insert(0, str(ROOT / "fpga"))
 import record_compare  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the comparison failed; no answer is given."""
 
 

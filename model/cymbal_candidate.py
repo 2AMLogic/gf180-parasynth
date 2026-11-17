@@ -328,6 +328,12 @@ import numpy as np
 import drums_fx as dx
 import modal_fixed as mf
 from modal_fixed import BP, HP
+import sys  # noqa: E402
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 # The candidate's one new numerator: (1 - z^-1)^3 = a 2-pole high-pass's
 # numerator times the level stage's differentiator. It lives HERE, not in the
@@ -743,7 +749,7 @@ SHIPPED_BAND_PEAK = {"low": dx.PEAK_CYL, "decay": dx.PEAK_CYD, "short": dx.PEAK_
 SHIPPED_ENV_TAU = {dx.E_CYD: dx.CY_TAU_DECAY, dx.E_CYL: dx.CY_TAU_LOW}
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition the knob renderer needs is not met. Not a failed check."""
 
 

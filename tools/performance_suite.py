@@ -64,6 +64,7 @@ import pathlib
 import sys
 
 import numpy as np
+import refusal
 
 SR = 48_000
 FRAME = SR // 1000                    # 1 ms envelope frames
@@ -89,7 +90,7 @@ MIN_IOI_S = 0.02
 MIN_GAP_S = 0.025
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the apparatus failed: no verdict about the sound."""
 
 

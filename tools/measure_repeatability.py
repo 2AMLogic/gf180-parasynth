@@ -85,6 +85,7 @@ import audio_measure as am                                        # noqa: E402
 import run_case as rc                                             # noqa: E402
 import promoted_bands as pb                                       # noqa: E402
 import promoted_measures as pm                                    # noqa: E402
+import refusal
 
 MEASURED, FALSE, REFUSED = 0, 1, 2
 
@@ -98,7 +99,7 @@ FETCH = ("tools/refaudio_local.py --prefix 808-from-mars.zip "
          "'808 From Mars/WAV/01. Individual Hits/01. Bass Drum/Clean/'")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the apparatus failed. Nothing was attempted."""
 
 

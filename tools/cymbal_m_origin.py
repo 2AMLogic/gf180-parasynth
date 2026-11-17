@@ -117,6 +117,7 @@ sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import run_case as rc  # noqa: E402
 import cymbal_low_tail as lt  # noqa: E402
 import cymbal_tone_realisation as tr  # noqa: E402
+import refusal
 
 BANDS = dict(lt.BANDS)
 REF = lt.REF_BAND
@@ -153,7 +154,7 @@ SWEEP_DB = (-12.0, -6.0, 0.0, 6.0, 9.0, 12.0, 15.0, 18.0, 24.0, 30.0)
 MIN_BAND_RE_REF_DB = -22.0
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

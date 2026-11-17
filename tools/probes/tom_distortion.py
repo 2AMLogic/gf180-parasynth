@@ -48,11 +48,15 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "tools")]
 from finite_number import is_finite_number as _finite  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 PREREG = ROOT / "docs" / "scorecard" / "tom-distortion-593" / "prereg.json"
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """The apparatus cannot answer. Distinct from pass and from fail."""
 
 

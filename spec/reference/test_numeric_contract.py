@@ -31,6 +31,12 @@ import os
 import re
 
 import pytest
+import sys  # noqa: E402
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONTRACT = os.path.normpath(os.path.join(HERE, os.pardir, "NUMERIC-CONTRACT.md"))
@@ -59,7 +65,7 @@ HISTORICAL = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
 KNOWN_MISSING = set()
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The document is not in a state this check can read.
 
     Distinct from a failure: a renamed heading or a reformatted bullet means

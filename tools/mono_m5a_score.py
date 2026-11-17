@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import voice_fx as vf
 from measure_mono_m5a_reference import envelope_timing
+import refusal
 
 SR = 48_000
 ANALYSIS_VERSION = "m5a-score-v3"
@@ -80,7 +81,7 @@ TOLERANCES = {
 }
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

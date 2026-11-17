@@ -70,6 +70,11 @@ import re
 import shutil
 import subprocess
 import sys
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -107,7 +112,7 @@ READMEMH_TABLES = [
 ]
 
 
-class Refusal(Exception):
+class Refusal(refusal.Refused, Exception):
     """A precondition of the apparatus is not met.  Distinct from a tool failure."""
 
 

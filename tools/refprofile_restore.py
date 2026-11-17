@@ -12,11 +12,12 @@ import json
 from pathlib import Path, PurePosixPath
 import sys
 import zipfile
+import refusal
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

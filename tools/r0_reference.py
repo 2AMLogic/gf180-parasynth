@@ -62,6 +62,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 for _p in ("fpga", "model", "rtl-sketch", "audition", "tools", "fpga/release"):
     sys.path.insert(0, str(ROOT / _p))
+import refusal
 
 MANIFEST = ROOT / "fpga" / "release" / "baseline-2025.1.json"
 R1_MANIFEST = ROOT / "fpga" / "release" / "r1-2025.1.json"
@@ -95,7 +96,7 @@ CAL_ONSET_LSB = 256
 CAL_WINDOW_S = 0.030
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     pass
 
 

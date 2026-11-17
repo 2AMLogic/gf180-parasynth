@@ -48,6 +48,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import run_case  # noqa: E402
 import scorecard  # noqa: E402
+import refusal
 
 ENGINE = "integrated-rtl"
 SR = 48000
@@ -84,7 +85,7 @@ RE_DEFINES = re.compile(r"compile defines: (?P<defines>.+)")
 RE_BUILT = re.compile(r"built from (?P<commit>\S+), outdir")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the measurement failed, so there is no measurement."""
 
 
