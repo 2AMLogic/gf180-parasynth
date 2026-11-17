@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am  # noqa: E402
 from measure_mono_m5a_reference import envelope_timing  # noqa: E402
 import refusal
+import run_all  # noqa: E402
 
 SR = 48_000
 REF_DIR = ROOT / "docs/scorecard/mono-m5a-miniv3"
@@ -41,6 +42,13 @@ RMS_MS = 5.0
 
 class Refused(refusal.Refused, RuntimeError):
     """Frozen-reference preconditions did not hold."""
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous record on
+    `docs/scorecard/mono-m5a-miniv3/attack-bias-v1.json` standing, not a
+    truncated one."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 
 def _sha256(path: pathlib.Path) -> str:
@@ -180,8 +188,7 @@ def main(argv=None) -> int:
     if not out.resolve().is_relative_to(ROOT):
         print("measure_m5a_attack_bias: REFUSED -- output must stay inside the repository")
         return 2
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, indent=2) + "\n")
+    write_json(out, report)
     medians = [row["median_bias_ms"] for row in report["known_signal"]["conditions"]]
     spread = report["frozen_reference"]["event_attack_spread_ms"]
     print(f"measure_m5a_attack_bias: valid; known-signal 5 ms RMS bias {min(medians):+.3f}..{max(medians):+.3f} ms; "

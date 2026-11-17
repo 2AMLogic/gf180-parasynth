@@ -14,6 +14,13 @@
 # It is its own workflow so a failing tools/check_workflows.py (one of the
 # inventory's declared checks) is not tangled with another job's failure.
 #
+# The attest steps below print klt's report BEFORE failing on it (the rc
+# idiom: redirect, `|| rc=$?`, cat, then test). A bare `cmd > file` aborts
+# under `bash -e` before the cat, which swallowed the drift JSON and left a
+# drifted attestation reading as a bare exit 3 (issue #884). Locally,
+# `make verify-fast` runs tools/check_attested_hashes.py, which recomputes
+# every attested content_hash and prints the regeneration recipe on drift.
+#
 # `--with pyyaml`: the inventory's checks run `python3` INSIDE uvx's
 # environment, where tools/check_workflows.py exits 2 without pyyaml ("no
 # evidence, not no problem"). Without it the attestation is red, not skipped.
@@ -62,11 +69,15 @@ jobs:
 
       - name: item 10 attestation still reproduces and passes
         run: |
+          # print klt's report before failing on it: a bare redirect aborts
+          # under bash -e before the cat, swallowing the drift JSON (#884).
+          rc=0
           $KLT signoff --attest 10 \
               --inventory manifests/inventories/item-10.json \
               --check manifests/evidence/item-10.json --format json \
-              > "$RUNNER_TEMP/attest-check.json"
-          cat "$RUNNER_TEMP/attest-check.json"
+              > "$RUNNER_TEMP/attest-check.json" || rc=$?
+          cat "$RUNNER_TEMP/attest-check.json" || echo "(klt wrote no report)"
+          test "$rc" -eq 0
 
       - name: the declared checks actually ran (none skipped)
         run: |
@@ -80,11 +91,13 @@ jobs:
 
       - name: item 9 attestation still reproduces (cold start carried, not re-run)
         run: |
+          rc=0
           $KLT signoff --attest 9 \
               --inventory manifests/inventories/item-9.json \
               --check manifests/evidence/item-9.json --format json \
-              > "$RUNNER_TEMP/attest9-check.json"
-          cat "$RUNNER_TEMP/attest9-check.json"
+              > "$RUNNER_TEMP/attest9-check.json" || rc=$?
+          cat "$RUNNER_TEMP/attest9-check.json" || echo "(klt wrote no report)"
+          test "$rc" -eq 0
           python3 - "$RUNNER_TEMP/attest9-check.json" <<'PY'
           import json, sys
           d = json.load(open(sys.argv[1]))

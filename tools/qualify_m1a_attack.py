@@ -38,6 +38,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import attack_known_answer as kaa                                    # noqa: E402
+import run_all                                                       # noqa: E402
 
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/attack-qualification"
 BOUND_MS = 1.0          # the v2 gate's refusal level, unchanged
@@ -49,6 +50,12 @@ VALUE_EDGES = (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0,
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous record
+    under OUT standing, not a truncated suite the domain step strands on."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 
 def measurable(rows):
@@ -151,11 +158,11 @@ def main(argv=None):
         "tools/measure_mono_m1a_reference.py")}
     if a.cmd == "suite":
         rows = kaa.run_suite(estimator=a.estimator)
-        (OUT / f"suite-{a.estimator}.json").write_text(json.dumps(
-            {"schema": "m1a-attack-known-answer-v1", "estimator": a.estimator,
-             "source_commit": git("rev-parse", "HEAD"),
-             "source_dirty": bool(git("status", "--porcelain", "--", "tools")),
-             "sources_sha256": sources, "rows": rows}, indent=1) + "\n")
+        write_json(OUT / f"suite-{a.estimator}.json",
+                   {"schema": "m1a-attack-known-answer-v1", "estimator": a.estimator,
+                    "source_commit": git("rev-parse", "HEAD"),
+                    "source_dirty": bool(git("status", "--porcelain", "--", "tools")),
+                    "sources_sha256": sources, "rows": rows})
         print(f"{len(rows)} cases -> suite-{a.estimator}.json")
         return 0
     report = {"schema": "m1a-attack-qualification-v1", "bound_ms": BOUND_MS,
@@ -167,7 +174,7 @@ def main(argv=None):
                        "search_boundary_hits": sum(1 for r in rows if r.get("search_boundary")),
                        "domain": derive_domain(rows),
                        "breakdown": breakdown(rows)}
-    (OUT / "qualification.json").write_text(json.dumps(report, indent=2) + "\n")
+    write_json(OUT / "qualification.json", report)
     for est in ("v2", "v3"):
         print(est, "boundary hits", report[est]["search_boundary_hits"])
         for row in report[est]["domain"]:

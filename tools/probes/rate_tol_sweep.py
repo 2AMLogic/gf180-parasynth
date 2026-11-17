@@ -33,6 +33,14 @@ tolerance is bounded from both and one number cannot say so:
              whether the suite is green: the wide panel is the evidence, but
              `RATE_PANEL` is what ships.
 
+TWO DIALS, ONE INSTRUMENT. `--unit db` (#782) sweeps the dB relative term
+alone, through `rate_tolerance`'s per-unit dict override, with the other four
+units' terms held at their shipped values by construction; its grid lives in
+rate-tol-rel-by-unit-plan.json. The default mode sweeps the single scalar the
+dial was before #782, moving every unit together (#775's dial), against
+rate-tol-rel-plan.json. A dial whose grid is not committed refuses to measure,
+in either mode.
+
 THE PANEL IS WIDE ON PURPOSE. 44 values of f0 in both resampling directions
 (`fold_rate_sweep.F0_GRID`), plus the two control shapes `RATE_PANEL` carries
 at both build rates: the 0.1 %-jitter entry, which is the only thing that
@@ -86,6 +94,7 @@ if _REFUSAL_TOOLS not in sys.path:
 import refusal  # noqa: E402
 
 PLAN = ROOT / "docs" / "sensitivity" / "rate-tol-rel-plan.json"
+PLAN_BY_UNIT = ROOT / "docs" / "sensitivity" / "rate-tol-rel-by-unit-plan.json"
 
 SR_A, SR_B = 44100, 48000
 
@@ -130,23 +139,25 @@ def _rel(path: Path) -> str:
         return str(path)
 
 
-def load_plan(allow_dirty: bool = False) -> dict:
+def load_plan(allow_dirty: bool = False, path: Path | None = None) -> dict:
     """The grid, the rule and the prediction, as committed.
 
     Refuses on a plan that is absent, untracked or dirty: a grid stated after
     the results is not a grid, and nothing in the artefact could tell a reader
-    which it was.
+    which it was. `path` selects which sweep's plan -- the scalar dial's
+    (#775) or the per-unit dB dial's (#782).
     """
-    if not PLAN.exists():
-        raise Refused(f"no plan at {_rel(PLAN)}; state the grid first")
-    plan = json.loads(PLAN.read_text())
+    path = PLAN if path is None else path
+    if not path.exists():
+        raise Refused(f"no plan at {_rel(path)}; state the grid first")
+    plan = json.loads(path.read_text())
     if plan.get("schema") != "sensitivity-plan-v1":
-        raise Refused(f"{PLAN.name}: schema is {plan.get('schema')!r}")
+        raise Refused(f"{path.name}: schema is {plan.get('schema')!r}")
     grid = [float(v) for v in plan["grid"]]
     if sorted(grid) != grid or len(set(grid)) != len(grid):
-        raise Refused(f"{PLAN.name}: grid {grid} is not strictly increasing")
+        raise Refused(f"{path.name}: grid {grid} is not strictly increasing")
     if not allow_dirty:
-        rel = _rel(PLAN)
+        rel = _rel(path)
         if not git("ls-files", rel):
             raise Refused(f"{rel} is not committed; state the grid first")
         if git("status", "--porcelain", "--", rel):
@@ -154,7 +165,7 @@ def load_plan(allow_dirty: bool = False) -> dict:
     plan["_grid"] = grid
     plan["_dirty"] = allow_dirty
     plan["_commit"] = ("UNCOMMITTED" if allow_dirty
-                       else git("log", "-1", "--format=%h", "--", _rel(PLAN)))
+                       else git("log", "-1", "--format=%h", "--", _rel(path)))
     return plan
 
 
@@ -283,43 +294,68 @@ def cyclecorr_margin() -> dict:
     }
 
 
-def measure(grid, panel, panel_11=True) -> dict:
+def measure(grid, panel, panel_11=True, unit: str | None = None) -> dict:
+    """Sweep one dial through `rate_tolerance`'s own override.
+
+    `unit=None` sweeps the single scalar the dial was before #782: every unit
+    moves together, which is #775's dial exactly. `unit="db"` (etc.) moves
+    only that unit's relative term, through a `{"db": value}` override merged
+    over the shipped values -- the per-unit dial -- so the caught/cost delta
+    between two grid points is attributable to that term alone and the other
+    four are held fixed by construction rather than by promise.
+    """
+    def tol_at(v: float) -> float | dict:
+        return v if unit is None else {unit: v}
+
     shipped = measure_panel(panel, None)
     injected = measure_panel(panel, -1)
     n_refused = sum(1 for r in shipped if r["refused"])
+    valcol = "tol_rel" if unit is None else f"rel_{unit}"
     rows = []
     for t in grid:
-        c = red(injected, t)
-        s = red(shipped, t)
-        rows.append({
-            "tol_rel": t, "caught": float(len(c)), "cost": float(len(s)),
-            "cost_db": float(len(red(shipped, t, "db"))),
-            "cost_ratio": float(len(red(shipped, t, "ratio"))),
-            "caught_ratio": float(len(red(injected, t, "ratio"))),
+        c = red(injected, tol_at(t))
+        s = red(shipped, tol_at(t))
+        row = {
+            valcol: t,
+            "caught": float(len(c)), "cost": float(len(s)),
+            "cost_ratio": float(len(red(shipped, tol_at(t), "ratio"))),
+            "caught_ratio": float(len(red(injected, tol_at(t), "ratio"))),
             "refused": float(n_refused),
-        })
+        }
+        if unit is None:
+            row["cost_db"] = float(len(red(shipped, t, "db")))
+        else:
+            row["caught_db"] = float(len(red(injected, tol_at(t), unit)))
+            row["cost_db"] = float(len(red(shipped, tol_at(t), unit)))
+        rows.append(row)
     units = sorted(D.RATE_TOL_ABS)
-    by_unit = [{"tol_rel": t, **{u: float(len(red(shipped, t, u))) for u in units}}
+    by_unit = [{valcol: t,
+                **{u: float(len(red(shipped, tol_at(t), u))) for u in units}}
                for t in grid]
     panel_rows = []
     if panel_11:
         for t in grid:
-            over = D._rate_gaps(tol_rel=t)
+            over = D._rate_gaps(tol_rel=tol_at(t))
             panel_rows.append({
-                "tol_rel": t, "panel_red": float(len(over)),
+                valcol: t, "panel_red": float(len(over)),
                 "panel_red_ratio": float(sum(1 for r in over
                                              if D._unit_of(r[1]) == "ratio")),
                 "panel_entries": float(len({r[0] for r in over})),
             })
     # refused pairs are excluded here too: a #774 octave-error row has a huge
     # crossing value and would head this table while saying nothing about the
-    # dial, which is the same reason it is out of both counts
-    reach = sorted((r for r in shipped if not r["refused"] and crossing(r) > 0),
+    # dial, which is the same reason it is out of both counts. In per-unit
+    # mode only the swept unit's pairs are listed: another unit's crossing is
+    # a fact about a dial this run holds fixed.
+    dial_rows = shipped if unit is None else [r for r in shipped
+                                              if r["unit"] == unit]
+    reach = sorted((r for r in dial_rows if not r["refused"] and crossing(r) > 0),
                    key=lambda r: -crossing(r))
-    unreachable = sum(1 for r in shipped if not r["refused"] and crossing(r) < 0
+    unreachable = sum(1 for r in dial_rows if not r["refused"] and crossing(r) < 0
                       and r["gap"] > 0)
-    return {"rows": rows, "by_unit": by_unit, "units": units,
-            "panel": panel_rows, "reach": reach, "margin": cyclecorr_margin(),
+    return {"rows": rows, "by_unit": by_unit, "units": units, "unit": unit,
+            "panel": panel_rows, "reach": reach,
+            "margin": None if unit else cyclecorr_margin(),
             "n_pairs": len(shipped), "n_entries": len(panel),
             "n_refused": n_refused, "n_unreachable": unreachable,
             "shipped": shipped, "injected": injected}
@@ -353,16 +389,31 @@ def report(res: dict, plan: dict, out) -> None:
     import platform
 
     import scipy
+    unit = res["unit"]
+    valcol = "tol_rel" if unit is None else f"rel_{unit}"
     w = lambda s="": print(s, file=out)  # noqa: E731
-    w("The relative half of the 44.1 kHz <-> 48 kHz rate tolerance, swept through")
-    w("rate_tolerance's own tol_rel override -- i.e. against the comparison that")
-    w("ships. #775.")
+    if unit is None:
+        w("The relative half of the 44.1 kHz <-> 48 kHz rate tolerance, swept through")
+        w("rate_tolerance's own tol_rel override -- i.e. against the comparison that")
+        w("ships. #775.")
+    else:
+        w(f"The {unit} relative term of the 44.1 kHz <-> 48 kHz rate tolerance, swept")
+        w("through rate_tolerance's own per-unit override -- i.e. against the")
+        w("comparison that ships, with the other four units' terms held at their")
+        w("shipped values by construction, not by promise. #782.")
     w(f"python {platform.python_version()}, numpy {np.__version__}, "
       f"scipy {scipy.__version__}.")
-    w(f"Shipped value: RATE_TOL_REL = {D.RATE_TOL_REL:g}. Held fixed: "
-      f"RATE_TOL_ABS = {D.RATE_TOL_ABS}, FOLD_SINC_TAPS = {D.FOLD_SINC_TAPS}.")
-    w(f"Grid committed at {plan['_commit']} in "
-      f"docs/sensitivity/rate-tol-rel-plan.json.")
+    if unit is None:
+        w(f"Shipped value: RATE_TOL_REL = {D.RATE_TOL_REL}. Held fixed: "
+          f"RATE_TOL_ABS = {D.RATE_TOL_ABS}, FOLD_SINC_TAPS = {D.FOLD_SINC_TAPS}.")
+        plan_name = "docs/sensitivity/rate-tol-rel-plan.json"
+    else:
+        held = {u: D.RATE_TOL_REL[u] for u in sorted(D.RATE_TOL_REL) if u != unit}
+        w(f"Shipped value: RATE_TOL_REL[{unit!r}] = {D.RATE_TOL_REL[unit]}. Held")
+        w(f"fixed: the other four relative terms {held}, RATE_TOL_ABS = "
+          f"{D.RATE_TOL_ABS}, FOLD_SINC_TAPS = {D.FOLD_SINC_TAPS}.")
+        plan_name = "docs/sensitivity/rate-tol-rel-by-unit-plan.json"
+    w(f"Grid committed at {plan['_commit']} in {plan_name}.")
     if plan["_dirty"]:
         w("NOT EVIDENCE: the plan was dirty or uncommitted when this ran, so the")
         w("grid is not known to predate the results. Do not cite this run.")
@@ -372,7 +423,11 @@ def report(res: dict, plan: dict, out) -> None:
     w(f"counts. {res['n_unreachable']} pairs have a non-zero gap that no value of this")
     w("dial can reach, because the gap is already under the unit's absolute floor.")
     w()
-    w("rate_tol_rel -- the objective and the cost over the wide panel. caught is")
+    if unit is None:
+        w("rate_tol_rel -- the objective and the cost over the wide panel. caught is")
+    else:
+        w(f"rate_tol_rel_{unit} -- the objective and the cost over the wide panel. "
+          f"caught is")
     w("  (entry, column) pairs the control turns red on the INTEGER FOLD #767")
     w("  replaced (taps=-1), the honest injected defect; higher is better. cost is")
     w("  the same count on the SHIPPED fold -- a clean panel going red. The _ratio")
@@ -380,57 +435,67 @@ def report(res: dict, plan: dict, out) -> None:
     w("  cost are not the same story, which is why the cost is also split by unit")
     w("  below.")
     w()
-    for line in _table(res["rows"],
-                       ["tol_rel", "caught", "cost", "cost_db", "cost_ratio",
-                        "caught_ratio", "refused"],
-                       [9, 9, 7, 9, 12, 14, 9]):
+    cols = ([valcol, "caught", "cost", "cost_db", "cost_ratio", "caught_ratio",
+             "refused"] if unit is None else
+            [valcol, "caught", "caught_db", "cost", "cost_db", "cost_ratio",
+             "caught_ratio", "refused"])
+    widths = ([9, 9, 7, 9, 12, 14, 9] if unit is None else
+              [8, 9, 11, 7, 9, 12, 14, 9])
+    for line in _table(res["rows"], cols, widths):
         w(line)
     w()
-    w("rate_tol_rel_cost_by_unit -- the cost of the SHIPPED fold going red, split")
+    w(f"rate_tol_rel_cost_by_unit -- the cost of the SHIPPED fold going red, split")
     w("  by the unit whose absolute floor applies. The acceptance criterion asks")
     w("  for this split because the floors stand in completely different relations")
     w("  to their columns' magnitudes: 0.02 against a correlation of ~1, 0.5 dB")
     w("  against a cqt column clamped at -80 dB.")
     w()
-    for line in _table(res["by_unit"], ["tol_rel", *res["units"]],
+    for line in _table(res["by_unit"], [valcol, *res["units"]],
                        [9, *[10] * len(res["units"])]):
         w(line)
     w()
     if res["panel"]:
-        w("rate_tol_rel_shipped_panel -- the same cost on the ELEVEN-ENTRY RATE_PANEL,")
+        w(f"rate_tol_rel_shipped_panel -- the same cost on the ELEVEN-ENTRY "
+          f"RATE_PANEL,")
         w("  read through _rate_gaps(tol_rel=...) itself rather than re-evaluated")
         w("  here. This is the count that decides whether the suite is green, and")
         w("  every pair it reports needs a RATE_KNOWN_RED entry WITH A STATED REASON")
         w("  or a fix. panel_entries is how many distinct panel entries are involved.")
         w()
         for line in _table(res["panel"],
-                           ["tol_rel", "panel_red", "panel_red_ratio",
+                           [valcol, "panel_red", "panel_red_ratio",
                             "panel_entries"],
                            [9, 11, 17, 15]):
             w(line)
         w()
-    w("rate_tol_rel_cyclecorr_margin -- the column #775 was filed on, and the")
-    w("  reason this dial alone cannot give it a margin. effect is the whole")
-    w("  separation jit.cyclecorr.seg0 reports between a steady 410 Hz square and")
-    w("  the same square with 0.5 % per-period jitter; rate_gap is that jittered")
-    w("  clip's own 44.1k->48k movement in the same column, i.e. the noise the")
-    w("  effect stands out from. tol_at_012 is the tolerance the rate test applied")
-    w("  at the RATE_TOL_REL = 0.12 that shipped before #775; tol_floor_only is the")
-    w("  tolerance at RATE_TOL_REL = 0, which is RATE_TOL_ABS['ratio'] and is the")
-    w("  SMALLEST this dial can ever make it. floor_over_effect above 1 means no")
-    w("  value of RATE_TOL_REL puts the tolerance under the effect: the binding")
-    w("  term is the floor, not the dial, which is why #775's margin test lands on")
-    w("  its recorded-reason branch.")
-    w()
-    for line in _table([res["margin"]],
-                       ["effect", "rate_gap", "tol_at_012", "tol_floor_only",
-                        "at_012_over_effect", "floor_over_effect",
-                        "effect_over_gap"],
-                       [9, 10, 12, 16, 20, 19, 16]):
-        w(line)
-    w()
+    if res["margin"] is not None:
+        w("rate_tol_rel_cyclecorr_margin -- the column #775 was filed on, and the")
+        w("  reason this dial alone cannot give it a margin. effect is the whole")
+        w("  separation jit.cyclecorr.seg0 reports between a steady 410 Hz square and")
+        w("  the same square with 0.5 % per-period jitter; rate_gap is that jittered")
+        w("  clip's own 44.1k->48k movement in the same column, i.e. the noise the")
+        w("  effect stands out from. tol_at_012 is the tolerance the rate test applied")
+        w("  at the RATE_TOL_REL = 0.12 that shipped before #775; tol_floor_only is the")
+        w("  tolerance at RATE_TOL_REL = 0, which is RATE_TOL_ABS['ratio'] and is the")
+        w("  SMALLEST this dial can ever make it. floor_over_effect above 1 means no")
+        w("  value of RATE_TOL_REL puts the tolerance under the effect: the binding")
+        w("  term is the floor, not the dial, which is why #775's margin test lands on")
+        w("  its recorded-reason branch.")
+        w()
+        for line in _table([res["margin"]],
+                           ["effect", "rate_gap", "tol_at_012", "tol_floor_only",
+                            "at_012_over_effect", "floor_over_effect",
+                            "effect_over_gap"],
+                           [9, 10, 12, 16, 20, 19, 16]):
+            w(line)
+        w()
     w("The pairs this dial can reach, on the shipped fold, worst first: the value of")
-    w("RATE_TOL_REL at or below which each goes red. A pair whose gap is already")
+    if unit is None:
+        w("RATE_TOL_REL at or below which each goes red. A pair whose gap is already")
+    else:
+        w(f"RATE_TOL_REL[{unit!r}] at or below which each goes red (this unit's pairs")
+        w("only; another unit's crossing is a fact about a dial this run holds fixed).")
+        w("A pair whose gap is already")
     w("under its unit's absolute floor is unreachable at any value and is not here.")
     w()
     w(f"{'crosses_below':>14} {'entry':<24} {'column':<28} {'unit':<6} "
@@ -450,14 +515,21 @@ def main(argv=None) -> int:
                     help="write the report here instead of stdout")
     ap.add_argument("--f0", type=float, nargs="+", default=None,
                     help="a narrower f0 ladder, for iterating. Not evidence.")
+    ap.add_argument("--unit", choices=sorted(("ppm", "db", "ms", "count", "ratio")),
+                    default=None,
+                    help="sweep ONE unit's relative term through a per-unit "
+                         "override (#782) instead of the pre-#782 scalar; its "
+                         "plan is rate-tol-rel-by-unit-plan.json")
     ap.add_argument("--no-shipped-panel", dest="panel_11", action="store_false",
                     default=True, help="skip the eleven-entry RATE_PANEL table")
     ap.add_argument("--allow-dirty-plan", action="store_true",
                     help="measure anyway, and stamp the artefact as not evidence")
     args = ap.parse_args(argv)
     try:
-        plan = load_plan(args.allow_dirty_plan)
-        res = measure(plan["_grid"], wide_panel(args.f0), panel_11=args.panel_11)
+        plan = load_plan(args.allow_dirty_plan,
+                         PLAN if args.unit is None else PLAN_BY_UNIT)
+        res = measure(plan["_grid"], wide_panel(args.f0), panel_11=args.panel_11,
+                      unit=args.unit)
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2

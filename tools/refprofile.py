@@ -124,12 +124,15 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "audition"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 # ONE implementation of "is this audio made of numbers", shared with every other
 # boundary (#134). `audio_measure` imports nothing but `math` and `numpy`, so
 # this costs a reader of the profile nothing.
 import audio_measure as am                                          # noqa: E402
 import refusal
+import manifest                                                     # noqa: E402
+import run_all                                                      # noqa: E402
 
 PROFILE_DIR = ROOT / "refprofile"
 PROFILE_JSON = PROFILE_DIR / "profile.json"
@@ -1118,15 +1121,31 @@ def merge_notes(evidence: dict, notes: dict) -> dict:
     return merged
 
 
+def _load_json_refused(path: pathlib.Path, what: str) -> dict:
+    """`manifest.load_json_refused` re-typed as this module's `Refused` (#882):
+    a truncated profile must refuse with its path and the way to restore it,
+    never a bare JSONDecodeError that reads as a bug in the reader."""
+    try:
+        return manifest.load_json_refused(path, what)
+    except manifest.Refused as e:
+        raise Refused(str(e)) from e
+
+
+def write_json(dest: pathlib.Path, obj) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous profile at
+    `dest` standing -- run_case/scorecard read it as apparatus state."""
+    run_all.write_json_atomic(str(dest), obj)
+
+
 def load_profile() -> dict:
     if not PROFILE_JSON.exists():
         raise Refused(f"no frozen reference profile at {_rel(PROFILE_JSON)}")
-    d = json.loads(PROFILE_JSON.read_text(encoding="utf-8"))
+    d = _load_json_refused(PROFILE_JSON, "reference profile")
     if d.get("schema") != SCHEMA:
         raise Refused(f"profile schema is {d.get('schema')!r}, this tool reads {SCHEMA!r}")
     notes_path = notes_path_for(PROFILE_JSON)
     if notes_path.exists():
-        notes = json.loads(notes_path.read_text(encoding="utf-8"))
+        notes = _load_json_refused(notes_path, "profile notes")
         d = merge_notes(d, notes)
     return d
 
@@ -1692,9 +1711,8 @@ def main(argv=None) -> int:
         evidence, notes = split_profile(prof)
         dest = pathlib.Path(a.out) if a.out else PROFILE_JSON
         notes_dest = notes_path_for(dest)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(json.dumps(evidence, indent=1, sort_keys=False) + "\n", encoding="utf-8")
-        notes_dest.write_text(json.dumps(notes, indent=1, sort_keys=False) + "\n", encoding="utf-8")
+        write_json(dest, evidence)
+        write_json(notes_dest, notes)
         print(f"\nwrote {dest} and {notes_dest} -- {len(evidence['clips'])} clips. "
               f"Review the diff: {dest.name} IS the reference; {notes_dest.name} is "
               f"commentary and is never a hashed input (#129).")
