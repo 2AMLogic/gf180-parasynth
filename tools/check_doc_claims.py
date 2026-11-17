@@ -87,6 +87,7 @@ import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -180,14 +181,19 @@ def parse_attrs(body: str) -> tuple[dict[str, str], str | None]:
     return attrs, None
 
 
-def find_claims(doc: pathlib.Path) -> list[Claim]:
-    """Every marker in one document, with the nearest prose line above it.
+def iter_claim_markers(
+        lines: list[str]) -> Iterator[tuple[int, str, re.Match[str]]]:
+    """Yield (1-based lineno, line, MARKER match) for each marker that is a
+    claim, applying the two example-skip rules exactly once (#962).
 
-    The prose is only ever used for reporting -- it is what a reader needs to
-    see next to a STALE verdict. Nothing is inferred from it.
+    A marker is an example rather than an assertion when it sits inside a
+    fenced code block (``` or ~~~) or inside inline `backticks`. Two readers
+    walk documents with this grammar -- `find_claims` here and the #789
+    probe's `injected_state`, which until #962 re-implemented the fence rule
+    by hand and lacked the backtick rule, so its view of which markers exist
+    in a staged document could diverge from this checker's by one class of
+    line. The grammar lives here so the two readers cannot disagree.
     """
-    out: list[Claim] = []
-    lines = doc.read_text(encoding="utf-8").splitlines()
     fenced = False
     for i, line in enumerate(lines, start=1):
         if FENCE.match(line):
@@ -200,6 +206,18 @@ def find_claims(doc: pathlib.Path) -> list[Claim]:
             continue
         if line.count("`", 0, m.start()) % 2:
             continue                       # ...and so is one inside `backticks`
+        yield i, line, m
+
+
+def find_claims(doc: pathlib.Path) -> list[Claim]:
+    """Every marker in one document, with the nearest prose line above it.
+
+    The prose is only ever used for reporting -- it is what a reader needs to
+    see next to a STALE verdict. Nothing is inferred from it.
+    """
+    out: list[Claim] = []
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    for i, line, m in iter_claim_markers(lines):
         prose = ""
         for back in range(i - 1, max(0, i - 6), -1):
             cand = lines[back - 1].strip()
