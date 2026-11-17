@@ -4,6 +4,11 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-17
 
+- **PR #974**: dag: restate verdict-less evidence_file as REFUSED in docs, and forbid the silent declaration
+- **PR #972**: fix: compile_dag --only refuses a named node it cannot run, instead of silence
+- **PR #977**: test: pin run_evidence()'s known-key REFUSED and its non-recording path through main
+- **Issue #976** (closed): compile_dag: run_evidence()'s EVIDENCE_PRECEDENCE refusal ships without the input that defeats it
+- **Issue #971** (closed): compile_dag: docs/capability-dag.md and test_compile_dag_deps.py still state the pre-#791 'EXISTS ONLY returns pass' behaviour as current
 - **PR #968**: test: refuse the archive fixture during a squash merge
 - **PR #973**: fix: derive compile_dag's four evidence-source readers from one EVIDENCE_PRECEDENCE
 - **PR #969**: fix: keep unchanged dag records byte-identical so record PRs can land (#967)
