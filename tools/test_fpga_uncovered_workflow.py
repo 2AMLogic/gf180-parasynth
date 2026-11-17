@@ -103,11 +103,24 @@ def test_every_named_path_exists():
 
 
 def test_job_gates_on_changes_scope_like_every_suite_job():
+    """The canonical gate, restated at full strength, not a weaker copy.
+
+    A substring check here once passed while the canonical
+    ``test_every_suite_job_is_gated_fail_safe`` failed: the job was gated
+    correctly but absent from ``GATED`` -- exactly the input that shipped on
+    this PR. So assert the two things the canonical gate asserts (byte-exact
+    ``if:``, registration in ``GATED``), deferring to it for everything else.
+    """
+    import test_ci_changes as gate
+
     job = real_job()
     assert job.get("needs") == "changes"
-    cond = str(job.get("if", ""))
-    assert "scope != 'none'" in cond and "scope != 'docs'" in cond, (
-        "the job must gate on the shared changes scope, like every suite job")
+    assert str(job.get("if", "")) == gate.FULL_IF, (
+        "the job's if: must be FULL_IF byte for byte, like every suite job")
+    assert JOB in gate.GATED[WORKFLOW.name], (
+        f"{JOB} must be registered in test_ci_changes.py's "
+        f"GATED[{WORKFLOW.name!r}] registry -- an unregistered suite job is "
+        "ungated, and only the canonical gate fails on that")
 
 
 def test_job_fetches_full_history_for_trial_provenance():
