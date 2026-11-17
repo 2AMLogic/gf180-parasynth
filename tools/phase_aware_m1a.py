@@ -32,6 +32,7 @@ import analyse_m1a_phase_cycle as ap
 import diagnose_m1a_harmonic_phase as d
 import measure_m1a_drive as dx
 import mono_m1a_score as bass
+import run_all
 from finite_number import is_finite_number
 
 ROOT, SR, lead = bass.ROOT, bass.SR, bass.lead
@@ -39,6 +40,12 @@ OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/phase-aware-337"
 PHASE_REPORT = ROOT / "docs/scorecard/mono-m1a-miniv3/phase-cycle-capture/report.json"
 DIAG_REPORT = ROOT / "docs/scorecard/mono-m1a-miniv3/harmonic-diagnosis/report.json"
 RECORD = ROOT / "docs/scorecard/results/M1A.json"
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous report
+    standing, not a truncated one."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 BASELINE = .75
 CANDIDATES = (.50, .25)
@@ -460,8 +467,7 @@ def main():
             "confirmation": confirmation,
             "synthetic_control": control,
         }
-        OUT.mkdir(parents=True, exist_ok=True)
-        (OUT / "report.json").write_text(json.dumps(report, indent=1) + "\n")
+        write_json(OUT / "report.json", report)
         return 0
     except Refused as exc:
         print(f"REFUSED: {exc}")

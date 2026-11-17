@@ -64,7 +64,9 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "audition"))
+sys.path.insert(0, os.path.join(HERE, "..", "tools"))
 
+import run_all                                                      # noqa: E402
 import test_discrimination as td                                    # noqa: E402
 from test_discrimination import ALL_REF, Clip                       # noqa: E402
 
@@ -74,6 +76,12 @@ MODES = ("legacy", "fixed")
 # report's ">=10": further than a 0..10 dial can travel.
 PUBLISHED_148 = {"SD": 3.4, "BD": 2.5, "OH": 6.9, "HT": 7.3, "LT": float("nan"),
                  "CY": 8.1, "MT": 5.2, "LC": 3.5, "MC": 5.4, "HC": float("nan")}
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous report on
+    `docs/condition-boundary-results.json` standing, not a truncated one."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 
 # ---------------------------------------------------------------------------
@@ -338,12 +346,10 @@ def main(argv=None) -> int:
                published_148=PUBLISHED_148, artefact=art, knob_equivalents=ke,
                command=" ".join(["model/condition_boundary.py", "--refs", a.refs,
                                  "--json", a.json]))
-    os.makedirs(os.path.dirname(os.path.abspath(a.json)), exist_ok=True)
-    with open(a.json, "w") as f:
-        json.dump(res, f, indent=1,
-                  default=lambda o: (list(o) if isinstance(o, tuple)
-                                     else float(o) if isinstance(o, np.floating)
-                                     else int(o) if isinstance(o, np.integer) else str(o)))
+    write_json(a.json, res,
+               default=lambda o: (list(o) if isinstance(o, tuple)
+                                  else float(o) if isinstance(o, np.floating)
+                                  else int(o) if isinstance(o, np.integer) else str(o)))
     print(f"\nwrote {a.json}")
     return 0
 

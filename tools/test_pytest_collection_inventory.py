@@ -22,7 +22,7 @@ import pytest_collection_inventory as inv  # noqa: E402
 #: them (scope, path, parsing) cannot let the real-tree check pass vacuously.
 #: A count here goes UP when a module gains a test.
 #:
-#: model/discrimination_features.py, 13 -> 31, and this line is RE-DERIVED BY
+#: model/discrimination_features.py, 13 -> 32, and this line is RE-DERIVED BY
 #: COLLECTION rather than picked from either side of a merge: #773 landed with
 #: this line conflicting, and NEITHER side was right (merge-base 13, that
 #: branch 14, origin/main 18 -- the two branches added disjoint tests, so
@@ -33,9 +33,12 @@ import pytest_collection_inventory as inv  # noqa: E402
 #: -- so the count below was re-derived by collection a third time. The #781
 #: merge with main is the fourth: both sides said 26, each describing its own
 #: tree, and the merged tree collects 31, re-derived by collection again.
-#: Re-derive it with
+#: The #895 merge with main is the fifth, a new shape: BOTH sides said 31 and
+#: the line auto-merged cleanly, but it described neither tree -- this branch
+#: had added a test at 91dd5b6e without bumping the pin, so it arrived carrying
+#: 32-collected/pin-31, and the merged tree collects 32. Re-derive it with
 #: `inv.expected_nodes("model/discrimination_features.py", src)`, never by
-#: adding the two diffs. The thirty-one, by the side that added each:
+#: adding the two diffs. The thirty-two, by the side that added each:
 #:   13  the merge base (#763's
 #:       test_the_dphase_floor_refuses_the_input_that_defeats_it, 12 -> 13)
 #:   +5  origin/main, the #767 fold interpolator:
@@ -64,10 +67,13 @@ import pytest_collection_inventory as inv  # noqa: E402
 #:       test_a_doubly_degenerate_row_is_not_credited_to_the_floor
 #:   +5  #775, this branch: the cyclecorr margin finding, the injected control
 #:       for the new RATE_TOL_REL, and three on the quarantine
+#:   +1  #895, this branch: the 191-column feature-vector guard,
+#:       test_the_feature_vector_is_still_191_columns (added at 91dd5b6e
+#:       without bumping this pin -- the fifth re-derivation above)
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
-    "model/discrimination_features.py": 31,
+    "model/discrimination_features.py": 32,
     "model/discrimination_trajectory.py": 6,
 }
 

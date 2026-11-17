@@ -1,0 +1,68 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "rate-tol-rel-by-unit",
+  "parameter": {
+    "name": "RATE_TOL_REL_DB",
+    "source": "model/discrimination_features.py",
+    "kind": "python-constant",
+    "what": "the dB family's relative term -- one of the five per-unit scalars the pre-#782 scalar RATE_TOL_REL split into. A relative tolerance is dimensionally meaningless on an offset scale: RATE_TOL_REL x |-80 dB| handed a cqt bin sitting at the floor_db clamp 9.6 dB of licence at 0.12 and 1.6 dB at 0.02 -- the licence grows with the bin's distance from 0 dB, which for a dB column is backwards -- and 7.0 dB of real 44.1k<->48k movement sat under the old licence at 440 Hz (#775's committed limits name exactly this repair and file it as #782). Registered with the proposal (#782), before the sweep ran. The other four units' terms (RATE_TOL_REL_PPM/MS/COUNT/RATIO) are held at their shipped 0.02 by the instrument's per-unit override, which merges over the shipped dict; the ratio family's term is registered separately by rate-tol-rel.json, whose grid this record deliberately does not reuse because a scalar grid moved all five units together."
+  },
+  "objective": {
+    "name": "pairs the control catches on the integer fold",
+    "units": "columns",
+    "lower_is_better": false,
+    "why": "the dial's job is how much real 44.1k<->48k dependence the rate-independence control can SEE in the family it governs, so the objective is that, counted on the honest injected defect rather than on a synthetic perturbation: the integer-lag fold that shipped before #767, which test_the_integer_fold_this_replaced_is_still_red_on_this_panel already uses as its control, through rate_tolerance itself with the dB term overridden per-unit. Counted as (panel entry, column) pairs over tolerance across the wide panel. It is deliberately NOT the only thing the dial trades: the count falls as the licence grows, so on this objective alone the smallest value wins, and the cost columns in the same artefact -- clean-fold pairs going red, split by unit, plus the shipped-panel count that decides quarantine retirement -- are the constraint from the other side. jit.* columns are excluded on any entry where dominant_period disagrees between the rates by more than 5 % (#774), as in #775's sweep."
+  },
+  "grid": {
+    "stated_before_results": true,
+    "values": [0.0, 0.00625, 0.02, 0.057, 0.09, 0.1, 0.12],
+    "range_basis": [
+      "0.02 is the value the dB term carries until this change; on the grid so the record prices the CHANGE and not only the dial.",
+      "0.12 is the scalar that shipped until #775, under which the 7.0 dB null movement at 440 Hz sat hidden; it prices the top of the range.",
+      "0.00625 = RATE_TOL_ABS['db'] / 80 dB: at the floor_db clamp the relative term equals the 0.5 dB floor exactly, so at this value and below the dial is inert for every dB column. Paired with 0.0, which removes the term outright.",
+      "0.057 sits above the committed RATE_KNOWN_RED crossings of the two smaller null families (cqt4064Hz 4.07/80 = 0.0509, cqt2874Hz 4.43/80 = 0.0554): the decision row for 'the smaller nulls pass'.",
+      "0.09 sits above the worst committed cqt3225Hz bound (7.00/80 = 0.0875) with 2.9 % of margin: the decision row for 'every quarantined cqt null passes'.",
+      "0.1 is the headroom row, 14 % above the worst committed bound -- the ship candidate if 2.9 % is judged too thin against cross-version gap noise. Both 0.09 and 0.1 retire the same ten entries; the objective prices what the extra licence costs."
+    ],
+    "held_fixed": "the other four relative terms at their shipped 0.02 (held by the override's merge, not by promise), RATE_TOL_ABS's five floors, FOLD_SINC_TAPS at its shipped 16 for the cost panel and -1 for the benefit panel, and the stimulus panel itself"
+  },
+  "decision_rule": {
+    "stated_before_results": true,
+    "flat_within_relative": 0.00001,
+    "why": "the objective is an INTEGER COUNT of (entry, column) pairs. Two counts are equal or they are not; there is no 'within' for a count, so the rule has to be exact equality. The wide panel is at most 92 entries x 191 columns = 17572 pairs, so any relative tolerance below 1/17572 = 5.7e-5 is exact equality by construction, and 1e-5 is below that with a factor of 5.7 to spare. Stated from the objective's own granularity and the panel's size, both known before the sweep ran, and not from the spread of the data."
+  },
+  "evidence": {
+    "artifact": "docs/sensitivity/rate-tol-rel-by-unit-sweep.txt",
+    "format": "fixed-width-table",
+    "table": "rate_tol_rel_db",
+    "value_column": "rel_db",
+    "objective_column": "caught",
+    "held_fixed": {},
+    "regenerate": "tools/probes/rate_tol_sweep.py --unit db -o docs/sensitivity/rate-tol-rel-by-unit-sweep.txt",
+    "instrument": "rate_tolerance itself, through its per-unit dict override -- the shipped comparison, called and not restated. tools/probes/test_rate_tol_sweep.py asserts that the instrument's re-evaluated reds are the SAME (entry, column) pairs _rate_gaps(tol_rel={...}) returns on the shipped panel, for the per-unit overrides as well as the scalars, so the re-evaluation cannot drift from the comparison the test applies; it also asserts a per-unit override leaves the other units' tolerances at their shipped terms and refuses an unknown unit key. Stimuli are the module's own _square, _bl_square and band-limited _resample, so the rate pair is the one the rate-independence test compares. Each panel entry asserts its own preconditions through _rate_pair (a jittered entry really carries jitter, a band-limited entry really is fractional at both rates) and an AssertionError there REFUSES the whole sweep. Measured on python 3.12.3 / numpy 2.5.2 / scipy 1.18.1, and re-run on numpy 1.26.4 / scipy 1.11.4 (the module's second required environment): every table -- all seven grid rows, the by-unit split, the shipped-panel table and the reach list to six decimals -- is byte-identical between the two runs; only the header's version lines differ."
+  },
+  "points": [
+    {"value": 0.0, "objective": 667},
+    {"value": 0.00625, "objective": 667},
+    {"value": 0.02, "objective": 641},
+    {"value": 0.057, "objective": 600},
+    {"value": 0.09, "objective": 551},
+    {"value": 0.1, "objective": 551},
+    {"value": 0.12, "objective": 550}
+  ],
+  "verdict": {
+    "state": "MIXED",
+    "runs": [[0.0, 0.00625], [0.02], [0.057], [0.09, 0.1], [0.12]],
+    "summary": "The dB dial is a staircase whose steps are the decision rows the grid asked for: the control catches 667 wide-panel pairs with the term inert (0.0 and 0.00625, one plateau -- every dB column's tolerance is the 0.5 dB floor), 641 at the 0.02 that carried over from the scalar, 600 at 0.057 once the two smaller null families' licences open, then 551 at BOTH 0.09 and 0.1 -- where the SHIPPED PANEL GOES EMPTY and all eleven RATE_KNOWN_RED entries retire -- and 550 at 0.12. 0.1 ships: it sits in the same run as 0.09 on every column the artefact carries, so the objective prices nothing for it, and it buys 14.3 % of headroom over the worst measured crossing (0.0875 = 7.00/80) instead of 2.9 %. The cost is dB-only by construction and is residue: the five wide-panel pairs still red at 0.1 are msd 200-700 Hz bands of stimuli whose first partial is 800 Hz or higher -- bands holding no harmonic of their own stimulus, the same null mechanism the falsifier checks the retired cqt entries against. The sight the objective reports losing -- caught_db 95 at 0.02 down to 5 at 0.1 -- is those false alarms, not signal: a dB band that holds a harmonic of its own stimulus stays inside tolerance at every grid point (any pair green at 0.02 stays green as the licence grows), and test_extra_features_are_rate_independent now runs with an EMPTY quarantine, so any pair regrowing red fails it outright with no holding pen to absorb it."
+  },
+  "limits": [
+    "THE PREDICTION'S CLAUSE (d) FAILED FOR [0.09] AND [0.1], and the failure is the reason this record carries no prediction block. The basis argued the 48 dB pairs with committed clean-fold crossings in (0.06, 0.12] spread continuously enough to populate (0.09, 0.1]; measured, they do not -- the cqt null crossings top out at 0.0895 and the next ones jump to 0.167 (the msd nulls), so caught at 0.09 and 0.1 is exactly 551 and the two points form one run. The measured runs are [[0.0, 0.00625], [0.02], [0.057], [0.09, 0.1], [0.12]] against six predicted groups. Everything the DECISION needed from the prediction held: the inert plateau, the 0.02 step, the 0.057 step, monotonicity, and MIXED. The prediction itself lives unedited in the committed plan, which is what makes the failure checkable.",
+    "THE PLAN'S MSD-880Hz BASIS WAS WRONG, exactly as its own what_would_falsify_it anticipated: the basis guessed the band's peak at a few dB, putting the ('880Hz', 'msd10-25ms.200-700Hz.seg0') crossing near 0.2 and the entry surviving at every grid point. Measured, it retires with the rest (panel_red 4 -> 0 across (0.057, 0.09]). A correction to the basis, not a change of verdict.",
+    "THE OBJECTIVE ALONE WOULD CHOOSE 0.0, AND 0.0 IS NOT WHAT SHIPS. tools/sensitivity.py reads only caught, and caught is highest with the term inert -- where the shipped panel carries 12 red pairs and the quarantine refills. The panel table and the falsifier's diagnosis are the other half of the record, the same shape as #775's first limit.",
+    "THE SHIP CHOICE INSIDE THE [0.09, 0.1] PLATEAU IS MARGIN POLICY, NOT MEASUREMENT. No column in the artefact separates them; 0.1 was chosen for 14.3 % headroom over the worst measured crossing rather than 2.9 %, because a retired entry must stay retired across both required numpy environments, and re-quarantining an entry later is the failure this issue exists to end.",
+    "THE SHAPE STILL CARRIES THE ISSUE'S DIMENSIONAL CAVEAT. max(rel * |v|, floor) grows with a bin's distance from 0 dB -- the complaint this issue was filed on -- with the constant now tuned so the licence at the floor_db clamp (8.0 dB at 0.1) covers what residue-in-null differences measure (4.1-7.2 dB) while bins near a clip's loudness get 0.7-2.0 dB. The alternative the issue names -- an ENERGY-REFERENCED floor tying the licence to the clip's loudest bin -- needs a quantity rate_tolerance cannot see (it reads one column), so it is a different expression shape and is NOT measured here; the five still-red msd pairs and the falsifier mark that boundary.",
+    "THE PANEL IS SYNTHETIC. 44 values of f0 as _square in both resampling directions plus the two control shapes, as in #775. How many rows of a real discrimination run on the reference corpus would move is a separate, unmeasured question; the corpus is not on this host.",
+    "0 jit.* PAIRS WERE REFUSED ON THIS RUN AGAINST 27 ON #775'S, and the reason is a repaired defect, not a broken instrument: #774's octave-margin repair shipped between the two runs, so dominant_period no longer disagrees between the rates on the entries that produced the refusals. Those pairs are back IN both counts, which is why caught_ratio here (546, the ratio term held at 0.02) is 5 higher than the 541 #775 measured at the same 0.02 -- the 5 ratio pairs its run excluded as refused. A reader comparing the two artefacts' objectives directly is comparing different refusal sets.",
+    "MOVING THIS DIAL DOES NOT TOUCH THE OTHER RECORDS' STATED REASONING, checked rather than assumed: rate-tol-rel.json's re-pointed record rests on the ratio term, which this sweep holds at 0.02 throughout its grid; fold-interpolator.json and dphase-ar1-floor.json derive their rules from RATE_TOL_ABS entries this sweep never moves."
+  ]
+}
