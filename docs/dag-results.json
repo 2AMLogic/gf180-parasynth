@@ -20,18 +20,18 @@
     "sha": "934c33e28634b37c674271be4720a780560a143a"
   },
   "M3": {
-    "detail": "docs/reference-compare-results.json EXISTS ONLY -- no verdict declared",
-    "passed": true,
-    "sha": "934c33e28634b37c674271be4720a780560a143a"
+    "detail": "docs/reference-compare-results.json carries no passed/ok/success/green key -- no verdict to read",
+    "passed": false,
+    "sha": "a21aef7dc822b1b9ec8b39231071903ce5d34831"
   },
   "S1": {
-    "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared",
+    "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/verdict.json passed=True",
     "passed": true,
-    "sha": "934c33e28634b37c674271be4720a780560a143a"
+    "sha": "a21aef7dc822b1b9ec8b39231071903ce5d34831"
   },
   "S3": {
-    "detail": "fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared",
+    "detail": "fpga/reports/ecp5_25f.txt contains 'RESULT: routed.'",
     "passed": true,
-    "sha": "934c33e28634b37c674271be4720a780560a143a"
+    "sha": "a21aef7dc822b1b9ec8b39231071903ce5d34831"
   }
 }
