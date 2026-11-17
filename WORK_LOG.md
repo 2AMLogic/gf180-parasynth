@@ -4,6 +4,9 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-17
 
+- **PR #980**: docs: record the posted OpenROAD#12303 correction of record in the #12307 row
+- **Issue #888** (closed): Post the #12307 correction of record as a comment on OpenROAD#12303
+- **Issue #826** (closed): compile_dag --only: a named node that cannot run is skipped SILENTLY (exit 0, no line)
 - **PR #974**: dag: restate verdict-less evidence_file as REFUSED in docs, and forbid the silent declaration
 - **PR #972**: fix: compile_dag --only refuses a named node it cannot run, instead of silence
 - **PR #977**: test: pin run_evidence()'s known-key REFUSED and its non-recording path through main
