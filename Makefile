@@ -534,8 +534,8 @@ verify-full:
 ## accepts. Known residue, recorded not designed around: on a runner timeout
 ## this runner SIGKILLs the job's
 ## process group and the probe's finally-restore does not run, leaving
-## README.md and docs/milestones.md modified -- at a few seconds against this
-## target's 3600 s timeout that needs the probe to hang ~1000x its runtime.
+## README.md and docs/milestones.md modified -- at ~0.6 s against this
+## target's 3600 s timeout that needs the probe to hang ~6000x its runtime.
 ## Same note in docs/claim-markers.md, beside the scope_control paragraph.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \

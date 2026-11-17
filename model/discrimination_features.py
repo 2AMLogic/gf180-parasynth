@@ -1340,6 +1340,22 @@ def test_the_integer_fold_this_replaced_is_still_red_on_this_panel():
     it, and this asserts the WHOLE class is red on the old fold."""
     over = _rate_gaps(taps=-1)
     red = {(label, nm) for label, nm, _, _, _ in over}
+    # WHY EVERY ROW BELOW IS A RATIO COLUMN -- measured, not an oversight
+    # (#935). A dB row needs a pair the INTEGER fold turns red and the
+    # SHIPPED fold leaves green at the shipped licence, and
+    # tools/probes/rate_fold_db_control.py measured that no such pair exists
+    # -- at RATE_TOL_REL_DB = 0.1 or at any committed grid value of the dial:
+    # every dB pair this panel turns red is red on BOTH folds alike
+    # (docs/sensitivity/rate-fold-db-control.txt, rate_fold_db_grid), i.e.
+    # fold-invariant residue, not the fold defect this control asserts
+    # against. The dB family's guard is therefore not here: it is
+    # RATE_KNOWN_RED being empty, so any dB pair that regrows red fails
+    # test_extra_features_are_rate_independent outright, plus the falsifier
+    # `test_the_quarantined_db_columns_are_bands_with_no_harmonic_in_them`
+    # that checked the diagnosis the retired entries carried. The figures
+    # #935 quotes for the licence itself -- 8.0 dB at the floor_db clamp,
+    # 1.0 dB ten down -- are re-measured in the same artefact
+    # (cqt_clamp_tolerance).
     must = {
         ("220Hz", "jit.cycledshape.seg0"),
         ("440Hz", "jit.cycledshape.seg0"),
