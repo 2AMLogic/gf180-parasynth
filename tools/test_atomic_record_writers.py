@@ -43,8 +43,12 @@ sys.path.insert(0, str(HERE))
 
 #: (module, writer attribute) -- one entry per migrated write site; refprofile
 #: writes profile and notes through the same `write_json` seam, so one entry
-#: covers both calls.
+#: covers both calls. `holdout` writes the ledger and both seal writes through
+#: one seam, and `measure_m1a_volume_mapping` writes its per-run records and
+#: report through one (#922).
 WRITERS = [
+    ("holdout", "write_json"),
+    ("measure_m1a_volume_mapping", "write_json"),
     ("condition_boundary", "write_json"),
     ("regen_m1a_units", "write_json"),
     ("refprofile", "write_json"),
