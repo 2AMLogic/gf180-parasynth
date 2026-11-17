@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import mono_m1a_score as bass                                        # noqa: E402
+import manifest as mf                                                # noqa: E402
 import measure_m1a_volume_mapping as volume                           # noqa: E402
 
 RECORD = ROOT / "docs/scorecard/results/M1A.json"
@@ -168,11 +169,11 @@ def main(argv=None) -> int:
     ap.add_argument("--record", type=Path, default=RECORD)
     a = ap.parse_args(argv)
     try:
-        record = json.loads(a.record.read_text())
-        candidate = json.loads(CANDIDATE.read_text())
-        baseline = json.loads(BASELINE.read_text())
+        record = mf.load_json_refused(a.record, "the M1A board record")
+        candidate = mf.load_json_refused(CANDIDATE, "the -4 dB candidate record")
+        baseline = mf.load_json_refused(BASELINE, "the pre-selection baseline record")
         manifest, _ = bass.load_reference()
-    except (OSError, ValueError, bass.Refused) as exc:
+    except (OSError, ValueError, bass.Refused, mf.Refused) as exc:
         print(f"REFUSED: {exc}")
         return 2
     problems = check(record, candidate, baseline, manifest)
