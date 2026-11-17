@@ -60,6 +60,15 @@ ALREADY_SATISFIED_CASES = [
      "module drum_kit_NOT_IN_TREE;\nendmodule\n",
      "drum_kit_NOT_IN_TREE",
      "the milestone-3 control"),
+    # #927: the injected claim is an UNANCHORED PREFIX match, so a module
+    # whose name merely STARTS WITH drum_kit_NOT_IN_TREE pre-satisfies it
+    # too. The first draft's guard pattern carried a trailing \b and stayed
+    # silent on exactly this state (red-first at 17fbfe45: the control
+    # reported `FAIL ...: exit=0`, rc=1, baseline green).
+    ("rtl-sketch/drum_kit.v",
+     "module drum_kit_NOT_IN_TREE_X;\nendmodule\n",
+     "drum_kit_NOT_IN_TREE",
+     "the milestone-3 control"),
 ]
 
 
