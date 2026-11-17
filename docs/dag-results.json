@@ -22,16 +22,16 @@
   "M3": {
     "detail": "docs/reference-compare-results.json carries no passed/ok/success/green key -- no verdict to read",
     "passed": false,
-    "sha": "a21aef7dc822b1b9ec8b39231071903ce5d34831"
+    "sha": "89383ed99416e9534ec8467ef904243e8369b4e2"
   },
   "S1": {
     "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/verdict.json passed=True",
     "passed": true,
-    "sha": "a21aef7dc822b1b9ec8b39231071903ce5d34831"
+    "sha": "89383ed99416e9534ec8467ef904243e8369b4e2"
   },
   "S3": {
     "detail": "fpga/reports/ecp5_25f.txt contains 'RESULT: routed.'",
     "passed": true,
-    "sha": "a21aef7dc822b1b9ec8b39231071903ce5d34831"
+    "sha": "89383ed99416e9534ec8467ef904243e8369b4e2"
   }
 }
