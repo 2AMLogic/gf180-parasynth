@@ -59,7 +59,7 @@ right; all five were caught by a control rather than by inspection.
 | ⬜ | Playable access: the FPGA needs its SPI host, **including the timed writes the kick attack and tom pitch movement depend on** |
 <!-- claim: grep="rtl-sketch/verify_voice\.py --set full" in=.github/workflows/nightly.yml issue=789 note="row 1: the voice's full-set bench runs nightly" -->
 <!-- claim: grep="^\| `model/test_808_acceptance\.py`, `TR808_STRICT=1` \| \*\*102 passed\*\*" in=docs/drum-verification.md issue=789 note="row 2: the 102 STRICT acceptance tests" -->
-<!-- claim: grep="^module drum_kit" in=rtl-sketch/drum_kit.v issue=789 note="row 3: the engine is a file in this tree" -->
+<!-- claim: grep="^module drum_kit #\(" in=rtl-sketch/drum_kit.v issue=789 note="row 3: the engine is a file in this tree" -->
 <!-- claim: grep="^\s*drum_kit #\(" in=rtl-sketch/synth_top.v issue=789 note="row 4: the shipping top level instantiates it" -->
 <!-- claim: absent="^\s*(module\s+)?drum_section_placeholder" in=rtl-sketch/*.v,fpga/rtl/*.v issue=789 note="row 4: no placeholder module or instantiation is left. The pattern is anchored so the header COMMENT in synth_top.v saying the placeholder is gone does not satisfy it -- an unanchored absent= on this string is STALE on this tree, which is the control for this marker" -->
 <!-- claim: grep="rtl-sketch/verify_drums\.py" in=.github/workflows/nightly.yml issue=789 note="row 5: the kit's bit-exactness bench is a named nightly job" -->
