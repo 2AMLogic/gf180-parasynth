@@ -183,10 +183,11 @@ def parse_attrs(body: str) -> tuple[dict[str, str], str | None]:
 def live_marker_lines(lines: list[str]) -> dict[int, re.Match[str]]:
     """MARKER match for every line that parses as a live claim marker.
 
-    One state machine, shared by find_claims() (which collects claims) and
-    check_grep() (which must never count a marker line as evidence): a marker
-    inside a fenced code block or `backticks` is an example, not a claim, so
-    it is not a marker line here either.
+    find_claims()'s collector: a marker inside a fenced code block or
+    `backticks` is an example, not a claim, so it is not a live marker line
+    here. check_grep() must NOT reuse this: an example is not evidence
+    either, and this state machine would leave it in -- it skips on the raw
+    MARKER shape instead (issue #949).
     """
     out: dict[int, re.Match[str]] = {}
     fenced = False
@@ -492,7 +493,14 @@ def _when(ts: int) -> str:
 def check_grep(c: Claim) -> None:
     """Search the in= files for the pattern -- but never inside a marker.
 
-    A marker line is not evidence, for either polarity (issue #949). For
+    A marker line is not evidence, for either polarity (issue #949), and
+    "marker line" is the raw MARKER shape, not the live-claim state machine:
+    a fenced or `backticks` EXAMPLE of a marker is skipped too. Filtering
+    through live_marker_lines() instead left such an example in the
+    evidence -- OK on a file with no live prose anywhere, a false green
+    that main's #904 rule still caught (example + the live marker's own
+    line = two hits). The shape test closes both polarities in one place.
+    For
     grep= this is the self-match trap: the pattern is quoted inside the
     marker carrying it, so the marker's own line always matches, and when the
     guarded prose is gone -- deleted, or wrapped across two lines so no
@@ -532,11 +540,12 @@ def check_grep(c: Claim) -> None:
         except (OSError, UnicodeDecodeError):
             unreadable.append(f.relative_to(ROOT).as_posix())
             continue
-        lines = body.splitlines()
-        markers = live_marker_lines(lines)
-        for n, line in enumerate(lines, start=1):
-            if n in markers:
-                continue                  # a marker line is never evidence
+        for n, line in enumerate(body.splitlines(), start=1):
+            if MARKER.search(line):
+                continue                  # a marker-shaped line is never
+                                          # evidence: not a live marker's own,
+                                          # another marker's, or an example of
+                                          # one inside a fence or `backticks`
             if rx.search(line):
                 hits.append(f"{f.relative_to(ROOT).as_posix()}:{n}")
     if c.kind == "grep":
@@ -550,13 +559,14 @@ def check_grep(c: Claim) -> None:
             # line and the marker stayed green by construction, and no
             # marker's uniqueness was ever re-derived. A marker that cannot
             # say WHICH line it guards guards nothing: that is REFUSED, and
-            # the author makes the pattern unique. The input that defeats the
-            # tightened authoring is the marker's own line when in= names the
-            # marker's own document: the pattern appears verbatim inside it,
-            # punctuation included, so quoting a comma does not defuse the
-            # self-match. A regex's own source text never matches itself, so
-            # deferring one letter into a class (`erro[r]`) matches the prose
-            # while the marker quoting it stays unmatched. `absent=` below is
+            # the author makes the pattern unique. The input that once
+            # defeated that authoring -- the marker's own line when in=
+            # names the marker's own document, the pattern quoted verbatim
+            # inside it -- is gone since #949: marker-shaped lines are
+            # excluded from the evidence above, so every hit counted here is
+            # genuine prose and two of them need real disambiguation.
+            # docs/claim-markers.md retires the `erro[r]`-style brackets
+            # this comment used to advise. `absent=` below is
             # deliberately unchanged -- for a "not yet" claim, ANY hit means
             # done, however many.
             c.refuse(f"{c.value!r} matches {len(hits)} lines, not one -- first "
