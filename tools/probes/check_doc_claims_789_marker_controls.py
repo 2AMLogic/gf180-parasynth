@@ -184,9 +184,14 @@ def main() -> int:
         return 2
     ms = ROOT / "docs/milestones.md"
     orig_ms = ms.read_text(encoding="utf-8")
+    # The find string is the claim's ANCHORED form (#959): the unanchored
+    # `^module drum_kit` also matched the state this control injects, so the
+    # checker refused for non-uniqueness before the already-satisfied guard
+    # could fire. Do not widen it back -- the claim in docs/milestones.md and
+    # this string must stay the same text (the #936 coupling).
     staged_ms = inject_or_refuse(
         orig_ms,
-        'grep="^module drum_kit" in=rtl-sketch/drum_kit.v',
+        'grep="^module drum_kit #\\(" in=rtl-sketch/drum_kit.v',
         'grep="^module drum_kit_NOT_IN_TREE" '
         'in=rtl-sketch/drum_kit.v',
         "the milestone-3 control")

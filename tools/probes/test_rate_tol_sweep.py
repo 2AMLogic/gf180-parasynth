@@ -23,6 +23,7 @@ when it cannot. So:
 """
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
@@ -187,15 +188,45 @@ def test_the_per_unit_counts_are_monotone_in_the_dial():
     can only loosen that unit's tolerance, so every count is non-increasing.
     If caught_db rose anywhere, the `{"db": value}` override leaked into
     another unit and the sweep is not pricing one dial."""
+    unit = "db"
     res = S.measure([0.0, 0.02, 0.09], S.wide_panel(TWO_F0),
-                    panel_11=False, unit="db")
+                    panel_11=False, unit=unit)
     caught = [r["caught"] for r in res["rows"]]
-    caught_db = [r["caught_db"] for r in res["rows"]]
+    caught_unit = [r[f"caught_{unit}"] for r in res["rows"]]
     cost = [r["cost"] for r in res["rows"]]
     assert caught == sorted(caught, reverse=True), caught
-    assert caught_db == sorted(caught_db, reverse=True), caught_db
+    assert caught_unit == sorted(caught_unit, reverse=True), caught_unit
     assert cost == sorted(cost, reverse=True), cost
-    assert caught_db[0] > 0, "the injected fold must be red in the swept unit"
+    assert caught_unit[0] > 0, "the injected fold must be red in the swept unit"
+
+
+@pytest.mark.parametrize("unit", ["ms", "ratio", "count"])
+def test_a_non_db_unit_names_its_own_columns_not_the_dbs(unit):
+    """The swept unit names its own columns. #937: `measure` and `report`
+    hardcoded the db names `caught_db`/`cost_db` for whatever unit was
+    swept, so `--unit ms` printed a table whose columns claimed to be dB
+    counts -- the apparatus answering in a vocabulary it was not asked, which
+    is exactly how a mislabelled instrument ships: the db run was doubly
+    lucky, its literal names happened to be right, so nothing failed. These
+    three units each break differently: ms is where the literal and the unit
+    disagree; ratio is where the per-unit columns duplicate the
+    always-present correlation-family pair (`caught_ratio`/`cost_ratio`),
+    so the header carries a name twice; count is where the name does not
+    even fit the fixed width, so the rows stop tokenising. Asserted through
+    `sens.parse_fixed_width_tables` -- the real consumer of the artefact --
+    not a substring of the header."""
+    res = S.measure([0.0, 0.12], S.wide_panel(TWO_F0), panel_11=False,
+                    unit=unit)
+    row = res["rows"][0]
+    assert f"caught_{unit}" in row and f"cost_{unit}" in row, sorted(row)
+    assert "caught_db" not in row and "cost_db" not in row, sorted(row)
+    out = io.StringIO()
+    S.report(res, S.load_plan(allow_dirty=True, path=S.PLAN_BY_UNIT), out)
+    tables = sens.parse_fixed_width_tables(out.getvalue())
+    rows = tables[f"rate_tol_rel_{unit}"]
+    assert len(rows) == len(res["rows"]), sorted(tables)
+    assert f"caught_{unit}" in rows[0], rows[0]
+    assert "caught_db" not in rows[0] and "cost_db" not in rows[0], rows[0]
 
 
 def test_the_integer_fold_is_caught_more_than_the_shipped_one_everywhere():
