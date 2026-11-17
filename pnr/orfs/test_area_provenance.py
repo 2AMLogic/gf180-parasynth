@@ -132,34 +132,54 @@ def test_an_unknown_design_with_no_run_local_artefact_is_refused(tmp_path):
 
 
 # --------------------------------------------------- the expectation contract
+#
+# Since OpenROAD#12303 (issue #835) duplicates a presented metric in every
+# standard finish stage, the clean baseline's summarize exits 2 too. "ok" is
+# therefore ratio-attributed + duplicate guard alive + injected reason absent,
+# and "refused-circular" must see its OWN reason named -- a bare "REFUSED"
+# could now be the duplicate refusal instead.
 
-@pytest.mark.parametrize("state,quoted,refusal,expect,code", [
-    ("OK", True, False, "ok", 0),
-    ("REFUSED", False, True, "ok", 1),          # clean case refused: no discrimination
-    ("REFUSED", False, True, "refused-circular", 0),
-    ("OK", True, False, "refused-circular", 1),  # the control did not fire
-    ("REFUSED", True, True, "refused-circular", 1),   # refused but quoted anyway
-    ("REFUSED", False, False, "refused-circular", 2),  # exit 2 for another reason
-    ("ERROR", False, False, "ok", 2),
+@pytest.mark.parametrize("state,quoted,dup,circular,expect,code", [
+    ("REFUSED", True, True, False, "ok", 0),                 # the clean reality
+    ("REFUSED", True, False, False, "ok", 1),                # guard gone quiet: producer fixed?
+    ("REFUSED", True, True, True, "ok", 1),                  # the injected reason in the clean run
+    ("REFUSED", False, True, False, "ok", 1),                # clean run withheld the ratio
+    ("REFUSED", False, True, True, "refused-circular", 0),   # the injected reality
+    ("REFUSED", True, True, True, "refused-circular", 1),    # refused but quoted anyway
+    ("REFUSED", False, True, False, "refused-circular", 1),  # refusal without this reason named
+    ("REFUSED", False, False, False, "refused-circular", 2), # exit 2 for another reason
+    ("ERROR", False, False, False, "ok", 2),
 ])
-def test_the_three_outcomes_are_distinguished(state, quoted, refusal, expect, code):
+def test_the_three_outcomes_are_distinguished(state, quoted, dup, circular, expect, code):
     result = {"state": state, "exit": {"OK": 0, "REFUSED": 2, "ERROR": 1}[state],
-              "quoted_ratio": quoted, "printed_refusal": refusal}
+              "quoted_ratio": quoted, "printed_refusal": dup or circular,
+              "printed_duplicate_refusal": dup,
+              "printed_circular_refusal": circular}
     assert ap.check_expectation(result, expect)[0] == code
 
 
 def test_an_unknown_expectation_is_no_verdict_not_a_pass():
-    result = {"state": "OK", "exit": 0, "quoted_ratio": True, "printed_refusal": False}
+    result = {"state": "OK", "exit": 0, "quoted_ratio": True,
+              "printed_refusal": False, "printed_duplicate_refusal": False,
+              "printed_circular_refusal": False}
     assert ap.check_expectation(result, "whatever")[0] == 2
 
 
 # --------------------------------------------------------------- end to end
 
-def test_the_staged_clean_run_summarises_and_quotes_a_ratio():
+def test_the_staged_clean_run_quotes_a_ratio_and_refuses_only_the_duplicate():
+    """Rule 5 condition 1, restated for the #12303 reality: the clean baseline
+    must be green in the specific way the injections are not. The producer's
+    duplicate keys refuse (the guard must be alive on a real artifact), but
+    the die ratio is still attributed and the injected reason is absent."""
     result = ap.run_control(None)
-    assert result["state"] == "OK"
     assert result["quoted_ratio"], "the clean baseline must PASS or the control " \
                                    "cannot discriminate (rule 5, condition 1)"
+    assert result["state"] == "REFUSED"
+    assert result["printed_duplicate_refusal"], "the duplicate guard must fire " \
+        "on the committed artifact -- if it went quiet, the producer was " \
+        "changed and this control must be updated deliberately"
+    assert not result["printed_circular_refusal"]
 
 
 @pytest.mark.parametrize("name", sorted(ap.INJECTIONS))
@@ -168,7 +188,8 @@ def test_every_injection_makes_the_shipped_tool_refuse(name):
     assert result["state"] == "REFUSED", result["output"][-800:]
     assert not result["quoted_ratio"], "a refusal that still prints the ratio is " \
                                        "not a refusal"
-    assert result["printed_refusal"]
+    assert result["printed_circular_refusal"], "the refusal must name the " \
+                                               "injected reason, not just any refusal"
 
 
 def test_the_control_refuses_when_the_injection_cannot_be_read_back(monkeypatch):

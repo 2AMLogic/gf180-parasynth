@@ -579,6 +579,7 @@ def stale_control(case: str, out: Path) -> int:
         print(f"stale_control: {word} -- {detail}", flush=True)
         return {"STALE": 1, "BOUND": 0}.get(word, 2)
 
+    import release_manifest as rm
     try:
         raw = _need(MANIFEST).read_bytes()
         committed = json.loads(raw)
@@ -591,7 +592,6 @@ def stale_control(case: str, out: Path) -> int:
             for k, v in sub.items():
                 stale["image"][k.split(".", 1)[1]] = v
         elif case == "host":
-            import release_manifest as rm
             import tempfile
             with tempfile.TemporaryDirectory() as d:
                 cap = rm._capture(["run", "--fixture", "demo", "--image", "release"], Path(d))
@@ -618,8 +618,8 @@ def stale_control(case: str, out: Path) -> int:
         stale_path.write_text(json.dumps(stale, indent=2) + "\n")
         verdict, detail = check(stale_path, fresh)
         print(f"  | substituted:     {PREFIX}{verdict} -- {detail}")
-    except Refused as exc:
-        return say("REFUSED", str(exc))
+    except (Refused, rm.Refused) as exc:            # rm.Refused: a sibling
+        return say("REFUSED", str(exc))             # RuntimeError subclass (#784)
     if verdict == "BOUND":
         return say("BOUND", f"r1_release ACCEPTED a manifest with {changed} substituted: "
                             "not caught")

@@ -24,7 +24,9 @@ matters:
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import shutil
 import sys
 
 import pytest
@@ -538,3 +540,128 @@ def test_the_cli_lists_the_analysers_variants_injections_and_retention(capsys):
     out = capsys.readouterr().out
     assert V1 in out and V2 in out and "bd-decay-short" in out
     assert "reference-fixture" in out and "BOUND_SILENT_CHANGE" in out
+
+
+# ---------------------------------------------------------------------------
+# #881: --record-bounds and the ledger seed write/read the tracked file
+# atomically / with a declared refusal (the #842 shape on the tracked ledger)
+# ---------------------------------------------------------------------------
+# `shutil.copyfile(led, BOUNDS_TRACKED)` truncates the destination first, so a
+# kill mid-copy left `spec/acceptance-bounds-history.json` short. Every test
+# here points `sc.BOUNDS_TRACKED` at a throwaway copy: nothing touches the real
+# tracked file.
+
+def _throwaway_tracked(tmp_path, content):
+    tracked = tmp_path / "spec" / "acceptance-bounds-history.json"
+    tracked.parent.mkdir(parents=True, exist_ok=True)
+    tracked.write_text(content)
+    return tracked
+
+
+def _scratch_ledger(tmp_path, content):
+    scratch = tmp_path / "store" / "bounds-history.json"
+    scratch.parent.mkdir(parents=True, exist_ok=True)
+    scratch.write_text(content)
+    return scratch
+
+
+def test_a_kill_during_the_record_bounds_copy_leaves_the_tracked_file_intact(tmp_path, monkeypatch):
+    """THE CONTROL (start red): this failed against the bare `copyfile`.
+
+    Same dual-hook injection as PR #862's records control: half-copy-then-die
+    for `copyfile` (which truncates the destination first), die-after-tmp-
+    before-replace for the atomic writer. Pre-fix the first hook fired and the
+    tracked file was left short; post-fix the previous tracked file survives
+    both."""
+    _scratch_ledger(tmp_path, json.dumps(
+        {"BD-solo": {"T20": {"lo": 271.9, "hi": 272.1, "rationale": "seed"}}},
+        indent=2, sort_keys=True) + "\n")
+    tracked = _throwaway_tracked(tmp_path, '{"previous": "complete"}')
+    monkeypatch.setattr(sc, "BOUNDS_TRACKED", tracked)
+
+    def kill_mid_copyfile(src, dst):
+        data = pathlib.Path(src).read_bytes()
+        with open(dst, "wb") as fh:
+            fh.write(data[: len(data) // 2])
+        raise RuntimeError("injected: killed mid copy")
+
+    def kill_before_replace(src, dst):
+        raise RuntimeError("injected: killed after tmp write, before replace")
+
+    monkeypatch.setattr(shutil, "copyfile", kill_mid_copyfile)
+    monkeypatch.setattr(os, "replace", kill_before_replace)
+
+    with pytest.raises(RuntimeError):
+        sc.main(["list", "--root", str(tmp_path / "store"), "--record-bounds"])
+
+    assert json.loads(tracked.read_text()) == {"previous": "complete"}, (
+        "a kill during --record-bounds corrupted the tracked ledger")
+    assert list(tracked.parent.glob("*tmp*")) == [], (
+        f"a tmp sibling survived the failed write: {list(tracked.parent.glob('*tmp*'))}")
+
+
+def test_record_bounds_writes_the_tracked_file_byte_identically_and_ignores_a_stale_tmp(
+        tmp_path, monkeypatch, capsys):
+    """Success path: the recorded tracked file is exactly the scratch ledger's
+    serialisation, no NEW tmp sibling survives, and a `.tmp-<pid>` leftover
+    from an earlier killed run is neither copied nor picked up."""
+    payload = {"BD-solo": {"T20": {"lo": 271.9, "hi": 272.1, "rationale": "seed"}}}
+    _scratch_ledger(tmp_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    tracked = _throwaway_tracked(tmp_path, '{"previous": "complete"}')
+    stale = tracked.parent / "acceptance-bounds-history.json.tmp-424242"
+    stale.write_text('{"stale": true')
+    monkeypatch.setattr(sc, "BOUNDS_TRACKED", tracked)
+    monkeypatch.setattr(sc, "ROOT", tmp_path)  # so the recorded-path print stays relative
+
+    assert sc.main(["list", "--root", str(tmp_path / "store"), "--record-bounds"]) == 0
+    assert "recorded" in capsys.readouterr().out
+
+    assert tracked.read_bytes() == (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode(), (
+        "--record-bounds reformatted the tracked ledger")
+    assert stale.read_bytes() == b'{"stale": true', "the stale tmp sibling was consumed"
+    assert list(tracked.parent.glob("*tmp*")) == [stale], (
+        "a new tmp sibling survived the successful write")
+
+
+def test_record_bounds_refuses_a_truncated_scratch_ledger_and_saves_the_tracked_file(
+        tmp_path, monkeypatch, capsys):
+    """A scratch ledger left short by a killed write must be REFUSED -- naming
+    the scratch path -- before it can reach the tracked file, not copied over
+    it wholesale (a bare copyfile would happily replace a complete tracked
+    ledger with garbage)."""
+    _scratch_ledger(tmp_path, '{"BD-solo": {"T20"')  # a kill's leftover
+    tracked = _throwaway_tracked(tmp_path, '{"previous": "complete"}')
+    monkeypatch.setattr(sc, "BOUNDS_TRACKED", tracked)
+
+    assert sc.main(["list", "--root", str(tmp_path / "store"), "--record-bounds"]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert json.loads(tracked.read_text()) == {"previous": "complete"}, (
+        "a truncated scratch ledger reached the tracked file")
+
+
+def test_a_tracked_ledger_that_cannot_be_parsed_refuses_the_seed_and_names_itself(
+        tmp_path, monkeypatch):
+    """The fresh-checkout path: `ledger_for` seeds a scratch ledger from the
+    tracked one. A truncated tracked file must be refused HERE, naming the
+    tracked path -- not copied into scratch so `accept()` dies later on a path
+    that is not the file that is broken."""
+    tracked = _throwaway_tracked(tmp_path, '{"BD-solo": {"T20"')  # a kill's leftover
+    monkeypatch.setattr(sc, "BOUNDS_TRACKED", tracked)
+
+    with pytest.raises(manifest.Refused, match="acceptance-bounds-history\\.json"):
+        sc.ledger_for(tmp_path / "store")
+
+
+def test_a_truncated_record_is_refused_with_its_path_not_a_traceback(tmp_path):
+    """The read side of the same shape for the retained records `_read` hands
+    to later invocations (--analysis/--before/--after): a record left short by
+    a killed write is a REFUSED naming the file, not a bare JSONDecodeError.
+    A missing record keeps its existing refusal."""
+    p = tmp_path / "runs" / "abc" / "manifest.json"
+    p.parent.mkdir(parents=True)
+    p.write_text('{"render_id": "abc"')  # a kill's leftover
+
+    with pytest.raises(manifest.Refused, match="manifest\\.json"):
+        sc._read(tmp_path, "render", "abc")
+    with pytest.raises(manifest.Refused, match="no render record"):
+        sc._read(tmp_path, "render", "missing")

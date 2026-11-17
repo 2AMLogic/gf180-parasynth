@@ -20,8 +20,11 @@ Status is derived, never asserted:
   RED       the evidence ran and FAILED
   REFUSED   the evidence cannot be judged: the file exists but declares no
             verdict this tool can read (#791), or the record's commit left
-            this history, or there are no covered files to measure (#824) --
+            this history, or there are no covered files to measure (#824),
+            or a covered file cannot be diffed against HEAD (#863) --
             distinct from both pass and fail; never rendered as current
+  BLOCKED   the node declares what it is waiting for
+  TODO      no evidence yet; an issue number if one is filed
   BLOCKED   the node declares what it is waiting for
   TODO      no evidence yet; an issue number if one is filed
 
@@ -229,15 +232,55 @@ def load_results() -> dict:
     return doc
 
 
-def stale_against(n: dict, at_sha: str) -> str | None:
-    """Has anything this node covers changed since the evidence was recorded?"""
+# #863, rule 8: the input that defeats the #824 fix through a new door.
+# stale_against() answered "are the bytes this evidence was recorded against
+# still the bytes at HEAD?" with `git log {at_sha}..HEAD -- <f>` -- a commit
+# HISTORY walk answering a CONTENT question. The two coincide on a linear
+# chain, which is why main's own board never showed it; they diverge on the
+# merge commits a conflict round produces. The shape that fires (verified
+# against both PR #818 rounds, a4ae3529 and b5c4f677): a merge whose covered
+# file is TREESAME to a parent that lies OUTSIDE stamp..HEAD -- an ancestor
+# of the record stamp -- while its other parent is in range with different
+# content. Simplification cannot rewrite the merge to that TREESAME parent
+# (it is uninteresting), so the merge itself is reported, and a node whose
+# file never changed renders STALE. The obvious candidate repair is refuted
+# by measurement: `--full-history` reports MORE commits on the real rounds
+# (b5c4f677 went from 1 to 4), turns two benign merge shapes false-positive
+# that the default walk answers correctly, and flips F2 STAMPED->STALE on
+# main's own board -- a new cry of wolf, the exact outcome this defect
+# produces. A content comparison (`git diff --name-only <stamp> HEAD --
+# <f>`) is correct on all four synthetic shapes and both reported rounds,
+# and changes 0 of 15 statuses on main. And the comparison must NOT go
+# through `git()`: its stdout-only contract reads a failed command as "no
+# output", which here would mean GREEN with nothing measured -- #824's hole
+# through a new door. The return code is read, and "cannot measure" comes
+# back as its own state, rendered REFUSED.
+def stale_against(n: dict, at_sha: str) -> tuple[str, str]:
+    """Has anything this node covers changed since the evidence was recorded?
+
+    Compares CONTENT at `at_sha` against HEAD (#863), per `covers` entry --
+    a file or a directory, both ordinary diff pathspecs. Returns
+    ("changed", <first changed cover>), ("fresh", "") when every cover is
+    byte-identical, or ("unmeasurable", <detail>) when git cannot answer.
+    classify() renders the third REFUSED: not GREEN (no measurement was
+    taken), and not STALE either (nothing observed changed).
+    """
     if not at_sha:
-        return None
+        return "unmeasurable", "no commit to measure against"
     for f in n.get("covers", []):
-        newer = git("log", "--format=%H", f"{at_sha}..HEAD", "--", f)
-        if newer.strip():
-            return f
-    return None
+        try:
+            r = subprocess.run(["git", "diff", "--name-only", at_sha, "HEAD",
+                                "--", f], cwd=ROOT, capture_output=True,
+                               text=True, timeout=30)
+        except Exception as exc:
+            return "unmeasurable", f"{f}: {type(exc).__name__}"
+        if r.returncode != 0:
+            err = (r.stderr or "").strip().splitlines()
+            why = f" ({err[0][:70]})" if err else ""
+            return "unmeasurable", f"{f}: git diff failed{why}"
+        if r.stdout.strip():
+            return "changed", f
+    return "fresh", ""
 
 
 def classify(nid: str, n: dict) -> tuple[str, str]:
@@ -272,27 +315,36 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     # honestly: the moment a file the node covers changes, the stamp goes
     # STALE rather than sitting there looking verified.
     tag = n.get("tag", "")
+    # A FAILING record stays RED: the run's verdict is already stated, and
+    # is more precise than a refusal. Hoisted ABOVE the empty-covers guard
+    # below (#858): that guard's `or tag_is_ancestor(tag)` disjunct fired on
+    # the tag alone, so a failing record on a covers-less tagged node
+    # rendered REFUSED -- a known failure reported as a cannot-answer --
+    # instead of the failure it is. The only checks this jumps are the
+    # empty-covers guard itself and the `not rec`-gated ones below it, none
+    # of which a failing record could answer more precisely.
+    if rec and not rec.get("passed"):
+        return "RED", rec.get("detail", "failed")
     # #824, rule 8: the input that defeats the sha guard. Staleness is
     # measured over `covers`; evidence with no covered files named -- a
     # passing record, or an in-history stamp -- has nothing to go stale, and
-    # the loop would measure nothing and answer "not stale". A FAILING
-    # record stays RED instead: the run's verdict is already stated, and is
-    # more precise than a refusal.
+    # the loop would measure nothing and answer "not stale".
     if not n.get("covers", []) and ((rec and rec.get("passed"))
                                     or tag_is_ancestor(tag)):
         return "REFUSED", ("evidence exists but the node declares no "
                            "covered files -- staleness cannot be measured")
     if not rec and tag_is_ancestor(tag):
         tag_sha = git("rev-list", "-n1", tag)
-        changed = stale_against(n, tag_sha)
-        if changed:
-            return "STALE", f"{changed} changed since {tag} was cut"
+        state, detail = stale_against(n, tag_sha)
+        if state == "changed":
+            return "STALE", f"{detail} changed since {tag} was cut"
+        if state == "unmeasurable":
+            return "REFUSED", (f"staleness against {tag} cannot be "
+                               f"measured: {detail}")
         return "STAMPED", f"{tag} (not re-run; verifier is slow)"
 
     if not rec:
         return "TODO", "never run -- `tools/compile_dag.py --run`"
-    if not rec.get("passed"):
-        return "RED", rec.get("detail", "failed")
 
     # #824: staleness is measured against a sha in this history. A record
     # with no commit stamp, or a sha that left this history (squash-merged,
@@ -309,9 +361,11 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
                            f"history -- cannot tell whether "
                            f"{len(n.get('covers', []))} covered file(s) changed")
 
-    changed = stale_against(n, rec_sha)
-    if changed:
-        return "STALE", f"{changed} changed since this was last run"
+    state, detail = stale_against(n, rec_sha)
+    if state == "changed":
+        return "STALE", f"{detail} changed since this was last run"
+    if state == "unmeasurable":
+        return "REFUSED", f"staleness cannot be measured: {detail}"
 
     if tag_is_ancestor(n.get("tag", "")):
         return "STAMPED", n["tag"]
