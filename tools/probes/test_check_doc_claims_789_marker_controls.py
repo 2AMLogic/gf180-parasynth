@@ -24,6 +24,7 @@ construction instead of skipped on a dirty live tree.
 """
 import hashlib
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -83,22 +84,30 @@ IN_DIVERGENCE_TARGET_MISSES = [
 # still exists -- so the control's marker has nothing to fire at and the probe
 # used to report a misattributed FAIL instead of refusing.
 #
-# The drum_kit.v cases stage by REPLACING the module declaration in place, not
-# appending a duplicate. Found during #936: the append staging this table
+# History of the drum_kit.v staging choice. The append staging this table
 # originally carried passed at #920/#927's own tips but broke on their merge
 # with #904 (4c0c93bb) -- a second `^module drum_kit` line makes claim 62
-# (grep="^module drum_kit") multi-match, the checker REFUSES the tree, and the
-# probe honestly refused at the BASELINE (exit 2) instead of reaching
+# (grep="^module drum_kit") multi-match, the checker REFUSES the tree, and
+# the probe honestly refused at the BASELINE (exit 2) instead of reaching
 # already_satisfied, leaving main's suite red in this file since the two
-# landed. The renamed module keeps claim 62 single-match (its line still
-# prefix-matches `^module drum_kit`) while pre-satisfying the injected claim
-# -- the same state, staged through a door #904 does not close.
+# landed. Swap (renaming the declaration in place) fixed that for the
+# unanchored claim -- and then broke the same way against #960 (the #959
+# repair's anchored form): each PR green alone, red together on the merge
+# (measured at the #957 review: 2 failed, both drum_kit.v ids), because a
+# renamed line unmatches `^module drum_kit #\(` and no fixed choice opens
+# both doors. how="derive" ends the sequence: the staging is read off the
+# claim's ACTUAL committed grep= at run time (_derive_how) -- the pattern
+# matching the candidate line means append would add a second claim hit
+# (swap); not matching means swap would unmatch the only one (append). The
+# verdict.txt row keeps its hard-coded append on purpose: three claims read
+# that file, so no single claim's form decides its staging, and no colliding
+# PR touches them.
 ALREADY_SATISFIED_CASES = [
     ("manifests/verdict.txt", "append", "",
      "T1: 3/11 items met\n",
      "T1: 3/11 items met",
      "the README T1 count control"),
-    ("rtl-sketch/drum_kit.v", "swap", "module drum_kit #(",
+    ("rtl-sketch/drum_kit.v", "derive", "module drum_kit #(",
      "module drum_kit_NOT_IN_TREE #(",
      "drum_kit_NOT_IN_TREE",
      "the milestone-3 control"),
@@ -107,7 +116,7 @@ ALREADY_SATISFIED_CASES = [
     # too. The first draft's guard pattern carried a trailing \b and stayed
     # silent on exactly this state (red-first at 17fbfe45: the control
     # reported `FAIL ...: exit=0`, rc=1, baseline green).
-    ("rtl-sketch/drum_kit.v", "swap", "module drum_kit #(",
+    ("rtl-sketch/drum_kit.v", "derive", "module drum_kit #(",
      "module drum_kit_NOT_IN_TREE_X #(",
      "drum_kit_NOT_IN_TREE",
      "the milestone-3 control"),
@@ -150,6 +159,106 @@ def _run_probe(dst: pathlib.Path) -> subprocess.CompletedProcess:
                           capture_output=True, text=True)
 
 
+def _derive_how(scratch: pathlib.Path, rel: str, candidate: str) -> str:
+    """append-vs-swap from the injected claim's ACTUAL committed grep= (#959).
+
+    The table used to hard-code swap -- a hand-written assumption about claim
+    62's form, the same two-copies defect #936 removed from the guard, one
+    level further out. Measured at the #957 review (and reproduced here on
+    the merged tree): #957 and #960 were each green alone, red together --
+    claim 62 unanchored needs swap (an appended `module drum_kit_NOT_IN_TREE`
+    line is a SECOND `^module drum_kit` hit and the checker refuses the
+    tree), #960's anchored `^module drum_kit #\\(` needs append (a swap
+    unmatches the only hit and the baseline refuses STALE), and no fixed
+    choice opens both doors. Read the claim the milestone-3 control's
+    injection targets off the SCRATCH tree -- with the checker's own grammar,
+    via the probe module's injected_state, the same derivation
+    already_satisfied itself uses -- and apply its pattern to the candidate
+    line: a match means append would add a second claim hit (swap); no match
+    means swap would unmatch the only one (append). injected_state refuses on
+    zero-or-multiple claims, so a second rtl-sketch/drum_kit.v claim fails
+    here loudly instead of guessing.
+    """
+    sys.path.insert(0, str(ROOT / "tools" / "probes"))
+    import check_doc_claims_789_marker_controls as probe_mod
+    doc = (scratch / "docs/milestones.md").read_text(encoding="utf-8")
+    derived = probe_mod.injected_state(doc, f"in={rel}",
+                                       f"the {rel} staging decision")
+    assert derived is not None, (
+        f"could not derive the staging for {rel} from docs/milestones.md "
+        "(the REFUSED detail above names why)")
+    _, pattern = derived
+    return "swap" if re.search(pattern, candidate) else "append"
+
+
+def _stage_already_satisfied(scratch: pathlib.Path, rel: str, how: str,
+                             find: str, staged: str) -> None:
+    """Write the pre-satisfied state into the scratch copy.
+
+    how='append' adds the line at end-of-file (a newline is supplied when the
+    staged text lacks one -- the drum_kit rows' text doubles as the swap
+    replacement, which must stay newline-free); how='swap' replaces `find` in
+    place; how='derive' asks the claim's own grep= which of the two keeps it
+    single-match (_derive_how).
+    """
+    f = scratch / rel
+    orig = f.read_text(encoding="utf-8")
+    if how == "derive":
+        how = _derive_how(scratch, rel, staged)
+    if how == "append":
+        f.write_text(orig + (staged if staged.endswith("\n")
+                             else staged + "\n"), encoding="utf-8")
+    else:
+        assert find and find in orig, f"swap anchor not found in {rel}"
+        f.write_text(orig.replace(find, staged), encoding="utf-8")
+
+
+def _anchor_claim_62_as_960_does(scratch: pathlib.Path) -> None:
+    """Recreate PR #960's two edits on the SCRATCH copy: the anchored doc
+    claim and the matching anchored find string in the probe (#960's diff
+    touches nothing else this suite reads). The #957+#960 merged tree is
+    exactly this state, so the anchored-form tests below are the collision
+    in miniature, measurable on this tree whether or not #960 ever lands.
+    Idempotent: on a tree where #960 already landed (the merged
+    configuration) both forms are already anchored and this is a no-op --
+    anything else fails the asserts loudly rather than staging a third
+    claim form."""
+    doc = scratch / "docs/milestones.md"
+    lines = doc.read_text(encoding="utf-8").splitlines(keepends=True)
+    if 'grep="^module drum_kit" in=' in lines[61]:
+        lines[61] = lines[61].replace('grep="^module drum_kit" in=',
+                                      'grep="^module drum_kit #\\(" in=')
+        doc.write_text("".join(lines), encoding="utf-8")
+    else:
+        assert 'grep="^module drum_kit #\\(" in=' in lines[61], \
+            "claim 62 anchor not found (neither form)"
+    probe = scratch / PROBE_REL
+    text = probe.read_text(encoding="utf-8")
+    old = "'grep=\"^module drum_kit\" in=rtl-sketch/drum_kit.v'"
+    new = "'grep=\"^module drum_kit #\\\\(\" in=rtl-sketch/drum_kit.v'"
+    if old in text:
+        probe.write_text(text.replace(old, new), encoding="utf-8")
+    else:
+        assert new in text, "probe find-string anchor not found (neither form)"
+
+
+def _assert_refusal(before: dict[str, str], p: subprocess.CompletedProcess,
+                    blob: str, scratch: pathlib.Path, rel: str, needle: str,
+                    what: str) -> None:
+    """The already-satisfied refusal contract, shared by both claim forms:
+    exit 2 naming the file, the state and the control, no control lines, no
+    injection file, tree byte-identical."""
+    assert p.returncode == 2, f"expected REFUSED rc=2, got {p.returncode}:\n{blob}"
+    assert "REFUSED:" in blob, blob
+    assert rel in blob, f"refusal does not name the file:\n{blob}"
+    assert needle in blob, f"refusal does not name the already-satisfied state:\n{blob}"
+    assert what in blob, f"refusal does not name the control:\n{blob}"
+    assert "FAIL " not in blob, f"controls ran on a refused tree:\n{blob}"
+    assert "PASS " not in blob, f"controls ran on a refused tree:\n{blob}"
+    assert not (scratch / INJECT_REL).exists(), "refusal path wrote the injection file"
+    assert _snapshot(scratch) == before, "refusal path changed the tree"
+
+
 @pytest.mark.parametrize("rel,old,new,needle", DIRTY_CASES,
                          ids=[c[0] for c in DIRTY_CASES])
 def test_dirty_tree_refuses_instead_of_reporting_control_failures(
@@ -176,33 +285,48 @@ def test_dirty_tree_refuses_instead_of_reporting_control_failures(
 def test_already_satisfied_injection_refuses(scratch, rel, how, find, staged,
                                              needle, what):
     """#920: an injected state the tree ALREADY satisfies must refuse, not
-    report. The staging keeps every claim green (for swap staging the renamed
-    module still prefix-matches claim 62, single-hit) and the injection target
-    still exists, so neither #913 guard fires and the control's marker has
-    nothing to fire at -- the probe used to answer `FAIL ...: exit=0` for that
-    control and rc=1 overall, a guard that "stopped guarding" when it had
-    nothing to guard against. The probe must REFUSE pre-injection: exit 2, the
-    refusal names the file and the state, no control lines, tree
-    byte-identical."""
-    f = scratch / rel
-    orig = f.read_text(encoding="utf-8")
-    if how == "append":
-        f.write_text(orig + staged, encoding="utf-8")
-    else:
-        assert find and find in orig, f"swap anchor not found in {rel}"
-        f.write_text(orig.replace(find, staged), encoding="utf-8")
+    report. The staging keeps every claim green (for the drum_kit rows the
+    choice is DERIVED from the claim's own grep= at run time -- swap while
+    the claim is unanchored, append under #960's anchored form -- so the
+    injected state pre-exists without unmatching or duplicating claim 62)
+    and the injection target still exists, so neither #913 guard fires and
+    the control's marker has nothing to fire at -- the probe used to answer
+    `FAIL ...: exit=0` for that control and rc=1 overall, a guard that
+    "stopped guarding" when it had nothing to guard against. The probe must
+    REFUSE pre-injection: exit 2, the refusal names the file and the state,
+    no control lines, tree byte-identical."""
+    _stage_already_satisfied(scratch, rel, how, find, staged)
+    before = _snapshot(scratch)
+    p = _run_probe(scratch)
+    _assert_refusal(before, p, p.stdout + p.stderr, scratch, rel, needle, what)
+
+
+@pytest.mark.parametrize("staged", [
+    "module drum_kit_NOT_IN_TREE #(",
+    "module drum_kit_NOT_IN_TREE_X #(",
+], ids=["rtl-sketch/drum_kit.v0", "rtl-sketch/drum_kit.v1"])
+def test_already_satisfied_staging_survives_an_anchored_claim_form(
+        scratch, staged):
+    """#959, the collision in miniature. #960 anchors claim 62 to
+    `^module drum_kit #\\(`, and under that form the hard-coded swap staging
+    renamed drum_kit.v's only matching line -- the baseline refused STALE and
+    the already-satisfied guard was never reached (measured on the #957+#960
+    merged tree: 2 failed, both drum_kit.v ids, `refusal does not name the
+    already-satisfied state`). Red first in exactly that configuration. The
+    derived staging picks append -- the anchored pattern does not match the
+    candidate line, so a swap would unmatch the only claim hit -- the tree
+    stays green, and the refusal must still name the file, the state and the
+    control. Pins this tree against the anchored form whether or not #960
+    ever lands."""
+    _anchor_claim_62_as_960_does(scratch)
+    _stage_already_satisfied(scratch, "rtl-sketch/drum_kit.v", "derive",
+                             "module drum_kit #(", staged)
     before = _snapshot(scratch)
     p = _run_probe(scratch)
     blob = p.stdout + p.stderr
-    assert p.returncode == 2, f"expected REFUSED rc=2, got {p.returncode}:\n{blob}"
-    assert "REFUSED:" in blob, blob
-    assert rel in blob, f"refusal does not name the file:\n{blob}"
-    assert needle in blob, f"refusal does not name the already-satisfied state:\n{blob}"
-    assert what in blob, f"refusal does not name the control:\n{blob}"
-    assert "FAIL " not in blob, f"controls ran on a refused tree:\n{blob}"
-    assert "PASS " not in blob, f"controls ran on a refused tree:\n{blob}"
-    assert not (scratch / INJECT_REL).exists(), "refusal path wrote the injection file"
-    assert _snapshot(scratch) == before, "refusal path changed the tree"
+    assert "REFUSED: baseline not green" not in blob, blob
+    _assert_refusal(before, p, blob, scratch, "rtl-sketch/drum_kit.v",
+                    "drum_kit_NOT_IN_TREE", "the milestone-3 control")
 
 
 def _repoint_in(scratch: pathlib.Path, doc: str, lineno: int, old: str,
