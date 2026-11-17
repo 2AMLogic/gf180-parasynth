@@ -73,6 +73,10 @@ CANDIDATES = [ROOT / ".venv/bin/python", pathlib.Path(sys.executable)]
 # module the probe subprocess-runs keeps parse_attrs and expand() byte-identical
 # with what actually grades the claims (#936 -- a mirrored parser is the same
 # two-copies-can-diverge defect this probe exists to catch, one level up).
+# The import must also leave NO trace in the tree being audited: the scratch
+# tests hash every file, and a stray tools/__pycache__/check_doc_claims.pyc
+# reads as "the refusal path changed the tree" (measured: 10 red snapshots).
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "tools"))
 import check_doc_claims as checker  # noqa: E402  (needs ROOT's tools/ on path)
 
