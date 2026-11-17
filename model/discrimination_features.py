@@ -970,7 +970,13 @@ def extra_group(nm: str) -> str | None:
     if it is not one of ours. Keeps `feature_groups` from having to know the
     naming scheme twice."""
     if nm.startswith("mpd"):
-        return "mpd." + nm.split(".")[1]
+        # SPLIT ON "ms." ON PURPOSE. The stride token itself contains a '.'
+        # (`mpd10.00ms`), so splitting on '.' took field 1 -- the decimals --
+        # and the 10.0 ms and 5.0 ms strides both landed in `mpd.00ms`: one
+        # double-width bucket, five buckets for six strides (#929). Splitting
+        # on "ms." keeps the whole stride, so each stride is its own bucket
+        # and every bucket covers the same 8 columns (4 stats x MPD_SEGS).
+        return "mpd." + nm.split("ms.")[0][3:] + "ms"
     if nm.startswith("jit."):
         # SPLIT ON PURPOSE. `period_ms`, `ncycles` and `valid` say what the
         # dominant partial's FREQUENCY is -- a pitch error, which this study
