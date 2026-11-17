@@ -11,7 +11,8 @@
     "dphase-ar1-floor.json",
     "fold-interpolator.json",
     "dominant-period-octave-margin.json",
-    "rate-tol-rel.json",    "repeat-period-submultiple-margin.json",
+    "rate-tol-rel.json",
+    "repeat-period-submultiple-margin.json",
     "rate-tol-rel-by-unit.json"
   ]
 }
