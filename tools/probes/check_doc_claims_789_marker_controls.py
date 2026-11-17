@@ -32,7 +32,10 @@ when the guard worked and the tree was merely dirty. The precondition refuses
 exactly when the controls would be uninterpretable, not on WIP that leaves all
 claims green; that green-WIP state has its own refusal at the injection site
 (see "injection target" below), because a control whose replace target the WIP
-renamed would silently no-op and report a FAIL of its own.
+renamed would silently no-op and report a FAIL of its own. Every refusal --
+baseline, pre-existing injection file, missing injection target -- is checked
+BEFORE the first injection lands, so exit 2 never shares output with a
+control verdict: no evidence, not partial evidence.
 """
 from __future__ import annotations
 
@@ -78,13 +81,14 @@ def expect_red(py: str, name: str, needle: str) -> bool:
     return ok
 
 
-def baseline_green(py: str) -> bool:
-    """Assert the checkout's claims are green BEFORE any injection (#905).
+def baseline_refused(py: str) -> bool:
+    """REFUSE unless the checkout's claims are green BEFORE any injection (#905).
 
-    Returns True and prints nothing when green. Refuses -- exit 2, naming the
-    STALE/REFUSED lines -- otherwise: a control run on this tree would report
-    the tree's own staleness as a control failure, which is exactly the
-    misattribution #905 exists for.
+    Returns True -- after printing the refusal to stderr -- when the baseline
+    is NOT green, and False (printing nothing) when it is green, so the call
+    site reads `if baseline_refused(py): return 2`. A control run on a
+    not-green tree would report the tree's own staleness as a control
+    failure, which is exactly the misattribution #905 exists for.
     """
     rc, out = run(py)
     if rc == 0 and "0 stale, 0 refused" in out:
@@ -119,16 +123,37 @@ def inject_or_refuse(before: str, find: str, replace: str, what: str) -> str | N
 
 def main() -> int:
     py = interpreter()
-    if baseline_green(py):
+    if baseline_refused(py):
         return 2
-    results: list[bool] = []
-
-    # 1. A re-introduced placeholder INSTANTIATION must defeat the anchored
-    #    absent= marker -- the defect the marker exists to catch.
+    # Every refusal is checked BEFORE the first injection lands, so an exit 2
+    # never shares its output with a control verdict: a refusal means no
+    # evidence, not partial evidence plus one control's opinion.
     inj = ROOT / "fpga/rtl/_ctl789_inject.v"
     if inj.exists():
         print(f"REFUSED: {inj} already exists; refusing to overwrite", file=sys.stderr)
         return 2
+    readme = ROOT / "README.md"
+    orig_readme = readme.read_text(encoding="utf-8")
+    staged_readme = inject_or_refuse(
+        orig_readme, 'grep="^T1: 2/11 items met$"', 'grep="^T1: 3/11 items met$"',
+        "the README T1 count control")
+    if staged_readme is None:
+        return 2
+    ms = ROOT / "docs/milestones.md"
+    orig_ms = ms.read_text(encoding="utf-8")
+    staged_ms = inject_or_refuse(
+        orig_ms,
+        'grep="^module drum_kit" in=rtl-sketch/drum_kit.v',
+        'grep="^module drum_kit_NOT_IN_TREE" '
+        'in=rtl-sketch/drum_kit.v',
+        "the milestone-3 control")
+    if staged_ms is None:
+        return 2
+
+    results: list[bool] = []
+
+    # 1. A re-introduced placeholder INSTANTIATION must defeat the anchored
+    #    absent= marker -- the defect the marker exists to catch.
     inj.write_text("module _ctl789;\n"
                    "    drum_section_placeholder u_plh (.clk(clk));\n"
                    "endmodule\n", encoding="utf-8")
@@ -140,30 +165,14 @@ def main() -> int:
 
     # 2. The README T1 marker must go red the way a THIRD attestation would
     #    make it go red -- the drift this issue repaired, re-armed.
-    readme = ROOT / "README.md"
-    orig = readme.read_text(encoding="utf-8")
-    staged = inject_or_refuse(orig, 'grep="^T1: 2/11 items met$"',
-                              'grep="^T1: 3/11 items met$"',
-                              "the README T1 count control")
-    if staged is None:
-        return 2
     try:
-        readme.write_text(staged, encoding="utf-8")
+        readme.write_text(staged_readme, encoding="utf-8")
         results.append(expect_red(py, "README T1 count marker goes red on a wrong count", "3/11"))
     finally:
-        readme.write_text(orig, encoding="utf-8")
+        readme.write_text(orig_readme, encoding="utf-8")
 
     # 3. A milestone-3 marker whose cited evidence is absent must go red, not
     #    quietly pass.
-    ms = ROOT / "docs/milestones.md"
-    orig_ms = ms.read_text(encoding="utf-8")
-    staged_ms = inject_or_refuse(orig_ms,
-                                 'grep="^module drum_kit" in=rtl-sketch/drum_kit.v',
-                                 'grep="^module drum_kit_NOT_IN_TREE" '
-                                 'in=rtl-sketch/drum_kit.v',
-                                 "the milestone-3 control")
-    if staged_ms is None:
-        return 2
     try:
         ms.write_text(staged_ms, encoding="utf-8")
         results.append(expect_red(py, "milestone-3 marker goes red when its evidence is absent",
