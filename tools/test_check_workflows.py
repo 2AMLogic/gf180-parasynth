@@ -1,4 +1,5 @@
-"""Controls for `check_workflows.step_would_block_pull_request` (issue #307).
+"""Controls for `check_workflows.step_would_block_pull_request` (issue #307),
+and for the shipped #906 roadmap step order (issue #940).
 
 `tools/test_manifest.py` and `tools/test_check_surge_waveform_comment.py` each
 guard their own CI wiring by asserting a substring appears in a named job's
@@ -7,6 +8,11 @@ review: a step with `if: false` or `continue-on-error: true` still matches
 that substring check and leaves the guard green, even though neither can ever
 block a pull request. These are unit-level controls against constructed YAML,
 not full-source mutation, exercising the helper both tests now call.
+
+The #940 section below is the other shape on purpose: the injected defect
+there is a mutation of the REAL rungs.yml / nightly.yml parsed shape (the
+reverted #906 order), because what ships is the ordering of lines and steps
+in those files -- a lookalike fixture could pass while the real files drifted.
 """
 from __future__ import annotations
 
@@ -20,6 +26,7 @@ import check_workflows as cw                                        # noqa: E402
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 RUNGS = REPO / ".github" / "workflows" / "rungs.yml"
+NIGHTLY = REPO / ".github" / "workflows" / "nightly.yml"
 
 
 def _workflow(job_yaml: str) -> dict:
@@ -199,6 +206,7 @@ def test_a_step_relocated_to_a_different_job_is_not_found_in_the_original_job():
     assert "guard" in reason
 
 
+
 # =============================================================================
 # Failure modes of the helper itself: a lookup that finds nothing must say
 # what it did not find, not just report False.
@@ -363,3 +371,169 @@ def test_main_exits_1_on_a_dangling_path(monkeypatch):
                         lambda: [("w.yml", [(1, "cat docs/nope-nope.md")])])
     monkeypatch.setattr(cw, "tracked_files", lambda: TRACKED)
     assert cw.main() == 1
+
+# =============================================================================
+# The shipped #906 order itself (#940): check-before-run inside rungs.yml's
+# "the roadmap matches the evidence" step, and check-before-record across
+# nightly.yml's pair. tools/test_rungs_gate.py pins the semantics of
+# compile_dag.main(); these pin the YAML that ships. Injected defect (rule 8):
+# the reverted order, applied to the REAL files' parsed shape.
+# =============================================================================
+def _step(workflow: dict, name: str) -> dict:
+    for job in workflow["jobs"].values():
+        for s in job.get("steps") or []:
+            if isinstance(s, dict) and s.get("name") == name:
+                return s
+    raise AssertionError(f"no step named {name!r}")
+
+
+def test_real_rungs_roadmap_step_checks_before_run():
+    ok, reason = cw.roadmap_check_precedes_run_in_step(
+        yaml.safe_load(RUNGS.read_text()))
+    assert ok, reason
+
+
+def test_real_nightly_check_step_precedes_record_step():
+    ok, reason = cw.roadmap_check_step_precedes_record_step(
+        yaml.safe_load(NIGHTLY.read_text()))
+    assert ok, reason
+
+
+def test_reverting_rungs_to_the_pre_906_order_is_red():
+    """The injected defect: #906's exact regression, applied to the real
+    step's run block -- run-then-check, the gate reading its own output."""
+    wf = yaml.safe_load(RUNGS.read_text())
+    step = _step(wf, cw.ROADMAP_STEP)
+    lines = step["run"].split("\n")
+    i_check = next(i for i, l in enumerate(lines) if "--check" in l)
+    i_run = next(i for i, l in enumerate(lines) if "--run" in l)
+    assert i_check < i_run, "the real file has already regressed"
+    lines[i_check], lines[i_run] = lines[i_run], lines[i_check]
+    step["run"] = "\n".join(lines)
+    ok, reason = cw.roadmap_check_precedes_run_in_step(wf)
+    assert not ok
+    assert "--run" in reason and "--check" in reason and "#906" in reason
+
+
+def test_reverting_nightly_to_record_before_check_is_red():
+    """The injected defect: the pair swapped, on the real job's steps list."""
+    wf = yaml.safe_load(NIGHTLY.read_text())
+    for job in wf["jobs"].values():
+        steps = job.get("steps") or []
+        names = [s.get("name") for s in steps if isinstance(s, dict)]
+        if (cw.ROADMAP_CHECK_STEP in names
+                and cw.ROADMAP_RECORD_STEP in names):
+            i_c, i_r = names.index(cw.ROADMAP_CHECK_STEP), names.index(cw.ROADMAP_RECORD_STEP)
+            assert i_c < i_r, "the real file has already regressed"
+            steps[i_c], steps[i_r] = steps[i_r], steps[i_c]
+            break
+    else:
+        raise AssertionError("the pair is not in one nightly job")
+    ok, reason = cw.roadmap_check_step_precedes_record_step(wf)
+    assert not ok
+    assert "precedes" in reason and "#906" in reason
+
+
+def test_a_check_step_that_also_rewrites_is_red():
+    """--check and --run on one invocation judges nothing: the step would
+    rewrite the README it is supposedly judging."""
+    wf = yaml.safe_load(NIGHTLY.read_text())
+    _step(wf, cw.ROADMAP_CHECK_STEP)["run"] = \
+        "python tools/compile_dag.py --check --run"
+    ok, reason = cw.roadmap_check_step_precedes_record_step(wf)
+    assert not ok
+    assert "--run" in reason
+
+
+def test_a_renamed_roadmap_step_is_red_not_silently_exempt():
+    """A rename must move the finding somewhere loud, never turn the gate
+    off: the guard reports that it can no longer find what it guards."""
+    wf = yaml.safe_load(RUNGS.read_text())
+    _step(wf, cw.ROADMAP_STEP)["name"] = "roadmap (renamed)"
+    ok, reason = cw.roadmap_check_precedes_run_in_step(wf)
+    assert not ok
+    assert "no step named" in reason and "nothing to guard" in reason
+
+
+def test_a_run_only_roadmap_step_has_no_check_to_order():
+    wf = _workflow("""\
+  python:
+    steps:
+      - name: the roadmap matches the evidence
+        run: |
+          python tools/compile_dag.py --run || true  # a RED node is a result
+    """)
+    ok, reason = cw.roadmap_check_precedes_run_in_step(wf)
+    assert not ok
+    assert "--check" in reason
+
+
+def test_an_inline_comment_cannot_smuggle_a_flag():
+    """The flag scan strips shell comments first: a commented-out `--check`
+    above a live `--run` is still run-only."""
+    wf = _workflow("""\
+  python:
+    steps:
+      - name: the roadmap matches the evidence
+        run: |
+          # python tools/compile_dag.py --check
+          python tools/compile_dag.py --run || true
+    """)
+    ok, reason = cw.roadmap_check_precedes_run_in_step(wf)
+    assert not ok
+    assert "--check" in reason
+
+
+# =============================================================================
+# main() wiring: the gate as the `python` job actually runs it.
+# =============================================================================
+def _minimal_workflow_text() -> str:
+    return """\
+name: minimal
+on: workflow_dispatch
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: echo hi
+"""
+
+
+def test_main_is_green_on_the_real_workflow_tree(tmp_path, monkeypatch, capsys):
+    import shutil
+    for f in ("rungs.yml", "nightly.yml"):
+        shutil.copy(REPO / ".github" / "workflows" / f, tmp_path / f)
+    monkeypatch.setattr(cw, "WF", tmp_path)
+    assert cw.main() == 0
+    out = capsys.readouterr().out
+    assert "roadmap order:" in out
+
+
+def test_main_is_red_when_the_shipped_order_is_reverted(tmp_path, monkeypatch):
+    import shutil
+    for f in ("rungs.yml", "nightly.yml"):
+        shutil.copy(REPO / ".github" / "workflows" / f, tmp_path / f)
+    text = (tmp_path / "rungs.yml").read_text()
+    check_line = ("          python tools/compile_dag.py --check"
+                  "        # the committed README vs the committed evidence\n")
+    run_line = ("          python tools/compile_dag.py --run || true"
+                "  # a RED node is a result\n")
+    assert check_line in text and run_line in text
+    (tmp_path / "rungs.yml").write_text(
+        text.replace(check_line + run_line, run_line + check_line))
+    monkeypatch.setattr(cw, "WF", tmp_path)
+    assert cw.main() == 1
+
+
+def test_main_refuses_to_pass_when_no_workflow_carries_the_steps(
+        tmp_path, monkeypatch, capsys):
+    """Both gates renamed away = the guard has been evaded, and main() says
+    so in the exit code rather than reporting a green tree."""
+    (tmp_path / "minimal.yml").write_text(_minimal_workflow_text())
+    monkeypatch.setattr(cw, "WF", tmp_path)
+    assert cw.main() == 1
+    err = capsys.readouterr().err
+    assert err.count("nothing to guard") == 2
+
