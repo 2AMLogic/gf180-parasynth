@@ -26,6 +26,16 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The committed-roadmap check below renders the DAG from the
+          # committed records, which needs the history and tags the [dag] bot
+          # rendered them with. A shallow clone cannot answer "did a covered
+          # file change since this was recorded" and renders REFUSED; without
+          # tags the STAMPED nodes render differently from the committed
+          # README. Both measured to fail --check on a tree whose committed
+          # README is consistent (#906) -- an unsatisfiable gate, not a check.
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest
@@ -40,6 +50,16 @@ jobs:
       - name: I4 -- the whole chip at its pins
         run: python rtl-sketch/verify_synth_top.py
 
+      # The committed roadmap is judged BEFORE anything rewrites it (#906).
+      # `--run --slow` below regenerates README.md, and the strict check after
+      # it would then be reading the file this job just wrote -- the same
+      # defeat rungs.yml carried (#906). This step is the nightly's net on the
+      # tree as committed: if main's README disagrees with its committed
+      # evidence -- a [dag] push that failed to regenerate, a hand-edited
+      # table -- the nightly fails here rather than laundering the divergence
+      # through the regen below.
+      - name: the committed roadmap matches the committed evidence
+        run: python tools/compile_dag.py --check
       # The slow nodes the per-push job cannot run. This writes their pass/fail
       # into docs/dag-results.json with the commit, which is what lets the
       # README show an honest status for evidence that takes hours.
