@@ -4,6 +4,12 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-17
 
+- **PR #951**: probes: split the rate-fold verdict else on the dB red count it mis-states
+- **Issue #946** (closed): rate_fold_db_control's verdict prose states a stronger fact than `must == []` supports
+- **PR #945**: test: guard the ms.* grouping label against a silent %.0f collision
+- **Issue #939** (closed): measure: the ms.* grouping label is %.0f, so two MS_WINDOWS_S entries that round to the same integer ms would silently merge buckets
+- **PR #876**: ci: collect the 16 uncovered fpga/ test files in a fpga-uncovered job
+- **Issue #853** (closed): 16 of 40 fpga/ test files are run by no CI job (23 more only via make verify-fast) -- the fpga half of the #404/#851 shape
 - **Issue #958** (closed): 789 marker probe: the #920 already-satisfied refusal for drum_kit is shadowed by check_doc_claims' one-line uniqueness refusal — tools job red on main since 72be3665
 - **Issue #956** (closed): compile_dag.py's status legend lists BLOCKED and TODO twice (merge artefact from #810)
 - **Issue #937** (closed): rate_tol_sweep.py --unit <anything but db> labels its columns caught_db/cost_db, and two smaller label drifts from #895
