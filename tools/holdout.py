@@ -86,6 +86,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import provenance                                                    # noqa: E402
+import refusal
 
 SEAL_DIR = ROOT / "docs" / "scorecard" / "holdout"
 LEDGER = SEAL_DIR / "LEDGER.json"
@@ -110,7 +111,7 @@ CORE_FIELDS = ("schema", "case_id", "generation", "sealed_by", "sealed_utc",
 REQUIRED_FIELDS = CORE_FIELDS + ("state", "why", "seen_by")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the sealing apparatus failed. REFUSED is a first-class
     outcome here, distinct from pass and from fail."""
 

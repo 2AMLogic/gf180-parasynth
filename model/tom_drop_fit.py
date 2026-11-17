@@ -65,6 +65,10 @@ what it costs rather than be told it does not matter.
 from __future__ import annotations
 import argparse, json, math, pathlib, re, sys
 import numpy as np
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -77,7 +81,7 @@ USABLE = ("OK",)          # NO-DROP-ABOVE-FLOOR claims nothing in either directi
 MIN_CELL = 4              # rows needed before a (voice, accent) cell gets an intercept
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition is not met; nothing was attempted."""
 
 

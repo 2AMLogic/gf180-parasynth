@@ -38,10 +38,17 @@ import numpy as np
 from scipy.io import wavfile
 
 import diagnose_m1a_harmonic_phase as d
+import run_all
 
 bass, lead, am, SR = d.bass, d.lead, d.am, d.SR
 ROOT = d.ROOT
 CAPTURE = ROOT / "docs/scorecard/mono-m1a-miniv3/phase-cycle-capture"
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous capture
+    standing, not a truncated one a later analysis step strands on."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 NOTE = 36
 F36 = 440 * 2 ** ((NOTE - 69) / 12)
 WIN = 12000                  # 250 ms, the scorer's harmonic window length
@@ -449,13 +456,13 @@ def main():
             "summaries": summaries, "decision": verdict, "synthetic_control": control,
             "windows": {"A": ref["A"]["windows"], "B": ref["B"]["windows"], "model": model["windows"]},
         }
-        (CAPTURE / "report.json").write_text(json.dumps(report, indent=1) + "\n")
+        write_json(CAPTURE / "report.json", report)
         print(json.dumps({"verdict": verdict["verdict"], "step": verdict["step"], "reason": verdict["reason"],
                           "rows": verdict["rows"], "reference_drift_hz": drift, "cents": cents,
                           "model_drift_hz": model["drift_hz"]}, indent=1))
         return 0
     except Refused as exc:
-        (CAPTURE / "analysis-refused.json").write_text(json.dumps({"state": "REFUSED", "reason": str(exc)}) + "\n")
+        write_json(CAPTURE / "analysis-refused.json", {"state": "REFUSED", "reason": str(exc)})
         print(f"REFUSED: {exc}")
         return 2
 

@@ -458,3 +458,198 @@ def test_tone_ratio_shipped_exhibit_still_raises_on_a_refusing_reading(
     monkeypatch.setattr(am, "tone_amplitude", refusing)
     with pytest.raises(TypeError):
         ed.tone_ratio_shipped(np.ones(int(0.1 * SR)), SR, 800.0, 540.0)
+
+
+# ---------------------------------------------------------------------------
+# 6. section 6's nine unguarded `.value` sites (#845)
+# ---------------------------------------------------------------------------
+# defect 6 reads two estimators through seams (`shipped=`, `repaired=`),
+# four blocks: the shipped-vs-repaired TABLE (printed figures), the
+# constant-16 % READBACK (a division of two `.value` reads), the
+# grid-RECONCILIATION rows (printed figures), and the olds/news appends
+# feeding the two swing VERDICTS. Refusal counts below: table 7 rows,
+# readback 3 rows, reconciliation 2 grid labels, spread 3 pole counts --
+# a rigged estimator refuses all of them, 15 in total.
+def _refuse_shipped(freqs, g, cut_hz):
+    return am._fail("injected: the shipped corner refuses",
+                    plateau_db=-0.904)
+
+
+def _refuse_repaired(cut_hz):
+    def f(freqs, g):
+        return am._fail("injected: the repaired corner refuses",
+                        plateau_db=-0.904)
+    return f
+
+
+def test_defect6_table_refusal_none_encoded_is_refused_not_typeerror(
+        _reset_verdict_lists, capsys):
+    """SITES: defect 6's shipped-vs-repaired table rows (a99a408e :490-491,
+    moved by #792/#839; locate by expression) -- printed FIGURES, so this
+    control has less power than the verdict controls below. INJECTED
+    DEFECT: the shipped estimator refuses, None-encoded. Before the repair
+    the table's first row raised TypeError at its first arithmetic
+    `old.value/fc` (the detail carries `plateau_db`, so the crash lands on
+    `.value` and not on the detail lookup) -- NO VERDICT for anything
+    behind it. The seam feeds all four blocks, so fifteen readings refuse;
+    seven of them are table rows, asserted on the table's own refusal
+    message."""
+    ed.defect_6(shipped=_refuse_shipped)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 15, "every block the rigged seam feeds"
+    assert out.count("no row was printed for this cutoff") == 7, \
+        "one refusal per cutoff row in the table"
+    assert ed.fails == []
+    assert out.count("REFUSED") == 15
+    assert "injected: the shipped corner refuses" in out
+    assert "SHIPPED (pre-#150)" in out, "the header printed, no row under it did"
+    assert "nan" not in out
+
+
+def test_defect6_table_refusal_nan_carrying_is_refused_not_a_plausible_row(
+        _reset_verdict_lists, capsys):
+    """The opposite encoding at the same table sites: an ok-carrying nan
+    sails past an `.ok`-only guard and printed a plausible nan row for every
+    cutoff. The isfinite leg must catch it. Printed-figure coverage again;
+    the verdict controls carry the power. The seam feeds all four blocks:
+    fifteen readings refuse."""
+    def nan_shipped(freqs, g, cut_hz):
+        return am.Estimate(float("nan"), True, "", {"plateau_db": -0.904}, None)
+    ed.defect_6(shipped=nan_shipped)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 15
+    assert out.count("no row was printed for this cutoff") == 7
+    assert ed.fails == []
+    assert "nan" not in out
+
+
+def test_defect6_readback_refusal_none_encoded_is_refused_not_typeerror(
+        _reset_verdict_lists, capsys):
+    """SITES: the constant-16 % readback division (a99a408e :501-502, the
+    :245 class -- BOTH operands are `.value` reads and the arithmetic is a
+    division), plus the grid-reconciliation rows it shares the rig with
+    (a99a408e :513-515). INJECTED DEFECT: the shipped estimator refuses on
+    the GOT curve ONLY -- a refusal in exactly one operand of the division;
+    the reference side passes through the real estimator. Before the repair
+    `got.value / ref.value` raised TypeError. Counts: readback 3 rows +
+    reconciliation 2 grid labels. The BOUNDARY leg: the swing verdicts read
+    neither rig's curve, so they must still run and hold -- a guard that
+    refused the whole section here would have no power."""
+    def refusing_got(freqs, g, cut_hz):
+        got = -40.0 * np.log10(1.0 + (freqs / (cut_hz * 0.84)) ** 2)
+        if np.allclose(g, got):
+            return am._fail("injected: the readback's got side refuses",
+                            plateau_db=-0.904)
+        return ed.corner_shipped(freqs, g, cut_hz)
+    ed.defect_6(shipped=refusing_got)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 5
+    assert ed.fails == []
+    assert out.count("REFUSED") == 5
+    assert "nan" not in out
+    assert out.count("on a constant ratio") == 3, \
+        "the unrigged swing verdicts still ran"
+
+
+def test_defect6_readback_zero_denominator_is_refused_not_inf(
+        _reset_verdict_lists, capsys):
+    """SITES: the same readback division, the refusing-but-FINITE encoding
+    the ok/None/isfinite legs do not see: a corner of 0.0 Hz (a negative
+    one is the same predicate leg and reads as a plausible negative
+    percentage instead of crashing). Injected on the REFERENCE curve at
+    fc = 250 only -- one operand, one row. Before the repair block A's row
+    printed a plausible `0.0000 -100.00%` and the readback raised
+    ZeroDivisionError on `got/0.0`. A nonpositive corner is not a
+    measurement. Counts: table 1 row (fc 250) + readback 1 row + both
+    reconciliation labels + the 4-pole spread (whose ideal curve IS the
+    reference curve) = 5; the 2- and 6-pole verdicts are unrigged and must
+    still run."""
+    def zero_reference_at_250(freqs, g, cut_hz):
+        ref = -40.0 * np.log10(1.0 + (freqs / cut_hz) ** 2)
+        if cut_hz == 250.0 and np.allclose(g, ref):
+            return am.Estimate(0.0, True, "", {"plateau_db": -0.904}, None)
+        return ed.corner_shipped(freqs, g, cut_hz)
+    ed.defect_6(shipped=zero_reference_at_250)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 5
+    assert ed.fails == []
+    assert out.count("REFUSED") == 5
+    assert "nan" not in out
+    assert out.count("on a constant ratio") == 2, \
+        "the 2- and 6-pole verdicts still ran"
+
+
+def test_defect6_spread_verdict_nan_carrying_is_refused_not_failed(
+        _reset_verdict_lists, capsys):
+    """THE CONTROL (#845 AC2): SITES the olds/news appends (a99a408e
+    :529-530) feeding the two swing verdicts (a99a408e :531/:534). A
+    nan-carrying operand made `max/min - 1 > 0.08` silently False -- a
+    FAILED verdict where REFUSED is the truth, the exact pathology #805 was
+    filed for, now with verdicts downstream. This is the control with the
+    most power in this set. All fifteen blocks refuse (7 table + 3 readback
+    + 2 reconciliation + 3 spreads), the verdict phrase may not appear at
+    all, and the outcome is asserted on the printed token AND the exit
+    code -- never exit status alone."""
+    def nan_shipped(freqs, g, cut_hz):
+        return am.Estimate(float("nan"), True, "", {"plateau_db": -0.904}, None)
+    ed.defect_6(shipped=nan_shipped)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 15
+    assert ed.fails == [], "the predicate must not turn a nan into FAILED"
+    assert "FAIL" not in out
+    assert out.count("NEITHER swing verdict ran") == 3, \
+        "one refusal per poles block, naming that the verdict did not run"
+    assert out.count("on a constant ratio") == 0, \
+        "the phrase may appear only in a verdict line, and no verdict ran"
+    assert "nan" not in out
+    assert ed.verdict_exit_code() == 2
+
+
+def test_defect6_spread_verdict_none_encoded_is_refused_not_typeerror(
+        _reset_verdict_lists, capsys):
+    """The same verdict sites, None-encoded (the shipped encoding): before
+    the repair the append's `.value / fc` raised TypeError at the first
+    cutoff -- NO VERDICT for any block behind it. REFUSED is required."""
+    ed.defect_6(shipped=_refuse_shipped)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 15
+    assert ed.fails == []
+    assert "FAIL" not in out
+    assert out.count("on a constant ratio") == 0
+    assert ed.verdict_exit_code() == 2
+
+
+def test_defect6_repaired_side_refusal_is_refused_too(_reset_verdict_lists,
+                                                      capsys):
+    """SITES: the repaired reads (`rc.filt_corner(fc)(F, g).value`,
+    a99a408e :491/:502/:530) -- the seam the other controls leave real.
+    The repaired estimator refusing must refuse its thirteen readings --
+    thirteen, not fifteen: the grid-reconciliation block reads only the
+    shipped exhibit and has no repaired operand -- and the verdicts behind
+    the :530 read must be REFUSED, never FAILED."""
+    ed.defect_6(repaired=_refuse_repaired)
+    out = capsys.readouterr().out
+    assert len(ed.refusals) == 13, \
+        "table 7 + readback 3 + spread 3; reconciliation reads shipped only"
+    assert ed.fails == []
+    assert "FAIL" not in out
+    assert out.count("REFUSED") == 13
+    assert out.count("NEITHER swing verdict ran") == 3
+    assert ed.verdict_exit_code() == 2
+
+
+def test_defect6_runs_green_on_the_real_estimators(_reset_verdict_lists,
+                                                   capsys):
+    """The boundary control: no injection, the real estimators. Nothing
+    refuses, nothing fails, every verdict runs and holds -- the guard did
+    not widen into refusing everything, and the exhibit still exhibits (the
+    shipped estimator's spread still clears its 8 % verdict). Needs no
+    corpus, so it runs wherever the tests run."""
+    ed.defect_6()
+    out = capsys.readouterr().out
+    assert ed.refusals == []
+    assert ed.fails == []
+    assert ed.verdict_exit_code() == 0
+    assert out.count("REFUSED") == 0
+    assert "TWO READINGS, RECONCILED" in out
+    assert out.count("on a constant ratio") == 3

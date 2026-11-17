@@ -40,6 +40,10 @@ FILES = ["docs/sensitivity/registry.json",
          # issue #763's record: JIT_DPHASE_FLOOR_PPM, the physical floor under
          # jit.dphase_ar1.seg0 that replaced a 1e-20 epsilon
          "docs/sensitivity/dphase-ar1-floor.json",
+        # issue #782's record: RATE_TOL_REL_DB, the dB family's relative term
+        # split out of the pre-#782 scalar RATE_TOL_REL
+        "docs/sensitivity/rate-tol-rel-by-unit.json",
+        "docs/sensitivity/rate-tol-rel-by-unit-sweep.txt",
          "docs/sensitivity/dphase-ar1-floor-sweep.txt",
          "model/discrimination_features.py",
          # issue #767's record: FOLD_SINC_TAPS, the fold interpolator that
@@ -55,7 +59,8 @@ FILES = ["docs/sensitivity/registry.json",
          # rate-independence tolerance -- and the first FLOAT parameter under
          # the gate, which is why PY_CONST had to widen
          "docs/sensitivity/rate-tol-rel.json",
-         "docs/sensitivity/rate-tol-rel-sweep.txt",         # issue #780's record: REPEAT_SUBMULTIPLE_MARGIN_PERMILLE, the margin
+         "docs/sensitivity/rate-tol-rel-sweep.txt",
+         # issue #780's record: REPEAT_SUBMULTIPLE_MARGIN_PERMILLE, the margin
          # bounding repeat_period's shortest-submultiple rule
          "docs/sensitivity/repeat-period-submultiple-margin.json",
          "docs/sensitivity/repeat-period-submultiple-margin-sweep.txt",
@@ -257,11 +262,17 @@ def test_the_wiring_check_fails_when_a_line_is_commented_out_with_its_text_intac
 
         \\t#  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG ..."
 
-    GNU make honours that silently: the line is dropped, every other control
-    still runs, `make controls` still exits 0 -- and `_unwired` over
-    unfiltered text stays green because its match sits behind the `#`. That
-    is verbatim the failure this gate exists to close, so the parser must
-    drop comment lines before any consumer sees the recipe text."""
+    The failure mode depends on the line's position, and PREDICTION_WRONG
+    sits mid-recipe (Makefile:633; the recipe's last line is
+    `tools/bd_pitch_predeclaration_mutants.py`): the shell's `#` swallows
+    the trailing backslash, the command ends there, and the rest of the
+    recipe becomes a bogus command -- `Error 127`, every later control
+    dropped, nothing silent about it. (A *final* recipe line would be the
+    silent variant: rc 0, one entry gone.) Both mean the control does not
+    run, and `_unwired` over unfiltered text stays green either way because
+    its match sits behind the `#`. That is verbatim the failure this gate
+    exists to close, so the parser must drop comment lines before any
+    consumer sees the recipe text."""
     recipe = makefile_recipe("controls")
     mutated = "\n".join(
         ln.replace("\t", "\t#  ", 1) if "PREDICTION_WRONG" in ln else ln
@@ -589,7 +600,17 @@ def test_a_python_constant_can_be_a_plain_decimal(root):
     assert sens.parse_parameter("N: float = 0.12  # why\n", "N", "x",
                                 "python-constant") == 0.12
     src = (root / "model/discrimination_features.py").read_text()
-    assert sens.parse_parameter(src, "RATE_TOL_REL", "m", "python-constant") > 0.0
+    # #782 split RATE_TOL_REL into five per-unit scalars, because this
+    # pattern refuses a dict literal on purpose (the case above) and an
+    # unreadable registered parameter is a gate that reads as passing while
+    # seeing nothing. The registered names are the scalars; the module
+    # composes its RATE_TOL_REL dict from them -- and that composition line
+    # must stay unreadable rather than grow a bare decimal that would make
+    # the name registrable while carrying no unit's value.
+    for name in ("RATE_TOL_REL_RATIO", "RATE_TOL_REL_DB", "RATE_TOL_REL_PPM"):
+        assert sens.parse_parameter(src, name, "m", "python-constant") > 0.0
+    with pytest.raises(sens.Refused, match="found 0 declarations"):
+        sens.parse_parameter(src, "RATE_TOL_REL", "m", "python-constant")
 
 
 def test_a_python_constant_that_is_not_a_plain_decimal_literal_refuses():

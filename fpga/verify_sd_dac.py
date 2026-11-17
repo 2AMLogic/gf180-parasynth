@@ -91,6 +91,10 @@ from pathlib import Path
 
 import numpy as np
 from scipy import signal as ss
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OSR = 256                       # core clocks per 48 kHz frame
@@ -111,7 +115,7 @@ CONTROLS = {"SD_FIRST_ORDER": {"sine-6", "held"}, "SD_NO_SAT": {"square"},
             "I2S_RX_SHIFT": {"sine-6", "held", "square"}, "SD_DC_BIAS": {"silence"}}
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     pass
 
 

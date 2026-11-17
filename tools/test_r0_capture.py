@@ -219,6 +219,62 @@ def test_altered_reference_refuses(clean, tmp_path):
     assert rec["verdict"] == rc.REFUSED and "missing or altered" in rec["reasons"][0]
 
 
+def _copy_reference_corpus(tmp_path):
+    ref = tmp_path / "ref"
+    shutil.copytree(rc.REFERENCES, ref)
+    return ref
+
+
+def test_a_24bit_reference_with_a_matching_hash_refuses_not_errors(clean, tmp_path):
+    """#784 confirmed site 2: `load_reference` reaches rr.read_wav_int16 (the
+    24-bit refusal in r0_reference) only when the WAV bytes MATCH the recorded
+    wav_sha256 -- without the matching hash the altered-reference guard above
+    refuses first, correctly, and the defect is never exercised. A reference
+    side refusing is a REFUSED verdict, not an execution error."""
+    import wave
+    ref = _copy_reference_corpus(tmp_path)
+    p = ref / "held-default.wav"
+    with wave.open(str(p), "rb") as w:
+        sr, ch, n = w.getframerate(), w.getnchannels(), w.getnframes()
+        x = np.frombuffer(w.readframes(n), dtype="<i2").astype("<i4")
+    with wave.open(str(p), "wb") as w:
+        w.setnchannels(ch)
+        w.setsampwidth(3)
+        w.setframerate(sr)
+        w.writeframes(x.tobytes())
+    rec_path = ref / "held-default.json"
+    record = json.loads(rec_path.read_text())
+    record["wav_sha256"] = rc.sha256_file(p)
+    rec_path.write_text(json.dumps(record))
+    rec = rc.analyse(clean, ref, allow_synthetic=True)
+    assert rec["verdict"] == rc.REFUSED, rec["reasons"]
+    assert "16-bit" in rec["reasons"][0]
+
+
+def test_an_unreadable_release_manifest_refuses_not_errors(tmp_path):
+    """#784 site 2, second reachable path: analyse -> resolve_image ->
+    rr.load_manifest refusing (unreadable manifest) yields REFUSED, not
+    ERROR."""
+    bad = tmp_path / "manifest.json"
+    bad.write_text("{ this is not json")
+    rec = rc.analyse(tmp_path / "bundle-unused", manifest_path=bad)
+    assert rec["verdict"] == rc.REFUSED, rec["reasons"]
+    assert "unreadable" in rec["reasons"][0]
+
+
+def test_an_internal_valueerror_is_still_an_execution_error(clean, tmp_path, monkeypatch):
+    """#784: the repair must not widen the deliberately-total handler -- a
+    genuine implementation error inside the same try is still an EXECUTION
+    ERROR (plan090), proving the sibling-class handler catches only refusals."""
+    d = _copy(clean, tmp_path)
+
+    def boom(*a, **k):
+        raise ValueError("an implementation error")
+    monkeypatch.setattr(rc, "check_session", boom)
+    rec = rc.analyse(d, allow_synthetic=True)
+    assert rec["verdict"] == rc.ERROR and "ValueError" in rec["reasons"][0]
+
+
 # ---- the controls -------------------------------------------------------------
 def test_clean_synthetic_session_passes_with_its_known_answers(clean):
     rec = rc.analyse(clean, allow_synthetic=True)

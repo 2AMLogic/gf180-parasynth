@@ -66,6 +66,7 @@ from model.discrimination_features import (  # noqa: E402
     JIT_DPHASE_FLOOR_PPM, _rate_stimulus, _resample, _square, _square_periods,
     jitter_features,
 )
+import refusal
 
 SR_REF, SR_RENDER = 44100, 48000
 
@@ -107,7 +108,7 @@ MECHANISM_PANEL = (
 )
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The sweep could not answer. Never reported as a pass."""
 
 

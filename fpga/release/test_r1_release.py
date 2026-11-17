@@ -153,6 +153,22 @@ def test_each_stale_control_is_caught(tmp_path, case, capsys):
     assert "stale_control: STALE" in out and "unmodified copy: r1_release: BOUND" in out
 
 
+def test_stale_control_host_reports_refused_when_the_cli_refuses(tmp_path, monkeypatch,
+                                                                 capsys):
+    """#784 confirmed site 1: release_manifest._capture refuses (a uart_host
+    that exits non-zero on `run --fixture demo --image release`), and that
+    refusal must reach stale_control's designed REFUSED verdict (exit 2), not
+    escape as a traceback past `except Refused` -- a sibling RuntimeError
+    subclass does not match it."""
+    def refused(argv):
+        print("uart_host: unsupported command", file=sys.stderr)
+        return 1
+
+    monkeypatch.setattr(uh, "main", refused)
+    assert rr.stale_control("host", tmp_path) == 2
+    assert "stale_control: REFUSED" in capsys.readouterr().out
+
+
 def test_the_trial_passes_with_both_controls_caught(tmp_path):
     run_dir, rec = trial.run_trial("T-RELEASE-BOUND-R1", out_base=tmp_path)
     assert rec["verdict"] == trial.PASS, rec["verdict_reasons"]

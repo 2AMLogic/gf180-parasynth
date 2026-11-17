@@ -120,6 +120,136 @@ def step_would_block_pull_request(workflow, job_name: str, substring: str):
 
 
 # =============================================================================
+# "the shipped step order" -- issue #940, the #906 class.
+#
+# #906's fix is an ORDERING inside two workflow files: `compile_dag.py --check`
+# must judge the README as committed before any `--run` rewrites it. rungs.yml
+# runs both commands inside one step ("the roadmap matches the evidence");
+# nightly.yml gates the pair across two steps ("the committed roadmap matches
+# the committed evidence" before "record the slow evidence for the roadmap").
+# tools/test_rungs_gate.py pins the SEMANTICS by driving compile_dag.main()
+# directly -- correct, but nothing read the YAML, so reverting the fix back to
+# run-then-check left every test green while shipping the defeated gate. These
+# functions read what ships. main() wires them so that a step renamed or
+# deleted away is a finding, never a silent exemption: a guard that cannot
+# find what it guards must say so (docs/failure-modes.md).
+#
+# Single property by construction (verification-rules rule 4): the property is
+# "check precedes rewrite"; the injected defect is the reverted order, shipped
+# as a mutation of the REAL files' parsed shape in test_check_workflows.py.
+#
+# Known blind spot, bounded on purpose: the flags are read from a shell-level
+# token scan of each `run:` line with comments stripped -- not a shell parse.
+# An invocation assembled from variables (`CMD="--check"; compile_dag.py
+# $CMD`) is invisible here; no workflow writes one.
+# =============================================================================
+ROADMAP_STEP = "the roadmap matches the evidence"
+ROADMAP_CHECK_STEP = "the committed roadmap matches the committed evidence"
+ROADMAP_RECORD_STEP = "record the slow evidence for the roadmap"
+
+
+def _compile_dag_invocations(run_text: str) -> list[frozenset[str]]:
+    """Each `tools/compile_dag.py` invocation's long flags, in file order.
+    Shell comments are stripped first, so an inline `# ... --run ...` cannot
+    count as an invocation."""
+    out: list[frozenset[str]] = []
+    for raw in run_text.split("\n"):
+        toks = raw.split("#", 1)[0].split()
+        if any(t.endswith("compile_dag.py") for t in toks):
+            out.append(frozenset(t for t in toks if t.startswith("--")))
+    return out
+
+
+def roadmap_check_precedes_run_in_step(workflow, step_name: str = ROADMAP_STEP):
+    """(ok, reason): within the one step named `step_name`, a
+    `tools/compile_dag.py` invocation carrying `--check` precedes the first
+    carrying `--run`. A missing, ambiguous, check-less or run-less step is
+    not-ok with a specific reason -- a gate that cannot find what it guards
+    reports, never passes."""
+    if isinstance(workflow, (str, pathlib.Path)):
+        workflow = yaml.safe_load(pathlib.Path(workflow).read_text())
+    found = []
+    for jname, job in ((workflow or {}).get("jobs") or {}).items():
+        for s in (job or {}).get("steps") or []:
+            if isinstance(s, dict) and s.get("name") == step_name:
+                found.append((jname, s))
+    if not found:
+        return False, (f"no step named {step_name!r} -- the order gate has "
+                       f"nothing to guard")
+    if len(found) > 1:
+        return False, (f"{len(found)} steps named {step_name!r} "
+                       f"({', '.join(j for j, _ in found)}) -- ambiguous")
+    jname, step = found[0]
+    invs = _compile_dag_invocations(str(step.get("run", "")))
+    if not invs:
+        return False, (f"step {step_name!r} (job {jname!r}) does not invoke "
+                       f"tools/compile_dag.py -- the order gate has nothing "
+                       f"to guard")
+    first_run = next((i for i, f in enumerate(invs) if "--run" in f), None)
+    if first_run is None:
+        return False, (f"step {step_name!r} (job {jname!r}) carries no --run "
+                       f"invocation, so there is no rewrite for --check to "
+                       f"precede")
+    first_check = next((i for i, f in enumerate(invs) if "--check" in f), None)
+    if first_check is None:
+        return False, (f"step {step_name!r} (job {jname!r}) carries --run but "
+                       f"no --check: nothing judges the README as committed "
+                       f"before it is rewritten (#906)")
+    if first_check < first_run:
+        return True, (f"in step {step_name!r} (job {jname!r}), --check "
+                      f"(invocation {first_check}) precedes --run "
+                      f"(invocation {first_run})")
+    return False, (f"in step {step_name!r} (job {jname!r}), --run (invocation "
+                   f"{first_run}) precedes --check (invocation {first_check}):"
+                   f" --run rewrites README.md, so the later --check judges "
+                   f"the step's own output, not the committed tree (#906)")
+
+
+def roadmap_check_step_precedes_record_step(workflow,
+                                             check_step: str = ROADMAP_CHECK_STEP,
+                                             record_step: str = ROADMAP_RECORD_STEP):
+    """(ok, reason): in some one job, the step named `check_step` precedes the
+    step named `record_step`; the check step invokes `tools/compile_dag.py`
+    with `--check` and never `--run` (a check that also rewrites judges
+    nothing); the record step invokes it with `--run`."""
+    if isinstance(workflow, (str, pathlib.Path)):
+        workflow = yaml.safe_load(pathlib.Path(workflow).read_text())
+    named: dict[str, tuple[str, int, dict]] = {}
+    for jname, job in ((workflow or {}).get("jobs") or {}).items():
+        for i, s in enumerate((job or {}).get("steps") or []):
+            if isinstance(s, dict) and s.get("name") in (check_step, record_step):
+                named[s["name"]] = (jname, i, s)
+    if check_step not in named:
+        return False, (f"no step named {check_step!r} -- the order gate has "
+                       f"nothing to guard")
+    if record_step not in named:
+        return False, (f"no step named {record_step!r} -- the order gate has "
+                       f"nothing to guard")
+    cj, ci, cstep = named[check_step]
+    rj, ri, rstep = named[record_step]
+    if cj != rj:
+        return False, (f"{check_step!r} is in job {cj!r} but {record_step!r} "
+                       f"is in {rj!r} -- the pair must gate one job")
+    cinvs = _compile_dag_invocations(str(cstep.get("run", "")))
+    if not cinvs or not any("--check" in f for f in cinvs):
+        return False, (f"step {check_step!r} (job {cj!r}) does not invoke "
+                       f"tools/compile_dag.py with --check")
+    if any("--run" in f for f in cinvs):
+        return False, (f"step {check_step!r} (job {cj!r}) also carries --run: "
+                       f"it would rewrite the README it is judging (#906)")
+    if not any("--run" in f
+               for f in _compile_dag_invocations(str(rstep.get("run", "")))):
+        return False, (f"step {record_step!r} (job {rj!r}) does not invoke "
+                       f"tools/compile_dag.py with --run")
+    if ci < ri:
+        return True, (f"in job {cj!r}, {check_step!r} (step {ci}) precedes "
+                      f"{record_step!r} (step {ri})")
+    return False, (f"in job {cj!r}, {record_step!r} (step {ri}) precedes "
+                   f"{check_step!r} (step {ci}): the regen would run before "
+                   f"anything judged the committed README (#906)")
+
+
+# =============================================================================
 # "the path a workflow names exists" -- issue #629, the #622 class.
 #
 # `nightly.yml` tested a docs results file that has never existed, so the
@@ -301,6 +431,7 @@ def main() -> int:
         print("no workflow files found", file=sys.stderr)
         return 2
     bad: list[str] = []
+    parsed: list[tuple[str, dict]] = []
 
     for f in files:
         text = f.read_text()
@@ -312,6 +443,7 @@ def main() -> int:
         if not isinstance(doc, dict):
             bad.append(f"{f.name}: does not parse to a mapping")
             continue
+        parsed.append((f.name, doc))
 
         # `on:` is parsed by YAML 1.1 as the boolean True. Accept either.
         triggers = doc.get("on", doc.get(True))
@@ -343,6 +475,34 @@ def main() -> int:
             if run_text and not checkout:
                 bad.append(f"{f.name}:{jname}: runs commands without actions/checkout")
 
+    # -- the shipped #906 order itself (#940): the gate must FIND what it
+    #    guards somewhere in the tree. A rename that evaded both gates below
+    #    is reported, not rewarded with a green run.
+    guarded: dict[str, str] = {}
+    for name, doc in parsed:
+        step_names = [s.get("name")
+                      for job in (doc.get("jobs") or {}).values()
+                      for s in (job or {}).get("steps") or []
+                      if isinstance(s, dict)]
+        if ROADMAP_STEP in step_names:
+            ok, reason = roadmap_check_precedes_run_in_step(doc, ROADMAP_STEP)
+            if ok:
+                guarded["in-step"] = reason
+            else:
+                bad.append(f"{name}: {reason}")
+        if ROADMAP_CHECK_STEP in step_names and ROADMAP_RECORD_STEP in step_names:
+            ok, reason = roadmap_check_step_precedes_record_step(doc)
+            if ok:
+                guarded["pair"] = reason
+            else:
+                bad.append(f"{name}: {reason}")
+    for what, why in (
+            ("in-step", f"no workflow carries a step named {ROADMAP_STEP!r}"),
+            ("pair", f"no workflow carries the {ROADMAP_CHECK_STEP!r} / "
+                     f"{ROADMAP_RECORD_STEP!r} step pair")):
+        if what not in guarded:
+            bad.append(f"{why} -- the #906 order gate has nothing to guard")
+
     refused = None
     try:
         scan = check_referenced_paths(gather_sources(), tracked_files())
@@ -365,6 +525,8 @@ def main() -> int:
               f"build -- an unregistered workflow simply never runs.", file=sys.stderr)
         return 1
     print(f"{len(files)} workflow(s) parse and declare a usable trigger")
+    for reason in guarded.values():
+        print(f"  roadmap order: {reason}")
     return 0
 
 

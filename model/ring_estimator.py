@@ -23,6 +23,11 @@ sys.path.insert(0, os.path.join(ROOT, "audition"))
 
 import audio_measure as am                                          # noqa: E402
 from dsp import SR                                                  # noqa: E402
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 # ---- the estimator's thresholds (plan.json "estimator") ---------------------
 MIN_CYCLES = 10
@@ -31,7 +36,7 @@ SUSTAIN_FLOOR = 0.01                # last-quarter peak, full scale: a ring, not
 SUSTAIN_DROP_DB = -1.0              # last vs first quarter peak
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the measurement is unmet, so nothing was measured."""
 
 

@@ -60,6 +60,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import refusal
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 RIGS = REPO / "model" / "reference_rigs.py"
@@ -99,7 +100,7 @@ COMMENT_ROW = re.compile(
 UNQUALIFIED = "UNQUALIFIED"
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the check failed, so no verdict can be given."""
 
 

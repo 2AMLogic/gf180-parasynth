@@ -69,6 +69,10 @@ for _p in ("fpga", "rtl-sketch", "model"):
 
 import late_event_policy as pol                           # noqa: E402
 import uart_host as uh                                    # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 BENCH = ROOT / "rtl-sketch/tb_uart_late.v"
 BRIDGE = ROOT / "rtl-sketch/uart_bridge.v"
@@ -83,7 +87,7 @@ SR = 48_000
 MID = 128                                     # a mid-frame cycle, clear of the slots
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

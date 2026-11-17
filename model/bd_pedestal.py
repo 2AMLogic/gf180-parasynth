@@ -55,6 +55,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import modal_fixed as mf
 import drums_fx as dx
 from drums_fx import SR
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -67,7 +72,7 @@ TAIL_TAUS = 24            # record length in amplitude time constants (mechanism
 ZERO = 1e-9               # relative to peak: below this is numerically zero
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the apparatus failed. Not a result, and not a fail."""
 
 

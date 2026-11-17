@@ -25,10 +25,17 @@ from scipy.io import wavfile
 
 import analyse_m1a_phase_cycle as ap
 import mono_m1a_score as bass
+import run_all
 
 ROOT, SR, lead = bass.ROOT, bass.SR, bass.lead
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/drive-experiment"
 RECORD = ROOT / "docs/scorecard/results/M1A.json"
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous report
+    standing, not a truncated one."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 PHASE_REPORT = ROOT / "docs/scorecard/mono-m1a-miniv3/phase-cycle-capture/report.json"
 BASELINE_DRIVE = .75
 DRIVES = (.75, .50, .25)
@@ -224,8 +231,7 @@ def main():
             "candidates": {str(k): v for k, v in rows.items()},
             "choice": None if choice is None else str(choice),
         }
-        OUT.mkdir(parents=True, exist_ok=True)
-        (OUT / "report.json").write_text(json.dumps(report, indent=1) + "\n")
+        write_json(OUT / "report.json", report)
         print(json.dumps({"choice": report["choice"],
                           "ineligible": {k: v.get("ineligible_because") for k, v in rows.items()}}, indent=1))
         return 0

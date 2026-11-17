@@ -83,6 +83,7 @@ import sys
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import butter, hilbert, lfilter, resample_poly, sosfilt, sosfiltfilt, welch
+import refusal
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -156,7 +157,7 @@ INJECTIONS = ("pitch-rms", "centroid-max-weights", "span-target-only")
 INJECT: set = set()
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the apparatus failed; the gate withholds a verdict."""
 
 

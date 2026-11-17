@@ -55,6 +55,10 @@ import reference_rigs as rr          # noqa: E402
 import voice_fx as vf                # noqa: E402
 import f1_selected_path as f1        # noqa: E402
 import f1_level_capture as cap       # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 CANDIDATES = {"baseline": 1.0, "half": 0.5, "quarter": 0.25}
 AMPS = cap.AMPS
@@ -71,7 +75,7 @@ N_HARM = 9
 BASE_VPU = 0.13
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

@@ -44,13 +44,17 @@ from scipy.signal import butter, lfilter, sosfiltfilt
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "model")]
 import perceptual_gate as pg  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 FAMILY = ("LT", "MT", "HT", "LC", "MC", "HC")
 PREREG = ROOT / "docs" / "scorecard" / "tom-conga-558" / "prereg.json"
 PITCH_DB = pg.PITCH_DB
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

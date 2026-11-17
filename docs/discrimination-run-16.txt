@@ -1,5 +1,6 @@
-revision node/D-drums-bitexact-66-g7078320 (7078320bd8bd), model sha 73ffa9076b198dbe
+revision node/D-drums-bitexact-2665-g193aba44-dirty (193aba44efb8), model sha 80f57d76fa2eeaaa
 sounds: all sixteen; feature sets: both
+seed 0; jit.dphase_ar1 floor 20 ppm (shipped JIT_DPHASE_FLOOR_PPM)
 
 corpus level check: 38/116 files within 1 % of the ceiling, total range 6.0 dB -> PEAK-LIMITED
 reference clips: 116 over 16 voices; fit 54, held out 62
@@ -22,9 +23,23 @@ fitting the control law on FIT_KNOBS = (0.0, 5.0, 10.0) only
   measured SD.tone_ratio          k=0.0:0.001506  k=5.0:0.08386  k=10.0:2.205
   measured SD.tone_tau            k=0.0:0.02851  k=5.0:0.02739  k=10.0:0.0136
 
-rendering 1 arms on 9 workers...
-    rendered 50/116
-    rendered 100/116
+rendering 11 arms on 2 workers...
+    rendered 50/834
+    rendered 100/834
+    rendered 150/834
+    rendered 200/834
+    rendered 250/834
+    rendered 300/834
+    rendered 350/834
+    rendered 400/834
+    rendered 450/834
+    rendered 500/834
+    rendered 550/834
+    rendered 600/834
+    rendered 650/834
+    rendered 700/834
+    rendered 750/834
+    rendered 800/834
 
 ========================================================================
 == FEATURE SET 'base': 320 columns
@@ -36,8 +51,8 @@ rendering 1 arms on 9 workers...
   cross-voice (real vs real, different voice) BD vs MT     1.000 [0.81,1.00] n=18
   cross-voice (real vs real, different voice) LT vs MT     1.000 [0.40,1.00] n=4
   cross-voice (real vs real, different voice) LC vs MC     1.000 [0.40,1.00] n=4
-  label-permutation null      mean 0.497 [0.427,0.573] over 200 shuffles
-  real-vs-real random split   mean 0.438 [0.309,0.688] over 20 draws
+  label-permutation null      mean 0.498 [0.427,0.581] over 200 shuffles
+  real-vs-real random split   mean 0.425 [0.247,0.628] over 20 draws
   real-vs-real separation     BD DECAY   delta  2.5  1.000 [0.63,1.00] n=8
   real-vs-real separation     BD DECAY   delta  5.0  1.000 [0.63,1.00] n=8
   real-vs-real separation     BD DECAY   delta  7.5  1.000 [0.63,1.00] n=8
@@ -65,75 +80,95 @@ rendering 1 arms on 9 workers...
   -> cross-voice control PASS; null calibration PASS
 
 == arms: held-out (emulation) balanced accuracy, level-matched ==
-  ours           0.895 [0.83,0.94] n=124 settings=62 recordings=232 ABX 56/62
+  ours           0.895 [0.83,0.94] n=124 settings=62 recordings=232 ABX 62/62
+  docfix         0.911 [0.85,0.95] n=124 settings=62 recordings=232 ABX 62/62
+  deg_decay      1.000 [0.97,1.00] n=124 settings=62 recordings=232 ABX 62/62
+  deg_nonoise    0.906 [0.75,0.98] n=32 settings=16 recordings=54 ABX 16/16
+  deg_qcoarse    0.971 [0.90,1.00] n=68 settings=34 recordings=122 ABX 34/34
+  deg_tail75     0.976 [0.93,0.99] n=124 settings=62 recordings=226 ABX 62/62
+  deg_tail50     0.960 [0.91,0.99] n=124 settings=62 recordings=226 ABX 62/62
+  deg_snappy6    0.906 [0.75,0.98] n=32 settings=16 recordings=50 ABX 16/16
+  deg_snappy12   0.906 [0.75,0.98] n=32 settings=16 recordings=50 ABX 16/16
+  deg_q6bit      0.971 [0.90,1.00] n=68 settings=34 recordings=122 ABX 34/34
+  deg_q5bit      0.956 [0.88,0.99] n=68 settings=34 recordings=122 ABX 34/34
   -> large-degradation control PASS; OVERALL usable
 
 == ablations (arm 'ours') ==
   level-matched + floor clamp  0.895 [0.83,0.94] n=124
-  UNMATCHED level              0.976 [0.93,0.99] n=124
-  no floor clamp               0.992 [0.96,1.00] n=124
+  UNMATCHED level              0.984 [0.94,1.00] n=124
+  no floor clamp               1.000 [0.97,1.00] n=124
 
 == FD-mel (comparative; not FAD, not an absolute score) ==
-  reference vs ours                            114.086
-  reference vs reference subsets               103.597
+  reference vs ours                             63.807
+  reference vs docfix                           66.876
+  reference vs deg_decay                       128.682
+  reference vs deg_nonoise                     834.668
+  reference vs deg_qcoarse                     242.268
+  reference vs deg_tail75                       92.482
+  reference vs deg_tail50                      193.034
+  reference vs deg_snappy6                      42.653
+  reference vs deg_snappy12                    126.427
+  reference vs deg_q6bit                       217.803
+  reference vs deg_q5bit                       218.554
+  reference vs reference subsets               103.944
   CAVEAT: rows whose arm covers fewer voices than `ours` are NOT on the same
   scale as it -- the voice balance is fixed only WITHIN a row.
 
 == per-voice: knob-equivalent separation (arm 'ours', emulation) ==
-  BD  0.844 [0.67,0.95] n=32 settings=16  dist  17.2 vs knob-10  34.9  knob-equiv   2.5  frozen-ruler   5.2  -> known defect remains
+  BD  0.844 [0.67,0.95] n=32 settings=16  dist  18.3 vs knob-10  35.3  knob-equiv   4.0  frozen-ruler   5.4  -> known defect remains
   CB  REFUSED: no knob -> no held-out setting, no knob-equivalent
   CH  REFUSED: no knob -> no held-out setting, no knob-equivalent
   CL  REFUSED: no knob -> no held-out setting, no knob-equivalent
   CP  REFUSED: no knob -> no held-out setting, no knob-equivalent
-  CY  1.000 [0.89,1.00] n=32 settings=16  dist  29.9 vs knob-10  32.6  knob-equiv   8.1  frozen-ruler  >=10  -> known defect remains
-  HC  1.000 [0.40,1.00] n=4 settings=2  dist  30.7 vs knob-10  29.3  knob-equiv  >=10  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  HT  1.000 [0.40,1.00] n=4 settings=2  dist  32.2 vs knob-10  32.4  knob-equiv   7.3  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  LC  0.750 [0.19,0.99] n=4 settings=2  dist  22.8 vs knob-10  34.0  knob-equiv   3.5  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  LT  1.000 [0.40,1.00] n=4 settings=2  dist  32.4 vs knob-10  32.3  knob-equiv  >=10  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  CY  1.000 [0.89,1.00] n=32 settings=16  dist  28.7 vs knob-10  32.6  knob-equiv   7.2  frozen-ruler  >=10  -> known defect remains
+  HC  0.500 [0.07,0.93] n=4 settings=2  dist  14.1 vs knob-10  29.3  knob-equiv   2.5  frozen-ruler   2.5  -> no verdict (underpowered: 4 held-out recording
+  HT  0.750 [0.19,0.99] n=4 settings=2  dist  27.7 vs knob-10  31.7  knob-equiv   5.9  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  LC  0.750 [0.19,0.99] n=4 settings=2  dist  14.3 vs knob-10  34.0  knob-equiv   2.5  frozen-ruler   2.5  -> no verdict (underpowered: 4 held-out recording
+  LT  1.000 [0.40,1.00] n=4 settings=2  dist  31.4 vs knob-10  32.6  knob-equiv   6.8  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
   MA  REFUSED: no knob -> no held-out setting, no knob-equivalent
-  MC  0.750 [0.19,0.99] n=4 settings=2  dist  25.7 vs knob-10  32.4  knob-equiv   5.4  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  MT  1.000 [0.40,1.00] n=4 settings=2  dist  30.2 vs knob-10  32.1  knob-equiv   5.2  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  OH  1.000 [0.40,1.00] n=4 settings=2  dist  28.8 vs knob-10  29.2  knob-equiv   6.9  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  MC  0.750 [0.19,0.99] n=4 settings=2  dist   9.6 vs knob-10  32.1  knob-equiv   2.5  frozen-ruler   2.5  -> no verdict (underpowered: 4 held-out recording
+  MT  1.000 [0.40,1.00] n=4 settings=2  dist  25.6 vs knob-10  32.5  knob-equiv   3.5  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  OH  1.000 [0.40,1.00] n=4 settings=2  dist  28.5 vs knob-10  29.1  knob-equiv   6.0  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
   RS  REFUSED: no knob -> no held-out setting, no knob-equivalent
-  SD  0.812 [0.64,0.93] n=32 settings=16  dist  18.4 vs knob-10  27.7  knob-equiv   3.4  frozen-ruler   4.7  -> known defect remains
+  SD  0.906 [0.75,0.98] n=32 settings=16  dist  18.3 vs knob-10  27.5  knob-equiv   3.4  frozen-ruler   4.7  -> known defect remains
 
 == interpretable diagnostics, HELD-OUT settings only (generalisation) ==
-  BD  n=16  tau_ms +169%  attack_ms +29%  share_hi -79%
-  CY  n=16  share_lo +170938%  share_mid +349%  tau_ms +167%
-  HC  n=2  share_mid +64714%  share_hi -11%  attack_ms -22%
-  HT  n=2  share_mid -100%  share_hi -27%  centroid_Hz -24%
-  LC  n=2  share_mid +63%  share_hi -56%  centroid_Hz -17%
-  LT  n=2  share_mid -100%  share_hi -65%  attack_ms -29%
-  MC  n=2  share_mid +658%  share_hi -59%  centroid_Hz -36%
-  MT  n=2  share_mid -100%  share_hi -51%  attack_ms -38%
-  OH  n=2  share_lo +16896%  share_mid -81%  attack_ms -81%
-  SD  n=16  share_mid +2854%  share_hi +831%  share_lo +32%
+  BD  n=16  tau_ms +155%  share_hi -79%  share_mid -75%
+  CY  n=16  share_lo +23681%  share_mid -42%  flatness_dB -44%
+  HC  n=2  share_mid -68%  share_hi -49%  attack_ms -18%
+  HT  n=2  share_mid -100%  share_hi -49%  attack_ms +1%
+  LC  n=2  share_mid -66%  share_hi -49%  attack_ms +10%
+  LT  n=2  share_mid -100%  attack_ms +75%  share_hi -62%
+  MC  n=2  share_hi -70%  share_mid -63%  attack_ms +17%
+  MT  n=2  share_mid -100%  share_hi -50%  attack_ms -26%
+  OH  n=2  share_mid -81%  flatness_dB -78%  attack_ms -65%
+  SD  n=16  share_mid +2852%  share_hi +831%  share_lo +32%
 
 == what carries the discrimination (arm 'ours', held out) ==
-  mfcc.seg0                  accuracy drop +0.122 when shuffled
-  mfcc.seg1                  accuracy drop +0.065 when shuffled
-  mfcc.seg2                  accuracy drop +0.050 when shuffled
-  mfcc.seg3                  accuracy drop +0.022 when shuffled
-  200-700Hz.seg0             accuracy drop +0.017 when shuffled
-  2-5kHz.seg0                accuracy drop +0.010 when shuffled
-  5-18kHz.seg1               accuracy drop +0.007 when shuffled
-  30-200Hz.seg1              accuracy drop +0.006 when shuffled
-  0.7-2kHz.seg1              accuracy drop +0.005 when shuffled
-  2-5kHz.seg2                accuracy drop +0.005 when shuffled
+  mfcc.seg0                  accuracy drop +0.213 when shuffled
+  mfcc.seg3                  accuracy drop +0.055 when shuffled
+  mfcc.seg1                  accuracy drop +0.034 when shuffled
+  2-5kHz.seg0                accuracy drop +0.025 when shuffled
+  mfcc.seg2                  accuracy drop +0.025 when shuffled
+  5-18kHz.seg0               accuracy drop +0.019 when shuffled
+  5-18kHz.seg3               accuracy drop +0.014 when shuffled
+  200-700Hz.seg1             accuracy drop +0.009 when shuffled
+  0.7-2kHz.seg3              accuracy drop +0.009 when shuffled
+  0.7-2kHz.seg1              accuracy drop +0.006 when shuffled
   200-700Hz.seg3             accuracy drop +0.004 when shuffled
-  200-700Hz.seg1             accuracy drop +0.004 when shuffled
-  30-200Hz.seg2              accuracy drop +0.004 when shuffled
-  5-18kHz.seg0               accuracy drop +0.003 when shuffled
-  200-700Hz.seg2             accuracy drop +0.003 when shuffled
-  30-200Hz.seg0              accuracy drop +0.003 when shuffled
-  0.7-2kHz.seg0              accuracy drop +0.003 when shuffled
-  2-5kHz.seg1                accuracy drop +0.003 when shuffled
-  5-18kHz.seg3               accuracy drop +0.002 when shuffled
-  30-200Hz.seg3              accuracy drop +0.001 when shuffled
-  5-18kHz.seg2               accuracy drop +0.001 when shuffled
-  2-5kHz.seg3                accuracy drop +0.001 when shuffled
-  0.7-2kHz.seg3              accuracy drop +0.000 when shuffled
-  0.7-2kHz.seg2              accuracy drop +0.000 when shuffled
+  30-200Hz.seg0              accuracy drop +0.004 when shuffled
+  30-200Hz.seg1              accuracy drop +0.001 when shuffled
+  30-200Hz.seg2              accuracy drop +0.000 when shuffled
+  200-700Hz.seg2             accuracy drop +0.000 when shuffled
+  0.7-2kHz.seg2              accuracy drop -0.001 when shuffled
+  2-5kHz.seg3                accuracy drop -0.002 when shuffled
+  30-200Hz.seg3              accuracy drop -0.002 when shuffled
+  5-18kHz.seg1               accuracy drop -0.004 when shuffled
+  200-700Hz.seg0             accuracy drop -0.005 when shuffled
+  2-5kHz.seg2                accuracy drop -0.007 when shuffled
+  5-18kHz.seg2               accuracy drop -0.007 when shuffled
+  2-5kHz.seg1                accuracy drop -0.008 when shuffled
+  0.7-2kHz.seg0              accuracy drop -0.011 when shuffled
 
 ========================================================================
 == FEATURE SET 'plus': 511 columns
@@ -145,13 +180,13 @@ rendering 1 arms on 9 workers...
   cross-voice (real vs real, different voice) BD vs MT     1.000 [0.81,1.00] n=18
   cross-voice (real vs real, different voice) LT vs MT     1.000 [0.40,1.00] n=4
   cross-voice (real vs real, different voice) LC vs MC     1.000 [0.40,1.00] n=4
-  label-permutation null      mean 0.501 [0.427,0.573] over 200 shuffles
-  real-vs-real random split   mean 0.438 [0.250,0.688] over 20 draws
+  label-permutation null      mean 0.503 [0.427,0.573] over 200 shuffles
+  real-vs-real random split   mean 0.441 [0.309,0.625] over 20 draws
   real-vs-real separation     BD DECAY   delta  2.5  1.000 [0.63,1.00] n=8
   real-vs-real separation     BD DECAY   delta  5.0  1.000 [0.63,1.00] n=8
   real-vs-real separation     BD DECAY   delta  7.5  1.000 [0.63,1.00] n=8
   real-vs-real separation     BD DECAY   delta 10.0  1.000 [0.40,1.00] n=4
-  real-vs-real separation     BD TONE    delta  2.5  0.500 [0.16,0.84] n=8
+  real-vs-real separation     BD TONE    delta  2.5  0.625 [0.24,0.91] n=8
   real-vs-real separation     BD TONE    delta  5.0  0.875 [0.47,1.00] n=8
   real-vs-real separation     BD TONE    delta  7.5  1.000 [0.63,1.00] n=8
   real-vs-real separation     BD TONE    delta 10.0  1.000 [0.40,1.00] n=4
@@ -159,7 +194,7 @@ rendering 1 arms on 9 workers...
   real-vs-real separation     CY DECAY   delta  5.0  1.000 [0.63,1.00] n=8
   real-vs-real separation     CY DECAY   delta  7.5  1.000 [0.63,1.00] n=8
   real-vs-real separation     CY DECAY   delta 10.0  1.000 [0.40,1.00] n=4
-  real-vs-real separation     CY TONE    delta  2.5  0.500 [0.16,0.84] n=8
+  real-vs-real separation     CY TONE    delta  2.5  0.625 [0.24,0.91] n=8
   real-vs-real separation     CY TONE    delta  5.0  0.875 [0.47,1.00] n=8
   real-vs-real separation     CY TONE    delta  7.5  1.000 [0.63,1.00] n=8
   real-vs-real separation     CY TONE    delta 10.0  1.000 [0.40,1.00] n=4
@@ -167,18 +202,28 @@ rendering 1 arms on 9 workers...
   real-vs-real separation     SD SNAPPY  delta  5.0  1.000 [0.63,1.00] n=8
   real-vs-real separation     SD SNAPPY  delta  7.5  1.000 [0.63,1.00] n=8
   real-vs-real separation     SD SNAPPY  delta 10.0  1.000 [0.40,1.00] n=4
-  real-vs-real separation     SD TONE    delta  2.5  0.500 [0.16,0.84] n=8
+  real-vs-real separation     SD TONE    delta  2.5  0.625 [0.24,0.91] n=8
   real-vs-real separation     SD TONE    delta  5.0  0.875 [0.47,1.00] n=8
   real-vs-real separation     SD TONE    delta  7.5  1.000 [0.63,1.00] n=8
   real-vs-real separation     SD TONE    delta 10.0  1.000 [0.40,1.00] n=4
   -> cross-voice control PASS; null calibration PASS
 
 == arms: held-out (emulation) balanced accuracy, level-matched ==
-  ours           0.984 [0.94,1.00] n=124 settings=62 recordings=232 ABX 62/62
+  ours           0.976 [0.93,0.99] n=124 settings=62 recordings=232 ABX 61/62
+  docfix         0.976 [0.93,0.99] n=124 settings=62 recordings=232 ABX 61/62
+  deg_decay      0.992 [0.96,1.00] n=124 settings=62 recordings=232 ABX 62/62
+  deg_nonoise    1.000 [0.89,1.00] n=32 settings=16 recordings=54 ABX 16/16
+  deg_qcoarse    0.985 [0.92,1.00] n=68 settings=34 recordings=122 ABX 34/34
+  deg_tail75     0.984 [0.94,1.00] n=124 settings=62 recordings=226 ABX 61/62
+  deg_tail50     1.000 [0.97,1.00] n=124 settings=62 recordings=226 ABX 62/62
+  deg_snappy6    1.000 [0.89,1.00] n=32 settings=16 recordings=50 ABX 16/16
+  deg_snappy12   1.000 [0.89,1.00] n=32 settings=16 recordings=50 ABX 16/16
+  deg_q6bit      0.985 [0.92,1.00] n=68 settings=34 recordings=122 ABX 34/34
+  deg_q5bit      0.985 [0.92,1.00] n=68 settings=34 recordings=122 ABX 34/34
   -> large-degradation control PASS; OVERALL usable
 
 == ablations (arm 'ours') ==
-  level-matched + floor clamp  0.984 [0.94,1.00] n=124
+  level-matched + floor clamp  0.976 [0.93,0.99] n=124
   UNMATCHED level              0.992 [0.96,1.00] n=124
   no floor clamp               0.984 [0.94,1.00] n=124
 
@@ -188,60 +233,60 @@ rendering 1 arms on 9 workers...
   units. Read the 'base' rows; there is no honest 'plus' row.
 
 == per-voice: knob-equivalent separation (arm 'ours', emulation) ==
-  BD  1.000 [0.89,1.00] n=32 settings=16  dist  23.6 vs knob-10  42.7  knob-equiv   4.4  frozen-ruler  >=10  -> known defect remains
+  BD  1.000 [0.89,1.00] n=32 settings=16  dist  24.7 vs knob-10  43.1  knob-equiv   5.1  frozen-ruler  >=10  -> known defect remains
   CB  REFUSED: no knob -> no held-out setting, no knob-equivalent
   CH  REFUSED: no knob -> no held-out setting, no knob-equivalent
   CL  REFUSED: no knob -> no held-out setting, no knob-equivalent
   CP  REFUSED: no knob -> no held-out setting, no knob-equivalent
-  CY  1.000 [0.89,1.00] n=32 settings=16  dist  39.2 vs knob-10  39.5  knob-equiv   9.8  frozen-ruler  >=10  -> known defect remains
-  HC  1.000 [0.40,1.00] n=4 settings=2  dist  38.7 vs knob-10  38.1  knob-equiv  >=10  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  HT  1.000 [0.40,1.00] n=4 settings=2  dist  40.1 vs knob-10  40.8  knob-equiv   6.7  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  LC  1.000 [0.40,1.00] n=4 settings=2  dist  30.9 vs knob-10  41.3  knob-equiv   4.1  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  LT  1.000 [0.40,1.00] n=4 settings=2  dist  39.7 vs knob-10  39.9  knob-equiv   7.4  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  CY  1.000 [0.89,1.00] n=32 settings=16  dist  37.2 vs knob-10  39.6  knob-equiv   8.6  frozen-ruler  >=10  -> known defect remains
+  HC  1.000 [0.40,1.00] n=4 settings=2  dist  24.0 vs knob-10  38.2  knob-equiv   2.5  frozen-ruler   5.8  -> no verdict (underpowered: 4 held-out recording
+  HT  0.750 [0.19,0.99] n=4 settings=2  dist  35.2 vs knob-10  40.2  knob-equiv   4.7  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  LC  1.000 [0.40,1.00] n=4 settings=2  dist  22.5 vs knob-10  41.3  knob-equiv   2.5  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  LT  0.750 [0.19,0.99] n=4 settings=2  dist  38.2 vs knob-10  40.1  knob-equiv   6.3  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
   MA  REFUSED: no knob -> no held-out setting, no knob-equivalent
-  MC  1.000 [0.40,1.00] n=4 settings=2  dist  34.6 vs knob-10  40.2  knob-equiv   5.7  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  MT  1.000 [0.40,1.00] n=4 settings=2  dist  38.4 vs knob-10  40.0  knob-equiv   5.8  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
-  OH  1.000 [0.40,1.00] n=4 settings=2  dist  37.3 vs knob-10  36.2  knob-equiv  >=10  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  MC  0.750 [0.19,0.99] n=4 settings=2  dist  21.9 vs knob-10  40.0  knob-equiv   2.5  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  MT  1.000 [0.40,1.00] n=4 settings=2  dist  33.7 vs knob-10  40.2  knob-equiv   4.0  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
+  OH  1.000 [0.40,1.00] n=4 settings=2  dist  36.3 vs knob-10  35.9  knob-equiv  >=10  frozen-ruler  >=10  -> no verdict (underpowered: 4 held-out recording
   RS  REFUSED: no knob -> no held-out setting, no knob-equivalent
-  SD  0.938 [0.79,0.99] n=32 settings=16  dist  22.0 vs knob-10  36.9  knob-equiv   2.9  frozen-ruler   4.8  -> known defect remains
+  SD  1.000 [0.89,1.00] n=32 settings=16  dist  22.0 vs knob-10  36.9  knob-equiv   3.0  frozen-ruler   4.8  -> known defect remains
 
 == interpretable diagnostics, HELD-OUT settings only (generalisation) ==
-  BD  n=16  tau_ms +169%  attack_ms +29%  share_hi -79%
-  CY  n=16  share_lo +170938%  share_mid +349%  tau_ms +167%
-  HC  n=2  share_mid +64714%  share_hi -11%  attack_ms -22%
-  HT  n=2  share_mid -100%  share_hi -27%  centroid_Hz -24%
-  LC  n=2  share_mid +63%  share_hi -56%  centroid_Hz -17%
-  LT  n=2  share_mid -100%  share_hi -65%  attack_ms -29%
-  MC  n=2  share_mid +658%  share_hi -59%  centroid_Hz -36%
-  MT  n=2  share_mid -100%  share_hi -51%  attack_ms -38%
-  OH  n=2  share_lo +16896%  share_mid -81%  attack_ms -81%
-  SD  n=16  share_mid +2854%  share_hi +831%  share_lo +32%
+  BD  n=16  tau_ms +155%  share_hi -79%  share_mid -75%
+  CY  n=16  share_lo +23681%  share_mid -42%  flatness_dB -44%
+  HC  n=2  share_mid -68%  share_hi -49%  attack_ms -18%
+  HT  n=2  share_mid -100%  share_hi -49%  attack_ms +1%
+  LC  n=2  share_mid -66%  share_hi -49%  attack_ms +10%
+  LT  n=2  share_mid -100%  attack_ms +75%  share_hi -62%
+  MC  n=2  share_hi -70%  share_mid -63%  attack_ms +17%
+  MT  n=2  share_mid -100%  share_hi -50%  attack_ms -26%
+  OH  n=2  share_mid -81%  flatness_dB -78%  attack_ms -65%
+  SD  n=16  share_mid +2852%  share_hi +831%  share_lo +32%
 
 == what carries the discrimination (arm 'ours', held out) ==
-  mfcc.seg1                  accuracy drop +0.045 when shuffled
-  mfcc.seg3                  accuracy drop +0.026 when shuffled
-  mfcc.seg0                  accuracy drop +0.026 when shuffled
-  jit.period                 accuracy drop +0.024 when shuffled
+  mfcc.seg0                  accuracy drop +0.044 when shuffled
+  mfcc.seg3                  accuracy drop +0.028 when shuffled
+  mfcc.seg1                  accuracy drop +0.023 when shuffled
   cqt.0-200Hz                accuracy drop +0.018 when shuffled
-  cqt.9000-20000Hz           accuracy drop +0.017 when shuffled
-  cqt.5000-9000Hz            accuracy drop +0.014 when shuffled
-  cqt.700-2000Hz             accuracy drop +0.010 when shuffled
-  ms.scale-difference        accuracy drop +0.010 when shuffled
-  cqt.2000-5000Hz            accuracy drop +0.010 when shuffled
-  mfcc.seg2                  accuracy drop +0.008 when shuffled
-  jit.stability              accuracy drop +0.008 when shuffled
-  0.7-2kHz.seg0              accuracy drop +0.006 when shuffled
-  2-5kHz.seg0                accuracy drop +0.005 when shuffled
-  5-18kHz.seg2               accuracy drop +0.004 when shuffled
-  5-18kHz.seg0               accuracy drop +0.002 when shuffled
-  5-18kHz.seg1               accuracy drop +0.002 when shuffled
-  mpd.00ms                   accuracy drop +0.002 when shuffled
-  200-700Hz.seg0             accuracy drop +0.001 when shuffled
-  cqt.200-700Hz              accuracy drop +0.001 when shuffled
-  mpd.07ms                   accuracy drop +0.001 when shuffled
-  mpd.54ms                   accuracy drop +0.001 when shuffled
-  mpd.77ms                   accuracy drop +0.001 when shuffled
+  cqt.2000-5000Hz            accuracy drop +0.012 when shuffled
+  cqt.9000-20000Hz           accuracy drop +0.009 when shuffled
+  cqt.700-2000Hz             accuracy drop +0.007 when shuffled
+  jit.stability              accuracy drop +0.003 when shuffled
+  ms.25ms                    accuracy drop +0.003 when shuffled
+  2-5kHz.seg0                accuracy drop +0.001 when shuffled
+  mpd.00ms                   accuracy drop +0.001 when shuffled
+  mpd.50ms                   accuracy drop +0.001 when shuffled
+  5-18kHz.seg0               accuracy drop +0.000 when shuffled
   2-5kHz.seg3                accuracy drop +0.000 when shuffled
+  mpd.07ms                   accuracy drop +0.000 when shuffled
+  30-200Hz.seg0              accuracy drop +0.000 when shuffled
+  200-700Hz.seg0             accuracy drop +0.000 when shuffled
+  30-200Hz.seg1              accuracy drop +0.000 when shuffled
+  0.7-2kHz.seg1              accuracy drop +0.000 when shuffled
+  2-5kHz.seg1                accuracy drop +0.000 when shuffled
+  5-18kHz.seg1               accuracy drop +0.000 when shuffled
+  30-200Hz.seg2              accuracy drop +0.000 when shuffled
+  200-700Hz.seg2             accuracy drop +0.000 when shuffled
+  30-200Hz.seg3              accuracy drop +0.000 when shuffled
 
 ========================================================================
 == WHAT THE EXTRA COLUMNS CHANGED
@@ -249,23 +294,25 @@ rendering 1 arms on 9 workers...
   knob-equivalent on the FROZEN ruler (both distances scaled on the same
   population), so the two columns are two readings of one instrument.
   voice    ke base   ke plus    delta    acc base  acc plus
-  BD           5.2      >=10                0.844     1.000
+  BD           5.4      >=10                0.844     1.000
   CB       refused   refused                  nan       nan
   CH       refused   refused                  nan       nan
   CL       refused   refused                  nan       nan
   CP       refused   refused                  nan       nan
   CY          >=10      >=10                1.000     1.000
-  HC          >=10      >=10                1.000     1.000
-  HT          >=10      >=10                1.000     1.000
-  LC          >=10      >=10                0.750     1.000
-  LT          >=10      >=10                1.000     1.000
+  HC           2.5       5.8     +3.3       0.500     1.000
+  HT          >=10      >=10                0.750     0.750
+  LC           2.5      >=10                0.750     1.000
+  LT          >=10      >=10                1.000     0.750
   MA       refused   refused                  nan       nan
-  MC          >=10      >=10                0.750     1.000
+  MC           2.5      >=10                0.750     0.750
   MT          >=10      >=10                1.000     1.000
   OH          >=10      >=10                1.000     1.000
   RS       refused   refused                  nan       nan
-  SD           4.7       4.8     +0.1       0.812     0.938
+  SD           4.7       4.8     +0.1       0.906     1.000
 
   A knob-equivalent that RISES with better features is a finding, not a
   regression: it says the old columns could not see how far away we were.
+
+wrote 136 playable reference/candidate pairs to /tmp/discrimination-img-778/pairs
 wrote docs/discrimination-results-16.json

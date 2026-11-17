@@ -55,6 +55,10 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 PREFIX = "stale_control: "
 LEGACY_CAPTURE = HERE / "evidence" / "held-note" / "default-legacy" / "capture.cmds"
@@ -62,7 +66,7 @@ STALE_COMMAND = "held-default"
 BINDING_SUBSTITUTE = "rtl-sketch/voice_dp.v"
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 
@@ -139,6 +143,13 @@ def _binding_files() -> tuple[list[str], list[str]]:
     rel = lambda p: str(Path(p).resolve().relative_to(ROOT))           # noqa: E731
     records = sorted(rel(p) for p in publish_arty.VERIFICATION_BY_WRAPPER.values())
     files = {"tools/check_arty_evidence_binding.py", "rtl-sketch/verify_synth_top.py"}
+    # since #815 the checker's fpga/*.py inputs raise refusal.Refused, so an
+    # isolated copy without tools/refusal.py crashes their module-scope import
+    # before any verdict can form -- the apparatus must carry the class its
+    # subjects catch. One copy serves every resolution path: the fpga modules'
+    # ROOT/tools append, verify_synth_top's conditional insert, and a tools/
+    # script's own directory.
+    files.add("tools/refusal.py")
     files |= {rel(p) for p in (ROOT / "fpga").glob("*.py")}
     files |= {rel(p) for p in build_arty.sources() + build_arty.roms()}
     # the constraint file: outside the checker's default (verification) scope,

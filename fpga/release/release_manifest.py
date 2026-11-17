@@ -44,6 +44,10 @@ for _p in ("fpga/release", "fpga", "model", "audition", "tools", "rtl-sketch"):
         sys.path.insert(0, str(ROOT / _p))
 
 import record_compare as rc                      # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 MANIFEST = HERE / "baseline-2025.1.json"
 PUB_DIR = ROOT / "fpga/reports/arty/integrated-baseline-2025.1"
@@ -126,7 +130,7 @@ COMMANDS = (
 ROLLING = ("demo", "bar808-full")
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """Selected artifacts disagree, or an input is missing."""
 
 
