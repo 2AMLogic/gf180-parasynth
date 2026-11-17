@@ -22,6 +22,17 @@ narrowed the regex without blinding it.
 Exit 0 every control went red then green again, 1 a control did not fire,
 2 the apparatus could not run (per this repository's convention: 2 is NO
 EVIDENCE, not NO PROBLEM).
+
+BASELINE PRECONDITION (#905). The controls inject into the live checkout and
+expect the checker to be green between injections, so before injecting anything
+the probe runs the checker once and REFUSES -- exit 2, naming what it found --
+if that baseline is not already green. WIP that makes one of the 17 claims
+stale otherwise reads as two FAILing controls (a guard that stopped guarding)
+when the guard worked and the tree was merely dirty. The precondition refuses
+exactly when the controls would be uninterpretable, not on WIP that leaves all
+claims green; that green-WIP state has its own refusal at the injection site
+(see "injection target" below), because a control whose replace target the WIP
+renamed would silently no-op and report a FAIL of its own.
 """
 from __future__ import annotations
 
@@ -67,8 +78,49 @@ def expect_red(py: str, name: str, needle: str) -> bool:
     return ok
 
 
+def baseline_green(py: str) -> bool:
+    """Assert the checkout's claims are green BEFORE any injection (#905).
+
+    Returns True and prints nothing when green. Refuses -- exit 2, naming the
+    STALE/REFUSED lines -- otherwise: a control run on this tree would report
+    the tree's own staleness as a control failure, which is exactly the
+    misattribution #905 exists for.
+    """
+    rc, out = run(py)
+    if rc == 0 and "0 stale, 0 refused" in out:
+        return False
+    reasons = [l.strip() for l in out.splitlines()
+               if l.startswith("STALE") or "REFUSED" in l][:10]
+    print("REFUSED: baseline not green before injection (checker exit="
+          f"{rc}); the four controls below would misreport this tree's own "
+          "staleness as a control failure. Commit or revert the WIP first.",
+          file=sys.stderr)
+    for line in reasons:
+        print(f"        {line}", file=sys.stderr)
+    return True
+
+
+def inject_or_refuse(before: str, find: str, replace: str, what: str) -> str | None:
+    """Stage an injection edit, or refuse if the target text is not there.
+
+    A replace that matches nothing would silently no-op and the control would
+    then report a FAIL about the tree rather than about the marker (#905's
+    green-WIP corner: WIP that renamed the claim text leaves every claim green,
+    so the baseline precondition passes, and this is the only thing that can
+    notice). Returns the staged text, or None after printing the refusal.
+    """
+    staged = before.replace(find, replace)
+    if staged == before:
+        print(f"REFUSED: injection target {find!r} not found; cannot stage "
+              f"{what} on this tree", file=sys.stderr)
+        return None
+    return staged
+
+
 def main() -> int:
     py = interpreter()
+    if baseline_green(py):
+        return 2
     results: list[bool] = []
 
     # 1. A re-introduced placeholder INSTANTIATION must defeat the anchored
@@ -90,9 +142,13 @@ def main() -> int:
     #    make it go red -- the drift this issue repaired, re-armed.
     readme = ROOT / "README.md"
     orig = readme.read_text(encoding="utf-8")
+    staged = inject_or_refuse(orig, 'grep="^T1: 2/11 items met$"',
+                              'grep="^T1: 3/11 items met$"',
+                              "the README T1 count control")
+    if staged is None:
+        return 2
     try:
-        readme.write_text(orig.replace('grep="^T1: 2/11 items met$"',
-                                       'grep="^T1: 3/11 items met$"'), encoding="utf-8")
+        readme.write_text(staged, encoding="utf-8")
         results.append(expect_red(py, "README T1 count marker goes red on a wrong count", "3/11"))
     finally:
         readme.write_text(orig, encoding="utf-8")
@@ -101,10 +157,15 @@ def main() -> int:
     #    quietly pass.
     ms = ROOT / "docs/milestones.md"
     orig_ms = ms.read_text(encoding="utf-8")
+    staged_ms = inject_or_refuse(orig_ms,
+                                 'grep="^module drum_kit" in=rtl-sketch/drum_kit.v',
+                                 'grep="^module drum_kit_NOT_IN_TREE" '
+                                 'in=rtl-sketch/drum_kit.v',
+                                 "the milestone-3 control")
+    if staged_ms is None:
+        return 2
     try:
-        ms.write_text(orig_ms.replace('grep="^module drum_kit" in=rtl-sketch/drum_kit.v',
-                                      'grep="^module drum_kit_NOT_IN_TREE" '
-                                      'in=rtl-sketch/drum_kit.v'), encoding="utf-8")
+        ms.write_text(staged_ms, encoding="utf-8")
         results.append(expect_red(py, "milestone-3 marker goes red when its evidence is absent",
                                   "drum_kit_NOT_IN_TREE"))
     finally:
