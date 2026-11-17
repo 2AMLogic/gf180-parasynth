@@ -49,11 +49,11 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **2768 commits over 1446 hours.**
+Measured from git, not remembered. **2795 commits over 1449 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 4015 | 2.8 |
+| tests | 4033 | 2.8 |
 | injected controls | 305 | 0.2 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,189 | 8 |
@@ -71,17 +71,17 @@ graph LR
   subgraph foundation["Foundation"]
     F1["✓ Ladder bit-exact"]
     F2["✓ Modal bank bit-exact"]
-    F3["· Measurement ground truth"]
+    F3["? Measurement ground truth"]
   end
   subgraph minimoog["Minimoog voice"]
     M1["✓ One Moog voice bit-exact"]
-    M2["✓ Matches our own spec"]
-    M3["· Matches software references"]
+    M2["? Matches our own spec"]
+    M3["? Matches software references"]
     M4["✗ Matches real hardware"]
   end
   subgraph drums["TR-808 drums"]
     D1["✓ Drum kit bit-exact"]
-    D2["· Is an 808, per the reference"]
+    D2["? Is an 808, per the reference"]
     D3["✗ Per-voice measured against targets"]
   end
   subgraph integration["Integration"]
@@ -89,9 +89,9 @@ graph LR
     I2["· Whole chip at its pins"]
   end
   subgraph silicon["Silicon"]
-    S1["· Routed on gf180, DRC clean"]
+    S1["? Routed on gf180, DRC clean"]
     S2["✗ Fits a real shuttle padframe"]
-    S3["· FPGA build of the real engine"]
+    S3["? FPGA build of the real engine"]
   end
   F1 --> M1
   M1 --> M2
@@ -110,38 +110,41 @@ graph LR
   I2 --> S3
   style F1 fill:#0E6B5E,color:#fff
   style F2 fill:#0E6B5E,color:#fff
-  style F3 fill:#3f8f5f,color:#fff
+  style F3 fill:#5E4B8A,color:#fff
   style M1 fill:#0E6B5E,color:#fff
-  style M2 fill:#0E6B5E,color:#fff
-  style M3 fill:#3f8f5f,color:#fff
+  style M2 fill:#5E4B8A,color:#fff
+  style M3 fill:#5E4B8A,color:#fff
   style M4 fill:#8E2438,color:#fff
   style D1 fill:#0E6B5E,color:#fff
-  style D2 fill:#3f8f5f,color:#fff
+  style D2 fill:#5E4B8A,color:#fff
   style D3 fill:#8E2438,color:#fff
   style I1 fill:#3f8f5f,color:#fff
   style I2 fill:#3f8f5f,color:#fff
-  style S1 fill:#3f8f5f,color:#fff
+  style S1 fill:#5E4B8A,color:#fff
   style S2 fill:#8E2438,color:#fff
-  style S3 fill:#3f8f5f,color:#fff
+  style S3 fill:#5E4B8A,color:#fff
 ```
 
 | | node | status | evidence |
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STAMPED** | node/F1-ladder |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal |
-| `F3` | Measurement ground truth | **GREEN** | 153 passed in 2.43s |
+| `F3` | Measurement ground truth | **REFUSED** | recorded sha 307e46fb is not in this history -- cannot tell whether 1 covered file(s) changed |
 | `M1` | One Moog voice bit-exact | **STAMPED** | node/M1-voice |
-| `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
-| `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
+| `M2` | Matches our own spec | **REFUSED** | recorded sha 307e46fb is not in this history -- cannot tell whether 2 covered file(s) changed |
+| `M3` | Matches software references **fidelity** | **REFUSED** | recorded sha 307e46fb is not in this history -- cannot tell whether 4 covered file(s) changed |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `D1` | Drum kit bit-exact | **STAMPED** | node/D-drums-bitexact |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 240.97s (0:04:00) |
+| `D2` | Is an 808, per the reference **fidelity** | **REFUSED** | recorded sha 307e46fb is not in this history -- cannot tell whether 1 covered file(s) changed |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `I1` | Control link carries every write | **GREEN** | verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in |
 | `I2` | Whole chip at its pins | **GREEN** | verify_synth_top: PASS -- 2851 I2S periods decoded from the wire, every one identical to t |
-| `S1` | Routed on gf180, DRC clean | **GREEN** | pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared |
+| `S1` | Routed on gf180, DRC clean | **REFUSED** | recorded sha 307e46fb is not in this history -- cannot tell whether 11 covered file(s) changed |
 | `S2` | Fits a real shuttle padframe | **BLOCKED** | LibreLane half-slot, in flight: padcells 0 -> 754 placed with all 5 wafer.space IP macros, 73.07 % core utilisation, drum_regs 3,520/3,520 flops placed on the run's own DEF. Detailed routing has NOT completed (iteration 60 of a 64 cap, 1 Metal2 short), so there is no final router DRC count, no post-route antenna check and no post-route STA at any corner. The verdict this node will read is pnr/shuttle/evidence/halfslot-verdict.json ('passed' = the AREA question only); finish it with pnr/shuttle/finish_halfslot.py finish. docs/pnr-shuttle-halfslot.md, PR #348 |
-| `S3` | FPGA build of the real engine | **GREEN** | fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared |
+| `S3` | FPGA build of the real engine | **REFUSED** | recorded sha 307e46fb is not in this history -- cannot tell whether 13 covered file(s) changed |
+
+> **Unvalidated subsystems.** TR-808 drums: no green fidelity evidence -- UNVALIDATED against anything external  
+> Minimoog voice: no green fidelity evidence -- UNVALIDATED against anything external
 
 <sub>Compiled from `docs/dag.json` by `tools/compile_dag.py`. Status is derived from evidence, not asserted.</sub>
 <!-- DAG:END -->

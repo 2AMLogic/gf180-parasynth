@@ -45,6 +45,15 @@ pre-existing injection file, missing injection target, already-satisfied
 injection state -- is
 checked BEFORE the first injection lands, so exit 2 never shares output with
 a control verdict: no evidence, not partial evidence.
+
+#936: `already_satisfied` no longer takes a hand-written copy of the claim's
+grep= pattern and in= path. Both are parsed out of the staged injection with
+the checker's own grammar (`tools/check_doc_claims.py`: MARKER, parse_attrs,
+expand), so repointing a claim marker's in= cannot leave the guard reading a
+file the claim no longer reads -- a divergence that measured, before the
+fix, as a misattributed `FAIL  README T1 count marker goes red on a wrong
+count: exit=0` with rc=1 (baseline green, injection target present, the
+injected line pre-satisfied in the file the claim actually grepped).
 """
 from __future__ import annotations
 
@@ -59,6 +68,17 @@ DOCS = ["docs/milestones.md", "README.md"]
 # cannot, and reports 102 REFUSED claims that read exactly like failures, so
 # the interpreter is asserted here rather than assumed.
 CANDIDATES = [ROOT / ".venv/bin/python", pathlib.Path(sys.executable)]
+
+# The marker grammar is the checker's, not a second copy of it: importing the
+# module the probe subprocess-runs keeps parse_attrs and expand() byte-identical
+# with what actually grades the claims (#936 -- a mirrored parser is the same
+# two-copies-can-diverge defect this probe exists to catch, one level up).
+# The import must also leave NO trace in the tree being audited: the scratch
+# tests hash every file, and a stray tools/__pycache__/check_doc_claims.pyc
+# reads as "the refusal path changed the tree" (measured: 10 red snapshots).
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT / "tools"))
+import check_doc_claims as checker  # noqa: E402  (needs ROOT's tools/ on path)
 
 
 def interpreter() -> str:
@@ -131,7 +151,61 @@ def inject_or_refuse(before: str, find: str, replace: str, what: str) -> str | N
     return staged
 
 
-def already_satisfied(path: pathlib.Path, pattern: str, what: str) -> bool:
+def injected_state(staged: str, marker_of: str,
+                   what: str) -> tuple[list[pathlib.Path], str] | None:
+    """Derive the injected claim's (files, pattern) from the staged text (#936).
+
+    already_satisfied used to be called with a SECOND, hand-written copy of
+    the claim's grep= pattern and in= path -- #927 had made the two pattern
+    copies byte-identical for control 3, but control 2's in= had no check at
+    all, and a hand copy diverges silently. Repoint the claim marker's own
+    in= at a file that already contains the injected line and the guard read
+    the OLD file, found no pre-satisfaction, ran the control, and the marker
+    had nothing to fire at in the file the claim actually greps: a
+    misattributed FAIL (rc=1) for a tree that was already wrong -- the exact
+    shape #905, #913 and #920 each removed through a different door. So the
+    pair is parsed out of the staged injection instead of restated: the
+    marker containing `marker_of` (the replace string the injection just
+    introduced) is read with the checker's own MARKER/parse_attrs, and its
+    in= is expanded with the checker's own expand(), so guard and claim
+    cannot disagree about which file carries which pattern. Returns None
+    after printing a refusal when the staged injection does not yield
+    exactly one parseable grep= claim with an expanding in= -- an apparatus
+    error, exit 2, no evidence.
+    """
+    bodies: list[str] = []
+    fenced = False
+    for line in staged.splitlines():
+        if checker.FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue  # a marker in a fenced block is an example, not a claim
+        m = checker.MARKER.search(line)
+        if m and marker_of in m.group("body"):
+            bodies.append(m.group("body"))
+    if len(bodies) != 1:
+        print(f"REFUSED: expected exactly one injected claim containing "
+              f"{marker_of!r} in the staged text, found {len(bodies)}; "
+              f"cannot derive {what}'s guard from the injection",
+              file=sys.stderr)
+        return None
+    attrs, err = checker.parse_attrs(bodies[0])
+    if err or "grep" not in attrs or "in" not in attrs:
+        print(f"REFUSED: the staged injection is not a parseable grep= claim "
+              f"with an in= ({err or 'missing grep=/in='}); cannot derive "
+              f"{what}'s guard", file=sys.stderr)
+        return None
+    files, err = checker.expand(attrs["in"])
+    if err or not files:
+        print(f"REFUSED: the staged injection's in={attrs['in']!r} does not "
+              f"expand to files ({err or 'matched no files'}); cannot derive "
+              f"{what}'s guard", file=sys.stderr)
+        return None
+    return files, attrs["grep"]
+
+
+def already_satisfied(paths: list[pathlib.Path], pattern: str, what: str) -> bool:
     """REFUSE when the tree already satisfies the state a control injects (#920).
 
     The dual of inject_or_refuse's missing-target refusal. A control injects
@@ -143,20 +217,27 @@ def already_satisfied(path: pathlib.Path, pattern: str, what: str) -> bool:
     marker has nothing to fire at and stays green no matter what the marker
     does, so "the control failed" and "the tree was already wrong" are
     indistinguishable and the control reports the tree as its finding.
+    #936: the paths and the pattern are no longer passed as hand-written
+    literals -- they are derived from the staged injection (injected_state),
+    so the guard always checks the file(s) the injected claim actually
+    greps with the pattern it actually carries.
     Checked pre-injection, beside the other refusals, so exit 2 never shares
     output with a control verdict. Returns True after printing the refusal,
     False (printing nothing) when the state is genuinely absent.
     """
-    if not path.exists():
-        return False  # a claim greps this file; the baseline check already refused
     rx = re.compile(pattern)
-    rel = path.relative_to(ROOT)
-    if any(rx.search(line) for line in path.read_text(encoding="utf-8").splitlines()):
-        print(f"REFUSED: {rel} already contains a line matching {pattern!r}: "
-              f"the state {what} injects pre-exists on this tree, so its "
-              f"marker cannot fire and the control would misreport the tree "
-              f"as a failure. Remove the pre-existing state first.",
-              file=sys.stderr)
+    matched: list[str] = []
+    for path in paths:
+        rel = path.relative_to(ROOT).as_posix()
+        if any(rx.search(line)
+               for line in path.read_text(encoding="utf-8").splitlines()):
+            matched.append(rel)
+    if matched:
+        print(f"REFUSED: {', '.join(matched)} already contains a line matching "
+              f"{pattern!r}: the state {what} injects pre-exists on this "
+              f"tree, so its marker cannot fire and the control would "
+              f"misreport the tree as a failure. Remove the pre-existing "
+              f"state first.", file=sys.stderr)
         return True
     return False
 
@@ -179,26 +260,42 @@ def main() -> int:
         "the README T1 count control")
     if staged_readme is None:
         return 2
-    if already_satisfied(ROOT / "manifests/verdict.txt", r"^T1: 3/11 items met$",
+    derived = injected_state(staged_readme, 'grep="^T1: 3/11 items met$"',
+                             "the README T1 count control")
+    if derived is None:
+        return 2
+    if already_satisfied(derived[0], derived[1],
                          "the README T1 count control"):
         return 2
     ms = ROOT / "docs/milestones.md"
     orig_ms = ms.read_text(encoding="utf-8")
+    # The find string is the claim's ANCHORED form (#959): the unanchored
+    # `^module drum_kit` also matched the state this control injects, so the
+    # checker refused for non-uniqueness before the already-satisfied guard
+    # could fire. Do not widen it back -- the claim in docs/milestones.md and
+    # this string must stay the same text (the #936 coupling).
     staged_ms = inject_or_refuse(
         orig_ms,
-        'grep="^module drum_kit" in=rtl-sketch/drum_kit.v',
+        'grep="^module drum_kit #\\(" in=rtl-sketch/drum_kit.v',
         'grep="^module drum_kit_NOT_IN_TREE" '
         'in=rtl-sketch/drum_kit.v',
         "the milestone-3 control")
     if staged_ms is None:
         return 2
-    # The guard pattern must BE the injected claim's own pattern -- an
-    # unanchored prefix match, per line (check_grep compiles with
-    # re.MULTILINE and rx.search-es each line). A trailing \b here would let
+    # The guard's pattern and paths are DERIVED from the staged injection
+    # (#936), so the pattern is by construction the injected claim's own
+    # pattern -- an unanchored prefix match, per line (check_grep compiles
+    # with re.MULTILINE and rx.search-es each line) -- the property #927
+    # first enforced by hand: a trailing \b would let
     # `module drum_kit_NOT_IN_TREE_X` satisfy the claim while this refusal
-    # stayed silent (#927, red-first at 17fbfe45: FAIL exit=0, rc=1).
-    if already_satisfied(ROOT / "rtl-sketch/drum_kit.v",
-                         r"^module drum_kit_NOT_IN_TREE",
+    # stayed silent (red-first at 17fbfe45: FAIL exit=0, rc=1).
+    derived = injected_state(
+        staged_ms,
+        'grep="^module drum_kit_NOT_IN_TREE" in=rtl-sketch/drum_kit.v',
+        "the milestone-3 control")
+    if derived is None:
+        return 2
+    if already_satisfied(derived[0], derived[1],
                          "the milestone-3 control"):
         return 2
 
