@@ -4,6 +4,26 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-17
 
+- **PR #968**: test: refuse the archive fixture during a squash merge
+- **PR #973**: fix: derive compile_dag's four evidence-source readers from one EVIDENCE_PRECEDENCE
+- **PR #969**: fix: keep unchanged dag records byte-identical so record PRs can land (#967)
+- **PR #970**: fix: share the claim-marker skip grammar between checker and #789 probe
+- **PR #810**: dag: report an evidence file that declares no verdict as REFUSED, not GREEN
+- **PR #944**: test: catch serialise-then-write and write-mode open spellings in the inline record-write guard
+- **PR #965**: fix: refuse the 789-marker suite's archive fixture mid-merge
+- **PR #953**: fix: --margins all-caught no-cliff input states the measured fact, not 'not every pair is CAUGHT'
+- **PR #957**: fix: 789 marker probe derives its already-satisfied guard from the staged injection
+- **PR #960**: fix: anchor the drum_kit grep= claim so the 789 probe's injection cannot collide with it
+- **Issue #966** (closed): 789-marker fixture guard: `git merge --squash` reproduces the exact mid-merge split it refuses, and is not refused
+- **Issue #827** (closed): compile_dag: unjudged() keys on evidence_file but run_evidence dispatches suite/verifier first, so a node with both would be REFUSED despite a passing suite
+- **Issue #967** (closed): Any PR that rewrites a docs/dag-results.json record cannot land while main is busy: dag.yml re-conflicts it every merge
+- **Issue #962** (closed): 789 probe: injected_state mirrors the checker's FENCE rule but not its inline-backtick rule
+- **Issue #791** (closed): compile_dag renders a node GREEN when its evidence file declares no verdict: M3, S1 and S3 are green on existence alone
+- **Issue #923** (closed): The source-shape guard in test_atomic_record_writers.py stays green on open(...,'w') + write(json.dumps(...))
+- **Issue #964** (closed): 789 probe suite: a merged-tree measurement is silently void unless HEAD is the merge commit (git archive HEAD fixture)
+- **Issue #950** (closed): print_margins' else prose says 'not every pair is CAUGHT' on a guard that does not measure it
+- **Issue #936** (closed): 789 marker probe: already_satisfied() holds a hand-written copy of each claim's in=/grep=, and the two can diverge silently
+- **Issue #959** (closed): main is red: the 789 marker probe's already-satisfied injection also defeats #904's grep= uniqueness refusal (tools job, since 72be3665)
 - **PR #951**: probes: split the rate-fold verdict else on the dB red count it mis-states
 - **Issue #946** (closed): rate_fold_db_control's verdict prose states a stronger fact than `must == []` supports
 - **PR #945**: test: guard the ms.* grouping label against a silent %.0f collision
