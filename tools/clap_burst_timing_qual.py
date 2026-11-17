@@ -61,9 +61,16 @@ from scipy.signal import butter, sosfilt  # noqa: E402
 
 import audio_measure as am  # noqa: E402
 import run_case as rc  # noqa: E402
+import run_all  # noqa: E402
 
 N_REAL = 24
 BUDGET = dict(median_abs_ms=2.0, p95_abs_ms=5.0, max_false_extra=1)
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous record
+    standing, not a truncated one."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 P = 10.646e-3          # 511 frames at 48 kHz: the 4-strike schedule's spacing
 TAIL = (0.32, 0.047)   # b relative to the first strike, tau: the current kit's ratio
 
@@ -179,8 +186,7 @@ def main(argv=None) -> int:
                   f"med {r['median_err_ms']!s:>8} p95 {r['p95_abs_err_ms']:8.2f} "
                   f"extra {r['false_extra']:2d} missed {r['missed']:2d} refused {r['refused']}")
     p = pathlib.Path(a.out)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(res, indent=1) + "\n")
+    write_json(p, res)
     v1 = res["detectors"]["v1 pre-declared (min_dip 6 dB)"]["qualified_everywhere"]
     v0 = res["detectors"]["v0 official (min_dip 2 dB)"]["qualified_everywhere"]
     print(f"verdict: official {'QUALIFIED' if v0 else 'UNQUALIFIED'}; "

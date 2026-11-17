@@ -10,7 +10,7 @@ Fixing the instance and leaving the class is the repeating failure here, so
 these cases pin the class.
 """
 from __future__ import annotations
-import json, pathlib, subprocess, sys
+import json, os, pathlib, subprocess, sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -114,6 +114,8 @@ def test_the_committed_results_file_loads():
 # stale" whatever the sha. Closed in the same change -- evidence with no
 # covered files to measure is REFUSED too. Pinned by
 # test_issue_824_a_passing_record_with_no_covers_is_refused.
+# (#863 later replaced the walk itself -- a commit-range walk is the wrong
+# instrument for staleness on merge-shaped history; see that section below.)
 def _mini_repo(tmp_path, monkeypatch):
     """A throwaway two-commit git repo, so ancestry questions get real
     answers without touching this checkout's history.
@@ -201,6 +203,53 @@ def test_issue_824_a_passing_record_with_no_covers_is_refused(monkeypatch):
     assert st == "REFUSED" and "covered" in note
 
 
+def test_issue_824_858_a_failing_record_with_no_covers_stays_red_even_when_tagged(tmp_path, monkeypatch):
+    """#858 (rule 5, through classify(), where the verdict is issued): a
+    FAILING record is a stated verdict, more precise than a refusal -- but
+    the empty-covers guard's `or tag_is_ancestor(tag)` disjunct fired on the
+    tag alone, so a covers-less node carrying an in-history tag rendered
+    REFUSED ("cannot answer") instead of the failure it is. The guard must
+    keep refusing the PASSING case it exists for (#824); only the masked
+    failure moves to RED."""
+    v1, _ = _mini_repo(tmp_path, monkeypatch)
+    subprocess.run(["git", "tag", "ctl-858", v1], cwd=tmp_path,
+                   capture_output=True, text=True, check=True)
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": False, "detail": "suite exit 1",
+                                       "sha": v1}})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "tag": "ctl-858"})
+    assert (st, note) == ("RED", "suite exit 1"), \
+        f"a failing record on a covers-less tagged node rendered {st} -- {note}"
+    # Rule 8, the input that defeats the hoist: the same node with a PASSING
+    # record must still refuse -- the hoist must not widen the guard into a
+    # pass for the case #824 added it to catch.
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "detail": "ok",
+                                       "sha": v1}})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "tag": "ctl-858"})
+    assert st == "REFUSED" and "covered" in note, \
+        f"a passing record on a covers-less tagged node rendered {st} -- {note}"
+
+
+def test_issue_824_858_a_failing_record_with_no_covers_stays_red_without_a_tag(monkeypatch):
+    """The untagged half of the same shape, pinned before it is broken: with
+    no tag the guard's tag disjunct cannot fire, so the RED check answered
+    -- correct, but covered by nothing (all nine earlier issue_824 controls
+    drive passing records or no record). Also pins the rule-8 input both
+    paths share: a record with no `passed` key at all reads falsy and stays
+    RED, exactly as the covers case behaved."""
+    for rec, detail in ({"passed": False, "detail": "suite exit 1"},
+                        "suite exit 1"), \
+                       ({"detail": "no verdict key"},
+                        "no verdict key"):
+        monkeypatch.setattr(cd, "load_results", lambda r=rec: {"N": r})
+        st, note = cd.classify("N", {"evidence_file": "docs/dag.json"})
+        assert (st, note) == ("RED", detail), \
+            f"record {rec} rendered {st} -- {note}"
+
+
 def test_issue_824_a_reachable_sha_with_a_changed_file_is_still_stale(tmp_path, monkeypatch):
     """The guard must not overfire: a sha in this history whose covered file
     genuinely changed keeps the honest STALE verdict."""
@@ -260,3 +309,383 @@ def test_issue_824_the_gate_fails_and_names_the_node_on_stderr(monkeypatch, caps
     assert rc == 1
     assert "REFUSED: F3 -- recorded sha deadbee" in err, \
         f"the gate must name the refused node on stderr; got:\n{err}"
+
+
+# ---------------------------------------------------------------------------
+# #842: the --run records write is atomic, so a kill cannot truncate it
+# ---------------------------------------------------------------------------
+# `RESULTS.write_text` is a truncate-then-write. A job-level kill landing
+# inside it (the nightly's timeout-minutes, a runner eviction, Ctrl-C in a
+# persistent workspace) leaves truncated JSON, and load_results() then REFUSES
+# on every later invocation until git restores the file. The per-node write
+# that #823 introduced multiplies the windows it can land in (7 per --run,
+# 13 with --slow). The write now goes through run_all.write_json_atomic
+# (tmp + fsync + os.replace), so a kill leaves either the previous complete
+# file or the new complete file -- never a truncated one.
+
+def _records_worktree(tmp_path, monkeypatch, seed):
+    """A --run whose evidence is injected, against a throwaway records file.
+
+    Points DAG and RESULTS at tmp_path so nothing here touches the real
+    docs/, and stubs run_evidence so no suite executes. ROOT stays the real
+    checkout: classify_all's git queries need a repo, and the record's sha
+    comes from it."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    results = docs / "dag-results.json"
+    if seed is not None:
+        results.write_text(json.dumps(seed, indent=2, sort_keys=True) + "\n")
+    (docs / "dag.json").write_text(json.dumps(
+        {"nodes": {"N": {"name": "control", "group": "foundation",
+                         "verifier": "no/such/tool.py"}}}))
+    monkeypatch.setattr(cd, "DAG", docs / "dag.json")
+    monkeypatch.setattr(cd, "RESULTS", results)
+    monkeypatch.setattr(cd, "run_evidence", lambda i, n: (True, "ctl pass"))
+    return results
+
+
+def test_a_kill_during_the_records_write_leaves_the_previous_file_complete(tmp_path, monkeypatch):
+    """THE CONTROL (start red): this failed against the bare `write_text`.
+
+    Both hooks simulate the same physical event -- a kill inside the write --
+    on whichever writer is live: truncate-then-half-write-then-die for
+    `write_text`, die-after-tmp-before-replace for `write_json_atomic`.
+    Pre-fix the first hook fired, the file was left truncated, and
+    load_results() REFUSED; post-fix the original record survives both."""
+    original = {"M1": {"passed": True, "sha": "abc", "detail": "old run"}}
+    results = _records_worktree(tmp_path, monkeypatch, original)
+
+    def kill_mid_truncate_write(self, data, *a, **k):
+        with self.open("w") as fh:
+            fh.write(data[: len(data) // 2])
+        raise RuntimeError("injected: killed mid truncate-then-write")
+
+    def kill_before_replace(src, dst):
+        raise RuntimeError("injected: killed after tmp write, before replace")
+
+    monkeypatch.setattr(pathlib.Path, "write_text", kill_mid_truncate_write)
+    monkeypatch.setattr(os, "replace", kill_before_replace)
+
+    monkeypatch.setattr(sys, "argv", ["compile_dag.py", "--run", "--print"])
+    with pytest.raises(RuntimeError):
+        cd.main()
+
+    # The pre-existing record is intact, parseable, and refused by nothing:
+    assert cd.load_results() == original, \
+        "a kill during the write corrupted the previous complete record"
+    leftovers = list((tmp_path / "docs").glob("*tmp*"))
+    assert leftovers == [], f"a tmp sibling survived the failed write: {leftovers}"
+
+
+def test_the_records_write_is_byte_identical_to_the_format_it_replaced(tmp_path, monkeypatch):
+    """The atomic writer must not reformat a git-tracked file: same bytes as
+    `json.dumps(res, indent=2, sort_keys=True) + "\\n"`, which is what the bare
+    write_text wrote. Seeded keys are inserted out of sorted order so a
+    dropped sort_keys reorders them and fails here rather than churning every
+    future commit. Also pins the success path: no tmp sibling survives."""
+    seed = {"M1": {"passed": True, "sha": "abc", "detail": "old"},
+            "A2": {"passed": False, "sha": "def", "detail": "older"}}
+    results = _records_worktree(tmp_path, monkeypatch, seed)
+
+    sha = cd.git("rev-parse", "HEAD")
+    expected = (json.dumps({**seed, "N": {"passed": True, "sha": sha,
+                                          "detail": "ctl pass"}},
+                           indent=2, sort_keys=True) + "\n").encode()
+
+    monkeypatch.setattr(sys, "argv", ["compile_dag.py", "--run", "--print"])
+    assert cd.main() == 0
+
+    assert results.read_bytes() == expected, \
+        "the atomic write changed the record's bytes -- tracked-file churn"
+    leftovers = list((tmp_path / "docs").glob("*tmp*"))
+    assert leftovers == [], f"a tmp sibling survived the successful write: {leftovers}"
+
+
+# ---------------------------------------------------------------------------
+# #863: a merge-shaped history is not staleness
+# ---------------------------------------------------------------------------
+# stale_against() answered "are the bytes this evidence was recorded against
+# still the bytes at HEAD?" with `git log {sha}..HEAD -- <f>` -- a commit
+# HISTORY walk answering a CONTENT question. The two coincide on a linear
+# chain, which is why main's own board never showed it; they diverge on the
+# merge commits a conflict round produces. The shape that fires (verified
+# against rounds a4ae3529 and b5c4f677 on PR #818): a merge whose covered
+# file is TREESAME to a parent that lies OUTSIDE stamp..HEAD -- an ancestor
+# of the record stamp -- while its other parent is in range with different
+# content. git cannot simplify the merge away to the TREESAME parent (that
+# parent is uninteresting), so the merge itself is reported, and a node
+# whose file never changed renders STALE.
+#
+# Two things a control here must carry (rule 8, both directions):
+#   * NOT one of the three naive merge shapes (resolved-to-ours,
+#     touched-and-reverted, change-via-side-branch): the default walk answers
+#     all three correctly, so a control built on them is a false green. The
+#     builder below asserts its own shape still fires the walk.
+#   * The refused candidate fix is `--full-history`: measured strictly worse
+#     (it widened round b5c4f677 from 1 reported commit to 4, turned two
+#     benign shapes false-positive, and flipped F2 STAMPED->STALE on main's
+#     board). The fix is a content comparison, and a diff that cannot run
+#     must REFUSE -- routing it through `git()` would read a failure as "no
+#     output" and render GREEN with nothing measured (#824's hole through a
+#     new door).
+def _merge_repo(tmp_path, monkeypatch, resolve="v2"):
+    """A throwaway repo reproducing the #863 shape, from the real round
+    (round a4ae3529 on PR #818; commit times mirrored so the merge precedes
+    the stamp, as it did there):
+
+        A: base, f=v1
+        main:  B(main): f=v2          (main's fix; tip of main)
+        work (from A):
+          W: other work, f stays v1
+          M: merge main, resolving f to `resolve`
+        new (from A):
+          N1: merge main -> f=v2      (an earlier round had merged main)
+          S: record stamp, f=v2       (the range base)
+          56: post-stamp commit
+        HEAD: merge new into work     (f=v2, identical to S)
+
+    M's parent1 (W, f=v1) is in range with different content; its parent2
+    (B, f=v2) is TREESAME for f but an ancestor of S, so outside S..HEAD.
+    Every commit gets its own GIT_*_DATE, and the merge commits BEFORE the
+    stamp, as it did in the real round (9d45d85e at t=8018, the next stamp
+    0df2135b at t=81500). Both properties are load-bearing, measured on the
+    first drafts of this builder: with equal timestamps the limited walk's
+    order is undefined and the control flapped (fired 29/30); with distinct
+    timestamps but the merge AFTER the stamp it never fired at all (0/30).
+    Only the real order fires deterministically -- which is itself part of
+    the defect's shape, not an accident to normalize away. Returns (g,
+    stamp) -- an asserting git runner and the stamp sha. ROOT is
+    monkeypatched here, as in _mini_repo.
+    """
+    clock = [0]
+
+    def dated(env_extra=None):
+        clock[0] += 60
+        stamp_date = f"2026-01-01 00:{clock[0] // 3600:02d}:" \
+                     f"{clock[0] // 60 % 60:02d}:{clock[0] % 60:02d} +0000"
+        return {"GIT_AUTHOR_DATE": stamp_date,
+                "GIT_COMMITTER_DATE": stamp_date,
+                **(env_extra or {})}
+
+    def g(*a, check=True, dated_=True):
+        env = dict(os.environ)
+        if dated_:
+            env.update(dated())
+        r = subprocess.run(["git", *a], cwd=tmp_path, capture_output=True,
+                           text=True, env=env)
+        if check and r.returncode != 0:
+            raise AssertionError(f"git {' '.join(a)} failed: {r.stderr}")
+        return r
+
+    def commit(msg, allow_empty=False):
+        g("add", "-A")
+        g("commit", "-q", "--no-verify", "-m", msg,
+          *(["--allow-empty"] if allow_empty else []))
+        return g("rev-parse", "HEAD").stdout.strip()
+
+    def merge_resolve(theirs, f_content, msg):
+        g("merge", "--no-commit", "--no-ff", theirs, check=False)
+        (tmp_path / "f").write_text(f_content + "\n")
+        return commit(msg)
+
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "control@example.com")
+    g("config", "user.name", "control")
+    g("config", "commit.gpgsign", "false")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "dag.json").write_text("{}\n")
+    (tmp_path / "f").write_text("v1\n")
+    a = commit("A: base")
+    g("checkout", "-q", "main")
+    (tmp_path / "f").write_text("v2\n")
+    commit("B(main): fix f=v2")
+    g("checkout", "-q", "-b", "work", a)
+    (tmp_path / "other").write_text("w\n")
+    commit("W: work, f stays v1")
+    merge_resolve("main", resolve, "M: merge main (Doctor: resolve conflicts)")
+    g("checkout", "-q", "-b", "new", a)
+    merge_resolve("main", "v2", "N1: merge main (earlier round)")
+    stamp = commit("S: record stamp", allow_empty=True)
+    (tmp_path / "p1").write_text("p\n")
+    commit("56: post-stamp commit")
+    g("checkout", "-q", "work")
+    g("merge", "--no-ff", "-m", "HEAD: bring the stamp side in", "new")
+    head = g("rev-parse", "HEAD").stdout.strip()
+
+    # Sensitivity guard, so this builder cannot drift into one of the naive
+    # shapes that never reproduced the defect: the OLD walk must fire (the
+    # reported defect exists), and -- when resolve="v2" -- the content must
+    # be identical (the STALE verdict would be a false positive).
+    walk = g("log", "--format=%H", f"{stamp}..HEAD", "--", "f").stdout.strip()
+    assert walk, "control drifted: the history walk no longer fires on this shape"
+    same = g("diff", "--name-only", stamp, head, "--", "f").stdout.strip()
+    if resolve == "v2":
+        assert not same, "control drifted: content genuinely changed at v2"
+    else:
+        assert same, "control drifted: resolution content matches the stamp"
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    return g, stamp
+
+
+def _linear_repo(tmp_path, monkeypatch, pre=lambda p: None, post=lambda p: None):
+    """A two-commit linear repo; `pre` runs before the stamp, `post` after."""
+    def g(*a, check=True):
+        r = subprocess.run(["git", *a], cwd=tmp_path, capture_output=True,
+                           text=True)
+        if check and r.returncode != 0:
+            raise AssertionError(f"git {' '.join(a)} failed: {r.stderr}")
+        return r
+
+    def commit(msg, allow_empty=False):
+        g("add", "-A")
+        g("commit", "-q", "--no-verify", "-m", msg,
+          *(["--allow-empty"] if allow_empty else []))
+        return g("rev-parse", "HEAD").stdout.strip()
+
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "control@example.com")
+    g("config", "user.name", "control")
+    g("config", "commit.gpgsign", "false")
+    (tmp_path / "docs").mkdir(exist_ok=True)
+    (tmp_path / "docs" / "dag.json").write_text("{}\n")
+    (tmp_path / "covered.v").write_text("v1\n")
+    pre(tmp_path)
+    commit("stamp")
+    stamp = g("rev-parse", "HEAD").stdout.strip()
+    post(tmp_path)
+    commit("after the stamp", allow_empty=True)
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    return stamp
+
+
+def test_issue_863_a_merge_over_a_content_identical_file_is_not_stale(tmp_path, monkeypatch):
+    """THE CONTROL (rule 5: through classify(), where the verdict is issued).
+
+    The evidence was recorded at S; the only commit the old walk reported in
+    S..HEAD is a merge that left the covered file byte-identical to S (its
+    TREESAME parent is an ancestor of S, outside the range). The node must
+    render GREEN -- pre-fix it rendered STALE, which is the defect."""
+    g, stamp = _merge_repo(tmp_path, monkeypatch)
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "sha": stamp}})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "covers": ["f"]})
+    assert st == "GREEN", \
+        f"a content-identical merge round rendered {st} -- {note}"
+
+
+def test_issue_863_the_tag_path_on_a_content_identical_merge_is_stamped(tmp_path, monkeypatch):
+    """Both call sites go through stale_against(); the tag path (a stamp cut
+    before the same merge) must keep its honest STAMPED verdict, not
+    STALE."""
+    g, stamp = _merge_repo(tmp_path, monkeypatch)
+    g("tag", "dag-N", stamp)
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "covers": ["f"], "tag": "dag-N"})
+    assert st == "STAMPED", \
+        f"a tag whose covered file is content-identical rendered {st} -- {note}"
+
+
+def test_issue_863_a_change_only_in_the_merge_resolution_is_stale(tmp_path, monkeypatch):
+    """Must stay red: a resolution whose bytes differ from BOTH parents
+    (f=v4 from v3/v2 sides) is a genuine change -- STALE, not GREEN."""
+    g, stamp = _merge_repo(tmp_path, monkeypatch, resolve="v4-combined")
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "sha": stamp}})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "covers": ["f"]})
+    assert st == "STALE", \
+        f"a resolution that changed the bytes rendered {st} -- {note}"
+    assert "f" in note, "the stale note must name the changed cover"
+
+
+def test_issue_863_an_unmeasurable_diff_refuses_through_classify(tmp_path, monkeypatch):
+    """#824's property, re-asserted through the new query: a diff that
+    cannot run must render REFUSED -- never GREEN (a failed measurement
+    read as "not stale") and never STALE (which would claim a real change
+    happened). The `covers` order matters: the first entry is measurable
+    and identical, so the refusal can only come from the failure itself.
+    The bad pathspec stands in for the real cases (a corrupted or too-
+    shallow object store) where git cannot answer."""
+    g, stamp = _merge_repo(tmp_path, monkeypatch)
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "sha": stamp}})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "covers": ["f", ":(bogus)x"]})
+    assert st == "REFUSED", \
+        f"an unmeasurable diff rendered {st} -- {note}"
+
+
+def test_issue_863_a_directory_cover_measures_both_ways(tmp_path, monkeypatch):
+    """`covers` names directories too (fpga/rtl, spec/reference/tables on
+    the real DAG); a directory is an ordinary diff pathspec."""
+    def add_sub(p):
+        (p / "sub").mkdir()
+        (p / "sub" / "x.txt").write_text("s\n")
+
+    def touch_sub(p):
+        (p / "sub" / "x.txt").write_text("s2\n")
+
+    one = tmp_path / "one"
+    one.mkdir()
+    stamp = _linear_repo(one, monkeypatch, pre=add_sub)
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "sha": stamp}})
+    st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "covers": ["sub"]})
+    assert st == "GREEN", f"an unchanged directory cover rendered {st}"
+
+    two = tmp_path / "two"
+    two.mkdir()
+    stamp2 = _linear_repo(two, monkeypatch, pre=add_sub, post=touch_sub)
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "sha": stamp2}})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "covers": ["sub"]})
+    assert st == "STALE", f"a changed directory cover rendered {st} -- {note}"
+
+
+def test_issue_863_a_cover_appearing_or_vanishing_after_the_stamp_is_stale(tmp_path, monkeypatch):
+    """Presence differences are content differences: a file absent at the
+    stamp but present at HEAD -- and the reverse -- cannot be fresh."""
+    def add_file(p):
+        (p / "new.v").write_text("n\n")
+
+    one = tmp_path / "one"
+    one.mkdir()
+    stamp = _linear_repo(one, monkeypatch, post=add_file)
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "sha": stamp}})
+    st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "covers": ["new.v"]})
+    assert st == "STALE", f"a cover added after the stamp rendered {st}"
+
+    def rm_file(p):
+        (p / "covered.v").unlink()
+
+    two = tmp_path / "two"
+    two.mkdir()
+    stamp2 = _linear_repo(two, monkeypatch, post=rm_file)
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "sha": stamp2}})
+    st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "covers": ["covered.v"]})
+    assert st == "STALE", f"a cover deleted after the stamp rendered {st}"
+
+
+def test_issue_863_a_shallow_clone_refuses_rather_than_rendering_fresh(tmp_path, monkeypatch):
+    """End to end, the failure #824 closed for the sha guard and #863 must
+    not reopen for the diff: in a clone too shallow to contain the stamp,
+    sha_is_ancestor refuses before any query runs -- the node can never
+    render current on a measurement that was never taken."""
+    g, stamp = _merge_repo(tmp_path, monkeypatch)
+    clone = tmp_path.parent / (tmp_path.name + "-shallow")
+    subprocess.run(["git", "clone", "-q", "--depth", "1",
+                    tmp_path.as_uri(), str(clone)], check=True)
+    monkeypatch.setattr(cd, "ROOT", clone)
+    monkeypatch.setattr(cd, "load_results",
+                        lambda: {"N": {"passed": True, "sha": stamp}})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "covers": ["f"]})
+    assert st == "REFUSED", \
+        f"a shallow clone rendered {st} -- {note}"

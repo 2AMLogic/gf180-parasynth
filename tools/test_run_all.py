@@ -10,7 +10,7 @@ The cases below are the ones that could produce a FALSE GREEN, which is the
 only failure mode of a runner that actually matters.
 """
 from __future__ import annotations
-import json, os, subprocess, sys, textwrap, time, threading
+import json, os, pathlib, subprocess, sys, textwrap, time, threading
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -223,3 +223,60 @@ def test_mismatch_and_did_not_run_are_distinguishable_in_the_summary():
            ra.run_one(f'{PY} -c "raise SystemExit(2)"')]
     s = ra.summarise(res)
     assert "FAIL(1)" in s and ra.NO_VERDICT in s
+
+
+# --- write_json_atomic -------------------------------------------------------
+# The --json report and, since #842, the DAG's dag-results.json both persist
+# through this helper, so a partial write here is a REFUSED there. The cases
+# that matter: the bytes are exactly the format each caller already shipped
+# (a reformat reorders a git-tracked file), and no tmp survives either path.
+
+def test_write_json_atomic_sort_keys_matches_the_dag_records_format(tmp_path):
+    value = {"b": 1, "a": {"z": 2, "y": 1}}
+    p = tmp_path / "r.json"
+    ra.write_json_atomic(str(p), value, sort_keys=True)
+    assert p.read_bytes() == (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+
+
+def test_write_json_atomic_default_keeps_insertion_order(tmp_path):
+    """The --json report's existing format: default parameters must not
+    silently start sorting keys and churn that file too."""
+    value = {"b": 1, "a": 2}
+    p = tmp_path / "r.json"
+    ra.write_json_atomic(str(p), value)
+    assert p.read_bytes() == (json.dumps(value, indent=2) + "\n").encode()
+    assert list(json.loads(p.read_text())) == ["b", "a"]
+
+
+def test_write_json_atomic_leaves_no_tmp_behind_on_success(tmp_path):
+    p = tmp_path / "r.json"
+    ra.write_json_atomic(str(p), {"ok": True})
+    assert list(tmp_path.glob("*tmp*")) == []
+
+
+def test_write_json_atomic_a_failure_before_the_replace_leaves_the_original_intact(tmp_path, monkeypatch):
+    """The injected control: die after the tmp write, before os.replace.
+    The pre-existing file must be complete and no tmp may survive -- the
+    guarantee compile_dag's records now rest on."""
+    p = tmp_path / "r.json"
+    ra.write_json_atomic(str(p), {"kept": True})
+    original = p.read_bytes()
+
+    def die(src, dst):
+        raise RuntimeError("injected: killed after tmp write, before replace")
+
+    monkeypatch.setattr(os, "replace", die)
+    with pytest.raises(RuntimeError):
+        ra.write_json_atomic(str(p), {"lost": True})
+    assert p.read_bytes() == original
+    assert list(tmp_path.glob("*tmp*")) == []
+
+
+def test_write_json_atomic_passes_default_through_to_json_dump(tmp_path):
+    """#881: manifest's records serialise through its `_canonical` default, so
+    the helper must forward one rather than raise on the first non-native
+    value (or silently change that caller's bytes)."""
+    p = tmp_path / "r.json"
+    ra.write_json_atomic(str(p), {"v": {1, 2}}, sort_keys=True, default=sorted)
+    assert p.read_bytes() == (json.dumps({"v": [1, 2]}, indent=2, sort_keys=True) + "\n").encode()
+    assert list(tmp_path.glob("*tmp*")) == []

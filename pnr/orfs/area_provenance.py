@@ -35,13 +35,21 @@ the whole argument for a check over a comment.
 
     exit 0  OK       -- the die area is an input; the utilisation is measured
     exit 1  the `--expect` was not met (a control that did not fire)
-    exit 2  REFUSED  -- no ratio, and none will be given:
+    exit 2  REFUSED  -- attributed, or none will be given:
                         `circular-die-area`  a utilisation target was set, so
                                              die/cell only recovers 1/target
                         `no-die-input`       neither a fixed die nor a target:
                                              the die's origin is not recorded
                         `no-provenance`      no config/request artefact at all,
                                              so the question cannot be answered
+                        `duplicate-metric`   a metric the report presents is
+                                             duplicated with differing values
+                                             in the stage metrics (OpenROAD
+                                             #12303, issue #835): the last-
+                                             wins numbers still print, marked
+                                             unattributed -- and when only
+                                             this reason fires, the die ratio
+                                             itself still prints, attributed
 
 REFUSED is not a pass and not a fail. A tool that answers "1.87" when it cannot
 know what 1.87 is made of is worse than one that is absent, because its output
@@ -419,20 +427,44 @@ def run_control(name: str | None, keep: pathlib.Path | None = None) -> dict:
     quoted = bool(RATIO_CLAIM.search(output))
     refused = "REFUSED" in output
     return {"injection": name, "exit": code, "quoted_ratio": quoted,
-            "printed_refusal": refused, "output": output,
+            "printed_refusal": refused,
+            "printed_duplicate_refusal": "duplicate-metric" in output,
+            "printed_circular_refusal": "circular-die-area" in output,
+            "output": output,
             "state": "REFUSED" if code == REFUSED_EXIT else
                      "OK" if code == 0 else "ERROR"}
 
 
 def check_expectation(result: dict, expect: str) -> tuple[int, str]:
-    """0 met / 1 not met / 2 nothing measured."""
+    """0 met / 1 not met / 2 nothing measured.
+
+    Since OpenROAD#12303 (issue #835) the producer duplicates a presented
+    metric in EVERY standard finish stage, so the clean baseline's summarize
+    exits 2 as well. "ok" is therefore not exit-code-shaped any more: it
+    requires the die ratio still ATTRIBUTED (quoted), the duplicate guard
+    alive (a duplicate-metric refusal named), and the injected reason absent.
+    If upstream ever fixes the producer, the duplicate refusal disappears and
+    this control goes red on purpose: update it deliberately, naming the
+    fixed OpenROAD version.
+    """
     if expect == "ok":
-        if result["state"] == "OK" and result["quoted_ratio"]:
-            return OK_EXIT, "met: an area ratio was reported for a fixed-die run"
-        if result["state"] == "REFUSED":
-            return EXPECTATION_UNMET, ("NOT MET: the clean run REFUSED, so this "
-                                       "control cannot discriminate")
-        return REFUSED_EXIT, f"NO VERDICT: summarize.py exited {result['exit']}"
+        if result["state"] == "ERROR":
+            return REFUSED_EXIT, f"NO VERDICT: summarize.py exited {result['exit']}"
+        if not result["quoted_ratio"]:
+            return EXPECTATION_UNMET, ("NOT MET: the clean run did not attribute "
+                                       "the die ratio, so this control cannot "
+                                       "discriminate")
+        if result["printed_circular_refusal"]:
+            return EXPECTATION_UNMET, ("NOT MET: the injected reason "
+                                       "(circular-die-area) appears in the clean "
+                                       "run's output")
+        if not result["printed_duplicate_refusal"]:
+            return EXPECTATION_UNMET, ("NOT MET: no duplicate-metric refusal -- "
+                                       "the producer may have stopped duplicating "
+                                       "(update this control with the fixed "
+                                       "OpenROAD version)")
+        return OK_EXIT, ("met: ratio attributed, duplicate metrics refused, no "
+                         "circular-die-area in a fixed-die run")
     if expect == "refused-circular":
         if result["state"] != "REFUSED":
             return EXPECTATION_UNMET, ("NOT MET: summarize.py exited "
@@ -443,7 +475,10 @@ def check_expectation(result: dict, expect: str) -> tuple[int, str]:
         if not result["printed_refusal"]:
             return REFUSED_EXIT, ("NO VERDICT: exit 2 with no REFUSED in the "
                                   "output -- that is not this refusal")
-        return OK_EXIT, "met: REFUSED, and no ratio was printed"
+        if not result["printed_circular_refusal"]:
+            return EXPECTATION_UNMET, ("NOT MET: a refusal that does not name "
+                                       "circular-die-area is some other refusal")
+        return OK_EXIT, "met: REFUSED for the injected reason, and no ratio was printed"
     return REFUSED_EXIT, f"NO VERDICT: unknown expectation {expect!r}"
 
 

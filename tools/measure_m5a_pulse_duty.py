@@ -22,9 +22,17 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import mono_m5a_score as m5a
+import run_all
 import voice_fx as vf
 
 SHAPES = ("square", "pulse15", "pulse25", "pulse29")
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous record on
+    `docs/scorecard/mono-m5a-miniv3/pulse-duty-v1.json` standing, not a
+    truncated one."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 
 def _shape_summary(model, reference, f0_model, f0_reference, sr):
@@ -146,8 +154,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     report = measure(args.shapes)
     path = ROOT / args.out
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report, indent=2) + "\n")
+    write_json(path, report)
     print(json.dumps({"report": str(path.relative_to(ROOT)),
                       "source_commit": report["source_commit"],
                       "results": [{"shape": run["shape"], "duty_fraction": run["duty_fraction"],

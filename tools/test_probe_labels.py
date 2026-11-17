@@ -22,6 +22,21 @@ prevent. The binding below therefore requires the pre-repair column to carry
 `pre-#150` and the repaired column to carry `#150` without `pre-`, and the
 injected controls turn that binding red.
 
+The policed population has its own defeating input (#900): a column header
+written without a format spec -- a plain string, or an f-string interpolation
+carrying none -- is outside the scan, and a newly added inverted header
+written that way moves no count. Measured on this tree (origin/main 754bce36,
+2026-11-16, standalone ast replication of the FCR half, pin 6): a new
+`SHIPPED (#150)` header as a plain string or bare f-string interpolation
+leaves the count at 6 and the binding green -- #900's rows (b) and (c),
+re-measured here, not copied; written the file's own way -- with a format
+spec -- it is policed, count 7, both gates red (row (d)). Stripping the spec
+from an existing header also leaves the scan, but drops the count below the
+pin, so the count assertion fails (row (a)): the count pin is what keeps the
+existing headers from leaving the set. This is recorded as a bound, not
+repaired -- policing spec-less strings again would reintroduce #852's false
+positives -- and the FCR control below pins row (b) as measured.
+
 Also pins the REFUSED path of `filter_corner_recalibration.py` section 1
 against genuinely refusing estimators at a cutoff where `rc.filt_corner`
 refuses on the F1 grid (100 Hz; #792's measured table), not a stub.
@@ -41,6 +56,8 @@ FCR = ROOT / "tools" / "probes" / "filter_corner_recalibration.py"
 
 EST_TEXT = EST.read_text()
 FCR_TEXT = FCR.read_text()
+EST_NAME = str(EST.relative_to(ROOT))
+FCR_NAME = str(FCR.relative_to(ROOT))
 
 HELPER_RE = re.compile(r"(.*_shipped|shipped_.*)")
 HEADER_RE = re.compile(r"SHIPPED|REPAIRED|(shipped|repaired) (ratio|spread)")
@@ -62,30 +79,45 @@ def _section6_range() -> tuple[int, int]:
 
 
 def _header_literals(text: str, lo: int, hi: int) -> list[tuple[int, str]]:
-    """(1-based line number, literal) for every string constant in the
-    inclusive line span that names a column. Parsed, not grepped: f-string
-    fragments like ``{'SHIPPED ratio':>15}`` are single Constants inside a
-    JoinedStr, so quoting on the physical line cannot fool this."""
+    """(1-based line number, literal) for every column header in the
+    inclusive line span. A column header is a string constant that is the
+    `.value` of an `ast.FormattedValue` carrying a `format_spec` -- a string
+    being column-formatted, literally ``{'SHIPPED (pre-#150)':>19}``. Parsed,
+    not grepped, so quoting on the physical line cannot fool this; and
+    prose -- docstrings, plain string arguments, bare f-string fragments and
+    ``{n}`` interpolations without a format spec -- is not formatted into a
+    column, so it stays outside the policed set (#852). The mirror bound
+    (#900): a *column header* written without a format spec is equally
+    outside this set -- the scan cannot tell it from prose -- so an existing
+    header is kept in the set by gate (c)'s count pins, not by this
+    predicate; see the module docstring's rule-8 paragraph for the measured
+    rows."""
     found = []
     for node in ast.walk(ast.parse(text)):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if lo <= node.lineno <= hi and HEADER_RE.search(node.value):
-                found.append((node.lineno, node.value))
+        if not (isinstance(node, ast.FormattedValue)
+                and node.format_spec is not None):
+            continue
+        value = node.value
+        if (isinstance(value, ast.Constant) and isinstance(value.value, str)
+                and lo <= value.lineno <= hi and HEADER_RE.search(value.value)):
+            found.append((value.lineno, value.value))
     return found
 
 
-def _vintage_violations(pairs: list[tuple[int, str]]) -> list[str]:
+def _vintage_violations(pairs: list[tuple[int, str]],
+                        source: str) -> list[str]:
     """Bind the vintage to the column it heads: a pre-repair column must say
     `pre-#150`; a repaired column must say `#150` and must not say `pre-`.
     `SHIPPED (#150)` -- the repaired vintage on the retired column -- fails
-    the first rule, which is the inversion this pin exists to catch."""
+    the first rule, which is the inversion this pin exists to catch. `source`
+    names the file the pairs came from, so a violation is actionable."""
     bad = []
     for ln, lit in pairs:
         if re.search(r"SHIPPED|shipped", lit) and "pre-#150" not in lit:
-            bad.append(f"est/probes line {ln}: {lit!r} -- pre-repair column "
+            bad.append(f"{source} line {ln}: {lit!r} -- pre-repair column "
                        f"carries no `pre-#150` vintage")
         if re.search(r"REPAIRED|repaired", lit) and ("#150" not in lit or "pre-" in lit):
-            bad.append(f"est/probes line {ln}: {lit!r} -- repaired column must "
+            bad.append(f"{source} line {ln}: {lit!r} -- repaired column must "
                        f"carry `#150` and not `pre-`")
     return bad
 
@@ -156,9 +188,16 @@ def test_filter_corner_recalibration_has_no_status_named_helper():
 def test_corner_header_pairs_carry_their_vintage():
     est = _header_literals(EST_TEXT, *_section6_range())
     fcr = _header_literals(FCR_TEXT, 1, len(FCR_TEXT.splitlines()))
-    assert est, "section-6 scan matched nothing -- the scope rotted"
-    assert fcr, "filter_corner_recalibration scan matched nothing"
-    assert _vintage_violations(est + fcr) == []
+    # Pin the population, not just its emptiness: a scan that silently
+    # narrows to nothing passes `assert est` vacuously (#852).
+    assert len(est) == 4, (
+        f"estimator_defects section-6 scan changed: {est} -- the policed "
+        "population moved; re-pin this count deliberately")
+    assert len(fcr) == 6, (
+        f"filter_corner_recalibration scan changed: {fcr} -- the policed "
+        "population moved; re-pin this count deliberately")
+    assert (_vintage_violations(est, EST_NAME)
+            + _vintage_violations(fcr, FCR_NAME)) == []
 
 
 def test_the_gate_scope_is_load_bearing_not_decorative():
@@ -174,7 +213,7 @@ def test_the_gate_scope_is_load_bearing_not_decorative():
     assert defect1 and defect3, "expected the out-of-scope undated headers on main"
     assert all(ln < lo or ln > hi for ln, _ in defect1 + defect3), (
         "defects 1 and 3 leaked into the section-6 scan")
-    assert _vintage_violations(defect1 + defect3), (
+    assert _vintage_violations(defect1 + defect3, EST_NAME), (
         "the out-of-scope headers pass the binding -- the scope claim is stale")
     assert not any(lit in ("SHIPPED err", "REPAIRED err", "SHIPPED guard")
                    for _, lit in scoped)
@@ -200,7 +239,7 @@ def _control_red(text: str) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "defect_6":
             lo, hi = node.lineno, node.end_lineno
-    return _vintage_violations(_header_literals(text, lo, hi))
+    return _vintage_violations(_header_literals(text, lo, hi), EST_NAME)
 
 
 def test_control_repaired_vintage_on_the_retired_column_turns_red():
@@ -218,6 +257,79 @@ def test_control_undated_header_turns_red():
 def test_control_pre_vintage_on_the_repaired_column_turns_red():
     text = _est_section6_with("REPAIRED (#150)", "REPAIRED (pre-#150)")
     assert _control_red(text)
+
+
+# ---------------------------------------------------------------------------
+# injected controls on the FCR half: prose must stay green, the inversion red
+# ---------------------------------------------------------------------------
+
+def _fcr_gate(text: str) -> list[str]:
+    """Gate (c) as it applies to the FCR half: whole-file scan + binding."""
+    return _vintage_violations(
+        _header_literals(text, 1, len(text.splitlines())), FCR_NAME)
+
+
+def _fcr_docstring_with(prose: str) -> str:
+    """FCR with one prose line inserted inside the module docstring."""
+    doc = ast.parse(FCR_TEXT).body[0]
+    assert isinstance(doc, ast.Expr) and isinstance(doc.value, ast.Constant) \
+        and isinstance(doc.value.value, str), "FCR lost its module docstring"
+    lines = FCR_TEXT.splitlines()
+    lines.insert(doc.end_lineno - 1, prose)
+    return "\n".join(lines)
+
+
+def test_control_docstring_naming_both_columns_stays_green():
+    """Correct prose in the module docstring -- naming both columns by their
+    header text, as a reader documents #150's rename -- must not turn the
+    gate red. #852's false positive: rule 2's `pre-` test is literal-wide,
+    so a literal documenting both columns fails it by construction."""
+    text = _fcr_docstring_with(
+        "The SHIPPED (pre-#150) column is the retired estimator; "
+        "REPAIRED (#150) is the calibrated one.")
+    assert _fcr_gate(text) == []
+
+
+def test_control_docstring_naming_one_undated_column_stays_green():
+    """Prose that mentions one column without a vintage is still prose, not
+    a column header: rule 1 must not reach it."""
+    text = _fcr_docstring_with(
+        "See the SHIPPED column for the retired estimator.")
+    assert _fcr_gate(text) == []
+
+
+def test_control_prose_fstring_print_stays_green():
+    """A prose f-string naming a column is not a column header: its text is
+    a bare JoinedStr fragment, not a string being column-formatted."""
+    text = FCR_TEXT + ('\nprint(f"   the SHIPPED column above is the retired '
+                       'estimator, {13} devices")\n')
+    assert _fcr_gate(text) == []
+
+
+def test_control_real_inversion_in_an_fcr_header_turns_red():
+    """The scan must not narrow past the real defect: `SHIPPED (#150)` in an
+    actual FCR column header -- the inversion #792 exists to catch -- stays
+    red, red before and after any population fix (#852)."""
+    assert "SHIPPED (pre-#150)" in FCR_TEXT, "control target moved in FCR"
+    text = FCR_TEXT.replace("SHIPPED (pre-#150)", "SHIPPED (#150)", 1)
+    assert _fcr_gate(text)
+
+
+def test_control_new_header_without_format_spec_escapes_the_gate():
+    """Records #900's measured bound; it is not a pass to rely on. A NEW
+    column header written without a format spec -- row (b), a plain string;
+    row (c), a bare f-string interpolation, behaves identically -- is outside
+    the policed set and moves no count, so the gate stays green over an
+    inverted `SHIPPED (#150)` that arrived spec-less. If this control ever
+    fails, the predicate was widened over spec-less strings -- #852's false
+    positives are back -- and the module docstring's rule-8 paragraph and
+    this control must be updated together."""
+    text = FCR_TEXT + '\nprint("      SHIPPED (#150)       ")\n'
+    assert len(_header_literals(text, 1, len(text.splitlines()))) == 6, (
+        "the policed population moved -- a spec-less header was policed "
+        "after all; re-measure #900's rows (a)-(d) and update the rule-8 "
+        "statement")
+    assert _fcr_gate(text) == []
 
 
 # ---------------------------------------------------------------------------

@@ -220,10 +220,11 @@ def inharmonic_shipped(x, f0, sr, guard=5):
     return 10.0 * math.log10(max(p[~harm].sum(), 1e-300) / p.sum())
 
 
-def defect_2():
+def defect_2(inharmonic=None):
     print("\n" + "=" * 78)
     print("2. #119 / #92 -- the aliasing floor is not -54 dB, it is whatever f0 makes it")
     print("=" * 78)
+    inharmonic = inharmonic or am.inharmonic_fraction_db
     n = int(0.5 * SR)
     print(f"   {'f0':>10}{'on a bin':>10}{'HANN floor':>12}{'BH4 floor':>12}"
           f"{'HANN answer':>13}{'BH4 answer':>12}{'answer moved':>14}")
@@ -232,10 +233,35 @@ def defect_2():
         onbin = abs(f0 / (SR / n) - round(f0 / (SR / n))) < 1e-9
         free, naive = _addsaw(f0, n), _naivesaw(f0, n)
         fh = inharmonic_shipped(free, f0, SR)
-        fb = am.inharmonic_fraction_db(free, f0, SR)
+        # The alias-free saw's reading IS the floor, so `fb` asks for the
+        # floor ON PURPOSE (`min_headroom_db=None`, the mode the headroom
+        # gate's docstring names for exactly this control). The gate's 6 dB
+        # minimum refuses a reading at its own floor -- which is every row
+        # here -- and this was the one floor-on-purpose caller not updated
+        # when the gate landed (d4c89f03; measure_mono_case, measure_saw_
+        # alias_after_2x and estimator_domains all were): the print below
+        # raised TypeError on the refusal's None and the probe died at its
+        # first row, with NO VERDICT for every section after it (#843).
+        fb = inharmonic(free, f0, SR, min_headroom_db=None)
         ah = inharmonic_shipped(naive, f0, SR)
-        ab = am.inharmonic_fraction_db(naive, f0, SR)
+        ab = inharmonic(naive, f0, SR)
         swing.append(fh)
+        # Guarded ABOVE the first `.value` read, the print included (#805's
+        # defeat note): a None-encoded refusal raised TypeError at the
+        # print, a nan-carrying one printed a plausible nan row -- and both
+        # would have run the floor-vs-answer verdict against a reading that
+        # does not exist.
+        readings = (fb, ab)
+        bad = next((e for e in readings
+                    if not e.ok or e.value is None or not math.isfinite(e.value)),
+                   None)
+        if bad is not None:
+            check_refused(
+                f"f0 {f0}: the inharmonic-floor row refused "
+                f"({bad.reason or 'no reason given'}) -- no row was printed "
+                "and the floor-vs-answer verdict did not run against a "
+                "reading that does not exist")
+            continue
         print(f"   {f0:>10.3f}{str(onbin):>10}{fh:>12.2f}{fb.value:>12.2f}"
               f"{ah:>13.2f}{ab.value:>12.2f}{ab.value-ah:>14.2f}")
         check(abs(fb.detail["headroom_db"]) < 1.0,
@@ -298,8 +324,89 @@ def defect_3():
 # 4. #108 -- a rig that names a frequency instead of finding one
 # ===========================================================================
 def tone_ratio_shipped(x, sr, hz_num, hz_den):
+    """`tone_ratio_db` as it stood before #108: probe the NOMINAL frequency.
+
+    Deliberately UNGUARDED (#843, docs/verification-rules.md rule 8's stated
+    reason): the exhibit's unguarded `.value` reads are part of what it
+    exhibits. On a refusing reading the shipped probe raised TypeError --
+    NO VERDICT -- and on two partials a rectangular projection at the
+    nominal points reads the leakage between them for an answer. Guarding
+    these reads would make the exhibit refuse where the shipped code
+    crashed, and it would no longer be the code that was wrong.
+    `test_estimator_defects.py` pins the faithfulness both ways: the wrong
+    answer on two partials, and the TypeError on a refusing reading."""
     a, b = am.tone_amplitude(x, hz_num, sr), am.tone_amplitude(x, hz_den, sr)
     return 20.0 * math.log10(a.value / b.value)
+
+
+def _defect4_row(label, y, sr):
+    """One comparison row of defect 4, extracted so the control can rig the
+    repaired-side estimators to refuse without the corpus (#843).
+
+    The guard sits ABOVE the first `.value` read -- the print it protects,
+    the defeat defect 1's own note describes, and it covers `lo.value` and
+    `hi.value` too, which the issue's enumeration did not name but the same
+    statement prints. The EXHIBIT calls stay outside the guard on purpose:
+    `tone_ratio_shipped` raising TypeError on a refusing shipped reading is
+    the shipped behaviour (see its docstring); what the guard owes the
+    reader is that a refusal of the repaired machinery refuses the ROW
+    instead of crashing the probe or printing a plausible nan."""
+    lo, hi = rc.find_line(y, sr, 540.0), rc.find_line(y, sr, 800.0)
+    old = tone_ratio_shipped(y, sr, 800.0, 540.0)
+    new = rc.tone_ratio_db(y, sr, 800.0, 540.0)
+    d_old = tone_ratio_shipped(y, sr, 260.0, 800.0)
+    d_new = rc.difference_tone_db(y, sr, 800.0, 540.0)
+    readings = (lo, hi, new, d_new)
+    bad = next((e for e in readings
+                if not e.ok or e.value is None or not math.isfinite(e.value)), None)
+    if bad is not None:
+        check_refused(
+            f"defect 4's row for {label} refused ({bad.reason or 'no reason given'})"
+            " -- no row was printed and no ratio moved against a reading "
+            "that does not exist")
+        return
+    print(f"   {label}")
+    print(f"      lines found        {lo.value:8.2f} Hz ({lo.detail['offset_pct']:+5.2f} %"
+          f" off 540)   {hi.value:8.2f} Hz ({hi.detail['offset_pct']:+5.2f} % off 800)")
+    print(f"      partial balance    nominal probe {old:+8.2f} dB"
+          f"   measured lines {new.value:+8.2f} dB   moved {new.value-old:+6.2f}")
+    print(f"      difference tone    nominal 260 Hz {d_old:+8.2f} dB"
+          f"   at {d_new.detail['diff_hz']:6.2f} Hz {d_new.value:+8.2f} dB"
+          f"   moved {d_new.value-d_old:+6.2f}")
+    print(f"                         its own leakage floor {d_new.detail['floor_db']:+8.2f} dB,"
+          f" headroom {d_new.detail['headroom_db']:.1f} dB")
+
+
+def _defect4_synthetic_checks(tone_ratio=None, difference_tone=None):
+    """Defect 4's closing verdicts on a synthetic two-partial strike,
+    extracted so the control can rig either estimator to refuse (#843).
+
+    The closed-form check used to read `.value` INSIDE the `check(...)`
+    predicate itself: a nan-carrying reading made `abs(nan - ...) < 0.2`
+    silently False -- a FAILED verdict where REFUSED is the truth, the
+    exact shape #805 was filed for, now with a verdict downstream -- and a
+    None-encoded one raised TypeError with no verdict at all. The guard
+    runs before the predicate. The neighbouring difference-tone verdict is
+    independent of this reading, so it runs either way: a refusal here must
+    not quietly widen into skipping it."""
+    tone_ratio = tone_ratio or rc.tone_ratio_db
+    difference_tone = difference_tone or rc.difference_tone_db
+    t = np.arange(int(0.1 * SR)) / SR
+    two = 1.0 * np.sin(2 * math.pi * 823.70 * t) + 0.5 * np.sin(2 * math.pi * 558.35 * t)
+    check(abs(tone_ratio_shipped(two, SR, 800.0, 540.0) - 20 * math.log10(2.0)) > 1.0,
+          "the nominal probe is wrong on two partials at the machine's own frequencies")
+    closed = tone_ratio(two, SR, 800.0, 540.0)
+    if not closed.ok or closed.value is None or not math.isfinite(closed.value):
+        check_refused(
+            "defect 4's closed-form answer check refused "
+            f"({closed.reason or 'no reason given'}) -- the two-partial "
+            "strike was NOT measured, so 'finding the lines gets the "
+            "closed-form answer' was neither confirmed nor denied")
+    else:
+        check(abs(closed.value - 20 * math.log10(2.0)) < 0.2,
+              "finding the lines gets the closed-form answer")
+    check(not difference_tone(two, SR, 800.0, 540.0).ok,
+          "and a difference tone that is not there is refused, not reported")
 
 
 def defect_4():
@@ -310,31 +417,10 @@ def defect_4():
     our_x, our_sr = rc.render_drum_solo("CB")
     for label, x, sr in (("reference " + rel, ref_x, ref_sr), ("ours", our_x, our_sr)):
         y = rc.window(rc.prepare(x, sr), sr, 0.0, 0.100)
-        lo, hi = rc.find_line(y, sr, 540.0), rc.find_line(y, sr, 800.0)
-        old = tone_ratio_shipped(y, sr, 800.0, 540.0)
-        new = rc.tone_ratio_db(y, sr, 800.0, 540.0)
-        d_old = tone_ratio_shipped(y, sr, 260.0, 800.0)
-        d_new = rc.difference_tone_db(y, sr, 800.0, 540.0)
-        print(f"   {label}")
-        print(f"      lines found        {lo.value:8.2f} Hz ({lo.detail['offset_pct']:+5.2f} %"
-              f" off 540)   {hi.value:8.2f} Hz ({hi.detail['offset_pct']:+5.2f} % off 800)")
-        print(f"      partial balance    nominal probe {old:+8.2f} dB"
-              f"   measured lines {new.value:+8.2f} dB   moved {new.value-old:+6.2f}")
-        print(f"      difference tone    nominal 260 Hz {d_old:+8.2f} dB"
-              f"   at {d_new.detail['diff_hz']:6.2f} Hz {d_new.value:+8.2f} dB"
-              f"   moved {d_new.value-d_old:+6.2f}")
-        print(f"                         its own leakage floor {d_new.detail['floor_db']:+8.2f} dB,"
-              f" headroom {d_new.detail['headroom_db']:.1f} dB")
+        _defect4_row(label, y, sr)
     print("   The difference tone moved by tens of dB on BOTH sides: a rectangular")
     print("   projection at 260 Hz was reading the two partials' leakage, not a tone.")
-    t = np.arange(int(0.1 * SR)) / SR
-    two = 1.0 * np.sin(2 * math.pi * 823.70 * t) + 0.5 * np.sin(2 * math.pi * 558.35 * t)
-    check(abs(tone_ratio_shipped(two, SR, 800.0, 540.0) - 20 * math.log10(2.0)) > 1.0,
-          "the nominal probe is wrong on two partials at the machine's own frequencies")
-    check(abs(rc.tone_ratio_db(two, SR, 800.0, 540.0).value - 20 * math.log10(2.0)) < 0.2,
-          "finding the lines gets the closed-form answer")
-    check(not rc.difference_tone_db(two, SR, 800.0, 540.0).ok,
-          "and a difference tone that is not there is refused, not reported")
+    _defect4_synthetic_checks()
 
 
 # ===========================================================================
@@ -551,8 +637,44 @@ def corner_shipped(freqs, g, cut_hz):
     return am.corner_from_curve(freqs, g, ref_band=rc._ref_band(freqs, cut_hz))
 
 
-def defect_6():
+def _bad_corner(*estimates):
+    """Section 6's readings guard (#845): every `.value` this section reads
+    is a corner frequency or feeds a ratio of two, so return the reason the
+    first unusable reading is unusable, or None when they all stand. Unusable
+    means not ok, a None value (the shipped `_fail` encoding -- raised
+    TypeError at the first arithmetic), non-finite (a nan-carrying estimate
+    sailed through an `.ok`-only test and made every comparison silently
+    False -- FAILED where REFUSED is the truth, #805's pathology), or
+    nonpositive (a corner at or below 0 Hz is not a measurement: the
+    readback's division raised ZeroDivisionError at 0 and printed a
+    plausible percentage off a negative). GUARD-DEFEAT STATEMENT (rule 8):
+    this certifies that a reading exists and is a physically possible
+    frequency -- it cannot certify that the exhibit's wrong number is the
+    RIGHT wrong number; that is what the printed columns and the swing
+    verdicts are for. And each call sits ABOVE its block's first `.value`
+    read, print included -- a guard below the print is defect 1's defeat
+    note again: the None encoding dies at the print and the guard is never
+    reached."""
+    for e in estimates:
+        if not e.ok:
+            return e.reason or "no reason given"
+        if e.value is None:
+            return "a refusal carrying a None value"
+        if not math.isfinite(e.value):
+            return "a non-finite reading"
+        if e.value <= 0.0:
+            return f"a nonphysical corner ({e.value} Hz)"
+    return None
+
+
+def defect_6(shipped=None, repaired=None):
     import reference_compare as rcmp
+    # The two estimators this section reads, exposed as seams (#845) so
+    # `tools/probes/test_estimator_defects.py` can rig either one to refuse,
+    # the `_prepend_silence_invariance(shipped=, repaired=)` pattern. The
+    # defaults are the real things; a passing run is unchanged by them.
+    shipped = shipped or corner_shipped
+    repaired = repaired or rc.filt_corner
     print("\n" + "=" * 78)
     print("6. #150 -- the corner estimator droops, on a response that does not")
     print("=" * 78)
@@ -565,8 +687,17 @@ def defect_6():
           f"{'bias':>9}{'REPAIRED (#150)':>17}{'bias':>9}")
     for fc in (250.0, 400.0, 630.0, 1000.0, 1600.0, 2500.0, 4000.0):
         g = -40.0 * np.log10(1.0 + (F / fc) ** 2)
-        old = corner_shipped(F, g, fc)
-        new = rc.filt_corner(fc)(F, g)
+        old = shipped(F, g, fc)
+        new = repaired(fc)(F, g)
+        # Guarded above the FIRST `.value` read, the print included (#845):
+        # all four figures in this row are ratios of corner readings, so a
+        # refusing operand means the row does not exist.
+        bad = _bad_corner(old, new)
+        if bad is not None:
+            check_refused(
+                f"fc {fc:.0f}: defect 6's corner-estimator table refused "
+                f"({bad}) -- no row was printed for this cutoff")
+            continue
         print(f"   {fc:9.0f} {old.detail['plateau_db']:+14.3f}"
               f"{old.value/fc:19.4f}{100*(old.value/fc/true_ratio-1):+8.2f}%"
               f"{new.value/fc:17.4f}{100*(new.value/fc/true_ratio-1):+8.2f}%")
@@ -579,8 +710,24 @@ def defect_6():
     for fc in (250.0, 1000.0, 4000.0):
         ref_g = -40.0 * np.log10(1.0 + (F / fc) ** 2)
         got_g = -40.0 * np.log10(1.0 + (F / (fc * 0.84)) ** 2)
-        o = corner_shipped(F, got_g, fc).value / corner_shipped(F, ref_g, fc).value - 1
-        n = rc.filt_corner(fc)(F, got_g).value / rc.filt_corner(fc)(F, ref_g).value - 1
+        got_old = shipped(F, got_g, fc)
+        ref_old = shipped(F, ref_g, fc)
+        got_new = repaired(fc)(F, got_g)
+        ref_new = repaired(fc)(F, ref_g)
+        # Same guard, and this row is the DIVISION class (#845, the :501
+        # shape): the readback is got/ref - 1 over two `.value` reads, so a
+        # refusing-but-finite denominator raised ZeroDivisionError at 0 or
+        # produced a plausible percentage off a negative -- the nonpositive
+        # leg in `_bad_corner` is what catches it.
+        bad = _bad_corner(got_old, ref_old, got_new, ref_new)
+        if bad is not None:
+            check_refused(
+                f"fc {fc:.0f}: the constant-16 % readback refused ({bad}) "
+                "-- the readback is a ratio of two readings, so no "
+                "percentage was produced from a reading that does not exist")
+            continue
+        o = got_old.value / ref_old.value - 1
+        n = got_new.value / ref_new.value - 1
         print(f"   {fc:9.0f}{100*o:18.2f}%{100*n:16.2f}%")
     print("\n   #150's TWO READINGS, RECONCILED. Both are right; the difference is")
     print("   the grid, which neither number was stated with.\n")
@@ -588,12 +735,25 @@ def defect_6():
     for label, G in (("geomspace(40, 12000, 32)", F),
                      ("geomspace(20, 18000, 32)", np.geomspace(20.0, 18000.0, 32))):
         rs, es = [], []
+        refused = None
         for fc in (250.0, 1000.0, 4000.0):
             ref_g = -40.0 * np.log10(1.0 + (G / fc) ** 2)
             got_g = -40.0 * np.log10(1.0 + (G / (fc * 0.84)) ** 2)
-            rs.append(corner_shipped(G, ref_g, fc).value / fc)
-            es.append(100 * (corner_shipped(G, got_g, fc).value
-                             / corner_shipped(G, ref_g, fc).value - 1))
+            r_ref = shipped(G, ref_g, fc)
+            r_got = shipped(G, got_g, fc)
+            bad = _bad_corner(r_ref, r_got)
+            if bad is not None:
+                refused = (fc, bad)
+                break
+            rs.append(r_ref.value / fc)
+            es.append(100 * (r_got.value / r_ref.value - 1))
+        if refused is not None:
+            check_refused(
+                f"{label}: the grid reconciliation refused at fc "
+                f"{refused[0]:.0f} ({refused[1]}) -- the grid row was not "
+                "printed, and neither grid was reconciled from a reading "
+                "that does not exist")
+            continue
         print(f"   {label:<28}" + "".join(f"{v:9.4f}" for v in rs)
               + "   " + " ".join(f"{v:7.2f}" for v in es))
     print("   The first is the external audit's and is `reference_compare.FREQS`,")
@@ -605,10 +765,28 @@ def defect_6():
     for poles in (2, 4, 6):
         tr = math.sqrt(10 ** (3.0 / (10.0 * poles)) - 1.0)
         olds, news = [], []
+        refused = None
         for fc in (250.0, 400.0, 630.0, 1000.0, 1600.0, 2500.0, 4000.0):
             g = -(10.0 * poles) * np.log10(1.0 + (F / fc) ** 2)
-            olds.append(corner_shipped(F, g, fc).value / fc)
-            news.append(rc.filt_corner(fc)(F, g).value / fc)
+            old = shipped(F, g, fc)
+            new = repaired(fc)(F, g)
+            bad = _bad_corner(old, new)
+            if bad is not None:
+                refused = (fc, bad)
+                break
+            olds.append(old.value / fc)
+            news.append(new.value / fc)
+        if refused is not None:
+            # The verdict guard (#845, the :529/:531 shape -- the reason this
+            # issue exists): a nan operand made `max/min - 1 > 0.08` silently
+            # False, a FAILED verdict where REFUSED is the truth; a None
+            # operand raised at the append. A swing measured from a reading
+            # that does not exist is not a number, so NEITHER verdict runs.
+            check_refused(
+                f"{poles}-pole: the corner-estimator spread refused at "
+                f"fc {refused[0]:.0f} ({refused[1]}) -- NEITHER swing "
+                "verdict ran")
+            continue
         check(max(olds) / min(olds) - 1 > 0.08,
               f"{poles}-pole: the shipped estimator moves "
               f"{100*(max(olds)/min(olds)-1):.2f} % on a constant ratio")

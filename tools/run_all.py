@@ -143,14 +143,17 @@ def run_all(cmds: list[str], *, serial: bool = False, timeout: float | None = No
     return results
 
 
-def write_json_atomic(path: str, value) -> None:
-    """Replace a JSON report atomically so readers never see a partial file."""
+def write_json_atomic(path: str, value, sort_keys: bool = False, default=None) -> None:
+    """Replace a JSON report atomically so readers never see a partial file.
+    `sort_keys` and `default` pass through to json.dump so a caller keeps the
+    exact bytes it shipped (the DAG's records sort keys; manifest's serialise
+    through its `_canonical` default)."""
     parent = os.path.dirname(os.path.abspath(path))
     os.makedirs(parent, exist_ok=True)
     temporary = f"{path}.tmp-{os.getpid()}"
     try:
         with open(temporary, "w") as fh:
-            json.dump(value, fh, indent=2)
+            json.dump(value, fh, indent=2, sort_keys=sort_keys, default=default)
             fh.write("\n")
             fh.flush()
             os.fsync(fh.fileno())

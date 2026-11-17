@@ -1,0 +1,56 @@
+Is a dB `must` row constructible for the rate control's injected-bug
+test -- `test_the_integer_fold_this_replaced_is_still_red_on_this_panel`
+-- at the shipped licence? The shipped eleven-entry RATE_PANEL, on both
+folds, through rate_tolerance itself, with the red set tied to
+_rate_gaps pair for pair as a runtime precondition. #935.
+python 3.12.3, numpy 2.5.2, scipy 1.18.1.
+Shipped: RATE_TOL_REL['db'] = 0.1, RATE_TOL_ABS = {'ppm': 20.0, 'db': 0.5, 'ratio': 0.02, 'ms': 0.05, 'count': 1.0}, FOLD_SINC_TAPS = 16,
+RATE_KNOWN_RED = {} (asserted empty: a quarantine
+entry would absorb a pair and turn the cost reading into a pass).
+Grid committed at 75c20033 in docs/sensitivity/rate-tol-rel-by-unit-plan.json (reused, not restated).
+Panel: 11 entries, 2101 (entry, column) pairs per fold.
+
+cqt_clamp_tolerance -- the tolerance numbers #935 quotes, re-measured on
+  this tree through rate_tolerance itself. peak_db is the bin's magnitude
+  (80 is the floor_db clamp); tol_shipped is what the shipped dial allows,
+  tol_floor_only what dial 0 (the 0.5 dB floor alone) would. The licence
+  grows with the bin's distance from 0 dB -- the shape #782's record
+  states as its fifth limit and #935's body measures.
+
+  peak_db  tol_shipped   tol_floor_only
+       80            8              0.5
+       10            1              0.5
+
+rate_fold_db_grid -- RATE_PANEL dB pairs red on each fold at every
+  committed grid value, through the per-unit override; must_rows is the
+  count CONSTRUCTIBLE as a control row: red on the integer fold AND green
+  on the shipped one. A pair red on both folds is the suite failing, not
+  the injected defect being visible, and is not a `must` row.
+
+   rel_db  db_red_injected   db_red_shipped  must_rows
+        0               12               12          0
+  0.00625               12               12          0
+     0.02               11               11          0
+    0.057                4                4          0
+     0.09                0                0          0
+      0.1                0                0          0
+     0.12                0                0          0
+
+rate_fold_injected_by_unit -- at the SHIPPED dial (0.1), red pairs on
+  RATE_PANEL by unit, on each fold. fold 1 is the INTEGER fold the
+  injected-bug control asserts against; fold 0 is the shipped one. The
+  control's `must` set can only assert pairs the fold-1 row shows red.
+
+    fold    count       db       ms      ppm    ratio
+       0        0        0        0        0        0
+       1        0        0        0        0       50
+
+verdict -- measured, not argued.
+
+  No RATE_PANEL dB pair is red on the integer fold at the shipped
+  licence (RATE_TOL_REL_DB = 0.1): the 50 pairs the integer fold
+  turns red are all in other units, so a dB `must` row is NOT
+  constructible at the shipped licence and the control's all-ratio
+  `must` set is a measured property of the dial, not an oversight.
+  No committed grid value constructs one either.
+
