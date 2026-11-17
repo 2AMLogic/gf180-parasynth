@@ -290,7 +290,12 @@ first runs the checker once and REFUSES (exit 2, which the exit contract
 reports as NO-VERDICT, naming what it found) unless that baseline is green,
 and again unless every injection target matches, because its controls inject
 into the live checkout and would otherwise misreport the tree's own WIP as
-control failures. On a tree whose claims are green the whole run is seconds
+control failures. Since #936 the guard that refuses an already-satisfied
+injection state derives its pattern and paths by parsing the staged
+injection with the checker's own grammar, so a hand-edited claim marker's
+`in=` cannot desynchronize the guard from the file the claim actually
+greps -- a divergence that used to surface as a misattributed control FAIL
+instead of a refusal. On a tree whose claims are green the whole run is seconds
 (every #789 marker is a `grep=` or `absent=` row with no backing test, so
 the two-document run collects no pytest), which is why it is wired and
 `scope_control` is not — and the refusal is the correct answer on a WIP
