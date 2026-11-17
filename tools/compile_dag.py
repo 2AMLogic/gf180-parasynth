@@ -494,6 +494,9 @@ def main() -> int:
 
     nodes = json.loads(DAG.read_text())["nodes"]
 
+    # Ids named in --only that the --run loop declined to run (filled below;
+    # empty unless --run --only). Read by main()'s final return.
+    refused_only: list[str] = []
     if args.run:
         sha = git("rev-parse", "HEAD")
         res = load_results()
@@ -502,21 +505,57 @@ def main() -> int:
         # rewrites their shas and buries the change you meant to make. An unknown
         # id REFUSES: silently recording nothing for a typo'd node id would read
         # exactly like a node that had no evidence to run.
+        # `is not None`, not truthy: `--only ''` is falsy, so a truthy test
+        # leaves `only` as None and the run degrades into a FULL bare `--run`
+        # -- re-recording every fast node and rewriting their shas, exactly
+        # the harm this flag exists to prevent. Same for `--only ','`, which
+        # strips to an empty list: naming no node must REFUSE, not silently
+        # execute nothing and exit 0.
         only = None
-        if args.only:
+        if args.only is not None:
             only = [i.strip() for i in args.only.split(",") if i.strip()]
             unknown = [i for i in only if i not in nodes]
             if unknown:
                 print(f"REFUSED: --only names no such node: {', '.join(unknown)}",
                       file=sys.stderr)
                 return 2
+            if not only:
+                print("REFUSED: --only names no node after stripping "
+                      "(empty or comma-only); it must not degrade into a "
+                      "full --run", file=sys.stderr)
+                return 2
+        # Ids named in --only that the loop then declined to run. A named node
+        # that cannot run must never look like one that ran: bare `--run`
+        # skips these silently BY DESIGN (the nightly sweeps everything, so
+        # silence is right when the operator named nothing), but `--only` is
+        # an explicit request to re-record ONE node, and silence there reads
+        # exactly like success. Refusals are COLLECTED, not returned: an early
+        # `return 2` here would abandon the named nodes that DID run (#600's
+        # shape -- a partial run discarding completed results).
         for i, n in nodes.items():
             if only is not None and i not in only:
                 continue
             if n.get("blocked") or not any(k in n for k in
                                            ("suite", "verifier", "tool", "evidence_file")):
+                if only is not None and i in only:
+                    # One reason, deterministically: `blocked` first, matching
+                    # classify()'s own order, so a node that is both blocked
+                    # and evidence-less reports the same way every time. The
+                    # blocked prose is truncated -- the real string can be
+                    # hundreds of characters, and classify() already renders
+                    # it in full on the board below.
+                    why = (f"declares itself blocked: {n['blocked'][:70]}"
+                           if n.get("blocked") else
+                           "declares no evidence key "
+                           "(suite/verifier/tool/evidence_file)")
+                    refused_only.append(i)
+                    print(f"  {'REFUSE':6s} {i:3s} {why}", file=sys.stderr)
                 continue
             if n.get("slow") and not args.slow:
+                if only is not None and i in only:
+                    refused_only.append(i)
+                    print(f"  {'REFUSE':6s} {i:3s} marked slow; pass --slow "
+                          f"to run it", file=sys.stderr)
                 continue                       # nightly runs these
             try:
                 ok, detail = run_evidence(i, n)
@@ -607,6 +646,12 @@ def main() -> int:
         print(f"{status[i][0]}: {i} -- {status[i][1]}", file=sys.stderr)
     for w in warn:
         print(f"note: {w}", file=sys.stderr)
+    # A refused --only id outranks everything: the operator named a node and
+    # nothing was recorded for it -- the same operator-visible outcome as the
+    # unknown-id refusal above, so it carries the same exit 2, whether or not
+    # the rest of the run was clean or strict-failing.
+    if refused_only:
+        return 2
     return 1 if (args.check and args.strict and bad) else 0
 
 
