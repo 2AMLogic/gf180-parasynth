@@ -522,14 +522,19 @@ verify-full:
 ##
 ## check_doc_claims_789_marker_controls.py (the probe PR #798 added, wired
 ## here as a STANDING control by #811) is the
-## red-first record for the #789 claim markers:
-## unlike check_doc_claims_scope_control.py it is satisfiable on any tree and
-## sub-second (all 17 markers the two documents carry are grep=/absent=, no
-## test=), and it restores every file it injects into. Known residue, recorded
-## not designed around: on a runner timeout this runner SIGKILLs the job's
+## red-first record for the #789 claim markers. Since #905 it is satisfiable
+## on any tree whose 17 claims are green and REFUSES otherwise -- exit 2
+## (NO-VERDICT in the exit contract), naming what it found -- because its
+## controls inject into this live checkout and would misreport the tree's own
+## staleness as control failures; every marker the two documents carry is
+## grep=/absent=, no test=, so the whole run is seconds, and it restores every
+## file it injects into. The refusal is the right answer on a WIP tree, not a
+## reason to unwire: a green `make verify` leaves exactly the tree state it
+## accepts. Known residue, recorded not designed around: on a runner timeout
+## this runner SIGKILLs the job's
 ## process group and the probe's finally-restore does not run, leaving
-## README.md and docs/milestones.md modified -- at ~0.5 s against this
-## target's 3600 s timeout that needs the probe to hang ~7200x its runtime.
+## README.md and docs/milestones.md modified -- at a few seconds against this
+## target's 3600 s timeout that needs the probe to hang ~1000x its runtime.
 ## Same note in docs/claim-markers.md, beside the scope_control paragraph.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \

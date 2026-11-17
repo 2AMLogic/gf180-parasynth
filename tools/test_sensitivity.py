@@ -262,11 +262,17 @@ def test_the_wiring_check_fails_when_a_line_is_commented_out_with_its_text_intac
 
         \\t#  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG ..."
 
-    GNU make honours that silently: the line is dropped, every other control
-    still runs, `make controls` still exits 0 -- and `_unwired` over
-    unfiltered text stays green because its match sits behind the `#`. That
-    is verbatim the failure this gate exists to close, so the parser must
-    drop comment lines before any consumer sees the recipe text."""
+    The failure mode depends on the line's position, and PREDICTION_WRONG
+    sits mid-recipe (Makefile:633; the recipe's last line is
+    `tools/bd_pitch_predeclaration_mutants.py`): the shell's `#` swallows
+    the trailing backslash, the command ends there, and the rest of the
+    recipe becomes a bogus command -- `Error 127`, every later control
+    dropped, nothing silent about it. (A *final* recipe line would be the
+    silent variant: rc 0, one entry gone.) Both mean the control does not
+    run, and `_unwired` over unfiltered text stays green either way because
+    its match sits behind the `#`. That is verbatim the failure this gate
+    exists to close, so the parser must drop comment lines before any
+    consumer sees the recipe text."""
     recipe = makefile_recipe("controls")
     mutated = "\n".join(
         ln.replace("\t", "\t#  ", 1) if "PREDICTION_WRONG" in ln else ln

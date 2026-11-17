@@ -7,7 +7,7 @@ Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sou
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
 
-_None._
+- **#818**: ci: commit the nightly's slow DAG records to main, not just the artifact
 
 ## Very Important
 
@@ -34,25 +34,9 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#778**: measure: re-derive the jit.stability +0.008 and mpd.* attributions with the exact-period fold (REFUSED in #767 -- no corpus on that host)
-- **#782**: bug: the relative rate tolerance is dimensionally meaningless on the 147 dB columns
-- **#787**: Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run"
-- **#811**: Wire or document tools/probes/check_doc_claims_789_marker_controls.py: a control no target runs (the #756 shape, again)
-- **#845**: estimator_defects.py section 6: nine unguarded `.value` arithmetic sites, including two that reach a check() verdict, owned by neither #792 nor #843
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
-- **#852**: test_probe_labels gate (c) polices filter_corner_recalibration's module docstring, and goes red if it says "pre-#150"
-- **#858**: compile_dag classify(): the empty-covers REFUSED guard masks a FAILING record as REFUSED when the node also carries an in-history tag
-- **#863**: compile_dag: stale_against() answers a content question with a commit-range walk, so a merge-shaped conflict round renders fast nodes STALE (false positive; --full-history is NOT the fix)
-- **#864**: classify_route_drc.py crashes where it documents exit 3 REFUSED: 3 measured inputs return rc=1 with a traceback
-- **#867**: #781 residue: fold-interpolator verdict summary says 'Five' where its own runs field has four singleton groups, plus two merge-jammed lines
-- **#870**: probe_orphan_reap argv test drops true matches where a worktree path ends a longer token (--opt=<path>, <path>:<mount>)
-- **#873**: spec/NUMERIC-CONTRACT.md: PR #846's repaired sites cite figures and pointers that no marker guards
-- **#877**: File upstream (rjwalters/loom): loom-daemon's write guard gates issue creation on push/WRITE, refusing every public upstream where issues:write suffices
-- **#879**: docs: makefile_recipe comment-filter docstrings claim a silent exit 0 for a mutation that is loud mid-recipe
-- **#882**: Tracked-JSON experiment-record writers still truncate-then-write (class sweep remainder from #881)
 - **#884**: regrade: an attested-file edit fails as a bare 'exit 3' with the drift report swallowed, and nothing couples the edit to regenerating the evidence
-- **#885**: pytest_collection_inventory.py:78 comment says pnr/ is 'make verify only' — false once the pnr CI job lands (#851/#865)
-- **#888**: Post the #12307 correction of record as a comment on OpenROAD#12303
+- **#906**: rungs.yml's roadmap gate checks the README that the line above it just rewrote
 
 ## In Progress
 
@@ -64,23 +48,36 @@ Issues currently being built (`loom:building`).
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
-- **#784**: Give Refused a shared base class: 113 unrelated definitions make two refusals report as a crash and an execution error
+- **#778**: measure: re-derive the jit.stability +0.008 and mpd.* attributions with the exact-period fold (REFUSED in #767 -- no corpus on that host)
+- **#782**: bug: the relative rate tolerance is dimensionally meaningless on the 147 dB columns
 - **#791**: compile_dag renders a node GREEN when its evidence file declares no verdict: M3, S1 and S3 are green on existence alone
-- **#835**: File upstream: ORFS 6_report.json emits finish__design__instance__area twice with two different meanings
+- **#815**: Re-base the 114 Refused definitions on refusal.Refused and delete the three mitigations it makes dead (follow-on to #784)
 - **#853**: 16 of 40 fpga/ test files are run by no CI job (23 more only via make verify-fast) -- the fpga half of the #404/#851 shape
-- **#881**: Class sweep for #842: tracked JSON still written by truncate-then-write outside compile_dag
+- **#874**: docs/tool-findings.md will carry contradictory claims about the core-area identity once #849 merges
+- **#879**: docs: makefile_recipe comment-filter docstrings claim a silent exit 0 for a mutation that is loud mid-recipe
+- **#882**: Tracked-JSON experiment-record writers still truncate-then-write (class sweep remainder from #881)
+- **#885**: pytest_collection_inventory.py:78 comment says pnr/ is 'make verify only' — false once the pnr CI job lands (#851/#865)
+- **#904**: check_doc_claims.py cannot detect a grep= pattern that matches several lines, so no marker's uniqueness is machine-checked
+- **#905**: check_doc_claims_789_marker_controls.py reports FAIL, not REFUSED, when an uncommitted edit makes a #789 claim stale
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#849**: summarize.py refuses duplicated required metrics (OpenROAD#12303)
+- **#810**: dag: report an evidence file that declares no verdict as REFUSED, not GREEN
+- **#895**: split RATE_TOL_REL into per-unit scalars; sweep the dB term to 0.1 and empty the rate quarantine
+- **#907**: docs: scope makefile_recipe comment-filter docstrings to the line position
+- **#911**: docs: drop stale attribution of the 6-sf coincidence framing to PR #849's row
+- **#913**: fix: 789 marker probe REFUSES a dirty tree instead of reporting FAILing controls
+- **#914**: docs: correct GUARDED_DIRS comment — CI collects pnr/ as a third job
+- **#915**: fix: re-base every Refused on refusal.Refused, delete the three dead mitigations, flip the guard to enforcing
+- **#916**: check_doc_claims: refuse a grep= marker matching more than one line
 
 ## Approved (Awaiting Merge)
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-_None._
+- **#818**: ci: commit the nightly's slow DAG records to main, not just the artifact
 
 ## Proposed
 
@@ -139,31 +136,26 @@ Issues carrying `loom:curated`.
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig) *(curated)*
 - **#778**: measure: re-derive the jit.stability +0.008 and mpd.* attributions with the exact-period fold (REFUSED in #767 -- no corpus on that host) *(curated)*
 - **#782**: bug: the relative rate tolerance is dimensionally meaningless on the 147 dB columns *(curated)*
-- **#784**: Give Refused a shared base class: 113 unrelated definitions make two refusals report as a crash and an execution error *(curated)*
 - **#787**: Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run" *(curated)*
 - **#791**: compile_dag renders a node GREEN when its evidence file declares no verdict: M3, S1 and S3 are green on existence alone *(curated)*
 - **#808**: Route ladder_dp to completion with the unpatched netlist on the build box: DRT-0305's cause is measured gone, the error is not re-observed *(curated)*
-- **#811**: Wire or document tools/probes/check_doc_claims_789_marker_controls.py: a control no target runs (the #756 shape, again) *(curated)*
+- **#815**: Re-base the 114 Refused definitions on refusal.Refused and delete the three mitigations it makes dead (follow-on to #784) *(curated)*
 - **#829**: Run `make reference-integration` on the box: verify_109_claims' real-reference half has never been exercised against the real Fischer corpus *(curated)*
-- **#835**: File upstream: ORFS 6_report.json emits finish__design__instance__area twice with two different meanings *(curated)*
-- **#845**: estimator_defects.py section 6: nine unguarded `.value` arithmetic sites, including two that reach a check() verdict, owned by neither #792 nor #843 *(curated)*
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
-- **#852**: test_probe_labels gate (c) polices filter_corner_recalibration's module docstring, and goes red if it says "pre-#150" *(curated)*
 - **#853**: 16 of 40 fpga/ test files are run by no CI job (23 more only via make verify-fast) -- the fpga half of the #404/#851 shape *(curated)*
 - **#856**: Provision the pinned build box for this checkout: no .env, no remote.env, and the dispatch worker's AWS identity has no EC2 access *(curated)*
-- **#858**: compile_dag classify(): the empty-covers REFUSED guard masks a FAILING record as REFUSED when the node also carries an in-history tag *(curated)*
 - **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)*
-- **#863**: compile_dag: stale_against() answers a content question with a commit-range walk, so a merge-shaped conflict round renders fast nodes STALE (false positive; --full-history is NOT the fix) *(curated)*
-- **#864**: classify_route_drc.py crashes where it documents exit 3 REFUSED: 3 measured inputs return rc=1 with a traceback *(curated)*
-- **#867**: #781 residue: fold-interpolator verdict summary says 'Five' where its own runs field has four singleton groups, plus two merge-jammed lines *(curated)*
-- **#870**: probe_orphan_reap argv test drops true matches where a worktree path ends a longer token (--opt=<path>, <path>:<mount>) *(curated)*
-- **#873**: spec/NUMERIC-CONTRACT.md: PR #846's repaired sites cite figures and pointers that no marker guards *(curated)*
-- **#877**: File upstream (rjwalters/loom): loom-daemon's write guard gates issue creation on push/WRITE, refusing every public upstream where issues:write suffices *(curated)*
+- **#874**: docs/tool-findings.md will carry contradictory claims about the core-area identity once #849 merges *(curated)*
 - **#879**: docs: makefile_recipe comment-filter docstrings claim a silent exit 0 for a mutation that is loud mid-recipe *(curated)*
-- **#881**: Class sweep for #842: tracked JSON still written by truncate-then-write outside compile_dag *(curated)*
 - **#882**: Tracked-JSON experiment-record writers still truncate-then-write (class sweep remainder from #881) *(curated)*
 - **#884**: regrade: an attested-file edit fails as a bare 'exit 3' with the drift report swallowed, and nothing couples the edit to regenerating the evidence *(curated)*
 - **#885**: pytest_collection_inventory.py:78 comment says pnr/ is 'make verify only' — false once the pnr CI job lands (#851/#865) *(curated)*
+- **#888**: Post the #12307 correction of record as a comment on OpenROAD#12303 *(curated)*
+- **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)*
+- **#904**: check_doc_claims.py cannot detect a grep= pattern that matches several lines, so no marker's uniqueness is machine-checked *(curated)*
+- **#905**: check_doc_claims_789_marker_controls.py reports FAIL, not REFUSED, when an uncommitted edit makes a #789 claim stale *(curated)*
+- **#906**: rungs.yml's roadmap gate checks the README that the line above it just rewrote *(curated)*
+- **#912**: Five more JSON-refusal handlers miss UnicodeDecodeError: the #909 gap generalises past load_json_refused *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -187,14 +179,14 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 0 |
+| Operator merge-risk holds | 1 |
 | Very important | 1 |
 | Important | 6 |
-| Ready (`loom:issue`) | 23 |
-| In Progress (`loom:building`) | 11 |
-| PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 0 |
-| Curated | 78 |
+| Ready (`loom:issue`) | 7 |
+| In Progress (`loom:building`) | 17 |
+| PRs awaiting review | 8 |
+| Approved PRs awaiting merge | 1 |
+| Curated | 73 |
 | Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
