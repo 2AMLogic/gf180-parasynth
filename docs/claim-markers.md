@@ -55,7 +55,11 @@ the marker's own line when `in=` names the marker's own document: the pattern
 appears verbatim inside it, punctuation included, so quoting a comma does not
 defuse the self-match. A regex's own source text never matches itself, so
 deferring one letter into a class (`erro[r]`, `wal[l]-clock`) matches the
-prose line while the marker quoting the pattern stays unmatched.
+prose line while the marker quoting the pattern stays unmatched. The rule is
+enforced over the checker's default document set (`DEFAULT_INCLUDES`) —
+`.md` only — so a marker outside it (e.g. in a Python docstring) is checked
+only by its own bespoke test, not by `make claims`; a marker placed there
+needs that test named in the PR that adds it.
 
 ### Modifiers
 
