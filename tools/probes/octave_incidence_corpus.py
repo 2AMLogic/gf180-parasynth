@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rows = []
     for i, c in enumerate(clips):
-        sr, x = td.read_wav(c.path)
+        x, sr = td.read_wav(c.path)
         if sr != SR_CORPUS:
             print(f"REFUSED: {c.path} reads at {sr} Hz, corpus is "
                   f"{SR_CORPUS} Hz -- the 44.1-vs-48 question is ill-posed")
