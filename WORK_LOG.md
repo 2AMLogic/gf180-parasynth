@@ -4,6 +4,47 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-17
 
+- **Issue #958** (closed): 789 marker probe: the #920 already-satisfied refusal for drum_kit is shadowed by check_doc_claims' one-line uniqueness refusal — tools job red on main since 72be3665
+- **Issue #956** (closed): compile_dag.py's status legend lists BLOCKED and TODO twice (merge artefact from #810)
+- **Issue #937** (closed): rate_tol_sweep.py --unit <anything but db> labels its columns caught_db/cost_db, and two smaller label drifts from #895
+- **PR #942**: fix: name rate_tol_sweep's per-unit columns by the swept unit
+- **Issue #932** (closed): check_attested_hashes: a pathed check entry with no content_hash is a silent green, and is counted as compared
+- **PR #938**: fix: REFUSE pathed check entries with no committed hash; count only compared files
+- **Issue #929** (closed): measure: extra_group() merges the 10.0 ms and 5.0 ms MPD strides into one bucket (6 strides -> 5 buckets)
+- **PR #934**: fix: bucket MPD attribution columns by stride, not by stride decimals
+- **Issue #920** (closed): 789 marker probe: a control still reports FAIL when the tree already satisfies the value it injects
+- **PR #927**: fix: 789 marker probe refuses an injection state the tree already satisfies
+- **Issue #815** (closed): Re-base the 114 Refused definitions on refusal.Refused and delete the three mitigations it makes dead (follow-on to #784)
+- **PR #915**: fix: re-base every Refused on refusal.Refused, delete the three dead mitigations, flip the guard to enforcing
+- **Issue #904** (closed): check_doc_claims.py cannot detect a grep= pattern that matches several lines, so no marker's uniqueness is machine-checked
+- **PR #916**: check_doc_claims: refuse a grep= marker matching more than one line
+- **Issue #928** (closed): docs: discrimination.md:962 points at line 232 of discrimination-run-16.txt, which #778 regenerated
+- **PR #931**: docs: re-anchor jit.stability figure to revision 24937ca4
+- **Issue #940** (closed): The #906 roadmap gate: tags assumed in rungs.yml but asserted in nightly.yml, and nothing guards the shipped step order
+- **PR #943**: ci: assert the shipped compile_dag check-before-run order; state rungs' tag precondition
+- **Issue #935** (closed): the dB family's rate tolerance ships 8.0 dB of licence at the floor_db clamp with no injected-bug control on any dB column
+- **Issue #921** (closed): Makefile and docs/claim-markers.md understate the 789 marker probe's runtime margin by ~6x
+- **PR #926**: docs: restore measured ~0.6 s / ~6000x figures for the 789 probe runtime note
+- **PR #941**: [rate-tol] measured: no dB must row is constructible for the integer-fold control at any licence (#935)
+- **Issue #906** (closed): rungs.yml's roadmap gate checks the README that the line above it just rewrote
+- **PR #924**: fix: the roadmap gate judges the README as committed, not the regen's own output
+- **Issue #882** (closed): Tracked-JSON experiment-record writers still truncate-then-write (class sweep remainder from #881)
+- **PR #918**: fix: tracked-JSON experiment records replace atomically; record readers refuse with a path
+- **Issue #782** (closed): bug: the relative rate tolerance is dimensionally meaningless on the 147 dB columns
+- **PR #895**: split RATE_TOL_REL into per-unit scalars; sweep the dB term to 0.1 and empty the rate quarantine
+- **Issue #884** (closed): regrade: an attested-file edit fails as a bare 'exit 3' with the drift report swallowed, and nothing couples the edit to regenerating the evidence
+- **PR #925**: signoff: surface klt's drift report on failure; add attested-hash coupling check to verify-fast
+- **Issue #930** (closed): signoff.yml swallows the attest-check diagnostic: failing attestation prints nothing under bash -e
+- **Issue #778** (closed): measure: re-derive the jit.stability +0.008 and mpd.* attributions with the exact-period fold (REFUSED in #767 -- no corpus on that host)
+- **PR #919**: docs: re-derive the 5b/5c attributions with the post-#776 fold; record corpus octave incidence
+- **Issue #885** (closed): pytest_collection_inventory.py:78 comment says pnr/ is 'make verify only' — false once the pnr CI job lands (#851/#865)
+- **PR #914**: docs: correct GUARDED_DIRS comment — CI collects pnr/ as a third job
+- **Issue #879** (closed): docs: makefile_recipe comment-filter docstrings claim a silent exit 0 for a mutation that is loud mid-recipe
+- **PR #907**: docs: scope makefile_recipe comment-filter docstrings to the line position
+- **Issue #905** (closed): check_doc_claims_789_marker_controls.py reports FAIL, not REFUSED, when an uncommitted edit makes a #789 claim stale
+- **PR #913**: fix: 789 marker probe REFUSES a dirty tree instead of reporting FAILing controls
+- **Issue #874** (closed): docs/tool-findings.md will carry contradictory claims about the core-area identity once #849 merges
+- **PR #911**: docs: drop stale attribution of the 6-sf coincidence framing to PR #849's row
 - **Issue #909** (closed): load_json_refused catches JSONDecodeError only: a damaged record that is also invalid UTF-8 escapes as a traceback
 - **PR #910**: fix: refuse a manifest record truncated mid-UTF-8 rather than a bare UnicodeDecodeError
 
