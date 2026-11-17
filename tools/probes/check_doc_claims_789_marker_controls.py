@@ -48,8 +48,10 @@ a control verdict: no evidence, not partial evidence.
 
 #936: `already_satisfied` no longer takes a hand-written copy of the claim's
 grep= pattern and in= path. Both are parsed out of the staged injection with
-the checker's own grammar (`tools/check_doc_claims.py`: MARKER, parse_attrs,
-expand), so repointing a claim marker's in= cannot leave the guard reading a
+the checker's own grammar (`tools/check_doc_claims.py`: iter_claim_markers,
+parse_attrs, expand -- #962 replaced this probe's hand-copied fence-only
+scan with the shared generator), so repointing a claim marker's in= cannot
+leave the guard reading a
 file the claim no longer reads -- a divergence that measured, before the
 fix, as a misattributed `FAIL  README T1 count marker goes red on a wrong
 count: exit=0` with rc=1 (baseline green, injection target present, the
@@ -166,23 +168,20 @@ def injected_state(staged: str, marker_of: str,
     shape #905, #913 and #920 each removed through a different door. So the
     pair is parsed out of the staged injection instead of restated: the
     marker containing `marker_of` (the replace string the injection just
-    introduced) is read with the checker's own MARKER/parse_attrs, and its
-    in= is expanded with the checker's own expand(), so guard and claim
-    cannot disagree about which file carries which pattern. Returns None
+    introduced) is read with the checker's own skip grammar and
+    MARKER/parse_attrs (#962: iter_claim_markers, so a marker the checker
+    treats as an example -- fenced or inside `backticks` -- is skipped here
+    too, instead of a hand-copied fence rule without the backtick rule
+    refusing a fine injection), and its in= is expanded with the checker's
+    own expand(), so guard and claim cannot disagree about which file
+    carries which pattern. Returns None
     after printing a refusal when the staged injection does not yield
     exactly one parseable grep= claim with an expanding in= -- an apparatus
     error, exit 2, no evidence.
     """
     bodies: list[str] = []
-    fenced = False
-    for line in staged.splitlines():
-        if checker.FENCE.match(line):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue  # a marker in a fenced block is an example, not a claim
-        m = checker.MARKER.search(line)
-        if m and marker_of in m.group("body"):
+    for _, _, m in checker.iter_claim_markers(staged.splitlines()):
+        if marker_of in m.group("body"):
             bodies.append(m.group("body"))
     if len(bodies) != 1:
         print(f"REFUSED: expected exactly one injected claim containing "

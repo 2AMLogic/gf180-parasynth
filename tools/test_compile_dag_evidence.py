@@ -10,7 +10,7 @@ Fixing the instance and leaving the class is the repeating failure here, so
 these cases pin the class.
 """
 from __future__ import annotations
-import json, os, pathlib, subprocess, sys
+import itertools, json, os, pathlib, subprocess, sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -196,6 +196,135 @@ def test_refused_does_not_propagate_to_dependents():
         out = cd.classify_all(nodes)
     assert out["A"][0] == "REFUSED"
     assert out["B"][0] == "GREEN", "REFUSED must not propagate (RED/BLOCKED do)"
+
+
+# ---------------------------------------------------------------------------
+# #827: unjudged() must agree with run_evidence()'s dispatch precedence.
+#
+# run_evidence() resolves a node's evidence by precedence -- the first key of
+# EVIDENCE_PRECEDENCE present wins -- but unjudged() asked only whether
+# `evidence_file` was declared. A node naming a higher-precedence source AND
+# an evidence_file was judged on its file while the run was the evidence that
+# resolved: classify() rendered REFUSED over a PASSING suite, and --run
+# printed REFUSE over a FAILING one. Neither is a false green, and no node in
+# docs/dag.json declares two sources today; the defect class is four
+# hand-written copies of one precedence, which is why the fix hoists
+# EVIDENCE_PRECEDENCE and these tests pin the AGREEMENT rather than today's
+# four keys by name.
+# ---------------------------------------------------------------------------
+
+def _resolved_source(node: dict) -> str | None:
+    """Which artifact run_evidence() would judge: the first key of
+    EVIDENCE_PRECEDENCE the node declares. Derived from the constant, so it
+    walks whatever order the module actually dispatches in -- if the order or
+    the key set changes, this changes with it and keeps testing agreement."""
+    for k in cd.EVIDENCE_PRECEDENCE:
+        if k in node:
+            return k
+    return None
+
+
+_SUBSETS = [tuple(c) for r in range(1, len(cd.EVIDENCE_PRECEDENCE) + 1)
+            for c in itertools.combinations(cd.EVIDENCE_PRECEDENCE, r)]
+
+
+@pytest.mark.parametrize("keys", _SUBSETS, ids=["+".join(k) for k in _SUBSETS])
+def test_unjudged_applies_exactly_when_the_file_is_the_resolved_source(
+        tmp_path, monkeypatch, keys):
+    """The agreement itself (#827), over every combination of evidence keys.
+
+    The file is set up unjudged -- exists, valid JSON, no verdict key, no
+    `evidence_requires` -- so unjudged() has a reason to give exactly when its
+    applicability guard lets it speak: when the evidence_file is what
+    run_evidence() would resolve. A future edit that makes the guard diverge
+    from the dispatch (a new key, a reorder, an "any other source" overreach)
+    fails here without this test being edited."""
+    node = {k: "unused-by-unjudged" for k in keys}
+    if "evidence_file" in keys:
+        (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+        node["evidence_file"] = "e.json"
+        monkeypatch.setattr(cd, "ROOT", tmp_path)
+    expect_reason = _resolved_source(node) == "evidence_file"
+    why = cd.unjudged(node)
+    assert (why is not None) == expect_reason, \
+        f"keys {keys}: unjudged said {why!r}, resolved source is " \
+        f"{_resolved_source(node)!r}"
+
+
+def test_a_passing_suite_beats_an_unjudged_evidence_file_green_not_refused(
+        tmp_path, monkeypatch):
+    """THE #827 BUG, classify() side. The suite is the evidence that runs, so
+    a PASSING suite must classify GREEN even when the node also names an
+    unjudged evidence_file. Before the fix this rendered REFUSED -- a false
+    abstention pointing the reader at the file instead of the suite."""
+    (tmp_path / "test_ok.py").write_text("def test_x():\n    pass\n")
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    node = {"suite": "test_ok.py", "evidence_file": "e.json",
+            "covers": ["e.json"]}
+    st, note = _classify(tmp_path, monkeypatch, node,
+                         rec={"passed": True, "sha": "abc", "detail": "1 passed"})
+    assert st == "GREEN", f"got {st}: {note}"
+
+
+def test_a_verifier_likewise_beats_an_unjudged_evidence_file(tmp_path, monkeypatch):
+    """The guard must be "an earlier source", not "suite" (#827 test plan):
+    verifier outranks evidence_file too, so the same node shaped as a
+    verifier is GREEN, not REFUSED."""
+    (tmp_path / "verify_ok.py").write_text("")
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    node = {"verifier": "verify_ok.py", "evidence_file": "e.json",
+            "covers": ["e.json"]}
+    st, note = _classify(tmp_path, monkeypatch, node,
+                         rec={"passed": True, "sha": "abc", "detail": "ok"})
+    assert st == "GREEN", f"got {st}: {note}"
+
+
+def test_a_tool_does_not_beat_an_unjudged_file_it_still_refuses(
+        tmp_path, monkeypatch):
+    """The input that defeats an over-eager guard (#827 test plan edge case):
+    evidence_file OUTRANKS tool, so a node declaring both resolves to the
+    file, and unjudged() must still apply -- a guard written as "any other
+    source present" instead of "an earlier source present" gets this wrong."""
+    (tmp_path / "t.py").write_text("")
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    node = {"tool": "t.py", "evidence_file": "e.json"}
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    why = cd.unjudged(node)
+    assert why and "no verdict" in why
+    st, note = _classify(tmp_path, monkeypatch, node,
+                         rec={"passed": True, "sha": "abc", "detail": "x"})
+    assert st == "REFUSED", f"got {st}: {note}"
+
+
+def test_run_marks_a_failing_suite_fail_not_refuse(tmp_path, monkeypatch, capsys):
+    """The second call site (#827): main()'s --run mark. A FAILING suite must
+    print FAIL. The written record carried the failure either way -- res[i]
+    is still {"passed": false} -- but printing REFUSE asserts a declined
+    verdict over one that ran and failed, the opposite direction from
+    classify()'s false abstention. Red before the fix: the mark read REFUSE."""
+    (tmp_path / "test_no.py").write_text("def test_x():\n    assert False\n")
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    dag = tmp_path / "dag.json"
+    dag.write_text(json.dumps({"nodes": {"CTL": {
+        "name": "ctl", "group": "foundation", "class": "implementation",
+        "suite": "test_no.py", "evidence_file": "e.json"}}}))
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    monkeypatch.setattr(cd, "DAG", dag)
+    monkeypatch.setattr(cd, "RESULTS", tmp_path / "dag-results.json")
+    monkeypatch.setattr(cd, "git", lambda *a: "deadbeef")
+    monkeypatch.setattr(cd.sc, "checkout_staleness", lambda: "")
+    monkeypatch.setattr(sys, "argv",
+                        ["compile_dag.py", "--run", "--only", "CTL", "--print"])
+    rc = cd.main()
+    assert rc == 0
+    err = capsys.readouterr().err
+    marks = [l for l in err.splitlines() if l.strip().split(maxsplit=2)[:1]
+             in (["PASS"], ["FAIL"], ["REFUSE"]) and l.split()[1] == "CTL"]
+    assert len(marks) == 1, f"expected exactly one mark line for CTL, got {marks}"
+    assert marks[0].split()[0] == "FAIL", \
+        f"a failing suite must print FAIL, got: {marks[0]!r}"
+    rec = json.loads(cd.RESULTS.read_text())["CTL"]
+    assert rec["passed"] is False, "the written record must still state the failure"
 
 
 def test_the_minimoog_fidelity_warning_is_restored_on_the_real_dag():
