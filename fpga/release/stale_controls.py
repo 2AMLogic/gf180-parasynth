@@ -143,6 +143,13 @@ def _binding_files() -> tuple[list[str], list[str]]:
     rel = lambda p: str(Path(p).resolve().relative_to(ROOT))           # noqa: E731
     records = sorted(rel(p) for p in publish_arty.VERIFICATION_BY_WRAPPER.values())
     files = {"tools/check_arty_evidence_binding.py", "rtl-sketch/verify_synth_top.py"}
+    # since #815 the checker's fpga/*.py inputs raise refusal.Refused, so an
+    # isolated copy without tools/refusal.py crashes their module-scope import
+    # before any verdict can form -- the apparatus must carry the class its
+    # subjects catch. One copy serves every resolution path: the fpga modules'
+    # ROOT/tools append, verify_synth_top's conditional insert, and a tools/
+    # script's own directory.
+    files.add("tools/refusal.py")
     files |= {rel(p) for p in (ROOT / "fpga").glob("*.py")}
     files |= {rel(p) for p in build_arty.sources() + build_arty.roms()}
     # the constraint file: outside the checker's default (verification) scope,
