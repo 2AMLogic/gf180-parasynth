@@ -1766,6 +1766,86 @@ def test_the_dphase_floor_override_reaches_the_column_the_run_reports():
     assert np.array_equal(b_on, b_off)
 
 
+def test_ms_windows_cannot_silently_share_a_grouping_label():
+    """The ms.* buckets are keyed on a LOSSY label; assert it is still
+    distinct (#939).
+
+    `extra_group` buckets every `ms*` column on field 0 of its name --
+    `ms4ms.20-200Hz.seg0` -> `ms.4ms` -- and that token is `%.0f`, which
+    renders 4.4e-3 and 4.0e-3 identically ("4"). The grouping is healthy as
+    committed only because the three MS_WINDOWS_S values happen to round
+    apart; nothing asserted it, so a future window added beside a near
+    neighbour would merge two windows into one double-width bucket: #929's
+    exact failure shape (grouped permutation importance shuffling 12 columns
+    where its neighbours shuffle 6), visible only as "one bucket looks
+    unusually large".
+
+    `ms_window_ms_label` owns the token, so this test reads the SHIPPED
+    format, not a copy of it. Two halves, per verification-rules rule 8: the
+    precondition holds for the committed windows with the shipped names
+    landing one equal-size bucket per window -- and the SAME distinctness
+    check, run on a tuple chosen to collide, is shown to report the
+    collision. A guard that cannot fail checks nothing."""
+    import discrimination_features as dfx
+
+    def distinct(ws):
+        labs = [dfx.ms_window_ms_label(T) for T in ws]
+        return len(set(labs)) == len(labs), labs
+
+    ok, labs = distinct(dfx.MS_WINDOWS_S)
+    assert ok, (
+        f"MS_WINDOWS_S {dfx.MS_WINDOWS_S} renders {labs}: two windows share "
+        "one ms.* bucket, so grouped permutation importance would shuffle a "
+        "double-width bucket and read as one (#939; the shape #929 fixed for "
+        "MPD). Give the colliding windows a distinct %.0f label, or widen the "
+        "format deliberately and rename every consumer with it")
+
+    # The shipped names, not the label arithmetic: one bucket per window of
+    # len(MS_BANDS_HZ) each, and the msd* columns hit the earlier `msd`
+    # branch -- they must never be counted into a window bucket.
+    names = dfx.extra_names()
+    buckets: dict = {}
+    for nm in names:
+        if nm.startswith("msd"):
+            assert dfx.extra_group(nm) == "ms.scale-difference", nm
+            continue
+        g = dfx.extra_group(nm)
+        if g is not None and g.startswith("ms."):
+            buckets.setdefault(g, []).append(nm)
+    expected = {f"ms.{dfx.ms_window_ms_label(T)}ms": len(dfx.MS_BANDS_HZ)
+                for T in dfx.MS_WINDOWS_S}
+    sizes = {b: len(cols) for b, cols in buckets.items()}
+    assert sizes == expected, (
+        f"ms.* buckets {sizes} != one bucket of {len(dfx.MS_BANDS_HZ)} per "
+        f"window {expected}: a window's columns have merged or drifted")
+
+    # CONTROL: the same check on a tuple chosen to collide must report it --
+    # through the predicate's OWN verdict, not a recomputation of it: a
+    # recomputation stays green under a defeated guard, which is exactly the
+    # input this control must turn red on.
+    ok_c, labs_c = distinct((4.0e-3, 4.4e-3, 25.0e-3))
+    assert not ok_c, (
+        f"the distinctness guard passed on (4.0e-3, 4.4e-3, 25.0e-3) -> "
+        f"{labs_c}: the control cannot collide, so the precondition above is "
+        "unguarded and this test checks nothing")
+
+    # ...and the harm is real, not just a repeated label: the shipped
+    # grouper merges BOTH colliding windows' band columns into ONE bucket of
+    # 2 * len(MS_BANDS_HZ) -- #929's double-width bucket, which grouped
+    # permutation importance shuffles as one.
+    coll_names = [f"ms{dfx.ms_window_ms_label(T)}ms.{lo:.0f}-{hi:.0f}Hz.seg0"
+                  for T in (4.0e-3, 4.4e-3) for lo, hi in dfx.MS_BANDS_HZ]
+    merged: dict = {}
+    for nm in coll_names:
+        g = dfx.extra_group(nm)
+        merged.setdefault(g, []).append(nm)
+    assert {b: len(cols) for b, cols in merged.items()} == {
+        f"ms.{labs_c[0]}ms": 2 * len(dfx.MS_BANDS_HZ)}, (
+        f"the shipped grouper did not merge both colliding windows into one "
+        f"double-width bucket ({dict(merged)}): the control does not "
+        "reproduce #929's failure shape, so the precondition is unguarded")
+
+
 def test_window_is_shorter_than_every_reference_file():
     """The decay knob sets the file length in the Fischer set; the window must
     fit inside the shortest file that exists, or length leaks the knob."""
