@@ -114,6 +114,7 @@ import run_case as rc                       # noqa: E402
 import cymbal_bands as cb                   # noqa: E402
 import cymbal_tone_realisation as tr        # noqa: E402
 import tone_stage_schematic as ts           # noqa: E402
+import refusal
 
 FISCHER_JSON = ROOT / "docs" / "scorecard" / "cymbal-369" / "fischer.json"
 
@@ -247,7 +248,7 @@ BLIND_PAIRS = {
 ALTERNATIVES = ("inverted", "no-tone-network", "low-on-top-rail", "ht2-ht3-swapped")
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition this instrument needs is not met. Not a failed check."""
 
 

@@ -153,6 +153,7 @@ import json
 import pathlib
 import re
 import sys
+import refusal
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "docs" / "corpus-lineage.json"
@@ -296,7 +297,7 @@ _PRECEDING_WORD_RE = re.compile(
     r"([a-z]+(?:\s*/\s*[a-z]+)*)[\s\-\u2010-\u2015(\[\"'`]*\Z", re.I)
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition failed: say so instead of producing findings."""
 
 

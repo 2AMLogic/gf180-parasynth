@@ -57,6 +57,10 @@ import re
 import subprocess
 import sys
 import time
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 SR = 48000.0                      # audio frames per second
 WRAP = 0x10000                    # the device's frame counter is 16-bit
@@ -64,7 +68,7 @@ HORIZON = 0x8000                  # past this, a 16-bit delta's sign is a guess
 MIN_SPAN_S = 1.0                  # below this the method cannot support a 1% gate
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition failed. Distinct from a failure of the thing measured."""
 
 

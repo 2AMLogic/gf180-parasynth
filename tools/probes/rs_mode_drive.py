@@ -118,6 +118,10 @@ import audio_measure as AM                       # noqa: E402
 import drums_fx as dx                             # noqa: E402
 import partial_trajectory as PT                   # noqa: E402
 import run_case as RC                             # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 OP = RC.RS_BALANCE_OP
 WIN_KW = dict(win_ms=OP["win_ms"], hop_ms=OP["hop_ms"], t_end=OP["t_end"])
@@ -127,7 +131,7 @@ BAND_HZ = (1300, 1400, 1450, 1500, 1600, 1700, 1800, 1900, 2000, 2100)
 SHELF_REF_HZ = 1450.0
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the apparatus failed. REFUSED is a first-class
     outcome here, distinct from pass and from fail."""
 

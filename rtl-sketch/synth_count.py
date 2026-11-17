@@ -17,6 +17,10 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 EXIT_NO_YOSYS = 3
@@ -34,7 +38,7 @@ FLOWS = [
 CELLS = re.compile(r"^\s+(\d+) +cells$")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     def __init__(self, code, msg):
         super().__init__(msg)
         self.code = code

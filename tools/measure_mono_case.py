@@ -32,6 +32,7 @@ import audio_measure as am  # noqa: E402
 import reference_rigs as rr  # noqa: E402
 import voice_fx as vf  # noqa: E402
 import oversampled_osc as os2  # noqa: E402
+import refusal
 
 NOTE = 84
 SECONDS = 0.70
@@ -40,7 +41,7 @@ SR = rr.SR
 REFUSED = 2
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

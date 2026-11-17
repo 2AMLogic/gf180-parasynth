@@ -48,6 +48,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.signal import butter, hilbert, sosfiltfilt
+import refusal
 
 ESTIMATOR_ID = "pitch_trajectory/v1 bandpass-zero-phase+hilbert-IF, amp^2 weighted"
 
@@ -88,7 +89,7 @@ def TAIL_S_N(sr):
     return int(TAIL_S * sr)
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition failed.  This is a first-class outcome, not an error code
     to be mapped to zero."""
 

@@ -114,6 +114,10 @@ import audio_measure as am              # noqa: E402
 import drums_fx as dx                   # noqa: E402
 from dsp import SR                      # noqa: E402
 from modal_fixed import RAW, BP, HP     # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[3] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 # The five-band split every earlier probe in this directory reports, kept so
 # this one is readable beside them. A SURROGATE here, never a verdict.
@@ -180,7 +184,7 @@ def say(*a):
     print(*a, flush=True)
 
 
-class Refused(SystemExit):
+class Refused(refusal.Refused, SystemExit):
     """A precondition of the apparatus failed. REFUSED is a first-class outcome
     here, distinct from pass and from fail (CLAUDE.md, run_case.py)."""
 

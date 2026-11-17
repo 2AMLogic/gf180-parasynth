@@ -47,6 +47,20 @@ must not be able to hide as free-form prose.
 `in=` takes one or more comma-separated repo-relative globs (`tools/*.py`,
 `model/*.py,spec/*.py`).
 
+A `grep=` pattern must match **exactly one** line across the files `in=`
+names; a pattern matching several lines is `REFUSED` — the checker cannot say
+which line the claim guards, and an unrelated line carrying the same text
+would keep the marker green while the cited figure moved (issue #904). Mind
+the marker's own line when `in=` names the marker's own document: the pattern
+appears verbatim inside it, punctuation included, so quoting a comma does not
+defuse the self-match. A regex's own source text never matches itself, so
+deferring one letter into a class (`erro[r]`, `wal[l]-clock`) matches the
+prose line while the marker quoting the pattern stays unmatched. The rule is
+enforced over the checker's default document set (`DEFAULT_INCLUDES`) —
+`.md` only — so a marker outside it (e.g. in a Python docstring) is checked
+only by its own bespoke test, not by `make claims`; a marker placed there
+needs that test named in the PR that adds it.
+
 ### Modifiers
 
 | key | meaning |
@@ -117,10 +131,10 @@ only keeps the claim about the test honest.
 A worked example, from issue #135 itself:
 
 Measured, and sound: two renders of the same Diva patch differ in 1,763,954 of 1,764,000 samples; Mini V3 is bit-identical across the same test.
-<!-- claim: grep="1,763,954 of 1,764,000 samples" in=docs/claim-markers.md note="the effect -- re-derivable from this file" -->
+<!-- claim: grep="1,763,954 of 1,764,000 sample[s]" in=docs/claim-markers.md note="the effect -- re-derivable from this file. The bracket defers a letter so the prose line matches and the marker line quoting the pattern does not -- a pattern cannot match its own source text (issue #904)" -->
 
 Asserted, and never tested: that the cause is an artefact inserted on a wall-clock timer, therefore Diva is a positive control for a demo-artefact detector.
-<!-- claim: grep="an artefact inserted on a wall-clock timer" in=docs/claim-markers.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing" -->
+<!-- claim: grep="wal[l]-clock timer, therefore" in=docs/claim-markers.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing. The bracket defers a letter (a pattern cannot match its own source text); the comma excludes line 66, which retells the story with 'timer and' (issue #904)" -->
 
 ## The three outcomes
 
@@ -276,7 +290,12 @@ first runs the checker once and REFUSES (exit 2, which the exit contract
 reports as NO-VERDICT, naming what it found) unless that baseline is green,
 and again unless every injection target matches, because its controls inject
 into the live checkout and would otherwise misreport the tree's own WIP as
-control failures. On a tree whose claims are green the whole run is seconds
+control failures. Since #936 the guard that refuses an already-satisfied
+injection state derives its pattern and paths by parsing the staged
+injection with the checker's own grammar, so a hand-edited claim marker's
+`in=` cannot desynchronize the guard from the file the claim actually
+greps -- a divergence that used to surface as a misattributed control FAIL
+instead of a refusal. On a tree whose claims are green the whole run is seconds
 (every #789 marker is a `grep=` or `absent=` row with no backing test, so
 the two-document run collects no pytest), which is why it is wired and
 `scope_control` is not — and the refusal is the correct answer on a WIP

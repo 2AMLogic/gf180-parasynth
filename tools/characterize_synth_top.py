@@ -75,6 +75,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "pnr" / "orfs"))
 from area_provenance import classify, parse_config_mk, parse_par_request  # noqa: E402
+import refusal
 
 OK_EXIT, REFUSED_EXIT = 0, 2
 
@@ -181,7 +182,7 @@ BLOCKAREA_FLOPS_RE = re.compile(
     r"sequential cells only \(([\d,]+) flops, ([\d,]+)\.(\d) um2\)")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of this report was not met. Nothing is written."""
 
 

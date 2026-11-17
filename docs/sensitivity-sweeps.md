@@ -194,7 +194,7 @@ design constant rather than something a register can change (issue #551):
   the BD output network's 7.52 Hz rationale for K = 10 does not establish the
   cymbal's corner.
 
-The tenth and eleventh are the rate tolerance, scalar then per-unit:
+The tenth and twelfth are the rate tolerance, scalar then per-unit:
 
 - **`rate-tol-rel.json`** (#775) — the single scalar `RATE_TOL_REL` against
   pairs the control catches on the integer fold, over a 92-entry panel.

@@ -238,12 +238,28 @@ def report(res: dict, plan: dict, out) -> None:
             w(f"  {r['label']:<20} {r['column']:<28} "
               f"{S._num(r['gap']):>10} {S._num(r['peak']):>10}")
     else:
-        w("  No RATE_PANEL dB pair is red on the integer fold at the shipped")
-        w(f"  licence (RATE_TOL_REL_DB = {res['rel_db_shipped']}): the "
-          f"{sum(s['injected_by_unit'].values())} pairs the integer fold")
-        w("  turns red are all in other units, so a dB `must` row is NOT")
-        w("  constructible at the shipped licence and the control's all-ratio")
-        w("  `must` set is a measured property of the dial, not an oversight.")
+        db_red = s["injected_by_unit"].get("db", 0)
+        if db_red == 0:
+            w("  No RATE_PANEL dB pair is red on the integer fold at the shipped")
+            w(f"  licence (RATE_TOL_REL_DB = {res['rel_db_shipped']}): the "
+              f"{sum(s['injected_by_unit'].values())} pairs the integer fold")
+            w("  turns red are all in other units, so a dB `must` row is NOT")
+            w("  constructible at the shipped licence and the control's all-ratio")
+            w("  `must` set is a measured property of the dial, not an oversight.")
+        else:
+            other = sum(s["injected_by_unit"].values()) - db_red
+            w(f"  {db_red} RATE_PANEL dB pair(s) are red on the integer fold at")
+            w(f"  the shipped licence (RATE_TOL_REL_DB = {res['rel_db_shipped']})")
+            w("  and red on the shipped fold too -- `must` is empty, so none of")
+            w("  them is red on the integer fold alone: they are fold-invariant")
+            w("  residue, the suite failing rather than the injected defect")
+            w("  being visible, and none is constructible as a `must` row.")
+            if other:
+                w(f"  The other {other} pairs the integer fold turns red are in")
+                w("  other units.")
+            w("  A dB `must` row is NOT constructible at the shipped licence and")
+            w("  the control's all-ratio `must` set is a measured property of")
+            w("  the dial, not an oversight.")
         first = res["first_grid_value_with_a_must_row"]
         if first is None:
             w("  No committed grid value constructs one either.")

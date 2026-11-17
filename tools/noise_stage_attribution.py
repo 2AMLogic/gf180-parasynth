@@ -64,6 +64,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "model")]
 import perceptual_gate as pg  # noqa: E402
+import refusal
 
 ESTIMATOR_ID = "noise_stage_attribution/v1 on perceptual_gate.analyse"
 
@@ -80,7 +81,7 @@ WHITE_FLAT_TOL = 0.7
 SINE_FLAT_MAX = -20.0
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition failed.  First-class outcome; never mapped to zero."""
 
 

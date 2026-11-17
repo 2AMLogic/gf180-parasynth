@@ -59,6 +59,7 @@ import sys
 import zlib
 
 import numpy as np
+import refusal
 
 W14B_URL = "https://zenodo.org/api/records/850891/files/smc_2014_220.pdf/content"
 W14B_SHA256 = "0e75e26df59d8117939fbb253935d648cf969d43988c6a97fdc19061df453a02"
@@ -101,7 +102,7 @@ F0_TOL = 0.05
 Q_TOL = 0.10
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition failed. REFUSED is a verdict, distinct from a value."""
 
 

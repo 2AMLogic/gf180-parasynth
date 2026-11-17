@@ -65,6 +65,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import refprofile as rp        # noqa: E402
+import refusal
 
 OK, FAIL, REFUSED = 0, 1, 2
 OUT_DIR = ROOT / "docs" / "scorecard" / "f1-level" / "captures"
@@ -87,7 +88,7 @@ READBACK_TOL = 0.005
 OPEN_GUARD_DB = 6.0
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     pass
 
 

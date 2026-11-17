@@ -70,13 +70,17 @@ import tempfile
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
+import refusal
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: The directories ``make verify`` (Makefile ``verify``/``verify-full``/
-#: ``test``) collects by directory. CI collects the same ones in three jobs
-#: (``pytest model/ spec/``, ``pytest tools/`` and ``pytest pnr/``); fpga/ is
-#: covered by ``make verify`` only.
+#: ``test``) collects by directory. CI collects the same ones in four jobs:
+#: ``python`` collects ``model/ spec/``, ``tools`` collects ``tools/`` and
+#: ``pnr`` collects ``pnr/`` (all by directory, #404), and ``fpga-uncovered``
+#: (rungs.yml) collects ``fpga/release/`` plus the nine other fpga/ files no
+#: other job names (#853) -- on top of the 23 fpga/ files ``m5a-fast`` runs
+#: via ``make verify-fast``.
 GUARDED_DIRS = ("model", "spec", "tools", "fpga", "pnr")
 
 #: pytest's own defaults (``python_functions = test``,
@@ -113,7 +117,7 @@ class Report:
         return "\n".join(lines)
 
 
-class Refusal(Exception):
+class Refusal(refusal.Refused, Exception):
     pass
 
 

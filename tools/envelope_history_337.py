@@ -24,6 +24,7 @@ from scipy.io import wavfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 import audio_measure as am  # noqa: E402
+import refusal
 
 SRC = ROOT / "docs/scorecard/mono-attack-context"
 HISTORY = ("repeat84_gap3p4", "from72_gap3p4", "repeat84_gap5")
@@ -35,7 +36,7 @@ VIABLE_GAP_DB = 20.0
 FLOOR_DB = -120.0
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The instrument will not answer."""
 
 

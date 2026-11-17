@@ -32,6 +32,7 @@ import math
 import subprocess
 import sys
 from pathlib import Path
+import refusal
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -41,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PROVENANCE_KEYS = ("commit", "sources_dirty")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The comparison cannot be made. Distinct from "they differ"."""
 
 

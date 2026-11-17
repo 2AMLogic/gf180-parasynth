@@ -2,13 +2,19 @@
 Never refuses, always reads the reference frequency (a flat trajectory)."""
 from dataclasses import dataclass
 import numpy as np
+import sys  # noqa: E402
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 HOP_S = 0.005
 EARLY_WINDOW_S = (0.020, 0.050)
 LATE_WINDOW_S = (0.080, 0.130)
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

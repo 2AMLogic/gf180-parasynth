@@ -70,6 +70,10 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from finite_number import is_finite_number  # noqa: E402
 import run_case as rc  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 FS = 32768.0                       # int16 full scale
 LSB = 1.0 / FS
@@ -206,7 +210,7 @@ def _stats_of(seg, sr, fc, i0=0):
                 peak_lsb=float(np.abs(seg).max()))
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The apparatus cannot answer. A first-class outcome, not a failure."""
 
 

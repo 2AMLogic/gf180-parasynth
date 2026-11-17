@@ -107,6 +107,10 @@ for p in (str(ROOT / "model"),):
         sys.path.insert(0, p)
 
 import audio_measure as am                                           # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 SR = 48000
 
@@ -136,7 +140,7 @@ FOLD_DUR_S = 6.0
 MULT_TOL = 0.02
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the measurement does not hold, so there is no number."""
 
 

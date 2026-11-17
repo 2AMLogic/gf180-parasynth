@@ -37,6 +37,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Callable
+import refusal
 
 REPO = Path(__file__).resolve().parent.parent
 MICRO = REPO / "fpga/reports/arty/vivado-2025.1/dsp-dpreg-evidence/dsim/micro.v"
@@ -55,7 +56,7 @@ REASONS = (NO_TOOL, NO_VERSION, COMPILE_FAILED, RUN_FAILED, TIMEOUT,
            OUTPUT_UNPARSEABLE, CONTROL_NOT_EXPECTED)
 
 
-class Refusal(Exception):
+class Refusal(refusal.Refused, Exception):
     def __init__(self, reason: str, detail: str):
         super().__init__(detail)
         self.reason = reason

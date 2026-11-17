@@ -505,14 +505,33 @@ def check_grep(c: Claim) -> None:
         for n, line in enumerate(body.splitlines(), start=1):
             if rx.search(line):
                 hits.append(f"{f.relative_to(ROOT).as_posix()}:{n}")
-                break
     if c.kind == "grep":
         if unreadable and not hits:
             c.refuse(f"could not read {len(unreadable)} of {len(files)} file(s)")
             return
+        if len(hits) > 1:
+            # Issue #904: this loop used to stop at each file's first hit, so
+            # a pattern matching many lines graded OK on whichever the scan
+            # reached first -- the cited figure could move onto the unrelated
+            # line and the marker stayed green by construction, and no
+            # marker's uniqueness was ever re-derived. A marker that cannot
+            # say WHICH line it guards guards nothing: that is REFUSED, and
+            # the author makes the pattern unique. The input that defeats the
+            # tightened authoring is the marker's own line when in= names the
+            # marker's own document: the pattern appears verbatim inside it,
+            # punctuation included, so quoting a comma does not defuse the
+            # self-match. A regex's own source text never matches itself, so
+            # deferring one letter into a class (`erro[r]`) matches the prose
+            # while the marker quoting it stays unmatched. `absent=` below is
+            # deliberately unchanged -- for a "not yet" claim, ANY hit means
+            # done, however many.
+            c.refuse(f"{c.value!r} matches {len(hits)} lines, not one -- first "
+                     f"at {hits[0]} (+{len(hits) - 1} more); a grep= that "
+                     "cannot say which line it guards guards nothing, so "
+                     "make the pattern unique")
+            return
         if hits:
-            c.ok(f"{c.value!r} found at {hits[0]}"
-                 + (f" (+{len(hits) - 1} more)" if len(hits) > 1 else ""))
+            c.ok(f"{c.value!r} found at {hits[0]}")
         else:
             c.stale(f"{c.value!r} is in none of the {len(files)} file(s) matching "
                     f"{c.attrs['in']}")

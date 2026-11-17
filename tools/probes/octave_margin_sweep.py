@@ -53,6 +53,10 @@ sys.path.insert(0, str(ROOT / "tools" / "probes"))
 
 import fold_rate_sweep as FRS                           # noqa: E402
 from model import discrimination_features as D          # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 SR_A, SR_B = FRS.SR_A, FRS.SR_B
 
@@ -96,7 +100,7 @@ EXACT_PANEL = ((300.0, SR_A, 147), (300.0, SR_B, 160),
                (240.0, SR_B, 200), (441.0, SR_A, 100))
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The probe could not answer. Never reported as a measurement."""
 
 

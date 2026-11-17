@@ -40,6 +40,7 @@ from scipy.signal import butter, sosfiltfilt
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import run_case as rc  # noqa: E402
+import refusal
 
 BANDS = {"L": (2000.0, 5000.0), "Ln": (2900.0, 4100.0), "H": (6000.0, 14000.0)}
 # Ln: the low band's 3.45 kHz peak only. At its edges the shared 7.1 kHz Q 6
@@ -54,7 +55,7 @@ MAX_RESID_DB = 1.5
 TRUNC_MARGIN_DB = 15.0
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 
