@@ -46,6 +46,22 @@ DIRTY_CASES = [
      "T1: 2/11 items met"),
 ]
 
+# (file, line to append, needle naming the injected state the tree already
+# satisfies). #920: neither #913 guard fires here -- the baseline stays green
+# (the appended line does not unmatch any claim) and the injection target
+# still exists -- so the control's marker has nothing to fire at and the probe
+# used to report a misattributed FAIL instead of refusing.
+ALREADY_SATISFIED_CASES = [
+    ("manifests/verdict.txt",
+     "T1: 3/11 items met\n",
+     "T1: 3/11 items met",
+     "the README T1 count control"),
+    ("rtl-sketch/drum_kit.v",
+     "module drum_kit_NOT_IN_TREE;\nendmodule\n",
+     "drum_kit_NOT_IN_TREE",
+     "the milestone-3 control"),
+]
+
 
 def _snapshot(root: pathlib.Path) -> dict[str, str]:
     """Content hash of every file in the tree, for exact after-state checks.
@@ -97,6 +113,35 @@ def test_dirty_tree_refuses_instead_of_reporting_control_failures(
     assert p.returncode == 2, f"expected REFUSED rc=2, got {p.returncode}:\n{blob}"
     assert "REFUSED: baseline not green before injection" in blob
     assert needle in blob, f"refusal does not name the stale claim:\n{blob}"
+    assert "FAIL " not in blob, f"controls ran on a refused tree:\n{blob}"
+    assert "PASS " not in blob, f"controls ran on a refused tree:\n{blob}"
+    assert not (scratch / INJECT_REL).exists(), "refusal path wrote the injection file"
+    assert _snapshot(scratch) == before, "refusal path changed the tree"
+
+
+@pytest.mark.parametrize("rel,line,needle,what", ALREADY_SATISFIED_CASES,
+                         ids=[c[0] for c in ALREADY_SATISFIED_CASES])
+def test_already_satisfied_injection_refuses(scratch, rel, line, needle, what):
+    """#920: an injected state the tree ALREADY satisfies must refuse, not
+    report. Appending the state's own line keeps every claim green (the 2/11
+    claim still matches; a duplicate summary line does not unmatch anything)
+    and the injection target still exists, so neither #913 guard fires and
+    the control's marker has nothing to fire at -- the probe used to answer
+    `FAIL ...: exit=0` for that control and rc=1 overall, a guard that
+    "stopped guarding" when it had nothing to guard against. The probe must
+    REFUSE pre-injection: exit 2, the refusal names the file and the state,
+    no control lines, tree byte-identical."""
+    f = scratch / rel
+    orig = f.read_text(encoding="utf-8")
+    f.write_text(orig + line, encoding="utf-8")
+    before = _snapshot(scratch)
+    p = _run_probe(scratch)
+    blob = p.stdout + p.stderr
+    assert p.returncode == 2, f"expected REFUSED rc=2, got {p.returncode}:\n{blob}"
+    assert "REFUSED:" in blob, blob
+    assert rel in blob, f"refusal does not name the file:\n{blob}"
+    assert needle in blob, f"refusal does not name the already-satisfied state:\n{blob}"
+    assert what in blob, f"refusal does not name the control:\n{blob}"
     assert "FAIL " not in blob, f"controls ran on a refused tree:\n{blob}"
     assert "PASS " not in blob, f"controls ran on a refused tree:\n{blob}"
     assert not (scratch / INJECT_REL).exists(), "refusal path wrote the injection file"
