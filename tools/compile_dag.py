@@ -129,11 +129,23 @@ def unjudged(n: dict) -> str | None:
     elsewhere and folding it in here would hide a real failure behind a
     REFUSED:
       * a node with no `evidence_file` at all -- classify() handles it;
+      * a node whose verdict comes from a source EVIDENCE_PRECEDENCE resolves
+        earlier than the file (`suite`, `verifier`) -- the run is the
+        evidence, the file is context, and judging it answers a question
+        nobody is relying on (#827: a passing suite rendered REFUSED, a
+        failing one printed REFUSE);
       * a missing file -- an evidence file that is not there is a FAILURE;
       * a file that is unreadable or is not the JSON it claims to be -- also a
         failure. `run_evidence` returns False for both, and must keep doing so.
     """
     if "evidence_file" not in n:
+        return None
+    # Derived from the precedence, not a second hardcoded list: the guard is
+    # "an EARLIER key is present", so a lower-precedence `tool` alongside the
+    # file leaves the question live, and a key inserted between
+    # `verifier` and `evidence_file` one day is handled by its position.
+    if any(k in n for k in
+           EVIDENCE_PRECEDENCE[:EVIDENCE_PRECEDENCE.index("evidence_file")]):
         return None
     if n.get("evidence_requires"):
         return None                       # the node declares what makes it pass
@@ -163,60 +175,74 @@ def run_evidence(nid: str, n: dict) -> tuple[bool, str]:
     this script called a node GREEN when its test FILE EXISTED -- so a suite
     with every assertion deleted would have rendered green, which is precisely
     the failure this tool was written to prevent.
+
+    Dispatch walks EVIDENCE_PRECEDENCE, the one definition of the order: the
+    first key the node declares wins, so the bodies below are reached in
+    exactly the order unjudged()'s guard assumes.
     """
-    if "suite" in n:
-        r = subprocess.run([sys.executable, "-m", "pytest", n["suite"], "-q",
-                            "--no-header", "-x"], cwd=ROOT, capture_output=True,
-                           text=True, timeout=1800)
-        last = [l for l in r.stdout.strip().splitlines() if l.strip()]
-        return r.returncode == 0, (last[-1][:90] if last else "no output")
-    if "verifier" in n:
-        r = subprocess.run([sys.executable, n["verifier"]], cwd=ROOT,
-                           capture_output=True, text=True, timeout=7200)
-        last = [l for l in r.stdout.strip().splitlines() if l.strip()]
-        return r.returncode == 0, (last[-1][:90] if last else "no output")
-    if "evidence_file" in n:
-        # The docstring above describes exactly this bug -- and until now it was
-        # fixed for `suite` and left intact HERE. Existence is a precondition,
-        # not a verdict: a JSON saying `"passed": false` rendered the node GREEN
-        # because the file was on disk. Fixing the instance and not the class is
-        # the repeating failure this file was written to catch.
-        fp = ROOT / n["evidence_file"]
-        if not fp.exists():
-            return False, f"{n['evidence_file']} missing"
-        # A node may declare what makes its evidence a PASS. Text evidence uses
-        # `evidence_requires` (a substring); JSON evidence may name a key.
-        need = n.get("evidence_requires")
-        try:
-            body = fp.read_text()
-        except Exception as exc:
-            return False, f"{n['evidence_file']} unreadable: {type(exc).__name__}"
-        if need and need not in body:
-            return False, f"{n['evidence_file']} lacks {need!r}"
-        # If it is JSON and carries a verdict, HONOUR IT. A falsy verdict is a
-        # failure no matter how present the file is.
-        if fp.suffix == ".json":
+    for key in EVIDENCE_PRECEDENCE:
+        if key not in n:
+            continue
+        if key == "suite":
+            r = subprocess.run([sys.executable, "-m", "pytest", n["suite"], "-q",
+                                "--no-header", "-x"], cwd=ROOT, capture_output=True,
+                               text=True, timeout=1800)
+            last = [l for l in r.stdout.strip().splitlines() if l.strip()]
+            return r.returncode == 0, (last[-1][:90] if last else "no output")
+        if key == "verifier":
+            r = subprocess.run([sys.executable, n["verifier"]], cwd=ROOT,
+                               capture_output=True, text=True, timeout=7200)
+            last = [l for l in r.stdout.strip().splitlines() if l.strip()]
+            return r.returncode == 0, (last[-1][:90] if last else "no output")
+        if key == "evidence_file":
+            # The docstring above describes exactly this bug -- and until now it was
+            # fixed for `suite` and left intact HERE. Existence is a precondition,
+            # not a verdict: a JSON saying `"passed": false` rendered the node GREEN
+            # because the file was on disk. Fixing the instance and not the class is
+            # the repeating failure this file was written to catch.
+            fp = ROOT / n["evidence_file"]
+            if not fp.exists():
+                return False, f"{n['evidence_file']} missing"
+            # A node may declare what makes its evidence a PASS. Text evidence uses
+            # `evidence_requires` (a substring); JSON evidence may name a key.
+            need = n.get("evidence_requires")
             try:
-                doc = json.loads(body)
+                body = fp.read_text()
             except Exception as exc:
-                return False, f"{n['evidence_file']} is not valid JSON: {type(exc).__name__}"
-            for key in VERDICT_KEYS:
-                if isinstance(doc, dict) and key in doc:
-                    good = bool(doc[key])
-                    return good, f"{n['evidence_file']} {key}={doc[key]!r}"
-        if need:
-            return True, f"{n['evidence_file']} contains {need!r}"
-        # Nothing declared and no verdict found. This used to `return True` with
-        # the words EXISTS ONLY in the detail string -- which said so honestly in
-        # prose and then rendered the node GREEN anyway (#791). A file we never
-        # judged is not a pass. It is not a failure either, so classify() reports
-        # it REFUSED rather than RED; the False here only keeps run_evidence from
-        # being the one that claims the pass.
-        return False, unjudged(n) or f"{n['evidence_file']} declares no verdict"
-    if "tool" in n:
-        r = subprocess.run([sys.executable, n["tool"]], cwd=ROOT,
-                           capture_output=True, text=True, timeout=3600)
-        return r.returncode == 0, f"{n['tool']} exit {r.returncode}"
+                return False, f"{n['evidence_file']} unreadable: {type(exc).__name__}"
+            if need and need not in body:
+                return False, f"{n['evidence_file']} lacks {need!r}"
+            # If it is JSON and carries a verdict, HONOUR IT. A falsy verdict is a
+            # failure no matter how present the file is.
+            if fp.suffix == ".json":
+                try:
+                    doc = json.loads(body)
+                except Exception as exc:
+                    return False, f"{n['evidence_file']} is not valid JSON: {type(exc).__name__}"
+                for vkey in VERDICT_KEYS:
+                    if isinstance(doc, dict) and vkey in doc:
+                        good = bool(doc[vkey])
+                        return good, f"{n['evidence_file']} {vkey}={doc[vkey]!r}"
+            if need:
+                return True, f"{n['evidence_file']} contains {need!r}"
+            # Nothing declared and no verdict found. This used to `return True` with
+            # the words EXISTS ONLY in the detail string -- which said so honestly in
+            # prose and then rendered the node GREEN anyway (#791). A file we never
+            # judged is not a pass. It is not a failure either, so classify() reports
+            # it REFUSED rather than RED; the False here only keeps run_evidence from
+            # being the one that claims the pass.
+            return False, unjudged(n) or f"{n['evidence_file']} declares no verdict"
+        if key == "tool":
+            r = subprocess.run([sys.executable, n["tool"]], cwd=ROOT,
+                               capture_output=True, text=True, timeout=3600)
+            return r.returncode == 0, f"{n['tool']} exit {r.returncode}"
+        # A key EVIDENCE_PRECEDENCE knows that no branch above executes is a
+        # tooling bug, not a node property: refuse loudly rather than silently
+        # falling through to a lower-precedence source (#155's unknown-in-the-
+        # place-of-a-result, in dispatch form).
+        raise SystemExit(f"REFUSED: node {nid} declares {key!r}, which "
+                         f"EVIDENCE_PRECEDENCE knows but run_evidence() "
+                         f"cannot execute")
     return False, "no evidence declared"
 
 
@@ -295,8 +321,9 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     if n.get("blocked"):
         return "BLOCKED", n["blocked"]
 
-    # What would make this node true?
-    sources = [n[k] for k in ("verifier", "suite", "tool", "evidence_file") if k in n]
+    # What would make this node true? Enumerated from EVIDENCE_PRECEDENCE,
+    # not a fourth hand-written tuple (#827).
+    sources = [n[k] for k in EVIDENCE_PRECEDENCE if k in n]
     if not sources:
         iss = n.get("issue")
         return "TODO", (f"issue #{iss}" if iss else "no evidence declared")
@@ -522,8 +549,7 @@ def main() -> int:
         for i, n in nodes.items():
             if only is not None and i not in only:
                 continue
-            if n.get("blocked") or not any(k in n for k in
-                                           ("suite", "verifier", "tool", "evidence_file")):
+            if n.get("blocked") or not any(k in n for k in EVIDENCE_PRECEDENCE):
                 continue
             if n.get("slow") and not args.slow:
                 continue                       # nightly runs these
