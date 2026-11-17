@@ -65,7 +65,7 @@ def _classify(tmp_path, monkeypatch, node, rec=None):
     monkeypatch.setattr(cd, "ROOT", tmp_path)
     monkeypatch.setattr(cd, "load_results", lambda: ({"CTL": rec} if rec else {}))
     monkeypatch.setattr(cd, "tag_is_ancestor", lambda t: False)
-    monkeypatch.setattr(cd, "stale_against", lambda n, sha: None)
+    monkeypatch.setattr(cd, "stale_against", lambda n, sha: ("fresh", ""))
     monkeypatch.setattr(cd, "sha_is_ancestor", lambda s: True)
     return cd.classify("CTL", node)
 
@@ -90,7 +90,7 @@ def test_an_unjudged_file_is_refused_even_with_a_stamp(tmp_path, monkeypatch):
     monkeypatch.setattr(cd, "load_results", lambda: {})
     monkeypatch.setattr(cd, "tag_is_ancestor", lambda t: True)
     monkeypatch.setattr(cd, "git", lambda *a: "deadbeef")
-    monkeypatch.setattr(cd, "stale_against", lambda n, sha: None)
+    monkeypatch.setattr(cd, "stale_against", lambda n, sha: ("fresh", ""))
     st, _ = cd.classify("CTL", {"evidence_file": "e.json", "tag": "node/CTL"})
     assert st == "REFUSED"
 
@@ -404,6 +404,7 @@ def test_issue_824_858_a_failing_record_with_no_covers_stays_red_even_when_tagge
                         lambda: {"N": {"passed": False, "detail": "suite exit 1",
                                        "sha": v1}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "tag": "ctl-858"})
     assert (st, note) == ("RED", "suite exit 1"), \
         f"a failing record on a covers-less tagged node rendered {st} -- {note}"
@@ -414,6 +415,7 @@ def test_issue_824_858_a_failing_record_with_no_covers_stays_red_even_when_tagge
                         lambda: {"N": {"passed": True, "detail": "ok",
                                        "sha": v1}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "tag": "ctl-858"})
     assert st == "REFUSED" and "covered" in note, \
         f"a passing record on a covers-less tagged node rendered {st} -- {note}"
@@ -431,7 +433,12 @@ def test_issue_824_858_a_failing_record_with_no_covers_stays_red_without_a_tag(m
                        ({"detail": "no verdict key"},
                         "no verdict key"):
         monkeypatch.setattr(cd, "load_results", lambda r=rec: {"N": r})
-        st, note = cd.classify("N", {"evidence_file": "docs/dag.json"})
+        # #791 reconciliation: the node declares what makes it pass, so the
+        # unjudged question does not fire -- this test pins the #858 hoist
+        # (a failing record is RED even with no covers), not the declaration
+        # guard, which has its own tests above.
+        st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                     "evidence_requires": "fixture: judged by record"})
         assert (st, note) == ("RED", detail), \
             f"record {rec} rendered {st} -- {note}"
 
@@ -757,6 +764,7 @@ def test_issue_863_a_merge_over_a_content_identical_file_is_not_stale(tmp_path, 
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f"]})
     assert st == "GREEN", \
         f"a content-identical merge round rendered {st} -- {note}"
@@ -769,6 +777,7 @@ def test_issue_863_the_tag_path_on_a_content_identical_merge_is_stamped(tmp_path
     g, stamp = _merge_repo(tmp_path, monkeypatch)
     g("tag", "dag-N", stamp)
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f"], "tag": "dag-N"})
     assert st == "STAMPED", \
         f"a tag whose covered file is content-identical rendered {st} -- {note}"
@@ -781,6 +790,7 @@ def test_issue_863_a_change_only_in_the_merge_resolution_is_stale(tmp_path, monk
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f"]})
     assert st == "STALE", \
         f"a resolution that changed the bytes rendered {st} -- {note}"
@@ -799,6 +809,7 @@ def test_issue_863_an_unmeasurable_diff_refuses_through_classify(tmp_path, monke
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f", ":(bogus)x"]})
     assert st == "REFUSED", \
         f"an unmeasurable diff rendered {st} -- {note}"
@@ -820,6 +831,7 @@ def test_issue_863_a_directory_cover_measures_both_ways(tmp_path, monkeypatch):
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "evidence_requires": "fixture: judged by record",
                               "covers": ["sub"]})
     assert st == "GREEN", f"an unchanged directory cover rendered {st}"
 
@@ -829,6 +841,7 @@ def test_issue_863_a_directory_cover_measures_both_ways(tmp_path, monkeypatch):
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp2}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["sub"]})
     assert st == "STALE", f"a changed directory cover rendered {st} -- {note}"
 
@@ -845,6 +858,7 @@ def test_issue_863_a_cover_appearing_or_vanishing_after_the_stamp_is_stale(tmp_p
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "evidence_requires": "fixture: judged by record",
                               "covers": ["new.v"]})
     assert st == "STALE", f"a cover added after the stamp rendered {st}"
 
@@ -857,6 +871,7 @@ def test_issue_863_a_cover_appearing_or_vanishing_after_the_stamp_is_stale(tmp_p
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp2}})
     st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "evidence_requires": "fixture: judged by record",
                               "covers": ["covered.v"]})
     assert st == "STALE", f"a cover deleted after the stamp rendered {st}"
 
@@ -874,6 +889,9 @@ def test_issue_863_a_shallow_clone_refuses_rather_than_rendering_fresh(tmp_path,
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f"]})
     assert st == "REFUSED", \
         f"a shallow clone rendered {st} -- {note}"
+    assert "history" in note, \
+        f"the refusal must come from the unanchorable sha, not elsewhere: {note}"
