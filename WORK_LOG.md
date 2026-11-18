@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **PR #1005**: test: injected defect for the start-skip legitimacy half of the two-instant CB control
+- **Issue #1004** (closed): test_verify_109_corpus_gate: the start-skip legitimacy assertion ships without the input that defeats it (rule 8)
 - **PR #1001**: tools: commit the probes prose-literal census its counts were quoted from
 - **PR #1002**: pnr: commit the finished ladder_dp route record (klt 0.9.0) and classify its 24 residual DRC violations
 - **PR #999**: fix: NOT_QUOTED sentinel for unquoted CONCLUSION figures in the corpus-gate test
