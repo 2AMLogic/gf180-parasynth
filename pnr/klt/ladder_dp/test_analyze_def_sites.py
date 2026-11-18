@@ -27,6 +27,12 @@ become the width -- the old behaviour consumed the extension number as the
 path width whenever the path had none of its own, silently inflating the
 geometry of any pair that completed.
 
+And the skip-keyword arguments (#1021, one class over from #1013): the
+numeric argument of a skipped keyword -- ``STYLE <n>``/``MASK <n>`` on a
+path, ``WEIGHT <n>`` at net level -- is consumed with its keyword and never
+reaches the width branch. The plain-widthless and ``TAPERRULE <name>`` paths
+stay pinned as controls.
+
 And the refusal path: a site whose bbox is not where any geometry lives, and
 inputs that are missing, must produce ``REFUSED``/no verdict rather than a
 half-answer.
@@ -418,6 +424,147 @@ def test_a_nondefaultrule_stays_counted_never_geometry() -> None:
     assert tokens == ["CTS_NDR_0", "NONDEFAULTRULE"], tokens
     found = geometry.shapes_near("_00146_", "Metal2", (4000, 1800, 4800, 2300), "nets")
     assert found["wires"], "the path behind the rule must still parse"
+
+
+def test_a_style_number_on_a_widthless_path_never_becomes_the_width() -> None:
+    """``STYLE <n>`` on a widthless path: argument consumed with its keyword.
+
+    The input that defeats the old behaviour: ``STYLE`` sits in
+    ``_SKIP_TOKENS``, so the keyword was skipped but its numeric argument
+    fell through to the ``width is None`` branch -- width 3, a rect widened
+    by half of it, and ``unparsed`` still 0 (the silent wrong value the
+    issue exists to remove).
+    """
+    text = DEF.replace(
+        "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+        "+ ROUTED Metal2 STYLE 3 ( 4300 2050 ) ( * 2300 )",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
+    wires = [
+        (w["x1"], w["y1"], w["x2"], w["y2"], w["width"])
+        for w in geometry.nets["_00146_"]
+    ]
+    assert wires == [(4300, 2050, 4300, 2300, None)], wires
+
+
+def test_a_mask_number_on_a_widthless_path_never_becomes_the_width() -> None:
+    """``MASK <n>`` on a widthless path: same class, same consumption."""
+    text = DEF.replace(
+        "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+        "+ ROUTED Metal2 MASK 2 ( 4300 2050 ) ( * 2300 )",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
+    wires = [
+        (w["x1"], w["y1"], w["x2"], w["y2"], w["width"])
+        for w in geometry.nets["_00146_"]
+    ]
+    assert wires == [(4300, 2050, 4300, 2300, None)], wires
+
+
+def test_a_style_number_before_the_layer_is_also_consumed() -> None:
+    """The DEF 5.8 position, ``STYLE`` before the layer name, is covered too.
+
+    There the argument cannot reach the width branch (no layer yet), but on
+    the old behaviour it landed in ``unparsed`` -- a grammar-legal path
+    mislabelled as junk. Consuming it with the keyword keeps the unparsed
+    count meaning "shapes the grammar missed".
+    """
+    text = DEF.replace(
+        "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+        "+ ROUTED STYLE 3 Metal2 ( 4300 2050 ) ( * 2300 )",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
+    wires = [
+        (w["x1"], w["y1"], w["x2"], w["y2"], w["width"])
+        for w in geometry.nets["_00146_"]
+    ]
+    assert wires == [(4300, 2050, 4300, 2300, None)], wires
+
+
+def test_skip_keyword_numbers_never_touch_a_path_that_has_a_width() -> None:
+    """An explicit width followed by ``STYLE <n>``/``MASK <n>`` stays the width.
+
+    Neither the keyword's number may overwrite the width nor be double-counted
+    as unparsed noise.
+    """
+    text = DEF.replace(
+        "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+        "+ ROUTED Metal2 400 STYLE 3 ( 4300 2050 ) ( 4600 * )",
+    ).replace(
+        "+ ROUTED Metal2 400 ( 1900 2500 ) ( 2100 2500 )",
+        "+ ROUTED Metal2 400 MASK 2 ( 1900 2500 ) ( 2100 * )",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
+    for net, x1, x2 in (("_00146_", 4300, 4600), ("_00306_", 1900, 2100)):
+        wires = [
+            (w["x1"], w["y1"], w["x2"], w["y2"], w["width"])
+            for w in geometry.nets[net]
+        ]
+        # centreline widened by half of the explicit 400, unmodified
+        assert wires == [(x1, 2300 if net == "_00306_" else 1850, x2,
+                          2700 if net == "_00306_" else 2250, 400)], wires
+
+
+def test_a_weight_number_is_consumed_with_its_keyword() -> None:
+    """``+ WEIGHT <n>`` at net level: the number rides with its keyword.
+
+    The DEF grammar gives ``WEIGHT`` a numeric argument; on the old
+    behaviour the keyword was skipped and the number counted unparsed at
+    net level -- visible, but the same defect class, and noise in a count
+    that should mean "shapes the grammar missed".
+    """
+    text = DEF.replace(
+        "  - _00146_ ( U1 A ) ( U2 A )\n",
+        "  - _00146_ ( U1 A ) ( U2 A )\n    + WEIGHT 5\n",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
+    wires = [
+        (w["x1"], w["y1"], w["x2"], w["y2"], w["width"])
+        for w in geometry.nets["_00146_"]
+    ]
+    assert wires == [(4300, 1850, 4600, 2250, 400)], wires
+
+
+def test_a_plain_widthless_path_is_unchanged() -> None:
+    """Control: no skip-keyword at all -- widthless stays widthless, counted 0."""
+    text = DEF.replace(
+        "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+        "+ ROUTED Metal2 ( 4300 2050 ) ( * 2300 )",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
+    wires = [
+        (w["x1"], w["y1"], w["x2"], w["y2"], w["width"])
+        for w in geometry.nets["_00146_"]
+    ]
+    assert wires == [(4300, 2050, 4300, 2300, None)], wires
+
+
+def test_a_taperrule_name_stays_counted_never_geometry() -> None:
+    """Control: ``TAPERRULE <name>`` keeps today's safe behaviour.
+
+    Its argument is a name, not a number, so it cannot be mistaken for a
+    width and lands in the unparsed count in its own right -- the probe
+    control in the issue, kept pinned so the fix cannot regress it.
+    """
+    text = DEF.replace(
+        "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+        "+ ROUTED Metal2 TAPERRULE NDR_1 ( 4300 2050 ) ( * 2300 )",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 1, geometry.unparsed_tokens
+    tokens = sorted(s["token"] for s in geometry.unparsed_samples)
+    assert tokens == ["NDR_1"], tokens
+    wires = [
+        (w["x1"], w["y1"], w["x2"], w["y2"], w["width"])
+        for w in geometry.nets["_00146_"]
+    ]
+    assert wires == [(4300, 2050, 4300, 2300, None)], wires
 
 
 def test_refusal_inputs(tmp_path: pathlib.Path) -> None:
