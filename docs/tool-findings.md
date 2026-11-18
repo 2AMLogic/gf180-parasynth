@@ -234,8 +234,8 @@ record's `def_parse` shows 452 unparsed tokens with samples in that shape,
 and every one of its `unparsed_samples` entries names a signal net while
 `specialnets_parsed` is 2 (the VSS side the conclusion reads). The
 token-level decomposition of those 452 and the section split behind it are
-measured on the DEF itself, which is not in-tree; see the follow-up issue
-for what was measured there.
+measured on the DEF itself, which is not in-tree; #1011 carries what was
+measured there and the regeneration the parser fix needs.
 
 So design-versus-router resolves to **the PDN's**, and the separate
 floorplan issue #808's criteria anticipate is **filed on this evidence**
