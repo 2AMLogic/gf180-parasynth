@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **PR #818**: ci: commit the nightly's slow DAG records to main, not just the artifact
+- **Issue #787** (closed): Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run"
 - **PR #986**: docs: record verify_109_claims half-2 live run against the real Fischer corpus
 - **PR #985**: docs: mark §5c mpd.* bucket names as stale pending #933 regeneration
 - **Issue #983** (closed): CI produced zero check-runs on PR #982: pull_request workflows stopped triggering (needs operator)
