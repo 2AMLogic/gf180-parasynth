@@ -40,15 +40,26 @@ Independence from the model under test. The controls here are driven by
 `reference_render`, an additive/noise performer written for this file that
 shares no code with model/voice_fx.py or model/drums_fx.py, plus defects
 injected into ITS schedule or output. The thresholds are stated tolerances, not
-fitted to the voice. `--backend model` is an UNRUN, per-note-reset approximation
-of the instrument (see `model_render`), not the production-path gate: this file
-is apparatus scaffolding and #338 stays open until it drives the continuous
-schedule through the shipped mixer. `--matrix` prints which property each seeded
-defect moves and which stay blind.
+fitted to the voice. `--backend synthtop` is the production-path gate: the
+phrase is compiled to the chip's register write stream (phrase_writes) and
+played through model/synth_top_model.py -- the whole chip, voice and drums
+mixed by contract 12's one exact sum -- whose bit-exactness against
+synth_top.v at the I2S pins is rtl-sketch/verify_synth_top.py's contract, so
+its verdicts are the shipped path's. `--backend model` is retained for
+comparison: an UNRUN, per-note-reset approximation of the instrument (see
+`model_render`), not the gate. `--matrix` prints which property each seeded
+defect moves and which stay blind; defects seed the REFERENCE performer
+(--inject) -- the synthtop backend's controls seed the WRITE STREAM instead
+(test_performance_suite.py), because a defect the chip ships is a control
+move or an omission, not a magic edit of its output.
 
 What each guard cannot see, so a reader does not over-trust a PASS: timing is
-audio-onset based with ~1 ms resolution; the stuck test is only made where a
-gap leaves room (>= 25 ms after the allowance) -- each phrase carries gaps and
+audio-onset based with ~1 ms resolution, on a wideband envelope OR a
+first-difference (~6 dB/oct high-pass) one -- the high band exists because the
+kit's own bd/sd ring can sit within a few dB of a following hat's peak, where
+no wideband rise is possible; an event with no high-band content masked by a
+loud high-band neighbour is still invisible to both. The stuck test is only
+made where a gap leaves room (>= 25 ms after the allowance) -- each phrase carries gaps and
 a final tail, and a phrase with none is REFUSED; automation is tested on the
 named events only. A note held past gate-off is always red, but when the next
 onset is masked by it the report is often "timing +N ms" on that next event
@@ -137,7 +148,11 @@ def phrases() -> dict:
     repeated = Phrase("repeated_notes", 3.0, _notes([55], 0.2, 0.3, 0.18, n=8), release_s=0.3)
     dense = Phrase("dense", 3.0, _notes([48, 60, 55, 63], 0.2, 0.1, 0.055, n=16), release_s=0.3)
     dense_drums = Phrase("dense_drums", 2.2, tuple(
-        Event(0.2 + 0.1 * i, "drum", drum=["bd", "sd", "hh"][i % 3], ring_s=0.3) for i in range(14)))
+        Event(0.2 + 0.1 * i, "drum", drum=["bd", "sd", "hh"][i % 3], ring_s=0.5) for i in range(14)))
+    # ring_s 0.5, not the reference performer's 0.3: the R1 kit's sd is -22.2 dB
+    # down at +0.30 s, -31.3 dB at +0.45 s, -34.3 dB at +0.50 s (synthtop render,
+    # unmasked last-sd tail) -- a 0.3 s deadline calls the instrument's own
+    # snare ring a stuck note.
     return {p.name: p for p in (bass, lead, drums, mixed, repeated, dense, dense_drums)}
 
 
@@ -410,7 +425,10 @@ def failed_property(msg: str) -> str:
 def evaluate(x, phrase: Phrase) -> dict:
     x = preconditions(x, phrase)
     env = _env(x)
+    env_hi = _env(np.diff(x))          # ~6 dB/oct high-passed copy: a hat under
     fr = lambda t: int(round(t * 1000))          # noqa: E731
+    # lingering low tails (the #338 finding: the kit's sd/bd ring sits ~3 dB
+    # under the next hat's own peak 100 ms in, so NO wideband rise is possible)
     fails: list[str] = []
     info: dict = {"events": []}
     # ---- headroom
@@ -436,6 +454,7 @@ def evaluate(x, phrase: Phrase) -> dict:
         nxt = evs[i + 1].onset_s if i + 1 < len(evs) else phrase.duration_s
         lo, hi = max(0, fr(t - 0.01)), min(len(env), fr(nxt - 0.005 if i + 1 < len(evs) else nxt))
         pk = float(env[lo:hi].max()) if hi > lo else 0.0
+        hi_end = min(hi, len(env_hi))
         rec = {"i": i, "kind": e.kind, "peak_dbfs": round(_db(pk), 1)}
         if _db(pk) < PRESENT_DBFS:
             fails.append(f"event {i} ({e.kind}@{t:.3f}s): inaudible, peak {_db(pk):.1f} dBFS")
@@ -444,10 +463,15 @@ def evaluate(x, phrase: Phrase) -> dict:
             onsets.append(None)
             continue
         thr = ONSET_FLOOR_REL * pk
-        found = None
-        for f in range(lo, hi):
-            rises = f < 3 or env[f] >= RISE_RATIO * env[f - 3]
-            if env[f] >= thr and rises:
+        thr_hi = ONSET_FLOOR_REL * pk        # the wideband peak anchors BOTH floors:
+        found = None                         # a hi-band claim must be a tenth of the
+        for f in range(lo, hi_end):          # event's audible peak, else the release
+            rises = f < 3 or env[f] >= RISE_RATIO * env[f - 3]   # tail's own spectral
+            if env[f] >= thr and rises:      # wiggle reads as the next drum's attack
+                found = f                    # (mixed_automation's bd@2.775 read -10 ms
+                break                        # early, #338)
+            rises_hi = f < 3 or env_hi[f] >= RISE_RATIO * env_hi[f - 3]
+            if env_hi[f] >= thr_hi and rises_hi:
                 found = f
                 break
         if found is None:
@@ -623,9 +647,142 @@ def model_render(phrase: Phrase, engine: str = "r1") -> np.ndarray:
     return out
 
 
+# ------------------------------------------------------------------ synth_top backend (the shipped path)
+SYNTHTOP_PATCH = dict(waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0),
+                      mix=(1.0, 0.0, 0.0), noise=0.0, q=0.0, drive=0.75,
+                      amp=(0.004, 0.05, 1.0, 0.04), fenv=(0.004, 0.05, 1.0, 0.04),
+                      track=0.0, vol=0.45)
+SYNTHTOP_CUTOFF_HZ = 4000.0        # commanded cutoff where the phrase declares none
+SYNTHTOP_DRUM_GAIN = 0.45          # DVOL/BVOL, verify_synth_top's reference gains
+SYNTHTOP_ACCENT = 1.0
+DRUM_STOP_NAME = {"bd": "BD", "sd": "SD", "hh": "CH"}
+
+# Which chip build renders. r1 is the published release (fpga/release/r1-candidate.json:
+# OSC2X=1 FILTER2X=1 PULSE2X=0, RTL frozen at 6864435a) -- the same mapping
+# tools/mono_artifact_probe.ENGINES carries onto synth_top_model's construction
+# flags. `baseline` (no 2x paths) is NOT the shipped instrument: on it a saw's
+# first half-cycle pins the ladder drive's tanh and prints a 4 ms flat-topped
+# start-up plateau the headroom guard reads as clipping.
+SYNTHTOP_ENGINES = {
+    "r1": dict(oversample_2x=True, filter_2x=True, pulse_2x=False),
+    "pulse2x": dict(oversample_2x=True, filter_2x=True, pulse_2x=True),
+    "baseline": dict(oversample_2x=False, filter_2x=False, pulse_2x=False),
+}
+SYNTHTOP_ENGINE = "r1"
+
+
+def phrase_writes(phrase, *, patch=None, cutoff_hz=SYNTHTOP_CUTOFF_HZ,
+                  drum_gain=SYNTHTOP_DRUM_GAIN, accent=SYNTHTOP_ACCENT) -> list:
+    """The phrase as the chip's write stream -- (frame, flag, sec, addr, data),
+    the only thing a host can actually send. Frame f means round(t*SR); the
+    model applies writes at the START of the frame they name (synth_top_model's
+    register contract; the link's own latency is verify_ctl/verify_synth_top's
+    business and is irrelevant at these tolerances).
+
+    Per note: the three INC registers as JUMPS (flag = 1 -- no glide between
+    phrase notes), TRACK, the commanded cutoff as cut_lo AND cut_hi (the
+    envelope's sustain holds the END value, so one-sided programming would
+    silently ignore the control -- first model run, 6c94bdb2) whenever the
+    commanded cutoff changes, then GATE_ON; GATE_OFF at the gate's frame.
+    Drums: the kit image at frame 0, then STOPS pulses via drums_fx.hit_writes
+    (the bit drops the next frame so a repeat is an edge again).
+
+    The voice is MONO: gates that overlap retrigger, they do not voice two
+    notes at once -- that is what the shipped instrument does with the
+    schedule, and every frozen phrase keeps gates below inter-onsets.
+
+    REFUSES a drum name outside DRUM_STOP_NAME and a gate-off landing past the
+    record: the chip's run() would assert mid-render, and a truncated stream
+    must not look like data."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    sys.path[:0] = [str(root / "model"), str(root / "tools")]
+    import drums_fx as dx
+    import synth_top_model as st
+    import voice_fx as vf
+
+    p = dict(SYNTHTOP_PATCH if patch is None else patch)
+    regs = vf.VoiceFx.patch_regs(**p)
+    fr = lambda t: int(round(t * SR))          # noqa: E731
+    w: list = []
+    put = lambda f, fl, a, d: w.append((f, fl, st.SEC_VOICE, a, d))   # noqa: E731
+
+    # the boot-time image: the exact mapping rtl-sketch/verify_synth_top._voice_image writes
+    for k, s_ in enumerate(regs["waves"]):
+        put(0, 0, st.A_WAVE + k, vf.WAVE_CODE[s_])
+    for base, key in ((st.A_AMP, "amp"), (st.A_FILT, "fenv")):
+        for j, v in enumerate(regs[key]):
+            put(0, 0, base + j, v)
+    for nm, key in (("A_CUT_LO", "cut_lo"), ("A_CUT_HI", "cut_hi"), ("A_K", "k"),
+                    ("A_GAIN", "gain"), ("A_OGAIN", "ogain"), ("A_GLIDE", "glide")):
+        put(0, 0, getattr(st, nm), regs[key])
+    put(0, 0, st.A_VOL, regs["vol"])
+    put(0, 0, st.A_DVOL, dx.accent_reg(drum_gain))
+    put(0, 0, st.A_BVOL, dx.accent_reg(drum_gain))
+    for k, g in enumerate(regs["weights"]):
+        put(0, 0, st.A_W + k, g)
+
+    n = int(phrase.duration_s * SR)
+    last_fc = None
+    for e in phrase.events:
+        if e.kind != "note":
+            continue
+        f, fg = fr(e.onset_s), fr(e.onset_s + e.gate_s)
+        if fg >= n:
+            raise Refused(f"note at {e.onset_s:.3f}s: gate-off lands at frame {fg}, "
+                          f"past the {n}-frame record")
+        fc = _control_at(phrase, "cutoff", e.onset_s, cutoff_hz)
+        if fc != last_fc:                      # before the gate: the envelope must start there
+            put(f, 0, st.A_CUT_LO, vf.usat(int(round(fc)), vf.CUT_BITS))
+            put(f, 0, st.A_CUT_HI, vf.usat(int(round(fc)), vf.CUT_BITS))
+            last_fc = fc
+        for k, v in enumerate(vf.VoiceFx.note_incs(e.midi, regs["detune"])):
+            put(f, 1, st.A_INC + k, v)
+        put(f, 0, st.A_TRACK, vf.VoiceFx.note_track(e.midi, p["track"]))
+        put(f, 0, st.A_GATE_ON, 0)
+        put(fg, 0, st.A_GATE_OFF, 0)
+
+    drums = [e for e in phrase.events if e.kind == "drum"]
+    if drums:
+        bad = sorted({e.drum for e in drums} - set(DRUM_STOP_NAME))
+        if bad:
+            raise Refused(f"drum names {bad} are not one of {sorted(DRUM_STOP_NAME)}; "
+                          f"the schedule names a circuit the host cannot name")
+        kit = dx.kit_with_sounds(*(DRUM_STOP_NAME[e.drum] for e in drums))
+        w.extend((f, 0, st.SEC_DRUM, a, v)
+                 for f, a, v in dx.hit_writes([(fr(e.onset_s),
+                                                dx.SOUND_STOP[DRUM_STOP_NAME[e.drum]],
+                                                accent) for e in drums], kit))
+    return w
+
+
+def render_writes(writes, duration_s: float, *, engine: str = SYNTHTOP_ENGINE) -> np.ndarray:
+    """An explicit write stream through the chip model (synth_top_model.run),
+    built as the named release configuration (SYNTHTOP_ENGINES; default r1).
+    The control surface for seeding a defect in the STREAM: the suite judges
+    the audio against the schedule either way, so a control that omits
+    gate-offs or floors the volume mid-note is a defect the host shipped, not
+    an edit to the judged audio. An unknown engine is REFUSED, not defaulted."""
+    import synth_top_model as st
+
+    if engine not in SYNTHTOP_ENGINES:
+        raise Refused(f"engine {engine!r} is not one of {sorted(SYNTHTOP_ENGINES)}")
+    m = st.SynthTopModel(**SYNTHTOP_ENGINES[engine])
+    out = m.run(writes, int(duration_s * SR))
+    return np.asarray(out["sample"], dtype=np.float64) / 32768.0
+
+
+def synthtop_render(phrase, *, engine: str = SYNTHTOP_ENGINE) -> np.ndarray:
+    """phrase_writes -> render_writes: the phrase through the shipped chip's
+    register interface and contract-12 mixer."""
+    return render_writes(phrase_writes(phrase), phrase.duration_s, engine=engine)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--backend", choices=("reference", "model"), default="reference")
+    ap.add_argument("--backend", choices=("reference", "model", "synthtop"),
+                    default="reference")
+    ap.add_argument("--engine", choices=tuple(SYNTHTOP_ENGINES), default=SYNTHTOP_ENGINE,
+                    help="chip build the synthtop backend renders (default r1)")
     ap.add_argument("--inject", default="", help="seed a defect into the reference render")
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--phrase", action="append")
@@ -639,8 +796,13 @@ def main(argv=None) -> int:
     if a.inject and a.backend != "reference":
         print("REFUSED: --inject seeds the reference performer only", file=sys.stderr)
         return 2
-    render = (lambda p: reference_render(p, defect=a.inject)) if a.backend == "reference" \
-        else model_render
+    if a.engine != SYNTHTOP_ENGINE and a.backend != "synthtop":
+        print("REFUSED: --engine selects the synthtop backend's chip build only",
+              file=sys.stderr)
+        return 2
+    render = {"reference": lambda p: reference_render(p, defect=a.inject),
+              "model": model_render,
+              "synthtop": lambda p: synthtop_render(p, engine=a.engine)}[a.backend]
     try:
         res = run_suite(render, a.phrase)
     except Refused as r:
