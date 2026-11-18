@@ -2,6 +2,10 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-18
+
+- **Issue #869** (closed): Forward upstream to rjwalters/loom: post-verdict issue-body hash refuses when the body ends in a newline (#13600's fix covers one trailing newline, jq gives two)
+
 ### 2026-11-17
 
 - **PR #980**: docs: record the posted OpenROAD#12303 correction of record in the #12307 row
