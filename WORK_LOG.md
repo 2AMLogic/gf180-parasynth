@@ -4,6 +4,18 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **PR #1035**: fix: end the via-name position at a skipped '+' in DEF path walk
+- **Issue #1034** (closed): analyze_def_sites: '+ NONDEFAULTRULE <name>' after a path's points makes the keyword a phantom via (the spelling #1030 left out of scope)
+- **PR #1027**: docs: scope 'bound in-repo' claim to what route_def_manifest.json carries
+- **Issue #1026** (closed): tool-findings.md:189-193 — "this chain is bound in-repo" covers two items the manifest does not
+- **PR #1024**: fix: consume STYLE/MASK/WEIGHT numeric arguments with their keyword, never as the path width
+- **Issue #1021** (closed): analyze_def_sites: STYLE/MASK numeric arguments are still consumed as the path width
+- **PR #1019**: bind the DEF re-run evidence chain in-repo: commit route_def_manifest.json, regenerate def_site_analysis.json with totals, shape tags, overlap lower bound
+- **Issue #1011** (closed): Commit route_def_manifest.json and regenerate def_site_analysis.json's record fields against the kept DEF
+- **PR #1016**: docs: accept ladder_dp's 24 Metal2 PDN spacing sites as known-PDN residual
+- **Issue #1009** (closed): Floorplan/PDN: the M1->M4 via-column lands leave 24 Metal2 spacing violations in ladder_dp's finished route
+- **PR #1017**: parse the DEF path-point extension form ( x y ext ): record ext_start/ext_end, never consume it as width
+- **Issue #1013** (closed): analyze_def_sites: parse or refuse DEF path-point extension form ( x y ext )
 - **PR #1015**: docs: add static as-of instruction to WORK_PLAN.md header
 - **Issue #1014** (closed): WORK_PLAN.md carries no as-of date, so a reader cannot tell when a declined regeneration left it stale
 - **PR #1010**: bind the ladder_dp route-DRC claims in-repo and answer design-versus-router from the routed DEF

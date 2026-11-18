@@ -28,13 +28,12 @@ _None._
 
 ## Ready
 
-Human-approved issues ready for implementation (`loom:issue`).
+Human-approved issues (`loom:issue`) ready for implementation — excluding held (`loom:blocked`/`loom:operator`/`loom:frozen`), `loom:building`, and issues closed by an open `loom:pr` PR (listed under Approved).
 
 - **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#787**: Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run"
 
 ## In Progress
 
@@ -46,22 +45,23 @@ Issues currently being built (`loom:building`).
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
-- **#826**: compile_dag --only: a named node that cannot run is skipped SILENTLY (exit 0, no line)
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
 - **#922**: Tracked-JSON truncate-then-write remains in holdout.py (ledger + seals) and measure_m1a_volume_mapping.py
 - **#947**: Atomic-write remainder: 23 tracked JSONs still written truncate-then-write (audit of #922)
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#971**: compile_dag: docs/capability-dag.md and test_compile_dag_deps.py still state the pre-#791 'EXISTS ONLY returns pass' behaviour as current
-- **#976**: compile_dag: run_evidence()'s EVIDENCE_PRECEDENCE refusal ships without the input that defeats it
+- **#1022**: analyze_def_sites: the DEF path-point extension is recorded but never applied to the emitted rect, nor surfaced in the record
+- **#1023**: docs/tool-findings.md carries zero claim markers, so its route-record figures have nothing re-deriving them
+- **#1030**: analyze_def_sites: a skip-keyword's NAME argument after a path's points becomes a phantom via (same class as #1013/#1021, via branch not width branch)
+- **#1034**: analyze_def_sites: '+ NONDEFAULTRULE <name>' after a path's points makes the keyword a phantom via (the spelling #1030 left out of scope)
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#818**: ci: commit the nightly's slow DAG records to main, not just the artifact
-- **#972**: fix: compile_dag --only refuses a named node it cannot run, instead of silence
-- **#974**: dag: restate verdict-less evidence_file as REFUSED in docs, and forbid the silent declaration
-- **#977**: test: pin run_evidence()'s known-key REFUSED and its non-recording path through main
+- **#1025**: fix: apply the DEF path-point extension to the wire rect and count it in the record
+- **#1029**: docs: bind #1006 route-record figures to claim markers
+- **#1031**: fix: consume skip-keyword name arguments so they never become phantom vias
+- **#1035**: fix: end the via-name position at a skipped '+' in DEF path walk
 
 ## Approved (Awaiting Merge)
 
@@ -93,7 +93,6 @@ Issues carrying `loom:curated`.
 - **#335**: Sound: cowbell partial balance (2.82x tolerance) — local voicing repair *(curated)* *(held)*
 - **#336**: Sound: rimshot spectrum, maracas envelope/band balance, and hat/cymbal qualification — cover every advertised drum *(curated)* *(held)*
 - **#337**: Sound: mono character — oscillator mixtures, drift, drive/resonance, envelope response; M1A as a phase-aware question *(curated)* *(held)*
-- **#338**: Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement *(curated)* *(held)*
 - **#350**: Qualify the drum modal-bank floor-arithmetic deadband across production tails *(curated)*
 - **#353**: Harvest the finished half-slot route: one command, four files, one DAG node *(curated)* *(held)*
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override) *(curated)*
@@ -124,22 +123,20 @@ Issues carrying `loom:curated`.
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)* *(held)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)* *(held)*
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig) *(curated)*
-- **#787**: Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run" *(curated)*
-- **#808**: Route ladder_dp to completion with the unpatched netlist on the build box: DRT-0305's cause is measured gone, the error is not re-observed *(curated)* *(held)*
-- **#826**: compile_dag --only: a named node that cannot run is skipped SILENTLY (exit 0, no line) *(curated)*
-- **#829**: Run `make reference-integration` on the box: verify_109_claims' real-reference half has never been exercised against the real Fischer corpus *(curated)* *(held)*
+- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)* *(held)*
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
-- **#856**: Provision the pinned build box for this checkout: no .env, no remote.env, and the dispatch worker's AWS identity has no EC2 access *(curated)* *(held)*
 - **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)* *(held)*
-- **#888**: Post the #12307 correction of record as a comment on OpenROAD#12303 *(curated)* *(held)*
 - **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)* *(held)*
-- **#912**: Five more JSON-refusal handlers miss UnicodeDecodeError: the #909 gap generalises past load_json_refused *(curated)* *(held)*
 - **#922**: Tracked-JSON truncate-then-write remains in holdout.py (ledger + seals) and measure_m1a_volume_mapping.py *(curated)*
 - **#933**: regenerate discrimination artefacts under the six-bucket MPD grouping (follow-up to #929) *(curated)* *(held)*
 - **#947**: Atomic-write remainder: 23 tracked JSONs still written truncate-then-write (audit of #922) *(curated)*
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
-- **#971**: compile_dag: docs/capability-dag.md and test_compile_dag_deps.py still state the pre-#791 'EXISTS ONLY returns pass' behaviour as current *(curated)*
-- **#976**: compile_dag: run_evidence()'s EVIDENCE_PRECEDENCE refusal ships without the input that defeats it *(curated)*
+- **#1018**: Confirm WORK_PLAN.md's as-of sentence survives Guide regeneration, and reconcile it with the inbound upstream in-region stamp *(curated)* *(held)*
+- **#1022**: analyze_def_sites: the DEF path-point extension is recorded but never applied to the emitted rect, nor surfaced in the record *(curated)*
+- **#1023**: docs/tool-findings.md carries zero claim markers, so its route-record figures have nothing re-deriving them *(curated)*
+- **#1030**: analyze_def_sites: a skip-keyword's NAME argument after a path's points becomes a phantom via (same class as #1013/#1021, via branch not width branch) *(curated)*
+- **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md) *(curated)* *(held)*
+- **#1034**: analyze_def_sites: '+ NONDEFAULTRULE <name>' after a path's points makes the keyword a phantom via (the spelling #1030 left out of scope) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -153,7 +150,6 @@ Issues carrying `loom:curated`.
 - **#800**: Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site *(hermit)* *(held)*
 - **#812**: verify-fast re-runs 40 test files that sibling jobs in the same workflow already collect wholesale, on the stale premise that no CI job does *(hermit)* *(held)*
 - **#817**: Consolidate the seven WAV readers: four conventions, and two answer 96 dB wrong on a 24-bit file instead of refusing *(hermit)* *(held)*
-- **#975**: Remove tools/ring_ratio_compare.py: one-shot #548 before/after harness, nothing references it *(hermit)*
 
 ## Epics
 
@@ -167,11 +163,11 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
 | Important | 6 |
-| Ready (`loom:issue`) | 5 |
-| In Progress (`loom:building`) | 13 |
+| Ready (`loom:issue`, net of holds/building/merge-pending) | 4 |
+| In Progress (`loom:building`) | 14 |
 | PRs awaiting review | 4 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 67 |
-| Architect / Hermit proposals | 11 |
+| Curated | 64 |
+| Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->

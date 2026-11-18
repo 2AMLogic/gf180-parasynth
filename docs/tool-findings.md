@@ -188,9 +188,10 @@ and signal srcs"** -- neither bucket is forced.
 deliberately not collected by the original job, so #1006 re-ran the route
 at the *same* klt -- same pinned heavy AMI (`ami-08688417b66e0c74d`, klt
 0.9.0, Yosys 0.68+, OpenROAD `26Q4-1310`, ciel 3.2.0, 16 vCPU, PDK pin
-`54435919…`, source netlist sha `a3f5d1ad…`; committed as
-`route_def_manifest.json`, the re-run's own tool probe and sha256
-bindings, so this chain is bound in-repo #1011) -- as job
+`54435919…`, source netlist sha `a3f5d1ad…`; the tool probe, `nproc` and
+the PDK pin are committed in `route_def_manifest.json` with the re-run's
+sha256 bindings, but the AMI id and the re-run's netlist sha stay prose,
+not bound in-repo #1011) -- as job
 `rs-parasynth808-def1006c-s00`, and it **reproduced the original route**:
 the re-run's `ladder_dp_route_drc.rpt` is byte-identical to the committed
 record's binding (`be35b9d9…`), its DEF is the original's exact byte size,
