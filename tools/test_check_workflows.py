@@ -23,6 +23,7 @@ import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import check_workflows as cw                                        # noqa: E402
+import push_dag_records as pdr                                      # noqa: E402
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 RUNGS = REPO / ".github" / "workflows" / "rungs.yml"
@@ -372,6 +373,33 @@ def test_main_exits_1_on_a_dangling_path(monkeypatch):
     monkeypatch.setattr(cw, "tracked_files", lambda: TRACKED)
     assert cw.main() == 1
 
+
+# =============================================================================
+# #787: the nightly now pushes its own records commit to main. dag.yml skips
+# any push whose head commit message contains `[dag]` -- that guard is what
+# stops the nightly's push from re-triggering the per-push job into a commit
+# loop. The coupling is only as strong as the two strings staying in step
+# (rule 8: the input that defeats the guard is a reworded subject), so pin
+# both sides of the contract against the real files.
+# =============================================================================
+def test_every_commit_the_nightly_pushes_carries_the_dag_guard_string():
+    nightly = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "nightly.yml").read_text())
+    runs = [str(s.get("run", ""))
+            for j in (nightly.get("jobs") or {}).values()
+            for s in (j.get("steps") or []) if isinstance(s, dict)]
+    assert any("tools/push_dag_records.py" in r for r in runs), \
+        "nightly.yml no longer drives the records-commit tool"
+
+    # The commit moved out of the YAML into the tool during #818's retry fix,
+    # so the guard pins the tool's COMMIT_SUBJECT constant rather than scraped
+    # YAML: a reworded subject would defeat dag.yml's guard silently.
+    assert "[dag]" in pdr.COMMIT_SUBJECT, \
+        "the nightly commit's [dag] guard string was removed or reworded"
+
+    dag = yaml.safe_load((REPO / ".github" / "workflows" / "dag.yml").read_text())
+    guard = str((dag.get("jobs") or {}).get("regenerate", {}).get("if", ""))
+    assert "[dag]" in guard, "dag.yml's own-commit guard has been removed or reworded"
 # =============================================================================
 # The shipped #906 order itself (#940): check-before-run inside rungs.yml's
 # "the roadmap matches the evidence" step, and check-before-record across
