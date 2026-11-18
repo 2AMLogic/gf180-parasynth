@@ -512,12 +512,14 @@ def test_conclusion_two_instant_cb_control():
     runs to 588.7 ms of a 600 ms window`) while the detail line measures
     both instants. Green when the quoted end matches the detail's
     `latest` -- with the unquoted start skipped EXPLICITLY via the
-    NOT_QUOTED sentinel, not by None-luck. Both injected defects drive the
-    SHIPPED comparison (`_assert_extents_agree`), not a re-typed copy:
-    red on the END comparison when the prose end drifts, and red on the
-    skip-legitimacy assertion when the prose drops the end figure
-    entirely (#988's class, invisible to a conclusion-side-only skip).
-    Its first state, run against the pre-fix
+    NOT_QUOTED sentinel, not by None-luck. All three injected defects
+    drive the SHIPPED comparison (`_assert_extents_agree`), not a
+    re-typed copy: red on the END comparison when the prose end drifts,
+    red on the skip-legitimacy assertion when the prose drops the end
+    figure entirely (#988's class, invisible to a conclusion-side-only
+    skip), and red on the start-skip legitimacy assertion when the prose
+    quotes no start against a detail that measured a single instant
+    (#1004). Its first state, run against the pre-fix
     `_conclusion_extent`, failed with the false
     `CB: CONCLUSION start None ms != detail 22.0 ms` -- #988's drift
     message with nothing drifted."""
@@ -557,6 +559,29 @@ def test_conclusion_two_instant_cb_control():
                   r"latest 588\.7 ms"):
         _assert_extents_agree("CB", _conclusion_extent(flat_drop, "CB"),
                               (window, t1, t2), flat_drop)
+
+    # Injected defect 3 (rule 8 for the `t2 is not None` half of the
+    # start-skip assertion, #1004): the CONCLUSION keeps the two-instant
+    # prose -- start unquoted, end quoted -- while the detail line
+    # measured only a single instant, so no two-instant record backs the
+    # skip. Measured RED on the #999 Judge probe (inputs reused here).
+    # The `voice == "CB"` half of that assertion is unreachable by
+    # construction -- the RS arms of `_conclusion_extent` never return
+    # NOT_QUOTED for start -- so it is deliberately not covered.
+    detail_single = (
+        f"CB {rel}: prepared record is 620.0 ms long; "
+        "1 of 8 probed instants in [0, 600] ms clear the joint floor "
+        "by 6 dB; earliest 22.0 ms")
+    flat_mismatch = f"{detail_single} {conclusion}"
+    ws, t1s, t2s = _detail_extent(flat_mismatch, "CB", rel)
+    assert (ws, t1s, t2s) == ("600", 22.0, None), \
+        f"single-instant detail parsed {(ws, t1s, t2s)!r}"
+    with pytest.raises(
+            AssertionError,
+            match=r"CONCLUSION quotes no start, but the detail is not a "
+                  r"two-instant CB record"):
+        _assert_extents_agree("CB", _conclusion_extent(flat_mismatch, "CB"),
+                              (ws, t1s, t2s), flat_mismatch)
 
 
 def test_conclusion_absent_on_half_run(tmp_path):
