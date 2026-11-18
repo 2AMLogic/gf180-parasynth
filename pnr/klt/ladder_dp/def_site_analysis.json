@@ -1,0 +1,3126 @@
+{
+  "schema_version": 1,
+  "what": "Design-versus-router evidence for the residual route DRC sites, read from the routed DEF (#1006). Evidence, not a verdict: per-site geometry records; docs/tool-findings.md concludes on these.",
+  "inputs": {
+    "def": {
+      "path": "/tmp/ps1006-rerun-c/s00/files/pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp.def",
+      "sha256": "sha256:d79d83d45ea2040ee29b642a276b00d1f41529656b0075ef26cebf7732b618b7"
+    },
+    "drc_report": {
+      "path": "/tmp/ps1006-rerun-c/s00/files/pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_route_drc.rpt",
+      "sha256": "sha256:be35b9d9bc4ec0ea6cc4525afa5e4ce37abbb4410b2f4e912cae8903ca8e3bbe"
+    },
+    "par_response": {
+      "path": "/tmp/ps1006-rerun-c/s00/files/pnr/klt/ladder_dp/par_response.json",
+      "sha256": "sha256:c254fe4ecb45a4c3136b49d44ac42f64fceb4a10523ea860d277238253fce15d"
+    }
+  },
+  "source_job": "rs-parasynth808-def1006c-s00",
+  "def_parse": {
+    "units_distance_microns": 2000,
+    "sections_found": [
+      "specialnets",
+      "nets"
+    ],
+    "nets_parsed": 5673,
+    "specialnets_parsed": 2,
+    "via_definitions_parsed": 4,
+    "unparsed_tokens": 452,
+    "unparsed_samples": [
+      {
+        "net": "clk",
+        "token": "NONDEFAULTRULE"
+      },
+      {
+        "net": "clk",
+        "token": "CTS_NDR_0"
+      },
+      {
+        "net": "clk",
+        "token": "("
+      },
+      {
+        "net": "clk",
+        "token": "*"
+      },
+      {
+        "net": "clk",
+        "token": "0"
+      },
+      {
+        "net": "clk",
+        "token": ")"
+      },
+      {
+        "net": "clknet_0_clk",
+        "token": "NONDEFAULTRULE"
+      },
+      {
+        "net": "clknet_0_clk",
+        "token": "CTS_NDR_0"
+      },
+      {
+        "net": "g[0]",
+        "token": "("
+      },
+      {
+        "net": "g[0]",
+        "token": "*"
+      },
+      {
+        "net": "g[0]",
+        "token": "0"
+      },
+      {
+        "net": "g[0]",
+        "token": ")"
+      },
+      {
+        "net": "g[10]",
+        "token": "("
+      },
+      {
+        "net": "g[10]",
+        "token": "*"
+      },
+      {
+        "net": "g[10]",
+        "token": "0"
+      },
+      {
+        "net": "g[10]",
+        "token": ")"
+      },
+      {
+        "net": "g[11]",
+        "token": "("
+      },
+      {
+        "net": "g[11]",
+        "token": "*"
+      },
+      {
+        "net": "g[11]",
+        "token": "0"
+      },
+      {
+        "net": "g[11]",
+        "token": ")"
+      }
+    ]
+  },
+  "power_nets": [
+    "VDD",
+    "VSS"
+  ],
+  "window_um": 1.0,
+  "drc_summary": {
+    "total_records": 24,
+    "distinct_sites": 24
+  },
+  "verdict_counts": {
+    "fill_wire_spaced": 24
+  },
+  "sites": [
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04365_ net:VSS",
+      "bbox": "(23.9400, 113.0300) - (24.2200, 113.2980)",
+      "layer": "Metal2",
+      "nets": [
+        "_04365_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_04365_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            46920,
+            226596,
+            51640,
+            228124
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            48488,
+            226596,
+            49048,
+            227356
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            48488,
+            226852,
+            49048,
+            227612
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            48744,
+            226852,
+            49304,
+            227612
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            48744,
+            226596,
+            49304,
+            227356
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            48744,
+            227108,
+            49304,
+            227868
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            48488,
+            227108,
+            49048,
+            227868
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            49000,
+            227108,
+            49560,
+            227868
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_04365_": {
+          "wires": 2,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _04365_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_03972_ net:VSS",
+      "bbox": "(24.5000, 90.5420) - (24.7800, 90.8100)",
+      "layer": "Metal2",
+      "nets": [
+        "_03972_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_03972_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            46920,
+            179556,
+            51640,
+            181084
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            49512,
+            180324,
+            50072,
+            181084
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            49256,
+            180324,
+            49816,
+            181084
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            49000,
+            180324,
+            49560,
+            181084
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            48744,
+            180324,
+            49304,
+            181084
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            48488,
+            180324,
+            49048,
+            181084
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            49512,
+            180068,
+            50072,
+            180828
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            49256,
+            180068,
+            49816,
+            180828
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_03972_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _03972_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_03824_ net:VSS",
+      "bbox": "(68.2600, 50.3100) - (68.4600, 50.5780)",
+      "layer": "Metal2",
+      "nets": [
+        "_03824_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_03824_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            136520,
+            101156,
+            141240,
+            102684
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            138088,
+            101924,
+            138648,
+            102684
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            138088,
+            101668,
+            138648,
+            102428
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            138088,
+            101412,
+            138648,
+            102172
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            138088,
+            101156,
+            138648,
+            101916
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            138344,
+            101924,
+            138904,
+            102684
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            138344,
+            101668,
+            138904,
+            102428
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            138344,
+            101412,
+            138904,
+            102172
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_03824_": {
+          "wires": 2,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 1
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _03824_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04673_ net:VSS",
+      "bbox": "(68.7400, 239.5020) - (69.0200, 239.7700)",
+      "layer": "Metal2",
+      "nets": [
+        "_04673_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_04673_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            136520,
+            477476,
+            141240,
+            479004
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            138088,
+            478244,
+            138648,
+            479004
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            138088,
+            477988,
+            138648,
+            478748
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            138344,
+            478244,
+            138904,
+            479004
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            138344,
+            477988,
+            138904,
+            478748
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            138344,
+            477732,
+            138904,
+            478492
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            138088,
+            477732,
+            138648,
+            478492
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            138600,
+            478244,
+            139160,
+            479004
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_04673_": {
+          "wires": 2,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _04673_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04667_ net:VSS",
+      "bbox": "(69.3000, 277.6700) - (69.5800, 277.9380)",
+      "layer": "Metal2",
+      "nets": [
+        "_04667_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_04667_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            136520,
+            555876,
+            141240,
+            557404
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            139112,
+            555876,
+            139672,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            138856,
+            555876,
+            139416,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            138600,
+            555876,
+            139160,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            138344,
+            555876,
+            138904,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            138088,
+            555876,
+            138648,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            139112,
+            556132,
+            139672,
+            556892
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            138856,
+            556132,
+            139416,
+            556892
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_04667_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _04667_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_03141_ net:VSS",
+      "bbox": "(113.0600, 4.3020) - (113.2600, 4.5700)",
+      "layer": "Metal2",
+      "nets": [
+        "_03141_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_03141_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            226120,
+            7076,
+            230840,
+            8604
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            227688,
+            7844,
+            228248,
+            8604
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            227688,
+            7588,
+            228248,
+            8348
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            227688,
+            7332,
+            228248,
+            8092
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            227688,
+            7076,
+            228248,
+            7836
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            227944,
+            7844,
+            228504,
+            8604
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            227944,
+            7588,
+            228504,
+            8348
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            227944,
+            7332,
+            228504,
+            8092
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_03141_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _03141_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04387_ net:VSS",
+      "bbox": "(113.5400, 137.5820) - (113.8200, 137.8500)",
+      "layer": "Metal2",
+      "nets": [
+        "_04387_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_04387_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            226120,
+            273636,
+            230840,
+            275164
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            227688,
+            274404,
+            228248,
+            275164
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            227688,
+            274148,
+            228248,
+            274908
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            227944,
+            274404,
+            228504,
+            275164
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            227944,
+            274148,
+            228504,
+            274908
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            227944,
+            273892,
+            228504,
+            274652
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            227688,
+            273892,
+            228248,
+            274652
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            228200,
+            274404,
+            228760,
+            275164
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_04387_": {
+          "wires": 2,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _04387_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04510_ net:VSS",
+      "bbox": "(115.2200, 325.7420) - (115.4200, 325.8800)",
+      "layer": "Metal2",
+      "nets": [
+        "_04510_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_04510_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            226120,
+            649956,
+            230840,
+            651484
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            228712,
+            650724,
+            229272,
+            651484
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            228712,
+            650468,
+            229272,
+            651228
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            228712,
+            650212,
+            229272,
+            650972
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            228712,
+            649956,
+            229272,
+            650716
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            228456,
+            650724,
+            229016,
+            651484
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            228456,
+            650468,
+            229016,
+            651228
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            228456,
+            650212,
+            229016,
+            650972
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_04510_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 1
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _04510_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02579_ net:VSS",
+      "bbox": "(158.9000, 277.8000) - (159.1800, 277.9380)",
+      "layer": "Metal2",
+      "nets": [
+        "_02579_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_02579_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            315720,
+            555876,
+            320440,
+            557404
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            318312,
+            555876,
+            318872,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            318056,
+            555876,
+            318616,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            317800,
+            555876,
+            318360,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            317544,
+            555876,
+            318104,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            317288,
+            555876,
+            317848,
+            556636
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            318312,
+            556132,
+            318872,
+            556892
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            318056,
+            556132,
+            318616,
+            556892
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_02579_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 1
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _02579_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_00306_ net:VSS",
+      "bbox": "(204.2600, 136.5500) - (204.5400, 136.8180)",
+      "layer": "Metal2",
+      "nets": [
+        "_00306_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_00306_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            405320,
+            273636,
+            410040,
+            275164
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            407912,
+            273636,
+            408472,
+            274396
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            407912,
+            273892,
+            408472,
+            274652
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            407656,
+            273892,
+            408216,
+            274652
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            407656,
+            273636,
+            408216,
+            274396
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            407912,
+            274148,
+            408472,
+            274908
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            407656,
+            274148,
+            408216,
+            274908
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            407400,
+            274148,
+            407960,
+            274908
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_00306_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _00306_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_01600_ net:VSS",
+      "bbox": "(247.4600, 74.8620) - (247.6600, 75.1300)",
+      "layer": "Metal2",
+      "nets": [
+        "_01600_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_01600_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            494920,
+            148196,
+            499640,
+            149724
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            496488,
+            148964,
+            497048,
+            149724
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            496488,
+            148708,
+            497048,
+            149468
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            496488,
+            148452,
+            497048,
+            149212
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            496488,
+            148196,
+            497048,
+            148956
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            496744,
+            148964,
+            497304,
+            149724
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            496744,
+            148708,
+            497304,
+            149468
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            496744,
+            148452,
+            497304,
+            149212
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_01600_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 1
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _01600_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04110_ net:VSS",
+      "bbox": "(247.9400, 231.6620) - (248.2200, 231.9300)",
+      "layer": "Metal2",
+      "nets": [
+        "_04110_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_04110_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            494920,
+            461796,
+            499640,
+            463324
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            496488,
+            462564,
+            497048,
+            463324
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            496488,
+            462308,
+            497048,
+            463068
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            496744,
+            462564,
+            497304,
+            463324
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            496744,
+            462308,
+            497304,
+            463068
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            496744,
+            462052,
+            497304,
+            462812
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            496488,
+            462052,
+            497048,
+            462812
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            497000,
+            462564,
+            497560,
+            463324
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_04110_": {
+          "wires": 2,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _04110_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04090_ net:VSS",
+      "bbox": "(292.2600, 247.3420) - (292.4600, 247.6100)",
+      "layer": "Metal2",
+      "nets": [
+        "_04090_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_04090_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            584520,
+            493156,
+            589240,
+            494684
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            586088,
+            493924,
+            586648,
+            494684
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            586088,
+            493668,
+            586648,
+            494428
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            586088,
+            493412,
+            586648,
+            494172
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            586088,
+            493156,
+            586648,
+            493916
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            586344,
+            493924,
+            586904,
+            494684
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            586344,
+            493668,
+            586904,
+            494428
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            586344,
+            493412,
+            586904,
+            494172
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_04090_": {
+          "wires": 2,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _04090_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02803_ net:VSS",
+      "bbox": "(292.2600, 310.0620) - (292.4600, 310.3300)",
+      "layer": "Metal2",
+      "nets": [
+        "_02803_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_02803_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            584520,
+            618596,
+            589240,
+            620124
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            586088,
+            619364,
+            586648,
+            620124
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            586088,
+            619108,
+            586648,
+            619868
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            586088,
+            618852,
+            586648,
+            619612
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            586088,
+            618596,
+            586648,
+            619356
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            586344,
+            619364,
+            586904,
+            620124
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            586344,
+            619108,
+            586904,
+            619868
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            586344,
+            618852,
+            586904,
+            619612
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_02803_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _02803_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_00146_ net:VSS",
+      "bbox": "(292.7400, 200.3020) - (293.0200, 200.5700)",
+      "layer": "Metal2",
+      "nets": [
+        "_00146_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_00146_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            584520,
+            399076,
+            589240,
+            400604
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            586088,
+            399844,
+            586648,
+            400604
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            586088,
+            399588,
+            586648,
+            400348
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            586344,
+            399844,
+            586904,
+            400604
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            586344,
+            399588,
+            586904,
+            400348
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            586344,
+            399332,
+            586904,
+            400092
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            586088,
+            399332,
+            586648,
+            400092
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            586600,
+            399844,
+            587160,
+            400604
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_00146_": {
+          "wires": 2,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _00146_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_03409_ net:VSS",
+      "bbox": "(292.7400, 371.7500) - (293.0200, 372.0180)",
+      "layer": "Metal2",
+      "nets": [
+        "_03409_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_03409_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            584520,
+            744036,
+            589240,
+            745564
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            586088,
+            744036,
+            586648,
+            744796
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            586088,
+            744292,
+            586648,
+            745052
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            586344,
+            744292,
+            586904,
+            745052
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            586344,
+            744036,
+            586904,
+            744796
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            586344,
+            744548,
+            586904,
+            745308
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            586088,
+            744548,
+            586648,
+            745308
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            586600,
+            744548,
+            587160,
+            745308
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_03409_": {
+          "wires": 3,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _03409_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_05021_ net:VSS",
+      "bbox": "(293.8600, 396.3020) - (294.1400, 396.5700)",
+      "layer": "Metal2",
+      "nets": [
+        "_05021_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_05021_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            584520,
+            791076,
+            589240,
+            792604
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            587112,
+            791844,
+            587672,
+            792604
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            587112,
+            791588,
+            587672,
+            792348
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            586856,
+            791844,
+            587416,
+            792604
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            586856,
+            791588,
+            587416,
+            792348
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            587112,
+            791332,
+            587672,
+            792092
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            586856,
+            791332,
+            587416,
+            792092
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            586600,
+            791844,
+            587160,
+            792604
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_05021_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 1
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _05021_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_01263_ net:VSS",
+      "bbox": "(337.5400, 18.9500) - (337.8200, 19.2180)",
+      "layer": "Metal2",
+      "nets": [
+        "_01263_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_01263_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            674120,
+            38436,
+            678840,
+            39964
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            675688,
+            38436,
+            676248,
+            39196
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            675688,
+            38692,
+            676248,
+            39452
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            675944,
+            38692,
+            676504,
+            39452
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            675944,
+            38436,
+            676504,
+            39196
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            675944,
+            38948,
+            676504,
+            39708
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            675688,
+            38948,
+            676248,
+            39708
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            676200,
+            38948,
+            676760,
+            39708
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_01263_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _01263_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02074_ net:VSS",
+      "bbox": "(337.5400, 145.4220) - (337.8200, 145.6900)",
+      "layer": "Metal2",
+      "nets": [
+        "_02074_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_02074_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            674120,
+            289316,
+            678840,
+            290844
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            675688,
+            290084,
+            676248,
+            290844
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            675688,
+            289828,
+            676248,
+            290588
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            675944,
+            290084,
+            676504,
+            290844
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            675944,
+            289828,
+            676504,
+            290588
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            675944,
+            289572,
+            676504,
+            290332
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            675688,
+            289572,
+            676248,
+            290332
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            676200,
+            290084,
+            676760,
+            290844
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_02074_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 1
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _02074_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_00879_ net:VSS",
+      "bbox": "(338.1000, 387.4300) - (338.3800, 387.6980)",
+      "layer": "Metal2",
+      "nets": [
+        "_00879_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_00879_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            674120,
+            775396,
+            678840,
+            776924
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            676712,
+            775396,
+            677272,
+            776156
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            676456,
+            775396,
+            677016,
+            776156
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            676200,
+            775396,
+            676760,
+            776156
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            675944,
+            775396,
+            676504,
+            776156
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            675688,
+            775396,
+            676248,
+            776156
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            676712,
+            775652,
+            677272,
+            776412
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            676456,
+            775652,
+            677016,
+            776412
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_00879_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 1
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _00879_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02095_ net:VSS",
+      "bbox": "(381.8600, 121.9020) - (382.0600, 122.1700)",
+      "layer": "Metal2",
+      "nets": [
+        "_02095_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_02095_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            763720,
+            242276,
+            768440,
+            243804
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            765288,
+            243044,
+            765848,
+            243804
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            765288,
+            242788,
+            765848,
+            243548
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            765288,
+            242532,
+            765848,
+            243292
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1168,
+          "rect": [
+            765288,
+            242276,
+            765848,
+            243036
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            765544,
+            243044,
+            766104,
+            243804
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            765544,
+            242788,
+            766104,
+            243548
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 1424,
+          "rect": [
+            765544,
+            242532,
+            766104,
+            243292
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_02095_": {
+          "wires": 1,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _02095_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02142_ net:VSS",
+      "bbox": "(382.3400, 191.4300) - (382.6200, 191.6980)",
+      "layer": "Metal2",
+      "nets": [
+        "_02142_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_02142_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            763720,
+            383396,
+            768440,
+            384924
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 48,
+          "rect": [
+            765288,
+            383396,
+            765848,
+            384156
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            765288,
+            383652,
+            765848,
+            384412
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            765544,
+            383652,
+            766104,
+            384412
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 304,
+          "rect": [
+            765544,
+            383396,
+            766104,
+            384156
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            765544,
+            383908,
+            766104,
+            384668
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 512,
+          "rect": [
+            765288,
+            383908,
+            765848,
+            384668
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 560,
+          "rect": [
+            765800,
+            383908,
+            766360,
+            384668
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_02142_": {
+          "wires": 2,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _02142_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_00949_ net:VSS",
+      "bbox": "(382.9000, 293.4800) - (383.1800, 293.6180)",
+      "layer": "Metal2",
+      "nets": [
+        "_00949_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_00949_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            763720,
+            587236,
+            768440,
+            588764
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            766312,
+            587236,
+            766872,
+            587996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            766056,
+            587236,
+            766616,
+            587996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            765800,
+            587236,
+            766360,
+            587996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            765544,
+            587236,
+            766104,
+            587996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            765288,
+            587236,
+            765848,
+            587996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            766312,
+            587492,
+            766872,
+            588252
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            766056,
+            587492,
+            766616,
+            588252
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_00949_": {
+          "wires": 3,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 0
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _00949_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_01921_ net:VSS",
+      "bbox": "(427.7000, 97.3500) - (427.9800, 97.6180)",
+      "layer": "Metal2",
+      "nets": [
+        "_01921_",
+        "VSS"
+      ],
+      "signal_nets": [
+        "_01921_"
+      ],
+      "power_nets": [
+        "VSS"
+      ],
+      "power_shapes_in_window": [
+        {
+          "net": "VSS",
+          "origin": "wire",
+          "shape": "DRCFILL",
+          "gap_dbu": 0,
+          "rect": [
+            853320,
+            195236,
+            858040,
+            196764
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            855912,
+            195236,
+            856472,
+            195996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            855656,
+            195236,
+            856216,
+            195996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            855400,
+            195236,
+            855960,
+            195996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            855144,
+            195236,
+            855704,
+            195996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 0,
+          "rect": [
+            854888,
+            195236,
+            855448,
+            195996
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            855912,
+            195492,
+            856472,
+            196252
+          ]
+        },
+        {
+          "net": "VSS",
+          "origin": "via_pad",
+          "via": "via2_3_8960_1200_1_1_256_256",
+          "gap_dbu": 256,
+          "rect": [
+            855656,
+            195492,
+            856216,
+            196252
+          ]
+        }
+      ],
+      "signal_shapes_in_window": {
+        "_01921_": {
+          "wires": 3,
+          "pads": 0,
+          "vias_resolved": 0,
+          "vias_unresolved": 1
+        }
+      },
+      "signal_overlaps_power": false,
+      "evidence": "nearest power Metal2 shape: origin=wire shape=DRCFILL, gap=0 dbu; signal _01921_ Metal2 shapes in window",
+      "verdict": "fill_wire_spaced"
+    }
+  ]
+}
