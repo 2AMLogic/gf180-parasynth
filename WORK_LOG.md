@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **PR #1042**: fix: refuse a second claim marker on one line instead of dropping it
+- **Issue #1041** (closed): check_doc_claims.py silently drops a second claim marker on the same line, so an unverified claim reports green
 - **Issue #1040** (closed): analyze_def_sites: read the kept DEF's extension-point census on the #1010 host (live-vs-latent, one command)
 - **PR #1039**: fix: a '+' in the DEF walk ends the layer-name position
 - **Issue #1037** (closed): analyze_def_sites: a skipped '+' does not end the LAYER-name position either (sibling of #1034)
