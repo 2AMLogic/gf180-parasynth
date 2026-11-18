@@ -336,6 +336,11 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
                     # via name directly follows a point and never a '+', so
                     # the keyword after it is not a via (#1034)
                     expect_via = False
+                    # ... and ends the layer-name position the same way:
+                    # DEF 5.8 regularWiring is ``+ ROUTED layerName``, the
+                    # layer directly after the path keyword, so the keyword
+                    # after a '+' is never a layer (#1037)
+                    expect_layer = False
                 if word in _SKIP_TOKENS_WITH_NUMERIC_ARG and i + 1 < len(toks):
                     # the keyword's own numeric argument rides with it --
                     # never left in the walk to be read as a width (#1021)
