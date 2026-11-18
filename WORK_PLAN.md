@@ -1,6 +1,6 @@
 # Work plan
 
-Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery.
+Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as this file's last commit — `git log -1 --format=%cs origin/main -- WORK_PLAN.md` — and a declined Guide regeneration does not advance it.
 
 <!-- guide:plan-body:start -->
 ## Operator Attention: Merge-Risk-Hold Pileup
