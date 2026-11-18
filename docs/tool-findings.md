@@ -186,12 +186,14 @@ collected (no DEF/ODB in the job outputs), so design-versus-router is
 **undetermined, with the reason recorded**, and the separate floorplan
 issue the criteria anticipate is *not* filed on this evidence.
 
-The 2026-11-14 lead above is resolved by the attributable route, not
-inherited: its *shape* (Metal Spacing, signal-vs-`VSS`, all `Metal2`,
-surviving every remaining iteration) is confirmed; its *count* (9) is
-superseded by 24, and its `fmax` 28.04 MHz and via/wirelength figures came
-from the unattributable container, so nothing else in that paragraph
-carries forward as evidence.
+The lead this resolves is the 2026-11-14 container sighting (#5726's shape:
+a route whose only record was an orphaned container, read as 9 residual
+Metal Spacing violations at fmax 28.04 MHz), resolved by the attributable
+route, not inherited: its *shape* (Metal Spacing, signal-vs-`VSS`, all
+`Metal2`, surviving every remaining iteration) is confirmed; its *count*
+(9) is superseded by 24, and its `fmax` 28.04 MHz and via/wirelength
+figures came from the unattributable container, so nothing else from that
+sighting carries forward as evidence.
 
 ### klayout-tools#5577 — `klt synthesize`'s netlist path carries a per-run uuid, so no committed `klt place-and-route` request can name it
 
