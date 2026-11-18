@@ -15,6 +15,12 @@ Four verdicts are pinned:
 * the same geometry but the violation site far away -> no power shapes, no
   verdict.
 
+And the fifth, the branch every real site in ``def_site_analysis.json``
+takes and the one the docs conclusion rests on: a ``+ SHAPE DRCFILL``
+landing strip -> ``fill_wire_spaced``. It was added after review because
+the fixture's plain Metal2 stripe exercised only ``power_wire_spaced`` --
+the verdict actually shipping for all 24 sites had no test.
+
 And the refusal path: a site whose bbox is not where any geometry lives, and
 inputs that are missing, must produce ``REFUSED``/no verdict rather than a
 half-answer.
@@ -34,6 +40,8 @@ UNITS = 1000
 #: Geometry by construction:
 #: * VSS M1 followpin (1000,1000)-(5000,1000) -- the ``*`` test;
 #: * VSS Metal2 stripe x=2000, y 1000..4000 -- a *wire* origin;
+#: * VSS Metal2 DRCFILL strip x=7000, y 1000..3000 -- a *fill-wire* origin,
+#:   the branch every real site takes (``fill_wire_spaced``);
 #: * VSS via land at (4500,1500): a placed via whose DEF definition carries an
 #:   Metal2 pad (4300..4700, 1300..1700) -- a *via_pad* origin;
 #: * VSS via placement at (3000,3000) whose definition is NOT in the DEF --
@@ -55,6 +63,7 @@ SPECIALNETS 1 ;
   - VSS ( * )
     + ROUTED Metal1 2000 + SHAPE FOLLOWPIN ( 1000 1000 ) ( 5000 * )
     + NEW Metal2 400 ( 2000 1000 ) ( * 4000 )
+    + NEW Metal2 400 + SHAPE DRCFILL ( 7000 1000 ) ( * 3000 )
     + NEW Metal2 400 ( 4500 1500 ) via_m2_land
     + NEW Metal2 400 ( 3000 3000 ) via_not_in_def
     ;
@@ -80,6 +89,7 @@ SITE_PAD = "(4.3000, 1.8000) - (4.5000, 2.0000)"  # abuts the via pad (gap 100)
 SITE_WIRE = "(2.2000, 2.0000) - (2.6000, 2.6000)"  # 200 dbu from the M2 stripe
 SITE_OVERLAP = "(1.9000, 2.4000) - (2.1000, 2.6000)"  # wire crosses the stripe
 SITE_FAR = "(40.0000, 40.0000) - (40.2000, 40.2000)"  # nothing within 1 um
+SITE_FILL = "(7.3000, 2.0000) - (7.5000, 2.4000)"  # 100 dbu from the DRCFILL strip
 
 
 def _drc(bboxes_and_srcs: list[tuple[str, str]]) -> dict:
@@ -117,6 +127,21 @@ def test_wire_geometry_reads_as_wire_origin() -> None:
     nearest = record["power_shapes_in_window"][0]
     # stripe centreline x=2000 at width 400 -> metal edge x=2200 = bbox x1
     assert nearest["origin"] == "wire" and nearest["gap_dbu"] == 0, nearest
+
+
+def test_a_drcfill_strip_is_fill_wire_spaced() -> None:
+    """The verdict every real site takes: nearest power shape is a DRCFILL wire.
+
+    The strip centreline x=7000 at width 400 -> metal edge x=7200; the bbox
+    starts at 7300, so the gap is 100 -- and the DRCFILL tag, not the wire
+    origin, is what names the verdict.
+    """
+    records = _analyse([(SITE_FILL, "_00146_ VSS")])
+    record = _site("fill_wire_spaced", records)
+    nearest = record["power_shapes_in_window"][0]
+    assert nearest["origin"] == "wire", nearest
+    assert nearest["shape"] == "DRCFILL", nearest
+    assert nearest["gap_dbu"] == 100, nearest
 
 
 def test_an_overlap_is_reported_as_router_overlap() -> None:

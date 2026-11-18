@@ -14,7 +14,13 @@ cross-binding that is checkable inside the repository:
    ``drc_report`` binding;
 3. the series' final value, both headline counts, and the classification
    record's ``drc_report.total_records`` are one number (24), so no reading of
-   the extract can quietly disagree with the committed classification.
+   the extract can quietly disagree with the committed classification;
+4. the DEF analysis consumed a report byte-identical to the committed
+   binding: ``def_site_analysis.json``'s ``drc_report`` sha256 equals the
+   extract's ``drc_report`` binding. That equality *is* the docs' "the
+   re-run reproduced the original route" sentence -- the re-run's report and
+   the original route's report are the same bytes -- so it is machine-checked
+   here rather than left as prose.
 
 What defeats this check, stated rather than left to be discovered
 (``docs/verification-rules.md`` rule 8): both sides live in the repo, so a
@@ -42,9 +48,12 @@ HERE = Path(__file__).resolve().parent
 
 EXTRACT = HERE / "route_drc_extract.json"
 CLASSIFICATION = HERE / "route_drc_classification.json"
+SITE_ANALYSIS = HERE / "def_site_analysis.json"
 
 
-def verify(extract: dict, classification: dict) -> list[str]:
+def verify(
+    extract: dict, classification: dict, site_analysis: dict
+) -> list[str]:
     """Return one string per failed check; empty list means all passed."""
     problems: list[str] = []
 
@@ -115,6 +124,23 @@ def verify(extract: dict, classification: dict) -> list[str]:
                 f"claimed final_value {final_value}"
             )
 
+    # 4. the reproduction claim: the DEF analysis's report is the committed
+    #    binding's bytes. If the two records ever disagree, "the re-run
+    #    reproduced the original route" is no longer true in-repo.
+    rerun_sha = ((site_analysis.get("inputs") or {}).get("drc_report") or {}).get(
+        "sha256"
+    ) or ""
+    rerun_sha = rerun_sha.strip()
+    if not rerun_sha:
+        problems.append("def_site_analysis record binds no sha256 for drc_report")
+    elif rerun_sha != rpt_binding:
+        problems.append(
+            f"reproduction claim fails: def_site_analysis drc_report "
+            f"{rerun_sha!r} != extract's committed binding {rpt_binding!r} "
+            f"(the re-run's report is no longer byte-identical to the "
+            f"original route's)"
+        )
+
     return problems
 
 
@@ -127,7 +153,11 @@ def main(argv: list[str] | None = None) -> int:
             classification_path = Path(argv[1])
 
     problems: list[str] = []
-    for label, path in (("extract", extract_path), ("classification", classification_path)):
+    for label, path in (
+        ("extract", extract_path),
+        ("classification", classification_path),
+        ("site analysis", SITE_ANALYSIS),
+    ):
         try:
             json.loads(Path(path).read_text())
         except OSError as exc:
@@ -142,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     problems = verify(
         json.loads(Path(extract_path).read_text()),
         json.loads(Path(classification_path).read_text()),
+        json.loads(SITE_ANALYSIS.read_text()),
     )
     if problems:
         for problem in problems:

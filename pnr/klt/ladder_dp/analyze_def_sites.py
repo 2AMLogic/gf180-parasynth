@@ -153,8 +153,9 @@ def parse_via_definitions(vias_body: str) -> dict[str, dict[str, list[tuple[int,
     return vias
 
 
-def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]:
-    """One ``NETS``/``SPECIALNETS`` body -> ({net: [shapes]}, unparsed count).
+def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int, list[dict[str, Any]]]:
+    """One ``NETS``/``SPECIALNETS`` body -> ({net: [shapes]}, unparsed count,
+    unparsed samples).
 
     Shapes carry ``kind`` (``wire``/``via``/``pad``), ``layer``, and integer
     DBU coordinates. A wire is a point pair on one path; a via is a via name

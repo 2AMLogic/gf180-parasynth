@@ -201,8 +201,12 @@ par response) reads it:
 - the VSS `Metal2` bounding **every one of the 24 sites** is **pdngen's own
   M1->M4 connect geometry**: the `add_pdn_connect -layers {Metal1 Metal4}
   -max_columns {5} -ongrid {Metal2 Metal3 Metal4}` via-column lands
-  (STRIPE-tagged via pads, gap 0-48 DBU at the bbox at 20 of 24 sites,
-  0.58 µm at the other 4) fused with the DRCFILL-tagged landing strips
+  (STRIPE-tagged via pads, per-site minimum via-pad gap 0-48 DBU at the
+  bbox at **17 of 24 sites**, 1168 DBU = 0.58 µm at **the other 7**;
+  measured two ways -- from the committed record, whose
+  `power_shapes_in_window` is sorted ascending before its 8-entry
+  truncation so each per-site minimum is exact, and untruncated from the
+  DEF -- and both give 17/7) fused with the DRCFILL-tagged landing strips
   pdngen draws over the same columns (gap **0** at all 24 -- the strip edge
   exactly bounds each bbox);
 - **both shapes pre-date detailed routing.** A cts-bounded re-run (job
@@ -213,9 +217,25 @@ par response) reads it:
   that writes special-net `Metal2`. The DRCFILL tag is pdngen's own labelling
   of its landing metal, recorded as found;
 - the router placed the signal side against this obstruction and could not
-  close the spacing across 60 iterations (0-48 DBU of actual gap against a
-  ~280 DBU rule). The router did not create the VSS metal it violates
-  against.
+  close the spacing across 60 iterations (per-site minimum via-pad gap
+  0-48 DBU at 17 of the 24 sites). The router did not create the VSS metal
+  it violates against. The governing `Metal2` spacing rule value is *not*
+  bound here -- no tech LEF was reachable on the hosts this record was
+  written on, so no rule number is asserted; what is measured is the gap
+  itself, per site, in `def_site_analysis.json`.
+
+Two limitations of the instrument, recorded rather than discovered later:
+`signal_overlaps_power` is a **lower bound** -- regular `NETS` carry no
+width in DEF, so signal wires are modelled as zero-width centrelines and
+real metal edges can overlap power where a centreline does not (nothing
+above rests on `overlap == false`); and the parser counts the DEF
+path-point extension form `( x y ext )` as **unparsed** -- the committed
+record's `def_parse` shows 452 unparsed tokens with samples in that shape,
+and every one of its `unparsed_samples` entries names a signal net while
+`specialnets_parsed` is 2 (the VSS side the conclusion reads). The
+token-level decomposition of those 452 and the section split behind it are
+measured on the DEF itself, which is not in-tree; see the follow-up issue
+for what was measured there.
 
 So design-versus-router resolves to **the PDN's**, and the separate
 floorplan issue #808's criteria anticipate is **filed on this evidence**
