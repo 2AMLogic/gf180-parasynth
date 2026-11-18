@@ -4,6 +4,12 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **PR #1019**: bind the DEF re-run evidence chain in-repo: commit route_def_manifest.json, regenerate def_site_analysis.json with totals, shape tags, overlap lower bound
+- **Issue #1011** (closed): Commit route_def_manifest.json and regenerate def_site_analysis.json's record fields against the kept DEF
+- **PR #1016**: docs: accept ladder_dp's 24 Metal2 PDN spacing sites as known-PDN residual
+- **Issue #1009** (closed): Floorplan/PDN: the M1->M4 via-column lands leave 24 Metal2 spacing violations in ladder_dp's finished route
+- **PR #1017**: parse the DEF path-point extension form ( x y ext ): record ext_start/ext_end, never consume it as width
+- **Issue #1013** (closed): analyze_def_sites: parse or refuse DEF path-point extension form ( x y ext )
 - **PR #1015**: docs: add static as-of instruction to WORK_PLAN.md header
 - **Issue #1014** (closed): WORK_PLAN.md carries no as-of date, so a reader cannot tell when a declined regeneration left it stale
 - **PR #1010**: bind the ladder_dp route-DRC claims in-repo and answer design-versus-router from the routed DEF
