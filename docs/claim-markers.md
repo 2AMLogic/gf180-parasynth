@@ -30,6 +30,12 @@ A marker inside a fenced code block or inline backticks is an **example**, not a
 claim, and is skipped — otherwise this document, which is nothing but examples,
 would be checked as a list of assertions.
 
+**One marker per line.** A second marker on the same line is `REFUSED`
+(naming file and line), never dropped and never parsed as a second claim: the
+report is keyed on `file:line`, and a silently ignored marker is
+indistinguishable from a claim nobody made (#1041). Put each marker on its own
+line.
+
 Syntax is `<!-- claim: key=value key="value with spaces" ... -->`, tokenised
 with `shlex`. **Exactly one** key must be a *kind*; the rest are modifiers or
 annotations. An unrecognised key is `REFUSED`, never ignored — a typo in a key

@@ -524,6 +524,33 @@ def test_iter_claim_markers_applies_both_skip_rules_once():
     assert found == [(1, "commit=abc"), (6, "grep=z")]
 
 
+def test_second_marker_on_one_line_is_refused_not_dropped(tmp_path):
+    """#1041 control: a satisfiable marker followed by an unsatisfiable one on
+    the SAME line. Before the fix the second was never parsed (`search`, not
+    `finditer`): rc 0, one claim counted. It must now be counted and REFUSED,
+    and the iterator both readers share must yield both."""
+    doc = tmp_path / "d.md"
+    doc.write_text(
+        "A <!-- claim: commit=HEAD --> and B "
+        "<!-- claim: grep='NO_SUCH_KEY' in=nope.json -->\n")
+    assert [m.group("body") for _, _, m in
+            cdc.iter_claim_markers(doc.read_text().splitlines())] == \
+        ["commit=HEAD", "grep='NO_SUCH_KEY' in=nope.json"]
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 2
+    assert got[0].status != cdc.REFUSED or "second claim marker" not in got[0].detail
+    assert got[1].status == cdc.REFUSED
+    assert "second claim marker" in got[1].detail
+    assert got[1].where.endswith("d.md:1")
+
+
+def test_second_marker_in_backticks_is_still_an_example(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("A <!-- claim: commit=HEAD --> and `<!-- claim: grep=x -->`\n"
+                   "```\nB <!-- claim: grep=y --> <!-- claim: grep=z -->\n```\n")
+    assert [c.raw for c in cdc.find_claims(doc)] == ["commit=HEAD"]
+
+
 def test_markers_are_found_with_the_prose_they_back(tmp_path):
     doc = tmp_path / "d.md"
     doc.write_text("\n".join([
