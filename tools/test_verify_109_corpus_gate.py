@@ -437,6 +437,40 @@ def _conclusion_extent(flat: str, voice: str):
     return window, NOT_QUOTED, float(m.group(1))
 
 
+def _assert_extents_agree(voice, c_extent, d_extent, flat):
+    """The shipped CONCLUSION-vs-detail comparison, shared by the corpus
+    test and its controls so a control drives the comparison that ships
+    (#999 review), not a re-typed copy of it. The window must match, and a
+    quoted figure must equal the detail's measurement. A skipped comparison
+    is ASSERTED legitimate, not just skipped: the four arms of
+    `_conclusion_extent` make the legitimate shapes exact, so an unquoted
+    start is legal only for the two-instant CB prose (which quotes only
+    the end) and an unquoted end only when the detail measured a single
+    instant (t2 is None). Without that companion assertion, prose that
+    silently drops one of its own run's figures would pass -- #988's
+    defect class, the thing this gate exists to catch."""
+    c_window, c_t1, c_t2 = c_extent
+    window, t1, t2 = d_extent
+    assert c_window == window, \
+        f"{voice}: CONCLUSION window {c_window} ms != detail {window} ms"
+    if c_t1 is NOT_QUOTED:
+        assert voice == "CB" and t2 is not None, \
+            (f"{voice}: CONCLUSION quotes no start, but the detail is not a "
+             f"two-instant CB record (earliest={t1}, latest={t2})")
+    else:
+        assert c_t1 == t1, \
+            f"{voice}: CONCLUSION start {c_t1} ms != detail {t1} ms\n{flat[-800:]}"
+    if c_t2 is NOT_QUOTED:
+        assert t2 is None, \
+            (f"{voice}: CONCLUSION quotes no end, but the detail measured "
+             f"latest {t2} ms -- the prose dropped a figure its own run "
+             f"produced (#988's defect class)")
+    else:
+        assert c_t2 == t2, \
+            (f"{voice}: CONCLUSION end {c_t2} ms != detail {t2} ms -- the "
+             f"prose drifted from its own run (#988's defect class)\n{flat[-800:]}")
+
+
 def test_conclusion_figures_match_detail_lines(tmp_path):
     """#988's start-red control: on a synthetic reference whose measured
     extents differ from the old hard-coded prose (RS `~41 ms`, CB
@@ -463,16 +497,8 @@ def test_conclusion_figures_match_detail_lines(tmp_path):
     for voice in ("RS", "CB"):
         rel = rc.REF_MAIN[voice][0]
         window, t1, t2 = _detail_extent(flat, voice, rel)
-        c_window, c_t1, c_t2 = _conclusion_extent(flat, voice)
-        assert c_window == window, \
-            f"{voice}: CONCLUSION window {c_window} ms != detail {window} ms"
-        if c_t1 is not NOT_QUOTED:
-            assert c_t1 == t1, \
-                f"{voice}: CONCLUSION start {c_t1} ms != detail {t1} ms\n{flat[-800:]}"
-        if c_t2 is not NOT_QUOTED:
-            assert c_t2 == t2, \
-                (f"{voice}: CONCLUSION end {c_t2} ms != detail {t2} ms -- the "
-                 f"prose drifted from its own run (#988's defect class)\n{flat[-800:]}")
+        _assert_extents_agree(voice, _conclusion_extent(flat, voice),
+                              (window, t1, t2), flat)
         # The injected-drift control: neither old hard-coded literal may
         # survive anywhere in the CONCLUSION, whatever this run measured.
         for stale in ("~41 ms", "~589 ms"):
@@ -486,8 +512,12 @@ def test_conclusion_two_instant_cb_control():
     runs to 588.7 ms of a 600 ms window`) while the detail line measures
     both instants. Green when the quoted end matches the detail's
     `latest` -- with the unquoted start skipped EXPLICITLY via the
-    NOT_QUOTED sentinel, not by None-luck; red on the END comparison when
-    the prose end drifts. Its first state, run against the pre-fix
+    NOT_QUOTED sentinel, not by None-luck. Both injected defects drive the
+    SHIPPED comparison (`_assert_extents_agree`), not a re-typed copy:
+    red on the END comparison when the prose end drifts, and red on the
+    skip-legitimacy assertion when the prose drops the end figure
+    entirely (#988's class, invisible to a conclusion-side-only skip).
+    Its first state, run against the pre-fix
     `_conclusion_extent`, failed with the false
     `CB: CONCLUSION start None ms != detail 22.0 ms` -- #988's drift
     message with nothing drifted."""
@@ -501,20 +531,32 @@ def test_conclusion_two_instant_cb_control():
     window, t1, t2 = _detail_extent(flat, "CB", rel)
     assert (window, t1, t2) == ("600", 22.0, 588.7)
     c_window, c_t1, c_t2 = _conclusion_extent(flat, "CB")
-    assert c_window == window
     assert c_t1 is NOT_QUOTED, \
         f"CB two-instant prose unexpectedly quotes a start: {c_t1!r}"
-    assert c_t2 == t2, f"CB: CONCLUSION end {c_t2} ms != detail {t2} ms"
+    _assert_extents_agree("CB", (c_window, c_t1, c_t2), (window, t1, t2), flat)
 
-    # Injected defect: the prose end drifts off the detail's `latest` --
+    # Injected defect 1: the prose end drifts off the detail's `latest` --
     # the comparison that must go red is the END one.
     flat_bad = flat.replace("runs to 588.7 ms of a 600 ms window",
                             "runs to 580.0 ms of a 600 ms window")
     with pytest.raises(AssertionError,
                        match=r"CONCLUSION end 580\.0 ms != detail 588\.7 ms"):
-        _, _, bad_end = _conclusion_extent(flat_bad, "CB")
-        assert bad_end == t2, \
-            f"CB: CONCLUSION end {bad_end} ms != detail {t2} ms"
+        _assert_extents_agree("CB", _conclusion_extent(flat_bad, "CB"),
+                              (window, t1, t2), flat_bad)
+
+    # Injected defect 2 (rule 8 for the skip-legitimacy assertion): the
+    # prose regresses to the single-instant form, silently dropping the
+    # end figure the detail line measured -- #988's defect class, which a
+    # conclusion-side-only skip would wave through (PR #999 review).
+    flat_drop = flat.replace(
+        "runs to 588.7 ms of a 600 ms window",
+        "runs to a single floor-clearing instant at 22.0 ms of a 600 ms window")
+    with pytest.raises(
+            AssertionError,
+            match=r"CONCLUSION quotes no end, but the detail measured "
+                  r"latest 588\.7 ms"):
+        _assert_extents_agree("CB", _conclusion_extent(flat_drop, "CB"),
+                              (window, t1, t2), flat_drop)
 
 
 def test_conclusion_absent_on_half_run(tmp_path):
