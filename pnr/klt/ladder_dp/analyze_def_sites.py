@@ -31,7 +31,9 @@ point pairs, ``*`` repeated coordinates, the path-point extension form
 ``ext_start``/``ext_end``, applied to the wire rect along the path axis and
 counted in the record, never used as a width), via placements at points,
 ``RECT`` pads relative to the last point), plus the
-``UNITS DISTANCE MICRONS`` scale.
+``UNITS DISTANCE MICRONS`` scale. The numeric arguments of the skip-keywords
+``STYLE``/``MASK``/``WEIGHT`` are consumed with their keyword, never read as
+a width (#1021).
 Tokens that do not fit the grammar are counted per section and reported in
 the output, never dropped.
 
@@ -101,6 +103,18 @@ _SKIP_TOKENS = {
     "WEIGHT", "PROPERTY", "SYNTHESIZED", "NET", "SPECIAL", "INOUT", "INPUT",
     "OUTPUT", "FEEDTHRU", "TAPERRULENAME",
 }
+
+#: The ``_SKIP_TOKENS`` members whose DEF grammar argument is a single
+#: number (``STYLE styleNum``, ``MASK maskNum``, ``WEIGHT weightValue``).
+#: The keyword alone was being skipped and the number left in the walk,
+#: where a widthless path's ``width is None`` branch silently consumed it
+#: as the width (#1021, the class #1013 closed for the extension form) --
+#: so the argument is consumed with its keyword. Members taking a name
+#: (``TAPERRULE``, ``USE``, ``SOURCE``, ...) need no entry: a non-numeric
+#: name cannot be mistaken for a width and is counted unparsed in its own
+#: right. The argument is only consumed when it *is* a bare numeric word,
+#: so a malformed spec keeps today's behaviour for whatever follows.
+_SKIP_TOKENS_WITH_NUMERIC_ARG = {"STYLE", "MASK", "WEIGHT"}
 
 
 def _norm_bbox_um(bbox: str) -> tuple[float, float, float, float] | None:
@@ -349,6 +363,13 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
                 i += 1
                 continue
             if word in _SKIP_TOKENS:
+                if word in _SKIP_TOKENS_WITH_NUMERIC_ARG and i + 1 < len(toks):
+                    # the keyword's own numeric argument rides with it --
+                    # never left in the walk to be read as a width (#1021)
+                    nxt_kind, nxt_value = toks[i + 1]
+                    if nxt_kind == "word" and re.fullmatch(r"-?\d+", nxt_value):
+                        i += 2
+                        continue
                 i += 1
                 continue
             if word in _PATH_KEYWORDS:
@@ -474,7 +495,9 @@ class DefGeometry:
                 if shape["via"] in self.vias:
                     for rect in self.via_pads(shape, layer):
                         if touches(rect):
-                            vias_resolved.append({"via": shape["via"], "rect": list(rect)})
+                            vias_resolved.append(
+                                {"via": shape["via"], "shape": shape.get("shape"), "rect": list(rect)}
+                            )
                 elif touches((at[0], at[1], at[0], at[1])):
                     # definition not in the DEF, so its pads cannot be
                     # derived; the placement point itself is the evidence,
@@ -583,7 +606,13 @@ def analyse(
             for pad in found["pads"]:
                 rect = (pad["x1"], pad["y1"], pad["x2"], pad["y2"])
                 power_rects.append(
-                    {"net": name, "origin": "pad", "gap_dbu": _rect_distance(bbox_dbu, rect), "rect": list(rect)}
+                    {
+                        "net": name,
+                        "origin": "pad",
+                        "shape": pad.get("shape"),
+                        "gap_dbu": _rect_distance(bbox_dbu, rect),
+                        "rect": list(rect),
+                    }
                 )
             for via in found["vias_resolved"]:
                 rect = tuple(via["rect"])
@@ -591,6 +620,7 @@ def analyse(
                     {
                         "net": name,
                         "origin": "via_pad",
+                        "shape": via.get("shape"),
                         "via": via["via"],
                         "gap_dbu": _rect_distance(bbox_dbu, rect),
                         "rect": list(rect),
@@ -669,6 +699,7 @@ def analyse(
                 "nets": site.nets,
                 "signal_nets": signal_nets,
                 "power_nets": power_nets_here,
+                "power_shapes_in_window_total": len(power_rects),
                 "power_shapes_in_window": power_rects[:8],
                 "signal_shapes_in_window": {
                     name: {
@@ -777,7 +808,7 @@ def main(argv: list[str] | None = None) -> int:
     verdicts = Counter(record["verdict"] for record in sites)
     result = {
         "schema_version": SCHEMA_VERSION,
-        "what": "Design-versus-router evidence for the residual route DRC sites, read from the routed DEF (#1006). Evidence, not a verdict: per-site geometry records; docs/tool-findings.md concludes on these.",
+        "what": "Design-versus-router evidence for the residual route DRC sites, read from the routed DEF (#1006). Evidence, not a verdict: per-site geometry records; docs/tool-findings.md concludes on these. signal_overlaps_power is a lower bound: regular NETS carry no width, so signal wires are zero-width centrelines and real metal edges can overlap power where a centreline does not.",
         "inputs": {
             "def": {"path": str(def_path), "sha256": sha256_file(def_path)},
             "drc_report": {"path": str(drc_path), "sha256": sha256_file(drc_path)},

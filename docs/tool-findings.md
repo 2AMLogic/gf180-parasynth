@@ -188,7 +188,9 @@ and signal srcs"** -- neither bucket is forced.
 deliberately not collected by the original job, so #1006 re-ran the route
 at the *same* klt -- same pinned heavy AMI (`ami-08688417b66e0c74d`, klt
 0.9.0, Yosys 0.68+, OpenROAD `26Q4-1310`, ciel 3.2.0, 16 vCPU, PDK pin
-`54435919…`, source netlist sha `a3f5d1ad…`) -- as job
+`54435919…`, source netlist sha `a3f5d1ad…`; committed as
+`route_def_manifest.json`, the re-run's own tool probe and sha256
+bindings, so this chain is bound in-repo #1011) -- as job
 `rs-parasynth808-def1006c-s00`, and it **reproduced the original route**:
 the re-run's `ladder_dp_route_drc.rpt` is byte-identical to the committed
 record's binding (`be35b9d9…`), its DEF is the original's exact byte size,
@@ -201,12 +203,15 @@ par response) reads it:
 - the VSS `Metal2` bounding **every one of the 24 sites** is **pdngen's own
   M1->M4 connect geometry**: the `add_pdn_connect -layers {Metal1 Metal4}
   -max_columns {5} -ongrid {Metal2 Metal3 Metal4}` via-column lands
-  (STRIPE-tagged via pads, per-site minimum via-pad gap 0-48 DBU at the
+  (STRIPE-tagged via pads -- the tag is on the record's `pad`/`via_pad`
+  entries since #1011, per-site minimum via-pad gap 0-48 DBU at the
   bbox at **17 of 24 sites**, 1168 DBU = 0.58 µm at **the other 7**;
   measured two ways -- from the committed record, whose
   `power_shapes_in_window` is sorted ascending before its 8-entry
   truncation so each per-site minimum is exact, and untruncated from the
-  DEF -- and both give 17/7) fused with the DRCFILL-tagged landing strips
+  DEF -- and both give 17/7; the record carries
+  `power_shapes_in_window_total` beside the truncation since #1011) fused
+  with the DRCFILL-tagged landing strips
   pdngen draws over the same columns (gap **0** at all 24 -- the strip edge
   exactly bounds each bbox);
 - **both shapes pre-date detailed routing.** A cts-bounded re-run (job
@@ -228,7 +233,8 @@ Two limitations of the instrument, recorded rather than discovered later:
 `signal_overlaps_power` is a **lower bound** -- regular `NETS` carry no
 width in DEF, so signal wires are modelled as zero-width centrelines and
 real metal edges can overlap power where a centreline does not (nothing
-above rests on `overlap == false`); and the parser counts the DEF
+above rests on `overlap == false`; stated in the record's own `what` since
+#1011, so the limitation travels with the evidence); and the parser counts the DEF
 path-point extension form `( x y ext )` as **unparsed** -- the committed
 record's `def_parse` shows 452 unparsed tokens with samples in that shape,
 and every one of its `unparsed_samples` entries names a signal net while
@@ -239,9 +245,9 @@ measured there and the regeneration the parser fix needs.
 
 So design-versus-router resolves to **the PDN's**, and the separate
 floorplan issue #808's criteria anticipate is **filed on this evidence**
-(#1009): it names the 24 sites, the `add_pdn_connect` line that shapes
-them, and leaves the remedy -- connect-geometry options at 52.3%
-utilization with 0 antenna / 0 setup / 0 hold to spend -- to that issue.
+(#1009): it names the 24 sites and the `add_pdn_connect` line that shapes
+them, and the decision it reached is recorded below -- the lands are
+**accepted as known-PDN residual**, the connect-geometry sweep deferred.
 This record keeps the classification `unclassified` (the classifier
 classifies by nets and stays neither-nor); the conclusion above is a
 reading of `def_site_analysis.json`, recorded there per site.
@@ -254,6 +260,41 @@ route, not inherited: its *shape* (Metal Spacing, signal-vs-`VSS`, all
 (9) is superseded by 24, and its `fmax` 28.04 MHz and via/wirelength
 figures came from the unattributable container, so nothing else from that
 sighting carries forward as evidence.
+
+**Decision, 2026-11-18 (#1009): the 24 `Metal2` spacing sites are accepted
+as known-PDN residual -- a documented trade, no geometry change.** The
+connect-geometry sweep (`max_columns`, then the `-split_cuts` width) is
+**deferred, not rejected**: it is filed as a follow-on only when a named
+sound or player requirement needs a DRC-clean `ladder_dp` route. That
+trigger is deliberate, and the reason the trade goes this way: **no sound
+or player requirement currently needs these sites fixed.** Nothing in the
+current milestone (#282, checked 2026-11-18: no mention of the
+`ladder_dp` route, DRC or PDN in its body) or the FPGA delivery path rests
+on this route being DRC-clean, and ASIC shrinking is deferred (#33). At
+52.3% utilization (`par_response.json` `utilization_pct` 52.3365) with
+**0 antenna, 0 setup and 0 hold violations** (`antenna_violation_count`,
+`setup_violation_count`, `hold_violation_count`, all 0, setup and hold at
+all three corners), there is nothing to spend on the trade and nothing it
+would buy.
+
+What is accepted, per `pnr/klt/ladder_dp/def_site_analysis.json`
+(`verdict_counts` `{"fill_wire_spaced": 24}`, bound by sha256 to the
+routed DEF, the DRC report and `par_response.json`): 24 sites, all
+`Metal Spacing`, all `Metal2`, each between a signal net and `VSS`; the
+`VSS` shape at every site is the PDN's own M1->M4 connect geometry, with
+the per-site minimum via-pad gap 0-48 DBU at **17 of 24** sites and 1168
+DBU = 0.58 µm at **the other 7**, and the DRCFILL-tagged landing strip
+bounding every site at gap **0** (the PDN attribution and its evidence
+files are the #1006 record above). **No `Metal2` rule value is quoted
+here, and none was before**: no tech LEF was reachable on the hosts these
+records were written on, so what is measured is the gap itself, per site;
+reading `LAYER Metal2 SPACING` from the tech LEF at the pinned PDK and
+restating any margin against it is part of the deferred sweep's work, not
+part of this acceptance. Nothing is filed upstream -- this is this
+repository's floorplan, not a klt finding. The committed
+`route_drc_classification.json` stays `unclassified` and the extract
+records (`route_drc_extract.json`, `check_route_drc_extract.py`) are
+unchanged by this acceptance: it re-derives nothing.
 
 ### klayout-tools#5577 — `klt synthesize`'s netlist path carries a per-run uuid, so no committed `klt place-and-route` request can name it
 
