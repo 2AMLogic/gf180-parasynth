@@ -771,15 +771,29 @@ def render_writes(writes, duration_s: float, *, engine: str = SYNTHTOP_ENGINE) -
     The control surface for seeding a defect in the STREAM: the suite judges
     the audio against the schedule either way, so a control that omits
     gate-offs or floors the volume mid-note is a defect the host shipped, not
-    an edit to the judged audio. An unknown engine is REFUSED, not defaulted."""
+    an edit to the judged audio. An unknown engine is REFUSED, not defaulted.
+
+    REFUSES a write landing outside the record (frame < 0 or past
+    int(duration_s * SR)): the chip's run() would assert mid-render, and a
+    truncated stream must not look like data. Takes any iterable of writes;
+    it is materialized before the bound check, so a one-pass stream is not
+    consumed by the check itself."""
     if engine not in SYNTHTOP_ENGINES:
         raise Refused(f"engine {engine!r} is not one of {sorted(SYNTHTOP_ENGINES)}")
     root = pathlib.Path(__file__).resolve().parents[1]
     sys.path[:0] = [str(root / "model"), str(root / "tools")]
     import synth_top_model as st
 
+    n = int(duration_s * SR)
+    writes = list(writes)
+    for f, *_ in writes:
+        if not 0 <= f < n:
+            span = "the empty record (0 frames)" if n == 0 else f"0..{n - 1}"
+            raise Refused(f"write at frame {f} outside {span}: the chip's "
+                          f"run() would assert mid-render, and a truncated "
+                          f"stream must not look like data")
     m = st.SynthTopModel(**SYNTHTOP_ENGINES[engine])
-    out = m.run(writes, int(duration_s * SR))
+    out = m.run(writes, n)
     return np.asarray(out["sample"], dtype=np.float64) / 32768.0
 
 

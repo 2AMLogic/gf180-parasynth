@@ -536,6 +536,48 @@ def test_unknown_engine_is_refused_not_defaulted():
         ps.render_writes(ps.phrase_writes(SHORT), SHORT.duration_s, engine="turbo")
 
 
+def test_render_writes_refuses_stream_past_the_record():
+    # render_writes is the second door into the record bound (issue #995):
+    # the issue's exact input -- a gate-off at n+10 on a 0.5 s record. Before
+    # the bound this raised AssertionError from inside synth_top_model.run,
+    # not Refused (phrase_writes got the same shape in #987).
+    n = int(0.5 * ps.SR)
+    w = [(0, 0, st.SEC_VOICE, st.A_VOL, 100),
+         (n + 10, 0, st.SEC_VOICE, st.A_GATE_OFF, 0)]
+    with pytest.raises(ps.Refused, match="outside 0.."):
+        ps.render_writes(w, 0.5)
+    # negative frames refuse the same way
+    with pytest.raises(ps.Refused, match="outside 0.."):
+        ps.render_writes([(-1, 0, st.SEC_VOICE, st.A_VOL, 100)], 0.5)
+    # duration_s=0 is not "outside 0..-1": the record is empty and the
+    # refusal must say so
+    with pytest.raises(ps.Refused, match="empty record"):
+        ps.render_writes([(0, 0, st.SEC_VOICE, st.A_GATE_OFF, 0)], 0.0)
+
+
+def test_render_writes_generator_stream_renders_same_as_list():
+    # rule 8 control for the bound check: render_writes must materialize the
+    # stream before checking it. If the check consumed a one-pass iterable,
+    # run() would render exact silence with no error -- output that looks
+    # exactly like data. Asserted as list-vs-generator equality, not
+    # non-silence: a legitimately quiet stream would defeat a "not silent"
+    # assertion the same way the eaten stream would.
+    w = ps.phrase_writes(SHORT)
+    x_list = ps.render_writes(w, SHORT.duration_s)
+    assert np.count_nonzero(x_list) > 0, \
+        "the fixture stream renders silence: this control is vacuous"
+    x_gen = ps.render_writes(iter(w), SHORT.duration_s)
+    assert np.array_equal(x_list, x_gen)
+
+
+def test_render_writes_accepts_write_at_last_frame():
+    # boundary control so the bound is not off by one: n-1 is the last
+    # sendable frame and must render, not refuse
+    n = int(0.5 * ps.SR)
+    x = ps.render_writes([(n - 1, 0, st.SEC_VOICE, st.A_GATE_OFF, 0)], 0.5)
+    assert len(x) == n
+
+
 def test_cli_refuses_engine_on_non_synthtop_backend(capsys):
     assert ps.main(["--engine", "baseline", "--phrase", "bass"]) == 2
     assert "REFUSED" in capsys.readouterr().err
