@@ -1,0 +1,465 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "drc_report": {
+      "path": "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_route_drc.rpt",
+      "sha256": "sha256:be35b9d9bc4ec0ea6cc4525afa5e4ce37abbb4410b2f4e912cae8903ca8e3bbe"
+    },
+    "metrics": {
+      "path": "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_route_metrics.json",
+      "sha256": "sha256:73a06d2fb24dc525a777dca4e209ced8190f1f4dbd7da692746328cd19f0a84d"
+    },
+    "route_tcl": null,
+    "par_response": "pnr/klt/ladder_dp/par_response.json"
+  },
+  "drc_report": {
+    "total_records": 24,
+    "distinct_sites_type_srcs_bbox": 24,
+    "distinct_sites_type_srcs_bbox_layer": 24,
+    "incomplete_records": 0,
+    "adjacent_duplicate_pairs": 0,
+    "doubling": {
+      "total_vs_distinct_disagree": false,
+      "observed_multiplier_total_vs_distinct": 1.0,
+      "distinct3_vs_distinct4_disagree": false
+    }
+  },
+  "classification_summary": {
+    "distinct_sites_pdn": 0,
+    "distinct_sites_signal": 0,
+    "distinct_sites_unclassified": 24
+  },
+  "sites": [
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_00146_ net:VSS",
+      "bbox": "(292.7400, 200.3020) - (293.0200, 200.5700)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        14
+      ],
+      "nets": [
+        "_00146_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_00306_ net:VSS",
+      "bbox": "(204.2600, 136.5500) - (204.5400, 136.8180)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        9
+      ],
+      "nets": [
+        "_00306_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_00879_ net:VSS",
+      "bbox": "(338.1000, 387.4300) - (338.3800, 387.6980)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        19
+      ],
+      "nets": [
+        "_00879_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_00949_ net:VSS",
+      "bbox": "(382.9000, 293.4800) - (383.1800, 293.6180)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        22
+      ],
+      "nets": [
+        "_00949_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_01263_ net:VSS",
+      "bbox": "(337.5400, 18.9500) - (337.8200, 19.2180)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        17
+      ],
+      "nets": [
+        "_01263_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_01600_ net:VSS",
+      "bbox": "(247.4600, 74.8620) - (247.6600, 75.1300)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        10
+      ],
+      "nets": [
+        "_01600_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_01921_ net:VSS",
+      "bbox": "(427.7000, 97.3500) - (427.9800, 97.6180)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        23
+      ],
+      "nets": [
+        "_01921_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02074_ net:VSS",
+      "bbox": "(337.5400, 145.4220) - (337.8200, 145.6900)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        18
+      ],
+      "nets": [
+        "_02074_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02095_ net:VSS",
+      "bbox": "(381.8600, 121.9020) - (382.0600, 122.1700)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        20
+      ],
+      "nets": [
+        "_02095_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02142_ net:VSS",
+      "bbox": "(382.3400, 191.4300) - (382.6200, 191.6980)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        21
+      ],
+      "nets": [
+        "_02142_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02579_ net:VSS",
+      "bbox": "(158.9000, 277.8000) - (159.1800, 277.9380)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        8
+      ],
+      "nets": [
+        "_02579_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_02803_ net:VSS",
+      "bbox": "(292.2600, 310.0620) - (292.4600, 310.3300)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        13
+      ],
+      "nets": [
+        "_02803_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_03141_ net:VSS",
+      "bbox": "(113.0600, 4.3020) - (113.2600, 4.5700)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        5
+      ],
+      "nets": [
+        "_03141_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_03409_ net:VSS",
+      "bbox": "(292.7400, 371.7500) - (293.0200, 372.0180)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        15
+      ],
+      "nets": [
+        "_03409_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_03824_ net:VSS",
+      "bbox": "(68.2600, 50.3100) - (68.4600, 50.5780)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        2
+      ],
+      "nets": [
+        "_03824_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_03972_ net:VSS",
+      "bbox": "(24.5000, 90.5420) - (24.7800, 90.8100)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        1
+      ],
+      "nets": [
+        "_03972_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04090_ net:VSS",
+      "bbox": "(292.2600, 247.3420) - (292.4600, 247.6100)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        12
+      ],
+      "nets": [
+        "_04090_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04110_ net:VSS",
+      "bbox": "(247.9400, 231.6620) - (248.2200, 231.9300)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        11
+      ],
+      "nets": [
+        "_04110_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04365_ net:VSS",
+      "bbox": "(23.9400, 113.0300) - (24.2200, 113.2980)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        0
+      ],
+      "nets": [
+        "_04365_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04387_ net:VSS",
+      "bbox": "(113.5400, 137.5820) - (113.8200, 137.8500)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        6
+      ],
+      "nets": [
+        "_04387_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04510_ net:VSS",
+      "bbox": "(115.2200, 325.7420) - (115.4200, 325.8800)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        7
+      ],
+      "nets": [
+        "_04510_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04667_ net:VSS",
+      "bbox": "(69.3000, 277.6700) - (69.5800, 277.9380)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        4
+      ],
+      "nets": [
+        "_04667_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_04673_ net:VSS",
+      "bbox": "(68.7400, 239.5020) - (69.0200, 239.7700)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        3
+      ],
+      "nets": [
+        "_04673_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    },
+    {
+      "type": "Metal Spacing",
+      "srcs": "net:_05021_ net:VSS",
+      "bbox": "(293.8600, 396.3020) - (294.1400, 396.5700)",
+      "layer": "Metal2",
+      "record_count": 1,
+      "record_indices": [
+        16
+      ],
+      "nets": [
+        "_05021_",
+        "VSS"
+      ],
+      "classification": "unclassified",
+      "classification_reason": "mixed power (VSS) and signal srcs",
+      "on_pdn_layer": false
+    }
+  ],
+  "incomplete_records": [],
+  "metrics": {
+    "route__drc_errors": {
+      "occurrences": [
+        24
+      ],
+      "occurrence_count": 1,
+      "first": 24,
+      "plain_json_loads_sees": 24,
+      "has_duplicate_keys": false
+    },
+    "pass_scoped": {
+      "route_pass:0__route__drc_errors": [
+        24
+      ]
+    },
+    "klt__repeated_metrics": null
+  },
+  "route_tcl": null,
+  "par_response": {
+    "stage_reached": "route",
+    "route_drc_violation_count": 24
+  }
+}

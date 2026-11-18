@@ -83,8 +83,10 @@ the flow with none. Re-run on the same PDK the original used (`gf180mcuD` @
 ciel `54435919…`), so klt is the only variable that moved -- and the two klt
 builds emit a **byte-identical** netlist
 (`sha256:ea7cc228fd4013e7640f87078a1f0f4907b94565f53a21f153c0b4c5f25201c8`),
-so the counts below are not one build's accident. The committed `run.log`,
-`synth_response.json` and `par_response.json` are the `dev1029` run.
+so the counts below are not one build's accident. (Those committed records
+were the `dev1029` bounded run until #808 replaced them with the finished klt
+`0.9.0` route; the `dev1029` versions are
+`git show 64212ad0:pnr/klt/ladder_dp/<file>`.)
 
 The generated `synth_ladder_dp.run.ys` now carries all three things
 this finding said were missing for the 7t library -- `abc -constr
@@ -111,11 +113,13 @@ it cannot see is stated with it: patch 2 only ever matched **1-bit** constants,
 so a wider constant assign is the same defect class in a shape that patch never
 handled -- counted and reported next to the gated counts, never gated on.
 
-**`STA-0171` is cleared live, not only by counting.** The `dev1029` run reaches
-`cts` with `setup_violation_count: 0` and `hold_violation_count: 0` at both
-`place` and `cts` (`par_response.json` `stages[]`), i.e. OpenSTA read the
-unpatched netlist and built a timing graph from it. That is the error patch 1
-existed to avoid, and it does not occur.
+**`STA-0171` is cleared live, not only by counting.** The `dev1029` run
+reached `cts` with `setup_violation_count: 0` and `hold_violation_count: 0`
+at both `place` and `cts`; #808's committed `0.9.0` route goes further --
+`route` completes with 0 setup and 0 hold violations at all three corners
+(`par_response.json` `stages[]` and `corners[]`). OpenSTA read the
+unpatched netlist and built a timing graph from it, end to end. That is the
+error patch 1 existed to avoid, and it does not occur.
 
 The silent half is fixed too: `timing` is no longer `null` inside an `"ok"`
 envelope -- the same request now reports `critical_path_ps: 30288.33` against
@@ -124,31 +128,70 @@ its `delay_target_ps: 81380` -- and `provenance` carries `klt_git_commit` and
 
 Not the same netlist: `instance_count` went 5328 -> 5703 and `area_um2`
 113292.0768 -> 117230.2656, which is what applying `-constr`, `setundef` and
-`hilomap` to this library costs. The committed `synth_response.json` is the new
-run; the 0.5.0 one is `git show b9930a4a:pnr/klt/ladder_dp/synth_response.json`.
+`hilomap` to this library costs. klt `0.9.0` (#808) lands on exactly those
+numbers -- `instance_count: 5703`, `area_um2: 117230.2656`, the same as
+`dev1029` -- though the netlist sha differs (`a3f5d1ad…` vs `ea7cc228…`; the
+text carries each run's own uuid paths). The committed `synth_response.json`
+is now the `0.9.0` run; the `dev1029` one is
+`git show 64212ad0:pnr/klt/ladder_dp/synth_response.json` and the 0.5.0 one
+is `git show b9930a4a:pnr/klt/ladder_dp/synth_response.json`.
 
-**What the committed record does NOT establish: `DRT-0305` on a finished
-route.** The committed run is bounded at `cts` (`run.log` says so in those
-words), because floorplan + place + cts is **17 s** here while a full
-detailed route of this design is about **5 h** -- 64 rip-up/reroute
-iterations, then a `repair_antennas` pass and a second full `detailed_route`
--- which no dispatch step can hold. So `DRT-0305`'s *cause* is measured gone
-(zero constant assigns, zero all-x assigns, 59 tie cells klt inserted itself)
-and the error itself is not re-observed. Tracked for a verdict-grade run on
-the build box; see #808.
+**Finished route, 2026-11-18 (#808): the record now establishes `DRT-0305`
+measured gone on a completed route.** The bounded-at-`cts` record above is
+superseded. Job `rs-parasynth808-od2-s00` (on-demand `m6i.4xlarge`, attended
+operator session after #856 -- this repo has no reachable pinned build box
+from a dispatch worker) ran `run_klt.py` unbounded, `target_stage route`,
+exit 0: synth 63 s, place-and-route **4261 s** (the ~5 h estimate was
+pessimistic), no `BOUNDED RUN` line, the retired-patch audit again 0/0/0
+with klt's 59 own tie cells, and **no `DRT-0305` and no `STA-0171`** anywhere
+in stderr (empty) or any collected stage log -- the only textual matches are
+the audit's own label lines. `par_response.json` (42,537 bytes) parses and
+reports `stage_reached: route`, `status: ok`, `flow__errors__count: 0`,
+antenna violations 0, setup and hold violations 0 at all three corners,
+`timing__fmax` 29.45 MHz, worst setup slack 16.30 ns at `ss_125C_4v50`.
 
-A full route was nonetheless *seen* to complete, and this is deliberately not
-offered as evidence: the artefacts were written by the orphaned container of
-klayout-tools#5726, whose klt had already been reaped, so no invocation can be
-named for them. For whatever it is worth to a later run, and labelled as not a
-verdict: it reached `flow__errors__count: 0`, `timing__fmax: 28.04 MHz`, 36,945
-vias, 340,174 um of wirelength, and **9** residual `Metal Spacing` violations
-between signal nets and `VSS`, all on `Metal2` -- which the router did not
-clear in its remaining ~37 iterations. The same artefacts reproduce #2089's
-doubling exactly (9 unique `bbox` sites, 18 report lines,
-`route__drc_errors: 18` against `route_pass:0__route__drc_errors: 9`), at
-`dev986`, so that finding is still live. Treat every number in this paragraph
-as a lead for #808 to confirm, not as a result.
+**The route is at klt `0.9.0` (`klt_git_commit 5dbbad05…`, klayout 0.30.13,
+OpenROAD `26Q4-1310-g98c6045c72`), not the `0.9.2.dev1029` the retirement
+was measured at** -- the job image carries 0.9.0, and the issue named the
+newer build, so every statement in this section is a statement about `0.9.0`
+and is labelled as such; it is not generalised to later builds. One
+observation the version drift buys: `provenance.pdk.compatibility` in the
+committed `par_response.json` records klt 0.9.0 *expecting* open_pdks
+`f6eeac7d…` -- the shuttle/LibreLane lineage's pin -- and marking the
+deliberately chosen `54435919…` pin `status: "mismatch"` while running
+anyway: the two-pin split of #808's correction 6, visible inside the tool
+itself. The mismatch is recorded in the response, not refused, and the pin
+that ran is the `ladder_dp` lineage's.
+
+**The residual violations, classified (#808).** `route_drc_violation_count`
+is **24**, and all four readings agree: the report's own records (24), the
+metrics keys (`route__drc_errors` 24, `route_pass:0__route__drc_errors` 24,
+each occurring once, `json.loads` agreeing), and the response-side count.
+Every violation is `Metal Spacing` between a signal net and `VSS`, every
+one on `Metal2`, none involves `VDD`, and they are a small family of
+near-identical patches (0.2-0.28 × 0.138-0.268 µm). The per-iteration
+metrics show 24 from iteration 4 onward -- with brief transient bumps (32
+at iteration 17, 27 at 25, 25 at 41/49/57) -- and 24 at the final
+iteration 60: the router did not clear them. `classify_route_drc.py`
+(committed with its validation cases; output recorded in
+`route_drc_classification.json`, which carries the sha256 of its inputs)
+classifies each site **unclassified, reason "mixed power (VSS) and signal
+srcs"** -- neither bucket is forced. The layer evidence: `Metal2` carries
+no PDN strap geometry (the power block's straps are `Metal1` followpins and
+`Metal4`/`Metal5`; the only PDN `Metal2` shapes are the `connect` block's
+M1->M4 via-column lands), so the VSS geometry involved is most plausibly
+those lands -- but the routed DEF needed to separate "the router ignored an
+obstruction" from "the PDN left no legal Metal2 room" was deliberately not
+collected (no DEF/ODB in the job outputs), so design-versus-router is
+**undetermined, with the reason recorded**, and the separate floorplan
+issue the criteria anticipate is *not* filed on this evidence.
+
+The 2026-11-14 lead above is resolved by the attributable route, not
+inherited: its *shape* (Metal Spacing, signal-vs-`VSS`, all `Metal2`,
+surviving every remaining iteration) is confirmed; its *count* (9) is
+superseded by 24, and its `fmax` 28.04 MHz and via/wirelength figures came
+from the unattributable container, so nothing else in that paragraph
+carries forward as evidence.
 
 ### klayout-tools#5577 — `klt synthesize`'s netlist path carries a per-run uuid, so no committed `klt place-and-route` request can name it
 
@@ -256,6 +299,31 @@ With `max_antenna_repair_iterations = N` the multiplier is N+1.
 Independently sighted under plain ORFS on the same platform: our `synth_top`
 run's "2 detailed-route DRC violations" are **one** site listed twice
 (`docs/pnr-synth-top.md` §3).
+
+**Third data point, 2026-11-18 (#808), and it is at klt `0.9.0` -- older than
+the `dev986` line whose unattributable container reading showed the
+doubling.** On the finished route's artefacts the doubling is **not seen**,
+in both independent places: `ladder_dp_route_drc.rpt` has **24** `violation
+type:` records and **24** distinct `(type, srcs, bbox[, layer])` sites (0
+adjacent duplicate pairs, multiplier 1.0), and `ladder_dp_route_metrics.json`
+carries `route__drc_errors` **24** and `route_pass:0__route__drc_errors`
+**24**, each occurring exactly **once** -- no duplicate keys, so what
+`json.loads` sees and what the file says agree. The mechanism is
+structurally absent in this build's outputs: klt 0.9.0 emits a **distinct
+report path per `detailed_route` call** -- `ladder_dp_route_pass_0_drc.rpt`
+(first call) and `ladder_dp_route_drc.rpt` (last) are both present and
+**byte-identical, 24 records each** (antenna repair found 0 violations, so
+the second pass changed nothing) -- where the defect re-used one path; the
+two calls themselves are visible in the route invocation's
+`openroad-logs/<id>/stdout.log` as two `DRT-0024` layer-completion
+sequences. The route `.tcl` was not among the job's collected outputs, so
+the emitted `-output_drc` paths could not be read directly and
+`max_antenna_repair_iterations` not counted from it; the per-pass report
+pair is the observed evidence. Version order does not explain the contrast:
+`0.5.0` doubled (attributable), `0.9.0` does not (attributable), and the
+`dev986` 9/18 sighting came from the unattributable orphaned container
+(#5726, resolved above). One build's measurement, recorded as found -- do
+not read it as "fixed at 0.9.0" for later builds.
 
 ### klayout-tools#2090 — `provenance.klt_version` reports the package version, not the build version
 
