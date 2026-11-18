@@ -70,5 +70,16 @@ def test_missing_artefacts_empty_when_all_present(tmp_path: pathlib.Path) -> Non
 
 def test_the_def_is_among_the_kept_artefacts() -> None:
     """The wrapper exists to keep the DEF; drop it from the list and nothing here works."""
-    assert any(name.endswith("ladder_dp.def") for name in route_rerun.KEPT_ARTEFACTS)
-    assert any(name.endswith("ladder_dp_route.odb") for name in route_rerun.KEPT_ARTEFACTS)
+    assert any(name.endswith("ladder_dp.def") for name in route_rerun.ROUTE_ARTEFACTS)
+    assert any(name.endswith("ladder_dp_route.odb") for name in route_rerun.ROUTE_ARTEFACTS)
+
+
+def test_the_cts_mode_keeps_the_stage_tcls_and_pre_route_defs() -> None:
+    """The fill-provenance run lives on the stage records the route run drops."""
+    kept = route_rerun.CTS_ARTEFACTS
+    assert any(name.endswith("pnr_ladder_dp_floorplan.tcl") for name in kept)
+    assert any(name.endswith("pnr_ladder_dp_cts.tcl") for name in kept)
+    assert any(name.endswith("ladder_dp.cts.def") for name in kept)
+    assert not any(name.endswith("ladder_dp.def") for name in kept), (
+        "the final route DEF does not exist in a cts-bounded run"
+    )

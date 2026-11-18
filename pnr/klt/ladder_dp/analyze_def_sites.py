@@ -131,6 +131,7 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]
     """
     nets: dict[str, list[dict[str, Any]]] = {}
     unparsed = 0
+    unparsed_samples: list[dict[str, Any]] = []
     for entry in re.finditer(r"(?m)^\s*-\s+([^\s(]+)([^;]*);", body):
         net = entry.group(1)
         spec = entry.group(2)
@@ -145,6 +146,7 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]
         layer: str | None = None
         width: int | None = None
         expect_layer = False
+        shape_tag: str | None = None
         pending_pt: tuple[int, int] | None = None
         last_pt: tuple[int, int] | None = None
         expect_via = False
@@ -176,6 +178,7 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]
                             "kind": "wire",
                             "layer": layer,
                             "width": width,
+                            "shape": shape_tag,
                             "x1": pending_pt[0],
                             "y1": pending_pt[1],
                             "x2": pt[0],
@@ -203,6 +206,7 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]
                             "kind": "pad",
                             "layer": layer,
                             "width": None,
+                            "shape": shape_tag,
                             "x1": last_pt[0] + dx1,
                             "y1": last_pt[1] + dy1,
                             "x2": last_pt[0] + dx2,
@@ -212,17 +216,27 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]
                     i += 3
                 else:
                     unparsed += 1
+                    if len(unparsed_samples) < 20:
+                        unparsed_samples.append({"net": net, "token": "RECT"})
                     i += 1
                 expect_via = False
                 continue
             word = value
-            if word in _SKIP_TOKENS or word in _SHAPE_TYPES:
+            if word in _SHAPE_TYPES:
+                # + SHAPE <tag>: applies to the path that carries it (DRCFILL
+                # vs STRIPE vs FOLLOWPIN is exactly the fill-versus-PDN
+                # distinction the analysis records)
+                shape_tag = word
+                i += 1
+                continue
+            if word in _SKIP_TOKENS:
                 i += 1
                 continue
             if word in _PATH_KEYWORDS:
                 # a new path within the same net resets the point context:
                 # after NEW, a bare point is a start, never a segment end
                 layer, width, pending_pt, last_pt, expect_via = None, None, None, None, False
+                shape_tag = None
                 expect_layer = True
                 i += 1
                 continue
@@ -239,15 +253,24 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]
             if expect_via and re.match(r"^[A-Za-z_]", word):
                 if layer is not None and last_pt is not None:
                     shapes.append(
-                        {"kind": "via", "layer": layer, "via": word, "x": last_pt[0], "y": last_pt[1]}
+                        {
+                            "kind": "via",
+                            "layer": layer,
+                            "shape": shape_tag,
+                            "via": word,
+                            "x": last_pt[0],
+                            "y": last_pt[1],
+                        }
                     )
                 expect_via = False
                 i += 1
                 continue
             unparsed += 1
+            if len(unparsed_samples) < 20:
+                unparsed_samples.append({"net": net, "token": word[:60]})
             i += 1
         nets[net] = shapes
-    return nets, unparsed
+    return nets, unparsed, unparsed_samples
 
 
 class DefGeometry:
@@ -263,15 +286,17 @@ class DefGeometry:
         self.specialnets: dict[str, list[dict[str, Any]]] = {}
         self.nets: dict[str, list[dict[str, Any]]] = {}
         self.unparsed_tokens = 0
+        self.unparsed_samples: list[dict[str, Any]] = []
         self.sections_found: list[str] = []
         for section, attr in (("specialnets", "specialnets"), ("nets", "nets")):
             match = _SECTION[section].search(text)
             if match is None:
                 continue
             self.sections_found.append(section)
-            parsed, unparsed = _parse_net_section(match.group(1))
+            parsed, unparsed, samples = _parse_net_section(match.group(1))
             getattr(self, attr).update(parsed)
             self.unparsed_tokens += unparsed
+            self.unparsed_samples.extend(samples)
 
     def shapes_near(
         self,
@@ -394,7 +419,13 @@ def analyse(
             for wire in found["wires"]:
                 rect = (wire["x1"], wire["y1"], wire["x2"], wire["y2"])
                 power_rects.append(
-                    {"net": name, "origin": "wire", "gap_dbu": _rect_distance(bbox_dbu, rect), "rect": list(rect)}
+                    {
+                        "net": name,
+                        "origin": "wire",
+                        "shape": wire.get("shape"),
+                        "gap_dbu": _rect_distance(bbox_dbu, rect),
+                        "rect": list(rect),
+                    }
                 )
             for pad in found["pads"]:
                 rect = (pad["x1"], pad["y1"], pad["x2"], pad["y2"])
@@ -456,11 +487,16 @@ def analyse(
             elif origin in ("via_pad", "pad", "via_unresolved"):
                 verdict = "power_via_land_spaced"
             elif origin == "wire":
-                verdict = "power_wire_spaced"
+                verdict = (
+                    "fill_wire_spaced"
+                    if nearest.get("shape") == "DRCFILL"
+                    else "power_wire_spaced"
+                )
             else:
                 verdict = "undetermined"
             evidence = (
                 f"nearest power {layer} shape: origin={origin}"
+                + (f" shape={nearest['shape']}" if nearest.get("shape") else "")
                 + (f" via={nearest['via']}" if nearest.get("via") else "")
                 + (f", at={nearest['at']}" if nearest.get("at") else "")
                 + f", gap={gap} dbu"
@@ -499,7 +535,13 @@ def analyse(
 
 
 def read_par_power_nets(par_path: Path) -> tuple[frozenset[str] | None, str | None]:
-    """Power-net names from the par response's power block, or a refusal."""
+    """Power-net names from the par response's power block, or a refusal.
+
+    klt's power block names the nets as ``power_net``/``ground_net`` (an
+    optional ``nets`` list is accepted too, for symmetry with the request
+    shape); whichever it carries, deriving them from the DEF alone would be
+    guessing.
+    """
     try:
         par = json.loads(par_path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
@@ -518,10 +560,14 @@ def read_par_power_nets(par_path: Path) -> tuple[frozenset[str] | None, str | No
     block = find_power(par)
     if block is None:
         return None, "par response has no power block"
-    nets = block.get("nets")
+    nets: set[str] = set()
+    for key in ("power_net", "ground_net"):
+        if block.get(key):
+            nets.add(str(block[key]))
+    nets.update(str(n) for n in (block.get("nets") or []))
     if not nets:
-        return None, "par response power block names no nets"
-    return frozenset(str(n) for n in nets), None
+        return None, "par response power block names no power/ground nets"
+    return frozenset(nets), None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -585,6 +631,7 @@ def main(argv: list[str] | None = None) -> int:
             "specialnets_parsed": len(geometry.specialnets),
             "via_definitions_parsed": len(geometry.vias),
             "unparsed_tokens": geometry.unparsed_tokens,
+            "unparsed_samples": geometry.unparsed_samples,
         },
         "power_nets": sorted(power_nets),
         "window_um": args.window_um,

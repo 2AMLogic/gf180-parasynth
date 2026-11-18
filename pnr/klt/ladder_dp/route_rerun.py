@@ -68,10 +68,10 @@ PDK = "gf180mcuD"
 #: the original job's run.log names).
 PDK_FAMILY = "gf180mcu"
 
-#: What must exist after a successful driver run for the DEF question to be
-#: answerable, all under HERE. The responses and run.log are re-collected so
-#: the manifest binds them next to the artefacts.
-KEPT_ARTEFACTS = (
+#: What must exist after a successful full-route run, all under HERE. The
+#: responses and run.log are re-collected so the manifest binds them next to
+#: the artefacts.
+ROUTE_ARTEFACTS = (
     ".klt/place-and-route/ladder_dp.def",
     ".klt/place-and-route/ladder_dp_route.odb",
     ".klt/place-and-route/ladder_dp_route_drc.rpt",
@@ -82,6 +82,26 @@ KEPT_ARTEFACTS = (
     "par_response.json",
     "run.log",
 )
+
+#: The cts-bounded mode keeps the *stage* records instead: the per-stage
+#: emitted Tcl files and the pre-route DEFs, which name every command that
+#: had shaped the database before detailed_route saw it -- the evidence the
+#: full-route run cannot give about where the DRCFILL-tagged Metal2 entered.
+CTS_ARTEFACTS = (
+    ".klt/place-and-route/pnr_ladder_dp_floorplan.tcl",
+    ".klt/place-and-route/pnr_ladder_dp_place.tcl",
+    ".klt/place-and-route/pnr_ladder_dp_cts.tcl",
+    ".klt/place-and-route/ladder_dp_place.def",
+    ".klt/place-and-route/ladder_dp.cts.def",
+    ".klt/place-and-route/ladder_dp_cts_metrics.json",
+    "synth_response.json",
+    "par_response.json",
+    "run.log",
+)
+
+#: The full-route list is the default; the cts-bounded mode keeps the stage
+#: records instead (see the mode's help).
+KEPT_ARTEFACTS = ROUTE_ARTEFACTS
 
 MANIFEST_NAME = "route_def_manifest.json"
 PDK_FETCH_LOG = "pdk-fetch.log"
@@ -116,11 +136,11 @@ def resolve_pdk_root(store: Path, pin: str, pdk: str) -> tuple[Path | None, str 
     return root, None
 
 
-def missing_artefacts(here: Path = HERE) -> list[str]:
-    return [name for name in KEPT_ARTEFACTS if not (here / name).is_file()]
+def missing_artefacts(here: Path = HERE, kept: tuple[str, ...] = KEPT_ARTEFACTS) -> list[str]:
+    return [name for name in kept if not (here / name).is_file()]
 
 
-def build_manifest(here: Path = HERE) -> dict:
+def build_manifest(here: Path = HERE, kept: tuple[str, ...] = KEPT_ARTEFACTS) -> dict:
     """Provenance + sha256 of everything kept, written beside the artefacts.
 
     ``RS_SOURCE_COMMIT`` is exported by the batch job runner for exactly this
@@ -149,7 +169,7 @@ def build_manifest(here: Path = HERE) -> dict:
                 "sha256": sha256_file(here / name),
                 "bytes": (here / name).stat().st_size,
             }
-            for name in KEPT_ARTEFACTS
+            for name in kept
         },
         "route_pass_pair_byte_identical": pair_a.is_file()
         and pair_b.is_file()
@@ -174,7 +194,19 @@ def main(argv: list[str] | None = None) -> int:
         default=6300.0,
         help="per-step cap handed to run_klt.py (the original job's value)",
     )
+    parser.add_argument(
+        "--target-stage",
+        choices=("route", "cts"),
+        default="route",
+        help=(
+            "route = the full route and the artefacts the DEF question needs "
+            "(default); cts = stop place-and-route after cts and keep the "
+            "stage Tcl files and pre-route DEFs instead"
+        ),
+    )
     args = parser.parse_args(argv)
+
+    kept = ROUTE_ARTEFACTS if args.target_stage == "route" else CTS_ARTEFACTS
 
     store = Path(args.pdk_store).resolve()
 
@@ -200,14 +232,22 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_REFUSED
     print(f"[route-rerun] pdk {PDK} @ {pdk_root}", flush=True)
 
-    driver = subprocess.run(
-        [sys.executable, str(HERE / "run_klt.py"), "--pdk-root", str(pdk_root), "--timeout-s", str(args.timeout_s)]
-    )
+    driver_argv = [
+        sys.executable,
+        str(HERE / "run_klt.py"),
+        "--pdk-root",
+        str(pdk_root),
+        "--timeout-s",
+        str(args.timeout_s),
+    ]
+    if args.target_stage == "cts":
+        driver_argv += ["--target-stage", "cts"]
+    driver = subprocess.run(driver_argv)
     if driver.returncode != 0:
         print(f"FAILED: run_klt.py exited {driver.returncode}", file=sys.stderr)
         return driver.returncode
 
-    missing = missing_artefacts()
+    missing = missing_artefacts(kept=kept)
     if missing:
         print(
             "FAILED: driver exited 0 but the kept artefacts are missing: "
@@ -216,10 +256,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         return EXIT_FAILED
 
-    manifest = build_manifest()
+    manifest = build_manifest(kept=kept)
     manifest_path = HERE / MANIFEST_NAME
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    print(f"[route-rerun] kept {len(KEPT_ARTEFACTS)} artefacts; manifest {MANIFEST_NAME}", flush=True)
+    print(f"[route-rerun] kept {len(kept)} artefacts; manifest {MANIFEST_NAME}", flush=True)
     for name, rec in manifest["artefacts"].items():
         print(f"  {rec['sha256']}  {name}  ({rec['bytes']} bytes)")
     print(

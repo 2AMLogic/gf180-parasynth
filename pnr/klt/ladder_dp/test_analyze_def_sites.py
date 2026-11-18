@@ -188,4 +188,15 @@ def test_refusal_inputs(tmp_path: pathlib.Path) -> None:
     par_ok.write_text('{"requests": {"place_and_route": {"power": {"nets": ["VSS", "VDD"]}}}}')
     ok = ads.read_par_power_nets(par_ok)
     assert ok[0] == frozenset({"VSS", "VDD"}) and ok[1] is None
+
+    par_klt = tmp_path / "par_klt.json"
+    par_klt.write_text('{"power": {"power_net": "VDD", "ground_net": "VSS"}}')
+    ok_klt = ads.read_par_power_nets(par_klt)
+    assert ok_klt[0] == frozenset({"VDD", "VSS"}), ok_klt
+
+    par_empty = tmp_path / "par_empty.json"
+    par_empty.write_text('{"power": {"pdn": true}}')
+    no_nets = ads.read_par_power_nets(par_empty)
+    assert no_nets[0] is None and "no power/ground nets" in no_nets[1]
+
     assert def_path.exists()
