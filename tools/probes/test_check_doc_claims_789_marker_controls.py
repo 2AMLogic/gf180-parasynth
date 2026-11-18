@@ -74,12 +74,16 @@ IN_DIVERGENCE_PRESATISFIED = [
      "T1: 3/11 items met", "the README T1 count control"),
 ]
 
-# #936, sibling shape: repointing docs/milestones.md:62's in= defeats control 3's
+# #936, sibling shape: repointing the milestone drum_kit claim's in= defeats control 3's
 # injection by a different door -- the find/replace string carries BOTH halves
 # of the claim, so the target stops matching and inject_or_refuse (#913)
 # refuses. Covered on main by mechanism; pinned here so it stays covered.
 IN_DIVERGENCE_TARGET_MISSES = [
-    ("docs/milestones.md", 62,
+    # lineno=None: the claim is located by content at run time
+    # (_milestone_drum_kit_line) -- a hard-coded index breaks on every doc
+    # edit that inserts a marker above it (#904, #920/#927, #957, #960,
+    # #787); #787's record-step claim is the live case.
+    ("docs/milestones.md", None,
      "in=rtl-sketch/drum_kit.v", "in=rtl-sketch/drum_kit_copy.v",
      "rtl-sketch/drum_kit.v", "rtl-sketch/drum_kit_copy.v", "",
      "injection target", "the milestone-3 control"),
@@ -331,6 +335,22 @@ def _stage_already_satisfied(scratch: pathlib.Path, rel: str, how: str,
         f.write_text(orig.replace(find, staged), encoding="utf-8")
 
 
+def _milestone_drum_kit_line(doc: pathlib.Path) -> int:
+    """1-based line of the milestone-3 drum_kit claim, found by content --
+    a hard-coded index breaks on every doc edit that inserts a marker above
+    it (#904, #920/#927, #957, #960, #787), and #787's record-step claim is
+    the live case. The grep= content plus the in= path is unique in the
+    file; anything else fails loudly rather than staging against the wrong
+    line."""
+    lines = doc.read_text(encoding="utf-8").splitlines(keepends=True)
+    hits = [i + 1 for i, line in enumerate(lines)
+            if "claim: grep=" in line and "module drum_kit" in line
+            and "in=rtl-sketch/drum_kit.v" in line]
+    assert len(hits) == 1, (
+        f"drum_kit claim not uniquely located in {doc}: {len(hits)} matches")
+    return hits[0]
+
+
 def _anchor_claim_62_as_960_does(scratch: pathlib.Path) -> None:
     """Recreate PR #960's two edits on the SCRATCH copy: the anchored doc
     claim and the matching anchored find string in the probe (#960's diff
@@ -343,13 +363,14 @@ def _anchor_claim_62_as_960_does(scratch: pathlib.Path) -> None:
     claim form."""
     doc = scratch / "docs/milestones.md"
     lines = doc.read_text(encoding="utf-8").splitlines(keepends=True)
-    if 'grep="^module drum_kit" in=' in lines[61]:
-        lines[61] = lines[61].replace('grep="^module drum_kit" in=',
-                                      'grep="^module drum_kit #\\(" in=')
+    n = _milestone_drum_kit_line(doc)
+    if 'grep="^module drum_kit" in=' in lines[n - 1]:
+        lines[n - 1] = lines[n - 1].replace('grep="^module drum_kit" in=',
+                                            'grep="^module drum_kit #\\(" in=')
         doc.write_text("".join(lines), encoding="utf-8")
     else:
-        assert 'grep="^module drum_kit #\\(" in=' in lines[61], \
-            "claim 62 anchor not found (neither form)"
+        assert 'grep="^module drum_kit #\\(" in=' in lines[n - 1], \
+            "drum_kit claim anchor not found (neither form)"
     probe = scratch / PROBE_REL
     text = probe.read_text(encoding="utf-8")
     old = "'grep=\"^module drum_kit\" in=rtl-sketch/drum_kit.v'"
@@ -447,12 +468,15 @@ def test_already_satisfied_staging_survives_an_anchored_claim_form(
                     "drum_kit_NOT_IN_TREE", "the milestone-3 control")
 
 
-def _repoint_in(scratch: pathlib.Path, doc: str, lineno: int, old: str,
+def _repoint_in(scratch: pathlib.Path, doc: str, lineno, old: str,
                 new: str) -> None:
     """Repoint ONE claim marker's in= (line-targeted: the same in= string
-    appears on several claims in these documents)."""
+    appears on several claims in these documents). lineno=None locates the
+    milestone drum_kit claim by content instead of a hard-coded line."""
     f = scratch / doc
     lines = f.read_text(encoding="utf-8").splitlines(keepends=True)
+    if lineno is None:
+        lineno = _milestone_drum_kit_line(f)
     assert old in lines[lineno - 1], f"in= anchor not on {doc}:{lineno}"
     lines[lineno - 1] = lines[lineno - 1].replace(old, new)
     f.write_text("".join(lines), encoding="utf-8")
