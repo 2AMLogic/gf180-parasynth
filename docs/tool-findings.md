@@ -271,9 +271,11 @@ or player requirement currently needs these sites fixed.** Nothing in the
 current milestone (#282, checked 2026-11-18: no mention of the
 `ladder_dp` route, DRC or PDN in its body) or the FPGA delivery path rests
 on this route being DRC-clean, and ASIC shrinking is deferred (#33). At
-52.3% utilization (`par_response.json` `utilization_pct` 52.3365) with
-**0 antenna, 0 setup and 0 hold violations** (`antenna_violation_count`,
-`setup_violation_count`, `hold_violation_count`, all 0, setup and hold at
+52.3% utilization (`par_response.json` `utilization_pct` 52.3365) <!-- claim: grep='^  "utilization_pct": 52.3365,?$' in=pnr/klt/ladder_dp/par_response.json --> with
+**0 antenna, 0 setup and 0 hold violations** (`antenna_violation_count`, <!-- claim: grep='^  "antenna_violation_count": 0,?$' in=pnr/klt/ladder_dp/par_response.json -->
+`setup_violation_count`, <!-- claim: grep='^  "setup_violation_count": 0,?$' in=pnr/klt/ladder_dp/par_response.json -->
+`hold_violation_count`, <!-- claim: grep='^  "hold_violation_count": 0,?$' in=pnr/klt/ladder_dp/par_response.json -->
+all 0, setup and hold at
 all three corners), there is nothing to spend on the trade and nothing it
 would buy.
 
