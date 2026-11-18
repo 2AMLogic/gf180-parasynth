@@ -4,6 +4,15 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **Issue #1040** (closed): analyze_def_sites: read the kept DEF's extension-point census on the #1010 host (live-vs-latent, one command)
+- **PR #1039**: fix: a '+' in the DEF walk ends the layer-name position
+- **Issue #1037** (closed): analyze_def_sites: a skipped '+' does not end the LAYER-name position either (sibling of #1034)
+- **PR #1031**: fix: consume skip-keyword name arguments so they never become phantom vias
+- **Issue #1030** (closed): analyze_def_sites: a skip-keyword's NAME argument after a path's points becomes a phantom via (same class as #1013/#1021, via branch not width branch)
+- **PR #1029**: docs: bind #1006 route-record figures to claim markers
+- **Issue #1023** (closed): docs/tool-findings.md carries zero claim markers, so its route-record figures have nothing re-deriving them
+- **PR #1025**: fix: apply the DEF path-point extension to the wire rect and count it in the record
+- **Issue #1022** (closed): analyze_def_sites: the DEF path-point extension is recorded but never applied to the emitted rect, nor surfaced in the record
 - **PR #1035**: fix: end the via-name position at a skipped '+' in DEF path walk
 - **Issue #1034** (closed): analyze_def_sites: '+ NONDEFAULTRULE <name>' after a path's points makes the keyword a phantom via (the spelling #1030 left out of scope)
 - **PR #1027**: docs: scope 'bound in-repo' claim to what route_def_manifest.json carries
