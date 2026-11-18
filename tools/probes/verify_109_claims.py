@@ -161,6 +161,38 @@ def _refuse_voice(voice: str, why: str, refusals: list[str]):
     refusals.append(why)
 
 
+def conclusion_extent_lines(extents: dict[str, dict]) -> list[str]:
+    """The half's CONCLUSION block, with every extent figure derived from
+    this run's own measurements (#988): the prose and the detail lines above
+    it are built from the same values, so the prose cannot drift from the
+    measurement it describes -- the failure class that left a hard-coded
+    `~41 ms` standing next to a measured `latest 53.9 ms` on the same run,
+    in prose no gate reads. `t2_ms` is conditional in balance_trajectory_db's
+    detail (present only when a second floor-clearing instant exists past
+    min_gap_ms), so a single-instant record degrades the phrase rather than
+    KeyError-ing (#814's start-red test surfaced that condition)."""
+    def span(v: dict) -> str:
+        if v["t2_ms"] is None:
+            return f"a single floor-clearing instant at {v['t1_ms']:.1f} ms"
+        return f"{v['t1_ms']:.1f} ms to {v['t2_ms']:.1f} ms"
+
+    def end(v: dict) -> str:
+        return span(v) if v["t2_ms"] is None else f"{v['t2_ms']:.1f} ms"
+
+    rs, cb = extents["RS"], extents["CB"]
+    return [
+        "\n      CONCLUSION: for RS.WAV the joint-floor-clearing region runs from",
+        f"      {span(rs)} of a {rs['t_end_ms']:.0f} ms search window -- longer than the",
+        "      ~20 ms this issue quotes, but the same order of magnitude, and a",
+        "      small minority of the case's nominal window either way. For CB.WAV",
+        f"      it runs to {end(cb)} of a {cb['t_end_ms']:.0f} ms window. Neither",
+        "      number is a single constant 'signal length' -- floor-clearing is",
+        "      intermittent, not a contiguous prefix -- which is the concrete",
+        "      reason this fix gates each instant against its own measured floor",
+        "      (#92) instead of trying to pick one better window length (#101).",
+    ]
+
+
 def measure_reference_signal_length():
     print("\n" + "=" * 78)
     print("2. RS.WAV / CB.WAV floor-clearing extent (re-measured from the actual")
@@ -170,6 +202,7 @@ def measure_reference_signal_length():
     required = os.environ.get(rc.REFS_REQUIRED_ENV) == "1"
     refusals: list[str] = []
     measured: set[str] = set()
+    extents: dict[str, dict] = {}
 
     for voice, op in REFERENCE_VOICES:
         # File-level precondition (#814 row 3), PER VOICE: the WAV this half
@@ -223,6 +256,8 @@ def measure_reference_signal_length():
             continue
         measured.add(voice)
         d = e.detail
+        extents[voice] = {"t1_ms": d["t1_ms"], "t2_ms": d.get("t2_ms"),
+                          "t_end_ms": op["t_end"] * 1e3}
         # t2_ms is conditional in balance_trajectory_db's detail: present only
         # when a second floor-clearing instant exists past min_gap_ms. A
         # single-instant record is a valid verdict, not a KeyError (#814's
@@ -239,16 +274,11 @@ def measure_reference_signal_length():
         # The CONCLUSION compares both voices' measured extents, so it is
         # printed only when both produced measurements this run: a half-run
         # keeps its per-voice detail lines and NOT RUN records without
-        # asserting the numbers of the voice that did not run.
-        print("\n      CONCLUSION: for RS.WAV the joint-floor-clearing region runs from")
-        print("      ~11 ms to ~41 ms of a 60 ms search window -- longer than the ~20 ms")
-        print("      this issue quotes, but the same order of magnitude, and a small")
-        print("      minority of the case's nominal window either way. For CB.WAV it")
-        print("      runs to ~589 ms of a 600 ms window. Neither number is a single")
-        print("      constant 'signal length' -- floor-clearing is intermittent, not a")
-        print("      contiguous prefix -- which is the concrete reason this fix gates")
-        print("      each instant against its own measured floor (#92) instead of")
-        print("      trying to pick one better window length (#101).")
+        # asserting the numbers of the voice that did not run. The figures
+        # come from conclusion_extent_lines(), derived from this run (#988),
+        # so the prose and the detail lines above cannot disagree.
+        for line in conclusion_extent_lines(extents):
+            print(line)
     print("\n      The '808-from-mars' 26 ms / 39 ms rimshot figures are NOT")
     print("      re-measured here: that pack's audio is operator-side storage")
     print("      (refaudio/README.md) and was not available on this host.")
