@@ -97,6 +97,7 @@ _SHAPE_TYPES = {
 
 _SKIP_TOKENS = {
     "+", "SHAPE", "TAPER", "TAPERRULE", "STYLE", "MASK", "NONDEFAULT", "VIRTUAL",
+    "ORIGINAL",
     # DEF net properties -- no geometry, and naming them keeps the unparsed
     # count meaning "shapes the grammar missed", not "+ USE SIGNAL noise"
     "USE", "SIGNAL", "POWER", "GROUND", "CLOCK", "SOURCE", "NETLIST", "DIST",
@@ -110,11 +111,28 @@ _SKIP_TOKENS = {
 #: where a widthless path's ``width is None`` branch silently consumed it
 #: as the width (#1021, the class #1013 closed for the extension form) --
 #: so the argument is consumed with its keyword. Members taking a name
-#: (``TAPERRULE``, ``USE``, ``SOURCE``, ...) need no entry: a non-numeric
-#: name cannot be mistaken for a width and is counted unparsed in its own
-#: right. The argument is only consumed when it *is* a bare numeric word,
-#: so a malformed spec keeps today's behaviour for whatever follows.
+#: (``TAPERRULE``, ``USE``, ``SOURCE``, ...) are NOT safe by default: a name
+#: cannot be mistaken for a width, but it is counted unparsed only *before*
+#: the first point. After a point ``expect_via`` is set and the via branch
+#: swallows any word starting with a letter, so the name became a phantom
+#: via with ``unparsed`` still 0 (#1030). Those are handled below. The
+#: argument is only consumed when it *is* a bare numeric word, so a
+#: malformed spec keeps today's behaviour for whatever follows.
 _SKIP_TOKENS_WITH_NUMERIC_ARG = {"STYLE", "MASK", "WEIGHT"}
+
+#: Skip-keywords taking one NAME argument (``TAPERRULE ruleName``,
+#: ``NONDEFAULT``, ``ORIGINAL netName``). The grammar read here
+#: is checked against the LEF/DEF 5.8 Language Reference, NETS section
+#: (http://coriolis.lip6.fr/doc/lefdef/lefdefref/DEFSyntax.html):
+#: ``layerName [TAPER | TAPERRULE ruleName] [STYLE styleNum]`` in
+#: regularWiring and each ``NEW``; ``+ ORIGINAL netName``; and the net-level
+#: ``+ PROPERTY {propName propVal} ...``, the last clause before ``;``. The
+#: spec does not list ``NONDEFAULT`` (the real keyword is ``NONDEFAULTRULE``,
+#: before regularWiring; #1034). ``USE``/``SOURCE`` arguments
+#: are themselves ``_SKIP_TOKENS`` members, so they were never at risk. The
+#: name is consumed with its keyword; a real via name that follows is a
+#: separate word and still reaches the via branch.
+_SKIP_TOKENS_WITH_NAME_ARG = {"TAPERRULE", "NONDEFAULT", "ORIGINAL"}
 
 
 def _norm_bbox_um(bbox: str) -> tuple[float, float, float, float] | None:
@@ -395,6 +413,36 @@ def _parse_net_section(
                     if nxt_kind == "word" and re.fullmatch(r"-?\d+", nxt_value):
                         i += 2
                         continue
+                if word in _SKIP_TOKENS_WITH_NAME_ARG and i + 1 < len(toks):
+                    nxt_kind, nxt_value = toks[i + 1]
+                    if (
+                        nxt_kind == "word"
+                        and re.match(r"^[A-Za-z_]", nxt_value)
+                        and nxt_value not in _SKIP_TOKENS
+                        and nxt_value not in _PATH_KEYWORDS
+                        and nxt_value not in _SHAPE_TYPES
+                    ):
+                        i += 2
+                        continue
+                if word == "PROPERTY":
+                    # ``PROPERTY {propName propVal}...``. Consumed pair by pair
+                    # and only while the next token is a plain word, never to
+                    # the end of the net: geometry after a (non-conformant)
+                    # PROPERTY must stay in the walk, not be erased with
+                    # ``unparsed`` still 0 (#1031 review). A lone trailing name
+                    # (no value) is consumed alone so it cannot become a via.
+                    def _plain(tok: tuple[str, str]) -> bool:
+                        return (
+                            tok[0] == "word"
+                            and tok[1] not in _SKIP_TOKENS
+                            and tok[1] not in _PATH_KEYWORDS
+                            and tok[1] not in _SHAPE_TYPES
+                        )
+
+                    i += 1
+                    while i < len(toks) and _plain(toks[i]):
+                        i += 2 if i + 1 < len(toks) and _plain(toks[i + 1]) else 1
+                    continue
                 i += 1
                 continue
             if word in _PATH_KEYWORDS:

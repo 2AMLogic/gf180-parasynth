@@ -51,6 +51,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import pytest  # noqa: E402
 import analyze_def_sites as ads  # noqa: E402
 from classify_route_drc import parse_drc_report  # noqa: E402
 
@@ -856,25 +857,102 @@ def test_a_plain_widthless_path_is_unchanged() -> None:
 
 
 def test_a_taperrule_name_stays_counted_never_geometry() -> None:
-    """Control: ``TAPERRULE <name>`` keeps today's safe behaviour.
+    """Control: ``TAPERRULE <name>`` before the points never becomes geometry.
 
-    Its argument is a name, not a number, so it cannot be mistaken for a
-    width and lands in the unparsed count in its own right -- the probe
-    control in the issue, kept pinned so the fix cannot regress it.
+    #1030 changed the *count*, not the safety: the name is now consumed with
+    its keyword (as after the points), so it is no longer counted unparsed
+    (1 -> 0). The pinned property is that no width/via/point is made of it.
     """
     text = DEF.replace(
         "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
         "+ ROUTED Metal2 TAPERRULE NDR_1 ( 4300 2050 ) ( * 2300 )",
     )
     geometry = ads.DefGeometry(text)
-    assert geometry.unparsed_tokens == 1, geometry.unparsed_tokens
-    tokens = sorted(s["token"] for s in geometry.unparsed_samples)
-    assert tokens == ["NDR_1"], tokens
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
+    assert _vias_00146(geometry) == [], _vias_00146(geometry)
     wires = [
         (w["x1"], w["y1"], w["x2"], w["y2"], w["width"])
         for w in geometry.nets["_00146_"]
     ]
     assert wires == [(4300, 2050, 4300, 2300, None)], wires
+
+
+def _after_points(extra: str) -> "ads.DefGeometry":
+    """The mini-DEF's first path with ``extra`` written after its points."""
+    return ads.DefGeometry(
+        DEF.replace(
+            "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+            "+ ROUTED Metal2 ( 4300 2050 ) ( * 2300 ) " + extra,
+        )
+    )
+
+
+def _vias_00146(geometry: "ads.DefGeometry") -> list[str]:
+    return [s["via"] for s in geometry.nets["_00146_"] if s["kind"] == "via"]
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "+ TAPERRULE NDR_1",
+        "+ NONDEFAULT ndr1",
+        "+ PROPERTY weight 5",
+        "+ PROPERTY a 1 b 2",
+        "+ ORIGINAL OTHERNET",
+    ],
+)
+def test_a_skip_keyword_name_after_the_points_is_never_a_via(extra: str) -> None:
+    """#1030: the name rides with its keyword, never becomes a phantom via."""
+    geometry = _after_points(extra)
+    assert _vias_00146(geometry) == [], _vias_00146(geometry)
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_samples
+
+
+def test_a_real_via_name_after_a_point_still_emits_its_via() -> None:
+    """Control (defeating input): the consume must not eat a genuine via name,
+    including on a path that carried ``TAPERRULE <name>`` before its points."""
+    plain = ads.DefGeometry(
+        DEF.replace(
+            "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+            "+ ROUTED Metal2 ( 4300 2050 ) via12 ( * 2300 )",
+        )
+    )
+    assert _vias_00146(plain) == ["via12"], _vias_00146(plain)
+    tapered = ads.DefGeometry(
+        DEF.replace(
+            "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+            "+ ROUTED Metal2 TAPERRULE NDR_1 ( 4300 2050 ) via12 ( * 2300 )",
+        )
+    )
+    assert _vias_00146(tapered) == ["via12"], _vias_00146(tapered)
+    # and a name-taking keyword followed by a real via on the next path
+    after = _after_points("+ TAPERRULE NDR_1 NEW Metal3 ( 4300 2300 ) via23")
+    assert _vias_00146(after) == ["via23"], _vias_00146(after)
+
+
+def test_a_property_with_a_dangling_name_ends_cleanly() -> None:
+    """Malformed ``PROPERTY weight`` (no value) at end of net: no crash, no via."""
+    geometry = _after_points("+ PROPERTY weight")
+    assert _vias_00146(geometry) == [], _vias_00146(geometry)
+
+
+def test_a_property_never_erases_geometry_that_follows_it() -> None:
+    """Defeating input (rule 8): geometry after a PROPERTY must survive.
+
+    An unconditional swallow to the next ``+`` passes the no-via tests above
+    trivially while erasing a whole path with ``unparsed`` still 0.
+    """
+    after = _after_points("+ PROPERTY weight 5 NEW Metal3 ( 2000 2000 ) ( * 3000 ) via23")
+    assert _vias_00146(after) == ["via23"], _vias_00146(after)
+    assert after.unparsed_tokens == 0, after.unparsed_samples
+    inline = ads.DefGeometry(
+        DEF.replace(
+            "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+            "+ ROUTED Metal2 PROPERTY lengthSnap 5 ( 4300 2050 ) ( * 2300 ) via12",
+        )
+    )
+    assert _vias_00146(inline) == ["via12"], _vias_00146(inline)
+    assert [s for s in inline.nets["_00146_"] if s["kind"] == "wire"], inline.nets
 
 
 def test_refusal_inputs(tmp_path: pathlib.Path) -> None:
@@ -905,3 +983,16 @@ def test_refusal_inputs(tmp_path: pathlib.Path) -> None:
     assert no_nets[0] is None and "no power/ground nets" in no_nets[1]
 
     assert def_path.exists()
+
+
+@pytest.mark.parametrize("name_kw", ["TAPERRULE NDR_1", "ORIGINAL OTHERNET"])
+def test_a_name_keyword_with_no_plus_never_becomes_a_via(name_kw: str) -> None:
+    """#1030, isolated from #1034: the keyword is written with NO ``+``.
+
+    #1034 clears the via-name position at ``+``, so every ``+ ...`` case above
+    is also satisfied by that change. Only this PR's consume-the-argument
+    handling covers ``( .. ) ( * .. ) TAPERRULE NDR_1`` -- main's tree
+    alone reports ``('via', 'NDR_1')`` here.
+    """
+    geometry = _after_points(name_kw)
+    assert _vias_00146(geometry) == [], geometry.nets["_00146_"]
