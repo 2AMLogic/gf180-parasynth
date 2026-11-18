@@ -171,9 +171,17 @@ def parse_via_definitions(vias_body: str) -> dict[str, dict[str, list[tuple[int,
     return vias
 
 
-def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int, list[dict[str, Any]]]:
+def _parse_net_section(
+    body: str,
+) -> tuple[dict[str, list[dict[str, Any]]], int, list[dict[str, Any]], tuple[int, int]]:
     """One ``NETS``/``SPECIALNETS`` body -> ({net: [shapes]}, unparsed count,
-    unparsed samples).
+    unparsed samples, (extension points seen, non-zero ones)).
+
+    The extension-point count is taken at tokenise time, on every
+    ``( x y ext )`` token, so it is the population in the file -- independent
+    of whether the point later completes a wire pair (a via-terminated stub or
+    a point before ``NEW`` completes none) and never counting an interior
+    point once per adjoining segment (#1022).
 
     Shapes carry ``kind`` (``wire``/``via``/``pad``), ``layer``, and integer
     DBU coordinates. A wire is a point pair on one path; either point of the
@@ -188,6 +196,8 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
     nets: dict[str, list[dict[str, Any]]] = {}
     unparsed = 0
     unparsed_samples: list[dict[str, Any]] = []
+    ext_points = 0
+    ext_points_nonzero = 0
     for entry in re.finditer(r"(?m)^\s*-\s+([^\s(]+)([^;]*);", body):
         net = entry.group(1)
         spec = entry.group(2)
@@ -231,6 +241,9 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
                 # number is how far the wire end extends past the point,
                 # never a width
                 toks.append(("pt_ext", (m.group(5), m.group(6), int(m.group(7)))))
+                ext_points += 1
+                if int(m.group(7)) != 0:
+                    ext_points_nonzero += 1
             elif m.group(8) is not None:
                 toks.append(("pt", (m.group(8), m.group(9))))
             elif m.group(0) == "RECT":
@@ -257,7 +270,9 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
                     # each end's extension is metal past its own point along
                     # the path axis (#1022); an out-of-spec negative extension
                     # is read as none (0), never as a shrink below the
-                    # centreline
+                    # centreline. An interior point's extension therefore
+                    # extends BOTH adjoining segments past the joint: a
+                    # conservative over-cover (can only add overlap reports)
                     ext_start = max(pending_ext or 0, 0)
                     ext_end = max(ext or 0, 0)
                     if y1 == y2:
@@ -417,7 +432,7 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
                 unparsed_samples.append({"net": net, "token": word[:60]})
             i += 1
         nets[net] = shapes
-    return nets, unparsed, unparsed_samples
+    return nets, unparsed, unparsed_samples, (ext_points, ext_points_nonzero)
 
 
 class DefGeometry:
@@ -434,32 +449,25 @@ class DefGeometry:
         self.nets: dict[str, list[dict[str, Any]]] = {}
         self.unparsed_tokens = 0
         self.unparsed_samples: list[dict[str, Any]] = []
+        # #1022 census: path-point extensions in the file, counted at tokenise
+        # time (see _parse_net_section) -- not derived from completed wires,
+        # which would drop points that complete no pair and double-count an
+        # interior point. "All zero" claimed from a capped unparsed sample is
+        # the guess this replaces.
+        self.ext_points_total = 0
+        self.ext_points_nonzero = 0
         self.sections_found: list[str] = []
         for section, attr in (("specialnets", "specialnets"), ("nets", "nets")):
             match = _SECTION[section].search(text)
             if match is None:
                 continue
             self.sections_found.append(section)
-            parsed, unparsed, samples = _parse_net_section(match.group(1))
+            parsed, unparsed, samples, ext_counts = _parse_net_section(match.group(1))
+            self.ext_points_total += ext_counts[0]
+            self.ext_points_nonzero += ext_counts[1]
             getattr(self, attr).update(parsed)
             self.unparsed_tokens += unparsed
             self.unparsed_samples.extend(samples)
-        # #1022 census: how many path-point extensions the parse saw, and how
-        # many carry a non-zero value. "All zero" claimed from a capped
-        # unparsed sample is exactly the guess this field replaces; on the
-        # kept DEF it is the one-command answer to live-vs-latent.
-        self.ext_ends_total = 0
-        self.ext_ends_nonzero = 0
-        for shapes in (self.nets, self.specialnets):
-            for net_shapes in shapes.values():
-                for shape in net_shapes:
-                    if shape["kind"] != "wire":
-                        continue
-                    for value in (shape["ext_start"], shape["ext_end"]):
-                        if value is not None:
-                            self.ext_ends_total += 1
-                            if value != 0:
-                                self.ext_ends_nonzero += 1
 
     def shapes_near(
         self,
@@ -578,8 +586,11 @@ def analyse(
             for name in signal_nets
         }
 
-        # per-site extension census (#1022): extension ends among the window's
-        # wires -- power and signal both -- and how many are non-zero
+        # per-site SEGMENT-END census (#1022): extension values carried by the
+        # window's wires -- power and signal both -- and how many are non-zero.
+        # This counts ends on completed wires, NOT extension points: an
+        # interior point is seen by two segments, and a point that completes
+        # no pair is absent. The file-wide point count is def_parse.extension_points_*.
         ext_total = ext_nonzero = 0
         for found in list(per_power.values()) + list(per_signal.values()):
             for wire in found["wires"]:
@@ -710,7 +721,7 @@ def analyse(
                     }
                     for name, found in per_signal.items()
                 },
-                "ext_ends_in_window": {"total": ext_total, "nonzero": ext_nonzero},
+                "wire_ext_ends_in_window": {"total": ext_total, "nonzero": ext_nonzero},
                 "signal_overlaps_power": overlap,
                 "evidence": evidence,
                 "verdict": verdict,
@@ -823,8 +834,8 @@ def main(argv: list[str] | None = None) -> int:
             "via_definitions_parsed": len(geometry.vias),
             "unparsed_tokens": geometry.unparsed_tokens,
             "unparsed_samples": geometry.unparsed_samples,
-            "extension_ends_total": geometry.ext_ends_total,
-            "extension_ends_nonzero": geometry.ext_ends_nonzero,
+            "extension_points_total": geometry.ext_points_total,
+            "extension_points_nonzero": geometry.ext_points_nonzero,
         },
         "power_nets": sorted(power_nets),
         "window_um": args.window_um,

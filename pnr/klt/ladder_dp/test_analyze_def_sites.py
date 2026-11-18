@@ -485,7 +485,7 @@ END DESIGN
 """
 
 
-def test_the_parse_census_counts_extension_ends_per_run() -> None:
+def test_the_parse_census_counts_extension_points_per_run() -> None:
     """Total ext points seen and non-zero ones, across both net sections.
 
     #1022's census: the committed record's capped ``unparsed_samples`` made
@@ -493,14 +493,41 @@ def test_the_parse_census_counts_extension_ends_per_run() -> None:
     parse now counts, so the question has a number.
     """
     geometry = ads.DefGeometry(CENSUS_DEF)
-    assert geometry.ext_ends_total == 3, geometry.ext_ends_total
-    assert geometry.ext_ends_nonzero == 2, geometry.ext_ends_nonzero
+    assert geometry.ext_points_total == 3, geometry.ext_points_total
+    assert geometry.ext_points_nonzero == 2, geometry.ext_points_nonzero
+
+
+def _points(body: str) -> tuple[int, int]:
+    text = (
+        "VERSION 5.8 ;\nUNITS DISTANCE MICRONS 1000 ;\nNETS 1 ;\n"
+        f"  - sig ( U1 A )\n    {body}\n    ;\nEND NETS\nEND DESIGN\n"
+    )
+    g = ads.DefGeometry(text)
+    assert g.unparsed_tokens == 0, g.unparsed_samples
+    return g.ext_points_total, g.ext_points_nonzero
+
+
+def test_the_census_counts_points_not_segment_ends() -> None:
+    """One ext point is one point however the path shapes around it.
+
+    Review of #1025: counting ends of completed wires reported 2 for an
+    interior point (A), and 0 for a via-terminated stub (D) and for a point
+    before ``NEW`` (F) -- the latter silently, with zero unparsed tokens.
+    """
+    # A: ext only on the middle point of a 3-point path
+    assert _points("+ ROUTED Metal2 400 ( 1000 3000 ) ( 2000 3000 60 ) ( 3000 3000 )") == (1, 1)
+    # D: single point with ext terminated by a via
+    assert _points("+ ROUTED Metal2 400 ( 2000 3000 70 ) via2_1") == (1, 1)
+    # F: ext point, then a new path start
+    assert _points("+ ROUTED Metal2 400 ( 2000 3000 80 ) NEW Metal2 400 ( 1 1 ) ( 5 1 )") == (1, 1)
+    # zero ext is counted as seen, not non-zero
+    assert _points("+ ROUTED Metal2 400 ( 2000 3000 0 ) via2_1") == (1, 0)
 
 
 def test_the_site_record_counts_ext_ends_in_its_window() -> None:
     """Per-site census: extension ends among the window's wires, non-zero apart."""
     record = _analyse_ext_touch(ads.DefGeometry(EXT_TOUCH_DEF))
-    assert record["ext_ends_in_window"] == {"total": 1, "nonzero": 1}, record
+    assert record["wire_ext_ends_in_window"] == {"total": 1, "nonzero": 1}, record
 
 
 def test_the_census_reaches_the_json_record(tmp_path: pathlib.Path) -> None:
@@ -525,9 +552,9 @@ def test_the_census_reaches_the_json_record(tmp_path: pathlib.Path) -> None:
     )
     assert rc == ads.EXIT_OK, rc
     result = json.loads(out_path.read_text())
-    assert result["def_parse"]["extension_ends_total"] == 1, result["def_parse"]
-    assert result["def_parse"]["extension_ends_nonzero"] == 1, result["def_parse"]
-    assert result["sites"][0]["ext_ends_in_window"] == {"total": 1, "nonzero": 1}
+    assert result["def_parse"]["extension_points_total"] == 1, result["def_parse"]
+    assert result["def_parse"]["extension_points_nonzero"] == 1, result["def_parse"]
+    assert result["sites"][0]["wire_ext_ends_in_window"] == {"total": 1, "nonzero": 1}
     assert result["sites"][0]["verdict"] == "router_overlap_signal_crosses_power"
 
 
