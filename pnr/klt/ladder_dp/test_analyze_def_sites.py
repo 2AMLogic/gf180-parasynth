@@ -42,9 +42,9 @@ from __future__ import annotations
 import json
 import pathlib
 import sys
-import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import pytest  # noqa: E402
 import analyze_def_sites as ads  # noqa: E402
 from classify_route_drc import parse_drc_report  # noqa: E402
 
@@ -581,9 +581,6 @@ def _vias(geometry: "ads.DefGeometry") -> list[str]:
     return [s["via"] for s in geometry.nets["_00146_"] if s["kind"] == "via"]
 
 
-
-
-
 @pytest.mark.parametrize(
     "extra",
     [
@@ -627,6 +624,25 @@ def test_a_property_with_a_dangling_name_ends_cleanly() -> None:
     """Malformed ``PROPERTY weight`` (no value) at end of net: no crash, no via."""
     geometry = _after_points("+ PROPERTY weight")
     assert _vias(geometry) == [], _vias(geometry)
+
+
+def test_a_property_never_erases_geometry_that_follows_it() -> None:
+    """Defeating input (rule 8): geometry after a PROPERTY must survive.
+
+    An unconditional swallow to the next ``+`` passes the no-via tests above
+    trivially while erasing a whole path with ``unparsed`` still 0.
+    """
+    after = _after_points("+ PROPERTY weight 5 NEW Metal3 ( 2000 2000 ) ( * 3000 ) via23")
+    assert _vias(after) == ["via23"], _vias(after)
+    assert after.unparsed_tokens == 0, after.unparsed_samples
+    inline = ads.DefGeometry(
+        DEF.replace(
+            "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+            "+ ROUTED Metal2 PROPERTY lengthSnap 5 ( 4300 2050 ) ( * 2300 ) via12",
+        )
+    )
+    assert _vias(inline) == ["via12"], _vias(inline)
+    assert [s for s in inline.nets["_00146_"] if s["kind"] == "wire"], inline.nets
 
 
 def test_refusal_inputs(tmp_path: pathlib.Path) -> None:

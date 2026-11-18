@@ -121,9 +121,13 @@ _SKIP_TOKENS_WITH_NUMERIC_ARG = {"STYLE", "MASK", "WEIGHT"}
 
 #: Skip-keywords taking one NAME argument (``TAPERRULE ruleName``,
 #: ``NONDEFAULT``, ``ORIGINAL netName``). The grammar read here
-#: is from recollection of DEF 5.8 (NETS: regularWiring / net-level ``+``
-#: clauses); no copy of the spec is on the dispatch host, so it is NOT
-#: checked against the document -- see the PR. ``USE``/``SOURCE`` arguments
+#: is checked against the LEF/DEF 5.8 Language Reference, NETS section
+#: (http://coriolis.lip6.fr/doc/lefdef/lefdefref/DEFSyntax.html):
+#: ``layerName [TAPER | TAPERRULE ruleName] [STYLE styleNum]`` in
+#: regularWiring and each ``NEW``; ``+ ORIGINAL netName``; and the net-level
+#: ``+ PROPERTY {propName propVal} ...``, the last clause before ``;``. The
+#: spec does not list ``NONDEFAULT`` (the real keyword is ``NONDEFAULTRULE``,
+#: before regularWiring; #1034). ``USE``/``SOURCE`` arguments
 #: are themselves ``_SKIP_TOKENS`` members, so they were never at risk. The
 #: name is consumed with its keyword; a real via name that follows is a
 #: separate word and still reaches the via branch.
@@ -364,11 +368,23 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
                         i += 2
                         continue
                 if word == "PROPERTY":
-                    # ``PROPERTY {propName propVal}...``: a net-level clause, so
-                    # it runs to the next ``+`` or the end of the net
+                    # ``PROPERTY {propName propVal}...``. Consumed pair by pair
+                    # and only while the next token is a plain word, never to
+                    # the end of the net: geometry after a (non-conformant)
+                    # PROPERTY must stay in the walk, not be erased with
+                    # ``unparsed`` still 0 (#1031 review). A lone trailing name
+                    # (no value) is consumed alone so it cannot become a via.
+                    def _plain(tok: tuple[str, str]) -> bool:
+                        return (
+                            tok[0] == "word"
+                            and tok[1] not in _SKIP_TOKENS
+                            and tok[1] not in _PATH_KEYWORDS
+                            and tok[1] not in _SHAPE_TYPES
+                        )
+
                     i += 1
-                    while i < len(toks) and toks[i] != ("word", "+"):
-                        i += 1
+                    while i < len(toks) and _plain(toks[i]):
+                        i += 2 if i + 1 < len(toks) and _plain(toks[i + 1]) else 1
                     continue
                 i += 1
                 continue
