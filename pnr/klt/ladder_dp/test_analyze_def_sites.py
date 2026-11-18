@@ -823,7 +823,7 @@ def test_a_taperrule_name_stays_counted_never_geometry() -> None:
     )
     geometry = ads.DefGeometry(text)
     assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
-    assert _vias(geometry) == [], _vias(geometry)
+    assert _vias_00146(geometry) == [], _vias_00146(geometry)
     wires = [
         (w["x1"], w["y1"], w["x2"], w["y2"], w["width"])
         for w in geometry.nets["_00146_"]
@@ -841,7 +841,7 @@ def _after_points(extra: str) -> "ads.DefGeometry":
     )
 
 
-def _vias(geometry: "ads.DefGeometry") -> list[str]:
+def _vias_00146(geometry: "ads.DefGeometry") -> list[str]:
     return [s["via"] for s in geometry.nets["_00146_"] if s["kind"] == "via"]
 
 
@@ -858,7 +858,7 @@ def _vias(geometry: "ads.DefGeometry") -> list[str]:
 def test_a_skip_keyword_name_after_the_points_is_never_a_via(extra: str) -> None:
     """#1030: the name rides with its keyword, never becomes a phantom via."""
     geometry = _after_points(extra)
-    assert _vias(geometry) == [], _vias(geometry)
+    assert _vias_00146(geometry) == [], _vias_00146(geometry)
     assert geometry.unparsed_tokens == 0, geometry.unparsed_samples
 
 
@@ -871,23 +871,23 @@ def test_a_real_via_name_after_a_point_still_emits_its_via() -> None:
             "+ ROUTED Metal2 ( 4300 2050 ) via12 ( * 2300 )",
         )
     )
-    assert _vias(plain) == ["via12"], _vias(plain)
+    assert _vias_00146(plain) == ["via12"], _vias_00146(plain)
     tapered = ads.DefGeometry(
         DEF.replace(
             "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
             "+ ROUTED Metal2 TAPERRULE NDR_1 ( 4300 2050 ) via12 ( * 2300 )",
         )
     )
-    assert _vias(tapered) == ["via12"], _vias(tapered)
+    assert _vias_00146(tapered) == ["via12"], _vias_00146(tapered)
     # and a name-taking keyword followed by a real via on the next path
     after = _after_points("+ TAPERRULE NDR_1 NEW Metal3 ( 4300 2300 ) via23")
-    assert _vias(after) == ["via23"], _vias(after)
+    assert _vias_00146(after) == ["via23"], _vias_00146(after)
 
 
 def test_a_property_with_a_dangling_name_ends_cleanly() -> None:
     """Malformed ``PROPERTY weight`` (no value) at end of net: no crash, no via."""
     geometry = _after_points("+ PROPERTY weight")
-    assert _vias(geometry) == [], _vias(geometry)
+    assert _vias_00146(geometry) == [], _vias_00146(geometry)
 
 
 def test_a_property_never_erases_geometry_that_follows_it() -> None:
@@ -897,7 +897,7 @@ def test_a_property_never_erases_geometry_that_follows_it() -> None:
     trivially while erasing a whole path with ``unparsed`` still 0.
     """
     after = _after_points("+ PROPERTY weight 5 NEW Metal3 ( 2000 2000 ) ( * 3000 ) via23")
-    assert _vias(after) == ["via23"], _vias(after)
+    assert _vias_00146(after) == ["via23"], _vias_00146(after)
     assert after.unparsed_tokens == 0, after.unparsed_samples
     inline = ads.DefGeometry(
         DEF.replace(
@@ -905,7 +905,7 @@ def test_a_property_never_erases_geometry_that_follows_it() -> None:
             "+ ROUTED Metal2 PROPERTY lengthSnap 5 ( 4300 2050 ) ( * 2300 ) via12",
         )
     )
-    assert _vias(inline) == ["via12"], _vias(inline)
+    assert _vias_00146(inline) == ["via12"], _vias_00146(inline)
     assert [s for s in inline.nets["_00146_"] if s["kind"] == "wire"], inline.nets
 
 
@@ -937,3 +937,16 @@ def test_refusal_inputs(tmp_path: pathlib.Path) -> None:
     assert no_nets[0] is None and "no power/ground nets" in no_nets[1]
 
     assert def_path.exists()
+
+
+@pytest.mark.parametrize("name_kw", ["TAPERRULE NDR_1", "ORIGINAL OTHERNET"])
+def test_a_name_keyword_with_no_plus_never_becomes_a_via(name_kw: str) -> None:
+    """#1030, isolated from #1034: the keyword is written with NO ``+``.
+
+    #1034 clears the via-name position at ``+``, so every ``+ ...`` case above
+    is also satisfied by that change. Only this PR's consume-the-argument
+    handling covers ``( .. ) ( * .. ) TAPERRULE NDR_1`` -- main's tree
+    alone reports ``('via', 'NDR_1')`` here.
+    """
+    geometry = _after_points(name_kw)
+    assert _vias_00146(geometry) == [], geometry.nets["_00146_"]
