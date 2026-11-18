@@ -1,0 +1,606 @@
+#!/usr/bin/env python3
+"""Answer design-versus-router for the residual route DRC sites from the routed DEF (#1006).
+
+``classify_route_drc.py`` classifies by *nets*: the 24 ``Metal2``/``VSS``
+Metal Spacing sites are ``unclassified`` because each mixes a signal with a
+power net, and the routed DEF needed to go one level further -- is the ``VSS``
+geometry at the site the power block's M1->M4 via-column land, or something
+the router itself put there? -- was not collected, so the question stayed
+open (``docs/tool-findings.md``, #808). This tool reads that DEF and records,
+per site:
+
+* every ``VSS`` ``Metal2`` shape inside a window around the violation bbox,
+  tagged by origin: a via pad (from a via placement whose definition carries
+  ``Metal2`` rectangles), a special-net wire segment or pad, or an unresolved
+  via (its definition is not in the DEF, so its pads cannot be derived --
+  counted, never silently dropped);
+* every signal-net ``Metal2`` shape in the same window;
+* whether any signal shape *overlaps* a ``VSS`` shape (the router placed metal
+  inside power geometry) or only comes near it at spacing distance.
+
+The output is evidence, not a verdict: the per-site records name what
+geometry bounds each violation so ``docs/tool-findings.md`` can conclude
+design-versus-router on recorded facts -- this tool classifies geometry, it
+does not decide whose fault it is, mirroring ``classify_route_drc.py``'s
+contract.
+
+DEF parsing here covers what OpenROAD writes for this flow: ``VIAS``/``+VIAS``
+definitions, ``SPECIALNETS`` and ``NETS`` routing geometry (wire segments from
+point pairs, ``*`` repeated coordinates, via placements at points, ``RECT``
+pads relative to the last point), plus the ``UNITS DISTANCE MICRONS`` scale.
+Tokens that do not fit the grammar are counted per section and reported in
+the output, never dropped.
+
+Exit: ``0`` analysed; ``3`` REFUSED, an input is missing or unusable (the DEF
+has no parsable net sections, the DRC report has no parsable records while
+the committed record says 24, the par response names no power nets) -- a
+half-answer is not published. ``1`` for usage.
+
+Usage
+-----
+::
+
+    python3 pnr/klt/ladder_dp/analyze_def_sites.py \
+        --def <ladder_dp.def> --drc-report <ladder_dp_route_drc.rpt> \
+        --par-response <par_response.json> \
+        --output pnr/klt/ladder_dp/def_site_analysis.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from classify_route_drc import parse_drc_report, sha256_file  # noqa: E402
+
+EXIT_OK = 0
+EXIT_USAGE = 1
+EXIT_REFUSED = 3
+
+SCHEMA_VERSION = 1
+
+#: How far outside the violation bbox geometry is still collected as evidence.
+DEFAULT_WINDOW_UM = 1.0
+
+_UNITS = re.compile(r"(?m)^\s*UNITS\s+DISTANCE\s+MICRONS\s+(\d+)\s*;")
+
+_SECTION = {
+    "vias": re.compile(r"(?ms)^\s*(?:\+)?VIAS\s+\d+\s*;(.*?)^\s*END\s+VIAS", re.M),
+    "specialnets": re.compile(r"(?ms)^\s*SPECIALNETS\s+\d+\s*;(.*?)^\s*END\s+SPECIALNETS", re.M),
+    "nets": re.compile(r"(?ms)^\s*NETS\s+\d+\s*;(.*?)^\s*END\s+NETS", re.M),
+}
+
+_RECT_DEF = re.compile(
+    r"RECT\s+(\S+)\s*\(\s*(-?\d+)\s+(-?\d+)\s*\)\s*\(\s*(-?\d+)\s+(-?\d+)\s*\)"
+)
+
+_POINT = re.compile(r"\(\s*(-?\d+)\s+(-?\d+|\*)\s*\)")
+
+_PATH_KEYWORDS = {"ROUTED", "FIXED", "COVER", "NEW"}
+
+_SHAPE_TYPES = {
+    "FOLLOWPIN", "STRIPE", "COREWIRE", "RING", "BLOCKRING", "PADRING",
+    "RINGWIRE", "DRCFILL", "FILLWIRE", "IOWIRE", "SPECIALNET", "RESCUE", "NONE",
+}
+
+_SKIP_TOKENS = {"+", "SHAPE", "TAPER", "TAPERRULE", "STYLE", "MASK", "NONDEFAULT", "VIRTUAL"}
+
+
+def _norm_bbox_um(bbox: str) -> tuple[float, float, float, float] | None:
+    """``(292.7400, 200.3020) - (293.0200, 200.5700)`` -> floats, or None."""
+    nums = re.findall(r"-?\d+\.?\d*", bbox)
+    if len(nums) != 4:
+        return None
+    x1, y1, x2, y2 = (float(n) for n in nums)
+    return (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
+
+
+def parse_via_definitions(vias_body: str) -> dict[str, dict[str, list[tuple[int, int, int, int]]]]:
+    """One ``VIAS`` body -> {name: {layer: [(x1, y1, x2, y2), ...]}}.
+
+    Each ``- <name> ... + RECT <layer> ( dx1 dy1 ) ( dx2 dy2 ) ... ;`` entry
+    yields relative rectangles keyed by layer; nothing here knows where a via
+    is placed until a net references it.
+    """
+    vias: dict[str, dict[str, list[tuple[int, int, int, int]]]] = {}
+    for entry in re.finditer(r"(?m)^\s*-\s+(\S+)(.*?);", vias_body, re.S):
+        name, spec = entry.group(1), entry.group(2)
+        rects: dict[str, list[tuple[int, int, int, int]]] = {}
+        for rect in _RECT_DEF.finditer(spec):
+            layer = rect.group(1)
+            coords = tuple(int(rect.group(i)) for i in (2, 3, 4, 5))
+            rects.setdefault(layer, []).append(coords)
+        if rects:
+            vias[name] = rects
+    return vias
+
+
+def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]:
+    """One ``NETS``/``SPECIALNETS`` body -> ({net: [shapes]}, unparsed count).
+
+    Shapes carry ``kind`` (``wire``/``via``/``pad``), ``layer``, and integer
+    DBU coordinates. A wire is a point pair on one path; a via is a via name
+    at a point; a pad is a ``RECT`` relative to the last point. Anything else
+    a net says is counted as unparsed for the section, never dropped.
+    """
+    nets: dict[str, list[dict[str, Any]]] = {}
+    unparsed = 0
+    for entry in re.finditer(r"(?m)^\s*-\s+([^\s(]+)([^;]*);", body):
+        net = entry.group(1)
+        spec = entry.group(2)
+        # everything before the first path keyword marker is the instance-pin
+        # list, which this tool does not need; keeping it would only flood the
+        # unparsed count with pin pairs that parse fine as far as DEF is
+        # concerned
+        plus = spec.find("+")
+        if plus > 0:
+            spec = spec[plus:]
+        shapes: list[dict[str, Any]] = []
+        layer: str | None = None
+        width: int | None = None
+        expect_layer = False
+        pending_pt: tuple[int, int] | None = None
+        last_pt: tuple[int, int] | None = None
+        expect_via = False
+
+        # materialise once, walk by index: a RECT consumes its own two
+        # points, and re-tokenising mid-walk is how numbers get read twice.
+        # Points stay raw strings here because ``*`` resolves against the
+        # walk's running previous point, not against a tokeniser-time state
+        toks: list[tuple[str, Any]] = []
+        for m in re.finditer(r"\(\s*(-?\d+|\*)\s+(-?\d+|\*)\s*\)|RECT\b|\S+", spec):
+            if m.group(1) is not None:
+                toks.append(("pt", (m.group(1), m.group(2))))
+            elif m.group(0) == "RECT":
+                toks.append(("rect_kw", None))
+            else:
+                toks.append(("word", m.group(0)))
+
+        i = 0
+        while i < len(toks):
+            kind, value = toks[i]
+            if kind == "pt":
+                prev = last_pt if last_pt else (0, 0)
+                x = prev[0] if value[0] == "*" else int(value[0])
+                y = prev[1] if value[1] == "*" else int(value[1])
+                pt = (x, y)
+                if pending_pt is not None and layer is not None:
+                    shapes.append(
+                        {
+                            "kind": "wire",
+                            "layer": layer,
+                            "width": width,
+                            "x1": pending_pt[0],
+                            "y1": pending_pt[1],
+                            "x2": pt[0],
+                            "y2": pt[1],
+                        }
+                    )
+                pending_pt = pt
+                last_pt = pt
+                expect_via = True
+                i += 1
+                continue
+            if kind == "rect_kw":
+                # RECT ( dx1 dy1 ) ( dx2 dy2 ) relative to the last point
+                if (
+                    i + 2 < len(toks)
+                    and toks[i + 1][0] == "pt"
+                    and toks[i + 2][0] == "pt"
+                    and layer is not None
+                    and last_pt is not None
+                ):
+                    dx1, dy1 = toks[i + 1][1]
+                    dx2, dy2 = toks[i + 2][1]
+                    shapes.append(
+                        {
+                            "kind": "pad",
+                            "layer": layer,
+                            "width": None,
+                            "x1": last_pt[0] + dx1,
+                            "y1": last_pt[1] + dy1,
+                            "x2": last_pt[0] + dx2,
+                            "y2": last_pt[1] + dy2,
+                        }
+                    )
+                    i += 3
+                else:
+                    unparsed += 1
+                    i += 1
+                expect_via = False
+                continue
+            word = value
+            if word in _SKIP_TOKENS or word in _SHAPE_TYPES:
+                i += 1
+                continue
+            if word in _PATH_KEYWORDS:
+                # a new path within the same net resets the point context:
+                # after NEW, a bare point is a start, never a segment end
+                layer, width, pending_pt, last_pt, expect_via = None, None, None, None, False
+                expect_layer = True
+                i += 1
+                continue
+            if expect_layer and re.match(r"^[A-Za-z_]", word):
+                # the layer name that follows ROUTED/FIXED/COVER/NEW
+                layer = word
+                expect_layer = False
+                i += 1
+                continue
+            if re.fullmatch(r"-?\d+", word) and layer is not None and width is None:
+                width = int(word)
+                i += 1
+                continue
+            if expect_via and re.match(r"^[A-Za-z_]", word):
+                if layer is not None and last_pt is not None:
+                    shapes.append(
+                        {"kind": "via", "layer": layer, "via": word, "x": last_pt[0], "y": last_pt[1]}
+                    )
+                expect_via = False
+                i += 1
+                continue
+            unparsed += 1
+            i += 1
+        nets[net] = shapes
+    return nets, unparsed
+
+
+class DefGeometry:
+    """Parsed DEF: via definitions plus per-net shapes, in DBU."""
+
+    def __init__(self, text: str) -> None:
+        self.units = 1000
+        units = _UNITS.search(text)
+        if units:
+            self.units = int(units.group(1))
+        vias_match = _SECTION["vias"].search(text)
+        self.vias = parse_via_definitions(vias_match.group(1)) if vias_match else {}
+        self.specialnets: dict[str, list[dict[str, Any]]] = {}
+        self.nets: dict[str, list[dict[str, Any]]] = {}
+        self.unparsed_tokens = 0
+        self.sections_found: list[str] = []
+        for section, attr in (("specialnets", "specialnets"), ("nets", "nets")):
+            match = _SECTION[section].search(text)
+            if match is None:
+                continue
+            self.sections_found.append(section)
+            parsed, unparsed = _parse_net_section(match.group(1))
+            getattr(self, attr).update(parsed)
+            self.unparsed_tokens += unparsed
+
+    def shapes_near(
+        self,
+        net: str,
+        layer: str,
+        window: tuple[int, int, int, int],
+        section: str,
+    ) -> dict[str, Any]:
+        """``layer`` shapes of ``net`` (wires, pads) plus via pads on ``layer``.
+
+        Via placements are read two ways: pads derived from the via's DEF
+        definition (exact), and -- when the definition is not in the DEF and
+        the via sits *on* ``layer`` -- counted as unresolved, with the via
+        name and point, because a via placed on a layer necessarily lands
+        geometry on it. Vias on other layers with missing definitions are not
+        evidence for ``layer`` and are not claimed.
+        """
+        source = self.specialnets if section == "specialnets" else self.nets
+        wx1, wy1, wx2, wy2 = window
+
+        def touches(rect: tuple[int, int, int, int]) -> bool:
+            return not (rect[2] < wx1 or rect[0] > wx2 or rect[3] < wy1 or rect[1] > wy2)
+
+        wires: list[dict[str, Any]] = []
+        pads: list[dict[str, Any]] = []
+        vias_resolved: list[dict[str, Any]] = []
+        vias_unresolved: list[dict[str, Any]] = []
+        for shape in source.get(net, []):
+            if shape["kind"] == "via":
+                if shape["layer"] != layer:
+                    continue
+                at = (shape["x"], shape["y"])
+                if shape["via"] in self.vias:
+                    for rect in self.via_pads(shape, layer):
+                        if touches(rect):
+                            vias_resolved.append({"via": shape["via"], "rect": list(rect)})
+                elif touches((at[0], at[1], at[0], at[1])):
+                    # definition not in the DEF, so its pads cannot be
+                    # derived; the placement point itself is the evidence,
+                    # and only when it is inside the window
+                    vias_unresolved.append({"via": shape["via"], "at": [at[0], at[1]]})
+                continue
+            if shape["layer"] != layer:
+                continue
+            rect = (shape["x1"], shape["y1"], shape["x2"], shape["y2"])
+            if touches(rect):
+                (wires if shape["kind"] == "wire" else pads).append(dict(shape))
+        return {
+            "wires": wires,
+            "pads": pads,
+            "vias_resolved": vias_resolved,
+            "vias_unresolved": vias_unresolved,
+        }
+
+    def via_pads(self, shape: dict[str, Any], layer: str) -> list[tuple[int, int, int, int]]:
+        """Absolute rectangles one via placement puts on ``layer``."""
+        rects = self.vias.get(shape.get("via", ""), {}).get(layer)
+        if not rects:
+            return []
+        return [
+            (shape["x"] + r[0], shape["y"] + r[1], shape["x"] + r[2], shape["y"] + r[3])
+            for r in rects
+        ]
+
+
+def _rect_distance(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> int:
+    """Gap between two rects in DBU on both axes: 0 when they overlap."""
+    dx = max(a[0], b[0]) - min(a[2], b[2])
+    dy = max(a[1], b[1]) - min(a[3], b[3])
+    return max(0, dx, dy)
+
+
+def analyse(
+    def_geometry: DefGeometry,
+    drc: dict[str, Any],
+    power_nets: frozenset[str],
+    window_um: float,
+) -> list[dict[str, Any]]:
+    """One evidence record per distinct DRC site, in the report's order."""
+    records: list[dict[str, Any]] = []
+    span = int(round(window_um * def_geometry.units))
+    dbu = def_geometry.units
+    for site in drc["sites"].values():
+        bbox_um = _norm_bbox_um(site.bbox)
+        if bbox_um is None:
+            records.append(
+                {
+                    "type": site.type,
+                    "srcs": site.srcs,
+                    "bbox": site.bbox,
+                    "layer": site.layer,
+                    "evidence": "unparsable bbox",
+                    "verdict": "undetermined",
+                }
+            )
+            continue
+        x1, y1, x2, y2 = bbox_um
+        bbox_dbu = tuple(int(round(v * dbu)) for v in (x1, y1, x2, y2))
+        window = (
+            bbox_dbu[0] - span,
+            bbox_dbu[1] - span,
+            bbox_dbu[2] + span,
+            bbox_dbu[3] + span,
+        )
+        layer = site.layer
+        signal_nets = [n for n in site.nets if n not in power_nets]
+        power_nets_here = [n for n in site.nets if n in power_nets]
+        per_power = {
+            name: def_geometry.shapes_near(name, layer, window, "specialnets")
+            for name in power_nets_here
+        }
+        per_signal = {
+            name: def_geometry.shapes_near(name, layer, window, "nets")
+            for name in signal_nets
+        }
+
+        # every power shape rect with its gap to the bbox and its origin
+        power_rects: list[dict[str, Any]] = []
+        for name, found in per_power.items():
+            for wire in found["wires"]:
+                rect = (wire["x1"], wire["y1"], wire["x2"], wire["y2"])
+                power_rects.append(
+                    {"net": name, "origin": "wire", "gap_dbu": _rect_distance(bbox_dbu, rect), "rect": list(rect)}
+                )
+            for pad in found["pads"]:
+                rect = (pad["x1"], pad["y1"], pad["x2"], pad["y2"])
+                power_rects.append(
+                    {"net": name, "origin": "pad", "gap_dbu": _rect_distance(bbox_dbu, rect), "rect": list(rect)}
+                )
+            for via in found["vias_resolved"]:
+                rect = tuple(via["rect"])
+                power_rects.append(
+                    {
+                        "net": name,
+                        "origin": "via_pad",
+                        "via": via["via"],
+                        "gap_dbu": _rect_distance(bbox_dbu, rect),
+                        "rect": list(rect),
+                    }
+                )
+            for via in found["vias_unresolved"]:
+                power_rects.append(
+                    {
+                        "net": name,
+                        "origin": "via_unresolved",
+                        "via": via["via"],
+                        "at": via["at"],
+                        "gap_dbu": None,
+                    }
+                )
+        power_rects.sort(key=lambda r: (r["gap_dbu"] is None, r["gap_dbu"] or 0))
+
+        # overlap: does any signal shape intersect any power shape on layer?
+        overlap = False
+        for found in per_signal.values():
+            signal_rects = [
+                (w["x1"], w["y1"], w["x2"], w["y2"]) for w in found["wires"]
+            ] + [
+                (p["x1"], p["y1"], p["x2"], p["y2"]) for p in found["pads"]
+            ] + [
+                tuple(v["rect"]) for v in found["vias_resolved"]
+            ]
+            for srect in signal_rects:
+                for prect in power_rects:
+                    if prect.get("rect") is None:
+                        continue
+                    if _rect_distance(srect, tuple(prect["rect"])) == 0:
+                        overlap = True
+        signal_present = any(
+            found["wires"] or found["pads"] or found["vias_resolved"] or found["vias_unresolved"]
+            for found in per_signal.values()
+        )
+        nearest = power_rects[0] if power_rects else None
+        if nearest is None:
+            evidence = f"no {'/'.join(power_nets_here) or 'power'} {layer} geometry within the window"
+            verdict = "undetermined"
+        else:
+            origin = nearest["origin"]
+            gap = nearest["gap_dbu"]
+            if overlap:
+                verdict = "router_overlap_signal_crosses_power"
+            elif origin in ("via_pad", "pad", "via_unresolved"):
+                verdict = "power_via_land_spaced"
+            elif origin == "wire":
+                verdict = "power_wire_spaced"
+            else:
+                verdict = "undetermined"
+            evidence = (
+                f"nearest power {layer} shape: origin={origin}"
+                + (f" via={nearest['via']}" if nearest.get("via") else "")
+                + (f", at={nearest['at']}" if nearest.get("at") else "")
+                + f", gap={gap} dbu"
+                + (
+                    f"; signal {', '.join(signal_nets)} {layer} shapes in window"
+                    if signal_present
+                    else f"; no signal {layer} shapes in window"
+                )
+                + ("; SIGNAL OVERLAPS POWER" if overlap else "")
+            )
+        records.append(
+            {
+                "type": site.type,
+                "srcs": site.srcs,
+                "bbox": site.bbox,
+                "layer": layer,
+                "nets": site.nets,
+                "signal_nets": signal_nets,
+                "power_nets": power_nets_here,
+                "power_shapes_in_window": power_rects[:8],
+                "signal_shapes_in_window": {
+                    name: {
+                        "wires": len(found["wires"]),
+                        "pads": len(found["pads"]),
+                        "vias_resolved": len(found["vias_resolved"]),
+                        "vias_unresolved": len(found["vias_unresolved"]),
+                    }
+                    for name, found in per_signal.items()
+                },
+                "signal_overlaps_power": overlap,
+                "evidence": evidence,
+                "verdict": verdict,
+            }
+        )
+    return records
+
+
+def read_par_power_nets(par_path: Path) -> tuple[frozenset[str] | None, str | None]:
+    """Power-net names from the par response's power block, or a refusal."""
+    try:
+        par = json.loads(par_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, f"par response unreadable: {exc}"
+
+    def find_power(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            if "power" in obj and isinstance(obj["power"], dict):
+                return obj["power"]
+            for value in obj.values():
+                found = find_power(value)
+                if found is not None:
+                    return found
+        return None
+
+    block = find_power(par)
+    if block is None:
+        return None, "par response has no power block"
+    nets = block.get("nets")
+    if not nets:
+        return None, "par response power block names no nets"
+    return frozenset(str(n) for n in nets), None
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--def", dest="def_path", required=True)
+    parser.add_argument("--drc-report", required=True)
+    parser.add_argument("--par-response", required=True)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--window-um", type=float, default=DEFAULT_WINDOW_UM)
+    args = parser.parse_args(argv)
+
+    def_path, drc_path, par_path = Path(args.def_path), Path(args.drc_report), Path(args.par_response)
+    refusals = [
+        f"{label} not found: {path}"
+        for label, path in (("DEF", def_path), ("DRC report", drc_path), ("par response", par_path))
+        if not path.is_file()
+    ]
+    power_nets, reason = read_par_power_nets(par_path)
+    if reason:
+        refusals.append(reason)
+    for refusal in refusals:
+        print(f"REFUSED: {refusal}", file=sys.stderr)
+    if refusals:
+        return EXIT_REFUSED
+
+    text = def_path.read_text(errors="replace")
+    geometry = DefGeometry(text)
+    missing = [s for s in ("nets", "specialnets") if s not in geometry.sections_found]
+    if missing:
+        print(
+            f"REFUSED: DEF has no parsable {' and '.join(missing)} section(s); "
+            "the geometry the question is about cannot be read",
+            file=sys.stderr,
+        )
+        return EXIT_REFUSED
+
+    drc = parse_drc_report(drc_path.read_text(errors="replace"))
+    if not drc["sites"]:
+        print(
+            "REFUSED: DRC report has no parsable records -- the report disagrees "
+            "with the committed count (24) and a zero-site answer would look "
+            "like data",
+            file=sys.stderr,
+        )
+        return EXIT_REFUSED
+
+    sites = analyse(geometry, drc, power_nets, args.window_um)
+    verdicts = Counter(record["verdict"] for record in sites)
+    result = {
+        "schema_version": SCHEMA_VERSION,
+        "what": "Design-versus-router evidence for the residual route DRC sites, read from the routed DEF (#1006). Evidence, not a verdict: per-site geometry records; docs/tool-findings.md concludes on these.",
+        "inputs": {
+            "def": {"path": str(def_path), "sha256": sha256_file(def_path)},
+            "drc_report": {"path": str(drc_path), "sha256": sha256_file(drc_path)},
+            "par_response": {"path": str(par_path), "sha256": sha256_file(par_path)},
+        },
+        "def_parse": {
+            "units_distance_microns": geometry.units,
+            "sections_found": geometry.sections_found,
+            "nets_parsed": len(geometry.nets),
+            "specialnets_parsed": len(geometry.specialnets),
+            "via_definitions_parsed": len(geometry.vias),
+            "unparsed_tokens": geometry.unparsed_tokens,
+        },
+        "power_nets": sorted(power_nets),
+        "window_um": args.window_um,
+        "drc_summary": {
+            "total_records": drc["total_records"],
+            "distinct_sites": drc["distinct_sites_type_srcs_bbox_layer"],
+        },
+        "verdict_counts": dict(verdicts),
+        "sites": sites,
+    }
+    Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
+    print(f"def_site_analysis: {args.output}")
+    print(f"  sites analysed: {len(sites)}; verdicts: {dict(verdicts)}")
+    print(f"  DEF parse: {json.dumps(result['def_parse'])}")
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

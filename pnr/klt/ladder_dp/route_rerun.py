@@ -12,6 +12,10 @@ re-run job executes:
 
 1. bootstrap the PDK pin into a run-local store (never the host's shared
    ``~/.ciel`` -- the recipe ``pnr/shuttle/run_librelane.py`` established);
+   ``ciel`` itself comes from ``requirements-rerun.txt``, which the batch
+   runner installs into a job-local venv at the version the original job
+   probed (3.2.0) -- the heavy image does not carry it on PATH, which the
+   first submission found as a REFUSED after 20 seconds;
 2. run ``run_klt.py`` unchanged -- the committed driver, so the re-run carries
    the same retired-patch audit and the same run.log contract;
 3. assert the big artefacts exist and manifest them (path, sha256, size),
