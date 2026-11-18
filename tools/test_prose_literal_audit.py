@@ -16,6 +16,11 @@ in no tree, so the controls here must show, per docs/verification-rules.md:
     of the drop1 column the loop above it prints) matches the regex too.
     The count bounds the review set; it does not classify.  #988 found
     its third sites by reading the feeding code paths, not by the count.
+  * the VERBATIM-REGEX CONSEQUENCE is flagged and documented the same
+    way: the #998 regex's bare `s` has no right word boundary, so "18
+    samples" reads as "18 s" -- 13 of the 200 segments on the
+    introduction tree are exactly this false match.  Pinned by fixture
+    so the count's known inflation is a tested fact, not a sentence.
   * the refusals fire -- a probes file that does not parse and a
     truncated probe tree must REFUSE (exit 2), never answer from a
     partial scan;
@@ -158,6 +163,29 @@ def test_the_not_the_defect_genus_is_flagged_and_documented(tmp_path, monkeypatc
     got = _matches(res, "probe_genus.py")
     for figure in ("0.2 dB", "~1.5 ms", "60 ms", "0.01 dB", "16.6 dB"):
         assert figure in got, f"the genus fixture lost {figure!r}"
+
+
+def test_the_bare_s_word_match_is_flagged_and_documented(tmp_path, monkeypatch):
+    """The verbatim-regex consequence, pinned as a fact the way the genus
+    above is: the #998 regex's bare `s` has no right word boundary, so
+    "18 samples" matches as "18 s" -- the exact shape
+    tools/probes/dc_blocker.py prints ("rails 18 samples against").
+    Measured with the committed module, 13 of the 200 segments on the
+    introduction tree are exactly this false match (15 of 200 end
+    mid-word; 16 of 211, 13 of them bare-`s`, at the #993 base), so the
+    headline count is an upper bound inflated by a known, enumerable
+    amount.  This IS flagged and must stay flagged: adding a word
+    boundary would silently redefine every count the tool produces, and
+    the regex is the #998 specification verbatim."""
+    res = _audit(tmp_path, monkeypatch, {"probe_bare_s.py": '''
+        def report():
+            print("rails 18 samples against")
+            print("bin 4 sits inside the loop, 6 seeds each")
+    '''})
+    got = _matches(res, "probe_bare_s.py")
+    assert "18 s" in got, "the bare-`s` fixture stopped flagging"
+    assert "4 s" in got and "6 s" in got
+    assert "18 samples" not in got and "seeds each" not in got
 
 
 # ------------------------------------------------------------- edge cases

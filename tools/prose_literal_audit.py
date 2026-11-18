@@ -45,18 +45,33 @@ added:
     ~?\\d[\\d.]*\\s?(ms|dB|Hz|kHz|s|%)
 
 Documented consequence of running it as written: the alternation's bare
-`s` would also accept a word starting with s after the number -- "12
-samples" matches "12 s".  Measured, not assumed: at the #993 base, 0 of
-the 211 segments ended mid-word, so the concern is theoretical on this
-tree today; the verbatim regex is kept anyway because it is the
-specification, and a boundary would silently redefine every count this
-tool produces.
+`s` also accepts a word starting with s after the number -- "12
+samples" matches "12 s".  Measured with this file's own functions (a
+segment "ends mid-word" when the character after the match is
+word-forming): 16 of the 211 segments at the #993 base end mid-word, 13
+of them exactly this bare-`s` case; 15 of 200 on the introduction tree,
+the same 13 shape -- "18 samples", "#158 signal type", "the 1.7 sweep",
+"6 seeds each" and so on, each number read as seconds.  An earlier
+draft of this paragraph claimed 0 of 211 and called the concern
+theoretical; that measurement was wrong -- the bare-`s` case is LIVE at
+6.5% of the headline count, so the 200 is an upper bound inflated by a
+known, enumerable amount (the same direction as FLAGGED IS NOT GUILTY
+below; the thirteen sites are enumerated in the PR).  The verbatim
+regex is kept anyway because it is the specification -- a boundary
+would silently redefine every count this tool produces -- and
+`test_the_bare_s_word_match_is_flagged_and_documented` pins the
+consequence as a tested fact rather than a sentence.
 
 PRECONDITIONS, ASSERTED AT THE POINT OF USE, REFUSED (exit 2) WHEN UNMET:
 
   * `git ls-files -- tools/probes/*.py` must run from this repository and
     list at least MIN_PROBE_FILES files.  A census over a partial tree
-    under-reports and reads exactly like one over the whole tree.
+    under-reports and reads exactly like one over the whole tree.  What
+    this floor CANNOT do (its own guard-defeat statement): a tree
+    truncated to 60-85 of the 86 tracked files passes the floor and
+    under-reports exactly as silently -- it narrows the window to
+    churn-sized losses, it does not close it; nothing mechanical
+    distinguishes a pruned tree from ordinary churn.
   * every tracked probes file must parse.  A file that does not parse
     would contribute zero flags while looking counted -- an unknown
     rendered in the place where a result belongs.
