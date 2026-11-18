@@ -45,9 +45,12 @@ phrase is compiled to the chip's register write stream (phrase_writes) and
 played through model/synth_top_model.py -- the whole chip, voice and drums
 mixed by contract 12's one exact sum -- whose bit-exactness against
 synth_top.v at the I2S pins is rtl-sketch/verify_synth_top.py's contract, so
-its verdicts are the shipped path's. `--backend model` is retained for
-comparison: an UNRUN, per-note-reset approximation of the instrument (see
-`model_render`), not the gate. `--matrix` prints which property each seeded
+its verdicts are the shipped path's. The full seven-phrase synthtop run is a
+standing gate: `test_synthtop_backend_full_suite_passes` re-derives it in
+test_performance_suite.py, which runs in the tools/ CI job and `make verify`'s
+broad pytest run. `--backend model` is retained for comparison: an UNRUN,
+per-note-reset approximation of the instrument (see `model_render`), not the
+gate. `--matrix` prints which property each seeded
 defect moves and which stay blind; defects seed the REFERENCE performer
 (--inject) -- the synthtop backend's controls seed the WRITE STREAM instead
 (test_performance_suite.py), because a defect the chip ships is a control
@@ -425,10 +428,11 @@ def failed_property(msg: str) -> str:
 def evaluate(x, phrase: Phrase) -> dict:
     x = preconditions(x, phrase)
     env = _env(x)
-    env_hi = _env(np.diff(x))          # ~6 dB/oct high-passed copy: a hat under
+    # ~6 dB/oct high-passed copy: a hat under lingering low tails (the #338
+    # finding: the kit's sd/bd ring sits ~3 dB under the next hat's own peak
+    # 100 ms in, so NO wideband rise is possible)
+    env_hi = _env(np.diff(x))
     fr = lambda t: int(round(t * 1000))          # noqa: E731
-    # lingering low tails (the #338 finding: the kit's sd/bd ring sits ~3 dB
-    # under the next hat's own peak 100 ms in, so NO wideband rise is possible)
     fails: list[str] = []
     info: dict = {"events": []}
     # ---- headroom
@@ -691,9 +695,9 @@ def phrase_writes(phrase, *, patch=None, cutoff_hz=SYNTHTOP_CUTOFF_HZ,
     notes at once -- that is what the shipped instrument does with the
     schedule, and every frozen phrase keeps gates below inter-onsets.
 
-    REFUSES a drum name outside DRUM_STOP_NAME and a gate-off landing past the
-    record: the chip's run() would assert mid-render, and a truncated stream
-    must not look like data."""
+    REFUSES a drum name outside DRUM_STOP_NAME and a gate-off or drum write
+    landing past the record: the chip's run() would assert mid-render, and a
+    truncated stream must not look like data."""
     root = pathlib.Path(__file__).resolve().parents[1]
     sys.path[:0] = [str(root / "model"), str(root / "tools")]
     import drums_fx as dx
@@ -748,10 +752,16 @@ def phrase_writes(phrase, *, patch=None, cutoff_hz=SYNTHTOP_CUTOFF_HZ,
             raise Refused(f"drum names {bad} are not one of {sorted(DRUM_STOP_NAME)}; "
                           f"the schedule names a circuit the host cannot name")
         kit = dx.kit_with_sounds(*(DRUM_STOP_NAME[e.drum] for e in drums))
-        w.extend((f, 0, st.SEC_DRUM, a, v)
-                 for f, a, v in dx.hit_writes([(fr(e.onset_s),
-                                                dx.SOUND_STOP[DRUM_STOP_NAME[e.drum]],
-                                                accent) for e in drums], kit))
+        dw = dx.hit_writes([(fr(e.onset_s),
+                             dx.SOUND_STOP[DRUM_STOP_NAME[e.drum]],
+                             accent) for e in drums], kit)
+        late = max(f for f, _, _ in dw)
+        if late >= n:
+            raise Refused(f"drum write lands at frame {late}, past the "
+                          f"{n}-frame record: the chip's run() would assert "
+                          f"mid-render, and a truncated stream must not look "
+                          f"like data")
+        w.extend((f, 0, st.SEC_DRUM, a, v) for f, a, v in dw)
     return w
 
 
@@ -762,10 +772,12 @@ def render_writes(writes, duration_s: float, *, engine: str = SYNTHTOP_ENGINE) -
     the audio against the schedule either way, so a control that omits
     gate-offs or floors the volume mid-note is a defect the host shipped, not
     an edit to the judged audio. An unknown engine is REFUSED, not defaulted."""
-    import synth_top_model as st
-
     if engine not in SYNTHTOP_ENGINES:
         raise Refused(f"engine {engine!r} is not one of {sorted(SYNTHTOP_ENGINES)}")
+    root = pathlib.Path(__file__).resolve().parents[1]
+    sys.path[:0] = [str(root / "model"), str(root / "tools")]
+    import synth_top_model as st
+
     m = st.SynthTopModel(**SYNTHTOP_ENGINES[engine])
     out = m.run(writes, int(duration_s * SR))
     return np.asarray(out["sample"], dtype=np.float64) / 32768.0
@@ -781,7 +793,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--backend", choices=("reference", "model", "synthtop"),
                     default="reference")
-    ap.add_argument("--engine", choices=tuple(SYNTHTOP_ENGINES), default=SYNTHTOP_ENGINE,
+    ap.add_argument("--engine", choices=tuple(SYNTHTOP_ENGINES), default=None,
                     help="chip build the synthtop backend renders (default r1)")
     ap.add_argument("--inject", default="", help="seed a defect into the reference render")
     ap.add_argument("--expect-fail", action="store_true")
@@ -796,13 +808,13 @@ def main(argv=None) -> int:
     if a.inject and a.backend != "reference":
         print("REFUSED: --inject seeds the reference performer only", file=sys.stderr)
         return 2
-    if a.engine != SYNTHTOP_ENGINE and a.backend != "synthtop":
+    if a.engine is not None and a.backend != "synthtop":
         print("REFUSED: --engine selects the synthtop backend's chip build only",
               file=sys.stderr)
         return 2
     render = {"reference": lambda p: reference_render(p, defect=a.inject),
               "model": model_render,
-              "synthtop": lambda p: synthtop_render(p, engine=a.engine)}[a.backend]
+              "synthtop": lambda p: synthtop_render(p, engine=a.engine or SYNTHTOP_ENGINE)}[a.backend]
     try:
         res = run_suite(render, a.phrase)
     except Refused as r:

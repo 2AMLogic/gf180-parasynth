@@ -459,6 +459,12 @@ def test_phrase_writes_refuses_unsendable_schedules():
         ps.phrase_writes(ps.Phrase("bad", 1.0, (ps.Event(0.2, "drum", drum="cowbell"),)))
     with pytest.raises(ps.Refused, match="gate-off"):
         ps.phrase_writes(ps.Phrase("long", 0.4, (ps.Event(0.1, "note", 0.5, 52),)))
+    # the drum half of the same record bound, with the input that defeats it:
+    # a hit 1 ms before the end whose stop drop and attack coefficient window
+    # land past the record. Before the bound this raised AssertionError from
+    # inside synth_top_model.run, not Refused (rule 8, judge on PR #987).
+    with pytest.raises(ps.Refused, match="past the"):
+        ps.phrase_writes(ps.Phrase("late_bd", 0.5, (ps.Event(0.499, "drum", drum="bd"),)))
 
 
 def test_synthtop_backend_clean_phrase_passes_the_suite():
@@ -466,6 +472,17 @@ def test_synthtop_backend_clean_phrase_passes_the_suite():
     r = ps.evaluate(x, SHORT)
     assert r["verdict"] == "PASS", r["failures"]
     assert r["info"]["peak_dbfs"] < -1.0          # and with headroom, not at the rail
+
+
+def test_synthtop_backend_full_suite_passes():
+    # the production-path gate, standing: every phrase through the shipped
+    # mixer, re-derived by the tools/ CI job and make verify's broad pytest
+    # run -- not a point measurement (judge on PR #987).
+    res = ps.run_suite(lambda p: ps.synthtop_render(p))
+    assert len(res) == len(ps.phrases())
+    bad = [(r["phrase"], r["verdict"], r.get("failures"))
+           for r in res if r["verdict"] != "PASS"]
+    assert not bad, bad
 
 
 def test_control_dropping_the_last_note_gate_off_is_stuck():
@@ -521,4 +538,8 @@ def test_unknown_engine_is_refused_not_defaulted():
 
 def test_cli_refuses_engine_on_non_synthtop_backend(capsys):
     assert ps.main(["--engine", "baseline", "--phrase", "bass"]) == 2
+    assert "REFUSED" in capsys.readouterr().err
+    # the old value-comparison guard was satisfied by its own default: naming
+    # the default engine on a non-synthtop backend must refuse the same way
+    assert ps.main(["--engine", "r1", "--backend", "reference"]) == 2
     assert "REFUSED" in capsys.readouterr().err
