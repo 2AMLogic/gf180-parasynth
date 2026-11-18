@@ -536,6 +536,29 @@ def test_unknown_engine_is_refused_not_defaulted():
         ps.render_writes(ps.phrase_writes(SHORT), SHORT.duration_s, engine="turbo")
 
 
+def test_render_writes_refuses_stream_past_the_record():
+    # render_writes is the second door into the record bound (issue #995):
+    # the issue's exact input -- a gate-off at n+10 on a 0.5 s record. Before
+    # the bound this raised AssertionError from inside synth_top_model.run,
+    # not Refused (phrase_writes got the same shape in #987).
+    n = int(0.5 * ps.SR)
+    w = [(0, 0, st.SEC_VOICE, st.A_VOL, 100),
+         (n + 10, 0, st.SEC_VOICE, st.A_GATE_OFF, 0)]
+    with pytest.raises(ps.Refused, match="outside 0.."):
+        ps.render_writes(w, 0.5)
+    # negative frames refuse the same way
+    with pytest.raises(ps.Refused, match="outside 0.."):
+        ps.render_writes([(-1, 0, st.SEC_VOICE, st.A_VOL, 100)], 0.5)
+
+
+def test_render_writes_accepts_write_at_last_frame():
+    # boundary control so the bound is not off by one: n-1 is the last
+    # sendable frame and must render, not refuse
+    n = int(0.5 * ps.SR)
+    x = ps.render_writes([(n - 1, 0, st.SEC_VOICE, st.A_GATE_OFF, 0)], 0.5)
+    assert len(x) == n
+
+
 def test_cli_refuses_engine_on_non_synthtop_backend(capsys):
     assert ps.main(["--engine", "baseline", "--phrase", "bass"]) == 2
     assert "REFUSED" in capsys.readouterr().err
