@@ -164,7 +164,7 @@ itself. The mismatch is recorded in the response, not refused, and the pin
 that ran is the `ladder_dp` lineage's.
 
 **The residual violations, classified and then answered (#808, #1006).**
-`route_drc_violation_count` is **24**, and all four readings agree: the
+`route_drc_violation_count` is **24**, and all four readings agree: the <!-- claim: grep='^  "route_drc_violation_count": 24,$' in=pnr/klt/ladder_dp/par_response.json -->
 report's own records (24), the metrics keys (`route__drc_errors` 24,
 `route_pass:0__route__drc_errors` 24, each occurring once, `json.loads`
 agreeing), and the response-side count. Every violation is `Metal Spacing`
@@ -210,7 +210,7 @@ par response) reads it:
   measured two ways -- from the committed record, whose
   `power_shapes_in_window` is sorted ascending before its 8-entry
   truncation so each per-site minimum is exact, and untruncated from the
-  DEF -- and both give 17/7; the record carries
+  DEF -- and both give 17/7; the record carries <!-- claim: test=pnr/klt/ladder_dp/test_def_site_split.py::test_split_is_17_close_and_7_at_1168 -->
   `power_shapes_in_window_total` beside the truncation since #1011) fused
   with the DRCFILL-tagged landing strips
   pdngen draws over the same columns (gap **0** at all 24 -- the strip edge
@@ -272,14 +272,16 @@ or player requirement currently needs these sites fixed.** Nothing in the
 current milestone (#282, checked 2026-11-18: no mention of the
 `ladder_dp` route, DRC or PDN in its body) or the FPGA delivery path rests
 on this route being DRC-clean, and ASIC shrinking is deferred (#33). At
-52.3% utilization (`par_response.json` `utilization_pct` 52.3365) with
-**0 antenna, 0 setup and 0 hold violations** (`antenna_violation_count`,
-`setup_violation_count`, `hold_violation_count`, all 0, setup and hold at
+52.3% utilization (`par_response.json` `utilization_pct` 52.3365) <!-- claim: grep='^  "utilization_pct": 52.3365,?$' in=pnr/klt/ladder_dp/par_response.json --> with
+**0 antenna, 0 setup and 0 hold violations** (`antenna_violation_count`, <!-- claim: grep='^  "antenna_violation_count": 0,?$' in=pnr/klt/ladder_dp/par_response.json -->
+`setup_violation_count`, <!-- claim: grep='^  "setup_violation_count": 0,?$' in=pnr/klt/ladder_dp/par_response.json -->
+`hold_violation_count`, <!-- claim: grep='^  "hold_violation_count": 0,?$' in=pnr/klt/ladder_dp/par_response.json -->
+all 0, setup and hold at
 all three corners), there is nothing to spend on the trade and nothing it
 would buy.
 
 What is accepted, per `pnr/klt/ladder_dp/def_site_analysis.json`
-(`verdict_counts` `{"fill_wire_spaced": 24}`, bound by sha256 to the
+(`verdict_counts` `{"fill_wire_spaced": 24}`, bound by sha256 to the <!-- claim: grep='^    "fill_wire_spaced": 24$' in=pnr/klt/ladder_dp/def_site_analysis.json -->
 routed DEF, the DRC report and `par_response.json`): 24 sites, all
 `Metal Spacing`, all `Metal2`, each between a signal net and `VSS`; the
 `VSS` shape at every site is the PDN's own M1->M4 connect geometry, with
