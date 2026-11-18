@@ -164,8 +164,7 @@ itself. The mismatch is recorded in the response, not refused, and the pin
 that ran is the `ladder_dp` lineage's.
 
 **The residual violations, classified and then answered (#808, #1006).**
-`route_drc_violation_count` is **24**, and all four readings agree: the
-<!-- claim: grep='^  "route_drc_violation_count": 24,$' in=pnr/klt/ladder_dp/par_response.json -->
+`route_drc_violation_count` is **24**, and all four readings agree: the <!-- claim: grep='^  "route_drc_violation_count": 24,$' in=pnr/klt/ladder_dp/par_response.json -->
 report's own records (24), the metrics keys (`route__drc_errors` 24,
 `route_pass:0__route__drc_errors` 24, each occurring once, `json.loads`
 agreeing), and the response-side count. Every violation is `Metal Spacing`
@@ -210,8 +209,7 @@ par response) reads it:
   measured two ways -- from the committed record, whose
   `power_shapes_in_window` is sorted ascending before its 8-entry
   truncation so each per-site minimum is exact, and untruncated from the
-  DEF -- and both give 17/7; the record carries
-<!-- claim: test=pnr/klt/ladder_dp/test_def_site_split.py::test_split_is_17_close_and_7_at_1168 -->
+  DEF -- and both give 17/7; the record carries <!-- claim: test=pnr/klt/ladder_dp/test_def_site_split.py::test_split_is_17_close_and_7_at_1168 -->
   `power_shapes_in_window_total` beside the truncation since #1011) fused
   with the DRCFILL-tagged landing strips
   pdngen draws over the same columns (gap **0** at all 24 -- the strip edge
@@ -280,8 +278,7 @@ all three corners), there is nothing to spend on the trade and nothing it
 would buy.
 
 What is accepted, per `pnr/klt/ladder_dp/def_site_analysis.json`
-(`verdict_counts` `{"fill_wire_spaced": 24}`, bound by sha256 to the
-<!-- claim: grep='^    "fill_wire_spaced": 24$' in=pnr/klt/ladder_dp/def_site_analysis.json -->
+(`verdict_counts` `{"fill_wire_spaced": 24}`, bound by sha256 to the <!-- claim: grep='^    "fill_wire_spaced": 24$' in=pnr/klt/ladder_dp/def_site_analysis.json -->
 routed DEF, the DRC report and `par_response.json`): 24 sites, all
 `Metal Spacing`, all `Metal2`, each between a signal net and `VSS`; the
 `VSS` shape at every site is the PDN's own M1->M4 connect geometry, with
