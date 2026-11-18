@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **PR #1010**: bind the ladder_dp route-DRC claims in-repo and answer design-versus-router from the routed DEF
+- **Issue #1006** (closed): ladder_dp route record: design-vs-router is undetermined for want of a DEF, and the classifier's inputs are not in the tree
 - **PR #1005**: test: injected defect for the start-skip legitimacy half of the two-instant CB control
 - **Issue #1004** (closed): test_verify_109_corpus_gate: the start-skip legitimacy assertion ships without the input that defeats it (rule 8)
 - **PR #1001**: tools: commit the probes prose-literal census its counts were quoted from
