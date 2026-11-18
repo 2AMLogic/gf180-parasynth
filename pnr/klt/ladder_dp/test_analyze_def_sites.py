@@ -690,6 +690,52 @@ def test_a_real_via_directly_after_a_point_still_emits() -> None:
     assert _vias(_post_point_net("( 2000 2000 ) via12")) == ["via12"]
 
 
+def _layerless_net(head: str) -> "ads.DefGeometry":
+    """A one-net DEF whose path keyword is followed by ``head`` then Metal2."""
+    return ads.DefGeometry(
+        "VERSION 5.8 ;\nUNITS DISTANCE MICRONS 1000 ;\nNETS 1 ;\n"
+        "  - n ( U1 A ) ( U2 A )\n"
+        f"    {head} Metal2 ( 1000 1000 ) ( * 2000 )\n"
+        "    ;\nEND NETS\nEND DESIGN\n"
+    )
+
+
+def _wire_layers(geometry: "ads.DefGeometry") -> list:
+    return [s["layer"] for s in geometry.nets["n"] if s["kind"] == "wire"]
+
+
+def test_a_plus_after_a_path_keyword_never_lends_its_keyword_as_the_layer() -> None:
+    """``+ ROUTED + NONDEFAULTRULE ndr1 Metal2``: no wire on NONDEFAULTRULE (#1037).
+
+    DEF 5.8 ``regularWiring`` is ``{+ COVER|+ FIXED|+ ROUTED|+ NOSHIELD}
+    layerName``, so a ``+`` there is not legal -- but the walk must not turn
+    the keyword after it into a layer name. ``expect_layer`` survived the
+    ``+`` and the first bare word took it, so the wire landed on
+    ``NONDEFAULTRULE``. Sibling of the ``expect_via`` hole in #1034. The
+    input is illegal DEF, so the layer after it is deliberately not claimed
+    as recovered -- only the mis-attribution is asserted away.
+    """
+    geometry = _layerless_net("+ ROUTED + NONDEFAULTRULE ndr1")
+    assert "NONDEFAULTRULE" not in _wire_layers(geometry), geometry.nets["n"]
+
+
+def test_a_plus_after_new_never_lends_its_keyword_as_the_layer() -> None:
+    """The ``NEW`` spelling of the same hole."""
+    geometry = ads.DefGeometry(
+        "VERSION 5.8 ;\nUNITS DISTANCE MICRONS 1000 ;\nNETS 1 ;\n"
+        "  - n ( U1 A ) ( U2 A )\n"
+        "    + ROUTED Metal1 ( 0 0 ) ( * 500 )\n"
+        "    NEW + NONDEFAULTRULE ndr1 Metal2 ( 1000 1000 ) ( * 2000 )\n"
+        "    ;\nEND NETS\nEND DESIGN\n"
+    )
+    assert "NONDEFAULTRULE" not in _wire_layers(geometry), geometry.nets["n"]
+
+
+def test_a_layer_directly_after_a_path_keyword_still_parses() -> None:
+    """Control: the legal ``+ ROUTED Metal2`` is a Metal2 wire."""
+    assert set(_wire_layers(_layerless_net("+ ROUTED"))) == {"Metal2"}
+
+
 def test_a_style_number_on_a_widthless_path_never_becomes_the_width() -> None:
     """``STYLE <n>`` on a widthless path: argument consumed with its keyword.
 
