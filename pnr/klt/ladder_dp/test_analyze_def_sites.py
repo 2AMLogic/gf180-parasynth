@@ -426,6 +426,43 @@ def test_a_nondefaultrule_stays_counted_never_geometry() -> None:
     assert found["wires"], "the path behind the rule must still parse"
 
 
+def _post_point_net(tail: str) -> "ads.DefGeometry":
+    """A one-net DEF whose path carries ``tail`` after its points."""
+    return ads.DefGeometry(
+        "VERSION 5.8 ;\nUNITS DISTANCE MICRONS 1000 ;\nNETS 1 ;\n"
+        "  - n ( U1 A ) ( U2 A )\n"
+        "    + ROUTED Metal2 ( 1000 1000 ) ( * 2000 )\n"
+        f"    {tail}\n"
+        "    ;\nEND NETS\nEND DESIGN\n"
+    )
+
+
+def _vias(geometry: "ads.DefGeometry") -> list:
+    return [s["via"] for s in geometry.nets["n"] if s["kind"] == "via"]
+
+
+def test_a_plus_keyword_after_a_point_never_becomes_a_via() -> None:
+    """``+ NONDEFAULTRULE ndr1`` after the points: no phantom via (#1034).
+
+    ``+`` was skipped without ending the via-name position, so the next
+    keyword was read as a via name. A via name never follows ``+`` in DEF.
+    The keyword stays counted unparsed, exactly like the pre-point spelling.
+    """
+    geometry = _post_point_net("+ NONDEFAULTRULE ndr1")
+    assert _vias(geometry) == [], geometry.nets["n"]
+    assert geometry.unparsed_tokens == 2, geometry.unparsed_samples
+
+
+def test_another_plus_keyword_after_a_point_never_becomes_a_via() -> None:
+    """The class, not one spelling: ``+ ESTCAP`` takes the same path."""
+    assert _vias(_post_point_net("+ ESTCAP 1.5")) == []
+
+
+def test_a_real_via_directly_after_a_point_still_emits() -> None:
+    """Control: ``( x y ) via12`` (no ``+``) is still a via shape."""
+    assert _vias(_post_point_net("( 2000 2000 ) via12")) == ["via12"]
+
+
 def test_a_style_number_on_a_widthless_path_never_becomes_the_width() -> None:
     """``STYLE <n>`` on a widthless path: argument consumed with its keyword.
 

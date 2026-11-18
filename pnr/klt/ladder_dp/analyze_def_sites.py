@@ -331,6 +331,11 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
                 i += 1
                 continue
             if word in _SKIP_TOKENS:
+                if word == "+":
+                    # a property introducer ends the via-name position: a
+                    # via name directly follows a point and never a '+', so
+                    # the keyword after it is not a via (#1034)
+                    expect_via = False
                 if word in _SKIP_TOKENS_WITH_NUMERIC_ARG and i + 1 < len(toks):
                     # the keyword's own numeric argument rides with it --
                     # never left in the walk to be read as a width (#1021)
