@@ -149,6 +149,9 @@ class Claim:
     value: str = ""
     status: str = REFUSED
     detail: str = "not checked"
+    # A marker after the first on its line (#1041): refused by construction,
+    # never validated, so validate() cannot overwrite the refusal.
+    extra_on_line: bool = False
 
     @property
     def where(self) -> str:
@@ -201,12 +204,12 @@ def iter_claim_markers(
             continue
         if fenced:
             continue                       # a marker in a code block is an example
-        m = MARKER.search(line)
-        if not m:
-            continue
-        if line.count("`", 0, m.start()) % 2:
-            continue                       # ...and so is one inside `backticks`
-        yield i, line, m
+        # finditer, not search (#1041): a second marker on the line must be
+        # SEEN so find_claims can refuse it, not silently dropped.
+        for m in MARKER.finditer(line):
+            if line.count("`", 0, m.start()) % 2:
+                continue                   # ...and so is one inside `backticks`
+            yield i, line, m
 
 
 def find_claims(doc: pathlib.Path) -> list[Claim]:
@@ -217,7 +220,18 @@ def find_claims(doc: pathlib.Path) -> list[Claim]:
     """
     out: list[Claim] = []
     lines = doc.read_text(encoding="utf-8").splitlines()
+    last_line = 0
     for i, line, m in iter_claim_markers(lines):
+        if i == last_line:
+            c = Claim(doc=doc, line=i, raw=m.group("body"),
+                      prose=MARKER.sub("", line[: m.start()]).strip()[:100],
+                      extra_on_line=True)
+            c.refuse("second claim marker on one line; put each marker on "
+                     "its own line (one marker per line is the contract, "
+                     "docs/claim-markers.md)")
+            out.append(c)
+            continue
+        last_line = i
         prose = ""
         for back in range(i - 1, max(0, i - 6), -1):
             cand = lines[back - 1].strip()
@@ -234,6 +248,8 @@ def find_claims(doc: pathlib.Path) -> list[Claim]:
 
 def validate(c: Claim) -> None:
     """Syntax only. A marker that cannot be understood is REFUSED, not skipped."""
+    if c.extra_on_line:
+        return                             # already REFUSED by find_claims
     attrs, err = parse_attrs(c.raw)
     if err:
         c.refuse(err)
