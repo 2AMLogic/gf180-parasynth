@@ -396,7 +396,9 @@ class DefGeometry:
                 if shape["via"] in self.vias:
                     for rect in self.via_pads(shape, layer):
                         if touches(rect):
-                            vias_resolved.append({"via": shape["via"], "rect": list(rect)})
+                            vias_resolved.append(
+                                {"via": shape["via"], "shape": shape.get("shape"), "rect": list(rect)}
+                            )
                 elif touches((at[0], at[1], at[0], at[1])):
                     # definition not in the DEF, so its pads cannot be
                     # derived; the placement point itself is the evidence,
@@ -494,7 +496,13 @@ def analyse(
             for pad in found["pads"]:
                 rect = (pad["x1"], pad["y1"], pad["x2"], pad["y2"])
                 power_rects.append(
-                    {"net": name, "origin": "pad", "gap_dbu": _rect_distance(bbox_dbu, rect), "rect": list(rect)}
+                    {
+                        "net": name,
+                        "origin": "pad",
+                        "shape": pad.get("shape"),
+                        "gap_dbu": _rect_distance(bbox_dbu, rect),
+                        "rect": list(rect),
+                    }
                 )
             for via in found["vias_resolved"]:
                 rect = tuple(via["rect"])
@@ -502,6 +510,7 @@ def analyse(
                     {
                         "net": name,
                         "origin": "via_pad",
+                        "shape": via.get("shape"),
                         "via": via["via"],
                         "gap_dbu": _rect_distance(bbox_dbu, rect),
                         "rect": list(rect),
@@ -580,6 +589,7 @@ def analyse(
                 "nets": site.nets,
                 "signal_nets": signal_nets,
                 "power_nets": power_nets_here,
+                "power_shapes_in_window_total": len(power_rects),
                 "power_shapes_in_window": power_rects[:8],
                 "signal_shapes_in_window": {
                     name: {
@@ -687,7 +697,7 @@ def main(argv: list[str] | None = None) -> int:
     verdicts = Counter(record["verdict"] for record in sites)
     result = {
         "schema_version": SCHEMA_VERSION,
-        "what": "Design-versus-router evidence for the residual route DRC sites, read from the routed DEF (#1006). Evidence, not a verdict: per-site geometry records; docs/tool-findings.md concludes on these.",
+        "what": "Design-versus-router evidence for the residual route DRC sites, read from the routed DEF (#1006). Evidence, not a verdict: per-site geometry records; docs/tool-findings.md concludes on these. signal_overlaps_power is a lower bound: regular NETS carry no width, so signal wires are zero-width centrelines and real metal edges can overlap power where a centreline does not.",
         "inputs": {
             "def": {"path": str(def_path), "sha256": sha256_file(def_path)},
             "drc_report": {"path": str(drc_path), "sha256": sha256_file(drc_path)},
