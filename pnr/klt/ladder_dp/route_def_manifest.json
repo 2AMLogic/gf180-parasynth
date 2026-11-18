@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "what": "Artefacts kept by the #1006 DEF re-run: sha256 bindings for the routed DEF/ODB and the reports the design-vs-router analysis consumed.",
+  "source_commit": "f6108f2e47a5ba69409a59e9b6993afa1249a6ef",
+  "pdk_pin": "54435919abffb937387ec956209f9cf5fd2dfbee",
+  "pdk": "gf180mcuD",
+  "nproc": 16,
+  "tools": {
+    "klt": "klt 0.9.0",
+    "yosys": "Yosys 0.68+ (git sha1 a5af9d690, Release, GNU /usr/bin/c++ 13.3.0) [github.com/The-OpenROAD-Project/yosys at HEAD]",
+    "openroad": "26Q4-1310-g98c6045c72",
+    "ciel": "Ciel v3.2.0 \u00a92022-2025 Efabless Corporation and Contributors\n\nLicensed under the Apache License, Version 2.0 (the \"License\");\nyou may not use this program except in compliance with the License.\nYou may obtain a copy of the License at\n\n    http://www.apache.org/licenses/LICENSE-2.0\n\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License."
+  },
+  "artefacts": {
+    ".klt/place-and-route/ladder_dp.def": {
+      "sha256": "sha256:d79d83d45ea2040ee29b642a276b00d1f41529656b0075ef26cebf7732b618b7",
+      "bytes": 10455178
+    },
+    ".klt/place-and-route/ladder_dp_route.odb": {
+      "sha256": "sha256:c1609377270016e7dc257b0272cc7ea1448ea8a0e1b1df9c372ea3779ed61f3a",
+      "bytes": 13585193
+    },
+    ".klt/place-and-route/ladder_dp_route_drc.rpt": {
+      "sha256": "sha256:be35b9d9bc4ec0ea6cc4525afa5e4ce37abbb4410b2f4e912cae8903ca8e3bbe",
+      "bytes": 2976
+    },
+    ".klt/place-and-route/ladder_dp_route_pass_0_drc.rpt": {
+      "sha256": "sha256:be35b9d9bc4ec0ea6cc4525afa5e4ce37abbb4410b2f4e912cae8903ca8e3bbe",
+      "bytes": 2976
+    },
+    ".klt/place-and-route/ladder_dp_route_metrics.json": {
+      "sha256": "sha256:78f3751216f60cea5a155310ec8434adbc4cdedf57ce476e3aecbdeeafa110ec",
+      "bytes": 11035
+    },
+    ".klt/place-and-route/pnr_ladder_dp_route.tcl": {
+      "sha256": "sha256:459246c105169ada579c33b5ec49024cf6f46287b3d3c49d3aa2b3b05c735d5b",
+      "bytes": 4004
+    },
+    "synth_response.json": {
+      "sha256": "sha256:40dc7026c7fbf6f323fd66f9b6690d4566cc81f930e030bd3cb7e8f2e58f783a",
+      "bytes": 5571
+    },
+    "par_response.json": {
+      "sha256": "sha256:c254fe4ecb45a4c3136b49d44ac42f64fceb4a10523ea860d277238253fce15d",
+      "bytes": 42598
+    },
+    "run.log": {
+      "sha256": "sha256:6ef81967f235b7e925c453372b358f96a3ce3c509d8315d9413ecb81bcca1ba5",
+      "bytes": 1580
+    }
+  },
+  "route_pass_pair_byte_identical": true,
+  "original_run_report_sha256": "sha256:be35b9d9bc4ec0ea6cc4525afa5e4ce37abbb4410b2f4e912cae8903ca8e3bbe",
+  "reproduced_original_route_report": true,
+  "written_at": "2026-11-18T12:10:01Z"
+}

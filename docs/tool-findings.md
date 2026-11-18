@@ -188,7 +188,9 @@ and signal srcs"** -- neither bucket is forced.
 deliberately not collected by the original job, so #1006 re-ran the route
 at the *same* klt -- same pinned heavy AMI (`ami-08688417b66e0c74d`, klt
 0.9.0, Yosys 0.68+, OpenROAD `26Q4-1310`, ciel 3.2.0, 16 vCPU, PDK pin
-`54435919…`, source netlist sha `a3f5d1ad…`) -- as job
+`54435919…`, source netlist sha `a3f5d1ad…`; committed as
+`route_def_manifest.json`, the re-run's own tool probe and sha256
+bindings, so this chain is bound in-repo #1011) -- as job
 `rs-parasynth808-def1006c-s00`, and it **reproduced the original route**:
 the re-run's `ladder_dp_route_drc.rpt` is byte-identical to the committed
 record's binding (`be35b9d9…`), its DEF is the original's exact byte size,
@@ -201,12 +203,15 @@ par response) reads it:
 - the VSS `Metal2` bounding **every one of the 24 sites** is **pdngen's own
   M1->M4 connect geometry**: the `add_pdn_connect -layers {Metal1 Metal4}
   -max_columns {5} -ongrid {Metal2 Metal3 Metal4}` via-column lands
-  (STRIPE-tagged via pads, per-site minimum via-pad gap 0-48 DBU at the
+  (STRIPE-tagged via pads -- the tag is on the record's `pad`/`via_pad`
+  entries since #1011, per-site minimum via-pad gap 0-48 DBU at the
   bbox at **17 of 24 sites**, 1168 DBU = 0.58 µm at **the other 7**;
   measured two ways -- from the committed record, whose
   `power_shapes_in_window` is sorted ascending before its 8-entry
   truncation so each per-site minimum is exact, and untruncated from the
-  DEF -- and both give 17/7) fused with the DRCFILL-tagged landing strips
+  DEF -- and both give 17/7; the record carries
+  `power_shapes_in_window_total` beside the truncation since #1011) fused
+  with the DRCFILL-tagged landing strips
   pdngen draws over the same columns (gap **0** at all 24 -- the strip edge
   exactly bounds each bbox);
 - **both shapes pre-date detailed routing.** A cts-bounded re-run (job
@@ -228,7 +233,8 @@ Two limitations of the instrument, recorded rather than discovered later:
 `signal_overlaps_power` is a **lower bound** -- regular `NETS` carry no
 width in DEF, so signal wires are modelled as zero-width centrelines and
 real metal edges can overlap power where a centreline does not (nothing
-above rests on `overlap == false`); and the parser counts the DEF
+above rests on `overlap == false`; stated in the record's own `what` since
+#1011, so the limitation travels with the evidence); and the parser counts the DEF
 path-point extension form `( x y ext )` as **unparsed** -- the committed
 record's `def_parse` shows 452 unparsed tokens with samples in that shape,
 and every one of its `unparsed_samples` entries names a signal net while
