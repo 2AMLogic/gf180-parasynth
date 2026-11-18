@@ -163,28 +163,68 @@ anyway: the two-pin split of #808's correction 6, visible inside the tool
 itself. The mismatch is recorded in the response, not refused, and the pin
 that ran is the `ladder_dp` lineage's.
 
-**The residual violations, classified (#808).** `route_drc_violation_count`
-is **24**, and all four readings agree: the report's own records (24), the
-metrics keys (`route__drc_errors` 24, `route_pass:0__route__drc_errors` 24,
-each occurring once, `json.loads` agreeing), and the response-side count.
-Every violation is `Metal Spacing` between a signal net and `VSS`, every
-one on `Metal2`, none involves `VDD`, and they are a small family of
-near-identical patches (0.2-0.28 × 0.138-0.268 µm). The per-iteration
-metrics show 24 from iteration 4 onward -- with brief transient bumps (32
-at iteration 17, 27 at 25, 25 at 41/49/57) -- and 24 at the final
-iteration 60: the router did not clear them. `classify_route_drc.py`
-(committed with its validation cases; output recorded in
-`route_drc_classification.json`, which carries the sha256 of its inputs)
-classifies each site **unclassified, reason "mixed power (VSS) and signal
-srcs"** -- neither bucket is forced. The layer evidence: `Metal2` carries
-no PDN strap geometry (the power block's straps are `Metal1` followpins and
-`Metal4`/`Metal5`; the only PDN `Metal2` shapes are the `connect` block's
-M1->M4 via-column lands), so the VSS geometry involved is most plausibly
-those lands -- but the routed DEF needed to separate "the router ignored an
-obstruction" from "the PDN left no legal Metal2 room" was deliberately not
-collected (no DEF/ODB in the job outputs), so design-versus-router is
-**undetermined, with the reason recorded**, and the separate floorplan
-issue the criteria anticipate is *not* filed on this evidence.
+**The residual violations, classified and then answered (#808, #1006).**
+`route_drc_violation_count` is **24**, and all four readings agree: the
+report's own records (24), the metrics keys (`route__drc_errors` 24,
+`route_pass:0__route__drc_errors` 24, each occurring once, `json.loads`
+agreeing), and the response-side count. Every violation is `Metal Spacing`
+between a signal net and `VSS`, every one on `Metal2`, none involves `VDD`,
+and they are a small family of near-identical patches (0.2-0.28 ×
+0.138-0.268 µm). The per-iteration metrics show 24 from iteration 4 onward
+-- with brief transient bumps (32 at iteration 17, 27 at 25, 25 at
+41/49/57) -- and 24 at the final iteration 60: the router did not clear
+them; both artefact-only readings (the series and the byte-identical
+`ladder_dp_route_pass_0_drc.rpt` / `ladder_dp_route_drc.rpt` pair) are now
+committed in-repo as `route_drc_extract.json`, bound by sha256 and checked
+against `route_drc_classification.json` by
+`check_route_drc_extract.py` (#1006: a number whose inputs are a gitignored
+`.klt/` tree and a bucket that expires is a claim, not evidence).
+`classify_route_drc.py` (committed with its validation cases; output
+recorded in `route_drc_classification.json`, which carries the sha256 of
+its inputs) classifies each site **unclassified, reason "mixed power (VSS)
+and signal srcs"** -- neither bucket is forced.
+
+**Design-versus-router, answered from the routed DEF (#1006).** The DEF was
+deliberately not collected by the original job, so #1006 re-ran the route
+at the *same* klt -- same pinned heavy AMI (`ami-08688417b66e0c74d`, klt
+0.9.0, Yosys 0.68+, OpenROAD `26Q4-1310`, ciel 3.2.0, 16 vCPU, PDK pin
+`54435919…`, source netlist sha `a3f5d1ad…`) -- as job
+`rs-parasynth808-def1006c-s00`, and it **reproduced the original route**:
+the re-run's `ladder_dp_route_drc.rpt` is byte-identical to the committed
+record's binding (`be35b9d9…`), its DEF is the original's exact byte size,
+and the route-pass pair is byte-identical again. So the re-run's DEF is the
+DEF of these 24 violations, and `analyze_def_sites.py` (committed, its
+parser pinned by a synthetic mini-DEF; output recorded per site in
+`def_site_analysis.json`, bound by sha256 to the DEF, the report and the
+par response) reads it:
+
+- the VSS `Metal2` bounding **every one of the 24 sites** is **pdngen's own
+  M1->M4 connect geometry**: the `add_pdn_connect -layers {Metal1 Metal4}
+  -max_columns {5} -ongrid {Metal2 Metal3 Metal4}` via-column lands
+  (STRIPE-tagged via pads, gap 0-48 DBU at the bbox at 20 of 24 sites,
+  0.58 µm at the other 4) fused with the DRCFILL-tagged landing strips
+  pdngen draws over the same columns (gap **0** at all 24 -- the strip edge
+  exactly bounds each bbox);
+- **both shapes pre-date detailed routing.** A cts-bounded re-run (job
+  `rs-parasynth808-def1006d-s00`) collected the pre-route
+  `ladder_dp.cts.def`, which already carries the same strips and lands
+  coordinate-identical, and the collected per-stage Tcl files show **no
+  metal-fill command anywhere in the flow**: `pdngen` is the only command
+  that writes special-net `Metal2`. The DRCFILL tag is pdngen's own labelling
+  of its landing metal, recorded as found;
+- the router placed the signal side against this obstruction and could not
+  close the spacing across 60 iterations (0-48 DBU of actual gap against a
+  ~280 DBU rule). The router did not create the VSS metal it violates
+  against.
+
+So design-versus-router resolves to **the PDN's**, and the separate
+floorplan issue #808's criteria anticipate is **filed on this evidence**
+(#1009): it names the 24 sites, the `add_pdn_connect` line that shapes
+them, and leaves the remedy -- connect-geometry options at 52.3%
+utilization with 0 antenna / 0 setup / 0 hold to spend -- to that issue.
+This record keeps the classification `unclassified` (the classifier
+classifies by nets and stays neither-nor); the conclusion above is a
+reading of `def_site_analysis.json`, recorded there per site.
 
 The lead this resolves is the 2026-11-14 container sighting (#5726's shape:
 a route whose only record was an orphaned container, read as 9 residual

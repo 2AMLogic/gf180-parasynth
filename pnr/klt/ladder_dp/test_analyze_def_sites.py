@@ -68,6 +68,8 @@ NETS 3 ;
     ;
   - _00426_ ( U5 A ) ( U6 A )
     + ROUTED Metal2 400 ( 6500 4000 ) ( 6800 4000 )
+      NEW Metal2 ( 6800 4000 ) Via2_VH
+      NEW Metal2 ( 6800 4000 ) RECT ( -280 -660 280 0 )
     ;
 END NETS
 END DESIGN
@@ -109,11 +111,12 @@ def test_a_via_pad_at_spacing_is_power_via_land() -> None:
 
 
 def test_wire_geometry_reads_as_wire_origin() -> None:
-    """The M2 stripe 200 dbu from the site is a wire origin, not a land."""
+    """The M2 stripe centreline, widened to its metal, touches the site."""
     records = _analyse([(SITE_WIRE, "_00426_ VSS")])
     record = _site("power_wire_spaced", records)
     nearest = record["power_shapes_in_window"][0]
-    assert nearest["origin"] == "wire" and nearest["gap_dbu"] == 200, nearest
+    # stripe centreline x=2000 at width 400 -> metal edge x=2200 = bbox x1
+    assert nearest["origin"] == "wire" and nearest["gap_dbu"] == 0, nearest
 
 
 def test_an_overlap_is_reported_as_router_overlap() -> None:
@@ -151,13 +154,36 @@ def test_a_resolved_via_yields_its_definiton_pad() -> None:
 
 
 def test_a_star_coordinate_resolves_against_the_previous_point() -> None:
-    """``( 5000 * )`` in the fixture must close the followpin at y=1000."""
+    """``( 5000 * )`` must close the followpin at y=1000, widened to its metal."""
     geometry = ads.DefGeometry(DEF)
     found = geometry.shapes_near("VSS", "Metal1", (0, 0, 8000, 8000), "specialnets")
+    # centreline y=1000 at width 2000 -> metal spans y 0..2000
     assert any(
-        (w["x1"], w["y1"], w["x2"], w["y2"]) == (1000, 1000, 5000, 1000)
+        (w["x1"], w["y1"], w["x2"], w["y2"]) == (1000, 0, 5000, 2000)
         for w in found["wires"]
     ), found["wires"]
+
+
+def test_a_viarule_via_yields_derived_pads_per_layer() -> None:
+    """CUTSIZE 520 + ENCLOSURE 20 120 120 20 -> Metal2 560x760, Metal3 760x560."""
+    geometry = ads.DefGeometry(DEF)
+    at = geometry.shapes_near(
+        "VSS", "Metal2", (4000, 1000, 5000, 2000), "specialnets"
+    )
+    assert [v["rect"] for v in at["vias_resolved"]] == [[4300, 1300, 4700, 1700]]  # explicit-RECT via
+    viarule = ads.DefGeometry(
+        DEF.replace(
+            "END VIAS",
+            """  - via_viarule
+    + VIARULE Via2_GEN_HH + CUTSIZE 520 520 + LAYERS Metal2 Via2 Metal3
+    + CUTSPACING -264 -264 + ENCLOSURE 20 120 120 20 ;
+END VIAS""",
+        ).replace("( 4500 1500 ) via_m2_land", "( 4500 1500 ) via_viarule")
+    )
+    pads = viarule.via_pads({"via": "via_viarule", "x": 4500, "y": 1500}, "Metal2")
+    assert pads == [(4220, 1120, 4780, 1880)], pads
+    pads_m3 = viarule.via_pads({"via": "via_viarule", "x": 4500, "y": 1500}, "Metal3")
+    assert pads_m3 == [(4120, 1220, 4880, 1780)], pads_m3
 
 
 def test_the_def_parser_counts_what_it_does_not_understand() -> None:
@@ -170,6 +196,14 @@ def test_the_def_parser_counts_what_it_does_not_understand() -> None:
     text = DEF.replace("( 6500 4000 )", "( 6500 4000 ) 17")
     geometry = ads.DefGeometry(text)
     assert geometry.unparsed_tokens >= 1, geometry.unparsed_tokens
+
+
+def test_the_quad_rect_form_is_a_pad_on_the_signal_net() -> None:
+    """OpenROAD's one-paren RECT ( dx1 dy1 dx2 dy2 ) is a via pad, parsed."""
+    geometry = ads.DefGeometry(DEF)
+    found = geometry.shapes_near("_00426_", "Metal2", (6000, 3000, 7500, 4500), "nets")
+    rects = [(p["x1"], p["y1"], p["x2"], p["y2"]) for p in found["pads"]]
+    assert (6520, 3340, 7080, 4000) in rects, rects
 
 
 def test_refusal_inputs(tmp_path: pathlib.Path) -> None:

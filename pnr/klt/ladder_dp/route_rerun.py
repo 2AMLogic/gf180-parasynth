@@ -91,13 +91,16 @@ CTS_ARTEFACTS = (
     ".klt/place-and-route/pnr_ladder_dp_floorplan.tcl",
     ".klt/place-and-route/pnr_ladder_dp_place.tcl",
     ".klt/place-and-route/pnr_ladder_dp_cts.tcl",
-    ".klt/place-and-route/ladder_dp_place.def",
     ".klt/place-and-route/ladder_dp.cts.def",
     ".klt/place-and-route/ladder_dp_cts_metrics.json",
+    ".klt/place-and-route/ladder_dp_floorplan_metrics.json",
     "synth_response.json",
     "par_response.json",
     "run.log",
 )
+# No place.def here: klt bounded at cts writes only the cts DEF -- the first
+# cts-bounded submission (job rs-parasynth808-def1006d-s00) FAILED on exactly
+# this declared-but-never-written file, and the run's own artefacts were fine.
 
 #: The full-route list is the default; the cts-bounded mode keeps the stage
 #: records instead (see the mode's help).

@@ -89,7 +89,14 @@ _SHAPE_TYPES = {
     "RINGWIRE", "DRCFILL", "FILLWIRE", "IOWIRE", "SPECIALNET", "RESCUE", "NONE",
 }
 
-_SKIP_TOKENS = {"+", "SHAPE", "TAPER", "TAPERRULE", "STYLE", "MASK", "NONDEFAULT", "VIRTUAL"}
+_SKIP_TOKENS = {
+    "+", "SHAPE", "TAPER", "TAPERRULE", "STYLE", "MASK", "NONDEFAULT", "VIRTUAL",
+    # DEF net properties -- no geometry, and naming them keeps the unparsed
+    # count meaning "shapes the grammar missed", not "+ USE SIGNAL noise"
+    "USE", "SIGNAL", "POWER", "GROUND", "CLOCK", "SOURCE", "NETLIST", "DIST",
+    "WEIGHT", "PROPERTY", "SYNTHESIZED", "NET", "SPECIAL", "INOUT", "INPUT",
+    "OUTPUT", "FEEDTHRU", "TAPERRULENAME",
+}
 
 
 def _norm_bbox_um(bbox: str) -> tuple[float, float, float, float] | None:
@@ -101,12 +108,23 @@ def _norm_bbox_um(bbox: str) -> tuple[float, float, float, float] | None:
     return (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
 
 
+_CUTSIZE = re.compile(r"CUTSIZE\s+(-?\d+)\s+(-?\d+)")
+_VIA_LAYERS = re.compile(r"LAYERS\s+(\S+)\s+(\S+)\s+(\S+)")
+_ENCLOSURE = re.compile(r"ENCLOSURE\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)")
+
+
 def parse_via_definitions(vias_body: str) -> dict[str, dict[str, list[tuple[int, int, int, int]]]]:
     """One ``VIAS`` body -> {name: {layer: [(x1, y1, x2, y2), ...]}}.
 
-    Each ``- <name> ... + RECT <layer> ( dx1 dy1 ) ( dx2 dy2 ) ... ;`` entry
-    yields relative rectangles keyed by layer; nothing here knows where a via
-    is placed until a net references it.
+    Two DEF spellings are covered. An explicit-RECT via yields the rectangles
+    it names. A VIARULE-generated via (what OpenROAD emits for this flow:
+    ``+ CUTSIZE x y + LAYERS bot cut top + ENCLOSURE xB yB xT yT``) yields the
+    per-layer pad derived from cut and enclosure -- the bottom layer is
+    enclosed ``(xB, yB)``, the top ``(xT, yT)``, each added around the cut
+    centre, so a 1x1 Via2 with cut 520 and enclosure ``20 120 120 20`` lands a
+    560x760 pad on Metal2 and a 760x560 pad on Metal3. Nothing here knows
+    where a via is placed until a net references it; arrays are the set of
+    their per-placement pads.
     """
     vias: dict[str, dict[str, list[tuple[int, int, int, int]]]] = {}
     for entry in re.finditer(r"(?m)^\s*-\s+(\S+)(.*?);", vias_body, re.S):
@@ -116,6 +134,20 @@ def parse_via_definitions(vias_body: str) -> dict[str, dict[str, list[tuple[int,
             layer = rect.group(1)
             coords = tuple(int(rect.group(i)) for i in (2, 3, 4, 5))
             rects.setdefault(layer, []).append(coords)
+        if not rects:
+            cut = _CUTSIZE.search(spec)
+            layers = _VIA_LAYERS.search(spec)
+            enc = _ENCLOSURE.search(spec)
+            if cut and layers and enc:
+                sx, sy = int(cut.group(1)), int(cut.group(2))
+                xe_b, ye_b, xe_t, ye_t = (int(enc.group(i)) for i in (1, 2, 3, 4))
+                bottom, top = layers.group(1), layers.group(3)
+                rects.setdefault(bottom, []).append(
+                    (-(sx // 2 + xe_b), -(sy // 2 + ye_b), sx // 2 + xe_b, sy // 2 + ye_b)
+                )
+                rects.setdefault(top, []).append(
+                    (-(sx // 2 + xe_t), -(sy // 2 + ye_t), sx // 2 + xe_t, sy // 2 + ye_t)
+                )
         if rects:
             vias[name] = rects
     return vias
@@ -156,9 +188,18 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]
         # Points stay raw strings here because ``*`` resolves against the
         # walk's running previous point, not against a tokeniser-time state
         toks: list[tuple[str, Any]] = []
-        for m in re.finditer(r"\(\s*(-?\d+|\*)\s+(-?\d+|\*)\s*\)|RECT\b|\S+", spec):
+        for m in re.finditer(
+            # the quad form -- RECT ( dx1 dy1 dx2 dy2 ) -- must be matched
+            # before the two-number point form, or its numbers read as points
+            r"\(\s*(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s*\)"
+            r"|\(\s*(-?\d+|\*)\s+(-?\d+|\*)\s*\)"
+            r"|RECT\b|\S+",
+            spec,
+        ):
             if m.group(1) is not None:
-                toks.append(("pt", (m.group(1), m.group(2))))
+                toks.append(("rect_quad", tuple(int(m.group(i)) for i in (1, 2, 3, 4))))
+            elif m.group(5) is not None:
+                toks.append(("pt", (m.group(5), m.group(6))))
             elif m.group(0) == "RECT":
                 toks.append(("rect_kw", None))
             else:
@@ -173,16 +214,28 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]
                 y = prev[1] if value[1] == "*" else int(value[1])
                 pt = (x, y)
                 if pending_pt is not None and layer is not None:
+                    # the path's points are the wire centreline; the metal is
+                    # the centreline widened by the path width on the
+                    # perpendicular axis, which is what spacing is measured
+                    # against -- a zero-length point pair is a square patch
+                    x1, y1, x2, y2 = pending_pt[0], pending_pt[1], pt[0], pt[1]
+                    half = (width or 0) / 2
+                    if y1 == y2:
+                        rect = (min(x1, x2), int(y1 - half), max(x1, x2), int(y1 + half))
+                    elif x1 == x2:
+                        rect = (int(x1 - half), min(y1, y2), int(x1 + half), max(y1, y2))
+                    else:
+                        rect = (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
                     shapes.append(
                         {
                             "kind": "wire",
                             "layer": layer,
                             "width": width,
                             "shape": shape_tag,
-                            "x1": pending_pt[0],
-                            "y1": pending_pt[1],
-                            "x2": pt[0],
-                            "y2": pt[1],
+                            "x1": rect[0],
+                            "y1": rect[1],
+                            "x2": rect[2],
+                            "y2": rect[3],
                         }
                     )
                 pending_pt = pt
@@ -191,34 +244,44 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int]
                 i += 1
                 continue
             if kind == "rect_kw":
-                # RECT ( dx1 dy1 ) ( dx2 dy2 ) relative to the last point
-                if (
+                # RECT relative to the last point, in either DEF spelling:
+                # ( dx1 dy1 ) ( dx2 dy2 ), or the one-paren quad OpenROAD
+                # writes for via pads -- ( dx1 dy1 dx2 dy2 )
+                quad = None
+                if i + 1 < len(toks) and toks[i + 1][0] == "rect_quad":
+                    quad = toks[i + 1][1]
+                    i += 2
+                elif (
                     i + 2 < len(toks)
                     and toks[i + 1][0] == "pt"
                     and toks[i + 2][0] == "pt"
-                    and layer is not None
-                    and last_pt is not None
+                    and "*" not in toks[i + 1][1] + toks[i + 2][1]
                 ):
-                    dx1, dy1 = toks[i + 1][1]
-                    dx2, dy2 = toks[i + 2][1]
+                    # RECT deltas are absolute numbers by DEF spec; a '*'
+                    # here is not legal and is refused below, never guessed
+                    dxs = toks[i + 1][1] + toks[i + 2][1]
+                    quad = tuple(int(v) for v in dxs)
+                    i += 3
+                else:
+                    quad = None
+                    i += 1
+                if quad is not None and layer is not None and last_pt is not None:
                     shapes.append(
                         {
                             "kind": "pad",
                             "layer": layer,
                             "width": None,
                             "shape": shape_tag,
-                            "x1": last_pt[0] + dx1,
-                            "y1": last_pt[1] + dy1,
-                            "x2": last_pt[0] + dx2,
-                            "y2": last_pt[1] + dy2,
+                            "x1": last_pt[0] + quad[0],
+                            "y1": last_pt[1] + quad[1],
+                            "x2": last_pt[0] + quad[2],
+                            "y2": last_pt[1] + quad[3],
                         }
                     )
-                    i += 3
-                else:
+                elif quad is None:
                     unparsed += 1
                     if len(unparsed_samples) < 20:
                         unparsed_samples.append({"net": net, "token": "RECT"})
-                    i += 1
                 expect_via = False
                 continue
             word = value
@@ -577,6 +640,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--par-response", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--window-um", type=float, default=DEFAULT_WINDOW_UM)
+    parser.add_argument(
+        "--source-job",
+        default=None,
+        help="batch job id the DEF/DRC/par inputs came from, recorded verbatim",
+    )
     args = parser.parse_args(argv)
 
     def_path, drc_path, par_path = Path(args.def_path), Path(args.drc_report), Path(args.par_response)
@@ -624,6 +692,7 @@ def main(argv: list[str] | None = None) -> int:
             "drc_report": {"path": str(drc_path), "sha256": sha256_file(drc_path)},
             "par_response": {"path": str(par_path), "sha256": sha256_file(par_path)},
         },
+        "source_job": args.source_job,
         "def_parse": {
             "units_distance_microns": geometry.units,
             "sections_found": geometry.sections_found,
