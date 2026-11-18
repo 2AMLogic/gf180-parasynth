@@ -612,6 +612,15 @@ Full list in `docs/discrimination-results-16.json`; 24 buckets are kept.
 > probe follows one partial. Oscillator drift over a longer note, or in the
 > five oscillators the probe does not lock to, is untested.
 
+> **The `mpd.*` bucket names quoted below predate #929** (interim note,
+> 2026-11-18, verified at `origin/main` @ `8636b24f`): since #934,
+> `extra_group()` buckets by the whole stride token — six distinct `mpd.*`
+> buckets over the same 48 columns (`mpd.10.00ms` … `mpd.1.77ms`, 8 columns
+> each), and the double-width `mpd.00ms` no longer exists. The names and
+> figures below are the last run under the old five-bucket grouping; a
+> regeneration by the study pipeline is tracked in #933, and §5c will be
+> re-reconciled from those artefacts.
+
 **The MPD columns earn nothing and should not be carried.** Three of the five
 stride buckets rank in the kept twenty-four — `mpd.00ms` and `mpd.50ms` at
 **+0.001** (11th and 12th), `mpd.07ms` at **+0.000** (15th) — and the rest
