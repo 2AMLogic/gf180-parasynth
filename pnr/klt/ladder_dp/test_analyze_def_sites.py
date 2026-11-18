@@ -27,12 +27,20 @@ become the width -- the old behaviour consumed the extension number as the
 path width whenever the path had none of its own, silently inflating the
 geometry of any pair that completed.
 
+And applying it (#1022): the extension grows the emitted rect past its point
+along the path axis, so a signal end that touches power only once extended
+names the verdict -- ``router_overlap_signal_crosses_power``, not a
+spaced-anything. The record also counts the extensions the parse saw, per run
+and per site, so "are they all zero" is a census, never a capped sample read
+as one.
+
 And the refusal path: a site whose bbox is not where any geometry lives, and
 inputs that are missing, must produce ``REFUSED``/no verdict rather than a
 half-answer.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 
@@ -278,9 +286,202 @@ def test_extension_points_record_both_ends_of_the_pair() -> None:
         (w["x1"], w["y1"], w["x2"], w["y2"], w["width"], w["ext_start"], w["ext_end"])
         for w in found["wires"]
     )
-    # width 400 widens each centreline pair by half on the perpendicular axis
-    assert (4300, 1850, 4600, 2250, 400, 25, None) in segs, segs
+    # width 400 widens each centreline pair by half on the perpendicular
+    # axis, and ext_start=25 extends the first segment's start end 25 DBU
+    # past its point (#1022)
+    assert (4275, 1850, 4600, 2250, 400, 25, None) in segs, segs
     assert (4400, 2050, 4800, 2300, 400, None, 0) in segs, segs
+
+
+#: The extension-touch fixture (#1022): a VSS Metal2 stripe whose metal is
+#: x 1800..2200, and a signal wire whose centreline stops 200 DBU short of it
+#: at ( 2400 2500 ) but carries ``ext 200`` on that end -- the real metal
+#: reaches x 2200 and touches the stripe only once the extension is applied.
+EXT_TOUCH_DEF = """VERSION 5.8 ;
+UNITS DISTANCE MICRONS 1000 ;
+SPECIALNETS 1 ;
+  - VSS ( * )
+    + NEW Metal2 400 ( 2000 1000 ) ( * 4000 )
+    ;
+END SPECIALNETS
+NETS 1 ;
+  - sig ( U1 A ) ( U2 A )
+    + ROUTED Metal2 400 ( 2500 2500 ) ( 2400 * 200 )
+    ;
+END NETS
+END DESIGN
+"""
+
+SITE_EXT_TOUCH = "(2.3000, 2.4000) - (2.5000, 2.6000)"
+
+
+def _analyse_ext_touch(geometry: ads.DefGeometry) -> dict:
+    records = ads.analyse(
+        geometry, _drc([(SITE_EXT_TOUCH, "sig VSS")]), frozenset({"VSS", "VDD"}), 1.0
+    )
+    assert len(records) == 1, [(r["bbox"], r["verdict"]) for r in records]
+    return records[0]
+
+
+def test_an_extended_end_touches_power_only_once_extended() -> None:
+    """The red-first test for #1022: ext at the end point extends the rect.
+
+    The centreline pair ends at ( 2400 2500 ), 200 DBU clear of the stripe
+    metal -- on the #1017 head, where the extension is recorded but never
+    applied, that is no overlap and verdict ``power_wire_spaced``. With the
+    extension applied the metal reaches x 2200, touches the stripe, and the
+    verdict flips to ``router_overlap_signal_crosses_power``. This test was
+    run on the #1017 head first and failed exactly so.
+    """
+    record = _analyse_ext_touch(ads.DefGeometry(EXT_TOUCH_DEF))
+    assert record["signal_overlaps_power"] is True, record
+    assert record["verdict"] == "router_overlap_signal_crosses_power", record
+
+
+def test_an_extended_start_end_touches_power_on_a_vertical_path() -> None:
+    """``ext_start`` on a vertical path extends the y-min side, ends independent.
+
+    The VSS wire is horizontal, metal y 2800..3200; the signal pair starts at
+    ( 2500 3300 ) -- 100 DBU clear -- carrying ``ext 100`` on that start
+    point. The extension closes exactly that gap.
+    """
+    text = EXT_TOUCH_DEF.replace(
+        "+ NEW Metal2 400 ( 2000 1000 ) ( * 4000 )",
+        "+ NEW Metal2 400 ( 1000 3000 ) ( 4000 3000 )",
+    ).replace(
+        "+ ROUTED Metal2 400 ( 2500 2500 ) ( 2400 * 200 )",
+        "+ ROUTED Metal2 400 ( 2500 3300 100 ) ( * 3800 )",
+    )
+    record = _analyse_ext_touch(ads.DefGeometry(text))
+    assert record["signal_overlaps_power"] is True, record
+    assert record["verdict"] == "router_overlap_signal_crosses_power", record
+
+
+def test_extension_grows_the_diagonal_bbox_per_end_on_both_axes() -> None:
+    """A non-Manhattan pair keeps its bbox fallback, grown by each end's own ext.
+
+    A diagonal has no single path axis to extend along, so each point's
+    extension is applied on both axes at the sides of the bbox that point
+    owns -- the fallback stays a conservative cover, never borrowing one
+    end's extension for the other.
+    """
+    text = EXT_TOUCH_DEF.replace(
+        "+ ROUTED Metal2 400 ( 2500 2500 ) ( 2400 * 200 )",
+        "+ ROUTED Metal2 400 ( 2500 2500 ) ( 2600 2600 300 )",
+    )
+    geometry = ads.DefGeometry(text)
+    found = geometry.shapes_near("sig", "Metal2", (0, 0, 8000, 8000), "nets")
+    assert [(w["x1"], w["y1"], w["x2"], w["y2"]) for w in found["wires"]] == [
+        (2500, 2500, 2900, 2900)
+    ], found["wires"]
+
+
+#: The census fixture: three extension points across both net sections, one
+#: of them zero -- total 3, non-zero 2.
+CENSUS_DEF = """VERSION 5.8 ;
+UNITS DISTANCE MICRONS 1000 ;
+SPECIALNETS 1 ;
+  - VSS ( * )
+    + NEW Metal2 400 ( 2000 1000 50 ) ( * 4000 )
+    ;
+END SPECIALNETS
+NETS 1 ;
+  - sig ( U1 A ) ( U2 A )
+    + ROUTED Metal2 400 ( 2500 2500 ) ( 2400 * 200 )
+      NEW Metal2 400 ( 3000 3000 ) ( 3200 * 0 )
+    ;
+END NETS
+END DESIGN
+"""
+
+
+def test_the_parse_census_counts_extension_ends_per_run() -> None:
+    """Total ext points seen and non-zero ones, across both net sections.
+
+    #1022's census: the committed record's capped ``unparsed_samples`` made
+    "the extensions are all 0" *plausible* -- a sample read as a census. The
+    parse now counts, so the question has a number.
+    """
+    geometry = ads.DefGeometry(CENSUS_DEF)
+    assert geometry.ext_ends_total == 3, geometry.ext_ends_total
+    assert geometry.ext_ends_nonzero == 2, geometry.ext_ends_nonzero
+
+
+def test_the_site_record_counts_ext_ends_in_its_window() -> None:
+    """Per-site census: extension ends among the window's wires, non-zero apart."""
+    record = _analyse_ext_touch(ads.DefGeometry(EXT_TOUCH_DEF))
+    assert record["ext_ends_in_window"] == {"total": 1, "nonzero": 1}, record
+
+
+def test_the_census_reaches_the_json_record(tmp_path: pathlib.Path) -> None:
+    """``def_site_analysis.json`` carries the census and the per-site counts."""
+    def_path = tmp_path / "x.def"
+    def_path.write_text(EXT_TOUCH_DEF)
+    drc_path = tmp_path / "x.rpt"
+    drc_path.write_text(
+        "violation type: Metal Spacing\n\tsrcs: sig VSS\n"
+        f"\tbbox = {SITE_EXT_TOUCH}\n\tLayer: Metal2\n"
+    )
+    par_path = tmp_path / "par.json"
+    par_path.write_text('{"power": {"power_net": "VDD", "ground_net": "VSS"}}')
+    out_path = tmp_path / "out.json"
+    rc = ads.main(
+        [
+            "--def", str(def_path),
+            "--drc-report", str(drc_path),
+            "--par-response", str(par_path),
+            "--output", str(out_path),
+        ]
+    )
+    assert rc == ads.EXIT_OK, rc
+    result = json.loads(out_path.read_text())
+    assert result["def_parse"]["extension_ends_total"] == 1, result["def_parse"]
+    assert result["def_parse"]["extension_ends_nonzero"] == 1, result["def_parse"]
+    assert result["sites"][0]["ext_ends_in_window"] == {"total": 1, "nonzero": 1}
+    assert result["sites"][0]["verdict"] == "router_overlap_signal_crosses_power"
+
+
+def test_both_ends_of_one_pair_extend_independently() -> None:
+    """``ext_start`` grows the start side and ``ext_end`` the end side, one pair.
+
+    The pair runs x 2500..3500 at y 3000; ext 75 on the start point and 100
+    on the end point leave the rect at x 2425..3600 -- each end its own.
+    """
+    text = EXT_TOUCH_DEF.replace(
+        "+ ROUTED Metal2 400 ( 2500 2500 ) ( 2400 * 200 )",
+        "+ ROUTED Metal2 400 ( 2500 3000 75 ) ( 3500 * 100 )",
+    )
+    geometry = ads.DefGeometry(text)
+    found = geometry.shapes_near("sig", "Metal2", (0, 0, 8000, 8000), "nets")
+    assert [(w["x1"], w["y1"], w["x2"], w["y2"]) for w in found["wires"]] == [
+        (2425, 2800, 3600, 3200)
+    ], found["wires"]
+
+
+def test_the_control_zeroing_ext_flips_the_overlap_verdict(monkeypatch) -> None:
+    """Injected-bug control (#1022): ignoring ext must turn the red-first test red.
+
+    The injection strips every ``( x y ext )`` form down to ``( x y )`` inside
+    ``DefGeometry.__init__`` -- the parser then never sees an extension and
+    builds exactly the pre-fix rects. It must act on the *input text*, not on
+    the parsed shape dicts: the rect is built at parse time, so zeroing
+    ``ext_start``/``ext_end`` afterwards changes nothing and controls nothing.
+    Under the injection the same fixture must come back non-overlapping; if
+    it did not, the overlap test above would not be testing the extension at
+    all.
+    """
+    import re
+
+    original_init = ads.DefGeometry.__init__
+    ext_form = re.compile(r"\(\s*(-?\d+|\*)\s+(-?\d+|\*)\s+-?\d+\s*\)")
+
+    def init_with_ext_ignored(self: ads.DefGeometry, text: str) -> None:
+        original_init(self, ext_form.sub(lambda m: f"( {m.group(1)} {m.group(2)} )", text))
+
+    monkeypatch.setattr(ads.DefGeometry, "__init__", init_with_ext_ignored)
+    record = _analyse_ext_touch(ads.DefGeometry(EXT_TOUCH_DEF))
+    assert record["signal_overlaps_power"] is False, record
+    assert record["verdict"] == "power_wire_spaced", record
 
 
 #: The ``clk`` NDR path from the routed DEF, in the form the committed
