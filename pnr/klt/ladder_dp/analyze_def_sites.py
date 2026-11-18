@@ -30,7 +30,9 @@ point pairs, ``*`` repeated coordinates, the path-point extension form
 ``( x y ext )`` (its extension is recorded per segment end,
 ``ext_start``/``ext_end``, never used as a width), via placements at points,
 ``RECT`` pads relative to the last point), plus the
-``UNITS DISTANCE MICRONS`` scale.
+``UNITS DISTANCE MICRONS`` scale. The numeric arguments of the skip-keywords
+``STYLE``/``MASK``/``WEIGHT`` are consumed with their keyword, never read as
+a width (#1021).
 Tokens that do not fit the grammar are counted per section and reported in
 the output, never dropped.
 
@@ -100,6 +102,18 @@ _SKIP_TOKENS = {
     "WEIGHT", "PROPERTY", "SYNTHESIZED", "NET", "SPECIAL", "INOUT", "INPUT",
     "OUTPUT", "FEEDTHRU", "TAPERRULENAME",
 }
+
+#: The ``_SKIP_TOKENS`` members whose DEF grammar argument is a single
+#: number (``STYLE styleNum``, ``MASK maskNum``, ``WEIGHT weightValue``).
+#: The keyword alone was being skipped and the number left in the walk,
+#: where a widthless path's ``width is None`` branch silently consumed it
+#: as the width (#1021, the class #1013 closed for the extension form) --
+#: so the argument is consumed with its keyword. Members taking a name
+#: (``TAPERRULE``, ``USE``, ``SOURCE``, ...) need no entry: a non-numeric
+#: name cannot be mistaken for a width and is counted unparsed in its own
+#: right. The argument is only consumed when it *is* a bare numeric word,
+#: so a malformed spec keeps today's behaviour for whatever follows.
+_SKIP_TOKENS_WITH_NUMERIC_ARG = {"STYLE", "MASK", "WEIGHT"}
 
 
 def _norm_bbox_um(bbox: str) -> tuple[float, float, float, float] | None:
@@ -317,6 +331,13 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
                 i += 1
                 continue
             if word in _SKIP_TOKENS:
+                if word in _SKIP_TOKENS_WITH_NUMERIC_ARG and i + 1 < len(toks):
+                    # the keyword's own numeric argument rides with it --
+                    # never left in the walk to be read as a width (#1021)
+                    nxt_kind, nxt_value = toks[i + 1]
+                    if nxt_kind == "word" and re.fullmatch(r"-?\d+", nxt_value):
+                        i += 2
+                        continue
                 i += 1
                 continue
             if word in _PATH_KEYWORDS:
