@@ -551,6 +551,37 @@ def test_second_marker_in_backticks_is_still_an_example(tmp_path):
     assert [c.raw for c in cdc.find_claims(doc)] == ["commit=HEAD"]
 
 
+def test_unclosed_opener_is_refused_not_dropped(tmp_path):
+    """#1044 control: a marker whose `-->` is on a later line. Before the fix
+    MARKER needed both ends on one line, so the opener matched nothing: the
+    claim vanished, rc 0, beside a valid claim. It must be REFUSED, naming the
+    opener's file:line, and the run must exit non-zero."""
+    doc = tmp_path / "d.md"
+    doc.write_text("ok <!-- claim: commit=HEAD -->\n"
+                   "<!-- claim: grep='NO_SUCH_KEY'\n"
+                   "     in=nope.json -->\n")
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 2
+    assert got[1].status == cdc.REFUSED
+    assert "no `-->` on its line" in got[1].detail
+    assert got[1].where.endswith("d.md:2")
+
+
+def test_unclosed_opener_in_fence_or_backticks_is_an_example(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("A <!-- claim: commit=HEAD -->\n"
+                   "see `<!-- claim: grep=x` here\n"
+                   "```\n<!-- claim: grep=y\n```\n")
+    assert [c.raw for c in cdc.find_claims(doc)] == ["commit=HEAD"]
+
+
+def test_unclosed_opener_on_last_line_is_refused(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("text\n<!-- claim: grep=x")
+    got = cdc.find_claims(doc)
+    assert len(got) == 1 and got[0].unclosed and got[0].line == 2
+
+
 def test_markers_are_found_with_the_prose_they_back(tmp_path):
     doc = tmp_path / "d.md"
     doc.write_text("\n".join([

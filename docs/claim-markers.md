@@ -34,7 +34,9 @@ would be checked as a list of assertions.
 (naming file and line), never dropped and never parsed as a second claim: the
 report is keyed on `file:line`, and a silently ignored marker is
 indistinguishable from a claim nobody made (#1041). Put each marker on its own
-line.
+line. The same rule covers a marker that **spans lines**: an opener
+`<!-- claim:` with no `-->` on its line is `REFUSED`, naming the opener's
+file and line, never skipped (#1044). Close every marker on the line it opens.
 
 Syntax is `<!-- claim: key=value key="value with spaces" ... -->`, tokenised
 with `shlex`. **Exactly one** key must be a *kind*; the rest are modifiers or
