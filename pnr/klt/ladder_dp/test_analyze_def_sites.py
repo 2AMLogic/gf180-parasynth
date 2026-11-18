@@ -21,6 +21,12 @@ landing strip -> ``fill_wire_spaced``. It was added after review because
 the fixture's plain Metal2 stripe exercised only ``power_wire_spaced`` --
 the verdict actually shipping for all 24 sites had no test.
 
+And the extension form (#1013): a path point written ``( x y ext )`` records
+the extension per segment end (``ext_start``/``ext_end``) and never lets it
+become the width -- the old behaviour consumed the extension number as the
+path width whenever the path had none of its own, silently inflating the
+geometry of any pair that completed.
+
 And the refusal path: a site whose bbox is not where any geometry lives, and
 inputs that are missing, must produce ``REFUSED``/no verdict rather than a
 half-answer.
@@ -229,6 +235,104 @@ def test_the_quad_rect_form_is_a_pad_on_the_signal_net() -> None:
     found = geometry.shapes_near("_00426_", "Metal2", (6000, 3000, 7500, 4500), "nets")
     rects = [(p["x1"], p["y1"], p["x2"], p["y2"]) for p in found["pads"]]
     assert (6520, 3340, 7080, 4000) in rects, rects
+
+
+def test_an_extension_point_completing_a_pair_never_becomes_the_width() -> None:
+    """``( x y ext )``: the extension is recorded, never consumed as width.
+
+    The input that defeats the old behaviour: on current main the widthless
+    path's extension number fell through to the ``width is None`` branch, the
+    garbled tokens counted as unparsed, and the completing pair emitted a
+    metal rect inflated to half the extension value -- the silent wrong
+    geometry field the issue names.
+    """
+    text = DEF.replace(
+        "NEW Metal2 ( 6800 4000 ) Via2_VH",
+        "NEW Metal2 ( 4300 2050 ) ( * 2300 0 ) ( 4600 * )",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
+    found = geometry.shapes_near("_00426_", "Metal2", (0, 0, 8000, 8000), "nets")
+    wires = [
+        (w["x1"], w["y1"], w["x2"], w["y2"], w["width"], w["ext_start"], w["ext_end"])
+        for w in found["wires"]
+    ]
+    # the ext-point completed the pair: centreline bbox at width None (no
+    # widening -- half=0), the extension riding alongside as ext_end -- never
+    # as width
+    assert (4300, 2050, 4300, 2300, None, None, 0) in wires, wires
+    # and the plain pair behind it is unchanged
+    assert (4300, 2300, 4600, 2300, None, 0, None) in wires, wires
+
+
+def test_extension_points_record_both_ends_of_the_pair() -> None:
+    """ext on the path's first point lands as ``ext_start``; on the last, ``ext_end``."""
+    text = DEF.replace(
+        "+ ROUTED Metal2 400 ( 4300 2050 ) ( 4600 2050 )",
+        "+ ROUTED Metal2 400 ( 4300 2050 25 ) ( 4600 * ) ( * 2300 0 )",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 0, geometry.unparsed_tokens
+    found = geometry.shapes_near("_00146_", "Metal2", (0, 0, 8000, 8000), "nets")
+    segs = sorted(
+        (w["x1"], w["y1"], w["x2"], w["y2"], w["width"], w["ext_start"], w["ext_end"])
+        for w in found["wires"]
+    )
+    # width 400 widens each centreline pair by half on the perpendicular axis
+    assert (4300, 1850, 4600, 2250, 400, 25, None) in segs, segs
+    assert (4400, 2050, 4800, 2300, 400, None, 0) in segs, segs
+
+
+#: The ``clk`` NDR path from the routed DEF, in the form the committed
+#: ``def_site_analysis.json`` counted 6 unparsed tokens for (4 from the
+#: extension form, 2 for the non-default rule). The full 10 MB DEF stays on
+#: the #1010 review host; this excerpt carries the extension line verbatim.
+CLK_EXCERPT = """VERSION 5.8 ;
+UNITS DISTANCE MICRONS 2000 ;
+NETS 1 ;
+  - clk ( U1 CK ) ( U2 CK )
+    + NONDEFAULTRULE CTS_NDR_0
+    + NEW Metal4 ( 276640 799680 ) ( * 975600 0 )
+    ;
+END NETS
+END DESIGN
+"""
+
+
+def test_the_clk_ndr_path_excerpt_parses_its_extension_point() -> None:
+    """The real ``clk`` path form: unparsed 6 -> 2, the pair completes widthless.
+
+    On current main the extension number ``975600`` was consumed as the path
+    width and the four surrounding tokens counted unparsed, so the segment
+    was dropped before its pair could complete.
+    """
+    geometry = ads.DefGeometry(CLK_EXCERPT)
+    assert geometry.unparsed_tokens == 2, geometry.unparsed_tokens
+    tokens = sorted(s["token"] for s in geometry.unparsed_samples)
+    assert tokens == ["CTS_NDR_0", "NONDEFAULTRULE"], tokens
+    wires = [
+        (w["x1"], w["y1"], w["x2"], w["y2"], w["width"], w["ext_start"], w["ext_end"])
+        for w in geometry.nets["clk"]
+    ]
+    assert wires == [(276640, 799680, 276640, 975600, None, None, 0)], wires
+
+
+def test_a_nondefaultrule_stays_counted_never_geometry() -> None:
+    """``+ NONDEFAULTRULE <name>`` names a routing rule, not geometry.
+
+    It stays counted as unparsed -- the 4 such tokens in the committed
+    record -- and must never become a width, a point, or a shape.
+    """
+    text = DEF.replace(
+        "  - _00146_ ( U1 A ) ( U2 A )\n",
+        "  - _00146_ ( U1 A ) ( U2 A )\n    + NONDEFAULTRULE CTS_NDR_0\n",
+    )
+    geometry = ads.DefGeometry(text)
+    assert geometry.unparsed_tokens == 2, geometry.unparsed_tokens
+    tokens = sorted(s["token"] for s in geometry.unparsed_samples)
+    assert tokens == ["CTS_NDR_0", "NONDEFAULTRULE"], tokens
+    found = geometry.shapes_near("_00146_", "Metal2", (4000, 1800, 4800, 2300), "nets")
+    assert found["wires"], "the path behind the rule must still parse"
 
 
 def test_refusal_inputs(tmp_path: pathlib.Path) -> None:

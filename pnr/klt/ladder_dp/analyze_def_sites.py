@@ -26,8 +26,11 @@ contract.
 
 DEF parsing here covers what OpenROAD writes for this flow: ``VIAS``/``+VIAS``
 definitions, ``SPECIALNETS`` and ``NETS`` routing geometry (wire segments from
-point pairs, ``*`` repeated coordinates, via placements at points, ``RECT``
-pads relative to the last point), plus the ``UNITS DISTANCE MICRONS`` scale.
+point pairs, ``*`` repeated coordinates, the path-point extension form
+``( x y ext )`` (its extension is recorded per segment end,
+``ext_start``/``ext_end``, never used as a width), via placements at points,
+``RECT`` pads relative to the last point), plus the
+``UNITS DISTANCE MICRONS`` scale.
 Tokens that do not fit the grammar are counted per section and reported in
 the output, never dropped.
 
@@ -158,9 +161,12 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
     unparsed samples).
 
     Shapes carry ``kind`` (``wire``/``via``/``pad``), ``layer``, and integer
-    DBU coordinates. A wire is a point pair on one path; a via is a via name
-    at a point; a pad is a ``RECT`` relative to the last point. Anything else
-    a net says is counted as unparsed for the section, never dropped.
+    DBU coordinates. A wire is a point pair on one path; either point of the
+    pair may carry the DEF path-point extension ``( x y ext )``, recorded per
+    end as ``ext_start``/``ext_end`` and never used as the width. A via is a
+    via name at a point; a pad is a ``RECT`` relative to the last point.
+    Anything else a net says is counted as unparsed for the section, never
+    dropped.
     """
     nets: dict[str, list[dict[str, Any]]] = {}
     unparsed = 0
@@ -181,6 +187,7 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
         expect_layer = False
         shape_tag: str | None = None
         pending_pt: tuple[int, int] | None = None
+        pending_ext: int | None = None
         last_pt: tuple[int, int] | None = None
         expect_via = False
 
@@ -191,8 +198,11 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
         toks: list[tuple[str, Any]] = []
         for m in re.finditer(
             # the quad form -- RECT ( dx1 dy1 dx2 dy2 ) -- must be matched
-            # before the two-number point form, or its numbers read as points
+            # before the two-number point form, or its numbers read as points;
+            # likewise the three-number point form -- ( x y ext ) -- before
+            # the two-number one
             r"\(\s*(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s*\)"
+            r"|\(\s*(-?\d+|\*)\s+(-?\d+|\*)\s+(-?\d+)\s*\)"
             r"|\(\s*(-?\d+|\*)\s+(-?\d+|\*)\s*\)"
             r"|RECT\b|\S+",
             spec,
@@ -200,7 +210,12 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
             if m.group(1) is not None:
                 toks.append(("rect_quad", tuple(int(m.group(i)) for i in (1, 2, 3, 4))))
             elif m.group(5) is not None:
-                toks.append(("pt", (m.group(5), m.group(6))))
+                # the DEF path-point extension form ( x y ext ): the third
+                # number is how far the wire end extends past the point,
+                # never a width
+                toks.append(("pt_ext", (m.group(5), m.group(6), int(m.group(7)))))
+            elif m.group(8) is not None:
+                toks.append(("pt", (m.group(8), m.group(9))))
             elif m.group(0) == "RECT":
                 toks.append(("rect_kw", None))
             else:
@@ -209,11 +224,12 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
         i = 0
         while i < len(toks):
             kind, value = toks[i]
-            if kind == "pt":
+            if kind in ("pt", "pt_ext"):
                 prev = last_pt if last_pt else (0, 0)
                 x = prev[0] if value[0] == "*" else int(value[0])
                 y = prev[1] if value[1] == "*" else int(value[1])
                 pt = (x, y)
+                ext = value[2] if kind == "pt_ext" else None
                 if pending_pt is not None and layer is not None:
                     # the path's points are the wire centreline; the metal is
                     # the centreline widened by the path width on the
@@ -237,9 +253,16 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
                             "y1": rect[1],
                             "x2": rect[2],
                             "y2": rect[3],
+                            # the extension values ride alongside, per end of
+                            # the completed pair -- read by nothing downstream,
+                            # but recorded so they are never silently dropped
+                            # and can never be mistaken for the width
+                            "ext_start": pending_ext,
+                            "ext_end": ext,
                         }
                     )
                 pending_pt = pt
+                pending_ext = ext
                 last_pt = pt
                 expect_via = True
                 i += 1
@@ -299,7 +322,14 @@ def _parse_net_section(body: str) -> tuple[dict[str, list[dict[str, Any]]], int,
             if word in _PATH_KEYWORDS:
                 # a new path within the same net resets the point context:
                 # after NEW, a bare point is a start, never a segment end
-                layer, width, pending_pt, last_pt, expect_via = None, None, None, None, False
+                layer, width, pending_pt, pending_ext, last_pt, expect_via = (
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    False,
+                )
                 shape_tag = None
                 expect_layer = True
                 i += 1
