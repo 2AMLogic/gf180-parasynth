@@ -21,7 +21,10 @@ CELL_LIB = "gf180mcu_fd_sc_mcu7t5v0"
 
 
 def _fake_pdk_store(tmp_path: pathlib.Path, pin: str = PIN) -> pathlib.Path:
-    root = tmp_path / "store" / "gf180mcu" / "versions" / pin / route_rerun.PDK / "libs.ref" / CELL_LIB
+    root = (
+        tmp_path / "store" / "ciel" / "gf180mcu" / "versions" / pin
+        / route_rerun.PDK / "libs.ref" / CELL_LIB
+    )
     root.mkdir(parents=True)
     return tmp_path / "store"
 
@@ -43,8 +46,8 @@ def test_resolve_pdk_root_refuses_a_missing_pin(tmp_path: pathlib.Path) -> None:
 
 
 def test_resolve_pdk_root_refuses_a_pin_without_the_cell_library(tmp_path: pathlib.Path) -> None:
-    """The shuttle lineage's pin layout without the 7t library is not runnable."""
-    store = tmp_path / "store" / "gf180mcu" / "versions" / PIN
+    """The right pin layout without the 7t library is not runnable."""
+    store = tmp_path / "store" / "ciel" / "gf180mcu" / "versions" / PIN
     store.mkdir(parents=True)  # version dir exists, cell library does not
     root, refusal = route_rerun.resolve_pdk_root(tmp_path / "store", PIN, route_rerun.PDK)
     assert root is None

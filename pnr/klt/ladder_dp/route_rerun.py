@@ -62,6 +62,11 @@ EXIT_REFUSED = 3
 #: original job ran, which is what makes a re-run comparable.
 PDK_PIN = "54435919abffb937387ec956209f9cf5fd2dfbee"
 PDK = "gf180mcuD"
+#: ciel's own storage layout (ciel/common.py::get_versions_dir):
+#: ``<pdk-root>/ciel/<family>/versions/<pin>`` -- the family level is ciel's,
+#: not ours, and the tool-facing root is the version directory itself (what
+#: the original job's run.log names).
+PDK_FAMILY = "gf180mcu"
 
 #: What must exist after a successful driver run for the DEF question to be
 #: answerable, all under HERE. The responses and run.log are re-collected so
@@ -93,12 +98,13 @@ def sha256_file(path: Path) -> str:
 def resolve_pdk_root(store: Path, pin: str, pdk: str) -> tuple[Path | None, str | None]:
     """Return ``(tool_pdk_root, None)`` or ``(None, refusal)``.
 
-    ``ciel enable --pdk-root <store>`` installs ``<store>/<family>/versions/<pin>``
-    and the *version directory* is what tools take as ``--pdk-root`` (the
-    original job's run.log names exactly that shape). Resolved by glob and
-    asserted to hold the cell library, never assumed.
+    ``ciel enable --pdk-root <store>`` installs
+    ``<store>/ciel/<family>/versions/<pin>`` (ciel's own layout) and the
+    *version directory* is what tools take as ``--pdk-root`` (the original
+    job's run.log names exactly that shape). Resolved by glob and asserted to
+    hold the cell library, never assumed.
     """
-    candidates = sorted(store.glob(f"*/versions/{pin}"))
+    candidates = sorted(store.glob(f"*/{PDK_FAMILY}/versions/{pin}"))
     if not candidates:
         return None, (
             f"no PDK version dir under {store} for pin {pin}; "
