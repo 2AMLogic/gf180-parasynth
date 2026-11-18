@@ -4,6 +4,12 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **PR #1001**: tools: commit the probes prose-literal census its counts were quoted from
+- **PR #1002**: pnr: commit the finished ladder_dp route record (klt 0.9.0) and classify its 24 residual DRC violations
+- **PR #999**: fix: NOT_QUOTED sentinel for unquoted CONCLUSION figures in the corpus-gate test
+- **Issue #998** (closed): The #988/#990 prose-literal class scanner is in no tree, so its 139/159/156 counts (and "no third site") cannot be re-derived
+- **Issue #997** (closed): test_verify_109_corpus_gate's CB extent parser can report a drift that does not exist (two-instant CB returns start=None)
+- **Issue #808** (closed): Route ladder_dp to completion with the unpatched netlist on the build box: DRT-0305's cause is measured gone, the error is not re-observed
 - **PR #1000**: tools: remove one-shot ring-ratio snapshot harness
 - **PR #996**: fix: render_writes refuses out-of-record streams instead of asserting
 - **PR #993**: probes: derive two summaries' quoted figures from the run's own measurements
