@@ -386,9 +386,26 @@ def _detail_extent(flat: str, voice: str, rel: str):
     return m.group(1), float(m.group(2)), t2
 
 
+class _NotQuoted:
+    """The CONCLUSION prose does not quote this figure at all (#997).
+
+    Distinct from a quoted float and from the detail side's measured-None
+    (a single-instant record prints no `latest`). The old None-for-unquoted
+    return made `test_conclusion_figures_match_detail_lines` assert
+    `None == <measured>` on the two-instant CB shape and fail with a
+    drift-shaped message when nothing had drifted."""
+
+    def __repr__(self):
+        return "NOT_QUOTED"
+
+
+NOT_QUOTED = _NotQuoted()
+
+
 def _conclusion_extent(flat: str, voice: str):
     """The CONCLUSION's quoted extent for one voice: (window_ms, start_ms,
-    end_ms-or-None). `~?` tolerates the pre-fix prose's tilde prefixes so a
+    end_ms) where an unquoted figure is the NOT_QUOTED sentinel, never
+    None (#997). `~?` tolerates the pre-fix prose's tilde prefixes so a
     red run against the old hard-coded text reports a FIGURE MISMATCH --
     the drift this test exists for -- rather than a parse failure."""
     if voice == "RS":
@@ -400,7 +417,8 @@ def _conclusion_extent(flat: str, voice: str):
         assert m, f"no CONCLUSION clause for {voice}:\n{flat[-1500:]}"
         window = m.group(4)
         if m.group(3) is not None:
-            return window, float(m.group(3)), None
+            # Single-instant: the prose quotes no end.
+            return window, float(m.group(3)), NOT_QUOTED
         return window, float(m.group(1)), float(m.group(2))
     m = re.search(
         r"[Ff]or CB\.WAV it runs to (?:~?([\d.]+) ms"
@@ -410,10 +428,13 @@ def _conclusion_extent(flat: str, voice: str):
     window = m.group(3)
     if m.group(2) is not None:
         # Single-instant record: the one printed instant IS the detail
-        # line's `earliest`, so it is compared against t1 (t2 stays None on
-        # both sides).
-        return window, float(m.group(2)), None
-    return window, None, float(m.group(1))
+        # line's `earliest`, so it is compared against t1. The prose
+        # quotes no end; the detail's t2 is measured-None.
+        return window, float(m.group(2)), NOT_QUOTED
+    # Two-instant record: the prose quotes only the END. The start is
+    # unquoted -- NOT_QUOTED, so the caller skips that comparison
+    # explicitly instead of asserting None == <measured> (#997).
+    return window, NOT_QUOTED, float(m.group(1))
 
 
 def test_conclusion_figures_match_detail_lines(tmp_path):
@@ -445,16 +466,55 @@ def test_conclusion_figures_match_detail_lines(tmp_path):
         c_window, c_t1, c_t2 = _conclusion_extent(flat, voice)
         assert c_window == window, \
             f"{voice}: CONCLUSION window {c_window} ms != detail {window} ms"
-        assert c_t1 == t1, \
-            f"{voice}: CONCLUSION start {c_t1} ms != detail {t1} ms\n{flat[-800:]}"
-        assert c_t2 == t2, \
-            (f"{voice}: CONCLUSION end {c_t2} ms != detail {t2} ms -- the "
-             f"prose drifted from its own run (#988's defect class)\n{flat[-800:]}")
+        if c_t1 is not NOT_QUOTED:
+            assert c_t1 == t1, \
+                f"{voice}: CONCLUSION start {c_t1} ms != detail {t1} ms\n{flat[-800:]}"
+        if c_t2 is not NOT_QUOTED:
+            assert c_t2 == t2, \
+                (f"{voice}: CONCLUSION end {c_t2} ms != detail {t2} ms -- the "
+                 f"prose drifted from its own run (#988's defect class)\n{flat[-800:]}")
         # The injected-drift control: neither old hard-coded literal may
         # survive anywhere in the CONCLUSION, whatever this run measured.
         for stale in ("~41 ms", "~589 ms"):
             assert stale not in flat.split("CONCLUSION:")[-1], \
                 f"{voice}: stale hard-coded figure {stale!r} still printed"
+
+
+def test_conclusion_two_instant_cb_control():
+    """#997 injected-defect control (verification-rules.md rule 8): the
+    two-instant CB shape, where the CONCLUSION quotes only the end (`it
+    runs to 588.7 ms of a 600 ms window`) while the detail line measures
+    both instants. Green when the quoted end matches the detail's
+    `latest` -- with the unquoted start skipped EXPLICITLY via the
+    NOT_QUOTED sentinel, not by None-luck; red on the END comparison when
+    the prose end drifts. Its first state, run against the pre-fix
+    `_conclusion_extent`, failed with the false
+    `CB: CONCLUSION start None ms != detail 22.0 ms` -- #988's drift
+    message with nothing drifted."""
+    rel = rc.REF_MAIN["CB"][0]
+    detail = (
+        f"CB {rel}: prepared record is 620.0 ms long; "
+        "2 of 8 probed instants in [0, 600] ms clear the joint floor "
+        "by 6 dB; earliest 22.0 ms, latest 588.7 ms")
+    conclusion = "CONCLUSION: for CB.WAV it runs to 588.7 ms of a 600 ms window."
+    flat = f"{detail} {conclusion}"
+    window, t1, t2 = _detail_extent(flat, "CB", rel)
+    assert (window, t1, t2) == ("600", 22.0, 588.7)
+    c_window, c_t1, c_t2 = _conclusion_extent(flat, "CB")
+    assert c_window == window
+    assert c_t1 is NOT_QUOTED, \
+        f"CB two-instant prose unexpectedly quotes a start: {c_t1!r}"
+    assert c_t2 == t2, f"CB: CONCLUSION end {c_t2} ms != detail {t2} ms"
+
+    # Injected defect: the prose end drifts off the detail's `latest` --
+    # the comparison that must go red is the END one.
+    flat_bad = flat.replace("runs to 588.7 ms of a 600 ms window",
+                            "runs to 580.0 ms of a 600 ms window")
+    with pytest.raises(AssertionError,
+                       match=r"CONCLUSION end 580\.0 ms != detail 588\.7 ms"):
+        _, _, bad_end = _conclusion_extent(flat_bad, "CB")
+        assert bad_end == t2, \
+            f"CB: CONCLUSION end {bad_end} ms != detail {t2} ms"
 
 
 def test_conclusion_absent_on_half_run(tmp_path):
