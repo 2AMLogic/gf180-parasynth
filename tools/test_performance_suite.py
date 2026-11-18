@@ -211,14 +211,21 @@ INTENDED = {
 }
 # MOVED set per defect on the reference performer, collateral included. BLIND is the
 # complement within ps.PROPERTIES. Any change here is a change in what a check can see.
+# 2026-11-18 (#338 synthtop backend): clip/soft_clip/late_all lose their `release`
+# collateral -- it was dense_drums' final sd sitting -28.x dB against the -30 dB
+# stuck deadline at ring_s 0.3, a knife-edge on the REFERENCE performer itself that
+# each defect's level/offset perturbation tipped; ring_s is now 0.5 (the R1 kit's
+# measured sd decay: -22.2 dB at +0.30 s, -34.3 dB at +0.50 s). soft_clip also loses
+# `presence`: its masked hat is now found by the high-band onset path instead of
+# reading "no onset found".
 MATRIX = {
     "": set(),
-    "clip": {"headroom", "release"},
-    "soft_clip": {"headroom", "presence", "release"},
+    "clip": {"headroom"},
+    "soft_clip": {"headroom"},
     "dropout": {"dropout"},
     "stuck": {"automation", "presence", "release", "timing"},
     "late_one": {"presence", "timing"},
-    "late_all": {"release", "timing"},
+    "late_all": {"timing"},
     "missing": {"automation", "presence"},
     "legato": {"presence"},
     "frozen_automation": {"automation"},
@@ -377,3 +384,162 @@ def test_model_render_cutoff_control_reaches_the_patch(monkeypatch):
     ps.model_render(dataclasses.replace(ph, duration_s=1.0, events=ph.events[:1], controls=ph.controls[:1]))
     assert seen and all(lo == hi for lo, hi in seen), seen
     assert seen[0][0] == ph.controls[0][2]
+
+
+# ------------------------------------------------------------------ synth_top backend (#338)
+# The production-path gate: the phrase becomes the chip's WRITE STREAM and is
+# played through model/synth_top_model.py in the R1 release configuration.
+# The controls here seed defects in the STREAM -- a dropped gate-off, a floored
+# volume, a late note, a full-scale gain -- because a defect the chip ships is
+# a control move or an omission, not an edit to the judged audio.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "model"))
+import drums_fx as dx  # noqa: E402
+import synth_top_model as st  # noqa: E402
+
+SHORT = ps.Phrase("short", 1.1, (ps.Event(0.1, "note", 0.25, 52),
+                                 ps.Event(0.55, "note", 0.25, 55)), release_s=0.2)
+CONTROLLED = ps.Phrase("controlled", 0.9,
+                       (ps.Event(0.1, "note", 0.25, 52), ps.Event(0.55, "note", 0.25, 52)),
+                       release_s=0.2,
+                       controls=((0.1, "cutoff", 400.0), (0.55, "cutoff", 3200.0)))
+
+
+def _synthtop(ph, writes=None, **kw):
+    return ps.render_writes(writes if writes is not None else ps.phrase_writes(ph, **kw),
+                            ph.duration_s)
+
+
+def _vwrite(stream, addr):
+    return [w for w in stream if w[2] == st.SEC_VOICE and w[3] == addr]
+
+
+def test_phrase_writes_programs_the_register_interface():
+    w = ps.phrase_writes(SHORT)
+    # the boot-time image carries the osc mixer weights AND the drum gains --
+    # and the drum gains live on the VOICE page (streams missing these were
+    # exactly how this backend's first debug render came out silent)
+    assert _vwrite(w, st.A_W)[0][4] > 0
+    assert _vwrite(w, st.A_VOL)[0][4] > 0
+    assert _vwrite(w, st.A_DVOL)[0][4] == dx.accent_reg(ps.SYNTHTOP_DRUM_GAIN)
+    assert _vwrite(w, st.A_BVOL)[0][4] == dx.accent_reg(ps.SYNTHTOP_DRUM_GAIN)
+    # every note: three INC jumps + TRACK + GATE_ON at its onset frame,
+    # GATE_OFF at its gate frame
+    for e in SHORT.events:
+        f, fg = round(e.onset_s * ps.SR), round((e.onset_s + e.gate_s) * ps.SR)
+        incs = [x for x in w if x[2] == st.SEC_VOICE and x[0] == f
+                and st.A_INC <= x[3] <= st.A_INC + 2]
+        assert len(incs) == 3 and all(x[1] == 1 for x in incs), (e, incs)
+        assert any(x[0] == f and x[3] == st.A_TRACK for x in w)
+        assert any(x[0] == f and x[3] == st.A_GATE_ON for x in w)
+        assert any(x[0] == fg and x[3] == st.A_GATE_OFF for x in w)
+    # drums pulse STOPS with their bit and drop it the next frame (edge-triggered)
+    drums = ps.phrases()["drums"]
+    dw = ps.phrase_writes(drums)
+    f0 = round(drums.events[0].onset_s * ps.SR)
+    stops = [x for x in dw if x[2] == st.SEC_DRUM and x[3] == dx.A_STOPS]
+    assert stops[0][0] == f0 and stops[0][4] == 1 << dx.SOUND_STOP["BD"]
+    assert stops[1][0] == f0 + 1 and stops[1][4] == 0
+
+
+def test_cutoff_automation_writes_both_cut_registers_before_the_gate():
+    w = ps.phrase_writes(CONTROLLED)
+    for e, (_t, _k, hz) in zip(CONTROLLED.events, CONTROLLED.controls):
+        f = round(e.onset_s * ps.SR)
+        lo, hi = _vwrite(w, st.A_CUT_LO), _vwrite(w, st.A_CUT_HI)
+        lo = [x for x in lo if x[0] == f]
+        hi = [x for x in hi if x[0] == f]
+        assert len(lo) == len(hi) == 1
+        assert lo[0][4] == hi[0][4] == round(hz)      # one-sided cut is silently ignored (6c94bdb2)
+        order = [x[3] for x in w if x[2] == st.SEC_VOICE and x[0] == f]
+        assert order.index(st.A_CUT_LO) < order.index(st.A_GATE_ON)   # before the gate
+
+
+def test_phrase_writes_refuses_unsendable_schedules():
+    with pytest.raises(ps.Refused, match="drum names"):
+        ps.phrase_writes(ps.Phrase("bad", 1.0, (ps.Event(0.2, "drum", drum="cowbell"),)))
+    with pytest.raises(ps.Refused, match="gate-off"):
+        ps.phrase_writes(ps.Phrase("long", 0.4, (ps.Event(0.1, "note", 0.5, 52),)))
+    # the drum half of the same record bound, with the input that defeats it:
+    # a hit 1 ms before the end whose stop drop and attack coefficient window
+    # land past the record. Before the bound this raised AssertionError from
+    # inside synth_top_model.run, not Refused (rule 8, judge on PR #987).
+    with pytest.raises(ps.Refused, match="past the"):
+        ps.phrase_writes(ps.Phrase("late_bd", 0.5, (ps.Event(0.499, "drum", drum="bd"),)))
+
+
+def test_synthtop_backend_clean_phrase_passes_the_suite():
+    x = _synthtop(SHORT)
+    r = ps.evaluate(x, SHORT)
+    assert r["verdict"] == "PASS", r["failures"]
+    assert r["info"]["peak_dbfs"] < -1.0          # and with headroom, not at the rail
+
+
+def test_synthtop_backend_full_suite_passes():
+    # the production-path gate, standing: every phrase through the shipped
+    # mixer, re-derived by the tools/ CI job and make verify's broad pytest
+    # run -- not a point measurement (judge on PR #987).
+    res = ps.run_suite(lambda p: ps.synthtop_render(p))
+    assert len(res) == len(ps.phrases())
+    bad = [(r["phrase"], r["verdict"], r.get("failures"))
+           for r in res if r["verdict"] != "PASS"]
+    assert not bad, bad
+
+
+def test_control_dropping_the_last_note_gate_off_is_stuck():
+    # the LAST note's: a gate-off dropped under a FOLLOWING note reads as that
+    # note's masked onset (presence), not as stuck -- the retrigger resets the
+    # envelope before any tail can be judged. The last note has no follower.
+    w = ps.phrase_writes(SHORT)
+    fg_last = round((SHORT.events[-1].onset_s + SHORT.events[-1].gate_s) * ps.SR)
+    w = [x for x in w
+         if not (x[2] == st.SEC_VOICE and x[3] == st.A_GATE_OFF and x[0] == fg_last)]
+    r = ps.evaluate(_synthtop(SHORT, writes=w), SHORT)
+    assert r["verdict"] == "FAIL"
+    assert r["props"]["release"] == "FAIL"
+    assert any(f.startswith("stuck:") for f in r["failures"]), r["failures"]
+
+
+def test_control_flooring_the_volume_mid_note_is_a_dropout():
+    w = ps.phrase_writes(SHORT)
+    vol = _vwrite(w, st.A_VOL)[0][4]
+    w = sorted(w + [(round(0.20 * ps.SR), 0, st.SEC_VOICE, st.A_VOL, 0),
+                    (round(0.22 * ps.SR), 0, st.SEC_VOICE, st.A_VOL, vol)], key=lambda t: t[0])
+    r = ps.evaluate(_synthtop(SHORT, writes=w), SHORT)
+    assert r["verdict"] == "FAIL"
+    assert r["props"]["dropout"] == "FAIL"
+    assert r["props"]["timing"] == "ok" and r["props"]["presence"] == "ok"
+
+
+def test_control_late_note_writes_read_as_late_events():
+    lag = round(0.025 * ps.SR)
+    w = [(t[0] + (lag if t[2] == st.SEC_VOICE and t[0] > 0 else 0),) + t[1:]
+         for t in ps.phrase_writes(SHORT)]
+    r = ps.evaluate(_synthtop(SHORT, writes=w), SHORT)
+    assert r["verdict"] == "FAIL"
+    assert r["props"]["timing"] == "FAIL"
+    assert r["props"]["release"] == "ok"          # schedule-based tail checks must not move
+
+
+def test_control_full_scale_gains_clip_and_headroom_catches_it():
+    w = ps.phrase_writes(SHORT, patch=dict(ps.SYNTHTOP_PATCH, vol=2.0))
+    x = _synthtop(SHORT, writes=w)
+    rail = int(np.count_nonzero(np.abs(x) >= 0.999))
+    assert rail > 0, "the clip control never reached the rail: not a clip control"
+    r = ps.evaluate(x, SHORT)
+    assert r["verdict"] == "FAIL"
+    assert r["props"]["headroom"] == "FAIL"
+    assert any(f.startswith("clipping") for f in r["failures"]), r["failures"]
+
+
+def test_unknown_engine_is_refused_not_defaulted():
+    with pytest.raises(ps.Refused, match="engine"):
+        ps.render_writes(ps.phrase_writes(SHORT), SHORT.duration_s, engine="turbo")
+
+
+def test_cli_refuses_engine_on_non_synthtop_backend(capsys):
+    assert ps.main(["--engine", "baseline", "--phrase", "bass"]) == 2
+    assert "REFUSED" in capsys.readouterr().err
+    # the old value-comparison guard was satisfied by its own default: naming
+    # the default engine on a non-synthtop backend must refuse the same way
+    assert ps.main(["--engine", "r1", "--backend", "reference"]) == 2
+    assert "REFUSED" in capsys.readouterr().err
