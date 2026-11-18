@@ -4,6 +4,17 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **PR #1000**: tools: remove one-shot ring-ratio snapshot harness
+- **PR #996**: fix: render_writes refuses out-of-record streams instead of asserting
+- **PR #993**: probes: derive two summaries' quoted figures from the run's own measurements
+- **PR #991**: probes: derive verify_109_claims CONCLUSION extents from the run's measurements
+- **PR #987**: perf suite: drive the shipped mixer -- a synth_top backend for the full-performance suite (#338)
+- **Issue #995** (closed): performance_suite: render_writes answers AssertionError, not REFUSED, for a stream past the record
+- **Issue #990** (closed): Class sweep (#988): two more same-shape sites - hard-coded prose figures beside the same run's live measurements
+- **Issue #988** (closed): verify_109_claims:244's CONCLUSION understates RS floor-clearing by ~13 ms (53.9 measured vs ~41 prose), and the figure is registered with no gate
+- **Issue #975** (closed): Remove tools/ring_ratio_compare.py: one-shot #548 before/after harness, nothing references it
+- **Issue #912** (closed): Five more JSON-refusal handlers miss UnicodeDecodeError: the #909 gap generalises past load_json_refused
+- **Issue #338** (closed): Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
 - **PR #818**: ci: commit the nightly's slow DAG records to main, not just the artifact
 - **Issue #787** (closed): Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run"
 - **PR #986**: docs: record verify_109_claims half-2 live run against the real Fischer corpus
