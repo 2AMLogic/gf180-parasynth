@@ -4,6 +4,10 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-18
 
+- **PR #986**: docs: record verify_109_claims half-2 live run against the real Fischer corpus
+- **PR #985**: docs: mark §5c mpd.* bucket names as stale pending #933 regeneration
+- **Issue #983** (closed): CI produced zero check-runs on PR #982: pull_request workflows stopped triggering (needs operator)
+- **Issue #829** (closed): Run `make reference-integration` on the box: verify_109_claims' real-reference half has never been exercised against the real Fischer corpus
 - **Issue #856** (closed): Provision the pinned build box for this checkout: no .env, no remote.env, and the dispatch worker's AWS identity has no EC2 access
 - **Issue #869** (closed): Forward upstream to rjwalters/loom: post-verdict issue-body hash refuses when the body ends in a newline (#13600's fix covers one trailing newline, jq gives two)
 
