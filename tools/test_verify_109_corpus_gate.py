@@ -363,5 +363,147 @@ def test_no_corpus_state_leaves_a_traceback(required, tmp_path):
         assert p.returncode == 0
 
 
+# --- #988: the CONCLUSION block's figures must be the run's measurements ---
+
+def _flat(out: str) -> str:
+    """stdout collapsed to one string: both the detail lines and the
+    CONCLUSION are hard-wrapped prints, and the figures must be compared
+    where the sentences are, not where the line breaks happen to fall."""
+    return re.sub(r"\s+", " ", out)
+
+
+def _detail_extent(flat: str, voice: str, rel: str):
+    """One voice's measured extent, off the detail line: (window_ms, t1_ms,
+    t2_ms-or-None). This is the same line conclusion_extent_lines() derives
+    from, so equality here IS the no-drift property."""
+    m = re.search(
+        rf"{voice} {re.escape(rel)}: prepared record is [\d.]+ ms long; "
+        rf"\d+ of \d+ probed instants in \[0, (\d+)\] ms clear the joint "
+        rf"floor by 6 dB; earliest ([\d.]+) ms(?:, latest ([\d.]+) ms)?",
+        flat)
+    assert m, f"no detail line for {voice}:\n{flat[:1500]}"
+    t2 = float(m.group(3)) if m.group(3) is not None else None
+    return m.group(1), float(m.group(2)), t2
+
+
+def _conclusion_extent(flat: str, voice: str):
+    """The CONCLUSION's quoted extent for one voice: (window_ms, start_ms,
+    end_ms-or-None). `~?` tolerates the pre-fix prose's tilde prefixes so a
+    red run against the old hard-coded text reports a FIGURE MISMATCH --
+    the drift this test exists for -- rather than a parse failure."""
+    if voice == "RS":
+        m = re.search(
+            r"for RS\.WAV the joint-floor-clearing region runs from "
+            r"(?:~?([\d.]+) ms to ~?([\d.]+) ms"
+            r"|a single floor-clearing instant at ~?([\d.]+) ms)"
+            r" of a (\d+) ms search window", flat)
+        assert m, f"no CONCLUSION clause for {voice}:\n{flat[-1500:]}"
+        window = m.group(4)
+        if m.group(3) is not None:
+            return window, float(m.group(3)), None
+        return window, float(m.group(1)), float(m.group(2))
+    m = re.search(
+        r"[Ff]or CB\.WAV it runs to (?:~?([\d.]+) ms"
+        r"|a single floor-clearing instant at ~?([\d.]+) ms)"
+        r" of a (\d+) ms window", flat)
+    assert m, f"no CONCLUSION clause for {voice}:\n{flat[-1500:]}"
+    window = m.group(3)
+    if m.group(2) is not None:
+        # Single-instant record: the one printed instant IS the detail
+        # line's `earliest`, so it is compared against t1 (t2 stays None on
+        # both sides).
+        return window, float(m.group(2)), None
+    return window, None, float(m.group(1))
+
+
+def test_conclusion_figures_match_detail_lines(tmp_path):
+    """#988's start-red control: on a synthetic reference whose measured
+    extents differ from the old hard-coded prose (RS `~41 ms`, CB
+    `~589 ms`), the CONCLUSION must quote the DETAIL LINE's figures. Red
+    against the pre-fix probe (CONCLUSION says 41.0 ms where the run
+    measured something else -- the exact drift #988 filed), green once the
+    figures are derived. Synthetic tones, same recipe as
+    test_full_corpus_still_measured: whatever the estimator says about them
+    is a verdict; this test reads only the printed extents."""
+    refs = tmp_path / "refs"
+    blobs = {"RS": good_wav(*RS_PARTIALS), "CB": good_wav(540.0, 800.0)}
+    for voice, blob in blobs.items():
+        path = refs / rc.REF_MAIN[voice][0]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(blob)
+    p = run_probe(refs, required=True)
+    assert p.returncode in (0, 1), f"exit {p.returncode}\n{p.stdout}\n{p.stderr}"
+    assert "Traceback" not in p.stderr, p.stderr
+    assert "NOT RUN" not in p.stdout and "NO VERDICT" not in p.stdout
+    m = parse_verdict(p.stdout)
+    assert int(m.group(1)) == 8 and int(m.group(2)) == 8, p.stdout
+    assert "CONCLUSION: for RS.WAV" in p.stdout
+    flat = _flat(p.stdout)
+    for voice in ("RS", "CB"):
+        rel = rc.REF_MAIN[voice][0]
+        window, t1, t2 = _detail_extent(flat, voice, rel)
+        c_window, c_t1, c_t2 = _conclusion_extent(flat, voice)
+        assert c_window == window, \
+            f"{voice}: CONCLUSION window {c_window} ms != detail {window} ms"
+        assert c_t1 == t1, \
+            f"{voice}: CONCLUSION start {c_t1} ms != detail {t1} ms\n{flat[-800:]}"
+        assert c_t2 == t2, \
+            (f"{voice}: CONCLUSION end {c_t2} ms != detail {t2} ms -- the "
+             f"prose drifted from its own run (#988's defect class)\n{flat[-800:]}")
+        # The injected-drift control: neither old hard-coded literal may
+        # survive anywhere in the CONCLUSION, whatever this run measured.
+        for stale in ("~41 ms", "~589 ms"):
+            assert stale not in flat.split("CONCLUSION:")[-1], \
+                f"{voice}: stale hard-coded figure {stale!r} still printed"
+
+
+def test_conclusion_absent_on_half_run(tmp_path):
+    """#988 edge: a half-run (one voice refused) must still print NO
+    CONCLUSION -- the derived block did not change the both-voices condition
+    from #814, and the prose must not assert numbers for the voice that did
+    not run."""
+    refs = tmp_path / "refs"
+    blobs = {"RS": good_wav(*RS_PARTIALS),
+             "CB": truncated_wav(frames=5000, drop_last=900)}
+    for voice, blob in blobs.items():
+        path = refs / rc.REF_MAIN[voice][0]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(blob)
+    p = run_probe(refs, required=False)
+    assert p.returncode == 0, f"exit {p.returncode}\n{p.stdout}\n{p.stderr}"
+    assert "Traceback" not in p.stderr, p.stderr
+    m = parse_verdict(p.stdout)
+    assert int(m.group(3)) == 1, f"expected CB NOT RUN, got {p.stdout[-400:]}"
+    assert "CONCLUSION: for RS.WAV" not in p.stdout
+
+
+def test_conclusion_extent_lines_single_instant():
+    """#988 edge, unit-level: `t2_ms` is conditional in
+    balance_trajectory_db's detail (single-instant record), so the
+    CONCLUSION builder must degrade the phrase -- not KeyError (#814) -- and
+    every figure it prints must come from the dict it is handed. The values
+    are chosen to differ from the retired hard-coded literals (41 / 589):
+    if any of those reappear, the builder is printing prose, not the run."""
+    sys.path.insert(0, str(HERE / "probes"))
+    import verify_109_claims as vc
+
+    lines = "\n".join(vc.conclusion_extent_lines({
+        "RS": {"t1_ms": 7.5, "t2_ms": None, "t_end_ms": 60.0},
+        "CB": {"t1_ms": 3.2, "t2_ms": 432.1, "t_end_ms": 600.0},
+    }))
+    flat = re.sub(r"\s+", " ", lines)
+    assert "runs from a single floor-clearing instant at 7.5 ms of a " \
+           "60 ms search window" in flat
+    assert "it runs to 432.1 ms of a 600 ms window" in flat
+    assert "41 ms" not in flat and "589 ms" not in flat
+
+    two_instant = "\n".join(vc.conclusion_extent_lines({
+        "RS": {"t1_ms": 11.0, "t2_ms": 53.9, "t_end_ms": 60.0},
+        "CB": {"t1_ms": 10.0, "t2_ms": 588.7, "t_end_ms": 600.0},
+    }))
+    assert "runs from 11.0 ms to 53.9 ms of a 60 ms search window" \
+        in re.sub(r"\s+", " ", two_instant)
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
