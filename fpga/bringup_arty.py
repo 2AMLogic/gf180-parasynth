@@ -150,11 +150,11 @@ def frame_rate_hz(samples: list) -> tuple:
 
 
 def classify(rc: int, out: str) -> str:
-    """What a uart_host invocation actually did. `wrap-guard` is #458: a raw
-    ValueError whose occurrence depends on the free-running anchor, so a retry
-    at a fresh anchor is the documented workaround."""
-    if "inside the wrap guard" in out:
-        return "wrap-guard"
+    """What a uart_host invocation actually did. #458's fix moved the
+    unreachable-hold verdict ahead of the note-on and words it as a REFUSED
+    exit 2 whose REASON contains the old raw ValueError's "inside the wrap
+    guard" -- so that substring must not outrank the REFUSED verdict (#1075):
+    today's message carries it and the advice to shorten the hold."""
     if rc == 0 and "done;" in out:
         return "played"
     if "REFUSED" in out:
@@ -270,24 +270,24 @@ def status_samples(repo: pathlib.Path, port: str, n: int = 25) -> list:
 
 
 def play_note(repo: pathlib.Path, port: str, image: str, note: int,
-              hold: int, tries: int = 10) -> bool:
-    """One held note, retrying past #458's anchor-dependent wrap guard."""
-    for t in range(1, tries + 1):
-        p = subprocess.run([sys.executable, "fpga/uart_host.py", "--port", port,
-                            "--image", image, "run", "--note", str(note),
-                            "--hold-frames", str(hold)],
-                           capture_output=True, text=True, timeout=180, cwd=repo)
-        out = p.stdout + p.stderr
-        verdict = classify(p.returncode, out)
-        if verdict == "played":
-            print(f"  note {note}: played (try {t})")
-            return True
-        if verdict == "wrap-guard":
-            continue
-        why = [l for l in out.splitlines() if "REFUSED" in l]
-        print(f"  note {note}: {verdict}  {why[0][:120] if why else ''}")
-        return False
-    print(f"  note {note}: never cleared the wrap guard in {tries} tries (#458)")
+              hold: int) -> bool:
+    """One held note, one host invocation. The host refuses an unreachable
+    hold BEFORE the note-on leaves, and that verdict is a function of the
+    hold and the lead, not of the free-running counter's anchor (#458's
+    fix) -- so a retry at a fresh anchor cannot change it and would only
+    bury the host's advice under ten invocations (#1075). Print the whole
+    refusal line: it carries the operator's instruction."""
+    p = subprocess.run([sys.executable, "fpga/uart_host.py", "--port", port,
+                        "--image", image, "run", "--note", str(note),
+                        "--hold-frames", str(hold)],
+                       capture_output=True, text=True, timeout=180, cwd=repo)
+    out = p.stdout + p.stderr
+    verdict = classify(p.returncode, out)
+    if verdict == "played":
+        print(f"  note {note}: played")
+        return True
+    why = [l for l in out.splitlines() if "REFUSED" in l]
+    print(f"  note {note}: {verdict}  {why[0] if why else ''}")
     return False
 
 

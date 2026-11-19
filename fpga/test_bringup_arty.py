@@ -129,11 +129,21 @@ def test_unwrap_cumulative_is_monotonic_and_agrees_with_the_total():
 
 # -------------------------------------------------------------- classify ----
 @pytest.mark.parametrize("rc,out,want", [
+    # the historical #458 traceback: a raw ValueError, exit 1, no REFUSED --
+    # an error, never something to retry or decode advice from (#1075)
     (1, "ValueError: event 0: due 48119 (+anchor 16210) is inside the wrap guard",
-     "wrap-guard"),
+     "error"),
     (0, "uart_host: done; device frame 4203, evq 0, wrq 0, drops 0, errs 0",
      "played"),
     (2, "uart_host: REFUSED -- the device's frame counter did not advance",
+     "refused"),
+    # today's #458 verdict: exit 2, REFUSED, and the old guard's words inside
+    # the reason -- the REFUSED verdict must outrank the substring, and the
+    # reason carries the operator's instruction ("use a shorter hold")
+    (2, "uart_host: REFUSED -- hold_frames 48000 cannot be delivered as one "
+        "scheduled note-off: event 0: due 48459 (+anchor 51) is inside the "
+        "wrap guard. The device reasons about dues within +-32768 frames; "
+        "use a shorter hold",
      "refused"),
     (1, "Traceback (most recent call last): OSError", "error"),
 ])
@@ -197,6 +207,158 @@ def test_bitstream_hash_match_returns_the_hash(tmp_path):
     p.write_bytes(b"payload")
     want = hashlib.sha256(b"payload").hexdigest()
     assert ba.require_bitstream(p, want) == want
+
+
+# ----------------------------------------------- play_note regression (#1075) --
+# The wrapper is driven through its subprocess boundary: play_note's actual
+# CLI arguments run the REAL uart_host.main against a fresh simulated UART
+# bridge (fpga/uart_device_sim on simulated time -- no hardware, no wall
+# clock). The starting frame advances by 7,919 modulo 65,536 between calls,
+# so a retry really does get a fresh anchor: the historical retry's own
+# premise, granted before it is proven futile.
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _sub in ("model", "fpga"):
+    if os.path.isdir(os.path.join(_ROOT, _sub)):
+        sys.path.insert(0, os.path.join(_ROOT, _sub))
+
+import contextlib                                        # noqa: E402
+import io                                                # noqa: E402
+
+import synth_top_model as stm                            # noqa: E402
+import uart_device_sim as dev                            # noqa: E402
+import uart_host as uh                                   # noqa: E402
+
+_REPO = pathlib.Path(_ROOT)
+_ANCHOR_STRIDE = 7919          # coprime to 65,536: every retry a fresh anchor
+
+
+class _HostViaSim:
+    """subprocess.run replacement for play_note: the child host CLI runs
+    in-process on a fresh simulated bridge each call, capturing what the
+    child would have printed and its exit status."""
+
+    def __init__(self):
+        self.calls = []      # one record per host invocation
+
+    def __call__(self, cmd, **_kwargs):
+        assert cmd[1] == "fpga/uart_host.py", \
+            f"interception missed the host CLI: {cmd}"
+        argv = cmd[2:]
+        epoch = (_ANCHOR_STRIDE * len(self.calls)) & 0xFFFF
+        clock = dev.SimClock()
+        sim = dev.UartDeviceSim(clock=clock, epoch_frame=epoch)
+        ser = dev.SimSerial(sim)
+        bridge = uh.Bridge.on_serial(ser, clock=clock)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = uh.main(argv, bridge_factory=lambda p, b: bridge)
+        self.calls.append({"argv": argv, "rc": rc, "out": out.getvalue(),
+                           "err": err.getvalue(), "sim": sim, "ser": ser})
+        return type("Completed", (), {"returncode": rc,
+                                      "stdout": out.getvalue(),
+                                      "stderr": err.getvalue()})()
+
+
+def test_play_note_delivers_a_reachable_hold_with_one_host_call(monkeypatch):
+    host = _HostViaSim()
+    monkeypatch.setattr(ba.subprocess, "run", host)
+    assert ba.play_note(_REPO, "sim", "r1", 45, 24000) is True
+    assert len(host.calls) == 1, \
+        f"a reachable hold needs one host invocation, got {len(host.calls)}"
+    sim = host.calls[0]["sim"]
+    # delivery is asserted on the device's own write log, never on what the
+    # host claims: the live gate-on, then the scheduled gate-off after the hold
+    on = [i for i, w in enumerate(sim.writes)
+          if w[5] == "live" and w[3] == stm.A_GATE_ON]
+    off = [i for i, w in enumerate(sim.writes)
+           if w[5] == "event" and w[3] == stm.A_GATE_OFF]
+    assert on and off, "the gate-on and the scheduled gate-off must both land"
+    assert on[0] < off[0], "the gate-off must follow the gate-on"
+    span = sim.write_frames[off[0]] - sim.write_frames[on[0]]
+    assert span >= 24000, \
+        f"the gate-off landed {span} frames after the gate-on, " \
+        f"before the 24,000-frame hold elapsed"
+
+
+def _refused_hold_scenario(monkeypatch):
+    """The #1075 refused-hold scenario, shared by the regression and its
+    injected-defect control: one play_note for the 48,000-frame hold, then
+    the wrapper's contract asserted -- one host call, child exit 2, a False
+    return, nothing left queued on the device, and the child's full REFUSED
+    line returned for the operator-output check."""
+    host = _HostViaSim()
+    monkeypatch.setattr(ba.subprocess, "run", host)
+    ok = ba.play_note(_REPO, "sim", "r1", 45, 48000)
+    assert ok is False, "an unreachable hold must be reported undelivered"
+    assert len(host.calls) == 1, \
+        f"the host refuses an unreachable hold on the first attempt; the " \
+        f"wrapper invoked it {len(host.calls)} times"
+    call = host.calls[0]
+    assert call["rc"] == 2, "exit 2 belongs to the child host"
+    # drain the attempted bridge before trusting an empty write log: a
+    # note-on queued just before the refusal would still be in flight
+    call["ser"].run_until(call["ser"].clock.t + 0.05)
+    assert call["sim"].writes == [], \
+        "a refused hold must leave no write queued, sent or sounding"
+    refused = [l for l in call["err"].splitlines()
+               if "uart_host: REFUSED" in l]
+    assert len(refused) == 1, "exactly one REFUSED line from the child"
+    assert "use a shorter hold" in refused[0], \
+        "the child's refusal carries the operator's instruction"
+    return refused[0]
+
+
+def test_play_note_refuses_an_unreachable_hold_on_the_first_call(
+        monkeypatch, capsys):
+    full_line = _refused_hold_scenario(monkeypatch)
+    operator = capsys.readouterr().out
+    assert full_line in operator, \
+        "the operator must see the child's complete REFUSED line, " \
+        "not a truncation or a generic hint"
+
+
+def test_control_the_restored_retry_loop_turns_the_regression_red(monkeypatch):
+    """The injected-defect control (#1075): put the historical wrapper back --
+    the match-first classifier AND its ten-try retry loop -- and require the
+    SAME scenario to go red on its one-invocation assertion with ten calls.
+    A catch that is an import error, a timeout or an unrelated assertion
+    does not count, so the failing assertion and the count are both pinned."""
+    # verbatim history (indentation aside) -- the defect this control injects
+    def historical_classify(rc, out):
+        if "inside the wrap guard" in out:
+            return "wrap-guard"
+        if rc == 0 and "done;" in out:
+            return "played"
+        if "REFUSED" in out:
+            return "refused"
+        return "error"
+
+    def historical_play_note(repo, port, image, note, hold, tries=10):
+        for t in range(1, tries + 1):
+            p = ba.subprocess.run(
+                [sys.executable, "fpga/uart_host.py", "--port", port,
+                 "--image", image, "run", "--note", str(note),
+                 "--hold-frames", str(hold)],
+                capture_output=True, text=True, timeout=180, cwd=repo)
+            out = p.stdout + p.stderr
+            verdict = historical_classify(p.returncode, out)
+            if verdict == "played":
+                print(f"  note {note}: played (try {t})")
+                return True
+            if verdict == "wrap-guard":
+                continue
+            why = [l for l in out.splitlines() if "REFUSED" in l]
+            print(f"  note {note}: {verdict}  {why[0][:120] if why else ''}")
+            return False
+        print(f"  note {note}: never cleared the wrap guard in {tries} tries (#458)")
+        return False
+
+    monkeypatch.setattr(ba, "play_note", historical_play_note)
+    with pytest.raises(AssertionError) as ei:
+        _refused_hold_scenario(monkeypatch)
+    assert "invoked it 10 times" in str(ei.value), \
+        f"the control must fail on the one-invocation assertion with ten " \
+        f"calls, not something unrelated: {ei.value}"
 
 
 def test_missing_bitstream_is_refused(tmp_path):
