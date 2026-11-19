@@ -188,11 +188,15 @@ LOG_TS_RE = re.compile(
 #: that: a line that exactly imitates the record, from a step that can
 #: write the job log, is the forged-checkout class in the module
 #: docstring, told apart by no property of the file. No host or scheme
-#: is pinned: the genuine host is github.com today, and pinning it (or
-#: requiring `https?://`) would turn GHES and any future host change
-#: into false refusals -- a real refusal traded for a speculative false
-#: pass, and the scheme requirement would still accept the foreign-host
-#: line above. Defence: the caller's fetch command (the job's log
+#: is pinned, each restriction for its own reason. A literal
+#: `github.com` host requirement excludes an enterprise hostname
+#: (GHES) and any future host change -- a real refusal traded for a
+#: speculative false pass. An `https?://` scheme requirement makes no
+#: such trade: it accepts HTTPS URLs on either host (for both
+#: `https://ghe.corp/o/r` and the foreign-host line above,
+#: `bool(re.match(r"https?://", url))` is True), so it leaves the
+#: foreign-host case open; it is not a host defence and is not carried
+#: as one. Defence: the caller's fetch command (the job's log
 #: fetched by URL) is what binds the file, and the two-distinct-ids
 #: refusal below fires when the genuine record is also present -- a
 #: false attribution additionally requires the genuine upload record to

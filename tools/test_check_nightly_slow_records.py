@@ -430,10 +430,13 @@ def test_foreign_host_record_line_still_attributes(replay):
     a foreign host -- `<ts> Artifact download URL:
     https://evil.example/actions/runs/44128504549/artifacts/1` --
     still attributes that foreign run id (the gate passes on it, not
-    REFUSED). Not observed in the reviewed logs; no host or scheme is
-    pinned because GHES and future host changes would become false
-    refusals. This test documents an ACCEPTED LIMITATION, not a desired
-    property: a later tightening of ARTIFACT_RUN_ID_RE to reject
+    REFUSED). Not observed in the reviewed logs; no host is pinned
+    because a literal `github.com` requirement would refuse the same
+    record on GHES or a future host, and no scheme is pinned for a
+    different reason: `https?://` accepts HTTPS on either host
+    (`https://ghe.corp/o/r` matches it), so it leaves this foreign-host
+    line matching too. This test documents an ACCEPTED LIMITATION, not
+    a desired property: a later tightening of ARTIFACT_RUN_ID_RE to reject
     foreign hosts deliberately FLIPS it to a refusal."""
     identity = [ln for ln in IDENTITY_LINES
                 if "Artifact download URL" not in ln]
