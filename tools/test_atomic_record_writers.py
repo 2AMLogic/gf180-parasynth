@@ -55,8 +55,12 @@ sys.path.insert(0, str(HERE))
 
 #: (module, writer attribute) -- one entry per migrated write site; refprofile
 #: writes profile and notes through the same `write_json` seam, so one entry
-#: covers both calls.
+#: covers both calls. `holdout` writes the ledger and both seal writes through
+#: one seam, and `measure_m1a_volume_mapping` writes its per-run records and
+#: report through one (#922).
 WRITERS = [
+    ("holdout", "write_json"),
+    ("measure_m1a_volume_mapping", "write_json"),
     ("condition_boundary", "write_json"),
     ("regen_m1a_units", "write_json"),
     ("refprofile", "write_json"),
@@ -133,8 +137,13 @@ def inline_record_write_findings(src: str, *, dumps_allowance: int = 0) -> list[
     (`mode = "w"` defeats the literal match -- tracking values needs AST
     analysis, rejected in #923 as more machinery than the gap warrants); a
     serialiser inside a multi-line `print(` (`print(` must precede the match
-    on the same line, so one needs its own conscious extension); and
-    `open(` arguments nested more than one paren deep.
+    on the same line, so one needs its own conscious extension); `open(`
+    arguments nested more than one paren deep; and a
+    `json.encoder.JSONEncoder(...).encode(` call -- `json.dumps` is exactly
+    that encoder call, so an in-memory serialisation that never touches a
+    file (holdout's `_canon` fingerprints, #922) can spell itself outside
+    this count; pinned in GREEN_SPELLINGS (`encoder-encode-off-guard`) so
+    closing the hole goes red and forces the conscious decision.
     """
     findings: list[str] = []
     plain = ((".write_text(", re.compile(r"\.write_text\(")),
@@ -288,6 +297,12 @@ GREEN_SPELLINGS = {
         "wavfile.write(str(part), sr, y)\n", {}),
     "stdout-dumps-within-allowance": (
         'print(json.dumps(summary, indent=1))\n', {"dumps_allowance": 1}),
+    # json.dumps is exactly this encoder call: an in-memory serialisation
+    # that never touches a file (holdout's _canon fingerprint, #922) spells
+    # itself outside the json.dumps( count. Pinning it here means closing
+    # that textual hole goes red and must be decided consciously.
+    "encoder-encode-off-guard": (
+        'blob = json.encoder.JSONEncoder(sort_keys=True).encode(obj)\n', {}),
 }
 
 
