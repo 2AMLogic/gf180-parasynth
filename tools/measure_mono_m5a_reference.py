@@ -31,10 +31,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 
 import audio_measure as am  # noqa: E402
-import ring_estimator  # noqa: E402
 import reference_rigs as rr  # noqa: E402
 import reference_voice as rv  # noqa: E402
 import voice_fx as vf  # noqa: E402
+import refusal
 
 SR = 48_000
 BLOCK = 16
@@ -103,7 +103,7 @@ WAVE_PARAM = (48, "Wave Osc1")
 RANGE_READBACK = "8'"
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """The reference apparatus did not prove the conditions for measurement."""
 
 
@@ -408,13 +408,13 @@ def _qualify_reference_integrity() -> dict:
 def _measure_open_cutoff(repeats: int = 3) -> dict:
     """Measure the max-cutoff knob position by self-oscillation, not its 0..1 label."""
     values = []
+    prominence = []
     readbacks = []
     wrong_block_rig = rr.MiniV3Rig(block=512)
     wrong_block_audio = np.asarray(wrong_block_rig.ring(1.0, 0.98, seconds=1.2), dtype=np.float64)
-    try:
-        wrong_block_hz = ring_estimator.ring_frequency(wrong_block_audio, SR)
-    except ring_estimator.Refused as exc:
-        raise Refused(f"wrong-block cutoff control could not be measured: {exc}") from exc
+    wrong_block_estimate = am.dominant_frequency(wrong_block_audio, 25.0, 15000.0, SR)
+    if not wrong_block_estimate.ok:
+        raise Refused(f"wrong-block cutoff control could not be measured: {wrong_block_estimate.reason}")
     for _ in range(repeats):
         rig = rr.MiniV3Rig(block=BLOCK)
         ring = np.asarray(rig.ring(1.0, 0.98, seconds=1.2), dtype=np.float64)
@@ -424,27 +424,25 @@ def _measure_open_cutoff(repeats: int = 3) -> dict:
         })
         if not len(ring) or float(np.max(np.abs(ring))) < 1e-5:
             raise Refused("Mini V3 max-cutoff calibration ring is silent")
-        try:
-            measured_hz = ring_estimator.ring_frequency(ring, SR)
-        except ring_estimator.Refused as exc:
-            raise Refused(f"Mini V3 max-cutoff ring measurement refused: {exc}") from exc
-        if measured_hz < 1000.0:
-            raise Refused(f"Mini V3 max-cutoff ring measurement refused: {measured_hz:.1f} Hz is below 1000 Hz")
-        values.append(float(measured_hz))
+        measured = am.dominant_frequency(ring, 25.0, 15000.0, SR)
+        if not measured.ok or measured.value < 1000.0:
+            raise Refused(f"Mini V3 max-cutoff ring measurement refused: {measured.reason}")
+        values.append(float(measured.value))
+        prominence.append(float(measured.detail.get("prominence_db", 0.0)))
     spread = max(values) - min(values)
     if spread > 10.0:
         raise Refused(f"Mini V3 max-cutoff measurement is not repeatable: {spread:.2f} Hz")
-    if abs(float(wrong_block_hz) - float(np.median(values))) <= 10.0:
+    if abs(float(wrong_block_estimate.value) - float(np.median(values))) <= 10.0:
         raise Refused("wrong-block cutoff control did not distinguish the 512-sample apparatus from the pinned 16-sample setup")
     return {"knob": 1.0, "emphasis": 0.98, "block_size_samples": BLOCK,
-            "method": "measured self-oscillation ring; ring_estimator.ring_frequency (zero-crossing, spectrum-confirmed)",
+            "method": "measured self-oscillation ring; dominant frequency",
             "f0_hz_repeats": values, "repeat_range_hz": spread,
-            "f0_hz": float(np.median(values)),
+            "prominence_db_repeats": prominence, "f0_hz": float(np.median(values)),
             "repeat_count": repeats, "parameter_readbacks": readbacks,
             "wrong_block_control": {"block_size_samples": 512,
-                                    "f0_hz": float(wrong_block_hz),
+                                    "f0_hz": float(wrong_block_estimate.value),
                                     "separation_from_pinned_hz": float(abs(
-                                        wrong_block_hz - np.median(values))),
+                                        wrong_block_estimate.value - np.median(values))),
                                     "caught": True}}
 
 

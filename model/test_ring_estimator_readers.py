@@ -22,10 +22,18 @@ Not routed, by reading (verification-rules rule 8 -- why no defeating input):
     Assumed from names and docstrings -- skimmed, not traced.
   * `tools/measure_mono_m1a_reference.py`, `tools/measure_mono_m5a_reference.py`
     (Mini V3 free rings -- `_measure_open_cutoff`, M1A's three-ring phrase):
-    routed in #706; call-site controls at the end of this file. Both files are
-    hashed into the attack qualification (`suite-v3.json` `sources_sha256`) and
-    the attack-context analysis basis, which need regenerating on a rig host.
+    STILL on `am.dominant_frequency`, now permanently. Both files are hashed
+    into the Mini V3 records (`suite-v3.json` `sources_sha256`, the
+    attack-context model report `source_sha256`), and #1048 froze those
+    records: they cannot be regenerated, so the files cannot change either.
+    Routing them for V3 (#706) is cancelled; Mini V4 references get their own
+    reader when that suite produces records (#1052). The guard at the bottom
+    of this file turns any edit of the two files into a named failure here,
+    instead of the 19 stale-record refusals deep in the tools suite that the
+    first attempt (PR #750) produced.
 """
+import hashlib
+import json
 import math
 import os
 import sys
@@ -163,52 +171,37 @@ def test_reference_integrity_tracking_still_answers_sustained_rings(monkeypatch)
     assert all(v is not None and abs(v - 1.0) < 0.05 for v in errs.values()), errs
 
 
-# ---- #706: the hash-pinned Mini V3 readers -------------------------------------
-import measure_mono_m1a_reference as m1a                            # noqa: E402
-import measure_mono_m5a_reference as m5a                            # noqa: E402
+# ---- #706 re-scoped per #1048: the V3 ring-reader sources are frozen ---------
+# The two Mini V3 free-ring readers above stay on `am.dominant_frequency`
+# because the records that hash them are frozen (#1048): regeneration is
+# cancelled, so the files cannot change. This guard turns an edit of either
+# file into a named failure at this site instead of the stale-record refusals
+# deep in the tools suite that PR #750's first attempt produced (19 red
+# tests). Defeating input -- editing the recorded digest alongside the file:
+# `suite-v3.json` is covered by the committed reference-suite freeze
+# (tools/check_reference_freeze.py); the attack-context model report is not
+# in that manifest, which is a stated residual, not a guard.
+
+_V3_READER_RECORDS = {
+    "tools/measure_mono_m1a_reference.py":
+        ("docs/scorecard/mono-m1a-miniv3/attack-qualification/suite-v3.json",
+         "sources_sha256"),
+    "tools/measure_mono_m5a_reference.py":
+        ("docs/scorecard/mono-attack-context/model/report.json",
+         "source_sha256"),
+}
+
+_V3_READER_FROZEN_MESSAGE = (
+    "{source} changed since its Mini V3 record was written. The records are "
+    "frozen (#1048) and cannot be regenerated, so this reader cannot be "
+    "re-routed through ring_estimator for V3 -- edit neither side. New "
+    "references go through the Mini V4 suite (#1052), whose reader routes "
+    "through ring_estimator from the start.")
 
 
-class _FakeRig:
-    def __init__(self, ring_fn, block=16):
-        self.p = {}
-        self.ring_fn = ring_fn
-        self.block = block
-
-    def ring(self, knob, res, seconds=0.5):
-        return self.ring_fn(self.block, seconds)
-
-
-@pytest.mark.parametrize("make", BAD)
-def test_m1a_bass_ring_refuses(make):
-    with pytest.raises(m1a.ref.Refused):
-        m1a.ring_hz(make())
-
-
-def test_m1a_bass_ring_still_answers():
-    assert abs(m1a.ring_hz(sustained()) - 1000.0) < 1.0
-
-
-def _patch_rig(monkeypatch, ring_fn):
-    monkeypatch.setattr(m5a.rr, "MiniV3Rig", lambda block=16: _FakeRig(ring_fn, block))
-    monkeypatch.setattr(m5a, "_readback", lambda *a, **k: 0.0)
-
-
-@pytest.mark.parametrize("make", BAD)
-def test_m5a_open_cutoff_refuses_on_non_ring(monkeypatch, make):
-    _patch_rig(monkeypatch, lambda block, seconds: make(seconds=seconds))
-    with pytest.raises(m5a.Refused):
-        m5a._measure_open_cutoff()
-
-
-def test_m5a_open_cutoff_still_answers(monkeypatch):
-    _patch_rig(monkeypatch, lambda block, seconds: sustained(
-        1000.0 if block == 16 else 1500.0, seconds))
-    out = m5a._measure_open_cutoff()
-    assert abs(out["f0_hz"] - 1000.0) < 1.0 and out["wrong_block_control"]["caught"]
-
-
-def test_m5a_wrong_block_control_refuses_on_non_ring(monkeypatch):
-    _patch_rig(monkeypatch, lambda block, seconds: (
-        decay(seconds=seconds) if block == 512 else sustained(1000.0, seconds)))
-    with pytest.raises(m5a.Refused, match="wrong-block"):
-        m5a._measure_open_cutoff()
+@pytest.mark.parametrize("source,record", sorted(_V3_READER_RECORDS.items()))
+def test_v3_ring_reader_source_is_frozen(source, record):
+    record_path, key = record
+    digest = json.loads((HERE.parent / record_path).read_text())[key][source]
+    actual = hashlib.sha256((HERE.parent / source).read_bytes()).hexdigest()
+    assert actual == digest, _V3_READER_FROZEN_MESSAGE.format(source=source)
