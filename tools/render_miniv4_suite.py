@@ -146,7 +146,7 @@ class _Rig:
 # ===========================================================================
 # preconditions, each asserted at the point of use
 # ===========================================================================
-def check_plugin_version(rig: _Rig, path: str = PATH_MINIV4) -> dict:
+def check_plugin_version(path: str = PATH_MINIV4) -> dict:
     """The bundle must exist, and claim exactly 4.0.4.6366. REFUSED otherwise."""
     ident = rp.plugin_identity(path)
     if not ident.get("present"):
@@ -350,7 +350,7 @@ def main(argv=None) -> int:
                  "outcomes": {}, "records": {}}
     out_dir = ROOT / args.out
     try:
-        ident = check_plugin_version(_Rig, PATH_MINIV4)
+        ident = check_plugin_version(PATH_MINIV4)
         licence = check_licence(args.licence_established)
         rig = _Rig(PATH_MINIV4)
         cal = check_calibration(rig)

@@ -29,6 +29,11 @@ def load_reference(path=MANIFEST):
         manifest = json.loads(path.read_text())
         if manifest.get("case_id") != "M1A" or not manifest.get("valid"):
             raise Refused("M1A reference manifest is not qualified")
+        import reference_suites
+        try:
+            reference_suites.require_suite(manifest, reference_suites.SUITE_V3_FROZEN)
+        except reference_suites.Refused as exc:
+            raise Refused(str(exc)) from exc
         if manifest["events"] != list(reference.EVENTS):
             raise Refused("M1A reference timeline differs")
         for item in [*manifest["renders"], *manifest["controls"].values()]:
