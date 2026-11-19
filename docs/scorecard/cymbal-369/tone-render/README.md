@@ -42,8 +42,7 @@ replaced its own.** This step did, and the same construction, the same bound, th
 Figure 9 draws across the whole audio band (Ht3, 20 Hz–20 kHz); over its active range the two routes agree to
 **0.026 dB** (`nodal-grounded`, bound 0.5). Over the low band's active range they disagree by **4.61 dB**
 (`fig9-window-blind`, which must exceed the same 0.5 dB or the finding is not a finding); peak-to-peak over that
-same range the two routes span **5.59 dB** (`fig9-window-blind.span_db`).
-<!-- claim: test=tools/test_cymbal_tone_writeup_figures.py::test_every_quoted_figure_is_the_tool_s_own_output issue=429 why="all three figures on this line were transcribed, not computed: 0.10/5.62 against a tool that returns 0.026/4.61" -->
+same range the two routes span **5.59 dB** (`fig9-window-blind.span_db`). <!-- claim: test=tools/test_cymbal_tone_writeup_figures.py::test_every_quoted_figure_is_the_tool_s_own_output issue=429 why="all three figures on this line were transcribed, not computed: 0.10/5.62 against a tool that returns 0.026/4.61" -->
 Figure 9 plots Ht1 only
 over **121–564 Hz**, on a 4 dB tall axis; its fitted low-pass pole is **589.5 Hz** and the network's dominant
 in-band pole is at **4219 Hz**. A window a decade below the band cannot see it.

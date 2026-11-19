@@ -95,8 +95,7 @@ nonlinear corners.
 
 A ladder loses bass as its resonance rises — `H(0) = 1/(1 + k)` in the
 small-signal model, which `model/test_moog_acceptance.py` now asserts against
-our filter directly.
-<!-- claim: test=model/test_moog_acceptance.py::test_the_ladders_low_frequency_gain_is_one_over_one_plus_k -->
+our filter directly. <!-- claim: test=model/test_moog_acceptance.py::test_the_ladders_low_frequency_gain_is_one_over_one_plus_k -->
 DR 0005's `ogain` gives part of it back (`(1 + 2 res)`), and DR 0006's `k_comp`
 ROM moves the onset. **Both are level policy, and a change to either has two
 effects that must never be added up:**

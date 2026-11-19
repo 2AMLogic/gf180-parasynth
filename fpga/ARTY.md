@@ -464,8 +464,7 @@ with the reason written beside it, not a token output delay.
 `output_delay_exceptions == ["i2s_bclk"]` and binds evidence by wrapper
 (`VERIFICATION_BY_WRAPPER`). #406 decided that this wrapper is never a release
 image, rather than scoping the gate per wrapper. `publish_arty.py` refuses it
-because it has no entry, and `fpga/test_arty_sd_top.py` asserts that absence.
-<!-- claim: test=fpga/test_arty_sd_top.py::test_never_published_as_a_release_image -->
+because it has no entry, and `fpga/test_arty_sd_top.py` asserts that absence. <!-- claim: test=fpga/test_arty_sd_top.py::test_never_published_as_a_release_image -->
 Its build gate is `fpga/build_arty_sd.py`. It requires internal timing to pass
 (WNS ≥ 0, zero failing endpoints) and every XDC query to bind. The routed
 report's output ports must be classified as exactly: nothing unconstrained,
