@@ -76,7 +76,11 @@ that parameter ship a value its own sweep does not cover.
    within which two points are the same value of the objective — plus a `why`
    that derives it from **the granularity of the decision**, not from the
    spread of the data. A threshold fitted to its own measurements makes every
-   curve flat.
+   curve flat. A relative rule cannot measure an objective that crosses or
+   sits below zero — the gate refuses such a column rather than guessing a
+   scale. A column that *reaches* zero is fine as long as the zeros form a
+   plateau (every point perfect reads FLAT); a lone zero among nonzero values
+   has no relative spread at that step and cannot be gated by this rule.
 3. **Sweep one dial.** `held_fixed` names everything pinned while it moved.
    `fpga/scripts/mode_sweep.sh` says it plainly: *every naive sweep moves
    both.* A point measured with two dials moved is not evidence about either,
@@ -189,3 +193,20 @@ design constant rather than something a register can change (issue #551):
   now keys on the window-stable `beta`. The record says in so many words that
   the BD output network's 7.52 Hz rationale for K = 10 does not establish the
   cymbal's corner.
+
+The tenth and twelfth are the rate tolerance, scalar then per-unit:
+
+- **`rate-tol-rel.json`** (#775) — the single scalar `RATE_TOL_REL` against
+  pairs the control catches on the integer fold, over a 92-entry panel.
+  `MIXED` with the plateau at the bottom; 0.02 ships because below it the
+  relative term stops binding on a correlation saturating at ±1. Its limits
+  name the defect its own narrowing exposed — a relative term on an offset
+  scale licenses a dB bin by its distance from 0 dB — and file the repair as
+  #782. #782 split the scalar into five per-unit constants, and this record
+  now registers the ratio family's term, `RATE_TOL_REL_RATIO`; its points
+  remain the counts the single scalar produced with all five units moving.
+- **`rate-tol-rel-by-unit.json`** (#782) — the dB family's term,
+  `RATE_TOL_REL_DB`, swept alone through `rate_tolerance`'s per-unit
+  override with the other four units held at their shipped 0.02 by
+  construction. The decision it prices: how much of the control's dB sight
+  a licence large enough to retire the `RATE_KNOWN_RED` null entries costs.

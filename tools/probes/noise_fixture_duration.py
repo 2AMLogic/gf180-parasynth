@@ -78,6 +78,10 @@ import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import permitted_differences as pd                                    # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 GRID = (2.0, 4.0)
 BASELINE = 2.0
@@ -98,7 +102,7 @@ assert CONFIRM_GROUPS * GROUP_STRIDE <= pd.SEED_SPAN
 INVARIANCE_TOL = 1e-9   # dB/oct; the mutant's residual must not see the dial
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition failed. Never reported as a result."""
 
 

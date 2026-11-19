@@ -18,6 +18,11 @@ on:
     - cron: '0 7 * * *'        # 07:00 UTC daily
   workflow_dispatch:
 
+# Without this the nightly cannot push its own records commit back
+# (dag.yml carries the same permission for the same reason).
+permissions:
+  contents: write
+
 jobs:
   # ---------------------------------------------------------------- the slow
   # bit-exactness runs. These are the ones a push cannot afford.
@@ -26,28 +31,77 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The committed-roadmap check below renders the DAG from the
+          # committed records, which needs the history and tags the [dag] bot
+          # rendered them with. A shallow clone cannot answer "did a covered
+          # file change since this was recorded" and renders REFUSED; without
+          # tags the STAMPED nodes render differently from the committed
+          # README. Both measured to fail --check on a tree whose committed
+          # README is consistent (#906) -- an unsatisfiable gate, not a check.
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest
       - run: sudo apt-get update && sudo apt-get install -y iverilog
 
-      - name: M1 -- the voice, full set (255,060 frames)
-        run: python rtl-sketch/verify_voice.py --set full
-      - name: D -- the drum kit (348,554 samples)
-        run: python rtl-sketch/verify_drums.py
-      - name: F2 -- the modal bank
-        run: python rtl-sketch/verify_modal.py
-      - name: I4 -- the whole chip at its pins
-        run: python rtl-sketch/verify_synth_top.py
+      # The committed roadmap is judged BEFORE anything rewrites it (#906).
+      # `--run --slow` below regenerates README.md, and the strict check after
+      # it would then be reading the file this job just wrote -- the same
+      # defeat rungs.yml carried (#906). This step is the nightly's net on the
+      # tree as committed: if main's README disagrees with its committed
+      # evidence -- a [dag] push that failed to regenerate, a hand-edited
+      # table -- the nightly fails here rather than laundering the divergence
+      # through the regen below.
+      - name: the committed roadmap matches the committed evidence
+        run: python tools/compile_dag.py --check
 
-      # The slow nodes the per-push job cannot run. This writes their pass/fail
-      # into docs/dag-results.json with the commit, which is what lets the
-      # README show an honest status for evidence that takes hours.
+      # The slow nodes the per-push job cannot run: compile_dag executes each
+      # one's verifier and records (passed, detail, sha) into
+      # docs/dag-results.json. A node FAILING is a recorded result, not an
+      # aborted run -- an earlier shape of this job ran these same verifiers
+      # as bare steps first, without that tolerance, so one failing verifier
+      # left nothing recorded at all: exactly the loss this job exists to
+      # prevent.
       - name: record the slow evidence for the roadmap
-        run: python tools/compile_dag.py --run --slow
+        # The `|| true` is broader than "a RED node is a result": without
+        # --check --strict the tool already exits 0 on a RED node, so what the
+        # tolerance actually buys is surviving a hard failure (a crashed
+        # verifier, a missing README marker) so one broken node cannot lose
+        # the other nodes' records. The hard failure is still caught one step
+        # later: the commit step re-runs the tool with no tolerance, and the
+        # strict check after that gates the job.
+        run: python tools/compile_dag.py --run --slow || true
+
+      # Carry the records to main. Until this step existed they lived only in
+      # this job's artifact, and the README's F1/M1/D1/I1/I2 rows read STALE
+      # or "never run" against evidence that had actually passed (#787). The
+      # README is regenerated from the same records in the same step, so the
+      # committed table and the committed records cannot disagree.
+      #
+      # The commit-and-push is tools/push_dag_records.py, not a bare `git
+      # push`: over the 14 days measured in the #818 review, commits landed on
+      # main inside this ~2h job's window about one night in three, and a bare
+      # push is rejected non-fast-forward on exactly those nights -- records
+      # written, job red, nothing persisted but the artifact. The tool
+      # rebase-retries onto the moved main (bounded), union-merging the
+      # records: slow nodes keep tonight's evidence, fast nodes take
+      # origin/main's fresher dag.yml records, and the README block is
+      # re-rendered from the merge. The `[dag]` subject it commits with is
+      # load-bearing -- dag.yml's job-level `if:` skips any push whose head
+      # commit message contains it, so this push cannot re-trigger the
+      # per-push job into a loop -- and is pinned against that guard by
+      # test_check_workflows.py.
+      - name: commit the records if they moved (retries onto a moved main)
+        run: python tools/push_dag_records.py
+
       # The nightly CAN refresh the slow evidence, so it is the job entitled to
       # demand that nothing is RED or STALE. The per-push job only asserts the
-      # README is accurate.
+      # README is accurate. This deliberately runs AFTER the commit step: a
+      # RED node here (D3 today) is a finding, and a commit gated on this
+      # check would never fire -- records written, job red, nothing
+      # persisted, which is precisely the bug this job's history records.
       - name: nothing is red or stale
         run: python tools/compile_dag.py --check --strict
       - uses: actions/upload-artifact@v4

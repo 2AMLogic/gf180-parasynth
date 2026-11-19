@@ -43,6 +43,12 @@ for _p in ("fpga/release", "fpga", "model", "audition", "tools", "rtl-sketch"):
     if str(ROOT / _p) not in sys.path:
         sys.path.insert(0, str(ROOT / _p))
 
+import record_compare as rc                      # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
+
 MANIFEST = HERE / "baseline-2025.1.json"
 PUB_DIR = ROOT / "fpga/reports/arty/integrated-baseline-2025.1"
 ROLLBACK_DIR = ROOT / "fpga/reports/arty/vivado-2025.1"
@@ -124,7 +130,7 @@ COMMANDS = (
 ROLLING = ("demo", "bar808-full")
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """Selected artifacts disagree, or an input is missing."""
 
 
@@ -139,8 +145,7 @@ def sha_json(obj) -> str:
 def _rel(p: Path) -> str:
     """Repo-relative for the committed manifest; a path outside the tree (a
     test's substituted copy) stays absolute rather than crashing the check."""
-    p = Path(p).resolve()
-    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+    return rc.rel(p, ROOT)
 
 
 def _need(path: Path) -> Path:
@@ -520,13 +525,11 @@ def build() -> dict:
     }
 
 
-def _diff(a, b, path=""):
-    if isinstance(a, dict) and isinstance(b, dict):
-        out = []
-        for k in sorted(set(a) | set(b)):
-            out += _diff(a.get(k), b.get(k), f"{path}.{k}" if path else k)
-        return out
-    return [] if a == b else [path]
+#: the shared staleness comparison -- fpga/record_compare.py (#785) carries the
+#: divergence table, the type-strictness decision and the inputs that defeat
+#: it. A module-level NAME, because check() calls it as a global and
+#: fpga/release/test_stale_controls.py patches it there.
+_diff = rc.diff
 
 
 def check(manifest_path: Path = MANIFEST) -> tuple:

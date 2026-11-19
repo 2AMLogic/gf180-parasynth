@@ -53,7 +53,7 @@ Every number below was produced by code committed with this document:
 and `tools/run_with_rss.py` (the whole step's envelope). Both carry controls in
 `tools/test_crash_rate.py` and `tools/test_run_with_rss.py`, including a child
 that really does `faulthandler._sigsegv()`.
-<!-- claim: grep=faulthandler\._sigsegv in=tools/test_crash_rate.py,tools/test_run_with_rss.py -->
+<!-- claim: grep="^\s*faulthandler\._sigsegv\(\)\s*$" in=tools/test_crash_rate.py,tools/test_run_with_rss.py note="the bare call site (test_crash_rate.py:64); the docstrings and -c child strings that also contain the name are not the line that does it, and one pattern guards one line (issue #904)" -->
 
 ### 1. The crash rate is 0 in 120 runs — and that is not "no crashes"
 

@@ -206,6 +206,14 @@ jobs:
           # the step fails on every run -- which tools/check_workflows.py caught
           # in this very file, on its first outing.
           fetch-depth: 0
+          # The roadmap step below renders the DAG from annotated tags: the
+          # committed README carries STAMPED rows, and without tags those
+          # nodes render a different status, so --check fails on a README
+          # that is consistent (#906 measured this; #940 filed it). Stated
+          # here where the precondition is used, not inherited from
+          # fetch-depth's undocumented tag side effect -- nightly.yml's
+          # full-rtl checkout states the same precondition the same way.
+          fetch-tags: true
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
@@ -220,30 +228,41 @@ jobs:
       # The roadmap is compiled from evidence, not maintained by hand. This
       # document twice carried findings that had already been fixed -- the
       # modal_dp exc hazard, and red on four repaired drum circuits. Non-strict
-      # --check fails when the generated README disagrees with the recorded
-      # evidence. It does not fail merely because a node is RED or STALE; that
+      # --check fails when the README disagrees with the recorded evidence. It
+      # does not fail merely because a node is RED or STALE; that
       # project-health gate is nightly's `--check --strict` (nightly.yml).
-      # The roadmap is compiled from evidence that is ACTUALLY EXECUTED here,
-      # not from the presence of a file. An earlier version of this script
-      # called a node green when its test file existed -- so a suite with every
-      # assertion deleted would have rendered green, which is the exact failure
-      # the tool exists to prevent.
+      # The evidence is ACTUALLY EXECUTED here, not merely present: an earlier
+      # version of this script called a node green when its test file existed
+      # -- so a suite with every assertion deleted would have rendered green,
+      # which is the exact failure the tool exists to prevent.
       #
-      # --run executes each fast node's suite and records pass/fail with the
-      # commit. The `|| true` on --run is deliberate: a RED node is a result
-      # to record, not a reason to stop before the README is regenerated.
-      # Non-strict --check then fails only when README disagrees with that
-      # recorded evidence. RED and STALE nodes are reported in the README, not
-      # failed here; STALE means a node passed once but a file it `covers` has
-      # changed since. Slow nodes (iverilog, hours) carry their status from the
-      # nightly job, which runs `--check --strict` as the project-health gate.
-      # On a PR branch the dag workflow does not run, so this is what keeps a
-      # pull request honest about what it claims. On main the bot regenerates
-      # and commits instead -- see .github/workflows/dag.yml.
+      # The check runs FIRST, against the README AS COMMITTED on this branch.
+      # #906 had the order inverted: --run regenerates README.md, so a --check
+      # placed after it verified the file the line above had just written and
+      # could not fail for the only thing non-strict --check asserts -- README
+      # staleness. Measured: PR #818's head (30f1b41e) fails `--check` outright
+      # on its committed tree while the old step passed. On a red gate the
+      # regen does not run (the step stops at the check); the author
+      # regenerates locally (`python tools/compile_dag.py`) and commits the
+      # result, which is exactly the honesty this step exists to demand of a
+      # pull request. On main the bot regenerates and commits instead -- see
+      # .github/workflows/dag.yml.
+      #
+      # Why not regen-then-`git diff --exit-code -- README.md`: suite details
+      # render VERBATIM into the table and carry wall-clock timings ("105
+      # passed in 472.54s"), so every fresh --run rewrites the README and the
+      # diff churns red on every run. tools/test_rungs_gate.py pins the step's
+      # shape: RED on a stale committed README, GREEN on a regenerated one --
+      # where the pre-fix ordering was green on both.
+      #
+      # --run still executes each fast node's suite and records pass/fail with
+      # this commit, after the check. The `|| true` is deliberate: a RED node
+      # is a result to record, not a reason to stop. RED and STALE nodes are
+      # reported in the job log, not failed here.
       - name: the roadmap matches the evidence
         run: |
-          python tools/compile_dag.py --run || true   # a RED node is a result
-          python tools/compile_dag.py --check
+          python tools/compile_dag.py --check        # the committed README vs the committed evidence
+          python tools/compile_dag.py --run || true  # a RED node is a result
 
       # First on purpose: every node above F1 measures with these estimators,
       # so a suite built on untested analysers measures the analysers.
@@ -548,6 +567,169 @@ jobs:
       # so the deselects and the guard go with the merge that brought it in.
       - name: every tools/ test, by directory
         run: python -m pytest tools/ -q
+
+  # The 16 fpga/ test files no other CI job runs (#853) -- the fpga half of the
+  # #404 shape (tools/ above is the same repair; pnr/ is #851). Measured on a
+  # hosted-runner equivalent, 2026-11-16: all 16 pass under
+  # spec/trial-environment.json -- 320 tests in ~57 s; none needs Vivado, a
+  # flashed Arty or the TR808 corpus at runtime (the "hardware" strings in
+  # these files are paths and manifest keys -- measured, not device access).
+  #
+  # The pins are the point, not a nicety: three of the 16 (the release-bound
+  # trials) preflight the spec and return NO VERDICT on drift, and the pty
+  # harness refuses without pyserial -- so the unpinned
+  # `pip install numpy scipy pytest pyyaml` the other jobs use reads here as
+  # six red tests, not a pass. The spec, not hand-written versions, is the
+  # single source of pins; --no-toolchain because no file in this set runs the
+  # simulator (their trial manifests preflight no tools).
+  #
+  # No ignores and no deselects (the tools-job rule); there is nothing to
+  # deselect: all 16 measured runnable, zero skips. The floor step is the
+  # exclusion control: collection must stay at or above the FLOOR= below, so
+  # an `--ignore`, a moved file or a deleted test cannot achieve an exclusion
+  # silently -- and tools/test_fpga_uncovered_workflow.py (run by the tools
+  # job, by directory) pins that floor to a live collection of the same
+  # paths, so the number itself cannot drift.
+  fpga-uncovered:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # ONE list, and both steps read it: the run executes it, the floor
+      # counts it. fpga/release/ is collected by directory so the seven
+      # release-evidence files cannot silently grow an eighth (#853).
+      FPGA_UNCOVERED_PATHS: >-
+        fpga/release/
+        fpga/test_bringup_arty.py
+        fpga/test_ext_io_extract.py
+        fpga/test_ext_io_timing.py
+        fpga/test_play_song.py
+        fpga/test_record_compare.py
+        fpga/test_uart_host_hold_refused.py
+        fpga/test_uart_host_pty.py
+        fpga/test_verify_flash.py
+        fpga/test_verify_live_midi_unwrap.py
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # trial receipts record HEAD / origin/main / merge-base provenance
+          # (tools/trial.py identities()); not answerable from a shallow clone.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      # Not set here, on purpose: GF180_TR808_REFS (the tools-job rule). No file
+      # in this set reads the corpus -- measured -- so nothing would skip; the
+      # rule costs nothing and keeps every suite job shaped the same.
+      - name: install the spec, not guesses (idempotent; refuses on drift)
+        run: python tools/trial_env.py bootstrap --no-toolchain
+      - name: the 16 fpga/ files no other CI job runs
+        run: python -m pytest $FPGA_UNCOVERED_PATHS -q
+      - name: collection floor -- an exclusion cannot be silent
+        run: |
+          FLOOR=321
+          st=0
+          out=$(python -m pytest $FPGA_UNCOVERED_PATHS --collect-only -q 2>&1) || st=$?
+          n=$(printf '%s\n' "$out" | sed -n 's/^\([0-9][0-9]*\) tests\? collected.*/\1/p' | tail -n 1)
+          if [ -n "$n" ]; then
+            echo "collected $n (floor $FLOOR)"
+            [ "$n" -ge "$FLOOR" ] || {
+              echo "REFUSED: collected $n < floor $FLOOR -- a test was silently lost or excluded"
+              exit 1
+            }
+          else
+            echo "REFUSED: collection itself failed (pytest exit $st, no '<n> tests collected' line) -- not a lost test; last lines:"
+            printf '%s\n' "$out" | tail -n 5
+            exit 1
+          fi
+
+  # The pnr suite, collected as a DIRECTORY (#404, one directory over from
+  # tools/). Before this job, 5 of the 7 pnr/**/test_*.py files on main ran
+  # under `make verify` on a build box and under NO CI job at all -- the same
+  # gap #404 closed for tools/, found the same way: by counting the
+  # hand-maintained list (Makefile:261 names two) against the directory.
+  # A new pnr/**/test_*.py is covered here by EXISTING, with no edit to any
+  # workflow or Makefile. (The Makefile list itself stays untouched: it is the
+  # subject of open operator decision #812, which keeps those two files on
+  # m5a-fast under every option.)
+  #
+  # Measured on the 8-vCPU worker (2026-11-15, origin/main @ 6be93eef):
+  # 197 passed in 0.81 s -- three orders of magnitude under the tools job --
+  # so the 10-minute cap is ~700x the measured runtime, the same headroom
+  # logic the tools job's 60 uses over its ~21 min.
+  #
+  # Default checkout depth: no pnr/ test reads origin/main or computes a
+  # merge-base, unlike tools/test_run_case.py (measured 2026-11-15). No
+  # iverilog or other EDA tool: the suite parses synthetic logs and
+  # monkeypatches its own precondition gates (pnr/klt/ladder_dp/test_run_klt.py
+  # says so in its docstring).
+  #
+  # docker is deliberately NOT installed here. That is a precondition, not an
+  # absence: the hosted ubuntu-24.04 image already provides it, and with
+  # docker hidden from PATH one test errored FileNotFoundError -- it did not
+  # skip -- until container_progress (pnr/shuttle/finish_halfslot.py) learned
+  # to answer None for "docker cannot answer". The precondition is asserted in
+  # the code, so a runner-image change degrades to a handled None, never to a
+  # bare crash.
+  pnr:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy pytest
+      - name: every pnr/ test, by directory
+        run: python -m pytest pnr/ -q
+      # A green run must be capable of being red -- the same control the
+      # `python` job carries for model/, and for the same reason: each mutation
+      # must compile and import, so a failure left after those steps is
+      # evidence the suite detects wrong arithmetic, not that Python rejects
+      # bad syntax.
+      - name: the suite detects wrong arithmetic, not just bad syntax
+        run: |
+          python - <<'PY'
+          import pathlib, subprocess, sys
+          p = pathlib.Path("pnr/shuttle/finish_halfslot.py")
+          orig = p.read_text()
+          # (label, exact source to replace, replacement) -- valid Python that
+          # returns a numerically wrong iteration time.
+          MUTANTS = [
+              ("elapsed seconds off by one",
+               "secs = int(m.group(4)) * 3600 + int(m.group(5)) * 60 + int(m.group(6))",
+               "secs = int(m.group(4)) * 3600 + int(m.group(5)) * 60 + int(m.group(6)) + 1"),
+          ]
+          failures = []
+          for label, old, new in MUTANTS:
+              if old not in orig:
+                  failures.append(f"{label}: anchor text not found -- control is stale")
+                  continue
+              p.write_text(orig.replace(old, new, 1))
+              try:
+                  # 1. it must still be valid Python ...
+                  compile(p.read_text(), str(p), "exec")
+                  # 2. ... and must still import, or we are testing the parser
+                  r = subprocess.run([sys.executable, "-c",
+                                      "import sys; sys.path.insert(0,'pnr/shuttle'); import finish_halfslot"],
+                                     capture_output=True)
+                  if r.returncode != 0:
+                      failures.append(f"{label}: mutant does not import -- tests the parser, not the suite")
+                      continue
+                  # 3. ... and NOW the suite must notice the wrong number.
+                  r = subprocess.run([sys.executable, "-m", "pytest", "pnr/", "-q"],
+                                     capture_output=True)
+                  if r.returncode == 0:
+                      failures.append(f"{label}: suite passed with wrong arithmetic")
+                  else:
+                      print(f"  caught: {label}")
+              finally:
+                  p.write_text(orig)
+          if failures:
+              sys.exit("negative control failed:\n  " + "\n  ".join(failures))
+          print("negative control OK -- wrong arithmetic turns the pnr suite red")
+          PY
 
   # A prose-only change still carries claim markers backed by real tests
   # (docs/claim-markers.md), so it runs the claim checker -- the whole default

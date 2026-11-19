@@ -164,14 +164,14 @@
         "role": "testbench",
         "path": "tools/item9_cold_start.py",
         "passed": true,
-        "content_hash": "sha256:d007690bbdf0e3f84542d273aff910795b5332d9c0d817fdd5a7fd199f9f02e2"
+        "content_hash": "sha256:f06473528a5ae15073e093355487e7e6ee7f73de1c5ec604cbafa4efe1cc1dba"
       },
       {
         "check": "present",
         "role": "testbench",
         "path": "tools/run_all.py",
         "passed": true,
-        "content_hash": "sha256:1275130b115735f1f3a514867f5cbcdca73b9bd7bdb6f12af6f1a1cd571c5846"
+        "content_hash": "sha256:ef1f40c5b420a25960f9e2a9e36c51c33c463d5ec8f0cc4fe0e8633a52100f60"
       },
       {
         "check": "present",

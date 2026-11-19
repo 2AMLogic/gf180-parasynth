@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import voice_fx as vf
 from measure_mono_m5a_reference import envelope_timing
+import refusal
 
 SR = 48_000
 ANALYSIS_VERSION = "m5a-score-v3"
@@ -80,7 +81,7 @@ TOLERANCES = {
 }
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 
@@ -258,6 +259,11 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     if manifest.get("case_id") != case_id:
         raise Refused(f"frozen manifest identifies as {manifest.get('case_id')!r}, expected {case_id}")
+    import reference_suites
+    try:
+        reference_suites.require_suite(manifest, reference_suites.SUITE_V3_FROZEN)
+    except reference_suites.Refused as exc:
+        raise Refused(str(exc)) from exc
     audio_meta = manifest["audio"]
     ref_path = reference_override or (manifest_path.parent / audio_meta["file"])
     try:

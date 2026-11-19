@@ -30,6 +30,14 @@ A marker inside a fenced code block or inline backticks is an **example**, not a
 claim, and is skipped — otherwise this document, which is nothing but examples,
 would be checked as a list of assertions.
 
+**One marker per line.** A second marker on the same line is `REFUSED`
+(naming file and line), never dropped and never parsed as a second claim: the
+report is keyed on `file:line`, and a silently ignored marker is
+indistinguishable from a claim nobody made (#1041). Put each marker on its own
+line. The same rule covers a marker that **spans lines**: an opener
+`<!-- claim:` with no `-->` on its line is `REFUSED`, naming the opener's
+file and line, never skipped (#1044). Close every marker on the line it opens.
+
 Syntax is `<!-- claim: key=value key="value with spaces" ... -->`, tokenised
 with `shlex`. **Exactly one** key must be a *kind*; the rest are modifiers or
 annotations. An unrecognised key is `REFUSED`, never ignored — a typo in a key
@@ -46,6 +54,20 @@ must not be able to hide as free-form prose.
 
 `in=` takes one or more comma-separated repo-relative globs (`tools/*.py`,
 `model/*.py,spec/*.py`).
+
+A `grep=` pattern must match **exactly one** line across the files `in=`
+names; a pattern matching several lines is `REFUSED` — the checker cannot say
+which line the claim guards, and an unrelated line carrying the same text
+would keep the marker green while the cited figure moved (issue #904). Mind
+the marker's own line when `in=` names the marker's own document: the pattern
+appears verbatim inside it, punctuation included, so quoting a comma does not
+defuse the self-match. A regex's own source text never matches itself, so
+deferring one letter into a class (`erro[r]`, `wal[l]-clock`) matches the
+prose line while the marker quoting the pattern stays unmatched. The rule is
+enforced over the checker's default document set (`DEFAULT_INCLUDES`) —
+`.md` only — so a marker outside it (e.g. in a Python docstring) is checked
+only by its own bespoke test, not by `make claims`; a marker placed there
+needs that test named in the PR that adds it.
 
 ### Modifiers
 
@@ -117,10 +139,10 @@ only keeps the claim about the test honest.
 A worked example, from issue #135 itself:
 
 Measured, and sound: two renders of the same Diva patch differ in 1,763,954 of 1,764,000 samples; Mini V3 is bit-identical across the same test.
-<!-- claim: grep="1,763,954 of 1,764,000 samples" in=docs/claim-markers.md note="the effect -- re-derivable from this file" -->
+<!-- claim: grep="1,763,954 of 1,764,000 sample[s]" in=docs/claim-markers.md note="the effect -- re-derivable from this file. The bracket defers a letter so the prose line matches and the marker line quoting the pattern does not -- a pattern cannot match its own source text (issue #904)" -->
 
 Asserted, and never tested: that the cause is an artefact inserted on a wall-clock timer, therefore Diva is a positive control for a demo-artefact detector.
-<!-- claim: grep="an artefact inserted on a wall-clock timer" in=docs/claim-markers.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing" -->
+<!-- claim: grep="wal[l]-clock timer, therefore" in=docs/claim-markers.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing. The bracket defers a letter (a pattern cannot match its own source text); the comma excludes line 66, which retells the story with 'timer and' (issue #904)" -->
 
 ## The three outcomes
 
@@ -243,12 +265,55 @@ Naming documents on the command line still narrows deliberately, and skips the
 audit: that is how fixture runs and one-off checks work. Only the no-argument
 run — the one `make verify` reads — audits.
 
-The red-first control for all of this is
-`tools/probes/check_doc_claims_scope_control.py`: it injects a stale marker into
-a file the old set did not reach, runs the checker at `origin/main` and in the
-working tree, and requires the first to be green and silent while the second is
-red and names the file. It refuses rather than reporting a result if the
-`before` arm was already red for some other reason.
+`tools/probes/check_doc_claims_scope_control.py` is the **one-time** red-first
+record taken when #435 landed (`f2419e26`, 2026-09-28), and not a standing
+control: it injects a stale marker into a file the old set did not reach, runs
+the checker both at a named revision and as it stands in the working tree, and
+requires the first to be green and silent about that file while the second is
+red and names it — a differential that can only pass while `main`'s checker is
+still the *pre*-#435 one, so on every tree after `f2419e26` it refuses rather
+than reporting a result; the standing control for the document set is instead
+the scope tests in `tools/test_check_doc_claims.py`, which
+`.github/workflows/rungs.yml` runs by name, and the red-first one among them
+plants a marker outside the scanned set and requires the run to come back
+`REFUSED` rather than silent.
+<!-- claim: test=tools/test_check_doc_claims.py::test_a_marker_outside_the_scanned_set_is_refused_rather_than_silent -->
+
+Both ways of running the control refuse, measured 2026-11-13 at `a19f7cf4`
+(each 298 s wall): the default `--before origin/main` compares the widened
+checker against itself, so both arms are red at `pnr/orfs/README.md` and it
+exits 2 with `REFUSED: the 'before' arm was already red (exit 1)`; and pinning
+`--before f2419e26^` does not rescue it, because that older checker rejects the
+`mechanism` key current documents use and is therefore red before the injection
+can matter, exiting 2 with `REFUSED: the 'before' arm was already red (exit 2)`.
+The script stays in the tree, unchanged in behaviour, as the record of why this
+layer needed a control; it is deliberately not wired into a target, where it
+would be an unsatisfiable gate at about five minutes a run.
+
+**Its neighbour by name is the opposite kind of thing.**
+`tools/probes/check_doc_claims_789_marker_controls.py` is a **standing
+control**, wired into `make controls` by #811, not a one-time record. Unlike
+`scope_control` it is satisfiable — but not on *any* tree: since #905 it
+first runs the checker once and REFUSES (exit 2, which the exit contract
+reports as NO-VERDICT, naming what it found) unless that baseline is green,
+and again unless every injection target matches, because its controls inject
+into the live checkout and would otherwise misreport the tree's own WIP as
+control failures. Since #936 the guard that refuses an already-satisfied
+injection state derives its pattern and paths by parsing the staged
+injection with the checker's own grammar, so a hand-edited claim marker's
+`in=` cannot desynchronize the guard from the file the claim actually
+greps -- a divergence that used to surface as a misattributed control FAIL
+instead of a refusal. On a tree whose claims are green the whole run is seconds
+(every #789 marker is a `grep=` or `absent=` row with no backing test, so
+the two-document run collects no pytest), which is why it is wired and
+`scope_control` is not — and the refusal is the correct answer on a WIP
+tree, not a reason to unwire it. It injects its defects in place and
+restores what it read; the one way those restores do not run is a runner
+timeout (`tools/run_all.py` SIGKILLs the job's process group), which would
+leave `README.md` and `docs/milestones.md` modified — at ~0.6 s
+against `controls`' 3600 s timeout that needs the probe to hang ~6000x its
+runtime, so it is recorded here rather than made hermetic (a rewrite of the
+probe, out of scope for #811).
 
 ## Running it
 
@@ -256,7 +321,6 @@ red and names the file. It refuses rather than reporting a result if the
 make claims                                  # the whole scanned set, one run
 python3 tools/check_doc_claims.py            # the same thing
 python3 tools/check_doc_claims.py docs/failure-modes.md --quiet
-python3 tools/probes/check_doc_claims_scope_control.py   # the scope control
 ```
 
 `make claims` is also one of the jobs in `make verify`, and a job in

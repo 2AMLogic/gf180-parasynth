@@ -64,6 +64,12 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "audition", ROOT / "rtl-s
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+import record_compare as rc                      # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
+
 RECORD = HERE / "r1-candidate.json"
 EVIDENCE_DIR = ROOT / "fpga/reports/r1-candidate"
 
@@ -105,7 +111,7 @@ HOST_FILES = ("fpga/uart_host.py", "fpga/midi_session.py", "fpga/live_midi_contr
               "model/voice_fx.py", "model/drums_fx.py")
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """The candidate cannot be derived or the evidence does not belong to it."""
 
 
@@ -115,8 +121,7 @@ def sha(path) -> str:
 
 
 def _rel(p) -> str:
-    p = Path(p).resolve()
-    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+    return rc.rel(p, ROOT)
 
 
 # ---- the frozen target -------------------------------------------------------
@@ -407,13 +412,11 @@ def build() -> dict:
     }
 
 
-def _diff(a, b, path=""):
-    if isinstance(a, dict) and isinstance(b, dict):
-        out = []
-        for k in sorted(set(a) | set(b)):
-            out += _diff(a.get(k), b.get(k), f"{path}.{k}" if path else k)
-        return out
-    return [] if a == b else [path]
+#: the shared staleness comparison -- fpga/record_compare.py (#785) carries the
+#: divergence table, the type-strictness decision and the inputs that defeat
+#: it. A module-level NAME, because check() calls it as a global and
+#: fpga/release/test_stale_controls.py patches it there.
+_diff = rc.diff
 
 
 def check(record: Path = RECORD) -> tuple:

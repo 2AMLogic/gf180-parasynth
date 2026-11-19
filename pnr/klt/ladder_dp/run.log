@@ -1,5 +1,22 @@
-klt 0.5.0+g604c4fb8a1ce
-synthesize: 100 s
-dangling all-x assigns removed: 2
-tie cells inserted for constant assigns: 3
-signed qualifiers left: 0
+klt 0.9.0
+pdk gf180mcuD @ /var/tmp/eda-job-rs-parasynth808-od2-s00/src/.pdk-store/ciel/gf180mcu/versions/54435919abffb937387ec956209f9cf5fd2dfbee
+driver pnr/klt/ladder_dp/run_klt.py (no netlist patches)
+target_stage route
+netlist pnr/klt/ladder_dp/.klt/synthesize/run-3b78e096c3f547a78b6f70481252ca9c/ladder_dp_synth.v sha256:a3f5d1ad4e1f03d63e7b73ac57cbb926013cfbc88fd0396461b6d210ddbb6850
+
+retired-patch audit (each gated count must be 0 -- the retirement's premise, measured, not inherited):
+  patch 1 (sed, STA-0171): 0
+  patch 2 (tie cells, DRT-0305): 0
+  patch 3 (all-x assigns, DRT-0305): 0
+  klt's own tie-cell instances: 59
+  wider-than-1-bit constant assigns (reported, not gated): 0
+
+[synthesize] klt synthesize --pdk gf180mcuD --pdk-root /var/tmp/eda-job-rs-parasynth808-od2-s00/src/.pdk-store/ciel/gf180mcu/versions/54435919abffb937387ec956209f9cf5fd2dfbee /var/tmp/eda-job-rs-parasynth808-od2-s00/src/pnr/klt/ladder_dp/synth_request.json --format json
+[synthesize] exit=0 seconds=63 response_bytes=5571 response_parses=True verdict=ok
+[synthesize] stderr: empty
+
+[place-and-route] klt place-and-route --pdk gf180mcuD --pdk-root /var/tmp/eda-job-rs-parasynth808-od2-s00/src/.pdk-store/ciel/gf180mcu/versions/54435919abffb937387ec956209f9cf5fd2dfbee /var/tmp/eda-job-rs-parasynth808-od2-s00/src/pnr/klt/ladder_dp/par_request.resolved.json --format json
+[place-and-route] exit=0 seconds=4261 response_bytes=42537 response_parses=True verdict=ok
+[place-and-route] stderr: empty
+
+exit 0 (ok)

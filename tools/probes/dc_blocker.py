@@ -106,6 +106,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "model"))
 
 import drums_fx as dx                            # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 SR = dx.SR
 FS = 32768.0                                     # int16 full scale
@@ -1291,7 +1295,7 @@ K_PLAN = ROOT / "docs" / "sensitivity" / "coupling-k-plan.json"
 K_SWEEP_ARTIFACT = ROOT / "docs" / "sensitivity" / "coupling-k-sweep.txt"
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """An apparatus precondition failed: REFUSED, not a result."""
 
 

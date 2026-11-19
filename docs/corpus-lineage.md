@@ -58,6 +58,7 @@ material that is weaker evidence than its file count suggests.**
 - [The packs, by lineage](#the-packs-by-lineage)
 - [The three groups, and the rule that assigns them](#the-three-groups-and-the-rule-that-assigns-them)
 - [The three targets, which are not the same question](#the-three-targets-which-are-not-the-same-question)
+- [Plugin reference suites, which are not packs](#plugin-reference-suites-which-are-not-packs)
 - [Adding a pack: the procedure](#adding-a-pack-the-procedure)
 - [Where the corpus path comes from, and four places it disagreed with itself](#where-the-corpus-path-comes-from-and-four-places-it-disagreed-with-itself)
 - [What is mechanical here and what is not](#what-is-mechanical-here-and-what-is-not)
@@ -257,6 +258,24 @@ its per-voice group normalisation and its editor's trims as much as its machine
 that editing noise and calls it the floor, *"a machine spread beneath it is not
 a measurement."* A floor derived there is honest. A fidelity claim derived there
 is not.
+
+## Plugin reference suites, which are not packs
+
+The commercial Minimoog-emulation reference **suites** for the voice family are
+declared in the manifest's `plugin_reference_suites` section (#1050, under the
+voice-only ruling #1048): `miniv3-frozen` — Arturia Mini V3 3.12.0.3422, whose
+three scorecard record directories are frozen (never regenerated, never edited,
+hash-checked by `tools/check_reference_freeze.py` against
+`docs/scorecard/reference-suite-freeze.sha256`) — and `miniv4`, Arturia Mini V4
+4.0.4.6366, declared with no renders yet. They sit beside the packs rather than
+in them on purpose: a suite is a plugin build and a licence state, not a
+machine, so the groups, lineage tiers and descent-test rules above do not apply
+to it, and no group assignment is made. The one rule that does apply is the
+comparison rule: **a record from one suite is never graded against another
+suite's expectation**, which `tools/reference_suites.py` refuses at the scoring
+boundary. The V4 case list and render settings live in
+`docs/scorecard/miniv4-suite/suite.json`; renders happen on an operator Mac in
+an attended session, never on a fleet worker.
 
 ## Adding a pack: the procedure
 

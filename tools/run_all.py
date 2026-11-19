@@ -24,8 +24,9 @@ WHAT THIS GUARANTEES, AND WHAT IT DOES NOT
   - A timeout is **NO-VERDICT**, distinct from PASS and from FAIL. A timed-out
     job reported as either is how a green run hides a hung one.
   - Each child's own exit status is preserved in the summary and the JSON
-    report. Verifiers here distinguish 1 (mismatch) from 2 (did not run) and
-    the runner must not erase that.
+    report. Verifiers here distinguish 1 (mismatch) from the declared refusal
+    statuses 2, 3 and 126 (tools/exit_contract.py) and the runner must not
+    erase that.
   - The overall exit code is **bounded**: 0 or 1. A raw failure count is wrong
     -- shell status is eight bits, so 256 failures would exit 0.
   - On timeout the whole **process group** is killed, so a shelled-out job's
@@ -44,25 +45,34 @@ PASS, FAIL, NO_VERDICT, LAUNCH_ERROR = "PASS", "FAIL", "NO-VERDICT", "LAUNCH-ERR
 # This repository's verifiers already distinguish "it ran and disagreed" from
 # "it did not run", and the runner must not flatten that into one FAIL.
 #
-#   0  match          the comparison ran and agreed
-#   1  mismatch       the comparison ran and disagreed  -- a RESULT
-#   2  did not run    simulator missing, compile failed -- NO EVIDENCE
+#   0    match          the comparison ran and agreed
+#   1    mismatch       the comparison ran and disagreed  -- a RESULT
+#   2    refusal        precondition not met, nothing measured  -- NO EVIDENCE
+#   3    refusal        the same outcome, declared by tools that already used
+#                       3 for it (pnr/shuttle, corpus_lineage, r0_capture) -- NO EVIDENCE
+#   126  refusal        run_with_rss's declared refusal            -- NO EVIDENCE
 #
 # The distinction is load-bearing for negative controls: `--expect-fail` exits
 # 0 only on status 1, so a missing simulator can never be mistaken for a
-# successfully caught defect. Reporting exit 2 as "FAIL" would hide the
+# successfully caught defect. Reporting a refusal as "FAIL" would hide the
 # difference between a control that worked and a control that never ran, which
 # is the difference between evidence and its absence.
-VERIFIER_NO_EVIDENCE = 2
+#
+# The statuses are declared, by outcome rather than integer, in
+# tools/exit_contract.py and imported below; tools/refusal_exit_census.py
+# reads that declaration back and turns red if a refusal family lands on a
+# status outside the set.
+from exit_contract import NO_EVIDENCE
 
 
 def run_one(cmd: str, timeout: float | None = None, env: dict | None = None,
             verifier: bool = True, cwd: str | None = None, on_spawn=None) -> dict:
     """Run one command. Never infers status from output.
 
-    `verifier=True` applies this repo's exit-code convention, under which 2
-    means "did not run" and is reported NO-VERDICT rather than FAIL. Pass
-    False for a command that uses 2 to mean an ordinary error.
+    `verifier=True` applies this repo's exit-code convention
+    (tools/exit_contract.py): 2, 3 and 126 mean "refused / did not run" and
+    are reported NO-VERDICT rather than FAIL. Pass False for a command that
+    uses one of those statuses to mean an ordinary error.
 
     `on_spawn(popen)` is called once the child exists. The child leads its own
     process group, so a supervisor that is itself cancelled (tools/trial.py)
@@ -84,7 +94,7 @@ def run_one(cmd: str, timeout: float | None = None, env: dict | None = None,
         rc = p.returncode
         if rc == 0:
             state = PASS
-        elif rc == VERIFIER_NO_EVIDENCE and verifier:
+        elif rc in NO_EVIDENCE and verifier:
             state = NO_VERDICT          # it did not run; that is not a failure
         else:
             state = FAIL
@@ -133,14 +143,17 @@ def run_all(cmds: list[str], *, serial: bool = False, timeout: float | None = No
     return results
 
 
-def write_json_atomic(path: str, value) -> None:
-    """Replace a JSON report atomically so readers never see a partial file."""
+def write_json_atomic(path: str, value, sort_keys: bool = False, default=None) -> None:
+    """Replace a JSON report atomically so readers never see a partial file.
+    `sort_keys` and `default` pass through to json.dump so a caller keeps the
+    exact bytes it shipped (the DAG's records sort keys; manifest's serialise
+    through its `_canonical` default)."""
     parent = os.path.dirname(os.path.abspath(path))
     os.makedirs(parent, exist_ok=True)
     temporary = f"{path}.tmp-{os.getpid()}"
     try:
         with open(temporary, "w") as fh:
-            json.dump(value, fh, indent=2)
+            json.dump(value, fh, indent=2, sort_keys=sort_keys, default=default)
             fh.write("\n")
             fh.flush()
             os.fsync(fh.fileno())

@@ -17,6 +17,9 @@
 #                          responsibility). Also deletes the matching local
 #                          branch via `git branch -d` (refuses on unmerged
 #                          commits — Git's own safety check).
+#   --remove-ignored       With --worktree-path: also remove the worktree when it
+#                          holds gitignored files that are not regenerable build
+#                          artifacts (#13599). Without it such a worktree is kept.
 #   --dry-run              Show what would happen without merging
 #   --auto                 No-op (#12063 slice 2): merge-pr no longer waits for checks;
 #                          GitHub's required checks gate the merge call itself.
@@ -324,7 +327,7 @@ PR_NUMBER=""; CLEANUP_WORKTREE=true
 # CLEANUP_PRIMARY_CHECKOUT (#5015): gates the automatic primary-checkout
 # branch cleanup performed by `merge-pr post-merge-cleanup`. Defaults on
 # (mirrors CLEANUP_WORKTREE's default); --no-cleanup-primary opts out.
-CLEANUP_PRIMARY_CHECKOUT=true; DRY_RUN=false; WORKTREE_PATH_OVERRIDE=""; ALLOW_STACKED_CHILDREN=false
+CLEANUP_PRIMARY_CHECKOUT=true; DRY_RUN=false; WORKTREE_PATH_OVERRIDE=""; REMOVE_IGNORED=false; ALLOW_STACKED_CHILDREN=false
 # ALLOW_UNAPPROVED (#7419): bypasses the loom:pr review-signal guard
 # (_check_loom_pr_label below). Off by default — a missing loom:pr label
 # hard-blocks the merge unless the operator explicitly opts in here.
@@ -342,6 +345,7 @@ while [[ $# -gt 0 ]]; do
     # The two --worktree-path arms are joined onto one line each.
     --worktree-path) [[ $# -lt 2 ]] && error "--worktree-path requires a value"; WORKTREE_PATH_OVERRIDE="$2"; shift 2 ;;
     --worktree-path=*) WORKTREE_PATH_OVERRIDE="${1#--worktree-path=}"; [[ -z "$WORKTREE_PATH_OVERRIDE" ]] && error "--worktree-path= requires a value"; shift ;;
+    --remove-ignored) REMOVE_IGNORED=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     --auto) warning "--auto is a no-op (#12063 slice 2): merge-pr no longer waits for checks"; shift ;;
     --allow-stacked-children) ALLOW_STACKED_CHILDREN=true; shift ;;
@@ -359,7 +363,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$PR_NUMBER" ]] && error "Usage: merge-pr.sh <pr-number> [--no-cleanup-worktree] [--no-cleanup-primary] [--worktree-path <dir>] [--dry-run] [--auto] [--allow-stacked-children] [--allow-unapproved] [--allow-red-tree] [--allow-red-required <context>]... [--merge-method squash|merge|rebase] [--expected-head <sha>]"
+[[ -z "$PR_NUMBER" ]] && error "Usage: merge-pr.sh <pr-number> [--no-cleanup-worktree] [--no-cleanup-primary] [--worktree-path <dir>] [--remove-ignored] [--dry-run] [--auto] [--allow-stacked-children] [--allow-unapproved] [--allow-red-tree] [--allow-red-required <context>]... [--merge-method squash|merge|rebase] [--expected-head <sha>]"
 [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || error "PR number must be numeric: $PR_NUMBER"
 
 # #8845: an explicit --merge-method overrides REPO_MERGE_METHOD's auto-detect
@@ -421,9 +425,6 @@ fi
 _PRF_ERR="$(mktemp)"
 PR_JSON=$(forge_get_pr_nocache "$REPO_NWO" "$PR_NUMBER" "$GH" 2>"$_PRF_ERR") || error "Could not fetch PR #$PR_NUMBER -- $(forge_fetch_error_cause "$(cat "$_PRF_ERR"; rm -f "$_PRF_ERR")" "$PR_JSON")"; rm -f "$_PRF_ERR"; unset _PRF_ERR
 
-# Combined onto two lines (net code-line offset for the #8112 guard added
-# below — file-size-policy.md's "remove at least as much as you added"; a
-# verbatim, behavior-preserving chain, not a reformat of anything else).
 PR_STATE=$(echo "$PR_JSON" | jq -r '.state'); PR_MERGED=$(echo "$PR_JSON" | jq -r '.merged'); PR_BRANCH=$(echo "$PR_JSON" | jq -r '.head.ref')
 PR_TITLE=$(echo "$PR_JSON" | jq -r '.title')
 # Head SHA (#4100): the safety criterion for local-branch deletion. A local
@@ -724,8 +725,7 @@ _check_loom_pr_label() {
 # artifact carries the floor yet. [verb] is the sub-subcommand that actually
 # failed: when it has a `daemon-verb-hint:` above, the message names
 # '<subcommand> <verb>' and that verb's own version; otherwise the family
-# floor. Written as a one-liner because merge-pr.sh is frozen by the
-# file-size ratchet (scripts/check-file-size-budget.sh) and may not grow.
+# floor.
 #
 # Both reads carry `|| true` deliberately. merge-pr.sh runs under `set -euo
 # pipefail`, and a bare `x="$(cmd)"` assignment adopts cmd's status — so an
@@ -1254,9 +1254,6 @@ _notify_cleared_blockers() { [[ "$FORGE_TYPE" == "github" ]] || return 0; "${LOO
 # lines above, OUTSIDE the span test-merge-pr-auto-reconcile.sh extracts and
 # sources, so an unguarded call would put `command not found` into the one
 # message whose whole job is to tell an operator what to do next.
-#
-# One line, like `_mp_daemon_roll_hint` itself: this file is over the file-size
-# ratchet's threshold, so it may shrink but not grow (.loom/docs/file-size-policy.md).
 _mp_reconcile_roll_hint() { declare -F _mp_daemon_roll_hint >/dev/null || return 0; _mp_daemon_roll_hint merge-pr "$(command -v "${LOOM_DAEMON_SELF_BIN:-${LOOM_DAEMON_BIN:-loom-daemon}}" 2>/dev/null || true)"; }
 
 # The whole pass (plan, per-child route, deferral comment or reconcile-stack.sh)
@@ -1580,6 +1577,7 @@ _post_merge_cleanup() {
   [[ "${CLEANUP_PRIMARY_CHECKOUT:-true}" == "true" ]] || base+=(--no-cleanup-primary)
   [[ "${LOOM_PRESERVE_WORKTREE:-0}" != "1" ]] || base+=(--preserve-env)
   [[ -z "$WORKTREE_PATH_OVERRIDE" ]] || base+=(--worktree-path "$WORKTREE_PATH_OVERRIDE")
+  [[ "${REMOVE_IGNORED:-false}" != "true" ]] || base+=(--remove-ignored)
   local facts=() out="" rc=0 level text need
   for _ in 1 2 3 4; do
     rc=0; out="$("$bin" "${base[@]}" ${facts[@]+"${facts[@]}"})" || rc=$?

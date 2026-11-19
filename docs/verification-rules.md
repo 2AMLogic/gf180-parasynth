@@ -291,10 +291,10 @@ The two sentences from #135 itself, marked up with the convention they argue
 for — the rule demonstrating itself:
 
 Measured, and sound: two renders of the same Diva patch differ in 1,763,954 of 1,764,000 samples; Mini V3 is bit-identical across the same test.
-<!-- claim: grep="1,763,954 of 1,764,000 samples" in=docs/verification-rules.md note="the effect -- a specific count, re-derivable from this file" -->
+<!-- claim: grep="1,763,954 of 1,764,000 sample[s]" in=docs/verification-rules.md note="the effect -- a specific count, re-derivable from this file. The bracket defers a letter: a pattern cannot match its own source text, so the marker line quoting it stays unmatched (issue #904)" -->
 
 Asserted, and never tested: that the cause is an artefact inserted on a wall-clock timer, therefore non-deterministic relative to the note, therefore Diva is a positive control for a demo-artefact detector.
-<!-- claim: grep="an artefact inserted on a wall-clock timer" in=docs/verification-rules.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing; #135's own example of exactly this rule" -->
+<!-- claim: grep="is an artefact inserted on a wal[l]-clock timer, therefore" in=docs/verification-rules.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing; #135's own example of exactly this rule. 'is' plus the bracket picks this sentence over line 252's retelling ('cause was') and over the marker line quoting the pattern (issue #904)" -->
 
 ## 8. A guard ships with the input that defeats it, or with a stated reason none exists
 

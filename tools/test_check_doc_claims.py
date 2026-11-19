@@ -15,6 +15,7 @@ shipped one.
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import shutil
 import sys
@@ -246,6 +247,80 @@ def test_a_glob_matching_zero_files_is_refused_for_both_polarities(fixtures):
 
 
 # --------------------------------------------------------------------------
+# grep= uniqueness (issue #904): a pattern matching several lines cannot say
+# which one it guards, and a marker that cannot say that guards nothing.
+# --------------------------------------------------------------------------
+
+def test_a_grep_pattern_matching_several_lines_is_refused(fixtures):
+    """Issue #904. `check_grep()` used to stop at each file's first hit, so a
+    pattern matching 40 lines of one file graded OK identically to one
+    matching a single line -- the cited figure could drift onto the unrelated
+    line and the marker stayed green by construction. One match in total is
+    still exactly the OK case it always was, including under a glob spanning
+    several files."""
+    (fixtures / "u_multi_one_file.txt").write_text(
+        "first\nneedle here\nneedle again\nlast\n")
+    (fixtures / "u_multi_a.txt").write_text("needle in a\n")
+    (fixtures / "u_multi_b.txt").write_text("needle in b\n")
+    (fixtures / "u_single_c.txt").write_text("nothing to see\n")
+    rel = fixtures.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "two-in-one-file":
+            f'grep="needle" in={rel}/u_multi_one_file.txt',
+        "one-in-each-of-two-files":
+            f'grep="needle" in={rel}/u_multi_[ab].txt',
+        "unique-under-a-glob":
+            f'grep="needle in a" in={rel}/u_multi_[ab].txt,{rel}/u_single_c.txt',
+    }))
+    two = v["two-in-one-file"]
+    assert two.status == cdc.REFUSED, two.detail
+    assert "2 lines" in two.detail and "(+1 more)" in two.detail
+    spread = v["one-in-each-of-two-files"]
+    assert spread.status == cdc.REFUSED, spread.detail
+    assert "(+1 more)" in spread.detail
+    ok = v["unique-under-a-glob"]
+    assert ok.status == cdc.OK, ok.detail
+    assert "u_multi_a.txt:1" in ok.detail
+
+
+def test_absent_with_several_hits_is_stale_exactly_as_before(fixtures):
+    """The other polarity reads the same collected hits and keeps its old
+    semantics: for a 'not yet' claim ANY hit means done, so a multi-hit
+    absence stays STALE, never REFUSED -- issue #904 changed only the grep=
+    grade."""
+    (fixtures / "u_absent_hits.txt").write_text(
+        "gone? not yet:\nstill here\nstill here too\n")
+    rel = fixtures.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "absent-two-hits": f'absent="still here" in={rel}/u_absent_hits.txt',
+    }))
+    c = v["absent-two-hits"]
+    assert c.status == cdc.STALE, c.detail
+    assert "now EXISTS" in c.detail
+
+
+def test_an_unreadable_target_file_is_refused(fixtures):
+    """Test-plan edge: an unreadable target is 'could not examine', never
+    evidence -- for grep= when nothing else matched, and for absent=
+    unconditionally, since the unreadable file could be hiding exactly the
+    thing claimed absent."""
+    f = fixtures / "u_unreadable.txt"
+    f.write_text("needle\n")
+    f.chmod(0)
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        f.chmod(0o644)
+        pytest.skip("running as root: file permissions are not enforceable")
+    rel = fixtures.relative_to(ROOT).as_posix()
+    v = verdicts(write_doc(fixtures, {
+        "grep-unreadable": f'grep="needle" in={rel}/u_unreadable.txt',
+        "absent-unreadable": f'absent="needle" in={rel}/u_unreadable.txt',
+    }))
+    assert v["grep-unreadable"].status == cdc.REFUSED, v["grep-unreadable"].detail
+    assert "could not read" in v["grep-unreadable"].detail
+    assert v["absent-unreadable"].status == cdc.REFUSED, v["absent-unreadable"].detail
+
+
+# --------------------------------------------------------------------------
 # commit=
 # --------------------------------------------------------------------------
 
@@ -425,6 +500,86 @@ def test_a_marker_in_a_code_block_or_backticks_is_an_example_not_a_claim(tmp_pat
     ]))
     found = cdc.find_claims(doc)
     assert [c.raw for c in found] == ["commit=abc"]
+
+
+def test_iter_claim_markers_applies_both_skip_rules_once():
+    """#962: the fence and inline-backtick skip grammar exists exactly once,
+    in `iter_claim_markers`, because two readers walk documents with it --
+    `find_claims` and the #789 probe's `injected_state` -- and a hand copy
+    in the probe had drifted (it lacked the backtick rule). Edge cases from
+    the issue's test plan: a ~~~ fence, an odd backtick count before a
+    marker on its own line, and an unterminated fence (everything after it
+    is inside the fence, so nothing further yields)."""
+    lines = [
+        "<!-- claim: commit=abc -->",        # 1: a plain claim
+        "~~~",                                # 2: tilde fence opens
+        "<!-- claim: grep=x -->",             # 3: inside the fence
+        "~~~",                                # 4: fence closes
+        "`odd <!-- claim: grep=y -->",        # 5: odd backticks before the marker
+        "`even` <!-- claim: grep=z -->",      # 6: balanced, so a claim
+        "```",                                # 7: fence opens, never closed
+        "<!-- claim: grep=w -->",             # 8: inside the unterminated fence
+    ]
+    found = [(i, m.group("body")) for i, _, m in cdc.iter_claim_markers(lines)]
+    assert found == [(1, "commit=abc"), (6, "grep=z")]
+
+
+def test_second_marker_on_one_line_is_refused_not_dropped(tmp_path):
+    """#1041 control: a satisfiable marker followed by an unsatisfiable one on
+    the SAME line. Before the fix the second was never parsed (`search`, not
+    `finditer`): rc 0, one claim counted. It must now be counted and REFUSED,
+    and the iterator both readers share must yield both."""
+    doc = tmp_path / "d.md"
+    doc.write_text(
+        "A <!-- claim: commit=HEAD --> and B "
+        "<!-- claim: grep='NO_SUCH_KEY' in=nope.json -->\n")
+    assert [m.group("body") for _, _, m in
+            cdc.iter_claim_markers(doc.read_text().splitlines())] == \
+        ["commit=HEAD", "grep='NO_SUCH_KEY' in=nope.json"]
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 2
+    assert got[0].status != cdc.REFUSED or "second claim marker" not in got[0].detail
+    assert got[1].status == cdc.REFUSED
+    assert "second claim marker" in got[1].detail
+    assert got[1].where.endswith("d.md:1")
+
+
+def test_second_marker_in_backticks_is_still_an_example(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("A <!-- claim: commit=HEAD --> and `<!-- claim: grep=x -->`\n"
+                   "```\nB <!-- claim: grep=y --> <!-- claim: grep=z -->\n```\n")
+    assert [c.raw for c in cdc.find_claims(doc)] == ["commit=HEAD"]
+
+
+def test_unclosed_opener_is_refused_not_dropped(tmp_path):
+    """#1044 control: a marker whose `-->` is on a later line. Before the fix
+    MARKER needed both ends on one line, so the opener matched nothing: the
+    claim vanished, rc 0, beside a valid claim. It must be REFUSED, naming the
+    opener's file:line, and the run must exit non-zero."""
+    doc = tmp_path / "d.md"
+    doc.write_text("ok <!-- claim: commit=HEAD -->\n"
+                   "<!-- claim: grep='NO_SUCH_KEY'\n"
+                   "     in=nope.json -->\n")
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 2
+    assert got[1].status == cdc.REFUSED
+    assert "no `-->` on its line" in got[1].detail
+    assert got[1].where.endswith("d.md:2")
+
+
+def test_unclosed_opener_in_fence_or_backticks_is_an_example(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("A <!-- claim: commit=HEAD -->\n"
+                   "see `<!-- claim: grep=x` here\n"
+                   "```\n<!-- claim: grep=y\n```\n")
+    assert [c.raw for c in cdc.find_claims(doc)] == ["commit=HEAD"]
+
+
+def test_unclosed_opener_on_last_line_is_refused(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("text\n<!-- claim: grep=x")
+    got = cdc.find_claims(doc)
+    assert len(got) == 1 and got[0].unclosed and got[0].line == 2
 
 
 def test_markers_are_found_with_the_prose_they_back(tmp_path):

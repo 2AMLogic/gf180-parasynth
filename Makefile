@@ -131,7 +131,14 @@ help:
 ## nowhere; they now share estimator_fixtures' synthesis primitives, so they
 ## are gated here for the same reason the shared module is -- a change to the
 ## synthesis must not be able to move their numbers unnoticed. Both print the
-## TR-808 corpus's absence as a result and exit 0 without it.
+## TR-808 corpus's absence as a result and exit 0 without it. #814 made
+## verify_109_claims' verdict line COUNT what did not run (never "All checks
+## passed." over a half that emitted nothing), and its real-reference half
+## refuses outright under GF180_REQUIRE_TR808_REFS=1 -- enforced for real in
+## `make reference-integration`, the rung that has the corpus. That half is
+## the only automated place balance_trajectory_db meets the real Fischer
+## RS.WAV/CB.WAV, the estimator scoring Partial balance on D10A/D13A (#282's
+## rimshot and cowbell).
 ## #354: the all-maximum `extremes` image alone, OSC2X+FILTER2X (960 frames,
 ## ~7 s). R1's 25-bit ladder `xg` wrapped on it and the continuing full-set
 ## voice carried the wrong state into `audition`; #364 widened it. This is the
@@ -168,6 +175,7 @@ verify:
 	  "$(PY) tools/check_f1_rtl_record.py" \
 	  "$(PY) tools/holdout.py check" \
 	  "$(PY) tools/check_decision_record_numbers.py" \
+	  "$(PY) tools/check_refused_base.py" \
 	  "$(PY) tools/external_claim.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi" \
 	  "$(PY) tools/probes/estimator_ground_truth.py check" \
@@ -175,6 +183,7 @@ verify:
 	  "$(PY) tools/probes/estimator_domains.py" \
 	  "$(PY) tools/probes/verify_109_claims.py" \
 	  "$(PY) tools/sensitivity.py check" \
+	  "$(PY) tools/refusal_exit_census.py --check" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py"
 
 ## Fast sound-development checks, separate from the broad repository suite.
@@ -251,7 +260,7 @@ verify:
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest tools/test_run_case.py -q" \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_refusal_exit_census.py tools/test_manifest.py tools/test_characterize_synth_top.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_check_attested_hashes.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
  	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py tools/test_check_arty_evidence_binding.py fpga/test_publish_binding.py fpga/test_arty_sd_top.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py fpga/test_named_r1.py fpga/test_named_r2.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
@@ -259,6 +268,7 @@ verify-fast:
 	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \
 	  "$(PY) tools/verify_mono_case.py" \
 	  "$(PY) tools/check_workflows.py" \
+	  "$(PY) tools/check_attested_hashes.py" \
 	  "$(PY) model/sound_report.py --check-locks" \
 	  "$(PY) tools/inject_manifest_defects.py"
 
@@ -421,8 +431,8 @@ verify-full:
 ##                                      itself all BLIND -- yosys resolves the
 ##                                      don't-care, so the netlist simulates
 ##                                      x-free and the area moves 0.1 %
-##   area_provenance clean              summarize.py exit 0, ratio 1.87 printed
-##   area_provenance UTILIZATION_TARGET summarize.py exit 2, ratio withheld
+##   area_provenance clean              summarize.py refuses the OpenROAD#12303 duplicate metrics (#835) AND still attributes the ratio (1.87)
+##   area_provenance UTILIZATION_TARGET summarize.py exit 2, ratio withheld, circular-die-area named
 ##   area_provenance CORE_UTILIZATION_SET  ditto, the ORFS spelling
 ##
 ## THE CONSTRAINT-BINDING CONTROLS (#436) close rule 5 on #315: the UART-RX
@@ -445,9 +455,13 @@ verify-full:
 ## and DO run there.
 ##
 ## measure_promoted_bands.py validate (#138) is here because it IS a set of
-## injected controls -- thirteen mutants of the three promoted estimators and
+## injected controls -- fourteen mutants of the three promoted estimators and
 ## of the floor reader, each named against the one known case it must turn red,
-## plus the two start-red stub runs. It shipped in PR #507 wired to nothing,
+## plus the two start-red stub runs. The fourteenth (#801) mutates no code: it
+## makes the period estimator refuse nine of its twelve known cases and answer
+## three EXACTLY, because a worst-case reduction that drops refusals reports a
+## SMALLER error over the survivors and neither start-red stub models a
+## partial refusal. It shipped in PR #507 wired to nothing,
 ## which is the state this target exists to prevent: a control nobody runs is
 ## indistinguishable from a control that passes. Pure Python, no corpus, ~3 s.
 ##
@@ -490,14 +504,52 @@ verify-full:
 ## checks x defects matrix rule 4 asks for and FAILS on any check that
 ## answered in the clean run and was reddened by nothing at all. Pure Python,
 ## no corpus, ~65 s.
+##
+## bd_pitch_predeclaration_mutants.py (#601, wired here by #755) is the same
+## shape for the #557 BD pitch freeze's guards: 12 text-replacement mutants,
+## each removing ONE guard from a scratch copy of the tree and running the
+## focused controls named for it, every one of which must go RED. It is here
+## because it was NOT: the mutant for the bool guard pointed at a helper that
+## commit b6590cb7 moved into tools/finite_number.py, its own rule-8 precheck
+## REFUSED (exit 2), and no target ran it, so none of the 12 executed for about
+## four weeks while two documents asserted the result. Pure Python, no corpus,
+## ~12 s: 10 baseline runs of one focused pytest file that must all be GREEN on
+## the unmutated tree (without them a host with no pytest reports all 12 RED
+## having run nothing, #757), then the 12 mutant runs that must all be RED.
+## REFUSES (exit 2) rather than reporting if either precondition fails. Its
+## fast half --
+## tools/test_bd_pitch_predeclaration_mutants.py, the same precheck read
+## statically off the real tree -- runs under `verify`.
+##
+## check_doc_claims_789_marker_controls.py (the probe PR #798 added, wired
+## here as a STANDING control by #811) is the
+## red-first record for the #789 claim markers. Since #905 it is satisfiable
+## on any tree whose 17 claims are green and REFUSES otherwise -- exit 2
+## (NO-VERDICT in the exit contract), naming what it found -- because its
+## controls inject into this live checkout and would misreport the tree's own
+## staleness as control failures; every marker the two documents carry is
+## grep=/absent=, no test=, so the whole run is seconds, and it restores every
+## file it injects into. The refusal is the right answer on a WIP tree, not a
+## reason to unwire: a green `make verify` leaves exactly the tree state it
+## accepts. Known residue, recorded not designed around: on a runner timeout
+## this runner SIGKILLs the job's
+## process group and the probe's finally-restore does not run, leaving
+## README.md and docs/milestones.md modified -- at ~0.6 s against this
+## target's 3600 s timeout that needs the probe to hang ~6000x its runtime.
+## Same note in docs/claim-markers.md, beside the scope_control paragraph.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
+	  "$(PY) tools/control_dag_issue_only.py" \
+	  "$(PY) tools/control_dag_verdictless_evidence.py" \
+	  "$(PY) tools/control_dag_churn.py" \
+	  "$(PY) -m pytest tools/test_rungs_gate.py -q" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
 	  "$(PY) tools/probes/estimator_ground_truth.py controls" \
 	  "$(PY) tools/probes/coupling_controls.py" \
 	  "$(PY) tools/pytest_collection_inventory.py controls" \
 	  "$(PY) tools/r1_harvest_controls.py" \
+	  "$(PY) tools/probes/check_doc_claims_789_marker_controls.py" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \
@@ -559,6 +611,7 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
 	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
 	  "$(PY) -m pytest tools/test_check_surge_waveform_comment.py -q -k issue_271" \
+	  "$(PY) -m pytest tools/test_compile_dag_evidence.py -q -k issue_824" \
 	  "$(PY) -m pytest model/test_rig_qualification.py -q -k discrimination_matrix" \
 	  "$(PY) -m pytest model/test_modeld_pedalboard_rig.py -q -k 'refuses or REFUS or uncorrectable'" \
 	  "$(PY) tools/check_decision_record_numbers.py --expect ok" \
@@ -571,6 +624,7 @@ controls:
 	  "$(PY) model/sound_report.py --inject sd-centroid-amp-weighted" \
 	  "$(PY) tools/stage_case.py controls --root build/provenance-controls" \
 	  "$(PY) tools/inject_manifest_defects.py" \
+	  "$(PY) -m pytest tools/test_characterize_synth_top.py -q -k control" \
 	  "$(PY) pnr/report_synth_area.py --expect area --outdir build/pnr-area-clean" \
 	  "$(PY) pnr/report_synth_area.py --inject TANH_INDEX_OOR --expect refused-x --outdir build/pnr-area-tanh-oor" \
 	  "$(PY) pnr/orfs/area_provenance.py --expect ok --outdir build/pnr-die-clean" \
@@ -587,10 +641,15 @@ controls:
 	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused" \
+	  "$(PY) tools/sensitivity.py check --inject OBJECTIVE_ZERO --expect refused" \
+	  "$(PY) tools/sensitivity.py check --inject OBJECTIVE_NEGATIVE --expect refused" \
+	  "$(PY) tools/probes/repeat_period_multiple.py --inject NO_SUBMULTIPLE_RULE --expect-fail" \
+	  "$(PY) tools/probes/repeat_period_multiple.py --inject OVERLAP_NORMALISER --expect-fail" \
 	  "$(PY) tools/probes/permitted_differences.py --controls" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py --inject NO_IVERILOG --expect refused" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py --inject BROKEN_REPRO --expect refused" \
-	  "$(PY) tools/check_iverilog_generate_case_string.py --inject GARBAGE --expect refused"
+	  "$(PY) tools/check_iverilog_generate_case_string.py --inject GARBAGE --expect refused" \
+	  "$(PY) tools/bd_pitch_predeclaration_mutants.py"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q
@@ -638,6 +697,13 @@ trial-bootstrap:
 reference-integration:
 	GF180_REQUIRE_TR808_REFS=1 $(PY) -m pytest tools/test_run_case.py tools/test_metric_purpose.py tools/test_cymbal_tone_knob.py -q
 	GF180_REQUIRE_TR808_REFS=1 $(PY) tools/cymbal_tone_knob.py --check --require-corpus
+	# #814: verify_109_claims' half 2 is the only automated rung where
+	# balance_trajectory_db meets the real Fischer RS.WAV/CB.WAV (D10A/D13A,
+	# #282's kit). Here the corpus exists and the probe's
+	# GF180_REQUIRE_TR808_REFS=1 makes a missing or unusable one exit 2 --
+	# NO VERDICT, not a skip -- so the half is binding on the box that has
+	# the recordings, where `make verify` alone never ran it.
+	GF180_REQUIRE_TR808_REFS=1 $(PY) tools/probes/verify_109_claims.py
 
 board:
 	-@$(PY) tools/run_case.py --batch "First 32"

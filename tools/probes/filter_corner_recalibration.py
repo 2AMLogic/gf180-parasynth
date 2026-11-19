@@ -67,10 +67,24 @@ def check(ok: bool, what: str):
         fails.append(what)
 
 
-def shipped_corner(freqs, g, cut_hz):
+def corner_pre150(freqs, g, cut_hz):
     """`filt_corner` exactly as it stood before #150: -3 dB below the MEDIAN of
     a band whose top edge moves with the commanded cutoff."""
     return am.corner_from_curve(freqs, g, ref_band=rc._ref_band(freqs, cut_hz))
+
+
+def _ours_row(cid, cut, o, n):
+    """One section-1 row. Where either estimator refuses it prints REFUSED and
+    the reason's first clause, the way `real_curves` already does -- a refusal
+    is a first-class outcome, not a TypeError on a None `.value` (#792)."""
+    if not o.ok:
+        return (f"   {cid:>5}{cut:11.0f}{'REFUSED':>19}"
+                f"{'':>8}   {o.reason.split(' -- ')[0][:44]}")
+    if not n.ok:
+        return (f"   {cid:>5}{cut:11.0f}{o.value:19.2f}{o.value/cut:8.4f}"
+                f"{'REFUSED':>16}   {n.reason.split(' -- ')[0][:44]}")
+    return (f"   {cid:>5}{cut:11.0f}{o.value:19.2f}{o.value/cut:8.4f}"
+            f"{n.value:16.2f}{n.value/cut:8.4f}{100*(n.value/o.value-1):+8.2f}%")
 
 
 # ===========================================================================
@@ -84,16 +98,15 @@ def ours():
     print(f"   reference_rigs.OurLadder, res 0.0, probe amp {rp.PROBE_AMP} "
           f"({rp.PROBE_LEVEL_DBFS:+.2f} dBFS),")
     print(f"   {len(F)} tones {F[0]:.0f}-{F[-1]:.0f} Hz -- the F1 stimulus exactly.\n")
-    print(f"   {'case':>5}{'commanded':>11}{'SHIPPED':>11}{'ratio':>8}"
-          f"{'REPAIRED':>11}{'ratio':>8}{'moved':>9}")
+    print(f"   {'case':>5}{'commanded':>11}{'SHIPPED (pre-#150)':>19}{'ratio':>8}"
+          f"{'REPAIRED (#150)':>16}{'ratio':>8}{'moved':>9}")
     out = {}
     for cid, cut in (("F1A", 250.0), ("F1B", 1000.0), ("F1C", 4000.0)):
         g = rc.our_filter_curve(F, cut, 0.0, rp.PROBE_AMP)
-        o = shipped_corner(F, g, cut)
+        o = corner_pre150(F, g, cut)
         n = rc.filt_corner(cut)(F, g)
         out[cid] = (cut, o, n, g)
-        print(f"   {cid:>5}{cut:11.0f}{o.value:11.2f}{o.value/cut:8.4f}"
-              f"{n.value:11.2f}{n.value/cut:8.4f}{100*(n.value/o.value-1):+8.2f}%")
+        print(_ours_row(cid, cut, o, n))
     print("\n   Our ladder's own corner/cutoff ratio, which an ideal filter's is")
     print("   CONSTANT by construction, still moves across the range after the")
     print("   repair -- that part is the filter and not the instrument.")
@@ -139,8 +152,9 @@ def real_curves():
         return
     data = json.loads(RESULTS.read_text())
     keys = [k for k in data if k.startswith("response-")]
-    print(f"   {'device':14}{'cut':>6}{'SHIPPED':>11}{'REPAIRED':>11}{'new/old':>9}"
-          f"{'shipped ratio':>15}{'repaired ratio':>16}")
+    print(f"   {'device':14}{'cut':>6}{'SHIPPED (pre-#150)':>19}"
+          f"{'REPAIRED (#150)':>16}{'new/old':>9}"
+          f"{'shipped (pre-#150) ratio':>25}{'repaired (#150) ratio':>22}")
     factors: dict[float, list[float]] = {}
     trends: dict[str, tuple] = {}
     for k in sorted(keys):
@@ -150,20 +164,20 @@ def real_curves():
             f = np.asarray(r["freqs"], float)
             g = np.asarray(r["gain_db"], float)
             cut = float(r["cut_hz"])
-            o = shipped_corner(f, g, cut)
+            o = corner_pre150(f, g, cut)
             n = rc.filt_corner(cut)(f, g)
             if not o.ok:
                 continue
             if not n.ok:
-                print(f"   {r['device']:14}{cut:6.0f}{o.value:11.3f}"
-                      f"{'REFUSED':>11}   {n.reason.split(' -- ')[0][:44]}")
+                print(f"   {r['device']:14}{cut:6.0f}{o.value:19.3f}"
+                      f"{'REFUSED':>16}   {n.reason.split(' -- ')[0][:44]}")
                 continue
             factors.setdefault(cut, []).append(n.value / o.value)
             if cut >= 250.0:
                 o_r.append(o.value / cut)
                 n_r.append(n.value / cut)
-            print(f"   {r['device']:14}{cut:6.0f}{o.value:11.3f}{n.value:11.3f}"
-                  f"{n.value/o.value:9.4f}{o.value/cut:15.4f}{n.value/cut:16.4f}")
+            print(f"   {r['device']:14}{cut:6.0f}{o.value:19.3f}{n.value:16.3f}"
+                  f"{n.value/o.value:9.4f}{o.value/cut:25.4f}{n.value/cut:22.4f}")
         if o_r:
             trends[rows[0]["device"]] = (max(o_r) / min(o_r) - 1, max(n_r) / min(n_r) - 1)
     print("\n   The repair's factor at each commanded cutoff, across five devices:")
@@ -177,9 +191,10 @@ def real_curves():
     print("\n   The trend each device's own corner/cutoff ratio shows across the")
     print("   cutoffs this dataset holds inside the validated domain -- 400 Hz to")
     print("   6.4 kHz -- which is the quantity #146 read as our cutoff mapping:")
-    print(f"   {'device':14}{'SHIPPED spread':>16}{'REPAIRED spread':>17}{'moved':>10}")
+    print(f"   {'device':14}{'SHIPPED (pre-#150) spread':>26}"
+          f"{'REPAIRED (#150) spread':>23}{'moved':>10}")
     for dev, (o, n) in trends.items():
-        print(f"   {dev:14}{100*o:15.2f}%{100*n:16.2f}%{100*(o-n):+9.2f} pts")
+        print(f"   {dev:14}{100*o:25.2f}%{100*n:22.2f}%{100*(o-n):+9.2f} pts")
     print("\n   AND THE ANSWER IS THE OPPOSITE OF THE ONE THIS PROBE EXPECTED.")
     print("   Over 400 Hz-6.4 kHz the repair moves every device's apparent droop by")
     print("   at most 1.9 points, in BOTH directions -- four of eight get worse.")

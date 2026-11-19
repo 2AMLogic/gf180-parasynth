@@ -9,6 +9,9 @@ refaudio/cache/
 rtl-sketch/build/
 pnr/orfs/work/
 pnr/klt/*/.klt/
+# run_klt.py binds the committed par_request template to the netlist klt
+# synthesize reports; the bound copy is derived, not evidence (#765).
+pnr/klt/*/par_request.resolved.json
 fpga/build/
 pnr/orfs/collect.out
 pnr/orfs/collect.sh

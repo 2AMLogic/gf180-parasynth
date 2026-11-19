@@ -31,6 +31,39 @@ checker's own ~2 minutes, twice.
 
     python3 tools/probes/check_doc_claims_scope_control.py
     python3 tools/probes/check_doc_claims_scope_control.py --before origin/main
+
+THIS IS A ONE-TIME RECORD, NOT A STANDING CONTROL (#756). It passed once, at
+#435 (`f2419e26`, 2026-09-28), when `main`'s checker was still the narrow one.
+It cannot pass on any tree after that commit, because the differential needs a
+`before` arm that does NOT reach the injected file, and `origin/main` is now
+the widened checker. Measured 2026-11-13 at `a19f7cf4`, 298 s wall each:
+
+    default (--before origin/main)   exit 2, REFUSED: the 'before' arm was
+                                     already red (exit 1). Both arms exit 1 in
+                                     ~120-175 s naming STALE pnr/orfs/README.md
+                                     (117 claims in 202 documents).
+    --before f2419e26^               exit 2, REFUSED: the 'before' arm was
+                                     already red (exit 2). The pre-#435 checker
+                                     refuses the `mechanism` key that current
+                                     documents use (docs/claim-markers.md and
+                                     docs/verification-rules.md), so it is red
+                                     before the injection can matter -- and will
+                                     go red again on each new marker key.
+
+So pinning an older `before` does not rescue it either, and wiring this script
+into `make controls` would be an unsatisfiable gate at ~5 min a run, which
+`CLAUDE.md` says is worse than no gate. The standing control for the document
+set is instead the scope tests in `tools/test_check_doc_claims.py` (added by
+the same commit `f2419e26`, run by name at `.github/workflows/rungs.yml:569`):
+`test_the_default_set_reaches_every_directory_that_carries_claims`,
+`test_the_default_set_excludes_vendored_and_generated_trees`,
+`test_no_claim_marker_in_this_tree_is_outside_the_scanned_set`, and the
+red-first `test_a_marker_outside_the_scanned_set_is_refused_rather_than_silent`.
+They need no old revision, so they do not rot as the checker moves.
+
+This file is kept, unchanged in behaviour, because the repository keeps the
+instrument that produced a result: it is the record of why this layer needed a
+control at all. Running it today is expected to answer REFUSED.
 """
 from __future__ import annotations
 

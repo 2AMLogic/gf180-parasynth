@@ -55,6 +55,12 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "audition", ROOT / "rtl-s
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+import record_compare as rc                      # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
+
 MANIFEST = HERE / "r1-2025.1.json"
 PUB_DIR = ROOT / "fpga/reports/arty/r1-player-preview-2025.1"
 EXT_IO = "ext-io/ext-io-extract.json"
@@ -67,7 +73,7 @@ PERMITTED_EXCEPTIONS = ["i2s_bclk"]
 PREFIX = "r1_release: "
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """Selected artifacts disagree, or an input is missing."""
 
 
@@ -76,8 +82,7 @@ def sha(path) -> str:
 
 
 def _rel(p) -> str:
-    p = Path(p).resolve()
-    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+    return rc.rel(p, ROOT)
 
 
 def _need(path) -> Path:
@@ -301,7 +306,7 @@ def rederive_ext_io(path: Path, commit: str | None = None) -> dict:
     paths = _need(path.parent / "ext_io_paths.txt")
     try:
         derived = json.loads(json.dumps(eie.evaluate(eie.parse(paths.read_text()))))
-    except eie.Refused as exc:
+    except refusal.Refused as exc:
         raise Refused(f"{EXT_IO}: the shipped ext_io_paths.txt does not evaluate: {exc}") from None
     unknown = sorted(set(rec) - set(derived) - set(EXT_IO_EXTRACTION_ONLY))
     missing = sorted((set(derived) | set(EXT_IO_EXTRACTION_ONLY)) - set(rec))
@@ -409,7 +414,7 @@ def host_binding() -> dict:
     try:
         cmds = rc.commands()
         kit = rc.kit_identity()
-    except rc.Refused as exc:
+    except refusal.Refused as exc:
         raise Refused(f"the host's R1 bytes are not the frozen R1 target: {exc}") from None
     for name, c in cmds.items():
         want = cand["commands"].get(name, {})
@@ -521,13 +526,11 @@ def build() -> dict:
     }
 
 
-def _diff(a, b, path=""):
-    if isinstance(a, dict) and isinstance(b, dict):
-        out = []
-        for k in sorted(set(a) | set(b)):
-            out += _diff(a.get(k), b.get(k), f"{path}.{k}" if path else k)
-        return out
-    return [] if a == b else [path]
+#: the shared staleness comparison -- fpga/record_compare.py (#785) carries the
+#: divergence table, the type-strictness decision and the inputs that defeat
+#: it. A module-level NAME, because check() calls it as a global and
+#: fpga/release/test_stale_controls.py patches it there.
+_diff = rc.diff
 
 
 def tree_drift(image: dict) -> list:
@@ -580,6 +583,7 @@ def stale_control(case: str, out: Path) -> int:
         print(f"stale_control: {word} -- {detail}", flush=True)
         return {"STALE": 1, "BOUND": 0}.get(word, 2)
 
+    import release_manifest as rm
     try:
         raw = _need(MANIFEST).read_bytes()
         committed = json.loads(raw)
@@ -592,7 +596,6 @@ def stale_control(case: str, out: Path) -> int:
             for k, v in sub.items():
                 stale["image"][k.split(".", 1)[1]] = v
         elif case == "host":
-            import release_manifest as rm
             import tempfile
             with tempfile.TemporaryDirectory() as d:
                 cap = rm._capture(["run", "--fixture", "demo", "--image", "release"], Path(d))
@@ -619,8 +622,8 @@ def stale_control(case: str, out: Path) -> int:
         stale_path.write_text(json.dumps(stale, indent=2) + "\n")
         verdict, detail = check(stale_path, fresh)
         print(f"  | substituted:     {PREFIX}{verdict} -- {detail}")
-    except Refused as exc:
-        return say("REFUSED", str(exc))
+    except (Refused, rm.Refused) as exc:            # rm.Refused: a sibling
+        return say("REFUSED", str(exc))             # RuntimeError subclass (#784)
     if verdict == "BOUND":
         return say("BOUND", f"r1_release ACCEPTED a manifest with {changed} substituted: "
                             "not caught")

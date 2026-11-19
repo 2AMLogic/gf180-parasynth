@@ -65,6 +65,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT / "tools")]
 from finite_number import is_finite_number as _finite  # noqa: E402
+import refusal
 
 RECORD = ROOT / "docs" / "bd-pitch-predeclaration.json"
 AXES = ("tone", "decay", "accent", "retrigger")
@@ -72,7 +73,7 @@ MARS_TONES = tuple(f"{i:02d}" for i in range(1, 7))   # 6 TONE positions (measur
 MARS_DECAYS = tuple("ABCDEF")                           # 6 DECAY letters, same source
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition failed; nothing was checked or evaluated."""
 
 

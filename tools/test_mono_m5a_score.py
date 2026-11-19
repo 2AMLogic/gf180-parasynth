@@ -10,10 +10,17 @@ def test_corrupted_reference_refuses_before_measurement(tmp_path, monkeypatch):
     audio = tmp_path / "broken.wav"
     audio.write_bytes(b"not the frozen audio")
     manifest = tmp_path / "manifest.json"
-    manifest.write_text(json.dumps({"case_id": "M5A", "audio": {
-        "file": audio.name,
-        "sha256": hashlib.sha256(b"different content").hexdigest(),
-    }}))
+    # The identity block is the suite gate's input, so the fixture carries a
+    # genuine V3 identity: this test is about the HASH gate firing before any
+    # measurement, not about the suite gate (#1050), which has its own tests.
+    manifest.write_text(json.dumps({
+        "case_id": "M5A",
+        "identity": {"name": "Mini V3", "version": "3.12.0.3422",
+                     "bundle_id": "com.Arturia.Mini-V3.vst3"},
+        "audio": {
+            "file": audio.name,
+            "sha256": hashlib.sha256(b"different content").hexdigest(),
+        }}))
     monkeypatch.setattr(score, "MANIFEST", manifest)
     with pytest.raises(score.Refused, match="hash mismatch"):
         score.measure()

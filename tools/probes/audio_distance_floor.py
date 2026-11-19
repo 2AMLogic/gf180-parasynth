@@ -90,6 +90,10 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import run_case as _rc_refs  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 REFDIR = _rc_refs.configured_refs()
 
@@ -108,7 +112,7 @@ SCALES = (2048, 1024, 512, 256, 128, 64)
 LOG_FLOOR_REL = 1e-5
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition failed, so nothing was attempted. Distinct from a
     failure: REFUSED means no evidence, not bad evidence."""
 

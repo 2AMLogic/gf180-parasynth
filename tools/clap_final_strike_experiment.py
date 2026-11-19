@@ -67,8 +67,15 @@ import numpy as np  # noqa: E402
 
 import clap_d12a_probe as probe  # noqa: E402
 import run_case as rc  # noqa: E402
+import run_all  # noqa: E402
 
 DEV = [0, 7, 131, 977, 2203, 4099, 7919, 12007]
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous record
+    standing, not a truncated one."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 FRESH = [3301, 5557, 8803, 10501, 14009, 16411, 18503, 20011]
 FINAL_TAU = 20e-3
 TAIL_TAU = 80e-3
@@ -327,8 +334,7 @@ def main(argv=None) -> int:
                       else "model improvement; promotion incomplete (burst timing "
                       + ("unqualified)" if not timing_qualified else "qualified by B)")))}
     p = pathlib.Path(a.out)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(out, indent=1, default=float) + "\n")
+    write_json(p, out, default=float)
 
     print(f"{'condition':34s} ratio  decay  timing* |ratio err| anch-ref 30-50 50-80 80-200  pk@2  rail")
     for n, s in sdev.items():

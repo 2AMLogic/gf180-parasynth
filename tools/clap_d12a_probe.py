@@ -60,9 +60,17 @@ sys.path.insert(0, str(ROOT / "model"))
 import numpy as np  # noqa: E402
 
 import run_case as rc  # noqa: E402
+import refusal
+import run_all  # noqa: E402
 
 OUT_DIR = ROOT / "docs" / "scorecard" / "clap-d12a"
 RECORD = ROOT / "docs" / "scorecard" / "results" / "D12A.json"
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#882): a kill mid-write leaves the previous record
+    standing, not a truncated one."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 MANIFEST_DEFAULT = pathlib.Path.home() / "dev" / "refs" / "tr808-fischer-85fbecf.sha256"
 PINNED_COMMIT = "85fbecf"
 
@@ -87,7 +95,7 @@ CANDIDATES = [
 ]
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition failed: the probe says so instead of producing numbers."""
 
 
@@ -616,8 +624,7 @@ def main(argv=None) -> int:
         print(f"REFUSED: {e}")
         return 2
     p = pathlib.Path(a.out)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(out, indent=1, sort_keys=False) + "\n")
+    write_json(p, out)
     print(f"reproduced D12A: {out['reproduction']['metrics']['burst/tail ratio']['error']} dB error; "
           f"ours sha256 {out['reproduction']['ours_float64_sha256'][:16]}")
     for r in out["sensitivity"]:

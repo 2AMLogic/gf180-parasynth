@@ -89,6 +89,7 @@ sys.path.insert(0, str(ROOT / "audition"))
 
 import audio_measure as am                                          # noqa: E402
 import voice_fx as vf                                               # noqa: E402
+import refusal
 
 SR = vf.SR
 FS = 32768.0
@@ -113,7 +114,7 @@ MIN_HEADROOM_DB = 3.0            # below this a reading is the estimator, not th
 REPRODUCTION_TOL_DB = 0.15       # the frozen table's own rows must come back
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition failed. This is a first-class outcome, not a failure to
     measure: it means the apparatus was in a state where any number it printed
     would look exactly like data."""

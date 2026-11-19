@@ -63,6 +63,7 @@ import cymbal_bands as cb                # noqa: E402
 import cymbal_tone_knob as ctk           # noqa: E402
 import cymbal_tone_nodal as tn           # noqa: E402
 from finite_number import is_finite_number as _finite  # noqa: E402
+import refusal
 
 CENTRE = {"low": "3175", "decay": "10079", "short": "10079"}
 # Revision 4's low band leaves the chain at M_CYH1B, not M_CYH1.
@@ -85,7 +86,7 @@ QUANT_TOL_DB = 0.2
 LN_INVARIANCE = TIME_TOL
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition this render needs is not met. Not a failed check."""
 
 

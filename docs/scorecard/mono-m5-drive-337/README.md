@@ -176,7 +176,7 @@ The saw lead's upper partials are 4.1 dB too dark on average at drive 0.75 on
 the M5A notes. At 0.50, with level held, they are 2.7 dB too dark. The effect
 holds at MIDI 72 (4.2 to 2.6 dB). That is a real improvement and **still a
 fail**: the official limit is 1 dB per partial and the best saw error is 4.4 dB.
-<!-- claim: grep="real improvement and" in=docs/scorecard/mono-m5-drive-337/README.md note="effect; report.json confirmation.saw.summary vs confirmation.baseline.saw" -->
+<!-- claim: grep="real improvement an[d]" in=docs/scorecard/mono-m5-drive-337/README.md note="effect; report.json confirmation.saw.summary vs confirmation.baseline.saw. The bracket defers a letter so the prose matches and the marker line quoting the pattern does not (issue #904)" -->
 
 If the saw were given 0.50 and the pulse kept 0.75, the official Harmonic
 shape of M5A would move from 7.56 to 5.32 dB, and the maximum would then be a

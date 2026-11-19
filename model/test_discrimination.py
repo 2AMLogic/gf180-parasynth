@@ -447,7 +447,8 @@ def dct_ii(x: np.ndarray, n_out: int) -> np.ndarray:
     return (np.cos(np.pi * k * (2 * m + 1) / (2 * n)) @ x) * np.sqrt(2.0 / n)
 
 
-def features(x: np.ndarray, sr: int, floor_clamp: bool = True, extra: bool = False) -> tuple:
+def features(x: np.ndarray, sr: int, floor_clamp: bool = True, extra: bool = False,
+             dphase_floor_ppm: float | None = None) -> tuple:
     """Returns (vector, names). 40 log-mel bands x 4 segments (mean) plus
     20 MFCCs x 4 segments (mean and std) = 320 numbers.
 
@@ -456,7 +457,11 @@ def features(x: np.ndarray, sr: int, floor_clamp: bool = True, extra: bool = Fal
     constant-Q sub-bands and the multi-scale windows. They are deterministic
     transforms handed to the SAME classifier and read on the SAME
     knob-equivalent yardstick -- not a learned judge, and the arm is reported
-    both ways so the cost of the addition is visible."""
+    both ways so the cost of the addition is visible.
+
+    `dphase_floor_ppm` reaches `discrimination_features.jitter_features` and
+    is #768's floor-off arm. It is inert without `extra`, because the 320
+    base columns do not contain `jit.dphase_ar1.seg0`."""
     lm = logmel(x, sr, floor_clamp)
     mf = dct_ii(lm, N_MFCC)
     bounds = np.linspace(0, lm.shape[1], N_SEG + 1).astype(int)
@@ -474,7 +479,7 @@ def features(x: np.ndarray, sr: int, floor_clamp: bool = True, extra: bool = Fal
             names.append(f"mfcc{c:02d}.seg{s}.std")
     if extra:
         import discrimination_features as dfx
-        ev, en = dfx.extra_features(x, sr)
+        ev, en = dfx.extra_features(x, sr, dphase_floor_ppm=dphase_floor_ppm)
         vals = list(vals) + list(ev)
         names = names + en
     return np.asarray(vals, dtype=float), names
@@ -1722,6 +1727,125 @@ def _tone(f, sr=44100, dur=WINDOW_S + 0.05, tau=0.05, seed=0):
     return np.sin(2 * np.pi * f * t) * np.exp(-t / tau) + 1e-4 * rng.standard_normal(len(t))
 
 
+def test_the_dphase_floor_override_reaches_the_column_the_run_reports():
+    """CHECK THAT THE THING BEING TESTED IS THE THING THAT SHIPS (#768).
+
+    The floor-off arm is only a control over #763 if the flag travels the
+    whole path the run uses -- argparse, `discrimination_run._featurise`,
+    `features`, `discrimination_features.extra_features`, `jitter_features`
+    -- and arrives at the column. The hooks existed from #763 and reached
+    none of it: `extra_features` called `jitter_features(x, sr)` with neither
+    argument, so a run could not turn the floor off however the flag was
+    spelled, and an A/B driven from the CLI would have produced two identical
+    arms and a confident null result.
+
+    The second half matters as much as the first: the override must move
+    `jit.dphase_ar1.seg0` and NOTHING else. If it moved a second column the
+    A/B would be a test of the floor plus whatever else came with it."""
+    import discrimination_features as dfx  # noqa: F401  (the module under the flag)
+    sr = 44100
+    t = np.arange(int(0.24 * sr)) / sr
+    under = np.sin(2 * np.pi * 410.0 * t)   # 0.47 ppm: under any sane floor
+
+    on, names = features(under, sr, True, True)
+    off, _ = features(under, sr, True, True, dphase_floor_ppm=0.0)
+    i = names.index("jit.dphase_ar1.seg0")
+    assert on[i] == 0.0, on[i]
+    assert off[i] != 0.0, (
+        "with the floor off this column must report the autocorrelation of "
+        "the numerical noise -- that is the pre-#763 behaviour the A/B is "
+        "the control for, and if it is still zero the flag did not arrive")
+
+    moved = [nm for nm, x, y in zip(names, on, off) if x != y]
+    assert moved == ["jit.dphase_ar1.seg0"], (
+        f"the floor override moved {moved}: the A/B would not isolate #763")
+
+    # the base 320 do not contain the column, so the flag is inert there
+    b_on, _ = features(under, sr, True, False)
+    b_off, _ = features(under, sr, True, False, dphase_floor_ppm=0.0)
+    assert np.array_equal(b_on, b_off)
+
+
+def test_ms_windows_cannot_silently_share_a_grouping_label():
+    """The ms.* buckets are keyed on a LOSSY label; assert it is still
+    distinct (#939).
+
+    `extra_group` buckets every `ms*` column on field 0 of its name --
+    `ms4ms.20-200Hz.seg0` -> `ms.4ms` -- and that token is `%.0f`, which
+    renders 4.4e-3 and 4.0e-3 identically ("4"). The grouping is healthy as
+    committed only because the three MS_WINDOWS_S values happen to round
+    apart; nothing asserted it, so a future window added beside a near
+    neighbour would merge two windows into one double-width bucket: #929's
+    exact failure shape (grouped permutation importance shuffling 12 columns
+    where its neighbours shuffle 6), visible only as "one bucket looks
+    unusually large".
+
+    `ms_window_ms_label` owns the token, so this test reads the SHIPPED
+    format, not a copy of it. Two halves, per verification-rules rule 8: the
+    precondition holds for the committed windows with the shipped names
+    landing one equal-size bucket per window -- and the SAME distinctness
+    check, run on a tuple chosen to collide, is shown to report the
+    collision. A guard that cannot fail checks nothing."""
+    import discrimination_features as dfx
+
+    def distinct(ws):
+        labs = [dfx.ms_window_ms_label(T) for T in ws]
+        return len(set(labs)) == len(labs), labs
+
+    ok, labs = distinct(dfx.MS_WINDOWS_S)
+    assert ok, (
+        f"MS_WINDOWS_S {dfx.MS_WINDOWS_S} renders {labs}: two windows share "
+        "one ms.* bucket, so grouped permutation importance would shuffle a "
+        "double-width bucket and read as one (#939; the shape #929 fixed for "
+        "MPD). Give the colliding windows a distinct %.0f label, or widen the "
+        "format deliberately and rename every consumer with it")
+
+    # The shipped names, not the label arithmetic: one bucket per window of
+    # len(MS_BANDS_HZ) each, and the msd* columns hit the earlier `msd`
+    # branch -- they must never be counted into a window bucket.
+    names = dfx.extra_names()
+    buckets: dict = {}
+    for nm in names:
+        if nm.startswith("msd"):
+            assert dfx.extra_group(nm) == "ms.scale-difference", nm
+            continue
+        g = dfx.extra_group(nm)
+        if g is not None and g.startswith("ms."):
+            buckets.setdefault(g, []).append(nm)
+    expected = {f"ms.{dfx.ms_window_ms_label(T)}ms": len(dfx.MS_BANDS_HZ)
+                for T in dfx.MS_WINDOWS_S}
+    sizes = {b: len(cols) for b, cols in buckets.items()}
+    assert sizes == expected, (
+        f"ms.* buckets {sizes} != one bucket of {len(dfx.MS_BANDS_HZ)} per "
+        f"window {expected}: a window's columns have merged or drifted")
+
+    # CONTROL: the same check on a tuple chosen to collide must report it --
+    # through the predicate's OWN verdict, not a recomputation of it: a
+    # recomputation stays green under a defeated guard, which is exactly the
+    # input this control must turn red on.
+    ok_c, labs_c = distinct((4.0e-3, 4.4e-3, 25.0e-3))
+    assert not ok_c, (
+        f"the distinctness guard passed on (4.0e-3, 4.4e-3, 25.0e-3) -> "
+        f"{labs_c}: the control cannot collide, so the precondition above is "
+        "unguarded and this test checks nothing")
+
+    # ...and the harm is real, not just a repeated label: the shipped
+    # grouper merges BOTH colliding windows' band columns into ONE bucket of
+    # 2 * len(MS_BANDS_HZ) -- #929's double-width bucket, which grouped
+    # permutation importance shuffles as one.
+    coll_names = [f"ms{dfx.ms_window_ms_label(T)}ms.{lo:.0f}-{hi:.0f}Hz.seg0"
+                  for T in (4.0e-3, 4.4e-3) for lo, hi in dfx.MS_BANDS_HZ]
+    merged: dict = {}
+    for nm in coll_names:
+        g = dfx.extra_group(nm)
+        merged.setdefault(g, []).append(nm)
+    assert {b: len(cols) for b, cols in merged.items()} == {
+        f"ms.{labs_c[0]}ms": 2 * len(dfx.MS_BANDS_HZ)}, (
+        f"the shipped grouper did not merge both colliding windows into one "
+        f"double-width bucket ({dict(merged)}): the control does not "
+        "reproduce #929's failure shape, so the precondition is unguarded")
+
+
 def test_window_is_shorter_than_every_reference_file():
     """The decay knob sets the file length in the Fischer set; the window must
     fit inside the shortest file that exists, or length leaks the knob."""
@@ -2074,6 +2198,40 @@ def test_the_extra_columns_append_and_never_reorder_the_original_320():
     assert sum(len(ix) for ix in g.values()) == len(n1)
     assert any(k.startswith("mpd.") for k in g) and any(k.startswith("cqt.") for k in g)
     assert "jit.stability" in g and "jit.period" in g and "ms.scale-difference" in g
+
+
+def test_each_mpd_stride_is_its_own_grouping_bucket():
+    """#929: `extra_group()` bucketed MPD columns by `nm.split(".")[1]`, which
+    is the DECIMALS of the stride, not the stride: `mpd10.00ms` and
+    `mpd5.00ms` both formatted to `mpd.00ms`, so six strides collapsed into
+    five buckets and grouped permutation importance shuffled 16 columns (two
+    strides x 4 stats x 2 segments) where every other MPD bucket shuffles 8.
+
+    Names are built through the real `mpd_features` naming via `extra_names()`
+    -- the same strings the study ships -- and asserted per stride, not by
+    count. The guard-defeating input (docs/verification-rules.md rule 8): a
+    bucket-count assertion alone would pass a fix that merged two strides and
+    split another to keep the total at six, and `%.2f` always renders one
+    `.`, so the test pins the exact bucket derived from each stride and the
+    equal 8-column size, not just the number of buckets.
+
+    Red on `main` as of 2026-11-17: `mpd.00ms` carries 16 columns, the other
+    four buckets 8 each."""
+    import discrimination_features as dfx
+    names = dfx.extra_names()
+    mpd_names = [nm for nm in names if nm.startswith("mpd")]
+    assert len(mpd_names) == 6 * 4 * dfx.MPD_SEGS, len(mpd_names)
+    for T in dfx.MPD_PERIODS_S:
+        prefix = f"mpd{T * 1e3:.2f}ms."
+        stride_names = [nm for nm in mpd_names if nm.startswith(prefix)]
+        assert len(stride_names) == 4 * dfx.MPD_SEGS, (prefix, stride_names)
+        expected = f"mpd.{T * 1e3:.2f}ms"
+        got = {dfx.extra_group(nm) for nm in stride_names}
+        assert got == {expected}, (prefix, got)
+    buckets = {k: len(v) for k, v in feature_groups(names).items()
+               if k.startswith("mpd.")}
+    assert set(buckets) == {f"mpd.{T * 1e3:.2f}ms" for T in dfx.MPD_PERIODS_S}, buckets
+    assert set(buckets.values()) == {4 * dfx.MPD_SEGS}, buckets
 
 
 def test_the_cross_validation_grouping_does_not_move_between_processes():

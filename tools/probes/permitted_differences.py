@@ -1936,6 +1936,13 @@ def print_margins(trials: int, seed_base: int = VALIDATE_BASE) -> tuple[int, lis
                 key=lambda d: d["lost_above_safety"])
         print(f"\n   upper bound on SAFETY: {b['lost_above_safety']:.3g}x, set by "
               f"{b['injection']} on {b['case']}")
+    elif rc == 0:
+        # #950: this used to fall into the not-caught sentence, which is false
+        # here -- every pair IS caught; the mean-statistic (#539) and
+        # uncalibrated rows simply have no SAFETY cliff to locate
+        print("\n   every pair is CAUGHT and none locates a SAFETY cliff "
+              "(mean-statistic and uncalibrated rows do not depend on SAFETY), "
+              "so no upper bound exists to report")
     else:
         print("\n   not every pair is CAUGHT at the shipped factor, so no upper "
               "bound is reported")

@@ -50,6 +50,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import ext_io_timing as iot  # noqa: E402
+_REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 # the outputs the XDC gives a real output delay (fpga/boards/arty-a7-100.xdc);
 # i2s_bclk is the one permitted exception (a forwarded clock, no output delay)
@@ -100,7 +104,7 @@ exit
 """
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

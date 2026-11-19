@@ -43,6 +43,7 @@ import modal_fixed as mf                   # noqa: E402
 import cymbal_candidate as cc              # noqa: E402
 import werner_fig4 as wf                   # noqa: E402
 import werner_fig9 as w9                   # noqa: E402
+import refusal
 
 SR = dx.SR
 BAND_OF = {"low": "Ht1", "decay": "Ht2", "short": "Ht3"}
@@ -86,7 +87,7 @@ NET_TOL_DB = 0.2
 NET_RECORDED_DB = {"low": -2.82, "decay": -0.80, "short": -1.09}
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The tool cannot stand behind an answer. Distinct from a failed check."""
 
 

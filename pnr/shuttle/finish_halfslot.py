@@ -57,6 +57,11 @@ import shutil
 import subprocess
 import sys
 import time
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -113,7 +118,7 @@ RESUME_FROM = "Odb.RemoveRoutingObstructions"
 TR_DRC_OVERRIDE = "ERROR_ON_TR_DRC=false"
 
 
-class Refusal(Exception):
+class Refusal(refusal.Refused, Exception):
     """A precondition of the apparatus is not met.  Distinct from a tool failure."""
 
 
@@ -303,9 +308,15 @@ def container_progress(cid: str, tail: int = 400) -> str | None:
 
     `docker logs` is the only source that is not behind: the run's log FILE is
     block-buffered and was observed ninety minutes stale on this run.
+
+    No `docker` binary on PATH is "could not tell" (None), like every other
+    way docker fails to answer -- asserted here, not assumed of the machine.
     """
-    p = subprocess.run(["docker", "logs", "--tail", str(tail), cid],
-                       capture_output=True, text=True)
+    try:
+        p = subprocess.run(["docker", "logs", "--tail", str(tail), cid],
+                           capture_output=True, text=True)
+    except FileNotFoundError:
+        return None
     if p.returncode != 0:
         return None
     text = p.stdout + p.stderr

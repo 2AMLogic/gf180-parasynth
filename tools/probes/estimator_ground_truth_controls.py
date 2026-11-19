@@ -370,6 +370,53 @@ def _corner_from_curve_as_highpass():
     return mutant
 
 
+def _corner_dc_referenced_at_minus_6db():
+    """`corner_dc_referenced` reading its corner where the response is 6 dB
+    below the DC plateau instead of 3 dB: half AMPLITUDE where the contract is
+    half POWER.
+
+    A convention confusion in the one family this estimator belongs to, which
+    is what doctrine 2 in this file's header asks a mutant to be -- not a typo
+    but a thing a caller writing the composition by hand would plausibly get
+    wrong. The real `dc_plateau_db` reference is kept, so what moves is only
+    the target. Measured over the 16 lowpass members: red on all 16 against
+    the check's 2 % tolerance, +31.5 % on the 2-pole at fc=200 Hz (262.8 Hz
+    for a corner at 199.8 Hz) and +72.2 % at worst on the order=1 member.
+
+    THE SIGN MATTERS, and it is spelled out because it was got wrong once
+    already: `corner_from_curve` subtracts its own 3 dB from whatever `ref_db`
+    it is handed, so `ref.value - 3.0` gives a target 6 dB down, while
+    `ref.value + 3.0` puts the target AT the plateau, which the real function
+    rejects with "the passband reference band is already below -3 dB" --
+    REFUSED on 15 of the 16 members, and `_had_power` counts a refusal as
+    green. So the `+3.0` version carries almost no power and reaches CAUGHT,
+    if at all, through the single member that still answers; on the reduced
+    control catalogue it can be fully blind. A mutant that mostly converts
+    PASS into REFUSED is not the control it looks like.
+
+    NOT the mutant this check's own repair most obviously implies. Restoring
+    the median fallback #546 removed is BLIND on this family -- it reddens 0
+    of the 16, because the plateau- and median-referenced corners agree to
+    within 0.1 % here (worst 0.0985 %): the #546 bias needs a band that moves
+    toward a fixed grid floor, and this family's band top is a fixed fc/4.
+    Measured, and recorded here rather than shipped, for the same reason the
+    `tonality_db` note above is: a control that cannot fire reports CAUGHT
+    for nothing."""
+    real_dc = am.dc_plateau_db
+    real_corner = am.corner_from_curve
+
+    def mutant(freqs, gain_db, *, ref_band, scale_hz):
+        ref = real_dc(freqs, gain_db, ref_band, scale_hz=scale_hz)
+        if not ref.ok:
+            return am.Estimate(None, False,
+                               "no passband reference to measure a corner "
+                               "against: " + ref.reason, dict(ref.detail or {}))
+        return real_corner(freqs, gain_db, ref_band=ref_band,
+                           ref_db=ref.value - 3.0)
+    mutant.__name__ = "mutant_corner_dc_referenced"
+    return mutant
+
+
 def _step_ratio_over_max():
     def mutant(x):
         d = np.abs(np.diff(np.asarray(x, float)))
@@ -417,6 +464,80 @@ def _harmonic_powers_off_f0():
 
     def mutant(x, f0, ks, sr=48000, **k):
         return real(x, f0 * 1.01, ks, sr, **k)
+    return mutant
+
+
+def _repeat_period_statistic(kind: str):
+    """`repeat_period` with its per-lag normaliser replaced -- the two
+    statistics #780 measured and rejected, reverted one at a time.
+
+    `kind="overlap"` is the expression that SHIPPED BEFORE #780:
+    `(ac / ac[0]) * n / (n - L)`. For a record that repeats exactly that is
+    algebraically `meansq(x[0 : n - L]) / meansq(x[0 : n])`, a front/back
+    energy ratio in a correlation's units, which is why it could exceed 1.0
+    and why the argmax over it landed on the longest multiple in band
+    whenever the record's head was hotter than its mean.
+
+    `kind="geometric"` is the textbook scale-invariant NCCF,
+    `ac[L] / sqrt(E_head * E_tail)`. It is the version that was written FIRST
+    for #780 and it was wrong before it was right: scale invariance means a
+    decaying record's quiet tail correlates with its loud head in SHAPE, so it
+    scored a 0.6 s 81->60 Hz glide-then-ring at 0.530 where the shipped
+    arithmetic mean scores 0.484, turning a correct refusal into a confident
+    64.69 ms -- 3.88 carrier periods and not a repeat. Keeping it as a control
+    is the point: the decision between the two means is not a detail, and
+    without this entry nothing in the tree would turn red if someone
+    "simplified" it back.
+
+    THE SUBMULTIPLE RULE IS LEFT ON in both, deliberately. Reverting two things
+    at once cannot tell you which one the check saw, and #780's test plan asks
+    for each half separately."""
+    if kind not in ("overlap", "geometric"):
+        raise ValueError(kind)                               # pragma: no cover
+
+    def mutant(x, sr=am.SR_DEFAULT, *, min_lag_s=0.05, max_lag_s=12.0,
+               min_corr=0.5, submultiple_margin=None):
+        x = am._as_float(x)
+        if am.is_silent(x):
+            return am._fail("silent")
+        x = x - x.mean()
+        n = len(x)
+        max_lag = min(int(max_lag_s * sr), n // 2)
+        min_lag = int(min_lag_s * sr)
+        if max_lag <= min_lag + 16:
+            return am._fail("record too short for this lag range", samples=n)
+        nf = 1 << int(math.ceil(math.log2(2 * n)))
+        X = np.fft.rfft(x, nf)
+        ac = np.fft.irfft(X * np.conj(X), nf)[:max_lag + 1]
+        if ac[0] <= 0:
+            return am._fail("degenerate autocorrelation")
+        lags = np.arange(max_lag + 1)
+        if kind == "overlap":
+            overlap = (n - lags).astype(np.float64)
+            r = (ac / ac[0]) * (n / np.maximum(overlap, 1.0))
+        else:
+            c2 = np.concatenate(([0.0], np.cumsum(x * x)))
+            r = ac / np.sqrt(np.maximum((c2[n - lags] - c2[0])
+                                        * (c2[n] - c2[lags]), 1e-300))
+        best = min_lag + int(np.argmax(r[min_lag:max_lag + 1]))
+        peak = float(r[best])
+        if peak < min_corr:
+            return am._fail("no repeat: autocorrelation never approaches 1 in "
+                            "this lag range",
+                            best_corr=peak, best_lag_s=best / sr)
+        permille = (am.REPEAT_SUBMULTIPLE_MARGIN_PERMILLE
+                    if submultiple_margin is None else float(submultiple_margin))
+        lag = am._shortest_submultiple(r, min_lag, max_lag, best, permille / 1000.0)
+        corr = float(r[lag])
+        if corr < min_corr:
+            return am._fail("no repeat: the shortest submultiple that the "
+                            "margin admits is itself below min_corr",
+                            best_corr=corr, best_lag_s=lag / sr,
+                            argmax_corr=peak, argmax_lag_s=best / sr)
+        return am.Estimate(lag / sr, True, "",
+                           dict(corr=corr, argmax_lag_s=best / sr,
+                                argmax_corr=peak))
+    mutant.__name__ = f"mutant_repeat_period_{kind}"
     return mutant
 
 
@@ -505,6 +626,10 @@ MUTANTS = (
      "plateau comes from the wrong end of it",
      "corner_from_curve", _corner_from_curve_as_highpass,
      ("corner_from_curve", "filtered_noise")),
+    ("corner_dc_referenced taking its corner 6 dB below the DC plateau "
+     "instead of 3 dB -- half amplitude where the contract is half power",
+     "corner_dc_referenced", _corner_dc_referenced_at_minus_6db,
+     ("corner_dc_referenced", "filtered_noise")),
     ("envelope_ripple_db as the envelope's own standard deviation, with no "
      "high-pass (so a curve reads as stepping)",
      "envelope_ripple_db", _envelope_ripple_from_std,
@@ -518,6 +643,37 @@ MUTANTS = (
     ("repeat_period with its minimum-lag floor removed",
      "repeat_period", lambda: _wrap("repeat_period", min_lag_s=0.0),
      ("repeat_period", "damped_sine")),
+    # #780's repair has TWO load-bearing halves and one measured choice inside
+    # the first. Each is reverted on its own: a control that disables both at
+    # once cannot say which half the check saw, and the halves fail
+    # differently -- the normaliser alone scores WORSE than what it replaced.
+    # THE NCCF HALF IS NOT CONTROLLED FROM HERE, and the reason is measured
+    # rather than assumed. `_repeat_period_statistic("overlap")` -- the
+    # pre-#780 expression -- reddens exactly ONE record in the whole
+    # catalogue: harmonic_mixture[12], a 220 Hz band-limited saw at 20 dB SNR,
+    # which the evenly-spaced reduced control set does not carry. Naming it
+    # here would print NOT-CAUGHT, and a control that cannot activate is worse
+    # than no control (this file's docstring, and rule 8). The factory is kept
+    # above because it is the mutant, and the honest reading is that these
+    # seven quasi-periodic families have almost no power over the NORMALISER
+    # even with #780's tightened predicate -- they have plenty over the
+    # submultiple rule and over the arithmetic/geometric choice, which is why
+    # those two ARE named below.
+    #
+    # The control that does have power over it lives where the exactly-
+    # repeating records live:
+    #     tools/probes/repeat_period_multiple.py --inject OVERLAP_NORMALISER
+    # which goes red at 43 of 60 instead of 1 of 29. `make controls` runs it.
+    ("repeat_period with its shortest-submultiple rule disabled, so a whole "
+     "multiple of the period wins on any record where the multiples tie (the "
+     "rule half of #780 removed, NCCF left on)",
+     "repeat_period", lambda: _wrap("repeat_period", submultiple_margin=0),
+     ("repeat_period", "harmonic_mixture")),
+    ("repeat_period normalising by the GEOMETRIC instead of the arithmetic "
+     "mean of the two overlapped window energies, so it is scale-invariant "
+     "and a decaying record's quiet tail reads as a repeat of its loud head",
+     "repeat_period", lambda: _repeat_period_statistic("geometric"),
+     ("repeat_period", "two_modes")),
     ("harmonic_powers read 1 % off the commanded f0",
      "harmonic_powers", _harmonic_powers_off_f0,
      ("harmonic_powers", "harmonic_mixture")),

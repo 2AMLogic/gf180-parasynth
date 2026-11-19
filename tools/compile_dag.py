@@ -18,6 +18,11 @@ Status is derived, never asserted:
   STALE     the evidence passed, but a file the node `covers` has changed
             since -- the result no longer describes this code
   RED       the evidence ran and FAILED
+  REFUSED   the evidence cannot be judged: the file exists but declares no
+            verdict this tool can read (#791), or the record's commit left
+            this history, or there are no covered files to measure (#824),
+            or a covered file cannot be diffed against HEAD (#863) --
+            distinct from both pass and fail; never rendered as current
   BLOCKED   the node declares what it is waiting for
   TODO      no evidence yet; an issue number if one is filed
 
@@ -41,6 +46,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # the branch the reader will assume it describes.
 sys.path.insert(0, str(ROOT / "tools"))
 import scorecard as sc                                              # noqa: E402
+import run_all as ra                                                # noqa: E402
 
 DAG = ROOT / "docs" / "dag.json"
 README = ROOT / "README.md"
@@ -77,6 +83,91 @@ def tag_is_ancestor(tag: str) -> bool:
     return r.returncode == 0
 
 
+def sha_is_ancestor(sha: str) -> bool:
+    """A sha that is not an ancestor of HEAD cannot measure staleness (#824).
+
+    Reads a RETURN CODE, not stdout -- exactly why `git()` cannot be used
+    here: its stdout-only contract conflates "command failed" with "no
+    output", which is the defect. And `--is-ancestor`, not `cat-file -e`:
+    a sha still in the object store but no longer reachable (force-pushed
+    away before gc) must refuse too, or the range query would silently
+    answer about a divergent history.
+    """
+    if not sha:
+        return False
+    r = subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+                       cwd=ROOT, capture_output=True)
+    return r.returncode == 0
+
+
+# The top-level keys a JSON evidence file may use to declare its own verdict.
+# Named once: run_evidence() honours them, unjudged() asks whether any is there.
+VERDICT_KEYS = ("passed", "ok", "success", "green")
+
+# The order run_evidence() dispatches evidence sources in: the FIRST key a
+# node declares wins, so a node naming two sources is judged by the earlier
+# one and the later declaration is context, not the verdict. THE ONE
+# DEFINITION of that precedence (#827); the readers below derive from it
+# rather than restating the keys -- four hand-maintained copies in three
+# different orders is the drift surface that produced #827. A fifth evidence
+# kind is added here, in dispatch position, and every reader follows.
+EVIDENCE_PRECEDENCE = ("suite", "verifier", "evidence_file", "tool")
+
+
+def unjudged(n: dict) -> str | None:
+    """Why this node's `evidence_file` declares NO verdict this tool can read.
+
+    Returns the reason, or None when a verdict is declared (or when the question
+    does not apply). THIS IS THE SINGLE DEFINITION of "no verdict declared" --
+    `run_evidence` must not return a pass for it, `classify` renders it REFUSED
+    rather than green, and `--run` logs it as a refusal. Two copies of this
+    predicate would be the instance-not-class failure this file's own comments
+    exist to catch: the same branch has now been repaired three times (file
+    existence for `suite`, then the falsy verdict in #140, then this).
+
+    Deliberately NOT a reason to abstain, because each is already judged
+    elsewhere and folding it in here would hide a real failure behind a
+    REFUSED:
+      * a node with no `evidence_file` at all -- classify() handles it;
+      * a node whose verdict comes from a source EVIDENCE_PRECEDENCE resolves
+        earlier than the file (`suite`, `verifier`) -- the run is the
+        evidence, the file is context, and judging it answers a question
+        nobody is relying on (#827: a passing suite rendered REFUSED, a
+        failing one printed REFUSE);
+      * a missing file -- an evidence file that is not there is a FAILURE;
+      * a file that is unreadable or is not the JSON it claims to be -- also a
+        failure. `run_evidence` returns False for both, and must keep doing so.
+    """
+    if "evidence_file" not in n:
+        return None
+    # Derived from the precedence, not a second hardcoded list: the guard is
+    # "an EARLIER key is present", so a lower-precedence `tool` alongside the
+    # file leaves the question live, and a key inserted between
+    # `verifier` and `evidence_file` one day is handled by its position.
+    if any(k in n for k in
+           EVIDENCE_PRECEDENCE[:EVIDENCE_PRECEDENCE.index("evidence_file")]):
+        return None
+    if n.get("evidence_requires"):
+        return None                       # the node declares what makes it pass
+    fp = ROOT / n["evidence_file"]
+    if not fp.exists():
+        return None                       # missing is a failure, not an abstention
+    if fp.suffix != ".json":
+        return (f"{n['evidence_file']} is not JSON and the node declares no "
+                f"`evidence_requires` -- there is no verdict to read")
+    try:
+        doc = json.loads(fp.read_text())
+    except Exception:
+        return None                       # malformed is a failure, not an abstention
+    if not isinstance(doc, dict):
+        return (f"{n['evidence_file']} is a JSON {type(doc).__name__}, not an "
+                f"object that could carry a verdict key")
+    if any(k in doc for k in VERDICT_KEYS):
+        return None
+    return (f"{n['evidence_file']} carries no "
+            f"{'/'.join(VERDICT_KEYS)} key -- no verdict to read")
+
+
 def run_evidence(nid: str, n: dict) -> tuple[bool, str]:
     """Actually execute this node's evidence. Returns (passed, detail).
 
@@ -84,56 +175,74 @@ def run_evidence(nid: str, n: dict) -> tuple[bool, str]:
     this script called a node GREEN when its test FILE EXISTED -- so a suite
     with every assertion deleted would have rendered green, which is precisely
     the failure this tool was written to prevent.
+
+    Dispatch walks EVIDENCE_PRECEDENCE, the one definition of the order: the
+    first key the node declares wins, so the bodies below are reached in
+    exactly the order unjudged()'s guard assumes.
     """
-    if "suite" in n:
-        r = subprocess.run([sys.executable, "-m", "pytest", n["suite"], "-q",
-                            "--no-header", "-x"], cwd=ROOT, capture_output=True,
-                           text=True, timeout=1800)
-        last = [l for l in r.stdout.strip().splitlines() if l.strip()]
-        return r.returncode == 0, (last[-1][:90] if last else "no output")
-    if "verifier" in n:
-        r = subprocess.run([sys.executable, n["verifier"]], cwd=ROOT,
-                           capture_output=True, text=True, timeout=7200)
-        last = [l for l in r.stdout.strip().splitlines() if l.strip()]
-        return r.returncode == 0, (last[-1][:90] if last else "no output")
-    if "evidence_file" in n:
-        # The docstring above describes exactly this bug -- and until now it was
-        # fixed for `suite` and left intact HERE. Existence is a precondition,
-        # not a verdict: a JSON saying `"passed": false` rendered the node GREEN
-        # because the file was on disk. Fixing the instance and not the class is
-        # the repeating failure this file was written to catch.
-        fp = ROOT / n["evidence_file"]
-        if not fp.exists():
-            return False, f"{n['evidence_file']} missing"
-        # A node may declare what makes its evidence a PASS. Text evidence uses
-        # `evidence_requires` (a substring); JSON evidence may name a key.
-        need = n.get("evidence_requires")
-        try:
-            body = fp.read_text()
-        except Exception as exc:
-            return False, f"{n['evidence_file']} unreadable: {type(exc).__name__}"
-        if need and need not in body:
-            return False, f"{n['evidence_file']} lacks {need!r}"
-        # If it is JSON and carries a verdict, HONOUR IT. A falsy verdict is a
-        # failure no matter how present the file is.
-        if fp.suffix == ".json":
+    for key in EVIDENCE_PRECEDENCE:
+        if key not in n:
+            continue
+        if key == "suite":
+            r = subprocess.run([sys.executable, "-m", "pytest", n["suite"], "-q",
+                                "--no-header", "-x"], cwd=ROOT, capture_output=True,
+                               text=True, timeout=1800)
+            last = [l for l in r.stdout.strip().splitlines() if l.strip()]
+            return r.returncode == 0, (last[-1][:90] if last else "no output")
+        if key == "verifier":
+            r = subprocess.run([sys.executable, n["verifier"]], cwd=ROOT,
+                               capture_output=True, text=True, timeout=7200)
+            last = [l for l in r.stdout.strip().splitlines() if l.strip()]
+            return r.returncode == 0, (last[-1][:90] if last else "no output")
+        if key == "evidence_file":
+            # The docstring above describes exactly this bug -- and until now it was
+            # fixed for `suite` and left intact HERE. Existence is a precondition,
+            # not a verdict: a JSON saying `"passed": false` rendered the node GREEN
+            # because the file was on disk. Fixing the instance and not the class is
+            # the repeating failure this file was written to catch.
+            fp = ROOT / n["evidence_file"]
+            if not fp.exists():
+                return False, f"{n['evidence_file']} missing"
+            # A node may declare what makes its evidence a PASS. Text evidence uses
+            # `evidence_requires` (a substring); JSON evidence may name a key.
+            need = n.get("evidence_requires")
             try:
-                doc = json.loads(body)
+                body = fp.read_text()
             except Exception as exc:
-                return False, f"{n['evidence_file']} is not valid JSON: {type(exc).__name__}"
-            for key in ("passed", "ok", "success", "green"):
-                if isinstance(doc, dict) and key in doc:
-                    good = bool(doc[key])
-                    return good, f"{n['evidence_file']} {key}={doc[key]!r}"
-        if need:
-            return True, f"{n['evidence_file']} contains {need!r}"
-        # Nothing declared and no verdict found. Say so, rather than implying
-        # the file was read and approved.
-        return True, f"{n['evidence_file']} EXISTS ONLY -- no verdict declared"
-    if "tool" in n:
-        r = subprocess.run([sys.executable, n["tool"]], cwd=ROOT,
-                           capture_output=True, text=True, timeout=3600)
-        return r.returncode == 0, f"{n['tool']} exit {r.returncode}"
+                return False, f"{n['evidence_file']} unreadable: {type(exc).__name__}"
+            if need and need not in body:
+                return False, f"{n['evidence_file']} lacks {need!r}"
+            # If it is JSON and carries a verdict, HONOUR IT. A falsy verdict is a
+            # failure no matter how present the file is.
+            if fp.suffix == ".json":
+                try:
+                    doc = json.loads(body)
+                except Exception as exc:
+                    return False, f"{n['evidence_file']} is not valid JSON: {type(exc).__name__}"
+                for vkey in VERDICT_KEYS:
+                    if isinstance(doc, dict) and vkey in doc:
+                        good = bool(doc[vkey])
+                        return good, f"{n['evidence_file']} {vkey}={doc[vkey]!r}"
+            if need:
+                return True, f"{n['evidence_file']} contains {need!r}"
+            # Nothing declared and no verdict found. This used to `return True` with
+            # the words EXISTS ONLY in the detail string -- which said so honestly in
+            # prose and then rendered the node GREEN anyway (#791). A file we never
+            # judged is not a pass. It is not a failure either, so classify() reports
+            # it REFUSED rather than RED; the False here only keeps run_evidence from
+            # being the one that claims the pass.
+            return False, unjudged(n) or f"{n['evidence_file']} declares no verdict"
+        if key == "tool":
+            r = subprocess.run([sys.executable, n["tool"]], cwd=ROOT,
+                               capture_output=True, text=True, timeout=3600)
+            return r.returncode == 0, f"{n['tool']} exit {r.returncode}"
+        # A key EVIDENCE_PRECEDENCE knows that no branch above executes is a
+        # tooling bug, not a node property: refuse loudly rather than silently
+        # falling through to a lower-precedence source (#155's unknown-in-the-
+        # place-of-a-result, in dispatch form).
+        raise SystemExit(f"REFUSED: node {nid} declares {key!r}, which "
+                         f"EVIDENCE_PRECEDENCE knows but run_evidence() "
+                         f"cannot execute")
     return False, "no evidence declared"
 
 
@@ -156,15 +265,105 @@ def load_results() -> dict:
     return doc
 
 
-def stale_against(n: dict, at_sha: str) -> str | None:
-    """Has anything this node covers changed since the evidence was recorded?"""
+# #863, rule 8: the input that defeats the #824 fix through a new door.
+# stale_against() answered "are the bytes this evidence was recorded against
+# still the bytes at HEAD?" with `git log {at_sha}..HEAD -- <f>` -- a commit
+# HISTORY walk answering a CONTENT question. The two coincide on a linear
+# chain, which is why main's own board never showed it; they diverge on the
+# merge commits a conflict round produces. The shape that fires (verified
+# against both PR #818 rounds, a4ae3529 and b5c4f677): a merge whose covered
+# file is TREESAME to a parent that lies OUTSIDE stamp..HEAD -- an ancestor
+# of the record stamp -- while its other parent is in range with different
+# content. Simplification cannot rewrite the merge to that TREESAME parent
+# (it is uninteresting), so the merge itself is reported, and a node whose
+# file never changed renders STALE. The obvious candidate repair is refuted
+# by measurement: `--full-history` reports MORE commits on the real rounds
+# (b5c4f677 went from 1 to 4), turns two benign merge shapes false-positive
+# that the default walk answers correctly, and flips F2 STAMPED->STALE on
+# main's own board -- a new cry of wolf, the exact outcome this defect
+# produces. A content comparison (`git diff --name-only <stamp> HEAD --
+# <f>`) is correct on all four synthetic shapes and both reported rounds,
+# and changes 0 of 15 statuses on main. And the comparison must NOT go
+# through `git()`: its stdout-only contract reads a failed command as "no
+# output", which here would mean GREEN with nothing measured -- #824's hole
+# through a new door. The return code is read, and "cannot measure" comes
+# back as its own state, rendered REFUSED.
+def stale_against(n: dict, at_sha: str) -> tuple[str, str]:
+    """Has anything this node covers changed since the evidence was recorded?
+
+    Compares CONTENT at `at_sha` against HEAD (#863), per `covers` entry --
+    a file or a directory, both ordinary diff pathspecs. Returns
+    ("changed", <first changed cover>), ("fresh", "") when every cover is
+    byte-identical, or ("unmeasurable", <detail>) when git cannot answer.
+    classify() renders the third REFUSED: not GREEN (no measurement was
+    taken), and not STALE either (nothing observed changed).
+    """
     if not at_sha:
-        return None
+        return "unmeasurable", "no commit to measure against"
     for f in n.get("covers", []):
-        newer = git("log", "--format=%H", f"{at_sha}..HEAD", "--", f)
-        if newer.strip():
-            return f
-    return None
+        try:
+            r = subprocess.run(["git", "diff", "--name-only", at_sha, "HEAD",
+                                "--", f], cwd=ROOT, capture_output=True,
+                               text=True, timeout=30)
+        except Exception as exc:
+            return "unmeasurable", f"{f}: {type(exc).__name__}"
+        if r.returncode != 0:
+            err = (r.stderr or "").strip().splitlines()
+            why = f" ({err[0][:70]})" if err else ""
+            return "unmeasurable", f"{f}: git diff failed{why}"
+        if r.stdout.strip():
+            return "changed", f
+    return "fresh", ""
+
+
+# The tail of a pytest summary line is TIMING PRESENTATION, not evidence
+# (#967): "<counts> in <secs>", and past a minute "<counts> in <secs>
+# (H:MM:SS)". The counts sit BEFORE ` in ` and are kept, so stripping this
+# tail cannot hide a real change -- `105 passed in 3s` and `104 passed in 3s`
+# still differ after normalisation. The match is anchored at the END of the
+# detail, so a timing-shaped fragment mid-string (an evidence_requires
+# literal, a path) is left alone, and a tail that run_evidence()'s 90-char
+# truncation cut mid-unit fails to match. Every unmatched case keeps the old
+# behaviour (rewrite), which is the safe direction: a missed match can only
+# cost a suppression, never buy a false freshness.
+TIMING_TAIL = re.compile(
+    r"\s+in\s+\d[\d.,]*\s*(?:ms|s|m|h)(?:\s*\([\d:hmst., ]*\))?\s*$")
+
+
+def normalise_detail(detail: str) -> str:
+    """A detail with its wall-clock tail removed -- the part of an evidence
+    line that varies between two runs of identical code."""
+    return TIMING_TAIL.sub("", detail)
+
+
+def record_unchanged(n: dict, old: dict, ok: bool, detail: str) -> bool:
+    """Did re-running this node's evidence produce anything new? (#967)
+
+    dag.yml regenerates on every push to main and rewrites EVERY record's
+    `sha`, so a PR whose deliverable is a change to one of these records
+    conflicts with every merge to main while its CI runs (~41 min), and the
+    median gap between regenerations is about the same -- a livelock. The
+    writer fixes it: a re-run that shows the SAME verdict and the SAME
+    evidence line modulo timing leaves the old record byte-for-byte, so the
+    bot's next commit stops touching lines nothing observed changed.
+
+    The third leg is the freshness condition, and it is what keeps that
+    honest. `sha` is the staleness anchor classify() measures `covers`
+    against, so an old record may only survive while every covered file is
+    still byte-identical from the recorded sha to HEAD. A covered change
+    re-anchors the record to the new run's own sha even when verdict and
+    detail repeat -- otherwise the node would read GREEN forever off evidence
+    taken before the change. And anything UNMEASURABLE -- no recorded sha, a
+    sha outside this history, a git failure -- is not fresh either: rewrite,
+    the pre-#967 behaviour, rather than vouch for evidence that cannot be
+    anchored.
+    """
+    if old.get("passed") != ok:
+        return False
+    if normalise_detail(old.get("detail", "")) != normalise_detail(detail):
+        return False
+    state, _why = stale_against(n, old.get("sha", ""))
+    return state == "fresh"
 
 
 def classify(nid: str, n: dict) -> tuple[str, str]:
@@ -172,8 +371,9 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     if n.get("blocked"):
         return "BLOCKED", n["blocked"]
 
-    # What would make this node true?
-    sources = [n[k] for k in ("verifier", "suite", "tool", "evidence_file") if k in n]
+    # What would make this node true? Enumerated from EVIDENCE_PRECEDENCE,
+    # not a fourth hand-written tuple (#827).
+    sources = [n[k] for k in EVIDENCE_PRECEDENCE if k in n]
     if not sources:
         iss = n.get("issue")
         return "TODO", (f"issue #{iss}" if iss else "no evidence declared")
@@ -181,6 +381,14 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     missing = [s for s in sources if not (ROOT / s).exists()]
     if missing:
         return "TODO", "missing: " + ", ".join(missing)
+
+    # Can this node be judged AT ALL? Asked from the node's DECLARATION, before
+    # any recorded boolean or tag is trusted, because an unjudged node's record
+    # and stamp are both claims about a verdict that was never read (#791). A
+    # third status is needed rather than RED: nothing failed here, we declined.
+    why = unjudged(n)
+    if why:
+        return "REFUSED", why
 
     rec = load_results().get(nid)
 
@@ -191,21 +399,57 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     # honestly: the moment a file the node covers changes, the stamp goes
     # STALE rather than sitting there looking verified.
     tag = n.get("tag", "")
+    # A FAILING record stays RED: the run's verdict is already stated, and
+    # is more precise than a refusal. Hoisted ABOVE the empty-covers guard
+    # below (#858): that guard's `or tag_is_ancestor(tag)` disjunct fired on
+    # the tag alone, so a failing record on a covers-less tagged node
+    # rendered REFUSED -- a known failure reported as a cannot-answer --
+    # instead of the failure it is. The only checks this jumps are the
+    # empty-covers guard itself and the `not rec`-gated ones below it, none
+    # of which a failing record could answer more precisely.
+    if rec and not rec.get("passed"):
+        return "RED", rec.get("detail", "failed")
+    # #824, rule 8: the input that defeats the sha guard. Staleness is
+    # measured over `covers`; evidence with no covered files named -- a
+    # passing record, or an in-history stamp -- has nothing to go stale, and
+    # the loop would measure nothing and answer "not stale".
+    if not n.get("covers", []) and ((rec and rec.get("passed"))
+                                    or tag_is_ancestor(tag)):
+        return "REFUSED", ("evidence exists but the node declares no "
+                           "covered files -- staleness cannot be measured")
     if not rec and tag_is_ancestor(tag):
         tag_sha = git("rev-list", "-n1", tag)
-        changed = stale_against(n, tag_sha)
-        if changed:
-            return "STALE", f"{changed} changed since {tag} was cut"
+        state, detail = stale_against(n, tag_sha)
+        if state == "changed":
+            return "STALE", f"{detail} changed since {tag} was cut"
+        if state == "unmeasurable":
+            return "REFUSED", (f"staleness against {tag} cannot be "
+                               f"measured: {detail}")
         return "STAMPED", f"{tag} (not re-run; verifier is slow)"
 
     if not rec:
         return "TODO", "never run -- `tools/compile_dag.py --run`"
-    if not rec.get("passed"):
-        return "RED", rec.get("detail", "failed")
 
-    changed = stale_against(n, rec.get("sha", ""))
-    if changed:
-        return "STALE", f"{changed} changed since this was last run"
+    # #824: staleness is measured against a sha in this history. A record
+    # with no commit stamp, or a sha that left this history (squash-merged,
+    # force-pushed, or a clone too shallow to contain it, where the range
+    # query reads "failed" as "nothing changed"), cannot be checked at all
+    # -- REFUSED, never rendered current. Matches the tag path, which has
+    # refused unanchored tags through tag_is_ancestor all along.
+    rec_sha = rec.get("sha", "")
+    if not rec_sha:
+        return "REFUSED", ("the record carries no commit sha -- staleness "
+                           "cannot be measured")
+    if not sha_is_ancestor(rec_sha):
+        return "REFUSED", (f"recorded sha {rec_sha[:8]} is not in this "
+                           f"history -- cannot tell whether "
+                           f"{len(n.get('covers', []))} covered file(s) changed")
+
+    state, detail = stale_against(n, rec_sha)
+    if state == "changed":
+        return "STALE", f"{detail} changed since this was last run"
+    if state == "unmeasurable":
+        return "REFUSED", f"staleness cannot be measured: {detail}"
 
     if tag_is_ancestor(n.get("tag", "")):
         return "STAMPED", n["tag"]
@@ -222,8 +466,13 @@ def classify_all(nodes: dict) -> dict:
 
       * only GREEN/STAMPED are downgraded; a node's own RED/BLOCKED/TODO/STALE
         is never overwritten (it is already not a green claim);
-      * only RED/BLOCKED deps propagate. TODO and STALE are not known-failing,
-        and propagating them would turn most of the graph red on a stale stamp;
+      * only RED/BLOCKED deps propagate. TODO, STALE and REFUSED are not
+        known-failing, and propagating them would turn most of the graph red
+        on a stale stamp. REFUSED joins TODO here for the same reason and on
+        purpose: it means "we do not know", and a dependent whose OWN evidence
+        ran and passed is not made false by an unjudged prerequisite. #791
+        checked that no dependent rests green on one today (M3's and S1's only
+        dependents, M4 and S2, are both already BLOCKED);
       * a cycle or an unknown dep is REFUSED (BLOCKED with the reason), never
         guessed past.
     """
@@ -263,9 +512,13 @@ def classify_all(nodes: dict) -> dict:
 
 
 def mermaid(nodes: dict, status: dict) -> str:
+    # Every status MUST appear in both dicts below. `mark` is a bare index, so an
+    # unregistered status raises KeyError here rather than rendering wrong -- that
+    # is deliberate, and it is why adding a status means editing both.
     fill = {"STAMPED": "#0E6B5E,color:#fff", "GREEN": "#3f8f5f,color:#fff",
             "STALE": "#9A6510,color:#fff", "BLOCKED": "#8E2438,color:#fff",
-            "RED": "#8E2438,color:#fff", "TODO": "#5a6468,color:#fff"}
+            "RED": "#8E2438,color:#fff", "TODO": "#5a6468,color:#fff",
+            "REFUSED": "#5B4B8A,color:#fff"}
     out = ["```mermaid", "graph LR"]
     for g, label in GROUPS.items():
         ids = [i for i, n in nodes.items() if n.get("group") == g]
@@ -275,7 +528,8 @@ def mermaid(nodes: dict, status: dict) -> str:
         for i in ids:
             st = status[i][0]
             mark = {"STAMPED": "✓", "GREEN": "·", "STALE": "!",
-                    "BLOCKED": "✗", "RED": "✗", "TODO": "○"}[st]
+                    "BLOCKED": "✗", "RED": "✗", "TODO": "○",
+                    "REFUSED": "?"}[st]
             out.append(f'    {i}["{mark} {nodes[i]["name"]}"]')
         out.append("  end")
     for i, n in nodes.items():
@@ -303,12 +557,17 @@ def main() -> int:
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if README does not match the evidence")
     ap.add_argument("--strict", action="store_true",
-                    help="with --check, ALSO exit 1 if any node is RED or STALE")
+                    help="with --check, ALSO exit 1 if any node is RED, "
+                         "STALE or REFUSED")
     ap.add_argument("--print", action="store_true", help="write to stdout, not README")
     ap.add_argument("--run", action="store_true",
                     help="execute each node's evidence and record the result")
     ap.add_argument("--slow", action="store_true",
                     help="with --run, also execute nodes marked slow (iverilog; hours)")
+    ap.add_argument("--only", metavar="ID[,ID...]",
+                    help="with --run, execute ONLY these nodes and leave every "
+                         "other record untouched. REFUSES an unknown id rather "
+                         "than silently recording nothing for it.")
     args = ap.parse_args()
 
     # stderr UNCONDITIONALLY, unlike tools/scorecard.py's tty-conditional
@@ -321,19 +580,106 @@ def main() -> int:
 
     nodes = json.loads(DAG.read_text())["nodes"]
 
+    # Ids named in --only that the --run loop declined to run (filled below;
+    # empty unless --run --only). Read by main()'s final return.
+    refused_only: list[str] = []
     if args.run:
         sha = git("rev-parse", "HEAD")
         res = load_results()
+        # --only exists because re-recording ONE node otherwise means re-running
+        # every fast node (two of which are 4- and 8-minute pytest suites), which
+        # rewrites their shas and buries the change you meant to make. An unknown
+        # id REFUSES: silently recording nothing for a typo'd node id would read
+        # exactly like a node that had no evidence to run.
+        # `is not None`, not truthy: `--only ''` is falsy, so a truthy test
+        # leaves `only` as None and the run degrades into a FULL bare `--run`
+        # -- re-recording every fast node and rewriting their shas, exactly
+        # the harm this flag exists to prevent. Same for `--only ','`, which
+        # strips to an empty list: naming no node must REFUSE, not silently
+        # execute nothing and exit 0.
+        only = None
+        if args.only is not None:
+            only = [i.strip() for i in args.only.split(",") if i.strip()]
+            unknown = [i for i in only if i not in nodes]
+            if unknown:
+                print(f"REFUSED: --only names no such node: {', '.join(unknown)}",
+                      file=sys.stderr)
+                return 2
+            if not only:
+                print("REFUSED: --only names no node after stripping "
+                      "(empty or comma-only); it must not degrade into a "
+                      "full --run", file=sys.stderr)
+                return 2
+        # Ids named in --only that the loop then declined to run. A named node
+        # that cannot run must never look like one that ran: bare `--run`
+        # skips these silently BY DESIGN (the nightly sweeps everything, so
+        # silence is right when the operator named nothing), but `--only` is
+        # an explicit request to re-record ONE node, and silence there reads
+        # exactly like success. Refusals are COLLECTED, not returned: an early
+        # `return 2` here would abandon the named nodes that DID run (#600's
+        # shape -- a partial run discarding completed results).
         for i, n in nodes.items():
-            if n.get("blocked") or not any(k in n for k in
-                                           ("suite", "verifier", "tool", "evidence_file")):
+            if only is not None and i not in only:
+                continue
+            if n.get("blocked") or not any(k in n for k in EVIDENCE_PRECEDENCE):
+                if only is not None and i in only:
+                    # One reason, deterministically: `blocked` first, matching
+                    # classify()'s own order, so a node that is both blocked
+                    # and evidence-less reports the same way every time. The
+                    # blocked prose is truncated -- the real string can be
+                    # hundreds of characters, and classify() already renders
+                    # it in full on the board below.
+                    why = (f"declares itself blocked: {n['blocked'][:70]}"
+                           if n.get("blocked") else
+                           "declares no evidence key ("
+                           + "/".join(EVIDENCE_PRECEDENCE) + ")")
+                    refused_only.append(i)
+                    print(f"  {'REFUSE':6s} {i:3s} {why}", file=sys.stderr)
                 continue
             if n.get("slow") and not args.slow:
+                if only is not None and i in only:
+                    refused_only.append(i)
+                    print(f"  {'REFUSE':6s} {i:3s} marked slow; pass --slow "
+                          f"to run it", file=sys.stderr)
                 continue                       # nightly runs these
-            ok, detail = run_evidence(i, n)
-            res[i] = {"passed": ok, "sha": sha, "detail": detail}
-            print(f"  {'PASS' if ok else 'FAIL'}  {i:3s} {detail}", file=sys.stderr)
-        RESULTS.write_text(json.dumps(res, indent=2, sort_keys=True) + "\n")
+            try:
+                ok, detail = run_evidence(i, n)
+            except Exception as exc:
+                # A raise here -- a verifier TimeoutExpired above all -- used
+                # to escape the loop, so the single write after it never ran
+                # and the run's verdicts were discarded (#823). A raising node
+                # is RED evidence carrying the exception type, not a skip.
+                # `except Exception` leaves KeyboardInterrupt and the REFUSED
+                # SystemExit of load_results() loud (#600).
+                ok = False
+                detail = f"{type(exc).__name__}: {exc}"[:90]
+            if i in res and record_unchanged(n, res[i], ok, detail):
+                # Same verdict, same evidence line modulo timing, and the
+                # recorded sha still fresh over `covers`: keep the old record
+                # byte-for-byte (#967). The evidence still RAN -- only the
+                # rewrite is suppressed -- so the status stays derived, not
+                # carried forward.
+                print(f"  keep  {i:3s} {res[i].get('detail', '')} "
+                      f"(unchanged since {res[i].get('sha', '')[:8]})",
+                      file=sys.stderr)
+            else:
+                res[i] = {"passed": ok, "sha": sha, "detail": detail}
+                # REFUSE, not FAIL: `ok` is False for an unjudged file so that
+                # nothing claims a pass, but printing FAIL would assert a
+                # failure that never happened. Same predicate classify()
+                # renders REFUSED from. (#791)
+                mark = "PASS" if ok else ("REFUSE" if unjudged(n) else "FAIL")
+                print(f"  {mark:6s} {i:3s} {detail}", file=sys.stderr)
+            # Written after EVERY node, not once after the loop: a job-level
+            # kill (the nightly's timeout-minutes, a runner eviction, SIGKILL)
+            # cannot be handled, only out-saved. What is already on disk
+            # survives it; a handler alone would not. Atomic replace, not
+            # write_text: a kill inside a truncate-then-write leaves truncated
+            # JSON that load_results() REFUSES on until git restores it
+            # (#842). fsync stays: os.replace alone covers the process-kill
+            # threat named above, and the fsync adds machine-loss durability
+            # on the persistent workspaces where this runs, for ~1 KB a node.
+            ra.write_json_atomic(RESULTS, res, sort_keys=True)
 
     status = classify_all(nodes)
 
@@ -381,11 +727,27 @@ def main() -> int:
     # which the per-push job cannot do -- would be a gate demanding something
     # the job cannot satisfy, and this project has built three of those
     # already. The nightly, which CAN refresh the slow evidence, uses --strict.
-    bad = [i for i in nodes if status[i][0] in ("STALE", "RED")]
+    # REFUSED IS here (#824): a refusal is "cannot tell whether this green
+    # claim is current", which is exactly what the nightly -- which CAN
+    # re-record, and so repair a record whose sha left this history -- exists
+    # to clear. The unjudged refusal (#791) is not repairable by a re-run: the
+    # evidence file has no verdict to read until a real fidelity audit
+    # produces one, so M3 stays REFUSED here until then. That is deliberate --
+    # the fidelity audit below is what surfaces it, REFUSED not being in its
+    # ("GREEN", "STAMPED") set, restoring the minimoog UNVALIDATED warning
+    # (#45) -- and the nightly's exit code does not change, since it was
+    # already 1 on the stale tags and the red drums before this landed.
+    bad = [i for i in nodes if status[i][0] in ("STALE", "RED", "REFUSED")]
     for i in bad:
         print(f"{status[i][0]}: {i} -- {status[i][1]}", file=sys.stderr)
     for w in warn:
         print(f"note: {w}", file=sys.stderr)
+    # A refused --only id outranks everything: the operator named a node and
+    # nothing was recorded for it -- the same operator-visible outcome as the
+    # unknown-id refusal above, so it carries the same exit 2, whether or not
+    # the rest of the run was clean or strict-failing.
+    if refused_only:
+        return 2
     return 1 if (args.check and args.strict and bad) else 0
 
 

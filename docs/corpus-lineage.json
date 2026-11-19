@@ -253,5 +253,32 @@
 
   "out_of_scope": {
     "refprofile/": "Software references, not recordings of hardware: audio rendered once through a qualified plugin rig (surge-type2, modeld, miniv3, diva), cached and hashed, 16 clips. Its own provenance and disqualification record is refprofile/README.md and refprofile/profile.json. Lineage there is a plugin build and a licence state, not a machine, so it has its own apparatus document and is deliberately not listed above."
+  },
+
+  "plugin_reference_suites": {
+    "what": "The commercial Minimoog-emulation reference SUITES for the voice family, declared here per #1050 so a scorer and a renderer cannot disagree about which expectation a record belongs to. These are software plugin suites, NOT packs: a plugin build and a licence state, not a machine, so the groups/lineage rules of this manifest's hardware packs do not apply and no group assignment is made. The registry that derives and enforces the suite of a record is tools/reference_suites.py; the V4 case list and render settings live in docs/scorecard/miniv4-suite/suite.json; the freeze that protects the V3 records is docs/scorecard/reference-suite-freeze.sha256 (checked by tools/check_reference_freeze.py).",
+    "comparison_rule": "A record from one suite is never graded against another suite's expectation. V3 records are frozen: not regenerated, not edited, never compared against V4 renders.",
+    "suites": {
+      "miniv3-frozen": {
+        "plugin": "Arturia Mini V3",
+        "version": "3.12.0.3422",
+        "bundle_id": "com.Arturia.Mini-V3.vst3",
+        "state": "frozen 2026-11-19 (#1050): the records below are never regenerated and never edited",
+        "records": [
+          "docs/scorecard/mono-m1a-miniv3",
+          "docs/scorecard/mono-m5a-miniv3",
+          "docs/scorecard/mono-m5b-miniv3"
+        ],
+        "host_measured": "dawdreamer 0.8.3 (recorded in each record's identity block)",
+        "licence_state": "operator-established at capture; no licence probe exists in this repository"
+      },
+      "miniv4": {
+        "plugin": "Arturia Mini V4",
+        "required_version": "4.0.4.6366",
+        "state": "no renders yet -- the suite is declared, its case list is set, every render is waiting on an operator-Mac attended session (Mini V4 ships macOS/Windows only; no fleet worker renders it)",
+        "suite_manifest": "docs/scorecard/miniv4-suite/suite.json",
+        "host": "planned dawdreamer; unverified for Mini V4 -- which host loads and sounds the plugin is data, measured at the first attended session"
+      }
+    }
   }
 }

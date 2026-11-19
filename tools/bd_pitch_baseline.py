@@ -40,12 +40,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "model")]
 import pitch_trajectory as pt  # noqa: E402
 import run_case as rc  # noqa: E402
+import refusal
 
 F_REF = 52.0
 QUAL_GLIDE = (58.0, 50.0, 0.020)    # closed form: f0, f_inf, tg
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     pass
 
 

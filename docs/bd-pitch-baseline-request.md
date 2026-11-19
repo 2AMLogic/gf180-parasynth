@@ -211,9 +211,12 @@ single knob, then a coarse grid), and the baseline-number and satisfiability
 defects (6), and then the admitted knob-0 readings (7). That is 8
 wrong-then-right corrections in total, 5 of them found by the reviewer. Three
 were the same mistake (a coarse sample read as the worst case). The mutation
-controls are committed as `tools/bd_pitch_predeclaration_mutants.py`. It runs
-on a scratch copy of the tree and removes one guard per mutant. All 12 mutants
-turn their focused controls red. Nine are from the third round: bool accepted
+controls are committed as `tools/bd_pitch_predeclaration_mutants.py` and are
+run by `make controls` (#755 -- before that no target ran them, and the bool
+mutant had been pointing at a helper that moved, so for about four weeks none
+of the 12 executed and this paragraph was asserting a result nothing produced).
+It runs on a scratch copy of the tree and removes one guard per mutant. All 12
+mutants turn their focused controls red. Nine are from the third round: bool accepted
 as a number, negative spread, negative threshold, non-finite deficit, `<` at
 equality, satisfiability from the development take, the minimum-count
 derivation unchecked, the TONE holdout branch removed, and a 5 Hz pitch grid.

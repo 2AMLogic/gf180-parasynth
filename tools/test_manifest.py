@@ -22,8 +22,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import pathlib
-import re
 import subprocess
 
 import numpy as np
@@ -32,6 +32,7 @@ import yaml
 
 import check_workflows as cw
 import manifest as mf
+from makefile_recipe import makefile_recipe
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -39,23 +40,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 # =============================================================================
 # The gate on this suite's own wiring
 # =============================================================================
-def _makefile_recipe(target: str) -> str:
-    """The recipe lines of one Makefile target, joined. Used to assert that a
-    check is enumerated where CI will actually reach it."""
-    lines = (ROOT / "Makefile").read_text().split("\n")
-    out, inside = [], False
-    for line in lines:
-        if re.match(rf"^{re.escape(target)}\s*:", line):
-            inside = True
-            continue
-        if inside:
-            if line and not line[0].isspace():
-                break
-            out.append(line)
-    assert out, f"no recipe found for Makefile target {target!r}"
-    return "\n".join(out)
-
-
 def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
     """"Check that the thing you are testing is the thing that ships"
     (CLAUDE.md), applied to this suite itself.
@@ -67,7 +51,7 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
     comment states the rule: a gate nothing invokes fails exactly the same way
     as one that passes. This test fails if that wiring is ever removed.
     """
-    recipe = _makefile_recipe("verify-fast")
+    recipe = makefile_recipe("verify-fast")
     assert "tools/test_manifest.py" in recipe, (
         "tools/test_manifest.py must be enumerated in `make verify-fast`, which "
         "is the target rungs.yml's m5a-fast job runs; the broad `pytest tools/` "
@@ -81,6 +65,36 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
         "rungs.yml's m5a-fast job no longer runs `make verify-fast` in a way "
         f"that can block a pull request -- this suite's only CI path is "
         f"gone or neutered: {reason}")
+
+
+def test_makefile_recipe_returns_only_live_lines(tmp_path):
+    """The shared parser drops comment lines, not just collects them. A
+    control disabled the ordinary debugging way -- `#` after the leading tab,
+    invocation text intact -- never runs. The failure mode depends on the
+    recipe's shape, not position alone: a *final* recipe line is dropped
+    silently (rc 0, one entry gone), while a *mid-recipe* line ends the
+    command at the `#` and what happens next depends on that shape. In a
+    sequence of shell commands -- this fixture's shape -- `echo C` then runs
+    as its own command (rc 0 here) and `echo B` is the only entry dropped;
+    in a recipe that is one continued command taking quoted arguments, as
+    `controls:`/`verify-fast:` are, the orphaned argument string becomes a
+    bogus command and make fails loudly (`Error 127`), dropping every later
+    entry (issue #855). Either way the entry does not run, which is the only
+    property the assertion needs. The substring assertions above are
+    defeater-resistant only because this filter sits in the parser both
+    suites share; in raw recipe text the disabled invocation would still
+    match."""
+    (tmp_path / "Makefile").write_text(
+        "t:\n"
+        "\t@echo A \\\n"
+        "\t#  echo B \\\n"
+        "\techo C\n"
+    )
+    recipe = makefile_recipe("t", root=tmp_path)
+    assert "echo A" in recipe and "echo C" in recipe
+    assert "echo B" not in recipe, (
+        "echo B sits behind a `#`: make never runs it, so the parser must "
+        "not return it as recipe text")
 
 
 def test_every_permanent_injected_defect_still_has_something_to_inject_into():
@@ -784,3 +798,126 @@ def test_retroactive_reanalysis_separates_the_sound_fix_from_the_measurement_fix
     # criterion 5 -- so this whole reanalysis was possible from disk alone.
     assert (runs / render_a["render_id"] / "raw.wav").exists()
     assert (runs / render_b["render_id"] / "raw.wav").exists()
+
+
+# =============================================================================
+# #881: the bound ledger is written atomically and read with a declared refusal
+# =============================================================================
+# `history_path.write_text(_dumps(history))` is the #842 shape on a *tracked*
+# file: truncate-then-write, so a kill landing inside it (a session reaped, a
+# laptop dying) leaves `spec/acceptance-bounds-history.json` short, and every
+# later `accept()` dies on a bare JSONDecodeError until a human restores the
+# file. The same injected-kill control PR #862 established for the DAG records.
+
+def test_a_kill_during_the_ledger_write_leaves_the_previous_ledger_intact(tmp_path, monkeypatch):
+    """THE CONTROL (start red): this failed against the bare `write_text`.
+
+    Both hooks simulate the same physical event -- a kill inside the write --
+    on whichever writer is live: truncate-then-half-write-then-die for
+    `write_text`, die-after-tmp-before-replace for `write_json_atomic`.
+    Pre-fix the first hook fired and the ledger was left truncated; post-fix
+    the original ledger survives both."""
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    analysis = _analysis_with(12.3, jobs, render_rec)
+    hist = jobs / "_bounds_history.json"
+    mf.accept(analysis, {"decay": {"lo": 0.0, "hi": 20.0, "rationale": "spec"}},
+              jobs_dir=jobs, history_path=hist)
+    original = hist.read_bytes()
+
+    def kill_mid_truncate_write(self, data, *a, **k):
+        with self.open("w") as fh:
+            fh.write(data[: len(data) // 2])
+        raise RuntimeError("injected: killed mid truncate-then-write")
+
+    def kill_before_replace(src, dst):
+        raise RuntimeError("injected: killed after tmp write, before replace")
+
+    monkeypatch.setattr(pathlib.Path, "write_text", kill_mid_truncate_write)
+    monkeypatch.setattr(os, "replace", kill_before_replace)
+
+    with pytest.raises(RuntimeError):
+        mf.accept(analysis, {"decay": {"lo": 2.0, "hi": 22.0, "rationale": "moved"}},
+                  jobs_dir=jobs, history_path=hist)
+
+    assert json.loads(hist.read_bytes()) == json.loads(original), (
+        "a kill during the ledger write corrupted the previous complete ledger")
+    assert list(jobs.glob("*tmp*")) == [], (
+        f"a tmp sibling survived the failed write: {list(jobs.glob('*tmp*'))}")
+
+
+def test_a_truncated_bound_ledger_is_refused_with_its_path_not_a_traceback(tmp_path):
+    """The read half of #842: a ledger left short by a killed write must make
+    the next accept() REFUSE -- naming the file and how to restore it -- not
+    die with a bare JSONDecodeError that reads as a bug in the reader rather
+    than a corrupted input."""
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    analysis = _analysis_with(12.3, jobs, render_rec)
+    hist = jobs / "_bounds_history.json"
+    hist.write_text('{"T1": {"decay": {"lo": 0.0')  # a kill's leftover
+
+    with pytest.raises(mf.Refused, match="_bounds_history\\.json"):
+        mf.accept(analysis, {"decay": {"lo": 0.0, "hi": 20.0, "rationale": "spec"}},
+                  jobs_dir=jobs, history_path=hist)
+
+
+def test_the_ledger_write_keeps_its_format_and_ignores_a_stale_tmp_sibling(tmp_path):
+    """The ledger's bytes stay the serialisation it already shipped
+    (`json.dumps(..., indent=2, sort_keys=True)` plus the atomic writer's
+    trailing newline), and a `.tmp-<pid>` leftover from an earlier killed run
+    is neither read as history nor picked up by the next write."""
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    analysis = _analysis_with(12.3, jobs, render_rec)
+    hist = jobs / "_bounds_history.json"
+    stale = jobs / "_bounds_history.json.tmp-999999"
+    jobs.mkdir(parents=True, exist_ok=True)
+    stale.write_text('{"garbage": true')  # a previous kill's leftover
+
+    rec = mf.accept(analysis, {"decay": {"lo": 0.0, "hi": 20.0, "rationale": "spec"}},
+                    jobs_dir=jobs, history_path=hist)
+
+    loaded = json.loads(hist.read_text())
+    assert hist.read_bytes() == (json.dumps(loaded, indent=2, sort_keys=True) + "\n").encode(), (
+        "the atomic write changed the ledger's serialisation")
+    assert list(loaded) == [rec["case_id"]] and stale.read_bytes() == b'{"garbage": true', (
+        "a stale tmp sibling was consumed as history or clobbered by the new write")
+
+
+# =============================================================================
+# load_json_refused: a record truncated mid-UTF-8-character is REFUSED, not a
+# bare traceback (#909)
+# =============================================================================
+@pytest.mark.parametrize("glyph", ["é", "—", "\U0001D11E"])  # 2-, 3- and 4-byte sequences
+def test_load_json_refused_refuses_a_record_truncated_mid_multibyte_utf8(tmp_path, glyph):
+    """A ledger truncated inside a multi-byte UTF-8 character dies in
+    `Path.read_text()` with `UnicodeDecodeError` -- not `JSONDecodeError` --
+    so the #883 helper's single except clause let it escape as a bare
+    traceback instead of a `Refused` naming the path and the restore step
+    (#909). Truncation is exercised at the 2-, 3- and 4-byte sequence
+    boundaries; every one refuses with the same shape as a torn-JSON record."""
+    p = tmp_path / "ledger.json"
+    good = json.dumps({"case_id": "SD/01", "note": f"kept {glyph} intact"},
+                      ensure_ascii=False).encode()
+    i = good.index(glyph.encode())
+    p.write_bytes(good[: i + 1])  # cut mid-character: the #842 kill's leftover shape
+
+    with pytest.raises(mf.Refused,
+                       match=r"ledger\.json.*not valid UTF-8.*unexpected end of data"
+                             r".*git checkout"):
+        mf.load_json_refused(p, "bound ledger")
+
+
+def test_load_json_refused_refuses_invalid_utf8_that_is_not_a_truncation(tmp_path):
+    """Invalid UTF-8 that is not a truncation -- a lone continuation byte
+    after an ASCII character -- dies the same way and gets the same refusal,
+    so the branch cannot be written to only answer the truncated-tail case."""
+    p = tmp_path / "record.json"
+    good = json.dumps({"case_id": "SD/01"}).encode()
+    p.write_bytes(good.replace(b"SD", b"S\x80"))
+
+    with pytest.raises(mf.Refused,
+                       match=r"record\.json.*not valid UTF-8.*invalid start byte"
+                             r".*git checkout"):
+        mf.load_json_refused(p, "analysis record")

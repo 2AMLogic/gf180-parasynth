@@ -25,7 +25,9 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parents[1] / "model"))
 import cymbal_400_production_tail as pt  # noqa: E402
+import cymbal_bands as cb  # noqa: E402
 import cymbal_low_tail as lt  # noqa: E402
+import refusal  # noqa: E402
 import run_case as rc  # noqa: E402
 
 SR = 48_000
@@ -208,6 +210,38 @@ def test_both_sides_refusing_records_both_reasons():
         assert all(r[k]["refused_by"].values()), r[k]["refused_by"]
 
 
+# ---------------------------------------------------------------- the CLI boundary
+#: REFUSED_TYPES was a hand-maintained tuple of the four classes the measured
+#: path could raise (#815 replaced it with `except refusal.Refused`). One test
+#: per class the tuple used to name: each must still be normalized at the
+#: boundary -- printed as REFUSED / NO VERDICT, exit 2 -- now through the
+#: common base. A class that stopped subclassing refusal.Refused would escape
+#: main() as a traceback and turn these red.
+@pytest.mark.parametrize("exc", [pt.Refused, rc.Refused, cb.Refused, lt.Refused],
+                         ids=lambda e: f"{e.__module__}.{e.__name__}")
+def test_main_normalizes_every_refusal_the_tuple_used_to_name(tmp_path, monkeypatch,
+                                                              capsys, exc):
+    def raiser(a):
+        raise exc("forced: boundary normalization")
+    monkeypatch.setattr(pt, "cmd_measure", raiser)
+    code = pt.main(["measure", "--frozen", "unused-by-this-test",
+                    "--out", str(tmp_path / "out.json")])
+    assert code == 2, code
+    assert "REFUSED / NO VERDICT: forced: boundary normalization" in capsys.readouterr().out
+
+
+def test_main_lets_a_non_refusal_escape_as_a_traceback(tmp_path, monkeypatch, capsys):
+    # the inverse defect (an unexpected exception is an EXECUTION ERROR, never
+    # a refusal): the boundary must not relabel one by catching too much.
+    def raiser(a):
+        raise ValueError("an implementation error, not a refusal")
+    monkeypatch.setattr(pt, "cmd_measure", raiser)
+    with pytest.raises(ValueError):
+        pt.main(["measure", "--frozen", "unused-by-this-test",
+                 "--out", str(tmp_path / "out.json")])
+    assert "REFUSED" not in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------- refusals
 def test_production_path_has_no_knob_parameters_so_only_cy5025_is_supported():
     params = set(inspect.signature(rc.render_drum_solo).parameters)
@@ -284,7 +318,7 @@ def _outcome(record, ref, **kw) -> dict:
     (compare_records raised) is recorded as such for BOTH properties, with the exception text."""
     try:
         r = pt.compare_records(record, SR, ref, SR, **kw)
-    except pt.REFUSED_TYPES as e:
+    except refusal.Refused as e:
         return {k: ("REFUSED(record-level)", None, None, str(e), None) for k in ("energy", "decay")}
     out = {}
     for k in ("energy", "decay"):

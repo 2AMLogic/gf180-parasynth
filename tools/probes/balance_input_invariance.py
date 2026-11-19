@@ -34,9 +34,13 @@ re-rendered rather than argued about. That split -- what is proved and what is
 merely narrowed -- is the deliverable.
 
 REFUSES rather than answering when its own preconditions fail: the baseline rev
-must exist, must contain `model/drums_fx.py`, and the record's `amps` must be
-readable. An invariance probe that cannot load one of its two trees would
-report "no differences" for the most trivial possible wrong reason.
+must exist, must contain `model/drums_fx.py`, the record's `amps` must be
+readable, and every image value must be an int register word (a held JSON
+`null` is allowed through -- the comparator must distinguish it from an absent
+key, not refuse it -- but `bool`/`float`/`str` refuse). An invariance probe
+that cannot load one of its two trees, or that compares a domain it has never
+asserted, would report "no differences" for the most trivial possible wrong
+reason.
 
 Usage:
     python3 tools/probes/balance_input_invariance.py --baseline-rev f0c6816
@@ -55,9 +59,26 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RECORD = ROOT / "docs" / "scorecard" / "cymbal-369" / "balance" / "balance-ablation.json"
 
+# The comparison is fpga/record_compare's (#785) -- the one comparator in the
+# tree with controls for absent-vs-null and for 1/True/1.0 -- not a copy of it.
+# Module level, because it is compare() in THIS process that needs it:
+# _install_drums_fx's sys.path edit runs only in the --emit subprocess.
+sys.path.insert(0, str(ROOT / "fpga"))
+import record_compare  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
-class Refused(RuntimeError):
+
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the comparison failed; no answer is given."""
+
+
+# A JSON-representable marker for an address present on exactly one side of a
+# pair. Distinct from every register value (ints) and from a held `null`, so
+# moved_addresses never reports absence as a value (#803).
+ABSENT = "absent"
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +181,29 @@ def _address_names(dx) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _assert_int_images(images: dict, where: str) -> None:
+    """Every image value is an int register word -- or REFUSE (#803).
+
+    The measured domain, across every recorded baseline rev and the working
+    tree, is int-only, and `drums_fx` encodes "no value" as ABSENCE
+    (`if final_tau is not None`), never as a null; the old comparison's
+    correctness silently rested on both facts without asserting either. A
+    held JSON `null` is allowed through: the comparator distinguishes it from
+    an absent key and moves the verdict, which is the loud direction.
+    `bool` is refused although it subclasses `int` -- `1` and `True` are
+    different records under `record_compare`'s type-strict equality.
+    """
+    bad = {}
+    for key, img in images.items():
+        hits = {a: v for a, v in img.items()
+                if v is not None and (not isinstance(v, int) or isinstance(v, bool))}
+        if hits:
+            bad[key] = hits
+    if bad:
+        raise Refused(f"{where}: non-int register image value(s) "
+                      f"{json.dumps(bad)[:400]}")
+
+
 def _emit_for(drums_fx_path: pathlib.Path | None) -> dict:
     argv = [sys.executable, str(pathlib.Path(__file__).resolve()), "--emit"]
     if drums_fx_path is not None:
@@ -183,18 +227,22 @@ def compare(baseline_rev: str) -> dict:
     old, new = _emit_for(tmp), _emit_for(None)
     if old["images"].keys() != new["images"].keys():
         raise Refused("the two trees collect different image sets")
+    _assert_int_images(old["images"], f"baseline {baseline_rev}")
+    _assert_int_images(new["images"], "the working tree")
 
     names, owners = new["address_names"], new["address_owners"]
     cy_peaks = set(new["cy_env_peak_addrs"])
     res = {"baseline_rev": baseline_rev, "images": {}, "moved_addresses": {}}
     for key in new["images"]:
         a, b = old["images"][key], new["images"][key]
-        diff = {k: [a.get(k), b.get(k)] for k in set(a) | set(b) if a.get(k) != b.get(k)}
-        res["images"][key] = {"identical": not diff, "n_moved": len(diff)}
-        for k, (ov, nv) in diff.items():
+        moved = record_compare.diff(a, b)
+        res["images"][key] = {"identical": not moved, "n_moved": len(moved)}
+        for k in moved:
             res["moved_addresses"].setdefault(k, {
                 "name": names.get(k, "?"), "owners": owners.get(k, []),
-                "old": ov, "new": nv, "images": []})
+                "old": a[k] if k in a else ABSENT,
+                "new": b[k] if k in b else ABSENT,
+                "images": []})
             res["moved_addresses"][k]["images"].append(key)
 
     # Whose renders moved. Every kit writes every register before any strike, so

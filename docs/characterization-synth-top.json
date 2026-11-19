@@ -1,0 +1,623 @@
+{
+  "schema_version": 1,
+  "kind": "characterization-report",
+  "status": "pass",
+  "verdict_scope": "this key says the characterization report is COMPLETE (all required evidence present, all cross-checks inside their stated tolerances). It is not a klt signoff verdict for any item and attests nothing; T1 item 8 remains UNMET",
+  "run_dir": "joined-d1e5068",
+  "design": "synth_top",
+  "clock_period_ns": 81.379997,
+  "lib": "7t5v0",
+  "corner_full_names": [
+    "tt_025C_5v00",
+    "ss_125C_4v50",
+    "ff_n40C_5v50"
+  ],
+  "rcx": "typ/wst/bst",
+  "source_files": {
+    "6_report.json": {
+      "sha256": "9128fe3c793f935951d1aa57ca7868bbf4cda54a56c94c005ca6cde85052af1b",
+      "bytes": 3222
+    },
+    "sta_corners.log": {
+      "sha256": "86529b731c4c23f7c08ff6519c922df0c29d929229b4fab325e42506eed520f5",
+      "bytes": 39679
+    },
+    "synth_stat.txt": {
+      "sha256": "3a13e50128cb0d10c8f4cdf69d1970cb794631438a22a6c7976b5ac7a582a07c",
+      "bytes": 4735
+    },
+    "blockarea.md": {
+      "sha256": "9da0ac5e9314d2add8c9116587d8306abba60427a5c00626fe26e09255806dc3",
+      "bytes": 1976
+    },
+    "config.mk": {
+      "sha256": "5bf54b72b6bf471e2312a0ef53f6f20bdc1477f56bed78c3e2b4fdc3cbc52a28",
+      "bytes": 4635
+    }
+  },
+  "area": {
+    "finish__design__instance__count": {
+      "value": 154246,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__design__instance__count"
+      }
+    },
+    "finish__design__instance__area__stdcell": {
+      "value": 2033110.0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__design__instance__area__stdcell"
+      }
+    },
+    "finish__design__instance__utilization": {
+      "value": 0.601144,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__design__instance__utilization"
+      }
+    },
+    "finish__design__core__area": {
+      "value": 3382070.0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__design__core__area"
+      }
+    },
+    "finish__design__die__area": {
+      "value": 3464960.0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__design__die__area"
+      }
+    },
+    "finish__design__rows": {
+      "value": 469,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__design__rows"
+      }
+    },
+    "finish__design__sites": {
+      "value": 1540665,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__design__sites"
+      }
+    },
+    "finish__design__io": {
+      "value": 11,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__design__io"
+      }
+    },
+    "finish__design__nets": {
+      "value": 60450,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__design__nets"
+      }
+    }
+  },
+  "finish_timing": {
+    "finish__timing__setup__ws": {
+      "value": 43.5918,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__setup__ws"
+      }
+    },
+    "finish__timing__setup__tns": {
+      "value": 0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__setup__tns"
+      }
+    },
+    "finish__timing__hold__ws": {
+      "value": 0.600246,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__hold__ws"
+      }
+    },
+    "finish__timing__hold__tns": {
+      "value": 0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__hold__tns"
+      }
+    },
+    "finish__timing__fmax": {
+      "value": 26463300.0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__fmax"
+      }
+    }
+  },
+  "power": {
+    "finish__power__total": {
+      "value": 0.143543,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__power__total"
+      }
+    },
+    "finish__power__internal__total": {
+      "value": 0.10316,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__power__internal__total"
+      }
+    },
+    "finish__power__switching__total": {
+      "value": 0.0403658,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__power__switching__total"
+      }
+    },
+    "finish__power__leakage__total": {
+      "value": 1.6793e-05,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__power__leakage__total"
+      }
+    }
+  },
+  "drv": {
+    "finish__timing__drv__setup_violation_count": {
+      "value": 0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__drv__setup_violation_count"
+      }
+    },
+    "finish__timing__drv__hold_violation_count": {
+      "value": 0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__drv__hold_violation_count"
+      }
+    },
+    "finish__timing__drv__max_slew": {
+      "value": 0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__drv__max_slew"
+      }
+    },
+    "finish__timing__drv__max_cap": {
+      "value": 2,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__drv__max_cap"
+      }
+    },
+    "finish__timing__drv__max_fanout": {
+      "value": 0,
+      "source": {
+        "file": "6_report.json",
+        "key": "finish__timing__drv__max_fanout"
+      }
+    }
+  },
+  "per_corner_timing": {
+    "ff": {
+      "setup_wns_ns": 58.055,
+      "setup_tns_ns": 0.0,
+      "hold_wns_ns": 0.363,
+      "hold_tns_ns": 0.0,
+      "implied_min_period_ns": 23.32,
+      "implied_fmax_mhz": 42.9,
+      "source": {
+        "file": "sta_corners.log",
+        "line": 36,
+        "line_text": "=== CORNER ff setup_wns_ns=+58.055 setup_tns_ns=0.000 hold_wns_ns=+0.363 hold_tns_ns=0.000 implied_min_period_ns=23.32 implied_fmax_mhz=42.9"
+      }
+    },
+    "ss": {
+      "setup_wns_ns": 10.173,
+      "setup_tns_ns": 0.0,
+      "hold_wns_ns": 1.14,
+      "hold_tns_ns": 0.0,
+      "implied_min_period_ns": 71.21,
+      "implied_fmax_mhz": 14.0,
+      "source": {
+        "file": "sta_corners.log",
+        "line": 35,
+        "line_text": "=== CORNER ss setup_wns_ns=+10.173 setup_tns_ns=0.000 hold_wns_ns=+1.140 hold_tns_ns=0.000 implied_min_period_ns=71.21 implied_fmax_mhz=14.0"
+      }
+    },
+    "tt": {
+      "setup_wns_ns": 43.592,
+      "setup_tns_ns": 0.0,
+      "hold_wns_ns": 0.6,
+      "hold_tns_ns": 0.0,
+      "implied_min_period_ns": 37.79,
+      "implied_fmax_mhz": 26.5,
+      "source": {
+        "file": "sta_corners.log",
+        "line": 34,
+        "line_text": "=== CORNER tt setup_wns_ns=+43.592 setup_tns_ns=0.000 hold_wns_ns=+0.600 hold_tns_ns=0.000 implied_min_period_ns=37.79 implied_fmax_mhz=26.5"
+      }
+    }
+  },
+  "sta_header": {
+    "file": "sta_corners.log",
+    "line": 33,
+    "line_text": "=== STA_CORNERS design=synth_top clock_period_ns=81.379997 lib=7t5v0 tt_025C_5v00/ss_125C_4v50/ff_n40C_5v50 rcx=typ/wst/bst"
+  },
+  "synth_baseline": {
+    "cell_count": {
+      "value": 59289,
+      "source": {
+        "file": "synth_stat.txt",
+        "line": 21,
+        "line_text": "59289 1.98E+06    59289 1.98E+06 cells"
+      }
+    },
+    "chip_area_um2": {
+      "value": 1979378.912,
+      "source": {
+        "file": "synth_stat.txt",
+        "line": 74,
+        "line_text": "Chip area for module '\\synth_top': 1979378.912000"
+      }
+    }
+  },
+  "blockarea": {
+    "instances": {
+      "value": 154246,
+      "source": {
+        "file": "blockarea.md",
+        "line": 1,
+        "line_text": "instances 154246, area 3,382,067.8 um2 (excluding fillers: 2,014,497.7 um2)"
+      }
+    },
+    "total_area_um2": {
+      "value": 3382067.8,
+      "source": {
+        "file": "blockarea.md",
+        "line": 1,
+        "line_text": "instances 154246, area 3,382,067.8 um2 (excluding fillers: 2,014,497.7 um2)"
+      }
+    },
+    "non_filler_area_um2": {
+      "value": 2014497.7,
+      "source": {
+        "file": "blockarea.md",
+        "line": 1,
+        "line_text": "instances 154246, area 3,382,067.8 um2 (excluding fillers: 2,014,497.7 um2)"
+      }
+    },
+    "sequential_flops": {
+      "value": 8298,
+      "source": {
+        "file": "blockarea.md",
+        "line": 22,
+        "line_text": "sequential cells only (8,298 flops, 564,974.2 um2)"
+      }
+    },
+    "sequential_area_um2": {
+      "value": 564974.2,
+      "source": {
+        "file": "blockarea.md",
+        "line": 22,
+        "line_text": "sequential cells only (8,298 flops, 564,974.2 um2)"
+      }
+    }
+  },
+  "derived_ratios": {
+    "die_over_synth_cell_area": {
+      "value": 1.75,
+      "operands": [
+        "finish__design__die__area",
+        "synth_stat.txt chip area"
+      ],
+      "note": "quotable only because the provenance above attributes the die to a fixed input"
+    },
+    "core_over_synth_cell_area": {
+      "value": 1.71,
+      "operands": [
+        "finish__design__core__area",
+        "synth_stat.txt chip area"
+      ]
+    }
+  },
+  "die_area_provenance": {
+    "state": "OK",
+    "reason": "fixed-die",
+    "source": "pnr/orfs/evidence/synth_top/joined-d1e5068/config.mk",
+    "detail": "DIE_AREA = 0 0 1860.88 1862.00 and CORE_AREA = 10.64 11.76 1850.24 1850.24 are fixed inputs and no CORE_UTILIZATION is set, so the utilisation is the measured quantity."
+  },
+  "cross_checks": [
+    {
+      "check": "tt: clock_period - setup_wns vs implied_min_period",
+      "values": [
+        37.787997000000004,
+        37.79
+      ],
+      "tolerance": 0.0055,
+      "diff": 0.002003,
+      "pass": true,
+      "detail": "implied_min_period_ns is logged rounded to 2 dp and setup_wns_ns to 3 dp, so rounding alone allows 0.0055 ns",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 33,
+          "line_text": "=== STA_CORNERS design=synth_top clock_period_ns=81.379997 lib=7t5v0 tt_025C_5v00/ss_125C_4v50/ff_n40C_5v50 rcx=typ/wst/bst"
+        },
+        {
+          "file": "sta_corners.log",
+          "line": 34,
+          "line_text": "=== CORNER tt setup_wns_ns=+43.592 setup_tns_ns=0.000 hold_wns_ns=+0.600 hold_tns_ns=0.000 implied_min_period_ns=37.79 implied_fmax_mhz=26.5"
+        }
+      ]
+    },
+    {
+      "check": "tt: 1000/implied_min_period vs implied_fmax",
+      "values": [
+        26.462026991267532,
+        26.5
+      ],
+      "tolerance": 0.053501194362432856,
+      "diff": 0.037973009,
+      "pass": true,
+      "detail": "implied_fmax_mhz is logged rounded to 1 dp and implied_min_period_ns to 2 dp; the min-period half-ULP propagates through the reciprocal as 0.0035 MHz at T = 37.79 ns",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 34,
+          "line_text": "=== CORNER tt setup_wns_ns=+43.592 setup_tns_ns=0.000 hold_wns_ns=+0.600 hold_tns_ns=0.000 implied_min_period_ns=37.79 implied_fmax_mhz=26.5"
+        }
+      ]
+    },
+    {
+      "check": "ss: clock_period - setup_wns vs implied_min_period",
+      "values": [
+        71.206997,
+        71.21
+      ],
+      "tolerance": 0.0055,
+      "diff": 0.003003,
+      "pass": true,
+      "detail": "implied_min_period_ns is logged rounded to 2 dp and setup_wns_ns to 3 dp, so rounding alone allows 0.0055 ns",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 33,
+          "line_text": "=== STA_CORNERS design=synth_top clock_period_ns=81.379997 lib=7t5v0 tt_025C_5v00/ss_125C_4v50/ff_n40C_5v50 rcx=typ/wst/bst"
+        },
+        {
+          "file": "sta_corners.log",
+          "line": 35,
+          "line_text": "=== CORNER ss setup_wns_ns=+10.173 setup_tns_ns=0.000 hold_wns_ns=+1.140 hold_tns_ns=0.000 implied_min_period_ns=71.21 implied_fmax_mhz=14.0"
+        }
+      ]
+    },
+    {
+      "check": "ss: 1000/implied_min_period vs implied_fmax",
+      "values": [
+        14.04297149276787,
+        14.0
+      ],
+      "tolerance": 0.05098602524173346,
+      "diff": 0.042971493,
+      "pass": true,
+      "detail": "implied_fmax_mhz is logged rounded to 1 dp and implied_min_period_ns to 2 dp; the min-period half-ULP propagates through the reciprocal as 0.0010 MHz at T = 71.21 ns",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 35,
+          "line_text": "=== CORNER ss setup_wns_ns=+10.173 setup_tns_ns=0.000 hold_wns_ns=+1.140 hold_tns_ns=0.000 implied_min_period_ns=71.21 implied_fmax_mhz=14.0"
+        }
+      ]
+    },
+    {
+      "check": "ff: clock_period - setup_wns vs implied_min_period",
+      "values": [
+        23.324997000000003,
+        23.32
+      ],
+      "tolerance": 0.0055,
+      "diff": 0.004997,
+      "pass": true,
+      "detail": "implied_min_period_ns is logged rounded to 2 dp and setup_wns_ns to 3 dp, so rounding alone allows 0.0055 ns",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 33,
+          "line_text": "=== STA_CORNERS design=synth_top clock_period_ns=81.379997 lib=7t5v0 tt_025C_5v00/ss_125C_4v50/ff_n40C_5v50 rcx=typ/wst/bst"
+        },
+        {
+          "file": "sta_corners.log",
+          "line": 36,
+          "line_text": "=== CORNER ff setup_wns_ns=+58.055 setup_tns_ns=0.000 hold_wns_ns=+0.363 hold_tns_ns=0.000 implied_min_period_ns=23.32 implied_fmax_mhz=42.9"
+        }
+      ]
+    },
+    {
+      "check": "ff: 1000/implied_min_period vs implied_fmax",
+      "values": [
+        42.88164665523156,
+        42.9
+      ],
+      "tolerance": 0.05919417809932066,
+      "diff": 0.018353345,
+      "pass": true,
+      "detail": "implied_fmax_mhz is logged rounded to 1 dp and implied_min_period_ns to 2 dp; the min-period half-ULP propagates through the reciprocal as 0.0092 MHz at T = 23.32 ns",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 36,
+          "line_text": "=== CORNER ff setup_wns_ns=+58.055 setup_tns_ns=0.000 hold_wns_ns=+0.363 hold_tns_ns=0.000 implied_min_period_ns=23.32 implied_fmax_mhz=42.9"
+        }
+      ]
+    },
+    {
+      "check": "tt setup WNS vs finish-stage metrics",
+      "values": [
+        43.592,
+        43.5918
+      ],
+      "tolerance": 0.0005,
+      "diff": 0.0002,
+      "pass": true,
+      "detail": "the finish-stage metrics run at the config's CORNER (TC = tt_025C_5v00); the log rounds to 3 dp",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 34,
+          "line_text": "=== CORNER tt setup_wns_ns=+43.592 setup_tns_ns=0.000 hold_wns_ns=+0.600 hold_tns_ns=0.000 implied_min_period_ns=37.79 implied_fmax_mhz=26.5"
+        },
+        {
+          "file": "6_report.json",
+          "key": "finish__timing__setup__ws"
+        }
+      ]
+    },
+    {
+      "check": "tt hold WNS vs finish-stage metrics",
+      "values": [
+        0.6,
+        0.600246
+      ],
+      "tolerance": 0.0005,
+      "diff": 0.000246,
+      "pass": true,
+      "detail": "same rounding as the setup check",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 34,
+          "line_text": "=== CORNER tt setup_wns_ns=+43.592 setup_tns_ns=0.000 hold_wns_ns=+0.600 hold_tns_ns=0.000 implied_min_period_ns=37.79 implied_fmax_mhz=26.5"
+        },
+        {
+          "file": "6_report.json",
+          "key": "finish__timing__hold__ws"
+        }
+      ]
+    },
+    {
+      "check": "tt implied Fmax vs finish-stage fmax",
+      "values": [
+        26.5,
+        26.4633
+      ],
+      "tolerance": 0.05,
+      "diff": 0.0367,
+      "pass": true,
+      "detail": "6_report.json carries fmax in Hz",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 34,
+          "line_text": "=== CORNER tt setup_wns_ns=+43.592 setup_tns_ns=0.000 hold_wns_ns=+0.600 hold_tns_ns=0.000 implied_min_period_ns=37.79 implied_fmax_mhz=26.5"
+        },
+        {
+          "file": "6_report.json",
+          "key": "finish__timing__fmax"
+        }
+      ]
+    },
+    {
+      "check": "tt setup TNS vs finish-stage metrics",
+      "values": [
+        0.0,
+        0
+      ],
+      "tolerance": 0.0,
+      "diff": 0.0,
+      "pass": true,
+      "detail": "both carry TNS 0 for this run; exact comparison",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 34,
+          "line_text": "=== CORNER tt setup_wns_ns=+43.592 setup_tns_ns=0.000 hold_wns_ns=+0.600 hold_tns_ns=0.000 implied_min_period_ns=37.79 implied_fmax_mhz=26.5"
+        },
+        {
+          "file": "6_report.json",
+          "key": "finish__timing__setup__tns"
+        }
+      ]
+    },
+    {
+      "check": "tt hold TNS vs finish-stage metrics",
+      "values": [
+        0.0,
+        0
+      ],
+      "tolerance": 0.0,
+      "diff": 0.0,
+      "pass": true,
+      "detail": "both carry TNS 0 for this run; exact comparison",
+      "sources": [
+        {
+          "file": "sta_corners.log",
+          "line": 34,
+          "line_text": "=== CORNER tt setup_wns_ns=+43.592 setup_tns_ns=0.000 hold_wns_ns=+0.600 hold_tns_ns=0.000 implied_min_period_ns=37.79 implied_fmax_mhz=26.5"
+        },
+        {
+          "file": "6_report.json",
+          "key": "finish__timing__hold__tns"
+        }
+      ]
+    },
+    {
+      "check": "utilisation key vs std-cell/core-area recomputation",
+      "values": [
+        0.601144,
+        0.60114367827987
+      ],
+      "tolerance": 0.0001,
+      "diff": 3.22e-07,
+      "pass": true,
+      "detail": "finish__design__instance__utilization against instance__area__stdcell / core__area",
+      "sources": [
+        {
+          "file": "6_report.json",
+          "key": "finish__design__instance__utilization"
+        },
+        {
+          "file": "6_report.json",
+          "key": "finish__design__instance__area__stdcell"
+        },
+        {
+          "file": "6_report.json",
+          "key": "finish__design__core__area"
+        }
+      ]
+    }
+  ],
+  "tolerances": {
+    "min_period_ns": 0.0055,
+    "fmax_mhz": 0.05,
+    "wns_ns": 0.0005,
+    "utilization": 0.0001
+  },
+  "duplicate_json_keys_in_6_report": [
+    "finish__design__instance__area",
+    "finish__design__instance__count"
+  ],
+  "ambiguous_duplicate_values_in_6_report": [
+    {
+      "key": "finish__design__instance__area",
+      "values": [
+        3382070.0,
+        2033110.0
+      ],
+      "kept": "last (json.load semantics)"
+    }
+  ],
+  "not_covered": [
+    "no LVS",
+    "no sign-off DRC",
+    "no gate-level simulation",
+    "power at one corner only (the finish-stage metrics are tt_025C_5v00; sta_corners.log carries no power figures)",
+    "attestation status is not claimed by this report: klt 0.8.0 (the CI pin) has no --attest 8 producer, so T1 item 8 remains UNMET regardless of this report"
+  ]
+}

@@ -998,7 +998,7 @@ user-provisioned paths) have no issue state to consult and are unaffected.
 
 **What the #5919 post-mortem could and could not establish.** The ledger exists
 because this incident was *not* attributable from the evidence that existed at
-the time. Against `~/.loom/daemon.log` (+ rotations `.1`–`.5`, covering
+the time. Against `~/.loom/daemon.log` (+ day files `daemon.log.YYYY-MM-DD`, covering
 2026-08-01 → 2026-08-11) for the incident window — issue #5919 filed
 `2026-08-10T21:01:18Z`, PR #5942 opened `23:31:21Z`:
 
@@ -1289,9 +1289,7 @@ Out-of-band rolling is also where this already belongs: the daemon's own
 auto-update loop and `loom-daemon-watchdog.sh` converge the host from *outside*
 any merge. A version-floor refusal is a **symptom** of that loop being behind
 (on 2026-09-18 it was deferring behind the build-stampede guard, #8252) — fix
-it there, not by restarting the daemon from inside its own child. The secondary
-argument, that `merge-pr.sh` is frozen at its file-size-ratchet ceiling, only
-reinforces a conclusion the process model already forces.
+it there, not by restarting the daemon from inside its own child.
 
 ### `rm` of the installed `loom-daemon` binary is denied in an agent session (#5675)
 
@@ -3093,6 +3091,24 @@ git commit -m 'chore: resync installed Loom surfaces'
 git push -u origin HEAD   # open a PR from here
 cd - && git worktree remove /tmp/loom-resync-staging   # from the primary checkout when done
 ```
+
+**Which file to trust while a resync PR is open (#13592).** The re-stamp of
+`.loom/install-metadata.json` (`loom_version`, `loom_commit`, `last_resync`)
+lands wherever the files land, so `--output` stamps only the staging worktree and
+the PR branch: the primary checkout's metadata keeps naming the version whose
+files it actually carries until the PR merges and you pull. A *bare* run from the
+primary checkout (or `--allow-worktree`) writes the files **and** the stamp into
+that checkout's working tree; if you then move the changes onto a PR branch and
+reset the primary, a **gitignored** metadata file (some consumers ignore it) is
+not reset and keeps reporting the target version while the tracked `.loom/` files
+on the default branch are still the old ones. So while a resync PR is open:
+treat the **default branch's tracked `.loom/` files** (e.g. `git show
+origin/<default>:.loom/install-metadata.json`, or a vendored script's content) as
+the source of truth for "which Loom is installed", not a working-tree
+`install-metadata.json`, and prefer `--output` over a bare run so the primary's
+metadata is never touched. A daemon resync (`fleet_sync/workspace_resync.rs`)
+already works in a throwaway worktree. A mid-resync interruption is recorded by
+`resync_pending` in the metadata, never by bumping `loom_version`.
 
 Or skip the hand-rolled add entirely and let
 `./.loom/scripts/land-resync-commit.sh` stage and commit for you — it stages an

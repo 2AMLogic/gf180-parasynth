@@ -1,0 +1,66 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "dphase-ar1-floor",
+  "parameter": {
+    "name": "JIT_DPHASE_FLOOR_PPM",
+    "source": "model/discrimination_features.py",
+    "kind": "python-constant",
+    "what": "the phase scatter, in ppm of a period, below which jit.dphase_ar1.seg0 REFUSES instead of reporting. Registered when the value was proposed (#763), not after it landed: the dial replaces a 1e-20 epsilon, and an epsilon is a value nobody swept."
+  },
+  "objective": {
+    "name": "worst 44.1k->48k gap in jit.dphase_ar1.seg0",
+    "units": "ar1",
+    "lower_is_better": true,
+    "why": "the defect the dial exists to fix, stated as the quantity test_extra_features_are_rate_independent measures: the reference corpus is 44.1 kHz and our renders are 48 kHz, so a column that moves between them on the SAME clip is partly a sample-rate detector. It is deliberately NOT the only thing the dial trades. rate_gap improves monotonically as the column is silenced, so on this objective alone an infinite floor wins; sees_real in the same table is the constraint from the other side, and the verdict below is read against both."
+  },
+  "grid": {
+    "stated_before_results": true,
+    "values": [0, 0.2, 2, 20, 200, 2000],
+    "range_basis": [
+      "Five decades bracketing the two quantities this module already has numbers for, chosen before the sweep ran: the 44.1k->48k phase artefact at ~0.8 ppm (test_the_rate_tolerance_is_far_below_the_effect, and RATE_TOL_ABS['ppm'] = 20 is the floor already stated against it for the sibling column jit.phasejit_ppm), and 0.1 % per-period jitter at ~5.7e3 ppm of phase scatter.",
+      "0 is the behaviour that shipped before #763: the guard was `d.std() > _EPS` with _EPS = 1e-20, which nothing real is ever below, so 0 and the shipped epsilon are the same point on this dial.",
+      "200 and 2000 are above the smallest real mechanism the column must see (+0.5 Hz of static detuning, 54.53 ppm) and are on the grid ON PURPOSE, so the dial's upper bound is a measured row rather than an assertion. They are the rows where sees_real drops from 7 to 6."
+    ],
+    "held_fixed": {}
+  },
+  "decision_rule": {
+    "stated_before_results": true,
+    "flat_within_relative": 0.02,
+    "why": "the decision this dial serves is whether a floor changes what the rate-independence control can see, so the threshold comes from that control's granularity. The control cannot resolve a gap below RATE_TOL_ABS['ratio'] = 0.02 ar1 for a correlation column, and this objective never exceeds 0.43 anywhere on the grid, so 2 % relative is at most 0.0086 ar1 -- strictly TIGHTER than the control's own resolution everywhere. Tighter is the conservative direction: a rule finer than the control can split points the control would call equal, which can only add groups, never manufacture a plateau."
+  },
+  "evidence": {
+    "artifact": "docs/sensitivity/dphase-ar1-floor-sweep.txt",
+    "format": "fixed-width-table",
+    "table": "dphase_floor",
+    "value_column": "floor_ppm",
+    "objective_column": "rate_gap",
+    "held_fixed": {},
+    "regenerate": "tools/dphase_floor_sweep.py -o docs/sensitivity/dphase-ar1-floor-sweep.txt",
+    "instrument": "jitter_features itself, through its dphase_floor_ppm override and trace hook -- the shipped gate, not a reimplementation of it. Stimuli are the module's own _square and its band-limited _resample, so the rate pair is the one the rate-independence test compares, and the mechanism panel is exactly the stimulus set test_static_detuning_is_not_reported_as_drift depends on. Each jittered entry asserts its jitter survived the generator's whole-sample period rounding and REFUSES if it did not. Measured on python 3.12.3 / numpy 2.5.4 / scipy 1.18.1."
+  },
+  "points": [
+    {"value": 0, "objective": 0.428},
+    {"value": 0.2, "objective": 0.3481},
+    {"value": 2, "objective": 0.0011},
+    {"value": 20, "objective": 0.0011},
+    {"value": 200, "objective": 0.0011},
+    {"value": 2000, "objective": 0.0011}
+  ],
+  "prediction": {
+    "runs": [[0], [0.2], [2, 20, 200, 2000]],
+    "basis": "Stated from three quantities, none of which is a point on this sweep, so the measurement can contradict it. (a) A square generated at 44.1 kHz has whole-sample periods, so its phase residual there is float rounding of a unit-scale phase and reads 0 ppm to the printed precision. (b) The same clip band-limited to 48 kHz carries resample_poly residue, which this module already measures at ~0.8 ppm. (c) The jittered rate-panel entries scatter ~5.7e3 ppm. A floor makes exactly one refusal decision per clip, so two floors falling in the same interval of {0, 0.8, 5.7e3} must give bit-identical numbers and two in different intervals cannot. 0 refuses nothing. 0.2 straddles (a) and (b): it refuses the 44.1 kHz side of every jitterless entry and not the 48 kHz side, so it must differ from 0 and from everything above (b). 2, 20, 200 and 2000 all sit between (b) and (c): same decision on every rate-panel entry, one run. Note this prediction is about the OBJECTIVE only -- 200 and 2000 differ from 20 on the constraint, which is a different column and is why the shipped value is not 200.",
+    "independent_of_measurement": true
+  },
+  "verdict": {
+    "state": "MIXED",
+    "runs": [[0], [0.2], [2, 20, 200, 2000]],
+    "summary": "On the objective the dial is a cliff and then a plateau: 0.43 ar1 of rate gap at floor 0 (including a sign flip at 440 Hz and another at 660 Hz), 0.35 at 0.2, and 0.0011 everywhere from 2 ppm up -- that residue being the jittered entries' own 44.1k->48k reproducibility, not the defect. The CONSTRAINT is what picks a point on that plateau: sees_real falls from 7 to 6 at 200 ppm, where +0.5 Hz of static detuning (54.53 ppm of scatter) stops being reported and test_static_detuning_is_not_reported_as_drift goes silent instead of red. So the dial's usable range is 2..20 ppm, a single decade, and 20 is its top -- taken from RATE_TOL_ABS['ppm'], the floor this module already states for the sibling column, rather than fitted to these numbers."
+  },
+  "limits": [
+    "rate_gap alone is not a sufficient criterion for this dial and the record says so twice on purpose. tools/sensitivity.py reads only the objective column, so it reports a four-point plateau from 2 to 2000; the sees_real column in the same artefact is what that cannot see, and it cuts the plateau at 20.",
+    "The usable range is one decade (2..20 ppm), bounded below by resampler residue at ~0.8 ppm and above by the +0.5 Hz beat at 54.53 ppm -- a factor of 70, not of 1000. The shipped 20 sits 25x above the noise and 2.7x below the smallest mechanism, and that 2.7x is the tight edge. test_the_dphase_floor_refuses_the_input_that_defeats_it asserts both margins so neither can close unnoticed.",
+    "An earlier version of this record swept a floor on the per-cycle period error (np.diff(lin).std()), the quantity ar1 is computed from. That is the wrong quantity: the +0.5 Hz beat has only 4.56 ppm of it against 0.80 ppm of noise, a factor of 5.7, and a 20 ppm floor there silenced the beating control. The ds columns of the detail tables are kept so that refutation stays visible rather than being a sentence about a file nobody has.",
+    "Inside the plateau the objective is not exactly zero: 0.0011 ar1 is the 44.1k->48k reproducibility of the JITTERED rate-panel entries, which do have something to measure. The jitterless entries contribute exactly 0 there because both rates are refused.",
+    "The panel is synthetic squares and tones, not corpus audio. It establishes where the floor sits relative to float rounding, resampler residue, generated jitter, static detuning and a glide. How many rows of a real discrimination run fall under the floor is a separate, unmeasured question -- the reference corpus is not on this host; counted in issue #768."
+  ]
+}

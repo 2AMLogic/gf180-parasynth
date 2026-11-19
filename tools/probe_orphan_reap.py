@@ -188,6 +188,31 @@ def _container_id(pid: int) -> str | None:
     return m.group(1) if m else None
 
 
+def _is_inside(candidate: str, root: str) -> bool:
+    """True when `candidate` is `root` or lies under it at a component boundary.
+
+    Issue numbers are unpadded decimal, so one worktree path is often a
+    *string* prefix of a sibling's (`issue-77` / `issue-775`); a bare
+    `startswith` or substring test would attribute the sibling's work to both.
+    """
+    return candidate == root or candidate.startswith(root + os.sep)
+
+
+def _argv_names(argv: str, path: str) -> bool:
+    """True when the space-joined argv text names `path` at a name boundary.
+
+    The argv is joined text, not a token list, so the path can sit anywhere
+    inside a longer argument. Match the literal path (never as a regex
+    pattern) and require the next character to be one that cannot extend a
+    directory name -- not a word character, dot or hyphen. That keeps the
+    paths that only END a longer token (`--opt=<path>`, `<path>:<mount>`,
+    #870) and the component-boundary matches (`<path>/child`), while still
+    dropping the name-extension false positives (#819): `issue-77` is not
+    attributed from `issue-775`, `issue-77-b` or `issue-77.x` text.
+    """
+    return re.search(re.escape(path) + r"(?![\w.-])", argv) is not None
+
+
 def collect(repo_root: Path, worktrees: list[Path], self_pid: int) -> list[ProcFacts]:
     """Attribute live processes to `worktrees` by argv text or cwd containment."""
     names = {str(w.resolve()): w.name for w in worktrees}
@@ -204,13 +229,25 @@ def collect(repo_root: Path, worktrees: list[Path], self_pid: int) -> list[ProcF
         argv = raw.replace("\x00", " ").strip()
         if not argv:
             continue  # kernel thread
-        hits = {label for path, label in names.items() if path in argv}
+        # The argv text is space-joined, so there is no single token to
+        # compare: match the path as literal text and require the next
+        # character to be one that cannot extend a directory name. This
+        # keeps the component-boundary matches (a path embedded inside a
+        # longer argument, the incident's LibreLane shape, or the path as
+        # the final argument), restores the paths that only end a longer
+        # token (`--opt=<path>`, `<path>:<mount>` -- #870), and drops the
+        # name-extension false positives (#819). See `_argv_names`.
+        hits = {
+            label
+            for path, label in names.items()
+            if _argv_names(argv, path)
+        }
         try:
             cwd = os.readlink(entry / "cwd")
         except OSError:
             cwd = ""
         if cwd:
-            hits |= {label for path, label in names.items() if cwd.startswith(path)}
+            hits |= {label for path, label in names.items() if _is_inside(cwd, path)}
         if not hits:
             continue
         uid, pgid, sid = _proc_status(pid)

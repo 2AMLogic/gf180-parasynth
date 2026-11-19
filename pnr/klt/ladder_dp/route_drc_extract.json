@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "what": "In-repo extract of the two claims in docs/tool-findings.md whose inputs are neither committed nor durable: the per-iteration violation series and the byte-identical route-pass DRC report pair. The inputs live only in a gitignored .klt/ directory and in a batch bucket whose objects expire (~2026-12-18; operator holds a copy, see issue #808 comment 6967987133). Committing the extract resolves #1006's 'decide' item: a number without its inputs is a claim, so the claim travels with the repo and the inputs stay bound by sha256.",
+  "source_job": {
+    "group": "rs-parasynth808-od2",
+    "job": "rs-parasynth808-od2-s00",
+    "repo_commit": "08c5699d1022fca07569fcedf9ff4a6ba9866907",
+    "image_id": "ami-08688417b66e0c74d",
+    "klt_version": "0.9.0",
+    "ran_at": "2026-11-18T00:14Z",
+    "collected_at": "2026-11-18",
+    "bucket_expiry_approx": "2026-12-18"
+  },
+  "inputs": {
+    "drc_report": {
+      "path": "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_route_drc.rpt",
+      "sha256": "sha256:be35b9d9bc4ec0ea6cc4525afa5e4ce37abbb4410b2f4e912cae8903ca8e3bbe"
+    },
+    "drc_report_pass_0": {
+      "path": "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_route_pass_0_drc.rpt",
+      "sha256": "sha256:be35b9d9bc4ec0ea6cc4525afa5e4ce37abbb4410b2f4e912cae8903ca8e3bbe"
+    },
+    "metrics": {
+      "path": "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_route_metrics.json",
+      "sha256": "sha256:73a06d2fb24dc525a777dca4e209ced8190f1f4dbd7da692746328cd19f0a84d"
+    }
+  },
+  "claims": {
+    "per_iteration_violation_series": {
+      "claim": "The detailed-route iteration series ended stuck at 24: 2250 at iteration 0, 24 from iteration 4 onward, with brief transient bumps (32 at 17, 27 at 25, 25 at 41/49/57), and 24 at the final iteration 60 -- the router did not clear them.",
+      "metric_key_prefix": "route_pass:0__route__drc_errors__iter:",
+      "series": {
+        "0": 2250,
+        "1": 923,
+        "2": 854,
+        "3": 32,
+        "4": 24,
+        "5": 24,
+        "6": 24,
+        "10": 24,
+        "11": 24,
+        "15": 24,
+        "16": 24,
+        "17": 32,
+        "18": 24,
+        "19": 24,
+        "20": 24,
+        "21": 24,
+        "23": 24,
+        "24": 24,
+        "25": 27,
+        "26": 24,
+        "27": 24,
+        "28": 24,
+        "30": 24,
+        "31": 24,
+        "32": 24,
+        "33": 24,
+        "34": 24,
+        "35": 24,
+        "37": 24,
+        "38": 24,
+        "39": 24,
+        "40": 24,
+        "41": 25,
+        "42": 24,
+        "43": 24,
+        "44": 24,
+        "45": 24,
+        "46": 24,
+        "49": 25,
+        "50": 24,
+        "51": 24,
+        "52": 24,
+        "53": 24,
+        "57": 25,
+        "58": 24,
+        "59": 24,
+        "60": 24
+      },
+      "series_points": 47,
+      "final_iteration": 60,
+      "final_value": 24,
+      "note": "Keys are present only for iterations the metrics recorded; the gaps (7-9, 12-14, 22, 29, 36, 47-48, 54-56) are absent keys, not zeros, and were not interpolated. A second series under the route__ prefix agrees (43 points, same shape, same final 24)."
+    },
+    "route_pass_pair_byte_identical": {
+      "claim": "klayout-tools#2089's doubling is not seen at klt 0.9.0: the build emits a distinct report path per detailed_route call (ladder_dp_route_pass_0_drc.rpt from the first call, ladder_dp_route_drc.rpt from the last) and the two files are byte-identical with 24 records each, because antenna repair found 0 violations and the second pass changed nothing. The committed 0.5.0 baseline is 46 records / 23 distinct sites, every one doubled -- the defect re-used one path; this build's mechanism is structurally absent.",
+      "files": [
+        "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_route_pass_0_drc.rpt",
+        "pnr/klt/ladder_dp/.klt/place-and-route/ladder_dp_route_drc.rpt"
+      ],
+      "sha256": "sha256:be35b9d9bc4ec0ea6cc4525afa5e4ce37abbb4410b2f4e912cae8903ca8e3bbe",
+      "records_each": 24
+    },
+    "headline_counts": {
+      "route__drc_errors": 24,
+      "route_pass:0__route__drc_errors": 24,
+      "raw_file_occurrences_each": 1,
+      "note": "Each headline key occurs exactly once in the raw metrics file (no literal duplicate keys), so what json.loads sees and what the file says agree."
+    }
+  },
+  "cross_bindings": {
+    "classification_record": "pnr/klt/ladder_dp/route_drc_classification.json",
+    "drc_report_sha256_agrees_with_classification_record": true,
+    "metrics_sha256_agrees_with_classification_record": true,
+    "final_value_agrees_with_classification_total_records": true
+  }
+}
