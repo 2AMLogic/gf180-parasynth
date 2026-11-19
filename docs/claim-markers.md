@@ -19,7 +19,18 @@ could have noticed.
 ## The marker
 
 An HTML comment, on the line **after** the claim it backs (or trailing it on the
-same line). It is invisible in rendered Markdown.
+same line). It is invisible in rendered Markdown **when it trails the claim on
+the same line**, or when it stands on its own line clear of paragraph prose.
+On its own line *inside* a paragraph it is not invisible in effect: a line
+beginning `<!--` is a CommonMark HTML-block start condition, and such blocks
+can interrupt a paragraph, so the prose above and below render as two
+paragraphs where the author wrote one (measured on GitHub's renderer,
+2026-11-19; `docs/tr808-reference.md` carried two markers in that placement
+and both now trail their claim). `tools/check_doc_claims.py` REFUSES that
+placement. The refusal is a source-layout check and catches only the adjacent
+form: a blank line between the marker and the prose below it escapes it (the
+blank already ended the paragraph), and the checker never re-renders the
+document to count paragraphs.
 
 ```markdown
 Ground-truth estimator suite.
