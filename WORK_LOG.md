@@ -4,6 +4,12 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-19
 
+- **Issue #706** (closed): Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
+- **Issue #922** (closed): Tracked-JSON truncate-then-write remains in holdout.py (ledger + seals) and measure_m1a_volume_mapping.py
+- **PR #948**: tools: write holdout ledger/seals and M1A volume-mapping records atomically
+- **PR #750**: fix: keep the Mini V3 ring readers frozen with a named guard (re-scope per #1048)
+- **Issue #1053** (closed): Isolate the Mini V3 freeze-defeat tests so each mutation starts from a passing copy
+- **PR #1055**: test: isolate freeze-defeat mutants in function-scoped copies with a passing control
 - **Issue #1050** (closed): [voice-only] Baseline Mini V4 as a new reference suite: render script, case list, board case table
 - **PR #1052**: feat: baseline Mini V4 as a separate reference suite (manifest, render script, V3 freeze, board suite column)
 - **Issue #1018** (closed): Confirm WORK_PLAN.md's as-of sentence survives Guide regeneration, and reconcile it with the inbound upstream in-region stamp

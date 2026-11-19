@@ -38,8 +38,7 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
 - **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
 - **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md)
-- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
-- **#1053**: Isolate the Mini V3 freeze-defeat tests so each mutation starts from a passing copy
+- **#1056**: Say why eight of the ten files hashed into the frozen Mini V3 records are deliberately NOT guarded
 
 ## In Progress
 
@@ -50,11 +49,10 @@ Issues currently being built (`loom:building`).
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#598**: Production drum host: prevent repeated tom bends from feeding transient pitch back into nominal tuning
 - **#656**: Cymbal DECAY late-T20 not qualified/monotone: E_CYL sits on the Q0.16 rate-register floor at DECAY 7.5 and 10 (needs wider rate range in RTL)
-- **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
-- **#922**: Tracked-JSON truncate-then-write remains in holdout.py (ledger + seals) and measure_m1a_volume_mapping.py
-- **#947**: Atomic-write remainder: 23 tracked JSONs still written truncate-then-write (audit of #922)
+- **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
+- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
 
 ## PRs Awaiting Review
 
@@ -121,18 +119,16 @@ Issues carrying `loom:curated`.
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)* *(held)*
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)* *(held)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)* *(held)*
-- **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig) *(curated)*
 - **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)*
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
 - **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)* *(held)*
-- **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)*
-- **#922**: Tracked-JSON truncate-then-write remains in holdout.py (ledger + seals) and measure_m1a_volume_mapping.py *(curated)*
+- **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)* *(held)*
 - **#933**: regenerate discrimination artefacts under the six-bucket MPD grouping (follow-up to #929) *(curated)* *(held)*
-- **#947**: Atomic-write remainder: 23 tracked JSONs still written truncate-then-write (audit of #922) *(curated)*
+- **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules *(curated)*
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
 - **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md) *(curated)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)*
-- **#1053**: Isolate the Mini V3 freeze-defeat tests so each mutation starts from a passing copy *(curated)*
+- **#1056**: Say why eight of the ten files hashed into the frozen Mini V3 records are deliberately NOT guarded *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -159,11 +155,11 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
 | Important | 8 |
-| Ready (`loom:issue`, net of holds/building/merge-pending) | 8 |
-| In Progress (`loom:building`) | 10 |
+| Ready (`loom:issue`, net of holds/building/merge-pending) | 7 |
+| In Progress (`loom:building`) | 9 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 61 |
+| Curated | 59 |
 | Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
