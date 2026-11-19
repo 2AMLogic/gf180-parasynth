@@ -32,10 +32,16 @@ import reference_suites as rs                                      # noqa: E402
 MANIFEST = ROOT / "docs/scorecard/reference-suite-freeze.sha256"
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def frozen_scope_copy(tmp_path_factory):
     """A full copy of everything the freeze covers, so mutants can be built
-    without touching the frozen records."""
+    without touching the frozen records.
+
+    Function-scoped (#1053): each mutating test gets its own copy, and the
+    copy is asserted to pass the freeze check BEFORE it is mutated — so a
+    red verdict is attributable to this test's own defeat, not to damage a
+    previous test left on a shared tree.
+    """
     root = tmp_path_factory.mktemp("frozen-scope")
     for d in rs.SUITE_RECORDS[rs.SUITE_V3_FROZEN]:
         shutil.copytree(ROOT / d, root / d)
@@ -43,6 +49,9 @@ def frozen_scope_copy(tmp_path_factory):
         shutil.copy2(ROOT / doc, root / doc)
     (root / cf.CORPUS_MANIFEST).write_text((ROOT / cf.CORPUS_MANIFEST).read_text())
     shutil.copy2(MANIFEST, root / MANIFEST.name)
+    # The control: an unmutated copy must pass, or the test's verdict is
+    # about the fixture, not the defeat it injects.
+    assert cf.check(root, root / MANIFEST.name) == cf.OK
     return root
 
 
