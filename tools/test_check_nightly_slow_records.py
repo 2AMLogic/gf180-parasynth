@@ -61,8 +61,9 @@ FOREIGN_LINE = ("2026-11-18T16:10:59.9911337Z   keep  F3  153 passed in 4.07s "
 #: step's two head-reporting commands (rev-parse at 16:10:26, `git log -1
 #: --format=%H` at 16:10:27) each followed by its bare-sha output line, and
 #: upload-artifact's download URL carrying the run id. The gate asserts
-#: --head-sha against the checkout step's own output and --run-id against
-#: the log (review #1059, #1070): these lines are what make the pinned
+#: --head-sha against the checkout step's own output (#1070) and --run-id
+#: EQUAL to the download URL's run field, on the COMPLETE record line
+#: (review #1059, #1066, #1070): these lines are what make the pinned
 #: evidence THIS run's. (Both sha occurrences the real log carries are
 #: pinned.)
 #: upload-artifact's download URL, verbatim from the same job log -- the
@@ -174,6 +175,40 @@ def test_each_control_prevents_a_pass(replay, spec, capsys):
     assert "NOT CAUGHT" not in out
 
 
+def test_control_mode_returns_fail_when_the_positive_verdict_fails(
+        replay, capsys):
+    """#1066's defeating input: I2.passed falsified plus --control
+    withhold=F1. The old control-only exit printed `(a) 5/6 ... --> FAIL`
+    and still returned 0; control mode must return the worse of the two
+    answers, so a printed FAIL is never read as a pass."""
+    bad = dict(RECORDED)
+    bad["I2"] = dict(RECORDED["I2"], passed=False)
+    replay["published"].write_text(json.dumps(bad))
+    assert run_gate(replay, "--control", "withhold=F1") == cnsr.EXIT_FAIL
+    out = capsys.readouterr().out
+    assert "(a) 5/6 slow nodes corroborated" in out and "--> FAIL" in out
+    assert "CONTROL withhold=F1: caught" in out
+
+
+def test_control_on_already_failing_node_is_not_caught_and_exits_4(
+        replay, capsys):
+    """The measured regression from review (#1066): with published
+    I2.passed=false, `--control false-verdict=I2` printed `all requested
+    controls turned their node red` -- but the mutation writes the value
+    I2 already has, so it demonstrated nothing. A control needs a passing
+    baseline on its target node; the same-node case reports NOT CAUGHT and
+    exits 4, which takes precedence over the verdict's own FAIL (1)."""
+    bad = dict(RECORDED)
+    bad["I2"] = dict(RECORDED["I2"], passed=False)
+    replay["published"].write_text(json.dumps(bad))
+    assert run_gate(replay, "--control",
+                    "false-verdict=I2") == cnsr.EXIT_CONTROL
+    out = capsys.readouterr().out
+    assert "CONTROL false-verdict=I2: NOT CAUGHT" in out
+    assert "already failing before the control" in out
+    assert "all requested controls turned their node red" not in out
+
+
 def test_false_verdict_fails_even_with_matching_keep(replay, capsys):
     """The stored boolean alone must never be enough -- the control makes the
     base rule fail before the control machinery even runs."""
@@ -252,13 +287,167 @@ def test_refused_when_log_does_not_carry_run_id(replay, capsys):
     assert "run id" in err and "44344077192" in err
 
 
-def test_run_id_and_job_id_are_optional(replay):
-    """Omitting --run-id/--job-id skips their assertions; the head sha is
-    still required to appear in the log."""
+def test_job_id_stays_optional(replay, capsys):
+    """Only --job-id is optional: it is deliberately not asserted (a job's
+    own log does not carry its id, measured on runs 44344077192 and
+    44128504549), so omitting it changes nothing."""
+    argv = ["--published", str(replay["published"]),
+            "--at-run", str(replay["at_run"]),
+            "--log", str(replay["log"]), "--head-sha", HEAD_SHA,
+            "--run-id", "44344077192"]
+    assert cnsr.main(argv) == cnsr.EXIT_OK
+    assert "134941613343" not in capsys.readouterr().out
+
+
+def test_omitting_run_id_is_a_usage_error(replay):
+    """--run-id is load-bearing, not optional: on a quiet night two
+    consecutive nightlies share the head sha, so without it a previous
+    night's log satisfies the head-sha assertion (#1066). Omitting it is an
+    argparse error (exit 2), never a PASS."""
     argv = ["--published", str(replay["published"]),
             "--at-run", str(replay["at_run"]),
             "--log", str(replay["log"]), "--head-sha", HEAD_SHA]
-    assert cnsr.main(argv) == cnsr.EXIT_OK
+    with pytest.raises(SystemExit) as exc:
+        cnsr.main(argv)
+    assert exc.value.code == 2
+
+
+def test_missing_run_id_with_control_errors_before_any_verdict(replay, capsys):
+    """The same usage error with --control present: argparse rejects the
+    invocation before any verdict line is printed."""
+    argv = ["--published", str(replay["published"]),
+            "--at-run", str(replay["at_run"]),
+            "--log", str(replay["log"]), "--head-sha", HEAD_SHA,
+            "--control", "withhold=F1"]
+    with pytest.raises(SystemExit) as exc:
+        cnsr.main(argv)
+    assert exc.value.code == 2
+    assert "PASS" not in capsys.readouterr().out
+
+
+def test_refused_on_empty_run_id(replay):
+    """`--run-id ''` would slip past the log assertion through the anchor
+    loop's truthiness guard -- required means non-empty, so the gate
+    REFUSES rather than answer unattributed."""
+    assert run_gate(replay, "--run-id", "") == cnsr.EXIT_REFUSED
+
+
+def test_refused_on_artifact_id_as_run_id(replay, capsys):
+    """The measured regression from review (#1066): the pinned log's
+    artifact URL names run 44344077192 AND artifact 14445449921, and the
+    artifact id passed the old substring check 6/6 PASS. The supplied id
+    must equal the URL's run field exactly; the artifact id is REFUSED."""
+    assert run_gate(replay, "--run-id", "14445449921") == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "44344077192" in err and "14445449921" in err
+
+
+def test_refused_on_run_id_with_a_space(replay):
+    """The other measured pass: a single space appears in every log line,
+    so the literal `--run-id ' '` passed the substring check 6/6 on the
+    broken implementation and exits 3 at the fixed head (#1066 review).
+    Exact field equality refuses it. The test pins the literal space, not
+    a padded correct id -- ' 44344077192' is no substring of the log
+    either, so it refused the broken implementation too and pinned
+    nothing."""
+    assert run_gate(replay, "--run-id", " ") == cnsr.EXIT_REFUSED
+
+
+def test_only_the_upload_record_may_attribute_the_run(replay, capsys):
+    """The measured replay from review (#1066): the upload-artifact record
+    line replaced with a timestamped diagnostic naming ANOTHER run's
+    artifact path -- `Previous baseline path: /actions/runs/<other>/
+    artifacts/<n>` -- attributed all six rows to that foreign run and
+    exited 0 while every URL-bearing line was scanned. A line without the
+    `Artifact download URL:` marker attributes nothing, so this log
+    REFUSES even for the run its diagnostic names."""
+    identity = [ln for ln in IDENTITY_LINES
+                if "Artifact download URL" not in ln]
+    diagnostic = ("2026-11-18T16:31:13.8095034Z Previous baseline path: "
+                  "/actions/runs/44128504549/artifacts/1234567")
+    replay["log"].write_text(
+        "\n".join(identity + [diagnostic] + RECORDED_LOG) + "\n")
+    assert run_gate(replay, "--run-id", "44128504549") == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "Artifact download URL" in err and "44128504549" in err
+
+
+def test_foreign_diagnostic_does_not_conflict_with_the_upload_record(replay):
+    """The reverse measured case (#1066 review): a diagnostic naming
+    another run's artifact path, appended while the genuine upload record
+    stays, must not make the correct run REFUSE as ambiguous -- only
+    record lines are consulted, so the correct run still passes."""
+    diagnostic = ("2026-11-18T16:31:14.0000000Z Previous baseline path: "
+                  "/actions/runs/44128504549/artifacts/1234567")
+    replay["log"].write_text(replay["log"].read_text() + diagnostic + "\n")
+    assert run_gate(replay) == cnsr.EXIT_OK
+
+
+def test_quoted_warning_embedding_the_marker_is_not_the_record(replay, capsys):
+    """The measured replay from review round 2 (#1066): a warning line
+    quoting the record -- `##[warning]Previous nightly reported: Artifact
+    download URL: <foreign URL>` -- replaced the genuine record and the
+    extractor's wildcard skipped the quoted prefix, attributing all six
+    rows to the foreign run (6/6 PASS, exit 0). The record must be the
+    COMPLETE line after the log timestamp, so this log REFUSES even for
+    the run the warning names."""
+    identity = [ln for ln in IDENTITY_LINES
+                if "Artifact download URL" not in ln]
+    warning = ("2026-11-18T16:31:13.8095034Z ##[warning]Previous nightly "
+               "reported: Artifact download URL: "
+               "https://github.com/2AMLogic/gf180-parasynth/actions/runs/"
+               "44128504549/artifacts/1234567")
+    replay["log"].write_text(
+        "\n".join(identity + [warning] + RECORDED_LOG) + "\n")
+    assert run_gate(replay, "--run-id", "44128504549") == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "Artifact download URL" in err and "44128504549" in err
+
+
+def test_text_between_marker_and_url_is_not_the_record(replay, capsys):
+    """The other measured shape (#1066 review): the label anchored right
+    after the timestamp but free text wedged between it and the URL --
+    `Artifact download URL: unavailable. Previous nightly: <foreign URL>`
+    -- still fed the wildcard and gave the foreign run 6/6. The URL must
+    follow the label IMMEDIATELY as a single token, so this log REFUSES
+    even for the run its trailing URL names."""
+    identity = [ln for ln in IDENTITY_LINES
+                if "Artifact download URL" not in ln]
+    diagnostic = ("2026-11-18T16:31:13.8095034Z Artifact download URL: "
+                  "unavailable. Previous nightly: "
+                  "https://github.com/2AMLogic/gf180-parasynth/actions/runs/"
+                  "44128504549/artifacts/1234567")
+    replay["log"].write_text(
+        "\n".join(identity + [diagnostic] + RECORDED_LOG) + "\n")
+    assert run_gate(replay, "--run-id", "44128504549") == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "Artifact download URL" in err and "44128504549" in err
+
+
+def test_genuine_record_beside_a_quoted_warning_still_attributes(replay):
+    """The judge's acceptance case (#1066 review): the genuine record kept
+    and the quoted-warning line appended must not REFUSE as ambiguous --
+    only the complete record line counts, so the correct run still
+    passes."""
+    warning = ("2026-11-18T16:31:14.0000000Z ##[warning]Previous nightly "
+               "reported: Artifact download URL: "
+               "https://github.com/2AMLogic/gf180-parasynth/actions/runs/"
+               "44128504549/artifacts/1234567")
+    replay["log"].write_text(replay["log"].read_text() + warning + "\n")
+    assert run_gate(replay) == cnsr.EXIT_OK
+
+
+def test_refused_when_upload_records_name_two_runs(replay, capsys):
+    """A log carrying two upload-artifact download-URL records naming
+    different runs is ambiguous execution evidence; the gate refuses
+    rather than pick one."""
+    two_urls = replay["log"].read_text() + (
+        "\n2026-11-18T16:31:14.0000000Z Artifact download URL: "
+        "https://github.com/2AMLogic/gf180-parasynth/actions/runs/"
+        "44128504549/artifacts/14400000000\n")
+    replay["log"].write_text(two_urls)
+    assert run_gate(replay) == cnsr.EXIT_REFUSED
+    assert "2 distinct runs" in capsys.readouterr().err
 
 
 # --- the head sha is the checkout's own output, not any line naming it -------

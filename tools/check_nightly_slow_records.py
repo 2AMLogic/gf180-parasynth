@@ -3,7 +3,7 @@
 
     tools/check_nightly_slow_records.py \
       --published published.json --at-run at-run.json \
-      --log full-rtl.log --head-sha <40-hex> [--run-id R] [--job-id J]
+      --log full-rtl.log --head-sha <40-hex> --run-id R [--job-id J]
 
 WHY. #820's criterion (a) originally demanded every slow record's `sha` equal
 the verifying nightly's `headSha`. #967's `record_unchanged()` makes that
@@ -37,13 +37,34 @@ fails, so a green step cannot launder a record it did not measure.
 The log is asserted to belong to the run it names, at the point of use:
 `--head-sha` must equal what the checkout step itself reports -- the bare
 sha on the line following its `git rev-parse refs/remotes/origin/main` or
-`git log -1 --format=%H` command -- and `--run-id`, when given, must
-appear in the log itself, or the gate REFUSES naming what is missing.
-Appear-anywhere is not attribution: run 44344077192's log also names
-actions/checkout's own commit (11d5960a...) on its `Download action
+`git log -1 --format=%H` command -- or the gate REFUSES naming what is
+missing. Appear-anywhere is not attribution: run 44344077192's log also
+names actions/checkout's own commit (11d5960a...) on its `Download action
 repository` line, and that dependency commit satisfied the previous
 any-line substring check -- a 6/6 PASS on a sha that is not this
-repository's head (#1070). A fetch that silently
+repository's head (#1070). `--run-id` is required, not optional: on a
+quiet night `origin/main` does not move, so two consecutive nightlies
+share the same `headSha` and a previous night's log satisfies the
+head-sha assertion -- measured in #1066, where a stale log with its run
+id rewritten out passed 6/6 without it, and only the run id
+discriminates two runs at the same head. The run id must EQUAL the
+complete numeric run field of the URL in upload-artifact's own
+`Artifact download URL:` record
+(`/actions/runs/<id>/artifacts/<artifact>`) -- substring presence is not
+attribution: the artifact id and a single space each appear in a real
+log and passed a substring check (measured on run 44344077192's log,
+#1066 review), so only exact field equality attributes it. The record
+itself is the COMPLETE line after the log timestamp -- label, single
+space, one URL token, end of line: a diagnostic naming another run's
+artifact path (`Previous baseline path:
+/actions/runs/<other>/artifacts/<n>`) attributed that foreign run while
+every URL-bearing line was scanned, and a quoted warning embedding the
+marker (`##[warning]Previous nightly reported: Artifact download URL:
+<foreign URL>`) or free text wedged between label and URL
+(`Artifact download URL: unavailable. Previous nightly: <foreign URL>`)
+each fed the extractor's wildcard the same way (#1066 review) -- so
+neither the marker mid-line nor a URL that does not IMMEDIATELY follow
+the label attributes anything. A fetch that silently
 failed -- or a previous night's log left at the same fixed path -- would
 otherwise be attributed to tonight's run and answered in the voice of a
 measurement. Measured on the two replayed nightlies (44344077192 job
@@ -69,18 +90,29 @@ The six evidence lines this gate was first replayed against are pinned in
 `tools/test_check_nightly_slow_records.py`, so the positive case survives
 Actions' log retention.
 
-Exit: 0 every node corroborated (or every requested control turned red),
-      1 a node fails / the old rule rejects,
+Exit: 0 every node corroborated AND every requested control turned red,
+      1 a node fails / the old rule rejects; in control mode, every control
+        was caught but the positive verdict itself failed,
       3 REFUSED -- the apparatus cannot answer: required evidence missing or
         unusable, or the log does not name the run it is claimed to be from
         (a gate that answers anyway would look exactly like data),
-      4 a requested control did not turn the verdict red,
+      4 a requested control did not turn the verdict red (a control on a
+        node the baseline already fails is uncaught too -- it cannot be
+        credited),
       2 usage / unreadable input.
+
+In control mode the exit is the worse of the two answers
+(4 uncaught control > 1 verdict FAIL > 0), so a printed FAIL is never
+returned as 0 (#1066): the verdict's own result is printed and kept, not
+dropped in favour of the controls' result.
 
 Controls (--control name=node, repeatable) mutate the evidence the way
 #1058's test plan requires -- withhold the node's line, substitute a line
 from another run, corrupt the anchor, falsify the stored verdict -- and each
-must turn that node red. A gate whose controls pass is itself a defect.
+must turn that node red. A gate whose controls pass is itself a defect. A
+control on a node the baseline already fails is never credited: it writes
+the value the node already has, so "caught" there demonstrates nothing
+(#1066 review) -- the control is uncaught and the gate exits 4.
 """
 from __future__ import annotations
 
@@ -128,6 +160,27 @@ REPO_HEAD_COMMANDS = (
 #: output line is the bare sha after it.
 LOG_TS_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s")
+
+#: upload-artifact's own download-URL record: the COMPLETE line after the
+#: log timestamp is `Artifact download URL: <url>` -- label, single space,
+#: one URL token ending in `/actions/runs/<id>/artifacts/<n>`, end of line
+#: -- the only shape a job log may name its own run from, and the run field
+#: `--run-id` is asserted against WHOLE, not as a substring: the artifact
+#: id (14445449921) and a single space each appear in run 44344077192's
+#: log and passed an `in` check (#1066 review); a diagnostic naming
+#: another run's artifact path ("Previous baseline path: /actions/runs/
+#: <other>/artifacts/<n>", measured on the same log) attributed that
+#: foreign run while every URL-bearing line was scanned; and a quoted
+#: warning embedding the marker mid-line ("##[warning]Previous nightly
+#: reported: Artifact download URL: <foreign URL>") or free text wedged
+#: between label and URL ("Artifact download URL: unavailable. Previous
+#: nightly: <foreign URL>") each fed the extractor's wildcard and gave the
+#: foreign run 6/6 (#1066 review round 2) -- so the record is anchored at
+#: the line start (only a timestamp may precede the label) and the URL
+#: must follow the label immediately.
+ARTIFACT_RUN_ID_RE = re.compile(
+    r"^(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z )?"
+    r"Artifact download URL: \S*/actions/runs/(\d+)/artifacts/\d+\s*$")
 
 EXIT_OK, EXIT_FAIL, EXIT_REFUSED, EXIT_CONTROL = 0, 1, 3, 4
 
@@ -311,9 +364,21 @@ def main(argv: list[str] | None = None) -> int:
                          "--format=%H` command), not merely to appear in "
                          "the log -- a dependency action's commit appears "
                          "too (#1070)")
-    ap.add_argument("--run-id", default="", dest="run_id",
-                    help="asserted to appear in the log (upload-artifact's "
-                         "download URL), and echoed in the summary")
+    ap.add_argument("--run-id", required=True, dest="run_id",
+                    help="the run's id; asserted to EQUAL the complete "
+                         "numeric run field of the URL in the log's "
+                         "upload-artifact `Artifact download URL:` record "
+                         "-- the COMPLETE line after the log timestamp "
+                         "with the URL immediately after the label (not "
+                         "merely to appear in it -- the artifact id "
+                         "and a single space each pass a substring check, "
+                         "and a diagnostic line naming another artifact "
+                         "path, a quoted warning embedding the marker, or "
+                         "text wedged between marker and URL is not the "
+                         "record) and echoed in the "
+                         "summary -- required because at the same head "
+                         "sha (a quiet night) it is the only anchor that "
+                         "discriminates two runs (#1066)")
     ap.add_argument("--job-id", default="", dest="job_id",
                     help="echoed in the summary; deliberately NOT asserted -- "
                          "a job's own log does not carry its id (measured on "
@@ -328,13 +393,21 @@ def main(argv: list[str] | None = None) -> int:
                          "false-verdict=")
     args = ap.parse_args(argv)
 
-    run_label = f"run {args.run_id}" if args.run_id else "run"
+    run_label = f"run {args.run_id}"
     job_label = f" job {args.job_id}" if args.job_id else ""
 
     try:
         if not FULL_SHA_RE.match(args.head_sha or ""):
             raise Refused(f"--head-sha must be a full 40-hex sha, got "
                           f"{args.head_sha!r}")
+        if not args.run_id:
+            # `required=True` alone still admits `--run-id ''`, which would
+            # skip the log assertion through the anchor loop's truthiness
+            # guard -- the defeating input walks back in through a side door
+            # (verification-rules rule 8).
+            raise Refused("--run-id must be a non-empty run id -- at the "
+                          "same head sha (a quiet night) it is the only "
+                          "anchor that discriminates two runs")
         published = load_json(args.published, "published records")
         at_run = load_json(args.at_run, "records at the run checkout")
         try:
@@ -368,14 +441,40 @@ def main(argv: list[str] | None = None) -> int:
                 "(the previous night's log, another repository) cannot be "
                 f"attributed to {run_label}{job_label} (head "
                 f"{args.head_sha[:8]}) (#1070)")
-        if args.run_id and not any(args.run_id in line for line in log_lines):
+        url_run_ids = sorted({m.group(1) for line in log_lines
+                              for m in ARTIFACT_RUN_ID_RE.finditer(line)})
+        if not url_run_ids:
             raise Refused(
-                f"the log does not name the run's run id ({args.run_id}) -- "
+                "the log carries no upload-artifact `Artifact download "
+                "URL:` record naming the run id (no COMPLETE record line "
+                "`<timestamp> Artifact download URL: <url ending in "
+                "/actions/runs/<run id>/artifacts/<artifact>>`: a "
+                "diagnostic, a quoted warning embedding the marker, or "
+                "text between the marker and the URL is not the record) "
+                "-- "
                 "its execution evidence cannot be attributed to "
                 f"{run_label}{job_label} (head {args.head_sha[:8]}); a "
                 "stale or failed fetch leaves the previous night's log "
                 "at the path, so re-fetch the right log rather than "
                 "attribute this one")
+        if len(url_run_ids) > 1:
+            raise Refused(
+                "the log carries upload-artifact download-URL records "
+                "naming "
+                f"{len(url_run_ids)} distinct runs "
+                f"({', '.join(url_run_ids)}) -- ambiguous execution "
+                f"evidence for {run_label}{job_label}; re-fetch the single "
+                "run's log rather than attribute this one")
+        if url_run_ids[0] != args.run_id:
+            raise Refused(
+                f"the log's `Artifact download URL:` record names run "
+                f"{url_run_ids[0]}, not the supplied run id "
+                f"{args.run_id!r} -- the comparison is against the "
+                "complete numeric run field of the URL, exact and whole: "
+                "the artifact id and a single space each "
+                "appear in a real log and passed a substring check "
+                "(measured on run 44344077192's log), so a partial match "
+                "attributes nothing")
         keeps, fresh = parse_log(log_lines)
         if not fresh and not any(node in SLOW_NODES for node in keeps):
             raise Refused(
@@ -406,8 +505,14 @@ def main(argv: list[str] | None = None) -> int:
         if not args.controls:
             return EXIT_OK if npass == len(SLOW_NODES) else EXIT_FAIL
 
-        # Control mode: every requested control must turn its node red.
-        exit_code = EXIT_OK
+        # Control mode: every requested control must turn its node red FROM
+        # A PASSING BASELINE, and the positive verdict keeps its own exit --
+        # a printed FAIL must never be returned as 0 (#1066). A control on
+        # a node the baseline already fails is not credited: it writes the
+        # value the node already has, so "caught" there demonstrates
+        # nothing (#1066 review). The worse of the two answers wins:
+        # 4 (a control went uncaught) > 1 (verdict FAIL) > 0.
+        controls_exit = EXIT_OK
         for spec in args.controls:
             name, _, node = spec.partition("=")
             if name not in CONTROLS:
@@ -422,13 +527,22 @@ def main(argv: list[str] | None = None) -> int:
                     for n, v in published.items()}
             CONTROLS[name](node, keeps2, fresh2, pub2, at_run)
             v2 = evaluate(pub2, at_run, keeps2, fresh2, args.head_sha)
-            caught = not v2[node][0]
+            caught = verdicts[node][0] and not v2[node][0]
             if caught:
                 print(f"  CONTROL {spec}: caught (node fails: {v2[node][1]})")
+            elif not verdicts[node][0]:
+                print(f"  CONTROL {spec}: NOT CAUGHT -- {node} was already "
+                      f"failing before the control ({verdicts[node][1]}); "
+                      "a control that writes the value the node already "
+                      "has demonstrates nothing")
+                controls_exit = EXIT_CONTROL
             else:
                 print(f"  CONTROL {spec}: NOT CAUGHT -- {v2[node][1]}")
-                exit_code = EXIT_CONTROL
-        if exit_code == EXIT_OK:
+                controls_exit = EXIT_CONTROL
+        positive_exit = EXIT_OK if npass == len(SLOW_NODES) else EXIT_FAIL
+        exit_code = (EXIT_CONTROL if controls_exit != EXIT_OK
+                     else positive_exit)
+        if controls_exit == EXIT_OK:
             print("all requested controls turned their node red")
         return exit_code
     except Refused as exc:
