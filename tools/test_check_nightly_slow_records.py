@@ -58,16 +58,36 @@ FOREIGN_LINE = ("2026-11-18T16:10:59.9911337Z   keep  F3  153 passed in 4.07s "
                 "(unchanged since 4fe488f1)")
 
 #: The log's identity anchors, verbatim from the same job log: the checkout
-#: step's rev-parse command and its full-sha output line, and upload-artifact's
-#: download URL carrying the run id. The gate asserts --head-sha appears in
-#: the log and --run-id EQUALS the download URL's run field (review #1059;
-#: #1066 review): these lines are what make the pinned evidence THIS run's. (The real log prints the sha a second time at
-#: 16:10:27 from the nightly's own fetch step; one occurrence is pinned.)
+#: step's two head-reporting commands (rev-parse at 16:10:26, `git log -1
+#: --format=%H` at 16:10:27) each followed by its bare-sha output line, and
+#: upload-artifact's download URL carrying the run id. The gate asserts
+#: --head-sha against the checkout step's own output (#1070) and --run-id
+#: EQUAL to the download URL's run field, on the COMPLETE record line
+#: (review #1059, #1066, #1070): these lines are what make the pinned
+#: evidence THIS run's. (Both sha occurrences the real log carries are
+#: pinned.)
+#: upload-artifact's download URL, verbatim from the same job log -- the
+#: line that carries the run id.
+ARTIFACT_URL_LINE = ("2026-11-18T16:31:13.8095034Z Artifact download URL: "
+                     "https://github.com/2AMLogic/gf180-parasynth/actions/"
+                     "runs/44344077192/artifacts/14445449921")
+
 IDENTITY_LINES = [
     "2026-11-18T16:10:26.8792578Z [command]/usr/bin/git rev-parse refs/remotes/origin/main",
     "2026-11-18T16:10:26.8793193Z 4a6eda4d2df8a41bdb0e2b6110137dd5fb5478f2",
-    "2026-11-18T16:31:13.8095034Z Artifact download URL: https://github.com/2AMLogic/gf180-parasynth/actions/runs/44344077192/artifacts/14445449921",
+    "2026-11-18T16:10:27.5620308Z [command]/usr/bin/git log -1 --format=%H",
+    "2026-11-18T16:10:27.5652306Z 4a6eda4d2df8a41bdb0e2b6110137dd5fb5478f2",
+    ARTIFACT_URL_LINE,
 ]
+
+#: A dependency action's resolved commit, verbatim from line 31 of the same
+#: job log: `actions/checkout@v4`'s own SHA. A 40-hex string in the log but
+#: NOT this repository's head -- the input that passed the old any-line
+#: substring check and must be refused (#1070).
+ACTION_SHA = "11d5960a326750d5838078e36cf38b85af677262"
+ACTION_SHA_LINE = ("2026-11-18T16:10:22.9087306Z Download action repository "
+                   "'actions/checkout@v4' "
+                   "(SHA:11d5960a326750d5838078e36cf38b85af677262)")
 
 
 @pytest.fixture()
@@ -428,6 +448,80 @@ def test_refused_when_upload_records_name_two_runs(replay, capsys):
     replay["log"].write_text(two_urls)
     assert run_gate(replay) == cnsr.EXIT_REFUSED
     assert "2 distinct runs" in capsys.readouterr().err
+
+
+# --- the head sha is the checkout's own output, not any line naming it -------
+#     (#1070): the old `any(anchor in line for line in log_lines)` accepted
+#     actions/checkout's own commit -- line 31 of the real job log -- as
+#     head evidence and passed 6/6 on it.
+
+def test_action_commit_sha_is_refused_as_head(replay, capsys):
+    """#1070, the reported defect: the `Download action repository` line
+    names a dependency's commit, and the old any-line check let it PASS the
+    gate 6/6 on the unmodified log. It is not this repository's head."""
+    replay["log"].write_text(
+        "\n".join([ACTION_SHA_LINE] + IDENTITY_LINES + RECORDED_LOG) + "\n")
+    assert run_gate(replay, "--head-sha", ACTION_SHA) == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "head sha" in err and ACTION_SHA in err
+
+
+def test_refused_when_head_sha_appears_without_checkout_output(replay, capsys):
+    """A sha stray in the file -- a mention, a dependency line -- with no
+    checkout-step output leaves the gate unable to say whose checkout the
+    log carries: REFUSED, never attributed. The artifact URL line is kept
+    so the run-id assertion passes and the refusal is genuinely the head
+    sha's."""
+    stray = "2026-11-18T16:31:12Z a stray line naming " + HEAD_SHA
+    replay["log"].write_text(
+        "\n".join([stray, ARTIFACT_URL_LINE] + RECORDED_LOG) + "\n")
+    assert run_gate(replay) == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "checkout" in err
+
+
+def test_mismatched_checkout_output_is_refused(replay, capsys):
+    """A log whose checkout step itself reports a different full sha -- the
+    previous night's log, another checkout -- is refused naming what the
+    checkout printed. The stray occurrence is kept so the old any-line
+    check would have passed this (red-first)."""
+    other = "b" * 40
+    identity = [ln.replace(HEAD_SHA, other) for ln in IDENTITY_LINES]
+    stray = "2026-11-18T16:31:12Z a stray line naming " + HEAD_SHA
+    replay["log"].write_text(
+        "\n".join([stray] + identity + RECORDED_LOG) + "\n")
+    assert run_gate(replay) == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert HEAD_SHA in err and other in err
+
+
+def test_short_sha_checkout_output_is_refused(replay):
+    """The checkout printing a short sha is not the full-sha identity the
+    gate asserts: refused, never matched loosely."""
+    identity = [ln.replace(HEAD_SHA, HEAD_SHA[:8]) for ln in IDENTITY_LINES]
+    stray = "2026-11-18T16:31:12Z a stray line naming " + HEAD_SHA
+    replay["log"].write_text(
+        "\n".join([stray] + identity + RECORDED_LOG) + "\n")
+    assert run_gate(replay) == cnsr.EXIT_REFUSED
+
+
+def test_stray_head_sha_occurrences_change_nothing(replay):
+    """Occurrences outside the checkout output are inert: extra copies of
+    the right sha neither rescue a wrong identity nor disturb the right
+    one."""
+    stray = "2026-11-18T16:31:12Z a stray line naming " + HEAD_SHA
+    replay["log"].write_text(
+        "\n".join([stray] + IDENTITY_LINES + RECORDED_LOG) + "\n")
+    assert run_gate(replay) == cnsr.EXIT_OK
+
+
+def test_repo_head_evidence_is_scoped_to_checkout_output_lines():
+    """The extractor reads only the lines following the checkout step's own
+    head commands -- not the `Download action repository` line, which also
+    carries a 40-hex sha (#1070)."""
+    evidence = cnsr.repo_head_evidence(
+        [ACTION_SHA_LINE] + IDENTITY_LINES + RECORDED_LOG)
+    assert [out for _line, out in evidence] == [HEAD_SHA, HEAD_SHA]
 
 
 def test_refused_on_log_with_only_fast_node_lines(replay, capsys):

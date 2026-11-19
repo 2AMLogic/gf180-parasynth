@@ -35,15 +35,28 @@ close. A line from another run -- a foreign anchor or a foreign detail --
 fails, so a green step cannot launder a record it did not measure.
 
 The log is asserted to belong to the run it names, at the point of use:
-`--head-sha` must appear in the log itself, and `--run-id` must EQUAL the
+`--head-sha` must equal what the checkout step itself reports -- the bare
+sha on the line following its `git rev-parse refs/remotes/origin/main` or
+`git log -1 --format=%H` command -- or the gate REFUSES naming what is
+missing. Appear-anywhere is not attribution: run 44344077192's log also
+names actions/checkout's own commit (11d5960a...) on its `Download action
+repository` line, and that dependency commit satisfied the previous
+any-line substring check -- a 6/6 PASS on a sha that is not this
+repository's head (#1070). `--run-id` is required, not optional: on a
+quiet night `origin/main` does not move, so two consecutive nightlies
+share the same `headSha` and a previous night's log satisfies the
+head-sha assertion -- measured in #1066, where a stale log with its run
+id rewritten out passed 6/6 without it, and only the run id
+discriminates two runs at the same head. The run id must EQUAL the
 complete numeric run field of the URL in upload-artifact's own
-`Artifact download URL:` record (`/actions/runs/<id>/artifacts/<artifact>`)
--- substring presence is not attribution: the artifact id and a single
-space each appear in a real log and passed a substring check (measured on
-run 44344077192's log, #1066 review), so only exact field equality
-attributes it. The record itself is the COMPLETE line after the log
-timestamp -- label, single space, one URL token, end of line: a
-diagnostic naming another run's artifact path (`Previous baseline path:
+`Artifact download URL:` record
+(`/actions/runs/<id>/artifacts/<artifact>`) -- substring presence is not
+attribution: the artifact id and a single space each appear in a real
+log and passed a substring check (measured on run 44344077192's log,
+#1066 review), so only exact field equality attributes it. The record
+itself is the COMPLETE line after the log timestamp -- label, single
+space, one URL token, end of line: a diagnostic naming another run's
+artifact path (`Previous baseline path:
 /actions/runs/<other>/artifacts/<n>`) attributed that foreign run while
 every URL-bearing line was scanned, and a quoted warning embedding the
 marker (`##[warning]Previous nightly reported: Artifact download URL:
@@ -51,26 +64,27 @@ marker (`##[warning]Previous nightly reported: Artifact download URL:
 (`Artifact download URL: unavailable. Previous nightly: <foreign URL>`)
 each fed the extractor's wildcard the same way (#1066 review) -- so
 neither the marker mid-line nor a URL that does not IMMEDIATELY follow
-the label attributes anything.
-`--run-id` is required, not optional: on a
-quiet night `origin/main` does not move, so two consecutive nightlies share
-the same `headSha` and a previous night's log satisfies the head-sha
-assertion -- measured in #1066, where a stale log with its run id rewritten
-out passed 6/6 without it, and only the run id discriminates two runs at
-the same head. A fetch that silently
+the label attributes anything. A fetch that silently
 failed -- or a previous night's log left at the same fixed path -- would
 otherwise be attributed to tonight's run and answered in the voice of a
 measurement. Measured on the two replayed nightlies (44344077192 job
-134941613343 @ 4a6eda4d; 44128504549 job 134198792633): the full head sha
-appears in each (the checkout step's `git rev-parse refs/remotes/origin/main`
-output) and the run id appears in each (upload-artifact's download URL), so
-both anchors are stable enough to assert -- a workflow change that moves
-them makes this gate REFUSE, never silently skip the check. Deliberately
-NOT asserted, per verification-rules rule 8's stated-reason half:
+134941613343 @ 4a6eda4d; 44128504549 job 134198792633): the checkout step
+prints the full head sha on the line after both commands in each, and the
+run id appears in each (upload-artifact's download URL), so both anchors
+are stable enough to assert -- a workflow change that moves them makes
+this gate REFUSE, never silently skip the check. Deliberately NOT
+asserted, per verification-rules rule 8's stated-reason half:
 `--job-id`, absent from both measured logs (a job's own stdout does not
 carry its id); and `--published` / `--at-run`, plain JSON with no embedded
 sha or run id, so their identity cannot be verified from content -- the
-caller's fetch command is what pins them.
+caller's fetch command is what pins them. The new check's own defeating
+input is a log whose checkout output is forged (command and sha lines
+crafted to name any sha asked about): no property of the file can
+distinguish that from a real checkout's output, so the gate defends
+against accident -- a stale or foreign log, a dependency's commit mistaken
+for the head -- and the caller's fetch command (the job's log fetched by
+URL) is what binds the file, the same stated reason given for
+`--published` / `--at-run` above.
 
 The six evidence lines this gate was first replayed against are pinned in
 `tools/test_check_nightly_slow_records.py`, so the positive case survives
@@ -129,6 +143,24 @@ FRESH_RE = re.compile(r"(?:^|\s)(PASS|FAIL|REFUSE)\s+(\S+)\s+(.+?)\s*$")
 
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
+#: The checkout step reports the repository head by running one of these
+#: commands (`[command]/usr/bin/git ...`, Actions' command echo) and
+#: printing its output -- the bare sha -- on the NEXT line (measured on run
+#: 44344077192's job log, lines 268-269 and 280-281, #1070). `--head-sha`
+#: is asserted against that output line only: the same log names each
+#: dependency action's commit on its `Download action repository` lines,
+#: and one of those satisfied the previous any-line substring check
+#: (#1070).
+REPO_HEAD_COMMANDS = (
+    "git rev-parse refs/remotes/origin/main",
+    "git log -1 --format=%H",
+)
+
+#: Actions prefix each log line with an ISO-8601 timestamp; the checkout
+#: output line is the bare sha after it.
+LOG_TS_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s")
+
 #: upload-artifact's own download-URL record: the COMPLETE line after the
 #: log timestamp is `Artifact download URL: <url>` -- label, single space,
 #: one URL token ending in `/actions/runs/<id>/artifacts/<n>`, end of line
@@ -175,6 +207,26 @@ def parse_log(lines: list[str]) -> tuple[dict, dict]:
         if m and m.group(2) in SLOW_NODES:
             fresh.setdefault(m.group(2), []).append((m.group(1), m.group(3)))
     return keeps, fresh
+
+
+def repo_head_evidence(lines: list[str]) -> list[tuple[int, str]]:
+    """What the checkout step itself reported as the repository head.
+
+    Returns (1-based line number, reported output) for each line that
+    follows a checkout-step head command (`REPO_HEAD_COMMANDS`), timestamp
+    stripped. The evidence for `--head-sha` is THESE lines only -- never
+    "the sha anywhere in the log": the log also names dependency actions'
+    commits, which are not this repository's head (#1070).
+    """
+    evidence: list[tuple[int, str]] = []
+    for i, line in enumerate(lines):
+        if not any(cmd in line for cmd in REPO_HEAD_COMMANDS):
+            continue
+        if i + 1 >= len(lines):
+            continue
+        out = LOG_TS_RE.sub("", lines[i + 1], count=1).strip()
+        evidence.append((i + 2, out))
+    return evidence
 
 
 def load_json(path: pathlib.Path, what: str) -> dict:
@@ -305,8 +357,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--log", required=True, type=pathlib.Path,
                     help="the full-rtl job log (the recording step's lines)")
     ap.add_argument("--head-sha", required=True, dest="head_sha",
-                    help="the run's full 40-hex headSha; asserted to appear "
-                         "in the log (the checkout step's rev-parse output)")
+                    help="the run's full 40-hex headSha; asserted to equal "
+                         "what the checkout step itself reports (the bare "
+                         "sha line after its `git rev-parse "
+                         "refs/remotes/origin/main` / `git log -1 "
+                         "--format=%H` command), not merely to appear in "
+                         "the log -- a dependency action's commit appears "
+                         "too (#1070)")
     ap.add_argument("--run-id", required=True, dest="run_id",
                     help="the run's id; asserted to EQUAL the complete "
                          "numeric run field of the URL in the log's "
@@ -359,14 +416,31 @@ def main(argv: list[str] | None = None) -> int:
             raise Refused(f"log not found: {args.log}") from None
         if not log_lines:
             raise Refused(f"log is empty: {args.log}")
-        if not any(args.head_sha in line for line in log_lines):
+        # The head sha is asserted against the checkout step's own output
+        # (repo_head_evidence), never "anywhere in the log": run
+        # 44344077192's log names actions/checkout's own commit on its
+        # `Download action repository` line and that dependency sha passed
+        # the old any-line check (#1070).
+        evidence = repo_head_evidence(log_lines)
+        if not evidence:
             raise Refused(
-                f"the log does not name the run's head sha ({args.head_sha}) "
-                "-- its execution evidence cannot be attributed to "
-                f"{run_label}{job_label} (head {args.head_sha[:8]}); a "
-                "stale or failed fetch leaves the previous night's log "
-                "at the path, so re-fetch the right log rather than "
-                "attribute this one")
+                "the log carries no repository-checkout output -- no `git "
+                "rev-parse refs/remotes/origin/main` or `git log -1 "
+                "--format=%H` command line followed by its bare-sha output "
+                f"-- so the run's head sha ({args.head_sha}) cannot be "
+                f"attributed to {run_label}{job_label} (head "
+                f"{args.head_sha[:8]}); a sha appearing elsewhere in the "
+                "log (a dependency action's commit, a stray mention) is "
+                "not identity evidence (#1070)")
+        wrong = [(n, out) for n, out in evidence if out != args.head_sha]
+        if wrong:
+            raise Refused(
+                "the log's repository-checkout output does not report the "
+                f"run's head sha: asked for {args.head_sha}, the checkout "
+                f"step printed {wrong} -- a checkout of another commit "
+                "(the previous night's log, another repository) cannot be "
+                f"attributed to {run_label}{job_label} (head "
+                f"{args.head_sha[:8]}) (#1070)")
         url_run_ids = sorted({m.group(1) for line in log_lines
                               for m in ARTIFACT_RUN_ID_RE.finditer(line)})
         if not url_run_ids:
