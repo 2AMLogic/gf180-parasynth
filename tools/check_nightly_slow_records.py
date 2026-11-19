@@ -58,6 +58,8 @@ import pathlib
 import re
 import sys
 
+import refusal
+
 #: The nodes nightly.yml records with `compile_dag.py --run --slow`; every
 #: reader of this gate reads the same six from docs/dag.json's `slow: true`.
 SLOW_NODES = ("F1", "F2", "M1", "D1", "I1", "I2")
@@ -80,7 +82,7 @@ FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 EXIT_OK, EXIT_FAIL, EXIT_REFUSED, EXIT_CONTROL = 0, 1, 3, 4
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """The apparatus cannot answer; say what is missing, never guess."""
 
 
