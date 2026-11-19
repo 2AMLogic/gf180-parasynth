@@ -22,15 +22,19 @@ Not routed, by reading (verification-rules rule 8 -- why no defeating input):
     Assumed from names and docstrings -- skimmed, not traced.
   * `tools/measure_mono_m1a_reference.py`, `tools/measure_mono_m5a_reference.py`
     (Mini V3 free rings -- `_measure_open_cutoff`, M1A's three-ring phrase):
-    STILL on `am.dominant_frequency`, now permanently. Both files are hashed
-    into the Mini V3 records (`suite-v3.json` `sources_sha256`, the
-    attack-context model report `source_sha256`), and #1048 froze those
-    records: they cannot be regenerated, so the files cannot change either.
-    Routing them for V3 (#706) is cancelled; Mini V4 references get their own
-    reader when that suite produces records (#1052). The guard at the bottom
-    of this file turns any edit of the two files into a named failure here,
-    instead of the 19 stale-record refusals deep in the tools suite that the
-    first attempt (PR #750) produced.
+    STILL on `am.dominant_frequency`, now permanently. Routing them for V3
+    (#706) is cancelled, so these two readers have no remaining reason to
+    change -- that cancellation, not a freeze of the files themselves, is
+    what this file pins. Both are hashed into the Mini V3 records
+    (`suite-v3.json` `sources_sha256`, the attack-context model report
+    `source_sha256`); those records hash eight other files that are live and
+    deliberately unguarded -- an edit to one lands in its own stale-record
+    refusal or reported-difference path, not here (per-file behaviour
+    tabulated in `docs/scorecard/mono-attack-context/model/README.md`).
+    Mini V4 references get their own reader when that suite produces records
+    (#1052). The guard at the bottom of this file turns any edit of the two
+    files into a named failure here, instead of the 19 stale-record refusals
+    deep in the tools suite that the first attempt (PR #750) produced.
 """
 import hashlib
 import json
@@ -171,13 +175,18 @@ def test_reference_integrity_tracking_still_answers_sustained_rings(monkeypatch)
     assert all(v is not None and abs(v - 1.0) < 0.05 for v in errs.values()), errs
 
 
-# ---- #706 re-scoped per #1048: the V3 ring-reader sources are frozen ---------
+# ---- #706 re-scoped per #1048: the two V3 ring-reader sources are pinned -----
 # The two Mini V3 free-ring readers above stay on `am.dominant_frequency`
-# because the records that hash them are frozen (#1048): regeneration is
-# cancelled, so the files cannot change. This guard turns an edit of either
-# file into a named failure at this site instead of the stale-record refusals
-# deep in the tools suite that PR #750's first attempt produced (19 red
-# tests). Defeating input -- editing the recorded digest alongside the file:
+# because their only pending change -- routing them through ring_estimator
+# (#706) -- was cancelled by #1048, leaving neither reader a remaining reason
+# to change. The frozen records hash eight other files too; those are live
+# and deliberately NOT pinned here -- an edit to one lands in its own
+# stale-record refusal or reported-difference path (measured per file in
+# docs/scorecard/mono-attack-context/model/README.md). This guard turns an
+# edit of either reader into a named failure at this site instead of the
+# stale-record refusals deep in the tools suite that PR #750's first attempt
+# produced (19 red tests). Defeating input -- editing the recorded digest
+# alongside the file:
 # M1A's record (`suite-v3.json`) is covered by the committed reference-suite
 # freeze (tools/check_reference_freeze.py). M5A's record is
 # `mono-attack-context/model/report.json`, which the model comparison tool
