@@ -23,4 +23,5 @@ POLY="${POLYSYNTH_RTL:-$REPO/../gf180-polysynth/rtl}"
 command -v docker >/dev/null || { echo "docker not on PATH" >&2; exit 1; }
 exec docker run --rm --platform linux/amd64 "${MOUNTS[@]}" -w /OpenROAD-flow-scripts/flow \
   -e POLYSYNTH_RTL="$POLY" "$IMAGE" bash -lc \
-  "source /OpenROAD-flow-scripts/env.sh >/dev/null 2>&1; make DESIGN_CONFIG='$HERE/$DESIGN/config.mk' WORK_HOME='$WORK' $*"
+  'source /OpenROAD-flow-scripts/env.sh >/dev/null 2>&1 && exec make "$@"' bash \
+  "DESIGN_CONFIG=$HERE/$DESIGN/config.mk" "WORK_HOME=$WORK" "$@"
