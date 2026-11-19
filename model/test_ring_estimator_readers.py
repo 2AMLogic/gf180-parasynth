@@ -199,9 +199,14 @@ _V3_READER_FROZEN_MESSAGE = (
     "through ring_estimator from the start.")
 
 
+_V3_READER_ROOT = os.path.dirname(HERE)
+
+
 @pytest.mark.parametrize("source,record", sorted(_V3_READER_RECORDS.items()))
 def test_v3_ring_reader_source_is_frozen(source, record):
     record_path, key = record
-    digest = json.loads((HERE.parent / record_path).read_text())[key][source]
-    actual = hashlib.sha256((HERE.parent / source).read_bytes()).hexdigest()
+    with open(os.path.join(_V3_READER_ROOT, record_path)) as fh:
+        digest = json.load(fh)[key][source]
+    with open(os.path.join(_V3_READER_ROOT, source), "rb") as fh:
+        actual = hashlib.sha256(fh.read()).hexdigest()
     assert actual == digest, _V3_READER_FROZEN_MESSAGE.format(source=source)
