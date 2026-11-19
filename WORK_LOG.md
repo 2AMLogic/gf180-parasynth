@@ -4,6 +4,11 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-19
 
+- **Issue #1066** (closed): check_nightly_slow_records: --run-id is optional but load-bearing, and control mode exits 0 over a printed FAIL
+- **PR #1067**: fix: require --run-id and return the worse of verdict/control exits in the nightly slow-record gate
+- **PR #1072**: fix: preserve quarter-slot geometry and voice parameters in ORFS
+- **Issue #1070** (closed): Nightly slow-record gate accepts an Actions dependency SHA as the repository head
+- **PR #1071**: fix: nightly gate attributes head sha to the checkout step's own output, not any line naming it
 - **Issue #1033** (closed): Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md)
 - **PR #1065**: docs: trail six mid-paragraph claim markers; refuse the splitting placement
 - **Issue #1058** (closed): AC (a)'s sha-equality discriminator in #820 cannot pass on a quiet night under record_unchanged() (#967) — rederive the nightly slow-record check
