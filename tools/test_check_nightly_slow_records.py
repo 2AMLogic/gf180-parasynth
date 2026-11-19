@@ -424,6 +424,29 @@ def test_text_between_marker_and_url_is_not_the_record(replay, capsys):
     assert "Artifact download URL" in err and "44128504549" in err
 
 
+def test_foreign_host_record_line_still_attributes(replay):
+    """Stated residual, pinned as a characterization (#1073): the URL
+    prefix is `\\S*`, so the log's ONLY upload record being absolute on
+    a foreign host -- `<ts> Artifact download URL:
+    https://evil.example/actions/runs/44128504549/artifacts/1` --
+    still attributes that foreign run id (the gate passes on it, not
+    REFUSED). Not observed in the reviewed logs; no host is pinned
+    because a literal `github.com` requirement would refuse the same
+    record on GHES or a future host, and no scheme is pinned for a
+    different reason: `https?://` accepts HTTPS on either host
+    (`https://ghe.corp/o/r` matches it), so it leaves this foreign-host
+    line matching too. This test documents an ACCEPTED LIMITATION, not
+    a desired property: a later tightening of ARTIFACT_RUN_ID_RE to reject
+    foreign hosts deliberately FLIPS it to a refusal."""
+    identity = [ln for ln in IDENTITY_LINES
+                if "Artifact download URL" not in ln]
+    foreign = ("2026-11-18T16:31:13.8095034Z Artifact download URL: "
+               "https://evil.example/actions/runs/44128504549/artifacts/1")
+    replay["log"].write_text(
+        "\n".join(identity + [foreign] + RECORDED_LOG) + "\n")
+    assert run_gate(replay, "--run-id", "44128504549") == cnsr.EXIT_OK
+
+
 def test_genuine_record_beside_a_quoted_warning_still_attributes(replay):
     """The judge's acceptance case (#1066 review): the genuine record kept
     and the quoted-warning line appended must not REFUSE as ambiguous --

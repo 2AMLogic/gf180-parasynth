@@ -25,7 +25,7 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a h
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(held)*
-- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
+- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(held)*
 - **#1051**: [voice-only] Draft decision record and re-scope README/roadmap/spec to voice-only silicon target *(held)*
 
 ## Ready
@@ -36,7 +36,6 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
 
 ## In Progress
 
@@ -50,14 +49,15 @@ Issues currently being built (`loom:building`).
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites)
-- **#1066**: check_nightly_slow_records: --run-id is optional but load-bearing, and control mode exits 0 over a printed FAIL
+- **#1073**: check_nightly_slow_records: the artifact-record URL prefix is `\S*`, so a foreign host or bare path in a complete record line still attributes the run
+- **#1075**: Remove the Arty bring-up retry loop that hides a refused held note
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#1067**: fix: require --run-id and return the worse of verdict/control exits in the nightly slow-record gate
+- **#1074**: State the foreign-host URL residual of the slow-record gate and pin it
+- **#1076**: fix: stop bringup_arty's play_note retrying a refused hold
 
 ## Approved (Awaiting Merge)
 
@@ -125,9 +125,10 @@ Issues carrying `loom:curated`.
 - **#933**: regenerate discrimination artefacts under the six-bucket MPD grouping (follow-up to #929) *(curated)* *(held)*
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules *(curated)*
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
-- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)*
+- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)* *(held)*
 - **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites) *(curated)*
-- **#1066**: check_nightly_slow_records: --run-id is optional but load-bearing, and control mode exits 0 over a printed FAIL *(curated)*
+- **#1073**: check_nightly_slow_records: the artifact-record URL prefix is `\S*`, so a foreign host or bare path in a complete record line still attributes the run *(curated)*
+- **#1075**: Remove the Arty bring-up retry loop that hides a refused held note *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -154,11 +155,11 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 1 |
 | Very important | 1 |
 | Important | 8 |
-| Ready (`loom:issue`, net of holds/building/merge-pending) | 5 |
+| Ready (`loom:issue`, net of holds/building/merge-pending) | 4 |
 | In Progress (`loom:building`) | 10 |
-| PRs awaiting review | 1 |
+| PRs awaiting review | 2 |
 | Approved PRs awaiting merge | 1 |
-| Curated | 59 |
+| Curated | 60 |
 | Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
