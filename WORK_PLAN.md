@@ -49,15 +49,12 @@ Issues currently being built (`loom:building`).
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#1073**: check_nightly_slow_records: the artifact-record URL prefix is `\S*`, so a foreign host or bare path in a complete record line still attributes the run
-- **#1075**: Remove the Arty bring-up retry loop that hides a refused held note
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#1074**: State the foreign-host URL residual of the slow-record gate and pin it
-- **#1076**: fix: stop bringup_arty's play_note retrying a refused hold
+_None._
 
 ## Approved (Awaiting Merge)
 
@@ -85,7 +82,7 @@ Issues carrying `loom:curated`.
 - **#310**: Sweep hygiene: a killed sweep leaves its nohup'd heavy job running, and nothing reaps or surfaces it *(curated)* *(held)*
 - **#324**: R1 capture inputs: R1-bound references and commands for the physical capture procedure *(curated)* *(held)*
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1) *(curated)*
-- **#334**: Sound: shared tom/conga body-spectrum failures — test a common cause before tuning six presets *(curated)* *(held)*
+- **#334**: Sound: shared tom/conga body-spectrum failures — test a common cause before tuning six presets *(curated)*
 - **#335**: Sound: cowbell partial balance (2.82x tolerance) — local voicing repair *(curated)* *(held)*
 - **#336**: Sound: rimshot spectrum, maracas envelope/band balance, and hat/cymbal qualification — cover every advertised drum *(curated)* *(held)*
 - **#337**: Sound: mono character — oscillator mixtures, drift, drive/resonance, envelope response; M1A as a phase-aware question *(curated)* *(held)*
@@ -127,8 +124,6 @@ Issues carrying `loom:curated`.
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)* *(held)*
 - **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites) *(curated)*
-- **#1073**: check_nightly_slow_records: the artifact-record URL prefix is `\S*`, so a foreign host or bare path in a complete record line still attributes the run *(curated)*
-- **#1075**: Remove the Arty bring-up retry loop that hides a refused held note *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -156,10 +151,10 @@ Issues carrying `loom:curated`.
 | Very important | 1 |
 | Important | 8 |
 | Ready (`loom:issue`, net of holds/building/merge-pending) | 4 |
-| In Progress (`loom:building`) | 10 |
-| PRs awaiting review | 2 |
+| In Progress (`loom:building`) | 8 |
+| PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
-| Curated | 60 |
+| Curated | 58 |
 | Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->

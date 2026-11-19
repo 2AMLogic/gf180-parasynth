@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-19
 
+- **Issue #1075** (closed): Remove the Arty bring-up retry loop that hides a refused held note
+- **PR #1076**: fix: stop bringup_arty's play_note retrying a refused hold
 - **PR #1074**: State the foreign-host URL residual of the slow-record gate and pin it
 - **Issue #1073** (closed): check_nightly_slow_records: the artifact-record URL prefix is `\S*`, so a foreign host or bare path in a complete record line still attributes the run
 - **Issue #1066** (closed): check_nightly_slow_records: --run-id is optional but load-bearing, and control mode exits 0 over a printed FAIL
