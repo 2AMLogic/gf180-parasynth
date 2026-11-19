@@ -83,8 +83,7 @@ adding one sample of high-frequency content. The cymbal's HF *share* rises
 87.13 % → 91.50 % under coupling while its absolute 5–20 kHz energy moves
 **+0.00 dB**. `share_rise_is_lf_removal` is the rule that separates the two, and
 every share in `measure-*.txt` is labelled by it. No verdict in this directory
-is read off a share.
-<!-- claim: test=tools/probes/dc_blocker.py::test_band_energy_is_absolute_and_a_share_is_not -->
+is read off a share. <!-- claim: test=tools/probes/dc_blocker.py::test_band_energy_is_absolute_and_a_share_is_not -->
 The same rule must *not* fire when harmonics really are added, which is the
 control that makes it a discriminator rather than a filter.
 <!-- claim: test=tools/probes/dc_blocker.py::test_the_trap_rule_does_not_fire_on_real_new_harmonics -->

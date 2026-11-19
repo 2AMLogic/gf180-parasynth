@@ -250,8 +250,7 @@ the model the whole population's variation as free credit against a single
 member of it. On the bass drum that was measured and it swallowed the
 instrument: 10 % is 5.06 Hz and everything the machine's own DECAY and TONE
 controls do to its f0 is 3.66 Hz, so no two settings of the voice could be told
-apart (`docs/bd-repeatability-measurement.md` §4).
-<!-- claim: test=tools/test_run_case.py::test_POSITIVE_CONTROL_new_f0_check_separates_settings_the_old_one_could_not -->
+apart (`docs/bd-repeatability-measurement.md` §4). <!-- claim: test=tools/test_run_case.py::test_POSITIVE_CONTROL_new_f0_check_separates_settings_the_old_one_could_not -->
 A tolerance against one
 recorded unit is bounded by how far *that* unit differs from itself and by how
 far its own knobs move — see `run_case.F0_DISCRIMINATION_BAND`. The ±10 % here
@@ -917,8 +916,7 @@ its 2-pole form therefore reads (tone × LEVEL) as **flat to 0.46 dB** across
 2–8 kHz where the network's own response **falls 5.9 dB**. Over the *short*
 band — the one path Fig. 9 draws across the whole audio band — the two routes
 agree to **0.026 dB**, which is what makes this a statement about the window
-rather than about the network.
-<!-- claim: test=tools/test_cymbal_tone_writeup_figures.py::test_every_quoted_figure_is_the_tool_s_own_output issue=429 why="the 0.026 dB above is cymbal_tone_nodal.py's nodal-grounded property; it read 0.10 dB here for a week under a [measured:] tag" -->
+rather than about the network. <!-- claim: test=tools/test_cymbal_tone_writeup_figures.py::test_every_quoted_figure_is_the_tool_s_own_output issue=429 why="the 0.026 dB above is cymbal_tone_nodal.py's nodal-grounded property; it read 0.10 dB here for a week under a [measured:] tag" -->
  Consequence for an implementation: a model that
 drops the tone low-pass pole against the LEVEL differentiator (on the grounds
 that both are asymptotic over the band) is right for the **DECAY and short**

@@ -4,6 +4,10 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-19
 
+- **Issue #1033** (closed): Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md)
+- **PR #1065**: docs: trail six mid-paragraph claim markers; refuse the splitting placement
+- **Issue #1058** (closed): AC (a)'s sha-equality discriminator in #820 cannot pass on a quiet night under record_unchanged() (#967) — rederive the nightly slow-record check
+- **PR #1059**: add check_nightly_slow_records: per-node corroboration gate for #820 AC (a)
 - **Issue #1056** (closed): Say why eight of the ten files hashed into the frozen Mini V3 records are deliberately NOT guarded
 - **PR #1060**: docs: correct Mini V3 re-bind guidance and narrow the reader-pin rationale
 - **Issue #706** (closed): Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
