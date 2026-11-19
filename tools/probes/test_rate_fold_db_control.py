@@ -157,6 +157,86 @@ def test_measures_clean_and_reports_the_shipped_dial():
 
 
 # ---------------------------------------------------------------------------
+# the verdict prose states no more than `must == []` measured -- #946
+
+
+def verdict_section(res):
+    """`report()`'s output for a hand-built `measure()` result: the verdict
+    prose a reader cites, rendered without paying for a panel walk."""
+    import io
+
+    out = io.StringIO()
+    C.report(res, {"_commit": "75c20033", "_dirty": False}, out)
+    return out.getvalue()
+
+
+def res_with_db_red_on_both_folds(db_red, other_red):
+    """A hand-built `measure()` result in the shape of the committed grid's
+    rel_db=0.02 reading: `must` empty, yet `db_red` dB pairs red on the
+    integer fold -- all of them red on the shipped fold too, which is the
+    only way `must` can be empty while `db_red` is not."""
+    units = {}
+    if other_red:
+        units["ratio"] = other_red
+    if db_red:
+        units["db"] = db_red
+    grid = [{"rel_db": 0.02, "db_red_injected": float(db_red),
+             "db_red_shipped": float(db_red), "must_rows": 0.0},
+            {"rel_db": 0.1, "db_red_injected": 0.0,
+             "db_red_shipped": 0.0, "must_rows": 0.0}]
+    return {
+        "shipped": {"injected_by_unit": units,
+                    "shipped_by_unit": {"db": float(db_red)},
+                    "must": []},
+        "grid": grid,
+        "first_grid_value_with_a_must_row": None,
+        "rel_db_shipped": 0.1,
+        "figures": [{"peak_db": 80.0, "tol_shipped": 8.0,
+                     "tol_floor_only": 0.5},
+                    {"peak_db": 10.0, "tol_shipped": 1.0,
+                     "tol_floor_only": 0.5}],
+        "n_pairs": 2101, "n_entries": 11,
+    }
+
+
+def test_verdict_does_not_deny_db_reds_that_the_by_unit_count_carries():
+    """THE #946 CASE. `must == []` does not mean no dB pair is red on the
+    integer fold -- with dB pairs red on BOTH folds (the committed grid's
+    rel_db=0.02 reading: 11 red on each) it is the fold-invariant residue
+    speaking. The old prose said "No RATE_PANEL dB pair is red on the
+    integer fold" directly beneath its own grid printing 11 of them, and
+    mis-stated the by-unit total as "all in other units"."""
+    text = verdict_section(res_with_db_red_on_both_folds(db_red=11,
+                                                         other_red=39))
+    assert "No RATE_PANEL dB pair is red on the integer fold" not in text
+    assert "all in other units" not in text
+    assert "11 RATE_PANEL dB pair(s) are red on the integer fold" in text
+    assert "The other 39 pairs" in text
+
+
+def test_verdict_counts_non_db_pairs_separately_when_only_db_pairs_are_red():
+    """dB nonzero and non-dB zero: the fold-invariant reading, with no
+    "other units" population to speak of at all."""
+    text = verdict_section(res_with_db_red_on_both_folds(db_red=4,
+                                                         other_red=0))
+    assert "No RATE_PANEL dB pair is red on the integer fold" not in text
+    assert "all in other units" not in text
+    assert "4 RATE_PANEL dB pair(s) are red on the integer fold" in text
+    assert "other units" not in text
+
+
+def test_verdict_keeps_the_all_other_units_wording_when_no_db_pair_is_red():
+    """The shipped dial's actual shape: dB red = 0, non-dB red = 50. The
+    old wording states exactly what was measured here, so it is kept
+    verbatim -- this pins it against accidental rewording."""
+    text = verdict_section(res_with_db_red_on_both_folds(db_red=0,
+                                                         other_red=50))
+    assert "No RATE_PANEL dB pair is red on the integer fold" in text
+    assert "the 50 pairs the integer fold" in text
+    assert "are all in other units" in text
+
+
+# ---------------------------------------------------------------------------
 # the artefact has to be readable by the gate that will cite it
 
 

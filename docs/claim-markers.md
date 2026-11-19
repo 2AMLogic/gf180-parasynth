@@ -30,6 +30,14 @@ A marker inside a fenced code block or inline backticks is an **example**, not a
 claim, and is skipped — otherwise this document, which is nothing but examples,
 would be checked as a list of assertions.
 
+**One marker per line.** A second marker on the same line is `REFUSED`
+(naming file and line), never dropped and never parsed as a second claim: the
+report is keyed on `file:line`, and a silently ignored marker is
+indistinguishable from a claim nobody made (#1041). Put each marker on its own
+line. The same rule covers a marker that **spans lines**: an opener
+`<!-- claim:` with no `-->` on its line is `REFUSED`, naming the opener's
+file and line, never skipped (#1044). Close every marker on the line it opens.
+
 Syntax is `<!-- claim: key=value key="value with spaces" ... -->`, tokenised
 with `shlex`. **Exactly one** key must be a *kind*; the rest are modifiers or
 annotations. An unrecognised key is `REFUSED`, never ignored — a typo in a key
@@ -290,7 +298,12 @@ first runs the checker once and REFUSES (exit 2, which the exit contract
 reports as NO-VERDICT, naming what it found) unless that baseline is green,
 and again unless every injection target matches, because its controls inject
 into the live checkout and would otherwise misreport the tree's own WIP as
-control failures. On a tree whose claims are green the whole run is seconds
+control failures. Since #936 the guard that refuses an already-satisfied
+injection state derives its pattern and paths by parsing the staged
+injection with the checker's own grammar, so a hand-edited claim marker's
+`in=` cannot desynchronize the guard from the file the claim actually
+greps -- a divergence that used to surface as a misattributed control FAIL
+instead of a refusal. On a tree whose claims are green the whole run is seconds
 (every #789 marker is a `grep=` or `absent=` row with no backing test, so
 the two-document run collects no pytest), which is why it is wired and
 `scope_control` is not — and the refusal is the correct answer on a WIP

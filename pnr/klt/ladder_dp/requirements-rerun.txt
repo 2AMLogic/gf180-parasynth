@@ -1,0 +1,8 @@
+# The #1006 DEF re-run's only runtime dependency beyond the image's own
+# toolchain (klt, yosys, openroad are baked into the pinned AMI): ciel, the
+# PDK manager, which the heavy image does not carry on PATH. Pinned to
+# 3.2.0 -- the version the original job rs-parasynth808-od2-s00 probed in
+# its environment.txt -- so the re-run changes no variable but the outputs
+# collected. Installed by the batch runner into a job-local venv, never the
+# host.
+ciel==3.2.0

@@ -87,11 +87,16 @@ import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 MARKER = re.compile(r"<!--\s*claim:\s*(?P<body>.*?)\s*-->")
+# Same opener, but a closer on the SAME line is optional (#1044): an opener whose
+# `-->` is on a later line is a marker the one-line grammar cannot read, and it
+# must be SEEN so find_claims can refuse it rather than drop it silently.
+MARKER_OR_OPENER = re.compile(r"<!--\s*claim:\s*(?P<body>.*?)\s*(?:-->|$)")
 # A marker inside a fenced block or inline backticks is an EXAMPLE, not a claim.
 # docs/claim-markers.md documents the syntax and so is full of them; without
 # this the convention's own documentation would be checked as assertions -- and
@@ -148,6 +153,11 @@ class Claim:
     value: str = ""
     status: str = REFUSED
     detail: str = "not checked"
+    # A marker after the first on its line (#1041): refused by construction,
+    # never validated, so validate() cannot overwrite the refusal.
+    extra_on_line: bool = False
+    # An opener with no `-->` on its line (#1044): same refusal discipline.
+    unclosed: bool = False
 
     @property
     def where(self) -> str:
@@ -180,6 +190,34 @@ def parse_attrs(body: str) -> tuple[dict[str, str], str | None]:
     return attrs, None
 
 
+def iter_claim_markers(
+        lines: list[str]) -> Iterator[tuple[int, str, re.Match[str]]]:
+    """Yield (1-based lineno, line, MARKER match) for each marker that is a
+    claim, applying the two example-skip rules exactly once (#962).
+
+    A marker is an example rather than an assertion when it sits inside a
+    fenced code block (``` or ~~~) or inside inline `backticks`. Two readers
+    walk documents with this grammar -- `find_claims` here and the #789
+    probe's `injected_state`, which until #962 re-implemented the fence rule
+    by hand and lacked the backtick rule, so its view of which markers exist
+    in a staged document could diverge from this checker's by one class of
+    line. The grammar lives here so the two readers cannot disagree.
+    """
+    fenced = False
+    for i, line in enumerate(lines, start=1):
+        if FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue                       # a marker in a code block is an example
+        # finditer, not search (#1041): a second marker on the line must be
+        # SEEN so find_claims can refuse it, not silently dropped.
+        for m in MARKER_OR_OPENER.finditer(line):
+            if line.count("`", 0, m.start()) % 2:
+                continue                   # ...and so is one inside `backticks`
+            yield i, line, m
+
+
 def find_claims(doc: pathlib.Path) -> list[Claim]:
     """Every marker in one document, with the nearest prose line above it.
 
@@ -188,18 +226,30 @@ def find_claims(doc: pathlib.Path) -> list[Claim]:
     """
     out: list[Claim] = []
     lines = doc.read_text(encoding="utf-8").splitlines()
-    fenced = False
-    for i, line in enumerate(lines, start=1):
-        if FENCE.match(line):
-            fenced = not fenced
+    last_line = 0
+    for i, line, m in iter_claim_markers(lines):
+        if not m.group(0).endswith("-->"):
+            # #1044: the closer is not on this line. One-line-per-marker is
+            # the contract, so refuse (naming the opener) rather than let a
+            # multi-line marker vanish from the report.
+            c = Claim(doc=doc, line=i, raw=m.group("body"),
+                      prose=line[: m.start()].strip()[:100],
+                      extra_on_line=True, unclosed=True)
+            c.refuse("claim marker opener has no `-->` on its line; a marker "
+                     "must be closed on the line it opens (one line per "
+                     "marker, docs/claim-markers.md)")
+            out.append(c)
             continue
-        if fenced:
-            continue                       # a marker in a code block is an example
-        m = MARKER.search(line)
-        if not m:
+        if i == last_line:
+            c = Claim(doc=doc, line=i, raw=m.group("body"),
+                      prose=MARKER.sub("", line[: m.start()]).strip()[:100],
+                      extra_on_line=True)
+            c.refuse("second claim marker on one line; put each marker on "
+                     "its own line (one marker per line is the contract, "
+                     "docs/claim-markers.md)")
+            out.append(c)
             continue
-        if line.count("`", 0, m.start()) % 2:
-            continue                       # ...and so is one inside `backticks`
+        last_line = i
         prose = ""
         for back in range(i - 1, max(0, i - 6), -1):
             cand = lines[back - 1].strip()
@@ -216,6 +266,8 @@ def find_claims(doc: pathlib.Path) -> list[Claim]:
 
 def validate(c: Claim) -> None:
     """Syntax only. A marker that cannot be understood is REFUSED, not skipped."""
+    if c.extra_on_line or c.unclosed:
+        return                             # already REFUSED by find_claims
     attrs, err = parse_attrs(c.raw)
     if err:
         c.refuse(err)

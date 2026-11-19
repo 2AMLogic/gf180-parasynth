@@ -583,3 +583,69 @@ def test_the_mean_statistic_does_not_depend_on_safety():
     a = pd.mean_margin("SINGLE_WINDOW_SLOPE", "noise/psd_slope", pd.VALIDATE_BASE)
     assert a.threshold == pytest.approx(pd.MEAN_FACTOR * pd.calibration_mean("noise/psd_slope"))
     assert math.isnan(pd.upper_cliff(a, pd.CASE_BY_ID["noise/psd_slope"].policy.calibrated))
+
+
+# ---------------------------------------------------------------------------
+# 10. the --margins summary sentence states what was measured (#950)
+# ---------------------------------------------------------------------------
+# `print_margins` picked its summary prose on `not (cliffs and rc == 0)` --
+# two situations with different facts -- and both landed on a sentence
+# asserting pairs were not caught. The #950 one: every pair CAUGHT, none
+# locating a SAFETY cliff (mean-statistic pairs have none by construction,
+# #539), and the old sentence asserted the opposite of what was measured.
+# Same rule as section 8: a summary line is a guard, so both branches are
+# driven as inputs, with the shipped dial as the control that the
+# upper-bound line survives the split.
+def _caught_mean_pm(injection, cid):
+    """A CAUGHT pair on the mean statistic: no SAFETY cliff can exist for it,
+    so `upper_cliff` is NaN and `lost_above_safety` reports as `--`."""
+    c = pd.CASE_BY_ID[cid]
+    return pd.PairMargin(injection, cid, threshold=c.policy.threshold,
+                         residual=9.0, margin=1.5, state=pd.CAUGHT,
+                         statistic=f"mean of {pd.MEAN_TRIALS}")
+
+
+def test_margins_summary_never_says_a_pair_was_missed_when_all_are_caught(
+        monkeypatch, capsys):
+    """The #950 red: all pairs CAUGHT, none with a SAFETY cliff, and the old
+    prose printed `not every pair is CAUGHT` -- false on exactly this input.
+    The all-caught summary must state the measured fact instead."""
+    pms = [_caught_mean_pm("SINGLE_WINDOW_SLOPE", "noise/psd_slope"),
+           _caught_mean_pm("SHORT_WINDOW_SPECTRUM", "noise/centroid")]
+    monkeypatch.setattr(pd, "pair_margins", lambda cases, trials, seed: pms)
+    rc, _ = pd.print_margins(QUICK)
+    text = capsys.readouterr().out
+    assert rc == 0, text
+    assert "not every pair is CAUGHT" not in text, text
+    assert "every pair is CAUGHT" in text and "no upper bound" in text, text
+
+
+def test_margins_summary_keeps_the_not_caught_sentence_for_a_missed_pair(
+        monkeypatch, capsys):
+    """Over-correction guard: with a pair genuinely MISSED the summary must
+    keep today's sentence verbatim -- the prose was true for that branch."""
+    c = pd.CASE_BY_ID["noise/psd_slope"]
+    pms = [_caught_mean_pm("SINGLE_WINDOW_SLOPE", "noise/psd_slope"),
+           pd.PairMargin("SINGLE_WINDOW_SLOPE", "noise/psd_slope",
+                         threshold=c.policy.threshold, residual=0.01,
+                         margin=0.01 / c.policy.threshold, state=pd.MISSED)]
+    monkeypatch.setattr(pd, "pair_margins", lambda cases, trials, seed: pms)
+    rc, _ = pd.print_margins(QUICK)
+    text = capsys.readouterr().out
+    assert rc == 1, text
+    assert ("not every pair is CAUGHT at the shipped factor, so no upper "
+            "bound is reported") in text, text
+
+
+def test_margins_at_the_shipped_dial_still_prints_the_upper_bound(capsys):
+    """The control the split must not break: the shipped CASES at the shipped
+    factor are all CAUGHT with finite cliffs, so the upper-bound line and its
+    setting pair still print."""
+    rc, rows = pd.print_margins(QUICK)
+    text = capsys.readouterr().out
+    assert rc == 0, text
+    assert "upper bound on SAFETY" in text, text
+    finite = [r for r in rows if r["lost_above_safety"] is not None]
+    assert finite, text
+    setter = min(finite, key=lambda r: r["lost_above_safety"])
+    assert setter["injection"] in text and setter["case"] in text, text

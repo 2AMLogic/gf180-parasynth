@@ -2,8 +2,145 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-19
+
+- **PR #1045**: fix: refuse a claim marker whose closer is not on its opener's line
+- **Issue #1044** (closed): check_doc_claims.py silently drops a claim marker that spans two lines, so an unverified claim reports green
+
+### 2026-11-18
+
+- **PR #1042**: fix: refuse a second claim marker on one line instead of dropping it
+- **Issue #1041** (closed): check_doc_claims.py silently drops a second claim marker on the same line, so an unverified claim reports green
+- **Issue #1040** (closed): analyze_def_sites: read the kept DEF's extension-point census on the #1010 host (live-vs-latent, one command)
+- **PR #1039**: fix: a '+' in the DEF walk ends the layer-name position
+- **Issue #1037** (closed): analyze_def_sites: a skipped '+' does not end the LAYER-name position either (sibling of #1034)
+- **PR #1031**: fix: consume skip-keyword name arguments so they never become phantom vias
+- **Issue #1030** (closed): analyze_def_sites: a skip-keyword's NAME argument after a path's points becomes a phantom via (same class as #1013/#1021, via branch not width branch)
+- **PR #1029**: docs: bind #1006 route-record figures to claim markers
+- **Issue #1023** (closed): docs/tool-findings.md carries zero claim markers, so its route-record figures have nothing re-deriving them
+- **PR #1025**: fix: apply the DEF path-point extension to the wire rect and count it in the record
+- **Issue #1022** (closed): analyze_def_sites: the DEF path-point extension is recorded but never applied to the emitted rect, nor surfaced in the record
+- **PR #1035**: fix: end the via-name position at a skipped '+' in DEF path walk
+- **Issue #1034** (closed): analyze_def_sites: '+ NONDEFAULTRULE <name>' after a path's points makes the keyword a phantom via (the spelling #1030 left out of scope)
+- **PR #1027**: docs: scope 'bound in-repo' claim to what route_def_manifest.json carries
+- **Issue #1026** (closed): tool-findings.md:189-193 — "this chain is bound in-repo" covers two items the manifest does not
+- **PR #1024**: fix: consume STYLE/MASK/WEIGHT numeric arguments with their keyword, never as the path width
+- **Issue #1021** (closed): analyze_def_sites: STYLE/MASK numeric arguments are still consumed as the path width
+- **PR #1019**: bind the DEF re-run evidence chain in-repo: commit route_def_manifest.json, regenerate def_site_analysis.json with totals, shape tags, overlap lower bound
+- **Issue #1011** (closed): Commit route_def_manifest.json and regenerate def_site_analysis.json's record fields against the kept DEF
+- **PR #1016**: docs: accept ladder_dp's 24 Metal2 PDN spacing sites as known-PDN residual
+- **Issue #1009** (closed): Floorplan/PDN: the M1->M4 via-column lands leave 24 Metal2 spacing violations in ladder_dp's finished route
+- **PR #1017**: parse the DEF path-point extension form ( x y ext ): record ext_start/ext_end, never consume it as width
+- **Issue #1013** (closed): analyze_def_sites: parse or refuse DEF path-point extension form ( x y ext )
+- **PR #1015**: docs: add static as-of instruction to WORK_PLAN.md header
+- **Issue #1014** (closed): WORK_PLAN.md carries no as-of date, so a reader cannot tell when a declined regeneration left it stale
+- **PR #1010**: bind the ladder_dp route-DRC claims in-repo and answer design-versus-router from the routed DEF
+- **Issue #1006** (closed): ladder_dp route record: design-vs-router is undetermined for want of a DEF, and the classifier's inputs are not in the tree
+- **PR #1005**: test: injected defect for the start-skip legitimacy half of the two-instant CB control
+- **Issue #1004** (closed): test_verify_109_corpus_gate: the start-skip legitimacy assertion ships without the input that defeats it (rule 8)
+- **PR #1001**: tools: commit the probes prose-literal census its counts were quoted from
+- **PR #1002**: pnr: commit the finished ladder_dp route record (klt 0.9.0) and classify its 24 residual DRC violations
+- **PR #999**: fix: NOT_QUOTED sentinel for unquoted CONCLUSION figures in the corpus-gate test
+- **Issue #998** (closed): The #988/#990 prose-literal class scanner is in no tree, so its 139/159/156 counts (and "no third site") cannot be re-derived
+- **Issue #997** (closed): test_verify_109_corpus_gate's CB extent parser can report a drift that does not exist (two-instant CB returns start=None)
+- **Issue #808** (closed): Route ladder_dp to completion with the unpatched netlist on the build box: DRT-0305's cause is measured gone, the error is not re-observed
+- **PR #1000**: tools: remove one-shot ring-ratio snapshot harness
+- **PR #996**: fix: render_writes refuses out-of-record streams instead of asserting
+- **PR #993**: probes: derive two summaries' quoted figures from the run's own measurements
+- **PR #991**: probes: derive verify_109_claims CONCLUSION extents from the run's measurements
+- **PR #987**: perf suite: drive the shipped mixer -- a synth_top backend for the full-performance suite (#338)
+- **Issue #995** (closed): performance_suite: render_writes answers AssertionError, not REFUSED, for a stream past the record
+- **Issue #990** (closed): Class sweep (#988): two more same-shape sites - hard-coded prose figures beside the same run's live measurements
+- **Issue #988** (closed): verify_109_claims:244's CONCLUSION understates RS floor-clearing by ~13 ms (53.9 measured vs ~41 prose), and the figure is registered with no gate
+- **Issue #975** (closed): Remove tools/ring_ratio_compare.py: one-shot #548 before/after harness, nothing references it
+- **Issue #912** (closed): Five more JSON-refusal handlers miss UnicodeDecodeError: the #909 gap generalises past load_json_refused
+- **Issue #338** (closed): Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
+- **PR #818**: ci: commit the nightly's slow DAG records to main, not just the artifact
+- **Issue #787** (closed): Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run"
+- **PR #986**: docs: record verify_109_claims half-2 live run against the real Fischer corpus
+- **PR #985**: docs: mark §5c mpd.* bucket names as stale pending #933 regeneration
+- **Issue #983** (closed): CI produced zero check-runs on PR #982: pull_request workflows stopped triggering (needs operator)
+- **Issue #829** (closed): Run `make reference-integration` on the box: verify_109_claims' real-reference half has never been exercised against the real Fischer corpus
+- **Issue #856** (closed): Provision the pinned build box for this checkout: no .env, no remote.env, and the dispatch worker's AWS identity has no EC2 access
+- **Issue #869** (closed): Forward upstream to rjwalters/loom: post-verdict issue-body hash refuses when the body ends in a newline (#13600's fix covers one trailing newline, jq gives two)
+
 ### 2026-11-17
 
+- **PR #980**: docs: record the posted OpenROAD#12303 correction of record in the #12307 row
+- **Issue #888** (closed): Post the #12307 correction of record as a comment on OpenROAD#12303
+- **Issue #826** (closed): compile_dag --only: a named node that cannot run is skipped SILENTLY (exit 0, no line)
+- **PR #974**: dag: restate verdict-less evidence_file as REFUSED in docs, and forbid the silent declaration
+- **PR #972**: fix: compile_dag --only refuses a named node it cannot run, instead of silence
+- **PR #977**: test: pin run_evidence()'s known-key REFUSED and its non-recording path through main
+- **Issue #976** (closed): compile_dag: run_evidence()'s EVIDENCE_PRECEDENCE refusal ships without the input that defeats it
+- **Issue #971** (closed): compile_dag: docs/capability-dag.md and test_compile_dag_deps.py still state the pre-#791 'EXISTS ONLY returns pass' behaviour as current
+- **PR #968**: test: refuse the archive fixture during a squash merge
+- **PR #973**: fix: derive compile_dag's four evidence-source readers from one EVIDENCE_PRECEDENCE
+- **PR #969**: fix: keep unchanged dag records byte-identical so record PRs can land (#967)
+- **PR #970**: fix: share the claim-marker skip grammar between checker and #789 probe
+- **PR #810**: dag: report an evidence file that declares no verdict as REFUSED, not GREEN
+- **PR #944**: test: catch serialise-then-write and write-mode open spellings in the inline record-write guard
+- **PR #965**: fix: refuse the 789-marker suite's archive fixture mid-merge
+- **PR #953**: fix: --margins all-caught no-cliff input states the measured fact, not 'not every pair is CAUGHT'
+- **PR #957**: fix: 789 marker probe derives its already-satisfied guard from the staged injection
+- **PR #960**: fix: anchor the drum_kit grep= claim so the 789 probe's injection cannot collide with it
+- **Issue #966** (closed): 789-marker fixture guard: `git merge --squash` reproduces the exact mid-merge split it refuses, and is not refused
+- **Issue #827** (closed): compile_dag: unjudged() keys on evidence_file but run_evidence dispatches suite/verifier first, so a node with both would be REFUSED despite a passing suite
+- **Issue #967** (closed): Any PR that rewrites a docs/dag-results.json record cannot land while main is busy: dag.yml re-conflicts it every merge
+- **Issue #962** (closed): 789 probe: injected_state mirrors the checker's FENCE rule but not its inline-backtick rule
+- **Issue #791** (closed): compile_dag renders a node GREEN when its evidence file declares no verdict: M3, S1 and S3 are green on existence alone
+- **Issue #923** (closed): The source-shape guard in test_atomic_record_writers.py stays green on open(...,'w') + write(json.dumps(...))
+- **Issue #964** (closed): 789 probe suite: a merged-tree measurement is silently void unless HEAD is the merge commit (git archive HEAD fixture)
+- **Issue #950** (closed): print_margins' else prose says 'not every pair is CAUGHT' on a guard that does not measure it
+- **Issue #936** (closed): 789 marker probe: already_satisfied() holds a hand-written copy of each claim's in=/grep=, and the two can diverge silently
+- **Issue #959** (closed): main is red: the 789 marker probe's already-satisfied injection also defeats #904's grep= uniqueness refusal (tools job, since 72be3665)
+- **PR #951**: probes: split the rate-fold verdict else on the dB red count it mis-states
+- **Issue #946** (closed): rate_fold_db_control's verdict prose states a stronger fact than `must == []` supports
+- **PR #945**: test: guard the ms.* grouping label against a silent %.0f collision
+- **Issue #939** (closed): measure: the ms.* grouping label is %.0f, so two MS_WINDOWS_S entries that round to the same integer ms would silently merge buckets
+- **PR #876**: ci: collect the 16 uncovered fpga/ test files in a fpga-uncovered job
+- **Issue #853** (closed): 16 of 40 fpga/ test files are run by no CI job (23 more only via make verify-fast) -- the fpga half of the #404/#851 shape
+- **Issue #958** (closed): 789 marker probe: the #920 already-satisfied refusal for drum_kit is shadowed by check_doc_claims' one-line uniqueness refusal — tools job red on main since 72be3665
+- **Issue #956** (closed): compile_dag.py's status legend lists BLOCKED and TODO twice (merge artefact from #810)
+- **Issue #937** (closed): rate_tol_sweep.py --unit <anything but db> labels its columns caught_db/cost_db, and two smaller label drifts from #895
+- **PR #942**: fix: name rate_tol_sweep's per-unit columns by the swept unit
+- **Issue #932** (closed): check_attested_hashes: a pathed check entry with no content_hash is a silent green, and is counted as compared
+- **PR #938**: fix: REFUSE pathed check entries with no committed hash; count only compared files
+- **Issue #929** (closed): measure: extra_group() merges the 10.0 ms and 5.0 ms MPD strides into one bucket (6 strides -> 5 buckets)
+- **PR #934**: fix: bucket MPD attribution columns by stride, not by stride decimals
+- **Issue #920** (closed): 789 marker probe: a control still reports FAIL when the tree already satisfies the value it injects
+- **PR #927**: fix: 789 marker probe refuses an injection state the tree already satisfies
+- **Issue #815** (closed): Re-base the 114 Refused definitions on refusal.Refused and delete the three mitigations it makes dead (follow-on to #784)
+- **PR #915**: fix: re-base every Refused on refusal.Refused, delete the three dead mitigations, flip the guard to enforcing
+- **Issue #904** (closed): check_doc_claims.py cannot detect a grep= pattern that matches several lines, so no marker's uniqueness is machine-checked
+- **PR #916**: check_doc_claims: refuse a grep= marker matching more than one line
+- **Issue #928** (closed): docs: discrimination.md:962 points at line 232 of discrimination-run-16.txt, which #778 regenerated
+- **PR #931**: docs: re-anchor jit.stability figure to revision 24937ca4
+- **Issue #940** (closed): The #906 roadmap gate: tags assumed in rungs.yml but asserted in nightly.yml, and nothing guards the shipped step order
+- **PR #943**: ci: assert the shipped compile_dag check-before-run order; state rungs' tag precondition
+- **Issue #935** (closed): the dB family's rate tolerance ships 8.0 dB of licence at the floor_db clamp with no injected-bug control on any dB column
+- **Issue #921** (closed): Makefile and docs/claim-markers.md understate the 789 marker probe's runtime margin by ~6x
+- **PR #926**: docs: restore measured ~0.6 s / ~6000x figures for the 789 probe runtime note
+- **PR #941**: [rate-tol] measured: no dB must row is constructible for the integer-fold control at any licence (#935)
+- **Issue #906** (closed): rungs.yml's roadmap gate checks the README that the line above it just rewrote
+- **PR #924**: fix: the roadmap gate judges the README as committed, not the regen's own output
+- **Issue #882** (closed): Tracked-JSON experiment-record writers still truncate-then-write (class sweep remainder from #881)
+- **PR #918**: fix: tracked-JSON experiment records replace atomically; record readers refuse with a path
+- **Issue #782** (closed): bug: the relative rate tolerance is dimensionally meaningless on the 147 dB columns
+- **PR #895**: split RATE_TOL_REL into per-unit scalars; sweep the dB term to 0.1 and empty the rate quarantine
+- **Issue #884** (closed): regrade: an attested-file edit fails as a bare 'exit 3' with the drift report swallowed, and nothing couples the edit to regenerating the evidence
+- **PR #925**: signoff: surface klt's drift report on failure; add attested-hash coupling check to verify-fast
+- **Issue #930** (closed): signoff.yml swallows the attest-check diagnostic: failing attestation prints nothing under bash -e
+- **Issue #778** (closed): measure: re-derive the jit.stability +0.008 and mpd.* attributions with the exact-period fold (REFUSED in #767 -- no corpus on that host)
+- **PR #919**: docs: re-derive the 5b/5c attributions with the post-#776 fold; record corpus octave incidence
+- **Issue #885** (closed): pytest_collection_inventory.py:78 comment says pnr/ is 'make verify only' — false once the pnr CI job lands (#851/#865)
+- **PR #914**: docs: correct GUARDED_DIRS comment — CI collects pnr/ as a third job
+- **Issue #879** (closed): docs: makefile_recipe comment-filter docstrings claim a silent exit 0 for a mutation that is loud mid-recipe
+- **PR #907**: docs: scope makefile_recipe comment-filter docstrings to the line position
+- **Issue #905** (closed): check_doc_claims_789_marker_controls.py reports FAIL, not REFUSED, when an uncommitted edit makes a #789 claim stale
+- **PR #913**: fix: 789 marker probe REFUSES a dirty tree instead of reporting FAILing controls
+- **Issue #874** (closed): docs/tool-findings.md will carry contradictory claims about the core-area identity once #849 merges
+- **PR #911**: docs: drop stale attribution of the 6-sf coincidence framing to PR #849's row
 - **Issue #909** (closed): load_json_refused catches JSONDecodeError only: a damaged record that is also invalid UTF-8 escapes as a traceback
 - **PR #910**: fix: refuse a manifest record truncated mid-UTF-8 rather than a bare UnicodeDecodeError
 

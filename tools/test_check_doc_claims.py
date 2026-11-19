@@ -502,6 +502,86 @@ def test_a_marker_in_a_code_block_or_backticks_is_an_example_not_a_claim(tmp_pat
     assert [c.raw for c in found] == ["commit=abc"]
 
 
+def test_iter_claim_markers_applies_both_skip_rules_once():
+    """#962: the fence and inline-backtick skip grammar exists exactly once,
+    in `iter_claim_markers`, because two readers walk documents with it --
+    `find_claims` and the #789 probe's `injected_state` -- and a hand copy
+    in the probe had drifted (it lacked the backtick rule). Edge cases from
+    the issue's test plan: a ~~~ fence, an odd backtick count before a
+    marker on its own line, and an unterminated fence (everything after it
+    is inside the fence, so nothing further yields)."""
+    lines = [
+        "<!-- claim: commit=abc -->",        # 1: a plain claim
+        "~~~",                                # 2: tilde fence opens
+        "<!-- claim: grep=x -->",             # 3: inside the fence
+        "~~~",                                # 4: fence closes
+        "`odd <!-- claim: grep=y -->",        # 5: odd backticks before the marker
+        "`even` <!-- claim: grep=z -->",      # 6: balanced, so a claim
+        "```",                                # 7: fence opens, never closed
+        "<!-- claim: grep=w -->",             # 8: inside the unterminated fence
+    ]
+    found = [(i, m.group("body")) for i, _, m in cdc.iter_claim_markers(lines)]
+    assert found == [(1, "commit=abc"), (6, "grep=z")]
+
+
+def test_second_marker_on_one_line_is_refused_not_dropped(tmp_path):
+    """#1041 control: a satisfiable marker followed by an unsatisfiable one on
+    the SAME line. Before the fix the second was never parsed (`search`, not
+    `finditer`): rc 0, one claim counted. It must now be counted and REFUSED,
+    and the iterator both readers share must yield both."""
+    doc = tmp_path / "d.md"
+    doc.write_text(
+        "A <!-- claim: commit=HEAD --> and B "
+        "<!-- claim: grep='NO_SUCH_KEY' in=nope.json -->\n")
+    assert [m.group("body") for _, _, m in
+            cdc.iter_claim_markers(doc.read_text().splitlines())] == \
+        ["commit=HEAD", "grep='NO_SUCH_KEY' in=nope.json"]
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 2
+    assert got[0].status != cdc.REFUSED or "second claim marker" not in got[0].detail
+    assert got[1].status == cdc.REFUSED
+    assert "second claim marker" in got[1].detail
+    assert got[1].where.endswith("d.md:1")
+
+
+def test_second_marker_in_backticks_is_still_an_example(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("A <!-- claim: commit=HEAD --> and `<!-- claim: grep=x -->`\n"
+                   "```\nB <!-- claim: grep=y --> <!-- claim: grep=z -->\n```\n")
+    assert [c.raw for c in cdc.find_claims(doc)] == ["commit=HEAD"]
+
+
+def test_unclosed_opener_is_refused_not_dropped(tmp_path):
+    """#1044 control: a marker whose `-->` is on a later line. Before the fix
+    MARKER needed both ends on one line, so the opener matched nothing: the
+    claim vanished, rc 0, beside a valid claim. It must be REFUSED, naming the
+    opener's file:line, and the run must exit non-zero."""
+    doc = tmp_path / "d.md"
+    doc.write_text("ok <!-- claim: commit=HEAD -->\n"
+                   "<!-- claim: grep='NO_SUCH_KEY'\n"
+                   "     in=nope.json -->\n")
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 2
+    assert got[1].status == cdc.REFUSED
+    assert "no `-->` on its line" in got[1].detail
+    assert got[1].where.endswith("d.md:2")
+
+
+def test_unclosed_opener_in_fence_or_backticks_is_an_example(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("A <!-- claim: commit=HEAD -->\n"
+                   "see `<!-- claim: grep=x` here\n"
+                   "```\n<!-- claim: grep=y\n```\n")
+    assert [c.raw for c in cdc.find_claims(doc)] == ["commit=HEAD"]
+
+
+def test_unclosed_opener_on_last_line_is_refused(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("text\n<!-- claim: grep=x")
+    got = cdc.find_claims(doc)
+    assert len(got) == 1 and got[0].unclosed and got[0].line == 2
+
+
 def test_markers_are_found_with_the_prose_they_back(tmp_path):
     doc = tmp_path / "d.md"
     doc.write_text("\n".join([
