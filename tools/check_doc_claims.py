@@ -169,7 +169,8 @@ class Claim:
     unclosed: bool = False
     # A standalone marker line between two prose lines (#1033): the placement
     # splits the paragraph when rendered, so it is refused by construction and
-    # validate() must not overwrite the refusal either.
+    # validate() must not overwrite the refusal either. Set only on `.md`
+    # documents -- the rationale is a CommonMark property (see find_claims).
     splits_paragraph: bool = False
 
     @property
@@ -240,6 +241,11 @@ def _split_paragraph_reason(lines: list[str], i: int, start: int) -> str | None:
     and can never start a block. Stacked markers are walked past in both
     directions, so m1 of a prose/m1/m2/blank stack is judged by what follows
     m2, not by m2 itself.
+
+    The CALLER scopes this to `.md` documents: the reason below is a
+    CommonMark rendering property, and a Python docstring is never rendered
+    as CommonMark, so asserting it there would be a refusal whose reason
+    cannot be true (see find_claims).
 
     ADJACENT FORM ONLY. A blank line between the marker and the prose below
     escapes this check -- the blank already ended the paragraph -- and the
@@ -321,7 +327,15 @@ def find_claims(doc: pathlib.Path) -> list[Claim]:
         same = line[: m.start()].strip().lstrip("-*> ").strip()
         if same:
             prose = same
-        split = _split_paragraph_reason(lines, i, m.start())
+        # Scoped to Markdown (#1033): the refusal's rationale is a CommonMark
+        # HTML-block property, and nothing renders a Python docstring as
+        # CommonMark -- firing on a .py source file would assert a rendering
+        # consequence that cannot occur. A docstring marker therefore stays
+        # outside this placement check and is hand-covered where deliberate
+        # (tools/test_promoted_bands.py covers the one in
+        # model/promoted_measures.py).
+        split = (_split_paragraph_reason(lines, i, m.start())
+                 if doc.suffix == ".md" else None)
         c = Claim(doc=doc, line=i, raw=m.group("body"), prose=prose[:100],
                   splits_paragraph=bool(split))
         if split:

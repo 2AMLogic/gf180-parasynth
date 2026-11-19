@@ -723,6 +723,29 @@ def test_stacked_markers_between_prose_lines_are_refused(tmp_path):
     assert [c.status for c in got] == [cdc.REFUSED, cdc.REFUSED]
 
 
+def test_the_paragraph_split_refusal_is_scoped_to_markdown(tmp_path):
+    """The refusal's rationale is a CommonMark HTML-block property: a
+    standalone `<!--` line can interrupt a *rendered* paragraph. Nothing
+    renders a Python docstring as CommonMark, so the same placement on a
+    `.py` source file would make the guard refuse with a reason that cannot
+    be true -- a refusal that answers where it cannot. Scoping it to `.md`
+    leaves docstring markers placement-unchecked by the machine; where one
+    is deliberate it is hand-covered (tools/test_promoted_bands.py covers
+    the marker in model/promoted_measures.py, whose grep backer still has to
+    match). PR #1065's review found the unscoped guard refusing exactly that
+    docstring marker."""
+    doc = tmp_path / "d.py"
+    doc.write_text("\n".join([
+        "The docstring's first sentence stands here.",
+        "<!-- claim: commit=HEAD -->",
+        "The sentence after the marker continues it.",
+    ]))
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 1
+    assert not got[0].splits_paragraph
+    assert got[0].status == cdc.OK, got[0].detail
+
+
 # --------------------------------------------------------------------------
 # the exit-code contract, which is what `make verify` actually reads
 # --------------------------------------------------------------------------

@@ -27,7 +27,15 @@ can interrupt a paragraph, so the prose above and below render as two
 paragraphs where the author wrote one (measured on GitHub's renderer,
 2026-11-19; `docs/tr808-reference.md` carried two markers in that placement
 and both now trail their claim). `tools/check_doc_claims.py` REFUSES that
-placement. The refusal is a source-layout check and catches only the adjacent
+placement **in Markdown documents** (its document set is `.md` only): the
+rationale above is a CommonMark rendering property, and nothing renders a
+Python docstring as CommonMark, so a marker inside a `.py` source file is
+not checked for this placement by the machine. Where such a marker is
+deliberate it is hand-covered instead --
+`tools/test_promoted_bands.py` covers the one in
+`model/promoted_measures.py`, including its placement-shaped requirements
+(the grep backer must match real prose). The refusal is a source-layout
+check and catches only the adjacent
 form: a blank line between the marker and the prose below it escapes it (the
 blank already ended the paragraph), and the checker never re-renders the
 document to count paragraphs.
