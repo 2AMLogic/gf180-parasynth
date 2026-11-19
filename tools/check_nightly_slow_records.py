@@ -3,7 +3,7 @@
 
     tools/check_nightly_slow_records.py \
       --published published.json --at-run at-run.json \
-      --log full-rtl.log --head-sha <40-hex> [--run-id R] [--job-id J]
+      --log full-rtl.log --head-sha <40-hex> --run-id R [--job-id J]
 
 WHY. #820's criterion (a) originally demanded every slow record's `sha` equal
 the verifying nightly's `headSha`. #967's `record_unchanged()` makes that
@@ -35,8 +35,13 @@ close. A line from another run -- a foreign anchor or a foreign detail --
 fails, so a green step cannot launder a record it did not measure.
 
 The log is asserted to belong to the run it names, at the point of use:
-`--head-sha` and, when given, `--run-id` must each appear in the log
-itself, or the gate REFUSES naming what is missing. A fetch that silently
+`--head-sha` and `--run-id` must each appear in the log itself, or the gate
+REFUSES naming what is missing. `--run-id` is required, not optional: on a
+quiet night `origin/main` does not move, so two consecutive nightlies share
+the same `headSha` and a previous night's log satisfies the head-sha
+assertion -- measured in #1066, where a stale log with its run id rewritten
+out passed 6/6 without it, and only the run id discriminates two runs at
+the same head. A fetch that silently
 failed -- or a previous night's log left at the same fixed path -- would
 otherwise be attributed to tonight's run and answered in the voice of a
 measurement. Measured on the two replayed nightlies (44344077192 job
@@ -55,13 +60,19 @@ The six evidence lines this gate was first replayed against are pinned in
 `tools/test_check_nightly_slow_records.py`, so the positive case survives
 Actions' log retention.
 
-Exit: 0 every node corroborated (or every requested control turned red),
-      1 a node fails / the old rule rejects,
+Exit: 0 every node corroborated AND every requested control turned red,
+      1 a node fails / the old rule rejects; in control mode, every control
+        was caught but the positive verdict itself failed,
       3 REFUSED -- the apparatus cannot answer: required evidence missing or
         unusable, or the log does not name the run it is claimed to be from
         (a gate that answers anyway would look exactly like data),
       4 a requested control did not turn the verdict red,
       2 usage / unreadable input.
+
+In control mode the exit is the worse of the two answers
+(4 uncaught control > 1 verdict FAIL > 0), so a printed FAIL is never
+returned as 0 (#1066): the verdict's own result is printed and kept, not
+dropped in favour of the controls' result.
 
 Controls (--control name=node, repeatable) mutate the evidence the way
 #1058's test plan requires -- withhold the node's line, substitute a line
@@ -254,9 +265,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--head-sha", required=True, dest="head_sha",
                     help="the run's full 40-hex headSha; asserted to appear "
                          "in the log (the checkout step's rev-parse output)")
-    ap.add_argument("--run-id", default="", dest="run_id",
-                    help="asserted to appear in the log (upload-artifact's "
-                         "download URL), and echoed in the summary")
+    ap.add_argument("--run-id", required=True, dest="run_id",
+                    help="the run's id; asserted to appear in the log "
+                         "(upload-artifact's download URL) and echoed in the "
+                         "summary -- required because at the same head sha "
+                         "(a quiet night) it is the only anchor that "
+                         "discriminates two runs (#1066)")
     ap.add_argument("--job-id", default="", dest="job_id",
                     help="echoed in the summary; deliberately NOT asserted -- "
                          "a job's own log does not carry its id (measured on "
@@ -271,13 +285,21 @@ def main(argv: list[str] | None = None) -> int:
                          "false-verdict=")
     args = ap.parse_args(argv)
 
-    run_label = f"run {args.run_id}" if args.run_id else "run"
+    run_label = f"run {args.run_id}"
     job_label = f" job {args.job_id}" if args.job_id else ""
 
     try:
         if not FULL_SHA_RE.match(args.head_sha or ""):
             raise Refused(f"--head-sha must be a full 40-hex sha, got "
                           f"{args.head_sha!r}")
+        if not args.run_id:
+            # `required=True` alone still admits `--run-id ''`, which would
+            # skip the log assertion through the anchor loop's truthiness
+            # guard -- the defeating input walks back in through a side door
+            # (verification-rules rule 8).
+            raise Refused("--run-id must be a non-empty run id -- at the "
+                          "same head sha (a quiet night) it is the only "
+                          "anchor that discriminates two runs")
         published = load_json(args.published, "published records")
         at_run = load_json(args.at_run, "records at the run checkout")
         try:
@@ -326,8 +348,11 @@ def main(argv: list[str] | None = None) -> int:
         if not args.controls:
             return EXIT_OK if npass == len(SLOW_NODES) else EXIT_FAIL
 
-        # Control mode: every requested control must turn its node red.
-        exit_code = EXIT_OK
+        # Control mode: every requested control must turn its node red, and
+        # the positive verdict keeps its own exit -- a printed FAIL must
+        # never be returned as 0 (#1066). The worse of the two answers wins:
+        # 4 (a control went uncaught) > 1 (verdict FAIL) > 0.
+        controls_exit = EXIT_OK
         for spec in args.controls:
             name, _, node = spec.partition("=")
             if name not in CONTROLS:
@@ -347,8 +372,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  CONTROL {spec}: caught (node fails: {v2[node][1]})")
             else:
                 print(f"  CONTROL {spec}: NOT CAUGHT -- {v2[node][1]}")
-                exit_code = EXIT_CONTROL
-        if exit_code == EXIT_OK:
+                controls_exit = EXIT_CONTROL
+        positive_exit = EXIT_OK if npass == len(SLOW_NODES) else EXIT_FAIL
+        exit_code = (EXIT_CONTROL if controls_exit != EXIT_OK
+                     else positive_exit)
+        if controls_exit == EXIT_OK:
             print("all requested controls turned their node red")
         return exit_code
     except Refused as exc:

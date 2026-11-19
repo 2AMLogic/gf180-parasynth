@@ -155,6 +155,21 @@ def test_each_control_prevents_a_pass(replay, spec, capsys):
     assert "NOT CAUGHT" not in out
 
 
+def test_control_mode_returns_fail_when_the_positive_verdict_fails(
+        replay, capsys):
+    """#1066's defeating input: I2.passed falsified plus --control
+    withhold=F1. The old control-only exit printed `(a) 5/6 ... --> FAIL`
+    and still returned 0; control mode must return the worse of the two
+    answers, so a printed FAIL is never read as a pass."""
+    bad = dict(RECORDED)
+    bad["I2"] = dict(RECORDED["I2"], passed=False)
+    replay["published"].write_text(json.dumps(bad))
+    assert run_gate(replay, "--control", "withhold=F1") == cnsr.EXIT_FAIL
+    out = capsys.readouterr().out
+    assert "(a) 5/6 slow nodes corroborated" in out and "--> FAIL" in out
+    assert "CONTROL withhold=F1: caught" in out
+
+
 def test_false_verdict_fails_even_with_matching_keep(replay, capsys):
     """The stored boolean alone must never be enough -- the control makes the
     base rule fail before the control machinery even runs."""
@@ -233,13 +248,49 @@ def test_refused_when_log_does_not_carry_run_id(replay, capsys):
     assert "run id" in err and "44344077192" in err
 
 
-def test_run_id_and_job_id_are_optional(replay):
-    """Omitting --run-id/--job-id skips their assertions; the head sha is
-    still required to appear in the log."""
+def test_job_id_stays_optional(replay, capsys):
+    """Only --job-id is optional: it is deliberately not asserted (a job's
+    own log does not carry its id, measured on runs 44344077192 and
+    44128504549), so omitting it changes nothing."""
+    argv = ["--published", str(replay["published"]),
+            "--at-run", str(replay["at_run"]),
+            "--log", str(replay["log"]), "--head-sha", HEAD_SHA,
+            "--run-id", "44344077192"]
+    assert cnsr.main(argv) == cnsr.EXIT_OK
+    assert "134941613343" not in capsys.readouterr().out
+
+
+def test_omitting_run_id_is_a_usage_error(replay):
+    """--run-id is load-bearing, not optional: on a quiet night two
+    consecutive nightlies share the head sha, so without it a previous
+    night's log satisfies the head-sha assertion (#1066). Omitting it is an
+    argparse error (exit 2), never a PASS."""
     argv = ["--published", str(replay["published"]),
             "--at-run", str(replay["at_run"]),
             "--log", str(replay["log"]), "--head-sha", HEAD_SHA]
-    assert cnsr.main(argv) == cnsr.EXIT_OK
+    with pytest.raises(SystemExit) as exc:
+        cnsr.main(argv)
+    assert exc.value.code == 2
+
+
+def test_missing_run_id_with_control_errors_before_any_verdict(replay, capsys):
+    """The same usage error with --control present: argparse rejects the
+    invocation before any verdict line is printed."""
+    argv = ["--published", str(replay["published"]),
+            "--at-run", str(replay["at_run"]),
+            "--log", str(replay["log"]), "--head-sha", HEAD_SHA,
+            "--control", "withhold=F1"]
+    with pytest.raises(SystemExit) as exc:
+        cnsr.main(argv)
+    assert exc.value.code == 2
+    assert "PASS" not in capsys.readouterr().out
+
+
+def test_refused_on_empty_run_id(replay):
+    """`--run-id ''` would slip past the log assertion through the anchor
+    loop's truthiness guard -- required means non-empty, so the gate
+    REFUSES rather than answer unattributed."""
+    assert run_gate(replay, "--run-id", "") == cnsr.EXIT_REFUSED
 
 
 def test_refused_on_log_with_only_fast_node_lines(replay, capsys):
