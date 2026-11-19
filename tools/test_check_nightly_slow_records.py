@@ -324,14 +324,49 @@ def test_refused_on_artifact_id_as_run_id(replay, capsys):
 
 def test_refused_on_run_id_with_a_space(replay):
     """The other measured pass: a single space appears in every log line,
-    so `--run-id ' '` passed the substring check 6/6. Exact field equality
-    refuses it, padding included."""
-    assert run_gate(replay, "--run-id", " 44344077192") == cnsr.EXIT_REFUSED
+    so the literal `--run-id ' '` passed the substring check 6/6 on the
+    broken implementation and exits 3 at the fixed head (#1066 review).
+    Exact field equality refuses it. The test pins the literal space, not
+    a padded correct id -- ' 44344077192' is no substring of the log
+    either, so it refused the broken implementation too and pinned
+    nothing."""
+    assert run_gate(replay, "--run-id", " ") == cnsr.EXIT_REFUSED
 
 
-def test_refused_when_log_urls_name_two_runs(replay, capsys):
-    """A log carrying artifact URLs of two different runs is ambiguous
-    execution evidence; the gate refuses rather than pick one."""
+def test_only_the_upload_record_may_attribute_the_run(replay, capsys):
+    """The measured replay from review (#1066): the upload-artifact record
+    line replaced with a timestamped diagnostic naming ANOTHER run's
+    artifact path -- `Previous baseline path: /actions/runs/<other>/
+    artifacts/<n>` -- attributed all six rows to that foreign run and
+    exited 0 while every URL-bearing line was scanned. A line without the
+    `Artifact download URL:` marker attributes nothing, so this log
+    REFUSES even for the run its diagnostic names."""
+    identity = [ln for ln in IDENTITY_LINES
+                if "Artifact download URL" not in ln]
+    diagnostic = ("2026-11-18T16:31:13.8095034Z Previous baseline path: "
+                  "/actions/runs/44128504549/artifacts/1234567")
+    replay["log"].write_text(
+        "\n".join(identity + [diagnostic] + RECORDED_LOG) + "\n")
+    assert run_gate(replay, "--run-id", "44128504549") == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "Artifact download URL" in err and "44128504549" in err
+
+
+def test_foreign_diagnostic_does_not_conflict_with_the_upload_record(replay):
+    """The reverse measured case (#1066 review): a diagnostic naming
+    another run's artifact path, appended while the genuine upload record
+    stays, must not make the correct run REFUSE as ambiguous -- only
+    record lines are consulted, so the correct run still passes."""
+    diagnostic = ("2026-11-18T16:31:14.0000000Z Previous baseline path: "
+                  "/actions/runs/44128504549/artifacts/1234567")
+    replay["log"].write_text(replay["log"].read_text() + diagnostic + "\n")
+    assert run_gate(replay) == cnsr.EXIT_OK
+
+
+def test_refused_when_upload_records_name_two_runs(replay, capsys):
+    """A log carrying two upload-artifact download-URL records naming
+    different runs is ambiguous execution evidence; the gate refuses
+    rather than pick one."""
     two_urls = replay["log"].read_text() + (
         "\n2026-11-18T16:31:14.0000000Z Artifact download URL: "
         "https://github.com/2AMLogic/gf180-parasynth/actions/runs/"

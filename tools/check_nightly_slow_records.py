@@ -36,11 +36,16 @@ fails, so a green step cannot launder a record it did not measure.
 
 The log is asserted to belong to the run it names, at the point of use:
 `--head-sha` must appear in the log itself, and `--run-id` must EQUAL the
-complete numeric run field of upload-artifact's download URL
-(`/actions/runs/<id>/artifacts/<artifact>`) -- substring presence is not
-attribution: the artifact id, the job id and a single space each appear in
-a real log and passed a substring check (measured on run 44344077192's
-log, #1066 review), so only exact field equality attributes it.
+complete numeric run field of the URL in upload-artifact's own
+`Artifact download URL:` record (`/actions/runs/<id>/artifacts/<artifact>`)
+-- substring presence is not attribution: the artifact id and a single
+space each appear in a real log and passed a substring check (measured on
+run 44344077192's log, #1066 review), so only exact field equality
+attributes it -- and the URL counts only on the upload record's own line:
+a diagnostic naming another run's artifact path (`Previous baseline path:
+/actions/runs/<other>/artifacts/<n>`, measured on the same log, #1066
+review) attributed that foreign run when every URL-bearing line was
+scanned.
 `--run-id` is required, not optional: on a
 quiet night `origin/main` does not move, so two consecutive nightlies share
 the same `headSha` and a previous night's log satisfies the head-sha
@@ -118,12 +123,17 @@ FRESH_RE = re.compile(r"(?:^|\s)(PASS|FAIL|REFUSE)\s+(\S+)\s+(.+?)\s*$")
 
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
-#: upload-artifact's download URL -- the only place a job log names its own
-#: run, and the field `--run-id` is asserted against WHOLE, not as a
-#: substring: the artifact id (14445449921), the job id and a single space
-#: each appear in run 44344077192's log and passed an `in` check (#1066
-#: review).
-ARTIFACT_RUN_ID_RE = re.compile(r"/actions/runs/(\d+)/artifacts/\d+")
+#: upload-artifact's own download-URL record ("Artifact download URL:" on
+#: the upload step's line) -- the only line a job log may name its own run
+#: from, and the run field `--run-id` is asserted against WHOLE, not as a
+#: substring: the artifact id (14445449921) and a single space each appear
+#: in run 44344077192's log and passed an `in` check (#1066 review), and a
+#: bare diagnostic naming another run's artifact path ("Previous baseline
+#: path: /actions/runs/<other>/artifacts/<n>", measured on the same log)
+#: attributed that foreign run while every URL-bearing line was scanned --
+#: so a line without the record marker attributes nothing.
+ARTIFACT_RUN_ID_RE = re.compile(
+    r"Artifact download URL:.*?/actions/runs/(\d+)/artifacts/\d+")
 
 EXIT_OK, EXIT_FAIL, EXIT_REFUSED, EXIT_CONTROL = 0, 1, 3, 4
 
@@ -283,14 +293,16 @@ def main(argv: list[str] | None = None) -> int:
                     help="the run's full 40-hex headSha; asserted to appear "
                          "in the log (the checkout step's rev-parse output)")
     ap.add_argument("--run-id", required=True, dest="run_id",
-                    help="the run's id; asserted to EQUAL the artifact "
-                         "download URL's complete numeric run field in the "
-                         "log (not merely to appear in it -- the artifact "
-                         "id, the job id and a single space each pass a "
-                         "substring check) and echoed in the summary -- "
-                         "required because at the same head sha (a quiet "
-                         "night) it is the only anchor that discriminates "
-                         "two runs (#1066)")
+                    help="the run's id; asserted to EQUAL the complete "
+                         "numeric run field of the URL in the log's "
+                         "upload-artifact `Artifact download URL:` record "
+                         "(not merely to appear in it -- the artifact id "
+                         "and a single space each pass a substring check, "
+                         "and a diagnostic line naming another artifact "
+                         "path is not the record) and echoed in the "
+                         "summary -- required because at the same head "
+                         "sha (a quiet night) it is the only anchor that "
+                         "discriminates two runs (#1066)")
     ap.add_argument("--job-id", default="", dest="job_id",
                     help="echoed in the summary; deliberately NOT asserted -- "
                          "a job's own log does not carry its id (measured on "
@@ -340,8 +352,11 @@ def main(argv: list[str] | None = None) -> int:
                               for m in ARTIFACT_RUN_ID_RE.finditer(line)})
         if not url_run_ids:
             raise Refused(
-                "the log carries no artifact download URL naming the run id "
-                "(no /actions/runs/<run id>/artifacts/<artifact> line) -- "
+                "the log carries no upload-artifact `Artifact download "
+                "URL:` record naming the run id (no line of the form "
+                "`Artifact download URL: .../actions/runs/<run id>/"
+                "artifacts/<artifact>`; a diagnostic may name an artifact "
+                "path, but only the upload record attributes) -- "
                 "its execution evidence cannot be attributed to "
                 f"{run_label}{job_label} (head {args.head_sha[:8]}); a "
                 "stale or failed fetch leaves the previous night's log "
@@ -349,18 +364,19 @@ def main(argv: list[str] | None = None) -> int:
                 "attribute this one")
         if len(url_run_ids) > 1:
             raise Refused(
-                "the log carries artifact download URLs naming "
+                "the log carries upload-artifact download-URL records "
+                "naming "
                 f"{len(url_run_ids)} distinct runs "
                 f"({', '.join(url_run_ids)}) -- ambiguous execution "
                 f"evidence for {run_label}{job_label}; re-fetch the single "
                 "run's log rather than attribute this one")
         if url_run_ids[0] != args.run_id:
             raise Refused(
-                f"the log's artifact download URL names run "
+                f"the log's `Artifact download URL:` record names run "
                 f"{url_run_ids[0]}, not the supplied run id "
                 f"{args.run_id!r} -- the comparison is against the "
                 "complete numeric run field of the URL, exact and whole: "
-                "the artifact id, the job id and a single space each "
+                "the artifact id and a single space each "
                 "appear in a real log and passed a substring check "
                 "(measured on run 44344077192's log), so a partial match "
                 "attributes nothing")
