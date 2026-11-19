@@ -48,10 +48,26 @@ RECORDED_LOG = [
     "2026-11-18T16:31:12.5129144Z the records are unchanged",
 ]
 
-#: A fast node's line from the same log -- the `foreign` control substitutes
-#: it (renamed) as a line from another run: foreign anchor AND foreign detail.
+#: A fast node's line from the same log -- a REAL foreign anchor (4fe488f1,
+#: another branch) with a foreign detail in one line. This is NOT what the
+#: `foreign` control substitutes (another slow node's same-night line, whose
+#: anchor every slow node shares on a quiet night -- see control_foreign's
+#: docstring); it pins the foreign-anchor pathology directly in
+#: test_substituted_line_from_another_run_fails_directly.
 FOREIGN_LINE = ("2026-11-18T16:10:59.9911337Z   keep  F3  153 passed in 4.07s "
                 "(unchanged since 4fe488f1)")
+
+#: The log's identity anchors, verbatim from the same job log: the checkout
+#: step's rev-parse command and its full-sha output line, and upload-artifact's
+#: download URL carrying the run id. The gate asserts --head-sha and --run-id
+#: against the log (review #1059): these lines are what make the pinned
+#: evidence THIS run's. (The real log prints the sha a second time at
+#: 16:10:27 from the nightly's own fetch step; one occurrence is pinned.)
+IDENTITY_LINES = [
+    "2026-11-18T16:10:26.8792578Z [command]/usr/bin/git rev-parse refs/remotes/origin/main",
+    "2026-11-18T16:10:26.8793193Z 4a6eda4d2df8a41bdb0e2b6110137dd5fb5478f2",
+    "2026-11-18T16:31:13.8095034Z Artifact download URL: https://github.com/2AMLogic/gf180-parasynth/actions/runs/44344077192/artifacts/14445449921",
+]
 
 
 @pytest.fixture()
@@ -62,7 +78,7 @@ def replay(tmp_path):
     log = tmp_path / "full-rtl.log"
     pub.write_text(json.dumps(RECORDED))
     run.write_text(json.dumps(RECORDED))
-    log.write_text("\n".join(RECORDED_LOG) + "\n")
+    log.write_text("\n".join(IDENTITY_LINES + RECORDED_LOG) + "\n")
     return {"published": pub, "at_run": run, "log": log}
 
 
@@ -159,18 +175,22 @@ def test_substituted_line_from_another_run_fails_directly(replay, capsys):
     assert not ok and "no keep line" in why
 
 
-def test_branch_records_without_execution_evidence_fail(replay, capsys):
-    """#818's branch content -- six bare records at 91398a0c, no nightly
-    line anywhere -- must still fail. This is the defeat the original clause
-    existed to close; the amended rule closes it too."""
+def test_bare_records_without_recording_lines_are_refused(replay):
+    """Six bare records at 91398a0c with no nightly line anywhere: the log
+    at hand is not one this gate can use, so it REFUSES -- kept distinct
+    from FAIL, which is the verdict when recording rows exist and a node's
+    does not (test_green_step_cannot_supply_a_missing_row: bare records
+    fail per-node there, the defeat the original clause existed to
+    close)."""
     replay["log"].write_text("2026-11-18T16:31:12.5129144Z the records are unchanged\n")
-    assert run_gate(replay) == cnsr.EXIT_REFUSED  # no recording lines: REFUSED
+    assert run_gate(replay) == cnsr.EXIT_REFUSED
 
 
 def test_green_step_cannot_supply_a_missing_row(replay, capsys):
     """Every node keeps its line except one; the silent node must fail, not
     ride on the step's green exit (`|| true`)."""
-    lines = [ln for ln in RECORDED_LOG if "keep  I2  " not in ln]
+    lines = [ln for ln in IDENTITY_LINES + RECORDED_LOG
+             if "keep  I2  " not in ln]
     replay["log"].write_text("\n".join(lines) + "\n")
     assert run_gate(replay) == cnsr.EXIT_FAIL
     out = capsys.readouterr().out
@@ -185,8 +205,50 @@ def test_refused_on_empty_log(replay):
 
 
 def test_refused_on_log_without_recording_lines(replay):
-    replay["log"].write_text("2026-11-18T16:31:12Z some other step's output\n")
+    replay["log"].write_text("\n".join(IDENTITY_LINES)
+                             + "\n2026-11-18T16:31:12Z some other step's output\n")
     assert run_gate(replay) == cnsr.EXIT_REFUSED
+
+
+# --- the log's identity is asserted, not assumed ------------------------------
+
+def test_refused_when_log_does_not_carry_head_sha(replay, capsys):
+    """The measured attack from review: the six real keep rows with a
+    different night's timestamps and ZERO occurrences of the head sha are
+    not tonight's evidence -- REFUSED naming what is missing, never
+    attributed to the run."""
+    replay["log"].write_text("\n".join(RECORDED_LOG) + "\n")
+    assert run_gate(replay) == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "head sha" in err and HEAD_SHA in err
+
+
+def test_refused_when_log_does_not_carry_run_id(replay, capsys):
+    """Every measured log carries the run id (the artifact download URL);
+    a log without it is not that run's log."""
+    identity = [ln for ln in IDENTITY_LINES if "Artifact download" not in ln]
+    replay["log"].write_text("\n".join(identity + RECORDED_LOG) + "\n")
+    assert run_gate(replay) == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "run id" in err and "44344077192" in err
+
+
+def test_run_id_and_job_id_are_optional(replay):
+    """Omitting --run-id/--job-id skips their assertions; the head sha is
+    still required to appear in the log."""
+    argv = ["--published", str(replay["published"]),
+            "--at-run", str(replay["at_run"]),
+            "--log", str(replay["log"]), "--head-sha", HEAD_SHA]
+    assert cnsr.main(argv) == cnsr.EXIT_OK
+
+
+def test_refused_on_log_with_only_fast_node_lines(replay, capsys):
+    """A fast node's keep row alone is not the log this gate needs:
+    REFUSED (no slow-node recording lines), not a 0/6 FAIL -- the shape
+    #1058 was filed about."""
+    replay["log"].write_text("\n".join(IDENTITY_LINES + [FOREIGN_LINE]) + "\n")
+    assert run_gate(replay) == cnsr.EXIT_REFUSED
+    assert "no recording-step lines" in capsys.readouterr().err
 
 
 def test_refused_on_short_head_sha(replay):

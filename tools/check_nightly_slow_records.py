@@ -34,6 +34,23 @@ says `passed`: the branch content #818 shipped (six bare records at
 close. A line from another run -- a foreign anchor or a foreign detail --
 fails, so a green step cannot launder a record it did not measure.
 
+The log is asserted to belong to the run it names, at the point of use:
+`--head-sha` and, when given, `--run-id` must each appear in the log
+itself, or the gate REFUSES naming what is missing. A fetch that silently
+failed -- or a previous night's log left at the same fixed path -- would
+otherwise be attributed to tonight's run and answered in the voice of a
+measurement. Measured on the two replayed nightlies (44344077192 job
+134941613343 @ 4a6eda4d; 44128504549 job 134198792633): the full head sha
+appears in each (the checkout step's `git rev-parse refs/remotes/origin/main`
+output) and the run id appears in each (upload-artifact's download URL), so
+both anchors are stable enough to assert -- a workflow change that moves
+them makes this gate REFUSE, never silently skip the check. Deliberately
+NOT asserted, per verification-rules rule 8's stated-reason half:
+`--job-id`, absent from both measured logs (a job's own stdout does not
+carry its id); and `--published` / `--at-run`, plain JSON with no embedded
+sha or run id, so their identity cannot be verified from content -- the
+caller's fetch command is what pins them.
+
 The six evidence lines this gate was first replayed against are pinned in
 `tools/test_check_nightly_slow_records.py`, so the positive case survives
 Actions' log retention.
@@ -41,7 +58,8 @@ Actions' log retention.
 Exit: 0 every node corroborated (or every requested control turned red),
       1 a node fails / the old rule rejects,
       3 REFUSED -- the apparatus cannot answer: required evidence missing or
-        unusable (a gate that answers anyway would look exactly like data),
+        unusable, or the log does not name the run it is claimed to be from
+        (a gate that answers anyway would look exactly like data),
       4 a requested control did not turn the verdict red,
       2 usage / unreadable input.
 
@@ -181,8 +199,12 @@ def control_withhold(node, keeps, fresh, published, at_run):
 
 
 def control_foreign(node, keeps, fresh, published, at_run):
-    """Substitute a line from ANOTHER node -- a stand-in for another run's
-    line: foreign anchor, foreign detail, renamed to `node`."""
+    """Substitute ANOTHER SLOW node's keep line from the SAME night, renamed
+    to `node` -- a line this node never printed. On a quiet night every slow
+    node shares the anchor (91398a0c), so only the detail is foreign here;
+    the foreign-anchor pathology is covered directly by
+    test_substituted_line_from_another_run_fails_directly (F3's real
+    4fe488f1)."""
     other = next((lines for n, lines in sorted(keeps.items()) if n != node),
                  None)
     if other:
@@ -230,11 +252,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--log", required=True, type=pathlib.Path,
                     help="the full-rtl job log (the recording step's lines)")
     ap.add_argument("--head-sha", required=True, dest="head_sha",
-                    help="the run's full 40-hex headSha")
+                    help="the run's full 40-hex headSha; asserted to appear "
+                         "in the log (the checkout step's rev-parse output)")
     ap.add_argument("--run-id", default="", dest="run_id",
-                    help="provenance label, echoed in the summary")
+                    help="asserted to appear in the log (upload-artifact's "
+                         "download URL), and echoed in the summary")
     ap.add_argument("--job-id", default="", dest="job_id",
-                    help="provenance label, echoed in the summary")
+                    help="echoed in the summary; deliberately NOT asserted -- "
+                         "a job's own log does not carry its id (measured on "
+                         "runs 44344077192 and 44128504549)")
     ap.add_argument("--old-rule", action="store_true",
                     help="evaluate #820's original sha-equality predicate "
                          "instead of the amended rule (replay evidence)")
@@ -260,8 +286,18 @@ def main(argv: list[str] | None = None) -> int:
             raise Refused(f"log not found: {args.log}") from None
         if not log_lines:
             raise Refused(f"log is empty: {args.log}")
+        for what, anchor in (("head sha", args.head_sha),
+                             ("run id", args.run_id)):
+            if anchor and not any(anchor in line for line in log_lines):
+                raise Refused(
+                    f"the log does not name the run's {what} ({anchor}) -- "
+                    "its execution evidence cannot be attributed to "
+                    f"{run_label}{job_label} (head {args.head_sha[:8]}); a "
+                    "stale or failed fetch leaves the previous night's log "
+                    "at the path, so re-fetch the right log rather than "
+                    "attribute this one")
         keeps, fresh = parse_log(log_lines)
-        if not keeps and not fresh:
+        if not fresh and not any(node in SLOW_NODES for node in keeps):
             raise Refused(
                 "the log carries no recording-step lines (no `keep`, PASS, "
                 "FAIL or REFUSE row naming a slow node) -- if this is not "
