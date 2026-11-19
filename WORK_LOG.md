@@ -2,6 +2,11 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-19
+
+- **PR #1045**: fix: refuse a claim marker whose closer is not on its opener's line
+- **Issue #1044** (closed): check_doc_claims.py silently drops a claim marker that spans two lines, so an unverified claim reports green
+
 ### 2026-11-18
 
 - **PR #1042**: fix: refuse a second claim marker on one line instead of dropping it
