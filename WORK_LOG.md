@@ -4,6 +4,9 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-19
 
+- **Issue #1050** (closed): [voice-only] Baseline Mini V4 as a new reference suite: render script, case list, board case table
+- **PR #1052**: feat: baseline Mini V4 as a separate reference suite (manifest, render script, V3 freeze, board suite column)
+- **Issue #1018** (closed): Confirm WORK_PLAN.md's as-of sentence survives Guide regeneration, and reconcile it with the inbound upstream in-region stamp
 - **PR #1045**: fix: refuse a claim marker whose closer is not on its opener's line
 - **Issue #1044** (closed): check_doc_claims.py silently drops a claim marker that spans two lines, so an unverified claim reports green
 
