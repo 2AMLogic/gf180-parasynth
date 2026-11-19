@@ -25,6 +25,8 @@ _None._
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(held)*
+- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
+- **#1051**: [voice-only] Draft decision record and re-scope README/roadmap/spec to voice-only silicon target *(held)*
 
 ## Ready
 
@@ -34,6 +36,10 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
+- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
+- **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md)
+- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
+- **#1053**: Isolate the Mini V3 freeze-defeat tests so each mutation starts from a passing copy
 
 ## In Progress
 
@@ -49,19 +55,12 @@ Issues currently being built (`loom:building`).
 - **#922**: Tracked-JSON truncate-then-write remains in holdout.py (ledger + seals) and measure_m1a_volume_mapping.py
 - **#947**: Atomic-write remainder: 23 tracked JSONs still written truncate-then-write (audit of #922)
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#1022**: analyze_def_sites: the DEF path-point extension is recorded but never applied to the emitted rect, nor surfaced in the record
-- **#1023**: docs/tool-findings.md carries zero claim markers, so its route-record figures have nothing re-deriving them
-- **#1030**: analyze_def_sites: a skip-keyword's NAME argument after a path's points becomes a phantom via (same class as #1013/#1021, via branch not width branch)
-- **#1034**: analyze_def_sites: '+ NONDEFAULTRULE <name>' after a path's points makes the keyword a phantom via (the spelling #1030 left out of scope)
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#1025**: fix: apply the DEF path-point extension to the wire rect and count it in the record
-- **#1029**: docs: bind #1006 route-record figures to claim markers
-- **#1031**: fix: consume skip-keyword name arguments so they never become phantom vias
-- **#1035**: fix: end the via-name position at a skipped '+' in DEF path walk
+_None._
 
 ## Approved (Awaiting Merge)
 
@@ -123,20 +122,17 @@ Issues carrying `loom:curated`.
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)* *(held)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)* *(held)*
 - **#706**: Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig) *(curated)*
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)* *(held)*
+- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)*
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
 - **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)* *(held)*
-- **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)* *(held)*
+- **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)*
 - **#922**: Tracked-JSON truncate-then-write remains in holdout.py (ledger + seals) and measure_m1a_volume_mapping.py *(curated)*
 - **#933**: regenerate discrimination artefacts under the six-bucket MPD grouping (follow-up to #929) *(curated)* *(held)*
 - **#947**: Atomic-write remainder: 23 tracked JSONs still written truncate-then-write (audit of #922) *(curated)*
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
-- **#1018**: Confirm WORK_PLAN.md's as-of sentence survives Guide regeneration, and reconcile it with the inbound upstream in-region stamp *(curated)* *(held)*
-- **#1022**: analyze_def_sites: the DEF path-point extension is recorded but never applied to the emitted rect, nor surfaced in the record *(curated)*
-- **#1023**: docs/tool-findings.md carries zero claim markers, so its route-record figures have nothing re-deriving them *(curated)*
-- **#1030**: analyze_def_sites: a skip-keyword's NAME argument after a path's points becomes a phantom via (same class as #1013/#1021, via branch not width branch) *(curated)*
-- **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md) *(curated)* *(held)*
-- **#1034**: analyze_def_sites: '+ NONDEFAULTRULE <name>' after a path's points makes the keyword a phantom via (the spelling #1030 left out of scope) *(curated)*
+- **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md) *(curated)*
+- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)*
+- **#1053**: Isolate the Mini V3 freeze-defeat tests so each mutation starts from a passing copy *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -162,12 +158,12 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
-| Important | 6 |
-| Ready (`loom:issue`, net of holds/building/merge-pending) | 4 |
-| In Progress (`loom:building`) | 14 |
-| PRs awaiting review | 4 |
+| Important | 8 |
+| Ready (`loom:issue`, net of holds/building/merge-pending) | 8 |
+| In Progress (`loom:building`) | 10 |
+| PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 64 |
+| Curated | 61 |
 | Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
