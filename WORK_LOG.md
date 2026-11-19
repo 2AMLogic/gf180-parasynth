@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-19
 
+- **Issue #1056** (closed): Say why eight of the ten files hashed into the frozen Mini V3 records are deliberately NOT guarded
+- **PR #1060**: docs: correct Mini V3 re-bind guidance and narrow the reader-pin rationale
 - **Issue #706** (closed): Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
 - **Issue #922** (closed): Tracked-JSON truncate-then-write remains in holdout.py (ledger + seals) and measure_m1a_volume_mapping.py
 - **PR #948**: tools: write holdout ledger/seals and M1A volume-mapping records atomically
