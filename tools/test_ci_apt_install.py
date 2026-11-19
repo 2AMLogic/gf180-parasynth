@@ -236,6 +236,51 @@ def test_a_hanging_phase_is_killed_within_its_timeout(fake_apt):
     assert [e["phase"] for e in log_entries()] == ["update", "install"]
 
 
+FORKING_APT = textwrap.dedent(r"""
+    import os, pathlib, subprocess, sys, time
+    marker = pathlib.Path(os.environ["CI_APT_FORK_MARKER"])
+    if sys.argv[1:2] == ["update"]:
+        sys.exit(0)
+    child = subprocess.Popen(
+        [sys.executable, "-c",
+         "import pathlib, sys, time; time.sleep(1.5); "
+         "pathlib.Path(sys.argv[1]).write_text('outlived the step')",
+         str(marker)])
+    time.sleep(5)
+    child.wait()
+    sys.exit(0)
+""")
+
+
+def test_phase_timeout_kills_the_descendant_tree(tmp_path):
+    """Regression for the Judge's scenario at 55874edf (#1064): with the phase
+    run by a bare subprocess.run(timeout=...), the expiry reached only the
+    direct child. The scripted apt returned success for update, and on
+    install forked a child that wrote a marker 1.5 s later while its parent
+    slept 5 s: the wrapper returned 124 in 0.57 s, the marker was absent at
+    return and APPEARED afterwards -- a fetcher outliving the reported
+    failure. The phase must run under timeout(1), whose default mode signals
+    the whole process group: no descendant may survive the step."""
+    standin = tmp_path / "forking-apt"
+    standin.write_text(f"#!{PY}\n{FORKING_APT}")
+    standin.chmod(0o755)
+    marker = tmp_path / "outlived.marker"
+    started = time.monotonic()
+    r = subprocess.run(
+        [PY, str(ROOT / "tools" / "ci_apt_install.py"), "--no-sudo",
+         "--apt", str(standin), "--deadline", "30", "--phase-timeout",
+         "0.5", "--delay", "0", "iverilog"],
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, "CI_APT_FORK_MARKER": str(marker)})
+    elapsed = time.monotonic() - started
+    assert r.returncode == cap.TIMEOUT_STATUS
+    assert elapsed < 4, f"timeout path took {elapsed:.1f}s -- rode the 5s parent"
+    assert "timeout" in r.stderr
+    time.sleep(2.0)  # well past the forked child's 1.5 s write deadline
+    assert not marker.exists(), \
+        "a forked apt descendant outlived the reported timeout"
+
+
 def test_deadline_bounds_the_whole_step(fake_apt):
     """`--deadline` caps the entire helper run: with none left, no phase
     starts, and the step ends nonzero inside its own limits."""
@@ -268,15 +313,22 @@ def test_packages_are_required(fake_apt):
     assert r.returncode != 0
 
 
-def test_sudo_is_prefixed_by_default_and_omitted_under_no_sudo():
-    """Production runs `sudo apt-get ...` exactly as the old one-shot chain
-    did; tests opt out with --no-sudo."""
-    assert cap.phase_command(True, "apt-get", "update", []) == \
-        ["sudo", "apt-get", "update"]
-    assert cap.phase_command(True, "apt-get", "install", ["iverilog"]) == \
-        ["sudo", "apt-get", "install", "-y", "iverilog"]
-    assert cap.phase_command(False, "/tmp/fake", "install", ["iverilog"]) == \
-        ["/tmp/fake", "install", "-y", "iverilog"]
+def test_sudo_is_prefixed_by_default_and_the_chain_runs_under_timeout_1():
+    """Production is `sudo timeout ... apt-get ...`: sudo stays first (the old
+    chain's elevation), and the timeout(1) link sits INSIDE it so its
+    process-group signal reaches root-owned apt children -- the non-root
+    wrapper cannot signal them (#1064). Tests opt out with --no-sudo and get
+    the same timeout link without the elevation."""
+    assert cap.phase_command(True, "apt-get", "update", [], 420) == \
+        ["sudo", "timeout", "--signal=TERM", "--kill-after=15s", "420s",
+         "apt-get", "update"]
+    assert cap.phase_command(True, "apt-get", "install", ["iverilog"], 420) == \
+        ["sudo", "timeout", "--signal=TERM", "--kill-after=15s", "420s",
+         "apt-get", "install", "-y", "iverilog"]
+    assert cap.phase_command(False, "/tmp/fake", "install", ["iverilog"],
+                             0.5) == \
+        ["timeout", "--signal=TERM", "--kill-after=15s", "0.5s",
+         "/tmp/fake", "install", "-y", "iverilog"]
 
 
 # --- the workflows ship the helper: nine call sites, four files --------------

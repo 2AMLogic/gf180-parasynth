@@ -23,11 +23,16 @@ Contract:
     clamped to the time the deadline leaves, so a wedged mirror ends as a
     visible dependency-step error inside the tightest job timeout that hosts
     this step (15 min) instead of riding the job timeout.
+  * each invocation runs under timeout(1) inside the command chain -- under
+    sudo the step is `sudo timeout ... apt-get ...`, so the timeout signal
+    reaches apt's whole process group as root and a forked fetcher or package
+    installer cannot outlive the reported failure (#1064).
   * apt's own diagnostics stream through untouched; this wrapper only adds one
     stderr line per phase (`attempt=N phase=... status=...`) and a final line
     when it gives up.
-  * the step's exit status is apt's final status; a timeout inside the wrapper
-    ends the step with 124 (the conventional timeout status).
+  * the step's exit status is apt's final status; a phase timeout (timeout(1)
+    fired, or the wrapper's own clock ended it) ends the step with 124 (the
+    conventional timeout status).
 
 Tests: `tools/test_ci_apt_install.py` runs everything against a scripted apt
 stand-in -- no mirror contact, no real delays, no sudo.
@@ -46,29 +51,41 @@ DEFAULT_PHASE_TIMEOUT_S = 420.0
 
 TIMEOUT_STATUS = 124  # none: 124 is timeout(1)'s status for the same meaning
 
+KILL_AFTER_S = 15.0    # timeout(1) grace between TERM and KILL
+WRAPPER_GRACE_S = 5.0  # the wrapper's backstop past timeout(1)'s own bound
+
 
 def _log(message: str) -> None:
     print(f"ci-apt-install: {message}", file=sys.stderr, flush=True)
 
 
-def phase_command(sudo: bool, apt: str, phase: str,
-                  packages: list[str]) -> list[str]:
+def phase_command(sudo: bool, apt: str, phase: str, packages: list[str],
+                  timeout: float) -> list[str]:
+    """One phase, under the timeout(1) link. The link sits inside the sudo
+    elevation (`sudo timeout ... apt-get ...`): timeout(1) runs its command
+    in a new process group and signals the group on expiry, and running as
+    root it can signal root-owned apt children -- the non-root wrapper
+    process could not (#1064)."""
     cmd = ["sudo"] if sudo else []
-    cmd += [apt]
+    cmd += ["timeout", "--signal=TERM", f"--kill-after={KILL_AFTER_S:g}s",
+            f"{timeout:g}s", apt]
     if phase == "update":
         return cmd + ["update"]
     return cmd + ["install", "-y"] + list(packages)
 
 
 def _run_phase(cmd: list[str], timeout: float) -> int | None:
-    """One apt invocation. None means the wrapper's clock ended it -- a status
-    from apt itself is never confused with a timeout."""
+    """One apt invocation under the timeout(1) link. Returns None only when
+    the wrapper's own backstop fired past timeout(1)'s bound -- a status from
+    apt itself is never confused with a timeout, and timeout(1)'s own expiry
+    surfaces as TIMEOUT_STATUS (#1064)."""
     try:
-        return subprocess.run(cmd, timeout=timeout).returncode
+        return subprocess.run(
+            cmd, timeout=timeout + KILL_AFTER_S + WRAPPER_GRACE_S).returncode
     except subprocess.TimeoutExpired:
         return None
     except FileNotFoundError:
-        _log(f"apt program not found: {cmd[-1] if cmd else cmd}")
+        _log(f"required program not found for: {' '.join(cmd[:5])}")
         return 127
 
 
@@ -96,11 +113,12 @@ def install(packages: list[str], *, sudo: bool = True, apt: str = "apt-get",
                      + (f"; last apt status={last_failure}" if last_failure
                         else ""))
                 return last_failure if last_failure is not None else TIMEOUT_STATUS
-            status = _run_phase(phase_command(sudo, apt, phase, packages),
-                                min(phase_timeout, left))
-            if status is None:
+            budget = min(phase_timeout, left)
+            status = _run_phase(
+                phase_command(sudo, apt, phase, packages, budget), budget)
+            if status is None or status == TIMEOUT_STATUS:
                 _log(f"attempt={attempt} phase={phase} timeout after "
-                     f"{min(phase_timeout, left):.0f}s")
+                     f"{budget:.0f}s")
                 return TIMEOUT_STATUS
             _log(f"attempt={attempt} phase={phase} status={status}")
             if status != 0:
