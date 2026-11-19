@@ -178,6 +178,27 @@ LOG_TS_RE = re.compile(
 #: foreign run 6/6 (#1066 review round 2) -- so the record is anchored at
 #: the line start (only a timestamp may precede the label) and the URL
 #: must follow the label immediately.
+#:
+#: Stated residual (rule 8, #1073): the URL prefix is `\S*`, so an
+#: otherwise-exact record line whose URL is absolute on a foreign host
+#: (`https://evil.example/actions/runs/<id>/artifacts/<n>`), host-less
+#: (a bare path) or glued to a non-space prefix still attributes its run
+#: id. Not observed in the reviewed logs (runs 44344077192 and
+#: 44128504549) -- not shown unreachable, and a clean log cannot show
+#: that: a line that exactly imitates the record, from a step that can
+#: write the job log, is the forged-checkout class in the module
+#: docstring, told apart by no property of the file. No host or scheme
+#: is pinned: the genuine host is github.com today, and pinning it (or
+#: requiring `https?://`) would turn GHES and any future host change
+#: into false refusals -- a real refusal traded for a speculative false
+#: pass, and the scheme requirement would still accept the foreign-host
+#: line above. Defence: the caller's fetch command (the job's log
+#: fetched by URL) is what binds the file, and the two-distinct-ids
+#: refusal below fires when the genuine record is also present -- a
+#: false attribution additionally requires the genuine upload record to
+#: be absent from the fetched log. Pinned where a later tightening
+#: deliberately flips it:
+#: test_foreign_host_record_line_still_attributes.
 ARTIFACT_RUN_ID_RE = re.compile(
     r"^(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z )?"
     r"Artifact download URL: \S*/actions/runs/(\d+)/artifacts/\d+\s*$")
