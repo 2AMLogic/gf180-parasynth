@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-19
 
+- **PR #1074**: State the foreign-host URL residual of the slow-record gate and pin it
+- **Issue #1073** (closed): check_nightly_slow_records: the artifact-record URL prefix is `\S*`, so a foreign host or bare path in a complete record line still attributes the run
 - **Issue #1066** (closed): check_nightly_slow_records: --run-id is optional but load-bearing, and control mode exits 0 over a printed FAIL
 - **PR #1067**: fix: require --run-id and return the worse of verdict/control exits in the nightly slow-record gate
 - **PR #1072**: fix: preserve quarter-slot geometry and voice parameters in ORFS
