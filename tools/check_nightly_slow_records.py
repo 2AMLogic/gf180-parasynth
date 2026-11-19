@@ -35,8 +35,13 @@ close. A line from another run -- a foreign anchor or a foreign detail --
 fails, so a green step cannot launder a record it did not measure.
 
 The log is asserted to belong to the run it names, at the point of use:
-`--head-sha` and `--run-id` must each appear in the log itself, or the gate
-REFUSES naming what is missing. `--run-id` is required, not optional: on a
+`--head-sha` must appear in the log itself, and `--run-id` must EQUAL the
+complete numeric run field of upload-artifact's download URL
+(`/actions/runs/<id>/artifacts/<artifact>`) -- substring presence is not
+attribution: the artifact id, the job id and a single space each appear in
+a real log and passed a substring check (measured on run 44344077192's
+log, #1066 review), so only exact field equality attributes it.
+`--run-id` is required, not optional: on a
 quiet night `origin/main` does not move, so two consecutive nightlies share
 the same `headSha` and a previous night's log satisfies the head-sha
 assertion -- measured in #1066, where a stale log with its run id rewritten
@@ -66,7 +71,9 @@ Exit: 0 every node corroborated AND every requested control turned red,
       3 REFUSED -- the apparatus cannot answer: required evidence missing or
         unusable, or the log does not name the run it is claimed to be from
         (a gate that answers anyway would look exactly like data),
-      4 a requested control did not turn the verdict red,
+      4 a requested control did not turn the verdict red (a control on a
+        node the baseline already fails is uncaught too -- it cannot be
+        credited),
       2 usage / unreadable input.
 
 In control mode the exit is the worse of the two answers
@@ -77,7 +84,10 @@ dropped in favour of the controls' result.
 Controls (--control name=node, repeatable) mutate the evidence the way
 #1058's test plan requires -- withhold the node's line, substitute a line
 from another run, corrupt the anchor, falsify the stored verdict -- and each
-must turn that node red. A gate whose controls pass is itself a defect.
+must turn that node red. A gate whose controls pass is itself a defect. A
+control on a node the baseline already fails is never credited: it writes
+the value the node already has, so "caught" there demonstrates nothing
+(#1066 review) -- the control is uncaught and the gate exits 4.
 """
 from __future__ import annotations
 
@@ -107,6 +117,13 @@ KEEP_RE = re.compile(
 FRESH_RE = re.compile(r"(?:^|\s)(PASS|FAIL|REFUSE)\s+(\S+)\s+(.+?)\s*$")
 
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+#: upload-artifact's download URL -- the only place a job log names its own
+#: run, and the field `--run-id` is asserted against WHOLE, not as a
+#: substring: the artifact id (14445449921), the job id and a single space
+#: each appear in run 44344077192's log and passed an `in` check (#1066
+#: review).
+ARTIFACT_RUN_ID_RE = re.compile(r"/actions/runs/(\d+)/artifacts/\d+")
 
 EXIT_OK, EXIT_FAIL, EXIT_REFUSED, EXIT_CONTROL = 0, 1, 3, 4
 
@@ -266,11 +283,14 @@ def main(argv: list[str] | None = None) -> int:
                     help="the run's full 40-hex headSha; asserted to appear "
                          "in the log (the checkout step's rev-parse output)")
     ap.add_argument("--run-id", required=True, dest="run_id",
-                    help="the run's id; asserted to appear in the log "
-                         "(upload-artifact's download URL) and echoed in the "
-                         "summary -- required because at the same head sha "
-                         "(a quiet night) it is the only anchor that "
-                         "discriminates two runs (#1066)")
+                    help="the run's id; asserted to EQUAL the artifact "
+                         "download URL's complete numeric run field in the "
+                         "log (not merely to appear in it -- the artifact "
+                         "id, the job id and a single space each pass a "
+                         "substring check) and echoed in the summary -- "
+                         "required because at the same head sha (a quiet "
+                         "night) it is the only anchor that discriminates "
+                         "two runs (#1066)")
     ap.add_argument("--job-id", default="", dest="job_id",
                     help="echoed in the summary; deliberately NOT asserted -- "
                          "a job's own log does not carry its id (measured on "
@@ -308,16 +328,42 @@ def main(argv: list[str] | None = None) -> int:
             raise Refused(f"log not found: {args.log}") from None
         if not log_lines:
             raise Refused(f"log is empty: {args.log}")
-        for what, anchor in (("head sha", args.head_sha),
-                             ("run id", args.run_id)):
-            if anchor and not any(anchor in line for line in log_lines):
-                raise Refused(
-                    f"the log does not name the run's {what} ({anchor}) -- "
-                    "its execution evidence cannot be attributed to "
-                    f"{run_label}{job_label} (head {args.head_sha[:8]}); a "
-                    "stale or failed fetch leaves the previous night's log "
-                    "at the path, so re-fetch the right log rather than "
-                    "attribute this one")
+        if not any(args.head_sha in line for line in log_lines):
+            raise Refused(
+                f"the log does not name the run's head sha ({args.head_sha}) "
+                "-- its execution evidence cannot be attributed to "
+                f"{run_label}{job_label} (head {args.head_sha[:8]}); a "
+                "stale or failed fetch leaves the previous night's log "
+                "at the path, so re-fetch the right log rather than "
+                "attribute this one")
+        url_run_ids = sorted({m.group(1) for line in log_lines
+                              for m in ARTIFACT_RUN_ID_RE.finditer(line)})
+        if not url_run_ids:
+            raise Refused(
+                "the log carries no artifact download URL naming the run id "
+                "(no /actions/runs/<run id>/artifacts/<artifact> line) -- "
+                "its execution evidence cannot be attributed to "
+                f"{run_label}{job_label} (head {args.head_sha[:8]}); a "
+                "stale or failed fetch leaves the previous night's log "
+                "at the path, so re-fetch the right log rather than "
+                "attribute this one")
+        if len(url_run_ids) > 1:
+            raise Refused(
+                "the log carries artifact download URLs naming "
+                f"{len(url_run_ids)} distinct runs "
+                f"({', '.join(url_run_ids)}) -- ambiguous execution "
+                f"evidence for {run_label}{job_label}; re-fetch the single "
+                "run's log rather than attribute this one")
+        if url_run_ids[0] != args.run_id:
+            raise Refused(
+                f"the log's artifact download URL names run "
+                f"{url_run_ids[0]}, not the supplied run id "
+                f"{args.run_id!r} -- the comparison is against the "
+                "complete numeric run field of the URL, exact and whole: "
+                "the artifact id, the job id and a single space each "
+                "appear in a real log and passed a substring check "
+                "(measured on run 44344077192's log), so a partial match "
+                "attributes nothing")
         keeps, fresh = parse_log(log_lines)
         if not fresh and not any(node in SLOW_NODES for node in keeps):
             raise Refused(
@@ -348,9 +394,12 @@ def main(argv: list[str] | None = None) -> int:
         if not args.controls:
             return EXIT_OK if npass == len(SLOW_NODES) else EXIT_FAIL
 
-        # Control mode: every requested control must turn its node red, and
-        # the positive verdict keeps its own exit -- a printed FAIL must
-        # never be returned as 0 (#1066). The worse of the two answers wins:
+        # Control mode: every requested control must turn its node red FROM
+        # A PASSING BASELINE, and the positive verdict keeps its own exit --
+        # a printed FAIL must never be returned as 0 (#1066). A control on
+        # a node the baseline already fails is not credited: it writes the
+        # value the node already has, so "caught" there demonstrates
+        # nothing (#1066 review). The worse of the two answers wins:
         # 4 (a control went uncaught) > 1 (verdict FAIL) > 0.
         controls_exit = EXIT_OK
         for spec in args.controls:
@@ -367,9 +416,15 @@ def main(argv: list[str] | None = None) -> int:
                     for n, v in published.items()}
             CONTROLS[name](node, keeps2, fresh2, pub2, at_run)
             v2 = evaluate(pub2, at_run, keeps2, fresh2, args.head_sha)
-            caught = not v2[node][0]
+            caught = verdicts[node][0] and not v2[node][0]
             if caught:
                 print(f"  CONTROL {spec}: caught (node fails: {v2[node][1]})")
+            elif not verdicts[node][0]:
+                print(f"  CONTROL {spec}: NOT CAUGHT -- {node} was already "
+                      f"failing before the control ({verdicts[node][1]}); "
+                      "a control that writes the value the node already "
+                      "has demonstrates nothing")
+                controls_exit = EXIT_CONTROL
             else:
                 print(f"  CONTROL {spec}: NOT CAUGHT -- {v2[node][1]}")
                 controls_exit = EXIT_CONTROL

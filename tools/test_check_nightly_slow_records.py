@@ -59,9 +59,9 @@ FOREIGN_LINE = ("2026-11-18T16:10:59.9911337Z   keep  F3  153 passed in 4.07s "
 
 #: The log's identity anchors, verbatim from the same job log: the checkout
 #: step's rev-parse command and its full-sha output line, and upload-artifact's
-#: download URL carrying the run id. The gate asserts --head-sha and --run-id
-#: against the log (review #1059): these lines are what make the pinned
-#: evidence THIS run's. (The real log prints the sha a second time at
+#: download URL carrying the run id. The gate asserts --head-sha appears in
+#: the log and --run-id EQUALS the download URL's run field (review #1059;
+#: #1066 review): these lines are what make the pinned evidence THIS run's. (The real log prints the sha a second time at
 #: 16:10:27 from the nightly's own fetch step; one occurrence is pinned.)
 IDENTITY_LINES = [
     "2026-11-18T16:10:26.8792578Z [command]/usr/bin/git rev-parse refs/remotes/origin/main",
@@ -168,6 +168,25 @@ def test_control_mode_returns_fail_when_the_positive_verdict_fails(
     out = capsys.readouterr().out
     assert "(a) 5/6 slow nodes corroborated" in out and "--> FAIL" in out
     assert "CONTROL withhold=F1: caught" in out
+
+
+def test_control_on_already_failing_node_is_not_caught_and_exits_4(
+        replay, capsys):
+    """The measured regression from review (#1066): with published
+    I2.passed=false, `--control false-verdict=I2` printed `all requested
+    controls turned their node red` -- but the mutation writes the value
+    I2 already has, so it demonstrated nothing. A control needs a passing
+    baseline on its target node; the same-node case reports NOT CAUGHT and
+    exits 4, which takes precedence over the verdict's own FAIL (1)."""
+    bad = dict(RECORDED)
+    bad["I2"] = dict(RECORDED["I2"], passed=False)
+    replay["published"].write_text(json.dumps(bad))
+    assert run_gate(replay, "--control",
+                    "false-verdict=I2") == cnsr.EXIT_CONTROL
+    out = capsys.readouterr().out
+    assert "CONTROL false-verdict=I2: NOT CAUGHT" in out
+    assert "already failing before the control" in out
+    assert "all requested controls turned their node red" not in out
 
 
 def test_false_verdict_fails_even_with_matching_keep(replay, capsys):
@@ -291,6 +310,35 @@ def test_refused_on_empty_run_id(replay):
     loop's truthiness guard -- required means non-empty, so the gate
     REFUSES rather than answer unattributed."""
     assert run_gate(replay, "--run-id", "") == cnsr.EXIT_REFUSED
+
+
+def test_refused_on_artifact_id_as_run_id(replay, capsys):
+    """The measured regression from review (#1066): the pinned log's
+    artifact URL names run 44344077192 AND artifact 14445449921, and the
+    artifact id passed the old substring check 6/6 PASS. The supplied id
+    must equal the URL's run field exactly; the artifact id is REFUSED."""
+    assert run_gate(replay, "--run-id", "14445449921") == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "44344077192" in err and "14445449921" in err
+
+
+def test_refused_on_run_id_with_a_space(replay):
+    """The other measured pass: a single space appears in every log line,
+    so `--run-id ' '` passed the substring check 6/6. Exact field equality
+    refuses it, padding included."""
+    assert run_gate(replay, "--run-id", " 44344077192") == cnsr.EXIT_REFUSED
+
+
+def test_refused_when_log_urls_name_two_runs(replay, capsys):
+    """A log carrying artifact URLs of two different runs is ambiguous
+    execution evidence; the gate refuses rather than pick one."""
+    two_urls = replay["log"].read_text() + (
+        "\n2026-11-18T16:31:14.0000000Z Artifact download URL: "
+        "https://github.com/2AMLogic/gf180-parasynth/actions/runs/"
+        "44128504549/artifacts/14400000000\n")
+    replay["log"].write_text(two_urls)
+    assert run_gate(replay) == cnsr.EXIT_REFUSED
+    assert "2 distinct runs" in capsys.readouterr().err
 
 
 def test_refused_on_log_with_only_fast_node_lines(replay, capsys):
