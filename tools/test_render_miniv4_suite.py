@@ -201,6 +201,44 @@ def test_a_clean_render_passes_and_stamps_the_suite(monkeypatch, capsys,
     assert wav.exists() and wav.read_bytes()[:4] == b"RIFF"
 
 
+def test_the_written_record_passes_the_v4_gate_and_refuses_the_v3_slot(
+        monkeypatch, capsys, tmp_path, rig_ready):
+    """The writer/reader join: the record the renderer ACTUALLY writes --
+    not a hand-built stand-in with an assumed schema -- must classify as
+    `miniv4` through `reference_suites.require_suite` (the call the V4
+    scoring side makes once renders land) and refuse the frozen V3 slot.
+    Without this test each half of the apparatus is tested against its own
+    assumed schema and nothing joins them."""
+    out = tmp_path / "renders"
+    code = rv.main(["--render", "M1B", "--licence-established", GOOD_LICENCE,
+                    "--out", str(out)])
+    assert code == rv.OK, capsys.readouterr().out
+    rec = json.loads((out / "M1B-miniv4-manifest.json").read_text())
+    assert rs.require_suite(rec, rs.SUITE_V4) == rs.SUITE_V4
+    with pytest.raises(rs.Refused, match="reference-suite mix"):
+        rs.require_suite(rec, rs.SUITE_V3_FROZEN)
+
+
+def test_an_unclassifiable_render_identity_refuses_before_measuring(tmp_path):
+    """The writer checks the identity it is about to stamp through the
+    reader's own gate before rendering: a version the registry never
+    declared refuses having measured nothing, rather than writing a record
+    no scorer can classify."""
+    class UndeclaredRig:
+        host = "dawdreamer"
+
+        def identity(self):
+            return {"bundle_version": "9.9.9.9999", "bundle_id": "x"}
+
+        def render_note(self, *a, **k):
+            raise AssertionError("must not render: the identity refused first")
+
+    suite = rs.load_v4_suite()
+    case = next(c for c in suite["cases"] if c["case_id"] == "M1B")
+    with pytest.raises(rv.Refused, match="not classifiable"):
+        rv.render_case(case, UndeclaredRig(), "licence stated", tmp_path / "renders")
+
+
 def test_demo_artefacts_on_the_calibration_note_fail_the_run(monkeypatch, capsys,
                                                              tmp_path, rig_ready):
     # Sparse impulsive transients are what both Arturia's and u-he's demo

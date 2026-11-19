@@ -153,6 +153,17 @@ def test_m1a_scoring_refuses_a_v4_manifest_substituted_into_the_v3_slot(
         m1a.load_reference(p)
 
 
+def test_m1a_names_the_suite_mix_before_any_manifest_symptom(tmp_path):
+    """The suite gate fires before the manifest checks: a record with an
+    unqualified body but a Mini V4 identity refuses as the mix, not as
+    'M1A reference manifest is not qualified' -- a symptom would leave the
+    operator diagnosing the manifest instead of the substitution."""
+    p = tmp_path / "manifest.json"
+    p.write_text(json.dumps({"identity": v4_identity()}))
+    with pytest.raises(m1a.Refused, match="reference-suite mix"):
+        m1a.load_reference(p)
+
+
 # ===========================================================================
 # the V4 suite definition, cross-checked against the board's own case table
 # ===========================================================================

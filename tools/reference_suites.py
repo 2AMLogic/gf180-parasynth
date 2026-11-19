@@ -20,9 +20,11 @@ would itself be an edit of a frozen record. An identity that is not in the
 registry is REFUSED, not guessed: a Mini V4 whose vendor ships 4.0.5 next week
 is a new identity until an operator declares it here.
 
-Every renderer stamps what it produced with its suite; every scorer asserts
-the expectation's suite before measuring. Both import those two facts from
-here. The freeze that protects the V3 records lives in
+Every renderer writes the identity of what it produced at top-level
+`identity` (the block `suite_of_identity` derives the suite from); every
+scorer asserts the expectation's suite through `require_suite` before
+measuring. Both import those two facts from here. The freeze that
+protects the V3 records lives in
 `docs/scorecard/reference-suite-freeze.sha256`, checked by
 `tools/check_reference_freeze.py`; the V4 suite definition (the cases to be
 rendered, with their settings) lives in `docs/scorecard/miniv4-suite/suite.json`.
@@ -46,11 +48,13 @@ SUITE_OPEN_SOURCE = "open-source"
 #: cannot drift from the records it names.
 V3_FROZEN_VERSION = "3.12.0.3422"
 V3_BUNDLE_ID = "com.Arturia.Mini-V3.vst3"
+V3_PLUGIN_NAME = "Mini V3"
 
 #: The only Mini V4 version this suite baselines. The render script refuses
 #: (REFUSED, not FAIL) anything else, per the apparatus-precondition rule:
 #: a plugin update is a change of instrument, not a re-run.
 V4_REQUIRED_VERSION = "4.0.4.6366"
+V4_PLUGIN_NAME = "Mini V4"
 
 V4_SUITE_MANIFEST = ROOT / "docs/scorecard/miniv4-suite/suite.json"
 FREEZE_MANIFEST = ROOT / "docs/scorecard/reference-suite-freeze.sha256"
@@ -58,8 +62,8 @@ FREEZE_MANIFEST = ROOT / "docs/scorecard/reference-suite-freeze.sha256"
 #: (identity.name, identity.version) -> suite. Entries are added by an
 #: operator decision, never inferred: a version not listed here refuses.
 _KNOWN_IDENTITIES = {
-    ("Mini V3", V3_FROZEN_VERSION): SUITE_V3_FROZEN,
-    ("Mini V4", V4_REQUIRED_VERSION): SUITE_V4,
+    (V3_PLUGIN_NAME, V3_FROZEN_VERSION): SUITE_V3_FROZEN,
+    (V4_PLUGIN_NAME, V4_REQUIRED_VERSION): SUITE_V4,
 }
 
 #: Where each suite's records live (or will live). `miniv3-frozen` names the

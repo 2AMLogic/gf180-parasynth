@@ -43,7 +43,10 @@ precondition that was once silently wrong here:
 
 Every render's record carries the #123 environment tuple -- host, host
 version, plugin identity, block, sample rate, licence, preset -- plus the
-suite stamp `suite: miniv4`, which is what the scoring boundary later checks.
+top-level `identity` block (`name`, `version`, `bundle_id`), which is
+what `reference_suites.require_suite` reads at the scoring boundary; the
+`suite` stamp is a convenience for humans reading the file, not what the
+gate checks.
 """
 from __future__ import annotations
 
@@ -261,10 +264,25 @@ def host_version() -> str:
 def render_case(case: dict, rig: _Rig, licence: str, out_dir: pathlib.Path) -> dict:
     """Render one case from the suite definition and write its record.
 
-    The record carries the environment tuple and the suite stamp -- the
-    stamp is what `reference_suites.require_suite` later checks at the
-    scoring boundary. Raw float32 WAV, no normalisation, complete release
-    inside the stated phrase length."""
+    The record carries the environment tuple and the top-level `identity`
+    block -- the block `reference_suites.require_suite` reads at the
+    scoring boundary. Before rendering, the identity the record will carry
+    is checked through that same gate, so the writer and the reader cannot
+    drift apart: a record no scorer can classify refuses here, having
+    measured nothing. The `suite` stamp is for humans, not for the gate.
+    Raw float32 WAV, no normalisation, complete release inside the stated
+    phrase length."""
+    plugin = rig.identity()
+    identity = {
+        "name": rs.V4_PLUGIN_NAME,
+        "version": plugin.get("bundle_version"),
+        "bundle_id": plugin.get("bundle_id"),
+    }
+    try:
+        rs.require_suite({"identity": identity}, rs.SUITE_V4)
+    except rs.Refused as exc:
+        raise Refused(f"this render's identity is not classifiable as "
+                      f"{rs.SUITE_V4}: {exc}") from exc
     phrase_s = float(case["phrase_s"])
     note = case["base_midi_note"]
     if note is None:
@@ -280,9 +298,10 @@ def render_case(case: dict, rig: _Rig, licence: str, out_dir: pathlib.Path) -> d
         "schema": 1,
         "case_id": case["case_id"],
         "suite": rs.SUITE_V4,
+        "identity": identity,
         "suite_manifest": "docs/scorecard/miniv4-suite/suite.json",
         "plugin_required_version": rs.V4_REQUIRED_VERSION,
-        "environment": environment_tuple(rig.identity(), licence, host_version()),
+        "environment": environment_tuple(plugin, licence, host_version()),
         "audio": {
             "file": wav_path.name,
             "sample_rate_hz": SR,

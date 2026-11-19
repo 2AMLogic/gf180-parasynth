@@ -1,6 +1,6 @@
-,,,,,,,,,,,,,
-100 sound cases,,,,,,,,,,,,,
-,,,,,,,,,,,,,
+,,,,,,,,,,,,,,
+100 sound cases,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,
 Case ID,Family,Sound or scene,Batch,Split,Reference target,Reference suite,Required measurements,Groups required,Groups valid,Worst error / tolerance,Evidence state,Verdict,Result link,Stimulus and mapping
 D01A,Drums,Bass drum / anchor,First 32,Development,Fischer hardware sample,hardware-corpus,Pitch trajectory; early/body energy; decay,3,,,NOT RUN,NOT RUN,,BD alone at the documented reference setting. Preserve the full tail. Measure dry audio at original gain and a separate level-matched copy. Record source filename and any pair selector.
 D01B,Drums,Bass drum / variation,Holdout 20,Holdout,Second documented hardware setting,hardware-corpus,Pitch trajectory; early/body energy; decay,3,,,NOT RUN,NOT RUN,,"Reserve an unseen documented setting or strike from a qualifying corpus. Seal the exact file and control vector before tuning. If unavailable, leave this case unscored."
