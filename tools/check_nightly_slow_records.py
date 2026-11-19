@@ -41,11 +41,17 @@ complete numeric run field of the URL in upload-artifact's own
 -- substring presence is not attribution: the artifact id and a single
 space each appear in a real log and passed a substring check (measured on
 run 44344077192's log, #1066 review), so only exact field equality
-attributes it -- and the URL counts only on the upload record's own line:
-a diagnostic naming another run's artifact path (`Previous baseline path:
-/actions/runs/<other>/artifacts/<n>`, measured on the same log, #1066
-review) attributed that foreign run when every URL-bearing line was
-scanned.
+attributes it. The record itself is the COMPLETE line after the log
+timestamp -- label, single space, one URL token, end of line: a
+diagnostic naming another run's artifact path (`Previous baseline path:
+/actions/runs/<other>/artifacts/<n>`) attributed that foreign run while
+every URL-bearing line was scanned, and a quoted warning embedding the
+marker (`##[warning]Previous nightly reported: Artifact download URL:
+<foreign URL>`) or free text wedged between label and URL
+(`Artifact download URL: unavailable. Previous nightly: <foreign URL>`)
+each fed the extractor's wildcard the same way (#1066 review) -- so
+neither the marker mid-line nor a URL that does not IMMEDIATELY follow
+the label attributes anything.
 `--run-id` is required, not optional: on a
 quiet night `origin/main` does not move, so two consecutive nightlies share
 the same `headSha` and a previous night's log satisfies the head-sha
@@ -123,17 +129,26 @@ FRESH_RE = re.compile(r"(?:^|\s)(PASS|FAIL|REFUSE)\s+(\S+)\s+(.+?)\s*$")
 
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
-#: upload-artifact's own download-URL record ("Artifact download URL:" on
-#: the upload step's line) -- the only line a job log may name its own run
-#: from, and the run field `--run-id` is asserted against WHOLE, not as a
-#: substring: the artifact id (14445449921) and a single space each appear
-#: in run 44344077192's log and passed an `in` check (#1066 review), and a
-#: bare diagnostic naming another run's artifact path ("Previous baseline
-#: path: /actions/runs/<other>/artifacts/<n>", measured on the same log)
-#: attributed that foreign run while every URL-bearing line was scanned --
-#: so a line without the record marker attributes nothing.
+#: upload-artifact's own download-URL record: the COMPLETE line after the
+#: log timestamp is `Artifact download URL: <url>` -- label, single space,
+#: one URL token ending in `/actions/runs/<id>/artifacts/<n>`, end of line
+#: -- the only shape a job log may name its own run from, and the run field
+#: `--run-id` is asserted against WHOLE, not as a substring: the artifact
+#: id (14445449921) and a single space each appear in run 44344077192's
+#: log and passed an `in` check (#1066 review); a diagnostic naming
+#: another run's artifact path ("Previous baseline path: /actions/runs/
+#: <other>/artifacts/<n>", measured on the same log) attributed that
+#: foreign run while every URL-bearing line was scanned; and a quoted
+#: warning embedding the marker mid-line ("##[warning]Previous nightly
+#: reported: Artifact download URL: <foreign URL>") or free text wedged
+#: between label and URL ("Artifact download URL: unavailable. Previous
+#: nightly: <foreign URL>") each fed the extractor's wildcard and gave the
+#: foreign run 6/6 (#1066 review round 2) -- so the record is anchored at
+#: the line start (only a timestamp may precede the label) and the URL
+#: must follow the label immediately.
 ARTIFACT_RUN_ID_RE = re.compile(
-    r"Artifact download URL:.*?/actions/runs/(\d+)/artifacts/\d+")
+    r"^(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z )?"
+    r"Artifact download URL: \S*/actions/runs/(\d+)/artifacts/\d+\s*$")
 
 EXIT_OK, EXIT_FAIL, EXIT_REFUSED, EXIT_CONTROL = 0, 1, 3, 4
 
@@ -296,10 +311,14 @@ def main(argv: list[str] | None = None) -> int:
                     help="the run's id; asserted to EQUAL the complete "
                          "numeric run field of the URL in the log's "
                          "upload-artifact `Artifact download URL:` record "
-                         "(not merely to appear in it -- the artifact id "
+                         "-- the COMPLETE line after the log timestamp "
+                         "with the URL immediately after the label (not "
+                         "merely to appear in it -- the artifact id "
                          "and a single space each pass a substring check, "
                          "and a diagnostic line naming another artifact "
-                         "path is not the record) and echoed in the "
+                         "path, a quoted warning embedding the marker, or "
+                         "text wedged between marker and URL is not the "
+                         "record) and echoed in the "
                          "summary -- required because at the same head "
                          "sha (a quiet night) it is the only anchor that "
                          "discriminates two runs (#1066)")
@@ -353,10 +372,12 @@ def main(argv: list[str] | None = None) -> int:
         if not url_run_ids:
             raise Refused(
                 "the log carries no upload-artifact `Artifact download "
-                "URL:` record naming the run id (no line of the form "
-                "`Artifact download URL: .../actions/runs/<run id>/"
-                "artifacts/<artifact>`; a diagnostic may name an artifact "
-                "path, but only the upload record attributes) -- "
+                "URL:` record naming the run id (no COMPLETE record line "
+                "`<timestamp> Artifact download URL: <url ending in "
+                "/actions/runs/<run id>/artifacts/<artifact>>`: a "
+                "diagnostic, a quoted warning embedding the marker, or "
+                "text between the marker and the URL is not the record) "
+                "-- "
                 "its execution evidence cannot be attributed to "
                 f"{run_label}{job_label} (head {args.head_sha[:8]}); a "
                 "stale or failed fetch leaves the previous night's log "

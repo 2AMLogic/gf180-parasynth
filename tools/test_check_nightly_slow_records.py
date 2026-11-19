@@ -363,6 +363,60 @@ def test_foreign_diagnostic_does_not_conflict_with_the_upload_record(replay):
     assert run_gate(replay) == cnsr.EXIT_OK
 
 
+def test_quoted_warning_embedding_the_marker_is_not_the_record(replay, capsys):
+    """The measured replay from review round 2 (#1066): a warning line
+    quoting the record -- `##[warning]Previous nightly reported: Artifact
+    download URL: <foreign URL>` -- replaced the genuine record and the
+    extractor's wildcard skipped the quoted prefix, attributing all six
+    rows to the foreign run (6/6 PASS, exit 0). The record must be the
+    COMPLETE line after the log timestamp, so this log REFUSES even for
+    the run the warning names."""
+    identity = [ln for ln in IDENTITY_LINES
+                if "Artifact download URL" not in ln]
+    warning = ("2026-11-18T16:31:13.8095034Z ##[warning]Previous nightly "
+               "reported: Artifact download URL: "
+               "https://github.com/2AMLogic/gf180-parasynth/actions/runs/"
+               "44128504549/artifacts/1234567")
+    replay["log"].write_text(
+        "\n".join(identity + [warning] + RECORDED_LOG) + "\n")
+    assert run_gate(replay, "--run-id", "44128504549") == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "Artifact download URL" in err and "44128504549" in err
+
+
+def test_text_between_marker_and_url_is_not_the_record(replay, capsys):
+    """The other measured shape (#1066 review): the label anchored right
+    after the timestamp but free text wedged between it and the URL --
+    `Artifact download URL: unavailable. Previous nightly: <foreign URL>`
+    -- still fed the wildcard and gave the foreign run 6/6. The URL must
+    follow the label IMMEDIATELY as a single token, so this log REFUSES
+    even for the run its trailing URL names."""
+    identity = [ln for ln in IDENTITY_LINES
+                if "Artifact download URL" not in ln]
+    diagnostic = ("2026-11-18T16:31:13.8095034Z Artifact download URL: "
+                  "unavailable. Previous nightly: "
+                  "https://github.com/2AMLogic/gf180-parasynth/actions/runs/"
+                  "44128504549/artifacts/1234567")
+    replay["log"].write_text(
+        "\n".join(identity + [diagnostic] + RECORDED_LOG) + "\n")
+    assert run_gate(replay, "--run-id", "44128504549") == cnsr.EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "Artifact download URL" in err and "44128504549" in err
+
+
+def test_genuine_record_beside_a_quoted_warning_still_attributes(replay):
+    """The judge's acceptance case (#1066 review): the genuine record kept
+    and the quoted-warning line appended must not REFUSE as ambiguous --
+    only the complete record line counts, so the correct run still
+    passes."""
+    warning = ("2026-11-18T16:31:14.0000000Z ##[warning]Previous nightly "
+               "reported: Artifact download URL: "
+               "https://github.com/2AMLogic/gf180-parasynth/actions/runs/"
+               "44128504549/artifacts/1234567")
+    replay["log"].write_text(replay["log"].read_text() + warning + "\n")
+    assert run_gate(replay) == cnsr.EXIT_OK
+
+
 def test_refused_when_upload_records_name_two_runs(replay, capsys):
     """A log carrying two upload-artifact download-URL records naming
     different runs is ambiguous execution evidence; the gate refuses
