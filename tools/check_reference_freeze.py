@@ -49,6 +49,11 @@ import reference_suites as rs                                        # noqa: E40
 
 OK, FAIL, REFUSED = 0, 1, 2
 
+
+class Refused(rs.Refused, RuntimeError):
+    """The freeze could not be checked at all -- no verdict exists."""
+
+
 #: Documents the V3 records cite; editing one changes what the suite means.
 FREEZE_DOCS = (
     "docs/minimoog-reference.md",
@@ -79,8 +84,10 @@ def _resolve(root: pathlib.Path, dotted: str):
     return obj
 
 
-def freeze_entries(root: pathlib.Path) -> list[tuple[str, str, str]]:
-    """(kind, digest, subject) for everything the freeze covers."""
+def tracked_entries(root: pathlib.Path) -> list[tuple[str, str, str]]:
+    """(kind, digest, subject) for everything the freeze covers, enumerated
+    from the tracked tree. Used by --generate only: check() must work on any
+    tree rooted like this one, including a copy that is not a git repo."""
     entries: list[tuple[str, str, str]] = []
     for d in rs.SUITE_RECORDS[rs.SUITE_V3_FROZEN]:
         rel = subprocess.run(
@@ -99,38 +106,58 @@ def freeze_entries(root: pathlib.Path) -> list[tuple[str, str, str]]:
     return entries
 
 
+def manifest_entries(path: pathlib.Path) -> list[tuple[str, str, str]]:
+    """Parse the freeze manifest, or REFUSED. The manifest is the covered
+    set at check time -- never re-derived from the files it protects."""
+    if not path.exists():
+        raise Refused(f"freeze manifest missing: {path}")
+    entries: list[tuple[str, str, str]] = []
+    for n, line in enumerate(path.read_text().splitlines(), 1):
+        parts = line.split("  ")
+        if len(parts) != 3 or parts[0] not in ("file", "canon"):
+            raise Refused(f"freeze manifest line {n} is malformed: {line!r}")
+        entries.append((parts[0], parts[1], parts[2]))
+    return entries
+
+
 def write_manifest(root: pathlib.Path, path: pathlib.Path) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"{kind}  {digest}  {subject}" for kind, digest, subject
-             in freeze_entries(root)]
+             in tracked_entries(root)]
     path.write_text("\n".join(lines) + "\n")
-    print(f"wrote {len(lines)} entries to {path.relative_to(ROOT)}")
+    try:
+        shown = path.relative_to(ROOT)
+    except ValueError:
+        shown = path
+    print(f"wrote {len(lines)} entries to {shown}")
     return OK
 
 
 def check(root: pathlib.Path, path: pathlib.Path) -> int:
-    if not path.exists():
-        print(f"REFUSED  freeze manifest missing: {path.relative_to(ROOT)}")
+    try:
+        expected = manifest_entries(path)
+    except Refused as why:
+        print(f"REFUSED  {why}")
         return REFUSED
-    expected: list[tuple[str, str, str]] = []
-    for n, line in enumerate(path.read_text().splitlines(), 1):
-        parts = line.split("  ")
-        if len(parts) != 3 or parts[0] not in ("file", "canon"):
-            print(f"REFUSED  freeze manifest line {n} is malformed: {line!r}")
-            return REFUSED
-        expected.append((parts[0], parts[1], parts[2]))
 
-    actual = {subject: (kind, digest) for kind, digest, subject
-              in freeze_entries(root)}
     bad: list[str] = []
     for kind, digest, subject in expected:
-        if subject not in actual:
-            bad.append(f"{subject}: covered by the freeze manifest but MISSING "
-                       f"from the tree (deleted or untracked)")
-        elif actual[subject] != (kind, digest):
-            bad.append(f"{subject}: sha256 {actual[subject][1][:12]}... != frozen "
+        actual: str
+        if kind == "canon":
+            actual = _canonical_hash(_resolve(root, subject))
+        else:
+            f = root / subject
+            if not f.exists():
+                bad.append(f"{subject}: covered by the freeze manifest but "
+                           f"MISSING from the tree (deleted or untracked)")
+                continue
+            actual = _sha256(f)
+        if actual != digest:
+            bad.append(f"{subject}: hash {actual[:12]}... != frozen "
                        f"{digest[:12]}... (edited since the freeze)")
-    grew = sorted(set(actual) - {s for _k, _d, s in expected})
+    grew = sorted(str(p.relative_to(root)) for d in rs.SUITE_RECORDS[rs.SUITE_V3_FROZEN]
+                  for p in (root / d).rglob("*") if p.is_file()
+                  and p.relative_to(root).as_posix() not in {s for _k, _dg, s in expected})
     for subject in grew:
         bad.append(f"{subject}: a frozen-scope file is NOT in the freeze "
                    f"manifest -- regenerate the manifest or exclude it with "

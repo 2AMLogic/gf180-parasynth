@@ -86,7 +86,9 @@ CAL_CENTS_LIMIT = 50.0
 #: The demo-artefact detector's calibration-note window: the detector looks
 #: for isolated broadband transients against a stationary background, the
 #: shape both Arturia's and u-he's demo modes take (model/reference_integrity.py).
-CAL_RENDER_S = 1.2
+#: Long enough that the pitched path holds >= 1 s of analysis after its
+#: 0.5 s attack skip.
+CAL_RENDER_S = 2.5
 
 
 class Refused(rs.Refused):
@@ -218,7 +220,13 @@ def _demo_artefact_scan(y: np.ndarray, f0_hz: float) -> dict:
     scan FAILs (exit 1) rather than refusing, because the render did happen
     and was measured."""
     from reference_integrity import transient_report
-    return transient_report(y, SR, f0_hz=f0_hz)
+    try:
+        return transient_report(y, SR, f0_hz=f0_hz)
+    except am.InsufficientEvidence as exc:
+        raise Refused(
+            f"the demo-artefact detector cannot run on this calibration "
+            f"note: {exc}. Lengthen the note rather than trust a scan that "
+            f"did not happen")
 
 
 # ===========================================================================
