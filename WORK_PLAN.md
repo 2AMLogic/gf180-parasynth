@@ -36,9 +36,8 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
 - **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md)
-- **#1056**: Say why eight of the ten files hashed into the frozen Mini V3 records are deliberately NOT guarded
+- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
 
 ## In Progress
 
@@ -52,7 +51,8 @@ Issues currently being built (`loom:building`).
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
+- **#1058**: AC (a)'s sha-equality discriminator in #820 cannot pass on a quiet night under record_unchanged() (#967) — rederive the nightly slow-record check
+- **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites)
 
 ## PRs Awaiting Review
 
@@ -119,7 +119,7 @@ Issues carrying `loom:curated`.
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)* *(held)*
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)* *(held)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)* *(held)*
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)*
+- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)* *(held)*
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
 - **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)* *(held)*
 - **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)* *(held)*
@@ -128,7 +128,8 @@ Issues carrying `loom:curated`.
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
 - **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md) *(curated)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)*
-- **#1056**: Say why eight of the ten files hashed into the frozen Mini V3 records are deliberately NOT guarded *(curated)*
+- **#1058**: AC (a)'s sha-equality discriminator in #820 cannot pass on a quiet night under record_unchanged() (#967) — rederive the nightly slow-record check *(curated)*
+- **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -155,11 +156,11 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 0 |
 | Very important | 1 |
 | Important | 8 |
-| Ready (`loom:issue`, net of holds/building/merge-pending) | 7 |
-| In Progress (`loom:building`) | 9 |
+| Ready (`loom:issue`, net of holds/building/merge-pending) | 6 |
+| In Progress (`loom:building`) | 10 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 59 |
+| Curated | 60 |
 | Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
