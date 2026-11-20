@@ -37,12 +37,23 @@ from dsp import SR
 from verify_ladder import tool, compare
 
 
-def stimulus(short: bool = False):
-    """The write stream and its length. State carries across segments."""
+def stimulus(short: bool = False, couple: bool = True):
+    """The write stream and its length. State carries across segments.
+
+    `couple=True` (#552, contract 15.10) threads COUPLE (drum page 0x30) writes through the
+    stream: reserved-bit-only and neighbouring-address writes that must leave it OFF, an enable
+    in the same frame as the first hit, a disable / re-enable (bit 0 only, reserved bits set)
+    with the charge carried across, a retune and a hit with it ON, and a RESET with a charged
+    filter that must clear BOTH the charge and the enable. `couple=False` strips every address
+    0x30 write: the stream the bypass has to reproduce bit for bit."""
     S = 0.25 if short else 1.0
     kit = dx.kit_808()
     hits, writes = [], []
+    cw = []                       # COUPLE-related writes, dropped when couple=False
+    cw += [(2, 0x2F, 1), (2, 0x31, 1),            # neighbours of 0x30: no register, must NOT enable
+           (3, dx.A_COUPLE, 0xFFFFFFFE)]          # reserved bits only: bit 0 = 0, still bypass
     f = 10
+    cw.append((f, dx.A_COUPLE, 0xFFFFFFFF))       # enable, same frame as the first hit
     # 1. every stop soloed at accent 1.0 -- eleven of them since revision 10, so the cymbal's three
     #    VCA paths and the RS/CL pair's four are all driven, and the BD and the THREE tom circuits
     #    carry the coefficient sequences of 15.7
@@ -53,7 +64,12 @@ def stimulus(short: bool = False):
                (f + 3, dx.A_STOPS, 1 << dx.CH), (f + 4, dx.A_STOPS, 0), (f + 5, dx.A_STOPS, 1 << dx.CH),
                (f + 6, dx.A_STOPS, 1 << dx.CH), (f + 7, dx.A_STOPS, 0)]
     f += int(0.05 * SR)
-    # 3. all eleven in one frame at accent 2.0: the loudest hit the kit's registers allow
+    # 3. all eleven in one frame at accent 2.0: the loudest hit the kit's registers allow.
+    #    COUPLE off for 300 frames (the charge keeps tracking), back on (the output steps to
+    #    x - floor(acc / 2^10), nothing cleared), a bit-0-clear write with reserved bits set
+    #    (off), then on again with reserved bits set
+    cw += [(f - 2, dx.A_COUPLE, 0), (f + 300, dx.A_COUPLE, 1), (f + 400, dx.A_COUPLE, 0x2),
+           (f + 700, dx.A_COUPLE, 0x3)]
     hits += [(f, s, 2.0) for s in range(dx.N_STOPS)]
     f += int(0.15 * S * SR)
     # 4. a bar of the groove with accents, the OH -> CH choke, and the BD retuned while it rings
@@ -138,8 +154,21 @@ def stimulus(short: bool = False):
     writes.append((f, dx.A_RESET, 0))
     writes += [(f + 1, a, v) for a, v in kit]
     hits += [(f + 2, dx.BD, 1.0), (f + 2, dx.OH, 1.0)]
+    # the charge was non-zero and COUPLE was on when RESET landed: afterwards the buses must be
+    # RAW (the enable cleared) and, when it is turned on again, the charge must have started from
+    # zero at the reset, not from the pre-reset history
+    cw.append((f + int(0.15 * S * SR), dx.A_COUPLE, 1))
+    # a second RESET with the filter charged and on, then COUPLE = 1 IN THE SAME FRAME, after it:
+    # the write port applies them in order, so the enable survives and the charge restarts at 0
+    f2 = f + int(0.25 * S * SR)
+    writes.append((f2, dx.A_RESET, 0))
+    cw.append((f2, dx.A_COUPLE, 1))
+    writes += [(f2 + 1, a, v) for a, v in kit]
+    hits.append((f2 + 2, dx.BD, 1.0))
     f += int(0.5 * S * SR)
     n = f
+    if couple:
+        writes += cw
     all_writes = sorted(dx.hit_writes(hits, kit) + writes, key=lambda t: t[0])
     return [w for w in all_writes if w[0] < n], n
 
@@ -158,8 +187,8 @@ class Coverage:
     def restore(self): modal_fixed.sat = self._sat
 
 
-def generate(outdir: str, short: bool = False, verbose: bool = True):
-    writes, n = stimulus(short)
+def generate(outdir: str, short: bool = False, verbose: bool = True, couple: bool = True):
+    writes, n = stimulus(short, couple)
     d = dx.DrumsFx()
     cov = Coverage(d)
     dmix, body = d.play(writes, n)
@@ -172,6 +201,17 @@ def generate(outdir: str, short: bool = False, verbose: bool = True):
         expected += [int(dmix[i]), int(body[i])]
     with open(os.path.join(outdir, "drum_expected.txt"), "w") as fh:
         fh.writelines(f"{dmix[i]} {body[i]}\n" for i in range(n))
+    if verbose and couple:
+        # What the enabled stream actually exercises, from the model (never from the RTL): how many
+        # frames each bus is changed by the filter, and the widest word each needed.
+        bw, _ = stimulus(short, False)
+        ref_mix, ref_body = dx.DrumsFx().play(bw, n)
+        print(f"  coupling coverage (model): {int(np.sum(dmix != ref_mix))} of {n} frames differ from the "
+              f"bypass on the mix bus, {int(np.sum(body != ref_body))} on the body bus; "
+              f"charge needed {d.cc_dmix.acc_bits}/{d.cc_body.acc_bits} bits "
+              f"(limit {d.cc_dmix.acc_limit_bits}/{d.cc_body.acc_limit_bits}), output "
+              f"{d.cc_dmix.out_bits}/{d.cc_body.out_bits} bits "
+              f"(limit {d.cc_dmix.out_limit_bits}/{d.cc_body.out_limit_bits})")
     if verbose:
         fires = [int(np.sum((d.trace["fire"] >> s) & 1)) for s in range(dx.N_STOPS)]
         env = d.envs
@@ -213,12 +253,14 @@ def main(argv=None) -> int:
     ap.add_argument("--inject", default=None); ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--jitter", type=int, default=0)
     ap.add_argument("--short", action="store_true")
+    ap.add_argument("--no-couple", action="store_true",
+                    help="strip every COUPLE (0x30) write: the bypass stream, which must be the old design's, bit for bit")
     ap.add_argument("--compare-only", default=None, metavar="FILE")
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
     a = ap.parse_args(argv)
     print(f"verify_drums: model DrumsFx({dx.N_ENV} envelopes, {dx.N_PATH} paths, bank {dx.N_MODES} modes / "
           f"{dx.N_NUMS} with numerators, headroom {dx.BODY_HR}, {dx.BODY_BITS}-bit body word)")
-    expected, n, _ = generate(a.outdir, a.short)
+    expected, n, _ = generate(a.outdir, a.short, couple=not a.no_couple)
     if a.compare_only:
         status = compare(expected, a.compare_only, "verify_drums")
     else:

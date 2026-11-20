@@ -154,23 +154,24 @@ module synth_top #(
     wire [MODES*26-1:0]   d_a1, d_a2;
     wire [MODES*16-1:0]   d_amp;
     wire [MODES*2-1:0]    d_num;
+    wire                  d_couple;
     wire rst_n_drum = rst_n & ~d_soft_rst;
     drum_regs #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .STOPS(STOPS)) u_dregs (
         .clk(clk), .rst_n(rst_n_drum), .wr_valid(wr_drum), .wr_addr(wr_addr), .wr_data(wr_data),
         .soft_rst(d_soft_rst),
         .stops(d_stops), .accent_bus(d_accent), .osc_inc_bus(d_osc),
         .env_ctl_bus(d_ectl), .env_peak_bus(d_peak), .env_rate_bus(d_rate), .env_frate_bus(d_frate), .path_bus(d_path),
-        .a1_bus(d_a1), .a2_bus(d_a2), .amp_bus(d_amp), .num_bus(d_num));
+        .a1_bus(d_a1), .a2_bus(d_a2), .amp_bus(d_amp), .num_bus(d_num), .couple_en(d_couple));
 
-    wire signed [21:0] dmix;                 // the mix bus (15.5), 22 bits, exact:
-                                             // 23 paths x 17 bits needs 22 (revision 10)
-    wire signed [18:0] body;                 // the body bus (15.6), 19 bits Q4.15
+    wire signed [22:0] dmix;                 // the mix bus (15.5), 22 bits exact (23 paths x 17 bits,
+                                             // revision 10), +1 for the coupled bus (15.10)
+    wire signed [19:0] body;                 // the body bus (15.6), 19 bits Q4.15, +1 likewise
     wire               mix_valid, body_valid;
     drum_kit #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .NUMS(NUMS), .STOPS(STOPS)) u_drums (
         .clk(clk), .rst_n(rst_n_drum), .frame_tick(go),
         .stops(d_stops), .accent_bus(d_accent), .osc_inc_bus(d_osc),
         .env_ctl_bus(d_ectl), .env_peak_bus(d_peak), .env_rate_bus(d_rate), .env_frate_bus(d_frate), .path_bus(d_path),
-        .a1_bus(d_a1), .a2_bus(d_a2), .amp_bus(d_amp), .num_bus(d_num),
+        .a1_bus(d_a1), .a2_bus(d_a2), .amp_bus(d_amp), .num_bus(d_num), .couple_en(d_couple),
         .mix_out(dmix), .mix_valid(mix_valid), .body_out(body), .body_valid(body_valid));
 
     // `drum_done` is the handshake of ARCHITECTURE 4.4: cleared at `go`, set only
@@ -194,24 +195,24 @@ module synth_top #(
     // The master mix takes the PREVIOUS frame's drum buses: the handshake is
     // satisfied, the format is right, the deadline is met, and the audio is one
     // frame stale.
-    reg signed [21:0] dmix_q;
-    reg signed [18:0] body_q;
-    always @(posedge clk) if (!rst_n_drum) begin dmix_q <= 22'sd0; body_q <= 19'sd0; end
+    reg signed [22:0] dmix_q;
+    reg signed [19:0] body_q;
+    always @(posedge clk) if (!rst_n_drum) begin dmix_q <= 23'sd0; body_q <= 20'sd0; end
                           else if (go) begin dmix_q <= dmix; body_q <= body; end
-    wire signed [21:0] dmix_v = dmix_q;
-    wire signed [18:0] body_v = body_q;
+    wire signed [22:0] dmix_v = dmix_q;
+    wire signed [19:0] body_v = body_q;
     wire               done_v = 1'b1;
 `elsif INJECT_BUG_DRUM_DONE_NOWAIT
     // The handshake removed and nothing else: the mix does not WAIT for this
     // frame's buses. Whether that is audible depends on whether the voice
     // reaches its drum stage before drum_kit finishes -- which is the question
     // the handshake exists to answer, and it must not be left to timing.
-    wire signed [21:0] dmix_v = dmix;
-    wire signed [18:0] body_v = body;
+    wire signed [22:0] dmix_v = dmix;
+    wire signed [19:0] body_v = body;
     wire               done_v = 1'b1;
 `else
-    wire signed [21:0] dmix_v = dmix;
-    wire signed [18:0] body_v = body;
+    wire signed [22:0] dmix_v = dmix;
+    wire signed [19:0] body_v = body;
     wire               done_v = drum_done;
 `endif
 
