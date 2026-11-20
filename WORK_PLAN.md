@@ -62,7 +62,7 @@ _None._
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-- **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper — closes #1062
+- **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper *(held)* — closes #1062
 
 ## Proposed
 
