@@ -3,7 +3,7 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as its own last change — `git log --no-patch -1 --format='%h %cs' -L '/^<!-- guide:plan-body:start -->$/,/^<!-- guide:plan-body:end -->$/:WORK_PLAN.md' origin/main` — which neither a declined Guide regeneration nor a docs-only commit elsewhere in this file advances.
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-20T10:08:14Z (snapshot; compare against live labels)_
+_Generated: 2026-11-20T19:40:29Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
@@ -126,6 +126,8 @@ Issues carrying `loom:curated`.
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)* *(held)*
 - **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites) *(curated)*
+- **#1084**: T1 item 8: bump the signoff klt pin 0.8.0 -> 0.9.2, re-attest items 9 and 10, and attest the committed characterization report *(curated)*
+- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -156,7 +158,7 @@ Issues carrying `loom:curated`.
 | In Progress (`loom:building`) | 8 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
-| Curated | 58 |
+| Curated | 60 |
 | Architect / Hermit proposals | 10 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
