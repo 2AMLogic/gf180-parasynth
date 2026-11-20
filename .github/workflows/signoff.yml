@@ -115,6 +115,34 @@ jobs:
           print("skipped_checks == [cold_start], carried from the committed envelope")
           PY
 
+      - name: evidence envelopes were attested by the pinned klt
+        run: |
+          # provenance.klt_version is written by the producer and read by
+          # nothing else: after a pin bump, an envelope left behind by the
+          # OLD pin passed regrade unchanged, because --check recomputes
+          # content hashes without comparing the recorded producer version
+          # (#1089). verdict.txt needs no equivalent here: the fresh-render
+          # diff in the next step fails if its `build: klt <v>` line moves.
+          python3 - <<'PY'
+          import json, os, re
+
+          klt = os.environ.get("KLT", "")
+          m = re.search(r"klayout-tools==([0-9][^\s]*)", klt)
+          assert m, ("REFUSED: cannot read the pinned version from $KLT "
+                     f"{klt!r}; expected klayout-tools==X.Y.Z")
+          pinned = m.group(1)
+
+          for path in ("manifests/evidence/item-9.json",
+                       "manifests/evidence/item-10.json"):
+              envelope = json.load(open(path))
+              got = envelope.get("provenance", {}).get("klt_version")
+              assert got, f"REFUSED: {path} records no provenance.klt_version"
+              assert got == pinned, (
+                  f"{path} was attested by klt {got}, not the pinned {pinned}: "
+                  "a pin bump landed without re-attesting the envelope")
+              print(f"{path}: klt_version {got} == pinned {pinned}")
+          PY
+
       - name: committed verdict equals a fresh grade
         run: |
           # exit 3 is the grade ("not T1"), not a failure of the render.
