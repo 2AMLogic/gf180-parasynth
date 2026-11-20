@@ -277,6 +277,6 @@ def test_current_repo_is_green():
 def test_recipe_is_the_signoff_header_recipe(tmp_path):
     """The three artefacts and the pinned klt invocation, as the
     .github/workflows/signoff.yml header states them."""
-    assert "klayout-tools==0.8.0" in cah.RECIPE
+    assert "klayout-tools==0.9.2" in cah.RECIPE
     assert "verdict.txt" in cah.RECIPE
     assert "evidence." in cah.RECIPE and "content_hash" in cah.RECIPE

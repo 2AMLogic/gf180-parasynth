@@ -62,7 +62,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 RECIPE = """\
 Regenerate (three artefacts move together -- the authoritative recipe is the
 header of .github/workflows/signoff.yml):
-  1. K="uvx --with pyyaml --from klayout-tools==0.8.0 klt"
+  1. K="uvx --with pyyaml --from klayout-tools==0.9.2 klt"
      $K signoff --attest <item> --inventory manifests/inventories/<item>.json \\
          -o manifests/evidence/<item>.json
   2. set evidence.<item>.content_hash in manifests/gf180-parasynth.json to the
