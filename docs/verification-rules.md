@@ -51,6 +51,24 @@ outcomes, not two:
 A bench that reports "mismatch" for all three is fine. A bench that reports
 "pass" for X is not a bench. Check this explicitly; do not assume it.
 
+### How gates are wired here (what "does this gate ever run" means)
+
+A committed pass/fail script nobody invokes is not a gate: its answer is
+never read, and it cannot go red (#847). The sufficient check is **not** a
+name-grep of `Makefile`, `tools/run_all.py` and `.github/` — this repo wires
+most gates through directory-wide pytest discovery (`make verify` runs
+`pytest model/ spec/ tools/ fpga/ pnr/ …`), so a script with an adjacent
+`tools/test_<name>.py` runs in every `make verify` even though its name
+appears in no recipe. A gate is wired if **either** holds: it is named in a
+Makefile recipe or workflow step, **or** a collected `test_*.py` beside it
+imports and asserts on it. `tools/check_m1a_selection.py` was proposed for
+retirement on the grep alone; its adjacent test — carrying its own
+injected-bug control — runs it every `make verify`, and it stays. Check
+collection (`pytest tools/ --collect-only -q`) before claiming any gate is
+unwired, and wire a genuine no-argument gate into `verify:` beside
+`check_decimator_saturation.py` rather than removing it (#755 is the
+precedent: closed completed by wiring).
+
 ---
 
 ## 2. Every bench carries injected-bug controls
