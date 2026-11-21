@@ -10,8 +10,11 @@ DEF question it cannot answer.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
+
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import route_rerun  # noqa: E402
@@ -72,6 +75,26 @@ def test_the_def_is_among_the_kept_artefacts() -> None:
     """The wrapper exists to keep the DEF; drop it from the list and nothing here works."""
     assert any(name.endswith("ladder_dp.def") for name in route_rerun.ROUTE_ARTEFACTS)
     assert any(name.endswith("ladder_dp_route.odb") for name in route_rerun.ROUTE_ARTEFACTS)
+
+
+@pytest.mark.parametrize("field", ["gds_path", "verilog_path"])
+def test_full_route_requires_each_signoff_input(tmp_path: pathlib.Path, field: str) -> None:
+    response = json.loads((route_rerun.HERE / "par_response.json").read_text())
+    emitted = pathlib.Path(response[field]).relative_to(pathlib.Path(response["def_path"]).parent)
+    name = str(pathlib.Path(".klt/place-and-route") / emitted)
+    for other in route_rerun.ROUTE_ARTEFACTS:
+        path = tmp_path / other
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+
+    target = tmp_path / name
+    target.unlink(missing_ok=True)
+    assert route_rerun.missing_artefacts(tmp_path) == [name]
+    target.touch()
+    assert route_rerun.missing_artefacts(tmp_path) == [name]
+    target.write_bytes(b"routed output")
+    assert route_rerun.missing_artefacts(tmp_path) == []
+    assert name not in route_rerun.CTS_ARTEFACTS
 
 
 def test_the_cts_mode_keeps_the_stage_tcls_and_pre_route_defs() -> None:

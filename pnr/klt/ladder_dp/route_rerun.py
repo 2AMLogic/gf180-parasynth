@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Re-run the ``ladder_dp`` route on the batch fleet, keeping the DEF/ODB (#1006).
+"""Re-run the ``ladder_dp`` route on the batch fleet and bind its outputs.
 
 Job ``rs-parasynth808-od2-s00`` produced ``ladder_dp.def`` and
 ``ladder_dp_route.odb`` (``klt-file-listing.txt`` records both) but did not
@@ -68,12 +68,19 @@ PDK = "gf180mcuD"
 #: the original job's run.log names).
 PDK_FAMILY = "gf180mcu"
 
+#: Inputs to DRC, LVS and ERC from the full route (#1085).
+SIGNOFF_INPUTS = (
+    ".klt/place-and-route/ladder_dp.gds",
+    ".klt/place-and-route/ladder_dp.v",
+)
+
 #: What must exist after a successful full-route run, all under HERE. The
 #: responses and run.log are re-collected so the manifest binds them next to
 #: the artefacts.
 ROUTE_ARTEFACTS = (
     ".klt/place-and-route/ladder_dp.def",
     ".klt/place-and-route/ladder_dp_route.odb",
+    *SIGNOFF_INPUTS,
     ".klt/place-and-route/ladder_dp_route_drc.rpt",
     ".klt/place-and-route/ladder_dp_route_pass_0_drc.rpt",
     ".klt/place-and-route/ladder_dp_route_metrics.json",
@@ -140,7 +147,12 @@ def resolve_pdk_root(store: Path, pin: str, pdk: str) -> tuple[Path | None, str 
 
 
 def missing_artefacts(here: Path = HERE, kept: tuple[str, ...] = KEPT_ARTEFACTS) -> list[str]:
-    return [name for name in kept if not (here / name).is_file()]
+    missing = []
+    for name in kept:
+        path = here / name
+        if not path.is_file() or (name in SIGNOFF_INPUTS and path.stat().st_size == 0):
+            missing.append(name)
+    return missing
 
 
 def build_manifest(here: Path = HERE, kept: tuple[str, ...] = KEPT_ARTEFACTS) -> dict:
@@ -161,7 +173,7 @@ def build_manifest(here: Path = HERE, kept: tuple[str, ...] = KEPT_ARTEFACTS) ->
     }
     manifest = {
         "schema_version": 1,
-        "what": "Artefacts kept by the #1006 DEF re-run: sha256 bindings for the routed DEF/ODB and the reports the design-vs-router analysis consumed.",
+        "what": "SHA256 bindings for the ladder_dp re-run outputs and tool reports.",
         "source_commit": os.environ.get("RS_SOURCE_COMMIT", "unknown"),
         "pdk_pin": PDK_PIN,
         "pdk": PDK,
@@ -253,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
     missing = missing_artefacts(kept=kept)
     if missing:
         print(
-            "FAILED: driver exited 0 but the kept artefacts are missing: "
+            "FAILED: driver exited 0 but kept artefacts are missing or signoff inputs are empty: "
             + ", ".join(missing),
             file=sys.stderr,
         )
