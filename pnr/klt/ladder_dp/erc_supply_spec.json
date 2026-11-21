@@ -1,0 +1,22 @@
+{
+  "_comment": "Metal, label and via layers follow gf180mcuD/libs.tech/klayout/tech/gf180mcu.map at wafer-space/gf180mcu fb4b8f59451d248ef5b310a593759f946a8f6ae8. The ladder_dp route uses Metal1 through Metal5. Poly2, Comp and Contact follow the gf180mcu deck.",
+  "stackup": [
+    {"name": "Poly2", "layer": "30/0", "role": "gate", "active_layer": "22/0"},
+    {"name": "Metal1", "layer": "34/0", "label_layer": "34/10"},
+    {"name": "Metal2", "layer": "36/0", "label_layer": "36/10"},
+    {"name": "Metal3", "layer": "42/0", "label_layer": "42/10"},
+    {"name": "Metal4", "layer": "46/0", "label_layer": "46/10"},
+    {"name": "Metal5", "layer": "81/0", "label_layer": "81/10"}
+  ],
+  "vias": [
+    {"name": "Contact", "layer": "33/0", "between": ["Poly2", "Metal1"]},
+    {"name": "Via1", "layer": "35/0", "between": ["Metal1", "Metal2"]},
+    {"name": "Via2", "layer": "38/0", "between": ["Metal2", "Metal3"]},
+    {"name": "Via3", "layer": "40/0", "between": ["Metal3", "Metal4"]},
+    {"name": "Via4", "layer": "41/0", "between": ["Metal4", "Metal5"]}
+  ],
+  "nets": [
+    {"name": "VDD", "kind": "supply", "islands": 1},
+    {"name": "VSS", "kind": "supply", "islands": 1}
+  ]
+}

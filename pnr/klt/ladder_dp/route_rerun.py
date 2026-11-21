@@ -34,6 +34,14 @@ output paths out of the source tree afterwards, so every artefact this wrapper
 promises must sit at a stable path under ``HERE`` and be declared on the
 ``repo-script-submit.py`` command line. Nothing here reads or writes outside
 the run-local store and ``HERE``.
+
+For #1085, submit the full route first, declaring ROUTE_ARTEFACTS and
+MANIFEST_NAME as outputs. Overlay those collected files on the same source
+revision for the probe shards (the submitter accepts a ``--tarball``).
+Each ``--probe drc|lvs|erc`` shard runs one verb, with ``.klt/<verb>_report.json``
+as its declared output. Use requirements-rerun.txt for each job. The report
+file holds verbatim stdout, the batch log holds the version and stderr, and
+run.json holds the exit code, including violations and application errors.
 """
 
 from __future__ import annotations
@@ -200,6 +208,43 @@ def build_manifest(here: Path = HERE, kept: tuple[str, ...] = KEPT_ARTEFACTS) ->
     return manifest
 
 
+def verify_probe_inputs(verb: str) -> None:
+    """Check the staged route packet before giving its files to a signoff verb."""
+    manifest = json.loads((HERE / MANIFEST_NAME).read_text())
+    if (manifest["pdk"], manifest["pdk_pin"]) != (PDK, PDK_PIN):
+        raise ValueError(f"{MANIFEST_NAME} must describe {PDK} at {PDK_PIN}")
+    report = ".klt/place-and-route/ladder_dp_route_drc.rpt"
+    gds, netlist = SIGNOFF_INPUTS
+    inputs = [report, gds]
+    if verb == "lvs":
+        inputs.extend([netlist, ".klt/place-and-route/ladder_dp.def"])
+    for name in inputs:
+        actual = sha256_file(HERE / name)
+        recorded = manifest["artefacts"][name]["sha256"]
+        if actual != recorded:
+            raise ValueError(f"{name}: expected {recorded}, got {actual}")
+    original = json.loads((HERE / "route_drc_extract.json").read_text())
+    expected = original["inputs"]["drc_report"]["sha256"]
+    recorded = manifest["artefacts"][report]["sha256"]
+    if recorded != expected:
+        raise ValueError(f"{report}: original {expected}, re-run {recorded}")
+
+
+def run_probe(verb: str, pdk_root: Path) -> int:
+    """Keep the tool's own output and exit code, including non-clean verdicts."""
+    cmd = ["klt", verb, f"{verb}_request.json", "--format", "json"]
+    if verb == "erc":
+        cmd = ["sh", "erc_request.sh"]
+    env = {**os.environ, "PDK_ROOT": str(pdk_root), "PDK": PDK}
+    try:
+        subprocess.run(["klt", "version"], check=True, cwd=HERE, env=env)
+        with (HERE / ".klt" / f"{verb}_report.json").open("wb") as report:
+            return subprocess.run(cmd, cwd=HERE, env=env, stdout=report, check=False).returncode
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return EXIT_REFUSED
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--pdk-store", default=str(HERE / ".pdk-store"))
@@ -209,7 +254,13 @@ def main(argv: list[str] | None = None) -> int:
         default=6300.0,
         help="per-step cap handed to run_klt.py (the original job's value)",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--probe",
+        choices=("drc", "lvs", "erc"),
+        help="run one klt verb on the collected, hash-bound route",
+    )
+    mode.add_argument(
         "--target-stage",
         choices=("route", "cts"),
         default="route",
@@ -220,6 +271,13 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+
+    if args.probe:
+        try:
+            verify_probe_inputs(args.probe)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"REFUSED: staged probe inputs: {exc}", file=sys.stderr)
+            return EXIT_REFUSED
 
     kept = ROUTE_ARTEFACTS if args.target_stage == "route" else CTS_ARTEFACTS
 
@@ -246,6 +304,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSED: {refusal}", file=sys.stderr)
         return EXIT_REFUSED
     print(f"[route-rerun] pdk {PDK} @ {pdk_root}", flush=True)
+    if args.probe:
+        return run_probe(args.probe, pdk_root)
 
     driver_argv = [
         sys.executable,

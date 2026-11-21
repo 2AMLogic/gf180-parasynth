@@ -1,0 +1,25 @@
+{
+  "schema": "klt.lvs.request/1",
+  "engine": "klayout",
+  "layout": {
+    "file": ".klt/place-and-route/ladder_dp.gds",
+    "top": "ladder_dp",
+    "deck": "gf180mcu",
+    "def_net_names": true,
+    "def_pins": ".klt/place-and-route/ladder_dp.def",
+    "abstract_cells": "gf180mcu_fd_sc_mcu7t5v0__*",
+    "abstract_cell_lef": "$PDK_ROOT/gf180mcuD/libs.ref/gf180mcu_fd_sc_mcu7t5v0/lef/gf180mcu_fd_sc_mcu7t5v0.lef"
+  },
+  "reference": {
+    "netlist": ".klt/place-and-route/ladder_dp.v",
+    "form": "gate-level-verilog",
+    "top": "ladder_dp",
+    "library": "gf180mcu_fd_sc_mcu7t5v0",
+    "pdk": "gf180mcuD"
+  },
+  "options": {
+    "power_connectivity": {
+      "expected_nets": {"VDD": "VDD", "VSS": "VSS"}
+    }
+  }
+}
