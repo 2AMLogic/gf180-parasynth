@@ -1,0 +1,9 @@
+{
+  "schema": "klt.drc.request/1",
+  "file": ".klt/place-and-route/ladder_dp.gds",
+  "top": "ladder_dp",
+  "engine": "curated",
+  "deck": "gf180mcu",
+  "pdk": "gf180mcuD",
+  "pdk_root": "$PDK_ROOT"
+}

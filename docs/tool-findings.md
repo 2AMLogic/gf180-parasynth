@@ -184,6 +184,13 @@ recorded in `route_drc_classification.json`, which carries the sha256 of
 its inputs) classifies each site **unclassified, reason "mixed power (VSS)
 and signal srcs"** -- neither bucket is forced.
 
+**Signoff probe attempt, 2026-11-21.** The dry run listed the routed GDS
+and Verilog in the output specification for `rs-parasynth1085-84ece5e0`.
+The live upload exited 1 with `The config profile (batch-runner-submit) could not be found`
+before a job launched. DRC deck coverage and confirmation of the 24 sites,
+LVS body and power connectivity, and ERC results for VDD and VSS all await
+the first run on the collected layout. [Sub-block probe #1085](https://github.com/2AMLogic/gf180-parasynth/issues/1085)
+
 **Design-versus-router, answered from the routed DEF (#1006).** The DEF was
 deliberately not collected by the original job, so #1006 re-ran the route
 at the *same* klt -- same pinned heavy AMI (`ami-08688417b66e0c74d`, klt
