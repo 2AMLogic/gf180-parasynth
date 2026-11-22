@@ -103,6 +103,15 @@ MARKER_OR_OPENER = re.compile(r"<!--\s*claim:\s*(?P<body>.*?)\s*(?:-->|$)")
 # a checker that cannot read its own specification is not one to trust.
 FENCE = re.compile(r"^\s*(```|~~~)")
 
+# Paragraph-splitting placement (#1033): a marker standing ALONE between two
+# prose lines of one paragraph is a CommonMark HTML-block start condition, and
+# HTML blocks can interrupt a paragraph, so the prose above and below render
+# as two <p> elements where the author wrote one. These recognise the
+# neighbours that were already separate blocks, where the same placement
+# changes nothing visible.
+LIST_ITEM_START = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
+ATX_HEADING = re.compile(r"^\s*#{1,6}\s")
+
 KINDS = ("test", "grep", "absent", "commit")
 # Keys that are documentation for a human and carry no check of their own. They
 # are listed so that a TYPO in a real key cannot hide as free-form prose --
@@ -158,6 +167,11 @@ class Claim:
     extra_on_line: bool = False
     # An opener with no `-->` on its line (#1044): same refusal discipline.
     unclosed: bool = False
+    # A standalone marker line between two prose lines (#1033): the placement
+    # splits the paragraph when rendered, so it is refused by construction and
+    # validate() must not overwrite the refusal either. Set only on `.md`
+    # documents -- the rationale is a CommonMark property (see find_claims).
+    splits_paragraph: bool = False
 
     @property
     def where(self) -> str:
@@ -218,11 +232,64 @@ def iter_claim_markers(
             yield i, line, m
 
 
+def _split_paragraph_reason(lines: list[str], i: int, start: int) -> str | None:
+    """Why a standalone marker at line `i` (1-based) splits its paragraph.
+
+    Returns the refusal text, or None when the placement cannot split
+    anything. `start` is the offset of `<!--` on the marker's line: prose
+    before it means the marker trails the claim inline, which is inline HTML
+    and can never start a block. Stacked markers are walked past in both
+    directions, so m1 of a prose/m1/m2/blank stack is judged by what follows
+    m2, not by m2 itself.
+
+    The CALLER scopes this to `.md` documents: the reason below is a
+    CommonMark rendering property, and a Python docstring is never rendered
+    as CommonMark, so asserting it there would be a refusal whose reason
+    cannot be true (see find_claims).
+
+    ADJACENT FORM ONLY. A blank line between the marker and the prose below
+    escapes this check -- the blank already ended the paragraph -- and the
+    checker never re-renders the document. That is the input that defeats
+    this guard (docs/verification-rules.md rule 8), which is why the refusal
+    text says so instead of implying the paragraph is proven intact.
+    """
+    if lines[i - 1][:start].strip():
+        return None                        # trailing form: inline, cannot split
+    j = i - 1
+    while j >= 1 and lines[j - 1].lstrip().startswith("<!--"):
+        j -= 1                             # stacked marker above
+    k = i + 1
+    while k <= len(lines) and lines[k - 1].lstrip().startswith("<!--"):
+        k += 1                             # stacked marker below
+    prev_raw = lines[j - 1] if j >= 1 else ""
+    next_raw = lines[k - 1] if k <= len(lines) else ""
+    prev, nxt = prev_raw.strip(), next_raw.strip()
+    if not prev or not nxt:
+        return None                        # paragraph start/end: nothing to split
+    # Neighbours that were already separate blocks -- a heading, a fence, a
+    # new list item. An interrupt between such blocks changes nothing visible.
+    if (ATX_HEADING.match(prev_raw) or FENCE.match(prev_raw)
+            or LIST_ITEM_START.match(next_raw) or FENCE.match(next_raw)
+            or ATX_HEADING.match(next_raw)):
+        return None
+    return (f"claim marker on its own line splits its paragraph: non-blank "
+            f"prose above ({prev[-60:]}) and below ({nxt[:60]}); a standalone "
+            "<!-- line is a CommonMark HTML-block start that can interrupt a "
+            "paragraph, so the prose renders as two <p> elements. Trail the "
+            "marker on the claim's own line or move it to a paragraph "
+            "boundary (docs/claim-markers.md). Adjacent-form source check "
+            "only: a blank line between the marker and the prose below "
+            "escapes it")
+
+
 def find_claims(doc: pathlib.Path) -> list[Claim]:
     """Every marker in one document, with the nearest prose line above it.
 
     The prose is only ever used for reporting -- it is what a reader needs to
-    see next to a STALE verdict. Nothing is inferred from it.
+    see next to a STALE verdict. Nothing is inferred from it -- except the
+    one placement property #1033 adds: a marker standing alone between two
+    prose lines REFUSES here, before any evidence is consulted, because the
+    placement itself makes the rendered claim misleading.
     """
     out: list[Claim] = []
     lines = doc.read_text(encoding="utf-8").splitlines()
@@ -260,13 +327,26 @@ def find_claims(doc: pathlib.Path) -> list[Claim]:
         same = line[: m.start()].strip().lstrip("-*> ").strip()
         if same:
             prose = same
-        out.append(Claim(doc=doc, line=i, raw=m.group("body"), prose=prose[:100]))
+        # Scoped to Markdown (#1033): the refusal's rationale is a CommonMark
+        # HTML-block property, and nothing renders a Python docstring as
+        # CommonMark -- firing on a .py source file would assert a rendering
+        # consequence that cannot occur. A docstring marker therefore stays
+        # outside this placement check and is hand-covered where deliberate
+        # (tools/test_promoted_bands.py covers the one in
+        # model/promoted_measures.py).
+        split = (_split_paragraph_reason(lines, i, m.start())
+                 if doc.suffix == ".md" else None)
+        c = Claim(doc=doc, line=i, raw=m.group("body"), prose=prose[:100],
+                  splits_paragraph=bool(split))
+        if split:
+            c.refuse(split)                # #1033: the placement, not the evidence
+        out.append(c)
     return out
 
 
 def validate(c: Claim) -> None:
     """Syntax only. A marker that cannot be understood is REFUSED, not skipped."""
-    if c.extra_on_line or c.unclosed:
+    if c.extra_on_line or c.unclosed or c.splits_paragraph:
         return                             # already REFUSED by find_claims
     attrs, err = parse_attrs(c.raw)
     if err:

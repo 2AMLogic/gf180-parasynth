@@ -3,11 +3,12 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as its own last change — `git log --no-patch -1 --format='%h %cs' -L '/^<!-- guide:plan-body:start -->$/,/^<!-- guide:plan-body:end -->$/:WORK_PLAN.md' origin/main` — which neither a declined Guide regeneration nor a docs-only commit elsewhere in this file advances.
 
 <!-- guide:plan-body:start -->
+_Generated: 2026-11-20T19:40:29Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
-Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
+Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
 
-_None._
+- **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper
 
 ## Very Important
 
@@ -25,7 +26,7 @@ _None._
 - **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(held)*
-- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
+- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(held)*
 - **#1051**: [voice-only] Draft decision record and re-scope README/roadmap/spec to voice-only silicon target *(held)*
 
 ## Ready
@@ -36,8 +37,7 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md)
-- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot
+- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
 
 ## In Progress
 
@@ -51,8 +51,6 @@ Issues currently being built (`loom:building`).
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#1058**: AC (a)'s sha-equality discriminator in #820 cannot pass on a quiet night under record_unchanged() (#967) — rederive the nightly slow-record check
-- **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites)
 
 ## PRs Awaiting Review
 
@@ -64,7 +62,7 @@ _None._
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-_None._
+- **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper *(held)* — linked issue #1062
 
 ## Proposed
 
@@ -119,17 +117,17 @@ Issues carrying `loom:curated`.
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)* *(held)*
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)* *(held)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)* *(held)*
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)* *(held)*
+- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)*
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
 - **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)* *(held)*
 - **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)* *(held)*
 - **#933**: regenerate discrimination artefacts under the six-bucket MPD grouping (follow-up to #929) *(curated)* *(held)*
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules *(curated)*
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
-- **#1033**: Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md) *(curated)*
-- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)*
-- **#1058**: AC (a)'s sha-equality discriminator in #820 cannot pass on a quiet night under record_unchanged() (#967) — rederive the nightly slow-record check *(curated)*
+- **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)* *(held)*
 - **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites) *(curated)*
+- **#1084**: T1 item 8: bump the signoff klt pin 0.8.0 -> 0.9.2, re-attest items 9 and 10, and attest the committed characterization report *(curated)*
+- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -153,13 +151,13 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 0 |
+| Operator merge-risk holds | 1 |
 | Very important | 1 |
 | Important | 8 |
-| Ready (`loom:issue`, net of holds/building/merge-pending) | 6 |
-| In Progress (`loom:building`) | 10 |
+| Ready (`loom:issue`, net of holds/building/merge-pending) | 5 |
+| In Progress (`loom:building`) | 8 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 0 |
+| Approved PRs awaiting merge | 1 |
 | Curated | 60 |
 | Architect / Hermit proposals | 10 |
 | Active epics | 2 |

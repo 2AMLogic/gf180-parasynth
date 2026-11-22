@@ -2,8 +2,26 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-20
+
+- **PR #1087**: signoff: bump the klt pin 0.8.0 -> 0.9.2, re-attest items 9 and 10, record the item 8 refusal
+- **Issue #1084** (closed): T1 item 8: bump the signoff klt pin 0.8.0 -> 0.9.2, re-attest items 9 and 10, and attest the committed characterization report
+
 ### 2026-11-19
 
+- **Issue #1075** (closed): Remove the Arty bring-up retry loop that hides a refused held note
+- **PR #1076**: fix: stop bringup_arty's play_note retrying a refused hold
+- **PR #1074**: State the foreign-host URL residual of the slow-record gate and pin it
+- **Issue #1073** (closed): check_nightly_slow_records: the artifact-record URL prefix is `\S*`, so a foreign host or bare path in a complete record line still attributes the run
+- **Issue #1066** (closed): check_nightly_slow_records: --run-id is optional but load-bearing, and control mode exits 0 over a printed FAIL
+- **PR #1067**: fix: require --run-id and return the worse of verdict/control exits in the nightly slow-record gate
+- **PR #1072**: fix: preserve quarter-slot geometry and voice parameters in ORFS
+- **Issue #1070** (closed): Nightly slow-record gate accepts an Actions dependency SHA as the repository head
+- **PR #1071**: fix: nightly gate attributes head sha to the checkout step's own output, not any line naming it
+- **Issue #1033** (closed): Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md)
+- **PR #1065**: docs: trail six mid-paragraph claim markers; refuse the splitting placement
+- **Issue #1058** (closed): AC (a)'s sha-equality discriminator in #820 cannot pass on a quiet night under record_unchanged() (#967) — rederive the nightly slow-record check
+- **PR #1059**: add check_nightly_slow_records: per-node corroboration gate for #820 AC (a)
 - **Issue #1056** (closed): Say why eight of the ten files hashed into the frozen Mini V3 records are deliberately NOT guarded
 - **PR #1060**: docs: correct Mini V3 re-bind guidance and narrow the reader-pin rationale
 - **Issue #706** (closed): Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)

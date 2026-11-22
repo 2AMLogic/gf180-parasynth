@@ -50,7 +50,7 @@
       "pyyaml": "6.0.3",
       "oss-cad-suite": "2026-09-21 sha256:fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c",
       "iverilog": "14.0 (devel) (s20260301-476-g1a23d1ffd)",
-      "klt": "0.8.0"
+      "klt": "0.9.2"
     }
   }
 }

@@ -684,6 +684,38 @@ today** and needs no tool fix — nobody wired it up. `docs/v0.3-scope.md` and
   timeout -- only from the whole agent being killed, which is what the
   upstream fix covers.
 
+### klt 0.8.0 -> 0.9.2 signoff pin bump, 2026-11-20 (#1084): the two named upstream cases
+
+Checked while bumping the CI `klt` pin 0.8.0 -> 0.9.2 (issue #1084), with
+`uvx --with pyyaml --from klayout-tools==0.9.2 klt signoff --attest {9,10}`
+from the repository root; both envelopes re-attested green and the item-8
+attempt refused as its evidence gap predicts.
+
+- **klayout-tools#5829** (attest envelope `provenance.input` shape changed
+  under an unchanged `schema_version`): **does not reproduce here.** The
+  0.8.0-era committed envelopes and the fresh 0.9.2 envelopes carry the
+  identical `{"path": {"path": ..., "scope": "repo"}, "content_hash": ...}`
+  shape for `provenance.input` (compared with `git show
+  HEAD:manifests/evidence/item-{9,10}.json` against the regenerated files).
+  The shape change named in #5829 is an item-1 envelope change; this repo
+  attests items 8, 9 and 10 only.
+- **klayout-tools#6653** (`--attest` under uvx: inventory checks that run
+  `python3 -I`): **does not reproduce here.** Neither committed inventory
+  invokes `python3 -I` or the `klayout` wrapper; item 10's audit runs bare
+  `python3 tools/check_workflows.py` and item 9's cold start bare
+  `python3 tools/item9_cold_start.py`, both resolved by PATH.
+- **Adjacent observation, recorded because it changed our workflow, not
+  filed:** 0.9.2's `signoff_attest._command_env()` removes the tool venv's
+  `bin` from the check-command `PATH` (deliberate: a bare `python3` resolves
+  to the runner's interpreter, not the tool's), so the 0.8.0-era idiom
+  `uvx --with pyyaml ...` no longer provisions the interpreter that runs the
+  item-10 audit command. On a clean setup-python 3.12 without pyyaml the
+  audit exits 2 ("pyyaml not installed; cannot check workflows") and the
+  producer fails; observed during #1084 curation on 2026-11-20 and confirmed
+  by installing PyYAML into that interpreter (producer then exits 0).
+  `signoff.yml` now installs pyyaml next to uv for that interpreter. This is
+  documented, intended 0.9.x behaviour, not a defect: nothing to file.
+
 ---
 
 ## 3. What this pass changes about how findings get recorded
