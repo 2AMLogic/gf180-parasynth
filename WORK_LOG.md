@@ -2,6 +2,11 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+### 2026-11-23
+
+- **PR #1090**: signoff: fail regrade on an evidence envelope whose klt_version is not the pin
+- **Issue #1089** (closed): regrade cannot tell a re-attested envelope from a stale one: no gate binds evidence/item-{9,10}.json provenance.klt_version to the pinned klt
+
 ### 2026-11-20
 
 - **PR #1087**: signoff: bump the klt pin 0.8.0 -> 0.9.2, re-attest items 9 and 10, record the item 8 refusal
