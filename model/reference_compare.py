@@ -187,37 +187,6 @@ def stage_selfosc(dev, name, cut_setting, cut_hz):
     return rows
 
 
-def selfosc_summary(rows):
-    """h5 - h3 at each device's maximum resonance, and interpolated at the
-    matched h3 of MATCH_H3_DB so the comparison is at equal drive."""
-    out = {}
-    for name in sorted({r["device"] for r in rows}):
-        rs = [r for r in rows if r["device"] == name and r.get("ok")]
-        live = [r for r in rs if r.get("h3") is not None and r.get("h5") is not None]
-        top = max(rs, key=lambda r: r["res"]) if rs else None
-        d = dict(device=name, n_points=len(rs), n_with_h5=len(live))
-        if top:
-            d["max_res"] = top["res"]
-            d["max_res_h3"] = top.get("h3")
-            d["max_res_h5"] = top.get("h5")
-            d["max_res_h7"] = top.get("h7")
-            d["max_res_h2"] = top.get("h2")
-            d["max_res_rms"] = top["rms"]
-            d["max_res_f0"] = top.get("f0")
-            if top.get("h3") is not None and top.get("h5") is not None:
-                d["max_res_spread"] = top["h5"] - top["h3"]
-        if len(live) >= 2:
-            h3s = np.array([r["h3"] for r in live])
-            sp = np.array([r["h5"] - r["h3"] for r in live])
-            o = np.argsort(h3s)
-            h3s, sp = h3s[o], sp[o]
-            if h3s[0] <= MATCH_H3_DB <= h3s[-1]:
-                d["spread_at_matched_h3"] = float(np.interp(MATCH_H3_DB, h3s, sp))
-            d["h3_range"] = [float(h3s[0]), float(h3s[-1])]
-        out[name] = d
-    return out
-
-
 # ===========================================================================
 # stage: the measured response -- corner, slope, resonant peak
 # ===========================================================================
@@ -424,6 +393,8 @@ def report(out):                                                  # noqa: C901
         live = [r for r in rows if r.get("ok")]
         osc = [r for r in live if r.get("h3") is not None or r["rms"] > 2e-3]
         onset = min((r["res"] for r in osc), default=None)
+        # h5 - h3 at each device's maximum resonance, and interpolated at the
+        # matched h3 of MATCH_H3_DB so the comparison is at equal drive.
         top = max(live, key=lambda r: r["res"])
         pairs = sorted((r["h3"], r["h5"] - r["h3"]) for r in live
                        if r.get("h3") is not None and r.get("h5") is not None)
