@@ -4,6 +4,10 @@
     python tools/control_dag_churn.py          every control must fire
     python tools/control_dag_churn.py --list   what each one injects
 
+    exit 0   every control held, from a suite that was green with no patch
+    exit 1   a control did not hold
+    exit 2   REFUSED: the suite is not green before any patch (#1125)
+
 WHY THIS FILE EXISTS
 --------------------
 The #967 rule has three legs, and each leg is load-bearing in a way that the
@@ -29,6 +33,16 @@ deletion of the only assertion it was written for.
 
 Nothing on disk is mutated: the patched module lives only in the control's
 subprocess. Safe to run beside anything else, and it leaves no state behind.
+
+WHY THE SUITE RUNS ONCE WITH NO PATCH (#1125)
+---------------------------------------------
+Until #1125 `fired` was `pytest exited non-zero` plus the declared name among
+the FAILED lines, and the suite had never been run UNMUTATED. The name pin
+attributed the red to a TEST, never to the patch: a declared test red for a
+reason of its own fired every control that named it -- all three here are
+red-expect -- and this tool said `OK -- all 3 churn controls held`, exit 0.
+The suite now runs once with no patch first, through the same runner and on
+the same file, and the tool REFUSES (exit 2) unless it is green.
 """
 from __future__ import annotations
 
@@ -89,16 +103,30 @@ sys.exit(pytest.main(["-q", "--no-header", "-p", "no:cacheprovider",
 """
 
 
-def run_one(name: str) -> tuple[bool, list, str]:
-    """Inject one defect and run the churn suite. Returns (fired, failed
-    tests, why-not)."""
-    patch, expect, must_fail, _why = CONTROLS[name]
+def run_suite(patch: str) -> tuple[int, list, str]:
+    """Run the churn suite with `patch` applied to `compile_dag` in memory
+    before pytest collects. Returns (pytest's exit status, the FAILED tests,
+    the last line of output).
+
+    An empty patch is the UNMUTATED suite: the baseline every control's red
+    is read against, through the same runner and on the same file, so the two
+    cannot drift apart."""
     code = RUNNER.format(root=str(ROOT), patch=patch.strip(), suite=SUITE)
     p = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT),
                        capture_output=True, text=True)
     failed = sorted({ln.split("::")[-1].split(" ")[0]
                      for ln in p.stdout.splitlines() if ln.startswith("FAILED")})
-    if p.returncode == 0:
+    tail = ((p.stdout.strip() or p.stderr.strip()).splitlines()
+            or ["(no output)"])[-1]
+    return p.returncode, failed, tail
+
+
+def run_one(name: str) -> tuple[bool, list, str]:
+    """Inject one defect and run the churn suite. Returns (fired, failed
+    tests, why-not)."""
+    patch, expect, must_fail, _why = CONTROLS[name]
+    rc, failed, _tail = run_suite(patch)
+    if rc == 0:
         return False, failed, "the suite stayed GREEN with the defect injected"
     if must_fail not in failed:
         return False, failed, (f"the suite went red but {must_fail} was not "
@@ -123,6 +151,16 @@ def main(argv=None) -> int:
             print(textwrap.indent(patch.strip(), "  | "))
             print()
         return 0
+
+    rc, failed, tail = run_suite("")
+    if rc != 0:
+        print(f"REFUSED: the suite exits {rc} before any patch ({tail}) -- a "
+              "red under a patch would be that test's own, not the patch's, so "
+              "no control's red could be attributed to its injection. Nothing "
+              "was measured.")
+        for f in failed[:8]:
+            print(f"               {f}")
+        return 2
 
     bad = []
     for name in CONTROLS:

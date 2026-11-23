@@ -4,6 +4,10 @@
     python tools/control_capability_verdicts.py          every control must fire
     python tools/control_capability_verdicts.py --list   what each one injects
 
+    exit 0   every control fired, from a suite that was green with no mutation
+    exit 1   a control did not fire
+    exit 2   REFUSED: the suite is not green before any mutation (#1125)
+
 WHY THIS FILE EXISTS
 --------------------
 `tools/test_refprofile.py` asserts that the capability map behaves. That is not
@@ -34,6 +38,14 @@ is qualified?" review comment produces. It fired. The first version of the
 already trips `test_an_overall_yes_never_hides_a_measured_no` through Surge,
 before reaching the refusal wording the control was aimed at. Both named tests
 are asserted per control for that reason.
+
+The third is the harness's own, and the largest (#1125): until then it never
+ran the suite UNMUTATED. `fired` was `pytest exited non-zero` plus the
+declared name among the FAILED lines, so the name pin attributed the red to
+a TEST and never to the mutation -- a declared test red for a reason of its
+own fired every control that named it, and this tool said `OK -- all 6 ...
+controls fired`, exit 0. The suite now runs once with no mutation first, and
+the tool REFUSES (exit 2) unless it is green.
 """
 from __future__ import annotations
 
@@ -111,15 +123,29 @@ sys.exit(pytest.main(["-q", "--no-header", "-p", "no:cacheprovider",
 """
 
 
-def run_one(name: str) -> tuple[bool, list, str]:
-    """Apply one mutation and run the suite. Returns (fired, failed tests, why)."""
-    mutation, must_fail, _why = CONTROLS[name]
+def run_suite(mutation: str) -> tuple[int, list, str]:
+    """Run tools/test_refprofile.py with `mutation` applied to the imported
+    `refprofile` module before pytest collects. Returns (pytest's exit status,
+    the FAILED tests, the last line of output).
+
+    An empty mutation is the UNMUTATED suite: the baseline every control's red
+    is read against, through the same runner and on the same file, so the two
+    cannot drift apart."""
     code = RUNNER.format(root=str(ROOT), mutation=mutation)
     p = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT),
                        capture_output=True, text=True)
     failed = sorted({ln.split("::")[-1].split(" ")[0]
                      for ln in p.stdout.splitlines() if ln.startswith("FAILED")})
-    if p.returncode == 0:
+    tail = ((p.stdout.strip() or p.stderr.strip()).splitlines()
+            or ["(no output)"])[-1]
+    return p.returncode, failed, tail
+
+
+def run_one(name: str) -> tuple[bool, list, str]:
+    """Apply one mutation and run the suite. Returns (fired, failed tests, why)."""
+    mutation, must_fail, _why = CONTROLS[name]
+    rc, failed, _tail = run_suite(mutation)
+    if rc == 0:
         return False, failed, "the suite stayed GREEN with the defect injected"
     if must_fail not in failed:
         return False, failed, (f"the suite went red but {must_fail} was not among "
@@ -142,6 +168,16 @@ def main(argv=None) -> int:
             print(textwrap.indent(mutation, "  | "))
             print()
         return 0
+
+    rc, failed, tail = run_suite("")
+    if rc != 0:
+        print(f"REFUSED: the suite exits {rc} before any mutation ({tail}) -- "
+              "a red under a mutation would be that test's own, not the "
+              "mutation's, so no control's red could be attributed to its "
+              "injection. Nothing was measured.")
+        for f in failed[:8]:
+            print(f"               {f}")
+        return 2
 
     bad = []
     for name in CONTROLS:
