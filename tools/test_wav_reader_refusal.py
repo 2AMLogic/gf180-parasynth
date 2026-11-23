@@ -177,3 +177,88 @@ def test_an_answer_at_an_unhandled_width_cannot_pass_as_a_refusal(read, tmp_path
     except ValueError:
         return
     raise AssertionError(f"answered with peak {_peak(x)} instead of refusing")
+
+
+# ===========================================================================
+# #1117: the class sweep. The five readers below divided by 32768 with no
+# width check. Each control was run RED first (24-bit answered peak 32768, no
+# exception; recorded in the PR) and is green with the guard.
+# ===========================================================================
+import subprocess                                           # noqa: E402
+
+import cymbal_bands                                         # noqa: E402
+import measure_partial_balance as mpb                       # noqa: E402
+import refusal                                              # noqa: E402
+import run_case as rc                                       # noqa: E402
+
+_SIXTEEN = {"int16"}
+
+
+def _place(tmp_path: pathlib.Path, rel: str, writer) -> pathlib.Path:
+    p = tmp_path / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    writer(p)
+    return p
+
+
+def _refuses(call, path):
+    with pytest.raises((ValueError, refusal.Refused, SystemExit), match=r"int32.*16-bit") as why:
+        call()
+    assert str(path) in str(why.value), str(why.value)
+
+
+def test_run_case_load_reference_refuses_24bit_and_answers_16bit(tmp_path):
+    rel, _ = rc.REF_MAIN["RS"]
+    p = _place(tmp_path, rel, _write_24bit)
+    _refuses(lambda: rc.load_reference("RS", tmp_path), p)
+    p.unlink()
+    _place(tmp_path, rel, _write_16bit)
+    x, sr, _, _ = rc.load_reference("RS", tmp_path)
+    assert sr == SR and abs(_peak(x) - PEAK) < 1e-3, _peak(x)
+
+
+@pytest.mark.parametrize("label", sorted(UNHANDLED))
+def test_run_case_load_reference_refuses_every_unhandled_width(label, tmp_path):
+    writer, dtype = UNHANDLED[label]
+    rel, _ = rc.REF_MAIN["CB"]
+    p = _place(tmp_path, rel, writer)
+    with pytest.raises((refusal.Refused, SystemExit), match=r"16-bit") as why:
+        rc.load_reference("CB", tmp_path)
+    assert dtype in str(why.value) and str(p) in str(why.value), str(why.value)
+
+
+def test_partial_balance_load_reference_refuses_24bit_and_answers_16bit(tmp_path, monkeypatch):
+    monkeypatch.setattr(mpb, "REFDIR", tmp_path)
+    p = _place(tmp_path, mpb.REF_MAIN["RS"], _write_24bit)
+    _refuses(lambda: mpb.load_reference("RS"), p)
+    p.unlink()
+    _place(tmp_path, mpb.REF_MAIN["RS"], _write_16bit)
+    x, sr, _, _ = mpb.load_reference("RS")
+    assert sr == SR and abs(_peak(x) - PEAK) < 1e-3, _peak(x)
+
+
+def test_cymbal_bands_load_refuses_24bit_and_answers_16bit(tmp_path):
+    p = _place(tmp_path, "a.wav", _write_24bit)
+    _refuses(lambda: cymbal_bands._load(p), p)
+    q = _place(tmp_path, "b.wav", _write_16bit)
+    x, sr = cymbal_bands._load(q)
+    assert sr == SR and abs(_peak(x) - PEAK) < 1e-3, _peak(x)
+
+
+def test_hh_probe5_scorecard_record_refuses_24bit_reference(tmp_path):
+    sys.path.insert(0, str(ROOT / "tools" / "probes" / "hihat"))
+    import hh_probe5
+    p = _place(tmp_path, "cy8/CY.WAV", _write_24bit)
+    _refuses(lambda: hh_probe5.scorecard_record(
+        np.zeros(10), "cy8/CY.WAV", "s", "c", tmp_path, {}, {}), p)
+
+
+def test_ab_808_loud_refuses_24bit_and_answers_16bit(tmp_path):
+    """A script, not a library: drive it as the operator does (argv[1] = pack)."""
+    _place(tmp_path, "t-a-808.wav", _write_24bit)
+    _place(tmp_path, "t-b-ours.wav", _write_16bit)
+    run = lambda: subprocess.run([sys.executable, str(ROOT / "tools" / "ab_808_loud.py"),
+                                  str(tmp_path)], capture_output=True, text=True)
+    r = run()
+    assert r.returncode != 0 and "int32" in r.stderr and "16-bit" in r.stderr, r.stderr[-400:]
+    assert not (tmp_path / "00-all-AB.wav").exists()
