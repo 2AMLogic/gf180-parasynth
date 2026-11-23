@@ -9,14 +9,10 @@ interface and rendered here, in this process. Nothing reads a committed WAV, so
 what is measured is the design as it stands and not a stale artefact in
 `audio/drums/`.
 
-That implementation lives on the unmerged `drums` branch (PR #14). It is NOT
-what `main` ships today: `main`'s `synth_top.v` still instantiates
-`drum_section_placeholder`, and `audition/engines.py` still has the old
-swept-sine kick and noise hi-hats. This suite says nothing about either of
-those -- a swept-sine kick would fail
-`test_bd_decay_does_not_move_the_pitch_of_the_ring` and noise hats would fail
-`test_hats_inherit_the_oscillator_lines_and_noise_does_not`, which is the
-point.
+That implementation is REQUIRED, not optional: the import below is ordinary,
+so a missing `drums_fx` or a broken symbol inside it is a collection error
+that fails the run -- never a skip that hands back a green (or empty) verdict
+a reader could mistake for a sound check.
 
 THE REFERENCES are two. `docs/tr808-reference.md`, from the June-1981 Roland
 service notes and the Werner/Abel/Smith DAFx papers: section 12 is the
@@ -152,25 +148,7 @@ import audio_measure as am
 import modal_fixed
 from audio_measure import t20_from_tau
 
-try:
-    import drums_fx as dx
-except ImportError:                                             # pragma: no cover
-    # A collection error is not a red test -- it aborts the whole run and hides
-    # every other suite's result, which is strictly worse for verification than
-    # a loud skip. Rule 1 ("start red") is about an implemented-but-wrong
-    # feature and it was satisfied on the `drums` branch, where drums_fx.py
-    # exists and four defects are red. Here the module is absent entirely, so
-    # the suite is not applicable rather than failing.
-    #
-    # This cannot rot silently: .github/workflows/rungs.yml asserts that when
-    # model/drums_fx.py EXISTS this suite collects a non-zero number of tests,
-    # so deleting the implementation cannot quietly turn the suite green.
-    pytest.skip(
-        "model/drums_fx.py is absent, so the TR-808 acceptance suite is not "
-        "applicable here. It lives on the unmerged `drums` branch (PR #14); "
-        "the suite's red was established there. See docs/capability-dag.md.",
-        allow_module_level=True,
-    )
+import drums_fx as dx
 from dsp import SR, PHASE_BITS
 
 COEF_FRAC = 24                      # mode coefficients are Q2.24 (reference 14)

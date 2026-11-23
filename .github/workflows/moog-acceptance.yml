@@ -8,9 +8,9 @@
 # property to go red, so a green run means the suite could have failed.
 #
 # `model/test_808_acceptance.py` does the same for the drum section against
-# `docs/tr808-reference.md` and `docs/drum-verification.md`. It needs
-# `model/drums_fx.py`, which is still on the `drums` branch, so its step runs
-# only once that file exists -- and runs for real the moment it does.
+# `docs/tr808-reference.md` and `docs/drum-verification.md`. It requires
+# `model/drums_fx.py`: the step below runs pytest unconditionally, so a
+# missing or broken model fails here rather than skipping green.
 #
 # `model/test_audio_measure.py` is the ground truth for every estimator both
 # suites measure with. It runs first: an acceptance suite built on untested
@@ -119,13 +119,6 @@ jobs:
       - name: acceptance properties, and the proof they can fail
         run: python -m pytest model/test_moog_acceptance.py -q
       - name: the TR-808 acceptance suite
-        run: |
-          if [ -f model/drums_fx.py ]; then
-            python -m pytest model/test_808_acceptance.py -q
-          else
-            echo "model/drums_fx.py is not on this branch (PR #14), so the TR-808"
-            echo "acceptance suite has nothing to render. It is NOT being skipped"
-            echo "silently: this step runs it, and fails, the moment that file exists."
-          fi
+        run: python -m pytest model/test_808_acceptance.py -q
       - name: the rest of the model suite
         run: python -m pytest model spec -q --ignore=model/test_808_acceptance.py
