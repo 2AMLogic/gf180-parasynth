@@ -59,11 +59,11 @@ graph TD
 
 | node | capability | status |
 |---|---|---|
-| F1 | Ladder filter, bit-exact | verifier green — stamping |
-| F2 | Modal bank, bit-exact | on `drums`, PR #14 |
-| F3 | Measurement library ground truth, 60 tests | **green on main** |
-| M1 | One Moog voice, bit-exact, 255,060 frames | verifier green — stamping |
-| M2 | Musically a Minimoog, 42 tests, 6 injected defects | **green on main** |
+| F1 | Ladder filter, bit-exact | **green on main** — `verify_ladder` PASS, 28800 samples, RTL identical to model (`91398a0c`) |
+| F2 | Modal bank, bit-exact | **green on main** — `verify_modal` PASS, 57600 samples, RTL identical to model (`91398a0c`) |
+| F3 | Measurement library ground truth, 153 tests | **green on main** — 153 passed (`4fe488f1`) |
+| M1 | One Moog voice, bit-exact, 255,060 frames | **green on main** — `verify_voice` passed (`91398a0c`); the 255,060-frame count is not in the recorded detail |
+| M2 | Musically a Minimoog, 115 tests | **green on main** — 115 passed (`4fe488f1`); the earlier "6 injected defects" is unstamped: `dag-results.json` records no defect count |
 | M3 | Ladder structure vs real hardware | **BLOCKED** |
 
 **M3 is blocked on one input, not on work.** `model/moog_probe.py` is built and
