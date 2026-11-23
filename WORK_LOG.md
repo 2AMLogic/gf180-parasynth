@@ -4,6 +4,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-23
 
+- **PR #1108**: probes: dispositions for the four zero-reference orphan probes (wire, pin, delete)
+- **Issue #1106** (closed): Unreferenced probe scripts under tools/ may drift the way fpga/probe_uart_findings.py did
 - **PR #1093**: Prepare DRC, LVS and supply ERC probes for the routed ladder
 - **PR #1098**: chore: remove legacy unsaturating 2x decimator prototypes and unrun Verilog scratch benches
 - **Issue #1096** (closed): Remove 2 legacy unsaturating 2x decimator prototypes and 5 unrun Verilog scratch benches from rtl-sketch/
