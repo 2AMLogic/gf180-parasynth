@@ -142,14 +142,16 @@ def test_sixteen_bit_samples_are_bit_exact_with_the_old_behaviour(read, tmp_path
 # The known answer at every width the readers do NOT handle: refuse
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("read", READERS, ids=lambda f: f"{f.__module__}.read_wav")
-def test_twentyfour_bit_known_answer_is_half_full_scale(read, tmp_path):
-    """THE 96 dB CASE. A correct float reader returns ~0.5; the pre-fix code
-    returned 32768 here, silently."""
+def test_twentyfour_bit_known_answer_refuses_rather_than_answers_96_db_hot(read, tmp_path):
+    """THE 96 dB CASE, as ruled (#817 option a): refuse, do not scale. On
+    main this reader ANSWERED peak 32768 for this exact file -- the recorded
+    red run -- because scipy hands 24-bit PCM back as left-justified int32
+    and the unconditional /32768 is 65536x too small a divisor."""
     p = tmp_path / "known_24bit.wav"
     _write_24bit(p)
-    x, sr = read(str(p))
-    assert sr == SR
-    assert abs(_peak(x) - PEAK) < 1e-3, _peak(x)
+    with pytest.raises(ValueError, match=r"int32.*16-bit") as why:
+        read(str(p))
+    assert str(p) in str(why.value), str(why.value)
 
 
 @pytest.mark.parametrize("read", READERS, ids=lambda f: f"{f.__module__}.read_wav")

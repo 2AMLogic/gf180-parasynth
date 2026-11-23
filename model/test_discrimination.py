@@ -262,7 +262,13 @@ def ref_clips(refdir: str, voices=None, include_unmodelled: bool = False) -> lis
 
 
 def read_wav(path: str) -> tuple:
+    """16-bit PCM WAV to float full scale, `(x, sr)`; REFUSES any other
+    sample width (#817): `/32768` is only the 16-bit divisor, and a 24-bit
+    file (scipy returns left-justified int32) would read 96 dB hot with
+    nothing raised."""
     sr, x = wavfile.read(path)
+    if x.dtype != np.int16:
+        raise ValueError(f"{path}: {x.dtype} samples, expected 16-bit PCM (int16)")
     x = x.astype(np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)
