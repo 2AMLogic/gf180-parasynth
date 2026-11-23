@@ -61,6 +61,12 @@ BROKEN = {
     "import_error": ("import gf180_no_such_module_control\n", None, 2),
     "no_tests": ("# no tests defined\n", None, 5),
     "error_only": ("def test_a():\n    assert 1\n", BOOM, 1),
+    # A failing test AND pytest.exit(returncode=2): rc 2 WITH a parsed FAILED
+    # line, so the baseline's `if failed:` branch must name 2, not a literal 1
+    # (#1128).
+    "failed_then_exit": ("import pytest\n\n\ndef test_a():\n    assert 0\n\n\n"
+                         "def test_b():\n    pytest.exit('stop', returncode=2)\n",
+                         None, 2),
 }
 
 
@@ -142,6 +148,8 @@ def test_a_suite_that_cannot_go_green_is_refused_before_any_control_runs(
     assert rc == 2, out
     assert "every control fired" not in out
     assert f"pytest exited {status}" in out   # the status is named
+    if status != 1:                           # ...and no other one is (#1128)
+        assert "pytest exited 1" not in out
     assert "the injection point is gone" not in out
     _assert_no_control_ran(out)
 
