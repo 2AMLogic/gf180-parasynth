@@ -325,7 +325,9 @@ def test_the_floor_clamps_at_a_true_minus_75_db():
     """The -75 dB clamp used to sit at a true -103 dB, because every cell
     carried the n_seg/2 multiplier: a band the docstring called floored was
     reported as a reading. A band at a true -80 dB must clamp at exactly
-    FLOOR_DB, not read -51.8 dB.
+    FLOOR_DB, not read -60.825 dB (the merge-base reading, measured: the quiet
+    tone's true per-window share is 10*log10(1e-8/8) = -89.031 dB, plus the
+    stationary 28.205 dB multiplier).
 
     400 Hz and 3200 Hz are both integer bin multiples at 44.1 kHz (12 and 96
     cycles per window), so the Hann leakage between them is exactly zero and

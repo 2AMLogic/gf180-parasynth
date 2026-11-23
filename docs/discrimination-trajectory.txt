@@ -1,9 +1,15 @@
 # UNITS CORRECTED AFTER THIS REPORT WAS WRITTEN (#1129). The cells below were
 # measured with `trajectory()`'s pre-#1129 normalisation, which left a hidden
-# n_seg/2 multiplier in every cell: every MACHINE cell (44.1 kHz) carries
-# +28.205 dB and every OURS cell (48 kHz) +28.573 dB of instrument, so every
-# ours-minus-machine difference carries +0.368 dB. Decay rates (dB/100 ms) and
-# statements taken relative to a row's own peak are unaffected. Regenerate with
+# n_seg/2 multiplier in every cell. For a stationary window that is
+# +28.205 dB on a MACHINE cell (44.1 kHz) and +28.573 dB on an OURS cell
+# (48 kHz); for a transient the per-cell figure differs (a decaying drum clip
+# measured +28.08 dB, spread 27.84..28.39, at 44.1 kHz and +28.49 dB, spread
+# 28.21..28.80, at 48 kHz), so treat 28.2 / 28.6 as the stationary limit, not
+# a per-cell constant. Ours-minus-machine differences carry about +0.37 dB.
+# Within-rate differences move by at most 0.52 dB on a drum pair (0.22 dB on
+# steady tones). Decay rates (dB/100 ms) and statements taken relative to a
+# row's own peak are not affected beyond that. Figures:
+# tools/probes/trajectory_within_rate_drift.py. Regenerate with
 # `model/discrimination_trajectory.py --refs <corpus>` to re-issue the report
 # in the corrected unit. Parsed by `parse_trajectory_excess()`, which ignores
 # these lines.
