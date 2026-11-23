@@ -240,9 +240,20 @@ def test_partial_balance_load_reference_refuses_24bit_and_answers_16bit(tmp_path
 def test_cymbal_bands_load_refuses_24bit_and_answers_16bit(tmp_path):
     p = _place(tmp_path, "a.wav", _write_24bit)
     _refuses(lambda: cymbal_bands._load(p), p)
-    # Rule 8: _refuses() accepts the base refusal.Refused, which callers of
-    # cymbal_bands do NOT catch (they catch cymbal_bands.Refused -> exit 2).
-    # Pin the module's own class so raising the base class goes red.
+    # Rule 8: _refuses() accepts the base refusal.Refused, so it is satisfied by
+    # EITHER class and cannot tell them apart. Pin the module's own class -- the
+    # one cymbal_bands already raises at lines 100 and 140, and the name that is
+    # greppable at its raise and catch sites (tools/refusal.py) -- so raising the
+    # base class goes red.
+    #
+    # MEASURED during review of this PR, so a later reader is not misled: this
+    # does NOT yet buy a REFUSED exit status. cymbal_low_tail:236 and
+    # cymbal_tone_knob:251 each define their OWN sibling Refused, and
+    # cymbal_bands.main has no refusal handler at all, so a cymbal_bands.Refused
+    # is caught by nobody and the process exits 1 (FAIL), not 2. That is a
+    # pre-existing, module-wide gap -- it is true of lines 100 and 140 on
+    # origin/main too -- and is filed as its own follow-up issue, not this
+    # control's business.
     with pytest.raises(cymbal_bands.Refused):
         cymbal_bands._load(p)
     q = _place(tmp_path, "b.wav", _write_16bit)
