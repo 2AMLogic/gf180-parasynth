@@ -32,6 +32,22 @@ M = {
  "non-zero rc treated as no-fit": [("return Verdict(REFUSED, why + [f\"nextpnr exited {rc} without", "return Verdict(NOFIT, why + [f\"nextpnr exited {rc} without")],
  "new: render Fmax on unrouted reports": [("if mf and verdict.state != ROUTED:", "if False:")],
 }
+SUITE = str(WT / "fpga/test_pnr_report.py")
+
+
+def run_suite():
+    return subprocess.run([PY, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", SUITE],
+                          capture_output=True, text=True, cwd=WT)
+
+
+# Baseline: a suite red for its own reason would "kill" every mutant
+# (verification rule 5). REFUSE (exit 2) unless it is green unmutated.
+_base = run_suite()
+if _base.returncode != 0:
+    print(f"REFUSED: baseline `pytest {SUITE}` exits {_base.returncode} on the unmutated "
+          "source, so a non-zero status under a mutant proves nothing. No mutant was run.")
+    sys.exit(2)
+
 bad = []
 try:
     for name, subs in M.items():
@@ -40,8 +56,7 @@ try:
             assert s.count(a) == 1, (name, a)
             s = s.replace(a, b)
         SRC.write_text(s)
-        r = subprocess.run([PY, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider",
-                            str(WT / "fpga/test_pnr_report.py")], capture_output=True, text=True, cwd=WT)
+        r = run_suite()
         fails = [l.split(" - ")[0] for l in r.stdout.splitlines() if l.startswith("FAILED")]
         print(f"{'KILLED ' if r.returncode else 'SURVIVED'} {name}" + (f"  <- {fails[0]}" if fails else ""))
         if r.returncode == 0 and not name.startswith("J-equivalent"):
