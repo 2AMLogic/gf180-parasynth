@@ -82,7 +82,8 @@ def run(name: str) -> tuple[int, list[str]]:
 
 
 def main() -> int:
-    bad = 0
+    bad = 0      # a control genuinely did not fire: a defect in the seal
+    refused = 0  # the injection point is gone: the apparatus cannot run
     for name in INJECTS:
         code, failed = run(name)
         if code == 0:
@@ -91,13 +92,25 @@ def main() -> int:
             bad += 1
             continue
         if code == 2:
-            bad += 1
+            refused += 1
             continue
         print(f"{name}: red, {len(failed)} test(s) caught it")
         for f in failed:
             print(f"    {f}")
-    print("every control fired" if not bad else f"{bad} control(s) did not fire")
-    return 1 if bad else 0
+    # A seal defect (bad) outranks a refusal: 1 when any control genuinely did
+    # not fire (a mix included), else 2 when any refused, else 0. Exit 2 is the
+    # runner's NO-VERDICT channel (tools/run_all.py, tools/exit_contract.py) --
+    # the outcome this probe's run() already distinguishes internally.
+    if bad:
+        print(f"{bad} control(s) did not fire"
+              + (f", {refused} refused" if refused else ""))
+        return 1
+    if refused:
+        print(f"{refused} control(s) refused -- the injection point is gone from "
+              f"run_case.py or holdout.py")
+        return 2
+    print("every control fired")
+    return 0
 
 
 if __name__ == "__main__":
