@@ -4,6 +4,9 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-23
 
+- **PR #1093**: Prepare DRC, LVS and supply ERC probes for the routed ladder
+- **PR #1098**: chore: remove legacy unsaturating 2x decimator prototypes and unrun Verilog scratch benches
+- **Issue #1096** (closed): Remove 2 legacy unsaturating 2x decimator prototypes and 5 unrun Verilog scratch benches from rtl-sketch/
 - **PR #1090**: signoff: fail regrade on an evidence envelope whose klt_version is not the pin
 - **Issue #1089** (closed): regrade cannot tell a re-attested envelope from a stale one: no gate binds evidence/item-{9,10}.json provenance.klt_version to the pinned klt
 
