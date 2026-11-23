@@ -161,7 +161,7 @@ def baseline() -> Result:
     if rc == 0:
         return Result(NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
     if failed:
-        what = (f"pytest exited 1 on the UNMUTATED tree, {len(failed)} test(s) red "
+        what = (f"pytest exited {rc} on the UNMUTATED tree, {len(failed)} test(s) red "
                 f"before any injection ({', '.join(failed)})")
     elif rc == 1:
         what = ("pytest exited 1 on the UNMUTATED tree with no FAILED "
