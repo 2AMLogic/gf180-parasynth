@@ -75,6 +75,14 @@ def main(argv=None) -> int:
         print("The file has changed under the probe. Update the mutants; do not read this as a pass.")
         return 2
 
+    base = subprocess.run([sys.executable, "-m", "pytest", TESTS,
+                           "-q", "--no-header", "--tb=no"],
+                          cwd=ROOT, capture_output=True, text=True)
+    if base.returncode != 0:
+        print(f"probe REFUSED -- baseline `pytest {TESTS}` exits {base.returncode} on the "
+              "unmutated tree, so a red run under a mutant proves nothing. No mutant was run.")
+        return 2
+
     survivors = []
     for name, (old, new) in MUTANTS.items():
         TARGET.write_text(original.replace(old, new, 1))
