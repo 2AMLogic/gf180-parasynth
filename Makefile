@@ -265,7 +265,7 @@ verify:
 ## item-10 envelopes under the job's own `KLT` (green), then against seven
 ## one-change copies (each red, on its named diagnostic). It is in this bundle
 ## because m5a-fast is the job that installs pyyaml and runs this target.
-## 19 tests, 1.1 s measured. `make controls` runs the same file.
+## 32 tests, ~1 s measured. `make controls` runs the same file.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest tools/test_run_case.py -q" \
