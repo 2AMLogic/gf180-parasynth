@@ -2,8 +2,20 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+## Archives
+
+- [2026-09](work_log/WORK_LOG_2026-09.md)
+
 ### 2026-11-23
 
+- **PR #1119**: fix: holdout probe maps pytest's exit status to its own outcome space
+- **Issue #1118** (closed): holdout_injected_controls: pytest's own exit status is read as the probe's outcome — a deleted test_holdout.py reports 'every control fired' (exit 0)
+- **PR #1107**: Remove stale UART repair probe, record transcript provenance
+- **Issue #762** (closed): Remove fpga/probe_uart_findings.py: it reports 2 false FAILs on the repaired host and nothing runs it
+- **PR #1104**: test: require the drum model in TR-808 acceptance
+- **Issue #1094** (closed): Remove the obsolete optional-model skips from TR-808 acceptance
+- **PR #1103**: fix: refuse non-16-bit WAVs in the two unguarded reference-corpus readers
+- **Issue #817** (closed): Consolidate the seven WAV readers: four conventions, and two answer 96 dB wrong on a 24-bit file instead of refusing
 - **PR #1115**: fix: holdout probe exits 2 for REFUSED instead of folding it into exit 1
 - **Issue #1113** (closed): make controls records holdout_injected_controls' REFUSED as FAIL, and its Makefile comment names an exit 2 the probe never emits
 - **PR #1108**: probes: dispositions for the four zero-reference orphan probes (wire, pin, delete)
@@ -905,23 +917,3 @@ Closure events below record forge state, not a verified fix or a new sound resul
 - **PR #200**: Dismiss the 13 DPREG-4 DSP feedback warnings with mapped-simulation evidence
 - **PR #204**: Integrated qualified Arty baseline: DSP disposition + external I/O timing + UART bridge in one image
 
-### 2026-09-23
-
-- **PR #191**: Add named selected Mono presets and checked FPGA build
-
-### 2026-09-22
-
-- **PR #194**: Measure first M1A bass comparison with qualified release and explicit missing evidence
-- **PR #192**: Advance pulse 2x through the production RTL and Mono I2S scorer
-
-### 2026-09-21
-
-- **PR #193**: Measure the prior-note effect behind Mono attack discrepancies
-- **PR #180**: Land measured Mono baseline, shared engine and portable references
-- **PR #182**: Measure reconstructed 2x versus 4x ladder paths
-- **PR #183**: Combine verified M5A candidate and release fix
-- **PR #187**: Add first complete Mini V3 M5B scorecard case
-- **PR #188**: Score M5B with selected M5A engine
-- **PR #190**: Restore exact frozen Surge cache and run reference controls in CI
-- **PR #185**: Preserve voice envelope release precision
-- **PR #184**: Skip redundant render when scoring supplied I2S audio
