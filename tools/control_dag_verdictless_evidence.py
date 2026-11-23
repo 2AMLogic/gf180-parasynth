@@ -79,6 +79,7 @@ CONTROLS = {
         "decision with a failing control in front of it, not a silent one"),
 }
 
+
 def run_one(name: str) -> tuple[bool, list, str]:
     """Inject one node and run the suite. Returns (held, failed tests, why)."""
     node, expect, must_fail, _why = CONTROLS[name]

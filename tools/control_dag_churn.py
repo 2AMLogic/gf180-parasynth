@@ -75,6 +75,7 @@ cd.normalise_detail = lambda detail: detail
         "rule suppresses nothing on the suite nodes"),
 }
 
+
 def run_one(name: str) -> tuple[bool, list, str]:
     """Inject one defect and run the churn suite. Returns (fired, failed
     tests, why-not)."""
