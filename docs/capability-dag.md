@@ -25,8 +25,9 @@ deleted.
 
 All five, or it is not stamped. Four out of five is not a node.
 
-1. **Tagged** — annotated git tag, `node/<id>`. Three exist:
-   `node/F1-ladder`, `node/M1-voice`, `node/M2-minimoog`.
+1. **Tagged** — annotated git tag, `node/<id>`. Which nodes are stamped, and
+   the tag each carries, is in the evidence column of the generated
+   [capability graph table](../README.md#the-capability-graph).
 2. **A named test set, green, in CI on every push** — no path filter.
 3. **Negative controls carried** — an injected defect that turns each property
    red. A test that has never failed is not evidence.
