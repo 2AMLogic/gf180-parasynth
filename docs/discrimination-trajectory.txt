@@ -1,3 +1,12 @@
+# UNITS CORRECTED AFTER THIS REPORT WAS WRITTEN (#1129). The cells below were
+# measured with `trajectory()`'s pre-#1129 normalisation, which left a hidden
+# n_seg/2 multiplier in every cell: every MACHINE cell (44.1 kHz) carries
+# +28.205 dB and every OURS cell (48 kHz) +28.573 dB of instrument, so every
+# ours-minus-machine difference carries +0.368 dB. Decay rates (dB/100 ms) and
+# statements taken relative to a row's own peak are unaffected. Regenerate with
+# `model/discrimination_trajectory.py --refs <corpus>` to re-issue the report
+# in the corrected unit. Parsed by `parse_trajectory_excess()`, which ignores
+# these lines.
 band x time trajectory, arm 'ours', 8 windows of 30 ms over the study's own conditioned window
 
 BD  (16 held-out settings)

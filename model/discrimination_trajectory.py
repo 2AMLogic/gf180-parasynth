@@ -18,9 +18,15 @@ knob-equivalent, not instead of it.
 
 TWO PROPERTIES THAT MAKE THE NUMBERS COMPARABLE
 
-Every cell is a band's share of the WHOLE CLIP's energy, in dB, so a pure gain
-cancels -- the corpus is peak-limited to -2.4 dBFS and a level difference here
-would carry no information about the machine anyway.
+Every cell is a band's share of the WHOLE CLIP's energy, in dB -- a band's
+share of its window's energy times that window's share of the clip's -- so a
+pure gain cancels (the corpus is peak-limited to -2.4 dBFS and a level
+difference here would carry no information about the machine anyway) and the
+sample rate cancels too. The window's own normalisation cancels inside the
+band ratio, which is what keeps a 44.1 kHz reference and a 48 kHz render in
+the same unit; the one-sided spectrum is weighted so DC and Nyquist bins are
+counted once (#1129 -- an earlier scaling left a hidden n_seg/2 in every
+cell, a +0.368 dB cross-rate bias on every ours-minus-machine difference).
 
 Bands are constant-Q and stated in Hz, and windows are stated in ms, so the
 reference's 44.1 kHz and our 48 kHz land in the same cells with nothing
@@ -52,8 +58,12 @@ MIN_LIVE_WINDOWS = 3            # below this a decay slope is REFUSED
 def trajectory(x: np.ndarray, sr: int, n_win: int = N_WIN, edges=None):
     """(n_bands, n_win) of band energy in dB relative to the clip's total.
 
-    One power spectrum per window, integrated over constant-Q edges. Returns
-    (matrix, centre frequencies, window centres in ms)."""
+    A cell is the band's share of its window's energy times the window's
+    share of the clip's -- the window normalisation cancels in the first
+    ratio, so the unit is independent of the sample rate and of the window
+    function. One power spectrum per window, integrated over constant-Q
+    edges, with DC and Nyquist bins weighted once. Returns (matrix, centre
+    frequencies, window centres in ms)."""
     x = np.asarray(x, float)
     e = dfx.cqt_edges() if edges is None else np.asarray(edges, float)
     b = np.linspace(0, len(x), n_win + 1).astype(int)
@@ -64,12 +74,25 @@ def trajectory(x: np.ndarray, sr: int, n_win: int = N_WIN, edges=None):
         win = np.hanning(len(seg)) if len(seg) > 1 else np.ones(len(seg))
         P = np.abs(np.fft.rfft(seg * win)) ** 2
         f = np.fft.rfftfreq(len(seg), 1.0 / sr)
-        # the window's own normalisation, so a Hann's 0.375 power factor and
-        # the window length both cancel between the two sides
-        P = P / (float((win ** 2).sum()) + 1e-20) * len(seg)
+        # one-sided weighting: interior bins carry both halves of the spectrum,
+        # DC and Nyquist one each, so sum(wgt*P)/len(seg) is the windowed
+        # energy of the segment (Parseval) whatever the window
+        wgt = np.full(len(P), 2.0)
+        wgt[0] = 1.0
+        if len(seg) % 2 == 0:
+            wgt[-1] = 1.0
+        wt = float((wgt * P).sum()) + 1e-20
+        seg_e = float((seg ** 2).sum())
         for k in range(len(e) - 1):
             m = (f >= e[k]) & (f < e[k + 1])
-            v = float(P[m].sum()) / tot if m.any() else 0.0
+            # a cell is the band's share of its window's energy times the
+            # window's share of the clip's. The window normalisation cancels
+            # inside the first ratio -- which is what makes the unit free of
+            # the sample rate (#1129: the old len(seg)/sum(win**2) scaling
+            # left a hidden n_seg/2 in every cell, so a 44.1 kHz reference
+            # and a 48 kHz render differed by 0.368 dB that was no
+            # instrument's)
+            v = float((wgt[m] * P[m]).sum()) / wt * seg_e / tot if m.any() else 0.0
             M[k, w] = max(FLOOR_DB, 10.0 * np.log10(v + 1e-20))
     centres = np.sqrt(e[:-1] * e[1:])
     ms = 1e3 * (b[:-1] + np.diff(b) / 2.0) / sr
@@ -248,6 +271,84 @@ def test_the_trajectory_is_rate_independent():
     live = (A > FLOOR_DB + 10) & (B > FLOOR_DB + 10)
     assert live.sum() > 100, live.sum()
     assert np.abs(A - B)[live].max() < 1.5, np.abs(A - B)[live].max()
+
+
+def test_a_cell_is_the_bands_share_of_the_clip_at_any_rate():
+    """#1129: a cell used to carry a hidden n_seg/2 multiplier, so this same
+    control read +19.174 dB at 44.1 kHz and +19.542 dB at 48 kHz on main --
+    and the machine is recorded at 44.1 kHz while we render at 48 kHz, so
+    every ours-minus-machine cell carried +0.368 dB that belonged to no
+    instrument.
+
+    A 240 ms, 400 Hz sine holds 12 complete cycles in every 30 ms window, so
+    each window carries exactly 1/8 of the clip's energy: -9.031 dB, by
+    construction, at any sample rate."""
+    for sr in (44100, 48000):
+        t = np.arange(round(0.24 * sr)) / sr
+        x = np.sin(2 * np.pi * 400.0 * t)
+        M, _, _ = trajectory(x, sr, edges=[0, sr / 2 + 1])
+        assert np.allclose(M[0], 10.0 * np.log10(1.0 / 8.0), atol=0.01), (sr, M[0])
+
+
+def test_the_same_tone_at_two_rates_differences_to_zero():
+    """#1129's ours-minus-machine, directly: the estimator's own contribution
+    to a 44.1 kHz-vs-48 kHz difference must be 0 dB, or every map `diff`
+    carries it. Both sides read their own rate's -9.031 dB, so the difference
+    is exactly zero in every window."""
+    cells = []
+    for sr in (44100, 48000):
+        t = np.arange(round(0.24 * sr)) / sr
+        x = np.sin(2 * np.pi * 400.0 * t)
+        cells.append(trajectory(x, sr, edges=[0, sr / 2 + 1])[0])
+    assert np.abs(cells[1] - cells[0]).max() < 0.01, np.abs(cells[1] - cells[0]).max()
+
+
+def test_dc_and_nyquist_bins_are_counted_once():
+    """The one-sided weighting: interior bins carry both halves of the
+    spectrum, DC and Nyquist one each. 1 + (-1)^k has its windowed spectrum
+    in bins {0, 1} (the DC term and its Hann skirt) and {n/2-1, n/2} (the
+    Nyquist term and its skirt), which a split at sr/4 separates exactly, so
+    each side must read half of its window's 1/8 share: -12.041 dB. Weighting
+    DC or Nyquist as an interior bin moves the split by about a dB."""
+    sr = 48000                       # 1440-sample windows: Nyquist bin exists
+    n = int(round(0.24 * sr))
+    assert n % 16 == 0
+    k = np.arange(n)
+    x = 1.0 + (-1.0) ** k            # every window identical, DC + Nyquist only
+    M, _, _ = trajectory(x, sr, edges=[0.0, sr / 4.0, sr / 2 + 1])
+    want = 10.0 * np.log10(0.5 / 8.0)
+    assert np.allclose(M[0], want, atol=0.01), (M[0][0], M[0][-1], want)
+    assert np.allclose(M[1], want, atol=0.01), (M[1][0], M[1][-1], want)
+
+
+def test_the_floor_clamps_at_a_true_minus_75_db():
+    """The -75 dB clamp used to sit at a true -103 dB, because every cell
+    carried the n_seg/2 multiplier: a band the docstring called floored was
+    reported as a reading. A band at a true -80 dB must clamp at exactly
+    FLOOR_DB, not read -51.8 dB.
+
+    400 Hz and 3200 Hz are both integer bin multiples at 44.1 kHz (12 and 96
+    cycles per window), so the Hann leakage between them is exactly zero and
+    the quiet tone's share is known: -80 dB."""
+    sr = 44100
+    t = np.arange(round(0.24 * sr)) / sr
+    x = np.sin(2 * np.pi * 400.0 * t) + 10.0 ** (-80.0 / 20.0) * np.sin(2 * np.pi * 3200.0 * t)
+    M, _, _ = trajectory(x, sr, edges=[0.0, 2000.0, sr / 2 + 1])
+    assert np.allclose(M[1], FLOOR_DB, atol=1e-9), M[1]
+    assert np.allclose(M[0], 10.0 * np.log10(1.0 / 8.0), atol=0.01), M[0]
+
+
+def test_a_one_sample_window_reports_its_own_share():
+    """The degenerate window: eight one-sample windows, one impulse. The
+    rfft of one sample is a single DC bin (which is also Nyquist), and the
+    cell must be that sample's share of the clip -- 0 dB for the window that
+    holds the impulse, the floor for the rest."""
+    sr = 44100
+    x = np.zeros(8)
+    x[3] = 1.0
+    M, _, _ = trajectory(x, sr, edges=[0, sr / 2 + 1])
+    assert abs(M[0, 3]) < 1e-9, M[0, 3]
+    assert np.delete(M[0], 3).max() <= FLOOR_DB + 1e-9, M[0]
 
 
 def test_a_known_decay_rate_is_recovered():

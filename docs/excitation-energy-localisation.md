@@ -8,6 +8,24 @@ fitted and nothing was tuned. The instrument is
 [`tools/probes/excitation_energy.py`](../tools/probes/excitation_energy.py),
 nineteen self-tests, two of them injected-bug controls.
 
+> **Unit correction, #1129 (2026-11-23).** After this investigation was
+> written, `trajectory()`'s normalisation was found to carry a hidden `n_seg/2`
+> multiplier, so every absolute map cell below was measured **28.2 dB (machine,
+> 44.1 kHz) to 28.6 dB (ours, 48 kHz) above its true value** — a band's share of
+> its window's energy times the window's share of the clip's is the unit
+> `trajectory()` now reports and always documented. Consequences for the numbers
+> in this document and the `docs/excitation-energy-*.txt` reports it cites:
+> every **absolute** cell (a `machine`/`ours` reading, an F4 quantisation-floor
+> level) moves down by that amount and every **cross-rate** ours-minus-machine
+> difference loses a spurious **+0.368 dB**; the −75 dB clamp now sits at a true
+> −75 dB instead of a true −103 dB. **Within-rate** differences — the `move`
+> table in F2, the `#152 said` columns, every decay rate and every comparison
+> against a floor computed by the same estimator — were re-measured on
+> unclamped cells and move by at most **0.34 dB** (mean 0.15 dB, two synthetic
+> same-rate clips, both rates), so every verdict drawn from a within-rate
+> contrast stands as written. The absolute numbers stand as historical
+> measurements in the old unit until the reports are regenerated on the corpus.
+
 ---
 
 ## The answer, in four sentences
