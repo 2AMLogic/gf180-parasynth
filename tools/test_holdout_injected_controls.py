@@ -21,6 +21,11 @@ wins" implementation, per docs/verification-rules.md rule 8 (a guard ships
 with the input that defeats it). Started red: on the unfixed `main()` the
 refusal-only and refusal+red cases returned 1, and the summary line said
 "did not fire" for refusals.
+
+Issue #1124 added the gate in front of the loop: `main()` runs `baseline()`
+(the UNMUTATED tree) first and a baseline that is not green is exit 2 with no
+control run at all. So `_drive` stands in for a green baseline as well as for
+`run()`; the first case pins the red one.
 """
 from __future__ import annotations
 
@@ -30,13 +35,40 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "probes"))
 import holdout_injected_controls as hic  # noqa: E402
 
+GREEN = hic.Result(hic.NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
 
-def _drive(monkeypatch, results):
-    """Run main() with `run()` patched to return a Result per control, in
-    INJECTS order (GATE_OFF, CLEAN_OFF, STALE_OFF)."""
+
+def _drive(monkeypatch, results, base: hic.Result | None = None):
+    """Run main() with `baseline()` patched to `base` (a GREEN baseline unless
+    given) and `run()` patched to return a Result per control, in INJECTS
+    order (GATE_OFF, CLEAN_OFF, STALE_OFF)."""
     order = iter(results)
+    monkeypatch.setattr(hic, "baseline", lambda: GREEN if base is None else base)
     monkeypatch.setattr(hic, "run", lambda _name: next(order))
     return hic.main()
+
+
+def test_a_baseline_that_is_not_green_refuses_before_any_control_runs(
+        monkeypatch, capsys):
+    # The #1124 false green: a suite red before any injection made all three
+    # controls "fire". Nothing may run behind it, and the exit is the
+    # NO-VERDICT channel, not the seal-defect one.
+    def _no_control_may_run(_name):
+        raise AssertionError("a control ran although the unmutated tree was red")
+    monkeypatch.setattr(hic, "run", _no_control_may_run)
+    monkeypatch.setattr(hic, "baseline", lambda: hic.Result(
+        hic.REFUSED, ["test_a"],
+        "pytest exited 1 on the UNMUTATED tree, 1 test(s) red before any "
+        "injection (test_a) -- no control's red can mean anything",
+        "FAILED tools/test_holdout.py::test_a - assert 0\n1 failed in 0.01s"))
+    rc = hic.main()
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "no control's red can mean anything" in out
+    assert "test_a" in out
+    assert "1 failed in 0.01s" in out      # pytest's tail, shown not summarised
+    assert "every control fired" not in out
+    assert "did not fire" not in out
 
 
 def test_every_control_fired_exits_zero(monkeypatch):

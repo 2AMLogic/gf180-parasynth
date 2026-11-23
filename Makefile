@@ -552,6 +552,9 @@ verify-full:
 ## holdout.py (drift this control must surface, not skip), or pytest's own
 ## status naming a broken apparatus -- a deleted or uncollectable
 ## tools/test_holdout.py (#1118), which must never read as "fired".
+## Since #1124 the UNMUTATED copy runs first (a 4th tree copy) and must be
+## green, or the probe exits 2 on its BASELINE line before any control runs:
+## a suite red on its own used to read as three healthy controls.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
