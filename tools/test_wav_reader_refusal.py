@@ -240,6 +240,11 @@ def test_partial_balance_load_reference_refuses_24bit_and_answers_16bit(tmp_path
 def test_cymbal_bands_load_refuses_24bit_and_answers_16bit(tmp_path):
     p = _place(tmp_path, "a.wav", _write_24bit)
     _refuses(lambda: cymbal_bands._load(p), p)
+    # Rule 8: _refuses() accepts the base refusal.Refused, which callers of
+    # cymbal_bands do NOT catch (they catch cymbal_bands.Refused -> exit 2).
+    # Pin the module's own class so raising the base class goes red.
+    with pytest.raises(cymbal_bands.Refused):
+        cymbal_bands._load(p)
     q = _place(tmp_path, "b.wav", _write_16bit)
     x, sr = cymbal_bands._load(q)
     assert sr == SR and abs(_peak(x) - PEAK) < 1e-3, _peak(x)

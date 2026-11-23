@@ -199,7 +199,7 @@ def fischer(refs: pathlib.Path) -> dict:
 def _load(p):
     from scipy.io import wavfile
     sr, x = wavfile.read(str(p))
-    rc.require_int16_pcm(x, p, refusal.Refused)
+    rc.require_int16_pcm(x, p, Refused)
     x = np.asarray(x, dtype=np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)
