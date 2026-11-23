@@ -1,24 +1,34 @@
 """Controls for the apparatus of tools/probes/holdout_injected_controls.py
-(issue #1118).
+(issues #1118 and #1124).
 
 The probe measures whether injected defects turn `tools/test_holdout.py` red,
-so the probe itself is the apparatus, and `run()` used to return pytest's own
-process exit status straight into `main()`'s outcome space. With
-`tools/test_holdout.py` deleted, pytest exits 4 in every injected copy, every
-control landed in the "fired" branch, and the probe printed "every control
-fired" and exited 0 -- a false green over exactly the drift the control exists
-to surface. Each case below builds a throwaway tree (the real `tools/
-run_case.py` and `tools/holdout.py`, so the injections genuinely apply, plus a
-caller-controlled `tools/test_holdout.py`) and drives the real `run()`/`main()`
-against it by repointing the probe's ROOT.
+so the probe itself is the apparatus. Each case builds a throwaway tree (the
+real `tools/run_case.py` and `tools/holdout.py`, so the injections genuinely
+apply, plus a caller-controlled `tools/test_holdout.py`) and drives the real
+`run()`/`main()` against it by repointing the probe's ROOT.
 
-Measured pytest statuses pinned here (9.2.0): 4 (path does not exist), 2 (a
-collection/import error -- which `main()` used to misreport as "the injection
-point is gone"), 5 (no tests collected), and 1 with no parseable
-`FAILED tools/test_holdout.py::` line (an ERROR-only run), which used to
-report "red, 0 test(s) caught it" and pass. `test_a_working_apparatus...` is
-the rule-8 pairing: a probe that refused everything would satisfy every
-refusal assertion above, so a healthy firing is pinned too.
+Issue #1118: `run()` used to return pytest's own process exit status straight
+into `main()`'s outcome space. With `tools/test_holdout.py` deleted, pytest
+exits 4 in every injected copy, every control landed in the "fired" branch,
+and the probe printed "every control fired" and exited 0 -- a false green over
+exactly the drift the control exists to surface. Measured pytest statuses
+pinned here (9.2.0): 4 (path does not exist), 2 (a collection/import error --
+which `main()` used to misreport as "the injection point is gone"), 5 (no
+tests collected), and 1 with no parseable `FAILED tools/test_holdout.py::`
+line (an ERROR-only run), which used to report "red, 0 test(s) caught it" and
+pass.
+
+Issue #1124 is the same false green one layer out. `run()` decides FIRED from
+`rc == 1 and failed`, and nothing ran the UNMUTATED tree, so a suite that was
+red for its own reasons read as three healthy controls: this file's own
+healthy-firing pin used `def test_a(): assert 0` as its suite, and passed.
+`main()` now runs the unmutated copy once, first, and REFUSES (exit 2) unless
+it is green, before any control runs. That always-failing fixture is the
+rule-8 input for the gate (`test_an_unconditionally_red_suite_...` below);
+the healthy-firing pin needs a suite that is GREEN on the unmutated targets
+and RED under every injection, which is what `_green_then_red()` builds. A
+probe that refused everything would satisfy every refusal assertion here, so
+the healthy firing is pinned too.
 """
 from __future__ import annotations
 
@@ -26,11 +36,32 @@ import pathlib
 import shutil
 import sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import holdout_injected_controls as hic  # noqa: E402
 
 #: The real tree, captured before any test repoints `hic.ROOT`.
 REAL_ROOT = hic.ROOT
+
+#: Red for its own reasons, whatever is injected: the shape #1124 measured.
+ALWAYS_RED = "def test_a():\n    assert 0\n"
+
+#: An autouse fixture that raises: pytest reports ERROR lines, exits 1, and
+#: writes no `FAILED tools/test_holdout.py::` line to parse.
+BOOM = ("import pytest\n\n\n"
+        "@pytest.fixture(autouse=True)\n"
+        "def boom():\n"
+        "    raise RuntimeError('apparatus control')\n")
+
+#: Every way a `tools/test_holdout.py` cannot go green, with the pytest status
+#: each one produces: (file text or None to leave it out, conftest, status).
+BROKEN = {
+    "deleted": (None, None, 4),
+    "import_error": ("import gf180_no_such_module_control\n", None, 2),
+    "no_tests": ("# no tests defined\n", None, 5),
+    "error_only": ("def test_a():\n    assert 1\n", BOOM, 1),
+}
 
 
 def _tree(tmp_path: pathlib.Path, test_holdout: str | None,
@@ -49,68 +80,93 @@ def _tree(tmp_path: pathlib.Path, test_holdout: str | None,
     return root
 
 
+def _green_then_red(*without: str) -> str:
+    """A `tools/test_holdout.py` that is GREEN on the unmutated injection
+    targets and RED under every INJECTS entry: one test per control, each
+    reading its own injection site. `without` names controls whose site the
+    caller has already scrubbed from the tree, which the baseline would see.
+    Structural on purpose -- the real suite imports the runner's whole closure
+    (model/, scipy), which only the real tree has, and the thing under test
+    here is the probe's verdict on a (green, red, ...) suite. The seal's own
+    behaviour is `make controls`' question, asked of the real tree. Built from
+    INJECTS so the two cannot drift apart."""
+    lines = ["import pathlib", "import re", ""]
+    for name, (rel, pattern, _replacement) in hic.INJECTS.items():
+        if name in without:
+            continue
+        lines += [f"def test_{name.lower()}_site_is_present():",
+                  f"    src = pathlib.Path({rel!r}).read_text()",
+                  f"    assert re.search({pattern!r}, src), \"{name} site gone\"",
+                  ""]
+    return "\n".join(lines)
+
+
 def _probe(monkeypatch, capsys, root: pathlib.Path) -> tuple[int, str]:
     monkeypatch.setattr(hic, "ROOT", root)
     rc = hic.main()
     return rc, capsys.readouterr().out
 
 
-def test_a_deleted_test_holdout_py_is_a_refusal_not_a_pass(
-        monkeypatch, tmp_path, capsys):
-    root = _tree(tmp_path, test_holdout=None)
-    rc, out = _probe(monkeypatch, capsys, root)
-    assert rc != 0, out
-    assert "every control fired" not in out
-    assert out.count(": REFUSED --") == len(hic.INJECTS)
-    assert "pytest exited" in out  # the status is named, not just counted
+def _assert_no_control_ran(out: str) -> None:
+    """Not one control reported anything, fired or refused: the baseline is
+    the only line that may say REFUSED."""
+    assert out.count(": REFUSED --") == 1, out
+    assert "caught it" not in out
+    for name in hic.INJECTS:
+        assert f"{name}:" not in out
 
 
-def test_an_import_error_in_test_holdout_py_refuses_without_blaming_the_injection_point(
+def test_an_unconditionally_red_suite_is_refused_not_three_fired_controls(
         monkeypatch, tmp_path, capsys):
-    root = _tree(tmp_path, test_holdout="import gf180_no_such_module_control\n")
+    """The rule-8 input (docs/verification-rules.md): a suite that fails
+    before anything is injected used to print "every control fired" and exit
+    0, three times over, having measured nothing."""
+    root = _tree(tmp_path, test_holdout=ALWAYS_RED)
     rc, out = _probe(monkeypatch, capsys, root)
-    assert rc != 0, out
+    assert rc == 2, out
     assert "every control fired" not in out
-    # pytest exits 2 on a collection error; the old main() folded that into
-    # "the injection point is gone", a specific claim that was false here.
+    assert "UNMUTATED" in out and "pytest exited 1" in out
+    assert "test_a" in out             # the red is named, not just counted
+    assert "1 failed" in out           # and pytest's own tail is shown
+    _assert_no_control_ran(out)
+
+
+@pytest.mark.parametrize("shape", sorted(BROKEN))
+def test_a_suite_that_cannot_go_green_is_refused_before_any_control_runs(
+        monkeypatch, tmp_path, capsys, shape):
+    """Each #1118 status now stops at the baseline: one refusal naming it,
+    and no control line at all -- where the probe used to print three."""
+    test_holdout, conftest, status = BROKEN[shape]
+    root = _tree(tmp_path, test_holdout, conftest)
+    rc, out = _probe(monkeypatch, capsys, root)
+    assert rc == 2, out
+    assert "every control fired" not in out
+    assert f"pytest exited {status}" in out   # the status is named
     assert "the injection point is gone" not in out
-    assert "pytest exited" in out
+    _assert_no_control_ran(out)
 
 
-def test_a_test_holdout_py_that_collects_no_tests_is_a_refusal(
-        monkeypatch, tmp_path, capsys):
-    root = _tree(tmp_path, test_holdout="# no tests defined\n")
-    rc, out = _probe(monkeypatch, capsys, root)
-    assert rc != 0, out
-    assert "every control fired" not in out
-    assert "0 test(s) caught it" not in out
-    assert "pytest exited" in out
-
-
-def test_an_error_only_red_run_is_refused_rather_than_caught_by_nothing(
-        monkeypatch, tmp_path, capsys):
-    # pytest exits 1 when tests ERROR, and an ERROR line does not parse as a
-    # FAILED tools/test_holdout.py:: name -- the "red, 0 test(s) caught it"
-    # shape. Nothing was measured, so it must refuse, not report a firing.
-    conftest = ("import pytest\n\n\n"
-                "@pytest.fixture(autouse=True)\n"
-                "def boom():\n"
-                "    raise RuntimeError('apparatus control')\n")
-    root = _tree(tmp_path, test_holdout="def test_a():\n    assert 1\n",
-                 conftest=conftest)
-    rc, out = _probe(monkeypatch, capsys, root)
-    assert rc != 0, out
-    assert "0 test(s) caught it" not in out
-    assert "every control fired" not in out
-    assert "REFUSED" in out
+@pytest.mark.parametrize("shape", sorted(BROKEN))
+def test_run_alone_still_maps_a_broken_suite_status_to_a_refusal(
+        monkeypatch, tmp_path, shape):
+    """`run()` keeps its own mapping (the #1118 fix) although `main()` now
+    stops these trees at the baseline: an INJECTS replacement that is itself
+    what breaks the suite reaches `run()` with a green baseline behind it."""
+    test_holdout, conftest, status = BROKEN[shape]
+    monkeypatch.setattr(hic, "ROOT", _tree(tmp_path, test_holdout, conftest))
+    res = hic.run("GATE_OFF")
+    assert res.outcome == hic.REFUSED
+    assert f"pytest exited {status}" in res.reason
 
 
 def test_a_missing_injection_point_keeps_its_own_distinct_refusal(
         monkeypatch, tmp_path, capsys):
     # The pre-#1118 refusal reason must survive as its own message: scrub the
     # CLEAN_OFF pattern out of the copied holdout.py, so that one control
-    # cannot inject while the other two still fire.
-    root = _tree(tmp_path, test_holdout="def test_a():\n    assert 0\n")
+    # cannot inject while the other two still fire. The suite must not watch
+    # the scrubbed site: the baseline sees the tree as the caller left it and
+    # would refuse before CLEAN_OFF got to say why.
+    root = _tree(tmp_path, test_holdout=_green_then_red("CLEAN_OFF"))
     target = root / "tools/holdout.py"
     text = target.read_text()
     needle = '    if _git("diff", "--name-only", "HEAD", "--", rel).strip():'
@@ -120,13 +176,16 @@ def test_a_missing_injection_point_keeps_its_own_distinct_refusal(
     assert rc != 0, out
     assert "the injection point is gone from tools/holdout.py" in out
     assert "every control fired" not in out
+    assert out.count("red, 1 test(s) caught it") == len(hic.INJECTS) - 1
 
 
 def test_a_working_apparatus_still_fires_and_names_what_caught_it(
         monkeypatch, tmp_path, capsys):
-    root = _tree(tmp_path, test_holdout="def test_a():\n    assert 0\n")
+    root = _tree(tmp_path, test_holdout=_green_then_red())
     rc, out = _probe(monkeypatch, capsys, root)
     assert rc == 0, out
+    assert "green on the UNMUTATED tree" in out
     assert "every control fired" in out
-    assert "red, 1 test(s) caught it" in out
-    assert "test_a" in out
+    assert out.count("red, 1 test(s) caught it") == len(hic.INJECTS)
+    for name in hic.INJECTS:
+        assert f"test_{name.lower()}_site_is_present" in out
