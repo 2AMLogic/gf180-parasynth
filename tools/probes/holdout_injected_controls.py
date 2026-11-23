@@ -31,6 +31,14 @@ explained is worth more than one counted as coverage it does not provide.
 
 Each injection is deleted in a COPY of the worktree, never in place: a control
 that can leave the tree broken behind it is a control nobody runs twice.
+
+pytest's own process exit status is NOT this probe's outcome (issue #1118):
+`run()` maps it -- 1 with named failures is FIRED, 0 is NO_FIRE, and every
+other status (2 a collection error, 4 the path gone, 5 nothing collected, or
+1 with no parseable FAILED line) is REFUSED naming the status. A deleted
+`tools/test_holdout.py` used to exit 4 in all three copies and print
+"every control fired" -- a false green over the exact drift this probe exists
+to surface.
 """
 from __future__ import annotations
 
@@ -40,8 +48,23 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from typing import NamedTuple
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+
+#: The probe's own outcome space, deliberately disjoint from any subprocess's
+#: exit status: an integer returned here is what let pytest's statuses be read
+#: as verdicts (#1118).
+FIRED = "fired"          # pytest went red and the failures are named
+NO_FIRE = "no-fire"      # pytest stayed green with the assertion deleted
+REFUSED = "refused"      # nothing was measured; `reason` says why
+
+
+class Result(NamedTuple):
+    outcome: str
+    failed: list[str]
+    reason: str
+
 
 INJECTS = {
     "GATE_OFF": ("tools/run_case.py",
@@ -56,7 +79,7 @@ INJECTS = {
 }
 
 
-def run(name: str) -> tuple[int, list[str]]:
+def run(name: str) -> Result:
     rel, pattern, replacement = INJECTS[name]
     with tempfile.TemporaryDirectory() as tmp:
         work = pathlib.Path(tmp) / "tree"
@@ -68,9 +91,10 @@ def run(name: str) -> tuple[int, list[str]]:
         # a regex escape here and must not be parsed as one.
         new, n = re.subn(pattern, lambda _m: replacement, text, count=1)
         if n != 1:
-            print(f"{name}: REFUSED -- the injection point is gone from {rel}; "
-                  f"this control cannot fire and must be repaired, not skipped")
-            return 2, []
+            return Result(REFUSED, [],
+                          f"the injection point is gone from {rel}; this "
+                          f"control cannot fire and must be repaired, not "
+                          f"skipped")
         target.write_text(new)
         out = subprocess.run([sys.executable, "-m", "pytest", "tools/test_holdout.py",
                               "-q", "--no-header", "-p", "no:cacheprovider"],
@@ -78,36 +102,46 @@ def run(name: str) -> tuple[int, list[str]]:
         failed = sorted({ln.split("::")[1].split()[0]
                          for ln in out.stdout.splitlines()
                          if ln.startswith("FAILED tools/test_holdout.py::")})
-        return out.returncode, failed
+        rc = out.returncode
+        if rc == 0:
+            return Result(NO_FIRE, failed, "pytest stayed green")
+        if rc == 1 and failed:
+            return Result(FIRED, failed, "pytest exited 1")
+        if rc == 1:
+            return Result(REFUSED, [],
+                          "pytest exited 1 but no FAILED tools/test_holdout.py::"
+                          " line was parsed; nothing was measured")
+        return Result(REFUSED, [], f"pytest exited {rc}; nothing was measured")
 
 
 def main() -> int:
     bad = 0      # a control genuinely did not fire: a defect in the seal
-    refused = 0  # the injection point is gone: the apparatus cannot run
+    refused = 0  # nothing was measured: the apparatus cannot run
     for name in INJECTS:
-        code, failed = run(name)
-        if code == 0:
+        res = run(name)
+        if res.outcome == REFUSED:
+            print(f"{name}: REFUSED -- {res.reason}")
+            refused += 1
+            continue
+        if res.outcome == NO_FIRE:
             print(f"{name}: CONTROL DID NOT FIRE -- the suite stayed green with the "
                   f"assertion deleted")
             bad += 1
             continue
-        if code == 2:
-            refused += 1
-            continue
-        print(f"{name}: red, {len(failed)} test(s) caught it")
-        for f in failed:
+        print(f"{name}: red, {len(res.failed)} test(s) caught it")
+        for f in res.failed:
             print(f"    {f}")
     # A seal defect (bad) outranks a refusal: 1 when any control genuinely did
     # not fire (a mix included), else 2 when any refused, else 0. Exit 2 is the
     # runner's NO-VERDICT channel (tools/run_all.py, tools/exit_contract.py) --
-    # the outcome this probe's run() already distinguishes internally.
+    # the refusal reasons above name what could not be measured.
     if bad:
         print(f"{bad} control(s) did not fire"
               + (f", {refused} refused" if refused else ""))
         return 1
     if refused:
-        print(f"{refused} control(s) refused -- the injection point is gone from "
-              f"run_case.py or holdout.py")
+        print(f"{refused} control(s) refused -- the reasons are above; "
+              f"nothing was measured")
         return 2
     print("every control fired")
     return 0

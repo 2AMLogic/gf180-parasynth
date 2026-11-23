@@ -547,8 +547,11 @@ verify-full:
 ## only evidence the seal's three assertions are guarded is a docstring
 ## record dated 2026-09-28. Re-verified at wiring time on this tree: all
 ## three fire, same test names as recorded, 12.8 s (3 tree copies + pytest).
-## Exit 2 (REFUSED) means an injection point is GONE from run_case.py or
-## holdout.py -- drift this control must surface, not skip.
+## Exit 2 (REFUSED) means nothing was measured, with the reason on each
+## control's REFUSED line: an injection point GONE from run_case.py or
+## holdout.py (drift this control must surface, not skip), or pytest's own
+## status naming a broken apparatus -- a deleted or uncollectable
+## tools/test_holdout.py (#1118), which must never read as "fired".
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
