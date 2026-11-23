@@ -565,3 +565,17 @@ def test_main_refuses_to_pass_when_no_workflow_carries_the_steps(
     err = capsys.readouterr().err
     assert err.count("nothing to guard") == 2
 
+
+
+def test_a_job_level_continue_on_error_does_not_block():
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: the gate
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is False
+    assert "continue-on-error" in reason
