@@ -49,6 +49,17 @@ REFUSES (exit 2) unless it is green, before any control runs -- no control's
 red can mean anything on a suite that is already red. The refusal names the
 status and the tests that are red before any injection, and prints pytest's
 tail.
+
+And a red is not THIS injection's red unless the tests that went red include
+the ones recorded above (issue #1136). `EXPECTED` holds each control's recorded
+names as data, and `_verdict()` REFUSES a red that is disjoint from them: the
+unmutated tree was green, yet the control's red fell entirely elsewhere (a
+flaky or order-dependent test, a defect that arose after the baseline copy), so
+"fired" would be a claim about some other defect. Overlap is enough -- a
+superset is still FIRED and the unexpected extras are printed as information,
+so a newly added test does not make the probe noisy; only a renamed-away or
+empty expected set refuses. Exact-set pinning was rejected as coupling the
+probe to every test rename.
 """
 from __future__ import annotations
 
@@ -95,6 +106,20 @@ INJECTS = {
 }
 
 
+#: The tests recorded above as catching each control (issue #1136), as data so
+#: that something compares them. Keep in step with the docstring.
+EXPECTED = {
+    "GATE_OFF": frozenset({
+        "test_a_sealed_holdout_whose_reference_is_not_frozen_is_a_stated_no_verdict",
+        "test_an_unsealed_holdout_case_is_refused_and_carries_no_distance",
+        "test_an_unsealed_seal_directory_makes_f1d_refuse_for_the_seal_and_not_the_clip",
+        "test_the_runner_records_a_read_with_the_seal_hash_and_the_model_state",
+    }),
+    "CLEAN_OFF": frozenset({"test_a_seal_with_uncommitted_modifications_is_refused"}),
+    "STALE_OFF": frozenset({"test_a_seal_edited_after_it_was_read_is_reported_stale"}),
+}
+
+
 def _copy(parent: pathlib.Path) -> pathlib.Path:
     """A throwaway copy of the tree for ONE run -- the baseline's and every
     control's, so the baseline cannot pass by running in an easier tree."""
@@ -116,14 +141,26 @@ def _suite(work: pathlib.Path) -> tuple[int, list[str], str]:
     return out.returncode, failed, out.stdout
 
 
-def _verdict(rc: int, failed: list[str]) -> Result:
+def _verdict(rc: int, failed: list[str],
+             expected: frozenset[str] = frozenset()) -> Result:
     """pytest's status in this probe's outcome space (#1118): 1 with named
     failures is FIRED, 0 is NO_FIRE, and every other status -- 2 a collection
     error, 4 the path gone, 5 nothing collected -- or 1 with no parseable
-    FAILED line is REFUSED naming the status."""
+    FAILED line is REFUSED naming the status. A red disjoint from `expected` --
+    or with no `expected` to compare against -- is REFUSED too (#1136): it is
+    not attributable to the injection."""
     if rc == 0:
         return Result(NO_FIRE, failed, "pytest stayed green")
     if rc == 1 and failed:
+        if not expected:
+            return Result(REFUSED, failed,
+                          "no expected test names are recorded for this control, "
+                          "so its red cannot be attributed to the injection")
+        if not expected & set(failed):
+            return Result(REFUSED, failed,
+                          f"red but none of the expected tests caught it: expected "
+                          f"{sorted(expected)}, parsed {failed}; the red is not "
+                          f"this injection's")
         return Result(FIRED, failed, "pytest exited 1")
     if rc == 1:
         return Result(REFUSED, [],
@@ -148,7 +185,7 @@ def run(name: str) -> Result:
                           f"skipped")
         target.write_text(new)
         rc, failed, _stdout = _suite(work)
-        return _verdict(rc, failed)
+        return _verdict(rc, failed, EXPECTED.get(name, frozenset()))
 
 
 def baseline() -> Result:
@@ -195,6 +232,10 @@ def main() -> int:
         print(f"{name}: red, {len(res.failed)} test(s) caught it")
         for f in res.failed:
             print(f"    {f}")
+        extra = sorted(set(res.failed) - EXPECTED[name])
+        if extra:
+            print(f"    (not in the recorded set, information only: "
+                  f"{', '.join(extra)})")
     # A seal defect (bad) outranks a refusal: 1 when any control genuinely did
     # not fire (a mix included), else 2 when any refused, else 0. Exit 2 is the
     # runner's NO-VERDICT channel (tools/run_all.py, tools/exit_contract.py) --

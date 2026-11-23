@@ -101,6 +101,15 @@ def _green_then_red(*without: str) -> str:
     return "\n".join(lines)
 
 
+def _synthetic_expected(monkeypatch, **override) -> None:
+    """Repoint `EXPECTED` at the names `_green_then_red()` produces (the real
+    names belong to the real suite, which this tree does not carry); `override`
+    replaces one control's set."""
+    exp = {n: frozenset({f"test_{n.lower()}_site_is_present"}) for n in hic.INJECTS}
+    exp.update({k: frozenset(v) for k, v in override.items()})
+    monkeypatch.setattr(hic, "EXPECTED", exp)
+
+
 def _probe(monkeypatch, capsys, root: pathlib.Path) -> tuple[int, str]:
     monkeypatch.setattr(hic, "ROOT", root)
     rc = hic.main()
@@ -166,6 +175,7 @@ def test_a_missing_injection_point_keeps_its_own_distinct_refusal(
     # cannot inject while the other two still fire. The suite must not watch
     # the scrubbed site: the baseline sees the tree as the caller left it and
     # would refuse before CLEAN_OFF got to say why.
+    _synthetic_expected(monkeypatch)
     root = _tree(tmp_path, test_holdout=_green_then_red("CLEAN_OFF"))
     target = root / "tools/holdout.py"
     text = target.read_text()
@@ -181,6 +191,7 @@ def test_a_missing_injection_point_keeps_its_own_distinct_refusal(
 
 def test_a_working_apparatus_still_fires_and_names_what_caught_it(
         monkeypatch, tmp_path, capsys):
+    _synthetic_expected(monkeypatch)
     root = _tree(tmp_path, test_holdout=_green_then_red())
     rc, out = _probe(monkeypatch, capsys, root)
     assert rc == 0, out
@@ -189,3 +200,63 @@ def test_a_working_apparatus_still_fires_and_names_what_caught_it(
     assert out.count("red, 1 test(s) caught it") == len(hic.INJECTS)
     for name in hic.INJECTS:
         assert f"test_{name.lower()}_site_is_present" in out
+
+
+# Issue #1136: a red is not THIS injection's red unless it includes a recorded
+# test. The baseline is green in every case below, so #1124's gate passes them.
+
+def test_a_red_entirely_outside_the_expected_set_is_refused_not_fired(
+        monkeypatch, tmp_path, capsys):
+    """The rule-8 input: green baseline, every control goes red, but in tests
+    the record does not name (a flaky test, or a defect that arose after the
+    baseline copy). Before #1136 this printed "every control fired"."""
+    _synthetic_expected(monkeypatch, GATE_OFF={"test_somewhere_else"})
+    root = _tree(tmp_path, test_holdout=_green_then_red())
+    rc, out = _probe(monkeypatch, capsys, root)
+    assert rc == 2, out
+    assert "every control fired" not in out
+    gate = [ln for ln in out.splitlines() if ln.startswith("GATE_OFF:")]
+    assert len(gate) == 1 and "REFUSED" in gate[0]
+    assert "test_somewhere_else" in gate[0]                  # expected, named
+    assert "test_gate_off_site_is_present" in gate[0]        # parsed, named
+    assert out.count("red, 1 test(s) caught it") == len(hic.INJECTS) - 1
+
+
+def test_a_renamed_expected_test_is_refused_not_silently_passed(
+        monkeypatch, tmp_path, capsys):
+    _synthetic_expected(monkeypatch, STALE_OFF={"test_the_old_name"})
+    rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, _green_then_red()))
+    assert rc == 2 and "every control fired" not in out, out
+
+
+def test_an_empty_expected_set_is_refused(monkeypatch, tmp_path, capsys):
+    _synthetic_expected(monkeypatch, CLEAN_OFF=set())
+    rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, _green_then_red()))
+    assert rc == 2 and "every control fired" not in out, out
+    assert "cannot be attributed" in out
+
+
+def test_a_superset_of_the_expected_set_still_fires_and_names_the_extras(
+        monkeypatch, tmp_path, capsys):
+    """Overlap is enough: an added test, or a recorded name that no longer
+    exists beside one that does, must not turn the probe noisy."""
+    monkeypatch.setattr(hic, "EXPECTED", {
+        "GATE_OFF": frozenset({"test_gate_off_site_is_present", "test_gone"}),
+        "CLEAN_OFF": frozenset({"test_clean_off_site_is_present"}),
+        "STALE_OFF": frozenset({"test_stale_off_site_is_present"}),
+    })
+    rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, _green_then_red()))
+    assert rc == 0, out
+    assert "every control fired" in out
+
+
+def test_run_names_extra_failures_as_information_only(monkeypatch, capsys):
+    monkeypatch.setattr(hic, "EXPECTED", {"X": frozenset({"test_a"})})
+    monkeypatch.setattr(hic, "INJECTS", {"X": ("f", "", "")})
+    monkeypatch.setattr(hic, "baseline",
+                        lambda: hic.Result(hic.NO_FIRE, [], "green"))
+    monkeypatch.setattr(hic, "run",
+                        lambda n: hic.Result(hic.FIRED, ["test_a", "test_b"], "x"))
+    assert hic.main() == 0
+    out = capsys.readouterr().out
+    assert "information only: test_b" in out
