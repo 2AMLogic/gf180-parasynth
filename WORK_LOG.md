@@ -6,6 +6,34 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-24
+
+- **PR #1174**: fix: refuse any job-level if: in the signoff harness (_locate)
+- **PR #1169**: refactor: adopt control_dag_lib harness in control_capability_verdicts
+- **Issue #1168** (closed): check_workflows: the job and step `if:` arms still disagree (the `continue-on-error` half was #1158)
+- **PR #1166**: ci: gate the rtl-full phrase run on a Verilator identity refusal step
+- **PR #1164**: fix: catch refusal.Refused at cymbal_bands callers' cross-module call sites
+- **Issue #1160** (closed): cymbal_bands.Refused is caught by nobody: its three callers each define a sibling Refused, so a cymbal refusal exits 1 (FAIL), not 2
+- **PR #1159**: fix: treat expression-form continue-on-error as neutralising at job and step level
+- **Issue #1158** (closed): check_workflows: the job/step `continue-on-error` neutralisation check misses the `${{ ... }}` expression form
+- **Issue #1154** (closed): rtl-full's pulse2x phrase step can run under the wrong Verilator: assert the simulator identity at the point of use
+- **PR #1105**: refactor: consolidate the triplicated control_dag harness into control_dag_lib
+- **Issue #1099** (closed): Adopt control_dag_lib in control_capability_verdicts.py (same harness shape found by #1097's closing search)
+- **Issue #1097** (closed): Consolidate duplicated control_dag harness (RUNNER/run_one/main) into one shared helper
+- **PR #1150**: test: refuse job-level if/continue-on-error in the regrade harness
+- **Issue #1152** (closed): check_workflows: job-level continue-on-error only matches the bare YAML boolean (rule-8 input)
+- **Issue #1143** (closed): test_signoff_klt_version REFUSES on a step-level kill switch but reports green on a job-level one
+- **PR #1147**: fix: normalise trajectory() cells to a share of clip energy, independent of sample rate
+- **Issue #1129** (closed): trajectory() cells carry an n_seg/2 length multiplier, biasing every ours-minus-machine cell +0.368 dB (48 kHz vs 44.1 kHz)
+- **PR #1142**: fix(probe): refuse a holdout control whose red is outside its recorded tests
+- **Issue #1136** (closed): holdout probe: a FIRED control's red is still not attributed to its injection (candidate 2 from #1124)
+- **PR #1151**: fix: refuse malformed provenance and read quoted klt pins in signoff regrade
+- **Issue #1100** (closed): Fix malformed-provenance refusals and quoted-pin comparisons in signoff
+- **PR #1134**: refactor: remove five unreferenced defs, moving their explanations to live code
+- **Issue #800** (closed): Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site
+- **PR #1133**: ci: re-home full pulse2x phrase run into rtl-full, delete pulse_audio workflow
+- **Issue #760** (closed): Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September
+
 ### 2026-11-23
 
 - **PR #1141**: fix: baseline refusal names pytest's real exit status
@@ -921,17 +949,4 @@ Closure events below record forge state, not a verified fix or a new sound resul
 - **Issue #1** (closed): Product target: USB-C bus-powered class-compliant sound module (keychain)
 - **PR #216**: docs: the keychain dongle, itemised from manufacturers' drawings (#1 board fit)
 - **PR #212**: arty: bind integrated-baseline DSP evidence to routed.dcp by digest; extractor records the digest
-
-### 2026-09-24
-
-- **PR #210**: Musical-length playback: rolling UART delivery, qualified through the RTL
-- **PR #211**: M1A: select the −4 dB gain patch; two-sided attack qualification; exploratory attack sweep
-- **PR #209**: publish: derive dsp_feedback_review_complete from DCP-bound evidence
-- **PR #197**: measure: publish M1A gain improvement and diagnose oscillator cancellation
-- **PR #203**: Qualify M1A attack measurement: envelope becomes a valid metric; M1A valid fail (21/100)
-- **PR #199**: Build and publish Arty A7-100T baseline with SPI-to-I2S verification
-- **PR #202**: USB-UART control bridge: device-side event scheduling, one-command playback
-- **PR #201**: Qualify external I/O timing: I2S forwarded clock, SPI MISO return, documented LED exceptions
-- **PR #200**: Dismiss the 13 DPREG-4 DSP feedback warnings with mapped-simulation evidence
-- **PR #204**: Integrated qualified Arty baseline: DSP disposition + external I/O timing + UART bridge in one image
 

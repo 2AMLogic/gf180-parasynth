@@ -59,11 +59,56 @@ def _constant_false(value: object) -> bool:
     return False
 
 
+def constant_true(value: object) -> bool:
+    """Whether a `continue-on-error:` value must be treated as neutralising:
+    anything not provably constant-false (#1158). Safe direction for a guard:
+    bool `True`, `"true"`, `"${{ true }}"`, quoted `"yes"` and any
+    non-constant expression such as `${{ github.event_name != 'push' }}`
+    (true on a `pull_request` run) all neutralise; only absent / `False` /
+    `"false"` / `"${{ false }}"` do not. Whether the runner honours quoted
+    `"true"` / `"yes"` is UNMEASURED; the guard refuses on the safe side.
+    Not general expression evaluation."""
+    if value is None:
+        return False
+    return not _constant_false(value)
+
+
+def _constant_true_if(value: object) -> bool:
+    """Whether a step-level `if:` can be treated as absent: provably true in
+    every run of the job, so the step cannot be kept off a `pull_request` by
+    it. #1178 gave the step arm the same safe direction `constant_true` gave
+    `continue-on-error` in #1158, but with the OPPOSITE polarity to that
+    helper -- this is a small explicit always-true set (absent, bool `True`,
+    `true` / `${{ true }}`, `always()`, `success()`, `!cancelled()`, each
+    with or without the `${{ }}` wrapper), and anything else returns False:
+    a condition such as `${{ github.event_name == 'push' }}` means "cannot
+    say this step runs on a pull request", which the caller reports as
+    not blocking rather than optimistically blocking. `yes` is YAML-1.1
+    truthiness, not a GitHub `if:` constant. Not general expression
+    evaluation."""
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value is True
+    if isinstance(value, str):
+        s = value.strip()
+        if s.startswith("${{") and s.endswith("}}"):
+            s = s[3:-2].strip()
+        return s.lower() in {"true", "always()", "success()", "!cancelled()"}
+    return False
+
+
 def _job_excludes_pull_request(job: dict) -> bool:
     """Whether a job-level `if:` rules out a `pull_request` run. Only the
     two forms this repository actually writes: constant-false, and an
     `event_name` allowlist/denylist that never names `pull_request` (e.g.
-    rungs.yml's `rtl-full`: `workflow_dispatch' || ... == 'schedule'`)."""
+    rungs.yml's `rtl-full`: `workflow_dispatch' || ... == 'schedule'`).
+    Deliberately narrow, and measured to be the opposite of free to widen
+    (#1168): every non-signoff job in arty/provenance/rungs carries a
+    scope-gate `if:` this must tolerate. A `github.ref`-style condition is
+    invisible to this predicate on purpose; a harness whose one pinned job
+    must run on every pull request refuses any `if:` itself instead of
+    widening this (tools/test_signoff_klt_version.py, #1168)."""
     cond = job.get("if")
     if cond is None:
         return False
@@ -78,15 +123,34 @@ def _job_excludes_pull_request(job: dict) -> bool:
     return False
 
 
+def job_neutralised_reason(job: dict, job_name: str) -> str | None:
+    """A sentence saying why a job can never fail a `pull_request` run, or
+    None. Covers a job-level `if:` that excludes `pull_request` and a
+    job-level `continue-on-error: true` (which turns every step failure in
+    the job green). Shared so harnesses need no second parser (#1143)."""
+    if _job_excludes_pull_request(job):
+        return (f"job {job_name!r} has a job-level `if:` "
+                f"({job.get('if')!r}) that excludes pull_request, so "
+                f"no step in it can block a pull request")
+    if constant_true(job.get("continue-on-error")):
+        return (f"job {job_name!r} sets a job-level `continue-on-error: "
+                f"{job.get('continue-on-error')!r}`, so no step in it can "
+                f"block a pull request")
+    return None
+
+
 def step_would_block_pull_request(workflow, job_name: str, substring: str):
     """Whether a step in `job_name` whose `run:` contains `substring` would
     actually fail a `pull_request` run -- not just whether it is present.
 
     `workflow` is an already-`yaml.safe_load`ed workflow mapping, or a path
     to a workflow file. Checks, in order: the job is not excluded from
-    `pull_request` by its own `if:`; a step with a matching `run:` exists in
-    it; that step's `if:` is not constant-false; that step does not set
-    `continue-on-error: true`.
+    `pull_request` by its own `if:` or neutralised by a job-level
+    `continue-on-error` (both via `job_neutralised_reason`); a step with a
+    matching `run:` exists in it; that step's `if:` is provably always-true
+    (`_constant_true_if` -- absent, `true`, `always()`, `success()`,
+    `!cancelled()`), because any other `if:` cannot be shown to run on a
+    `pull_request` (#1178); that step does not set `continue-on-error: true`.
 
     Returns `(blocks, reason)` -- `reason` is always a specific sentence, so
     a caller's assertion message does not degrade to "found: False".
@@ -97,10 +161,9 @@ def step_would_block_pull_request(workflow, job_name: str, substring: str):
     if job_name not in jobs:
         return False, f"no job named {job_name!r} in this workflow"
     job = jobs[job_name] or {}
-    if _job_excludes_pull_request(job):
-        return False, (f"job {job_name!r} has a job-level `if:` "
-                        f"({job.get('if')!r}) that excludes pull_request, so "
-                        f"no step in it can block a pull request")
+    job_reason = job_neutralised_reason(job, job_name)
+    if job_reason:
+        return False, job_reason
     steps = [s for s in (job.get("steps") or []) if isinstance(s, dict)]
     matches = [s for s in steps if substring in str(s.get("run", ""))]
     if not matches:
@@ -109,10 +172,13 @@ def step_would_block_pull_request(workflow, job_name: str, substring: str):
     neutralised = []
     for s in matches:
         name = s.get("name", "<unnamed step>")
-        if _constant_false(s.get("if")):
-            neutralised.append(f"{name!r} has `if: {s.get('if')!r}`")
-        elif s.get("continue-on-error") is True:
-            neutralised.append(f"{name!r} sets continue-on-error: true")
+        if not _constant_true_if(s.get("if")):
+            neutralised.append(
+                f"{name!r} has `if: {s.get('if')!r}`, which cannot be shown "
+                f"to run on a pull_request")
+        elif constant_true(s.get("continue-on-error")):
+            neutralised.append(
+                f"{name!r} sets continue-on-error: {s.get('continue-on-error')!r}")
         else:
             return True, f"step {name!r} in job {job_name!r} would block a pull_request run"
     return False, (f"every step in job {job_name!r} matching {substring!r} "

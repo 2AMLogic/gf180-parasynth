@@ -72,6 +72,36 @@ def test_refuses_invalid_properties_or_incomparable_measurement_basis(mutation, 
         compare.compare_records(baseline, candidate)
 
 
+@pytest.mark.parametrize("mutation", [
+    lambda rec: rec.update(provenance=None),
+    lambda rec: rec.update(provenance=[]),
+    lambda rec: rec.update(provenance="frozen Mini V3"),
+    lambda rec: rec.update(provenance={}),
+    lambda rec: rec["provenance"].update(config=None),
+    lambda rec: rec["provenance"].update(config=[]),
+])
+def test_refuses_null_or_non_object_baseline_provenance_or_config(mutation):
+    baseline, candidate = _record(), _record()
+    mutation(baseline)
+    with pytest.raises(m5a.Refused, match="baseline provenance"):
+        compare.compare_records(baseline, candidate)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda rec: rec.update(provenance=None),
+    lambda rec: rec.update(provenance=[]),
+    lambda rec: rec.update(provenance="frozen Mini V3"),
+    lambda rec: rec.update(provenance={}),
+    lambda rec: rec["provenance"].update(config=None),
+    lambda rec: rec["provenance"].update(config=[]),
+])
+def test_refuses_null_or_non_object_candidate_provenance_or_config(mutation):
+    baseline, candidate = _record(), _record()
+    mutation(candidate)
+    with pytest.raises(m5a.Refused, match="candidate provenance"):
+        compare.compare_records(baseline, candidate)
+
+
 def test_rejects_candidate_that_loses_a_per_note_alias_pass_hidden_by_pulse():
     baseline = _record(events=[_event("saw", 84, alias=0.0),
                                _event("pulse", 84, alias=10.0)])

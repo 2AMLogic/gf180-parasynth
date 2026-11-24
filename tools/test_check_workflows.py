@@ -83,6 +83,93 @@ def test_a_quoted_false_expression_is_also_constant_false():
     assert blocks is False
 
 
+# =============================================================================
+# #1178, the #1168 shape one level down: a step `if:` that keeps the step off
+# every pull_request run is not "blocking". The step arm must treat any `if:`
+# it cannot prove always-true as "cannot say" -- the same safe direction
+# `constant_true` gave `continue-on-error` in #1158.
+# =============================================================================
+def test_a_step_if_gated_to_push_events_does_not_block():
+    """The defeating input (verification-rules rule 8): `github.event_name ==
+    'push'` is true on no pull_request run, so the gate never runs there --
+    previously reported as blocking because the step arm recognised only
+    constant `false`."""
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the gate
+        if: ${{ github.event_name == 'push' }}
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is False
+    assert "github.event_name" in reason
+    assert "pull_request" in reason
+
+
+def test_a_step_if_gated_on_github_ref_does_not_block():
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the gate
+        if: ${{ github.ref == 'refs/heads/nope' }}
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is False
+    assert "github.ref" in reason
+
+
+def test_a_step_if_gated_on_base_ref_does_not_block():
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the gate
+        if: ${{ github.base_ref == 'nope' }}
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is False
+    assert "github.base_ref" in reason
+
+
+def test_an_empty_step_if_does_not_block():
+    """`if: ''` evaluates falsy on the runner, so the step never runs -- not a
+    spelling of "unconditional"."""
+    wf = yaml.safe_load("""\
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the gate
+        if: ''
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, _ = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is False
+
+
+def test_two_matching_steps_where_the_second_is_unconditional_block():
+    """One gated twin must not launder the pair: the unconditional one still
+    fails a pull_request run, so the predicate answers for the job."""
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the gated twin
+        if: ${{ github.event_name == 'push' }}
+        run: python tools/check_surge_waveform_comment.py
+      - name: the gate
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is True
+    assert "the gate" in reason
+
+
 def test_a_job_level_if_excluding_pull_request_blocks_even_an_unconditional_step():
     """The fourth condition: the step itself is plain and would ordinarily
     block, but the JOB never runs on a pull_request at all."""
@@ -128,6 +215,73 @@ def test_an_ordinary_unconditional_step_blocks():
 
 def test_a_workflow_path_is_accepted_as_well_as_a_parsed_dict():
     blocks, _ = cw.step_would_block_pull_request(RUNGS, "m5a-fast", "verify-fast")
+    assert blocks is True
+
+
+# =============================================================================
+# #1178 positive controls: the explicit always-true `if:` spellings still
+# block. Without these, the conservative direction above could pass because
+# the step arm refuses everything.
+# =============================================================================
+def test_a_step_if_always_still_blocks():
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the gate
+        if: always()
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, _ = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is True
+
+
+def test_a_step_if_success_still_blocks():
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the gate
+        if: success()
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, _ = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is True
+
+
+def test_a_step_if_not_cancelled_still_blocks():
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the gate
+        if: ${{ !cancelled() }}
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, _ = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is True
+
+
+def test_a_step_if_true_in_its_spellings_still_blocks():
+    """Bare YAML `true`, the string `'true'`, and `${{ true }}` (which loads
+    as a string, #1158) are all spellings of "unconditional"."""
+    for spelling in ("true", "${{ true }}"):
+        job = {"runs-on": "ubuntu-latest", "steps": [
+            {"name": "the gate", "if": spelling,
+             "run": "python tools/check_surge_waveform_comment.py"}]}
+        wf = {"jobs": {"guard": job}}
+        blocks, _ = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+        assert blocks is True, spelling
+    wf = yaml.safe_load("""\
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the gate
+        if: 'true'
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, _ = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
     assert blocks is True
 
 
@@ -565,3 +719,78 @@ def test_main_refuses_to_pass_when_no_workflow_carries_the_steps(
     err = capsys.readouterr().err
     assert err.count("nothing to guard") == 2
 
+
+
+def test_a_job_level_continue_on_error_does_not_block():
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: the gate
+        run: python tools/check_surge_waveform_comment.py
+""")
+    blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is False
+    assert "continue-on-error" in reason
+
+
+@pytest.mark.parametrize("level", ["job", "step"])
+def test_an_expression_form_continue_on_error_does_not_block(level):
+    """#1158: `${{ true }}` loads as a string; `is True` missed it."""
+    job_line = "    continue-on-error: ${{ true }}\n" if level == "job" else ""
+    step_line = "        continue-on-error: ${{ true }}\n" if level == "step" else ""
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+""" + job_line + """\
+    steps:
+      - name: the gate
+        run: python tools/check_surge_waveform_comment.py
+""" + step_line)
+    blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is False
+    assert "continue-on-error" in reason
+
+
+@pytest.mark.parametrize("value", ["false", "${{ false }}", None, False])
+def test_constant_true_rejects_provably_false_forms(value):
+    assert cw.constant_true(value) is False
+
+
+@pytest.mark.parametrize("value", [
+    True, "true", "${{ true }}", "yes",
+    "${{ github.event_name != 'push' }}",  # true on a pull_request run
+], ids=repr)
+def test_constant_true_treats_anything_not_provably_false_as_neutralising(value):
+    """#1158 review: the safe direction. The conditional expression is the
+    input that defeats a narrow predicate (rule 8)."""
+    assert cw.constant_true(value) is True
+
+
+# =============================================================================
+# #1178: `_constant_true_if` is deliberately NOT `not _constant_false` -- it
+# is the small explicit always-true set, and everything else (including
+# conditionals that happen to be true on a push) is refused.
+# =============================================================================
+@pytest.mark.parametrize("value", [
+    None, True, "true", "${{ true }}", "True",
+    "always()", "${{ always() }}", "ALWAYS()",
+    "success()", "${{ success() }}",
+    "!cancelled()", "${{ !cancelled() }}",
+], ids=repr)
+def test_constant_true_if_accepts_exactly_the_explicit_always_true_set(value):
+    assert cw._constant_true_if(value) is True
+
+
+@pytest.mark.parametrize("value", [
+    False, "false", "${{ false }}", "",
+    "${{ github.event_name == 'push' }}",
+    "${{ github.ref == 'refs/heads/nope' }}",
+    "${{ github.base_ref == 'nope' }}",
+    0, [], "yes",
+], ids=repr)
+def test_constant_true_if_refuses_everything_else(value):
+    """`yes` is YAML-1.1 truthiness, not a GitHub `if:` constant; non-string
+    non-bool values cannot be shown always-true either."""
+    assert cw._constant_true_if(value) is False
