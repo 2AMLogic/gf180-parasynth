@@ -8,6 +8,13 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-24
 
+- **PR #1184**: fix: catch refusal.Refused at the rimshot probes' CLI dispatch, with the cross-module census
+- **PR #1145**: controls: require a clean baseline run before crediting an RTL mutant
+- **PR #1144**: fix: refuse non-16-bit WAVs in five unguarded reference readers
+- **PR #1131**: fix: refuse injected-defect controls whose suite is red before any injection
+- **Issue #1162** (closed): Handle cross-module refusals in the rimshot probe and check other CLI callers
+- **Issue #1125** (closed): Three injected-defect harnesses have no unmutated-suite baseline: inject_manifest_defects, control_capability_verdicts, control_dag_churn
+- **Issue #1117** (closed): Twelve more unguarded `wavfile.read` + /32768 readers survive #817, including `run_case.py`'s reference loader
 - **PR #1179**: check_workflows: refuse a step if: that cannot be shown to run on a pull_request
 - **PR #1176**: test: require exact success-polarity gate in verilator identity phrase check
 - **PR #1175**: ci: refuse rather than report simulator identity in pulse2x-rtl
