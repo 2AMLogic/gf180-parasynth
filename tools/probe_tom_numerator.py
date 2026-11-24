@@ -97,8 +97,8 @@ def render(voice: str, kind: str | None, nums: int = dx.N_MODES) -> tuple:
     return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR
 
 
-def score(voice: str, x, sr, refdir) -> dict:
-    ref_x, ref_sr, rel, _ = rc.load_reference(voice, refdir)
+def score(voice: str, x, sr, refdir, ref=None) -> dict:
+    ref_x, ref_sr, rel, _ = rc.load_reference(voice, refdir) if ref is None else ref
     req = PLAN[voice]
     metrics, _ = rc.drum_measurements(voice, x, sr, ref_x, ref_sr, rel, req)
     out = {}
@@ -197,20 +197,23 @@ def main(argv=None) -> int:
         a.out.write_text(json.dumps(res, indent=1) + "\n")
         return 0
     refdir = pathlib.Path(a.refs)
-    ctl = control_bit_identity()
-    print("bit-identity control (nums=16, all RAW):", ctl)
-    if not all(ctl.values()):
-        print("REFUSED: the nums=16 bank does not reproduce the shipped render")
-        return 2
-    rows = {}
-    # The measurement loop reads the corpus through `score()` ->
-    # `rc.load_reference`, whose `preparation_contract.Refused` is a SIBLING of
-    # the `rc.Refused` guard below (same class here, but nothing at main scope
-    # interpreted a refusal from score at all). A silent or missing corpus WAV
-    # escaped as an exit-1 traceback -- a refusal rendered as FAIL (#1183,
-    # `run_case.*` family). The boundary catches only `refusal.Refused`; a
-    # scipy ValueError on an unreadable corpus file still exits 1.
+    # Preload and validate every corpus reference before the ~30s bit-identity
+    # control and candidate renders so an absent, silent, or unreadable corpus
+    # refuses/fails immediately rather than after rendering 7 drum solos.
+    # `rc.load_reference` raises `preparation_contract.Refused`, a SIBLING of
+    # the `rc.Refused` render guard below (and previously unguarded at main
+    # scope), so a silent or missing corpus WAV escaped as an exit-1 traceback
+    # -- a refusal rendered as FAIL (#1183, `run_case.*` family). The boundary
+    # catches only `refusal.Refused`; a scipy ValueError on an unreadable
+    # corpus file still exits 1.
     try:
+        refs = {v: rc.load_reference(v, refdir) for v in VOICES}
+        ctl = control_bit_identity()
+        print("bit-identity control (nums=16, all RAW):", ctl)
+        if not all(ctl.values()):
+            print("REFUSED: the nums=16 bank does not reproduce the shipped render")
+            return 2
+        rows = {}
         for kind in (None, "BP", "HP", "BP+X4"):
             label = kind or "RAW (shipped)"
             rows[label] = {}
@@ -221,7 +224,7 @@ def main(argv=None) -> int:
                     rows[label] = {"refused": str(e)}
                     print(f"{label}: REFUSED -- {e}", flush=True)
                     break
-                rows[label][v] = score(v, x, sr, refdir)
+                rows[label][v] = score(v, x, sr, refdir, ref=refs[v])
                 s = rows[label][v]
                 print(f"{label:14s} {v} ({VOICES[v]}): " + "; ".join(
                     f"{k} {s[k].get('value')} vs {s[k].get('reference')} (d {s[k].get('distance')})"

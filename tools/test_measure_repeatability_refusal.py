@@ -31,7 +31,11 @@ against the pre-fix tree before the fix landed: exit 1 with the
 `preparation_contract.Refused` traceback.
 
 The tool's own corpus reader needs `soundfile`, which the CI image does
-not install; the control skips where the tool itself could not run (same
+not install; `test_cut_into_strike_reference_exits_refused_2` therefore gates
+with an in-function `pytest.importorskip("soundfile")` so both tests are
+collected (satisfying `tools/pytest_collection_inventory.py`), the
+class-relation control runs unconditionally in CI, and the corpus-driven
+subprocess control skips visibly where the tool itself could not run (same
 precondition, refused rather than reported -- docs/failure-modes.md).
 
 RULE-8 DEFEATER, STATED RATHER THAN CARRIED (docs/verification-rules.md): the
@@ -39,10 +43,11 @@ four sibling controls for this PR each carry an unreadable-corpus case pinning
 that a scipy/soundfile ValueError still exits 1. This file has none: the
 handlers repaired here widen to `refusal.Refused` only, so a ValueError cannot
 be caught by them by construction (no `except Exception` exists in the diff),
-and the module-level `importorskip("soundfile")` means a new control would not
-run in the CI image either. The cut-into-strike control below is the only
-known-answer case this file owns; an execution-error control is not shipped
-because it could not be run (or red-checked) on the hosts that build this PR.
+and `measure_repeatability.py`'s corpus reader requires `soundfile`, so an
+unreadable-corpus subprocess control would also skip via in-function
+`importorskip("soundfile")` in the CI image and could not be run or
+red-checked on the hosts that build this PR. The cut-into-strike control below
+is the only corpus-driven known-answer case this file owns.
 """
 from __future__ import annotations
 
@@ -54,9 +59,9 @@ import sys
 import numpy as np
 import pytest
 
-sf = pytest.importorskip("soundfile")
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(ROOT / "tools") not in sys.path:
+    sys.path.insert(0, str(ROOT / "tools"))
 SR = 44100
 LEAD_S = 0.05          # pre-onset silence the well-formed grid files carry
 BODY_S = 0.50
@@ -94,7 +99,7 @@ def _sandbox(tmp_path: pathlib.Path) -> pathlib.Path:
     return box
 
 
-def _grid(box: pathlib.Path) -> None:
+def _grid(box: pathlib.Path, sf) -> None:
     """The 36-file accent-A digital grid self_test's editing-noise section
     reads, with `CUT_CELL` cut into the strike and every other file
     well-formed (the happy-path grid the tool's own `load()` accepts)."""
@@ -132,8 +137,9 @@ def test_raiser_is_a_refusal_sibling_of_the_boundary_guard():
 # the cut-into-strike record must REFUSE, not traceback
 # ---------------------------------------------------------------------------
 def test_cut_into_strike_reference_exits_refused_2(tmp_path):
+    sf = pytest.importorskip("soundfile")
     box = _sandbox(tmp_path)
-    _grid(box)
+    _grid(box, sf)
     p = _self_test(box)
     assert p.returncode == 2, (p.returncode, p.stdout[-300:], p.stderr[-400:])
     assert "REFUSED" in p.stdout, p.stdout[-400:]
