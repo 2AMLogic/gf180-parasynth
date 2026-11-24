@@ -3,14 +3,14 @@
   "kind": "generic",
   "status": "pass",
   "t1_item": 10,
-  "summary": "T1 item 10 (Repo hygiene): 13/13 attestation checks passed (klt signoff --attest)",
+  "summary": "T1 item 10 (Repo hygiene): 12/12 attestation checks passed (klt signoff --attest)",
   "source": "manifests/inventories/item-10.json",
   "attestation": {
     "producer": "klt signoff --attest",
     "inventory_schema_version": 1,
     "hash_algorithm": "sha256-raw-bytes",
-    "check_count": 13,
-    "passed_count": 13,
+    "check_count": 12,
+    "passed_count": 12,
     "checks": [
       {
         "check": "present",
@@ -45,7 +45,7 @@
         "role": "hygiene",
         "path": ".github/workflows/moog-acceptance.yml",
         "passed": true,
-        "content_hash": "sha256:6207fec90d7a8b40c80a093c30913c1e8262a8839e0fcce6ee9c5eebfda2ad86"
+        "content_hash": "sha256:f4f2e939c5d0d82a9d936b7897c316f971be1ea02ba92bd30396193e2b12d9ba"
       },
       {
         "check": "present",
@@ -64,23 +64,16 @@
       {
         "check": "present",
         "role": "hygiene",
-        "path": ".github/workflows/pulse_audio.yml",
-        "passed": true,
-        "content_hash": "sha256:85af1eae81d819ed21fde6acfed5af594c913918e299035ef0f3384c09087ce4"
-      },
-      {
-        "check": "present",
-        "role": "hygiene",
         "path": ".github/workflows/rungs.yml",
         "passed": true,
-        "content_hash": "sha256:c47c0e735c5fb69ecea91f0a9b693447020fde7e62cfdc12a46a2f015d05706f"
+        "content_hash": "sha256:ae46e42543b5f25e4cbc3de508d5d61c4ffa2d377df98fcfa953eec3a52c89f7"
       },
       {
         "check": "present",
         "role": "hygiene",
         "path": ".github/workflows/signoff.yml",
         "passed": true,
-        "content_hash": "sha256:aaf4ad08db8183b993ba55f5e9697e3aed78d3a2f301dfe3a37e5e0b2f03ce5a"
+        "content_hash": "sha256:93c68ed7da9a4c09009c93a470ba2477a1c5fb85919fabb50e53adaac00fde49"
       },
       {
         "check": "present",
@@ -120,7 +113,7 @@
         "path": "manifests/inventories/item-10.json",
         "scope": "repo"
       },
-      "content_hash": "sha256:b3e6a45ea49d36c9f78b7c1170e2919462cd8f64b5412f8672a16aeaf8676230"
+      "content_hash": "sha256:3fae46de00b0ab05f8e5ca04b6a14b35b53861d12bb6b4970a1ab62cdfdb8e1d"
     }
   }
 }

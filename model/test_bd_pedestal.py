@@ -127,10 +127,6 @@ def test_meta_the_historical_mean_would_fail_this_suite():
 
 
 # ------------------------------------------------ part 2: the mechanism ------
-def deadband_prediction(a1, a2, cf, rounding):
-    return bp.deadband_halfwidth(a1, a2, cf, rounding)
-
-
 def test_prediction_is_the_analytic_fixed_point_set_of_the_recurrence():
     """Independent of the bank: brute-force the integer recurrence on the
     fixed-point condition y = (a*y + RND) >> CF over a window, for a pole with

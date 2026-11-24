@@ -331,7 +331,7 @@ def test_sudo_is_prefixed_by_default_and_the_chain_runs_under_timeout_1():
          "/tmp/fake", "install", "-y", "iverilog"]
 
 
-# --- the workflows ship the helper: nine call sites, four files --------------
+# --- the workflows ship the helper: nine call sites, three files --------------
 #
 # Baseline measured at origin/main 4132b497 (issue #1062): nine
 # `sudo apt-get update && sudo apt-get install -y <pkgs>` steps, none retried.
@@ -341,13 +341,14 @@ def test_sudo_is_prefixed_by_default_and_the_chain_runs_under_timeout_1():
 EXPECTED_INVOCATIONS = {
     "arty.yml": [("iverilog", "tcl")],
     "nightly.yml": [("iverilog",), ("iverilog",)],
-    "pulse_audio.yml": [("autoconf", "flex", "libfl-dev", "bison", "help2man")],
     "rungs.yml": [
         ("iverilog", "autoconf", "flex", "libfl-dev", "bison", "help2man"),
         ("iverilog",),
         ("iverilog",),
         ("iverilog",),
         ("iverilog", "verilator"),
+        # Was pulse_audio.yml; main re-homed it into rtl-full (2d6da2f6).
+        ("autoconf", "flex", "libfl-dev", "bison", "help2man"),
     ],
 }
 

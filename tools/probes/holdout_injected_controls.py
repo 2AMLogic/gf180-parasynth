@@ -31,6 +31,24 @@ explained is worth more than one counted as coverage it does not provide.
 
 Each injection is deleted in a COPY of the worktree, never in place: a control
 that can leave the tree broken behind it is a control nobody runs twice.
+
+pytest's own process exit status is NOT this probe's outcome (issue #1118):
+`run()` maps it -- 1 with named failures is FIRED, 0 is NO_FIRE, and every
+other status (2 a collection error, 4 the path gone, 5 nothing collected, or
+1 with no parseable FAILED line) is REFUSED naming the status. A deleted
+`tools/test_holdout.py` used to exit 4 in all three copies and print
+"every control fired" -- a false green over the exact drift this probe exists
+to surface.
+
+And a red is not the injection's red unless the UNMUTATED tree is green
+(issue #1124). `run()` decides FIRED from `rc == 1 and failed`, so a
+`tools/test_holdout.py` with any always-failing test read as three healthy
+controls: this probe printed "every control fired" and exited 0 having
+measured nothing. `main()` now runs the unmutated copy once, first, and
+REFUSES (exit 2) unless it is green, before any control runs -- no control's
+red can mean anything on a suite that is already red. The refusal names the
+status and the tests that are red before any injection, and prints pytest's
+tail.
 """
 from __future__ import annotations
 
@@ -40,8 +58,29 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from typing import NamedTuple
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+
+#: The probe's own outcome space, deliberately disjoint from any subprocess's
+#: exit status: an integer returned here is what let pytest's statuses be read
+#: as verdicts (#1118).
+FIRED = "fired"          # pytest went red and the failures are named
+NO_FIRE = "no-fire"      # pytest stayed green with the assertion deleted
+REFUSED = "refused"      # nothing was measured; `reason` says why
+
+#: How much of pytest's output a red baseline prints -- the window
+#: tools/r1_harvest_controls.py shows for its clean run. The tail is where the
+#: short summary and the `N failed` line are, which is what names the red.
+TAIL = 2000
+
+
+class Result(NamedTuple):
+    outcome: str
+    failed: list[str]
+    reason: str
+    tail: str = ""        # pytest's own last lines, where they must be seen
+
 
 INJECTS = {
     "GATE_OFF": ("tools/run_case.py",
@@ -56,48 +95,121 @@ INJECTS = {
 }
 
 
-def run(name: str) -> tuple[int, list[str]]:
+def _copy(parent: pathlib.Path) -> pathlib.Path:
+    """A throwaway copy of the tree for ONE run -- the baseline's and every
+    control's, so the baseline cannot pass by running in an easier tree."""
+    work = parent / "tree"
+    shutil.copytree(ROOT, work, symlinks=True,
+                    ignore=shutil.ignore_patterns("build", ".venv", "__pycache__"))
+    return work
+
+
+def _suite(work: pathlib.Path) -> tuple[int, list[str], str]:
+    """`pytest tools/test_holdout.py` inside `work`: its process status, the
+    sorted names on its `FAILED tools/test_holdout.py::` lines, its stdout."""
+    out = subprocess.run([sys.executable, "-m", "pytest", "tools/test_holdout.py",
+                          "-q", "--no-header", "-p", "no:cacheprovider"],
+                         cwd=work, capture_output=True, text=True)
+    failed = sorted({ln.split("::")[1].split()[0]
+                     for ln in out.stdout.splitlines()
+                     if ln.startswith("FAILED tools/test_holdout.py::")})
+    return out.returncode, failed, out.stdout
+
+
+def _verdict(rc: int, failed: list[str]) -> Result:
+    """pytest's status in this probe's outcome space (#1118): 1 with named
+    failures is FIRED, 0 is NO_FIRE, and every other status -- 2 a collection
+    error, 4 the path gone, 5 nothing collected -- or 1 with no parseable
+    FAILED line is REFUSED naming the status."""
+    if rc == 0:
+        return Result(NO_FIRE, failed, "pytest stayed green")
+    if rc == 1 and failed:
+        return Result(FIRED, failed, "pytest exited 1")
+    if rc == 1:
+        return Result(REFUSED, [],
+                      "pytest exited 1 but no FAILED tools/test_holdout.py::"
+                      " line was parsed; nothing was measured")
+    return Result(REFUSED, [], f"pytest exited {rc}; nothing was measured")
+
+
+def run(name: str) -> Result:
     rel, pattern, replacement = INJECTS[name]
     with tempfile.TemporaryDirectory() as tmp:
-        work = pathlib.Path(tmp) / "tree"
-        shutil.copytree(ROOT, work, symlinks=True,
-                        ignore=shutil.ignore_patterns("build", ".venv", "__pycache__"))
+        work = _copy(pathlib.Path(tmp))
         target = work / rel
         text = target.read_text()
         # A lambda, not a template: a replacement containing a backslash is not
         # a regex escape here and must not be parsed as one.
         new, n = re.subn(pattern, lambda _m: replacement, text, count=1)
         if n != 1:
-            print(f"{name}: REFUSED -- the injection point is gone from {rel}; "
-                  f"this control cannot fire and must be repaired, not skipped")
-            return 2, []
+            return Result(REFUSED, [],
+                          f"the injection point is gone from {rel}; this "
+                          f"control cannot fire and must be repaired, not "
+                          f"skipped")
         target.write_text(new)
-        out = subprocess.run([sys.executable, "-m", "pytest", "tools/test_holdout.py",
-                              "-q", "--no-header", "-p", "no:cacheprovider"],
-                             cwd=work, capture_output=True, text=True)
-        failed = sorted({ln.split("::")[1].split()[0]
-                         for ln in out.stdout.splitlines()
-                         if ln.startswith("FAILED tools/test_holdout.py::")})
-        return out.returncode, failed
+        rc, failed, _stdout = _suite(work)
+        return _verdict(rc, failed)
+
+
+def baseline() -> Result:
+    """The UNMUTATED tree, run once before any control (issue #1124): NO_FIRE
+    when it is green, because only then can a control's red be the injection's.
+    Anything else is REFUSED -- on a suite that is red on its own, every
+    control's "fired" measures nothing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, failed, stdout = _suite(_copy(pathlib.Path(tmp)))
+    if rc == 0:
+        return Result(NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
+    if failed:
+        what = (f"pytest exited {rc} on the UNMUTATED tree, {len(failed)} test(s) red "
+                f"before any injection ({', '.join(failed)})")
+    elif rc == 1:
+        what = ("pytest exited 1 on the UNMUTATED tree with no FAILED "
+                "tools/test_holdout.py:: line parsed")
+    else:
+        what = f"pytest exited {rc} on the UNMUTATED tree"
+    return Result(REFUSED, failed, f"{what} -- no control's red can mean anything",
+                  stdout[-TAIL:])
 
 
 def main() -> int:
-    bad = 0
+    base = baseline()
+    if base.outcome == REFUSED:
+        print(f"BASELINE: REFUSED -- {base.reason}")
+        print(base.tail.rstrip())
+        return 2
+    print(f"BASELINE: {base.reason}")
+    bad = 0      # a control genuinely did not fire: a defect in the seal
+    refused = 0  # nothing was measured: the apparatus cannot run
     for name in INJECTS:
-        code, failed = run(name)
-        if code == 0:
+        res = run(name)
+        if res.outcome == REFUSED:
+            print(f"{name}: REFUSED -- {res.reason}")
+            refused += 1
+            continue
+        if res.outcome == NO_FIRE:
             print(f"{name}: CONTROL DID NOT FIRE -- the suite stayed green with the "
                   f"assertion deleted")
             bad += 1
             continue
-        if code == 2:
-            bad += 1
-            continue
-        print(f"{name}: red, {len(failed)} test(s) caught it")
-        for f in failed:
+        print(f"{name}: red, {len(res.failed)} test(s) caught it")
+        for f in res.failed:
             print(f"    {f}")
-    print("every control fired" if not bad else f"{bad} control(s) did not fire")
-    return 1 if bad else 0
+    # A seal defect (bad) outranks a refusal: 1 when any control genuinely did
+    # not fire (a mix included), else 2 when any refused, else 0. Exit 2 is the
+    # runner's NO-VERDICT channel (tools/run_all.py, tools/exit_contract.py) --
+    # the refusal reasons above name what could not be measured, and a refused
+    # baseline took the same exit above, before any control ran.
+    if bad:
+        print(f"{bad} control(s) did not fire"
+              + (f", {refused} refused" if refused else ""))
+        return 1
+    if refused:
+        print(f"{refused} control(s) refused -- the reasons are above; "
+              f"nothing was measured")
+        return 2
+    print("every control fired")
+    return 0
 
 
 if __name__ == "__main__":

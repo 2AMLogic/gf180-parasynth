@@ -103,10 +103,6 @@ def load_reference(path=RESULTS):
     return mini, ours
 
 
-def hvec(row):
-    return {k: row.get(f"h{k}") for k in range(2, KMAX + 1)}
-
-
 def not_a_saw(row):
     h6 = row.get("h6")
     return h6 is None or abs(h6 - ideal_saw_db(6)) >= NOT_A_SAW_DB

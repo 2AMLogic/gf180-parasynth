@@ -173,8 +173,8 @@ CLAIMED_OK_WITH_REASON = "threshold-calibration"
 VERDICT_GROUP = "held-out-validation"
 
 REQUIRED_TEXT = ("name", "instrument", "unit", "lineage_status", "dry_or_processed",
-                 "known_settings", "processing", "relationships", "licence",
-                 "redistribution", "storage", "descent_tested")
+                 "known_settings", "processing", "wav_bit_depth", "relationships",
+                 "licence", "redistribution", "storage", "descent_tested")
 
 #: Fields whose value comes from a CONTROLLED VOCABULARY, where a word that
 #: looks like a placeholder is a legitimate value. `lineage_status: "unknown"`

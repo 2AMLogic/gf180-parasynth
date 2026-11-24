@@ -257,11 +257,20 @@ verify:
 ## Adding a file to either job is fine; adding a 150 s test to one is the thing
 ## that broke this, so put the next expensive file in whichever job is shorter --
 ## which the CI rows above, not the local ones, say is tools/test_run_case.py.
+##
+## tools/test_signoff_klt_version.py (#1095) is the local half of the regrade
+## job's `evidence envelopes were attested by the pinned klt` step (#1089),
+## which until now could be exercised only by pushing: it runs the SHIPPED
+## heredoc, found by step name in signoff.yml, against the committed item-9 and
+## item-10 envelopes under the job's own `KLT` (green), then against seven
+## one-change copies (each red, on its named diagnostic). It is in this bundle
+## because m5a-fast is the job that installs pyyaml and runs this target.
+## 32 tests, ~1 s measured. `make controls` runs the same file.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest tools/test_run_case.py -q" \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_refusal_exit_census.py tools/test_manifest.py tools/test_characterize_synth_top.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_check_attested_hashes.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
- 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py tools/test_check_arty_evidence_binding.py fpga/test_publish_binding.py fpga/test_arty_sd_top.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py fpga/test_named_r1.py fpga/test_named_r2.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_refusal_exit_census.py tools/test_manifest.py tools/test_characterize_synth_top.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_check_attested_hashes.py tools/test_signoff_klt_version.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
+ 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py fpga/test_probe_xdc_bindings.py tools/test_check_arty_evidence_binding.py fpga/test_publish_binding.py fpga/test_arty_sd_top.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py fpga/test_named_r1.py fpga/test_named_r2.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
@@ -537,6 +546,24 @@ verify-full:
 ## README.md and docs/milestones.md modified -- at ~0.6 s against this
 ## target's 3600 s timeout that needs the probe to hang ~6000x its runtime.
 ## Same note in docs/claim-markers.md, beside the scope_control paragraph.
+## tools/probes/holdout_injected_controls.py (#1106, wired here after four
+## weeks as the zero-reference orphan the #762 class search names) is the
+## start-red half for the holdout seal: GATE_OFF / CLEAN_OFF / STALE_OFF each
+## delete one of the sealing assertions in a throwaway COPY of the tree and
+## require tools/test_holdout.py to go red, naming the tests that caught it.
+## Nothing else injects into the holdout mechanism -- sensitivity.py check
+## sweeps parameters, it does not mutate the seal -- so without this line the
+## only evidence the seal's three assertions are guarded is a docstring
+## record dated 2026-09-28. Re-verified at wiring time on this tree: all
+## three fire, same test names as recorded, 12.8 s (3 tree copies + pytest).
+## Exit 2 (REFUSED) means nothing was measured, with the reason on each
+## control's REFUSED line: an injection point GONE from run_case.py or
+## holdout.py (drift this control must surface, not skip), or pytest's own
+## status naming a broken apparatus -- a deleted or uncollectable
+## tools/test_holdout.py (#1118), which must never read as "fired".
+## Since #1124 the UNMUTATED copy runs first (a 4th tree copy) and must be
+## green, or the probe exits 2 on its BASELINE line before any control runs:
+## a suite red on its own used to read as three healthy controls.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
@@ -544,9 +571,11 @@ controls:
 	  "$(PY) tools/control_dag_verdictless_evidence.py" \
 	  "$(PY) tools/control_dag_churn.py" \
 	  "$(PY) -m pytest tools/test_rungs_gate.py -q" \
+	  "$(PY) -m pytest tools/test_signoff_klt_version.py -q" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
 	  "$(PY) tools/probes/estimator_ground_truth.py controls" \
 	  "$(PY) tools/probes/coupling_controls.py" \
+	  "$(PY) tools/probes/holdout_injected_controls.py" \
 	  "$(PY) tools/pytest_collection_inventory.py controls" \
 	  "$(PY) tools/r1_harvest_controls.py" \
 	  "$(PY) tools/probes/check_doc_claims_789_marker_controls.py" \

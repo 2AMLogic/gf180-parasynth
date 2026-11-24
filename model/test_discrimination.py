@@ -262,7 +262,13 @@ def ref_clips(refdir: str, voices=None, include_unmodelled: bool = False) -> lis
 
 
 def read_wav(path: str) -> tuple:
+    """16-bit PCM WAV to float full scale, `(x, sr)`; REFUSES any other
+    sample width (#817): `/32768` is only the 16-bit divisor, and a 24-bit
+    file (scipy returns left-justified int32) would read 96 dB hot with
+    nothing raised."""
     sr, x = wavfile.read(path)
+    if x.dtype != np.int16:
+        raise ValueError(f"{path}: {x.dtype} samples, expected 16-bit PCM (int16)")
     x = x.astype(np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)
@@ -1130,12 +1136,6 @@ def render(voice: str, knobs: tuple, laws: dict, arm: str = "ours") -> tuple:
     return _render_raw(dx.SOUND_STOP[voice], kit_at(voice, knobs, laws, arm))
 
 
-def ours_clips(voices, arm: str, refs) -> list:
-    """One of our clips for every real clip, at the same knobs. Matching the
-    settings one for one is what makes the paired test possible."""
-    return [Clip(c.voice, c.knobs, arm) for c in refs if c.voice in voices]
-
-
 # ---------------------------------------------------------------------------
 # Statistics
 # ---------------------------------------------------------------------------
@@ -1544,7 +1544,11 @@ def distance_curve(refdir, cache, voice, matrix_fn, level_match=True, floor_clam
 
 def ours_distance(refs, cache, voice, arm, matrix_fn, test_only=True, scale=None) -> float:
     """Median feature-space distance between the real machine and our render
-    at the SAME knob setting, over the held-out settings."""
+    at the SAME knob setting, over the held-out settings.
+
+    Our arm is one of our clips for every real clip, at the same knobs;
+    matching the settings one for one is what makes the paired distance
+    possible."""
     use = [c for c in refs if c.voice == voice and (c.is_test or not test_only)]
     if not use:
         use = [c for c in refs if c.voice == voice]
