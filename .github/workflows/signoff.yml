@@ -124,18 +124,30 @@ jobs:
           # (#1089). verdict.txt needs no equivalent here: the fresh-render
           # diff in the next step fails if its `build: klt <v>` line moves.
           python3 - <<'PY'
-          import json, os, re
+          import json, os, re, shlex
 
           klt = os.environ.get("KLT", "")
-          m = re.search(r"klayout-tools==([0-9][^\s]*)", klt)
-          assert m, ("REFUSED: cannot read the pinned version from $KLT "
+          refusal = ("REFUSED: cannot read the pinned version from $KLT "
                      f"{klt!r}; expected klayout-tools==X.Y.Z")
+          # Tokenize as a shell would, so a quoted requirement loses its
+          # quotes; an unmatched quote is unreadable, not a pin.
+          try:
+              words = shlex.split(klt)
+          except ValueError:
+              words = []
+          reqs = [words[i + 1] for i, w in enumerate(words[:-1]) if w == "--from"]
+          m = re.fullmatch(r"klayout-tools==([0-9][A-Za-z0-9.+!_-]*)",
+                           reqs[0]) if reqs else None
+          assert m, refusal
           pinned = m.group(1)
 
           for path in ("manifests/evidence/item-9.json",
                        "manifests/evidence/item-10.json"):
               envelope = json.load(open(path))
-              got = envelope.get("provenance", {}).get("klt_version")
+              provenance = (envelope.get("provenance")
+                            if isinstance(envelope, dict) else None)
+              got = (provenance.get("klt_version")
+                     if isinstance(provenance, dict) else None)
               assert got, f"REFUSED: {path} records no provenance.klt_version"
               assert got == pinned, (
                   f"{path} was attested by klt {got}, not the pinned {pinned}: "

@@ -73,8 +73,13 @@ import pytest_collection_inventory as inv  # noqa: E402
 ISSUE_564_MODULES = {
     "tools/probes/excitation_energy.py": 22,
     "tools/probes/dc_blocker.py": 17,
+    "tools/probes/trajectory_within_rate_drift.py": 5,  # #1129 Doctor pass: the within-rate drift instrument
     "model/discrimination_features.py": 32,
-    "model/discrimination_trajectory.py": 6,
+    #   +5  #1129, this branch: the known-answer unit controls (a cell is a
+    #       share of the clip at any rate; the same tone at two rates
+    #       differences to zero; DC and Nyquist weighted once; the floor
+    #       clamps at a true -75 dB; the one-sample window)
+    "model/discrimination_trajectory.py": 11,
 }
 
 
