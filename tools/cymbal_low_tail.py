@@ -610,10 +610,14 @@ def fischer(refs: pathlib.Path, settings=None, *, trim_s=TRIM_S) -> dict:
     out = {}
     for s in (settings or [f"CY{t}{d}" for t in cb.CODES for d in cb.CODES]):
         p = refs / "cy8" / f"{s}.WAV"
-        x, sr = cb._load(p)
+        # the base class, not this module's sibling: cb._load and rc.prepare
+        # raise THEIR modules' Refused (#1160), which `except Refused` here
+        # never caught -- a refusing record exited 1 as a traceback, a refusal
+        # rendered as a FAIL result.
         try:
+            x, sr = cb._load(p)
             out[s] = measure(rc.prepare(x, sr, side=p.name), sr, trim_s=trim_s)
-        except Refused as e:
+        except refusal.Refused as e:
             out[s] = {"refused": str(e)}
     return out
 
@@ -789,11 +793,18 @@ def noise_floor_control(refs, setting="CY5025", *, trim_s=TRIM_S, band="M") -> d
     the matched floor and 10 dB noisier still."""
     x, sr = rc.render_drum_solo("CY")
     ours = rc.prepare(x, sr, side="shipped CY")
-    p = pathlib.Path(refs) / "cy8" / f"{setting}.WAV"
-    rx, rsr = cb._load(p)
-    ref = rc.prepare(rx, rsr, side=p.name)
     m_ours = measure(ours, sr, trim_s=trim_s)
-    m_ref = measure(ref, rsr, trim_s=trim_s)
+    p = pathlib.Path(refs) / "cy8" / f"{setting}.WAV"
+    # base class again (#1160): a refusing reference record is a refusal of the
+    # whole control, reported as such, not an exit-1 traceback out of main.
+    try:
+        rx, rsr = cb._load(p)
+        ref = rc.prepare(rx, rsr, side=p.name)
+        m_ref = measure(ref, rsr, trim_s=trim_s)
+    except refusal.Refused as e:
+        return {"setting": setting, "band": band, "trim_s": trim_s,
+                "ours": {"rho_M": m_ours["rho"]["M"], "rho_Mn": m_ours["rho"]["Mn"]},
+                "refused": str(e)}
     f_ours = m_ours["bands"][band]["floor_db_re_peak"]
     f_ref = m_ref["bands"][band]["floor_db_re_peak"]
     out = {"setting": setting, "band": band, "trim_s": trim_s,
@@ -974,7 +985,10 @@ def main(argv=None) -> int:
         w = {"fischer": fischer(pathlib.Path(a.refs), settings, trim_s=trim_s),
              "shipped": shipped(trim_s=trim_s)}
         if a.candidate:
-            w["candidate"] = candidate(trim_s=trim_s)
+            try:
+                w["candidate"] = candidate(trim_s=trim_s)
+            except refusal.Refused as e:      # ce.calibrate raises the base (#1160)
+                w["candidate"] = {"refused": str(e)}
         res["windows"][f"{trim_s:.1f}s"] = w
         print(f"\n=== common analysis window {trim_s:.1f} s ===")
         print(f"{'record':14s} " + " ".join(f"{d:>5.0f}" for d in DEPTHS)
@@ -996,18 +1010,22 @@ def main(argv=None) -> int:
             f"(median {sb[f'{b}_{d:.0f}']['median']:.3f})" for d in (-5.0, -10.0, -20.0)))
     if "2.0s" in res["windows"]:
         n = res["noise_floor_control"] = noise_floor_control(a.refs, "CY5025")
-        print(f"\nnoise-floor control (M band, {n['setting']}, {n['trim_s']} s window):")
-        print(f"  as measured:  ours floor {n['ours_floor_db']:8.2f} dB  rho(-10) {n['ours']['rho_M']['-10']}"
-              f"   |   808 floor {n['ref_floor_db']:8.2f} dB  rho(-10) {n['ref']['rho_M']['-10']}")
-        print(f"  the {n['cleaner']} record is the cleaner one, so noise is added to {n['noise_added_to']}")
-        for tag, r in n["runs"].items():
-            if "refused" in r:
-                print(f"  {tag:16s} REFUSED: {r['refused']}")
-            else:
-                print(f"  {tag:16s} floor {r['floor_db']:8.2f} dB   rho(-10) {r['rho_M']['-10']}")
-        if "moved_toward_other_by" in n:
-            print(f"  gap in rho(-10) before {n['gap_before']}; the matched floor closed it by "
-                  f"{n['moved_toward_other_by']}")
+        if "refused" in n:
+            print(f"\nnoise-floor control (M band, {n['setting']}, {n['trim_s']} s window): "
+                  f"REFUSED: {n['refused']}")
+        else:
+            print(f"\nnoise-floor control (M band, {n['setting']}, {n['trim_s']} s window):")
+            print(f"  as measured:  ours floor {n['ours_floor_db']:8.2f} dB  rho(-10) {n['ours']['rho_M']['-10']}"
+                  f"   |   808 floor {n['ref_floor_db']:8.2f} dB  rho(-10) {n['ref']['rho_M']['-10']}")
+            print(f"  the {n['cleaner']} record is the cleaner one, so noise is added to {n['noise_added_to']}")
+            for tag, r in n["runs"].items():
+                if "refused" in r:
+                    print(f"  {tag:16s} REFUSED: {r['refused']}")
+                else:
+                    print(f"  {tag:16s} floor {r['floor_db']:8.2f} dB   rho(-10) {r['rho_M']['-10']}")
+            if "moved_toward_other_by" in n:
+                print(f"  gap in rho(-10) before {n['gap_before']}; the matched floor closed it by "
+                      f"{n['moved_toward_other_by']}")
 
     print("\nonset (click) sensitivity: " + ", ".join(
         f"click {r['click_db']} dB: rho {r['rho_M_-10']}, onset M-Ln {r['onset_excess_db']} dB"

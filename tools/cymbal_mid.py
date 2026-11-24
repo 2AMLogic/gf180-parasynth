@@ -128,6 +128,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import run_case as rc  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
+import refusal  # noqa: E402
+from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
 # 1/3-octave edges: 891 = 1000/2^(1/6), 1782 = 1587*2^(1/6), 2818 = 2512*2^(1/6).
 MID = {"M": (891.0, 1782.0), "M25": (891.0, 2818.0)}
@@ -516,6 +518,18 @@ def main(argv=None) -> int:
     if not (a.fischer or a.renders):
         ap.error("choose --fischer and/or --renders")
     refs = pathlib.Path(a.refs)
+    # The corpus pass raises cymbal_bands.Refused ("silent", or band_decay's
+    # floor guard) and run_case.prepare raises its own sibling; this module
+    # defines no Refused of its own, so before #1160 a refusing record exited
+    # 1 as a traceback -- a refusal rendered as a FAIL result.
+    try:
+        return _main_body(a, refs)
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return REFUSED
+
+
+def _main_body(a, refs: pathlib.Path) -> int:
     res = {"bands": {k: list(v) for k, v in MID.items()},
            "preconditions": {"floor_margin_db": FLOOR_MARGIN_DB, "leak_margin_db": LEAK_MARGIN_DB,
                              "xcheck_tol": XCHECK_TOL},
