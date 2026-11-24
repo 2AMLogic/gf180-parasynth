@@ -8,6 +8,9 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-24
 
+- **Issue #1182** (closed): Wire in tools/performance_suite.py: the playing-behaviour gate that nothing runs
+- **Issue #1193** (closed): refusal_sibling_scan: family classes borrowed by from-import are invisible (9 census sites misclassified)
+- **PR #1224**: fix: track Refused families borrowed by from-import in refusal_sibling_scan
 - **PR #1204**: fix: refuse empty and near-silent windows in cymbal_bands.thirds
 - **Issue #1197** (closed): cymbal_bands.thirds divides by an unguarded e_tot; its zero case is prevented only by call-site ordering
 - **PR #1194**: tools: fix the three refusal_sibling_scan blind-spot gaps (try bodies, stem collisions, import aliases)
