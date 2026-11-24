@@ -787,6 +787,36 @@ def test_an_allowlist_entry_matching_no_step_is_reported(monkeypatch):
     assert "a ghost" in reason
 
 
+def test_a_duplicated_record_step_name_is_red_in_both_gates():
+    """#1196 review: a second, ungated `--run` under the gated record name,
+    inserted before the check step, passed all three gates (the pair gate kept
+    only the last same-named step). Real parsed nightly.yml, premise asserted."""
+    parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
+    nightly = parsed[1][1]
+    job = nightly["jobs"]["full-rtl"]
+    i = next(i for i, s in enumerate(job["steps"])
+             if s.get("name") == cw.ROADMAP_CHECK_STEP)
+    job["steps"].insert(i, {"name": cw.ROADMAP_RECORD_STEP,
+                            "run": "python tools/compile_dag.py --run"})
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert not ok and "occurs 2 times" in reason
+    ok, reason = cw.roadmap_check_step_precedes_record_step(nightly)
+    assert not ok and "ambiguous" in reason
+
+
+def test_a_duplicated_allowlisted_step_name_is_red():
+    parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
+    dag = parsed[2][1]
+    job = next(j for j in dag["jobs"].values()
+               if any(s.get("name") == "run the evidence and regenerate"
+                      for s in j.get("steps") or []))
+    step = next(s for s in job["steps"]
+                if s.get("name") == "run the evidence and regenerate")
+    job["steps"].append(dict(step))
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert not ok and "occurs 2 times" in reason
+
+
 def test_a_lone_pair_named_step_without_its_partner_is_red():
     """A step carrying a gated NAME in a file the pair gate never fires on
     (its partner absent) looks guarded and is not: name membership alone

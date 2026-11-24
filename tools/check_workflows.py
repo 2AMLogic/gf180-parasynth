@@ -281,10 +281,18 @@ def roadmap_check_step_precedes_record_step(workflow,
     if isinstance(workflow, (str, pathlib.Path)):
         workflow = yaml.safe_load(pathlib.Path(workflow).read_text())
     named: dict[str, tuple[str, int, dict]] = {}
+    seen: dict[str, int] = {}
     for jname, job in ((workflow or {}).get("jobs") or {}).items():
         for i, s in enumerate((job or {}).get("steps") or []):
             if isinstance(s, dict) and s.get("name") in (check_step, record_step):
+                seen[s["name"]] = seen.get(s["name"], 0) + 1
                 named[s["name"]] = (jname, i, s)
+    for dup, n in seen.items():
+        if n > 1:
+            # A dict keyed on name keeps only the LAST of a duplicate, so an
+            # earlier ungated --run would vanish from the order check (#1196).
+            return False, (f"step name {dup!r} occurs {n} times -- ambiguous: "
+                           f"the pair gate cannot tell which one it guards")
     if check_step not in named:
         return False, (f"no step named {check_step!r} -- the order gate has "
                        f"nothing to guard")
@@ -403,6 +411,14 @@ def compile_dag_invocation_set_accounted(parsed: list[tuple[str, dict]]):
                 if name == ROADMAP_STEP:
                     n_gated += 1
                     continue
+                if (name in (ROADMAP_CHECK_STEP, ROADMAP_RECORD_STEP)
+                        and names_in_file.count(name) > 1):
+                    unaccounted.append(
+                        f"{fname}:{jname}: gated step name {shown!r} occurs "
+                        f"{names_in_file.count(name)} times in the file, so "
+                        f"name membership does not say which invocation the "
+                        f"order gate guards (#1196)")
+                    continue
                 if name in (ROADMAP_CHECK_STEP, ROADMAP_RECORD_STEP):
                     partner = (ROADMAP_RECORD_STEP if name == ROADMAP_CHECK_STEP
                                else ROADMAP_CHECK_STEP)
@@ -423,6 +439,12 @@ def compile_dag_invocation_set_accounted(parsed: list[tuple[str, dict]]):
                         f"selects (#1192)")
                     continue
                 signature, _reason = entry
+                if names_in_file.count(name) > 1:
+                    unaccounted.append(
+                        f"{fname}:{jname}: allowlisted step name {shown!r} "
+                        f"occurs {names_in_file.count(name)} times, so the "
+                        f"entry cannot say which one it excuses (#1196)")
+                    continue
                 actual = _invocation_signature(str(s.get("run", "")))
                 if actual != signature:
                     unaccounted.append(
