@@ -545,8 +545,9 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
-      # Four files under tools/ shell out to iverilog (test_check_f1_rtl_record,
-      # test_run_controls, test_score_f1_rtl, test_trial). sympy is deliberately NOT installed:
+      # Five files under tools/ shell out to iverilog (test_check_f1_rtl_record,
+      # test_check_iverilog_generate_case_string, test_run_controls,
+      # test_score_f1_rtl, test_trial). sympy is deliberately NOT installed:
       # test_tone_stage_schematic's sympy witness is meant to be a VISIBLE skip
       # beside two numpy-only witnesses of the same fact that do run.
       - run: sudo apt-get update && sudo apt-get install -y iverilog

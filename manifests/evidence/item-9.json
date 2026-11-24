@@ -115,7 +115,7 @@
         "role": "testbench",
         "path": "rtl-sketch/verify_drums.py",
         "passed": true,
-        "content_hash": "sha256:9af7bae4d8e73d888234b106a07a9d451c24824ee1c155da42cec94749cec27d"
+        "content_hash": "sha256:e782a960de35ed90a85cf6a9b6d4534cb5a7e39c2912b5adfc823938d696a39d"
       },
       {
         "check": "present",
