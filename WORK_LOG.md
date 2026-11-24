@@ -8,6 +8,14 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-24
 
+- **PR #1166**: ci: gate the rtl-full phrase run on a Verilator identity refusal step
+- **Issue #1154** (closed): rtl-full's pulse2x phrase step can run under the wrong Verilator: assert the sim
+- **PR #1164**: fix: catch refusal.Refused at cymbal_bands callers' cross-module call sites
+- **Issue #1160** (closed): cymbal_bands.Refused is caught by nobody: its three callers each define a sibling
+- **PR #1159**: fix: treat expression-form continue-on-error as neutralising at job and step level
+- **Issue #1158** (closed): check_workflows: the job/step `continue-on-error` neutralisation check misses the expression form
+- **PR #1105**: refactor: consolidate the triplicated control_dag harness into control_dag_lib
+- **Issue #1097** (closed): Consolidate duplicated control_dag harness (RUNNER/run_one/main) into one shared module
 - **PR #1150**: test: refuse job-level if/continue-on-error in the regrade harness
 - **Issue #1152** (closed): check_workflows: job-level continue-on-error only matches the bare YAML boolean (rule-8 input)
 - **Issue #1143** (closed): test_signoff_klt_version REFUSES on a step-level kill switch but reports green on a job-level one
