@@ -233,8 +233,8 @@ def filtfilt_pedestal(sr: int = 48000, ms: float = 30.0):
 # ===========================================================================
 def quantisation_floor_db(x_file, sr, n_win: int = N_WIN, lsb: float = 1.0 / 32768.0):
     """Per (band, window) dB that uniform 16-bit quantisation noise alone would
-    put in the map, in the map's own units (band share of the CONDITIONED
-    clip's total energy).
+    put in the map, in the map's own units (a band's share of its window's
+    energy times that window's share of the CONDITIONED clip's energy).
 
     Uniform quantisation error has variance lsb^2/12, white over 0..sr/2. A
     band of width W therefore holds lsb^2/12 * (2W/sr) of it. The conditioning
@@ -244,25 +244,27 @@ def quantisation_floor_db(x_file, sr, n_win: int = N_WIN, lsb: float = 1.0 / 327
     scale = 1.0 / (float(np.abs(x_file).max()) + 1e-20)     # peak-normalisation gain
     q_var = (lsb * scale) ** 2 / 12.0
     e = dfx.cqt_edges()
-    n_seg = len(seg) // n_win
     tot = float((seg ** 2).sum()) + 1e-20
-    # `trajectory` scales P by len(seg)/sum(win^2) and sums bins; white noise of
-    # variance v over a band of B bins contributes v * n_seg * B under that
-    # scaling (the window normalisation is exactly what makes it so).
+    # a cell is the band's share of its window's energy times the window's
+    # share of the clip's, which for white noise of variance v over a band of
+    # B bins reduces to 2*B*v/clip_energy -- `noise_cell_db`'s whole job
     return np.repeat(noise_cell_db(q_var, sr, len(seg), tot, n_win)[:, :1], n_win, axis=1)
 
 
 def noise_cell_db(var: float, sr: int, n_total: int, clip_energy: float, n_win: int = N_WIN):
     """dB the map reports for WHITE noise of variance `var`, per band.
 
-    `trajectory` scales |rfft(seg*win)|^2 by len(seg)/sum(win^2); white noise of
-    variance v has E|X_k|^2 = v*sum(win^2) in every bin, so a band holding B
-    bins reads v * n_seg * B before the clip-total division. That is the whole
-    derivation and the self-tests check it against a measured requantisation."""
+    A cell is the band's share of its window's energy times the window's
+    share of the clip's. White noise of variance v puts v*sum(win**2) of
+    power in every one-sided bin, so a band holding B interior bins carries
+    2*B*v*sum(win**2) against a window total of n_seg*v*sum(win**2) -- a
+    share of 2*B/n_seg -- while the window's share of the clip is
+    v*n_seg/clip_energy. The n_seg cancels, leaving 2*B*v/clip_energy with
+    no sample rate in the unit. That is the whole derivation and the
+    self-tests check it against a measured requantisation."""
     counts, _, _ = bin_support(sr, n_total, n_win)
-    n_seg = n_total // n_win
     with np.errstate(divide="ignore"):
-        row = 10.0 * np.log10(var * n_seg * np.maximum(counts, 0) / (clip_energy + 1e-20) + 1e-20)
+        row = 10.0 * np.log10(var * 2.0 * np.maximum(counts, 0) / (clip_energy + 1e-20) + 1e-20)
     return np.repeat(row[:, None], n_win, axis=1)
 
 
