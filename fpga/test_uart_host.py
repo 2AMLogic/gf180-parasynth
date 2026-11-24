@@ -169,6 +169,14 @@ def test_budget_quotes_the_contract_numbers():
     assert b["bytes_per_s"] == pytest.approx(12_288_000 / 1070, rel=1e-3)
 
 
+@pytest.mark.parametrize("baud,divider", [(115200, 107), (96000, 128)])
+@pytest.mark.parametrize("packet,octets", [("write", 8), ("event", 10)])
+def test_budget_packet_duration_in_audio_frames(baud, divider, packet, octets):
+    # 12.288 MHz receiver, rounded RTL divisor, 8N1, 256 clocks/audio frame.
+    frames = Fraction(octets * 10 * divider, 256)
+    assert uh.budget(baud)[f"frames_per_{packet}_packet"] == float(frames)
+
+
 def test_require_serial_refuses_with_exit_2(monkeypatch):
     import builtins
     real_import = builtins.__import__
