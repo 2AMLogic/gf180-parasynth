@@ -6,6 +6,15 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-24
+
+- **PR #1151**: fix: refuse malformed provenance and read quoted klt pins in signoff regrade
+- **Issue #1100** (closed): Fix malformed-provenance refusals and quoted-pin comparisons in signoff
+- **PR #1134**: refactor: remove five unreferenced defs, moving their explanations to live code
+- **Issue #800** (closed): Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site
+- **PR #1133**: ci: re-home full pulse2x phrase run into rtl-full, delete pulse_audio workflow
+- **Issue #760** (closed): Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September
+
 ### 2026-11-23
 
 - **PR #1141**: fix: baseline refusal names pytest's real exit status
@@ -921,17 +930,4 @@ Closure events below record forge state, not a verified fix or a new sound resul
 - **Issue #1** (closed): Product target: USB-C bus-powered class-compliant sound module (keychain)
 - **PR #216**: docs: the keychain dongle, itemised from manufacturers' drawings (#1 board fit)
 - **PR #212**: arty: bind integrated-baseline DSP evidence to routed.dcp by digest; extractor records the digest
-
-### 2026-09-24
-
-- **PR #210**: Musical-length playback: rolling UART delivery, qualified through the RTL
-- **PR #211**: M1A: select the −4 dB gain patch; two-sided attack qualification; exploratory attack sweep
-- **PR #209**: publish: derive dsp_feedback_review_complete from DCP-bound evidence
-- **PR #197**: measure: publish M1A gain improvement and diagnose oscillator cancellation
-- **PR #203**: Qualify M1A attack measurement: envelope becomes a valid metric; M1A valid fail (21/100)
-- **PR #199**: Build and publish Arty A7-100T baseline with SPI-to-I2S verification
-- **PR #202**: USB-UART control bridge: device-side event scheduling, one-command playback
-- **PR #201**: Qualify external I/O timing: I2S forwarded clock, SPI MISO return, documented LED exceptions
-- **PR #200**: Dismiss the 13 DPREG-4 DSP feedback warnings with mapped-simulation evidence
-- **PR #204**: Integrated qualified Arty baseline: DSP disposition + external I/O timing + UART bridge in one image
 
