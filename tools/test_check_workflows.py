@@ -579,3 +579,26 @@ def test_a_job_level_continue_on_error_does_not_block():
     blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
     assert blocks is False
     assert "continue-on-error" in reason
+
+
+@pytest.mark.parametrize("level", ["job", "step"])
+def test_an_expression_form_continue_on_error_does_not_block(level):
+    """#1158: `${{ true }}` loads as a string; `is True` missed it."""
+    job_line = "    continue-on-error: ${{ true }}\n" if level == "job" else ""
+    step_line = "        continue-on-error: ${{ true }}\n" if level == "step" else ""
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+""" + job_line + """\
+    steps:
+      - name: the gate
+        run: python tools/check_surge_waveform_comment.py
+""" + step_line)
+    blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is False
+    assert "continue-on-error" in reason
+
+
+@pytest.mark.parametrize("value", ["false", "${{ false }}", None, "yes", False])
+def test_constant_true_rejects_non_true_forms(value):
+    assert cw.constant_true(value) is False
