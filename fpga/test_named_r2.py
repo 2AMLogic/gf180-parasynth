@@ -8,6 +8,7 @@ replays of r2's bytes run in the PULSE2X=1 configuration.
 """
 import contextlib
 import io
+import json
 import os
 import sys
 import tempfile
@@ -24,6 +25,7 @@ import midi_session as ms                                     # noqa: E402
 import qualified_domain as qd                                 # noqa: E402
 import r1_candidate as r1c                                    # noqa: E402
 import uart_host as uh                                        # noqa: E402
+import verify_live_midi as vlm                                 # noqa: E402
 import verify_uart_bridge as vub                              # noqa: E402
 import voice_fx as vf                                         # noqa: E402
 
@@ -82,6 +84,59 @@ def test_the_replay_configuration_follows_the_image():
     for other in ("release", "tree", "r1"):
         with vub.image_config(other):
             assert "VOICE_PULSE_2X" not in vub.config_defines()
+
+
+def test_the_live_midi_rtl_replay_of_r2_runs_pulse2x(monkeypatch, tmp_path):
+    """This file's contract, end to end through the shipped harness: the RTL
+    replays of r2's bytes run PULSE2X=1. The simulator is stubbed (it is not
+    the subject); the stubs RECORD the bench defines and the model CONFIG
+    they run under, so a replay stage that skips vub.image_config -- the
+    duplicated copy #1219 removed -- answers PULSE2X=0 and fails here."""
+    seen = {"sim": [], "analyze": [], "trunc": []}
+
+    def fake_simulate_replay(prefix, outdir, **kw):
+        seen["sim"].append({"outdir": Path(outdir), "defines": vub.config_defines()})
+        Path(outdir).mkdir(parents=True, exist_ok=True)
+        (Path(outdir) / "run_identity.json").write_text("{}\n")
+        return {"outdir": str(outdir), "reused": False, "reuse": {}, "identity": {}}
+
+    def fake_analyze(rr):
+        seen["analyze"].append(dict(vub.CONFIG))
+        return True, {"i2s_incomplete": False}, []
+
+    def fake_truncation_control(rr):
+        seen["trunc"].append(dict(vub.CONFIG))
+        return {"caught": True}
+
+    monkeypatch.setattr(vub, "simulate_replay", fake_simulate_replay)
+    monkeypatch.setattr(vub, "analyze", fake_analyze)
+    monkeypatch.setattr(vub, "truncation_control", fake_truncation_control)
+    # main() reassigns the module's HARNESS_IMAGE; restore it afterwards
+    monkeypatch.setattr(vlm, "HARNESS_IMAGE", vlm.HARNESS_IMAGE)
+
+    for image in ("r1", "r2"):
+        base = tmp_path / image
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert vlm.main(["--outdir", str(base), "--image", image,
+                             "--rtl", "coverage"]) == 0
+        recdir = base if image == "r1" else base / image
+        rec = json.loads((recdir / "verification.json").read_text())
+        assert rec["image"] == image
+        assert rec["rtl"]["coverage"]["state"] == "PASS"
+
+    # the r2 replay ran PULSE2X: the bench's defines carry it, and the model
+    # configuration the comparison saw during analyze was PULSE2X=1 (an
+    # analyze outside vub.image_config answers 0)
+    assert "VOICE_PULSE_2X" not in seen["sim"][0]["defines"]
+    assert "VOICE_PULSE_2X" in seen["sim"][1]["defines"]
+    assert seen["analyze"][0]["PULSE2X"] == 0
+    assert seen["analyze"][1]["PULSE2X"] == 1
+    assert seen["trunc"][1]["PULSE2X"] == 1
+    # one scratch directory per image (a reuse can never cross images), and
+    # the default r1 image keeps the historical live-midi-rtl path
+    assert seen["sim"][0]["outdir"].parent.name == "live-midi-rtl"
+    assert seen["sim"][1]["outdir"].parent.name == "live-midi-rtl-r2"
+    assert seen["sim"][1]["outdir"] != seen["sim"][0]["outdir"]
 
 
 def test_midi_session_r2_known_state_equals_r1s():
