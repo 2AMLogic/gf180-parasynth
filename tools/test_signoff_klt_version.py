@@ -71,6 +71,7 @@ import pytest
 import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from check_workflows import job_neutralised_reason                   # noqa: E402
 from makefile_recipe import makefile_recipe                          # noqa: E402
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -157,6 +158,11 @@ def _locate(workflow) -> tuple[dict, str | None, tuple[str, ...]]:
             f"expected exactly one step named {STEP_NAME!r} in job {JOB!r}, "
             f"found {len(hits)}: a gate this harness cannot pin must be "
             f"loud, never a silent exemption")
+    job_reason = job_neutralised_reason(job, JOB)
+    if job_reason:
+        raise HarnessRefused(
+            f"{job_reason}: it would still run green here while never "
+            f"blocking CI")
     step = hits[0]
     if not isinstance(step.get("run"), str) or not step["run"].strip():
         raise HarnessRefused(f"step {STEP_NAME!r} has no run: text")
@@ -514,6 +520,33 @@ def test_start_red_a_step_this_harness_cannot_pin_fails_it(tmp_path, how):
 def test_a_step_that_cannot_block_ci_fails_the_harness(neutralise, key):
     with pytest.raises(HarnessRefused, match=re.escape(f"`{key}:")):
         run_step(_workflow(lambda wf: neutralise(_step(wf))), REPO)
+
+
+# Job-level neutralisations (#1143). The step-level controls above cannot see
+# these: the step is intact, the JOB is what never runs or never fails a run.
+# Delegated to `check_workflows.job_neutralised_reason`, the same predicate
+# `step_would_block_pull_request` uses, so the two cannot drift.
+@pytest.mark.parametrize("mutate, match", [
+    (lambda j: j.__setitem__("if", False), r"job-level `if:"),
+    (lambda j: j.__setitem__("if", "${{ false }}"), r"job-level `if:"),
+    (lambda j: j.__setitem__("if", "github.event_name == 'push'"),
+     r"job-level `if:"),
+    (lambda j: j.__setitem__("continue-on-error", True),
+     r"job-level `continue-on-error:"),
+], ids=["if-false", "if-expression-false", "if-excludes-pull-request",
+        "continue-on-error-true"])
+def test_a_job_that_cannot_block_ci_fails_the_harness(mutate, match):
+    with pytest.raises(HarnessRefused, match=match):
+        run_step(_workflow(lambda wf: mutate(wf["jobs"][JOB])), REPO)
+
+
+def test_a_job_if_that_still_names_pull_request_is_not_refused():
+    """Edge: `push || pull_request` runs on a PR, so it must not refuse."""
+    def mutate(wf: dict) -> None:
+        wf["jobs"][JOB]["if"] = (
+            "github.event_name == 'push' || github.event_name == 'pull_request'")
+    step, _klt, _shell = _locate(_workflow(mutate))
+    assert step["name"] == STEP_NAME
 
 
 def test_a_step_level_klt_shadowing_the_job_pin_fails_the_harness():
