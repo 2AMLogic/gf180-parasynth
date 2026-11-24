@@ -71,7 +71,7 @@ import pytest
 import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from check_workflows import job_neutralised_reason                   # noqa: E402
+from check_workflows import constant_true, job_neutralised_reason                  # noqa: E402
 from makefile_recipe import makefile_recipe                          # noqa: E402
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -170,7 +170,7 @@ def _locate(workflow) -> tuple[dict, str | None, tuple[str, ...]]:
         raise HarnessRefused(
             f"step {STEP_NAME!r} carries `if: {step['if']!r}`: a conditional "
             f"gate runs where its condition says, not on every run")
-    if step.get("continue-on-error"):
+    if constant_true(step.get("continue-on-error")):
         raise HarnessRefused(
             f"step {STEP_NAME!r} carries `continue-on-error: "
             f"{step['continue-on-error']!r}`: it would still run green here "
@@ -516,7 +516,10 @@ def test_start_red_a_step_this_harness_cannot_pin_fails_it(tmp_path, how):
     (lambda s: s.__setitem__("if", False), "if"),
     (lambda s: s.__setitem__("if", "github.event_name == 'push'"), "if"),
     (lambda s: s.__setitem__("continue-on-error", True), "continue-on-error"),
-], ids=["if-false", "if-conditional", "continue-on-error-true"])
+    (lambda s: s.__setitem__("continue-on-error", "${{ true }}"),
+     "continue-on-error"),
+], ids=["if-false", "if-conditional", "continue-on-error-true",
+        "continue-on-error-expression-true"])
 def test_a_step_that_cannot_block_ci_fails_the_harness(neutralise, key):
     with pytest.raises(HarnessRefused, match=re.escape(f"`{key}:")):
         run_step(_workflow(lambda wf: neutralise(_step(wf))), REPO)
@@ -533,8 +536,10 @@ def test_a_step_that_cannot_block_ci_fails_the_harness(neutralise, key):
      r"job-level `if:"),
     (lambda j: j.__setitem__("continue-on-error", True),
      r"job-level `continue-on-error:"),
+    (lambda j: j.__setitem__("continue-on-error", "${{ true }}"),
+     r"job-level `continue-on-error:"),
 ], ids=["if-false", "if-expression-false", "if-excludes-pull-request",
-        "continue-on-error-true"])
+        "continue-on-error-true", "continue-on-error-expression-true"])
 def test_a_job_that_cannot_block_ci_fails_the_harness(mutate, match):
     with pytest.raises(HarnessRefused, match=match):
         run_step(_workflow(lambda wf: mutate(wf["jobs"][JOB])), REPO)
@@ -808,3 +813,22 @@ def test_a_mention_outside_a_pytest_job_is_not_wiring(recipe):
     even `pytest`) is in the recipe, yet Make never executes this file."""
     assert THIS_FILE in recipe, "the naive substring form would pass here"
     assert THIS_FILE not in _pytest_targets(recipe)
+
+
+@pytest.mark.parametrize("value, refused", [
+    (True, True), ("${{ true }}", True), ("yes", True), (False, False),
+    ("false", False), ("${{ false }}", False), (None, False),
+    ("${{ github.event_name != 'push' }}", True),
+], ids=repr)
+def test_job_and_step_continue_on_error_agree(value, refused):
+    """Edge/control (#1158): the job arm and the step arm share one predicate,
+    so an expression-form kill switch cannot pass at one level only."""
+    for level in ("job", "step"):
+        def mutate(wf, level=level):
+            tgt = wf["jobs"][JOB] if level == "job" else _step(wf)
+            tgt["continue-on-error"] = value
+        if refused:
+            with pytest.raises(HarnessRefused, match="continue-on-error"):
+                _locate(_workflow(mutate))
+        else:
+            _locate(_workflow(mutate))

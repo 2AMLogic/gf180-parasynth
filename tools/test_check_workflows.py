@@ -579,3 +579,36 @@ def test_a_job_level_continue_on_error_does_not_block():
     blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
     assert blocks is False
     assert "continue-on-error" in reason
+
+
+@pytest.mark.parametrize("level", ["job", "step"])
+def test_an_expression_form_continue_on_error_does_not_block(level):
+    """#1158: `${{ true }}` loads as a string; `is True` missed it."""
+    job_line = "    continue-on-error: ${{ true }}\n" if level == "job" else ""
+    step_line = "        continue-on-error: ${{ true }}\n" if level == "step" else ""
+    wf = _workflow("""\
+  guard:
+    runs-on: ubuntu-latest
+""" + job_line + """\
+    steps:
+      - name: the gate
+        run: python tools/check_surge_waveform_comment.py
+""" + step_line)
+    blocks, reason = cw.step_would_block_pull_request(wf, "guard", "check_surge_waveform_comment.py")
+    assert blocks is False
+    assert "continue-on-error" in reason
+
+
+@pytest.mark.parametrize("value", ["false", "${{ false }}", None, False])
+def test_constant_true_rejects_provably_false_forms(value):
+    assert cw.constant_true(value) is False
+
+
+@pytest.mark.parametrize("value", [
+    True, "true", "${{ true }}", "yes",
+    "${{ github.event_name != 'push' }}",  # true on a pull_request run
+], ids=repr)
+def test_constant_true_treats_anything_not_provably_false_as_neutralising(value):
+    """#1158 review: the safe direction. The conditional expression is the
+    input that defeats a narrow predicate (rule 8)."""
+    assert cw.constant_true(value) is True
