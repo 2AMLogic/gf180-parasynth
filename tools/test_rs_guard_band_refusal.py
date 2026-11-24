@@ -154,3 +154,48 @@ def test_unreadable_reference_is_an_execution_error_not_a_refusal(tmp_path):
     assert p.returncode == 1, (p.returncode, p.stdout[-200:], p.stderr[-400:])
     assert "Traceback" in p.stderr, p.stderr[-400:]
     assert "REFUSED" not in p.stdout, "a scipy ValueError must not be relabelled a refusal"
+
+
+# ---------------------------------------------------------------------------
+# rs_mode_drive: the SAME shape in the rimshot family's sibling probe, found
+# by the #1162 census and reproduced red-first by hand before the fix
+# (confirm and distort exited 1 with the preparation_contract.Refused
+# traceback on this exact fixture; derive and sweep, which never read the
+# corpus, exited 0 then and must still)
+# ---------------------------------------------------------------------------
+def _mode_drive(cmd: str, refs: pathlib.Path) -> subprocess.CompletedProcess:
+    env = {k: v for k, v in os.environ.items() if k not in ("GF180_TR808_REFS", "TR808_REFS")}
+    env["GF180_TR808_REFS"] = str(refs)
+    env["TR808_REFS"] = str(refs)
+    return subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "probes" / "rs_mode_drive.py"), cmd],
+        capture_output=True, text=True, timeout=300, env=env, cwd=str(ROOT))
+
+
+def test_mode_drive_confirm_silent_reference_exits_refused_2(tmp_path):
+    p = _mode_drive("confirm", _silent_corpus(tmp_path))
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
+    assert "REFUSED" in p.stdout, p.stdout[-400:]
+    assert "rs8/RS.WAV" in p.stdout and "silent" in p.stdout, p.stdout[-400:]
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-400:]
+    assert "PROVENANCE" not in p.stdout, "a refused run must not start a report"
+
+
+def test_mode_drive_distort_silent_reference_exits_refused_2(tmp_path):
+    p = _mode_drive("distort", _silent_corpus(tmp_path))
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
+    assert "REFUSED" in p.stdout and "rs8/RS.WAV" in p.stdout, p.stdout[-400:]
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-400:]
+
+
+def test_mode_drive_corpus_free_command_still_runs_on_silent_corpus(tmp_path):
+    """derive reads no reference, so the widened handler must not have made
+    the corpus-free commands refuse (the successful-path check)."""
+    p = _mode_drive("derive", _silent_corpus(tmp_path))
+    assert p.returncode == 0, (p.returncode, p.stdout[-300:], p.stderr[-300:])
+
+
+def test_mode_drive_absent_corpus_still_refuses_with_local_reason(tmp_path):
+    p = _mode_drive("confirm", tmp_path / "no-such-refs")
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
+    assert "reference corpus not at" in p.stdout, p.stdout[-400:]
