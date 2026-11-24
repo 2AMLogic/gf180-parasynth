@@ -10,7 +10,10 @@ The guard has two halves, and each ships with the input that defeats it:
   `steps.verilator_identity.outcome`. The defeating input is the pre-#1154
   shape: a bare `if: ${{ !cancelled() }}` phrase step, which still runs after
   a failed step (a failure does not set `cancelled()`) and would emit the
-  ungrounded M5A/M5B report under the apt simulator.
+  ungrounded M5A/M5B report under the apt simulator. Issue #1170 adds two
+  more: wrong-polarity mentions (`|| ... == 'failure'`,
+  `!= 'failure'` admits `skipped`) that reference the outcome without
+  gating on its 'success' value, so the whole `if` string is compared.
 
 Following the #940 pattern in `tools/test_check_workflows.py`, the YAML half
 is tested against the REAL parsed `rungs.yml` -- what ships is the step wiring
@@ -111,11 +114,18 @@ def _phrase_step(job: dict) -> dict:
     pytest.fail(f"rtl-full has no step named {PHRASE_STEP_NAME!r}")
 
 
+# The exact condition the phrase step ships (rungs.yml): a mention of the
+# identity outcome is not a gate on it, so the whole string is compared.
+EXPECTED_PHRASE_IF = "${{ !cancelled() && steps.verilator_identity.outcome == 'success' }}"
+
+
 def _identity_gates_phrase(job: dict) -> tuple[bool, str]:
     """True only when the shipped wiring can refuse: a unique
     `verilator_identity` step running `--assert-path` immediately after the
-    pinned-setup step, and a phrase-step `if` that references that step's
-    outcome. Anything less (the bare `!cancelled()` defect) returns False."""
+    pinned-setup step, and a phrase-step `if` that is exactly the expected
+    `!cancelled() && steps.verilator_identity.outcome == 'success'` gate.
+    Anything less (the bare `!cancelled()` defect, or a mention of the
+    outcome without the 'success' polarity) returns False."""
     identity_indices = [i for i, s in enumerate(job["steps"]) if s.get("id") == "verilator_identity"]
     if len(identity_indices) != 1:
         return False, f"expected one id: verilator_identity step, found {len(identity_indices)}"
@@ -129,6 +139,13 @@ def _identity_gates_phrase(job: dict) -> tuple[bool, str]:
     cond = str(_phrase_step(job).get("if", ""))
     if "steps.verilator_identity.outcome" not in cond:
         return False, f"phrase step if does not reference the identity outcome: {cond!r}"
+    if cond != EXPECTED_PHRASE_IF:
+        # Issue #1170: a mention of the outcome is not a gate on it. Only the
+        # exact shipped condition requires the identity step to have succeeded;
+        # `|| ... == 'failure'` and `!= 'failure'` (admits `skipped`) mention
+        # `verilator_identity.outcome` yet still run the phrases ungrounded.
+        return False, (f"phrase step if must require the identity outcome to be "
+                       f"exactly {EXPECTED_PHRASE_IF!r}, found: {cond!r}")
     return True, cond
 
 
@@ -146,6 +163,27 @@ def test_bare_cancelled_phrase_step_is_rejected():
     ok, detail = _identity_gates_phrase(job)
     assert not ok
     assert "identity outcome" in detail
+
+
+def test_or_failure_polarity_phrase_step_is_rejected():
+    # Rule 8, issue #1170: mentioning the outcome is not gating on it. This
+    # wiring runs the phrases on exactly the outcome the identity step exists
+    # to catch (a failed identity still sets !cancelled()).
+    job = copy.deepcopy(_rtl_full())
+    _phrase_step(job)["if"] = "${{ !cancelled() || steps.verilator_identity.outcome == 'failure' }}"
+    ok, detail = _identity_gates_phrase(job)
+    assert not ok
+    assert "'success'" in detail
+
+
+def test_not_failure_polarity_phrase_step_is_rejected():
+    # Rule 8, issue #1170: `!= 'failure'` mentions the outcome but admits
+    # `skipped` (and every non-failure outcome), re-opening the #1154 hole.
+    job = copy.deepcopy(_rtl_full())
+    _phrase_step(job)["if"] = "${{ !cancelled() && steps.verilator_identity.outcome != 'failure' }}"
+    ok, detail = _identity_gates_phrase(job)
+    assert not ok
+    assert "'success'" in detail
 
 
 def test_a_missing_identity_step_is_rejected():
