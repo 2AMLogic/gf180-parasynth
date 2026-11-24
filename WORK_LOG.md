@@ -8,6 +8,10 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-24
 
+- **PR #1191**: Extract the shared compare-candidate tail into tools/delta_report.py
+- **PR #1190**: fix: refuse a silent corpus WAV in cymbal_tone_knob's windowed measurement
+- **Issue #1187** (closed): Dedupe provenance block and output guard copy-pasted across three compare_*_candidate scripts
+- **Issue #1163** (closed): cymbal_tone_knob: a silent corpus WAV crashes measure_windows with ZeroDivisionError instead of refusing
 - **PR #1186**: test: gate every --pulse2x rtl-full step on the identity outcome
 - **Issue #1177** (closed): rtl-full identity gate: the pytest guard pins the one named phrase step, not that no OTHER step runs the pulse2x phrases ungated
 - **PR #1184**: fix: catch refusal.Refused at the rimshot probes' CLI dispatch, with the cross-module census
