@@ -78,6 +78,21 @@ def _job_excludes_pull_request(job: dict) -> bool:
     return False
 
 
+def job_neutralised_reason(job: dict, job_name: str) -> str | None:
+    """A sentence saying why a job can never fail a `pull_request` run, or
+    None. Covers a job-level `if:` that excludes `pull_request` and a
+    job-level `continue-on-error: true` (which turns every step failure in
+    the job green). Shared so harnesses need no second parser (#1143)."""
+    if _job_excludes_pull_request(job):
+        return (f"job {job_name!r} has a job-level `if:` "
+                f"({job.get('if')!r}) that excludes pull_request, so "
+                f"no step in it can block a pull request")
+    if job.get("continue-on-error") is True:
+        return (f"job {job_name!r} sets a job-level `continue-on-error: "
+                f"True`, so no step in it can block a pull request")
+    return None
+
+
 def step_would_block_pull_request(workflow, job_name: str, substring: str):
     """Whether a step in `job_name` whose `run:` contains `substring` would
     actually fail a `pull_request` run -- not just whether it is present.
@@ -85,7 +100,7 @@ def step_would_block_pull_request(workflow, job_name: str, substring: str):
     `workflow` is an already-`yaml.safe_load`ed workflow mapping, or a path
     to a workflow file. Checks, in order: the job is not excluded from
     `pull_request` by its own `if:`; a step with a matching `run:` exists in
-    it; that step's `if:` is not constant-false; that step does not set
+    it; the job does not set `continue-on-error: true`; that step's `if:` is not constant-false; that step does not set
     `continue-on-error: true`.
 
     Returns `(blocks, reason)` -- `reason` is always a specific sentence, so
@@ -97,10 +112,9 @@ def step_would_block_pull_request(workflow, job_name: str, substring: str):
     if job_name not in jobs:
         return False, f"no job named {job_name!r} in this workflow"
     job = jobs[job_name] or {}
-    if _job_excludes_pull_request(job):
-        return False, (f"job {job_name!r} has a job-level `if:` "
-                        f"({job.get('if')!r}) that excludes pull_request, so "
-                        f"no step in it can block a pull request")
+    job_reason = job_neutralised_reason(job, job_name)
+    if job_reason:
+        return False, job_reason
     steps = [s for s in (job.get("steps") or []) if isinstance(s, dict)]
     matches = [s for s in steps if substring in str(s.get("run", ""))]
     if not matches:

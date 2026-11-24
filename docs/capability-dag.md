@@ -25,8 +25,9 @@ deleted.
 
 All five, or it is not stamped. Four out of five is not a node.
 
-1. **Tagged** — annotated git tag, `node/<id>`. Three exist:
-   `node/F1-ladder`, `node/M1-voice`, `node/M2-minimoog`.
+1. **Tagged** — annotated git tag, `node/<id>`. Which nodes are stamped, and
+   the tag each carries, is in the evidence column of the generated
+   [capability graph table](../README.md#the-capability-graph).
 2. **A named test set, green, in CI on every push** — no path filter.
 3. **Negative controls carried** — an injected defect that turns each property
    red. A test that has never failed is not evidence.
@@ -59,11 +60,11 @@ graph TD
 
 | node | capability | status |
 |---|---|---|
-| F1 | Ladder filter, bit-exact | verifier green — stamping |
-| F2 | Modal bank, bit-exact | on `drums`, PR #14 |
-| F3 | Measurement library ground truth, 60 tests | **green on main** |
-| M1 | One Moog voice, bit-exact, 255,060 frames | verifier green — stamping |
-| M2 | Musically a Minimoog, 42 tests, 6 injected defects | **green on main** |
+| F1 | Ladder filter, bit-exact | **green on main** — `verify_ladder` PASS, 28800 samples, RTL identical to model (`91398a0c`) |
+| F2 | Modal bank, bit-exact | **green on main** — `verify_modal` PASS, 57600 samples, RTL identical to model (`91398a0c`) |
+| F3 | Measurement library ground truth, 153 tests | **green on main** — 153 passed (`4fe488f1`) |
+| M1 | One Moog voice, bit-exact, 255,060 frames | **green on main** — `verify_voice` passed (`91398a0c`); the 255,060-frame count is not in the recorded detail |
+| M2 | Musically a Minimoog, 115 tests | **green on main** — 115 passed (`4fe488f1`); the earlier "6 injected defects" is unstamped: `dag-results.json` records no defect count |
 | M3 | Ladder structure vs real hardware | **BLOCKED** |
 
 **M3 is blocked on one input, not on work.** `model/moog_probe.py` is built and

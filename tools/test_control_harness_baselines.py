@@ -37,6 +37,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import control_capability_verdicts as cv  # noqa: E402
 import control_dag_churn as cd            # noqa: E402
+import control_dag_lib as lib             # noqa: E402
 
 REAL_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -72,7 +73,10 @@ def _tree_with(tmp_path, monkeypatch, harness, suite, plant):
         # A later definition shadows the earlier one in the module namespace,
         # so this is the declared test pytest collects.
         copy.write_text(copy.read_text() + f"\n\ndef {plant}():\n    assert 0\n")
-    monkeypatch.setattr(harness, "ROOT", root)
+    monkeypatch.setattr(harness, "ROOT", root, raising=False)
+    # dag_churn runs through the shared harness, whose ROOT is the one its
+    # runner and subprocess cwd read.
+    monkeypatch.setattr(lib, "ROOT", root)
     return copy
 
 

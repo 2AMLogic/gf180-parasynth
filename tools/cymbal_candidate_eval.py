@@ -35,6 +35,8 @@ import run_case as rc  # noqa: E402
 import cymbal_candidate as cc  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
 import cymbal_mid as cm  # noqa: E402
+import refusal  # noqa: E402
+from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
 CENTRE = {"low": "3175", "decay": "10079", "short": "10079"}
 LEVEL_MODE = {"low": cc.M_CYH1, "decay": dx.M_CYHI, "short": cc.M_CYH3B}
@@ -72,7 +74,11 @@ def calibrate() -> dict:
             base = dict(dx.kit_808())[dx.A_ENV + LEVEL_ENV[band] * dx.ENV_STRIDE + 1] / dx.FULL24
             if base * env_gain > 1.0:
                 if VARIANT == "full":
-                    raise SystemExit(f"REFUSED: {band} band needs envelope peak {base * env_gain:.3f} > 1.0")
+                    # a refusal, so it raises the base class and reaches
+                    # main's handler -> exit 2 (#1160); SystemExit(str) exits 1,
+                    # which renders this precondition as a FAIL result
+                    raise refusal.Refused(
+                        f"{band} band needs envelope peak {base * env_gain:.3f} > 1.0")
                 # a diagnostic ablation may fall short of the level rule; record by how much
                 out[band]["level_short_db"] = round(20 * math.log10(base * env_gain), 2)
                 env_gain = 1.0 / base
@@ -136,7 +142,21 @@ def main(argv=None):
     a = ap.parse_args(argv)
     global VARIANT
     VARIANT = a.variant
-    refs = pathlib.Path(a.refs)
+    # The base class, not "no handler at all" (#1160): cb.measure, cb.thirds,
+    # cm.measure_mid and rc.prepare all raise their OWN modules' Refused, and a
+    # refusing corpus or band must exit REFUSED (2), never 1 as a traceback.
+    try:
+        return _main_body(a, pathlib.Path(a.refs))
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return REFUSED
+
+
+def _main_body(a, refs: pathlib.Path) -> int:
+    # The corpus is this run's precondition, asserted BEFORE the minutes of
+    # calibration: an unreadable or unpreparable CY5025 refuses in seconds.
+    rx, rsr = cb._load(refs / "cy8" / "CY5025.WAV")
+    ref_y = rc.prepare(rx, rsr, side="CY5025")
     cal = calibrate()
     if VARIANT == "balance":
         # Diagnostic ablation (#396), NOT a candidate: the band-pass peaks and
@@ -155,13 +175,16 @@ def main(argv=None):
     print("preservation (bit-identical to shipped):", pres)
     ys, sr = rc.render_drum_solo("CY")
     yc, _ = cc.render(kit_with_levels(cal["amps"]), "CY")
-    rx, rsr = cb._load(refs / "cy8" / "CY5025.WAV")
     P = lambda y, s, side: rc.prepare(y, s, side=side)
     res = {"variant": VARIANT, "levels": cal, "preservation": pres, "bands": {}, "thirds": {}}
-    for label, (y, s) in {"fischer_CY5025": (rx, rsr), "shipped": (ys, sr), "candidate": (yc, sr)}.items():
-        res["bands"][label] = cb.measure(P(y, s, label), s)
+    # the reference side uses the ONE prepared copy from the precondition
+    # block above (previously re-prepared three times, once per consumer)
+    for label, y, s in (("fischer_CY5025", ref_y, rsr),
+                        ("shipped", P(ys, sr, "shipped"), sr),
+                        ("candidate", P(yc, sr, "candidate"), sr)):
+        res["bands"][label] = cb.measure(y, s)
     for w, (t0, t1) in {"0-50ms": (0.0, 0.05), "50-300ms": (0.05, 0.3), "300-1000ms": (0.3, 1.0)}.items():
-        f = cb.thirds(P(rx, rsr, "808"), rsr, t0, t1)
+        f = cb.thirds(ref_y, rsr, t0, t1)
         sh = cb.thirds(P(ys, sr, "shipped"), sr, t0, t1)
         ca = cb.thirds(P(yc, sr, "cand"), sr, t0, t1)
         res["thirds"][w] = {"shipped_minus_808": {k: round(sh[k] - f[k], 2) for k in f},
@@ -178,7 +201,7 @@ def main(argv=None):
     # present in every VARIANT -- see model/cymbal_candidate.py), False for the
     # shipped kit, which omits Hh1 entirely.
     res["mid"] = {
-        "fischer_CY5025": cm.measure_mid(P(rx, rsr, "808"), rsr, True, bands=("M",)),
+        "fischer_CY5025": cm.measure_mid(ref_y, rsr, True, bands=("M",)),
         "shipped": cm.measure_mid(P(ys, sr, "shipped"), sr, False, bands=("M",)),
         "candidate": cm.measure_mid(P(yc, sr, "candidate"), sr, True, bands=("M",)),
     }

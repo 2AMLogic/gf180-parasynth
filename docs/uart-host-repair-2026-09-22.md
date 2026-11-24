@@ -12,6 +12,12 @@ Transcripts (committed):
 - `docs/uart-bridge-red-transcript.txt` -- all ten findings reproduced, 0/10
 - `docs/uart-bridge-gold-transcript.txt` -- same probes after the repair, 10/10
 
+Both transcripts were produced by `fpga/probe_uart_findings.py` (at
+`f600c7a3` before the repair, `db86c133` after), removed in #762 once two of
+its assertions went stale against a healthy host. Ongoing regression coverage
+for the ten findings lives in `fpga/test_uart_host_pty.py` (findings 1-9) and
+`fpga/test_uart_host.py` (finding 10).
+
 ## Per-finding before/after
 
 | # | finding | before (recorded) | after |

@@ -35,10 +35,11 @@ material that is weaker evidence than its file count suggests.**
 > `~/dev/refs` did not exist. Every field is sourced to a committed file. A
 > field that cannot be established that way carries the literal string
 > `unknown -- operator with the corpus mounted must fill this in` and is listed
-> by `tools/corpus_lineage.py open`; **five** such fields exist today — the unit
-> and chain of `boutique-808` and `ableton-factory-808`, and the chain of
-> `legowelt-minimoog-5529`. They are **declared gaps, not estimates**:
-> `check --strict` exits 2 while any remains.
+> by `tools/corpus_lineage.py open`; **eight** such fields exist today — the unit
+> and chain of `boutique-808` and `ableton-factory-808`, the chain of
+> `legowelt-minimoog-5529`, and the WAV bit depth of those same three packs
+> (none is a WAV corpus a committed file describes). They are **declared gaps,
+> not estimates**: `check --strict` exits 2 while any remains.
 
 > **Wrong before it was right, once, and the control caught it.** The first
 > version of rule R5 below banned every lineage that was not `documented` from
@@ -86,18 +87,18 @@ Pack ids are the manifest's. `tools/corpus_lineage.py check` fails if this table
 and the manifest disagree, in either direction, including on order.
 
 <!-- corpus-lineage:packs -->
-| pack | instrument | unit | lineage | dry/processed | groups |
-|---|---|---|---|---|---|
-| `fischer-tr808-103852` | Roland TR-808 | **s/n 103852**, a real machine | documented | dry (individual voice outputs) | threshold-calibration, held-out-validation |
-| `dirt-samples-808` | Roland TR-808 | s/n 103852 — **the same bytes** | documented | dry | *none — would double-count one lineage* |
-| `808-from-mars` | Roland TR-808 | Samples From Mars's machine, serial unpublished | claimed | processed (**including the subset named "Clean"**) | analyzer-development, threshold-calibration |
-| `808-from-mars-legacy` | Roland TR-808 | as above — a **second session**, years apart | claimed | processed | threshold-calibration |
-| `808-loops-from-mars` | Roland TR-808 | as above | claimed | processed | *none — never read* |
-| `boutique-808` | "a TR-808" | unknown | unknown | unknown | analyzer-development |
-| `ableton-factory-808` | "a TR-808" | unknown | unknown | unknown | *none — does not decode* |
-| `mini-from-mars` | Moog Minimoog | Samples From Mars's machine, serial unpublished | claimed | processed | *none — never read* |
-| `micro-from-mars` | Moog Micromoog | Samples From Mars's machine, serial unpublished | claimed | processed | *none — never read* |
-| `legowelt-minimoog-5529` | Moog Minimoog | **s/n 5529**, Legowelt's 1970s unit | documented | unknown | analyzer-development |
+| pack | instrument | unit | lineage | dry/processed | bits | groups |
+|---|---|---|---|---|---|---|
+| `fischer-tr808-103852` | Roland TR-808 | **s/n 103852**, a real machine | documented | dry (individual voice outputs) | 16 | threshold-calibration, held-out-validation |
+| `dirt-samples-808` | Roland TR-808 | s/n 103852 — **the same bytes** | documented | dry | 16 | *none — would double-count one lineage* |
+| `808-from-mars` | Roland TR-808 | Samples From Mars's machine, serial unpublished | claimed | processed (**including the subset named "Clean"**) | 24 (1,754) / 16 (192) | analyzer-development, threshold-calibration |
+| `808-from-mars-legacy` | Roland TR-808 | as above — a **second session**, years apart | claimed | processed | 24 (1,290) / 16 (110) | threshold-calibration |
+| `808-loops-from-mars` | Roland TR-808 | as above | claimed | processed | 24 | *none — never read* |
+| `boutique-808` | "a TR-808" | unknown | unknown | unknown | unknown (AIFF) | analyzer-development |
+| `ableton-factory-808` | "a TR-808" | unknown | unknown | unknown | unknown (AIFF-C) | *none — does not decode* |
+| `mini-from-mars` | Moog Minimoog | Samples From Mars's machine, serial unpublished | claimed | processed | 24 | *none — never read* |
+| `micro-from-mars` | Moog Micromoog | Samples From Mars's machine, serial unpublished | claimed | processed | 24 | *none — never read* |
+| `legowelt-minimoog-5529` | Moog Minimoog | **s/n 5529**, Legowelt's 1970s unit | documented | unknown | unknown | analyzer-development |
 <!-- /corpus-lineage:packs -->
 
 The manifest carries, per pack, the fields this table cannot: known settings,

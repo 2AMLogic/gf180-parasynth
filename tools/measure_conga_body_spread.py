@@ -13,7 +13,7 @@ working tree.  It is validated by EXACT REPRODUCTION of the two reference
 numbers those results published (`--check`), which is the only way to know the
 definition matches:
 
-    x        = wavfile.read(...) -> mono mean -> / 32768.0
+    x        = wavfile.read(...) -> int16 or REFUSED (#817) -> mono mean -> / 32768.0
     prepare  = pk = max|x| ; i = first index with |x| > 0.02*pk ;
                lead = max(0, i - 1 ms) ; if lead >= 5 ms: subtract mean(x[:lead])
                y = x[lead:] ; y /= max|y|
@@ -126,7 +126,13 @@ def body_spectrum(x, sr: int, voice: str):
 
 
 def read_wav(path: pathlib.Path):
+    """16-bit PCM WAV to float full scale, `(x, sr)`; REFUSES any other
+    sample width (#817): `/32768` is only the 16-bit divisor, and a 24-bit
+    file (scipy returns left-justified int32) would read 96 dB hot with
+    nothing raised."""
     sr, x = wavfile.read(str(path))
+    if x.dtype != np.int16:
+        raise ValueError(f"{path}: {x.dtype} samples, expected 16-bit PCM (int16)")
     x = np.asarray(x, dtype=np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)

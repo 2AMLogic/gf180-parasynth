@@ -2,8 +2,47 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+## Archives
+
+- [2026-09](work_log/WORK_LOG_2026-09.md)
+
+### 2026-11-24
+
+- **PR #1151**: fix: refuse malformed provenance and read quoted klt pins in signoff regrade
+- **Issue #1100** (closed): Fix malformed-provenance refusals and quoted-pin comparisons in signoff
+- **PR #1134**: refactor: remove five unreferenced defs, moving their explanations to live code
+- **Issue #800** (closed): Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site
+- **PR #1133**: ci: re-home full pulse2x phrase run into rtl-full, delete pulse_audio workflow
+- **Issue #760** (closed): Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September
+
 ### 2026-11-23
 
+- **PR #1141**: fix: baseline refusal names pytest's real exit status
+- **Issue #1128** (closed): holdout probe's baseline refusal names "pytest exited 1" when pytest exited 2 with a parsed FAILED line
+- **PR #1114**: fix: ignore .loom/account-ranking.* daemon state file
+- **Issue #1112** (closed): check-main-clean.sh exits 3 on every sweep: the daemon state file .loom/account-ranking.codex is not in the loom-managed .gitignore block
+- **PR #1101**: test: run the pinned-klt envelope step locally, not only in CI
+- **Issue #1095** (closed): the pinned-klt envelope gate has no committed control and no local half: it is runnable only by pushing to CI
+- **PR #1139**: chore: regenerate loom-managed gitignore block
+- **Issue #1122** (closed): loom-managed .gitignore block is two patterns stale vs installed loom-daemon 0.20.20 (/node_modules/, /pnpm-lock.yaml)
+- **PR #1138**: fix: refuse two mutation records when the unmutated suite is red
+- **Issue #1130** (closed): Two unwired mutation records read any non-zero pytest as killed with no unmutated run: mutate_pnr_report, probe_injection_discrimination
+- **PR #1140**: docs: link DAG tag criterion to generated evidence table
+- **Issue #1137** (closed): Link the capability DAG’s stamping criteria to the generated tag evidence
+- **PR #1135**: docs: refresh Foundation/Minimoog status cells from dag-results
+- **Issue #1121** (closed): docs/capability-dag.md F2 status still says the modal bank is on the unmerged `drums` branch
+- **PR #1127**: fix: holdout probe refuses on a red unmutated baseline before any control runs
+- **Issue #1124** (closed): holdout_injected_controls has no unmutated-tree baseline: a pre-existing red in test_holdout.py reads as 'every control fired'
+- **PR #1111**: docs: record the unfiled judge fast-path gh field finding
+- **Issue #820** (closed): Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
+- **PR #1119**: fix: holdout probe maps pytest's exit status to its own outcome space
+- **Issue #1118** (closed): holdout_injected_controls: pytest's own exit status is read as the probe's outcome — a deleted test_holdout.py reports 'every control fired' (exit 0)
+- **PR #1107**: Remove stale UART repair probe, record transcript provenance
+- **Issue #762** (closed): Remove fpga/probe_uart_findings.py: it reports 2 false FAILs on the repaired host and nothing runs it
+- **PR #1104**: test: require the drum model in TR-808 acceptance
+- **Issue #1094** (closed): Remove the obsolete optional-model skips from TR-808 acceptance
+- **PR #1103**: fix: refuse non-16-bit WAVs in the two unguarded reference-corpus readers
+- **Issue #817** (closed): Consolidate the seven WAV readers: four conventions, and two answer 96 dB wrong on a 24-bit file instead of refusing
 - **PR #1115**: fix: holdout probe exits 2 for REFUSED instead of folding it into exit 1
 - **Issue #1113** (closed): make controls records holdout_injected_controls' REFUSED as FAIL, and its Makefile comment names an exit 2 the probe never emits
 - **PR #1108**: probes: dispositions for the four zero-reference orphan probes (wire, pin, delete)
@@ -892,36 +931,3 @@ Closure events below record forge state, not a verified fix or a new sound resul
 - **PR #216**: docs: the keychain dongle, itemised from manufacturers' drawings (#1 board fit)
 - **PR #212**: arty: bind integrated-baseline DSP evidence to routed.dcp by digest; extractor records the digest
 
-### 2026-09-24
-
-- **PR #210**: Musical-length playback: rolling UART delivery, qualified through the RTL
-- **PR #211**: M1A: select the −4 dB gain patch; two-sided attack qualification; exploratory attack sweep
-- **PR #209**: publish: derive dsp_feedback_review_complete from DCP-bound evidence
-- **PR #197**: measure: publish M1A gain improvement and diagnose oscillator cancellation
-- **PR #203**: Qualify M1A attack measurement: envelope becomes a valid metric; M1A valid fail (21/100)
-- **PR #199**: Build and publish Arty A7-100T baseline with SPI-to-I2S verification
-- **PR #202**: USB-UART control bridge: device-side event scheduling, one-command playback
-- **PR #201**: Qualify external I/O timing: I2S forwarded clock, SPI MISO return, documented LED exceptions
-- **PR #200**: Dismiss the 13 DPREG-4 DSP feedback warnings with mapped-simulation evidence
-- **PR #204**: Integrated qualified Arty baseline: DSP disposition + external I/O timing + UART bridge in one image
-
-### 2026-09-23
-
-- **PR #191**: Add named selected Mono presets and checked FPGA build
-
-### 2026-09-22
-
-- **PR #194**: Measure first M1A bass comparison with qualified release and explicit missing evidence
-- **PR #192**: Advance pulse 2x through the production RTL and Mono I2S scorer
-
-### 2026-09-21
-
-- **PR #193**: Measure the prior-note effect behind Mono attack discrepancies
-- **PR #180**: Land measured Mono baseline, shared engine and portable references
-- **PR #182**: Measure reconstructed 2x versus 4x ladder paths
-- **PR #183**: Combine verified M5A candidate and release fix
-- **PR #187**: Add first complete Mini V3 M5B scorecard case
-- **PR #188**: Score M5B with selected M5A engine
-- **PR #190**: Restore exact frozen Surge cache and run reference controls in CI
-- **PR #185**: Preserve voice envelope release precision
-- **PR #184**: Skip redundant render when scoring supplied I2S audio

@@ -83,8 +83,6 @@ jobs:
           name: pulse2x-ci
           path: |
             build/pulse2x-ci.json
-            build/pulse2x-phrases.json
-            build/pulse-evidence/
 
   reference-controls:
     needs: changes
@@ -821,3 +819,36 @@ jobs:
         run: python tools/verify_m5a_filter2x_i2s.py
       - name: M5A -- Verilator integrated disabling control
         run: python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control
+      # The shipped R2 image sets PULSE2X; this is the only full-length
+      # --pulse2x phrase run (moved here from a retired standalone workflow,
+      # #760). It uses the pinned Verilator 5.052 that produced the September
+      # result, not the apt build above. setup_ci_verilator.py prepends the
+      # pinned build to PATH for the steps after it, so it sits last and the
+      # earlier steps keep the apt verilator.
+      #
+      # These four steps carry `if: ${{ !cancelled() }}` so an earlier red step
+      # (e.g. M5A above, #1148) does not skip the phrase run: with the default
+      # success() every earlier failure silently removed it, and it never
+      # executed in any dispatch (PR #1133 review, finding B).
+      - if: ${{ !cancelled() }}
+        run: sudo apt-get install -y autoconf flex libfl-dev bison help2man
+      - if: ${{ !cancelled() }}
+        uses: actions/cache@v4
+        with:
+          path: .tools/verilator-5.052
+          key: ubuntu24-verilator-ea338be98e1e838d3518809ce8899f85a009963c
+      - if: ${{ !cancelled() }}
+        run: python tools/setup_ci_verilator.py
+      - name: pulse2x -- complete M5A and M5B phrases decoded from I2S and scored independently
+        if: ${{ !cancelled() }}
+        run: >-
+          python tools/run_all.py --jobs 2 --timeout 1800 --json build/pulse2x-phrases.json
+          "python tools/verify_m5a_filter2x_i2s.py --case M5A --pulse2x --timeout 1700 --outdir build/full-M5A --verification build/pulse-evidence/M5A.txt --wav build/pulse-evidence/M5A-i2s.wav --record build/pulse-evidence/M5A.json --audio build/pulse-evidence/M5A-scored.wav"
+          "python tools/verify_m5a_filter2x_i2s.py --case M5B --pulse2x --timeout 1700 --outdir build/full-M5B --verification build/pulse-evidence/M5B.txt --wav build/pulse-evidence/M5B-i2s.wav --record build/pulse-evidence/M5B.json --audio build/pulse-evidence/M5B-scored.wav"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pulse2x-phrases
+          path: |
+            build/pulse2x-phrases.json
+            build/pulse-evidence/
