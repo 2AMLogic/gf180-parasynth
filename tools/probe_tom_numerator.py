@@ -43,6 +43,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import drums_fx as dx  # noqa: E402
+import refusal  # noqa: E402
 import run_case as rc  # noqa: E402
 
 VOICES = {"LT": "D03A", "MT": "D05A", "HT": "D07A", "LC": "D04A", "MC": "D06A", "HC": "D08A"}
@@ -202,21 +203,32 @@ def main(argv=None) -> int:
         print("REFUSED: the nums=16 bank does not reproduce the shipped render")
         return 2
     rows = {}
-    for kind in (None, "BP", "HP", "BP+X4"):
-        label = kind or "RAW (shipped)"
-        rows[label] = {}
-        for v in VOICES:
-            try:
-                x, sr = render(v, kind)
-            except rc.Refused as e:          # e.g. the compensated amp exceeds its register
-                rows[label] = {"refused": str(e)}
-                print(f"{label}: REFUSED -- {e}", flush=True)
-                break
-            rows[label][v] = score(v, x, sr, refdir)
-            s = rows[label][v]
-            print(f"{label:14s} {v} ({VOICES[v]}): " + "; ".join(
-                f"{k} {s[k].get('value')} vs {s[k].get('reference')} (d {s[k].get('distance')})"
-                for k in PLAN[v]) + f"; peak {s['_peak_fs']}", flush=True)
+    # The measurement loop reads the corpus through `score()` ->
+    # `rc.load_reference`, whose `preparation_contract.Refused` is a SIBLING of
+    # the `rc.Refused` guard below (same class here, but nothing at main scope
+    # interpreted a refusal from score at all). A silent or missing corpus WAV
+    # escaped as an exit-1 traceback -- a refusal rendered as FAIL (#1183,
+    # `run_case.*` family). The boundary catches only `refusal.Refused`; a
+    # scipy ValueError on an unreadable corpus file still exits 1.
+    try:
+        for kind in (None, "BP", "HP", "BP+X4"):
+            label = kind or "RAW (shipped)"
+            rows[label] = {}
+            for v in VOICES:
+                try:
+                    x, sr = render(v, kind)
+                except rc.Refused as e:          # e.g. the compensated amp exceeds its register
+                    rows[label] = {"refused": str(e)}
+                    print(f"{label}: REFUSED -- {e}", flush=True)
+                    break
+                rows[label][v] = score(v, x, sr, refdir)
+                s = rows[label][v]
+                print(f"{label:14s} {v} ({VOICES[v]}): " + "; ".join(
+                    f"{k} {s[k].get('value')} vs {s[k].get('reference')} (d {s[k].get('distance')})"
+                    for k in PLAN[v]) + f"; peak {s['_peak_fs']}", flush=True)
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", flush=True)
+        return 2
     base = rows["RAW (shipped)"]
 
     def verdict(kind, voices):

@@ -30,6 +30,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import audio_measure as am                                          # noqa: E402
+import refusal                                                      # noqa: E402
 import run_case as rc                                               # noqa: E402
 
 REFS = rc.configured_refs()
@@ -881,12 +882,23 @@ def main() -> int:
         print(f"the Fischer corpus is not at {REFS}", file=sys.stderr)
         return 2
     voices = sorted(rc.REF_MAIN) if a.all_voices else ["LC", "HC", "MC"]
-    defect_1(voices)
-    defect_2()
-    defect_3()
-    defect_4()
-    defect_5()
-    defect_6()
+    # The defect sections read the corpus through `rc.load_reference` /
+    # `rc.prepare`, whose `preparation_contract.Refused` is a class this probe
+    # never names (it has no local one) -- a silent corpus WAV escaped as an
+    # exit-1 traceback, which `verdict_exit_code` renders exactly like a
+    # failed invariant (#1183, `run_case.*` family). The boundary catches only
+    # `refusal.Refused` and maps it to the probe's own refused exit (2); a
+    # scipy ValueError on an unreadable corpus file still exits 1.
+    try:
+        defect_1(voices)
+        defect_2()
+        defect_3()
+        defect_4()
+        defect_5()
+        defect_6()
+    except refusal.Refused as e:
+        print(f"REFUSED  {e}")
+        return 2
     print("\n" + "=" * 78)
     # Both summaries print before `verdict_exit_code()` decides the exit:
     # a run with refusals AND fails must not name only the refusals -- the
