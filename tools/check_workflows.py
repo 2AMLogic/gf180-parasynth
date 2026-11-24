@@ -77,7 +77,13 @@ def _job_excludes_pull_request(job: dict) -> bool:
     """Whether a job-level `if:` rules out a `pull_request` run. Only the
     two forms this repository actually writes: constant-false, and an
     `event_name` allowlist/denylist that never names `pull_request` (e.g.
-    rungs.yml's `rtl-full`: `workflow_dispatch' || ... == 'schedule'`)."""
+    rungs.yml's `rtl-full`: `workflow_dispatch' || ... == 'schedule'`).
+    Deliberately narrow, and measured to be the opposite of free to widen
+    (#1168): every non-signoff job in arty/provenance/rungs carries a
+    scope-gate `if:` this must tolerate. A `github.ref`-style condition is
+    invisible to this predicate on purpose; a harness whose one pinned job
+    must run on every pull request refuses any `if:` itself instead of
+    widening this (tools/test_signoff_klt_version.py, #1168)."""
     cond = job.get("if")
     if cond is None:
         return False
