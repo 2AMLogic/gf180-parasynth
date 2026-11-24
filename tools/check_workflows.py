@@ -277,14 +277,24 @@ def roadmap_check_step_precedes_record_step(workflow,
     """(ok, reason): in some one job, the step named `check_step` precedes the
     step named `record_step`; the check step invokes `tools/compile_dag.py`
     with `--check` and never `--run` (a check that also rewrites judges
-    nothing); the record step invokes it with `--run`."""
+    nothing); the record step invokes it with `--run`. Either guarded name
+    appearing more than once in the file is ambiguous and refused, like the
+    in-step gate -- never last-wins (#1206)."""
     if isinstance(workflow, (str, pathlib.Path)):
         workflow = yaml.safe_load(pathlib.Path(workflow).read_text())
-    named: dict[str, tuple[str, int, dict]] = {}
+    found: list[tuple[str, str, int, dict]] = []
     for jname, job in ((workflow or {}).get("jobs") or {}).items():
         for i, s in enumerate((job or {}).get("steps") or []):
             if isinstance(s, dict) and s.get("name") in (check_step, record_step):
-                named[s["name"]] = (jname, i, s)
+                found.append((s.get("name"), jname, i, s))
+    named: dict[str, tuple[str, int, dict]] = {}
+    for guarded in (check_step, record_step):
+        hits = [(j, i, s) for n, j, i, s in found if n == guarded]
+        if len(hits) > 1:
+            return False, (f"{len(hits)} steps named {guarded!r} "
+                           f"({', '.join(j for j, _, _ in hits)}) -- ambiguous")
+        if hits:
+            named[guarded] = hits[0]
     if check_step not in named:
         return False, (f"no step named {check_step!r} -- the order gate has "
                        f"nothing to guard")

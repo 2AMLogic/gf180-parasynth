@@ -627,6 +627,88 @@ def test_a_check_step_that_also_rewrites_is_red():
     assert "--run" in reason
 
 
+# =============================================================================
+# The pair gate's duplicate-name hole (issue #1206): the dict keyed by step
+# name let a second occurrence overwrite the first, so only the LAST
+# occurrence was ever order-checked. These pin the ambiguity refusal that
+# mirrors the in-step gate's (a duplicate is never last-wins).
+# =============================================================================
+def test_a_duplicate_record_step_name_is_refused_not_last_wins():
+    """The issue's reproducer: record, check, record. The dict kept the last
+    record step, so the gate went green while an ungated --run --slow rewrote
+    the README before anything judged it -- the #906 harm itself."""
+    wf = _workflow(f"""\
+  full-rtl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: {cw.ROADMAP_RECORD_STEP}
+        run: python tools/compile_dag.py --run --slow
+      - name: {cw.ROADMAP_CHECK_STEP}
+        run: python tools/compile_dag.py --check
+      - name: {cw.ROADMAP_RECORD_STEP}
+        run: python tools/compile_dag.py --run --slow
+    """)
+    ok, reason = cw.roadmap_check_step_precedes_record_step(wf)
+    assert not ok
+    assert "ambiguous" in reason and cw.ROADMAP_RECORD_STEP in reason
+
+
+def test_a_duplicate_check_step_name_is_also_refused():
+    wf = _workflow(f"""\
+  full-rtl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: {cw.ROADMAP_CHECK_STEP}
+        run: python tools/compile_dag.py --check
+      - name: {cw.ROADMAP_RECORD_STEP}
+        run: python tools/compile_dag.py --run --slow
+      - name: {cw.ROADMAP_CHECK_STEP}
+        run: python tools/compile_dag.py --check
+    """)
+    ok, reason = cw.roadmap_check_step_precedes_record_step(wf)
+    assert not ok
+    assert "ambiguous" in reason and cw.ROADMAP_CHECK_STEP in reason
+
+
+def test_a_duplicate_record_step_in_another_job_is_refused():
+    """A duplicate in another job is equally ungated (per-job scoping was
+    rejected in curation): the file is ambiguous, not merely mis-paired."""
+    wf = _workflow(f"""\
+  full-rtl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: {cw.ROADMAP_CHECK_STEP}
+        run: python tools/compile_dag.py --check
+      - name: {cw.ROADMAP_RECORD_STEP}
+        run: python tools/compile_dag.py --run --slow
+  other:
+    runs-on: ubuntu-latest
+    steps:
+      - name: {cw.ROADMAP_RECORD_STEP}
+        run: python tools/compile_dag.py --run --slow
+    """)
+    ok, reason = cw.roadmap_check_step_precedes_record_step(wf)
+    assert not ok
+    assert "ambiguous" in reason and cw.ROADMAP_RECORD_STEP in reason
+
+
+def test_one_check_and_one_record_in_order_stay_green():
+    """Rule-8 control on the fix itself: the ambiguity refusal must not make
+    the clean pair unsatisfiable."""
+    wf = _workflow(f"""\
+  full-rtl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: {cw.ROADMAP_CHECK_STEP}
+        run: python tools/compile_dag.py --check
+      - name: {cw.ROADMAP_RECORD_STEP}
+        run: python tools/compile_dag.py --run --slow
+    """)
+    ok, reason = cw.roadmap_check_step_precedes_record_step(wf)
+    assert ok, reason
+
+
 def test_a_renamed_roadmap_step_is_red_not_silently_exempt():
     """A rename must move the finding somewhere loud, never turn the gate
     off: the guard reports that it can no longer find what it guards."""
