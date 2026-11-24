@@ -7,7 +7,10 @@ Each control plants the exact shape it names -- the shapes are the ones the
 #1160/#1162 repairs found in the real tree, and the false positives are the
 ones the #1160 one-off dotted-call grep actually produced (a local variable
 named like a module; a callee with no refusal family; a callee whose FUNCTION
-raises nothing even though its module has a family).
+raises nothing even though its module has a family). The #1188 section pins
+the three gaps that issue filed (try-handler credit, stem collision, alias
+loss) and the #1193 section the borrowed-family gap: each control there
+started red against the unfixed scanner, except the shadow pin noted inline.
 """
 from __future__ import annotations
 
@@ -146,6 +149,102 @@ if __name__ == "__main__":
         sys.exit(2)
 '''
 
+CALLER_EXCEPT_CLAUSE = '''
+import refusal
+import mod_a
+import mod_b
+
+def go(p):
+    try:
+        return mod_b.measure(p)   # body: this try's handlers DO cover it
+    except refusal.Refused:
+        return mod_a.load(p)      # except clause: they do NOT
+'''
+
+CALLER_ELSE_CLAUSE = '''
+import mod_a
+
+def go(p):
+    try:
+        touch(p)
+    except Exception:
+        touch(p)
+    else:
+        return mod_a.load(p)      # else clause: not covered by this try
+'''
+
+CALLER_FINALLY_CLAUSE = '''
+import refusal
+import mod_a
+
+def go(p):
+    try:
+        touch(p)
+    except refusal.Refused:
+        touch(p)
+    finally:
+        return mod_a.load(p)      # finally clause: not covered by this try
+'''
+
+CALLER_NESTED_IN_HANDLER = '''
+import refusal
+import mod_a
+
+def go(p):
+    try:
+        touch(p)
+    except refusal.Refused:
+        try:
+            return mod_a.load(p)  # inner body: inner try has no handlers,
+        finally:                  # and the outer guards only ITS body
+            touch(p)
+'''
+
+CALLER_FROM_IMPORT_ALIAS = '''
+from mod_a import load as l
+
+def go(p):
+    return l(p)                   # aliased from-import of a raising function
+'''
+
+CALLER_FROM_IMPORT_QUIET_ALIAS = '''
+from mod_a import quiet as q
+
+def go(p):
+    return q(p)                   # alias of a non-raising function: no site
+'''
+
+PLAY_ALPHA = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def run(x):
+    raise Refused("no records")
+'''
+
+PLAY_BETA = '''
+import mod_a
+
+def go(p):
+    return mod_a.load(p)          # this file's OWN site must be reported
+'''
+
+PLAY_GAMMA = '''
+import mod_b
+
+def go(x):
+    return mod_b.measure(x)       # a third same-stem site
+'''
+
+CALLER_AMBIGUOUS_STEM = '''
+from play import run
+
+def go(p):
+    return run(p)                 # WHICH play? the census must not guess
+'''
+
 
 def _tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
     files = {}
@@ -158,11 +257,35 @@ def _tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
                        ("caller_localvar", CALLER_LOCAL_VAR_FALSE_POSITIVE),
                        ("caller_broad", CALLER_BROAD_GUARD),
                        ("caller_exact", CALLER_EXACT_MODULE_GUARD),
-                       ("caller_cli_base", CALLER_CLI_BASE_GUARD)):
+                       ("caller_cli_base", CALLER_CLI_BASE_GUARD),
+                       ("caller_except_clause", CALLER_EXCEPT_CLAUSE),
+                       ("caller_else_clause", CALLER_ELSE_CLAUSE),
+                       ("caller_finally_clause", CALLER_FINALLY_CLAUSE),
+                       ("caller_nested_handler", CALLER_NESTED_IN_HANDLER),
+                       ("caller_from_alias", CALLER_FROM_IMPORT_ALIAS),
+                       ("caller_from_quiet", CALLER_FROM_IMPORT_QUIET_ALIAS)):
         p = tmp_path / f"{name}.py"
         p.write_text(body)
         files[name] = p
     return list(files.values())
+
+
+def _stem_tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
+    """The flat tree plus a three-way same-stem collision and a caller that
+    imports the colliding stem: audition/play.py vs fpga/play.py in the real
+    tree, at three files so both drop directions are exercised."""
+    files = _tree(tmp_path)
+    for sub, body in (("alpha", PLAY_ALPHA), ("beta", PLAY_BETA),
+                      ("gamma", PLAY_GAMMA)):
+        d = tmp_path / sub
+        d.mkdir()
+        p = d / "play.py"
+        p.write_text(body)
+        files.append(p)
+    amb = tmp_path / "caller_stem.py"
+    amb.write_text(CALLER_AMBIGUOUS_STEM)
+    files.append(amb)
+    return files
 
 
 def _scan(tmp_path):
@@ -234,3 +357,261 @@ def test_unguarded_call_under_a_base_cli_dispatch_is_cli_base(tmp_path):
     s = _scan(tmp_path)[("caller_cli_base.py", "mod_a.load")]
     assert s["classification"] == "covered(cli-base)", s
     assert s["guard"] == "none", s
+
+
+# --- #1188 controls: the three gaps the blind-spot list was missing ----------
+# Each starts red against the unfixed scanner; see the module docstring's
+# "three gaps" paragraph in tools/refusal_sibling_scan.py for the shapes.
+
+def test_call_in_a_trys_except_clause_is_not_covered_by_it(tmp_path):
+    """Gap "try-handler credit": any enclosing try used to credit the call,
+    but a handler covers only its try's BODY -- a refusal raised in the
+    except clause of a base-guarded try escapes it."""
+    got = _scan(tmp_path)
+    s = got[("caller_except_clause.py", "mod_a.load")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["guard"] == "none", s
+    body = got[("caller_except_clause.py", "mod_b.measure")]
+    assert body["classification"].startswith("covered"), body  # body still is
+
+
+def test_call_in_a_trys_else_clause_is_not_covered_by_it(tmp_path):
+    s = _scan(tmp_path)[("caller_else_clause.py", "mod_a.load")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["guard"] == "none", s
+
+
+def test_call_in_a_trys_finally_clause_is_not_covered_by_it(tmp_path):
+    s = _scan(tmp_path)[("caller_finally_clause.py", "mod_a.load")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["guard"] == "none", s
+
+
+def test_nested_try_inside_a_handler_guards_only_its_own_body(tmp_path):
+    """Inner try (finally-only, no handlers) inside an outer handler: the
+    call is in the inner body but the outer try guards only its own body."""
+    s = _scan(tmp_path)[("caller_nested_handler.py", "mod_a.load")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["guard"] == "none", s
+
+
+def test_each_same_stem_file_is_scanned_with_its_own_tree(tmp_path):
+    """Gap "stem collision": the index was keyed by stem with setdefault, so
+    of two same-stem files (audition/play.py, fpga/play.py in the real tree)
+    every file after the first was silently dropped -- its own sites
+    unreported and the winner's sites attributed to it."""
+    files = _stem_tree(tmp_path)
+    idx = rss.build_index(files)
+    got = {(s["site"].split("/")[-1].split(":")[0], s["callee"]): s
+           for s in rss.scan(files, idx)}
+    beta = got[("play.py", "mod_a.load")]
+    assert beta["classification"] == "candidate-escape", beta
+    gamma = got[("play.py", "mod_b.measure")]
+    assert gamma["classification"] == "candidate-escape", gamma
+
+
+def test_ambiguous_same_stem_callee_is_named_not_guessed(tmp_path):
+    """A `from play import run` cannot be attributed to one of three
+    same-stem modules from the AST alone: the site is reported as
+    ambiguous-callee with the candidates, never classified by guessing --
+    except where a base/broad guard covers every family anyway."""
+    files = _stem_tree(tmp_path)
+    idx = rss.build_index(files)
+    got = {(s["site"].split("/")[-1].split(":")[0], s["callee"]): s
+           for s in rss.scan(files, idx)}
+    s = got[("caller_stem.py", "play.run")]
+    assert s["classification"] == "ambiguous-callee", s
+    assert len(s["candidates"]) == 3, s
+    assert all(c.endswith("play.py") for c in s["candidates"]), s
+
+
+def test_aliased_from_import_call_resolves_to_the_original_function(tmp_path):
+    """Gap "alias loss": `from x import f as g` recorded only the module, so
+    `g()` looked for a def named g in x, found none, and the raising call
+    vanished from the census."""
+    s = _scan(tmp_path)[("caller_from_alias.py", "mod_a.load")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["origins"] == ["mod_a"], s
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_alias_of_a_non_raising_function_is_not_a_site(tmp_path):
+    assert not [k for k in _scan(tmp_path) if k[0] == "caller_from_quiet.py"]
+
+
+# --- #1193 controls: the borrowed-family blind spot ---------------------------
+# Every borrow control except the shadow pin started red against the unfixed
+# scanner: a from-imported Refused bound no family name, so the borrower's
+# own `raise Refused` read as raising no family and its `except Refused`
+# handlers read as shape `other` -- both sides of the census silenced.
+
+BORROWING_CALLEE = '''
+from mod_a import Refused as R           # the family, BORROWED (aliased)
+
+def fetch(p):
+    raise R(f"cannot use {p}")
+'''
+
+BORROW_CALLEE_CALLER = '''
+import borrow_callee
+
+def go(p):
+    return borrow_callee.fetch(p)        # unguarded: the site the census lost
+'''
+
+BORROWING_HANDLER = '''
+import mod_a
+import mod_b
+from mod_a import Refused                # the borrower's guard, unaliased
+
+def go(p):
+    try:
+        mod_a.load(p)                    # covered: the class IS mod_a's
+        mod_b.measure(p)                 # NOT covered: mod_b's is a sibling
+    except Refused as e:
+        print("REFUSED", e)
+'''
+
+BORROWING_HANDLER_ALIAS = '''
+import mod_a
+import mod_b
+from mod_a import Refused as R           # the borrower's guard, aliased
+
+def go(p):
+    try:
+        mod_a.load(p)
+        mod_b.measure(p)
+    except R as e:
+        print("REFUSED", e)
+'''
+
+TWO_STEM_BORROWER = '''
+import mod_a
+import mod_b
+from mod_a import Refused as RA          # two different lenders...
+from mod_b import Refused as RB
+
+def go(p):
+    try:
+        mod_a.load(p)
+        mod_b.measure(p)
+    except RA as e:                      # ...so each name covers only its own
+        print("A", e)
+    except RB as e:
+        print("B", e)
+'''
+
+BORROW_SHADOWED_BY_CLASS = '''
+import refusal
+import mod_a
+from mod_a import Refused                # borrowed first...
+
+class Refused(refusal.Refused, Exception):   # ...then rebound to a local def
+    pass
+
+def go(p):
+    try:
+        mod_a.load(p)
+    except Refused as e:                 # the LOCAL sibling: does not cover
+        print("REFUSED", e)
+'''
+
+CLASS_SHADOWED_BY_BORROW = '''
+import refusal
+import mod_a
+
+class Refused(refusal.Refused, Exception):   # local first...
+    pass
+
+from mod_a import Refused                # ...then rebound to the borrow
+
+def go(p):
+    try:
+        mod_a.load(p)
+    except Refused as e:                 # mod_a's class again: covers it
+        print("REFUSED", e)
+'''
+
+
+def _borrow_tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
+    files = _tree(tmp_path)
+    for name, body in (("borrow_callee", BORROWING_CALLEE),
+                       ("borrow_caller", BORROW_CALLEE_CALLER),
+                       ("borrow_handler", BORROWING_HANDLER),
+                       ("borrow_handler_alias", BORROWING_HANDLER_ALIAS),
+                       ("borrow_two_stems", TWO_STEM_BORROWER),
+                       ("borrow_shadowed", BORROW_SHADOWED_BY_CLASS),
+                       ("class_shadowed", CLASS_SHADOWED_BY_BORROW)):
+        p = tmp_path / f"{name}.py"
+        p.write_text(body)
+        files.append(p)
+    return files
+
+
+def _borrow_scan(tmp_path):
+    files = _borrow_tree(tmp_path)
+    idx = rss.build_index(files)
+    return {(s["site"].split("/")[-1].split(":")[0], s["callee"]): s
+            for s in rss.scan(files, idx)}
+
+
+def test_raise_of_a_borrowed_family_resolves_to_the_lenders_origin(tmp_path):
+    """Gap "borrowed family": `from mod_a import Refused as R` bound no family
+    name, so `raise R(...)` in the borrower read as raising nothing and this
+    caller's site vanished from the census entirely."""
+    s = _borrow_scan(tmp_path)[("borrow_caller.py", "borrow_callee.fetch")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["origins"] == ["mod_a"], s
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_borrowed_handler_covers_exactly_the_lender_and_no_sibling(tmp_path):
+    """The res_tuning shape: `except Refused` written with a borrowed Refused
+    covers the lender's origin (shape `exact` -- the class IS the lender's)
+    and nothing else, which is why the sibling module stays a candidate."""
+    got = _borrow_scan(tmp_path)
+    s = got[("borrow_handler.py", "mod_a.load")]
+    assert s["classification"].startswith("covered"), s
+    assert s["guard"] == "exact", s
+    sib = got[("borrow_handler.py", "mod_b.measure")]
+    assert sib["classification"] == "candidate-escape", sib
+    assert sib["uncovered"] == ["mod_b"], sib
+
+
+def test_aliased_borrowed_handler_covers_exactly_the_lender(tmp_path):
+    got = _borrow_scan(tmp_path)
+    s = got[("borrow_handler_alias.py", "mod_a.load")]
+    assert s["classification"].startswith("covered"), s
+    assert s["guard"] == "exact", s
+    sib = got[("borrow_handler_alias.py", "mod_b.measure")]
+    assert sib["classification"] == "candidate-escape", sib
+
+
+def test_borrow_from_two_stems_covers_each_name_to_its_own_lender(tmp_path):
+    """`Refused` borrowed under two names from two lenders: each handler
+    covers only its own lender's class, not the other's."""
+    got = _borrow_scan(tmp_path)
+    a = got[("borrow_two_stems.py", "mod_a.load")]
+    assert a["classification"].startswith("covered"), a
+    b = got[("borrow_two_stems.py", "mod_b.measure")]
+    assert b["classification"].startswith("covered"), b
+
+
+def test_borrow_shadowed_by_a_local_class_stays_an_escape(tmp_path):
+    """Python's last binding wins: a `class Refused` def AFTER the borrow
+    rebinds the name to a local sibling, so the handler no longer covers the
+    lender. A control, not a red-first case -- it pins the fix against
+    crediting every binding the module ever made."""
+    s = _borrow_scan(tmp_path)[("borrow_shadowed.py", "mod_a.load")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+    assert s["guard"] == "local", s
+
+
+def test_local_class_shadowed_by_a_borrow_covers_the_lender(tmp_path):
+    """The reverse shadow: the borrow comes after the class def, so the name
+    is the lender's class again and the handler covers it (shape `exact`,
+    not `local`)."""
+    s = _borrow_scan(tmp_path)[("class_shadowed.py", "mod_a.load")]
+    assert s["classification"].startswith("covered"), s
+    assert s["guard"] == "exact", s
