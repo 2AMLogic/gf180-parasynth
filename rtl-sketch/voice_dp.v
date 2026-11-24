@@ -71,8 +71,8 @@ module voice_dp #(
     input  wire [7:0]  wr_addr,
     input  wire [31:0] wr_data,
     // the drum section's two buses (DR 0008, 15.5/15.6), valid this frame once drum_done
-    input  wire signed [21:0] dmix,
-    input  wire signed [18:0] body,
+    input  wire signed [22:0] dmix,      // 22 + 1: the COUPLED mix bus (15.10; bypass = the raw bus, sign-extended)
+    input  wire signed [19:0] body,      // 19 + 1: likewise
     input  wire        drum_done,
     // out
     output reg  signed [15:0] sample,
@@ -276,7 +276,7 @@ module voice_dp #(
     reg [39:0] pacc;
     // the output stage's accumulators, all EXACT (contract 12): no shift and no
     // clamp until the single one at the end.
-    reg signed [38:0] dacc;            // dmix*dvol + body*bvol   , |.| < 2^37
+    reg signed [39:0] dacc;            // dmix*dvol + body*bvol   , |.| < 2^38 + 2^35 (23-bit dmix x 16-bit gain: 39 bits would wrap)
     reg signed [35:0] macc;            // v*vol                   , |.| < 2^34
     reg signed [39:0] tacc;            // the whole sum           , |.| < 2^38
     reg signed [18:0] d19;             // the drum bus after the drum filter
@@ -591,30 +591,37 @@ module voice_dp #(
     function signed [15:0] sat16m(input signed [19:0] v);
         sat16m = (v > 20'sd32767) ? 16'sd32767 : (v < -20'sd32768) ? -16'sd32768 : v[15:0];
     endfunction
-    function signed [15:0] sat16q(input signed [23:0] v);          // the drum filter's input rail
-        sat16q = (v > 24'sd32767) ? 16'sd32767 : (v < -24'sd32768) ? -16'sd32768 : v[15:0];
+    function signed [15:0] sat16q(input signed [24:0] v);          // the drum filter's input rail
+        sat16q = (v > 25'sd32767) ? 16'sd32767 : (v < -25'sd32768) ? -16'sd32768 : v[15:0];
     endfunction
     function signed [15:0] sat16t(input signed [24:0] v);          // the chip's ONE rail
         sat16t = (v > 25'sd32767) ? 16'sd32767 : (v < -25'sd32768) ? -16'sd32768 : v[15:0];
     endfunction
-    wire signed [23:0] dq = dacc >>> 15;                           // the drum bus as a Q4.15 word
+    wire signed [24:0] dq = dacc >>> 15;                           // the drum bus as a Q4.15 word
     wire signed [24:0] tsh = tacc >>> 15;
     // the two buses as they enter the gains. NEGATIVE CONTROL: clipped to 16
     // bits first, which contract 12 says must not happen ("a bus clipped to 16
     // bits before the master gains could not be recovered by lowering them").
 `ifdef INJECT_BUG_VOICE_DRUM_CLAMP16
-    wire signed [24:0] dmix_m = {{9{dmix[21]}}, ((dmix > 22'sd32767) ? 16'sd32767 :
-                                 (dmix < -22'sd32768) ? -16'sd32768 : dmix[15:0])};
-    wire signed [24:0] body_m = {{9{body[18]}}, ((body > 19'sd32767) ? 16'sd32767 :
-                                 (body < -19'sd32768) ? -16'sd32768 : body[15:0])};
+    wire signed [24:0] dmix_m = {{9{dmix[22]}}, ((dmix > 23'sd32767) ? 16'sd32767 :
+                                 (dmix < -23'sd32768) ? -16'sd32768 : dmix[15:0])};
+    wire signed [24:0] body_m = {{9{body[19]}}, ((body > 20'sd32767) ? 16'sd32767 :
+                                 (body < -20'sd32768) ? -16'sd32768 : body[15:0])};
 `else
-    wire signed [24:0] dmix_m = {{3{dmix[21]}}, dmix};
-    wire signed [24:0] body_m = {{6{body[18]}}, body};
+`ifdef INJECT_BUG_VOICE_COUPLED_TRUNC
+    // NEGATIVE CONTROL: the pre-#552 widths -- the coupled buses' added bit is dropped on entry
+    wire signed [24:0] dmix_m = {{3{dmix[21]}}, dmix[21:0]};
+    wire signed [24:0] body_m = {{6{body[18]}}, body[18:0]};
+`else
+    wire signed [24:0] dmix_m = {{2{dmix[22]}}, dmix};
+    wire signed [24:0] body_m = {{5{body[19]}}, body};
+`endif
 `endif
     // NEGATIVE CONTROL: each product floored to Q.15 before the sum -- two
     // floors instead of contract 12's one.
     wire signed [39:0] macc_r = $signed({macc[35:15], 15'b0});
-    wire signed [39:0] dacc_r = $signed({dacc[38:15], 15'b0});
+    wire signed [39:0] dacc_r = $signed({dacc[39:15], 15'b0});
+    wire signed [39:0] dacc_sum = dacc + $signed(mr[39:0]);          // S_DM2's sum, exact in 40 bits
 
     integer i;
     always @(posedge clk) begin
@@ -968,8 +975,13 @@ module voice_dp #(
                 S_YWAIT: if (y_seen && drum_done) begin
                     ma <= dmix_m; mb <= {5'b0, dvol}; state <= S_DM1;
                 end
-                S_DM1: begin dacc <= $signed(mr[38:0]); ma <= body_m; mb <= {5'b0, bvol}; state <= S_DM2; end
-                S_DM2: begin dacc <= dacc + $signed(mr[38:0]); state <= S_DFLT; end
+                S_DM1: begin dacc <= $signed(mr[39:0]); ma <= body_m; mb <= {5'b0, bvol}; state <= S_DM2; end
+`ifdef INJECT_BUG_VOICE_DACC39
+                // NEGATIVE CONTROL: the drum-gain sum kept to 39 bits, as before the buses grew (wraps)
+                S_DM2: begin dacc <= {dacc_sum[38], dacc_sum[38:0]}; state <= S_DFLT; end
+`else
+                S_DM2: begin dacc <= dacc + $signed(mr[39:0]); state <= S_DFLT; end
+`endif
                 // the drum filter runs on sat16 of the GAIN-SCALED drum bus
                 // (ARCHITECTURE.md 4.1: its input is sat16(drum_bus), and its
                 // rail is the designed mixer-overload rail); the VCA multiply

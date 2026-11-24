@@ -34,6 +34,7 @@ module tb_drums;
     reg [25:0] a2_r     [0:MODES-1];
     reg [15:0] amp_r    [0:MODES-1];
     reg [1:0]  num_r    [0:MODES-1];
+    reg        couple_r;                    // COUPLE (0x30) bit 0: the bench's copy of the register
     reg [STOPS*16-1:0] accent_bus;
     reg [6*24-1:0]     osc_inc_bus;
     reg [ENVS*27-1:0]  env_ctl_bus;
@@ -58,20 +59,20 @@ module tb_drums;
         end
     end
 
-    wire signed [21:0] mix_out; wire mix_valid;
-    wire signed [18:0] body_out; wire body_valid;
+    wire signed [22:0] mix_out; wire mix_valid;          // 22 + 1: the coupled bus (15.10)
+    wire signed [19:0] body_out; wire body_valid;        // 19 + 1
     drum_kit #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .NUMS(NUMS), .STOPS(STOPS), .MW(MW)) dut (
         .clk(clk), .rst_n(rst_n), .frame_tick(frame_tick), .stops(stops_r), .accent_bus(accent_bus),
         .osc_inc_bus(osc_inc_bus), .env_ctl_bus(env_ctl_bus), .env_peak_bus(env_peak_bus),
         .env_rate_bus(env_rate_bus), .env_frate_bus(env_frate_bus), .path_bus(path_bus), .a1_bus(a1_bus), .a2_bus(a2_bus),
-        .amp_bus(amp_bus), .num_bus(num_bus), .mix_out(mix_out), .mix_valid(mix_valid),
+        .amp_bus(amp_bus), .num_bus(num_bus), .couple_en(couple_r), .mix_out(mix_out), .mix_valid(mix_valid),
         .body_out(body_out), .body_valid(body_valid));
     always #10 clk = ~clk;
 
     task clear_image;
         integer j;
         begin
-            stops_r = 0;
+            stops_r = 0; couple_r = 0;
             for (j = 0; j < STOPS; j = j + 1) accent_r[j] = 0;
             for (j = 0; j < 6; j = j + 1) osc_r[j] = 0;
             for (j = 0; j < ENVS; j = j + 1) begin ectl_r[j] = 0; peak_r[j] = 0; rate_r[j] = 0; frate_r[j] = 0; end
@@ -86,6 +87,7 @@ module tb_drums;
             if (a == 8'hFF) begin
                 clear_image; rst_n = 0; @(negedge clk); @(negedge clk); rst_n = 1;
             end else if (a == 8'h00) stops_r = v[STOPS-1:0];
+            else if (a == 8'h30) couple_r = v[0];            // bits 31..1 reserved, ignored (15.10)
             else if (a >= 8'h10 && a < 8'h10 + STOPS) accent_r[a - 8'h10] = v[15:0];
             else if (a >= 8'h20 && a < 8'h26) osc_r[a - 8'h20] = v[23:0];
             else if (a >= 8'h40 && a < 8'h40 + ENVS * 4) begin

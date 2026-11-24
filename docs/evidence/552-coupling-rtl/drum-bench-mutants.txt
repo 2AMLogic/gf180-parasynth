@@ -1,0 +1,99 @@
+# drum bench mutants, round 1 (before the HIT/RETUNE hooks were made sticky; 3 of 8 NOT caught: wrong-then-right)
+==============================================================================
+PASS           300.7s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_BYPASS --expect-fail --outdir /tmp/m/COUPLE_BYPASS
+                73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+                model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+              verify_drums: simulating drum_kit.v with INJECT_BUG_DRUM_COUPLE_BYPASS
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: FAIL -- 137986 of 146356 samples differ (0 undefined/X)
+                first mismatch at sample 22: model 1964, RTL 1965, error +1 LSB
+                worst |error| 48993 LSB; error RMS 3504.0 LSB vs signal RMS 32924.2 LSB (-19.5 dB)
+              verify_drums: negative control DRUM_COUPLE_BYPASS CAUGHT (comparison failed as required)
+PASS           296.4s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_MISPLACED --expect-fail --outdir /tmp/m/COUPLE_MISPLACED
+                73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+                model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+              verify_drums: simulating drum_kit.v with INJECT_BUG_DRUM_COUPLE_MISPLACED
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: FAIL -- 8383 of 146356 samples differ (0 undefined/X)
+                first mismatch at sample 36530: model 40422, RTL 32767, error -7655 LSB
+                worst |error| 84479 LSB; error RMS 2218.7 LSB vs signal RMS 32924.2 LSB (-23.4 dB)
+              verify_drums: negative control DRUM_COUPLE_MISPLACED CAUGHT (comparison failed as required)
+FAIL(1)        290.1s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_HIT_CLEAR --expect-fail --outdir /tmp/m/COUPLE_HIT_CLEAR
+              verify_drums: model DrumsFx(18 envelopes, 23 paths, bank 16 modes / 11 with numerators, headroom 0, 19-bit body word)
+                coupling coverage (model): 67257 of 73178 frames differ from the bypass on the mix bus, 70729 on the body bus; charge needed 26/27 bits (limit 32/29), output 18/20 bits (limit 23/20)
+                73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+                model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+              verify_drums: simulating drum_kit.v with INJECT_BUG_DRUM_COUPLE_HIT_CLEAR
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: PASS -- 146356 samples, RTL identical to model
+              verify_drums: NEGATIVE CONTROL NOT CAUGHT (status 0)
+FAIL(1)        291.3s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_RETUNE_CLEAR --expect-fail --outdir /tmp/m/COUPLE_RETUNE_CLEAR
+              verify_drums: model DrumsFx(18 envelopes, 23 paths, bank 16 modes / 11 with numerators, headroom 0, 19-bit body word)
+                coupling coverage (model): 67257 of 73178 frames differ from the bypass on the mix bus, 70729 on the body bus; charge needed 26/27 bits (limit 32/29), output 18/20 bits (limit 23/20)
+                73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+                model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+              verify_drums: simulating drum_kit.v with INJECT_BUG_DRUM_COUPLE_RETUNE_CLEAR
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: PASS -- 146356 samples, RTL identical to model
+              verify_drums: NEGATIVE CONTROL NOT CAUGHT (status 0)
+FAIL(1)        257.3s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_NARROW_ACC --expect-fail --outdir /tmp/m/COUPLE_NARROW_ACC
+              verify_drums: model DrumsFx(18 envelopes, 23 paths, bank 16 modes / 11 with numerators, headroom 0, 19-bit body word)
+                coupling coverage (model): 67257 of 73178 frames differ from the bypass on the mix bus, 70729 on the body bus; charge needed 26/27 bits (limit 32/29), output 18/20 bits (limit 23/20)
+                73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+                model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+              verify_drums: simulating drum_kit.v with INJECT_BUG_DRUM_COUPLE_NARROW_ACC
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: PASS -- 146356 samples, RTL identical to model
+              verify_drums: NEGATIVE CONTROL NOT CAUGHT (status 0)
+PASS           259.5s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_NARROW_OUT --expect-fail --outdir /tmp/m/COUPLE_NARROW_OUT
+                73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+                model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+              verify_drums: simulating drum_kit.v with INJECT_BUG_DRUM_COUPLE_NARROW_OUT
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: FAIL -- 860 of 146356 samples differ (0 undefined/X)
+                first mismatch at sample 129411: model -263164, RTL 261124, error +524288 LSB
+                worst |error| 524288 LSB; error RMS 40189.6 LSB vs signal RMS 32924.2 LSB (+1.7 dB)
+              verify_drums: negative control DRUM_COUPLE_NARROW_OUT CAUGHT (comparison failed as required)
+PASS           204.8s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_SHIFT_LOGICAL --expect-fail --outdir /tmp/m/COUPLE_SHIFT_LOGICAL
+                73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+                model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+              verify_drums: simulating drum_kit.v with INJECT_BUG_DRUM_COUPLE_SHIFT_LOGICAL
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: FAIL -- 92332 of 146356 samples differ (0 undefined/X)
+                first mismatch at sample 637: model -11710, RTL 512578, error +524288 LSB
+                worst |error| 4194304 LSB; error RMS 43834.8 LSB vs signal RMS 32924.2 LSB (+2.5 dB)
+              verify_drums: negative control DRUM_COUPLE_SHIFT_LOGICAL CAUGHT (comparison failed as required)
+PASS           200.9s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_FROZEN --expect-fail --outdir /tmp/m/COUPLE_FROZEN
+                73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+                model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+              verify_drums: simulating drum_kit.v with INJECT_BUG_DRUM_COUPLE_FROZEN
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: FAIL -- 19809 of 146356 samples differ (0 undefined/X)
+                first mismatch at sample 37122: model -11101, RTL -9083, error +2018 LSB
+                worst |error| 4061 LSB; error RMS 193.6 LSB vs signal RMS 32924.2 LSB (-44.6 dB)
+              verify_drums: negative control DRUM_COUPLE_FROZEN CAUGHT (comparison failed as required)
+==============================================================================
+5/8 passed  --  FAIL python3 rtl-sketch/verify_drums.py --short -; FAIL python3 rtl-sketch/verify_drums.py --short -; FAIL python3 rtl-sketch/verify_drums.py --short -
+
+# round 2 (sticky hooks) + clean enabled
+==============================================================================
+PASS           218.3s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_HIT_CLEAR --expect-fail --outdir /tmp/m2/hit
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: FAIL -- 130197 of 146356 samples differ (0 undefined/X)
+                first mismatch at sample 22: model 1964, RTL 1965, error +1 LSB
+                worst |error| 12156 LSB; error RMS 871.4 LSB vs signal RMS 32924.2 LSB (-31.5 dB)
+              verify_drums: negative control DRUM_COUPLE_HIT_CLEAR CAUGHT (comparison failed as required)
+PASS           218.1s  python3 rtl-sketch/verify_drums.py --short --inject DRUM_COUPLE_RETUNE_CLEAR --expect-fail --outdir /tmp/m2/retune
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: FAIL -- 121855 of 146356 samples differ (0 undefined/X)
+                first mismatch at sample 22: model 1964, RTL 1965, error +1 LSB
+                worst |error| 46170 LSB; error RMS 2580.3 LSB vs signal RMS 32924.2 LSB (-22.1 dB)
+              verify_drums: negative control DRUM_COUPLE_RETUNE_CLEAR CAUGHT (comparison failed as required)
+PASS            99.6s  python3 rtl-sketch/verify_drums.py --short --outdir /tmp/m2/clean
+                73178 frames, 1001 writes; fires per stop [11, 6, 5, 5, 15, 7, 13, 6, 4, 4, 4]; envelope fires 128, chokes 21, re-strikes 41, floor steps (dec = 0, level > 0) 8896
+                model corners reached: bank state saturated 4134x, body word saturated 1963x, taps at the rail 7263x; |dmix| max 105834 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 6, |body| 10606
+              verify_drums: simulating drum_kit.v
+                sim: tb_drums: 73178 frames, 1001 writes applied of 1001, cycles/frame mean 118 worst 118 (tick to body_valid)
+              verify_drums: PASS -- 146356 samples, RTL identical to model
+==============================================================================
+3/3 passed

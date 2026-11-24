@@ -77,7 +77,7 @@ module tb_voice;
     wire signed [15:0] mixed; wire [14:0] ae, fe, cut; wire [16:0] k_eff; wire signed [18:0] y19;
     voice_dp dut (.clk(clk), .rst_n(rst_n), .go(go),
                   .wr_valid(wr_valid), .wr_flag(wr_flag), .wr_addr(wr_addr), .wr_data(wr_data),
-                  .dmix(22'sd0), .body(19'sd0), .drum_done(1'b1),
+                  .dmix(23'sd0), .body(20'sd0), .drum_done(1'b1),
                   .sample(sample), .sample_valid(sample_valid), .busy(busy),
                   .mixed(mixed), .ae(ae), .fe(fe), .cut(cut), .k_eff(k_eff), .y19(y19));
     always #10 clk = ~clk;

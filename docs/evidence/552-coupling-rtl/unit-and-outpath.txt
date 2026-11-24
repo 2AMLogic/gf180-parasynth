@@ -1,0 +1,75 @@
+# #552 evidence, unit/output-path benches. base 4c3313f
+Icarus Verilog version 13.0 (stable) (v13_0)
+
+$ python3 rtl-sketch/verify_couple.py --outdir /tmp/e/c
+verify_couple: 197200 samples; model charge bits needed 32/29 (limit 32/29), output bits 23/20 (limit 23/20); closed-form checks passed
+verify_couple: simulating drum_dcblock
+verify_couple: PASS -- 197200 samples x 2 buses, RTL identical to model
+# exit=0
+
+$ python3 rtl-sketch/verify_couple.py --inject BYPASS --expect-fail --outdir /tmp/e/cBYPASS
+verify_couple: 197200 samples; model charge bits needed 32/29 (limit 32/29), output bits 23/20 (limit 23/20); closed-form checks passed
+verify_couple: simulating drum_dcblock with INJECT_BUG_DRUM_COUPLE_BYPASS
+verify_couple: FAIL -- mismatches mix 170070, body 170032 of 197200 samples each (0 undefined/X)
+  first mix mismatch at sample 1024: model 0, RTL 1
+  first body mismatch at sample 1024: model 0, RTL 1
+  mismatches by segment: reversal to lo: 80000, reversal to hi: 80000, rest at +hi: 79998, charge to full before reset: 40000, toggling enable on random full scale: 11999, re-enabled: 7920, zero: 6000, en toggle: 6000
+verify_couple: negative control BYPASS CAUGHT (comparison failed as required)
+# exit=0
+
+$ python3 rtl-sketch/verify_couple.py --inject NARROW_ACC --expect-fail --outdir /tmp/e/cNARROW_ACC
+verify_couple: 197200 samples; model charge bits needed 32/29 (limit 32/29), output bits 23/20 (limit 23/20); closed-form checks passed
+verify_couple: simulating drum_dcblock with INJECT_BUG_DRUM_COUPLE_NARROW_ACC
+verify_couple: FAIL -- mismatches mix 150017, body 147930 of 197200 samples each (0 undefined/X)
+  first mix mismatch at sample 31910: model 1047998, RTL 3145150
+  first body mismatch at sample 31910: model 131000, RTL 393144
+  mismatches by segment: reversal to lo: 80000, reversal to hi: 80000, rest at +hi: 78580, charge to full before reset: 38581, re-enabled: 8000, toggling enable on random full scale: 6742, zero: 6000, en toggle: 44
+verify_couple: negative control NARROW_ACC CAUGHT (comparison failed as required)
+# exit=0
+
+$ python3 rtl-sketch/verify_couple.py --inject NARROW_OUT --expect-fail --outdir /tmp/e/cNARROW_OUT
+verify_couple: 197200 samples; model charge bits needed 32/29 (limit 32/29), output bits 23/20 (limit 23/20); closed-form checks passed
+verify_couple: simulating drum_dcblock with INJECT_BUG_DRUM_COUPLE_NARROW_OUT
+verify_couple: FAIL -- mismatches mix 1460, body 1456 of 197200 samples each (0 undefined/X)
+  first mix mismatch at sample 71200: model -4194303, RTL 1
+  first body mismatch at sample 71200: model -524287, RTL 1
+  mismatches by segment: reversal to lo: 1420, reversal to hi: 1420, toggling enable on random full scale: 54, en toggle: 17, charge to full before reset: 5
+verify_couple: negative control NARROW_OUT CAUGHT (comparison failed as required)
+# exit=0
+
+$ python3 rtl-sketch/verify_couple.py --inject SHIFT_LOGICAL --expect-fail --outdir /tmp/e/cSHIFT_LOGICAL
+verify_couple: 197200 samples; model charge bits needed 32/29 (limit 32/29), output bits 23/20 (limit 23/20); closed-form checks passed
+verify_couple: simulating drum_dcblock with INJECT_BUG_DRUM_COUPLE_SHIFT_LOGICAL
+verify_couple: FAIL -- mismatches mix 90963, body 95254 of 197200 samples each (0 undefined/X)
+  first mix mismatch at sample 2201: model 0, RTL -4194304
+  first body mismatch at sample 2201: model 0, RTL -524288
+  mismatches by segment: reversal to lo: 78580, charge to full before reset: 34721, reversal to hi: 30270, toggling enable on random full scale: 11998, en toggle: 6000, after reset: 5979, dead-zone step -1023 en=1: 2998, dead-zone step -1024 en=1: 2998
+verify_couple: negative control SHIFT_LOGICAL CAUGHT (comparison failed as required)
+# exit=0
+
+$ python3 rtl-sketch/verify_couple.py --inject FROZEN --expect-fail --outdir /tmp/e/cFROZEN
+verify_couple: 197200 samples; model charge bits needed 32/29 (limit 32/29), output bits 23/20 (limit 23/20); closed-form checks passed
+verify_couple: simulating drum_dcblock with INJECT_BUG_DRUM_COUPLE_FROZEN
+verify_couple: FAIL -- mismatches mix 22323, body 21900 of 197200 samples each (0 undefined/X)
+  first mix mismatch at sample 158200: model -3706, RTL -113305
+  first body mismatch at sample 158200: model 645, RTL -13056
+  mismatches by segment: charge to full before reset: 18246, toggling enable on random full scale: 11977, re-enabled: 8000, en toggle: 6000
+verify_couple: negative control FROZEN CAUGHT (comparison failed as required)
+# exit=0
+
+$ python3 rtl-sketch/verify_outpath.py --outdir /tmp/e/o
+verify_outpath: 413 cases (8 beyond 2^38), DFILT=0 sample and DFILT=1 filter-rail checked
+verify_outpath: PASS -- every case identical to the closed form
+# exit=0
+
+$ python3 rtl-sketch/verify_outpath.py --inject COUPLED_TRUNC --expect-fail --outdir /tmp/e/oCOUPLED_TRUNC
+verify_outpath: 413 cases (8 beyond 2^38), DFILT=0 sample and DFILT=1 filter-rail checked
+verify_outpath: FAIL -- 205 sample mismatches (DFILT=0), 42 drum-filter-rail mismatches (DFILT=1), 0 undefined; first: case 0 (dmix, body, dvol, bvol, dfilt) = (-4194304, -524288, 65535, 65535, 0): want -32768, RTL 0
+verify_outpath: negative control COUPLED_TRUNC CAUGHT
+# exit=0
+
+$ python3 rtl-sketch/verify_outpath.py --inject DACC39 --expect-fail --outdir /tmp/e/oDACC39
+verify_outpath: 413 cases (8 beyond 2^38), DFILT=0 sample and DFILT=1 filter-rail checked
+verify_outpath: FAIL -- 6 sample mismatches (DFILT=0), 2 drum-filter-rail mismatches (DFILT=1), 0 undefined; first: case 0 (dmix, body, dvol, bvol, dfilt) = (-4194304, -524288, 65535, 65535, 0): want -32768, RTL 32767
+verify_outpath: negative control DACC39 CAUGHT
+# exit=0
