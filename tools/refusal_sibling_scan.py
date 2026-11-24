@@ -41,7 +41,12 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     (#1188 "stem collision", fixed);
   * `from x import f as g` keeps the ORIGINAL name, so a `g()` call
     resolves to f's raise origins instead of vanishing (#1188 "alias
-    loss", fixed).
+    loss", fixed);
+  * a family class BORROWED by from-import is visible: after
+    `from x import Refused [as R]`, a `raise R(...)` in the borrower
+    resolves to x's origin and an `except R` handler covers it -- shape
+    `exact`, because the borrowed class IS x's; only a class defined in
+    the module itself reads `local` (#1193 "borrowed family", fixed).
 
 WHAT IT CANNOT TELL YOU, and why the per-site list is an inventory, not a
 verdict. A dotted call is not necessarily a raising call on the CLI's input
@@ -61,22 +66,13 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     frames are not modelled, so `candidate-escape` means "unguarded here
     and no base guard at the boundary", never "escapes at the exit".
   * test files are excluded: they are not CLI callers and their
-    `pytest.raises` sites are deliberate;
-  * a family class BORROWED by from-import is invisible: after
-    `from x import Refused`, both a `raise Refused` in the borrower and an
-    `except Refused` handler read as no family at all (borrowers in this
-    tree: model/res_tuning.py:68, tools/compare_ladder_candidates.py:78,
-    tools/compare_ensemble_candidate.py:49). KNOWN NON-ZERO: 9 census
-    sites (7 in model/res_tuning.py, 2 in tools/compare_ladder_candidates.py)
-    are listed candidate-escape while a borrowed handler covers them. Found
-    by #1188's same-shape search; deliberately unfixed there because
-    repairing it changes the census, which that issue pins unchanged.
+    `pytest.raises` sites are deliberate.
 
-Three further gaps were filed against this list in #1188 -- try-handler
-credit, stem collision, alias loss -- and are FIXED as of that issue's
-planted-shape controls (see WHAT THIS SCAN RESOLVES above); they are named
-here so a reader searching the blind-spot list for them finds their true
-status instead of an absence.
+Four further gaps were filed against this list -- try-handler credit,
+stem collision and alias loss in #1188, the borrowed family in #1193 --
+and are FIXED as of those issues' planted-shape controls (see WHAT THIS
+SCAN RESOLVES above); they are named here so a reader searching the
+blind-spot list for them finds their true status instead of an absence.
 
 NOT A GATE. Totals are reported, never pinned: the exit-status census
 (`tools/refusal_exit_census.py`) learned that a totals pin reds on every
@@ -120,7 +116,8 @@ class ModInfo:
         self.from_imports: dict[str, tuple[str, str]] = {}  # local name -> (stem, original name)
         self.funcs: dict[str, ast.FunctionDef] = {}
         self.refused_origin: str | None = None   # stem whose class our Refused is
-        self.refused_names: set[str] = set()     # names bound to our Refused
+        self.refused_names: dict[str, str] = {}  # family name -> stem it last resolved to
+        self.has_local_family = False            # a local `class Refused` def (maybe shadowed)
         self._read_bindings()
 
     def resolve_head(self, head: str) -> str | None:
@@ -142,9 +139,16 @@ class ModInfo:
                     # the ORIGINAL name is kept (`from x import f as g`):
                     # a `g()` call resolves to f's def, not to a missing g
                     self.from_imports[a.asname or a.name] = (stem, a.name)
+                    if a.name == FAMILY_NAME:
+                        # a BORROWED family class binds its name (aliased or
+                        # not) to the LENDER's stem, last binding wins -- the
+                        # same rule the Assign alias below follows (#1193)
+                        nm = a.asname or FAMILY_NAME
+                        self.refused_origin = stem
+                        self.refused_names[nm] = stem
             elif isinstance(node, ast.ClassDef) and node.name == FAMILY_NAME:
                 self.refused_origin = self.path.stem      # a local class
-                self.refused_names.add(FAMILY_NAME)
+                self.refused_names[FAMILY_NAME] = self.path.stem
                 self.has_local_family = True
             elif isinstance(node, ast.Assign):
                 for t in node.targets:
@@ -154,7 +158,7 @@ class ModInfo:
                         h = node.value.value.id
                         src = self.resolve_head(h) or h
                         self.refused_origin = src
-                        self.refused_names.add(FAMILY_NAME)
+                        self.refused_names[FAMILY_NAME] = src
         for node in ast.walk(self.tree):
             if isinstance(node, ast.FunctionDef):
                 self.funcs.setdefault(node.name, node)
@@ -209,8 +213,8 @@ def raise_origins(mod: ModInfo, fname: str) -> set[str]:
             if isinstance(exc, ast.Call):        # `raise Refused("reason")`
                 exc = exc.func
             txt = ast.unparse(exc)
-            if txt == FAMILY_NAME and mod.refused_origin:
-                out.add(mod.refused_origin)
+            if txt in mod.refused_names:
+                out.add(mod.refused_names[txt])
             elif "." in txt:
                 head = txt.split(".")[0]
                 stem = mod.resolve_head(head) or head
@@ -264,10 +268,15 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
             else:
                 shapes.add("other")
         elif txt in mod.refused_names:
-            o = origin_of(by_stem, mod.refused_origin or mod.path.stem)
+            o = origin_of(by_stem, mod.refused_names[txt])
             if o:
                 origins.add(o)
-            shapes.add("local")
+            # shape: `local` only for a class DEFINED in this module; a
+            # borrowed or assigned name is the lender's own class, so the
+            # handler is exact (#1193)
+            shapes.add("local" if (mod.has_local_family
+                                   and mod.refused_names[txt] == mod.path.stem)
+                       else "exact")
         else:
             shapes.add("other")
     shape = ("base" if "base" in shapes else "broad" if "broad" in shapes
