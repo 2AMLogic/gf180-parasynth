@@ -830,6 +830,16 @@ jobs:
       # (e.g. M5A above, #1148) does not skip the phrase run: with the default
       # success() every earlier failure silently removed it, and it never
       # executed in any dispatch (PR #1133 review, finding B).
+      #
+      # The phrase step itself additionally gates on the identity step's
+      # outcome (#1154): a failed step does NOT set cancelled(), so a bare
+      # !cancelled() phrase step would still run after a failed setup and
+      # score the phrases under the apt verilator 5.020-1, emitting an
+      # ungrounded M5A/M5B report. --assert-path refuses (rather than
+      # reports) unless PATH resolves the pinned 5.052 build, and
+      # steps.verilator_identity.outcome == 'success' turns that refusal
+      # into a skipped phrase run. An earlier red step with identity green
+      # still runs the phrases: !cancelled() keeps #1133's reachability.
       - if: ${{ !cancelled() }}
         run: sudo apt-get install -y autoconf flex libfl-dev bison help2man
       - if: ${{ !cancelled() }}
@@ -839,8 +849,12 @@ jobs:
           key: ubuntu24-verilator-ea338be98e1e838d3518809ce8899f85a009963c
       - if: ${{ !cancelled() }}
         run: python tools/setup_ci_verilator.py
-      - name: pulse2x -- complete M5A and M5B phrases decoded from I2S and scored independently
+      - name: refuse the phrase run unless PATH resolves the pinned Verilator
+        id: verilator_identity
         if: ${{ !cancelled() }}
+        run: python tools/setup_ci_verilator.py --assert-path
+      - name: pulse2x -- complete M5A and M5B phrases decoded from I2S and scored independently
+        if: ${{ !cancelled() && steps.verilator_identity.outcome == 'success' }}
         run: >-
           python tools/run_all.py --jobs 2 --timeout 1800 --json build/pulse2x-phrases.json
           "python tools/verify_m5a_filter2x_i2s.py --case M5A --pulse2x --timeout 1700 --outdir build/full-M5A --verification build/pulse-evidence/M5A.txt --wav build/pulse-evidence/M5A-i2s.wav --record build/pulse-evidence/M5A.json --audio build/pulse-evidence/M5A-scored.wav"
