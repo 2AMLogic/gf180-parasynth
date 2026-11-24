@@ -177,6 +177,25 @@ _LATENCY_RE = re.compile(r"worst host-to-register latency ([+-]?\d+) frame")
 _PERIODS_RE = re.compile(r"PASS -- (\d+) I2S periods decoded from the wire")
 
 
+def _binding_problem(part: str, report_text: str, wav_path: pathlib.Path,
+                     schedule_path: pathlib.Path) -> tuple[str, str, str | None]:
+    """The two sidecars' digests, and the first way this report fails to bind
+    exactly the files at these paths (None when it does bind them).
+
+    One byte-identity check with two readers: `validate_part` refuses on the
+    problem, and the control-reuse predicate re-runs on it, so a cached
+    negative control can no longer be credited from a swapped WAV or schedule
+    its report never digested."""
+    if not wav_path.is_file() or not schedule_path.is_file():
+        return "", "", f"{part}: the decoded WAV or the schedule is missing"
+    wav_sha, schedule_sha = _sha256(wav_path), _sha256(schedule_path)
+    if f"decoded I2S WAV sha256 {wav_sha}" not in report_text:
+        return wav_sha, schedule_sha, f"{part}: the report does not bind this decoded WAV"
+    if f"ensemble schedule sha256 {schedule_sha}" not in report_text:
+        return wav_sha, schedule_sha, f"{part}: the report does not bind this schedule"
+    return wav_sha, schedule_sha, None
+
+
 def validate_part(case_id: str, part: str, report_text: str, wav_path: pathlib.Path,
                   schedule_path: pathlib.Path) -> dict:
     """The preconditions of using this part as evidence, asserted at the point
@@ -204,13 +223,10 @@ def validate_part(case_id: str, part: str, report_text: str, wav_path: pathlib.P
         raise Refused(f"{part}: the report omits the three bus gain words")
     if tuple(int(g) for g in gains.groups()) != vst.ensemble_part_gains(part):
         raise Refused(f"{part}: the report's bus gains are not this part's")
-    if not wav_path.is_file() or not schedule_path.is_file():
-        raise Refused(f"{part}: the decoded WAV or the schedule is missing")
-    wav_sha, schedule_sha = _sha256(wav_path), _sha256(schedule_path)
-    if f"decoded I2S WAV sha256 {wav_sha}" not in report_text:
-        raise Refused(f"{part}: the report does not bind this decoded WAV")
-    if f"ensemble schedule sha256 {schedule_sha}" not in report_text:
-        raise Refused(f"{part}: the report does not bind this schedule")
+    wav_sha, schedule_sha, unbound = _binding_problem(part, report_text, wav_path,
+                                                      schedule_path)
+    if unbound is not None:
+        raise Refused(unbound)
     try:
         schedule = json.loads(schedule_path.read_text())
     except json.JSONDecodeError as exc:
@@ -336,16 +352,17 @@ def measure(case_id: str, evidence: dict) -> tuple[dict, dict]:
 
 def _reusable_control_run(paths: dict, case_id: str, part: str) -> bool:
     """An injected run already on disk that is THIS case, THIS part and THIS
-    mutation, and that turned the bench red. A control whose report does not
-    say all four is re-run: reuse must never be able to launder a stale or
-    foreign result into a fired control."""
-    if not (paths["report"].is_file() and paths["wav"].is_file()
-            and paths["schedule"].is_file()):
+    mutation, that turned the bench red, and whose report binds the exact WAV
+    and schedule beside it. A control whose report does not say all of that is
+    re-run: reuse must never be able to launder a stale or foreign result --
+    or a swapped sidecar the report never digested -- into a fired control."""
+    if not paths["report"].is_file():
         return False
     text = paths["report"].read_text()
     return (f"ENSEMBLE {case_id} part {part}:" in text
             and f"INJECT_BUG_{CONTROL_INJECT}" in text
-            and f"negative control {CONTROL_INJECT} CAUGHT" in text)
+            and f"negative control {CONTROL_INJECT} CAUGHT" in text
+            and _binding_problem(part, text, paths["wav"], paths["schedule"])[2] is None)
 
 
 def _injected_event_timing(case_id: str, stop: str, outdir: pathlib.Path, *,

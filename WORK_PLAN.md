@@ -3,7 +3,7 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as its own last change — `git log --no-patch -1 --format='%h %cs' -L '/^<!-- guide:plan-body:start -->$/,/^<!-- guide:plan-body:end -->$/:WORK_PLAN.md' origin/main` — which neither a declined Guide regeneration nor a docs-only commit elsewhere in this file advances.
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-20T23:54:59Z (snapshot; compare against live labels)_
+_Generated: 2026-11-24T18:46:31Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
@@ -20,14 +20,10 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
 
 `loom:important`; taken before unlabelled work.
 
-- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#162**: The bass drum's entire attack is 18-23 dB short across 170-678 Hz *(held)*
-- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
-- **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(held)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(held)*
-- **#1051**: [voice-only] Draft decision record and re-scope README/roadmap/spec to voice-only silicon target *(held)*
 
 ## Ready
 
@@ -37,7 +33,7 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
+- **#1207**: Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep
 
 ## In Progress
 
@@ -51,20 +47,45 @@ Issues currently being built (`loom:building`).
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit)
-- **#1089**: regrade cannot tell a re-attested envelope from a stale one: no gate binds evidence/item-{9,10}.json provenance.klt_version to the pinned klt
+- **#1126**: Require a matching clean run before make controls credits an RTL mismatch
+- **#1183**: Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census
+- **#1192**: check_workflows roadmap order gates key on step name, so the SET of compile_dag.py --run invocations is unasserted
+- **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal
+- **#1206**: check_workflows: the #906 pair order gate lets a duplicate guarded step name through (dict-overwrite, no ambiguity refusal)
+- **#1208**: Decide whether tools/delta_report.py belongs in each comparator's SOURCES (provenance now computed by unhashed code)
+- **#1211**: Use the ensemble scorer’s existing file hash checks for cached negative controls
+- **#1212**: rungs.yml rtl-full: the Verilator VOICE_FILTER2X_OFF control has no clean --m5a-smoke twin in that job
+- **#1214**: refusal_sibling_scan: ambiguous-callee reports family-less callees; --json leaks absolute paths
+- **#1215**: Make MIDI and UART packages optional in the keyboard audition instructions
+- **#1217**: rungs.yml pulse2x job: the VOICE_PULSE2X_OFF control's clean twin is an adjacent run_all row, which cannot gate it
+- **#1219**: Consolidate duplicated UART RTL capture/replay in verify_live_midi and verify_rolling_playback (fixes --image r2 running with PULSE2X=0)
+- **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow
+- **#1232**: Remove conflicting key assignments from the audition player’s keyboard guide
+- **#1235**: No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#1090**: signoff: fail regrade on an evidence envelope whose klt_version is not the pin
+- **#1196**: ci: assert the compile_dag.py invocation set, not just the named order-gate steps
+- **#1201**: controls: real-verifier mixed-baseline evidence, end-to-end make controls runs, drums outdir fix
+- **#1209**: fix: refuse duplicate step names in the roadmap pair gate instead of last-wins
+- **#1216**: Bind ensemble control-run reuse to the sidecar digests the report carries
+- **#1218**: tools: hash tools/delta_report.py in each comparator's SOURCES
+- **#1220**: ci: pair rtl-full's Verilator M5A mutant with a clean smoke baseline
+- **#1223**: ci: gate the pulse2x VOICE_PULSE2X_OFF control on its clean twin via run_controls
+- **#1226**: docs: make MIDI and UART packages optional in the keyboard audition install
+- **#1227**: fix(nightly): gate the ctl and synth_top mutant steps on a clean run
+- **#1228**: fix: share the UART RTL capture/replay pipeline; replay live-midi r2 bytes at PULSE2X=1
+- **#1233**: fix: correct audition player help keys for glide, hats and filter envelope
+- **#1240**: test: guard workflow RTL mutant gating and baseline config match
 
 ## Approved (Awaiting Merge)
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper *(held)* — linked issue #1062
+- **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches — linked issue #1199
 
 ## Proposed
 
@@ -119,7 +140,6 @@ Issues carrying `loom:curated`.
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)* *(held)*
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)* *(held)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)* *(held)*
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)*
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
 - **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)* *(held)*
 - **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)* *(held)*
@@ -128,8 +148,22 @@ Issues carrying `loom:curated`.
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)* *(held)*
 - **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites) *(curated)*
-- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit) *(curated)*
-- **#1089**: regrade cannot tell a re-attested envelope from a stale one: no gate binds evidence/item-{9,10}.json provenance.klt_version to the pinned klt *(curated)*
+- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit) *(curated)* *(held)*
+- **#1110**: Judge docs-only fast path is unreachable on this host: its base-repo read uses a gh --json field this gh 2.102.0 rejects *(curated)* *(held)*
+- **#1126**: Require a matching clean run before make controls credits an RTL mismatch *(curated)*
+- **#1148**: rtl-full step 8 is red on main: M5A filter2x SPI-to-I2S diverges from the model in 815424 of 1305549 frames (62%) *(curated)* *(held)*
+- **#1183**: Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census *(curated)*
+- **#1192**: check_workflows roadmap order gates key on step name, so the SET of compile_dag.py --run invocations is unasserted *(curated)*
+- **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal *(curated)*
+- **#1206**: check_workflows: the #906 pair order gate lets a duplicate guarded step name through (dict-overwrite, no ambiguity refusal) *(curated)*
+- **#1207**: Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep *(curated)*
+- **#1208**: Decide whether tools/delta_report.py belongs in each comparator's SOURCES (provenance now computed by unhashed code) *(curated)*
+- **#1212**: rungs.yml rtl-full: the Verilator VOICE_FILTER2X_OFF control has no clean --m5a-smoke twin in that job *(curated)*
+- **#1214**: refusal_sibling_scan: ambiguous-callee reports family-less callees; --json leaks absolute paths *(curated)*
+- **#1217**: rungs.yml pulse2x job: the VOICE_PULSE2X_OFF control's clean twin is an adjacent run_all row, which cannot gate it *(curated)*
+- **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin *(curated)*
+- **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow *(curated)*
+- **#1235**: No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -138,11 +172,10 @@ Issues carrying `loom:curated`.
 - **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)* *(held)*
 - **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)* *(held)*
 - **#753**: Consolidate 16 duplicate file-sha256 helpers in tools/ into provenance.py *(hermit)* *(held)*
-- **#760**: Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September *(hermit)* *(held)*
-- **#762**: Remove fpga/probe_uart_findings.py: it reports 2 false FAILs on the repaired host and nothing runs it *(hermit)* *(held)*
-- **#800**: Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site *(hermit)* *(held)*
 - **#812**: verify-fast re-runs 40 test files that sibling jobs in the same workflow already collect wholesale, on the stale premise that no CI job does *(hermit)* *(held)*
-- **#817**: Consolidate the seven WAV readers: four conventions, and two answer 96 dB wrong on a 24-bit file instead of refusing *(hermit)* *(held)*
+- **#1172**: Wire in or remove check_nightly_slow_records.py: a 1,176-line gate nothing runs *(hermit)* *(held)*
+- **#1173**: Remove tools/audit_tracked_json_writers.py: one-shot #922 report nothing runs *(hermit)* *(held)*
+- **#1205**: Remove disk cache replay from the 808 conditioning comparison *(hermit)* *(held)*
 
 ## Epics
 
@@ -155,12 +188,12 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 1 |
 | Very important | 1 |
-| Important | 8 |
+| Important | 4 |
 | Ready (`loom:issue`, net of holds/building/merge-pending) | 5 |
-| In Progress (`loom:building`) | 10 |
-| PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 1 |
-| Curated | 60 |
-| Architect / Hermit proposals | 10 |
+| In Progress (`loom:building`) | 23 |
+| PRs awaiting review | 12 |
+| Approved PRs awaiting merge | 2 |
+| Curated | 73 |
+| Architect / Hermit proposals | 9 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->
