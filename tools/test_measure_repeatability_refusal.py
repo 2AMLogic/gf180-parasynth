@@ -33,6 +33,16 @@ against the pre-fix tree before the fix landed: exit 1 with the
 The tool's own corpus reader needs `soundfile`, which the CI image does
 not install; the control skips where the tool itself could not run (same
 precondition, refused rather than reported -- docs/failure-modes.md).
+
+RULE-8 DEFEATER, STATED RATHER THAN CARRIED (docs/verification-rules.md): the
+four sibling controls for this PR each carry an unreadable-corpus case pinning
+that a scipy/soundfile ValueError still exits 1. This file has none: the
+handlers repaired here widen to `refusal.Refused` only, so a ValueError cannot
+be caught by them by construction (no `except Exception` exists in the diff),
+and the module-level `importorskip("soundfile")` means a new control would not
+run in the CI image either. The cut-into-strike control below is the only
+known-answer case this file owns; an execution-error control is not shipped
+because it could not be run (or red-checked) on the hosts that build this PR.
 """
 from __future__ import annotations
 
