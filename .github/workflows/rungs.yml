@@ -67,7 +67,7 @@ jobs:
       - run: python tools/setup_ci_verilator.py
       - name: simulator identity and independent converter diagnostic
         run: |
-          verilator --version
+          python tools/setup_ci_verilator.py --assert-path
           python tools/verify_rate_conv_2x.py --simulator verilator
       - name: pulse candidate, transport, deadlines and disabling control
         run: >-
