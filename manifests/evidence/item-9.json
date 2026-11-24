@@ -129,14 +129,14 @@
         "role": "testbench",
         "path": "rtl-sketch/verify_ladder.py",
         "passed": true,
-        "content_hash": "sha256:1bf055213b37a756b11da0882b107fd9c2cc9d8c49f324c59c7e30971c592814"
+        "content_hash": "sha256:8de8bd582e5106f340098629b2ed4639ffb0c000ecd0fa92febdd3b20c11bf54"
       },
       {
         "check": "present",
         "role": "testbench",
         "path": "rtl-sketch/verify_modal.py",
         "passed": true,
-        "content_hash": "sha256:e3e76991f79b2c025c439c2cf61559061b9a6627a24b1f117695f9647c91c000"
+        "content_hash": "sha256:bbe242f9987750f14ba799a445fb53d50c8c15adb29b1a7b320b5091726a5fed"
       },
       {
         "check": "present",
