@@ -13,7 +13,10 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import perceptual_gate as pg  # noqa: E402
 D = sys.argv[1]; SR = 48000
 def load(p):
-    sr, x = wavfile.read(p); x = x.astype(np.float64) / 32768.0
+    sr, x = wavfile.read(p)
+    if x.dtype != np.int16:     # #1117: /32768 is only the 16-bit divisor
+        raise ValueError(f"{p}: {x.dtype} samples, expected 16-bit PCM (int16)")
+    x = x.astype(np.float64) / 32768.0
     return resample_poly(x, SR, sr) if sr != SR else x
 gap = np.zeros(int(0.25 * SR)); allab = []
 report = []
