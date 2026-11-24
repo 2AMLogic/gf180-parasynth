@@ -8,6 +8,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-24
 
+- **PR #1186**: test: gate every --pulse2x rtl-full step on the identity outcome
+- **Issue #1177** (closed): rtl-full identity gate: the pytest guard pins the one named phrase step, not that no OTHER step runs the pulse2x phrases ungated
 - **PR #1184**: fix: catch refusal.Refused at the rimshot probes' CLI dispatch, with the cross-module census
 - **PR #1145**: controls: require a clean baseline run before crediting an RTL mutant
 - **PR #1144**: fix: refuse non-16-bit WAVs in five unguarded reference readers
