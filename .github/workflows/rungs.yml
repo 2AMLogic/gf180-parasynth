@@ -4,9 +4,29 @@ name: PR 1220 isolated Verilator smoke pair
 permissions:
   contents: read
 jobs:
-  rtl-full:
+  main-apt:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: 1bfb6e9984900863eeadab79456cc0cd570ea7c8
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - run: python -m pip install --upgrade pip numpy scipy pytest
+    - run: sudo apt-get update && sudo apt-get install -y iverilog verilator
+    - name: Record runner and source
+      run: git rev-parse HEAD && verilator --version
+    - name: M5A -- clean Verilator smoke baseline for the disabling control
+      run: python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke
+        --filter2x --outdir build/top-clean-m5a-f2x-verilator
+    - name: M5A -- Verilator integrated disabling control
+      run: python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke
+        --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control
+  pr-pinned:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v4
       with:
@@ -16,6 +36,19 @@ jobs:
         python-version: '3.12'
     - run: python -m pip install --upgrade pip numpy scipy pytest
     - run: sudo apt-get update && sudo apt-get install -y iverilog verilator
+    - if: ${{ !cancelled() }}
+      run: sudo apt-get install -y autoconf flex libfl-dev bison help2man
+    - if: ${{ !cancelled() }}
+      uses: actions/cache@v4
+      with:
+        path: .tools/verilator-5.052
+        key: ubuntu24-verilator-ea338be98e1e838d3518809ce8899f85a009963c
+    - if: ${{ !cancelled() }}
+      run: python tools/setup_ci_verilator.py
+    - name: refuse the phrase run unless PATH resolves the pinned Verilator
+      id: verilator_identity
+      if: ${{ !cancelled() }}
+      run: python tools/setup_ci_verilator.py --assert-path
     - name: Record runner and source
       run: git rev-parse HEAD && verilator --version
     - name: M5A -- clean Verilator smoke baseline for the disabling control
