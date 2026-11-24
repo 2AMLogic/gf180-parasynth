@@ -32,14 +32,12 @@ subprocess. Safe to run beside anything else, and it leaves no state behind.
 """
 from __future__ import annotations
 
-import argparse
-import json
 import pathlib
-import subprocess
 import sys
-import textwrap
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from control_dag_lib import main, patch_control                           # noqa: E402
+
 SUITE = "test_compile_dag_churn.py"
 REANCHORS = "test_a_covered_change_reanchors_the_record_even_when_the_verdict_matches"
 KEEPS_BYTES = "test_run_twice_here_then_once_at_a_covers_untouched_head_keeps_bytes"
@@ -77,74 +75,19 @@ cd.normalise_detail = lambda detail: detail
         "rule suppresses nothing on the suite nodes"),
 }
 
-RUNNER = """
-import pathlib, sys
-ROOT = pathlib.Path({root!r})
-sys.path.insert(0, str(ROOT / "tools"))
-import compile_dag as cd
-{patch}
-import pytest
-sys.exit(pytest.main(["-q", "--no-header", "-p", "no:cacheprovider",
-                      str(ROOT / "tools" / {suite!r})]))
-"""
-
 
 def run_one(name: str) -> tuple[bool, list, str]:
     """Inject one defect and run the churn suite. Returns (fired, failed
     tests, why-not)."""
     patch, expect, must_fail, _why = CONTROLS[name]
-    code = RUNNER.format(root=str(ROOT), patch=patch.strip(), suite=SUITE)
-    p = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT),
-                       capture_output=True, text=True)
-    failed = sorted({ln.split("::")[-1].split(" ")[0]
-                     for ln in p.stdout.splitlines() if ln.startswith("FAILED")})
-    if p.returncode == 0:
-        return False, failed, "the suite stayed GREEN with the defect injected"
-    if must_fail not in failed:
-        return False, failed, (f"the suite went red but {must_fail} was not "
-                               f"among the failures, so this control is "
-                               f"satisfied by some OTHER assertion and would "
-                               f"survive that one's deletion")
-    return True, failed, ""
-
-
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--list", action="store_true",
-                    help="what each control injects, and what must happen")
-    a = ap.parse_args(argv)
-
-    if a.list:
-        for name, (patch, expect, must_fail, why) in CONTROLS.items():
-            print(f"{name}\n  expects    suite {expect.upper()}"
-                  f"{'' if not must_fail else f', failing {must_fail}'}")
-            print(f"  why        {why}")
-            print(textwrap.indent(patch.strip(), "  | "))
-            print()
-        return 0
-
-    bad = []
-    for name in CONTROLS:
-        fired, failed, why = run_one(name)
-        expect = CONTROLS[name][1]
-        label = ("RED " if expect == "red" else "GREEN") if fired \
-            else "DID NOT HOLD"
-        print(f"{label:<14}{name}{'' if fired else '  -- ' + why}")
-        for f in failed[:8]:
-            print(f"               {f}")
-        if not fired:
-            bad.append(name)
-    print()
-    if bad:
-        print(f"FAIL -- {len(bad)} control(s) did not hold: {', '.join(bad)}. "
-              f"A run where these do not hold is a broken run, not a quiet one.")
-        return 1
-    print(f"OK -- all {len(CONTROLS)} churn controls held: each leg of the "
-          f"#967 rule is load-bearing, and removing any one of them turns "
-          f"the churn suite red on the test written for it.")
-    return 0
+    return patch_control(patch, expect, must_fail, SUITE)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(
+        __doc__, CONTROLS, run_one,
+        show=lambda patch: patch.strip(),
+        ok_message=f"OK -- all {len(CONTROLS)} churn controls held: each leg of "
+                   f"the #967 rule is load-bearing, and removing any one of "
+                   f"them turns the churn suite red on the test written for "
+                   f"it."))
