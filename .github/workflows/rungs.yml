@@ -527,14 +527,24 @@ jobs:
   # Gated on `changes` like every other suite job (#457): tools/ is always
   # `full`, so an edit to a tool or its test always runs this. GitHub-hosted
   # since the operator's 2026-09-30 move of every public repo off Blacksmith
-  # (2am `docs/ci.md` §"Blacksmith: decided 2026-09-28, retire"); the
-  # 60-minute cap is ~2.9x the ~21 min measured on Blacksmith, the same kind
-  # of headroom the `python` job's 70 gives over its hosted max.
+  # (2am `docs/ci.md` §"Blacksmith: decided 2026-09-28, retire").
+  #
+  # 105, not the 60 that survived the move (#1236): the ~21 min Blacksmith
+  # measurement did not. Hosted, the directory grew to 56m49s-59m19s
+  # whole-job across five green runs on main (Actions API, 2026-11-24),
+  # ~95-96% of a 60-minute cap, and a PR run that crossed the cap was
+  # cancelled at [96%] with NO pytest summary -- the failing tests' identity
+  # had to be re-derived from dot-progress by index. A cap a growing suite
+  # reaches nondeterministically is a red unrelated to the diff, and a
+  # cancelled run reports nothing where a verdict belongs. 105 is ~1.75x the
+  # 59m44s hosted maximum, the same headroom the `python` job's 70 gives
+  # over its own 40.3 min hosted max. Re-measure once more hosted runs
+  # accumulate.
   tools:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 105
     steps:
       - uses: actions/checkout@v4
         with:
@@ -654,7 +664,7 @@ jobs:
   # Measured on the 8-vCPU worker (2026-11-15, origin/main @ 6be93eef):
   # 197 passed in 0.81 s -- three orders of magnitude under the tools job --
   # so the 10-minute cap is ~700x the measured runtime, the same headroom
-  # logic the tools job's 60 uses over its ~21 min.
+  # logic the tools job's 105 gives over its ~59 min hosted maximum (#1236).
   #
   # Default checkout depth: no pnr/ test reads origin/main or computes a
   # merge-base, unlike tools/test_run_case.py (measured 2026-11-15). No
