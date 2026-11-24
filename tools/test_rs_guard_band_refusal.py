@@ -66,6 +66,7 @@ sys.path.insert(0, str(ROOT / "model"))
 
 import exit_contract                                     # noqa: E402
 import refusal                                           # noqa: E402
+import run_case as _rc_env                               # noqa: E402 -- REFS_ENV names only
 
 SR = 44100
 FRAMES = 4410               # 100 ms of mono PCM16: the issue's fixture spec
@@ -89,10 +90,12 @@ def _probe(cmd: str, refs: pathlib.Path) -> subprocess.CompletedProcess:
     """The real interpreter and the real environment a batch runner sees:
     GF180_TR808_REFS names the corpus root, TR808_REFS agrees with it (the
     test plan's 'unset or equal'), and nothing else about the ambient corpus
-    configuration can leak in."""
-    env = {k: v for k, v in os.environ.items() if k not in ("GF180_TR808_REFS", "TR808_REFS")}
-    env["GF180_TR808_REFS"] = str(refs)
-    env["TR808_REFS"] = str(refs)
+    configuration can leak in. The variable NAMES come from run_case so this
+    file never spells them (test_corpus_path_single_source)."""
+    drop = (_rc_env.REFS_ENV, _rc_env.REFS_ALIAS_ENV)
+    env = {k: v for k, v in os.environ.items() if k not in drop}
+    env[_rc_env.REFS_ENV] = str(refs)
+    env[_rc_env.REFS_ALIAS_ENV] = str(refs)
     return subprocess.run(
         [sys.executable, str(ROOT / "tools" / "probes" / "rs_guard_band.py"), cmd],
         capture_output=True, text=True, timeout=300, env=env, cwd=str(ROOT))
@@ -164,9 +167,10 @@ def test_unreadable_reference_is_an_execution_error_not_a_refusal(tmp_path):
 # corpus, exited 0 then and must still)
 # ---------------------------------------------------------------------------
 def _mode_drive(cmd: str, refs: pathlib.Path) -> subprocess.CompletedProcess:
-    env = {k: v for k, v in os.environ.items() if k not in ("GF180_TR808_REFS", "TR808_REFS")}
-    env["GF180_TR808_REFS"] = str(refs)
-    env["TR808_REFS"] = str(refs)
+    drop = (_rc_env.REFS_ENV, _rc_env.REFS_ALIAS_ENV)
+    env = {k: v for k, v in os.environ.items() if k not in drop}
+    env[_rc_env.REFS_ENV] = str(refs)
+    env[_rc_env.REFS_ALIAS_ENV] = str(refs)
     return subprocess.run(
         [sys.executable, str(ROOT / "tools" / "probes" / "rs_mode_drive.py"), cmd],
         capture_output=True, text=True, timeout=300, env=env, cwd=str(ROOT))
