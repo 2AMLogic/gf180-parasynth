@@ -17,6 +17,7 @@ in those files -- a lookalike fixture could pass while the real files drifted.
 from __future__ import annotations
 
 import pathlib
+import re
 import sys
 
 import yaml
@@ -794,3 +795,131 @@ def test_constant_true_if_refuses_everything_else(value):
     """`yes` is YAML-1.1 truthiness, not a GitHub `if:` constant; non-string
     non-bool values cannot be shown always-true either."""
     assert cw._constant_true_if(value) is False
+
+
+# =============================================================================
+# #1212: rtl-full's injected control is credited only against a clean run of
+# its OWN configuration. The job ran the Verilator VOICE_FILTER2X_OFF mutant
+# with no clean Verilator --m5a-smoke --filter2x run before it, so any red
+# for an unrelated reason (a Verilator build break among them) would have
+# registered as "detected". The pairing key is script + simulator + stimulus
+# flags -- not "some green step exists in the job": the full-phrase
+# tools/verify_m5a_filter2x_i2s.py step is also Verilator, and must NOT
+# satisfy the smoke mutant's baseline (same simulator, different stimulus).
+# =============================================================================
+_BENCH_LINE = re.compile(r"^python\s+(\S+\.py)\b")
+_PAIR_VALUE_FLAGS = ("--inject", "--outdir")     # value-taking, control-only
+_PAIR_BARE_FLAGS = ("--expect-fail",)            # control-only, no value
+
+
+def _bench_config(line: str) -> tuple[str, ...] | None:
+    """The identity of a bench invocation for pairing: every token except the
+    control's own knobs (--inject/--expect-fail/--outdir). Quoted spans are
+    run_all.py ARGUMENTS (the folded pulse2x step embeds whole commands in
+    quotes), not commands, so they are stripped before matching -- otherwise a
+    quoted "--inject" inside an argument list could masquerade as this step
+    being a mutant, or hide one."""
+    line = re.sub(r'"[^"]*"', "", line).strip()
+    m = _BENCH_LINE.match(line)
+    if not m:
+        return None
+    tokens, fp, i = line.split(), [], 0
+    while i < len(tokens):
+        if tokens[i] in _PAIR_VALUE_FLAGS:
+            i += 2                              # drop the flag and its value
+            continue
+        if tokens[i] in _PAIR_BARE_FLAGS:
+            i += 1
+            continue
+        fp.append(tokens[i])
+        i += 1
+    return tuple(sorted(fp))
+
+
+def _rtl_full_lines(steps: list | None = None) -> list[str]:
+    """rtl-full's command lines in job order; pass mutated `steps` to inject
+    defects into the parsed shape of the REAL file (rule 8). Steps carrying a
+    truthy `continue-on-error` contribute nothing: a clean baseline whose
+    failure cannot stop the job pairs nothing (the #304 hole, one shape over).
+    """
+    if steps is None:
+        steps = yaml.safe_load(RUNGS.read_text())["jobs"]["rtl-full"]["steps"]
+    lines: list[str] = []
+    for s in steps:
+        if not isinstance(s, dict) or s.get("continue-on-error"):
+            continue
+        lines.extend(ln.strip()
+                     for ln in str(s.get("run", "")).splitlines() if ln.strip())
+    return lines
+
+
+def _pair_injects_with_clean_configs(lines: list[str]) -> tuple[int, list[str]]:
+    """(mutant line count, mutant lines with no earlier clean twin)."""
+    clean: set[tuple[str, ...]] = set()
+    mutants, unpaired = 0, []
+    for ln in lines:
+        fp = _bench_config(ln)
+        if fp is None:
+            continue
+        if "--inject" in ln:
+            mutants += 1
+            if fp not in clean:
+                unpaired.append(ln)
+        else:
+            clean.add(fp)
+    return mutants, unpaired
+
+
+def _assert_injects_are_paired(lines: list[str]) -> None:
+    """The #1212 gate over rtl-full's command lines (raises on red)."""
+    mutants, unpaired = _pair_injects_with_clean_configs(lines)
+    assert mutants, ("rtl-full no longer runs any injected control: the "
+                     "mutants vanished silently")
+    assert not unpaired, ("injected controls with no clean run of the same "
+                          f"script/simulator/stimulus before them: {unpaired}")
+
+
+def test_rtl_full_injected_controls_follow_a_clean_run_of_the_same_config():
+    _assert_injects_are_paired(_rtl_full_lines())
+
+
+def test_rtl_full_without_the_clean_verilator_smoke_step_is_red():
+    """The injected defect (#1212's exact finding): drop the clean Verilator
+    --m5a-smoke --filter2x step from the parsed shape of the real file. The
+    full-phrase tools/verify_m5a_filter2x_i2s.py step (also Verilator) is
+    still present and must not satisfy the smoke mutant's baseline."""
+    steps = yaml.safe_load(RUNGS.read_text())["jobs"]["rtl-full"]["steps"]
+    kept = [s for s in steps
+            if not ("--m5a-smoke" in str(s.get("run", ""))
+                    and "--inject" not in str(s.get("run", "")))]
+    assert len(kept) < len(steps), "the clean smoke step is already gone"
+    mutants, unpaired = _pair_injects_with_clean_configs(_rtl_full_lines(kept))
+    assert mutants == 1
+    assert unpaired and "VOICE_FILTER2X_OFF" in unpaired[0]
+
+
+def test_a_same_script_different_stimulus_clean_step_does_not_pair_the_mutant():
+    """Same script, same simulator, WRONG stimulus: replacing the clean twin
+    with the --osc2x smoke must leave the --m5a-smoke --filter2x mutant
+    unpaired -- the pairing key is the stimulus, not the script alone."""
+    steps = yaml.safe_load(RUNGS.read_text())["jobs"]["rtl-full"]["steps"]
+    for s in steps:
+        run = str(s.get("run", ""))
+        if "--m5a-smoke" in run and "--inject" not in run:
+            s["run"] = ("python rtl-sketch/verify_synth_top.py "
+                        "--simulator verilator --osc2x "
+                        "--outdir build/top-osc2x-clean-verilator")
+            break
+    else:
+        raise AssertionError("no clean smoke step to rewrite")
+    mutants, unpaired = _pair_injects_with_clean_configs(_rtl_full_lines(steps))
+    assert mutants == 1 and unpaired
+
+
+def test_rtl_full_with_no_injected_controls_left_is_red():
+    """Vacuity guard: a pairing test that cannot fail trains nobody. Strip
+    every --inject line and the gate must go red, not pass emptily."""
+    lines = [ln for ln in _rtl_full_lines() if "--inject" not in ln]
+    assert lines, "the strip removed every line, so the test proves nothing"
+    with pytest.raises(AssertionError, match="vanished silently"):
+        _assert_injects_are_paired(lines)
