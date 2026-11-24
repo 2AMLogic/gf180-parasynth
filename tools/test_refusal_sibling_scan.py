@@ -9,10 +9,11 @@ ones the #1160 one-off dotted-call grep actually produced (a local variable
 named like a module; a callee with no refusal family; a callee whose FUNCTION
 raises nothing even though its module has a family). The #1188 section pins
 the three gaps that issue filed (try-handler credit, stem collision, alias
-loss): each control there started red against the unfixed scanner. The #1214
-section pins the ambiguous-callee filter (a non-raising collision is not a
-site), the repo-relative `candidates` format, and the shadowed-alias blind
-spot #1188's test plan named but never pinned.
+loss) and the #1193 section the borrowed-family gap: each control there
+started red against the unfixed scanner, except the shadow pin noted inline.
+The #1214 section pins the ambiguous-callee filter (a non-raising collision
+is not a site), the repo-relative `candidates` format, and the shadowed-alias
+blind spot #1188's test plan named but never pinned.
 """
 from __future__ import annotations
 
@@ -520,6 +521,184 @@ def test_aliased_from_import_call_resolves_to_the_original_function(tmp_path):
 
 def test_alias_of_a_non_raising_function_is_not_a_site(tmp_path):
     assert not [k for k in _scan(tmp_path) if k[0] == "caller_from_quiet.py"]
+
+
+# --- #1193 controls: the borrowed-family blind spot ---------------------------
+# Every borrow control except the shadow pin started red against the unfixed
+# scanner: a from-imported Refused bound no family name, so the borrower's
+# own `raise Refused` read as raising no family and its `except Refused`
+# handlers read as shape `other` -- both sides of the census silenced.
+
+BORROWING_CALLEE = '''
+from mod_a import Refused as R           # the family, BORROWED (aliased)
+
+def fetch(p):
+    raise R(f"cannot use {p}")
+'''
+
+BORROW_CALLEE_CALLER = '''
+import borrow_callee
+
+def go(p):
+    return borrow_callee.fetch(p)        # unguarded: the site the census lost
+'''
+
+BORROWING_HANDLER = '''
+import mod_a
+import mod_b
+from mod_a import Refused                # the borrower's guard, unaliased
+
+def go(p):
+    try:
+        mod_a.load(p)                    # covered: the class IS mod_a's
+        mod_b.measure(p)                 # NOT covered: mod_b's is a sibling
+    except Refused as e:
+        print("REFUSED", e)
+'''
+
+BORROWING_HANDLER_ALIAS = '''
+import mod_a
+import mod_b
+from mod_a import Refused as R           # the borrower's guard, aliased
+
+def go(p):
+    try:
+        mod_a.load(p)
+        mod_b.measure(p)
+    except R as e:
+        print("REFUSED", e)
+'''
+
+TWO_STEM_BORROWER = '''
+import mod_a
+import mod_b
+from mod_a import Refused as RA          # two different lenders...
+from mod_b import Refused as RB
+
+def go(p):
+    try:
+        mod_a.load(p)
+        mod_b.measure(p)
+    except RA as e:                      # ...so each name covers only its own
+        print("A", e)
+    except RB as e:
+        print("B", e)
+'''
+
+BORROW_SHADOWED_BY_CLASS = '''
+import refusal
+import mod_a
+from mod_a import Refused                # borrowed first...
+
+class Refused(refusal.Refused, Exception):   # ...then rebound to a local def
+    pass
+
+def go(p):
+    try:
+        mod_a.load(p)
+    except Refused as e:                 # the LOCAL sibling: does not cover
+        print("REFUSED", e)
+'''
+
+CLASS_SHADOWED_BY_BORROW = '''
+import refusal
+import mod_a
+
+class Refused(refusal.Refused, Exception):   # local first...
+    pass
+
+from mod_a import Refused                # ...then rebound to the borrow
+
+def go(p):
+    try:
+        mod_a.load(p)
+    except Refused as e:                 # mod_a's class again: covers it
+        print("REFUSED", e)
+'''
+
+
+def _borrow_tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
+    files = _tree(tmp_path)
+    for name, body in (("borrow_callee", BORROWING_CALLEE),
+                       ("borrow_caller", BORROW_CALLEE_CALLER),
+                       ("borrow_handler", BORROWING_HANDLER),
+                       ("borrow_handler_alias", BORROWING_HANDLER_ALIAS),
+                       ("borrow_two_stems", TWO_STEM_BORROWER),
+                       ("borrow_shadowed", BORROW_SHADOWED_BY_CLASS),
+                       ("class_shadowed", CLASS_SHADOWED_BY_BORROW)):
+        p = tmp_path / f"{name}.py"
+        p.write_text(body)
+        files.append(p)
+    return files
+
+
+def _borrow_scan(tmp_path):
+    files = _borrow_tree(tmp_path)
+    idx = rss.build_index(files)
+    return {(s["site"].split("/")[-1].split(":")[0], s["callee"]): s
+            for s in rss.scan(files, idx)}
+
+
+def test_raise_of_a_borrowed_family_resolves_to_the_lenders_origin(tmp_path):
+    """Gap "borrowed family": `from mod_a import Refused as R` bound no family
+    name, so `raise R(...)` in the borrower read as raising nothing and this
+    caller's site vanished from the census entirely."""
+    s = _borrow_scan(tmp_path)[("borrow_caller.py", "borrow_callee.fetch")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["origins"] == ["mod_a"], s
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_borrowed_handler_covers_exactly_the_lender_and_no_sibling(tmp_path):
+    """The res_tuning shape: `except Refused` written with a borrowed Refused
+    covers the lender's origin (shape `exact` -- the class IS the lender's)
+    and nothing else, which is why the sibling module stays a candidate."""
+    got = _borrow_scan(tmp_path)
+    s = got[("borrow_handler.py", "mod_a.load")]
+    assert s["classification"].startswith("covered"), s
+    assert s["guard"] == "exact", s
+    sib = got[("borrow_handler.py", "mod_b.measure")]
+    assert sib["classification"] == "candidate-escape", sib
+    assert sib["uncovered"] == ["mod_b"], sib
+
+
+def test_aliased_borrowed_handler_covers_exactly_the_lender(tmp_path):
+    got = _borrow_scan(tmp_path)
+    s = got[("borrow_handler_alias.py", "mod_a.load")]
+    assert s["classification"].startswith("covered"), s
+    assert s["guard"] == "exact", s
+    sib = got[("borrow_handler_alias.py", "mod_b.measure")]
+    assert sib["classification"] == "candidate-escape", sib
+
+
+def test_borrow_from_two_stems_covers_each_name_to_its_own_lender(tmp_path):
+    """`Refused` borrowed under two names from two lenders: each handler
+    covers only its own lender's class, not the other's."""
+    got = _borrow_scan(tmp_path)
+    a = got[("borrow_two_stems.py", "mod_a.load")]
+    assert a["classification"].startswith("covered"), a
+    b = got[("borrow_two_stems.py", "mod_b.measure")]
+    assert b["classification"].startswith("covered"), b
+
+
+def test_borrow_shadowed_by_a_local_class_stays_an_escape(tmp_path):
+    """Python's last binding wins: a `class Refused` def AFTER the borrow
+    rebinds the name to a local sibling, so the handler no longer covers the
+    lender. A control, not a red-first case -- it pins the fix against
+    crediting every binding the module ever made."""
+    s = _borrow_scan(tmp_path)[("borrow_shadowed.py", "mod_a.load")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+    assert s["guard"] == "local", s
+
+
+def test_local_class_shadowed_by_a_borrow_covers_the_lender(tmp_path):
+    """The reverse shadow: the borrow comes after the class def, so the name
+    is the lender's class again and the handler covers it (shape `exact`,
+    not `local`)."""
+    s = _borrow_scan(tmp_path)[("class_shadowed.py", "mod_a.load")]
+    assert s["classification"].startswith("covered"), s
+    assert s["guard"] == "exact", s
 
 
 # --- #1214 controls: the ambiguous-callee filter (items 1), repo-relative
