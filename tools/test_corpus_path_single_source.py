@@ -90,6 +90,16 @@ CORPUS_GATE_FUNCS = frozenset({
     "run_probe",     # sets REFS_ENV / unsets the alias on the child environment
     "test_corpus_root_absent_required_exits_2",   # asserts NO VERDICT names REFS_ENV
 })
+# Same contract for #1162's rimshot refusal controls (rs_guard_band and
+# rs_mode_drive take no --refs flag; the corpus state IS their input):
+# subprocess helpers only, names via run_case's constants, resolution stays
+# in the child's run_case.configured_refs().
+CORPUS_ENV_TEST_FILES = {
+    pathlib.PurePosixPath("tools/test_rs_guard_band_refusal.py"): frozenset({
+        "_probe",       # sets REFS_ENV + the alias on the child environment
+        "_mode_drive",  # ditto, for the sibling probe
+    }),
+}
 SELF = pathlib.PurePosixPath("tools/test_corpus_path_single_source.py")
 ENV_NAMES = {"GF180_TR808_REFS", "TR808_REFS", "GF180_TR808_REFS_DEFAULT"}   # env-var keys
 DEFAULT_PATH = "/tmp/tr808-ref"                  # the default, as a path (prose may mention it)
@@ -276,7 +286,7 @@ def test_no_module_outside_run_case_reads_the_corpus_variable_or_default():
             continue
         allow = (CORPUS_GATE_FUNCS if pp == CORPUS_GATE_TESTS
                  else OWNER_TESTS_RESOLVER_FUNCS if pp == OWNER_TESTS
-                 else frozenset())
+                 else CORPUS_ENV_TEST_FILES.get(pp, frozenset()))
         v = violations((ROOT / p).read_text(), allow_in=allow)
         if v:
             bad[p] = v
