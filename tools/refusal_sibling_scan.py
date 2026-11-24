@@ -43,10 +43,11 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     is invisible unless the helper is the credited def;
   * function-level imports are attributed to the whole file; a local name
     shadowing an import can misattribute;
-  * handlers are found around the CALL SITE only -- a guard higher up the
-    call chain (typically the CLI dispatch, which is where #1162's escape
-    lived) is not modelled. `unguarded` therefore means "unguarded here",
-    never "escapes at the exit".
+  * handlers are found around the CALL SITE, plus ONE level above: the
+    module's CLI boundary (`main()` / the `__main__` dispatch), which is
+    where #1160/#1162's repairs live. Guards in intermediate library
+    frames are not modelled, so `candidate-escape` means "unguarded here
+    and no base guard at the boundary", never "escapes at the exit".
   * test files are excluded: they are not CLI callers and their
     `pytest.raises` sites are deliberate.
 
@@ -113,8 +114,8 @@ class ModInfo:
                     if (isinstance(t, ast.Name) and t.id == FAMILY_NAME
                             and isinstance(node.value, ast.Attribute)
                             and isinstance(node.value.value, ast.Name)):
-                        src = self.from_imports.get(node.value.value.id,
-                                                    node.value.value.id)
+                        h = node.value.value.id
+                        src = self.imports.get(h, self.from_imports.get(h, h))
                         self.refused_origin = src
                         self.refused_names.add(FAMILY_NAME)
         for node in ast.walk(self.tree):
@@ -217,12 +218,43 @@ def handler_origins(mod: ModInfo, idx: dict[str, ModInfo],
     return origins, shape
 
 
+def cli_boundary_guards(mod: ModInfo, idx: dict[str, ModInfo]) -> list[tuple[set[str], str]]:
+    """The refusal handlers at the module's CLI boundary -- try statements
+    that sit directly in a `main()` def or in the `if __name__ == "__main__"`
+    dispatch, where #1160/#1162's repairs live. Returns (origins, shape) per
+    handler: `except refusal.Refused` covers every origin; an exact/alias
+    handler covers only its own origin (measure_partial_balance's
+    `except Refused` with `Refused = pc.Refused` is exact, not local-only)."""
+    parents: dict[ast.AST, ast.AST] = {}
+    for node in ast.walk(mod.tree):
+        for ch in ast.iter_child_nodes(node):
+            parents[ch] = node
+
+    def in_boundary(tr: ast.Try) -> bool:
+        cur = parents.get(tr)
+        if isinstance(cur, ast.FunctionDef) and cur.name == "main":
+            return True
+        while cur is not None:                # the __main__ dispatch block
+            if (isinstance(cur, ast.If) and isinstance(cur.test, ast.Compare)
+                    and getattr(cur.test.left, "id", "") == "__name__"):
+                return True
+            cur = parents.get(cur)
+        return False
+
+    out: list[tuple[set[str], str]] = []
+    for node in ast.walk(mod.tree):
+        if isinstance(node, ast.Try) and in_boundary(node):
+            out.extend(handler_origins(mod, idx, h) for h in node.handlers)
+    return out
+
+
 def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
     sites: list[dict] = []
     for f in files:
         mod = idx.get(f.stem)
         if mod is None:
             continue
+        boundary = cli_boundary_guards(mod, idx)
         for node in ast.walk(mod.tree):
             callee_stem = fname = None
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
@@ -252,6 +284,23 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                         covered |= ho & origins
                         shapes.append(shape)
             uncovered = origins - covered
+            bshapes = {shape for _, shape in boundary}
+            borigins: set[str] = set()
+            for ho, shape in boundary:
+                if shape == "base":
+                    borigins |= origins
+                elif shape != "broad" and shape != "other":
+                    borigins |= ho
+            if uncovered and "base" in bshapes:
+                # a base guard at the CLI boundary catches it on the way out
+                classification, uncovered = "covered(cli-base)", []
+            elif uncovered and uncovered <= borigins:
+                classification, uncovered = "covered(cli-exact)", []
+            elif uncovered and "broad" in bshapes:
+                classification = "relabelled(cli-total)"
+            else:
+                classification = ("candidate-escape" if uncovered
+                                  else f"covered({'+'.join(shapes) or 'none-needed'})")
             try:
                 label = str(f.relative_to(ROOT))
             except ValueError:
@@ -261,7 +310,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                 callee=f"{callee_stem}.{fname}",
                 origins=sorted(origins),
                 guard=",".join(shapes) or "none",
-                classification="candidate-escape" if uncovered else f"covered({'+'.join(shapes) or 'none-needed'})",
+                classification=classification,
                 uncovered=sorted(uncovered),
             ))
     return sites

@@ -86,13 +86,13 @@ def go(p):
 
 CALLER_ALIAS_EXACT = '''
 import refusal
-import mod_b
+import mod_b as mb                 # alias != stem: resolution must follow it
 
-Refused = mod_b.Refused
+Refused = mb.Refused
 
 def go(x):
     try:
-        mod_b.measure(x)
+        mb.measure(x)
     except Refused as e:
         print("REFUSED", e)
 '''
@@ -130,6 +130,22 @@ def go(p):
         print("REFUSED", e)
 '''
 
+CALLER_CLI_BASE_GUARD = '''
+import sys
+import refusal
+import mod_a
+
+def go(p):
+    return mod_a.load(p)           # unguarded HERE; caught at the boundary
+
+if __name__ == "__main__":
+    try:
+        sys.exit(go("x"))
+    except refusal.Refused as e:
+        print(f"REFUSED  {e}")
+        sys.exit(2)
+'''
+
 
 def _tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
     files = {}
@@ -141,7 +157,8 @@ def _tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
                        ("caller_quiet", CALLER_QUIET_FUNCTION),
                        ("caller_localvar", CALLER_LOCAL_VAR_FALSE_POSITIVE),
                        ("caller_broad", CALLER_BROAD_GUARD),
-                       ("caller_exact", CALLER_EXACT_MODULE_GUARD)):
+                       ("caller_exact", CALLER_EXACT_MODULE_GUARD),
+                       ("caller_cli_base", CALLER_CLI_BASE_GUARD)):
         p = tmp_path / f"{name}.py"
         p.write_text(body)
         files[name] = p
@@ -181,7 +198,7 @@ def test_alias_of_the_callee_class_covers_exactly_that_callee(tmp_path):
     # the same caller calling mod_a under that alias stays uncovered:
     files = [p for p in _tree(tmp_path)]
     (tmp_path / "caller_alias.py").write_text(
-        "import mod_a\n" + CALLER_ALIAS_EXACT.replace("mod_b.measure", "mod_a.load"))
+        "import mod_a as ma\n" + CALLER_ALIAS_EXACT.replace("mb.measure", "ma.load"))
     idx = rss.build_index(files)
     cross = [s for s in rss.scan(files, idx)
              if s["callee"] == "mod_a.load" and "caller_alias" in s["site"]][0]
@@ -208,3 +225,12 @@ def test_exact_module_refused_handler_covers(tmp_path):
     s = _scan(tmp_path)[("caller_exact.py", "mod_a.load")]
     assert s["classification"].startswith("covered"), s
     assert "exact" in s["guard"], s
+
+
+def test_unguarded_call_under_a_base_cli_dispatch_is_cli_base(tmp_path):
+    """The rs_guard_band/rs_mode_drive shape: unguarded at the call site,
+    `except refusal.Refused` at the `__main__` dispatch -- the census must
+    not list the repaired modules as escapes."""
+    s = _scan(tmp_path)[("caller_cli_base.py", "mod_a.load")]
+    assert s["classification"] == "covered(cli-base)", s
+    assert s["guard"] == "none", s
