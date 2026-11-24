@@ -135,18 +135,6 @@ def two_tone(f1, f2, tau1, tau2, a1, a2, seconds, sr=SR, lead_ms=10.0,
     return np.concatenate([np.zeros(int(lead_ms * 1e-3 * sr)), x])
 
 
-def harmonic_series(f0, n, k, sr=SR, amps=None, phases=None):
-    """Sum of `k` harmonics of `f0` with amplitudes `amps` (default 1/i, the
-    sawtooth series) and phases `phases` (default all zero)."""
-    t = np.arange(n) / sr
-    out = np.zeros(n)
-    for i in range(1, k + 1):
-        a = (1.0 / i) if amps is None else amps[i - 1]
-        p = 0.0 if phases is None else phases[i - 1]
-        out += a * np.sin(2 * math.pi * i * f0 * t + p)
-    return out
-
-
 def add_noise(x, snr_db, seed, *, over=None):
     """`x` plus white Gaussian noise at `snr_db` below the RMS of `x[over]`.
 
@@ -752,6 +740,14 @@ def _bandlimited(kind, f0, n, sr, duty=0.5, phase=0.0):
 
 def _harmonic_mixture(kind, band_limited, f0, duty, dur, phase, amp, snr_db,
                       seed, sr=SR, inharmonic_share_db=None):
+    """A stationary harmonic waveform whose truth is a synthesis parameter.
+
+    The core is `_bandlimited` (which also returns the partial amplitudes
+    `amps`) or `_naive` (which cannot, so `amps` is None), scaled by `amp`.
+    `inharmonic_share_db`, if given, adds a planted sine at 1.5 * f0 carrying
+    that share of the power. The core goes through `_struck` with no lead or
+    trail, and noise is added at `snr_db` over the sounding slice only. When `amps` is known, `centroid`
+    (power-weighted) and `rms_signal` are closed forms of the line set."""
     n = int(dur * sr)
     if band_limited:
         core, amps = _bandlimited(kind, f0, n, sr, duty, phase)

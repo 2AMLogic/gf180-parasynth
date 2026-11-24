@@ -8,6 +8,24 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-23
 
+- **PR #1141**: fix: baseline refusal names pytest's real exit status
+- **Issue #1128** (closed): holdout probe's baseline refusal names "pytest exited 1" when pytest exited 2 with a parsed FAILED line
+- **PR #1114**: fix: ignore .loom/account-ranking.* daemon state file
+- **Issue #1112** (closed): check-main-clean.sh exits 3 on every sweep: the daemon state file .loom/account-ranking.codex is not in the loom-managed .gitignore block
+- **PR #1101**: test: run the pinned-klt envelope step locally, not only in CI
+- **Issue #1095** (closed): the pinned-klt envelope gate has no committed control and no local half: it is runnable only by pushing to CI
+- **PR #1139**: chore: regenerate loom-managed gitignore block
+- **Issue #1122** (closed): loom-managed .gitignore block is two patterns stale vs installed loom-daemon 0.20.20 (/node_modules/, /pnpm-lock.yaml)
+- **PR #1138**: fix: refuse two mutation records when the unmutated suite is red
+- **Issue #1130** (closed): Two unwired mutation records read any non-zero pytest as killed with no unmutated run: mutate_pnr_report, probe_injection_discrimination
+- **PR #1140**: docs: link DAG tag criterion to generated evidence table
+- **Issue #1137** (closed): Link the capability DAG’s stamping criteria to the generated tag evidence
+- **PR #1135**: docs: refresh Foundation/Minimoog status cells from dag-results
+- **Issue #1121** (closed): docs/capability-dag.md F2 status still says the modal bank is on the unmerged `drums` branch
+- **PR #1127**: fix: holdout probe refuses on a red unmutated baseline before any control runs
+- **Issue #1124** (closed): holdout_injected_controls has no unmutated-tree baseline: a pre-existing red in test_holdout.py reads as 'every control fired'
+- **PR #1111**: docs: record the unfiled judge fast-path gh field finding
+- **Issue #820** (closed): Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
 - **PR #1119**: fix: holdout probe maps pytest's exit status to its own outcome space
 - **Issue #1118** (closed): holdout_injected_controls: pytest's own exit status is read as the probe's outcome — a deleted test_holdout.py reports 'every control fired' (exit 0)
 - **PR #1107**: Remove stale UART repair probe, record transcript provenance
