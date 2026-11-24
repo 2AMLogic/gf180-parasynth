@@ -37,13 +37,11 @@ are asserted per control for that reason.
 """
 from __future__ import annotations
 
-import argparse
 import pathlib
-import subprocess
 import sys
-import textwrap
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from control_dag_lib import main, mutation_control                    # noqa: E402
 
 #: name -> (the mutation, the test that MUST be among the failures, why it is
 #: a plausible way for the fix to be undone)
@@ -97,70 +95,15 @@ CONTROLS = {
         "for and which restores the original defect exactly"),
 }
 
-RUNNER = """
-import pathlib, sys
-ROOT = pathlib.Path({root!r})
-sys.path.insert(0, str(ROOT / "tools"))
-sys.path.insert(0, str(ROOT / "model"))
-sys.path.insert(0, str(ROOT / "audition"))
-import refprofile as rp
-{mutation}
-import pytest
-sys.exit(pytest.main(["-q", "--no-header", "-p", "no:cacheprovider",
-                      str(ROOT / "tools" / "test_refprofile.py")]))
-"""
-
-
 def run_one(name: str) -> tuple[bool, list, str]:
     """Apply one mutation and run the suite. Returns (fired, failed tests, why)."""
     mutation, must_fail, _why = CONTROLS[name]
-    code = RUNNER.format(root=str(ROOT), mutation=mutation)
-    p = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT),
-                       capture_output=True, text=True)
-    failed = sorted({ln.split("::")[-1].split(" ")[0]
-                     for ln in p.stdout.splitlines() if ln.startswith("FAILED")})
-    if p.returncode == 0:
-        return False, failed, "the suite stayed GREEN with the defect injected"
-    if must_fail not in failed:
-        return False, failed, (f"the suite went red but {must_fail} was not among "
-                               f"the failures, so this control is satisfied by some "
-                               f"OTHER assertion and would survive that one's "
-                               f"deletion")
-    return True, failed, ""
-
-
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--list", action="store_true",
-                    help="what each control injects, and which test must catch it")
-    a = ap.parse_args(argv)
-
-    if a.list:
-        for name, (mutation, must_fail, why) in CONTROLS.items():
-            print(f"{name}\n  caught by  {must_fail}\n  why        {why}")
-            print(textwrap.indent(mutation, "  | "))
-            print()
-        return 0
-
-    bad = []
-    for name in CONTROLS:
-        fired, failed, why = run_one(name)
-        print(f"{'RED ' if fired else 'DID NOT FIRE':<14}{name}"
-              f"{'' if fired else '  -- ' + why}")
-        for f in failed[:8]:
-            print(f"               {f}")
-        if not fired:
-            bad.append(name)
-    print()
-    if bad:
-        print(f"FAIL -- {len(bad)} control(s) did not fire: {', '.join(bad)}. "
-              f"A run where these do not fire is a broken run, not a quiet one.")
-        return 1
-    print(f"OK -- all {len(CONTROLS)} capability-verdict controls fired, each on "
-          f"the test it was written for.")
-    return 0
+    return mutation_control(mutation, must_fail)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(
+        __doc__, CONTROLS, run_one, show=str,
+        ok_message=f"OK -- all {len(CONTROLS)} capability-verdict controls "
+                   f"fired, each on the test it was written for."))
+
