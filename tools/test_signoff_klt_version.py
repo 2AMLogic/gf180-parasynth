@@ -326,7 +326,7 @@ def _logical_commands(recipe: str) -> list[str]:
 def _recipe_jobs(recipe: str) -> list[list[str]]:
     """Return each shell job executed by a Make recipe as a token list.
 
-    A `$(RUN)` invocation (`tools/run_all.py`) executes each positional
+    A `$(RUN)` invocation (`tools/run_all.py`, or `tools/run_controls.py`) executes each positional
     argument string as a separate job; any other recipe line executes as one
     command directly (so `echo "$(PY) -m pytest ..."` stays `['echo', ...]`,
     not a pytest job)."""
@@ -337,7 +337,8 @@ def _recipe_jobs(recipe: str) -> list[list[str]]:
             continue
         if tokens[0] == "$(RUN)":
             rest = tokens[1:]
-        elif tokens[:2] == ["$(PY)", "tools/run_all.py"]:
+        elif tokens[:2] in (["$(PY)", "tools/run_all.py"],
+                            ["$(PY)", "tools/run_controls.py"]):
             rest = tokens[2:]
         else:
             jobs.append(tokens)
@@ -354,7 +355,11 @@ def _recipe_jobs(recipe: str) -> list[list[str]]:
             elif not end_opts and tok.startswith("-"):
                 i += 1
             else:
-                jobs.append(shlex.split(tok))
+                # run_controls.py job strings may carry an `@baseline=ID ` /
+                # `@after=ID ` ordering prefix; it is not a VAR=VALUE
+                # assignment, so strip it or a pytest job behind a baseline
+                # would be invisible to _pytest_args_of_job.
+                jobs.append(shlex.split(re.sub(r"^@(?:baseline|after)=\S+\s+", "", tok)))
                 i += 1
     return jobs
 

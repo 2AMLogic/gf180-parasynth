@@ -181,17 +181,88 @@ def test_every_flagged_rtl_control_is_behind_a_baseline():
     assert not bare, f"mutants with no clean baseline in make controls: {bare}"
 
 
+_INJECTION_FLAGS = {"--inject", "--expect-fail", "--expect-mismatch", "--wrong",
+                    "--inject-clamp", "--define"}
+_NON_CONFIG = {"--outdir"}
+# Flags a mutant may carry that its baseline lacks because they SELECT the
+# defect under test rather than describe the scenario. `--link dr7rev1` is the
+# only live one (verify_ctl's reversed-link mutant). Anything else a mutant adds
+# (e.g. `--osc2x`) is a different configuration and must be refused.
+_MUTANT_ONLY_CONFIG = {"--link"}
+
+
+def _config_pairs(cmd: str) -> tuple[str, set[tuple[str, str | None]]]:
+    """(verifier script, {(flag, value-or-None)}) for the configuration flags of
+    a verifier command: every `--flag [value]` except outdir and the injection
+    flags. Values are kept, so `--set quick` != `--set full`."""
+    toks = shlex.split(cmd)
+    script = next(t for t in toks if t.endswith(".py"))
+    pairs: set[tuple[str, str | None]] = set()
+    i = 0
+    while i < len(toks):
+        t = toks[i]
+        if t.startswith("--"):
+            val = toks[i + 1] if i + 1 < len(toks) and not toks[i + 1].startswith("--") else None
+            if t in _INJECTION_FLAGS:
+                # an injection flag's value (the bug name) is not configuration
+                i += 2 if val is not None else 1
+                continue
+            if t not in _NON_CONFIG:
+                pairs.add((t, val))
+            i += 2 if val is not None else 1
+            continue
+        i += 1
+    return script, pairs
+
+
+def _mutant_matches_baseline(base_cmd: str, mut_cmd: str) -> bool:
+    """Same verifier and the same configuration, values included: every
+    (flag, value) the baseline names appears in the mutant, and the mutant adds
+    only defect-selecting flags (`_MUTANT_ONLY_CONFIG`). A mutant adding
+    `--osc2x` its baseline lacks, dropping a baseline flag, or changing a value
+    is a different scenario."""
+    bs, bp = _config_pairs(base_cmd)
+    ms, mp = _config_pairs(mut_cmd)
+    return bs == ms and bp <= mp and all(f in _MUTANT_ONLY_CONFIG for f, _ in mp - bp)
+
+
 def test_a_baseline_is_the_clean_config_of_its_mutants():
-    """Each group's mutants share the baseline's verifier and every
-    configuration flag the baseline names (`--osc2x`, `--short`, ...)."""
+    """Each group's mutants share the baseline's verifier and its EXACT
+    configuration (flags and flag values, both directions)."""
     specs = run_controls.parse(_entries())
     base = {s["group"]: s for s in specs if s["role"] == "baseline"}
     for s in specs:
         if s["role"] != "mutant":
             continue
-        b = shlex.split(base[s["group"]]["cmd"])
-        m = shlex.split(s["cmd"])
-        script = next(t for t in b if t.endswith(".py"))
-        assert script in m, (s["group"], s["cmd"])
-        cfg = [t for t in b if t.startswith("--") and t != "--outdir"]
-        assert all(t in m for t in cfg), (s["group"], cfg, s["cmd"])
+        assert _mutant_matches_baseline(base[s["group"]]["cmd"], s["cmd"]), (
+            s["group"], base[s["group"]]["cmd"], s["cmd"])
+
+
+@pytest.mark.parametrize("base,mut", [
+    # flag VALUE differs: quick/gate baseline credits a quick/default mutant
+    ("verify_voice.py --set quick --only gate --outdir b",
+     "verify_voice.py --set quick --only default --inject X --expect-fail --outdir m"),
+    ("verify_voice.py --set quick --only gate --outdir b",
+     "verify_voice.py --set full --only gate --inject X --expect-fail --outdir m"),
+    # empty baseline config must NOT vacuously accept a configured mutant
+    ("verify_synth_top.py --outdir b",
+     "verify_synth_top.py --osc2x --inject X --expect-fail --outdir m"),
+    # mutant drops a baseline config flag
+    ("verify_synth_top.py --osc2x --outdir b",
+     "verify_synth_top.py --inject X --expect-fail --outdir m"),
+    # different verifier
+    ("verify_voice.py --set quick --outdir b",
+     "verify_ctl.py --set quick --inject X --expect-fail --outdir m"),
+])
+def test_the_baseline_config_guard_rejects_a_mismatched_mutant(base, mut):
+    """Injected-bug control for the guard above (verification-rules rule 8)."""
+    assert not _mutant_matches_baseline(base, mut)
+
+
+def test_the_baseline_config_guard_accepts_a_matching_mutant():
+    assert _mutant_matches_baseline(
+        "verify_synth_top.py --osc2x --outdir b",
+        "verify_synth_top.py --osc2x --inject X --expect-fail --outdir m")
+    assert _mutant_matches_baseline(
+        "verify_ctl.py --outdir b",
+        "verify_ctl.py --link dr7rev1 --expect-fail --outdir m")
