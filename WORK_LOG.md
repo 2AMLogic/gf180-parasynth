@@ -8,6 +8,13 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-24
 
+- **PR #1150**: test: refuse job-level if/continue-on-error in the regrade harness
+- **Issue #1152** (closed): check_workflows: job-level continue-on-error only matches the bare YAML boolean (rule-8 input)
+- **Issue #1143** (closed): test_signoff_klt_version REFUSES on a step-level kill switch but reports green on a job-level one
+- **PR #1147**: fix: normalise trajectory() cells to a share of clip energy, independent of sample rate
+- **Issue #1129** (closed): trajectory() cells carry an n_seg/2 length multiplier, biasing every ours-minus-machine cell +0.368 dB (48 kHz vs 44.1 kHz)
+- **PR #1142**: fix(probe): refuse a holdout control whose red is outside its recorded tests
+- **Issue #1136** (closed): holdout probe: a FIRED control's red is still not attributed to its injection (candidate 2 from #1124)
 - **PR #1151**: fix: refuse malformed provenance and read quoted klt pins in signoff regrade
 - **Issue #1100** (closed): Fix malformed-provenance refusals and quoted-pin comparisons in signoff
 - **PR #1134**: refactor: remove five unreferenced defs, moving their explanations to live code
