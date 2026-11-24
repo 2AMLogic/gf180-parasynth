@@ -114,6 +114,7 @@ import run_case as rc                       # noqa: E402
 import cymbal_bands as cb                   # noqa: E402
 import cymbal_tone_realisation as tr        # noqa: E402
 import tone_stage_schematic as ts           # noqa: E402
+import audio_measure as am                  # noqa: E402
 import refusal
 
 FISCHER_JSON = ROOT / "docs" / "scorecard" / "cymbal-369" / "fischer.json"
@@ -663,6 +664,14 @@ def measure_windows(refs: pathlib.Path, *, cfg=None, defect=None) -> dict:
             p = refs / "cy8" / f"CY{t}{d}.WAV"
             x, sr = cb._load(p)
             y = rc.prepare(x, sr, side=p.name)
+            # A silent recording is a missing precondition, not a measurement:
+            # `prepare` passes it through unchanged and every band energy comes
+            # back zero, so the H/L division below is log10(0/0) -- a crash
+            # (#1163). Clamping the zeros instead would report a plausible
+            # 0 dB balance for silence, which is worse than refusing. Refuse in
+            # `run_case`'s own reference-load words.
+            if am.is_silent(y):
+                raise Refused(f"reference recording {p.name} is silent")
             if cfg["short_record"]:
                 y = y[:rc.required_lead_samples(sr) + int(0.25 * sr)]
             filt = {k: cb._bp(y, sr, lo, hi) for k, (lo, hi) in bands.items()}
