@@ -8,6 +8,15 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-24
 
+- **PR #1179**: check_workflows: refuse a step if: that cannot be shown to run on a pull_request
+- **PR #1176**: test: require exact success-polarity gate in verilator identity phrase check
+- **PR #1175**: ci: refuse rather than report simulator identity in pulse2x-rtl
+- **PR #1161**: fix: refuse by name on null provenance/config in m5a compare and m1a regen tools
+- **Issue #1178** (closed): step_would_block_pull_request's step arm misses an `if:` that keeps the step off pull requests (the #1168 shape, one level down)
+- **Issue #1171** (closed): pulse2x-rtl's simulator-identity step reports rather than refuses; it is safe only by default success() gating
+- **Issue #1170** (closed): rtl-full identity gate: the pytest guard accepts any mention of steps.verilator_identity.outcome, not the 'success' polarity
+- **Issue #1165** (closed): observe the rtl-full verilator_identity gate on a real dispatch (post-merge follow-up to #1154)
+- **Issue #1155** (closed): Same-shape sweep from #1100: three provenance reads still crash on a present-but-null field
 - **PR #1174**: fix: refuse any job-level if: in the signoff harness (_locate)
 - **PR #1169**: refactor: adopt control_dag_lib harness in control_capability_verdicts
 - **Issue #1168** (closed): check_workflows: the job and step `if:` arms still disagree (the `continue-on-error` half was #1158)
