@@ -60,20 +60,17 @@ def _constant_false(value: object) -> bool:
 
 
 def constant_true(value: object) -> bool:
-    """Whether a `continue-on-error:` value is constant-true: bool `True`, or
-    the string forms `"true"` / `"${{ true }}"` (#1158). YAML loads the
-    expression form as a *string*, so an `is True` test misses it while
-    GitHub Actions evaluates it and neutralises the job. Quoted `"true"` is
-    treated as true on the safe side for a guard (it refuses); whether the
-    runner honours it is UNMEASURED. Not general expression evaluation."""
-    if isinstance(value, bool):
-        return value is True
-    if isinstance(value, str):
-        s = value.strip()
-        if s.startswith("${{") and s.endswith("}}"):
-            s = s[3:-2].strip()
-        return s.lower() == "true"
-    return False
+    """Whether a `continue-on-error:` value must be treated as neutralising:
+    anything not provably constant-false (#1158). Safe direction for a guard:
+    bool `True`, `"true"`, `"${{ true }}"`, quoted `"yes"` and any
+    non-constant expression such as `${{ github.event_name != 'push' }}`
+    (true on a `pull_request` run) all neutralise; only absent / `False` /
+    `"false"` / `"${{ false }}"` do not. Whether the runner honours quoted
+    `"true"` / `"yes"` is UNMEASURED; the guard refuses on the safe side.
+    Not general expression evaluation."""
+    if value is None:
+        return False
+    return not _constant_false(value)
 
 
 def _job_excludes_pull_request(job: dict) -> bool:
@@ -106,7 +103,8 @@ def job_neutralised_reason(job: dict, job_name: str) -> str | None:
                 f"no step in it can block a pull request")
     if constant_true(job.get("continue-on-error")):
         return (f"job {job_name!r} sets a job-level `continue-on-error: "
-                f"{job.get('continue-on-error')!r}`, so no step in it can block a pull request")
+                f"{job.get('continue-on-error')!r}`, so no step in it can "
+                f"block a pull request")
     return None
 
 

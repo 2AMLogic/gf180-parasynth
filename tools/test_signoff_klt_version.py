@@ -816,8 +816,9 @@ def test_a_mention_outside_a_pytest_job_is_not_wiring(recipe):
 
 
 @pytest.mark.parametrize("value, refused", [
-    (True, True), ("${{ true }}", True), ("yes", False), (False, False),
+    (True, True), ("${{ true }}", True), ("yes", True), (False, False),
     ("false", False), ("${{ false }}", False), (None, False),
+    ("${{ github.event_name != 'push' }}", True),
 ], ids=repr)
 def test_job_and_step_continue_on_error_agree(value, refused):
     """Edge/control (#1158): the job arm and the step arm share one predicate,

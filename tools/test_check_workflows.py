@@ -599,6 +599,16 @@ def test_an_expression_form_continue_on_error_does_not_block(level):
     assert "continue-on-error" in reason
 
 
-@pytest.mark.parametrize("value", ["false", "${{ false }}", None, "yes", False])
-def test_constant_true_rejects_non_true_forms(value):
+@pytest.mark.parametrize("value", ["false", "${{ false }}", None, False])
+def test_constant_true_rejects_provably_false_forms(value):
     assert cw.constant_true(value) is False
+
+
+@pytest.mark.parametrize("value", [
+    True, "true", "${{ true }}", "yes",
+    "${{ github.event_name != 'push' }}",  # true on a pull_request run
+], ids=repr)
+def test_constant_true_treats_anything_not_provably_false_as_neutralising(value):
+    """#1158 review: the safe direction. The conditional expression is the
+    input that defeats a narrow predicate (rule 8)."""
+    assert cw.constant_true(value) is True
