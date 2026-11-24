@@ -44,13 +44,14 @@ a committed control below, beside the start-red stubs (a no-op with the step's
 shape, and a piped heredoc under the default `bash -e` shell) that the stale
 control must fail on for the one reason that the step accepted.
 
-Blind spots of the STEP, reproduced through `run_step` on disposable
-copies at `cce13654` and not fixed here (editing signoff.yml means
-re-attesting item 10; neither case passes silently): `provenance: null`
-ends in `AttributeError: 'NoneType' object has no attribute 'get'` -- exit
-1, but no `REFUSED:` line; a quoted pin, `--from "klayout-tools==0.9.2"`,
-is read as `0.9.2"` and reported as a mismatch against a correct envelope
--- exit 1, on a false diagnosis. Out of scope by the issue: a hand-edited
+Two blind spots of the step were fixed in #1100: `provenance: null` (or any
+non-object) ended in an `AttributeError` instead of the `REFUSED:` line, and a
+quoted pin, `--from "klayout-tools==0.9.2"`, was read as `0.9.2"` -- a false
+mismatch. The step now refuses non-object provenance by name and reads the
+pin with `shlex.split`. The quoted-pin cases exercise only the version
+comparison; they do not show that the earlier `$KLT signoff` steps accept
+embedded quotes, so the production job keeps its unquoted spelling.
+Out of scope by the issue: a hand-edited
 producer version equal to the pin authenticates.
 """
 from __future__ import annotations
@@ -649,6 +650,91 @@ def test_a_pin_the_step_cannot_read_is_refused(klt, tmp_path):
     _assert_rejected(
         res,
         f"REFUSED: cannot read the pinned version from $KLT {klt_val!r}; "
+        "expected klayout-tools==X.Y.Z")
+
+
+# =============================================================================
+# #1100: malformed provenance and quoted pins. Both used to end the step in
+# the wrong place (an AttributeError; a false mismatch on `0.9.2"`).
+# =============================================================================
+def _set_provenance(value):
+    def change(envelope: dict) -> None:
+        envelope["provenance"] = value
+    return change
+
+
+def _drop_provenance(envelope: dict) -> None:
+    del envelope["provenance"]
+
+
+MALFORMED_PROVENANCE = [
+    ("absent", _drop_provenance),
+    ("null", _set_provenance(None)),
+    ("list", _set_provenance([1])),
+    ("string", _set_provenance("x")),
+]
+
+
+def _recorded_version() -> str:
+    """The producer version the clean fixtures record, read straight from the
+    envelope JSON: independent of both the step's parse and `_pinned_version`."""
+    versions = {json.loads((REPO / e).read_text())["provenance"]["klt_version"]
+                for e in ENVELOPES}
+    assert len(versions) == 1, versions
+    return versions.pop()
+
+
+@pytest.mark.parametrize("rel", ENVELOPES, ids=["item-9", "item-10"])
+@pytest.mark.parametrize("kind, change", MALFORMED_PROVENANCE,
+                         ids=[k for k, _ in MALFORMED_PROVENANCE])
+def test_malformed_provenance_ends_in_the_refused_line_not_a_crash(
+        rel, kind, change, tmp_path):
+    res = run_step(WORKFLOW, _tree(tmp_path, rel, change))
+    _assert_rejected(res, f"REFUSED: {rel} records no provenance.klt_version")
+    # a malformed second envelope comes after a good first one
+    assert (ITEM9 in res.stdout) == (rel == ITEM10), _report(res)
+
+
+def _quoted_klt(version: str, quote: str) -> str:
+    return (f"uvx --with pyyaml --from {quote}klayout-tools=={version}{quote} klt")
+
+
+@pytest.mark.parametrize("quote", ["", '"', "'"], ids=["unquoted", "double", "single"])
+def test_the_exact_pin_passes_unquoted_and_in_matching_quotes(quote, tmp_path):
+    version = _recorded_version()
+    res = run_step(_workflow(_with_job_klt(_quoted_klt(version, quote))),
+                   _tree(tmp_path))
+    assert res.returncode == 0, _report(res)
+    for env in ENVELOPES:
+        line = [ln for ln in res.stdout.splitlines() if env in ln]
+        assert len(line) == 1 and f"== pinned {version}" in line[0], _report(res)
+        assert '"' not in line[0] and "'" not in line[0], _report(res)
+
+
+@pytest.mark.parametrize("quote", ['"', "'"], ids=["double", "single"])
+def test_a_stale_envelope_under_a_quoted_pin_names_the_real_pin(quote, tmp_path):
+    version = _recorded_version()
+    res = run_step(_workflow(_with_job_klt(_quoted_klt(version, quote))),
+                   _tree(tmp_path, ITEM10, _set_version(STALE_VERSION)))
+    _assert_rejected(
+        res,
+        f"{ITEM10} was attested by klt {STALE_VERSION}, not the pinned {version}: "
+        "a pin bump landed without re-attesting the envelope")
+
+
+@pytest.mark.parametrize("klt", [
+    'uvx --with pyyaml --from "klayout-tools==0.9.2 klt',
+    "uvx --with pyyaml --from 'klayout-tools==0.9.2\" klt",
+    'uvx --with pyyaml --from "klayout-tools==0.9.2\'" klt',
+    'uvx --with pyyaml --from "klayout-tools==0.9.2,<1" klt',
+    "uvx --with pyyaml klayout-tools==0.9.2 klt --from",
+], ids=["unmatched-quote", "mismatched-quotes", "embedded-quote", "range-suffix",
+        "dangling-from"])
+def test_an_unreadable_quoted_pin_is_refused(klt, tmp_path):
+    res = run_step(_workflow(_with_job_klt(klt)), _tree(tmp_path))
+    _assert_rejected(
+        res,
+        f"REFUSED: cannot read the pinned version from $KLT {klt!r}; "
         "expected klayout-tools==X.Y.Z")
 
 
