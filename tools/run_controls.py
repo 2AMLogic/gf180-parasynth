@@ -45,6 +45,7 @@ import shlex
 import sys
 import threading
 
+import refusal
 import run_all
 from run_all import FAIL, NO_VERDICT, PASS, run_one, summarise, write_json_atomic
 
@@ -59,7 +60,7 @@ _DEFINE_INJECT = re.compile(r"(?:^|\s)(?:--define\s+|-D)INJECT_BUG")
 _PREFIX = re.compile(r"^@(baseline|after)=([A-Za-z0-9_.-]+)\s+(.*)$", re.S)
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     pass
 
 
