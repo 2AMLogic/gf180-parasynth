@@ -17,6 +17,7 @@ in those files -- a lookalike fixture could pass while the real files drifted.
 from __future__ import annotations
 
 import pathlib
+import re
 import sys
 
 import yaml
@@ -985,3 +986,145 @@ def test_constant_true_if_refuses_everything_else(value):
     """`yes` is YAML-1.1 truthiness, not a GitHub `if:` constant; non-string
     non-bool values cannot be shown always-true either."""
     assert cw._constant_true_if(value) is False
+
+
+# =============================================================================
+# #1212: rtl-full's injected control is credited only against a clean run of
+# its OWN configuration. The job ran the Verilator VOICE_FILTER2X_OFF mutant
+# with no clean Verilator --m5a-smoke --filter2x run before it, so any red
+# for an unrelated reason (a Verilator build break among them) would have
+# registered as "detected". The pairing key is script + simulator + stimulus
+# flags -- not "some green step exists in the job": the full-phrase
+# tools/verify_m5a_filter2x_i2s.py step is also Verilator, and must NOT
+# satisfy the smoke mutant's baseline (same simulator, different stimulus).
+# =============================================================================
+# rtl-full's twins are direct, single-command steps. A wrapper's quoted
+# arguments or a shell expression need their own execution-order analysis.
+_DIRECT_BENCH = re.compile(r"python[ \t]+[\w./-]+\.py(?:[ \t]+[\w./:=-]+)*")
+
+
+def _rtl_full_steps():
+    return yaml.safe_load(RUNGS.read_text())["jobs"]["rtl-full"]["steps"]
+
+
+def _smoke_step(steps, *, mutant):
+    return next(step for step in steps if "--m5a-smoke" in step.get("run", "")
+                and ("--inject" in step["run"]) == mutant)
+
+
+def _success_gated(condition):
+    """A mutant must run on success and stop on failure of its baseline."""
+    if not isinstance(condition, str):
+        return condition is None or condition is True
+    expr = condition.strip()
+    if expr.startswith("${{") and expr.endswith("}}"):
+        expr = expr[3:-2].strip()
+    return expr.lower() in {"true", "success()"}
+
+
+def _assert_injects_are_paired(steps) -> None:
+    clean = set()
+    mutants = 0
+    for step in steps:
+        run = step.get("run", "").strip()
+        if not _DIRECT_BENCH.fullmatch(run):
+            assert "--inject" not in run, f"expected a direct bench invocation: {run}"
+            continue
+
+        # Retain argument order so flag values stay bound to their own flags.
+        args = iter(run.split())
+        config = []
+        injected = False
+        expect_fail = False
+        for arg in args:
+            flag, equals, value = arg.partition("=")
+            if flag in {"--inject", "--outdir"}:
+                value = value if equals else next(args, "")
+                assert value and not value.startswith("--"), f"missing {flag} value: {run}"
+                if flag == "--inject":
+                    injected = True
+            elif arg == "--expect-fail":
+                expect_fail = True
+            else:
+                config.append(arg)
+
+        condition = step.get("if")
+        soft_failure = cw.constant_true(step.get("continue-on-error"))
+        if injected:
+            mutants += 1
+            assert _success_gated(condition), f"mutant must depend on success: {run}"
+            assert not soft_failure, f"mutant allows continue-on-error: {run}"
+            assert tuple(config) in clean, f"no clean run of the same config before {run}"
+        elif not soft_failure and not expect_fail and cw._constant_true_if(condition):
+            clean.add(tuple(config))
+
+    assert mutants, "rtl-full's injected controls vanished silently"
+
+
+def test_rtl_full_injected_controls_follow_a_clean_run_of_the_same_config():
+    _assert_injects_are_paired(_rtl_full_steps())
+
+
+def test_rtl_full_without_the_clean_verilator_smoke_step_is_red():
+    """Leave the full-phrase Verilator step in place. It exercises a different
+    script and stimulus, so the smoke mutant loses its baseline."""
+    steps = _rtl_full_steps()
+    steps.remove(_smoke_step(steps, mutant=False))
+    with pytest.raises(AssertionError, match="no clean run.*VOICE_FILTER2X_OFF"):
+        _assert_injects_are_paired(steps)
+
+
+def test_a_same_script_different_stimulus_clean_step_does_not_pair_the_mutant():
+    steps = _rtl_full_steps()
+    clean = _smoke_step(steps, mutant=False)
+    clean["run"] = clean["run"].replace("--m5a-smoke --filter2x", "--osc2x")
+    with pytest.raises(AssertionError, match="no clean run.*VOICE_FILTER2X_OFF"):
+        _assert_injects_are_paired(steps)
+
+
+def test_rtl_full_with_no_injected_controls_left_is_red():
+    steps = [s for s in _rtl_full_steps() if "--inject" not in s.get("run", "")]
+    with pytest.raises(AssertionError, match="vanished silently"):
+        _assert_injects_are_paired(steps)
+
+
+@pytest.mark.parametrize("condition", ["${{ !cancelled() }}", "always()", "failure()"])
+def test_rtl_full_mutant_cannot_run_after_a_failed_baseline(condition):
+    steps = _rtl_full_steps()
+    _smoke_step(steps, mutant=True)["if"] = condition
+    with pytest.raises(AssertionError, match="success"):
+        _assert_injects_are_paired(steps)
+
+
+def test_rtl_full_refuses_a_soft_failing_second_mutant():
+    steps = _rtl_full_steps()
+    steps.append({**_smoke_step(steps, mutant=True), "continue-on-error": True})
+    with pytest.raises(AssertionError, match="mutant allows continue-on-error"):
+        _assert_injects_are_paired(steps)
+
+
+@pytest.mark.parametrize("quote", ["'", '"'])
+def test_rtl_full_refuses_a_mutant_inside_a_wrapper_argument(quote):
+    steps = _rtl_full_steps()
+    wrapper = "python tools/run_all.py --jobs 2 "
+    steps.extend([
+        {"run": wrapper + quote + "python tools/check_workflows.py" + quote},
+        {"run": wrapper + quote + _smoke_step(steps, mutant=True)["run"] + quote},
+    ])
+    with pytest.raises(AssertionError, match="direct"):
+        _assert_injects_are_paired(steps)
+
+
+@pytest.mark.parametrize("overrides", [{"if": "false"}, {"continue-on-error": True}])
+def test_rtl_full_clean_twin_must_run_and_propagate_failure(overrides):
+    steps = _rtl_full_steps()
+    _smoke_step(steps, mutant=False).update(overrides)
+    with pytest.raises(AssertionError, match="no clean run"):
+        _assert_injects_are_paired(steps)
+
+
+def test_rtl_full_accepts_an_always_clean_twin_and_success_gated_mutant():
+    steps = _rtl_full_steps()
+    _smoke_step(steps, mutant=False)["if"] = "always()"
+    _smoke_step(steps, mutant=True)["if"] = "${{ success() }}"
+    _assert_injects_are_paired(steps)
