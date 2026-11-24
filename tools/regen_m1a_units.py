@@ -60,6 +60,18 @@ def keep_audio_check(new, old) -> bool:
     return not (new_hash and old_hash and new_hash == old_hash)
 
 
+def carry_scoring_stamps(new: dict, old: dict) -> None:
+    """Fields the scoring layer (tools/run_case.py) stamps AFTER bass.run()
+    returns; the raw run() output lacks them. outcome_code is carried over
+    -- justified here because the gate above proved the published numbers
+    exact; command names THIS tool honestly rather than pretending
+    run_case ran."""
+    old_provenance = old.get("provenance") or {}
+    if "outcome_code" in old_provenance:
+        new["provenance"]["outcome_code"] = old_provenance["outcome_code"]
+    new["provenance"]["command"] = "tools/regen_m1a_units.py (cached-audio reanalysis)"
+
+
 def main() -> int:
     old = json.loads(RECORD.read_text())
     case = next(c for c in run_case.load_cases() if c["case_id"] == "M1A")
@@ -105,14 +117,7 @@ def main() -> int:
               "the published one", file=sys.stderr)
         return 1
 
-    # Fields the scoring layer (tools/run_case.py) stamps AFTER bass.run()
-    # returns; the raw run() output lacks them. outcome_code is carried over
-    # -- justified here because the gate above proved the published numbers
-    # exact; command names THIS tool honestly rather than pretending
-    # run_case ran.
-    if "outcome_code" in old.get("provenance", {}):
-        new["provenance"]["outcome_code"] = old["provenance"]["outcome_code"]
-    new["provenance"]["command"] = "tools/regen_m1a_units.py (cached-audio reanalysis)"
+    carry_scoring_stamps(new, old)
 
     changed_labels = []
     for name, prop in new["diagnostics"]["properties"].items():
