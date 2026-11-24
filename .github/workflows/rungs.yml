@@ -817,6 +817,13 @@ jobs:
         run: python rtl-sketch/verify_drums.py
       - name: M5A -- complete reconstructed 2x filter phrase through SPI to I2S and score decoded audio
         run: python tools/verify_m5a_filter2x_i2s.py
+      # A mutant is credited only against a clean run of its own config
+      # (#1212): the step below is the exact clean twin (same script,
+      # simulator and stimulus) of the disabling control after it, so a
+      # Verilator build break can no longer register as "detected". The
+      # full-phrase step above does not pair it -- different stimulus.
+      - name: M5A -- clean Verilator smoke baseline for the disabling control
+        run: python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --outdir build/top-clean-m5a-f2x-verilator
       - name: M5A -- Verilator integrated disabling control
         run: python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control
       # The shipped R2 image sets PULSE2X; this is the only full-length
