@@ -149,6 +149,82 @@ def _identity_gates_phrase(job: dict) -> tuple[bool, str]:
     return True, cond
 
 
+def _pulse2x_step_set_gated(job: dict) -> tuple[bool, str]:
+    """Step-SET check (issue #1177): every step whose `run` text contains
+    `--pulse2x` must carry `if` == EXPECTED_PHRASE_IF. Matching is on `run`
+    text, not step `name`, so a second --pulse2x step with another name (or
+    one inside a `run_all.py` quoted-command list) cannot slip past the
+    single-named-step check in `_identity_gates_phrase`. A step with no `if`
+    fails. An empty match set is refused rather than passed vacuously."""
+    hits = [s for s in job["steps"] if "--pulse2x" in str(s.get("run", ""))]
+    if not hits:
+        return False, "no rtl-full step runs --pulse2x: the scan matched nothing (vacuous)"
+    bad = [s for s in hits if s.get("if") != EXPECTED_PHRASE_IF]
+    if bad:
+        names = [(s.get("name"), s.get("if")) for s in bad]
+        return False, (f"{len(bad)} --pulse2x step(s) not gated on exactly "
+                       f"{EXPECTED_PHRASE_IF!r}: {names!r}")
+    return True, f"{len(hits)} --pulse2x step(s) all gated"
+
+
+def test_real_rungs_every_pulse2x_step_is_identity_gated():
+    # Green on the real file first; also pins that the scan is non-empty and
+    # sees the run_all.py quoted-command invocations (rungs.yml phrase step).
+    job = _rtl_full()
+    ok, detail = _pulse2x_step_set_gated(job)
+    assert ok, detail
+    hits = [s for s in job["steps"] if "--pulse2x" in str(s.get("run", ""))]
+    assert hits and any("verify_m5a_filter2x_i2s.py" in str(s["run"]) for s in hits)
+
+
+def test_extra_ungated_pulse2x_step_with_another_name_is_rejected():
+    # Mutation control: a second --pulse2x step under a different name with
+    # `!cancelled()` only. The named-step checker cannot see it; this must.
+    job = copy.deepcopy(_rtl_full())
+    job["steps"].append({"name": "sneaky second phrase run",
+                         "if": "${{ !cancelled() }}",
+                         "run": "python tools/verify_m5a_filter2x_i2s.py --case M5A --pulse2x"})
+    ok, detail = _pulse2x_step_set_gated(job)
+    assert not ok
+    assert "sneaky second phrase run" in detail
+    assert _identity_gates_phrase(job)[0], "premise: the named-step checker alone is blind to it"
+
+
+def test_pulse2x_step_with_no_if_is_rejected():
+    job = copy.deepcopy(_rtl_full())
+    job["steps"].append({"run": "python rtl-sketch/verify_voice.py --pulse2x"})
+    ok, _ = _pulse2x_step_set_gated(job)
+    assert not ok
+
+
+def test_pulse2x_inside_run_all_list_is_scanned():
+    # Only the quoted run_all.py argument carries --pulse2x; the leading
+    # command text does not.
+    job = copy.deepcopy(_rtl_full())
+    job["steps"].append({"if": "${{ !cancelled() }}",
+                         "run": 'python tools/run_all.py "python x.py --pulse2x"'})
+    ok, _ = _pulse2x_step_set_gated(job)
+    assert not ok
+
+
+def test_scan_refuses_an_empty_match_set():
+    job = copy.deepcopy(_rtl_full())
+    job["steps"] = [s for s in job["steps"] if "--pulse2x" not in str(s.get("run", ""))]
+    ok, detail = _pulse2x_step_set_gated(job)
+    assert not ok and "vacuous" in detail
+
+
+def test_ungated_by_design_non_pulse2x_m5a_step_is_not_flagged():
+    # Negative control: the plain `python tools/verify_m5a_filter2x_i2s.py`
+    # step (no --pulse2x) is ungated by design and must not be in the set.
+    job = _rtl_full()
+    plain = [s for s in job["steps"]
+             if str(s.get("run", "")).strip() == "python tools/verify_m5a_filter2x_i2s.py"]
+    assert plain, "premise: the plain M5A step still exists"
+    assert all("--pulse2x" not in str(s["run"]) for s in plain)
+    assert _pulse2x_step_set_gated(job)[0]
+
+
 def test_real_rungs_phrase_step_is_gated_on_the_identity_outcome():
     ok, detail = _identity_gates_phrase(_rtl_full())
     assert ok, detail
