@@ -107,6 +107,16 @@ def _event_errors(event: dict, label: str) -> dict[str, dict[str, float]]:
             for name, value in errors.items()}
 
 
+def _provenance_config(record: dict, identity: str) -> dict:
+    provenance = record.get("provenance")
+    if not isinstance(provenance, dict):
+        raise m5a.Refused(f"{identity} provenance is absent, null or not an object")
+    config = provenance.get("config")
+    if not isinstance(config, dict):
+        raise m5a.Refused(f"{identity} provenance config is absent, null or not an object")
+    return config
+
+
 def compare_records(baseline: dict, candidate: dict) -> dict:
     base_row, candidate_row = _row(baseline, "baseline"), _row(candidate, "candidate")
     if base_row["analysis_version"] != candidate_row["analysis_version"]:
@@ -119,8 +129,10 @@ def compare_records(baseline: dict, candidate: dict) -> dict:
     if (base_diag["reference_sha256"] != candidate_diag["reference_sha256"]
             or base_diag["reference_manifest_sha256"] != candidate_diag["reference_manifest_sha256"]):
         raise m5a.Refused("baseline and candidate use different frozen reference audio or manifest")
-    base_filter = baseline.get("provenance", {}).get("config", {}).get("filter_config")
-    candidate_filter = candidate.get("provenance", {}).get("config", {}).get("filter_config")
+    base_config = _provenance_config(baseline, "baseline")
+    candidate_config = _provenance_config(candidate, "candidate")
+    base_filter = base_config.get("filter_config")
+    candidate_filter = candidate_config.get("filter_config")
     if not base_filter or base_filter != candidate_filter:
         raise m5a.Refused("baseline and candidate filter configurations differ or are missing")
     comparison = filter_gate._compare_incremental(base_row, candidate_row)
@@ -170,7 +182,7 @@ def compare_records(baseline: dict, candidate: dict) -> dict:
         "candidate": {"source_commit": candidate.get("source_commit"),
                       "scorecard_state": candidate["scorecard_state"],
                       "decoded_i2s_sha256": candidate_diag["decoded_i2s_sha256"],
-                      "controls": candidate.get("provenance", {}).get("config", {}),
+                      "controls": candidate_config,
                       "metrics": candidate["metrics"]},
         "comparison": comparison,
     }
