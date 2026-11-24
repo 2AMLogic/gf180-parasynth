@@ -1577,7 +1577,7 @@ def load_reference(voice: str, refdir: pathlib.Path, inject: str = "") -> tuple:
     if not path.exists():
         raise Refused(f"reference recording missing: {rel} under {refdir}")
     sr, x = wavfile.read(str(path))
-    require_int16_pcm(x, path)
+    raw = x                       # keep the dtype: the width guard below needs it
     x = np.asarray(x, dtype=np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)
@@ -1590,6 +1590,11 @@ def load_reference(voice: str, refdir: pathlib.Path, inject: str = "") -> tuple:
         am.require_finite(x, f"reference recording {rel}")
     except am.NonFiniteAudio as why:
         raise Refused(str(why)) from why
+    # Width guard (#1117) goes AFTER the finiteness assert, not before: an int16
+    # file cannot hold a NaN, so guarding first would make `require_finite`
+    # unreachable here (a float32 NaN would get the format refusal instead).
+    # Nothing between the read and this line depends on the sample width.
+    require_int16_pcm(raw, path)
     if am.is_silent(x):
         raise Refused(f"reference recording {rel} is silent")
     if inject == "REF_F0_20PCT":
