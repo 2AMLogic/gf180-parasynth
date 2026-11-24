@@ -1,12 +1,14 @@
-"""Shared harness for the `control_dag_*` injected-defect controls.
+"""Shared harness for the injected-defect control tools.
 
-`control_dag_issue_only.py`, `control_dag_verdictless_evidence.py` and
-`control_dag_churn.py` each keep their own CONTROLS table -- the per-guard
-reasoning, which is theirs -- and hand the mechanics to this module: the
-subprocess template that injects the defect, the decision logic that turns
-one pytest run into held / did-not-hold, and the `--list` / report /
-exit-status scaffolding. Until #1097 that harness existed as three
-near-verbatim copies.
+`control_dag_issue_only.py`, `control_dag_verdictless_evidence.py`,
+`control_dag_churn.py` and `control_capability_verdicts.py` each keep their
+own CONTROLS table -- the per-guard reasoning, which is theirs -- and hand
+the mechanics to this module: the subprocess template that injects the
+defect, the decision logic that turns one pytest run into held /
+did-not-hold, and the `--list` / report / exit-status scaffolding. Until
+#1097 that harness existed as three near-verbatim copies; #1099 moved the
+fourth, mutation-only copy in (its tables are 3-tuples -- no expected-colour
+leg, because every entry expects red).
 
 WHY THE DECISION LOGIC LIVES HERE, ONCE
 ---------------------------------------
@@ -76,6 +78,20 @@ sys.exit(pytest.main(["-q", "--no-header", "-p", "no:cacheprovider",
                       str(ROOT / "tools" / {suite!r})]))
 """
 
+#: Subprocess template for in-memory mutations of an imported module: the
+#: extra sys.path roots are inserted, the module is imported under its
+#: alias, and the mutation is applied before pytest collects.
+MUTATION_RUNNER = """
+import pathlib, sys
+ROOT = pathlib.Path({root!r})
+{path_setup}
+import {module} as {alias}
+{mutation}
+import pytest
+sys.exit(pytest.main(["-q", "--no-header", "-p", "no:cacheprovider",
+                      str(ROOT / "tools" / {suite!r})]))
+"""
+
 
 def run_raw(code: str) -> tuple[int, list, str]:
     """Run one runner subprocess. Returns (pytest's exit status, the FAILED
@@ -136,14 +152,64 @@ def patch_suite(patch: str, suite: str) -> tuple[int, list, str]:
                                        suite=suite))
 
 
+def mutation_control(mutation: str, must_fail: str, *,
+                     module: str = "refprofile", alias: str = "rp",
+                     path_roots: tuple[str, ...] = ("tools", "model", "audition"),
+                     suite: str = "test_refprofile.py") -> tuple[bool, list, str]:
+    """Apply `mutation` to `module` in memory, inside the subprocess, and judge.
+
+    The red-expected twin of `patch_control`: a mutation-only controls table
+    has no green leg, so `expect` is fixed to "red" here and never appears
+    as a fake leg in the caller's tuples. Defaults reproduce the runner
+    `control_capability_verdicts.py` carried before #1099.
+    """
+    path_setup = "\n".join(
+        f'sys.path.insert(0, str(ROOT / "{p}"))' for p in path_roots)
+    return run_control(
+        MUTATION_RUNNER.format(root=str(ROOT), path_setup=path_setup,
+                               module=module, alias=alias,
+                               mutation=mutation.strip(), suite=suite),
+        "red", must_fail)
+
+
+def mutation_suite(mutation: str, *,
+                   module: str = "refprofile", alias: str = "rp",
+                   path_roots: tuple[str, ...] = ("tools", "model", "audition"),
+                   suite: str = "test_refprofile.py") -> tuple[int, list, str]:
+    """Run `suite` with `mutation` applied (empty = UNMUTATED) and return the
+    raw (exit status, FAILED tests, last output line), unjudged: the baseline
+    twin of `mutation_control` (#1125)."""
+    path_setup = "\n".join(
+        f'sys.path.insert(0, str(ROOT / "{p}"))' for p in path_roots)
+    return run_raw(MUTATION_RUNNER.format(
+        root=str(ROOT), path_setup=path_setup, module=module, alias=alias,
+        mutation=mutation.strip(), suite=suite))
+
+
+def _unpack(entry):
+    """Split a controls-table entry into (inject, expect, must_fail, why).
+
+    A 3-tuple (inject, must_fail, why) is a mutation-only table -- every
+    entry expects red -- so the colour leg defaults to "red" and `--list`
+    renders `caught by` instead of an expects line.
+    """
+    if len(entry) == 3:
+        inject, must_fail, why = entry
+        return inject, "red", must_fail, why
+    return entry
+
+
 def main(description, controls, run_one, *, show, ok_message, argv=None,
          baseline=None) -> int:
     """`--list`, the per-control report and the exit status, shared by the tools.
 
-    `controls` is the caller's name -> (injected, expected colour, the test
-    that must be among the failures when red, why) table; `show` renders the
+    `controls` is the caller's name -> entry table; a 4-tuple entry is
+    (injected, expected colour, the test that must be among the failures
+    when red, why) and a 3-tuple entry is (injected, that test, why) -- the
+    mutation-only shape, where every control expects red. `show` renders the
     injected thing for `--list` (a JSON node for the node tools, the raw
-    patch for churn); `ok_message` is each tool's own closing line.
+    patch for churn, the raw mutation for the mutation tool); `ok_message`
+    is each tool's own closing line.
 
     `baseline`, when given, is a zero-argument callable returning the
     UNMUTATED suite's (exit status, FAILED tests, last line). If it is not
@@ -157,9 +223,13 @@ def main(description, controls, run_one, *, show, ok_message, argv=None,
     a = ap.parse_args(argv)
 
     if a.list:
-        for name, (inject, expect, must_fail, why) in controls.items():
-            print(f"{name}\n  expects    suite {expect.upper()}"
-                  f"{'' if not must_fail else f', failing {must_fail}'}")
+        for name, entry in controls.items():
+            inject, expect, must_fail, why = _unpack(entry)
+            if len(entry) == 3:
+                print(f"{name}\n  caught by  {must_fail}")
+            else:
+                print(f"{name}\n  expects    suite {expect.upper()}"
+                      f"{'' if not must_fail else f', failing {must_fail}'}")
             print(f"  why        {why}")
             print(textwrap.indent(show(inject), "  | "))
             print()
@@ -179,7 +249,7 @@ def main(description, controls, run_one, *, show, ok_message, argv=None,
     bad = []
     for name in controls:
         held, failed, why = run_one(name)
-        expect = controls[name][1]
+        expect = _unpack(controls[name])[1]
         label = ("RED " if expect == "red" else "GREEN") if held else "DID NOT HOLD"
         print(f"{label:<14}{name}{'' if held else '  -- ' + why}")
         for f in failed[:8]:

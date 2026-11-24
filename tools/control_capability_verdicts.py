@@ -38,24 +38,14 @@ is qualified?" review comment produces. It fired. The first version of the
 already trips `test_an_overall_yes_never_hides_a_measured_no` through Surge,
 before reaching the refusal wording the control was aimed at. Both named tests
 are asserted per control for that reason.
-
-The third is the harness's own, and the largest (#1125): until then it never
-ran the suite UNMUTATED. `fired` was `pytest exited non-zero` plus the
-declared name among the FAILED lines, so the name pin attributed the red to
-a TEST and never to the mutation -- a declared test red for a reason of its
-own fired every control that named it, and this tool said `OK -- all 6 ...
-controls fired`, exit 0. The suite now runs once with no mutation first, and
-the tool REFUSES (exit 2) unless it is green.
 """
 from __future__ import annotations
 
-import argparse
 import pathlib
-import subprocess
 import sys
-import textwrap
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from control_dag_lib import main as lib_main, mutation_control, mutation_suite  # noqa: E402
 
 #: name -> (the mutation, the test that MUST be among the failures, why it is
 #: a plausible way for the fix to be undone)
@@ -109,93 +99,26 @@ CONTROLS = {
         "for and which restores the original defect exactly"),
 }
 
-RUNNER = """
-import pathlib, sys
-ROOT = pathlib.Path({root!r})
-sys.path.insert(0, str(ROOT / "tools"))
-sys.path.insert(0, str(ROOT / "model"))
-sys.path.insert(0, str(ROOT / "audition"))
-import refprofile as rp
-{mutation}
-import pytest
-sys.exit(pytest.main(["-q", "--no-header", "-p", "no:cacheprovider",
-                      str(ROOT / "tools" / "test_refprofile.py")]))
-"""
-
-
 def run_suite(mutation: str) -> tuple[int, list, str]:
-    """Run tools/test_refprofile.py with `mutation` applied to the imported
-    `refprofile` module before pytest collects. Returns (pytest's exit status,
-    the FAILED tests, the last line of output).
-
-    An empty mutation is the UNMUTATED suite: the baseline every control's red
-    is read against, through the same runner and on the same file, so the two
-    cannot drift apart."""
-    code = RUNNER.format(root=str(ROOT), mutation=mutation)
-    p = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT),
-                       capture_output=True, text=True)
-    failed = sorted({ln.split("::")[-1].split(" ")[0]
-                     for ln in p.stdout.splitlines() if ln.startswith("FAILED")})
-    tail = ((p.stdout.strip() or p.stderr.strip()).splitlines()
-            or ["(no output)"])[-1]
-    return p.returncode, failed, tail
+    """Run test_refprofile.py with `mutation` applied (empty = the UNMUTATED
+    baseline every control's red is read against). Returns (pytest's exit
+    status, the FAILED tests, the last line of output)."""
+    return mutation_suite(mutation)
 
 
 def run_one(name: str) -> tuple[bool, list, str]:
     """Apply one mutation and run the suite. Returns (fired, failed tests, why)."""
     mutation, must_fail, _why = CONTROLS[name]
-    rc, failed, _tail = run_suite(mutation)
-    if rc == 0:
-        return False, failed, "the suite stayed GREEN with the defect injected"
-    if must_fail not in failed:
-        return False, failed, (f"the suite went red but {must_fail} was not among "
-                               f"the failures, so this control is satisfied by some "
-                               f"OTHER assertion and would survive that one's "
-                               f"deletion")
-    return True, failed, ""
+    return mutation_control(mutation, must_fail)
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--list", action="store_true",
-                    help="what each control injects, and which test must catch it")
-    a = ap.parse_args(argv)
-
-    if a.list:
-        for name, (mutation, must_fail, why) in CONTROLS.items():
-            print(f"{name}\n  caught by  {must_fail}\n  why        {why}")
-            print(textwrap.indent(mutation, "  | "))
-            print()
-        return 0
-
-    rc, failed, tail = run_suite("")
-    if rc != 0:
-        print(f"REFUSED: the suite exits {rc} before any mutation ({tail}) -- "
-              "a red under a mutation would be that test's own, not the "
-              "mutation's, so no control's red could be attributed to its "
-              "injection. Nothing was measured.")
-        for f in failed[:8]:
-            print(f"               {f}")
-        return 2
-
-    bad = []
-    for name in CONTROLS:
-        fired, failed, why = run_one(name)
-        print(f"{'RED ' if fired else 'DID NOT FIRE':<14}{name}"
-              f"{'' if fired else '  -- ' + why}")
-        for f in failed[:8]:
-            print(f"               {f}")
-        if not fired:
-            bad.append(name)
-    print()
-    if bad:
-        print(f"FAIL -- {len(bad)} control(s) did not fire: {', '.join(bad)}. "
-              f"A run where these do not fire is a broken run, not a quiet one.")
-        return 1
-    print(f"OK -- all {len(CONTROLS)} capability-verdict controls fired, each on "
-          f"the test it was written for.")
-    return 0
+    return lib_main(
+        __doc__, CONTROLS, run_one, show=str,
+        baseline=lambda: run_suite(""),
+        ok_message=f"OK -- all {len(CONTROLS)} capability-verdict controls "
+                   f"fired, each on the test it was written for.",
+        argv=argv)
 
 
 if __name__ == "__main__":

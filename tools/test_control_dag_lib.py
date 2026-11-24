@@ -136,6 +136,22 @@ def test_patch_control_strips_the_patch_and_names_the_suite(monkeypatch):
     assert "test_compile_dag_churn.py" in code
 
 
+def test_mutation_control_imports_the_module_and_judges_red(monkeypatch):
+    seen = _fake_subprocess(monkeypatch, 1, [_failed(GUARD)])
+    held, failed, why = cdl.mutation_control("rp.X = 1", GUARD)
+    code = seen["cmd"][2]
+    assert "import refprofile as rp" in code
+    assert "rp.X = 1" in code
+    for root in ("tools", "model", "audition"):
+        assert f'sys.path.insert(0, str(ROOT / "{root}"))' in code
+    assert "test_refprofile.py" in code
+    assert str(cdl.ROOT) in code
+    assert seen["kw"]["cwd"] == str(cdl.ROOT)
+    assert held
+    assert failed == [GUARD]
+    assert why == ""
+
+
 # --- the shared main() ------------------------------------------------------
 
 def test_main_labels_each_colour_and_exits_zero_when_all_hold(capsys):
@@ -177,3 +193,44 @@ def test_main_list_renders_expectation_why_and_injection(capsys):
     assert "expects    suite RED, failing guard_a" in out
     assert "why        why a" in out
     assert "  | injected {'issue': 1}" in out
+
+
+# --- the mutation-only 3-tuple shape (#1099) --------------------------------
+
+def test_main_list_three_tuple_prints_caught_by_and_no_expects_line(capsys):
+    """A mutation-only table has no colour leg, so --list must not invent one."""
+    controls = {"M": ("rp.X = 1", "guard_m", "why m")}
+    rc = cdl.main("doc", controls, lambda name: (True, [], ""),
+                  show=lambda m: f"injected {m}", ok_message="OK",
+                  argv=["--list"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "caught by  guard_m" in out
+    assert "expects" not in out
+    assert "why        why m" in out
+    assert "  | injected rp.X = 1" in out
+
+
+def test_main_three_tuple_labels_red_when_held(capsys):
+    controls = {"M": ("rp.X = 1", "guard_m", "why m")}
+    rc = cdl.main("doc", controls, lambda name: (True, ["guard_m"], ""),
+                  show=str, ok_message="OK", argv=[])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert re.search(r"^RED\s+M$", out, re.M)
+
+
+def test_main_three_tuple_green_mutation_flips_to_not_held_and_exits_one(capsys):
+    """THE red-first check for the 3-tuple path: a mutation whose defect stays
+    green must be reported not-held with exit 1 through the shared main(),
+    exactly as the capability tool's own scaffolding did before #1099."""
+    controls = {"M": ("rp.X = 1", "guard_m", "why m")}
+    rc = cdl.main("doc", controls,
+                  lambda name: (False, [], "the suite stayed GREEN"
+                                         " with the defect injected"),
+                  show=str, ok_message="OK", argv=[])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert re.search(r"^DID NOT HOLD\s+M", out, re.M)
+    assert "stayed GREEN" in out
+    assert "did not hold" in out

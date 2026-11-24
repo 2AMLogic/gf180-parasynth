@@ -35,9 +35,13 @@ drift from it. Stdlib and pyyaml only; no klt, no network.
          for any other reason fails the test.
 
 The harness REFUSES (`HarnessRefused`) instead of reporting when it cannot
-speak for the gate: no step of that name, or two; a step carrying `if:` or
-`continue-on-error:` (green here, never able to fail a run -- #304's shape,
-which `tools/test_check_workflows.py` first measured); a step-level
+speak for the gate: no step of that name, or two; a job or step carrying
+`if:` -- any condition, at either level, #1168: the shared
+`job_neutralised_reason` predicate recognises only the two forms this
+repository usually writes, so a `github.ref` condition at job level passed
+it while keeping the job off every pull request -- or `continue-on-error:`
+(green here, never able to fail a run -- #304's shape, which
+`tools/test_check_workflows.py` first measured); a step-level
 `env.KLT` shadowing the job-level pin it reads; an unsupported `shell:`; a
 missing shell executable. Those are this file's own rule-8 inputs, and each is
 a committed control below, beside the start-red stubs (a no-op with the step's
@@ -71,7 +75,7 @@ import pytest
 import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from check_workflows import job_neutralised_reason                   # noqa: E402
+from check_workflows import constant_true, job_neutralised_reason                  # noqa: E402
 from makefile_recipe import makefile_recipe                          # noqa: E402
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -158,6 +162,24 @@ def _locate(workflow) -> tuple[dict, str | None, tuple[str, ...]]:
             f"expected exactly one step named {STEP_NAME!r} in job {JOB!r}, "
             f"found {len(hits)}: a gate this harness cannot pin must be "
             f"loud, never a silent exemption")
+    # Job arm, `if:` half (#1168): ANY job-level `if:` is refused, mirroring
+    # the step arm below, so the two arms agree on `if:` the way #1158 made
+    # them agree on `continue-on-error`. The shared `job_neutralised_reason`
+    # recognises only the two forms this repository usually writes, so a
+    # `github.ref` / `base_ref` / label condition passed it while still
+    # keeping the job off every pull request. That helper must STAY narrow --
+    # its other caller, `step_would_block_pull_request`, has to tolerate the
+    # always-valid scope-gate `if:`s of the arty/provenance/rungs/dag jobs --
+    # but the pinned `regrade` job carries no `if:` and needs no such
+    # tolerance.
+    if "if" in job:
+        raise HarnessRefused(
+            f"job {JOB!r} carries a job-level `if: {job['if']!r}`: a "
+            f"conditional gate runs where its condition says, not on every "
+            f"run")
+    # Job arm, `continue-on-error` half: the one shared predicate (#1143),
+    # whose `constant_true` the step arm below also uses (#1158), so neither
+    # key can drift between the two harnesses.
     job_reason = job_neutralised_reason(job, JOB)
     if job_reason:
         raise HarnessRefused(
@@ -166,11 +188,12 @@ def _locate(workflow) -> tuple[dict, str | None, tuple[str, ...]]:
     step = hits[0]
     if not isinstance(step.get("run"), str) or not step["run"].strip():
         raise HarnessRefused(f"step {STEP_NAME!r} has no run: text")
+    # Step arm: any `if:` key; the job arm above mirrors this since #1168.
     if "if" in step:
         raise HarnessRefused(
             f"step {STEP_NAME!r} carries `if: {step['if']!r}`: a conditional "
             f"gate runs where its condition says, not on every run")
-    if step.get("continue-on-error"):
+    if constant_true(step.get("continue-on-error")):
         raise HarnessRefused(
             f"step {STEP_NAME!r} carries `continue-on-error: "
             f"{step['continue-on-error']!r}`: it would still run green here "
@@ -516,7 +539,10 @@ def test_start_red_a_step_this_harness_cannot_pin_fails_it(tmp_path, how):
     (lambda s: s.__setitem__("if", False), "if"),
     (lambda s: s.__setitem__("if", "github.event_name == 'push'"), "if"),
     (lambda s: s.__setitem__("continue-on-error", True), "continue-on-error"),
-], ids=["if-false", "if-conditional", "continue-on-error-true"])
+    (lambda s: s.__setitem__("continue-on-error", "${{ true }}"),
+     "continue-on-error"),
+], ids=["if-false", "if-conditional", "continue-on-error-true",
+        "continue-on-error-expression-true"])
 def test_a_step_that_cannot_block_ci_fails_the_harness(neutralise, key):
     with pytest.raises(HarnessRefused, match=re.escape(f"`{key}:")):
         run_step(_workflow(lambda wf: neutralise(_step(wf))), REPO)
@@ -524,29 +550,55 @@ def test_a_step_that_cannot_block_ci_fails_the_harness(neutralise, key):
 
 # Job-level neutralisations (#1143). The step-level controls above cannot see
 # these: the step is intact, the JOB is what never runs or never fails a run.
-# Delegated to `check_workflows.job_neutralised_reason`, the same predicate
-# `step_would_block_pull_request` uses, so the two cannot drift.
+# `continue-on-error` is delegated to `check_workflows.job_neutralised_reason`,
+# the same predicate `step_would_block_pull_request` uses, so the two cannot
+# drift. `if:` is deliberately STRICTER here than in that shared predicate
+# (#1168): the pinned job must run on every pull request, so any condition is
+# refused -- the `github.ref` row is the measured defeating input that passed
+# the narrow shared form while keeping the job off every pull request.
 @pytest.mark.parametrize("mutate, match", [
     (lambda j: j.__setitem__("if", False), r"job-level `if:"),
     (lambda j: j.__setitem__("if", "${{ false }}"), r"job-level `if:"),
     (lambda j: j.__setitem__("if", "github.event_name == 'push'"),
      r"job-level `if:"),
+    (lambda j: j.__setitem__(
+        "if", "${{ github.ref == 'refs/heads/nope' }}"), r"job-level `if:"),
     (lambda j: j.__setitem__("continue-on-error", True),
      r"job-level `continue-on-error:"),
+    (lambda j: j.__setitem__("continue-on-error", "${{ true }}"),
+     r"job-level `continue-on-error:"),
 ], ids=["if-false", "if-expression-false", "if-excludes-pull-request",
-        "continue-on-error-true"])
+        "if-keeps-job-off-prs-by-ref", "continue-on-error-true",
+        "continue-on-error-expression-true"])
 def test_a_job_that_cannot_block_ci_fails_the_harness(mutate, match):
     with pytest.raises(HarnessRefused, match=match):
         run_step(_workflow(lambda wf: mutate(wf["jobs"][JOB])), REPO)
 
 
-def test_a_job_if_that_still_names_pull_request_is_not_refused():
-    """Edge: `push || pull_request` runs on a PR, so it must not refuse."""
-    def mutate(wf: dict) -> None:
-        wf["jobs"][JOB]["if"] = (
-            "github.event_name == 'push' || github.event_name == 'pull_request'")
-    step, _klt, _shell = _locate(_workflow(mutate))
-    assert step["name"] == STEP_NAME
+@pytest.mark.parametrize("value", [
+    False,
+    "${{ false }}",
+    "github.event_name == 'push'",
+    "${{ github.ref == 'refs/heads/nope' }}",
+    "github.event_name == 'push' || github.event_name == 'pull_request'",
+    "${{ true }}",
+], ids=["constant-false", "expression-false", "excludes-pull-request",
+        "defeats-the-narrow-shared-form", "still-names-pull-request",
+        "always-true"])
+def test_job_and_step_if_agree(value):
+    """Control (#1168): the job arm and the step arm refuse the same `if:`
+    values, so no condition can neutralise the gate at one level only.
+    `push || pull_request` and `${{ true }}` genuinely run on a pull
+    request and are refused anyway: the pinned job must run on EVERY run,
+    and a condition this harness would have to evaluate is one it cannot.
+    Mirrors #1159's `continue-on-error` agreement matrix; the arms agree on
+    `if:` exactly as #1158 made them agree on `continue-on-error`."""
+    for level in ("job", "step"):
+        def mutate(wf, level=level):
+            tgt = wf["jobs"][JOB] if level == "job" else _step(wf)
+            tgt["if"] = value
+        with pytest.raises(HarnessRefused, match="`if:"):
+            _locate(_workflow(mutate))
 
 
 def test_a_step_level_klt_shadowing_the_job_pin_fails_the_harness():
@@ -808,3 +860,22 @@ def test_a_mention_outside_a_pytest_job_is_not_wiring(recipe):
     even `pytest`) is in the recipe, yet Make never executes this file."""
     assert THIS_FILE in recipe, "the naive substring form would pass here"
     assert THIS_FILE not in _pytest_targets(recipe)
+
+
+@pytest.mark.parametrize("value, refused", [
+    (True, True), ("${{ true }}", True), ("yes", True), (False, False),
+    ("false", False), ("${{ false }}", False), (None, False),
+    ("${{ github.event_name != 'push' }}", True),
+], ids=repr)
+def test_job_and_step_continue_on_error_agree(value, refused):
+    """Edge/control (#1158): the job arm and the step arm share one predicate,
+    so an expression-form kill switch cannot pass at one level only."""
+    for level in ("job", "step"):
+        def mutate(wf, level=level):
+            tgt = wf["jobs"][JOB] if level == "job" else _step(wf)
+            tgt["continue-on-error"] = value
+        if refused:
+            with pytest.raises(HarnessRefused, match="continue-on-error"):
+                _locate(_workflow(mutate))
+        else:
+            _locate(_workflow(mutate))
