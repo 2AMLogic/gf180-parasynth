@@ -8,6 +8,10 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-24
 
+- **PR #1204**: fix: refuse empty and near-silent windows in cymbal_bands.thirds
+- **Issue #1197** (closed): cymbal_bands.thirds divides by an unguarded e_tot; its zero case is prevented only by call-site ordering
+- **PR #1194**: tools: fix the three refusal_sibling_scan blind-spot gaps (try bodies, stem collisions, import aliases)
+- **Issue #1188** (closed): Complete refusal_sibling_scan's blind-spot list: three unrecorded modelling gaps (all zero-instance today)
 - **PR #1191**: Extract the shared compare-candidate tail into tools/delta_report.py
 - **PR #1190**: fix: refuse a silent corpus WAV in cymbal_tone_knob's windowed measurement
 - **Issue #1187** (closed): Dedupe provenance block and output guard copy-pasted across three compare_*_candidate scripts
