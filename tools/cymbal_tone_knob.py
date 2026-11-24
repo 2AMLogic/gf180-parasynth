@@ -688,7 +688,10 @@ def measure_windows(refs: pathlib.Path, *, cfg=None, defect=None) -> dict:
 def measured_or_refused(refs=None, *, cfg=None, defect=None):
     try:
         return measure_windows(refs or rc.configured_refs(), cfg=cfg, defect=defect), None
-    except Refused as exc:
+    except refusal.Refused as exc:
+        # the base, not this module's sibling: cb._load and rc.prepare raise
+        # their own modules' Refused (#1160), and a corpus that cannot be
+        # read or prepared is a refusal of the whole windowed measurement.
         return None, str(exc)
 
 
