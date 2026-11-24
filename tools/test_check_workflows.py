@@ -633,11 +633,18 @@ def test_a_check_step_that_also_rewrites_is_red():
 # occurrence was ever order-checked. These pin the ambiguity refusal that
 # mirrors the in-step gate's (a duplicate is never last-wins).
 # =============================================================================
-def test_a_duplicate_record_step_name_is_refused_not_last_wins():
+def test_a_duplicate_record_step_name_is_refused_not_last_wins(
+        tmp_path, monkeypatch, capsys):
     """The issue's reproducer: record, check, record. The dict kept the last
     record step, so the gate went green while an ungated --run --slow rewrote
     the README before anything judged it -- the #906 harm itself."""
-    wf = _workflow(f"""\
+    import shutil
+    for filename in ("rungs.yml", "nightly.yml", "dag.yml"):
+        shutil.copy(REPO / ".github" / "workflows" / filename, tmp_path / filename)
+    (tmp_path / "dup.yml").write_text(f"""\
+name: dup
+on: workflow_dispatch
+jobs:
   full-rtl:
     runs-on: ubuntu-latest
     steps:
@@ -649,9 +656,11 @@ def test_a_duplicate_record_step_name_is_refused_not_last_wins():
       - name: {cw.ROADMAP_RECORD_STEP}
         run: python tools/compile_dag.py --run --slow
     """)
-    ok, reason = cw.roadmap_check_step_precedes_record_step(wf)
-    assert not ok
-    assert "ambiguous" in reason and cw.ROADMAP_RECORD_STEP in reason
+    monkeypatch.setattr(cw, "WF", tmp_path)
+    assert cw.main() == 1
+    errors = capsys.readouterr().err.splitlines()
+    assert any(line.lstrip().startswith("dup.yml: ") and cw.ROADMAP_RECORD_STEP in line
+               and "ambiguous" in line for line in errors), errors
 
 
 def test_a_duplicate_check_step_name_is_also_refused():
@@ -858,6 +867,7 @@ def test_an_allowlisted_step_whose_flags_drifted_is_red():
     ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
     assert not ok
     assert "allowlisted" in reason and "--slow" in reason
+    assert "matches no" not in reason
 
 
 def test_an_allowlist_entry_matching_no_step_is_reported(monkeypatch):
@@ -866,7 +876,7 @@ def test_an_allowlist_entry_matching_no_step_is_reported(monkeypatch):
     parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
     ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
     assert not ok
-    assert "a ghost" in reason
+    assert "allowlist entry 'a ghost' matches no" in reason
 
 
 def test_a_duplicated_record_step_name_is_red_in_both_gates():
@@ -897,6 +907,7 @@ def test_a_duplicated_allowlisted_step_name_is_red():
     job["steps"].append(dict(step))
     ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
     assert not ok and "occurs 2 times" in reason
+    assert "matches no" not in reason
 
 
 def test_a_lone_pair_named_step_without_its_partner_is_red():

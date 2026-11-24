@@ -441,6 +441,7 @@ def compile_dag_invocation_set_accounted(parsed: list[tuple[str, dict]]):
                         f"selects (#1192)")
                     continue
                 signature, _reason = entry
+                matched.add((fname, name))
                 if names_in_file.count(name) > 1:
                     unaccounted.append(
                         f"{fname}:{jname}: allowlisted step name {shown!r} "
@@ -456,7 +457,6 @@ def compile_dag_invocation_set_accounted(parsed: list[tuple[str, dict]]):
                         f"allowlist reason against the new shape (#1192)")
                     continue
                 n_allowed += 1
-                matched.add((fname, name))
     if not hits:
         return False, ("no workflow step invokes tools/compile_dag.py -- the "
                        "invocation-set gate matched nothing (vacuous)")
