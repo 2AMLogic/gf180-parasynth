@@ -4,6 +4,10 @@
     python tools/control_dag_churn.py          every control must fire
     python tools/control_dag_churn.py --list   what each one injects
 
+    exit 0   every control held, from a suite that was green with no patch
+    exit 1   a control did not hold
+    exit 2   REFUSED: the suite is not green before any patch (#1125)
+
 WHY THIS FILE EXISTS
 --------------------
 The #967 rule has three legs, and each leg is load-bearing in a way that the
@@ -29,6 +33,17 @@ deletion of the only assertion it was written for.
 
 Nothing on disk is mutated: the patched module lives only in the control's
 subprocess. Safe to run beside anything else, and it leaves no state behind.
+
+WHY THE SUITE RUNS ONCE WITH NO PATCH (#1125)
+---------------------------------------------
+Until #1125 `fired` was `pytest exited non-zero` plus the declared name among
+the FAILED lines, and the suite had never been run UNMUTATED. The name pin
+attributed the red to a TEST, never to the patch: a declared test red for a
+reason of its own fired every control that named it -- all three here are
+red-expect -- and this tool said `OK -- all 3 churn controls held`, exit 0.
+The suite now runs once with no patch first, through the same runner and on
+the same file, and the tool REFUSES (exit 2) unless it is green. The refusal
+itself lives in `control_dag_lib.main(baseline=...)`.
 """
 from __future__ import annotations
 
@@ -36,7 +51,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from control_dag_lib import main, patch_control                           # noqa: E402
+from control_dag_lib import main as lib_main, patch_control, patch_suite  # noqa: E402
 
 SUITE = "test_compile_dag_churn.py"
 REANCHORS = "test_a_covered_change_reanchors_the_record_even_when_the_verdict_matches"
@@ -76,6 +91,13 @@ cd.normalise_detail = lambda detail: detail
 }
 
 
+def run_suite(patch: str) -> tuple[int, list, str]:
+    """Run the churn suite with `patch` applied (empty = the UNMUTATED
+    baseline every control's red is read against). Returns (pytest's exit
+    status, the FAILED tests, the last line of output)."""
+    return patch_suite(patch, SUITE)
+
+
 def run_one(name: str) -> tuple[bool, list, str]:
     """Inject one defect and run the churn suite. Returns (fired, failed
     tests, why-not)."""
@@ -83,11 +105,17 @@ def run_one(name: str) -> tuple[bool, list, str]:
     return patch_control(patch, expect, must_fail, SUITE)
 
 
-if __name__ == "__main__":
-    sys.exit(main(
+def main(argv=None) -> int:
+    return lib_main(
         __doc__, CONTROLS, run_one,
         show=lambda patch: patch.strip(),
+        baseline=lambda: run_suite(""),
         ok_message=f"OK -- all {len(CONTROLS)} churn controls held: each leg of "
                    f"the #967 rule is load-bearing, and removing any one of "
                    f"them turns the churn suite red on the test written for "
-                   f"it."))
+                   f"it.",
+        argv=argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

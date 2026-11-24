@@ -93,6 +93,18 @@ sys.exit(pytest.main(["-q", "--no-header", "-p", "no:cacheprovider",
 """
 
 
+def run_raw(code: str) -> tuple[int, list, str]:
+    """Run one runner subprocess. Returns (pytest's exit status, the FAILED
+    tests, the last line of output)."""
+    p = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT),
+                       capture_output=True, text=True)
+    failed = sorted({ln.split("::")[-1].split(" ")[0]
+                     for ln in p.stdout.splitlines() if ln.startswith("FAILED")})
+    tail = ((p.stdout.strip() or p.stderr.strip()).splitlines()
+            or ["(no output)"])[-1]
+    return p.returncode, failed, tail
+
+
 def run_control(code: str, expect: str, must_fail: str | None) -> tuple[bool, list, str]:
     """Run one injected defect and judge it. Returns (held, failed, why-not).
 
@@ -101,17 +113,14 @@ def run_control(code: str, expect: str, must_fail: str | None) -> tuple[bool, li
     control was written for is among the failures, and a green expected
     colour only counts when the suite really stayed green.
     """
-    p = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT),
-                       capture_output=True, text=True)
-    failed = sorted({ln.split("::")[-1].split(" ")[0]
-                     for ln in p.stdout.splitlines() if ln.startswith("FAILED")})
+    rc, failed, _tail = run_raw(code)
     if expect == "green":
-        if p.returncode != 0:
+        if rc != 0:
             return False, failed, ("the suite went RED on a shape the guard is "
                                    "meant to PERMIT -- the guard is stricter "
                                    "than its own contract")
         return True, failed, ""
-    if p.returncode == 0:
+    if rc == 0:
         return False, failed, "the suite stayed GREEN with the defect injected"
     if must_fail not in failed:
         return False, failed, (f"the suite went red but {must_fail} was not among "
@@ -136,6 +145,13 @@ def patch_control(patch: str, expect: str, must_fail: str | None,
                        expect, must_fail)
 
 
+def patch_suite(patch: str, suite: str) -> tuple[int, list, str]:
+    """Run `suite` with `patch` applied (empty = UNMUTATED) and return the raw
+    (exit status, FAILED tests, last output line), unjudged."""
+    return run_raw(PATCH_RUNNER.format(root=str(ROOT), patch=patch.strip(),
+                                       suite=suite))
+
+
 def mutation_control(mutation: str, must_fail: str, *,
                      module: str = "refprofile", alias: str = "rp",
                      path_roots: tuple[str, ...] = ("tools", "model", "audition"),
@@ -156,6 +172,20 @@ def mutation_control(mutation: str, must_fail: str, *,
         "red", must_fail)
 
 
+def mutation_suite(mutation: str, *,
+                   module: str = "refprofile", alias: str = "rp",
+                   path_roots: tuple[str, ...] = ("tools", "model", "audition"),
+                   suite: str = "test_refprofile.py") -> tuple[int, list, str]:
+    """Run `suite` with `mutation` applied (empty = UNMUTATED) and return the
+    raw (exit status, FAILED tests, last output line), unjudged: the baseline
+    twin of `mutation_control` (#1125)."""
+    path_setup = "\n".join(
+        f'sys.path.insert(0, str(ROOT / "{p}"))' for p in path_roots)
+    return run_raw(MUTATION_RUNNER.format(
+        root=str(ROOT), path_setup=path_setup, module=module, alias=alias,
+        mutation=mutation.strip(), suite=suite))
+
+
 def _unpack(entry):
     """Split a controls-table entry into (inject, expect, must_fail, why).
 
@@ -169,7 +199,8 @@ def _unpack(entry):
     return entry
 
 
-def main(description, controls, run_one, *, show, ok_message, argv=None) -> int:
+def main(description, controls, run_one, *, show, ok_message, argv=None,
+         baseline=None) -> int:
     """`--list`, the per-control report and the exit status, shared by the tools.
 
     `controls` is the caller's name -> entry table; a 4-tuple entry is
@@ -179,6 +210,11 @@ def main(description, controls, run_one, *, show, ok_message, argv=None) -> int:
     injected thing for `--list` (a JSON node for the node tools, the raw
     patch for churn, the raw mutation for the mutation tool); `ok_message`
     is each tool's own closing line.
+
+    `baseline`, when given, is a zero-argument callable returning the
+    UNMUTATED suite's (exit status, FAILED tests, last line). If it is not
+    green the tool REFUSES (exit 2) before any control runs: a red under a
+    patch would be that test's own, not the patch's (#1125).
     """
     ap = argparse.ArgumentParser(
         description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -198,6 +234,17 @@ def main(description, controls, run_one, *, show, ok_message, argv=None) -> int:
             print(textwrap.indent(show(inject), "  | "))
             print()
         return 0
+
+    if baseline is not None:
+        rc, failed, tail = baseline()
+        if rc != 0:
+            print(f"REFUSED: the suite exits {rc} before any patch ({tail}) -- "
+                  "a red under a patch would be that test's own, not the "
+                  "patch's, so no control's red could be attributed to its "
+                  "injection. Nothing was measured.")
+            for f in failed[:8]:
+                print(f"               {f}")
+            return 2
 
     bad = []
     for name in controls:

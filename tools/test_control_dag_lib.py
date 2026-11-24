@@ -38,6 +38,7 @@ class _Proc:
     def __init__(self, returncode, stdout):
         self.returncode = returncode
         self.stdout = stdout
+        self.stderr = ""
 
 
 def _fake_subprocess(monkeypatch, returncode, lines):

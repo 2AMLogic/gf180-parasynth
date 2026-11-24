@@ -112,14 +112,38 @@ def test_every_permanent_injected_defect_still_has_something_to_inject_into():
             f"{rel} -- update tools/inject_manifest_defects.py")
 
 
-def test_the_injected_defect_control_refuses_rather_than_reporting_green(monkeypatch):
+def test_the_injected_defect_control_refuses_rather_than_reporting_green(monkeypatch, capsys):
     """The control's own only failure mode that matters: an injection that did
-    not apply must be REFUSED (exit 2), never counted as a fired control."""
+    not apply must be REFUSED (exit 2), never counted as a fired control.
+
+    The bogus control names a real test on purpose, and the refusal is
+    asserted by its wording. Since the baseline (#1125) runs before the loop,
+    a control naming NO test is refused without reaching its injection -- and
+    the first version of that baseline refused for a third reason instead, an
+    unselected pytest, so this test passed with its anchor check never run.
+    """
     import inject_manifest_defects as inj
 
     monkeypatch.setattr(inj, "INJECTIONS",
+                        [("bogus", "tools/manifest.py", "NOT IN THE SOURCE", "x",
+                          [f"{inj.TESTS}::test_hash_is_reproducible_across_calls_for_the_same_config"])])
+    assert inj.main([]) == 2
+    assert "no longer present" in capsys.readouterr().out
+
+
+def test_the_injection_harness_refuses_a_control_that_names_no_test(monkeypatch, capsys):
+    """A control with no test named has no selection: its pytest would collect
+    whatever the staged tree holds and its red would be nobody's. REFUSED
+    before any pytest runs."""
+    import inject_manifest_defects as inj
+
+    ran = []
+    monkeypatch.setattr(inj.subprocess, "run", lambda *a, **k: ran.append(a))
+    monkeypatch.setattr(inj, "INJECTIONS",
                         [("bogus", "tools/manifest.py", "NOT IN THE SOURCE", "x", [])])
     assert inj.main([]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert not ran, "pytest ran with nothing to prove green"
 
 
 def test_the_injection_harness_refuses_when_the_interpreter_loaded_stale_bytecode(tmp_path):
@@ -172,6 +196,50 @@ def test_the_injection_harness_refuses_when_the_interpreter_loaded_stale_bytecod
     assert not list(tree.rglob("__pycache__")), (
         "the shipped run must leave no bytecode cache in the staged tree at all "
         "-- that is what makes the next injection's compile unconditional")
+
+
+def test_the_injection_harness_refuses_when_a_declared_test_is_red_before_any_injection(
+        tmp_path, monkeypatch, capsys):
+    """#1125, rule 8. `main()` read `pytest exited non-zero` as RED (caught)
+    without ever running the named tests on the UNMUTATED tree, so a declared
+    test that was red for a reason of its own -- drifted, or broken by the
+    same edit that moved its injection -- satisfied every control naming it:
+    `9/9 controls fired`, exit 0, with the injections contributing nothing.
+
+    The input that must defeat that is planted here: a declared test replaced
+    by `assert 0`, before any injection is applied. `main()` must REFUSE
+    (exit 2) and must not run the loop. The second half is the falsifiability
+    check: on an untouched staged tree the same baseline is green, so the
+    gate discriminates rather than refusing unconditionally.
+    """
+    import inject_manifest_defects as inj
+
+    declared = {t for injection in inj.INJECTIONS for t in injection[4]}
+    red = "test_wav_quantisation_rounds_rather_than_truncating"
+    assert f"{inj.TESTS}::{red}" in declared
+    real_stage = inj._stage
+
+    def stage_with_that_test_red(dest):
+        real_stage(dest)
+        suite = dest / inj.TESTS
+        # A later definition shadows the earlier one in the module namespace,
+        # so this is the declared test pytest collects.
+        suite.write_text(suite.read_text() + f"\n\ndef {red}():\n    assert 0\n")
+
+    monkeypatch.setattr(inj, "_stage", stage_with_that_test_red)
+    assert inj.main([]) == 2, (
+        "a declared test red before any injection is not evidence of an "
+        "injection")
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and red in out
+    assert "controls fired" not in out, (
+        "the loop ran, and counted a red the injections did not cause")
+
+    monkeypatch.setattr(inj, "_stage", real_stage)
+    tree = tmp_path / "tree"
+    real_stage(tree)
+    rc, detail = inj.baseline(tree)
+    assert rc == 0, detail
 
 
 def test_the_bound_ledger_defaults_to_a_tracked_path():

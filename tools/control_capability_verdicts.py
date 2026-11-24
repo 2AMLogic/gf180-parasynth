@@ -4,6 +4,10 @@
     python tools/control_capability_verdicts.py          every control must fire
     python tools/control_capability_verdicts.py --list   what each one injects
 
+    exit 0   every control fired, from a suite that was green with no mutation
+    exit 1   a control did not fire
+    exit 2   REFUSED: the suite is not green before any mutation (#1125)
+
 WHY THIS FILE EXISTS
 --------------------
 `tools/test_refprofile.py` asserts that the capability map behaves. That is not
@@ -41,7 +45,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from control_dag_lib import main, mutation_control                    # noqa: E402
+from control_dag_lib import main as lib_main, mutation_control, mutation_suite  # noqa: E402
 
 #: name -> (the mutation, the test that MUST be among the failures, why it is
 #: a plausible way for the fix to be undone)
@@ -95,15 +99,27 @@ CONTROLS = {
         "for and which restores the original defect exactly"),
 }
 
+def run_suite(mutation: str) -> tuple[int, list, str]:
+    """Run test_refprofile.py with `mutation` applied (empty = the UNMUTATED
+    baseline every control's red is read against). Returns (pytest's exit
+    status, the FAILED tests, the last line of output)."""
+    return mutation_suite(mutation)
+
+
 def run_one(name: str) -> tuple[bool, list, str]:
     """Apply one mutation and run the suite. Returns (fired, failed tests, why)."""
     mutation, must_fail, _why = CONTROLS[name]
     return mutation_control(mutation, must_fail)
 
 
-if __name__ == "__main__":
-    sys.exit(main(
+def main(argv=None) -> int:
+    return lib_main(
         __doc__, CONTROLS, run_one, show=str,
+        baseline=lambda: run_suite(""),
         ok_message=f"OK -- all {len(CONTROLS)} capability-verdict controls "
-                   f"fired, each on the test it was written for."))
+                   f"fired, each on the test it was written for.",
+        argv=argv)
 
+
+if __name__ == "__main__":
+    sys.exit(main())
