@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
-import hashlib
 import json
 import math
 import pathlib
@@ -16,6 +14,12 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import measure_m5a_filter_oversample as filter_gate
 import mono_m5a_score as m5a
+import delta_report  # noqa: E402
+
+#: The sources a delta record's `provenance.source_sha256` identifies the
+#: comparison by (kept at module scope, as `compare_drum_i2s_candidate` does).
+SOURCES = ("tools/compare_m5a_i2s_candidate.py",
+           "tools/measure_m5a_filter_oversample.py", "tools/mono_m5a_score.py")
 
 
 def _row(record: dict, label: str) -> dict:
@@ -195,21 +199,8 @@ def compare_files(baseline_path: pathlib.Path, candidate_path: pathlib.Path) -> 
     except (OSError, json.JSONDecodeError) as exc:
         raise m5a.Refused(f"cannot load M5A score record: {exc}") from exc
     report = compare_records(baseline, candidate)
-    sources = ("tools/compare_m5a_i2s_candidate.py",
-               "tools/measure_m5a_filter_oversample.py", "tools/mono_m5a_score.py")
-    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
-                            check=True, capture_output=True, text=True).stdout.strip()
-    dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
-                                check=True, capture_output=True, text=True).stdout.strip())
-    report["provenance"] = {
-        "source_commit": commit, "source_dirty": dirty,
-        "input_sha256": {
-            "baseline_record": hashlib.sha256(baseline_path.read_bytes()).hexdigest(),
-            "candidate_record": hashlib.sha256(candidate_path.read_bytes()).hexdigest()},
-        "source_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-                          for name in sources},
-        "run_at_utc": datetime.now(timezone.utc).isoformat(),
-    }
+    report["provenance"] = delta_report.comparison_provenance(
+        baseline_path, candidate_path, SOURCES, root=ROOT)
     return report
 
 
@@ -219,22 +210,16 @@ def main(argv=None) -> int:
     parser.add_argument("candidate", help="valid candidate integrated M5A score JSON")
     parser.add_argument("--out", default="build/scorecard/m5a-integrated-delta.json")
     args = parser.parse_args(argv)
-    baseline = pathlib.Path(args.baseline)
-    candidate = pathlib.Path(args.candidate)
-    if not baseline.is_absolute(): baseline = ROOT / baseline
-    if not candidate.is_absolute(): candidate = ROOT / candidate
+    baseline = delta_report.repo_path(args.baseline, root=ROOT)
+    candidate = delta_report.repo_path(args.candidate, root=ROOT)
     try:
         report = compare_files(baseline, candidate)
     except (OSError, ValueError, m5a.Refused, subprocess.CalledProcessError) as exc:
         print(f"compare_m5a_i2s_candidate: REFUSED -- {exc}")
         return 2
-    out = pathlib.Path(args.out)
-    if not out.is_absolute(): out = ROOT / out
-    if not out.resolve().is_relative_to(ROOT):
-        print("compare_m5a_i2s_candidate: REFUSED -- output must remain inside the repository")
+    out = delta_report.write_report(report, args.out, "compare_m5a_i2s_candidate", root=ROOT)
+    if out is None:
         return 2
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, indent=2) + "\n")
     comparison = report["comparison"]
     print(json.dumps({"report": str(out.relative_to(ROOT)),
                       "accepts_incremental_improvement": comparison["accepts_incremental_improvement"],

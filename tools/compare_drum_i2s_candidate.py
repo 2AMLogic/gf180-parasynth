@@ -36,8 +36,6 @@ as such. The two are never merged into one "delta".
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
-import hashlib
 import json
 import math
 import pathlib
@@ -50,6 +48,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import run_case  # noqa: E402
 import scorecard  # noqa: E402
 import refusal
+import delta_report  # noqa: E402
 
 CANDIDATE_ENGINE = "integrated-rtl"
 BASELINE_ENGINE = "fixed-model"
@@ -248,19 +247,8 @@ def compare_files(baseline_path: pathlib.Path, candidate_path: pathlib.Path) -> 
     except (OSError, json.JSONDecodeError) as exc:
         raise Refused(f"cannot load a drum score record: {exc}") from exc
     report = compare_records(baseline, candidate)
-    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
-                            check=True, capture_output=True, text=True).stdout.strip()
-    dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
-                                check=True, capture_output=True, text=True).stdout.strip())
-    report["provenance"] = {
-        "source_commit": commit, "source_dirty": dirty,
-        "input_sha256": {
-            "baseline_record": hashlib.sha256(baseline_path.read_bytes()).hexdigest(),
-            "candidate_record": hashlib.sha256(candidate_path.read_bytes()).hexdigest()},
-        "source_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-                          for name in SOURCES},
-        "run_at_utc": datetime.now(timezone.utc).isoformat(),
-    }
+    report["provenance"] = delta_report.comparison_provenance(
+        baseline_path, candidate_path, SOURCES, root=ROOT)
     return report
 
 
@@ -271,21 +259,16 @@ def main(argv=None) -> int:
     ap.add_argument("candidate", help="the integrated-rtl record")
     ap.add_argument("--out", default="build/scorecard/drum-integrated-delta.json")
     a = ap.parse_args(argv)
-    baseline, candidate = pathlib.Path(a.baseline), pathlib.Path(a.candidate)
-    if not baseline.is_absolute(): baseline = ROOT / baseline
-    if not candidate.is_absolute(): candidate = ROOT / candidate
+    baseline = delta_report.repo_path(a.baseline, root=ROOT)
+    candidate = delta_report.repo_path(a.candidate, root=ROOT)
     try:
         report = compare_files(baseline, candidate)
     except (OSError, ValueError, Refused, subprocess.CalledProcessError) as exc:
         print(f"compare_drum_i2s_candidate: REFUSED -- {exc}")
         return 2
-    out = pathlib.Path(a.out)
-    if not out.is_absolute(): out = ROOT / out
-    if not out.resolve().is_relative_to(ROOT):
-        print("compare_drum_i2s_candidate: REFUSED -- output must remain inside the repository")
+    out = delta_report.write_report(report, a.out, "compare_drum_i2s_candidate", root=ROOT)
+    if out is None:
         return 2
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"report": str(out.relative_to(ROOT)),
                       "case_id": report["case_id"],
                       "case_verdicts_agree": report["case_verdicts_agree"],
