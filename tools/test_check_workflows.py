@@ -667,6 +667,143 @@ def test_an_inline_comment_cannot_smuggle_a_flag():
 
 
 # =============================================================================
+# #1192: the SET of compile_dag.py invocations. Both order gates above key on
+# step NAME, so an invocation under any other name is invisible to them both
+# -- the #1177 shape, present in the tree (dag.yml's regenerator, nightly's
+# post-record strict check) rather than hypothetical. The set gate accounts
+# for every invoking step: name-gated, or allowlisted with the measurement
+# that says the ungated shape is deliberate (rule 8 form 2).
+# =============================================================================
+def _real_parsed(*filenames):
+    """The real workflow files, freshly parsed -- each test mutates its own
+    copy, so no mutation can leak into another test."""
+    return [(n, yaml.safe_load((REPO / ".github" / "workflows" / n).read_text()))
+            for n in filenames]
+
+
+def _job_with_step(workflow: dict, step_name: str) -> dict:
+    for job in workflow["jobs"].values():
+        names = [s.get("name") for s in job.get("steps") or [] if isinstance(s, dict)]
+        if step_name in names:
+            return job
+    raise AssertionError(f"no job carries a step named {step_name!r}")
+
+
+def test_real_tree_every_compile_dag_invocation_is_accounted():
+    parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert ok, reason
+    hits = {(f, s.get("name")) for f, doc in parsed
+            for job in (doc.get("jobs") or {}).values()
+            for s in (job.get("steps") or [])
+            if isinstance(s, dict) and cw._compile_dag_invocations(str(s.get("run", "")))}
+    assert len(hits) == 5, sorted(hits)
+    assert ("dag.yml", "run the evidence and regenerate") in hits
+    assert ("nightly.yml", "nothing is red or stale") in hits
+    assert "3 name-gated" in reason and "2 allowlisted" in reason
+
+
+def test_an_extra_run_step_under_a_new_name_in_rungs_is_set_red_and_order_green():
+    """The injected defect, on the REAL parsed shape: a second --run under a
+    name no gate selects. The premise assert proves the set gate is not
+    redundant -- the name-keyed order gate stays green on the same mutation."""
+    parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
+    rungs = parsed[0][1]
+    _job_with_step(rungs, cw.ROADMAP_STEP)["steps"].append(
+        {"name": "quietly refresh the roadmap",
+         "run": "python tools/compile_dag.py --run || true"})
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert not ok
+    assert "quietly refresh the roadmap" in reason and "#1192" in reason
+    assert cw.roadmap_check_precedes_run_in_step(rungs)[0], \
+        "premise: the name-keyed in-step gate is blind to the new step"
+
+
+def test_an_extra_run_step_under_a_new_name_in_nightly_is_set_red_and_pair_green():
+    parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
+    nightly = parsed[1][1]
+    _job_with_step(nightly, cw.ROADMAP_RECORD_STEP)["steps"].append(
+        {"name": "and again, quietly",
+         "run": "python tools/compile_dag.py --run"})
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert not ok
+    assert "and again, quietly" in reason
+    assert cw.roadmap_check_step_precedes_record_step(nightly)[0], \
+        "premise: the name-keyed pair gate is blind to the new step"
+
+
+def test_a_commented_out_invocation_is_not_in_the_set():
+    """The flag scan strips shell comments first, so a step that only talks
+    about running compile_dag.py is not an invocation and not in the set."""
+    parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
+    rungs = parsed[0][1]
+    _job_with_step(rungs, cw.ROADMAP_STEP)["steps"].append(
+        {"name": "only talks about it",
+         "run": "# python tools/compile_dag.py --run"})
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert ok, reason
+
+
+def test_the_set_gate_refuses_an_empty_match_set():
+    parsed = [("minimal.yml",
+               yaml.safe_load("jobs:\n  a:\n    steps:\n      - run: echo hi\n"))]
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert not ok and "vacuous" in reason
+
+
+def test_without_the_dag_allowlist_entry_the_real_tree_is_red(monkeypatch):
+    monkeypatch.delitem(
+        cw.COMPILE_DAG_UNGUARDED_STEPS,
+        ("dag.yml", "run the evidence and regenerate"))
+    parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert not ok
+    assert "run the evidence and regenerate" in reason
+
+
+def test_an_allowlisted_step_whose_flags_drifted_is_red():
+    """Rule 8, on this guard itself: an exemption must not outlive the shape
+    it excuses. Giving the dag bot's --run a --slow changes what the entry
+    covers; the signature pin catches the drift and forces the reason to be
+    re-read against the new shape."""
+    parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
+    dag = parsed[2][1]
+    step = next(s for job in dag["jobs"].values()
+                for s in job.get("steps") or []
+                if s.get("name") == "run the evidence and regenerate")
+    step["run"] = step["run"].replace("compile_dag.py --run",
+                                      "compile_dag.py --run --slow")
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert not ok
+    assert "allowlisted" in reason and "--slow" in reason
+
+
+def test_an_allowlist_entry_matching_no_step_is_reported(monkeypatch):
+    monkeypatch.setitem(cw.COMPILE_DAG_UNGUARDED_STEPS,
+                        ("dag.yml", "a ghost"), (((),), "superseded reason"))
+    parsed = _real_parsed("rungs.yml", "nightly.yml", "dag.yml")
+    ok, reason = cw.compile_dag_invocation_set_accounted(parsed)
+    assert not ok
+    assert "a ghost" in reason
+
+
+def test_a_lone_pair_named_step_without_its_partner_is_red():
+    """A step carrying a gated NAME in a file the pair gate never fires on
+    (its partner absent) looks guarded and is not: name membership alone
+    must not account for it."""
+    wf = _workflow("""\
+  orphan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the committed roadmap matches the committed evidence
+        run: python tools/compile_dag.py --check
+""")
+    ok, reason = cw.compile_dag_invocation_set_accounted([("orphan.yml", wf)])
+    assert not ok
+    assert "record the slow evidence for the roadmap" in reason
+
+
+# =============================================================================
 # main() wiring: the gate as the `python` job actually runs it.
 # =============================================================================
 def _minimal_workflow_text() -> str:
@@ -685,12 +822,36 @@ jobs:
 
 def test_main_is_green_on_the_real_workflow_tree(tmp_path, monkeypatch, capsys):
     import shutil
-    for f in ("rungs.yml", "nightly.yml"):
+    # dag.yml joined the fixture with #1192: the invocation-set gate reads it
+    # (its regenerator is allowlisted), so green-on-real must include it.
+    for f in ("rungs.yml", "nightly.yml", "dag.yml"):
         shutil.copy(REPO / ".github" / "workflows" / f, tmp_path / f)
     monkeypatch.setattr(cw, "WF", tmp_path)
     assert cw.main() == 0
     out = capsys.readouterr().out
     assert "roadmap order:" in out
+    assert "compile_dag invocation set:" in out
+
+
+def test_main_is_red_on_an_unaccounted_invocation(tmp_path, monkeypatch, capsys):
+    import shutil
+    for f in ("rungs.yml", "nightly.yml", "dag.yml"):
+        shutil.copy(REPO / ".github" / "workflows" / f, tmp_path / f)
+    (tmp_path / "sneaky.yml").write_text("""\
+name: sneaky
+on: workflow_dispatch
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: refresh the roadmap quietly
+        run: python tools/compile_dag.py --run
+""")
+    monkeypatch.setattr(cw, "WF", tmp_path)
+    assert cw.main() == 1
+    err = capsys.readouterr().err
+    assert "refresh the roadmap quietly" in err
 
 
 def test_main_is_red_when_the_shipped_order_is_reverted(tmp_path, monkeypatch):
