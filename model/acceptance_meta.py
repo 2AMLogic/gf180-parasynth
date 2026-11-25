@@ -52,6 +52,13 @@ CLAIM_STATUS_TAGS = (
     "[measured-here:", "[defect:", "[method]", "[meta]",
 )
 
+# Qualified test citation `<module>.test_<name>` (including dotted module paths).
+# Recognition is intentionally independent of `ground_truth_mods` so citing an
+# unregistered or misspelled module fails resolution instead of disappearing
+# silently; plain-language exemptions (e.g. "none needed -- register read-back")
+# and non-test dotted tokens (e.g. `audio_measure.py`, `2.0`) do not match.
+GROUND_TRUTH_REF_RE = re.compile(r"\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.(test_\w+)")
+
 
 def assert_ground_truth_gate(mod, ground_truth_mods, *, meta_prefix="test_meta_",
                               not_asserted=None, known_defects=None):
@@ -64,12 +71,13 @@ def assert_ground_truth_gate(mod, ground_truth_mods, *, meta_prefix="test_meta_"
     `ground_truth_mods`  a module, or a {name: module} mapping of modules whose
                          `test_*` members are valid ground-truth references.
                          A single module is accepted directly and keyed by its
-                         own `__name__`. A `Ground truth:` line may name
-                         `<name>.<function>` for any `name` present here --
-                         typically `test_audio_measure` plus, for a suite that
-                         validates its own local estimators the same way
-                         `test_audio_measure.py` validates the shared ones,
-                         the suite's own module (a self-reference).
+                         own `__name__`. Every qualified `<name>.test_<fn>`
+                         reference in a `Ground truth:` line is resolved
+                         against this registry, so an unregistered or
+                         misspelled module fails instead of being ignored --
+                         typically `test_audio_measure` plus any suite-specific
+                         ground-truth modules or the suite's own module for
+                         local estimators validated in-file.
     `meta_prefix`        test names starting with this are exempt from the
                          ground-truth requirement (but still need a tag).
     `not_asserted`       optional: this suite's "established by no source, so
@@ -86,10 +94,8 @@ def assert_ground_truth_gate(mod, ground_truth_mods, *, meta_prefix="test_meta_"
     """
     if not isinstance(ground_truth_mods, dict):
         ground_truth_mods = {ground_truth_mods.__name__: ground_truth_mods}
-    known = {name: {n for n in vars(m) if n.startswith("test_")}
+    known = {name: {n for n, v in vars(m).items() if n.startswith("test_") and callable(v)}
              for name, m in ground_truth_mods.items()}
-    mod_alt = "|".join(re.escape(name) for name in known)
-    ref_re = re.compile(rf"\b({mod_alt})\.(\w+)") if mod_alt else None
 
     missing_tag, missing_gt, unknown_gt = [], [], []
     for name, fn in sorted(vars(mod).items()):
@@ -105,14 +111,17 @@ def assert_ground_truth_gate(mod, ground_truth_mods, *, meta_prefix="test_meta_"
         if not m:
             missing_gt.append(name)
             continue
-        # A `Ground truth:` line naming no registered module (e.g. "none
+        # A `Ground truth:` line with no qualified test reference (e.g. "none
         # needed -- register read-back and arithmetic") is a deliberate,
         # explicit escape hatch, not a missing reference -- the docstring
         # still has to SAY it needs none, which is what the `if not m` branch
-        # above catches; a line that says so is left alone here.
-        refs = ref_re.findall(m.group(1)) if ref_re else []
-        for mod_name, fn_name in refs:
-            if fn_name not in known[mod_name]:
+        # above catches; a line that says so is left alone here. Any qualified
+        # `<module>.test_<fn>` citation is checked against `known`, so an
+        # unregistered or misspelled module fails instead of disappearing.
+        for mod_name, fn_name in GROUND_TRUTH_REF_RE.findall(m.group(1)):
+            if mod_name not in known:
+                unknown_gt.append(f"{name} -> {mod_name}.{fn_name} (unknown module)")
+            elif fn_name not in known[mod_name]:
                 unknown_gt.append(f"{name} -> {mod_name}.{fn_name}")
 
     assert not missing_tag, f"tests without a claim-status tag: {missing_tag}"
