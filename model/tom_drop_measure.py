@@ -28,6 +28,11 @@ import numpy as np
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import tom_pitch_probe as P
+import refusal
+
+
+class Refused(refusal.Refused, RuntimeError):
+    """A precondition of the apparatus failed. Not a result, and not a fail."""
 
 REPO = HERE.parent
 CACHE = REPO / "refaudio" / "cache" / "808-from-mars"
@@ -116,6 +121,27 @@ def control_leading_silence(n_files: int = 6) -> list[dict]:
                                               r.get("f_settled_hz"), r["verdict"])
                 out.append(row)
     return out
+
+
+def leading_silence_worst_delta(rows: list[dict]) -> float:
+    """Worst |ratio change| across the lead-silence rows (issue #1289).
+
+    A nonfinite ratio is a named failure that identifies its row, never a value
+    merged into the summary: `max(worst, nan)` returns `worst`, so a NaN row
+    would vanish and an all-NaN control would print its cleanest result, 0.0.
+    `None` (a refused measurement) is still skipped, as before."""
+    worst = 0.0
+    for row in rows:
+        base = row["lead_0.0"][0]
+        for lead in (0.0, 0.5, 1.0, 10.0):
+            v = row[f"lead_{lead}"][0]
+            for val in (v, base):
+                if val is not None and not np.isfinite(val):
+                    raise Refused(f"nonfinite onset ratio {val!r} in {row['voice']}/"
+                                  f"{row['accent']} {row['file']} at lead {lead} ms")
+            if v and base:
+                worst = max(worst, abs(v - base))
+    return worst
 
 
 def control_distinct_events(folder: str, stem: str) -> dict:
@@ -291,15 +317,12 @@ def main(argv: list[str]) -> int:
         print("=== CONTROL: prepending digital silence must not change the answer")
         cs = control_leading_silence()
         out["control_leading_silence"] = cs
-        worst = 0.0
+        worst = leading_silence_worst_delta(cs)
         for row in cs:
-            base = row["lead_0.0"][0]
             line = f"   {row['voice']}/{row['accent']} {row['file'][-10:]:>10}  "
             for lead in (0.0, 0.5, 1.0, 10.0):
                 v, fset, verd = row[f"lead_{lead}"]
                 line += f"{lead:4.1f} ms: " + (f"x{v:.4f}  " if v else f"{verd[:8]}  ")
-                if v and base:
-                    worst = max(worst, abs(v - base))
             print(line)
         print(f"   worst change in the measured onset ratio from 10 ms of leading silence: "
               f"{worst:.6f}")

@@ -389,6 +389,16 @@ def check_preconditions(refs: str, verbose: bool = True) -> dict:
     return dict(ref=ref, ours=ours, ref_sr=ref_sr)
 
 
+def worst_column_move(a, b) -> float:
+    """Largest |a_i - b_i|. A nonfinite column refuses (#1289): `max()` drops a
+    NaN that is not first and `nan < 0.5` is False, so the self-test's verdict
+    would otherwise depend on which column the NaN sat in."""
+    d = [abs(x - y) for x, y in zip(a, b)]
+    if not all(math.isfinite(v) for v in d):
+        raise Refused(f"nonfinite band-share column in {list(a)} vs {list(b)}")
+    return max(d)
+
+
 def self_test(verbose: bool = True) -> int:
     """No audio needed. Checks the three things that would silently invalidate
     every number this file prints."""
@@ -398,7 +408,7 @@ def self_test(verbose: bool = True) -> int:
         print("self-test -- (b) replay is bit-exact against DrumsFx: OK")
 
     e = rp.shipped_exc()
-    worst = max(abs(x - y) for x, y in zip(rp.row(e), rp.row(e // 4)))
+    worst = worst_column_move(rp.row(e), rp.row(e // 4))
     if verbose:
         print(f"self-test -- band split invariant to a 4x excitation level change: "
               f"worst column moves {worst:.3f} pp")
