@@ -34,11 +34,12 @@ import compare_m5a_i2s_candidate as m5a_mod                    # noqa: E402
 
 
 DRUM_SOURCES = {"tools/compare_drum_i2s_candidate.py", "tools/score_drum_i2s.py",
-                "tools/run_case.py", "tools/scorecard.py"}
+                "tools/run_case.py", "tools/scorecard.py", "tools/delta_report.py"}
 ENSEMBLE_SOURCES = {"tools/compare_ensemble_candidate.py", "tools/score_ensemble_i2s.py",
-                    "tools/run_case.py", "tools/scorecard.py"}
+                    "tools/run_case.py", "tools/scorecard.py", "tools/delta_report.py"}
 M5A_SOURCES = {"tools/compare_m5a_i2s_candidate.py",
-               "tools/measure_m5a_filter_oversample.py", "tools/mono_m5a_score.py"}
+               "tools/measure_m5a_filter_oversample.py", "tools/mono_m5a_score.py",
+               "tools/delta_report.py"}
 
 #: Minimal reports carrying exactly the keys each script's `main` summary
 #: print reads -- enough for the tail to run end to end without re-deriving
@@ -125,6 +126,37 @@ def test_compare_files_pins_the_provenance_block(compare, tool, sources, report,
     assert provenance["run_at_utc"].endswith("+00:00")
     (tmp_path / "uncommitted.txt").write_text("dirt\n")
     assert compare.compare_files(baseline, candidate)["provenance"]["source_dirty"] is True
+
+
+@pytest.mark.parametrize("compare,tool,sources,report,summary_keys", CASES,
+                         ids=["drum", "ensemble", "m5a"])
+def test_sources_hash_the_module_that_computes_the_provenance(
+        compare, tool, sources, report, summary_keys):
+    """Issue #1208: `comparison_provenance()` moved into `tools/delta_report.py`
+    (PR #1191), which nothing hashed -- a future edit to it would emit
+    differently-shaped records under an identical `source_sha256`. The module
+    each comparator actually imports and calls for its provenance must be in
+    that comparator's own SOURCES, derived from the import (not a stale
+    hardcoded string)."""
+    helper = "tools/" + pathlib.Path(compare.delta_report.__file__).name
+    assert helper in compare.SOURCES
+
+
+@pytest.mark.parametrize("compare,tool,sources,report,summary_keys", CASES,
+                         ids=["drum", "ensemble", "m5a"])
+def test_editing_the_provenance_module_changes_its_hashed_bytes(
+        compare, tool, sources, report, summary_keys, tmp_path, monkeypatch):
+    """The original #1208 gap, pinned end to end: editing delta_report.py's
+    bytes must change the `source_sha256` entry for it -- and only that entry
+    -- or the record's evidence identity is blind to the code that builds it."""
+    _, baseline, candidate = _sandbox(compare, sources, report, tmp_path, monkeypatch)
+    helper = "tools/" + pathlib.Path(compare.delta_report.__file__).name
+    before = compare.compare_files(baseline, candidate)["provenance"]["source_sha256"]
+    (tmp_path / helper).write_text("# edited provenance module bytes\n")
+    after = compare.compare_files(baseline, candidate)["provenance"]["source_sha256"]
+    assert after[helper] != before[helper]
+    assert {k: v for k, v in after.items() if k != helper} == \
+        {k: v for k, v in before.items() if k != helper}
 
 
 @pytest.mark.parametrize("compare,tool,sources,report,summary_keys", CASES,

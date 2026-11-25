@@ -3,12 +3,13 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as its own last change — `git log --no-patch -1 --format='%h %cs' -L '/^<!-- guide:plan-body:start -->$/,/^<!-- guide:plan-body:end -->$/:WORK_PLAN.md' origin/main` — which neither a declined Guide regeneration nor a docs-only commit elsewhere in this file advances.
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-20T23:54:59Z (snapshot; compare against live labels)_
+_Generated: 2026-11-25T02:30:02Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
 
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper
+- **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches
 
 ## Very Important
 
@@ -20,14 +21,11 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
 
 `loom:important`; taken before unlabelled work.
 
-- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#162**: The bass drum's entire attack is 18-23 dB short across 170-678 Hz *(held)*
-- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
-- **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
+- **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(held)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(held)*
-- **#1051**: [voice-only] Draft decision record and re-scope README/roadmap/spec to voice-only silicon target *(held)*
 
 ## Ready
 
@@ -37,7 +35,7 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
+- **#1234**: refusal_sibling_scan: an ALIASED borrow sets refused_origin, so a dotted `except <mod>.Refused` is credited for an attribute that does not exist
 
 ## In Progress
 
@@ -51,20 +49,38 @@ Issues currently being built (`loom:building`).
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit)
-- **#1089**: regrade cannot tell a re-attested envelope from a stale one: no gate binds evidence/item-{9,10}.json provenance.klt_version to the pinned klt
+- **#1126**: Require a matching clean run before make controls credits an RTL mismatch
+- **#1183**: Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census
+- **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal
+- **#1207**: Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep
+- **#1219**: Consolidate duplicated UART RTL capture/replay in verify_live_midi and verify_rolling_playback (fixes --image r2 running with PULSE2X=0)
+- **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow
+- **#1235**: No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only
+- **#1239**: Tighten the audition help control: `>= 2` lets a silently-no-op replace retire one of its three injected defects
+- **#1248**: uart_host --dry-run status/abort renders the apply_frame sentinel -1 in the 'applies' column
+- **#1253**: render_plan prints the -1 sentinel in the applies column for status/abort rows
+- **#1258**: Remove the SciPy requirement from default-patch M5A UART playback
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#1090**: signoff: fail regrade on an evidence envelope whose klt_version is not the pin
+- **#1203**: fix: catch cross-module corpus refusals at five run_case-caller boundaries (run_case.* family of #1183)
+- **#1228**: fix: share the UART RTL capture/replay pipeline; replay live-midi r2 bytes at PULSE2X=1
+- **#1240**: test: guard workflow RTL mutant gating and baseline config match
+- **#1251**: test: require all three findings in audition help control
+- **#1254**: fix: refuse zero denominators at four cymbal log10 ratio sites
+- **#1255**: fix: render unset apply_frame as '-' in dry-run plan and echo lines
+- **#1256**: fix: render_plan prints '-' for rows with no apply frame
+- **#1259**: fix: let the R1 quick-start dry run work without SciPy
 
 ## Approved (Awaiting Merge)
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper *(held)* — linked issue #1062
+- **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches *(held)* — linked issue #1199
+- **#1227**: fix(nightly): gate the ctl and synth_top mutant steps on a clean run — linked issue #1222
 
 ## Proposed
 
@@ -119,7 +135,6 @@ Issues carrying `loom:curated`.
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)* *(held)*
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)* *(held)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)* *(held)*
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)*
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
 - **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)* *(held)*
 - **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)* *(held)*
@@ -128,8 +143,20 @@ Issues carrying `loom:curated`.
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)* *(held)*
 - **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites) *(curated)*
-- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit) *(curated)*
-- **#1089**: regrade cannot tell a re-attested envelope from a stale one: no gate binds evidence/item-{9,10}.json provenance.klt_version to the pinned klt *(curated)*
+- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit) *(curated)* *(held)*
+- **#1110**: Judge docs-only fast path is unreachable on this host: its base-repo read uses a gh --json field this gh 2.102.0 rejects *(curated)* *(held)*
+- **#1126**: Require a matching clean run before make controls credits an RTL mismatch *(curated)*
+- **#1148**: rtl-full step 8 is red on main: M5A filter2x SPI-to-I2S diverges from the model in 815424 of 1305549 frames (62%) *(curated)* *(held)*
+- **#1183**: Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census *(curated)*
+- **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal *(curated)*
+- **#1207**: Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep *(curated)*
+- **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin *(curated)*
+- **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow *(curated)*
+- **#1234**: refusal_sibling_scan: an ALIASED borrow sets refused_origin, so a dotted `except <mod>.Refused` is credited for an attribute that does not exist *(curated)*
+- **#1235**: No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only *(curated)*
+- **#1239**: Tighten the audition help control: `>= 2` lets a silently-no-op replace retire one of its three injected defects *(curated)*
+- **#1248**: uart_host --dry-run status/abort renders the apply_frame sentinel -1 in the 'applies' column *(curated)*
+- **#1253**: render_plan prints the -1 sentinel in the applies column for status/abort rows *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -138,11 +165,10 @@ Issues carrying `loom:curated`.
 - **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)* *(held)*
 - **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)* *(held)*
 - **#753**: Consolidate 16 duplicate file-sha256 helpers in tools/ into provenance.py *(hermit)* *(held)*
-- **#760**: Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September *(hermit)* *(held)*
-- **#762**: Remove fpga/probe_uart_findings.py: it reports 2 false FAILs on the repaired host and nothing runs it *(hermit)* *(held)*
-- **#800**: Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site *(hermit)* *(held)*
 - **#812**: verify-fast re-runs 40 test files that sibling jobs in the same workflow already collect wholesale, on the stale premise that no CI job does *(hermit)* *(held)*
-- **#817**: Consolidate the seven WAV readers: four conventions, and two answer 96 dB wrong on a 24-bit file instead of refusing *(hermit)* *(held)*
+- **#1172**: Wire in or remove check_nightly_slow_records.py: a 1,176-line gate nothing runs *(hermit)* *(held)*
+- **#1173**: Remove tools/audit_tracked_json_writers.py: one-shot #922 report nothing runs *(hermit)* *(held)*
+- **#1205**: Remove disk cache replay from the 808 conditioning comparison *(hermit)* *(held)*
 
 ## Epics
 
@@ -153,14 +179,14 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 1 |
+| Operator merge-risk holds | 2 |
 | Very important | 1 |
-| Important | 8 |
+| Important | 5 |
 | Ready (`loom:issue`, net of holds/building/merge-pending) | 5 |
-| In Progress (`loom:building`) | 10 |
-| PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 1 |
-| Curated | 60 |
-| Architect / Hermit proposals | 10 |
+| In Progress (`loom:building`) | 19 |
+| PRs awaiting review | 8 |
+| Approved PRs awaiting merge | 3 |
+| Curated | 71 |
+| Architect / Hermit proposals | 9 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->

@@ -244,7 +244,7 @@ def roadmap_check_precedes_run_in_step(workflow, step_name: str = ROADMAP_STEP):
                        f"nothing to guard")
     if len(found) > 1:
         return False, (f"{len(found)} steps named {step_name!r} "
-                       f"({', '.join(j for j, _ in found)}) -- ambiguous")
+                       f"({', '.join(str(j) for j, _ in found)}) -- ambiguous")
     jname, step = found[0]
     invs = _compile_dag_invocations(str(step.get("run", "")))
     if not invs:
@@ -277,14 +277,24 @@ def roadmap_check_step_precedes_record_step(workflow,
     """(ok, reason): in some one job, the step named `check_step` precedes the
     step named `record_step`; the check step invokes `tools/compile_dag.py`
     with `--check` and never `--run` (a check that also rewrites judges
-    nothing); the record step invokes it with `--run`."""
+    nothing); the record step invokes it with `--run`. Either guarded name
+    appearing more than once in the file is ambiguous and refused, like the
+    in-step gate -- never last-wins (#1206)."""
     if isinstance(workflow, (str, pathlib.Path)):
         workflow = yaml.safe_load(pathlib.Path(workflow).read_text())
-    named: dict[str, tuple[str, int, dict]] = {}
+    found: list[tuple[str, object, int, dict]] = []
     for jname, job in ((workflow or {}).get("jobs") or {}).items():
         for i, s in enumerate((job or {}).get("steps") or []):
             if isinstance(s, dict) and s.get("name") in (check_step, record_step):
-                named[s["name"]] = (jname, i, s)
+                found.append((s.get("name"), jname, i, s))
+    named: dict[str, tuple[object, int, dict]] = {}
+    for guarded in (check_step, record_step):
+        hits = [(j, i, s) for n, j, i, s in found if n == guarded]
+        if len(hits) > 1:
+            return False, (f"{len(hits)} steps named {guarded!r} "
+                           f"({', '.join(str(j) for j, _, _ in hits)}) -- ambiguous")
+        if hits:
+            named[guarded] = hits[0]
     if check_step not in named:
         return False, (f"no step named {check_step!r} -- the order gate has "
                        f"nothing to guard")
@@ -313,6 +323,153 @@ def roadmap_check_step_precedes_record_step(workflow,
     return False, (f"in job {cj!r}, {record_step!r} (step {ri}) precedes "
                    f"{check_step!r} (step {ci}): the regen would run before "
                    f"anything judged the committed README (#906)")
+
+
+# =============================================================================
+# "the set behind the order gates" -- issue #1192, the #1177 class.
+#
+# Both #906 order gates above select the step they guard by exact NAME, so an
+# invocation of tools/compile_dag.py under any other name is invisible to
+# them: the named steps stay unique, present and correctly ordered while a
+# second --run rewrites the roadmap ungated. #1177 fixed that shape for the
+# rtl-full --pulse2x identity gate by asserting the step SET
+# (tools/test_setup_ci_verilator.py); this is the same layer for the roadmap
+# gates. Every step whose `run` text invokes compile_dag.py must be accounted
+# for: one of the three gated names (the nightly pair counting only in a
+# file that carries BOTH names, where the pair gate actually fires), or on
+# COMPILE_DAG_UNGUARDED_STEPS with the measurement that says the ungated
+# shape is deliberate -- rule 8 form 2, the stated reason none exists.
+#
+# MEASURED, not assumed (#1192): both entries below were verified against
+# the files' own headers and compile_dag.py's semantics before being written.
+# =============================================================================
+# (workflow file name, step name) -> (invocation flag signature, why ungated).
+# The signature is one sorted tuple of long flags per invocation, in run
+# order, exactly as _compile_dag_invocations reads them: a step whose flags
+# drift from its entry goes red, so an exemption cannot silently widen past
+# the shape its reason describes.
+COMPILE_DAG_UNGUARDED_STEPS: dict[
+    tuple[str, str], tuple[tuple[tuple[str, ...], ...], str]
+] = {
+    ("dag.yml", "run the evidence and regenerate"): (
+        (("--run",), ()),
+        "the maintenance bot itself (dag.yml:1-9): this job's product IS the "
+        "rewrite -- it regenerates the README from evidence on every push to "
+        "main. It triggers only on push/workflow_dispatch, never "
+        "pull_request, so no PR gate can read its own output (the #906 "
+        "harm), and a preceding --check would be an unsatisfiable gate: the "
+        "README is legitimately stale after every merge, which is the "
+        "condition the bot exists to repair. The second, bare invocation "
+        "re-renders the README from the records the --run just wrote.",
+    ),
+    ("nightly.yml", "nothing is red or stale"): (
+        (("--check", "--strict"),),
+        "the post-record strict check, deliberately AFTER the record and "
+        "commit steps (nightly.yml: 'The nightly CAN refresh the slow "
+        "evidence, so it is the job entitled to demand that nothing is RED "
+        "or STALE'): it judges the evidence the record step just wrote. It "
+        "carries no --run, so it rewrites nothing.",
+    ),
+}
+
+
+def _invocation_signature(run_text: str) -> tuple[tuple[str, ...], ...]:
+    """The step's compile_dag.py invocations as a comparable shape: one
+    sorted tuple of long flags per invocation, in run order."""
+    return tuple(tuple(sorted(f)) for f in _compile_dag_invocations(run_text))
+
+
+def compile_dag_invocation_set_accounted(parsed: list[tuple[str, dict]]):
+    """(ok, reason): every workflow step whose `run` text invokes
+    tools/compile_dag.py is accounted for -- it carries one of the three
+    names the order gates select (the nightly pair counting only in a file
+    that carries both names, where the pair gate fires), or it is on
+    COMPILE_DAG_UNGUARDED_STEPS and its invocation flags still match the
+    signature its entry was written against.
+
+    Matching is on `run` text via _compile_dag_invocations, never on `name`:
+    the gap this closes (#1177's shape, found living in the tree by #1192)
+    is an invocation under a name no gate selects. An empty match set
+    refuses rather than passing vacuously, and an allowlist entry that
+    matches no step is reported, so an exemption cannot outlive its step.
+    """
+    hits: list[tuple[str, str, dict]] = []
+    unaccounted: list[str] = []
+    n_gated = n_allowed = 0
+    matched: set[tuple[str, str]] = set()
+    for fname, doc in parsed:
+        names_in_file = [s.get("name")
+                         for job in (doc.get("jobs") or {}).values()
+                         for s in (job or {}).get("steps") or []
+                         if isinstance(s, dict)]
+        for jname, job in (doc.get("jobs") or {}).items():
+            for s in (job or {}).get("steps") or []:
+                if not (isinstance(s, dict)
+                        and _compile_dag_invocations(str(s.get("run", "")))):
+                    continue
+                hits.append((fname, jname, s))
+                name = s.get("name")
+                shown = name if isinstance(name, str) else "<unnamed>"
+                if name == ROADMAP_STEP:
+                    n_gated += 1
+                    continue
+                if (name in (ROADMAP_CHECK_STEP, ROADMAP_RECORD_STEP)
+                        and names_in_file.count(name) > 1):
+                    unaccounted.append(
+                        f"{fname}:{jname}: gated step name {shown!r} occurs "
+                        f"{names_in_file.count(name)} times in the file, so "
+                        f"name membership does not say which invocation the "
+                        f"order gate guards (#1196)")
+                    continue
+                if name in (ROADMAP_CHECK_STEP, ROADMAP_RECORD_STEP):
+                    partner = (ROADMAP_RECORD_STEP if name == ROADMAP_CHECK_STEP
+                               else ROADMAP_CHECK_STEP)
+                    if partner in names_in_file:
+                        n_gated += 1
+                    else:
+                        unaccounted.append(
+                            f"{fname}:{jname}: step {shown!r} invokes "
+                            f"tools/compile_dag.py under a gated name, but the "
+                            f"file carries no {partner!r} step, so the pair "
+                            f"gate never fires here (#1192)")
+                    continue
+                entry = COMPILE_DAG_UNGUARDED_STEPS.get((fname, name))
+                if entry is None:
+                    unaccounted.append(
+                        f"{fname}:{jname}: step {shown!r} invokes "
+                        f"tools/compile_dag.py under a name no order gate "
+                        f"selects (#1192)")
+                    continue
+                signature, _reason = entry
+                matched.add((fname, name))
+                if names_in_file.count(name) > 1:
+                    unaccounted.append(
+                        f"{fname}:{jname}: allowlisted step name {shown!r} "
+                        f"occurs {names_in_file.count(name)} times, so the "
+                        f"entry cannot say which one it excuses (#1196)")
+                    continue
+                actual = _invocation_signature(str(s.get("run", "")))
+                if actual != signature:
+                    unaccounted.append(
+                        f"{fname}:{jname}: step {shown!r} is allowlisted, but "
+                        f"its invocations are now {actual!r}, not the "
+                        f"{signature!r} its entry describes -- re-read the "
+                        f"allowlist reason against the new shape (#1192)")
+                    continue
+                n_allowed += 1
+    if not hits:
+        return False, ("no workflow step invokes tools/compile_dag.py -- the "
+                       "invocation-set gate matched nothing (vacuous)")
+    for fname, name in sorted(set(COMPILE_DAG_UNGUARDED_STEPS) - matched):
+        unaccounted.append(
+            f"{fname}: allowlist entry {name!r} matches no "
+            f"compile_dag.py-invoking step -- an exemption that outlived its "
+            f"step (#1192)")
+    if unaccounted:
+        return False, "; ".join(unaccounted)
+    return True, (f"{len(hits)} compile_dag.py-invoking step(s) accounted "
+                  f"for: {n_gated} name-gated, {n_allowed} allowlisted with "
+                  f"reasons")
 
 
 # =============================================================================
@@ -569,6 +726,16 @@ def main() -> int:
         if what not in guarded:
             bad.append(f"{why} -- the #906 order gate has nothing to guard")
 
+    # -- the SET behind the two order gates (#1192): an invocation under a
+    #    name neither gate selects is invisible to both. Every invoking step
+    #    must be accounted for -- name-gated, or allowlisted with the
+    #    measured reason (rule 8 form 2).
+    ok, reason = compile_dag_invocation_set_accounted(parsed)
+    if ok:
+        guarded["set"] = reason
+    else:
+        bad.append(reason)
+
     refused = None
     try:
         scan = check_referenced_paths(gather_sources(), tracked_files())
@@ -591,8 +758,11 @@ def main() -> int:
               f"build -- an unregistered workflow simply never runs.", file=sys.stderr)
         return 1
     print(f"{len(files)} workflow(s) parse and declare a usable trigger")
-    for reason in guarded.values():
-        print(f"  roadmap order: {reason}")
+    for what, reason in guarded.items():
+        if what == "set":
+            print(f"  compile_dag invocation set: {reason}")
+        else:
+            print(f"  roadmap order: {reason}")
     return 0
 
 

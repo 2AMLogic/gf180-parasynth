@@ -9,7 +9,11 @@ ones the #1160 one-off dotted-call grep actually produced (a local variable
 named like a module; a callee with no refusal family; a callee whose FUNCTION
 raises nothing even though its module has a family). The #1188 section pins
 the three gaps that issue filed (try-handler credit, stem collision, alias
-loss): each control there started red against the unfixed scanner.
+loss) and the #1193 section the borrowed-family gap: each control there
+started red against the unfixed scanner, except the shadow pin noted inline.
+The #1214 section pins the ambiguous-callee filter (a non-raising collision
+is not a site), the repo-relative `candidates` format, and the shadowed-alias
+blind spot #1188's test plan named but never pinned.
 """
 from __future__ import annotations
 
@@ -245,6 +249,87 @@ def go(p):
 '''
 
 
+# --- #1214 shapes: the ambiguous-callee filter and the candidates format ----
+# Two same-stem candidates whose callees raise nothing used to be emitted as
+# `ambiguous-callee` anyway: the multi-candidate branch had no equivalent of
+# the single-callee `no family at all` / `this function raises no refusal`
+# filters. `candidates` also carried absolute host paths where `site` was
+# repo-relative, so the --json census was host-dependent.
+
+PLAY_FAMILY_RAISES = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def run(x):
+    raise Refused("no records")
+
+def quiet(x):
+    return x
+'''
+
+PLAY_PLAIN_HELPER = '''
+def helper(x):
+    return x / 0
+
+def quiet(x):
+    return x
+'''
+
+CALLER_AMBIG_FAMILYLESS = '''
+from play import helper
+
+def go(p):
+    return helper(p)              # every candidate is quiet: not a site at all
+'''
+
+CALLER_AMBIG_QUIET = '''
+from play import quiet
+
+def go(p):
+    return quiet(p)               # family present, but no candidate raises this fname
+'''
+
+CALLER_AMBIG_PARTIAL = '''
+from play import run
+
+def go(p):
+    return run(p)                 # one candidate raises: still ambiguous-callee
+'''
+
+CALLER_SHADOWED_ALIAS = '''
+from mod_a import load as l
+
+def go(p):
+    l = lambda q: q               # local rebinding: untracked (documented blind spot)
+    return l(p)                   # still attributed to mod_a.load
+'''
+
+
+def _collision_tree(tmp_path: pathlib.Path, alpha: str, beta: str,
+                    caller_name: str, caller_body: str) -> list[pathlib.Path]:
+    """The flat tree plus a two-way same-stem collision (alpha/play.py,
+    beta/play.py) and a caller importing the stem: the flat tree's stems are
+    unique, so `play` is the only collision the caller can hit."""
+    files = _tree(tmp_path)
+    for sub, body in (("alpha", alpha), ("beta", beta)):
+        d = tmp_path / sub
+        d.mkdir()
+        p = d / "play.py"
+        p.write_text(body)
+        files.append(p)
+    c = tmp_path / f"{caller_name}.py"
+    c.write_text(caller_body)
+    files.append(c)
+    return files
+
+
+def _sites_for(scan_files, idx, caller_name: str) -> list[dict]:
+    return [s for s in rss.scan(scan_files, idx)
+            if s["site"].split("/")[-1].startswith(f"{caller_name}.py:")]
+
+
 def _tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
     files = {}
     for name, body in (("mod_a", MOD_A), ("mod_b", MOD_B), ("plain", PLAIN),
@@ -436,3 +521,263 @@ def test_aliased_from_import_call_resolves_to_the_original_function(tmp_path):
 
 def test_alias_of_a_non_raising_function_is_not_a_site(tmp_path):
     assert not [k for k in _scan(tmp_path) if k[0] == "caller_from_quiet.py"]
+
+
+# --- #1193 controls: the borrowed-family blind spot ---------------------------
+# Every borrow control except the shadow pin started red against the unfixed
+# scanner: a from-imported Refused bound no family name, so the borrower's
+# own `raise Refused` read as raising no family and its `except Refused`
+# handlers read as shape `other` -- both sides of the census silenced.
+
+BORROWING_CALLEE = '''
+from mod_a import Refused as R           # the family, BORROWED (aliased)
+
+def fetch(p):
+    raise R(f"cannot use {p}")
+'''
+
+BORROW_CALLEE_CALLER = '''
+import borrow_callee
+
+def go(p):
+    return borrow_callee.fetch(p)        # unguarded: the site the census lost
+'''
+
+BORROWING_HANDLER = '''
+import mod_a
+import mod_b
+from mod_a import Refused                # the borrower's guard, unaliased
+
+def go(p):
+    try:
+        mod_a.load(p)                    # covered: the class IS mod_a's
+        mod_b.measure(p)                 # NOT covered: mod_b's is a sibling
+    except Refused as e:
+        print("REFUSED", e)
+'''
+
+BORROWING_HANDLER_ALIAS = '''
+import mod_a
+import mod_b
+from mod_a import Refused as R           # the borrower's guard, aliased
+
+def go(p):
+    try:
+        mod_a.load(p)
+        mod_b.measure(p)
+    except R as e:
+        print("REFUSED", e)
+'''
+
+TWO_STEM_BORROWER = '''
+import mod_a
+import mod_b
+from mod_a import Refused as RA          # two different lenders...
+from mod_b import Refused as RB
+
+def go(p):
+    try:
+        mod_a.load(p)
+        mod_b.measure(p)
+    except RA as e:                      # ...so each name covers only its own
+        print("A", e)
+    except RB as e:
+        print("B", e)
+'''
+
+BORROW_SHADOWED_BY_CLASS = '''
+import refusal
+import mod_a
+from mod_a import Refused                # borrowed first...
+
+class Refused(refusal.Refused, Exception):   # ...then rebound to a local def
+    pass
+
+def go(p):
+    try:
+        mod_a.load(p)
+    except Refused as e:                 # the LOCAL sibling: does not cover
+        print("REFUSED", e)
+'''
+
+CLASS_SHADOWED_BY_BORROW = '''
+import refusal
+import mod_a
+
+class Refused(refusal.Refused, Exception):   # local first...
+    pass
+
+from mod_a import Refused                # ...then rebound to the borrow
+
+def go(p):
+    try:
+        mod_a.load(p)
+    except Refused as e:                 # mod_a's class again: covers it
+        print("REFUSED", e)
+'''
+
+
+def _borrow_tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
+    files = _tree(tmp_path)
+    for name, body in (("borrow_callee", BORROWING_CALLEE),
+                       ("borrow_caller", BORROW_CALLEE_CALLER),
+                       ("borrow_handler", BORROWING_HANDLER),
+                       ("borrow_handler_alias", BORROWING_HANDLER_ALIAS),
+                       ("borrow_two_stems", TWO_STEM_BORROWER),
+                       ("borrow_shadowed", BORROW_SHADOWED_BY_CLASS),
+                       ("class_shadowed", CLASS_SHADOWED_BY_BORROW)):
+        p = tmp_path / f"{name}.py"
+        p.write_text(body)
+        files.append(p)
+    return files
+
+
+def _borrow_scan(tmp_path):
+    files = _borrow_tree(tmp_path)
+    idx = rss.build_index(files)
+    return {(s["site"].split("/")[-1].split(":")[0], s["callee"]): s
+            for s in rss.scan(files, idx)}
+
+
+def test_raise_of_a_borrowed_family_resolves_to_the_lenders_origin(tmp_path):
+    """Gap "borrowed family": `from mod_a import Refused as R` bound no family
+    name, so `raise R(...)` in the borrower read as raising nothing and this
+    caller's site vanished from the census entirely."""
+    s = _borrow_scan(tmp_path)[("borrow_caller.py", "borrow_callee.fetch")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["origins"] == ["mod_a"], s
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_borrowed_handler_covers_exactly_the_lender_and_no_sibling(tmp_path):
+    """The res_tuning shape: `except Refused` written with a borrowed Refused
+    covers the lender's origin (shape `exact` -- the class IS the lender's)
+    and nothing else, which is why the sibling module stays a candidate."""
+    got = _borrow_scan(tmp_path)
+    s = got[("borrow_handler.py", "mod_a.load")]
+    assert s["classification"].startswith("covered"), s
+    assert s["guard"] == "exact", s
+    sib = got[("borrow_handler.py", "mod_b.measure")]
+    assert sib["classification"] == "candidate-escape", sib
+    assert sib["uncovered"] == ["mod_b"], sib
+
+
+def test_aliased_borrowed_handler_covers_exactly_the_lender(tmp_path):
+    got = _borrow_scan(tmp_path)
+    s = got[("borrow_handler_alias.py", "mod_a.load")]
+    assert s["classification"].startswith("covered"), s
+    assert s["guard"] == "exact", s
+    sib = got[("borrow_handler_alias.py", "mod_b.measure")]
+    assert sib["classification"] == "candidate-escape", sib
+
+
+def test_borrow_from_two_stems_covers_each_name_to_its_own_lender(tmp_path):
+    """`Refused` borrowed under two names from two lenders: each handler
+    covers only its own lender's class, not the other's."""
+    got = _borrow_scan(tmp_path)
+    a = got[("borrow_two_stems.py", "mod_a.load")]
+    assert a["classification"].startswith("covered"), a
+    b = got[("borrow_two_stems.py", "mod_b.measure")]
+    assert b["classification"].startswith("covered"), b
+
+
+def test_borrow_shadowed_by_a_local_class_stays_an_escape(tmp_path):
+    """Python's last binding wins: a `class Refused` def AFTER the borrow
+    rebinds the name to a local sibling, so the handler no longer covers the
+    lender. A control, not a red-first case -- it pins the fix against
+    crediting every binding the module ever made."""
+    s = _borrow_scan(tmp_path)[("borrow_shadowed.py", "mod_a.load")]
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+    assert s["guard"] == "local", s
+
+
+def test_local_class_shadowed_by_a_borrow_covers_the_lender(tmp_path):
+    """The reverse shadow: the borrow comes after the class def, so the name
+    is the lender's class again and the handler covers it (shape `exact`,
+    not `local`)."""
+    s = _borrow_scan(tmp_path)[("class_shadowed.py", "mod_a.load")]
+    assert s["classification"].startswith("covered"), s
+    assert s["guard"] == "exact", s
+
+
+# --- #1214 controls: the ambiguous-callee filter (items 1), repo-relative
+# candidates (item 2), and the shadowed-alias blind-spot pin (item 4). The
+# filter and format controls started red against the unfixed scanner.
+
+def test_family_less_stem_collision_is_not_a_site(tmp_path):
+    """Item 1: two family-less play.py candidates and a `from play import
+    helper` caller used to be reported as ambiguous-callee -- "I cannot tell
+    which refusal this is" about a call that raises no refusal. The
+    single-callee path already filtered this shape; the multi-candidate
+    branch now mirrors it."""
+    files = _collision_tree(tmp_path, PLAY_PLAIN_HELPER, PLAY_PLAIN_HELPER,
+                            "caller_familyless", CALLER_AMBIG_FAMILYLESS)
+    idx = rss.build_index(files)
+    assert _sites_for(files, idx, "caller_familyless") == []
+
+
+def test_collision_where_no_candidate_raises_for_the_callee_is_not_a_site(tmp_path):
+    """Item 1, quiet-fname direction: one candidate module HAS a family but
+    its `quiet` raises nothing, the other has none -- the call cannot raise a
+    refusal under any resolution, so it is not a site (same contract as the
+    single-callee `caller_quiet` pin)."""
+    files = _collision_tree(tmp_path, PLAY_FAMILY_RAISES, PLAY_PLAIN_HELPER,
+                            "caller_quiet_stem", CALLER_AMBIG_QUIET)
+    idx = rss.build_index(files)
+    assert _sites_for(files, idx, "caller_quiet_stem") == []
+
+
+def test_partially_raising_collision_is_still_ambiguous_callee(tmp_path):
+    """The filter must not over-filter: one raising candidate keeps the site,
+    with every candidate listed (a `any`, never `all`, filter)."""
+    files = _collision_tree(tmp_path, PLAY_FAMILY_RAISES, PLAY_PLAIN_HELPER,
+                            "caller_partial", CALLER_AMBIG_PARTIAL)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_partial")
+    assert len(got) == 1, got
+    s = got[0]
+    assert s["classification"] == "ambiguous-callee", s
+    assert len(s["candidates"]) == 2, s
+
+
+def test_candidates_are_repo_relative_when_under_root(tmp_path, monkeypatch):
+    """Item 2: `candidates` used str(c.path) -- absolute, host-dependent --
+    while `site` was ROOT-relative; under a monkeypatched ROOT the json-facing
+    field must carry repo-relative paths, so the census is reproducible
+    across hosts (#1183 consumes --json)."""
+    monkeypatch.setattr(rss, "ROOT", tmp_path)
+    files = _collision_tree(tmp_path, PLAY_FAMILY_RAISES, PLAY_PLAIN_HELPER,
+                            "caller_partial", CALLER_AMBIG_PARTIAL)
+    idx = rss.build_index(files)
+    s = _sites_for(files, idx, "caller_partial")[0]
+    assert s["candidates"] == ["alpha/play.py", "beta/play.py"], s
+
+
+def test_candidates_outside_root_fall_back_to_the_absolute_path(tmp_path):
+    """Synthetic test trees live outside ROOT: the ValueError fallback keeps
+    them scannable, exactly as `site` already does."""
+    files = _collision_tree(tmp_path, PLAY_FAMILY_RAISES, PLAY_PLAIN_HELPER,
+                            "caller_partial", CALLER_AMBIG_PARTIAL)
+    idx = rss.build_index(files)
+    s = _sites_for(files, idx, "caller_partial")[0]
+    assert all(c.startswith(str(tmp_path)) for c in s["candidates"]), s
+
+
+def test_shadowed_alias_is_attributed_to_the_imported_def(tmp_path):
+    """Item 4, #1188's fourth edge case: `from mod_a import load as l` with a
+    LOCAL `l = ...` rebinding before the call. Bindings are module-level, so
+    the call is still attributed to mod_a.load -- the documented blind spot
+    (`a local name shadowing an import can misattribute`). Pinned so a future
+    scope-tracking change moves this test deliberately, not a user's census."""
+    files = _tree(tmp_path)
+    p = tmp_path / "caller_shadow.py"
+    p.write_text(CALLER_SHADOWED_ALIAS)
+    files.append(p)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_shadow")
+    assert len(got) == 1, got
+    s = got[0]
+    assert s["callee"] == "mod_a.load", s
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s

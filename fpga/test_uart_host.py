@@ -169,6 +169,24 @@ def test_budget_quotes_the_contract_numbers():
     assert b["bytes_per_s"] == pytest.approx(12_288_000 / 1070, rel=1e-3)
 
 
+@pytest.mark.parametrize("baud,divider", [(115200, 107), (96000, 128)])
+@pytest.mark.parametrize("packet,octets", [("write", 8), ("event", 10)])
+def test_budget_packet_duration_in_audio_frames(baud, divider, packet, octets):
+    # 12.288 MHz receiver, rounded RTL divisor, 8N1, 256 clocks/audio frame.
+    frames = Fraction(octets * 10 * divider, 256)
+    assert uh.budget(baud)[f"frames_per_{packet}_packet"] == float(frames)
+
+
+def test_budget_rates_stay_in_packets_per_frame_units():
+    # the explicitly named rates are the reciprocal of the duration they name
+    for baud in (115200, 96000):
+        b = uh.budget(baud)
+        assert b["event_packets_per_frame"] == pytest.approx(
+            1 / b["frames_per_event_packet"])
+        assert b["max_sustained_event_rate_per_kframe"] == pytest.approx(
+            b["event_packets_per_frame"] * 1000)
+
+
 def test_require_serial_refuses_with_exit_2(monkeypatch):
     import builtins
     real_import = builtins.__import__
@@ -197,6 +215,62 @@ def test_bridge_refuses_an_unopenable_port(capsys, monkeypatch):
 def test_main_without_port_or_dry_run_refuses():
     from uart_host import main
     assert main(["--dry-run", "load"]) == 0         # dry-run needs no hardware
+
+
+def _applies_cells(text):
+    """The `applies` column (4th-from-last field) of each data row."""
+    return [ln.split()[-2] for ln in text.splitlines()[2:]]
+
+
+@pytest.mark.parametrize("command", [("abort",), ("status",)])
+def test_render_plan_management_row_prints_dash_not_sentinel(command):
+    rows = uh.plan([command], start_frame=0)
+    assert rows[0].apply_frame == -1                  # the sentinel is really there
+    assert _applies_cells(uh.render_plan(rows)) == ["-"]
+
+
+def test_render_plan_write_and_event_rows_keep_their_frames():
+    rows = uh.plan([("write", 0, 0, 0x04, 0), ("event", 5000, 0, 0, 0x20, 0)],
+                   start_frame=0)
+    cells = _applies_cells(uh.render_plan(rows))
+    assert cells == [str(rows[0].accept_frame + 1), str(rows[1].due)]
+
+
+def test_fmt_apply_frame_dash_for_unset():
+    assert uh.fmt_apply_frame(-1) == "-"
+    assert uh.fmt_apply_frame(0) == "0"
+    assert uh.fmt_apply_frame(42) == "42"
+
+
+@pytest.mark.parametrize("command", ["abort", "status"])
+@pytest.mark.parametrize("mode", ["live", "dry-before", "dry-after"])
+def test_management_preview_cannot_touch_a_queued_note(command, mode):
+    from uart_device_sim import SimClock, SimSerial, UartDeviceSim
+
+    clock = SimClock()
+    device = UartDeviceSim(clock=clock)
+    serial = SimSerial(device)
+    serial.write(uh.pkt_event(4800, 0, 0, 0x20, 0))  # GATE_ON at 100 ms
+    serial.run_until(0.002)
+    assert device.evq_count == 1 and not device.writes
+    serial.tx_log.clear()
+    opens = []
+
+    def open_bridge(port, baud):
+        opens.append(port)
+        return uh.Bridge.on_serial(serial, baud=baud, clock=clock)
+
+    args = {"live": [command], "dry-before": ["--dry-run", command],
+            "dry-after": [command, "--dry-run"]}[mode]
+    assert uh.main(["--port", "sim", *args], bridge_factory=open_bridge) == 0
+    serial.run_until(0.005)
+    sent = [packet.hex() for _, packet in serial.tx_log]
+    observed = (opens, sent, device.evq_count)
+    if mode == "live":
+        assert observed == (["sim"], ["58a8" if command == "abort" else "51af"],
+                            0 if command == "abort" else 1)
+    else:
+        assert observed == ([], [], 1)
 
 
 # ---- the repair's contract, as units ----------------------------------------

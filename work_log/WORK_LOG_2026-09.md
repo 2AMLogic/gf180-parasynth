@@ -2,6 +2,27 @@
 
 Sections moved byte-for-byte from [WORK_LOG.md](../WORK_LOG.md) by `loom-daemon work-docs archive`.
 
+### 2026-09-25
+
+- **PR #231**: measure: F1 matched-level Surge references + one compensated input-scaling experiment
+- **PR #232**: measure: F1A-F1C board records at the current estimator (measurement-version update)
+- **Issue #222** (closed): Repo-wide ground-truth gate: extend the 808 suite's claim/backing-test meta-test beyond one file (#45 item 1)
+- **PR #227**: test: extend the claim/ground-truth gate to test_moog_acceptance.py
+- **Issue #223** (closed): Doc-claim-to-evidence checker: flag prose claims whose backing test is missing, passing-when-cited-as-failing, or stale (#45 item 4)
+- **PR #230**: Doc-claim-to-evidence checker, and the failure-modes status list it was commissioned to correct
+- **PR #228**: measure: current F1A-F1C cutoff baseline on the selected filter path
+- **PR #226**: M1A drive experiment: no candidate chosen -- drive fixes odd-partial phase sensitivity but worsens even partials
+- **PR #219**: M1A phase-cycle capture: Mini V3 at all relative phases -- INCONCLUSIVE under the pre-registered rule
+- **Issue #21** (closed): R8: shaped excitation pulse — the ~90% discrimination term
+- **PR #221**: docs: BD excitation-shape probe for #21 -- mechanism confirmed, blocked by #220, kit unchanged
+- **PR #218**: M1A harmonic-shape diagnosis: phase-sensitive mix; no sound change supported yet
+- **PR #217**: M1A attack: record the stopping point and two qualifications
+- **Issue #22** (closed): R9: complete the 808 — the eight voices we don't have
+- **PR #214**: M1A: known-answer qualification of the attack measurement (m1a-envelope-score-v3); still no verdict
+- **Issue #1** (closed): Product target: USB-C bus-powered class-compliant sound module (keychain)
+- **PR #216**: docs: the keychain dongle, itemised from manufacturers' drawings (#1 board fit)
+- **PR #212**: arty: bind integrated-baseline DSP evidence to routed.dcp by digest; extractor records the digest
+
 ### 2026-09-24
 
 - **PR #210**: Musical-length playback: rolling UART delivery, qualified through the RTL
