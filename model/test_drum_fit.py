@@ -25,7 +25,7 @@ import drum_fit as df
 import drums_fx as dx
 from dsp import SR
 
-SHARES = (0.0, 0.011, 0.05, 0.1855, 0.2766, 0.50, 0.80, 0.90)
+SHARES = df.SELF_TEST_TARGETS
 
 
 @pytest.mark.parametrize("target", SHARES)
@@ -42,9 +42,29 @@ def test_separator_recovers_a_known_noise_share(target):
     within 0.6 percentage points; above, within 1.5."""
     x = df.synthetic_mixture(target)
     got = df.noise_share(x, 44100, df.VOICE_MODES["SD"])["share"]
-    bound = 0.006 if target <= 0.30 else 0.015
-    assert got >= target - 0.002, f"target {target}, got {got}: an UNDER-estimate is a new failure mode"
-    assert abs(got - target) < bound, f"target {target}, got {got}"
+    assert df.share_failure(target, got) is None, df.share_failure(target, got)
+
+
+def test_the_cli_self_test_passes_on_the_unmodified_cases():
+    assert df.main(["--self-test"]) == 0
+
+
+def test_a_nonfinite_estimate_fails_the_cli_self_test(capsys):
+    """Injected control: NaN at every target used to print eight NaNs, report
+    'worst error 0.00' and exit 0."""
+    from unittest.mock import patch
+    with patch.object(df, "noise_share", return_value={"share": float("nan")}):
+        rc = df.main(["--self-test"])
+    out = capsys.readouterr().out
+    assert rc != 0
+    assert "worst error 0.00" not in out
+    assert out.count("nonfinite") == len(df.SELF_TEST_TARGETS)
+
+
+@pytest.mark.parametrize("target,got", [(0.5, 0.5 - 0.004), (0.1, float("nan")),
+                                         (0.1, 0.1 + 0.007), (0.8, 0.8 + 0.016)])
+def test_share_failure_rejects_what_it_must(target, got):
+    assert df.share_failure(target, got) is not None
 
 
 def test_separator_recovers_the_modes_it_subtracts():
