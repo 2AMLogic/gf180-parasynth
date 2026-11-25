@@ -529,20 +529,27 @@ def test_the_required_corpus_gate_is_satisfiable_where_the_wavs_are():
     assert tk.main(["--check", "--require-corpus", "--refs", str(refs)]) == 0
 
 
-def test_a_non_silent_record_with_a_silent_window_refuses_that_window(tmp_path):
-    """#1207. Red without the positivity check at the H/L division: the record
-    is non-silent (a late click) but every analysed band has exactly zero energy
-    in the analysed windows, so the division was 0/0. Control: the same file
-    with signal inside the window yields a number."""
+@pytest.mark.parametrize("silent_band", ["H", "L"])
+def test_a_non_silent_record_with_a_silent_window_refuses_that_window(
+        tmp_path, monkeypatch, silent_band):
+    """A late click has a valid strike, a silent H tail and a too-short 1s window.
+    Exchange the passbands to exercise a silent L tail independently."""
     refs = tmp_path / "refs"
     (refs / "cy8").mkdir(parents=True)
-    n = 4 * SR_SILENT
-    x = np.zeros(n, dtype="<i2")
+    x = np.zeros(4 * SR_SILENT, dtype="<i2")
     x[int(3.5 * SR_SILENT)] = 20000
-    for t in tk.CODES:
-        for d in tk.CODES:
-            wavfile.write(str(refs / "cy8" / f"CY{t}{d}.WAV"), SR_SILENT, x)
+    wavfile.write(str(refs / "cy8" / "CY0000.WAV"), SR_SILENT, x)
+    monkeypatch.setattr(tk, "CODES", ("00",))
+    if silent_band == "L":
+        monkeypatch.setattr(tk, "analysis_bands", lambda cfg: {"H": cb.BANDS["L"],
+                                                               "L": cb.BANDS["H"]})
+
     meas = tk.measure_windows(refs)
-    assert meas["n_refused"] > 0
-    assert any(v is None for w in meas["hml"].values()
-               for col in w.values() for v in col.values())
+    strike = meas["hml"]["strike"]["00"]["00"]
+    assert strike == pytest.approx(4.3041 if silent_band == "H" else -4.3041, abs=0.01)
+    assert meas["hml"]["tail"]["00"]["00"] is None
+    refused = {m["window"]: m["refused"] for m in meas["floor_margins"]
+               if m["setting"] == "CY0000" and m["margin_db"] is None}
+    assert refused["tail"] == f"band(s) {silent_band} carry no energy in window tail"
+    assert "does not fit" in refused["1s"]
+    assert meas["n_refused"] == 2

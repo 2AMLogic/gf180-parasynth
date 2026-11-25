@@ -23,6 +23,7 @@ instrument that produced it.
 """
 from __future__ import annotations
 
+from decimal import Decimal
 import json
 import math
 import pathlib
@@ -667,9 +668,7 @@ def test_the_clean_gate_passes_and_every_control_is_caught(figs):
 
 @pytest.mark.parametrize("key", ["shipped_abs", "unit_abs", "amp", "env_gain"])
 def test_a_zero_level_in_the_committed_record_refuses(tmp_path, key):
-    """Red without the positivity check in `shipped_rule_levels`: a zero here
-    reached `log10(got / want)` as a ZeroDivisionError / -inf. Control: the
-    shipped record itself loads (no guard that rejects real input)."""
+    """Every factor read from the committed level record must be positive."""
     blob = json.loads(bb.CANDIDATE3_ARTIFACT.read_text())
     bb.shipped_rule_levels()                                   # control: real input passes
     blob["levels"]["per_band"]["low"][key] = 0.0
@@ -677,3 +676,56 @@ def test_a_zero_level_in_the_committed_record_refuses(tmp_path, key):
     p.write_text(json.dumps(blob))
     with pytest.raises(bb.Refused, match="positive"):
         bb.shipped_rule_levels(p)
+
+
+@pytest.fixture
+def low_level_record(monkeypatch):
+    """Replace just candidate3.json's bytes at the CLI's normal input path."""
+    artifact = bb.CANDIDATE3_ARTIFACT
+    blob = json.loads(artifact.read_text())
+    read_text = pathlib.Path.read_text
+
+    def read(path, *args, **kwargs):
+        if path == artifact:
+            return json.dumps(blob)
+        return read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "read_text", read)
+    return blob["levels"]["per_band"]["low"]
+
+
+@pytest.mark.parametrize("mode", ["--report", "--json"])
+def test_cli_refuses_a_zero_unit_energy(mode, low_level_record, tmp_path, capsys):
+    low_level_record["unit_abs"] = 0.0
+    dest = tmp_path / "report.json"
+    args = [mode, str(dest)] if mode == "--json" else [mode]
+    assert bb.main(args) == 2
+    diagnostic = capsys.readouterr().out
+    assert diagnostic.startswith("REFUSED:") and "['low'].unit_abs" in diagnostic
+    assert not dest.exists()
+
+
+@pytest.mark.parametrize("registers", [{}, {"amp": 1e308, "env_gain": 2.0}])
+def test_rule_bind_rejects_extreme_finite_factors(registers, low_level_record, capsys):
+    """The second record previously produced inf/inf and a false 0 dB PASS."""
+    low_level_record.update(unit_abs=1e-320, **registers)
+    # Decimal can form the linear products and quotients that overflow floats.
+    lv = {k: Decimal.from_float(v) for k, v in low_level_record.items()}
+    gain = lv["amp"] * lv["env_gain"]
+    target = Decimal.from_float(bb.UNIT_AMP) * (lv["shipped_abs"] / lv["unit_abs"]).sqrt()
+    expected_error = abs(20 * (gain / target).log10())
+    assert bb.main(["--check"]) == 1
+    out = capsys.readouterr().out
+    failure = next(line for line in out.splitlines() if "FAIL  rule-bind" in line)
+    assert f"{expected_error:.5f} dB (low," in failure
+    assert "gate: FAIL" in out
+
+
+def test_report_prints_finite_balance_for_a_subnormal_reference(low_level_record, capsys):
+    low_level_record["shipped_abs"] = 1e-320
+    decay = bb.shipped_rule_levels()["decay"]["shipped_abs"]
+    expected = 10 * (Decimal.from_float(decay) / Decimal.from_float(1e-320)).log10()
+    assert bb.main(["--report"]) == 0
+    table = capsys.readouterr().out.split("Balance relative to the low band:")[1]
+    row = next(line for line in table.splitlines() if line.strip().startswith("decay "))
+    assert row.split()[-2] == f"{expected:+.2f}"

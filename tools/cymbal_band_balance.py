@@ -536,7 +536,8 @@ def shipped_rule_relative_db(path: pathlib.Path | None = None, *,
                              ref="low", defect=None) -> dict:
     """The shipped-kit level rule's band balance, in dB relative to `ref`."""
     lv = shipped_rule_levels(path=path, defect=defect)
-    return {b: round(10.0 * math.log10(lv[b]["shipped_abs"] / lv[ref]["shipped_abs"]), 2)
+    ref_log = math.log10(lv[ref]["shipped_abs"])
+    return {b: round(10.0 * (math.log10(lv[b]["shipped_abs"]) - ref_log), 2)
             for b in BANDS}
 
 
@@ -882,9 +883,13 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
         figg = gap_db(fig9, corner_hz, defect=defect, route=ROUTE_FIGURE)
         worst_bind, at = 0.0, ""
         for b in BANDS:
-            want = math.sqrt(lv[b]["shipped_abs"] / lv[b]["unit_abs"]) * UNIT_AMP
-            got = lv[b]["amp"] * lv[b]["env_gain"]
-            d = abs(20.0 * math.log10(got / want))
+            # Combine the positive finite factors in dB. Their linear products
+            # and ratios can overflow or underflow even when the dB error is finite.
+            level = lv[b]
+            want_db = (20.0 * math.log10(UNIT_AMP)
+                       + 10.0 * (math.log10(level["shipped_abs"]) - math.log10(level["unit_abs"])))
+            got_db = 20.0 * (math.log10(level["amp"]) + math.log10(level["env_gain"]))
+            d = abs(got_db - want_db)
             if d > worst_bind:
                 worst_bind, at = d, b
         biggest = max(abs(v["gap_db"]) for v in g.values())
@@ -1078,24 +1083,24 @@ def main(argv=None) -> int:
     try:
         fig9 = w9.from_artifact()[0]
         corner = ct.level_corner_hz()
+        rc = 0
+        if a.report:
+            print("\n".join(report(fig9, corner)))
+        if a.check:
+            ok, lines = check(fig9, corner)
+            print("\n".join(lines))
+            print("gate:", "PASS" if ok else "FAIL")
+            rc = 0 if ok else 1
+        if a.json:
+            rec = record(fig9, corner)
+            a.json.parent.mkdir(parents=True, exist_ok=True)
+            a.json.write_text(json.dumps(rec, indent=1, default=float) + "\n")
+            print(f"wrote {a.json}")
+            rc = rc or (0 if rec["gate"]["pass"] else 1)
+        return rc
     except (w9.Refused, Refused) as exc:
         print(f"REFUSED: {exc}")
         return 2
-    rc = 0
-    if a.report:
-        print("\n".join(report(fig9, corner)))
-    if a.check:
-        ok, lines = check(fig9, corner)
-        print("\n".join(lines))
-        print("gate:", "PASS" if ok else "FAIL")
-        rc = 0 if ok else 1
-    if a.json:
-        a.json.parent.mkdir(parents=True, exist_ok=True)
-        rec = record(fig9, corner)
-        a.json.write_text(json.dumps(rec, indent=1, default=float) + "\n")
-        print(f"wrote {a.json}")
-        rc = rc or (0 if rec["gate"]["pass"] else 1)
-    return rc
 
 
 if __name__ == "__main__":

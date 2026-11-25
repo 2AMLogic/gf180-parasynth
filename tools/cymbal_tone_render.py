@@ -165,9 +165,6 @@ def levels_at(anchor_level: dict, code: str) -> dict:
     amps, detail = {}, {}
     for band, lvl0 in anchor_level.items():
         want = lvl0 * g[band]
-        if not want > 0:
-            raise Refused(f"TONE {code} {band}: requested level {want!r} is not positive "
-                          f"(anchor {lvl0!r} x gain {g[band]!r})")
         amp, env = want, 1.0
         if amp > AMP_MAX:
             amp, env = AMP_MAX, amp / AMP_MAX
