@@ -781,3 +781,126 @@ def test_shadowed_alias_is_attributed_to_the_imported_def(tmp_path):
     assert s["callee"] == "mod_a.load", s
     assert s["classification"] == "candidate-escape", s
     assert s["uncovered"] == ["mod_a"], s
+
+
+# --- #1234 controls: an ALIASED borrow exposes no `<mod>.Refused` ------------
+# `from lender import Refused as R` binds only `R`: a dotted
+# `except borrower.Refused` handler is an AttributeError, so it must not be
+# credited as covering the lender. Each control started red against the
+# scanner that set `refused_origin = stem` for any borrow of the family name.
+
+ALIAS_ONLY_BORROWER = '''
+from mod_a import Refused as R           # ALIASED only: no borrower.Refused
+
+def fetch(p):
+    raise R(f"cannot use {p}")
+'''
+
+ALIAS_DOTTED_CALLER = '''
+import alias_only
+
+def go(p):
+    try:
+        alias_only.fetch(p)
+    except alias_only.Refused as e:      # AttributeError at runtime
+        print(e)
+'''
+
+ALIAS_LENDER_DOTTED_CALLER = '''
+import mod_a
+import alias_only
+
+def go(p):
+    try:
+        alias_only.fetch(p)
+    except mod_a.Refused as e:           # the real lender class: covers
+        print(e)
+'''
+
+LOCAL_THEN_ALIAS = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):   # local family first...
+    pass
+
+from mod_a import Refused as R           # ...then an aliased borrow (valid)
+
+def own(p):
+    raise Refused("local")
+
+def lent(p):
+    raise R("lender's")
+'''
+
+LOCAL_THEN_ALIAS_CALLER = '''
+import local_then_alias
+
+def go_own(p):
+    try:
+        local_then_alias.own(p)
+    except local_then_alias.Refused as e:    # exists at runtime, catches own
+        print(e)
+
+def go_lent(p):
+    try:
+        local_then_alias.lent(p)
+    except local_then_alias.Refused as e:    # local class: misses lender's
+        print(e)
+'''
+
+
+def _alias_tree(tmp_path, extra: dict[str, str]):
+    files = _tree(tmp_path)
+    for name, body in extra.items():
+        p = tmp_path / f"{name}.py"
+        p.write_text(body)
+        files.append(p)
+    return files, rss.build_index(files)
+
+
+def test_aliased_only_borrow_does_not_expose_the_family_attribute(tmp_path):
+    files, idx = _alias_tree(tmp_path, {"alias_only": ALIAS_ONLY_BORROWER,
+                                        "alias_dotted_caller": ALIAS_DOTTED_CALLER})
+    info = idx[str(tmp_path / "alias_only.py")]
+    assert info.refused_origin is None, info.refused_origin
+    assert info.refused_names == {"R": "mod_a"}, info.refused_names
+    assert rss.origin_of(rss.stem_map(idx), "alias_only") is None
+    got = _sites_for(files, idx, "alias_dotted_caller")
+    assert len(got) == 1, got
+    assert got[0]["classification"] == "candidate-escape", got[0]
+    assert got[0]["uncovered"] == ["mod_a"], got[0]
+
+
+def test_aliased_borrower_own_raise_still_resolves_to_the_lender(tmp_path):
+    files, idx = _alias_tree(tmp_path, {"alias_only": ALIAS_ONLY_BORROWER,
+                                        "alias_lender_caller": ALIAS_LENDER_DOTTED_CALLER})
+    got = _sites_for(files, idx, "alias_lender_caller")
+    assert len(got) == 1, got
+    assert got[0]["classification"] == "covered(exact)", got[0]
+    assert got[0]["guard"] == "exact", got[0]
+
+
+def test_aliased_handler_still_covers_exactly_the_lender(tmp_path):
+    """`except R` (aliased) keeps covering mod_a and only mod_a (#1193)."""
+    files = _tree(tmp_path)
+    p = tmp_path / "alias_handler.py"
+    p.write_text(BORROWING_HANDLER_ALIAS)
+    files.append(p)
+    idx = rss.build_index(files)
+    by_callee = {s["callee"]: s for s in _sites_for(files, idx, "alias_handler")}
+    assert by_callee["mod_a.load"]["guard"] == "exact", by_callee
+    assert by_callee["mod_a.load"]["classification"] == "covered(exact)", by_callee
+    assert by_callee["mod_b.measure"]["classification"] == "candidate-escape", by_callee
+
+
+def test_local_family_then_aliased_borrow_keeps_the_local_origin(tmp_path):
+    files, idx = _alias_tree(tmp_path, {"local_then_alias": LOCAL_THEN_ALIAS,
+                                        "lta_caller": LOCAL_THEN_ALIAS_CALLER})
+    info = idx[str(tmp_path / "local_then_alias.py")]
+    assert info.refused_origin == "local_then_alias", info.refused_origin
+    by_callee = {s["callee"]: s for s in _sites_for(files, idx, "lta_caller")}
+    own = by_callee["local_then_alias.own"]
+    lent = by_callee["local_then_alias.lent"]
+    assert own["classification"] == "covered(exact)" and own["guard"] == "exact", own
+    assert lent["classification"] == "candidate-escape", lent
+    assert lent["uncovered"] == ["mod_a"], lent
