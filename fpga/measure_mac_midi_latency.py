@@ -71,9 +71,8 @@ import coremidi_input as cmi                               # noqa: E402
 import live_midi_contract as C                             # noqa: E402
 import uart_device_sim as dev                              # noqa: E402
 
-# midi_session and verify_live_midi pull in the voice model (NumPy) at import.
-# They are imported inside the functions that measure, so `--help` and argument
-# parsing work without it (#1297; same shape as #1282).
+# Keep measurement imports local so argument parsing works without NumPy.
+# verify_live_midi imports NumPy at module load (#1297).
 
 SR = C.SR
 OUT = ROOT / "fpga/reports/live-midi/mac-host-latency.json"
