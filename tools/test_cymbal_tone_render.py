@@ -863,3 +863,29 @@ def test_knob_render_is_red_on_a_mutant_that_reddens_only_one_property(monkeypat
     assert code == 1
     assert rec["saturation_control"]["red"] == ["distinct-renders"]
     assert rec["saturation_control"]["misses"] == ["h-edt10-rises", "l-edt10-rises"]
+
+
+# ---- #1207: zero denominators are refused at the point of use ------------
+
+@pytest.mark.parametrize("band", tre.LEVEL_ENV)
+@pytest.mark.parametrize("code", tre.CODES)
+def test_zero_anchor_underflows_the_registers_before_the_ratio(band, code):
+    """The register-underflow refusal already handled zero at the merge base."""
+    import json
+    anchors = json.loads(RECORD.read_text())["levels"]["anchor_level"]
+    tre.levels_at(anchors, code)
+    with pytest.raises(tre.Refused, match=f"TONE {code} {band}: the level underflows"):
+        tre.levels_at({**anchors, band: 0.0}, code)
+
+
+@pytest.mark.parametrize("silent_band", ["L", "H"])
+def test_band_shares_refuses_each_zero_total_independently(monkeypatch, silent_band):
+    """Keep one analysed band positive across all three band-only renders."""
+    import numpy as np
+    click = np.zeros(48000)
+    click[480] = 1
+    monkeypatch.setattr(tre, "render_r4", lambda kit: (click, 48000))
+    monkeypatch.setattr(tre.cb, "_bp", lambda p, sr, lo, hi:
+                        np.zeros_like(p) if (lo, hi) == cb.BANDS[silent_band] else p)
+    with pytest.raises(tre.Refused, match=f"silent in {silent_band};"):
+        tre.band_shares({"low": 0.25, "decay": 0.25, "short": 0.25})
