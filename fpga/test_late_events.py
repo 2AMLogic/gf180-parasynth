@@ -52,6 +52,19 @@ def test_the_repaired_model_meets_the_policy_on_every_scenario(tmp_path):
     assert vle.main(["--model-only", "--json", str(tmp_path / "v.json")]) == 0
 
 
+@pytest.mark.parametrize("names", [[], ["boundry"]], ids=["empty", "unknown"])
+def test_invalid_scenario_selection_preserves_previous_result(tmp_path, names):
+    record = tmp_path / "v.json"
+    cli = [sys.executable, str(vle.ROOT / "fpga/verify_late_events.py"),
+           "--model-only", "--workdir", str(tmp_path), "--json", str(record), "--scenario"]
+    subprocess.run([*cli, "boundary"], check=True)
+    previous = record.read_bytes()
+    result = subprocess.run([*cli, *names], capture_output=True, text=True)
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert "--scenario" in result.stderr
+    assert record.read_bytes() == previous
+
+
 def test_the_model_as_shipped_before_329_is_caught(tmp_path):
     """The control: the exact pre-#329 model, from git, executes accepted
     events in the wrong frame (or a revolution late, beyond the run)."""
