@@ -801,6 +801,10 @@ jobs:
         run: |
           python rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail
           python rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail
+          # Default-config clean twin: both synth mutants below run in default
+          # config and no other clean step matches it (#1221); a red bench must
+          # stop the step before a mutant is credited as caught.
+          python rtl-sketch/verify_synth_top.py
           python rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail
           python rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail
       - name: the selected 2x path and integration reject disabling mutations

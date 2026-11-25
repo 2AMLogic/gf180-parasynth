@@ -1238,3 +1238,100 @@ def test_rtl_full_accepts_an_always_clean_twin_and_success_gated_mutant():
     _smoke_step(steps, mutant=False)["if"] = "always()"
     _smoke_step(steps, mutant=True)["if"] = "${{ success() }}"
     _assert_injects_are_paired(steps)
+
+
+# =============================================================================
+# #1221: the default-config synth mutants need a default-config clean twin.
+# VOICE_MASTER_PRESHIFT and I2S_SHIFT run verify_synth_top.py in DEFAULT config;
+# no other clean step in the rtl job matches, so without an exact clean run
+# ahead of them a bench that is red before injection credits both as caught
+# (the #1126 verdict error). Run the shipped block under `bash -e` with a
+# recording stand-in for `python` so the check follows the YAML, not a copy.
+# =============================================================================
+INTEGRATION_CONTROLS_STEP = "the integration checks can still fail"
+SYNTH_MUTANTS = ("VOICE_MASTER_PRESHIFT", "I2S_SHIFT")
+
+
+def _run_controls_block(tmp_path, run_text, clean_rc=0, mutant_rc=None):
+    """Execute a `run:` block with a fake python. Returns (rc, calls) where
+    calls is the list of argument strings the block invoked. Only the exact
+    default-config clean invocation (`verify_synth_top.py` with no flags)
+    returns `clean_rc`; `mutant_rc` maps an --inject name to its status."""
+    mutant_rc = mutant_rc or {}
+    log = tmp_path / "calls.log"
+    fake = tmp_path / "bin" / "python"
+    fake.parent.mkdir()
+    fake.write_text(
+        "#!/usr/bin/env bash\n"
+        'echo "$*" >> "$FAKE_LOG"\n'
+        'if [ "$*" = "rtl-sketch/verify_synth_top.py" ]; then exit "$CLEAN_RC"; fi\n'
+        'prev=""\n'
+        'for a in "$@"; do\n'
+        '  if [ "$prev" = "--inject" ]; then\n'
+        '    var="RC_$a"; exit "${!var:-0}"\n'
+        '  fi\n'
+        '  prev="$a"\n'
+        'done\n'
+        'exit 0\n')
+    fake.chmod(0o755)
+    env = {"PATH": f"{fake.parent}:/usr/bin:/bin", "FAKE_LOG": str(log),
+           "CLEAN_RC": str(clean_rc),
+           **{f"RC_{k}": str(v) for k, v in mutant_rc.items()}}
+    r = subprocess.run(["bash", "-e", "-c", run_text], env=env,
+                       capture_output=True, text=True)
+    calls = log.read_text().splitlines() if log.exists() else []
+    return r.returncode, calls
+
+
+def _real_controls_run() -> str:
+    return _step(yaml.safe_load(RUNGS.read_text()),
+                 INTEGRATION_CONTROLS_STEP)["run"]
+
+
+def _ran_mutants(calls):
+    return [m for m in SYNTH_MUTANTS if any(f"--inject {m}" in c for c in calls)]
+
+
+@pytest.mark.parametrize("clean_rc", [1, 2])
+def test_failing_default_clean_run_stops_both_synth_mutants(tmp_path, clean_rc):
+    rc, calls = _run_controls_block(tmp_path, _real_controls_run(),
+                                    clean_rc=clean_rc)
+    assert rc != 0
+    assert _ran_mutants(calls) == [], calls
+
+
+def test_green_default_clean_run_precedes_and_lets_both_mutants_run(tmp_path):
+    rc, calls = _run_controls_block(tmp_path, _real_controls_run(), clean_rc=0)
+    assert rc == 0
+    assert _ran_mutants(calls) == list(SYNTH_MUTANTS)
+    clean = calls.index("rtl-sketch/verify_synth_top.py")
+    assert clean < min(i for i, c in enumerate(calls) if "--inject VOICE_MASTER_PRESHIFT" in c)
+
+
+@pytest.mark.parametrize("mutant", SYNTH_MUTANTS)
+def test_a_surviving_synth_mutant_still_fails_the_step(tmp_path, mutant):
+    rc, _ = _run_controls_block(tmp_path, _real_controls_run(),
+                                mutant_rc={mutant: 1})
+    assert rc != 0
+
+
+CLEAN_TWIN = "python rtl-sketch/verify_synth_top.py"
+
+
+@pytest.mark.parametrize("replacement", [
+    None,                         # the pre-#1221 block: no clean twin at all
+    CLEAN_TWIN + " --osc2x",      # a clean run in the wrong config
+])
+def test_removing_or_mismatching_the_clean_twin_is_red(tmp_path, replacement):
+    lines = _real_controls_run().splitlines()
+    assert CLEAN_TWIN in lines, "the real block has no exact clean twin"
+    i = lines.index(CLEAN_TWIN)
+    if replacement is None:
+        del lines[i]
+    else:
+        lines[i] = replacement
+    rc, calls = _run_controls_block(tmp_path, "\n".join(lines) + "\n",
+                                    clean_rc=1)
+    # The exact-config clean run is never reached with status 1, so both
+    # mutants run and the block exits 0: the control detects the defect.
+    assert rc == 0 and _ran_mutants(calls) == list(SYNTH_MUTANTS)
