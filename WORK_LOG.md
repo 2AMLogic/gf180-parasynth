@@ -8,6 +8,12 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-25
 
+- **Issue #1253** (closed): render_plan prints the -1 sentinel in the applies column for status/abort rows
+- **PR #1255**: fix: render unset apply_frame as '-' in dry-run plan and echo lines
+- **Issue #1183** (closed): Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census
+- **PR #1203**: fix: catch cross-module corpus refusals at five run_case-caller boundaries (run_case.* family of #1183)
+- **Issue #1239** (closed): Tighten the audition help control: `>= 2` lets a silently-no-op replace retire one of its three injected defects
+- **PR #1251**: test: require all three findings in audition help control
 - **Issue #1243** (closed): Use one packet-duration calculation for the UART player’s budget and preflight
 - **PR #1247**: fix: give the UART budget packet durations in audio frames
 - **Issue #1217** (closed): rungs.yml pulse2x job: the VOICE_PULSE2X_OFF control's clean twin is an adjacent run_all row, which cannot gate it
