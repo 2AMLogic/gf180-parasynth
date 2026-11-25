@@ -420,8 +420,11 @@ def evidence_refusal(
     RESIDUAL (rule 8, stated not closed): selective `missing` entries that
     preserve selection and validation participation (e.g. >= `min_keys` pool keys
     and >= 1 validation take) while changing which take is nearest still pass
-    (#1317); blocking that needs a per-take signal independent of the record
-    (re-measuring). Naturally weak or untestable sounds keep their existing
+    (#1317). On the #1305 gate, 66 of 5000 seeded draws of 226 uniformly
+    random missing takes reached CALIBRATED at k=5. The complete record was
+    REFUSED (3/9 at k=3), and the selected 226-take control reached 9/9 at
+    k=3. See docs/scorecard/gate-379/mars-calibration/missing-random-1317.md.
+    Detecting a changed nearest take needs independent per-take evidence. Naturally weak or untestable sounds keep their existing
     treatment; if all takes of a non-participating sound sit in `missing`, Q2's
     `seeded_summary` spans one fewer bar without changing selection or Q4."""
     if expected is None:
