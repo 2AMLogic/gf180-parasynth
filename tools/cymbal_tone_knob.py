@@ -683,6 +683,18 @@ def measure_windows(refs: pathlib.Path, *, cfg=None, defect=None) -> dict:
                     margins.append({"setting": f"CY{t}{d}", "window": w,
                                     "margin_db": None, "refused": str(exc)})
                     continue
+                # #1207: a non-silent record can still carry exactly zero
+                # energy in an analysed band over this window (the silence
+                # check above is whole-record). Refuse that window in the
+                # tool's own words rather than divide by it.
+                dead = [k for k in ("H", "L") if not e[k][0] > 0.0]
+                if dead:
+                    out[w][d][t] = None
+                    margins.append({"setting": f"CY{t}{d}", "window": w,
+                                    "margin_db": None,
+                                    "refused": f"band(s) {'/'.join(dead)} carry no "
+                                               f"energy in window {w}"})
+                    continue
                 for k, (sig, flo) in e.items():
                     margins.append({"setting": f"CY{t}{d}", "window": w, "band": k,
                                     "margin_db": round(10 * math.log10(

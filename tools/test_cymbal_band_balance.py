@@ -661,3 +661,19 @@ def test_the_clean_gate_passes_and_every_control_is_caught(figs):
     assert ok, "\n".join(lines)
     assert any("5/5 controls" in ln for ln in lines), "\n".join(lines)
     assert any("1/1 blind-by-construction" in ln for ln in lines), "\n".join(lines)
+
+
+# ---- #1207: a zero denominator in the committed record is refused --------
+
+@pytest.mark.parametrize("key", ["shipped_abs", "unit_abs", "amp", "env_gain"])
+def test_a_zero_level_in_the_committed_record_refuses(tmp_path, key):
+    """Red without the positivity check in `shipped_rule_levels`: a zero here
+    reached `log10(got / want)` as a ZeroDivisionError / -inf. Control: the
+    shipped record itself loads (no guard that rejects real input)."""
+    blob = json.loads(bb.CANDIDATE3_ARTIFACT.read_text())
+    bb.shipped_rule_levels()                                   # control: real input passes
+    blob["levels"]["per_band"]["low"][key] = 0.0
+    p = tmp_path / "zero.json"
+    p.write_text(json.dumps(blob))
+    with pytest.raises(bb.Refused, match="positive"):
+        bb.shipped_rule_levels(p)

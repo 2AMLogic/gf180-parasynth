@@ -165,6 +165,9 @@ def levels_at(anchor_level: dict, code: str) -> dict:
     amps, detail = {}, {}
     for band, lvl0 in anchor_level.items():
         want = lvl0 * g[band]
+        if not want > 0:
+            raise Refused(f"TONE {code} {band}: requested level {want!r} is not positive "
+                          f"(anchor {lvl0!r} x gain {g[band]!r})")
         amp, env = want, 1.0
         if amp > AMP_MAX:
             amp, env = AMP_MAX, amp / AMP_MAX
@@ -352,6 +355,10 @@ def band_shares(anchor_level: dict) -> dict:
             x = cb._bp(p, sr, lo, hi)
             row[name] = float(np.sum(x[:int(cb.ENERGY_S * sr)] ** 2))
         out[band] = row
+    for name in ("L", "H"):
+        if not sum(out[b][name] for b in out) > 0.0:
+            raise Refused(f"band_shares: all three band-only renders are silent in {name}; "
+                          f"no share can be reported against a zero total")
     return out
 
 

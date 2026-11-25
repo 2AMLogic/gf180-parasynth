@@ -511,6 +511,13 @@ def shipped_rule_levels(path: pathlib.Path | None = None, *, defect=None) -> dic
                for b in BANDS}
     except (KeyError, TypeError) as exc:
         raise Refused(f"{p} carries no levels.per_band[*] with shipped_abs/unit_abs/amp") from exc
+    # #1207: these feed log10 ratios; a zero or negative entry is a corrupt
+    # record, not a level.
+    for b in BANDS:
+        for k, v in out[b].items():
+            if not (math.isfinite(v) and v > 0.0):
+                raise Refused(f"{p}: levels.per_band[{b!r}].{k} = {v!r} is not a positive "
+                              f"finite number")
     if defect == "SHIPPED_RULE_IS_FLAT":
         for b in BANDS:
             out[b]["shipped_abs"] = out["low"]["shipped_abs"]

@@ -863,3 +863,26 @@ def test_knob_render_is_red_on_a_mutant_that_reddens_only_one_property(monkeypat
     assert code == 1
     assert rec["saturation_control"]["red"] == ["distinct-renders"]
     assert rec["saturation_control"]["misses"] == ["h-edt10-rises", "l-edt10-rises"]
+
+
+# ---- #1207: zero denominators are refused at the point of use ------------
+
+def test_levels_at_refuses_a_zero_anchor_level():
+    """Red without the `want > 0` check: want == 0 reached log10(got / want)."""
+    ok = {"low": 0.25, "decay": 0.25, "short": 0.25}
+    tre.levels_at(ok, tre.ANCHOR)                             # control: real-shaped input passes
+    with pytest.raises(tre.Refused, match="not positive"):
+        tre.levels_at({**ok, "low": 0.0}, tre.ANCHOR)
+
+
+def test_band_shares_refuses_when_every_band_only_render_is_silent(monkeypatch):
+    """Red without the total check: tot[n] == 0 reached the share print as a
+    ZeroDivisionError. Silent renders are injected; no real render is run."""
+    import numpy as np
+    monkeypatch.setattr(tre, "kit_at", lambda *a, **k: (None, None))
+    monkeypatch.setattr(tre, "render_r4", lambda *a, **k: (np.zeros(96000), 48000))
+    monkeypatch.setattr(tre.cc, "band_only", lambda kit, band: kit)
+    monkeypatch.setattr(tre.rc, "prepare", lambda y, sr, side="": y)
+    monkeypatch.setattr(tre.cb, "_bp", lambda p, sr, lo, hi: p)
+    with pytest.raises(tre.Refused, match="silent"):
+        tre.band_shares({"low": 0.25, "decay": 0.25, "short": 0.25})

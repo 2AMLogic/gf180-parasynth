@@ -527,3 +527,22 @@ def test_the_required_corpus_gate_is_satisfiable_where_the_wavs_are():
     no gate, so this is the test that would have caught one."""
     refs = _refs_or_skip()
     assert tk.main(["--check", "--require-corpus", "--refs", str(refs)]) == 0
+
+
+def test_a_non_silent_record_with_a_silent_window_refuses_that_window(tmp_path):
+    """#1207. Red without the positivity check at the H/L division: the record
+    is non-silent (a late click) but every analysed band has exactly zero energy
+    in the analysed windows, so the division was 0/0. Control: the same file
+    with signal inside the window yields a number."""
+    refs = tmp_path / "refs"
+    (refs / "cy8").mkdir(parents=True)
+    n = 4 * SR_SILENT
+    x = np.zeros(n, dtype="<i2")
+    x[int(3.5 * SR_SILENT)] = 20000
+    for t in tk.CODES:
+        for d in tk.CODES:
+            wavfile.write(str(refs / "cy8" / f"CY{t}{d}.WAV"), SR_SILENT, x)
+    meas = tk.measure_windows(refs)
+    assert meas["n_refused"] > 0
+    assert any(v is None for w in meas["hml"].values()
+               for col in w.values() for v in col.values())
