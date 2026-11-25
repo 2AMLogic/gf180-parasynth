@@ -20,6 +20,7 @@ import pytest                                              # noqa: E402
 
 import live_midi_contract as C                             # noqa: E402
 import midi_session as ms                                  # noqa: E402
+import qualified_domain as qd                              # noqa: E402
 import uart_device_sim as dev                              # noqa: E402
 import verify_live_midi as vlm                             # noqa: E402
 import voice_fx as vf                                      # noqa: E402
@@ -316,7 +317,7 @@ def test_a_wrong_time_map_is_no_verdict_not_a_result():
 def test_release_domain_property_moves_when_the_session_lets_a_note_out(monkeypatch):
     """#255's validator is an external check: with the session's own domain
     refusal disabled, MIDI 127 reaches the device and check_stream rejects it."""
-    monkeypatch.setattr(ms.qd, "check_note", lambda note, regs: None)
+    monkeypatch.setattr(qd, "check_note", lambda note, regs: None)
     run = vlm.run_session("coverage")
     r = vlm.check(run)
     assert r["props"]["release_domain"]["moved"], r["props"]["release_domain"]
@@ -475,3 +476,27 @@ def test_non_timing_failures_stay_fail_even_under_load(monkeypatch, capsys, erro
     rc, out = _run_main_with_fake_sim(monkeypatch, capsys, errors=errors, drops=drops,
                                       load_at_end=21.0)
     assert rc == 1 and "NO-VERDICT" not in out.err
+
+
+# ---- port discovery must not need the voice model's NumPy (#1282) -------------
+def _run_cli_without_numpy(*args):
+    import subprocess
+    code = ("import sys; sys.modules['numpy'] = None; import runpy; "
+            "sys.argv = sys.argv[1:]; "
+            "runpy.run_path(sys.argv[0], run_name='__main__')")
+    here = os.path.dirname(os.path.abspath(__file__))
+    return subprocess.run(
+        [sys.executable, "-ISB", "-c", code, os.path.join(here, "midi_session.py"), *args],
+        capture_output=True, text=True, timeout=60)
+
+
+def test_help_and_port_listing_do_not_import_numpy():
+    r = _run_cli_without_numpy("--help")
+    assert r.returncode == 0, r.stderr
+    assert "--list-midi-ports" in r.stdout
+    r = _run_cli_without_numpy("--list-midi-ports")
+    if sys.platform.startswith("linux"):
+        assert r.returncode == 2, (r.returncode, r.stderr)
+        assert "REFUSED" in r.stdout + r.stderr and "coremidi" in r.stdout + r.stderr
+    else:
+        assert "numpy" not in r.stderr, r.stderr
