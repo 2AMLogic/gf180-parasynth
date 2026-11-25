@@ -1,12 +1,39 @@
-"""Ground-truth tests for the M5A waveform-level envelope measurement."""
+"""Tests for Mini V3 reference qualification and waveform-level envelope timing."""
 from __future__ import annotations
 
-import numpy as np
+import json
+import subprocess
+from pathlib import Path
 
-from tools.measure_mono_m5a_reference import CASES, envelope_timing
+import numpy as np
+import pytest
+
+from tools.measure_mono_m5a_reference import (
+    CASES, Refused, _qualify_reference_integrity, envelope_timing,
+)
 
 
 SR = 48_000
+
+
+@pytest.mark.parametrize("clean,injected,reason", [
+    (0, None, "lacks clean or injected control"),
+    (0, {}, "injected-click control failed"),
+    (1, {"n_events": 5}, "unprompted transient events"),
+])
+def test_qualification_refuses_incomplete_control_or_dirty_baseline(
+        monkeypatch, clean, injected, reason):
+    def write_report(command, **_kwargs):
+        rows = {"miniv3-smooth": {"n_events": clean}}
+        if injected is not None:
+            rows["miniv3-smooth+injected"] = injected
+        out = Path(command[command.index("--out") + 1])
+        (out / "demo-smooth.json").write_text(json.dumps(rows))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", write_report)
+    with pytest.raises(Refused, match=reason):
+        _qualify_reference_integrity()
 
 
 def test_m5a_reference_case_keeps_its_frozen_note_map_and_timing():

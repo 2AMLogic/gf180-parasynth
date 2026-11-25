@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from model import reference_integrity as ri
 
@@ -28,12 +29,50 @@ def test_miniv3_integrity_render_uses_the_requested_host_block(monkeypatch):
     assert len(audio) == ri.SR
 
 
+@pytest.mark.parametrize("requested_s,render_s,expected,verdict", [
+    (6, 6, 0, "REFUSED"),
+    (14, 14, 1, "WORKS"),  # the endpoint is outside the recording
+    (40, 40, 5, "WORKS"),
+    (40, 14, 1, "WORKS"),  # the injector receives only the samples rendered
+])
+def test_demo_control_on_silence(monkeypatch, tmp_path, capsys,
+                                 requested_s, render_s, expected, verdict):
+    monkeypatch.setattr(ri, "steady", lambda *a, **kw: np.zeros(render_s * ri.SR))
+    rows = ri.stage_demo(["miniv3"], requested_s, tmp_path)
+    assert rows["miniv3-smooth"]["n_events"] == 0
+    control = rows["miniv3-smooth+injected"]
+    assert control["n_events"] == expected
+    assert f"-- detector {verdict}" in capsys.readouterr().out
+    assert control["expected_clicks"] == expected
+    assert control["control_verdict"] == verdict
+
+
+def test_demo_control_fails_when_one_scheduled_click_is_suppressed(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(ri, "steady", lambda *a, **kw: np.zeros(40 * ri.SR))
+    detect = ri.transient_report
+    suppressed = []
+
+    def drop_third_click(audio):
+        audio = audio.copy()
+        third = audio[21 * ri.SR:22 * ri.SR]
+        suppressed.append(np.count_nonzero(third))
+        third[:] = 0
+        return detect(audio)
+
+    monkeypatch.setattr(ri, "transient_report", drop_third_click)
+    rows = ri.stage_demo(["miniv3"], 40, tmp_path)
+    assert suppressed == [0, 12]
+    assert rows["miniv3-smooth"]["n_events"] == 0
+    control = rows["miniv3-smooth+injected"]
+    assert control["n_events"] == 4
+    assert "-- detector FAILED" in capsys.readouterr().out
+    assert control["expected_clicks"] == 5
+    assert control["control_verdict"] == "FAILED"
+
 
 # ---------------------------------------------------------------------------
 # transient_report on pitched sources (issue #225)
 # ---------------------------------------------------------------------------
-import pytest                                                        # noqa: E402
-
 SWEEP = (33, 36, 45, 52, 60, 64, 69, 72, 76, 84)
 
 
