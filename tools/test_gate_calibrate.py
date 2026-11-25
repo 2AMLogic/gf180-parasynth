@@ -97,3 +97,75 @@ def test_decide_does_not_count_an_unrun_control_as_a_pass():
     assert gc.decide(q, True)["status"] == "NOT QUALIFIED"        # a corrupted corpus qualified: reject
     q["seeded_summary"].update(caught=5, rate=0.5)
     assert gc.decide(q, False)["status"] == "NOT QUALIFIED"       # a bar that misses seeds is not authority
+
+
+# ---- #1296: a partial record must not calibrate where the full corpus is refused
+
+COMMITTED = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/gate-379/mars-calibration"
+
+
+def _envelope(sounds=None, keys=None):
+    """The committed 16-sound record, optionally cut down. `sounds` is the
+    declared set, `keys` the rows actually kept (defaults to the declared set)."""
+    import json
+    r = json.loads((COMMITTED / "tables.json").read_text())
+    keep = list(pg.SOUNDS16) if keys is None else keys
+    env = {"corrupt": r["corrupt"], "archive": r["archive"], "tables": {s: r["tables"][s] for s in keep}}
+    if sounds is not None:
+        env["sounds"] = sounds
+    return env
+
+
+def test_committed_record_declares_its_sounds():
+    import json
+    r = json.loads((COMMITTED / "tables.json").read_text())
+    assert set(r["sounds"]) == set(r["tables"]) == set(pg.SOUNDS16)
+
+
+def test_one_sound_record_is_refused_though_the_pure_function_calibrates_it():
+    """The #1296 observation: BD alone calibrates (k=3) where all 16 are refused."""
+    env = _envelope(sounds=["BD"], keys=["BD"])
+    assert gc.calibrate(env["tables"])["status"] == "CALIBRATED"   # the hole, in the pure function
+    cal = gc.calibrate_record(env)
+    assert cal["status"].startswith("REFUSED") and cal["k"] is None and cal["sounds"] == {}
+
+
+def test_five_sound_cymbal_subset_is_refused():
+    sub = ["CY", "BD", "SD", "LC", "MT"]
+    env = _envelope(sounds=sub, keys=sub)
+    assert gc.calibrate(env["tables"])["k"] is not None            # it would calibrate
+    assert gc.calibrate_record(env)["status"].startswith("REFUSED")
+
+
+def test_full_record_outcome_unchanged():
+    cal = gc.calibrate_record(_envelope(sounds=list(pg.SOUNDS16)))
+    assert cal["k"] is None and cal["status"].startswith("REFUSED: no k reaches")
+
+
+def test_record_without_sounds_or_empty_is_refused():
+    assert gc.calibrate_record(_envelope())["status"].startswith("REFUSED")
+    assert gc.calibrate_record({"tables": {}})["status"].startswith("REFUSED")
+    assert gc.calibrate_record({})["status"].startswith("REFUSED")
+
+
+def test_declared_set_is_compared_to_the_rows_not_to_itself():
+    """Rule-8 control: the input that satisfies a check of `sounds` alone (or of
+    the keys alone) while violating its intent."""
+    # claims all 16, carries one
+    lie = _envelope(sounds=list(pg.SOUNDS16), keys=["BD"])
+    assert gc.calibrate_record(lie)["status"].startswith("REFUSED")
+    # carries all 16, declares one
+    assert gc.calibrate_record(_envelope(sounds=["BD"]))["status"].startswith("REFUSED")
+    # 16 names, but not the right 16
+    other = _envelope(sounds=list(pg.SOUNDS16)[:-1] + ["XX"])
+    assert gc.calibrate_record(other)["status"].startswith("REFUSED")
+    # extra row beyond the 16
+    extra = _envelope(sounds=list(pg.SOUNDS16))
+    extra["tables"]["XX"] = extra["tables"]["BD"]
+    assert gc.calibrate_record(extra)["status"].startswith("REFUSED")
+
+
+def test_allow_subset_is_labelled_diagnostic():
+    env = _envelope(sounds=["BD"], keys=["BD"])
+    cal = gc.calibrate_record(env, allow_subset=True)
+    assert cal["k"] == 3 and cal["diagnostic"].startswith("DIAGNOSTIC (not authority)")

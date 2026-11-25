@@ -1,6 +1,24 @@
 {
  "corrupt": null,
  "archive": "808-from-mars.zip",
+ "sounds": [
+  "BD",
+  "SD",
+  "LT",
+  "LC",
+  "MT",
+  "MC",
+  "HT",
+  "HC",
+  "RS",
+  "CL",
+  "CP",
+  "MA",
+  "CB",
+  "CY",
+  "OH",
+  "CH"
+ ],
  "tables": {
   "BD": {
    "sound": "BD",

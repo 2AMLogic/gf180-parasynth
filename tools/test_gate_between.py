@@ -189,3 +189,20 @@ def test_a_refused_injected_run_is_not_a_caught_control():
     bad = _green_q()
     bad["seeded_summary"].update(caught=5, rate=0.5)
     assert gc.injected_outcome(bad)[0] is False                   # completed NOT QUALIFIED = caught
+
+
+# ---- #1296: same refusal for the between-recording rule
+
+def test_gb_partial_record_is_refused():
+    import json
+    root = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/gate-379/mars-calibration"
+    r = json.loads((root / "tables.json").read_text())
+    env = {"sounds": ["BD"], "tables": {"BD": r["tables"]["BD"]}}
+    cal = gb.calibrate_record(env)
+    assert cal["status"].startswith("REFUSED") and cal["p"] is None and cal["sounds"] == {}
+    # lying envelope: declares 16, carries 1
+    lie = {"sounds": list(pg.SOUNDS16), "tables": env["tables"]}
+    assert gb.calibrate_record(lie)["status"].startswith("REFUSED")
+    assert gb.calibrate_record({"tables": r["tables"]})["status"].startswith("REFUSED")  # no "sounds"
+    sub = gb.calibrate_record(env, allow_subset=True)
+    assert sub["diagnostic"].startswith("DIAGNOSTIC (not authority)")

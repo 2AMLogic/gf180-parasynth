@@ -231,6 +231,17 @@ def render_table(rows: list) -> str:
     return "\n".join(out)
 
 
+def calibrate_record(envelope: dict, force_p: float | None = None, allow_subset: bool = False) -> dict:
+    """`calibrate` over a loaded tables file, refusing a partial sound set (#1296).
+    Same rule as gate_calibrate.calibrate_record, one shared check."""
+    why = gc.record_refusal(envelope)
+    if why is None:
+        return calibrate(envelope["tables"], force_p)
+    if not allow_subset:
+        return gc.refused_record(why)
+    return gc.label_subset(calibrate(envelope.get("tables", {}), force_p))
+
+
 CANDIDATE = "rejected-374-candidate"
 
 
@@ -264,10 +275,13 @@ def main(argv=None) -> int:
     ap.add_argument("--fixtures", type=pathlib.Path, default=None,
                     help="dir with CY5025-candidate.wav (the rejected #374 candidate)")
     ap.add_argument("--force-p", type=float, default=None)
+    ap.add_argument("--allow-subset", action="store_true",
+                    help="DIAGNOSTIC: calibrate a partial sound set; the result is labelled not-authority")
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
-    tabs = json.loads(a.tables.read_text())["tables"]
-    cal = calibrate(tabs, a.force_p)
+    env = json.loads(a.tables.read_text())
+    tabs = env["tables"]
+    cal = calibrate_record(env, a.force_p, a.allow_subset)
     ours = {}
     if a.ours:
         for s in pg.SOUNDS16:
@@ -276,10 +290,11 @@ def main(argv=None) -> int:
                 ours[s] = pg.load_wav(f)
     inj = None
     if a.corrupt_tables:
-        ci = calibrate(json.loads(a.corrupt_tables.read_text())["tables"], a.force_p)
+        cenv = json.loads(a.corrupt_tables.read_text())
+        ci = calibrate_record(cenv, a.force_p, a.allow_subset)
         qi = gc.qualify(ci, a.refs, ours) if ci.get("p") else None
         inj, inj_dec = gc.injected_outcome(qi)
-        cal["injected_control"] = {"corrupt": json.loads(a.corrupt_tables.read_text())["corrupt"],
+        cal["injected_control"] = {"corrupt": cenv["corrupt"],
                                    "calibration_status": ci["status"], "qualified": inj,
                                    "decision": inj_dec}
     q = gc.qualify(cal, a.refs, ours) if cal.get("p") else None
