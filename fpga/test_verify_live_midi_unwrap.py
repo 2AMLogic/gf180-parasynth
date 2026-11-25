@@ -23,6 +23,13 @@ def test_one_shared_unwrap_not_a_copy():
     assert vlm.UnwrapRefused is vrp.UnwrapRefused
 
 
+def test_one_shared_packet_splitter_not_a_copy():
+    """#1219: the capture/replay pipeline is shared with the rolling verifier
+    too -- a second _packets copy is another place the opcode-size table can
+    drift apart from the wire format."""
+    assert vlm._packets is vrp._packets
+
+
 @pytest.mark.parametrize("what", ["executed writes", "receipts"])
 def test_a_schedule_with_a_gap_at_the_bound_refuses(what):
     truth = [70000, 70000 + 0x8000]          # true forward gap == bound

@@ -54,7 +54,6 @@ from __future__ import annotations
 
 import argparse
 import difflib
-import hashlib
 import json
 import math
 import random
@@ -77,10 +76,13 @@ import synth_top_model as stm                     # noqa: E402
 import drums_fx as dx                             # noqa: E402
 import voice_fx as vf                             # noqa: E402
 import r1_candidate as r1c                        # noqa: E402
-# ONE unwrap, shared with the rolling-playback verifier (#474, #479): a second
-# copy is how the unchecked 0x8000 assumption survived here.
+# ONE unwrap and ONE capture/replay pipeline, shared with the rolling-playback
+# verifier (#474, #479, #1219): a second copy is how the unchecked 0x8000
+# assumption survived here, and how --image r2 replayed at PULSE2X=0 in r1's
+# scratch directory.
 from verify_rolling_playback import (             # noqa: E402
-    UNWRAP_GAP_BOUND, UnwrapRefused, _unwrap, _unwrap_offsets)
+    UNWRAP_GAP_BOUND, UnwrapRefused, _packets, _unwrap, _unwrap_offsets,
+    replay_and_analyze, write_replay_capture)
 from dsp import note_hz, phase_inc                # noqa: E402
 
 SR = C.SR
@@ -1025,16 +1027,6 @@ def _hist(xs: list) -> dict:
     return dict(sorted(out.items(), key=lambda kv: int(kv[0].split("-")[0])))
 
 
-def _packets(data: bytes) -> list:
-    sizes = {dev.OP_WRITE: 8, dev.OP_EVENT: 10, dev.OP_STATUS: 2, dev.OP_ABORT: 2}
-    out, i = [], 0
-    while i < len(data):
-        n = sizes[data[i]]
-        out.append(data[i:i + n])
-        i += n
-    return out
-
-
 # ---- controls -----------------------------------------------------------------
 CONTROLS = {
     "DROP_NOTE_OFF": ("coverage", ("voice_gate", "stuck_notes"),
@@ -1067,80 +1059,31 @@ def run_control(name: str, *, stub: bool = False) -> dict:
 
 # ---- the RTL replay of the session's bytes --------------------------------------
 def write_rtl_capture(res: dict, prefix: Path) -> dict:
-    """<prefix>.cmds/.plan.json in verify_uart_bridge's replay format: the
-    STIMULUS is the session's transmit log (the bytes it wrote, when it wrote
-    them); the EXPECTATION is the oracle's schedule. An epoch-0 run, so device
-    frames and bench frames coincide."""
+    """The session's capture: the bytes MidiSession actually wrote, at the
+    frames it wrote them; expectations from the oracle's schedule (times
+    already absolute on the device counter, so no performance origin)."""
     run, exp = res["_run"], res["_exp"]
-    ser = run["ser"]
     if run["epoch"] != 0 or run["sim"].resets:
         raise ValueError("RTL capture needs an epoch-0 run with no reset")
-    bc = 10 * uh.CLK_HZ / uh.DEFAULT_BAUD
-    div = (uh.CLK_HZ + uh.DEFAULT_BAUD // 2) // uh.DEFAULT_BAUD
-    rows, si, ti = [], 0, 0
-    wire_free = 0
-    for t, data in ser.tx_log:
-        send = int(t * SR) + 1
-        for pkt in _packets(data):
-            start = max(send * uh.CYC_PER_FRAME + 1, wire_free)
-            wire_free = start + len(pkt) * bc
-            push = start + (len(pkt) - 1) * bc + 4 + 9 * div + div // 2
-            accept = int(push // uh.CYC_PER_FRAME)
-            row = {"index": len(rows), "packet": pkt.hex(), "send_frame": send,
-                   "accept_frame": accept}
-            if pkt[0] == dev.OP_WRITE:
-                f, s_, a, d = exp["static"][si]
-                si += 1
-                row.update(kind="write", due=-1, apply_frame=accept + 1,
-                           expect={"flag": f, "sec": s_, "addr": a, "data": d})
-            elif pkt[0] == dev.OP_EVENT:
-                due, f, s_, a, d = exp["timed"][ti]
-                ti += 1
-                row.update(kind="event", due=due, apply_frame=due,
-                           expect={"flag": f, "sec": s_, "addr": a, "data": d})
-            elif pkt[0] == dev.OP_STATUS:
-                row.update(kind="status", due=-1, apply_frame=-1, expect=None)
-            else:
-                raise ValueError(f"unexpected opcode 0x{pkt[0]:02x} in the session's log")
-            rows.append(row)
-    if si != len(exp["static"]) or ti != len(exp["timed"]):
-        raise ValueError(f"capture has {si}/{ti} writes/events, schedule "
-                         f"{len(exp['static'])}/{len(exp['timed'])}")
-    prefix.parent.mkdir(parents=True, exist_ok=True)
-    with open(f"{prefix}.cmds", "w") as fh:
-        for r in rows:
-            fh.write(f"S {r['send_frame']} {bytes.fromhex(r['packet']).hex(' ')}\n")
-    rec = {"origin": 0, "baud": uh.DEFAULT_BAUD, "base_send_frame": 0,
-           "source": "MidiSession SimSerial transmit log; expectations from the oracle",
-           "rows": rows}
-    Path(f"{prefix}.plan.json").write_text(json.dumps(rec, indent=1) + "\n")
-    return {"rows": len(rows), "writes": si, "events": ti,
-            "last_due": max((r["due"] for r in rows), default=0)}
+    return write_replay_capture(
+        run["ser"].tx_log, exp["static"], exp["timed"], prefix,
+        source="MidiSession SimSerial transmit log; expectations from the oracle")
 
 
 def rtl_replay(res: dict, outdir: Path, *, reuse: bool = False, timeout_s: int = 10_800) -> dict:
-    import verify_uart_bridge as vub
+    """The shared replay stage under THIS harness's image (#1219): r2's
+    bytes replay in the PULSE2X=1 bench configuration, in a scratch
+    directory of its own -- the default r1 image keeps the historical
+    live-midi-rtl path (tools/probe_reuse_identity.py reuses runs there)."""
     name = res["scenario"] + (f"-{res['inject']}" if res["inject"] else "")
     if res["verdict"] != "PASS" and not res["inject"]:
         return {"state": "NO VERDICT", "reason": "the sim run is not clean; replaying it "
                 "would test nothing", "sim_reasons": res["reasons"]}
     cap = write_rtl_capture(res, outdir / name)
-    rr = vub.simulate_replay(str(outdir / name), ROOT / "build/live-midi-rtl" / name,
-                             tail_frames=int(RTL_TAIL_S * SR), timeout_s=timeout_s, reuse=reuse)
-    if rr is None:
-        return {"state": "NO VERDICT", "reason": "the RTL replay did not run", "capture": cap}
-    ok, comp, detail = vub.analyze(rr)
-    trunc = vub.truncation_control(rr)          # completeness can fail (#300 review)
-    receipt = Path(rr["outdir"]) / "run_identity.json"
-    published = outdir / f"{name}.run_identity.json"
-    published.write_bytes(receipt.read_bytes())
-    state = ("NO VERDICT" if comp.get("i2s_incomplete") or not trunc["caught"]
-             else "PASS" if ok else "FAIL")
-    return {"state": state, "capture": cap, "comparison": comp, "truncation_control": trunc,
-            "detail": detail[:10], "reused_rtl_run": bool(rr.get("reused")),
-            "rtl_run": vub.rtl_run_report(rr),
-            "run_receipt": {"path": published.name,
-                            "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
+    work = "live-midi-rtl" if HARNESS_IMAGE == "r1" else f"live-midi-rtl-{HARNESS_IMAGE}"
+    return replay_and_analyze(name, cap, outdir, work, image=HARNESS_IMAGE,
+                              tail_frames=int(RTL_TAIL_S * SR), timeout_s=timeout_s,
+                              reuse=reuse, none_state="NO VERDICT")
 
 
 # ---- main -------------------------------------------------------------------------
