@@ -87,7 +87,7 @@ def load_prereg(path: pathlib.Path = PREREG) -> dict:
 
 def load_checked(refs: pathlib.Path, rel: str, hashes: dict | None = None):
     p = refs / rel
-    if not p.exists():
+    if not p.is_file():
         raise Refused(f"corpus take missing: {p}")
     if hashes is not None:
         want = hashes.get(rel)
@@ -114,14 +114,16 @@ def bar_for_take(sound: str, rel: str, refs: pathlib.Path, T, hashes=None) -> di
     the nearest adjacent knob setting by `spec`, measured through the candidate
     path, plus the apparatus floor, with the three perceptual floors.
     `test_bar_for_take_is_the_gates_bar` pins it to pg.bar_for at TUNING 5.0."""
-    nbs = {}
-    for nb in pg.neighbours(sound, rel):
-        if (refs / nb).exists():
-            nbs[nb] = T.distance(*pg.candidate_path(*load_checked(refs, nb, hashes)), nb)
-    x, sr = load_checked(refs, rel, hashes)
-    floor = T.distance(*pg.candidate_path(x, sr), "apparatus floor")
-    if not nbs:
+    expected = pg.neighbours(sound, rel)
+    if not expected:
         raise Refused(f"{rel}: no neighbour take")
+    missing = [str(refs / p) for p in (rel, *expected) if not (refs / p).is_file()]
+    if missing:
+        raise Refused(f"{sound} ({rel}): missing expected reference WAV(s): {', '.join(missing)}")
+    loaded = {p: load_checked(refs, p, hashes) for p in (rel, *expected)}
+    nbs = {nb: T.distance(*pg.candidate_path(*loaded[nb]), nb) for nb in expected}
+    x, sr = loaded[rel]
+    floor = T.distance(*pg.candidate_path(x, sr), "apparatus floor")
     best = min(nbs, key=lambda k: nbs[k]["spec"])
     base = nbs[best]
     bar = {f: (None if base[f] is None else base[f] + (floor[f] or 0.0)) for f in base}

@@ -463,7 +463,7 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("measure", help="per-take distance tables (heavy: ~1,000 takes)")
     m.add_argument("--refs", type=pathlib.Path, required=True)
-    m.add_argument("--sounds", nargs="*", default=list(pg.SOUNDS16))
+    m.add_argument("--sounds", nargs="+", choices=pg.SOUNDS16, default=list(pg.SOUNDS16))
     m.add_argument("--corrupt", default=None, choices=[None, *pg.DEFECTS],
                    help="INJECTED DEFECT control: seed every MARS take before measuring")
     m.add_argument("--out", type=pathlib.Path, required=True)
