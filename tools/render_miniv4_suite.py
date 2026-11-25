@@ -58,19 +58,19 @@ import math
 import pathlib
 import sys
 
-import numpy as np
+# numpy, audio_measure, dsp and refprofile are render-only: they are imported
+# inside the functions that use them so `--help` and `--list` (the fleet-worker
+# dry run documented above) work on stdlib Python (#1292).
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "audition"))
 
-import audio_measure as am                                          # noqa: E402
-import dsp                                                          # noqa: E402
+import exit_contract                                                # noqa: E402
 import reference_suites as rs                                       # noqa: E402
-import refprofile as rp                                             # noqa: E402
 
-OK, FAIL, REFUSED = rp.OK, rp.FAIL, rp.REFUSED
+OK, FAIL, REFUSED = exit_contract.PASS, exit_contract.FAIL, exit_contract.REFUSED
 
 SR = 48000
 BLOCK = 16
@@ -129,13 +129,16 @@ class _Rig:
         self.eng.load_graph([(self.p, [])])
 
     def identity(self) -> dict:
+        import refprofile as rp
         return rp.plugin_identity(PATH_MINIV4)
 
     def set_parameter(self, idx: int, value: float) -> None:
         self.p.set_parameter(int(idx), float(value))
 
     def render_note(self, note: int, seconds: float,
-                    velocity: int = VELOCITY, note_at: float = 0.02) -> np.ndarray:
+                    velocity: int = VELOCITY, note_at: float = 0.02):
+        import numpy as np
+        import audio_measure as am
         self.p.clear_midi()
         self.p.add_note(note, velocity, note_at, seconds)
         self.eng.render(seconds)
@@ -153,6 +156,7 @@ class _Rig:
 # ===========================================================================
 def check_plugin_version(path: str = PATH_MINIV4) -> dict:
     """The bundle must exist, and claim exactly 4.0.4.6366. REFUSED otherwise."""
+    import refprofile as rp
     ident = rp.plugin_identity(path)
     if not ident.get("present"):
         raise Refused(f"Mini V4 is not installed at {path} "
@@ -190,6 +194,9 @@ def check_calibration(rig: _Rig) -> dict:
     the Model D lesson) and within CAL_CENTS_LIMIT of the commanded pitch
     (Mini V3's Range default was an octave down; the check that exists
     because a defaulted knob once passed silently)."""
+    import numpy as np
+    import audio_measure as am
+    import dsp
     y = rig.render_note(CAL_NOTE, CAL_RENDER_S)
     peak = float(np.max(np.abs(y))) if len(y) else 0.0
     if peak == 0.0:
@@ -213,7 +220,7 @@ def check_calibration(rig: _Rig) -> dict:
             "demo_artefact_scan": demo}
 
 
-def _demo_artefact_scan(y: np.ndarray, f0_hz: float) -> dict:
+def _demo_artefact_scan(y, f0_hz: float) -> dict:
     """Sparse impulsive transients against a stationary background -- the
     shape both Arturia's and u-he's demo modes take. The pitched path is the
     one already ground-truthed in model/reference_integrity.py (#225): a saw
@@ -222,6 +229,7 @@ def _demo_artefact_scan(y: np.ndarray, f0_hz: float) -> dict:
     proof of licence (stated limitation); it is one detector, and a fired
     scan FAILs (exit 1) rather than refusing, because the render did happen
     and was measured."""
+    import audio_measure as am
     from reference_integrity import transient_report
     try:
         return transient_report(y, SR, f0_hz=f0_hz)
@@ -319,7 +327,8 @@ def render_case(case: dict, rig: _Rig, licence: str, out_dir: pathlib.Path) -> d
     return record
 
 
-def _write_float32_wav(path: pathlib.Path, y: np.ndarray) -> None:
+def _write_float32_wav(path: pathlib.Path, y) -> None:
+    import numpy as np
     from scipy.io import wavfile
     wavfile.write(path, SR, y.astype(np.float32))
 

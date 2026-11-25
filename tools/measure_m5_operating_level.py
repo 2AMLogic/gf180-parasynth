@@ -43,6 +43,8 @@ import voice_fx as vf  # noqa: E402
 import mono_m5a_score as score  # noqa: E402
 import mono_artifact_probe as mp  # noqa: E402
 import measure_pulse2x_headroom as hr  # noqa: E402
+import refusal  # noqa: E402
+from exit_contract import REFUSED  # noqa: E402
 
 BASE_DRIVE = 0.75
 CANDIDATE_DRIVES = (0.5, 0.35, 0.25)          # the whole budget
@@ -161,7 +163,7 @@ def select(rows: dict) -> dict:
             "baseline_harmonic_shape": base["Harmonic shape"], "verdicts": verdicts, "chosen": chosen}
 
 
-def main(argv=None) -> int:
+def _run(argv) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--engine", choices=("pulse2x", "r1"), default="pulse2x")
     ap.add_argument("--drives", type=float, nargs="+", default=None,
@@ -204,6 +206,14 @@ def main(argv=None) -> int:
     a.out.write_text(json.dumps(res, indent=1) + "\n")
     print(f"wrote {a.out}")
     return 0
+
+
+def main(argv=None) -> int:
+    try:
+        return _run(argv)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
 
 
 if __name__ == "__main__":

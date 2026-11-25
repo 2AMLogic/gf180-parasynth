@@ -123,3 +123,20 @@ def test_a_note_handed_over_late_after_a_kick_is_not_dropped():
     s, sim, on = run({"NO_ORDER_GUARD"})
     assert s.stats["order_guarded"] == 0 and not on
     assert [e for e in sim.errors if e[0] == 3]
+
+
+# ---- `--help` is a player's command: it must not need the voice model (#1297) --
+import subprocess                                           # noqa: E402
+
+_BLOCK_NUMPY = ("import sys; sys.modules['numpy'] = None; import runpy; "
+                "sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name='__main__')")
+
+
+def test_help_works_with_numpy_blocked():
+    """The script's public path in a fresh interpreter, NumPy blocked in the
+    child so an installed package or pytest's import cache cannot hide it."""
+    r = subprocess.run([sys.executable, "-ISB", "-c", _BLOCK_NUMPY,
+                        os.path.join(HERE, "measure_mac_midi_latency.py"), "--help"],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr[-800:]
+    assert "--source" in r.stdout and "--control-stall-ms" in r.stdout

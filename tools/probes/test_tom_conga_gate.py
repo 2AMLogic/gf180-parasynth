@@ -248,6 +248,58 @@ def test_provenance_names_the_commit_the_run_started_from(monkeypatch, tmp_path)
     assert p["commit_at_end"] == "B" and p["head_moved_during_run"] and p["dirty_at_end"]
 
 
+# ---- #1263: per-take neighbour calibration refuses partial or missing sets ----
+def _write_tom_take(refs: pathlib.Path, rel: str, hz: float) -> None:
+    from scipy.io import wavfile
+    t = np.arange(int(1.0 * 44100)) / 44100
+    y = np.sin(2 * np.pi * hz * t) * np.exp(-t / 0.15)
+    y = np.concatenate([np.zeros(int(0.02 * 44100)), y])
+    p = refs / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    wavfile.write(p, 44100, np.round(16000 * y).astype(np.int16))
+
+
+@pytest.mark.parametrize("mode", ["nearest", "farthest", "all", "directory"])
+def test_bar_for_take_refuses_incomplete_neighbours_before_distances(tmp_path, monkeypatch, mode):
+    target = tc.take_rel("LT", "50")
+    neighbours = pg.neighbours("LT", target)
+    _write_tom_take(tmp_path, target, 90.0)
+    _write_tom_take(tmp_path, neighbours[0], 90.0)
+    _write_tom_take(tmp_path, neighbours[1], 110.0)
+
+    T = pg.Target(*tc.load_checked(tmp_path, target), "LT", target)
+    cand = T.distance(*pg.candidate_path(*tc.load_checked(tmp_path, neighbours[1])))
+    complete = tc.bar_for_take("LT", target, tmp_path, T)
+    assert complete["from"] == neighbours[0]
+    assert pg.verdict(cand, complete["bar"])["verdict"] == "FAIL"
+
+    if mode == "nearest":
+        removed = [neighbours[0]]
+    elif mode == "farthest":
+        removed = [neighbours[1]]
+    elif mode == "all":
+        removed = list(neighbours)
+    else:
+        removed = [neighbours[1]]
+
+    for rel in removed:
+        (tmp_path / rel).unlink()
+    if mode == "directory":
+        (tmp_path / removed[0]).mkdir()
+
+    calls = []
+    orig_distance = T.distance
+    monkeypatch.setattr(T, "distance", lambda *a, **kw: calls.append(1) or orig_distance(*a, **kw))
+
+    with pytest.raises(tc.Refused) as exc_info:
+        tc.bar_for_take("LT", target, tmp_path, T)
+    msg = str(exc_info.value)
+    for rel in removed:
+        assert str(tmp_path / rel) in msg
+        assert rel in msg
+    assert calls == [], "completeness must be checked before computing any distance"
+
+
 # ---- rule 5: every injection turns its known answer red ----
 INJECTED = {"no-preserve": test_judge_rejects_a_win_bought_with_decay,
             "no-peak": test_judge_rejects_a_win_bought_with_silence,

@@ -8,11 +8,13 @@ import numpy as np
 from scipy.io import wavfile
 import measure_mono_attack_context as context
 import mono_m5a_score as lead
+import refusal
+from exit_contract import REFUSED
 
 ROOT = lead.ROOT
 
 
-def main():
+def compare():
     source = ROOT / "docs/scorecard/mono-attack-context/report.json"
     frozen = json.loads(source.read_text())
     for row in frozen["renders"]:
@@ -75,5 +77,14 @@ def main():
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
 
 
+def main() -> int:
+    try:
+        compare()
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

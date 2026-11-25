@@ -60,7 +60,7 @@ ENSEMBLE_ENGINES = ("fixed-model", "integrated-rtl")
 #: The sources a delta record's `provenance.source_sha256` identifies the
 #: comparison by (kept at module scope, as `compare_drum_i2s_candidate` does).
 SOURCES = ("tools/compare_ensemble_candidate.py", "tools/score_ensemble_i2s.py",
-           "tools/run_case.py", "tools/scorecard.py")
+           "tools/run_case.py", "tools/scorecard.py", "tools/delta_report.py")
 
 
 def _case(case_id: str) -> dict:

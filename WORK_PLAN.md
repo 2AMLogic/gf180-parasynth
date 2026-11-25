@@ -3,12 +3,13 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as its own last change — `git log --no-patch -1 --format='%h %cs' -L '/^<!-- guide:plan-body:start -->$/,/^<!-- guide:plan-body:end -->$/:WORK_PLAN.md' origin/main` — which neither a declined Guide regeneration nor a docs-only commit elsewhere in this file advances.
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-20T23:54:59Z (snapshot; compare against live labels)_
+_Generated: 2026-11-25T11:11:00Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
 
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper
+- **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches
 
 ## Very Important
 
@@ -20,14 +21,11 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
 
 `loom:important`; taken before unlabelled work.
 
-- **#107**: One envelope drives both partials, so no voice can reproduce differential partial decay
 - **#162**: The bass drum's entire attack is 18-23 dB short across 170-678 Hz *(held)*
-- **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
-- **#369**: Cymbal: a very accurate TR-808 cymbal — three-band structure, Hh3 third-order, qualified band decay, confirmed across TONE/DECAY
+- **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#559**: [sound] CH and CP: flatness (CH 9.3x) and decay (CP 15.9x) fail the gate
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(held)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(held)*
-- **#1051**: [voice-only] Draft decision record and re-scope README/roadmap/spec to voice-only silicon target *(held)*
 
 ## Ready
 
@@ -37,7 +35,7 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
+- **#1309**: Refuse incomplete Fischer reference sets in the conga body-spread report
 
 ## In Progress
 
@@ -51,20 +49,37 @@ Issues currently being built (`loom:building`).
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit)
-- **#1089**: regrade cannot tell a re-attested envelope from a stale one: no gate binds evidence/item-{9,10}.json provenance.klt_version to the pinned klt
+- **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal
+- **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin
+- **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow
+- **#1289**: max() accumulators elsewhere drop a NaN the same way #1284's separator did
+- **#1296**: calibrate accepts a one-sound table that the full corpus refuses (the input that survives #1294's guard)
+- **#1297**: fpga/measure_mac_midi_latency.py --help needs NumPy it never uses (same class as #1282)
+- **#1301**: A complete sound set with empty per-sound tables still calibrates on one sound's evidence (rule-8 sibling of #1296)
+- **#1302**: Honor --image in fpga/play_song.py render instead of silently rendering R1 for --image r2
+- **#1303**: Consolidate model/sound_report.py RELOCKS into LOCK_CHANGELOG so one record feeds the report and --check-locks
+- **#1307**: gate_calibrate: bar_for's corpus-completeness Refused escapes uncaught, reporting REFUSED as exit 1
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#1090**: signoff: fail regrade on an evidence envelope whose klt_version is not the pin
+- **#1291**: fix: refuse nonfinite readings in two max() accumulators
+- **#1298**: fix: refuse to calibrate a partial-sound tables record
+- **#1299**: fix: defer NumPy-pulling imports in the Mac latency probe so --help works
+- **#1305**: fix: refuse calibration on incomplete per-sound evidence (index-backed)
+- **#1310**: fix: honor --image in play_song render (r2 uses pulse_2x)
+- **#1311**: refactor: fold RELOCKS into LOCK_CHANGELOG and tighten lock-chain checks
+- **#1312**: fix: gate_calibrate refuses with exit 2 when an old-bar neighbour WAV is missing
 
 ## Approved (Awaiting Merge)
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper *(held)* — linked issue #1062
+- **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches *(held)* — linked issue #1199
+- **#1227**: fix(nightly): gate the ctl and synth_top mutant steps on a clean run — linked issue #1222
+- **#1264**: ci: gate default-config synth mutants behind a clean default verify_synth_top run — linked issue #1221
 
 ## Proposed
 
@@ -119,7 +134,6 @@ Issues carrying `loom:curated`.
 - **#693**: Build-box re-capture for PR #662 (drum rev 18): deadline monitor, UART-bridge record, latency-argument pin *(curated)* *(held)*
 - **#700**: Run before/after corpus measurement for partial-balance and conga-spread probes after #690 *(curated)* *(held)*
 - **#705**: Run bd_pitch_baseline on the Fischer corpus after #697 and read f0_line_hz against the new glide f0 range *(curated)* *(held)*
-- **#820**: Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds *(curated)*
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates *(curated)*
 - **#859**: repo-remote.sh status reports instances:[] when DescribeInstances is unauthorized — file upstream (rjwalters/repo) and record the finding *(curated)* *(held)*
 - **#899**: probe_orphan_reap: _argv_names bounds the right side of the path match but not the left *(curated)* *(held)*
@@ -128,8 +142,18 @@ Issues carrying `loom:curated`.
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing *(curated)*
 - **#1049**: [voice-only] Measure synthesized+placed area of a voice-only top against one quarter slot *(curated)* *(held)*
 - **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites) *(curated)*
-- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit) *(curated)*
-- **#1089**: regrade cannot tell a re-attested envelope from a stale one: no gate binds evidence/item-{9,10}.json provenance.klt_version to the pinned klt *(curated)*
+- **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit) *(curated)* *(held)*
+- **#1110**: Judge docs-only fast path is unreachable on this host: its base-repo read uses a gh --json field this gh 2.102.0 rejects *(curated)* *(held)*
+- **#1148**: rtl-full step 8 is red on main: M5A filter2x SPI-to-I2S diverges from the model in 815424 of 1305549 frames (62%) *(curated)* *(held)*
+- **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal *(curated)*
+- **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin *(curated)*
+- **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow *(curated)*
+- **#1289**: max() accumulators elsewhere drop a NaN the same way #1284's separator did *(curated)*
+- **#1296**: calibrate accepts a one-sound table that the full corpus refuses (the input that survives #1294's guard) *(curated)*
+- **#1297**: fpga/measure_mac_midi_latency.py --help needs NumPy it never uses (same class as #1282) *(curated)*
+- **#1301**: A complete sound set with empty per-sound tables still calibrates on one sound's evidence (rule-8 sibling of #1296) *(curated)*
+- **#1307**: gate_calibrate: bar_for's corpus-completeness Refused escapes uncaught, reporting REFUSED as exit 1 *(curated)*
+- **#1309**: Refuse incomplete Fischer reference sets in the conga body-spread report *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -138,11 +162,12 @@ Issues carrying `loom:curated`.
 - **#569**: Consolidate 12+ duplicated file-SHA-256 helpers into tools/provenance.py *(hermit)* *(held)*
 - **#621**: Remove tools/regen_m1a_units.py: completed one-shot migration and its sole-caller cache path *(hermit)* *(held)*
 - **#753**: Consolidate 16 duplicate file-sha256 helpers in tools/ into provenance.py *(hermit)* *(held)*
-- **#760**: Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September *(hermit)* *(held)*
-- **#762**: Remove fpga/probe_uart_findings.py: it reports 2 false FAILs on the repaired host and nothing runs it *(hermit)* *(held)*
-- **#800**: Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site *(hermit)* *(held)*
 - **#812**: verify-fast re-runs 40 test files that sibling jobs in the same workflow already collect wholesale, on the stale premise that no CI job does *(hermit)* *(held)*
-- **#817**: Consolidate the seven WAV readers: four conventions, and two answer 96 dB wrong on a 24-bit file instead of refusing *(hermit)* *(held)*
+- **#1172**: Wire in or remove check_nightly_slow_records.py: a 1,176-line gate nothing runs *(hermit)* *(held)*
+- **#1173**: Remove tools/audit_tracked_json_writers.py: one-shot #922 report nothing runs *(hermit)* *(held)*
+- **#1205**: Remove disk cache replay from the 808 conditioning comparison *(hermit)* *(held)*
+- **#1281**: Deduplicate autocorrelation submultiple resolution in discrimination_features onto audio_measure._shortest_submultiple *(hermit)* *(held)*
+- **#1300**: Replace the clap probe’s caller-defined manifest with the pinned Fischer corpus digest *(hermit)* *(held)*
 
 ## Epics
 
@@ -153,14 +178,14 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 1 |
+| Operator merge-risk holds | 2 |
 | Very important | 1 |
-| Important | 8 |
+| Important | 5 |
 | Ready (`loom:issue`, net of holds/building/merge-pending) | 5 |
-| In Progress (`loom:building`) | 10 |
-| PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 1 |
-| Curated | 60 |
-| Architect / Hermit proposals | 10 |
+| In Progress (`loom:building`) | 18 |
+| PRs awaiting review | 7 |
+| Approved PRs awaiting merge | 4 |
+| Curated | 69 |
+| Architect / Hermit proposals | 11 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->

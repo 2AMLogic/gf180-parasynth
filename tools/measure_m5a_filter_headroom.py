@@ -16,6 +16,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m5a_score as m5a
+import refusal
+from exit_contract import REFUSED
 import voice_fx as vf
 import measure_m5a_filter_oversample as experiment
 import filter_rate_chain as frc
@@ -235,13 +237,17 @@ def main(argv=None) -> int:
     parser.add_argument("--recompare-report", type=pathlib.Path,
                         help="recompute acceptance decisions from a complete saved measurement without rerendering")
     args = parser.parse_args(argv)
-    if args.recompare_report is not None:
-        out = args.recompare_report
-        report = _recompare_report(out)
-    else:
-        report = run(ROOT / "build/scorecard/m5a-filter-headroom-audio",
-                     args.reuse_offline_report, args.reuse_causal_report)
-        out = ROOT / args.out
+    try:
+        if args.recompare_report is not None:
+            out = args.recompare_report
+            report = _recompare_report(out)
+        else:
+            report = run(ROOT / "build/scorecard/m5a-filter-headroom-audio",
+                         args.reuse_offline_report, args.reuse_causal_report)
+            out = ROOT / args.out
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
     comparison_summary = {

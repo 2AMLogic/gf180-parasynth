@@ -32,6 +32,7 @@ import analyse_m1a_phase_cycle as ap
 import diagnose_m1a_harmonic_phase as d
 import measure_m1a_drive as dx
 import mono_m1a_score as bass
+import refusal
 import run_all
 from finite_number import is_finite_number
 
@@ -469,7 +470,7 @@ def main():
         }
         write_json(OUT / "report.json", report)
         return 0
-    except Refused as exc:
+    except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
         return 2
 

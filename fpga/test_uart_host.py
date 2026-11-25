@@ -169,6 +169,24 @@ def test_budget_quotes_the_contract_numbers():
     assert b["bytes_per_s"] == pytest.approx(12_288_000 / 1070, rel=1e-3)
 
 
+@pytest.mark.parametrize("baud,divider", [(115200, 107), (96000, 128)])
+@pytest.mark.parametrize("packet,octets", [("write", 8), ("event", 10)])
+def test_budget_packet_duration_in_audio_frames(baud, divider, packet, octets):
+    # 12.288 MHz receiver, rounded RTL divisor, 8N1, 256 clocks/audio frame.
+    frames = Fraction(octets * 10 * divider, 256)
+    assert uh.budget(baud)[f"frames_per_{packet}_packet"] == float(frames)
+
+
+def test_budget_rates_stay_in_packets_per_frame_units():
+    # the explicitly named rates are the reciprocal of the duration they name
+    for baud in (115200, 96000):
+        b = uh.budget(baud)
+        assert b["event_packets_per_frame"] == pytest.approx(
+            1 / b["frames_per_event_packet"])
+        assert b["max_sustained_event_rate_per_kframe"] == pytest.approx(
+            b["event_packets_per_frame"] * 1000)
+
+
 def test_require_serial_refuses_with_exit_2(monkeypatch):
     import builtins
     real_import = builtins.__import__
@@ -197,6 +215,62 @@ def test_bridge_refuses_an_unopenable_port(capsys, monkeypatch):
 def test_main_without_port_or_dry_run_refuses():
     from uart_host import main
     assert main(["--dry-run", "load"]) == 0         # dry-run needs no hardware
+
+
+def _applies_cells(text):
+    """The `applies` column (4th-from-last field) of each data row."""
+    return [ln.split()[-2] for ln in text.splitlines()[2:]]
+
+
+@pytest.mark.parametrize("command", [("abort",), ("status",)])
+def test_render_plan_management_row_prints_dash_not_sentinel(command):
+    rows = uh.plan([command], start_frame=0)
+    assert rows[0].apply_frame == -1                  # the sentinel is really there
+    assert _applies_cells(uh.render_plan(rows)) == ["-"]
+
+
+def test_render_plan_write_and_event_rows_keep_their_frames():
+    rows = uh.plan([("write", 0, 0, 0x04, 0), ("event", 5000, 0, 0, 0x20, 0)],
+                   start_frame=0)
+    cells = _applies_cells(uh.render_plan(rows))
+    assert cells == [str(rows[0].accept_frame + 1), str(rows[1].due)]
+
+
+def test_fmt_apply_frame_dash_for_unset():
+    assert uh.fmt_apply_frame(-1) == "-"
+    assert uh.fmt_apply_frame(0) == "0"
+    assert uh.fmt_apply_frame(42) == "42"
+
+
+@pytest.mark.parametrize("command", ["abort", "status"])
+@pytest.mark.parametrize("mode", ["live", "dry-before", "dry-after"])
+def test_management_preview_cannot_touch_a_queued_note(command, mode):
+    from uart_device_sim import SimClock, SimSerial, UartDeviceSim
+
+    clock = SimClock()
+    device = UartDeviceSim(clock=clock)
+    serial = SimSerial(device)
+    serial.write(uh.pkt_event(4800, 0, 0, 0x20, 0))  # GATE_ON at 100 ms
+    serial.run_until(0.002)
+    assert device.evq_count == 1 and not device.writes
+    serial.tx_log.clear()
+    opens = []
+
+    def open_bridge(port, baud):
+        opens.append(port)
+        return uh.Bridge.on_serial(serial, baud=baud, clock=clock)
+
+    args = {"live": [command], "dry-before": ["--dry-run", command],
+            "dry-after": [command, "--dry-run"]}[mode]
+    assert uh.main(["--port", "sim", *args], bridge_factory=open_bridge) == 0
+    serial.run_until(0.005)
+    sent = [packet.hex() for _, packet in serial.tx_log]
+    observed = (opens, sent, device.evq_count)
+    if mode == "live":
+        assert observed == (["sim"], ["58a8" if command == "abort" else "51af"],
+                            0 if command == "abort" else 1)
+    else:
+        assert observed == ([], [], 1)
 
 
 # ---- the repair's contract, as units ----------------------------------------
@@ -334,3 +408,47 @@ def test_take_counts_every_packet_in_a_chunk_not_just_the_first_match():
         pass
     assert b.acks_seen == 8
     assert b.device_errors == [(1, 0x21)]
+
+
+# ---- #1258: the R1 quick-start must not need SciPy --------------------------
+def test_r1_quickstart_dry_run_works_without_scipy(tmp_path):
+    """The default R1 patch must run even when SciPy imports are blocked."""
+    import subprocess
+    from pathlib import Path
+    from textwrap import dedent
+
+    # This startup hook previously hid the eager import on SciPy-installed hosts.
+    (tmp_path / "sitecustomize.py").write_text("from scipy.io import wavfile\n")
+    code = dedent("""\
+        import os
+        import runpy
+        import sys
+
+        class ScipyBlocked(ModuleNotFoundError):
+            pass
+
+        class BlockScipy:
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname == "scipy" or fullname.startswith("scipy."):
+                    raise ScipyBlocked(fullname)
+
+        sys.meta_path.insert(0, BlockScipy())
+        try:
+            import scipy
+        except ScipyBlocked:
+            pass
+        else:
+            raise AssertionError("SciPy import bypassed the blocker")
+
+        del sys.argv[0]  # drop -c, so argv and sibling imports match script execution
+        sys.path.insert(0, os.path.dirname(sys.argv[0]))
+        runpy.run_path(sys.argv[0], run_name="__main__")
+    """)
+    player = Path(__file__).resolve().with_name("uart_host.py")
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code, player, "--dry-run", "run", "--note", "45",
+         "--fixture", "m5a", "--image", "r1", "--capture", tmp_path / "cap"],
+        env={**os.environ, "PYTHONPATH": str(tmp_path)}, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "FEASIBLE" in result.stdout
