@@ -283,11 +283,15 @@ def test_missing_index_refuses_rather_than_passes(real, monkeypatch, tmp_path):
     assert cal["k"] is None and cal["status"].startswith("REFUSED: incomplete evidence: cannot read the file index")
 
 
+VAL9 = ("BD", "CY", "HC", "HT", "LC", "LT", "MC", "MT", "SD")
+FORCE_K5 = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/gate-379/mars-calibration/calibrationforcek5.json"
+
+
 def test_decide_does_not_count_an_unrun_control_as_a_pass():
     q = {"sounds_with_bar": ["BD"], "start_red": {"BD": "FAIL", "BD-silence": "REFUSED"},
          "seeded_summary": {"n": 10, "caught": 10, "missed": [], "rate": 1.0},
          "known_bad": {"shipped-cymbal": {"verdict": "REFUSED"}}, "clean": {"BD": "PASS"},
-         "validation": {"sounds": 1, "best_passes": 1}}
+         "validation": {"rule": "v1", "by_sound": {s: True for s in VAL9}, "sounds": 9, "best_passes": 9}}
     assert gc.decide(q, False)["status"] == "REFUSED"             # Q3 could not run
     q["known_bad"]["shipped-cymbal"] = {"verdict": "FAIL"}
     assert gc.decide(q, None)["status"] == "REFUSED"              # Q5 vacuous (corpus refused too)
@@ -295,3 +299,81 @@ def test_decide_does_not_count_an_unrun_control_as_a_pass():
     assert gc.decide(q, True)["status"] == "NOT QUALIFIED"        # a corrupted corpus qualified: reject
     q["seeded_summary"].update(caught=5, rate=0.5)
     assert gc.decide(q, False)["status"] == "NOT QUALIFIED"       # a bar that misses seeds is not authority
+
+
+# ---------------------------------------------------------------------------
+# #1304: v1 lost validation, CLI old_bar_context empty-row guard, and Q4 rules
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("force_k", [None, 5])
+def test_v1_lost_validation_group_is_refused_and_names_hc(real, force_k):
+    """HC Case (b) under v1: groups 0 and 1 remain populated, every group-2 take
+    is moved to `missing`. Unfixed `evidence_refusal` checked only (0, 1)."""
+    t = copy.deepcopy(real)
+    reg = gc.regroup({"HC": t["HC"]})["HC"]["rows"]
+    keep = {r["rel"] for r in reg if r["group"] in (0, 1)}
+    t["HC"]["missing"] = t["HC"]["missing"] + [{"rel": r["rel"], "why": "x"} for r in t["HC"]["rows"] if r["rel"] not in keep]
+    t["HC"]["rows"] = [r for r in t["HC"]["rows"] if r["rel"] in keep]
+    cal = gc.calibrate(t, force_k=force_k)
+    assert cal["status"].startswith("REFUSED: incomplete evidence")
+    assert "HC" in cal["status"] and "validation" in cal["status"]
+    assert "BD" not in cal["status"] and cal["k"] is None and cal["sounds"] == {}
+
+
+def test_v1_cli_refusal_on_empty_rows_is_not_masked_by_old_bar_context(real, tmp_path, monkeypatch, capsys):
+    import numpy as np
+    sig = np.concatenate([np.zeros(2400), np.sin(2 * np.pi * 200 * np.arange(9600) / 48000) * np.exp(-np.arange(9600) / 1500)])
+    monkeypatch.setattr(pg, "load_wav", lambda p: (sig.copy(), 48000))
+    monkeypatch.setattr(pg, "bar_for", lambda s, refs, T=None: {"kind": "WEAK", "bar": {f: 1.0 for f in pg.FEATURES}})
+    monkeypatch.setattr(pg, "provenance", lambda a: {})
+    tpath = tmp_path / "tables.json"
+    tpath.write_text(json.dumps({"tables": _damage(real, "empty")}))
+    out = tmp_path / "cal.json"
+    rc = gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tpath), "--out", str(out), "--force-k", "3"])
+    assert rc == 0 and out.exists()
+    res = json.loads(out.read_text())
+    printed = json.loads(capsys.readouterr().out)
+    assert res["decision"]["status"] == "REFUSED" and printed["status"] == "REFUSED"
+    assert res["decision"]["why"].startswith("REFUSED: incomplete evidence")
+    assert res["calibration"]["k"] is None and res["calibration"]["sounds"] == {}
+    assert res["calibration"]["old_bar_context"]["SD"]["mars_best"] is None
+
+
+def test_q4_stored_v1_record_keeps_naturally_unvalidated_sounds_and_catches_omitted_hc():
+    """`calibrationforcek5.json` has MA naturally UNVALIDATED (2 keys < 3) and
+    OH NO-BAR (no group-1 key), leaving the 9 expected validation sounds."""
+    rec = json.loads(FORCE_K5.read_text())
+    cal = copy.deepcopy(rec["calibration"])
+    q = copy.deepcopy(rec["qualification"])
+    q["validation"] = gc.summarize_validation(cal)
+    dec = gc.decide(q, False)
+    assert dec["status"] == "NOT QUALIFIED"
+    assert dec["gates"]["Q4 stays green"]["ok"] is False
+    assert "2/9" in dec["gates"]["Q4 stays green"]["observed"]
+
+    del cal["sounds"]["HC"]["validation"]
+    q["validation"] = gc.summarize_validation(cal)
+    dec_missing = gc.decide(q, False)
+    assert dec_missing["status"] == "REFUSED" and "Q4 stays green" in dec_missing["unrun"]
+    assert "HC" in dec_missing["gates"]["Q4 stays green"]["observed"]
+
+
+def test_q4_expected_validation_differs_between_v1_and_v2_rules():
+    """A sound with 2 dev + 2 cal + 1 val keys (5 keys total, 4 pool keys) is
+    expected to validate under v1 (>=3 keys, groups 1 & 2) but is WEAK under v2
+    (<8 pool keys), so v1 requires its validation entry and v2 does not."""
+    import gate_between as gb
+    tabs = {"BD": _tab({0: [0.2] * 4, 1: [0.2] * 4, 2: [0.2]}),
+            "LT": _tab({0: [0.2, 0.2], 1: [0.2, 0.2], 2: [0.2]}, sound="LT")}
+    exp = _idx(tabs)
+    assert gc.expected_validation_sounds(exp, rule="v1") == {"BD", "LT"}
+    assert gc.expected_validation_sounds(exp, rule="v2") == {"BD"}
+    q = {"sounds_with_bar": ["BD", "LT"], "start_red": {"BD": "FAIL", "BD-silence": "REFUSED"},
+         "seeded_summary": {"n": 10, "caught": 10, "missed": [], "rate": 1.0},
+         "known_bad": {"shipped-cymbal": {"verdict": "FAIL"}, gb.CANDIDATE: {"verdict": "FAIL"}},
+         "clean": {"BD": "PASS", "LT": "PASS"},
+         "validation": {"rule": "v2", "by_sound": {"BD": True}, "sounds": 1, "best_passes": 1}}
+    assert gb.decide(q, False, expected=exp)["status"] == "QUALIFIED"
+    q_v1 = copy.deepcopy(q)
+    q_v1["validation"]["rule"] = "v1"
+    dec_v1 = gc.decide(q_v1, False, expected=exp)
+    assert dec_v1["status"] == "REFUSED" and "LT" in dec_v1["gates"]["Q4 stays green"]["observed"]

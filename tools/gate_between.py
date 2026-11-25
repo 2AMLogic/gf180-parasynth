@@ -155,11 +155,17 @@ def choose_p(tabs: dict) -> dict:
             "min_keys": MIN_KEYS, "splits": SPLITS}
 
 
-def calibrate(tabs: dict, force_p: float | None = None) -> dict:
+def calibrate(tabs: dict, force_p: float | None = None, expected: dict | None = None) -> dict:
     """Pure function of the per-take tables. Same output shape as
     gate_calibrate.calibrate (`sounds[s]["bar"]`) so `qualify`/`decide` run
-    unchanged."""
+    unchanged. `expected` is the index's take set per sound (default: the
+    committed file index); the evidence check runs unconditionally, `force_p`
+    included."""
     tabs = gc.regroup(tabs)
+    why = gc.evidence_refusal(tabs, expected, rule="v2", min_keys=MIN_KEYS)
+    if why:
+        return {"rule": "v2", "selection": None, "p": None, "sounds": {}, "twins": gc.twin_report(tabs),
+                "status": why, "diagnostic": None}
     sel = choose_p(tabs)
     p = sel["chosen"] if force_p is None else force_p
     out = {"rule": "v2", "selection": sel, "p": p, "sounds": {}, "twins": gc.twin_report(tabs),
@@ -188,9 +194,13 @@ def calibrate(tabs: dict, force_p: float | None = None) -> dict:
                                  else "VALIDATION-FAILED: best untouched take fails the bar")
         else:
             rp = reps(t["rows"])[:MARS_WEAK_KEYS]
-            row.update(bar=gc.make_bar(rp, t["floor"]), kind=f"WEAK-MARS-nearest-{len(rp)}-keys",
-                       n_matched=len(rp), bar_from=[r["rel"] for r in rp],
-                       status="WEAK-UNVALIDATED: too few keys to hold any out")
+            bar = gc.make_bar(rp, t["floor"])
+            if bar is None:
+                row["status"] = "NO-BAR: no readable take"
+            else:
+                row.update(bar=bar, kind=f"WEAK-MARS-nearest-{len(rp)}-keys",
+                           n_matched=len(rp), bar_from=[r["rel"] for r in rp],
+                           status="WEAK-UNVALIDATED: too few keys to hold any out")
         out["sounds"][s] = row
     out["status"] = "DIAGNOSTIC-CALIBRATION" if force_p is not None else "CALIBRATED"
     return out
@@ -208,12 +218,15 @@ def rank_rows(old_bar_context: dict) -> list:
         if not o:
             rows.append({"sound": s, "ours": None})
             continue
-        m = r["mars_best"]["worst_ratio"]
+        mb = r.get("mars_best")
+        if not mb:
+            raise ValueError(f"REFUSED: {s}: no readable MARS takes for old-bar ratio")
+        m = mb["worst_ratio"]
         # a NaN would pass `if m` below and make the sort order undefined (#134)
         if not (math.isfinite(m) and math.isfinite(o["worst_ratio"])):
             raise ValueError(f"REFUSED: {s}: non-finite worst ratio (ours {o['worst_ratio']}, MARS best {m})")
         rows.append({"sound": s, "bar": r["old_bar"], "ours": o["worst_ratio"], "ours_feature": o["worst_feature"],
-                     "mars_best": m, "mars_feature": r["mars_best"]["worst_feature"],
+                     "mars_best": m, "mars_feature": mb["worst_feature"],
                      "n_takes": r["n_takes"], "mars_pass_old_bar": r["mars_takes_passing_old_bar"],
                      "ours_over_mars": (o["worst_ratio"] / m if m else math.inf)})
     return sorted(rows, key=lambda x: -(x.get("ours_over_mars") or -1))
@@ -234,11 +247,11 @@ def render_table(rows: list) -> str:
 CANDIDATE = "rejected-374-candidate"
 
 
-def decide(q: dict, injected: bool | None) -> dict:
+def decide(q: dict, injected: bool | None, *, expected: dict | None = None) -> dict:
     """gate_calibrate's five gates plus Q6: the rejected #374 candidate must FAIL.
     A candidate that PASSes fails the gate; one that is absent or REFUSED leaves
     the control unrun, so the decision is REFUSED, never QUALIFIED."""
-    dec = gc.decide(q, injected)
+    dec = gc.decide(q, injected, rule="v2", expected=expected)
     kb = q["known_bad"].get(CANDIDATE, {}).get("verdict")
     dec["gates"]["Q6 rejected #374 candidate"] = {
         "ok": (kb == "FAIL") if kb in ("FAIL", "PASS") else None,
