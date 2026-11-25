@@ -303,7 +303,7 @@ def main(argv=None) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
     print(json.dumps(dec, indent=1))
-    return 0
+    return gc.decision_exit(dec)
 
 
 if __name__ == "__main__":
