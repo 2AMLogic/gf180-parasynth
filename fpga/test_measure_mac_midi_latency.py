@@ -8,6 +8,7 @@ through the independently built oracle -- on SIMULATED time, where both see
 the same run. And its one control (a host stall) must move `on_time`.
 """
 import os
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -125,18 +126,39 @@ def test_a_note_handed_over_late_after_a_kick_is_not_dropped():
     assert [e for e in sim.errors if e[0] == 3]
 
 
-# ---- `--help` is a player's command: it must not need the voice model (#1297) --
-import subprocess                                           # noqa: E402
-
+# ---- CLI help and host preconditions must work without the voice model --
 _BLOCK_NUMPY = ("import sys; sys.modules['numpy'] = None; import runpy; "
                 "sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name='__main__')")
+
+
+def _cli_without_numpy(*args, setup=""):
+    return subprocess.run([sys.executable, "-ISB", "-c", setup + "\n" + _BLOCK_NUMPY,
+                           os.path.join(HERE, "measure_mac_midi_latency.py"), *args],
+                          check=False, capture_output=True, text=True, timeout=60)
 
 
 def test_help_works_with_numpy_blocked():
     """The script's public path in a fresh interpreter, NumPy blocked in the
     child so an installed package or pytest's import cache cannot hide it."""
-    r = subprocess.run([sys.executable, "-ISB", "-c", _BLOCK_NUMPY,
-                        os.path.join(HERE, "measure_mac_midi_latency.py"), "--help"],
-                       capture_output=True, text=True, timeout=60)
+    r = _cli_without_numpy("--help")
     assert r.returncode == 0, r.stderr[-800:]
     assert "--source" in r.stdout and "--control-stall-ms" in r.stdout
+
+
+@pytest.mark.parametrize("source,reason", [
+    pytest.param("coremidi", f"--source coremidi needs macOS (this is {sys.platform})",
+                 marks=pytest.mark.skipif(sys.platform == "darwin", reason="CoreMIDI is supported")),
+    ("direct", "load average 9.0 on 8 CPUs"),
+])
+def test_preflight_refuses_without_numpy(source, reason, tmp_path):
+    report = tmp_path / "latency.json"
+    busy_host = """\
+import os
+os.getloadavg = lambda: (9.0, 0.0, 0.0)
+os.cpu_count = lambda: 8
+"""
+    r = _cli_without_numpy("--source", source, "--json", str(report), setup=busy_host)
+    assert r.returncode == 2, r.stderr
+    assert r.stdout.startswith(f"mac-latency: REFUSED -- {reason}")
+    assert r.stderr == ""
+    assert not report.exists()
