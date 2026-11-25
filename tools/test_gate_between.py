@@ -12,7 +12,7 @@ import exit_contract  # noqa: E402
 import gate_between as gb  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
-from test_gate_calibrate import _run_old_bar_cli  # noqa: E402
+from test_gate_calibrate import _old_bar_fixture, _run_old_bar_cli  # noqa: E402
 
 
 def _d(spec, other=1.0):
@@ -239,3 +239,34 @@ def test_main_exits_zero_and_ranks_when_the_corpus_is_complete(tmp_path, monkeyp
     ratio = bd["ours"]["worst_ratio"] / bd["mars_best"]["worst_ratio"]
     assert math.isfinite(ratio) and ratio > 0
     assert f"| 1 | BD | **{ratio:.1f}x** |" in table
+
+
+# --- #1329: a REFUSED decision must not exit 0 (tools/exit_contract.py) ---------
+
+def _run_between_main(tmp_path, tables):
+    tp = tmp_path / "tables.json"
+    tp.write_text(json.dumps({"tables": tables}))
+    out = tmp_path / "out.json"
+    return gb.main(["--refs", str(tmp_path), "--tables", str(tp), "--out", str(out)]), out
+
+
+def test_main_exits_refused_when_no_p_reaches_coverage(tmp_path, capsys):
+    rc, out = _run_between_main(tmp_path, {})
+    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    assert json.loads(out.read_text())["decision"]["status"] == "REFUSED"
+    assert rc == exit_contract.REFUSED
+
+
+def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
+    q = _green_q()
+    q["known_bad"][gb.CANDIDATE] = {"verdict": "REFUSED"}
+    monkeypatch.setattr(gb, "calibrate", lambda tabs, force_p=None: {"p": 0.1, "status": "ok", "sounds": {}})
+    monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: q)
+    tabs, _ = _old_bar_fixture(tmp_path, drop_neighbour=False)
+    rc, out = _run_between_main(tmp_path, tabs)
+    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    report = json.loads(out.read_text())
+    assert report["decision"]["gates"]["Q6 rejected #374 candidate"]["ok"] is None
+    assert report["decision"]["status"] == "REFUSED"
+    assert report["calibration"]["old_bar_context"]["BD"]["old_bar"] == "808-neighbour"
+    assert rc == exit_contract.REFUSED

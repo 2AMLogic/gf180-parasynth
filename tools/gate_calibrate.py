@@ -497,6 +497,19 @@ def injected_outcome(qi: dict | None) -> tuple[bool | None, dict | None]:
     return {"QUALIFIED": True, "NOT QUALIFIED": False}.get(dec["status"]), dec
 
 
+def decision_exit(dec) -> int:
+    """Exit code for a decision: REFUSED -> exit_contract.REFUSED, else PASS.
+
+    0 means "the comparison ran and agreed" (tools/exit_contract.py), so a
+    REFUSED decision must not exit 0. A DIAGNOSTIC (not authority) prefix wraps
+    the underlying status, so it is decided on the wrapped one. QUALIFIED /
+    NOT QUALIFIED keep exiting 0 -- mapping NOT QUALIFIED is a separate question.
+    """
+    status = str(dec.get("status", "REFUSED"))
+    status = status.removeprefix("DIAGNOSTIC (not authority): ")
+    return exit_contract.REFUSED if status.startswith("REFUSED") else exit_contract.PASS
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -555,7 +568,7 @@ def main(argv=None) -> int:
         print(f"REFUSED: old bar could not be built for {', '.join(refused)}; see old_bar_context in {a.out}",
               file=sys.stderr)
         return exit_contract.REFUSED
-    return 0
+    return decision_exit(dec)
 
 
 if __name__ == "__main__":

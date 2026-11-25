@@ -8,6 +8,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 
@@ -388,8 +389,6 @@ def test_old_bar_context_refusal_does_not_hide_other_sounds(tmp_path, monkeypatc
 
 
 def test_main_exits_refused_and_still_writes_out(tmp_path, monkeypatch):
-    import exit_contract
-
     rc, out, gone = _run_old_bar_cli(tmp_path, monkeypatch, gc, {"k": 1}, "calibrate", drop_neighbour=True)
     report = json.loads(out.read_text())
     assert report["decision"]["status"] == "QUALIFIED"
@@ -405,3 +404,46 @@ def test_main_exits_zero_when_every_old_bar_builds(tmp_path, monkeypatch):
     assert report["decision"]["status"] == "QUALIFIED"
     ctx = report["calibration"]["old_bar_context"]
     assert ctx["BD"]["old_bar"] == "808-neighbour" and ctx["BD"]["n_takes"] == 1   # the real function ran
+
+
+# --- #1329: a REFUSED decision must not exit 0 (tools/exit_contract.py) ---------
+
+def _run_calibrate_main(tmp_path, tables, extra=()):
+    tp = tmp_path / "tables.json"
+    tp.write_text(json.dumps({"tables": tables}))
+    out = tmp_path / "out.json"
+    rc = gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tp), "--out", str(out), *extra])
+    return rc, out
+
+
+def test_main_exits_refused_when_no_k_reaches_coverage(tmp_path, capsys):
+    """Real main(), real calibrate/decide: empty tables leave no k -> REFUSED decision."""
+    rc, out = _run_calibrate_main(tmp_path, {})
+    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    assert json.loads(out.read_text())["decision"]["status"] == "REFUSED"   # artefact written first
+    assert rc == exit_contract.REFUSED
+
+
+def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
+    """Real main() and real decide; only the upstream measurement is faked so a
+    gate (Q3 shipped-cymbal) is genuinely unrun inside decide()."""
+    q = {"sounds_with_bar": ["BD"], "start_red": {"BD": "FAIL", "BD-silence": "REFUSED"},
+         "seeded_summary": {"n": 10, "caught": 10, "missed": [], "rate": 1.0},
+         "known_bad": {"shipped-cymbal": {"verdict": "REFUSED"}}, "clean": {"BD": "PASS"},
+         "validation": {"sounds": 1, "best_passes": 1}}
+    monkeypatch.setattr(gc, "calibrate", lambda tabs, force_k=None: {"k": 3, "status": "ok"})
+    monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: q)
+    tabs, _ = _old_bar_fixture(tmp_path, drop_neighbour=False)
+    rc, out = _run_calibrate_main(tmp_path, tabs)
+    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    report = json.loads(out.read_text())
+    assert report["decision"]["status"] == "REFUSED"
+    assert report["calibration"]["old_bar_context"]["BD"]["old_bar"] == "808-neighbour"
+    assert rc == exit_contract.REFUSED
+
+
+@pytest.mark.parametrize("status,code", [
+    ("REFUSED", 2), ("DIAGNOSTIC (not authority): REFUSED", 2),
+    ("QUALIFIED", 0), ("NOT QUALIFIED", 0), ("DIAGNOSTIC (not authority): QUALIFIED", 0)])
+def test_decision_exit_maps_refused_only(status, code):
+    assert gc.decision_exit({"status": status}) == code

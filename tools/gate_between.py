@@ -317,7 +317,7 @@ def main(argv=None) -> int:
         print(f"REFUSED: old bar could not be built for {', '.join(refused)}; see old_bar_context in {a.out}",
               file=sys.stderr)
         return exit_contract.REFUSED
-    return 0
+    return gc.decision_exit(dec)
 
 
 if __name__ == "__main__":
