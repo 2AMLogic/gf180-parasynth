@@ -1159,8 +1159,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the integration checks can still fail",
         "python rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail",
     ): StepGatedEntry(
-        reason="default-config verify_synth_top mutant has no default-config clean step in job rtl yet (#1221)",
-        open_issue="#1221",
+        reason="gated by preceding exact-config clean twin in step 'the integration checks can still fail' (#1221 shipped it)",
+        clean_baseline="python rtl-sketch/verify_synth_top.py",
     ),
     (
         "rungs.yml",
@@ -1168,8 +1168,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the integration checks can still fail",
         "python rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail",
     ): StepGatedEntry(
-        reason="default-config verify_synth_top mutant has no default-config clean step in job rtl yet (#1221)",
-        open_issue="#1221",
+        reason="gated by preceding exact-config clean twin in step 'the integration checks can still fail' (#1221 shipped it)",
+        clean_baseline="python rtl-sketch/verify_synth_top.py",
     ),
     (
         "rungs.yml",
@@ -2732,17 +2732,18 @@ def _run_controls_block(tmp_path, run_text, clean_rc=0, mutant_rc=None):
     fake = tmp_path / "bin" / "python"
     fake.parent.mkdir()
     fake.write_text(
-        "#!/usr/bin/env bash\n"
-        'echo "$*" >> "$FAKE_LOG"\n'
-        'if [ "$*" = "rtl-sketch/verify_synth_top.py" ]; then exit "$CLEAN_RC"; fi\n'
-        'prev=""\n'
-        'for a in "$@"; do\n'
-        '  if [ "$prev" = "--inject" ]; then\n'
-        '    var="RC_$a"; exit "${!var:-0}"\n'
-        '  fi\n'
-        '  prev="$a"\n'
-        'done\n'
-        'exit 0\n')
+        f"#!{sys.executable}\n"
+        "import os, sys\n"
+        "args = sys.argv[1:]\n"
+        "with open(os.environ['FAKE_LOG'], 'a', encoding='utf-8') as f:\n"
+        "    f.write(' '.join(args) + '\\n')\n"
+        "if args == ['rtl-sketch/verify_synth_top.py']:\n"
+        "    sys.exit(int(os.environ['CLEAN_RC']))\n"
+        "for i, a in enumerate(args):\n"
+        "    if a == '--inject' and i + 1 < len(args):\n"
+        "        sys.exit(int(os.environ.get(f'RC_{args[i + 1]}', '0')))\n"
+        "sys.exit(0)\n"
+    )
     fake.chmod(0o755)
     env = {"PATH": f"{fake.parent}:/usr/bin:/bin", "FAKE_LOG": str(log),
            "CLEAN_RC": str(clean_rc),
