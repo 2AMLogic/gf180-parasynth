@@ -27,6 +27,9 @@ import numpy as np
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+_REFUSAL_TOOLS = str(HERE.parent / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
 import tom_pitch_probe as P
 import refusal
 
@@ -317,13 +320,18 @@ def main(argv: list[str]) -> int:
         print("=== CONTROL: prepending digital silence must not change the answer")
         cs = control_leading_silence()
         out["control_leading_silence"] = cs
-        worst = leading_silence_worst_delta(cs)
         for row in cs:
             line = f"   {row['voice']}/{row['accent']} {row['file'][-10:]:>10}  "
             for lead in (0.0, 0.5, 1.0, 10.0):
                 v, fset, verd = row[f"lead_{lead}"]
                 line += f"{lead:4.1f} ms: " + (f"x{v:.4f}  " if v else f"{verd[:8]}  ")
             print(line)
+        # After the table prints, so a refusal still leaves the rows that diagnose it.
+        try:
+            worst = leading_silence_worst_delta(cs)
+        except Refused as e:
+            print(f"REFUSED: {e}")
+            return 2
         print(f"   worst change in the measured onset ratio from 10 ms of leading silence: "
               f"{worst:.6f}")
         out["control_leading_silence_worst_delta"] = worst

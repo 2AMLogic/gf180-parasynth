@@ -434,7 +434,11 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     if a.self_test or not a.refs:
-        rc = self_test()
+        try:
+            rc = self_test()
+        except Refused as e:
+            print(f"REFUSED: {e}")
+            return 2
         if not a.refs:
             return rc
         print()

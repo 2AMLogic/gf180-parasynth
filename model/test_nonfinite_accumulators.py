@@ -10,12 +10,12 @@ REACHABILITY, measured by injection (CPython 3.12.3, numpy/scipy venv):
     Reachable; the partial-NaN case is not producible today but defeats the old
     guard (`[0.1,0.1,0.1,nan]` -> worst 0.1 -> pass).
 """
-import os, sys
+import os, subprocess, sys
 import numpy as np
 import pytest
 sys.path.insert(0, os.path.dirname(__file__))
+import tom_drop_measure as tm   # first: must import without bd's sys.path side effect
 import bd_excitation_probe as bd
-import tom_drop_measure as tm
 import tom_pitch_probe as P
 import drum_fit as df
 
@@ -61,3 +61,21 @@ def test_bd_zero_window_is_nan_row():
 def test_tom_nan_excess_gives_no_fit_not_nan():
     t = np.linspace(0.001, 0.1, 40); exc = 0.5 * np.exp(-t / 0.025); exc[3] = NAN
     assert P._fit_exponential(t, exc)["e0"] is None
+
+
+@pytest.mark.parametrize("script", ["tom_drop_measure.py", "bd_excitation_probe.py"])
+def test_entry_point_runs_as_shipped(script):
+    # The shipped thing is the script run as a process: an in-process import is
+    # repaired by whichever module imported first (review of #1291, finding 1/2).
+    r = subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), script),
+                        "--help"], capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr[-400:]
+
+
+def test_bd_self_test_refusal_is_exit_2_not_traceback(monkeypatch, capsys):
+    # A Refused is no-evidence (exit 2), never an exit-1 FAIL traceback.
+    def boom():
+        raise bd.Refused("nonfinite column 0")
+    monkeypatch.setattr(bd, "self_test", boom)
+    assert bd.main(["--self-test"]) == 2
+    assert "REFUSED: nonfinite column 0" in capsys.readouterr().out
