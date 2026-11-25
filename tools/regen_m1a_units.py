@@ -24,6 +24,7 @@ ROOT = __import__("os").path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 import mono_m1a_score as bass                       # noqa: E402
+import refusal                                      # noqa: E402
 import run_case                                     # noqa: E402
 import run_all                                      # noqa: E402
 
@@ -75,7 +76,11 @@ def carry_scoring_stamps(new: dict, old: dict) -> None:
 def main() -> int:
     old = json.loads(RECORD.read_text())
     case = next(c for c in run_case.load_cases() if c["case_id"] == "M1A")
-    new = bass.run(case, keep_audio=True, cached_record=old)
+    try:
+        new = bass.run(case, keep_audio=True, cached_record=old)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
 
     # THE GATE. Published numbers -- metrics and diagnostic properties --
     # must be EXACT: this repair may not move a single figure a reader can
