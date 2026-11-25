@@ -1132,7 +1132,8 @@ class StepGatedEntry:
 # Explicit allowlist of bare step-gated RTL mutant rows across `.github/workflows/*.yml`.
 # Key: (workflow_filename, job_name, step_name, normalized_command).
 # Every entry must carry a non-empty `reason` AND either `clean_baseline` (verified to
-# appear earlier in the same job as an active clean run) or `open_issue` (tracked gap).
+# appear earlier in the same job as an active clean run) or `open_issue` (until a
+# config-matching clean run appears earlier in the job).
 STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
     (
         "rungs.yml",
@@ -1648,6 +1649,7 @@ def classify_workflow_mutants(
             if not isinstance(steps_node, yaml.SequenceNode):
                 continue
 
+            # The config matcher parses these commands again; preserve argument boundaries.
             seen_clean_in_job: set[str] = set()
 
             for step_idx, step_node in enumerate(steps_node.value):
@@ -1797,7 +1799,7 @@ def classify_workflow_mutants(
                                     else:
                                         scan.batch_gated.append(f"{rel}:{sub_line}: {sub_norm}")
                                 elif spec["role"] == "baseline" and _is_clean_verifier(sub_toks):
-                                    seen_clean_in_job.add(sub_norm)
+                                    seen_clean_in_job.add(shlex.join(sub_toks))
                             continue
 
                         # 2. Direct bare verifier mutant in a `run:` step / block
@@ -1818,8 +1820,9 @@ def classify_workflow_mutants(
                                     f"{jname!r} / {sname!r}: {norm_cmd}"
                                 )
                                 continue
+                            mutant_cmd = shlex.join(toks)
                             if entry.clean_baseline is not None:
-                                want_clean = " ".join(shlex.split(entry.clean_baseline))
+                                want_clean = shlex.join(shlex.split(entry.clean_baseline))
                                 if want_clean not in seen_clean_in_job:
                                     scan.problems.append(
                                         f"{rel}:{line_no}: step-gated mutant missing active "
@@ -1828,11 +1831,26 @@ def classify_workflow_mutants(
                                     )
                                     continue
                                 if not entry.superset and not _mutant_matches_baseline(
-                                    want_clean, norm_cmd
+                                    want_clean, mutant_cmd
                                 ):
                                     scan.problems.append(
                                         f"{rel}:{line_no}: step-gated mutant config mismatch vs "
                                         f"clean_baseline ({want_clean!r} vs {norm_cmd!r})"
+                                    )
+                                    continue
+                            elif entry.open_issue:
+                                twin = next(
+                                    (
+                                        clean
+                                        for clean in sorted(seen_clean_in_job)
+                                        if _mutant_matches_baseline(clean, mutant_cmd)
+                                    ),
+                                    None,
+                                )
+                                if twin is not None:
+                                    scan.problems.append(
+                                        f"{rel}:{line_no}: stale open_issue exemption {entry.open_issue}: "
+                                        f"bind clean_baseline to {twin!r} for {norm_cmd}"
                                     )
                                     continue
                             scan.step_gated.append(f"{rel}:{line_no}: {norm_cmd}")
@@ -1845,7 +1863,7 @@ def classify_workflow_mutants(
                                 job_dict, jname, step_dict, sname, require_success_gate=False
                             )
                             if not _blocked(neut):
-                                seen_clean_in_job.add(norm_cmd)
+                                seen_clean_in_job.add(shlex.join(toks))
                             continue
 
                         # 4. Anything else (`run_all.py`, `bash -c`, `echo`, `time` ...): a
@@ -2127,6 +2145,61 @@ def _write_extra(wf_dir: pathlib.Path, run_text: str, *, name: str = "extra.yml"
 
 def _extra_problems(scan: MutantScan, name: str = "extra.yml") -> list[str]:
     return [p for p in scan.problems if p.startswith(f".github/workflows/{name}:")]
+
+
+@pytest.mark.parametrize(
+    "clean",
+    [
+        "python rtl-sketch/verify_ctl.py",
+        'python rtl-sketch/verify_ctl.py --outdir "player\'s clean run"',
+    ],
+)
+def test_open_issue_exemption_retires_when_the_clean_twin_arrives(tmp_path, clean):
+    """#1222 puts the clean verify_ctl invocation immediately before its mutants."""
+    mutant = "python rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail"
+    key = ("nightly.yml", "j", "synthetic", mutant)
+    waiver = StepGatedEntry(reason="missing clean control-link run", open_issue="#1222")
+    _write_extra(tmp_path, f"          {clean}\n          {mutant}\n", name="nightly.yml")
+    scan = classify_workflow_mutants(tmp_path, allowlist={key: waiver})
+    assert len(scan.problems) == 1, scan
+    problem = scan.problems[0]
+    assert re.match(r"^\.github/workflows/nightly\.yml:\d+: stale open_issue exemption", problem)
+    assert all(detail in problem for detail in ("#1222", mutant, "clean_baseline"))
+    assert repr(shlex.join(shlex.split(clean))) in problem
+    assert not scan.step_gated
+
+    bound = {key: StepGatedEntry(reason="clean run precedes mutant", clean_baseline=clean)}
+    scan = classify_workflow_mutants(tmp_path, allowlist=bound)
+    assert scan.problems == [] and len(scan.step_gated) == 1, scan
+
+    _write_extra(tmp_path, f"          {mutant}\n", name="nightly.yml")
+    scan = classify_workflow_mutants(tmp_path, allowlist=bound)
+    assert len(scan.problems) == 1, scan
+    assert "missing active preceding clean baseline" in scan.problems[0]
+    assert not scan.step_gated
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("", ""),
+        ("", "python rtl-sketch/verify_synth_top.py"),
+        ("python rtl-sketch/verify_synth_top.py --osc2x", ""),
+        ("python rtl-sketch/verify_synth_top.py || true", ""),
+    ],
+    ids=["absent", "later", "different-config", "ignored-failure"],
+)
+def test_open_issue_exemption_survives_without_an_active_matching_predecessor(
+    tmp_path, before, after
+):
+    mutant = "python rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail"
+    key = ("rungs.yml", "j", "synthetic", mutant)
+    waiver = StepGatedEntry(reason="missing default-config synth_top run", open_issue="#1221")
+    _write_extra(
+        tmp_path, f"          {before}\n          {mutant}\n          {after}\n", name="rungs.yml"
+    )
+    scan = classify_workflow_mutants(tmp_path, allowlist={key: waiver})
+    assert scan.problems == [] and len(scan.step_gated) == 1, scan
 
 
 _CLEAN_CTL = '"python rtl-sketch/verify_ctl.py"'

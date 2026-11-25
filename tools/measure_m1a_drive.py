@@ -25,6 +25,7 @@ from scipy.io import wavfile
 
 import analyse_m1a_phase_cycle as ap
 import mono_m1a_score as bass
+import refusal
 import run_all
 
 ROOT, SR, lead = bass.ROOT, bass.SR, bass.lead
@@ -235,7 +236,7 @@ def main():
         print(json.dumps({"choice": report["choice"],
                           "ineligible": {k: v.get("ineligible_because") for k, v in rows.items()}}, indent=1))
         return 0
-    except Refused as exc:
+    except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
         return 2
 

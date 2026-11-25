@@ -97,7 +97,6 @@ for _p in (HERE, os.path.join(HERE, "release"), os.path.join(ROOT, "model"),
 
 import coremidi_input as cmi                             # noqa: E402
 import live_midi_contract as C                           # noqa: E402
-import qualified_domain as qd                            # noqa: E402
 import uart_host as uh                                   # noqa: E402
 
 SR = C.SR
@@ -342,6 +341,9 @@ class MidiSession:
         self.regs = regs
         # the release's player-facing domain (#255): a patch outside it is
         # refused before anything is sent
+        # Deferred: qualified_domain pulls in NumPy via the voice model, which
+        # must not gate --help / --list-midi-ports (#1282).
+        import qualified_domain as qd
         self.patch_summary = qd.check_patch(regs, name=preset or "default")
         # the kit the IMAGE on the board plays (uart_host.image_kit): the frozen
         # revision-11 kit for the published release REFUSES (KitRefused) if it
@@ -778,6 +780,7 @@ class MidiSession:
         if on and self._stale_receipt is not None:
             return self._refuse_stale(t, m, f"note {note}")
         if on:
+            import qualified_domain as qd                 # deferred (#1282)
             try:
                 qd.check_note(note, self.regs)
             except qd.Rejected as exc:
