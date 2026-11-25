@@ -283,6 +283,29 @@ def test_missing_index_refuses_rather_than_passes(real, monkeypatch, tmp_path):
     assert cal["k"] is None and cal["status"].startswith("REFUSED: incomplete evidence: cannot read the file index")
 
 
+def test_non_utf8_index_refuses_rather_than_raises(real, monkeypatch, tmp_path):
+    bad = tmp_path / "bad.tsv"
+    bad.write_bytes(b"path\n\xff\n")
+    monkeypatch.setattr(gc, "INDEX", bad)
+    monkeypatch.setattr(gc.expected_takes, "__defaults__", (bad,))
+    for fk in (None, 3):
+        cal = gc.calibrate(_zero(real), force_k=fk)
+        assert cal["k"] is None and cal["sounds"] == {}
+        assert cal["status"].startswith("REFUSED: incomplete evidence: cannot read the file index bad.tsv (UnicodeDecodeError)")
+
+
+def test_table_without_missing_key_refuses_naming_sound_and_field(real):
+    t = _zero(real)
+    assert gc.calibrate(t)["status"] == "CALIBRATED"  # control: restored input is clean
+    del t["BD"]["missing"]
+    for fk in (None, 3):
+        cal = gc.calibrate(t, force_k=fk)
+        assert cal["k"] is None and cal["sounds"] == {}
+        assert cal["status"].startswith("REFUSED: incomplete evidence") and "BD: record has no 'missing'" in cal["status"]
+    t["BD"]["missing"] = []
+    assert gc.calibrate(t)["status"] == "CALIBRATED"
+
+
 def test_decide_does_not_count_an_unrun_control_as_a_pass():
     q = {"sounds_with_bar": ["BD"], "start_red": {"BD": "FAIL", "BD-silence": "REFUSED"},
          "seeded_summary": {"n": 10, "caught": 10, "missed": [], "rate": 1.0},

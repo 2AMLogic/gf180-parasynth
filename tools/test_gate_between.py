@@ -147,6 +147,22 @@ def test_rank_orders_by_distance_to_the_real_recordings_and_marks_missing_render
     assert "no render" in gb.render_table(rows)
 
 
+def test_a_perfect_render_with_worst_ratio_zero_is_not_labelled_no_render():
+    # the input that defeated the old `if not r["ours"]` / `or -1` guards: 0.0 is falsy.
+    # The missing row is listed BEFORE the zero row so a stable sort on a tied key keeps it ahead.
+    mars = {"old_bar": "x", "n_takes": 1, "mars_takes_passing_old_bar": 0,
+            "mars_best": {"worst_ratio": 2.0, "worst_feature": "spec"}}
+    ctx = {"SD": {**mars, "ours": {"worst_ratio": 4.0, "worst_feature": "decay"}},
+           "RS": dict(mars),
+           "BD": {**mars, "ours": {"worst_ratio": 0.0, "worst_feature": None}}}
+    rows = gb.rank_rows(ctx)
+    assert [r["sound"] for r in rows] == ["SD", "BD", "RS"]       # 2.0x, 0.0x, then no render
+    lines = {l.split("|")[2].strip(): l for l in gb.render_table(rows).splitlines()[2:]}
+    assert "no render" not in lines["BD"] and "0.0x" in lines["BD"]
+    assert "None" not in lines["BD"]
+    assert "no render" in lines["RS"]
+
+
 @pytest.mark.parametrize("bad", [float("nan"), float("inf")])
 @pytest.mark.parametrize("side", ["ours", "mars_best"])
 def test_rank_refuses_a_non_finite_ratio_rather_than_sort_it(bad, side):

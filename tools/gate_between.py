@@ -221,7 +221,12 @@ def rank_rows(old_bar_context: dict) -> list:
                      "mars_best": m, "mars_feature": r["mars_best"]["worst_feature"],
                      "n_takes": r["n_takes"], "mars_pass_old_bar": r["mars_takes_passing_old_bar"],
                      "ours_over_mars": (o["worst_ratio"] / m if m else math.inf)})
-    return sorted(rows, key=lambda x: -(x.get("ours_over_mars") or -1))
+    # a missing render (None) sorts last; a perfect render (0.0) is a real, smallest gap, not an absence
+    return sorted(rows, key=lambda x: math.inf if x["ours"] is None else -x["ours_over_mars"])
+
+
+def _feat(f) -> str:
+    return f" ({f})" if f is not None else ""
 
 
 def render_table(rows: list) -> str:
@@ -232,10 +237,10 @@ def render_table(rows: list) -> str:
             why = str(r["refused"]).replace("|", "/").replace("\n", " ")
             out.append(f"| {i} | {r['sound']} | REFUSED: {why} | | | | |")
             continue
-        if not r["ours"]:
+        if r["ours"] is None:
             out.append(f"| {i} | {r['sound']} | no render | | | | |")
             continue
-        out.append(f"| {i} | {r['sound']} | **{r['ours_over_mars']:.1f}x** | {r['ours']:.1f} ({r['ours_feature']}) "
+        out.append(f"| {i} | {r['sound']} | **{r['ours_over_mars']:.1f}x** | {r['ours']:.1f}{_feat(r['ours_feature'])} "
                    f"| {r['mars_best']:.1f} ({r['mars_feature']}) | {r['n_takes']} | {r['bar']} |")
     return "\n".join(out)
 
