@@ -295,3 +295,16 @@ def test_decide_does_not_count_an_unrun_control_as_a_pass():
     assert gc.decide(q, True)["status"] == "NOT QUALIFIED"        # a corrupted corpus qualified: reject
     q["seeded_summary"].update(caught=5, rate=0.5)
     assert gc.decide(q, False)["status"] == "NOT QUALIFIED"       # a bar that misses seeds is not authority
+
+
+def test_random_missing_probe_controls_and_replay():
+    """#1317: the probe's controls hold, and a recorded hit replays (seed 127)."""
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "probes"))
+    import gate_calibrate_missing_random as probe
+    tabs = probe.load()
+    probe.controls(tabs)
+    paths = sorted(r["rel"] for t in tabs.values() for r in t["rows"])
+    rem = probe.draw(paths, 127)
+    assert len(rem) == 226 and rem == probe.draw(paths, 127)
+    res = gc.calibrate(probe.move(tabs, rem))
+    assert (res["status"], res["k"]) == ("CALIBRATED", 5)

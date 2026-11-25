@@ -274,7 +274,12 @@ def evidence_refusal(tabs: dict, expected: dict | None = None) -> str | None:
 
     RESIDUAL (rule 8, stated not closed): selective `missing` entries that
     leave one readable take in group 0 and in group 1 but change which
-    calibration take is nearest still pass; blocking that needs a per-take
+    calibration take is nearest still pass. MEASURED (#1317): the selected
+    226-take construction reaches CALIBRATED k=3 at 9/9, and so does
+    DISTANCE-INDEPENDENT loss: 66 of 5000 seeded draws of 226 uniformly random
+    takes (1.3%) reach CALIBRATED, all at k=5, where the complete record is
+    REFUSED (3/9 at k=3); see docs/scorecard/gate-379/mars-calibration/
+    missing-random-1317.md. Blocking that needs a per-take
     signal independent of the record (re-measuring). A forged `rows` plus a
     forged index also passes; the index is a committed file at the same trust
     level as the tables."""
