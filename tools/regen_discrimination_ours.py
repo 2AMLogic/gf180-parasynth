@@ -339,8 +339,7 @@ def main(argv=None) -> int:
         # reader could mistake for the product of a complete one.
         write_json(SHIPPED, shipped, default=str)
         print(f"wrote {SHIPPED} ({len(shipped)} keys)", flush=True)
-        with open(report_path, "w") as f:
-            f.write(r.stdout)
+        run_all.write_text_atomic(str(report_path), r.stdout)
         print(r.stdout)
         print(f"wrote {report_path}", flush=True)
         return 0

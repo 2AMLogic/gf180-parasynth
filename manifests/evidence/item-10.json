@@ -3,14 +3,14 @@
   "kind": "generic",
   "status": "pass",
   "t1_item": 10,
-  "summary": "T1 item 10 (Repo hygiene): 13/13 attestation checks passed (klt signoff --attest)",
+  "summary": "T1 item 10 (Repo hygiene): 12/12 attestation checks passed (klt signoff --attest)",
   "source": "manifests/inventories/item-10.json",
   "attestation": {
     "producer": "klt signoff --attest",
     "inventory_schema_version": 1,
     "hash_algorithm": "sha256-raw-bytes",
-    "check_count": 13,
-    "passed_count": 13,
+    "check_count": 12,
+    "passed_count": 12,
     "checks": [
       {
         "check": "present",
@@ -45,14 +45,14 @@
         "role": "hygiene",
         "path": ".github/workflows/moog-acceptance.yml",
         "passed": true,
-        "content_hash": "sha256:6207fec90d7a8b40c80a093c30913c1e8262a8839e0fcce6ee9c5eebfda2ad86"
+        "content_hash": "sha256:f4f2e939c5d0d82a9d936b7897c316f971be1ea02ba92bd30396193e2b12d9ba"
       },
       {
         "check": "present",
         "role": "hygiene",
         "path": ".github/workflows/nightly.yml",
         "passed": true,
-        "content_hash": "sha256:1cf0fb62bedf2170dfa09f101c7c39dbc091e254a94407d74eca116bf25347d7"
+        "content_hash": "sha256:769474327e9e0ed70d5499a29ace5a887999eda0e590c3641df0bdcce58b95f0"
       },
       {
         "check": "present",
@@ -64,23 +64,16 @@
       {
         "check": "present",
         "role": "hygiene",
-        "path": ".github/workflows/pulse_audio.yml",
-        "passed": true,
-        "content_hash": "sha256:7137b55b9cd1a646ac031a791c2bf544d93bfcb7a39f8f08caaa11154ea075d4"
-      },
-      {
-        "check": "present",
-        "role": "hygiene",
         "path": ".github/workflows/rungs.yml",
         "passed": true,
-        "content_hash": "sha256:c26892abce42c4f09306aaee1e53dc89b54381c170868388ca527c39801e0828"
+        "content_hash": "sha256:deca3e2512423b50c91035a18b8de456ac426cc4ec8e659b0dee1be699f830d1"
       },
       {
         "check": "present",
         "role": "hygiene",
         "path": ".github/workflows/signoff.yml",
         "passed": true,
-        "content_hash": "sha256:4297db4eef0ac5c43c822e15ebc79a5ea37ba187052a7cc033a50b85b2a46b35"
+        "content_hash": "sha256:93c68ed7da9a4c09009c93a470ba2477a1c5fb85919fabb50e53adaac00fde49"
       },
       {
         "check": "present",
@@ -111,7 +104,7 @@
     ]
   },
   "provenance": {
-    "klt_version": "0.8.0",
+    "klt_version": "0.9.2",
     "klayout_version": null,
     "pdk": null,
     "deck": null,
@@ -120,7 +113,7 @@
         "path": "manifests/inventories/item-10.json",
         "scope": "repo"
       },
-      "content_hash": "sha256:b3e6a45ea49d36c9f78b7c1170e2919462cd8f64b5412f8672a16aeaf8676230"
+      "content_hash": "sha256:3fae46de00b0ab05f8e5ca04b6a14b35b53861d12bb6b4970a1ab62cdfdb8e1d"
     }
   }
 }

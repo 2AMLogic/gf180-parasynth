@@ -35,10 +35,11 @@ material that is weaker evidence than its file count suggests.**
 > `~/dev/refs` did not exist. Every field is sourced to a committed file. A
 > field that cannot be established that way carries the literal string
 > `unknown -- operator with the corpus mounted must fill this in` and is listed
-> by `tools/corpus_lineage.py open`; **five** such fields exist today — the unit
-> and chain of `boutique-808` and `ableton-factory-808`, and the chain of
-> `legowelt-minimoog-5529`. They are **declared gaps, not estimates**:
-> `check --strict` exits 2 while any remains.
+> by `tools/corpus_lineage.py open`; **eight** such fields exist today — the unit
+> and chain of `boutique-808` and `ableton-factory-808`, the chain of
+> `legowelt-minimoog-5529`, and the WAV bit depth of those same three packs
+> (none is a WAV corpus a committed file describes). They are **declared gaps,
+> not estimates**: `check --strict` exits 2 while any remains.
 
 > **Wrong before it was right, once, and the control caught it.** The first
 > version of rule R5 below banned every lineage that was not `documented` from
@@ -58,6 +59,7 @@ material that is weaker evidence than its file count suggests.**
 - [The packs, by lineage](#the-packs-by-lineage)
 - [The three groups, and the rule that assigns them](#the-three-groups-and-the-rule-that-assigns-them)
 - [The three targets, which are not the same question](#the-three-targets-which-are-not-the-same-question)
+- [Plugin reference suites, which are not packs](#plugin-reference-suites-which-are-not-packs)
 - [Adding a pack: the procedure](#adding-a-pack-the-procedure)
 - [Where the corpus path comes from, and four places it disagreed with itself](#where-the-corpus-path-comes-from-and-four-places-it-disagreed-with-itself)
 - [What is mechanical here and what is not](#what-is-mechanical-here-and-what-is-not)
@@ -85,18 +87,18 @@ Pack ids are the manifest's. `tools/corpus_lineage.py check` fails if this table
 and the manifest disagree, in either direction, including on order.
 
 <!-- corpus-lineage:packs -->
-| pack | instrument | unit | lineage | dry/processed | groups |
-|---|---|---|---|---|---|
-| `fischer-tr808-103852` | Roland TR-808 | **s/n 103852**, a real machine | documented | dry (individual voice outputs) | threshold-calibration, held-out-validation |
-| `dirt-samples-808` | Roland TR-808 | s/n 103852 — **the same bytes** | documented | dry | *none — would double-count one lineage* |
-| `808-from-mars` | Roland TR-808 | Samples From Mars's machine, serial unpublished | claimed | processed (**including the subset named "Clean"**) | analyzer-development, threshold-calibration |
-| `808-from-mars-legacy` | Roland TR-808 | as above — a **second session**, years apart | claimed | processed | threshold-calibration |
-| `808-loops-from-mars` | Roland TR-808 | as above | claimed | processed | *none — never read* |
-| `boutique-808` | "a TR-808" | unknown | unknown | unknown | analyzer-development |
-| `ableton-factory-808` | "a TR-808" | unknown | unknown | unknown | *none — does not decode* |
-| `mini-from-mars` | Moog Minimoog | Samples From Mars's machine, serial unpublished | claimed | processed | *none — never read* |
-| `micro-from-mars` | Moog Micromoog | Samples From Mars's machine, serial unpublished | claimed | processed | *none — never read* |
-| `legowelt-minimoog-5529` | Moog Minimoog | **s/n 5529**, Legowelt's 1970s unit | documented | unknown | analyzer-development |
+| pack | instrument | unit | lineage | dry/processed | bits | groups |
+|---|---|---|---|---|---|---|
+| `fischer-tr808-103852` | Roland TR-808 | **s/n 103852**, a real machine | documented | dry (individual voice outputs) | 16 | threshold-calibration, held-out-validation |
+| `dirt-samples-808` | Roland TR-808 | s/n 103852 — **the same bytes** | documented | dry | 16 | *none — would double-count one lineage* |
+| `808-from-mars` | Roland TR-808 | Samples From Mars's machine, serial unpublished | claimed | processed (**including the subset named "Clean"**) | 24 (1,754) / 16 (192) | analyzer-development, threshold-calibration |
+| `808-from-mars-legacy` | Roland TR-808 | as above — a **second session**, years apart | claimed | processed | 24 (1,290) / 16 (110) | threshold-calibration |
+| `808-loops-from-mars` | Roland TR-808 | as above | claimed | processed | 24 | *none — never read* |
+| `boutique-808` | "a TR-808" | unknown | unknown | unknown | unknown (AIFF) | analyzer-development |
+| `ableton-factory-808` | "a TR-808" | unknown | unknown | unknown | unknown (AIFF-C) | *none — does not decode* |
+| `mini-from-mars` | Moog Minimoog | Samples From Mars's machine, serial unpublished | claimed | processed | 24 | *none — never read* |
+| `micro-from-mars` | Moog Micromoog | Samples From Mars's machine, serial unpublished | claimed | processed | 24 | *none — never read* |
+| `legowelt-minimoog-5529` | Moog Minimoog | **s/n 5529**, Legowelt's 1970s unit | documented | unknown | unknown | analyzer-development |
 <!-- /corpus-lineage:packs -->
 
 The manifest carries, per pack, the fields this table cannot: known settings,
@@ -257,6 +259,24 @@ its per-voice group normalisation and its editor's trims as much as its machine
 that editing noise and calls it the floor, *"a machine spread beneath it is not
 a measurement."* A floor derived there is honest. A fidelity claim derived there
 is not.
+
+## Plugin reference suites, which are not packs
+
+The commercial Minimoog-emulation reference **suites** for the voice family are
+declared in the manifest's `plugin_reference_suites` section (#1050, under the
+voice-only ruling #1048): `miniv3-frozen` — Arturia Mini V3 3.12.0.3422, whose
+three scorecard record directories are frozen (never regenerated, never edited,
+hash-checked by `tools/check_reference_freeze.py` against
+`docs/scorecard/reference-suite-freeze.sha256`) — and `miniv4`, Arturia Mini V4
+4.0.4.6366, declared with no renders yet. They sit beside the packs rather than
+in them on purpose: a suite is a plugin build and a licence state, not a
+machine, so the groups, lineage tiers and descent-test rules above do not apply
+to it, and no group assignment is made. The one rule that does apply is the
+comparison rule: **a record from one suite is never graded against another
+suite's expectation**, which `tools/reference_suites.py` refuses at the scoring
+boundary. The V4 case list and render settings live in
+`docs/scorecard/miniv4-suite/suite.json`; renders happen on an operator Mac in
+an attended session, never on a fleet worker.
 
 ## Adding a pack: the procedure
 

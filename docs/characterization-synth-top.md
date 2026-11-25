@@ -79,4 +79,4 @@ Note: `6_report.json` contains duplicate JSON keys (finish__design__instance__ar
 - no sign-off DRC.
 - no gate-level simulation.
 - power at one corner only (the finish-stage metrics are tt_025C_5v00; sta_corners.log carries no power figures).
-- attestation status is not claimed by this report: klt 0.8.0 (the CI pin) has no --attest 8 producer, so T1 item 8 remains UNMET regardless of this report.
+- attestation status is not claimed by this report: the T1 item 8 grade is read from manifests/verdict.txt, never from this report.

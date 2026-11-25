@@ -147,7 +147,7 @@ help:
 ## y19 at frame 62 and 387 samples (--expect-first), not merely a failure.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_verify_drums.py rtl-sketch/test_synth_count.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -257,11 +257,20 @@ verify:
 ## Adding a file to either job is fine; adding a 150 s test to one is the thing
 ## that broke this, so put the next expensive file in whichever job is shorter --
 ## which the CI rows above, not the local ones, say is tools/test_run_case.py.
+##
+## tools/test_signoff_klt_version.py (#1095) is the local half of the regrade
+## job's `evidence envelopes were attested by the pinned klt` step (#1089),
+## which until now could be exercised only by pushing: it runs the SHIPPED
+## heredoc, found by step name in signoff.yml, against the committed item-9 and
+## item-10 envelopes under the job's own `KLT` (green), then against seven
+## one-change copies (each red, on its named diagnostic). It is in this bundle
+## because m5a-fast is the job that installs pyyaml and runs this target.
+## 32 tests, ~1 s measured. `make controls` runs the same file.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest tools/test_run_case.py -q" \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_refusal_exit_census.py tools/test_manifest.py tools/test_characterize_synth_top.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_check_attested_hashes.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
- 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py tools/test_check_arty_evidence_binding.py fpga/test_publish_binding.py fpga/test_arty_sd_top.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py fpga/test_named_r1.py fpga/test_named_r2.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_regen_m1a_units.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_compare_candidate_tails.py tools/test_result_destination.py tools/test_run_all.py tools/test_refusal_exit_census.py tools/test_manifest.py tools/test_characterize_synth_top.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_setup_ci_verilator.py tools/test_check_attested_hashes.py tools/test_signoff_klt_version.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_verify_drums.py rtl-sketch/test_synth_count.py -q" \
+ 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py fpga/test_probe_xdc_bindings.py tools/test_check_arty_evidence_binding.py fpga/test_publish_binding.py fpga/test_arty_sd_top.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py fpga/test_named_r1.py fpga/test_named_r2.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
@@ -293,7 +302,7 @@ verify-fast:
 verify-full:
 	@$(RUN) --timeout 7200 --json build/verification/verify-full.json \
 	  "$(PY) tools/score_ensemble_i2s.py --case E1A --jobs 1 --reuse --simulator verilator --out build/scorecard/E1A-integrated-rtl.json --audio build/scorecard/E1A-integrated-rtl-mix.wav --twin build/scorecard/E1A-fixed-model-twin.json" \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_verify_drums.py rtl-sketch/test_synth_count.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -537,66 +546,112 @@ verify-full:
 ## README.md and docs/milestones.md modified -- at ~0.6 s against this
 ## target's 3600 s timeout that needs the probe to hang ~6000x its runtime.
 ## Same note in docs/claim-markers.md, beside the scope_control paragraph.
+## tools/probes/holdout_injected_controls.py (#1106, wired here after four
+## weeks as the zero-reference orphan the #762 class search names) is the
+## start-red half for the holdout seal: GATE_OFF / CLEAN_OFF / STALE_OFF each
+## delete one of the sealing assertions in a throwaway COPY of the tree and
+## require tools/test_holdout.py to go red, naming the tests that caught it.
+## Nothing else injects into the holdout mechanism -- sensitivity.py check
+## sweeps parameters, it does not mutate the seal -- so without this line the
+## only evidence the seal's three assertions are guarded is a docstring
+## record dated 2026-09-28. Re-verified at wiring time on this tree: all
+## three fire, same test names as recorded, 12.8 s (3 tree copies + pytest).
+## Exit 2 (REFUSED) means nothing was measured, with the reason on each
+## control's REFUSED line: an injection point GONE from run_case.py or
+## holdout.py (drift this control must surface, not skip), or pytest's own
+## status naming a broken apparatus -- a deleted or uncollectable
+## tools/test_holdout.py (#1118), which must never read as "fired".
+## Since #1124 the UNMUTATED copy runs first (a 4th tree copy) and must be
+## green, or the probe exits 2 on its BASELINE line before any control runs:
+## a suite red on its own used to read as three healthy controls.
+## #1126: the RTL/fixture comparison controls run through tools/run_controls.py.
+## `@baseline=ID` is one CLEAN run of a configuration (stimulus, signal path,
+## simulator); `@after=ID` mutants start only when it exited 0. A red baseline
+## leaves its mutants NO-VERDICT (skipped, named) and the target nonzero, so an
+## `--expect-fail` can no longer turn a bench that is red before injection into
+## a CAUGHT. Exempt by design: the scoped voice control (pinned --expect-first),
+## I2S (channel signature), repeat_period (self-checks its baseline), XDC
+## (matrix gates on the clean design), pads (per-defect REASONS predicates).
 controls:
-	@$(RUN) --timeout 3600 --json build/verification/controls.json \
+	@$(PY) tools/run_controls.py --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
 	  "$(PY) tools/control_dag_issue_only.py" \
+	  "$(PY) tools/control_dag_verdictless_evidence.py" \
+	  "$(PY) tools/control_dag_churn.py" \
 	  "$(PY) -m pytest tools/test_rungs_gate.py -q" \
+	  "$(PY) -m pytest tools/test_signoff_klt_version.py -q" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
 	  "$(PY) tools/probes/estimator_ground_truth.py controls" \
 	  "$(PY) tools/probes/coupling_controls.py" \
+	  "$(PY) tools/probes/holdout_injected_controls.py" \
 	  "$(PY) tools/pytest_collection_inventory.py controls" \
 	  "$(PY) tools/r1_harvest_controls.py" \
 	  "$(PY) tools/probes/check_doc_claims_789_marker_controls.py" \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \
-	  "$(PY) tools/verify_rate_conv_2x.py --inject-clamp --expect-fail" \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --inject OSC_SMOOTH_ON --expect-fail --outdir build/voice-smooth-on" \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_SHARED --expect-fail --outdir build/voice-drift-shared" \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_LEAKFLOOR --expect-fail --outdir build/voice-drift-leakfloor" \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_MEANSTEP --expect-fail --outdir build/voice-drift-meanstep" \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --inject SHARK_BLAMP_SIGN --expect-fail --outdir build/voice-shark-blamp-sign" \
+	  "@baseline=voice-gate $(PY) rtl-sketch/verify_voice.py --set quick --only gate --outdir build/voice-clean-gate" \
+	  "@baseline=voice-default-2x $(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --outdir build/voice-clean-default-2x" \
+	  "@baseline=voice-default $(PY) rtl-sketch/verify_voice.py --set quick --only default --outdir build/voice-clean-default" \
+	  "@baseline=voice-drift $(PY) rtl-sketch/verify_voice.py --set quick --only drift --outdir build/voice-clean-drift" \
+	  "@baseline=voice-waves3 $(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --outdir build/voice-clean-waves3" \
+	  "@baseline=top-m5a-2x $(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --osc2x --outdir build/top-clean-m5a-2x" \
+	  "@baseline=top-m5a-f2x $(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --outdir build/top-clean-m5a-f2x" \
+	  "@baseline=top-clap $(PY) rtl-sketch/verify_synth_top.py --clap-phrase --outdir build/top-clean-clap" \
+	  "@baseline=top-solo-sd $(PY) rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --outdir build/top-clean-solo-sd" \
+	  "@baseline=top-2x $(PY) rtl-sketch/verify_synth_top.py --osc2x --outdir build/top-clean-2x" \
+	  "@baseline=top-default $(PY) rtl-sketch/verify_synth_top.py --outdir build/top-clean-default" \
+	  "@baseline=ctl $(PY) rtl-sketch/verify_ctl.py --outdir build/ctl-clean" \
+	  "@baseline=drums $(PY) rtl-sketch/verify_drums.py --short --outdir build/drum-clean" \
+	  "@baseline=fixture $(PY) fpga/verify_fixture.py --outdir build/fx-clean" \
+	  "@baseline=rate-conv $(PY) tools/verify_rate_conv_2x.py" \
+	  "@baseline=f1-chain $(PY) tools/f1_rtl_filter_path.py --frames 30000" \
+	  "@after=voice-gate $(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
+	  "@after=voice-default-2x $(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
+	  "@after=voice-default-2x $(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \
+	  "@after=rate-conv $(PY) tools/verify_rate_conv_2x.py --inject-clamp --expect-fail" \
+	  "@after=voice-default $(PY) rtl-sketch/verify_voice.py --set quick --only default --inject OSC_SMOOTH_ON --expect-fail --outdir build/voice-smooth-on" \
+	  "@after=voice-drift $(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_SHARED --expect-fail --outdir build/voice-drift-shared" \
+	  "@after=voice-drift $(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_LEAKFLOOR --expect-fail --outdir build/voice-drift-leakfloor" \
+	  "@after=voice-drift $(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_MEANSTEP --expect-fail --outdir build/voice-drift-meanstep" \
+	  "@after=voice-waves3 $(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --inject SHARK_BLAMP_SIGN --expect-fail --outdir build/voice-shark-blamp-sign" \
 	  "$(PY) tools/verify_voice_scoped.py --extremes-index 0 --osc2x --filter2x --define INJECT_BUG_LADDER_XG25 --expect-fail --expect-first y19@62:387 --outdir build/voice-allmax-354-xg25" \
-	  "$(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
-	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
-	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail --outdir build/ctl-data24" \
-	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_NOSEC --expect-fail --outdir build/ctl-nosec" \
-	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ANYLEN --expect-fail --outdir build/ctl-anylen" \
-	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_DRAIN_LATE --expect-fail --outdir build/ctl-drainlate" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail --outdir build/top-preshift" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --osc2x --inject VOICE_OSC2X_OFF --expect-fail --outdir build/top-osc2x-off" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --osc2x --inject VOICE_OSC2X_OFF --expect-fail --outdir build/top-m5a-smoke-off" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-m5a-filter2x-off" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject VOICE_DRUM_CLAMP16 --expect-fail --outdir build/top-dclamp16" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject VOICE_OUT_SAT --expect-fail --outdir build/top-outsat" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail --outdir build/top-i2sshift" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject I2S_DELAY --expect-fail --outdir build/top-i2sdelay" \
+	  "@after=ctl $(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
+	  "@after=ctl $(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
+	  "@after=ctl $(PY) rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail --outdir build/ctl-data24" \
+	  "@after=ctl $(PY) rtl-sketch/verify_ctl.py --inject SPI_NOSEC --expect-fail --outdir build/ctl-nosec" \
+	  "@after=ctl $(PY) rtl-sketch/verify_ctl.py --inject SPI_ANYLEN --expect-fail --outdir build/ctl-anylen" \
+	  "@after=ctl $(PY) rtl-sketch/verify_ctl.py --inject SPI_DRAIN_LATE --expect-fail --outdir build/ctl-drainlate" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail --outdir build/top-preshift" \
+	  "@after=top-2x $(PY) rtl-sketch/verify_synth_top.py --osc2x --inject VOICE_OSC2X_OFF --expect-fail --outdir build/top-osc2x-off" \
+	  "@after=top-m5a-2x $(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --osc2x --inject VOICE_OSC2X_OFF --expect-fail --outdir build/top-m5a-smoke-off" \
+	  "@after=top-m5a-f2x $(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-m5a-filter2x-off" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject VOICE_DRUM_CLAMP16 --expect-fail --outdir build/top-dclamp16" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject VOICE_OUT_SAT --expect-fail --outdir build/top-outsat" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail --outdir build/top-i2sshift" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject I2S_DELAY --expect-fail --outdir build/top-i2sdelay" \
 	  "$(PY) rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail --outdir build/i2s-swap" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_ADDR7 --expect-fail --outdir build/top-addr7" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_DATA24 --expect-fail --outdir build/top-data24" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_NOSEC --expect-fail --outdir build/top-nosec" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_DRAIN_LATE --expect-fail --outdir build/top-drainlate" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject MODAL_NUM_HOLD --expect-fail --outdir build/top-numhold" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_ENV_FLOOR --expect-fail --outdir build/top-envfloor" \
-	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_WEAK --expect-fail --outdir build/drum-finalweak" \
-	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_SHORT --expect-fail --outdir build/drum-finalshort" \
-	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_SHIFT --expect-fail --outdir build/drum-finalshift" \
-	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FCAP_STALE --expect-fail --outdir build/drum-fcapstale" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --clap-phrase --inject DRUM_FINAL_WEAK --expect-fail --outdir build/top-clap-finalweak" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_LFSR_TAP --expect-fail --outdir build/top-lfsrtap" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --inject DRUM_LFSR_TAP --expect-fail --outdir build/top-drum-solo-lfsrtap" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_RESET_ALIAS --expect-fail --outdir build/top-resetalias" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_STOPS8 --expect-fail --outdir build/top-stops8" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_BUS_STALE --expect-fail --outdir build/top-busstale" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_DONE_NOWAIT --expect-fail --outdir build/top-nowait" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject SPI_ADDR7 --expect-fail --outdir build/top-addr7" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject SPI_DATA24 --expect-fail --outdir build/top-data24" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject SPI_NOSEC --expect-fail --outdir build/top-nosec" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject SPI_DRAIN_LATE --expect-fail --outdir build/top-drainlate" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject MODAL_NUM_HOLD --expect-fail --outdir build/top-numhold" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject DRUM_ENV_FLOOR --expect-fail --outdir build/top-envfloor" \
+	  "@after=drums $(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_WEAK --expect-fail --outdir build/drum-finalweak" \
+	  "@after=drums $(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_SHORT --expect-fail --outdir build/drum-finalshort" \
+	  "@after=drums $(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_SHIFT --expect-fail --outdir build/drum-finalshift" \
+	  "@after=drums $(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FCAP_STALE --expect-fail --outdir build/drum-fcapstale" \
+	  "@after=top-clap $(PY) rtl-sketch/verify_synth_top.py --clap-phrase --inject DRUM_FINAL_WEAK --expect-fail --outdir build/top-clap-finalweak" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject DRUM_LFSR_TAP --expect-fail --outdir build/top-lfsrtap" \
+	  "@after=top-solo-sd $(PY) rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --inject DRUM_LFSR_TAP --expect-fail --outdir build/top-drum-solo-lfsrtap" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject DRUM_RESET_ALIAS --expect-fail --outdir build/top-resetalias" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject DRUM_STOPS8 --expect-fail --outdir build/top-stops8" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject DRUM_BUS_STALE --expect-fail --outdir build/top-busstale" \
+	  "@after=top-default $(PY) rtl-sketch/verify_synth_top.py --inject DRUM_DONE_NOWAIT --expect-fail --outdir build/top-nowait" \
 	  "$(PY) tools/run_case.py --inject MONO_PITCH_UP_25_CENTS M5B --results build/case-m5b-pitch --expect changed" \
-	  "$(PY) fpga/verify_fixture.py --wrong no-coef-seq --expect-fail --outdir build/fx-nocoef" \
-	  "$(PY) fpga/verify_fixture.py --wrong drop-restore --expect-fail --outdir build/fx-droprest" \
-	  "$(PY) fpga/verify_fixture.py --wrong late-window --expect-fail --outdir build/fx-late" \
-	  "$(PY) fpga/verify_fixture.py --wrong no-tom-bend --expect-fail --outdir build/fx-notom" \
-	  "$(PY) fpga/verify_fixture.py --wrong drop-tom-step --expect-fail --outdir build/fx-tomstep" \
-	  "$(PY) fpga/verify_fixture.py --wrong burst --expect-fail --outdir build/fx-burst" \
+	  "@after=fixture $(PY) fpga/verify_fixture.py --wrong no-coef-seq --expect-fail --outdir build/fx-nocoef" \
+	  "@after=fixture $(PY) fpga/verify_fixture.py --wrong drop-restore --expect-fail --outdir build/fx-droprest" \
+	  "@after=fixture $(PY) fpga/verify_fixture.py --wrong late-window --expect-fail --outdir build/fx-late" \
+	  "@after=fixture $(PY) fpga/verify_fixture.py --wrong no-tom-bend --expect-fail --outdir build/fx-notom" \
+	  "@after=fixture $(PY) fpga/verify_fixture.py --wrong drop-tom-step --expect-fail --outdir build/fx-tomstep" \
+	  "@after=fixture $(PY) fpga/verify_fixture.py --wrong burst --expect-fail --outdir build/fx-burst" \
 	  "$(PY) fpga/verify_pads_top.py --inject PADS_DEBOUNCE_DOUBLE --outdir build/pads-controls" \
 	  "$(PY) fpga/verify_pads_top.py --inject PADS_TRIG_STUCK --outdir build/pads-controls" \
 	  "$(PY) fpga/verify_pads_top.py --inject PADS_SRC_STUCK --outdir build/pads-controls" \
@@ -628,8 +683,8 @@ controls:
 	  "$(PY) pnr/orfs/area_provenance.py --expect ok --outdir build/pnr-die-clean" \
 	  "$(PY) pnr/orfs/area_provenance.py --inject UTILIZATION_TARGET --expect refused-circular --outdir build/pnr-die-utilreq" \
 	  "$(PY) pnr/orfs/area_provenance.py --inject CORE_UTILIZATION_SET --expect refused-circular --outdir build/pnr-die-utilmk" \
-	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_SKIP_INTERP --expect-mismatch" \
-	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_DROP_DECIM --expect-mismatch" \
+	  "@after=f1-chain $(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_SKIP_INTERP --expect-mismatch" \
+	  "@after=f1-chain $(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_DROP_DECIM --expect-mismatch" \
 	  "$(PY) fpga/verify_xdc_binding.py --matrix" \
 	  "$(PY) fpga/verify_xdc_binding.py --inject UART_SLASH_JOIN --expect-fail" \
 	  "$(PY) tools/probe_arty_constraint_scope.py" \
@@ -650,7 +705,7 @@ controls:
 	  "$(PY) tools/bd_pitch_predeclaration_mutants.py"
 
 test:
-	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_synth_count.py -q
+	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_verify_drums.py rtl-sketch/test_synth_count.py -q
 
 ## Re-derive every marked prose claim in this tree from the evidence it names.
 ## Three outcomes, and the third is the point: OK, STALE (the tree contradicts

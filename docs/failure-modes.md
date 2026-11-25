@@ -188,7 +188,8 @@ document that names mechanism 4.
 - `make -C fpga srccheck` — the routed file set is the verified file set (re-read after the #565 Makefile edit: target unchanged).
   <!-- claim: grep="^srccheck:" in=fpga/Makefile covers=fpga/Makefile -->
 - CI running the integrated verifier, not only block checks.
-  <!-- claim: grep="run: python rtl-sketch/verify_synth_top\.py\s*$" in=.github/workflows/*.yml note="the plain nightly run (job I4); the --inject negative controls also name the script, and one pattern guards one line (issue #904)" -->
+  <!-- claim: grep="rtl-sketch/verify_synth_top\.py" in=docs/dag.json note="the integrated verifier is a slow DAG node; the --inject negative controls also name the script, and one pattern guards one line (issue #904). The old in=nightly.yml binding died when job I4's bare run line became the record step" -->
+  <!-- claim: grep="tools/compile_dag\.py --run --slow" in=.github/workflows/nightly.yml note="the nightly's record step runs every slow DAG node -- the scheduling half of the integrated-verifier binding; the dag.json claim above is the naming half, so dropping the bench or the step each turns a claim stale (issue #904)" -->
 - A negative control that mutates *arithmetic* rather than syntax — which
   caught that inflating `rms` by 5 % passed all sixty ground-truth tests.
   <!-- claim: test=model/test_audio_measure.py::test_rms_of_a_sinusoid_is_amplitude_over_root_two -->

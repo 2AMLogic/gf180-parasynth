@@ -10,6 +10,8 @@ import subprocess
 import numpy as np
 from scipy.io import wavfile
 import mono_m1a_score as bass
+import refusal
+import run_all
 
 ROOT, SR = bass.ROOT, bass.SR
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/volume-mapping"
@@ -19,6 +21,13 @@ OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/volume-mapping"
 # compare the baseline against the promoted candidate once selection lands.
 BASELINE_PATCH = "m1a-provisional-v1"
 BASELINE_AUDIO_SHA256 = "50add9b962caa5f37716f030c7254141664ddd238ab13300708ae6f40ddd8c05"
+
+
+def write_json(path, obj) -> None:
+    """Atomic replace (#922, the #882 class sweep): a kill mid-write leaves the
+    previous record standing, not a truncated one (`check_m1a_selection.py`
+    reads baseline.json and volume-minus4db.json as apparatus state)."""
+    run_all.write_json_atomic(str(path), obj)
 
 
 def counts(measured):
@@ -57,7 +66,7 @@ def oscillator_mapping(manifest):
             "scope": "isolated open-filter audio; offset applied only in diagnostic challenger"}
 
 
-def main():
+def _run() -> int:
     manifest, reference = bass.load_reference()
     patch = bass.patch_for_reference(manifest, BASELINE_PATCH)
     engine = bass.lead.engine_configuration("selected")
@@ -90,7 +99,7 @@ def main():
                       "octave_offset_cents": detune_cents, "measurements": measured,
                       "components": counts(measured), "audio": str(audio.relative_to(ROOT)),
                       "sha256": bass.sha(audio), "metrics": bass.required_metrics(measured)}
-        (OUT / f"{name}.json").write_text(json.dumps(rows[name], indent=2) + "\n")
+        write_json(OUT / f"{name}.json", rows[name])
         print(name, rows[name]["components"], flush=True)
     baseline, candidate = (rows[n]["measurements"] for n in ("baseline", "volume-minus4db"))
     lost = sorted(passed_partials(baseline) - passed_partials(candidate))
@@ -118,8 +127,17 @@ def main():
               "envelope_qualification": bass.reference.qualify_envelope_basis(),
               "corroboration": {"Model D cross-check": {"state": "not measured", "required_for_M1A": False}},
               "scope": "volume challenger accepted as component improvement; detune run diagnostic only; no filter redesign or threshold changes"}
-    (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    write_json(OUT / "report.json", report)
+    return 0
+
+
+def main() -> int:
+    try:
+        return _run()
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

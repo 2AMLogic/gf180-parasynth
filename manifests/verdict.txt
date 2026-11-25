@@ -19,13 +19,13 @@ T1: 2/11 items met
 [UNMET] T1 #8 Characterization report
         reason: no_evidence
 [MET  ] T1 #9 Testbenches shipped
-        cite: manifests/evidence/item-9.json (kind=generic, status=pass, content_hash=sha256:ad0f020da701f3dbc18c292cee939f071fbcbb27cf70dca72aebe7482977659a, exit_status=0)
+        cite: manifests/evidence/item-9.json (kind=generic, status=pass, content_hash=sha256:24c30cfe72b5c40275f20fd4f679ccbab77d2691e7cfc587d01249fcef174ae0, exit_status=0)
         input: re-hashed the artifact this envelope names -- matches
-        bound: T1 item #9 -> manifests/inventories/item-9.json (content_hash=sha256:ad0f020da701f3dbc18c292cee939f071fbcbb27cf70dca72aebe7482977659a)
+        bound: T1 item #9 -> manifests/inventories/item-9.json (content_hash=sha256:24c30cfe72b5c40275f20fd4f679ccbab77d2691e7cfc587d01249fcef174ae0)
 [MET  ] T1 #10 Repo hygiene
-        cite: manifests/evidence/item-10.json (kind=generic, status=pass, content_hash=sha256:b3e6a45ea49d36c9f78b7c1170e2919462cd8f64b5412f8672a16aeaf8676230, exit_status=0)
+        cite: manifests/evidence/item-10.json (kind=generic, status=pass, content_hash=sha256:3fae46de00b0ab05f8e5ca04b6a14b35b53861d12bb6b4970a1ab62cdfdb8e1d, exit_status=0)
         input: re-hashed the artifact this envelope names -- matches
-        bound: T1 item #10 -> manifests/inventories/item-10.json (content_hash=sha256:b3e6a45ea49d36c9f78b7c1170e2919462cd8f64b5412f8672a16aeaf8676230)
+        bound: T1 item #10 -> manifests/inventories/item-10.json (content_hash=sha256:3fae46de00b0ab05f8e5ca04b6a14b35b53861d12bb6b4970a1ab62cdfdb8e1d)
 [UNMET] T1 #11 Power delivery (structural)
         reason: no_evidence
 [UNMET] T2 #- T2 — signoff-validated
@@ -35,5 +35,5 @@ T1: 2/11 items met
 [UNMET] T4 #- T4 — production-validated
         reason: tier_not_supported
 
-source: docs/design-evidence-tiers.md (content_hash=sha256:a26b90262320d0fbd32b3f549a02b6300832706041797a559d8bf6bdb62efdc7)
-build: klt 0.8.0
+source: docs/design-evidence-tiers.md (content_hash=sha256:d9287ec9dc6107e560e00b1a8b7a670f757722713b5c651dee3d2cbde058490a)
+build: klt 0.9.2

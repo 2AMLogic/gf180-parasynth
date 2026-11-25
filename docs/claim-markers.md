@@ -19,7 +19,26 @@ could have noticed.
 ## The marker
 
 An HTML comment, on the line **after** the claim it backs (or trailing it on the
-same line). It is invisible in rendered Markdown.
+same line). It is invisible in rendered Markdown **when it trails the claim on
+the same line**, or when it stands on its own line clear of paragraph prose.
+On its own line *inside* a paragraph it is not invisible in effect: a line
+beginning `<!--` is a CommonMark HTML-block start condition, and such blocks
+can interrupt a paragraph, so the prose above and below render as two
+paragraphs where the author wrote one (measured on GitHub's renderer,
+2026-11-19; `docs/tr808-reference.md` carried two markers in that placement
+and both now trail their claim). `tools/check_doc_claims.py` REFUSES that
+placement **in Markdown documents** (its document set is `.md` only): the
+rationale above is a CommonMark rendering property, and nothing renders a
+Python docstring as CommonMark, so a marker inside a `.py` source file is
+not checked for this placement by the machine. Where such a marker is
+deliberate it is hand-covered instead --
+`tools/test_promoted_bands.py` covers the one in
+`model/promoted_measures.py`, including its placement-shaped requirements
+(the grep backer must match real prose). The refusal is a source-layout
+check and catches only the adjacent
+form: a blank line between the marker and the prose below it escapes it (the
+blank already ended the paragraph), and the checker never re-renders the
+document to count paragraphs.
 
 ```markdown
 Ground-truth estimator suite.
@@ -29,6 +48,14 @@ Ground-truth estimator suite.
 A marker inside a fenced code block or inline backticks is an **example**, not a
 claim, and is skipped — otherwise this document, which is nothing but examples,
 would be checked as a list of assertions.
+
+**One marker per line.** A second marker on the same line is `REFUSED`
+(naming file and line), never dropped and never parsed as a second claim: the
+report is keyed on `file:line`, and a silently ignored marker is
+indistinguishable from a claim nobody made (#1041). Put each marker on its own
+line. The same rule covers a marker that **spans lines**: an opener
+`<!-- claim:` with no `-->` on its line is `REFUSED`, naming the opener's
+file and line, never skipped (#1044). Close every marker on the line it opens.
 
 Syntax is `<!-- claim: key=value key="value with spaces" ... -->`, tokenised
 with `shlex`. **Exactly one** key must be a *kind*; the rest are modifiers or
@@ -290,7 +317,12 @@ first runs the checker once and REFUSES (exit 2, which the exit contract
 reports as NO-VERDICT, naming what it found) unless that baseline is green,
 and again unless every injection target matches, because its controls inject
 into the live checkout and would otherwise misreport the tree's own WIP as
-control failures. On a tree whose claims are green the whole run is seconds
+control failures. Since #936 the guard that refuses an already-satisfied
+injection state derives its pattern and paths by parsing the staged
+injection with the checker's own grammar, so a hand-edited claim marker's
+`in=` cannot desynchronize the guard from the file the claim actually
+greps -- a divergence that used to surface as a misattributed control FAIL
+instead of a refusal. On a tree whose claims are green the whole run is seconds
 (every #789 marker is a `grep=` or `absent=` row with no backing test, so
 the two-document run collects no pytest), which is why it is wired and
 `scope_control` is not — and the refusal is the correct answer on a WIP

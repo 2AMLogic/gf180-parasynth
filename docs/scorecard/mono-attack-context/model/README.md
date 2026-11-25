@@ -26,6 +26,16 @@ python3 -m pytest -q tools/test_verify_attack_context_model.py
 
 The verifier refuses a one-sample timing mutation, changed contrast, missing row, changed audio digest, and invalid timing. **Wrong-then-right: zero sound measurement corrections; one publication precondition corrected** (exact dictionary equality rejected the one-ulp RMS difference). The prior reference qualification record remains in the parent report.
 
+This record is the model-side comparison: the unchanged model measured against
+the frozen Mini V3 plugin reference -- #193's 36 renders, bound by
+`reference_report_sha256` to `docs/scorecard/mono-attack-context/report.json`
+one directory up. Those reference WAVs are inputs this record reads, not part
+of it, and they stay frozen whatever happens to the model sources here. The
+Mini V4 suite (#1052, `docs/scorecard/miniv4-suite/suite.json`) is a separate
+future record whose renders are pending; it provides no replacement
+attack-context result, so this record and its V3 reference inputs remain the
+evidence of record.
+
 ## Source identity: re-bound to a reachable commit
 
 The WAVs were first rendered at `1ae5071b038d93df507efb50b76cb3c83eb6d228`, with pulse oversampling disabled. A later rebase orphaned that commit, so `git show` could not resolve it from any checkout, and the verifier's historical-hash check failed in CI (#403, root cause #215). The analysis module `model/audio_measure.py` had also changed since then (docstrings only), which the verifier correctly refuses.
@@ -70,12 +80,79 @@ carrying a stale link.
 
 ## How a Builder re-binds next time (#502)
 
-Any change to `model/audio_measure.py`, `tools/measure_mono_m5a_reference.py` or
-`tools/measure_mono_attack_context.py` makes the verifier refuse with
-`analysis basis changed`. That gate stays as it is. An agent token has no
-`actions: write`, so `gh workflow run attack_context_model.yml` returns HTTP 403.
+`tools/measure_mono_m5a_reference.py` and `tools/measure_mono_attack_context.py`
+refuse outright when edited: the verifier fails with
+`analysis basis changed: <path>; use the recorded checkout`.
+`model/audio_measure.py` is narrower -- the verifier pins the AST of
+`rms_envelope` and its named dependencies (`AUDIO_MEASURE_BASIS` in
+`tools/verify_attack_context_model.py`), so only a change to that executed
+basis refuses; a comment or an unrelated estimator repair passes and is
+reported under `current_source_differences`. That gate stays as it is. An
+agent token has no `actions: write`, so
+`gh workflow run attack_context_model.yml` returns HTTP 403.
 Nothing here grants that permission; widening the token is an operator decision
 and is not needed.
+
+### What an edit to a recorded source actually does
+
+`report.json` (`source_sha256`) and the M1A known-answer suite
+(`docs/scorecard/mono-m1a-miniv3/attack-qualification/suite-v3.json`,
+`sources_sha256`) together hash ten files. Only the two reader files are
+pinned by a dedicated digest guard (`model/test_ring_estimator_readers.py`);
+the other eight are deliberately unguarded -- each lands in the refusal or
+report path it already has. Measured behaviour, each file edited in isolation
+against the recorded commit (2026-11-19, `527764c7`), file restored between
+runs:
+
+| Files edited | Observed result |
+| --- | --- |
+| `tools/measure_mono_m1a_reference.py`, `tools/attack_fit_v3.py`, `tools/attack_known_answer.py` | `tools/mono_m1a_score.py` refuses: `attack qualification is stale: <path> changed since the suite ran`. The M1A qualification binds every digest in `suite-v3.json`, comments included. |
+| `tools/measure_mono_attack_context.py`, `tools/measure_mono_m5a_reference.py` | The context verifier refuses: `analysis basis changed: <path>; use the recorded checkout`. |
+| `model/audio_measure.py` | Only an edit to the executed basis -- the AST of `rms_envelope` and its named dependencies -- refuses with `analysis basis changed`. A comment or an unrelated estimator repair passes and is reported under `current_source_differences` while the recorded audio and timings still reproduce. |
+| `tools/compare_mono_attack_context.py`, `tools/mono_m5a_score.py`, `model/voice_fx.py`, `model/filter_rate_chain.py` | Nothing refuses. The verifier lists the file under `current_source_differences` and still reproduces every timing row and history contrast from the stored audio. This is not hypothetical: `tools/mono_m5a_score.py` already differs from its recorded hash on main and the verifier still reports `state: reproduced`. |
+
+A maintainer editing voice DSP can therefore tell when the historical
+measurements still reproduce: a refusal names the checkout to replay; a pass
+with `current_source_differences` means the stored audio remains the evidence
+and the recorded numbers are unchanged.
+
+### Why only the two readers carry a dedicated guard
+
+`model/test_ring_estimator_readers.py` pins
+`tools/measure_mono_m1a_reference.py` (against `suite-v3.json`) and
+`tools/measure_mono_m5a_reference.py` (against a committed digest literal), so
+an edit to either fails there with a named message instead of as one of the
+stale-record refusals above. The pins exist because those two readers have no
+remaining reason to change: their only pending change -- routing the V3
+free-ring readers through `ring_estimator` (#706) -- was cancelled by #1048.
+The records hash eight other files that are live -- three of them core model
+files on the current milestone (#282) -- and a digest pin on any of them would
+freeze instrument development to protect records #1048 already retired. Do
+not extend the guard to them.
+
+### When a genuine edit makes the record stale
+
+#1048 froze the Mini V3 records: the V3 captures, the M1A qualification and
+every digest expectation stay as committed -- they are never regenerated and
+never edited, so staleness is not repaired in place.
+
+- **Replaying the historical evidence:** use the recorded checkout. Check out
+  `source_commit` from `report.json` (the verifier's refusal names it) and run
+  the tools there; the verifier's historical-hash check already proves every
+  recorded source matches its digest at that commit, so the recorded result
+  always reproduces on it.
+- **A new model-side comparison against today's sources** is a new
+  measurement, not a repair: use the re-bind procedure below (CI-produced
+  preferred, local fallback) with its `check_attack_context_rebind.py`
+  provenance gate. It produces a new report at a new reachable
+  `source_commit` and keeps the old binding under `rebound_from`. The reader
+  pins do not move with it: the M5A expectation is a committed literal, and
+  the M1A expectation lives in the frozen `suite-v3.json`, so a regenerated
+  report cannot update either.
+- **A changed M1A estimator** needs its own known-answer qualification
+  (`tools/qualify_m1a_attack.py`; see the M1A qualification README) before any
+  new M1A attack result can be graded. The frozen V3 reference fits are never
+  re-scored with an unqualified estimator.
 
 **Preferred path (CI-produced).** The workflow now also runs on `push` to
 `feature/issue-*` when a path in its filter changes. That filter includes the

@@ -123,6 +123,28 @@ def test_every_control_turns_the_verifier_red_for_its_reason(control):
     assert c["caught"], c
 
 
+# ---- the RTL capture: the bytes and the schedule must agree -------------------
+@pytest.mark.parametrize("opcode", [dev.OP_WRITE, dev.OP_EVENT])
+def test_a_capture_that_drops_a_packet_refuses(opcode, tmp_path):
+    """The capture pairs the host's ACTUAL bytes with the INTENDED schedule;
+    a transmit log that drops one expected write or event must REFUSE, not
+    write a capture that silently lacks it (#1219: only one of the two
+    former copies of this serialization had the count check)."""
+    run = vrp.run_cli("demo")
+    log, dropped = [], False
+    for t, data in run["h"].ser.tx_log:
+        pkts = vrp._packets(data)
+        if not dropped:
+            k = next((i for i, p in enumerate(pkts) if p[0] == opcode), None)
+            if k is not None:
+                pkts, dropped = pkts[:k] + pkts[k + 1:], True
+        log.append((t, b"".join(pkts)))
+    assert dropped
+    run["h"].ser.tx_log = log
+    with pytest.raises(ValueError, match="writes/events"):
+        vrp.write_rtl_capture(run, tmp_path / "cap")
+
+
 # ---- the 16-bit frame log: an unwrap is a precondition, not an assumption ----
 def _log16(frames, p0):
     """What the device would log for writes at `frames` after `p0`."""
@@ -446,3 +468,55 @@ def test_behind_the_anchor_without_lateness_is_a_schedule_fault():
                          prev_origin=950, anchor_interval_s=0.05)
     assert "host" not in str(ei.value).lower()
     assert "behind the anchor" in str(ei.value)
+
+
+# ---- a refused replay is not controlled (#1229) -------------------------------
+
+def _stub_rtl_replay(monkeypatch, tmp_path, *, replay_out, caught):
+    """Drive vrp.rtl_replay past the sim stage with the RTL stages stubbed;
+    returns the list of rtl_control calls."""
+    import verify_uart_bridge as vub
+    calls = {"sim": 0, "control": 0}
+
+    def fake_sim(*a, **kw):
+        calls["sim"] += 1
+        return None            # the RTL replay did not run
+
+    def fake_control(*a, **kw):
+        calls["control"] += 1
+        return {"caught": caught}
+
+    monkeypatch.setattr(vrp, "run_cli", lambda *a, **kw: {})
+    monkeypatch.setattr(vrp, "check", lambda run: {"ok": True})
+    monkeypatch.setattr(vrp, "write_rtl_capture", lambda *a, **kw: {})
+    monkeypatch.setattr(vrp, "rtl_control", fake_control)
+    if replay_out is None:
+        monkeypatch.setattr(vub, "simulate_replay", fake_sim)
+    else:
+        monkeypatch.setattr(vrp, "replay_and_analyze",
+                            lambda *a, **kw: dict(replay_out))
+    return calls
+
+
+def test_a_refused_replay_is_not_controlled(monkeypatch, tmp_path):
+    calls = _stub_rtl_replay(monkeypatch, tmp_path, replay_out=None, caught=True)
+    out = vrp.rtl_replay("bar808", tmp_path)
+    assert out["state"] == "REFUSED"
+    assert "control" not in out
+    assert calls["sim"] == 1, "a refused replay must not simulate a second time"
+    assert calls["control"] == 0
+
+
+def test_a_run_replay_is_still_controlled_and_an_uncaught_control_fails(
+        monkeypatch, tmp_path):
+    calls = _stub_rtl_replay(monkeypatch, tmp_path,
+                             replay_out={"state": "PASS"}, caught=False)
+    out = vrp.rtl_replay("bar808", tmp_path)
+    assert calls["control"] == 1
+    assert out["state"] == "FAIL"
+    calls = _stub_rtl_replay(monkeypatch, tmp_path,
+                             replay_out={"state": "PASS"}, caught=True)
+    assert vrp.rtl_replay("bar808", tmp_path)["state"] == "PASS"
+    assert calls["control"] == 1
+
+

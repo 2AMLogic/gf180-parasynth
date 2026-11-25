@@ -30,6 +30,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import audio_measure as am                                          # noqa: E402
+import refusal                                                      # noqa: E402
 import run_case as rc                                               # noqa: E402
 
 REFS = rc.configured_refs()
@@ -518,6 +519,84 @@ def _trailing_silence_invariance(measure=am.schroeder_t20,
               "that does contain its decay")
 
 
+PROSE_LABEL_PAD_ZEROS = "PAD  zeros"
+PROSE_LABEL_PAD_N60 = "PAD  noise  -60 dB"
+PROSE_LABEL_FLOOR_B = "REAL on a -80 dBFS floor"
+PROSE_LABEL_BD8 = "REAL bd8/BD5050.WAV"
+PROSE_LABEL_CL8 = "REAL cl8/CL.WAV"
+
+
+class ProseNeedsRefused(Exception):
+    """A figure the WHY-THE-OTHER-TWO prose quotes was not measured this run
+    (its corpus WAV is absent) or came back None / nan. REFUSED, not FAILED:
+    the comparison the prose narrates was not made (#805's third outcome)."""
+
+
+class ProseContradicted(Exception):
+    """The measured values no longer have an ordering the prose asserts, so
+    the words would be false with true numbers in them."""
+
+
+def _other_two_prose(bc: dict) -> list[str]:
+    """Defect 5's WHY-THE-OTHER-TWO block, every figure derived from the
+    (b)/(c) table this run measured (`bc`: printed label -> (step ratio,
+    tail residual)) -- the #988 repair class (#990): no gate reads prose, so
+    a quoted figure drifts silently while the live table moves.
+
+    Raises ProseNeedsRefused for a reading that does not exist and
+    ProseContradicted when an ordering the wording asserts -- the zero pad
+    BELOW the genuine -80 dBFS floor under (b), the -60 dB pad's residual
+    ABOVE both corpus references under (c), which is what "INVERTED" and
+    "refuses both references FIRST" claim -- no longer holds.
+
+    GUARD-DEFEAT STATEMENT (rule 8): this guard cannot tell a measured dict
+    from an invented one. The defeat is answered structurally -- `bc` is
+    built in `defect_5` by the same loops that print the table, from the
+    same measured values, so there is no seam where a quoted number can
+    re-enter -- and behaviourally, by
+    tools/probes/test_probe_prose_derivation.py, which perturbs entries
+    through this seam and pins each ordering red."""
+    def need(label: str, col: int) -> float:
+        v = bc.get(label, (None, None))[col]
+        if v is None or not isinstance(v, (int, float)) or not math.isfinite(v):
+            raise ProseNeedsRefused(
+                f"the (b)/(c) prose needs a finite reading for {label!r} "
+                f"(column {'(b) step ratio' if col == 0 else '(c) tail resid dB'}); "
+                f"this run measured {v!r}")
+        return float(v)
+
+    pad0_b = need(PROSE_LABEL_PAD_ZEROS, 0)
+    floor_b = need(PROSE_LABEL_FLOOR_B, 0)
+    pad60_c = need(PROSE_LABEL_PAD_N60, 1)
+    bd8_c = need(PROSE_LABEL_BD8, 1)
+    cl8_c = need(PROSE_LABEL_CL8, 1)
+    if not pad0_b < floor_b:
+        raise ProseContradicted(
+            f"(b): the zero pad's step ratio {pad0_b:.2f} is not below the "
+            f"genuine -80 dBFS floor's {floor_b:.2f} -- the prose's "
+            "'property of the sound, not of the cut' ordering is gone")
+    if not (pad60_c > cl8_c and pad60_c > bd8_c):
+        raise ProseContradicted(
+            f"(c): the -60 dB pad's tail residual {pad60_c:.1f} dB is not "
+            f"above both corpus references (bd8 {bd8_c:.1f}, cl8 "
+            f"{cl8_c:.1f}) -- INVERTED no longer holds, so a refuse-below "
+            "threshold would not reject both references before the pad")
+    return [
+        "\n   (b) does not separate the two populations in EITHER direction: the zero",
+        f"   pad reads {pad0_b:.2f} and a genuine -80 dBFS noise floor reads {floor_b:.2f}. It is",
+        "   measuring the carrier's slew against its own envelope, which is a",
+        "   property of the sound and not of the cut.",
+        "   (c) separates zero pads cleanly, overlaps on noise pads, and on the",
+        f"   real corpus it is INVERTED: the -60 dB pad reads {pad60_c:.1f} dB while",
+        f"   bd8/BD5050.WAV -- the board's own bass-drum reference -- reads {bd8_c:.1f}",
+        f"   and cl8/CL.WAV reads {cl8_c:.1f}. Any threshold that refuses the pad refuses",
+        "   both references FIRST, so there is no threshold. (c) is REPORTED as",
+        "   `tail_residual_db` and refuses nothing.",
+        "   What shipped is the exact criterion: the estimate is read off the",
+        "   record's SOUNDING extent, so a pad cannot change any verdict at all.",
+    ]
+
+
 def defect_5():
     print("\n" + "=" * 78)
     print("5. #139 -- appending zeros turned a refusal into an accepted wrong answer")
@@ -569,8 +648,10 @@ def defect_5():
                np.sin(2 * math.pi * 220 * t) * (np.exp(-t / 0.05) + 0.003 * np.exp(-t / 0.35)),
                True)
     print(f"   {'record':<28}{'(b) step ratio':>16}{'(c) tail resid dB':>20}   want")
+    bc: dict = {}
     for label, y, good in pop:
-        print(f"   {label:<28}{_step_outlier(y, SR):16.2f}{_tail_residual(y, SR):20.2f}"
+        bc[label] = (_step_outlier(y, SR), _tail_residual(y, SR))
+        print(f"   {label:<28}{bc[label][0]:16.2f}{bc[label][1]:20.2f}"
               f"   {'pass' if good else 'REFUSE'}")
     for label, path in (("bd8/BD5050.WAV", REFS / "bd8" / "BD5050.WAV"),
                         ("cl8/CL.WAV", REFS / "cl8" / "CL.WAV")):
@@ -581,8 +662,10 @@ def defect_5():
         y = np.asarray(y, float)
         y = y.mean(1) if y.ndim > 1 else y
         y = y / max(float(np.abs(y).max()), 1e-30)
-        print(f"   {'REAL ' + label:<28}{_step_outlier(y, sr):16.2f}"
-              f"{_tail_residual(y, sr):20.2f}   pass")
+        real = "REAL " + label
+        bc[real] = (_step_outlier(y, sr), _tail_residual(y, sr))
+        print(f"   {real:<28}{bc[real][0]:16.2f}"
+              f"{bc[real][1]:20.2f}   pass")
     print("\n   THE FLOOR, MEASURED AGAINST THE CORPUS IT HAS TO CLEAR. `SOUNDING_")
     print("   FLOOR` is -180 dB of a record's own peak. What a REAL tail sits at:")
     import itertools
@@ -614,18 +697,13 @@ def defect_5():
           f"the quietest genuine tail in the corpus clears the floor by "
           f"{rows[0][0] - 20*math.log10(am.SOUNDING_FLOOR):.0f} dB")
 
-    print("\n   (b) does not separate the two populations in EITHER direction: the zero")
-    print("   pad reads 0.04 and a genuine -80 dBFS noise floor reads 4.18. It is")
-    print("   measuring the carrier's slew against its own envelope, which is a")
-    print("   property of the sound and not of the cut.")
-    print("   (c) separates zero pads cleanly, overlaps on noise pads, and on the")
-    print("   real corpus it is INVERTED: the -60 dB pad reads -24.8 dB while")
-    print("   bd8/BD5050.WAV -- the board's own bass-drum reference -- reads -33.6")
-    print("   and cl8/CL.WAV reads -25.3. Any threshold that refuses the pad refuses")
-    print("   both references FIRST, so there is no threshold. (c) is REPORTED as")
-    print("   `tail_residual_db` and refuses nothing.")
-    print("   What shipped is the exact criterion: the estimate is read off the")
-    print("   record's SOUNDING extent, so a pad cannot change any verdict at all.")
+    try:
+        for line in _other_two_prose(bc):
+            print(line)
+    except ProseNeedsRefused as e:
+        check_refused(f"defect 5's WHY-THE-OTHER-TWO prose: {e}")
+    except ProseContradicted as e:
+        check(False, f"defect 5's WHY-THE-OTHER-TWO prose: {e}")
 
 
 # ===========================================================================
@@ -804,12 +882,23 @@ def main() -> int:
         print(f"the Fischer corpus is not at {REFS}", file=sys.stderr)
         return 2
     voices = sorted(rc.REF_MAIN) if a.all_voices else ["LC", "HC", "MC"]
-    defect_1(voices)
-    defect_2()
-    defect_3()
-    defect_4()
-    defect_5()
-    defect_6()
+    # The defect sections read the corpus through `rc.load_reference` /
+    # `rc.prepare`, whose `preparation_contract.Refused` is a class this probe
+    # never names (it has no local one) -- a silent corpus WAV escaped as an
+    # exit-1 traceback, which `verdict_exit_code` renders exactly like a
+    # failed invariant (#1183, `run_case.*` family). The boundary catches only
+    # `refusal.Refused` and maps it to the probe's own refused exit (2); a
+    # scipy ValueError on an unreadable corpus file still exits 1.
+    try:
+        defect_1(voices)
+        defect_2()
+        defect_3()
+        defect_4()
+        defect_5()
+        defect_6()
+    except refusal.Refused as e:
+        print(f"REFUSED  {e}")
+        return 2
     print("\n" + "=" * 78)
     # Both summaries print before `verdict_exit_code()` decides the exit:
     # a run with refusals AND fails must not name only the refusals -- the

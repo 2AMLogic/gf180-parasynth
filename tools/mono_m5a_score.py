@@ -12,14 +12,12 @@ import pathlib
 import sys
 
 import numpy as np
-from scipy.io import wavfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import voice_fx as vf
-from measure_mono_m5a_reference import envelope_timing
 import refusal
 
 SR = 48_000
@@ -144,6 +142,8 @@ def _excess_alias_db(model_db: float, reference_db: float) -> float:
 
 def _load_i2s_candidate(path, required_samples: int):
     """Load only a complete mono signed-int16 I2S phrase at the target rate."""
+    from scipy.io import wavfile
+
     candidate_path = pathlib.Path(path)
     try:
         digest = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
@@ -234,6 +234,9 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             model_label=None, engine="selected", output_path=None,
             candidate_wav=None, saw_cutoff_override=None,
             saw_volume_correction_db=None, case_id="M5A", inject=""):
+    from scipy.io import wavfile
+    from measure_mono_m5a_reference import envelope_timing
+
     if case_id not in MANIFESTS:
         raise Refused(f"unsupported Mono scorecard case {case_id!r}")
     engine_profile = engine_configuration(engine)
@@ -259,6 +262,11 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     if manifest.get("case_id") != case_id:
         raise Refused(f"frozen manifest identifies as {manifest.get('case_id')!r}, expected {case_id}")
+    import reference_suites
+    try:
+        reference_suites.require_suite(manifest, reference_suites.SUITE_V3_FROZEN)
+    except reference_suites.Refused as exc:
+        raise Refused(str(exc)) from exc
     audio_meta = manifest["audio"]
     ref_path = reference_override or (manifest_path.parent / audio_meta["file"])
     try:

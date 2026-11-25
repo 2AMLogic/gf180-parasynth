@@ -51,6 +51,7 @@ import numpy as np
 from scipy.io import wavfile
 
 import mono_m1a_score as bass
+import refusal
 import run_all                # noqa: E402
 
 
@@ -58,6 +59,7 @@ def write_json(path, obj) -> None:
     """Atomic replace (#947): a kill mid-write leaves the previous report
     standing, not a truncated one a later reader strands on."""
     run_all.write_json_atomic(str(path), obj)
+
 
 ROOT, SR = bass.ROOT, bass.SR
 lead, am = bass.lead, bass.lead.am
@@ -516,14 +518,14 @@ def annotate(report):
     return report
 
 
-def main():
+def _run() -> int:
     if "--reanalyse" in sys.argv:
         report = annotate(json.loads((OUT / "report.json").read_text()))
         report["reanalysis_source_sha256"] = bass.sha(ROOT / "tools/diagnose_m1a_harmonic_phase.py")
         write_json(OUT / "report.json", report)
         ok = all(v["ok"] for v in report["synthetic_control"].values())
         print(json.dumps({"classification": report["repeat_pair"]["classification"], "control_ok": ok}, indent=1))
-        sys.exit(0 if ok else 1)
+        return 0 if ok else 1
     manifest, ref, controls = reference_audio()     # float32 full scale 1.0
     n_ref = len(ref)
     record = json.loads(RECORD.read_text())
@@ -678,9 +680,16 @@ def main():
                       "model_psi": model_psi_int,
                       "model_iso_psi": report["model_phase"]["isolated_render_psi_deg"],
                       "matched_check": matched_check}, indent=1))
-    if not all(v["ok"] for v in control.values()):
-        sys.exit(1)
+    return 0 if all(v["ok"] for v in control.values()) else 1
+
+
+def main() -> int:
+    try:
+        return _run()
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

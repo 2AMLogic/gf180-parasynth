@@ -114,6 +114,7 @@ import run_case as rc                       # noqa: E402
 import cymbal_bands as cb                   # noqa: E402
 import cymbal_tone_realisation as tr        # noqa: E402
 import tone_stage_schematic as ts           # noqa: E402
+import audio_measure as am                  # noqa: E402
 import refusal
 
 FISCHER_JSON = ROOT / "docs" / "scorecard" / "cymbal-369" / "fischer.json"
@@ -663,6 +664,14 @@ def measure_windows(refs: pathlib.Path, *, cfg=None, defect=None) -> dict:
             p = refs / "cy8" / f"CY{t}{d}.WAV"
             x, sr = cb._load(p)
             y = rc.prepare(x, sr, side=p.name)
+            # A silent recording is a missing precondition, not a measurement:
+            # `prepare` passes it through unchanged and every band energy comes
+            # back zero, so the H/L division below is log10(0/0) -- a crash
+            # (#1163). Clamping the zeros instead would report a plausible
+            # 0 dB balance for silence, which is worse than refusing. Refuse in
+            # `run_case`'s own reference-load words.
+            if am.is_silent(y):
+                raise Refused(f"reference recording {p.name} is silent")
             if cfg["short_record"]:
                 y = y[:rc.required_lead_samples(sr) + int(0.25 * sr)]
             filt = {k: cb._bp(y, sr, lo, hi) for k, (lo, hi) in bands.items()}
@@ -673,6 +682,18 @@ def measure_windows(refs: pathlib.Path, *, cfg=None, defect=None) -> dict:
                     out[w][d][t] = None
                     margins.append({"setting": f"CY{t}{d}", "window": w,
                                     "margin_db": None, "refused": str(exc)})
+                    continue
+                # #1207: a non-silent record can still carry exactly zero
+                # energy in an analysed band over this window (the silence
+                # check above is whole-record). Refuse that window in the
+                # tool's own words rather than divide by it.
+                dead = [k for k in ("H", "L") if not e[k][0] > 0.0]
+                if dead:
+                    out[w][d][t] = None
+                    margins.append({"setting": f"CY{t}{d}", "window": w,
+                                    "margin_db": None,
+                                    "refused": f"band(s) {'/'.join(dead)} carry no "
+                                               f"energy in window {w}"})
                     continue
                 for k, (sig, flo) in e.items():
                     margins.append({"setting": f"CY{t}{d}", "window": w, "band": k,
@@ -688,7 +709,10 @@ def measure_windows(refs: pathlib.Path, *, cfg=None, defect=None) -> dict:
 def measured_or_refused(refs=None, *, cfg=None, defect=None):
     try:
         return measure_windows(refs or rc.configured_refs(), cfg=cfg, defect=defect), None
-    except Refused as exc:
+    except refusal.Refused as exc:
+        # the base, not this module's sibling: cb._load and rc.prepare raise
+        # their own modules' Refused (#1160), and a corpus that cannot be
+        # read or prepared is a refusal of the whole windowed measurement.
         return None, str(exc)
 
 

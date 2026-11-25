@@ -2,8 +2,349 @@
 
 Recorded forge events; merge or closure alone does not establish sound qualification or hardware delivery. Initial coverage: the twenty most recently merged PRs, excluding Guide maintenance, and recently closed issues since 2026-10-01. Earlier events are outside this initial log.
 
+## Archives
+
+- [2026-09](work_log/WORK_LOG_2026-09.md)
+
+### 2026-11-25
+
+- **PR #1295**: fix: validate sound selections before measuring calibration tables
+- **PR #1293**: fix: defer render-only imports so render_miniv4_suite --help/--list run on stdlib Python
+- **PR #1288**: fix: share one qualification rule between snare separator CLI and test
+- **PR #1287**: fix: defer qualified_domain import so MIDI port discovery needs no NumPy
+- **PR #1286**: fix: reject empty or unknown --scenario in the late-event verifier
+- **PR #1285**: test: retire workflow waivers when matching clean runs appear
+- **PR #1283**: fix: check all qualified ground-truth citations in acceptance gate
+- **PR #1277**: fix: load M5A audio dependencies only during scoring
+- **PR #1274**: fix: skip the RTL control when the rolling replay was refused
+- **PR #1273**: fix: catch cross-module Refused at six M1A CLI boundaries
+- **PR #1272**: ci: install soundfile in tools job so the refusal control executes
+- **PR #1270**: fix: return the refusal exit status from M5 measurement tools
+- **PR #1269**: test: pin same-name Refused re-export against narrowed origin guard
+- **PR #1259**: fix: let the R1 quick-start dry run work without SciPy
+- **PR #1201**: controls: real-verifier mixed-baseline evidence, end-to-end make controls runs, drums outdir fix
+- **Issue #1294** (closed): gate_calibrate measure --sounds with no value writes an empty table record and exits 0
+- **Issue #1292** (closed): Defer render-only dependencies in render_miniv4_suite so --list works on stdlib Python
+- **Issue #1290** (closed): Nothing pins share_bound's published values, so widening it would pass both separator entry points
+- **Issue #1284** (closed): Remove the duplicate verdict from the snare separator self-test
+- **Issue #1282** (closed): Defer the voice-model dependency during MIDI port discovery
+- **Issue #1278** (closed): Remove the module-name filter that skips 808 ground-truth citations
+- **Issue #1276** (closed): Require a named scenario when selecting UART late-event checks
+- **Issue #1268** (closed): Defer SciPy and V3-reader imports in mono_m5a_score so named-preset UART, live MIDI, and demo players run without SciPy
+- **Issue #1267** (closed): refusal_sibling_scan: the `nm == FAMILY_NAME` guard has no control for the explicit re-export `from lender import Refused as Refused`
+- **Issue #1266** (closed): Catch cross-module Refused at M5A / M5B / mono_artifact_probe CLI boundaries (7 modules)
+- **Issue #1265** (closed): Catch cross-module Refused at M1A / phase-cycle CLI boundaries (6 modules)
+- **Issue #1262** (closed): measure_repeatability's only refusal control never runs in CI (soundfile absent by omission, not decision)
+- **Issue #1258** (closed): Remove the SciPy requirement from default-patch M5A UART playback
+- **Issue #1252** (closed): STEP_GATED_ALLOWLIST open_issue exemptions have no mechanical retirement, unlike the pending run_all entry
+- **Issue #1229** (closed): A refused rolling RTL replay now runs the rtl_control stage it used to skip
+- **Issue #1202** (closed): Triage the mono_m1a/mono_m5a raiser family: 11 modules whose local-subclass Refused handlers miss the parent class (#1183 remainder)
+- **Issue #1126** (closed): Require a matching clean run before make controls credits an RTL mismatch
+
+- **Issue #1235** (closed): No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only
+- **PR #1240**: test: guard workflow RTL mutant gating and baseline config match
+- **Issue #1248** (closed): uart_host --dry-run status/abort renders the apply_frame sentinel -1 in the 'applies' column
+- **Issue #1207** (closed): Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep
+- **PR #1254**: Audit four cymbal log ratios and fix invalid balance verdicts
+- **Issue #1234** (closed): refusal_sibling_scan: an ALIASED borrow sets refused_origin, so a dotted `except <mod>.Refused` is credited for an attribute that does not exist
+- **PR #1261**: fix: refusal_sibling_scan credits <mod>.Refused only for a binding named Refused
+- **Issue #1219** (closed): Consolidate duplicated UART RTL capture/replay in verify_live_midi and verify_rolling_playback (fixes --image r2 running with PULSE2X=0)
+- **PR #1228**: fix: share the UART RTL capture/replay pipeline; replay live-midi r2 bytes at PULSE2X=1
+- **Issue #1253** (closed): render_plan prints the -1 sentinel in the applies column for status/abort rows
+- **PR #1255**: fix: render unset apply_frame as '-' in dry-run plan and echo lines
+- **Issue #1183** (closed): Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census
+- **PR #1203**: fix: catch cross-module corpus refusals at five run_case-caller boundaries (run_case.* family of #1183)
+- **Issue #1239** (closed): Tighten the audition help control: `>= 2` lets a silently-no-op replace retire one of its three injected defects
+- **PR #1251**: test: require all three findings in audition help control
+- **Issue #1243** (closed): Use one packet-duration calculation for the UART player’s budget and preflight
+- **PR #1247**: fix: give the UART budget packet durations in audio frames
+- **Issue #1217** (closed): rungs.yml pulse2x job: the VOICE_PULSE2X_OFF control's clean twin is an adjacent run_all row, which cannot gate it
+- **PR #1223**: ci: gate the pulse2x VOICE_PULSE2X_OFF control on its clean twin via run_controls
+- **PR #1246**: fix: stop UART status and abort opening the bridge before the dry-run decision
+- **PR #1226**: docs: make MIDI and UART packages optional in the keyboard audition install
+- **PR #1218**: tools: hash tools/delta_report.py in each comparator's SOURCES
+- **PR #1209**: fix: refuse duplicate step names in the roadmap pair gate instead of last-wins
+- **Issue #1245** (closed): Remove early UART dispatch that sends abort and status during --dry-run
+- **Issue #1215** (closed): Make MIDI and UART packages optional in the keyboard audition instructions
+- **Issue #1208** (closed): Decide whether tools/delta_report.py belongs in each comparator's SOURCES (provenance now computed by unhashed code)
+- **Issue #1206** (closed): check_workflows: the #906 pair order gate lets a duplicate guarded step name through (dict-overwrite, no ambiguity refusal)
+- **Issue #1236** (closed): CI: give the full tools pytest job enough time to report its verdict
+- **PR #1242**: ci: raise the tools job budget to 105 minutes so its verdict can report
+- **Issue #1232** (closed): Remove conflicting key assignments from the audition player’s keyboard guide
+- **PR #1233**: fix: correct audition player help keys for glide, hats and filter envelope
+- **Issue #1249** (closed): Harden the audition help control: a silent str.replace no-op still satisfies it
+
+### 2026-11-24
+
+- **Issue #1214** (closed): refusal_sibling_scan: ambiguous-callee reports family-less callees; --json leaks absolute paths
+- **PR #1230**: fix: filter non-raising stem collisions and make refusal census candidates repo-relative
+- **Issue #1212** (closed): rungs.yml rtl-full: the Verilator VOICE_FILTER2X_OFF control has no clean --m5a-smoke twin in that job
+- **PR #1220**: ci: pair rtl-full's Verilator M5A mutant with a clean smoke baseline
+- **Issue #1211** (closed): Use the ensemble scorer’s existing file hash checks for cached negative controls
+- **PR #1216**: Bind ensemble control-run reuse to the sidecar digests the report carries
+- **Issue #1192** (closed): check_workflows roadmap order gates key on step name, so the SET of compile_dag.py --run invocations is unasserted
+- **PR #1196**: ci: assert the compile_dag.py invocation set, not just the named order-gate steps
+- **Issue #1182** (closed): Wire in tools/performance_suite.py: the playing-behaviour gate that nothing runs
+- **Issue #1193** (closed): refusal_sibling_scan: family classes borrowed by from-import are invisible (9 census sites misclassified)
+- **PR #1224**: fix: track Refused families borrowed by from-import in refusal_sibling_scan
+- **PR #1204**: fix: refuse empty and near-silent windows in cymbal_bands.thirds
+- **Issue #1197** (closed): cymbal_bands.thirds divides by an unguarded e_tot; its zero case is prevented only by call-site ordering
+- **PR #1194**: tools: fix the three refusal_sibling_scan blind-spot gaps (try bodies, stem collisions, import aliases)
+- **Issue #1188** (closed): Complete refusal_sibling_scan's blind-spot list: three unrecorded modelling gaps (all zero-instance today)
+- **PR #1191**: Extract the shared compare-candidate tail into tools/delta_report.py
+- **PR #1190**: fix: refuse a silent corpus WAV in cymbal_tone_knob's windowed measurement
+- **Issue #1187** (closed): Dedupe provenance block and output guard copy-pasted across three compare_*_candidate scripts
+- **Issue #1163** (closed): cymbal_tone_knob: a silent corpus WAV crashes measure_windows with ZeroDivisionError instead of refusing
+- **PR #1186**: test: gate every --pulse2x rtl-full step on the identity outcome
+- **Issue #1177** (closed): rtl-full identity gate: the pytest guard pins the one named phrase step, not that no OTHER step runs the pulse2x phrases ungated
+- **PR #1184**: fix: catch refusal.Refused at the rimshot probes' CLI dispatch, with the cross-module census
+- **PR #1145**: controls: require a clean baseline run before crediting an RTL mutant
+- **PR #1144**: fix: refuse non-16-bit WAVs in five unguarded reference readers
+- **PR #1131**: fix: refuse injected-defect controls whose suite is red before any injection
+- **Issue #1162** (closed): Handle cross-module refusals in the rimshot probe and check other CLI callers
+- **Issue #1125** (closed): Three injected-defect harnesses have no unmutated-suite baseline: inject_manifest_defects, control_capability_verdicts, control_dag_churn
+- **Issue #1117** (closed): Twelve more unguarded `wavfile.read` + /32768 readers survive #817, including `run_case.py`'s reference loader
+- **PR #1179**: check_workflows: refuse a step if: that cannot be shown to run on a pull_request
+- **PR #1176**: test: require exact success-polarity gate in verilator identity phrase check
+- **PR #1175**: ci: refuse rather than report simulator identity in pulse2x-rtl
+- **PR #1161**: fix: refuse by name on null provenance/config in m5a compare and m1a regen tools
+- **Issue #1178** (closed): step_would_block_pull_request's step arm misses an `if:` that keeps the step off pull requests (the #1168 shape, one level down)
+- **Issue #1171** (closed): pulse2x-rtl's simulator-identity step reports rather than refuses; it is safe only by default success() gating
+- **Issue #1170** (closed): rtl-full identity gate: the pytest guard accepts any mention of steps.verilator_identity.outcome, not the 'success' polarity
+- **Issue #1165** (closed): observe the rtl-full verilator_identity gate on a real dispatch (post-merge follow-up to #1154)
+- **Issue #1155** (closed): Same-shape sweep from #1100: three provenance reads still crash on a present-but-null field
+- **PR #1174**: fix: refuse any job-level if: in the signoff harness (_locate)
+- **PR #1169**: refactor: adopt control_dag_lib harness in control_capability_verdicts
+- **Issue #1168** (closed): check_workflows: the job and step `if:` arms still disagree (the `continue-on-error` half was #1158)
+- **PR #1166**: ci: gate the rtl-full phrase run on a Verilator identity refusal step
+- **PR #1164**: fix: catch refusal.Refused at cymbal_bands callers' cross-module call sites
+- **Issue #1160** (closed): cymbal_bands.Refused is caught by nobody: its three callers each define a sibling Refused, so a cymbal refusal exits 1 (FAIL), not 2
+- **PR #1159**: fix: treat expression-form continue-on-error as neutralising at job and step level
+- **Issue #1158** (closed): check_workflows: the job/step `continue-on-error` neutralisation check misses the `${{ ... }}` expression form
+- **Issue #1154** (closed): rtl-full's pulse2x phrase step can run under the wrong Verilator: assert the simulator identity at the point of use
+- **PR #1105**: refactor: consolidate the triplicated control_dag harness into control_dag_lib
+- **Issue #1099** (closed): Adopt control_dag_lib in control_capability_verdicts.py (same harness shape found by #1097's closing search)
+- **Issue #1097** (closed): Consolidate duplicated control_dag harness (RUNNER/run_one/main) into one shared helper
+- **PR #1150**: test: refuse job-level if/continue-on-error in the regrade harness
+- **Issue #1152** (closed): check_workflows: job-level continue-on-error only matches the bare YAML boolean (rule-8 input)
+- **Issue #1143** (closed): test_signoff_klt_version REFUSES on a step-level kill switch but reports green on a job-level one
+- **PR #1147**: fix: normalise trajectory() cells to a share of clip energy, independent of sample rate
+- **Issue #1129** (closed): trajectory() cells carry an n_seg/2 length multiplier, biasing every ours-minus-machine cell +0.368 dB (48 kHz vs 44.1 kHz)
+- **PR #1142**: fix(probe): refuse a holdout control whose red is outside its recorded tests
+- **Issue #1136** (closed): holdout probe: a FIRED control's red is still not attributed to its injection (candidate 2 from #1124)
+- **PR #1151**: fix: refuse malformed provenance and read quoted klt pins in signoff regrade
+- **Issue #1100** (closed): Fix malformed-provenance refusals and quoted-pin comparisons in signoff
+- **PR #1134**: refactor: remove five unreferenced defs, moving their explanations to live code
+- **Issue #800** (closed): Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site
+- **PR #1133**: ci: re-home full pulse2x phrase run into rtl-full, delete pulse_audio workflow
+- **Issue #760** (closed): Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September
+
+### 2026-11-23
+
+- **PR #1141**: fix: baseline refusal names pytest's real exit status
+- **Issue #1128** (closed): holdout probe's baseline refusal names "pytest exited 1" when pytest exited 2 with a parsed FAILED line
+- **PR #1114**: fix: ignore .loom/account-ranking.* daemon state file
+- **Issue #1112** (closed): check-main-clean.sh exits 3 on every sweep: the daemon state file .loom/account-ranking.codex is not in the loom-managed .gitignore block
+- **PR #1101**: test: run the pinned-klt envelope step locally, not only in CI
+- **Issue #1095** (closed): the pinned-klt envelope gate has no committed control and no local half: it is runnable only by pushing to CI
+- **PR #1139**: chore: regenerate loom-managed gitignore block
+- **Issue #1122** (closed): loom-managed .gitignore block is two patterns stale vs installed loom-daemon 0.20.20 (/node_modules/, /pnpm-lock.yaml)
+- **PR #1138**: fix: refuse two mutation records when the unmutated suite is red
+- **Issue #1130** (closed): Two unwired mutation records read any non-zero pytest as killed with no unmutated run: mutate_pnr_report, probe_injection_discrimination
+- **PR #1140**: docs: link DAG tag criterion to generated evidence table
+- **Issue #1137** (closed): Link the capability DAG’s stamping criteria to the generated tag evidence
+- **PR #1135**: docs: refresh Foundation/Minimoog status cells from dag-results
+- **Issue #1121** (closed): docs/capability-dag.md F2 status still says the modal bank is on the unmerged `drums` branch
+- **PR #1127**: fix: holdout probe refuses on a red unmutated baseline before any control runs
+- **Issue #1124** (closed): holdout_injected_controls has no unmutated-tree baseline: a pre-existing red in test_holdout.py reads as 'every control fired'
+- **PR #1111**: docs: record the unfiled judge fast-path gh field finding
+- **Issue #820** (closed): Post-merge live verification of #818: the nightly's records land on main, and the [dag] loop guard holds
+- **PR #1119**: fix: holdout probe maps pytest's exit status to its own outcome space
+- **Issue #1118** (closed): holdout_injected_controls: pytest's own exit status is read as the probe's outcome — a deleted test_holdout.py reports 'every control fired' (exit 0)
+- **PR #1107**: Remove stale UART repair probe, record transcript provenance
+- **Issue #762** (closed): Remove fpga/probe_uart_findings.py: it reports 2 false FAILs on the repaired host and nothing runs it
+- **PR #1104**: test: require the drum model in TR-808 acceptance
+- **Issue #1094** (closed): Remove the obsolete optional-model skips from TR-808 acceptance
+- **PR #1103**: fix: refuse non-16-bit WAVs in the two unguarded reference-corpus readers
+- **Issue #817** (closed): Consolidate the seven WAV readers: four conventions, and two answer 96 dB wrong on a 24-bit file instead of refusing
+- **PR #1115**: fix: holdout probe exits 2 for REFUSED instead of folding it into exit 1
+- **Issue #1113** (closed): make controls records holdout_injected_controls' REFUSED as FAIL, and its Makefile comment names an exit 2 the probe never emits
+- **PR #1108**: probes: dispositions for the four zero-reference orphan probes (wire, pin, delete)
+- **Issue #1106** (closed): Unreferenced probe scripts under tools/ may drift the way fpga/probe_uart_findings.py did
+- **PR #1093**: Prepare DRC, LVS and supply ERC probes for the routed ladder
+- **PR #1098**: chore: remove legacy unsaturating 2x decimator prototypes and unrun Verilog scratch benches
+- **Issue #1096** (closed): Remove 2 legacy unsaturating 2x decimator prototypes and 5 unrun Verilog scratch benches from rtl-sketch/
+- **PR #1090**: signoff: fail regrade on an evidence envelope whose klt_version is not the pin
+- **Issue #1089** (closed): regrade cannot tell a re-attested envelope from a stale one: no gate binds evidence/item-{9,10}.json provenance.klt_version to the pinned klt
+
+### 2026-11-20
+
+- **PR #1087**: signoff: bump the klt pin 0.8.0 -> 0.9.2, re-attest items 9 and 10, record the item 8 refusal
+- **Issue #1084** (closed): T1 item 8: bump the signoff klt pin 0.8.0 -> 0.9.2, re-attest items 9 and 10, and attest the committed characterization report
+
+### 2026-11-19
+
+- **Issue #1075** (closed): Remove the Arty bring-up retry loop that hides a refused held note
+- **PR #1076**: fix: stop bringup_arty's play_note retrying a refused hold
+- **PR #1074**: State the foreign-host URL residual of the slow-record gate and pin it
+- **Issue #1073** (closed): check_nightly_slow_records: the artifact-record URL prefix is `\S*`, so a foreign host or bare path in a complete record line still attributes the run
+- **Issue #1066** (closed): check_nightly_slow_records: --run-id is optional but load-bearing, and control mode exits 0 over a printed FAIL
+- **PR #1067**: fix: require --run-id and return the worse of verdict/control exits in the nightly slow-record gate
+- **PR #1072**: fix: preserve quarter-slot geometry and voice parameters in ORFS
+- **Issue #1070** (closed): Nightly slow-record gate accepts an Actions dependency SHA as the repository head
+- **PR #1071**: fix: nightly gate attributes head sha to the checkout step's own output, not any line naming it
+- **Issue #1033** (closed): Two pre-existing claim markers split their paragraph in rendered Markdown (docs/tr808-reference.md)
+- **PR #1065**: docs: trail six mid-paragraph claim markers; refuse the splitting placement
+- **Issue #1058** (closed): AC (a)'s sha-equality discriminator in #820 cannot pass on a quiet night under record_unchanged() (#967) — rederive the nightly slow-record check
+- **PR #1059**: add check_nightly_slow_records: per-node corroboration gate for #820 AC (a)
+- **Issue #1056** (closed): Say why eight of the ten files hashed into the frozen Mini V3 records are deliberately NOT guarded
+- **PR #1060**: docs: correct Mini V3 re-bind guidance and narrow the reader-pin rationale
+- **Issue #706** (closed): Route the hash-pinned Mini V3 ring readers through ring_estimator (needs rig)
+- **Issue #922** (closed): Tracked-JSON truncate-then-write remains in holdout.py (ledger + seals) and measure_m1a_volume_mapping.py
+- **PR #948**: tools: write holdout ledger/seals and M1A volume-mapping records atomically
+- **PR #750**: fix: keep the Mini V3 ring readers frozen with a named guard (re-scope per #1048)
+- **Issue #1053** (closed): Isolate the Mini V3 freeze-defeat tests so each mutation starts from a passing copy
+- **PR #1055**: test: isolate freeze-defeat mutants in function-scoped copies with a passing control
+- **Issue #1050** (closed): [voice-only] Baseline Mini V4 as a new reference suite: render script, case list, board case table
+- **PR #1052**: feat: baseline Mini V4 as a separate reference suite (manifest, render script, V3 freeze, board suite column)
+- **Issue #1018** (closed): Confirm WORK_PLAN.md's as-of sentence survives Guide regeneration, and reconcile it with the inbound upstream in-region stamp
+- **PR #1045**: fix: refuse a claim marker whose closer is not on its opener's line
+- **Issue #1044** (closed): check_doc_claims.py silently drops a claim marker that spans two lines, so an unverified claim reports green
+
+### 2026-11-18
+
+- **PR #1042**: fix: refuse a second claim marker on one line instead of dropping it
+- **Issue #1041** (closed): check_doc_claims.py silently drops a second claim marker on the same line, so an unverified claim reports green
+- **Issue #1040** (closed): analyze_def_sites: read the kept DEF's extension-point census on the #1010 host (live-vs-latent, one command)
+- **PR #1039**: fix: a '+' in the DEF walk ends the layer-name position
+- **Issue #1037** (closed): analyze_def_sites: a skipped '+' does not end the LAYER-name position either (sibling of #1034)
+- **PR #1031**: fix: consume skip-keyword name arguments so they never become phantom vias
+- **Issue #1030** (closed): analyze_def_sites: a skip-keyword's NAME argument after a path's points becomes a phantom via (same class as #1013/#1021, via branch not width branch)
+- **PR #1029**: docs: bind #1006 route-record figures to claim markers
+- **Issue #1023** (closed): docs/tool-findings.md carries zero claim markers, so its route-record figures have nothing re-deriving them
+- **PR #1025**: fix: apply the DEF path-point extension to the wire rect and count it in the record
+- **Issue #1022** (closed): analyze_def_sites: the DEF path-point extension is recorded but never applied to the emitted rect, nor surfaced in the record
+- **PR #1035**: fix: end the via-name position at a skipped '+' in DEF path walk
+- **Issue #1034** (closed): analyze_def_sites: '+ NONDEFAULTRULE <name>' after a path's points makes the keyword a phantom via (the spelling #1030 left out of scope)
+- **PR #1027**: docs: scope 'bound in-repo' claim to what route_def_manifest.json carries
+- **Issue #1026** (closed): tool-findings.md:189-193 — "this chain is bound in-repo" covers two items the manifest does not
+- **PR #1024**: fix: consume STYLE/MASK/WEIGHT numeric arguments with their keyword, never as the path width
+- **Issue #1021** (closed): analyze_def_sites: STYLE/MASK numeric arguments are still consumed as the path width
+- **PR #1019**: bind the DEF re-run evidence chain in-repo: commit route_def_manifest.json, regenerate def_site_analysis.json with totals, shape tags, overlap lower bound
+- **Issue #1011** (closed): Commit route_def_manifest.json and regenerate def_site_analysis.json's record fields against the kept DEF
+- **PR #1016**: docs: accept ladder_dp's 24 Metal2 PDN spacing sites as known-PDN residual
+- **Issue #1009** (closed): Floorplan/PDN: the M1->M4 via-column lands leave 24 Metal2 spacing violations in ladder_dp's finished route
+- **PR #1017**: parse the DEF path-point extension form ( x y ext ): record ext_start/ext_end, never consume it as width
+- **Issue #1013** (closed): analyze_def_sites: parse or refuse DEF path-point extension form ( x y ext )
+- **PR #1015**: docs: add static as-of instruction to WORK_PLAN.md header
+- **Issue #1014** (closed): WORK_PLAN.md carries no as-of date, so a reader cannot tell when a declined regeneration left it stale
+- **PR #1010**: bind the ladder_dp route-DRC claims in-repo and answer design-versus-router from the routed DEF
+- **Issue #1006** (closed): ladder_dp route record: design-vs-router is undetermined for want of a DEF, and the classifier's inputs are not in the tree
+- **PR #1005**: test: injected defect for the start-skip legitimacy half of the two-instant CB control
+- **Issue #1004** (closed): test_verify_109_corpus_gate: the start-skip legitimacy assertion ships without the input that defeats it (rule 8)
+- **PR #1001**: tools: commit the probes prose-literal census its counts were quoted from
+- **PR #1002**: pnr: commit the finished ladder_dp route record (klt 0.9.0) and classify its 24 residual DRC violations
+- **PR #999**: fix: NOT_QUOTED sentinel for unquoted CONCLUSION figures in the corpus-gate test
+- **Issue #998** (closed): The #988/#990 prose-literal class scanner is in no tree, so its 139/159/156 counts (and "no third site") cannot be re-derived
+- **Issue #997** (closed): test_verify_109_corpus_gate's CB extent parser can report a drift that does not exist (two-instant CB returns start=None)
+- **Issue #808** (closed): Route ladder_dp to completion with the unpatched netlist on the build box: DRT-0305's cause is measured gone, the error is not re-observed
+- **PR #1000**: tools: remove one-shot ring-ratio snapshot harness
+- **PR #996**: fix: render_writes refuses out-of-record streams instead of asserting
+- **PR #993**: probes: derive two summaries' quoted figures from the run's own measurements
+- **PR #991**: probes: derive verify_109_claims CONCLUSION extents from the run's measurements
+- **PR #987**: perf suite: drive the shipped mixer -- a synth_top backend for the full-performance suite (#338)
+- **Issue #995** (closed): performance_suite: render_writes answers AssertionError, not REFUSED, for a stream past the record
+- **Issue #990** (closed): Class sweep (#988): two more same-shape sites - hard-coded prose figures beside the same run's live measurements
+- **Issue #988** (closed): verify_109_claims:244's CONCLUSION understates RS floor-clearing by ~13 ms (53.9 measured vs ~41 prose), and the figure is registered with no gate
+- **Issue #975** (closed): Remove tools/ring_ratio_compare.py: one-shot #548 before/after harness, nothing references it
+- **Issue #912** (closed): Five more JSON-refusal handlers miss UnicodeDecodeError: the #909 gap generalises past load_json_refused
+- **Issue #338** (closed): Sound: full-performance suite — bass, lead, drum-only and mixed phrases with control movement
+- **PR #818**: ci: commit the nightly's slow DAG records to main, not just the artifact
+- **Issue #787** (closed): Carry the nightly's slow DAG evidence to main so F1, M1, D1, I1 and I2 stop reading STALE or "never run"
+- **PR #986**: docs: record verify_109_claims half-2 live run against the real Fischer corpus
+- **PR #985**: docs: mark §5c mpd.* bucket names as stale pending #933 regeneration
+- **Issue #983** (closed): CI produced zero check-runs on PR #982: pull_request workflows stopped triggering (needs operator)
+- **Issue #829** (closed): Run `make reference-integration` on the box: verify_109_claims' real-reference half has never been exercised against the real Fischer corpus
+- **Issue #856** (closed): Provision the pinned build box for this checkout: no .env, no remote.env, and the dispatch worker's AWS identity has no EC2 access
+- **Issue #869** (closed): Forward upstream to rjwalters/loom: post-verdict issue-body hash refuses when the body ends in a newline (#13600's fix covers one trailing newline, jq gives two)
+
 ### 2026-11-17
 
+- **PR #980**: docs: record the posted OpenROAD#12303 correction of record in the #12307 row
+- **Issue #888** (closed): Post the #12307 correction of record as a comment on OpenROAD#12303
+- **Issue #826** (closed): compile_dag --only: a named node that cannot run is skipped SILENTLY (exit 0, no line)
+- **PR #974**: dag: restate verdict-less evidence_file as REFUSED in docs, and forbid the silent declaration
+- **PR #972**: fix: compile_dag --only refuses a named node it cannot run, instead of silence
+- **PR #977**: test: pin run_evidence()'s known-key REFUSED and its non-recording path through main
+- **Issue #976** (closed): compile_dag: run_evidence()'s EVIDENCE_PRECEDENCE refusal ships without the input that defeats it
+- **Issue #971** (closed): compile_dag: docs/capability-dag.md and test_compile_dag_deps.py still state the pre-#791 'EXISTS ONLY returns pass' behaviour as current
+- **PR #968**: test: refuse the archive fixture during a squash merge
+- **PR #973**: fix: derive compile_dag's four evidence-source readers from one EVIDENCE_PRECEDENCE
+- **PR #969**: fix: keep unchanged dag records byte-identical so record PRs can land (#967)
+- **PR #970**: fix: share the claim-marker skip grammar between checker and #789 probe
+- **PR #810**: dag: report an evidence file that declares no verdict as REFUSED, not GREEN
+- **PR #944**: test: catch serialise-then-write and write-mode open spellings in the inline record-write guard
+- **PR #965**: fix: refuse the 789-marker suite's archive fixture mid-merge
+- **PR #953**: fix: --margins all-caught no-cliff input states the measured fact, not 'not every pair is CAUGHT'
+- **PR #957**: fix: 789 marker probe derives its already-satisfied guard from the staged injection
+- **PR #960**: fix: anchor the drum_kit grep= claim so the 789 probe's injection cannot collide with it
+- **Issue #966** (closed): 789-marker fixture guard: `git merge --squash` reproduces the exact mid-merge split it refuses, and is not refused
+- **Issue #827** (closed): compile_dag: unjudged() keys on evidence_file but run_evidence dispatches suite/verifier first, so a node with both would be REFUSED despite a passing suite
+- **Issue #967** (closed): Any PR that rewrites a docs/dag-results.json record cannot land while main is busy: dag.yml re-conflicts it every merge
+- **Issue #962** (closed): 789 probe: injected_state mirrors the checker's FENCE rule but not its inline-backtick rule
+- **Issue #791** (closed): compile_dag renders a node GREEN when its evidence file declares no verdict: M3, S1 and S3 are green on existence alone
+- **Issue #923** (closed): The source-shape guard in test_atomic_record_writers.py stays green on open(...,'w') + write(json.dumps(...))
+- **Issue #964** (closed): 789 probe suite: a merged-tree measurement is silently void unless HEAD is the merge commit (git archive HEAD fixture)
+- **Issue #950** (closed): print_margins' else prose says 'not every pair is CAUGHT' on a guard that does not measure it
+- **Issue #936** (closed): 789 marker probe: already_satisfied() holds a hand-written copy of each claim's in=/grep=, and the two can diverge silently
+- **Issue #959** (closed): main is red: the 789 marker probe's already-satisfied injection also defeats #904's grep= uniqueness refusal (tools job, since 72be3665)
+- **PR #951**: probes: split the rate-fold verdict else on the dB red count it mis-states
+- **Issue #946** (closed): rate_fold_db_control's verdict prose states a stronger fact than `must == []` supports
+- **PR #945**: test: guard the ms.* grouping label against a silent %.0f collision
+- **Issue #939** (closed): measure: the ms.* grouping label is %.0f, so two MS_WINDOWS_S entries that round to the same integer ms would silently merge buckets
+- **PR #876**: ci: collect the 16 uncovered fpga/ test files in a fpga-uncovered job
+- **Issue #853** (closed): 16 of 40 fpga/ test files are run by no CI job (23 more only via make verify-fast) -- the fpga half of the #404/#851 shape
+- **Issue #958** (closed): 789 marker probe: the #920 already-satisfied refusal for drum_kit is shadowed by check_doc_claims' one-line uniqueness refusal — tools job red on main since 72be3665
+- **Issue #956** (closed): compile_dag.py's status legend lists BLOCKED and TODO twice (merge artefact from #810)
+- **Issue #937** (closed): rate_tol_sweep.py --unit <anything but db> labels its columns caught_db/cost_db, and two smaller label drifts from #895
+- **PR #942**: fix: name rate_tol_sweep's per-unit columns by the swept unit
+- **Issue #932** (closed): check_attested_hashes: a pathed check entry with no content_hash is a silent green, and is counted as compared
+- **PR #938**: fix: REFUSE pathed check entries with no committed hash; count only compared files
+- **Issue #929** (closed): measure: extra_group() merges the 10.0 ms and 5.0 ms MPD strides into one bucket (6 strides -> 5 buckets)
+- **PR #934**: fix: bucket MPD attribution columns by stride, not by stride decimals
+- **Issue #920** (closed): 789 marker probe: a control still reports FAIL when the tree already satisfies the value it injects
+- **PR #927**: fix: 789 marker probe refuses an injection state the tree already satisfies
+- **Issue #815** (closed): Re-base the 114 Refused definitions on refusal.Refused and delete the three mitigations it makes dead (follow-on to #784)
+- **PR #915**: fix: re-base every Refused on refusal.Refused, delete the three dead mitigations, flip the guard to enforcing
+- **Issue #904** (closed): check_doc_claims.py cannot detect a grep= pattern that matches several lines, so no marker's uniqueness is machine-checked
+- **PR #916**: check_doc_claims: refuse a grep= marker matching more than one line
+- **Issue #928** (closed): docs: discrimination.md:962 points at line 232 of discrimination-run-16.txt, which #778 regenerated
+- **PR #931**: docs: re-anchor jit.stability figure to revision 24937ca4
+- **Issue #940** (closed): The #906 roadmap gate: tags assumed in rungs.yml but asserted in nightly.yml, and nothing guards the shipped step order
+- **PR #943**: ci: assert the shipped compile_dag check-before-run order; state rungs' tag precondition
+- **Issue #935** (closed): the dB family's rate tolerance ships 8.0 dB of licence at the floor_db clamp with no injected-bug control on any dB column
+- **Issue #921** (closed): Makefile and docs/claim-markers.md understate the 789 marker probe's runtime margin by ~6x
+- **PR #926**: docs: restore measured ~0.6 s / ~6000x figures for the 789 probe runtime note
+- **PR #941**: [rate-tol] measured: no dB must row is constructible for the integer-fold control at any licence (#935)
+- **Issue #906** (closed): rungs.yml's roadmap gate checks the README that the line above it just rewrote
+- **PR #924**: fix: the roadmap gate judges the README as committed, not the regen's own output
+- **Issue #882** (closed): Tracked-JSON experiment-record writers still truncate-then-write (class sweep remainder from #881)
+- **PR #918**: fix: tracked-JSON experiment records replace atomically; record readers refuse with a path
+- **Issue #782** (closed): bug: the relative rate tolerance is dimensionally meaningless on the 147 dB columns
+- **PR #895**: split RATE_TOL_REL into per-unit scalars; sweep the dB term to 0.1 and empty the rate quarantine
+- **Issue #884** (closed): regrade: an attested-file edit fails as a bare 'exit 3' with the drift report swallowed, and nothing couples the edit to regenerating the evidence
+- **PR #925**: signoff: surface klt's drift report on failure; add attested-hash coupling check to verify-fast
+- **Issue #930** (closed): signoff.yml swallows the attest-check diagnostic: failing attestation prints nothing under bash -e
+- **Issue #778** (closed): measure: re-derive the jit.stability +0.008 and mpd.* attributions with the exact-period fold (REFUSED in #767 -- no corpus on that host)
+- **PR #919**: docs: re-derive the 5b/5c attributions with the post-#776 fold; record corpus octave incidence
+- **Issue #885** (closed): pytest_collection_inventory.py:78 comment says pnr/ is 'make verify only' — false once the pnr CI job lands (#851/#865)
+- **PR #914**: docs: correct GUARDED_DIRS comment — CI collects pnr/ as a third job
+- **Issue #879** (closed): docs: makefile_recipe comment-filter docstrings claim a silent exit 0 for a mutation that is loud mid-recipe
+- **PR #907**: docs: scope makefile_recipe comment-filter docstrings to the line position
+- **Issue #905** (closed): check_doc_claims_789_marker_controls.py reports FAIL, not REFUSED, when an uncommitted edit makes a #789 claim stale
+- **PR #913**: fix: 789 marker probe REFUSES a dirty tree instead of reporting FAILing controls
+- **Issue #874** (closed): docs/tool-findings.md will carry contradictory claims about the core-area identity once #849 merges
+- **PR #911**: docs: drop stale attribution of the 6-sf coincidence framing to PR #849's row
 - **Issue #909** (closed): load_json_refused catches JSONDecodeError only: a damaged record that is also invalid UTF-8 escapes as a traceback
 - **PR #910**: fix: refuse a manifest record truncated mid-UTF-8 rather than a bare UnicodeDecodeError
 
@@ -693,57 +1034,3 @@ Closure events below record forge state, not a verified fix or a new sound resul
 - **Issue #49** (closed): Playing behaviour: choose our rules deliberately, then test them
 - **PR #236**: docs: decide the external feedback loop's tap, gain, delay and saturation
 
-### 2026-09-25
-
-- **PR #231**: measure: F1 matched-level Surge references + one compensated input-scaling experiment
-- **PR #232**: measure: F1A-F1C board records at the current estimator (measurement-version update)
-- **Issue #222** (closed): Repo-wide ground-truth gate: extend the 808 suite's claim/backing-test meta-test beyond one file (#45 item 1)
-- **PR #227**: test: extend the claim/ground-truth gate to test_moog_acceptance.py
-- **Issue #223** (closed): Doc-claim-to-evidence checker: flag prose claims whose backing test is missing, passing-when-cited-as-failing, or stale (#45 item 4)
-- **PR #230**: Doc-claim-to-evidence checker, and the failure-modes status list it was commissioned to correct
-- **PR #228**: measure: current F1A-F1C cutoff baseline on the selected filter path
-- **PR #226**: M1A drive experiment: no candidate chosen -- drive fixes odd-partial phase sensitivity but worsens even partials
-- **PR #219**: M1A phase-cycle capture: Mini V3 at all relative phases -- INCONCLUSIVE under the pre-registered rule
-- **Issue #21** (closed): R8: shaped excitation pulse — the ~90% discrimination term
-- **PR #221**: docs: BD excitation-shape probe for #21 -- mechanism confirmed, blocked by #220, kit unchanged
-- **PR #218**: M1A harmonic-shape diagnosis: phase-sensitive mix; no sound change supported yet
-- **PR #217**: M1A attack: record the stopping point and two qualifications
-- **Issue #22** (closed): R9: complete the 808 — the eight voices we don't have
-- **PR #214**: M1A: known-answer qualification of the attack measurement (m1a-envelope-score-v3); still no verdict
-- **Issue #1** (closed): Product target: USB-C bus-powered class-compliant sound module (keychain)
-- **PR #216**: docs: the keychain dongle, itemised from manufacturers' drawings (#1 board fit)
-- **PR #212**: arty: bind integrated-baseline DSP evidence to routed.dcp by digest; extractor records the digest
-
-### 2026-09-24
-
-- **PR #210**: Musical-length playback: rolling UART delivery, qualified through the RTL
-- **PR #211**: M1A: select the −4 dB gain patch; two-sided attack qualification; exploratory attack sweep
-- **PR #209**: publish: derive dsp_feedback_review_complete from DCP-bound evidence
-- **PR #197**: measure: publish M1A gain improvement and diagnose oscillator cancellation
-- **PR #203**: Qualify M1A attack measurement: envelope becomes a valid metric; M1A valid fail (21/100)
-- **PR #199**: Build and publish Arty A7-100T baseline with SPI-to-I2S verification
-- **PR #202**: USB-UART control bridge: device-side event scheduling, one-command playback
-- **PR #201**: Qualify external I/O timing: I2S forwarded clock, SPI MISO return, documented LED exceptions
-- **PR #200**: Dismiss the 13 DPREG-4 DSP feedback warnings with mapped-simulation evidence
-- **PR #204**: Integrated qualified Arty baseline: DSP disposition + external I/O timing + UART bridge in one image
-
-### 2026-09-23
-
-- **PR #191**: Add named selected Mono presets and checked FPGA build
-
-### 2026-09-22
-
-- **PR #194**: Measure first M1A bass comparison with qualified release and explicit missing evidence
-- **PR #192**: Advance pulse 2x through the production RTL and Mono I2S scorer
-
-### 2026-09-21
-
-- **PR #193**: Measure the prior-note effect behind Mono attack discrepancies
-- **PR #180**: Land measured Mono baseline, shared engine and portable references
-- **PR #182**: Measure reconstructed 2x versus 4x ladder paths
-- **PR #183**: Combine verified M5A candidate and release fix
-- **PR #187**: Add first complete Mini V3 M5B scorecard case
-- **PR #188**: Score M5B with selected M5A engine
-- **PR #190**: Restore exact frozen Surge cache and run reference controls in CI
-- **PR #185**: Preserve voice envelope release precision
-- **PR #184**: Skip redundant render when scoring supplied I2S audio

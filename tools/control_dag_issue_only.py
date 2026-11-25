@@ -60,14 +60,13 @@ hypothesis cannot be quietly reinstated.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import pathlib
-import subprocess
 import sys
-import textwrap
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from control_dag_lib import main, node_control                             # noqa: E402
+
 GUARD = "test_no_committed_node_cites_an_issue_as_its_only_source"
 
 #: An ordinary node, so a control fires on the guard rather than on a renderer
@@ -114,81 +113,17 @@ CONTROLS = {
         "decision with a failing control in front of it, not a silent one"),
 }
 
-RUNNER = """
-import json, pathlib, sys, tempfile
-ROOT = pathlib.Path({root!r})
-sys.path.insert(0, str(ROOT / "tools"))
-import compile_dag as cd
-doc = json.loads(cd.DAG.read_text())
-doc["nodes"]["ZZ"] = {node!r}
-tmp = pathlib.Path(tempfile.mkdtemp()) / "dag.json"
-tmp.write_text(json.dumps(doc, indent=2))
-cd.DAG = tmp
-import pytest
-sys.exit(pytest.main(["-q", "--no-header", "-p", "no:cacheprovider",
-                      str(ROOT / "tools" / "test_compile_dag_deps.py")]))
-"""
-
 
 def run_one(name: str) -> tuple[bool, list, str]:
     """Inject one node and run the suite. Returns (fired, failed tests, why)."""
     node, expect, must_fail, _why = CONTROLS[name]
-    code = RUNNER.format(root=str(ROOT), node=node)
-    p = subprocess.run([sys.executable, "-c", code], cwd=str(ROOT),
-                       capture_output=True, text=True)
-    failed = sorted({ln.split("::")[-1].split(" ")[0]
-                     for ln in p.stdout.splitlines() if ln.startswith("FAILED")})
-    if expect == "green":
-        if p.returncode != 0:
-            return False, failed, ("the suite went RED on a shape the guard is "
-                                   "meant to PERMIT -- the guard is stricter "
-                                   "than its own contract")
-        return True, failed, ""
-    if p.returncode == 0:
-        return False, failed, "the suite stayed GREEN with the defect injected"
-    if must_fail not in failed:
-        return False, failed, (f"the suite went red but {must_fail} was not among "
-                               f"the failures, so this control is satisfied by "
-                               f"some OTHER assertion and would survive that "
-                               f"one's deletion")
-    return True, failed, ""
-
-
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--list", action="store_true",
-                    help="what each control injects, and what must happen")
-    a = ap.parse_args(argv)
-
-    if a.list:
-        for name, (node, expect, must_fail, why) in CONTROLS.items():
-            print(f"{name}\n  expects    suite {expect.upper()}"
-                  f"{'' if not must_fail else f', failing {must_fail}'}")
-            print(f"  why        {why}")
-            print(textwrap.indent(json.dumps(node, indent=2), "  | "))
-            print()
-        return 0
-
-    bad = []
-    for name in CONTROLS:
-        fired, failed, why = run_one(name)
-        expect = CONTROLS[name][1]
-        label = ("RED " if expect == "red" else "GREEN") if fired else "DID NOT HOLD"
-        print(f"{label:<14}{name}{'' if fired else '  -- ' + why}")
-        for f in failed[:8]:
-            print(f"               {f}")
-        if not fired:
-            bad.append(name)
-    print()
-    if bad:
-        print(f"FAIL -- {len(bad)} control(s) did not hold: {', '.join(bad)}. "
-              f"A run where these do not hold is a broken run, not a quiet one.")
-        return 1
-    print(f"OK -- all {len(CONTROLS)} issue-only controls held: the guard fires on "
-          f"the shape #788 reported and permits the two shapes it documents.")
-    return 0
+    return node_control(node, expect, must_fail)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(
+        __doc__, CONTROLS, run_one,
+        show=lambda node: json.dumps(node, indent=2),
+        ok_message=f"OK -- all {len(CONTROLS)} issue-only controls held: the "
+                   f"guard fires on the shape #788 reported and permits the "
+                   f"two shapes it documents."))

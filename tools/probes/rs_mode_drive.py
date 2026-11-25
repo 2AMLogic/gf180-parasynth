@@ -101,8 +101,10 @@ WRONG BEFORE IT WAS RIGHT (3, all caught by a gate or a sweep, none by reading):
      and the exciter's own decay fit (PEAK_RSX's PROVENANCE) broken with it.
 
 Needs the Fischer corpus at $GF180_TR808_REFS / $TR808_REFS / /tmp/tr808-ref
-for `confirm`, and REFUSES rather than reporting without it. `derive` and
-`sweep` need no corpus and say so.
+for `confirm` and `distort` (`distort` reads it only for the reference
+line's tail decay / bal1, derived there rather than quoted since #990), and
+REFUSES rather than reporting without it. `derive` and `sweep` need no
+corpus and say so.
 """
 import math
 import os
@@ -435,8 +437,36 @@ def _tap_peaks(att, peak_x):
     return lo, hi
 
 
+def _ref_decay_balance(ref_y, ref_sr) -> tuple:
+    """The Fischer reference's `tail decay` (ms) and `bal1` (dB), through the
+    same estimators the table rows above the `reference:` line print. The
+    line is derived from these (#990, the #988 repair class), not quoted."""
+    dec = scored_rows(ref_y, ref_sr).get("tail decay", (None,))[0]
+    bal = measure(ref_y, ref_sr)["balance"]
+    return dec, bal
+
+
+def _reference_line(dec_ms, bal_db) -> str:
+    """The `reference:` prose line, from the measured pair. Refuses a reading
+    that does not exist (None / nan): a refusal rendered into prose is a
+    plausible number for a measurement that was not made (#990). The guard
+    sits at the print -- the last place a quoted number could re-enter.
+    GUARD-DEFEAT STATEMENT (rule 8): it cannot tell a measured pair from an
+    invented one; `tools/probes/test_probe_prose_derivation.py` perturbs the
+    pair through this seam and pins the refusal."""
+    if dec_ms is None or bal_db is None or not (
+            math.isfinite(dec_ms) and math.isfinite(bal_db)):
+        raise Refused(f"the reference line needs a finite reference tail "
+                      f"decay and bal1; the estimators returned "
+                      f"{dec_ms!r} ms and {bal_db!r} dB")
+    return (f"   reference: the machine's tail decay is {dec_ms:.2f} ms, "
+            f"bal1 {bal_db:+.2f} dB.")
+
+
 def cmd_distort() -> int:
-    print("NO RECORDING IS READ BY THIS COMMAND. `dHARM` is exactly")
+    ref_y, ref_sr, _rel, _setting = reference()
+    ref_dec, ref_bal = _ref_decay_balance(ref_y, ref_sr)
+    print("THE dHARM COLUMNS READ NO RECORDING. `dHARM` is exactly")
     print("test_808_acceptance.test_rimshot_is_distorted_and_that_is_the_sound's")
     print("measure: harmonics 2-5 of 455 Hz re the fundamental, swing minus LIN,")
     print("and it demands >= 6.0 dB. `dHARM*` drops harmonic 4 (1820 Hz), which")
@@ -468,7 +498,7 @@ def cmd_distort() -> int:
     print("\n   `peak` is the RS dmix peak in full scale before the bus gain; the")
     print("   kit's target for RS is 0.4286 (PEAK_RSG re-balances to it, and being")
     print("   the LAST stage it moves no column above except `peak`).")
-    print("   reference: the machine's tail decay is 7.24 ms, bal1 +3.85 dB.")
+    print(_reference_line(ref_dec, ref_bal))
 
     print("\n   WHERE THE ESTIMATOR'S dHARM WENT, harmonic by harmonic, on the LIN")
     print("   arm -- the arm with NO nonlinearity in it, so every dB here is a")
@@ -530,7 +560,14 @@ if __name__ == "__main__":
     try:
         sys.exit({"derive": cmd_derive, "sweep": cmd_sweep,
                   "confirm": cmd_confirm, "distort": cmd_distort}[cmd]())
-    except Refused as e:
+    # The BASE class, not the local sibling (#1162): reference() reaches
+    # run_case.load_reference / run_case.prepare, whose Refused is
+    # preparation_contract.Refused -- a sibling of this module's, so the old
+    # `except Refused` missed it and a silent reference escaped confirm and
+    # distort as an exit-1 traceback, a refusal rendered as FAIL. The same
+    # widening as rs_guard_band.py, same corpus input. Unrelated exceptions
+    # still escape as execution errors.
+    except refusal.Refused as e:
         print(f"REFUSED  {e}")
         sys.exit(2)
     except KeyError:

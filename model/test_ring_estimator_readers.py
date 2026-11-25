@@ -22,12 +22,22 @@ Not routed, by reading (verification-rules rule 8 -- why no defeating input):
     Assumed from names and docstrings -- skimmed, not traced.
   * `tools/measure_mono_m1a_reference.py`, `tools/measure_mono_m5a_reference.py`
     (Mini V3 free rings -- `_measure_open_cutoff`, M1A's three-ring phrase):
-    STILL on `am.dominant_frequency`, deliberately. Both files are hashed into
-    the attack qualification (`suite-v3.json` `sources_sha256`) and the
-    attack-context analysis basis; editing them makes those records REFUSED
-    as stale, and re-running them needs the Mini V3 rig this host lacks.
-    Routing them is a follow-up that must regenerate those records.
+    STILL on `am.dominant_frequency`, now permanently. Routing them for V3
+    (#706) is cancelled, so these two readers have no remaining reason to
+    change -- that cancellation, not a freeze of the files themselves, is
+    what this file pins. Both are hashed into the Mini V3 records
+    (`suite-v3.json` `sources_sha256`, the attack-context model report
+    `source_sha256`); those records hash eight other files that are live and
+    deliberately unguarded -- an edit to one lands in its own stale-record
+    refusal or reported-difference path, not here (per-file behaviour
+    tabulated in `docs/scorecard/mono-attack-context/model/README.md`).
+    Mini V4 references get their own reader when that suite produces records
+    (#1052). The guard at the bottom of this file turns any edit of the two
+    files into a named failure here, instead of the 19 stale-record refusals
+    deep in the tools suite that the first attempt (PR #750) produced.
 """
+import hashlib
+import json
 import math
 import os
 import sys
@@ -163,3 +173,96 @@ def test_reference_integrity_tracking_still_answers_sustained_rings(monkeypatch)
     monkeypatch.setattr(rr, "OurLadder", L, raising=True)
     errs = ri._tracking_once("ours", {})
     assert all(v is not None and abs(v - 1.0) < 0.05 for v in errs.values()), errs
+
+
+# ---- #706 re-scoped per #1048: the two V3 ring-reader sources are pinned -----
+# The two Mini V3 free-ring readers above stay on `am.dominant_frequency`
+# because their only pending change -- routing them through ring_estimator
+# (#706) -- was cancelled by #1048, leaving neither reader a remaining reason
+# to change. The frozen records hash eight other files too; those are live
+# and deliberately NOT pinned here -- an edit to one lands in its own
+# stale-record refusal or reported-difference path (measured per file in
+# docs/scorecard/mono-attack-context/model/README.md). This guard turns an
+# edit of either reader into a named failure at this site instead of the
+# stale-record refusals deep in the tools suite that PR #750's first attempt
+# produced (19 red tests). Defeating input -- editing the recorded digest
+# alongside the file:
+# M1A's record (`suite-v3.json`) is covered by the committed reference-suite
+# freeze (tools/check_reference_freeze.py). M5A's record is
+# `mono-attack-context/model/report.json`, which the model comparison tool
+# REGENERATES, writing the current reader's digest into it -- an expectation
+# read from there accepts any reader bytes the regenerator once produced, so
+# a paired edit (reader + regenerated report) would pass (the paired-edit
+# defeat demonstrated by the Judge on PR #750). M5A's expectation is
+# therefore a committed digest literal below, independent of both the report
+# and the manifest; the control beside it replays the paired edit and
+# requires the named refusal.
+
+_V3_READER_RECORDS = {
+    "tools/measure_mono_m1a_reference.py":
+        ("docs/scorecard/mono-m1a-miniv3/attack-qualification/suite-v3.json",
+         "sources_sha256"),
+}
+
+#: The M5A reader's expected digest is committed HERE, not read from
+#: `mono-attack-context/model/report.json` -- see the block comment above for
+#: why the report cannot carry the expectation.
+_M5A_READER = "tools/measure_mono_m5a_reference.py"
+_M5A_READER_FROZEN_SHA256 = (
+    "5c8b5a3fa1e4f8668d1ec5baacbadf016fb68fc515b2bd658e667c763a9c4a74")
+
+_V3_READER_FROZEN_MESSAGE = (
+    "{source} changed since its Mini V3 record was written. The records are "
+    "frozen (#1048) and cannot be regenerated, so this reader cannot be "
+    "re-routed through ring_estimator for V3 -- edit neither side. New "
+    "references go through the Mini V4 suite (#1052), whose reader routes "
+    "through ring_estimator from the start.")
+
+
+_V3_READER_ROOT = os.path.dirname(HERE)
+
+
+def _assert_v3_reader_frozen(source, expected_digest, root=None):
+    root = _V3_READER_ROOT if root is None else root
+    with open(os.path.join(root, source), "rb") as fh:
+        actual = hashlib.sha256(fh.read()).hexdigest()
+    assert actual == expected_digest, _V3_READER_FROZEN_MESSAGE.format(source=source)
+
+
+@pytest.mark.parametrize("source,record", sorted(_V3_READER_RECORDS.items()))
+def test_v3_ring_reader_source_is_frozen(source, record):
+    record_path, key = record
+    with open(os.path.join(_V3_READER_ROOT, record_path)) as fh:
+        digest = json.load(fh)[key][source]
+    _assert_v3_reader_frozen(source, digest)
+
+
+def test_v3_m5a_reader_source_is_frozen():
+    """M5A's expectation is the committed literal, not report.json: the report
+    is regenerated by tools/compare_mono_attack_context.py, which writes the
+    current reader's digest into it, so it cannot carry a frozen expectation."""
+    _assert_v3_reader_frozen(_M5A_READER, _M5A_READER_FROZEN_SHA256)
+
+
+def test_v3_m5a_paired_edit_is_still_caught(tmp_path):
+    """The paired-edit defeat: edit the reader AND move the model report with
+    it -- the exact bytes tools/compare_mono_attack_context.py writes into the
+    report on regeneration. The guard must refuse with the named M5A message,
+    because the expectation no longer comes from the report."""
+    with open(os.path.join(_V3_READER_ROOT, _M5A_READER), "rb") as fh:
+        frozen = fh.read()
+    edited = frozen + b"\n# paired-edit probe\n"
+    reader = tmp_path / _M5A_READER
+    reader.parent.mkdir(parents=True)
+    reader.write_bytes(edited)
+    moved = hashlib.sha256(edited).hexdigest()
+    report = tmp_path / "docs/scorecard/mono-attack-context/model/report.json"
+    report.parent.mkdir(parents=True)
+    report.write_text(json.dumps({"source_sha256": {_M5A_READER: moved}}))
+    # the paired state is genuine: the report now agrees with the edited bytes
+    with open(report) as fh:
+        assert json.load(fh)["source_sha256"][_M5A_READER] == moved
+    with pytest.raises(AssertionError,
+                       match=r"tools/measure_mono_m5a_reference\.py changed"):
+        _assert_v3_reader_frozen(_M5A_READER, _M5A_READER_FROZEN_SHA256,
+                                 root=str(tmp_path))

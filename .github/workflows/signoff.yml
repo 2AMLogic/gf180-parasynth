@@ -5,7 +5,8 @@
 # item-10.json is the tool-produced attestation envelope for
 # manifests/inventories/item-10.json; manifests/verdict.txt is the committed
 # `klt signoff --manifest` rendering. This job re-derives both with klt PINNED
-# to the release that first ships `--attest`, and fails on any difference, so
+# to 0.9.2 (the release that first ships `--attest 8`; 0.8.0 first shipped
+# `--attest` itself), and fails on any difference, so
 # an edit to the manifest, the inventory, LICENSE or a workflow that is not
 # followed by a regeneration cannot land. README.md is deliberately NOT attested:
 # dag.yml regenerates it on every push to main (with GITHUB_TOKEN, so no workflow
@@ -21,9 +22,15 @@
 # `make verify-fast` runs tools/check_attested_hashes.py, which recomputes
 # every attested content_hash and prints the regeneration recipe on drift.
 #
-# `--with pyyaml`: the inventory's checks run `python3` INSIDE uvx's
-# environment, where tools/check_workflows.py exits 2 without pyyaml ("no
-# evidence, not no problem"). Without it the attestation is red, not skipped.
+# pyyaml, twice on purpose. klt 0.9.2 runs an inventory's check commands with
+# the tool venv's bin REMOVED from PATH (signoff_attest._command_env: a bare
+# `python3` must resolve to the runner's interpreter, not the tool's), so the
+# bare `python3` of tools/check_workflows.py sees the setup-python 3.12 env --
+# where pyyaml is NOT preinstalled and the check exits 2, "pyyaml not
+# installed; cannot check workflows" (no evidence, not no problem). The
+# `pip install pyyaml` below covers that interpreter; `--with pyyaml` in $KLT
+# covers any yaml use inside klt's own environment. Without the install the
+# attestation is red, not skipped.
 #
 # NO DIRECTORY FILTER and no cancel-in-progress: the attested files are the
 # LICENSE and every workflow, so a path filter would exempt the very edits this
@@ -40,7 +47,7 @@
 #   # then set evidence.9.content_hash as for item 10, and regenerate the verdict.
 #
 # To regenerate (same pinned klt):
-#   K="uvx --with pyyaml --from klayout-tools==0.8.0 klt"
+#   K="uvx --with pyyaml --from klayout-tools==0.9.2 klt"
 #   $K signoff --attest 10 --inventory manifests/inventories/item-10.json \
 #       -o manifests/evidence/item-10.json
 #   # set evidence.10.content_hash in the manifest to the envelope's
@@ -60,12 +67,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      KLT: uvx --with pyyaml --from klayout-tools==0.8.0 klt
+      KLT: uvx --with pyyaml --from klayout-tools==0.9.2 klt
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: python -m pip install uv
+      # uv runs klt; pyyaml feeds the bare `python3` the item-10 check command
+      # resolves to (see the pyyaml note in the header).
+      - run: python -m pip install uv pyyaml
 
       - name: item 10 attestation still reproduces and passes
         run: |
@@ -104,6 +113,46 @@ jobs:
           roles = [c["role"] for c in d["skipped_checks"]]
           assert roles == ["cold_start"], f"only cold_start may be skipped, got {roles!r}"
           print("skipped_checks == [cold_start], carried from the committed envelope")
+          PY
+
+      - name: evidence envelopes were attested by the pinned klt
+        run: |
+          # provenance.klt_version is written by the producer and read by
+          # nothing else: after a pin bump, an envelope left behind by the
+          # OLD pin passed regrade unchanged, because --check recomputes
+          # content hashes without comparing the recorded producer version
+          # (#1089). verdict.txt needs no equivalent here: the fresh-render
+          # diff in the next step fails if its `build: klt <v>` line moves.
+          python3 - <<'PY'
+          import json, os, re, shlex
+
+          klt = os.environ.get("KLT", "")
+          refusal = ("REFUSED: cannot read the pinned version from $KLT "
+                     f"{klt!r}; expected klayout-tools==X.Y.Z")
+          # Tokenize as a shell would, so a quoted requirement loses its
+          # quotes; an unmatched quote is unreadable, not a pin.
+          try:
+              words = shlex.split(klt)
+          except ValueError:
+              words = []
+          reqs = [words[i + 1] for i, w in enumerate(words[:-1]) if w == "--from"]
+          m = re.fullmatch(r"klayout-tools==([0-9][A-Za-z0-9.+!_-]*)",
+                           reqs[0]) if reqs else None
+          assert m, refusal
+          pinned = m.group(1)
+
+          for path in ("manifests/evidence/item-9.json",
+                       "manifests/evidence/item-10.json"):
+              envelope = json.load(open(path))
+              provenance = (envelope.get("provenance")
+                            if isinstance(envelope, dict) else None)
+              got = (provenance.get("klt_version")
+                     if isinstance(provenance, dict) else None)
+              assert got, f"REFUSED: {path} records no provenance.klt_version"
+              assert got == pinned, (
+                  f"{path} was attested by klt {got}, not the pinned {pinned}: "
+                  "a pin bump landed without re-attesting the envelope")
+              print(f"{path}: klt_version {got} == pinned {pinned}")
           PY
 
       - name: committed verdict equals a fresh grade

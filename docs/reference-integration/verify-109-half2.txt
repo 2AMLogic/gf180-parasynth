@@ -1,0 +1,100 @@
+# verify_109_claims.py half 2 (the real-reference half) against the real
+# Fischer TR-808 corpus -- the live run #829 exists to record. PR #821 made
+# this half binding in `make reference-integration` under
+# GF180_REQUIRE_TR808_REFS=1; until this run it had only ever been exercised
+# on synthetic corpus fixtures (the corpus-less dispatch hosts used for
+# development cannot load real recordings).
+#
+# Outcome: the gate is SATISFIABLE on the real corpus.
+#   `make reference-integration` exit 0 (all three rungs; rung 1 pytest
+#   "260 passed in 374.86s", rung 2 cymbal_tone_knob --check --require-corpus
+#   pass, rung 3 the probe below).
+#   Direct probe run exit 0, "8 of 8 checks passed."
+#   Both voices OK: balance_trajectory_db returns e.ok on real rs8/RS.WAV and
+#   cb8/CB.WAV at the rung's operating points. A measured refutation was the
+#   other possible outcome (#829); it did not occur.
+#
+# Provenance:
+#   date   2026-11-18 ~03:55Z (direct probe run 2026-11-18T04:00Z)
+#   host   loom-worker-4 (Linux 7.0.0-1014-aws, shared 8-vCPU AWS dispatch
+#          worker) -- NOT the repo's pinned build box: #856 (operator ruling,
+#          2026-11-17) closed with "the build box this issue asked for is not
+#          being provisioned", workers hold no EC2 identity, and the target is
+#          Python-only (numpy/scipy audio analysis; no SPICE, no RTL), run
+#          serially per this host's modest-tests allowance.
+#   tree   2AMLogic/gf180-parasynth 8636b24f (= origin/main at run time,
+#          rev-list HEAD..origin/main = 0)
+#   python 3.12.3 (venv created in the issue worktree; numpy scipy pytest
+#          pyyaml -- the CI package set)
+#   corpus tidalcycles/sounds-tr808-fischer, depth-1 clone of refs/heads/main
+#          at 85fbecf1bec32553395625ea659e2a56dfd7c0e1 -- the commit pinned in
+#          docs/drum-verification.md; cloned to /tmp/tr808-ref (the probe's
+#          REFS_DEFAULT), with NO corpus environment variable set, per #829's
+#          recommended approach (the clone root IS the Fischer repo root, so
+#          the #522 parent-vs-root trap cannot fire).
+#   corpus commit  85fbecf1bec32553395625ea659e2a56dfd7c0e1
+#   sha256 rs8/RS.WAV 20d5cd385c0f8c3a24bbfe78c2e2747776841ede6185bc0fe93f97f0b455b89c (22096 bytes)
+#   sha256 cb8/CB.WAV 1468cbd6c75a1f23b50a15968796c256c74893a35aa3824c6663db82c271f28d (132346 bytes)
+#   precondition asserted before the run (both WAVs present and non-empty;
+#   absent/empty would have been REFUSED, not a verdict), per #829's AC and
+#   CLAUDE.md "preconditions assumed rather than asserted".
+#
+# Measurement vs the probe's historical CONCLUSION prose (recorded per #829's
+# AC): RS floor-clearing measured earliest 11.0 ms / latest 53.9 ms; the
+# CONCLUSION block's "~11 ms to ~41 ms" understates the latest instant by
+# ~13 ms on this run -- drift in the block's historical numbers, same order of
+# magnitude. CB measured latest 588.7 ms vs "~589 ms of 600 ms": consistent.
+# The detail lines (below) are the measurement; the CONCLUSION prose is the
+# probe's fixed historical commentary.
+#
+# Verbatim transcript of the direct run
+# (`GF180_REQUIRE_TR808_REFS=1 .venv/bin/python tools/probes/verify_109_claims.py`):
+# ----
+
+==============================================================================
+1. tone_ratio_db detuning / differential-decay sensitivity (re-measured)
+==============================================================================
+      OK    1% detune: tone_ratio_db resolves a line at all
+      1% detune: measured loss 0.0000 dB (issue claimed 7.3 dB)
+      OK    1% detune: loss is negligible, NOT the claimed 7.3 dB
+      OK    5% detune: tone_ratio_db resolves a line at all
+      5% detune: measured loss 0.0000 dB (issue claimed 16.0 dB)
+      OK    5% detune: loss is negligible, NOT the claimed 16.0 dB
+      tau1=6.0ms tau2=6.0ms: tone_ratio_db REFUSED (numerator: no line within +-10 % of 800.0 Hz: no prominent line in the band) rather than reporting a biased number
+      OK    tau1=6.0ms tau2=6.0ms: no silent multi-dB bias (either refused or accurate)
+      tau1=6.0ms tau2=1.5ms: tone_ratio_db REFUSED (numerator: no line within +-10 % of 800.0 Hz: no prominent line in the band) rather than reporting a biased number
+      OK    tau1=6.0ms tau2=1.5ms: no silent multi-dB bias (either refused or accurate)
+
+      CONCLUSION: current tone_ratio_db (post-#108, find_line-based)
+      is essentially exact under 1%/5% detuning and REFUSES outright on
+      rimshot-speed differential decay rather than reporting a biased
+      ratio. The issue's 7.3/16.0/8.7 dB figures do not reproduce against
+      this tree and must not be carried forward as a baseline -- they
+      describe the pre-#108 nominal-probe estimator (still visible, by
+      design, as the withdrawn comparison in this same probes/ package).
+
+==============================================================================
+2. RS.WAV / CB.WAV floor-clearing extent (re-measured from the actual
+   reference audio D10A/D13A score against)
+==============================================================================
+      OK    RS rs8/RS.WAV: balance_trajectory_db resolves on the real reference
+      RS rs8/RS.WAV: prepared record is 263.1 ms long; 24 of 217 probed instants in [0, 60] ms clear the joint floor by 6 dB; earliest 11.0 ms, latest 53.9 ms
+      OK    CB cb8/CB.WAV: balance_trajectory_db resolves on the real reference
+      CB cb8/CB.WAV: prepared record is 1513.0 ms long; 80 of 291 probed instants in [0, 600] ms clear the joint floor by 6 dB; earliest 10.0 ms, latest 588.7 ms
+
+      CONCLUSION: for RS.WAV the joint-floor-clearing region runs from
+      ~11 ms to ~41 ms of a 60 ms search window -- longer than the ~20 ms
+      this issue quotes, but the same order of magnitude, and a small
+      minority of the case's nominal window either way. For CB.WAV it
+      runs to ~589 ms of a 600 ms window. Neither number is a single
+      constant 'signal length' -- floor-clearing is intermittent, not a
+      contiguous prefix -- which is the concrete reason this fix gates
+      each instant against its own measured floor (#92) instead of
+      trying to pick one better window length (#101).
+
+      The '808-from-mars' 26 ms / 39 ms rimshot figures are NOT
+      re-measured here: that pack's audio is operator-side storage
+      (refaudio/README.md) and was not available on this host.
+
+==============================================================================
+8 of 8 checks passed.

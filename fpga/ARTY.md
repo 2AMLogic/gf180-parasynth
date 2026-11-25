@@ -102,6 +102,18 @@ Its start-red is the pre-#315 file that R0 and R1 were routed against, which
 fails `hier_separators` on lines 42 and 46.
 <!-- claim: test=fpga/test_verify_xdc_binding.py::test_red_first_the_constraints_r0_and_r1_shipped_fail_by_name -->
 
+The same binding on the REAL routed netlist — the only check that opens R1's
+checkpoint rather than a model of it — is `tools/probe_xdc_bindings.py`: it
+runs `xdc_bindings.tcl_assertions` twice in Vivado on the routed R1 `.dcp`
+(fixed XDC must bind its objects, R1's own XDC must make the assertion REFUSE
+on lines 42 and 46, R1 as-built must fail `uart_false`), asserting the
+checkpoint's digest before and after. It is a build-box probe: without Vivado
+or the named checkpoint it refuses (exit 2), which is the only outcome any
+other host ever sees of it, and that refusal is pinned by
+`fpga/test_probe_xdc_bindings.py` under `make verify` / `make verify-fast`.
+The checkpoint it wants is the one recorded in
+`reports/arty/r1-player-preview-2025.1/dsp-dpreg-evidence/routed_dcp.sha256`.
+
 What the wider scope also answers is the published images — R1
 (`r1-player-preview-2025.1`) was built on a branch that did not carry
 `383f10b`, so **its only divergence from this tree is the XDC**, which the
@@ -464,8 +476,7 @@ with the reason written beside it, not a token output delay.
 `output_delay_exceptions == ["i2s_bclk"]` and binds evidence by wrapper
 (`VERIFICATION_BY_WRAPPER`). #406 decided that this wrapper is never a release
 image, rather than scoping the gate per wrapper. `publish_arty.py` refuses it
-because it has no entry, and `fpga/test_arty_sd_top.py` asserts that absence.
-<!-- claim: test=fpga/test_arty_sd_top.py::test_never_published_as_a_release_image -->
+because it has no entry, and `fpga/test_arty_sd_top.py` asserts that absence. <!-- claim: test=fpga/test_arty_sd_top.py::test_never_published_as_a_release_image -->
 Its build gate is `fpga/build_arty_sd.py`. It requires internal timing to pass
 (WNS ≥ 0, zero failing endpoints) and every XDC query to bind. The routed
 report's output ports must be classified as exactly: nothing unconstrained,

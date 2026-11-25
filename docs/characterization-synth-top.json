@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "characterization-report",
   "status": "pass",
-  "verdict_scope": "this key says the characterization report is COMPLETE (all required evidence present, all cross-checks inside their stated tolerances). It is not a klt signoff verdict for any item and attests nothing; T1 item 8 remains UNMET",
+  "verdict_scope": "this key says the characterization report is COMPLETE (all required evidence present, all cross-checks inside their stated tolerances). It is not a klt signoff verdict for any item and attests nothing; the T1 item 8 grade is whatever manifests/verdict.txt says",
   "run_dir": "joined-d1e5068",
   "design": "synth_top",
   "clock_period_ns": 81.379997,
@@ -618,6 +618,6 @@
     "no sign-off DRC",
     "no gate-level simulation",
     "power at one corner only (the finish-stage metrics are tt_025C_5v00; sta_corners.log carries no power figures)",
-    "attestation status is not claimed by this report: klt 0.8.0 (the CI pin) has no --attest 8 producer, so T1 item 8 remains UNMET regardless of this report"
+    "attestation status is not claimed by this report: the T1 item 8 grade is read from manifests/verdict.txt, never from this report"
   ]
 }

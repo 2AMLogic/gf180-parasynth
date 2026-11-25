@@ -10,7 +10,7 @@ Fixing the instance and leaving the class is the repeating failure here, so
 these cases pin the class.
 """
 from __future__ import annotations
-import json, os, pathlib, subprocess, sys
+import itertools, json, os, pathlib, subprocess, sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -31,13 +31,376 @@ def test_a_json_verdict_is_honoured_not_just_its_existence(tmp_path, doc, expect
     assert "passed" in detail or "ok" in detail or "success" in detail
 
 
-def test_a_file_with_no_verdict_says_so_rather_than_implying_it_was_read(tmp_path):
-    """Existence alone may still stand -- but it must not LOOK like a verdict."""
+def test_a_file_with_no_verdict_is_not_a_pass(tmp_path):
+    """RECONCILED by #791. This test used to assert `ok is True` with an
+    "EXISTS ONLY" note -- it pinned the exact bug: the detail string said the
+    file was unjudged and the boolean said it had passed, and `classify()` reads
+    the boolean, so the node rendered GREEN. Announcing it is necessary and was
+    never sufficient. Now neither half claims a pass."""
     p = tmp_path / "e.json"
     p.write_text(json.dumps({"corner_hz": 117.9}))
-    ok, detail = cd.run_evidence("CTL", {"evidence_file": str(p)})
-    assert ok is True
-    assert "EXISTS ONLY" in detail, "an unjudged file must announce that it is unjudged"
+    node = {"evidence_file": str(p)}
+    ok, detail = cd.run_evidence("CTL", node)
+    assert ok is False
+    assert "no verdict" in detail, "an unjudged file must announce that it is unjudged"
+    assert cd.unjudged(node), "and the same predicate must say so to classify()"
+
+
+# ---------------------------------------------------------------------------
+# #791: an evidence file that declares no verdict renders REFUSED, not GREEN.
+#
+# The class, not the instance: the `evidence_file` branch has now been repaired
+# three times -- file existence (for `suite`), the falsy verdict (#140), and the
+# ABSENT verdict (#791). Each previous fix left the next one intact, so these
+# cases pin the predicate itself rather than any one of its callers.
+# ---------------------------------------------------------------------------
+def _classify(tmp_path, monkeypatch, node, rec=None):
+    """classify() one node with a controlled results record and no git.
+
+    Neutralises every git-reading guard (tag_is_ancestor, stale_against and,
+    since #824 landed, sha_is_ancestor) so a test here targets the judging
+    question only; the guards themselves have their own tests below, which
+    use real repositories precisely so they do NOT go through this helper.
+    """
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    monkeypatch.setattr(cd, "load_results", lambda: ({"CTL": rec} if rec else {}))
+    monkeypatch.setattr(cd, "tag_is_ancestor", lambda t: False)
+    monkeypatch.setattr(cd, "stale_against", lambda n, sha: ("fresh", ""))
+    monkeypatch.setattr(cd, "sha_is_ancestor", lambda s: True)
+    return cd.classify("CTL", node)
+
+
+def test_an_unjudged_json_is_refused_not_green(tmp_path, monkeypatch):
+    """THE BUG. A recorded `passed: true` must not survive the discovery that
+    nothing was ever judged -- which is why classify() asks the DECLARATION
+    before it reads the record."""
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    st, note = _classify(tmp_path, monkeypatch, {"evidence_file": "e.json"},
+                         rec={"passed": True, "sha": "abc",
+                              "detail": "e.json EXISTS ONLY -- no verdict declared"})
+    assert st == "REFUSED", f"got {st}: {note}"
+    assert "no verdict" in note
+
+
+def test_an_unjudged_file_is_refused_even_with_a_stamp(tmp_path, monkeypatch):
+    """A tag is evidence of a run, not of a verdict. The STAMPED path bypassed
+    the record entirely, so it needed the same guard."""
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    monkeypatch.setattr(cd, "load_results", lambda: {})
+    monkeypatch.setattr(cd, "tag_is_ancestor", lambda t: True)
+    monkeypatch.setattr(cd, "git", lambda *a: "deadbeef")
+    monkeypatch.setattr(cd, "stale_against", lambda n, sha: ("fresh", ""))
+    st, _ = cd.classify("CTL", {"evidence_file": "e.json", "tag": "node/CTL"})
+    assert st == "REFUSED"
+
+
+def test_a_non_json_file_without_evidence_requires_is_refused(tmp_path, monkeypatch):
+    """S3's shape before #791: a .txt, so the JSON verdict loop never runs and
+    there is nothing at all to judge."""
+    (tmp_path / "e.txt").write_text("ROUTED 0 DRC violations")
+    st, note = _classify(tmp_path, monkeypatch, {"evidence_file": "e.txt"},
+                         rec={"passed": True, "sha": "abc", "detail": "x"})
+    assert st == "REFUSED" and "not JSON" in note
+
+
+def test_declaring_evidence_requires_makes_a_text_node_judgeable(tmp_path, monkeypatch):
+    """S3's repair: the same file, now with a declared pass condition.
+
+    `covers` is declared because the node is judgeable -- #824's no-covered-
+    files guard must not fire on a node whose evidence is fine -- and e.txt
+    is what it covers."""
+    (tmp_path / "e.txt").write_text("ROUTED 0 DRC violations")
+    node = {"evidence_file": "e.txt", "evidence_requires": "0 DRC",
+            "covers": ["e.txt"]}
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    assert cd.unjudged(node) is None, "a declared pass condition IS a verdict"
+    st, _ = _classify(tmp_path, monkeypatch, node,
+                      rec={"passed": True, "sha": "abc", "detail": "contains '0 DRC'"})
+    assert st == "GREEN"
+
+
+def test_a_json_verdict_key_makes_a_node_judgeable(tmp_path, monkeypatch):
+    """S1's repair: a derived verdict file carrying a top-level `passed`.
+
+    `covers` for the same reason as above: judgeable evidence, real covered
+    files, so the only question left is the recorded verdict."""
+    (tmp_path / "v.json").write_text(json.dumps({"passed": True, "detail": "routed"}))
+    st, _ = _classify(tmp_path, monkeypatch,
+                      {"evidence_file": "v.json", "covers": ["v.json"]},
+                      rec={"passed": True, "sha": "abc", "detail": "v.json passed=True"})
+    assert st == "GREEN"
+
+
+def test_a_falsy_verdict_is_still_red_not_refused(tmp_path, monkeypatch):
+    """#140 must not regress. A declared failure is a FAILURE; REFUSED is for
+    the absence of a verdict, and widening it to cover a false one would undo
+    the previous fix while looking like this one."""
+    (tmp_path / "v.json").write_text(json.dumps({"passed": False}))
+    node = {"evidence_file": "v.json"}
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    assert cd.unjudged(node) is None
+    ok, _ = cd.run_evidence("CTL", node)
+    assert ok is False
+    st, _ = _classify(tmp_path, monkeypatch, node,
+                      rec={"passed": False, "sha": "abc", "detail": "v.json passed=False"})
+    assert st == "RED"
+
+
+def test_malformed_json_is_red_not_refused(tmp_path, monkeypatch):
+    """The input that defeats an over-eager REFUSED: a file that cannot be
+    parsed is a broken artefact, not an abstention. Reading it as REFUSED would
+    hide it from --strict forever."""
+    (tmp_path / "v.json").write_text("{truncated")
+    node = {"evidence_file": "v.json"}
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    assert cd.unjudged(node) is None
+    st, _ = _classify(tmp_path, monkeypatch, node,
+                      rec={"passed": False, "sha": "abc", "detail": "not valid JSON"})
+    assert st == "RED"
+
+
+def test_a_missing_file_is_todo_not_refused(tmp_path, monkeypatch):
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    assert cd.unjudged({"evidence_file": "gone.json"}) is None
+    st, _ = _classify(tmp_path, monkeypatch, {"evidence_file": "gone.json"})
+    assert st == "TODO"
+
+
+def test_a_json_list_cannot_carry_a_verdict_and_is_refused(tmp_path, monkeypatch):
+    """Valid JSON of the wrong shape -- the #600 defeating input, here."""
+    (tmp_path / "e.json").write_text("[1, 2, 3]")
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    why = cd.unjudged({"evidence_file": "e.json"})
+    assert why and "list" in why
+
+
+def test_refused_is_registered_in_both_mermaid_dicts():
+    """`mark` is a bare index: an unregistered status raises KeyError rather
+    than rendering wrong. Run the gate against the current state."""
+    nodes = {"CTL": {"name": "ctl", "group": "foundation"}}
+    for st in ("STAMPED", "GREEN", "STALE", "BLOCKED", "RED", "TODO", "REFUSED"):
+        out = cd.mermaid(nodes, {"CTL": (st, "note")})
+        assert "style CTL fill:" in out
+
+
+def test_refused_does_not_propagate_to_dependents():
+    """Stated decision, not an accident: REFUSED means "we do not know", so it
+    joins TODO rather than RED/BLOCKED. A dependent whose own evidence passed is
+    not made false by an unjudged prerequisite."""
+    nodes = {"A": {"name": "a"}, "B": {"name": "b", "deps": ["A"]}}
+    import unittest.mock as m
+    with m.patch.object(cd, "classify",
+                        side_effect=lambda i, n: {"A": ("REFUSED", "no verdict"),
+                                                  "B": ("GREEN", "passed")}[i]):
+        out = cd.classify_all(nodes)
+    assert out["A"][0] == "REFUSED"
+    assert out["B"][0] == "GREEN", "REFUSED must not propagate (RED/BLOCKED do)"
+
+
+# ---------------------------------------------------------------------------
+# #827: unjudged() must agree with run_evidence()'s dispatch precedence.
+#
+# run_evidence() resolves a node's evidence by precedence -- the first key of
+# EVIDENCE_PRECEDENCE present wins -- but unjudged() asked only whether
+# `evidence_file` was declared. A node naming a higher-precedence source AND
+# an evidence_file was judged on its file while the run was the evidence that
+# resolved: classify() rendered REFUSED over a PASSING suite, and --run
+# printed REFUSE over a FAILING one. Neither is a false green, and no node in
+# docs/dag.json declares two sources today; the defect class is four
+# hand-written copies of one precedence, which is why the fix hoists
+# EVIDENCE_PRECEDENCE and these tests pin the AGREEMENT rather than today's
+# four keys by name.
+# ---------------------------------------------------------------------------
+
+def _resolved_source(node: dict) -> str | None:
+    """Which artifact run_evidence() would judge: the first key of
+    EVIDENCE_PRECEDENCE the node declares. Derived from the constant, so it
+    walks whatever order the module actually dispatches in -- if the order or
+    the key set changes, this changes with it and keeps testing agreement."""
+    for k in cd.EVIDENCE_PRECEDENCE:
+        if k in node:
+            return k
+    return None
+
+
+_SUBSETS = [tuple(c) for r in range(1, len(cd.EVIDENCE_PRECEDENCE) + 1)
+            for c in itertools.combinations(cd.EVIDENCE_PRECEDENCE, r)]
+
+
+@pytest.mark.parametrize("keys", _SUBSETS, ids=["+".join(k) for k in _SUBSETS])
+def test_unjudged_applies_exactly_when_the_file_is_the_resolved_source(
+        tmp_path, monkeypatch, keys):
+    """The agreement itself (#827), over every combination of evidence keys.
+
+    The file is set up unjudged -- exists, valid JSON, no verdict key, no
+    `evidence_requires` -- so unjudged() has a reason to give exactly when its
+    applicability guard lets it speak: when the evidence_file is what
+    run_evidence() would resolve. A future edit that makes the guard diverge
+    from the dispatch (a new key, a reorder, an "any other source" overreach)
+    fails here without this test being edited."""
+    node = {k: "unused-by-unjudged" for k in keys}
+    if "evidence_file" in keys:
+        (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+        node["evidence_file"] = "e.json"
+        monkeypatch.setattr(cd, "ROOT", tmp_path)
+    expect_reason = _resolved_source(node) == "evidence_file"
+    why = cd.unjudged(node)
+    assert (why is not None) == expect_reason, \
+        f"keys {keys}: unjudged said {why!r}, resolved source is " \
+        f"{_resolved_source(node)!r}"
+
+
+def test_a_passing_suite_beats_an_unjudged_evidence_file_green_not_refused(
+        tmp_path, monkeypatch):
+    """THE #827 BUG, classify() side. The suite is the evidence that runs, so
+    a PASSING suite must classify GREEN even when the node also names an
+    unjudged evidence_file. Before the fix this rendered REFUSED -- a false
+    abstention pointing the reader at the file instead of the suite."""
+    (tmp_path / "test_ok.py").write_text("def test_x():\n    pass\n")
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    node = {"suite": "test_ok.py", "evidence_file": "e.json",
+            "covers": ["e.json"]}
+    st, note = _classify(tmp_path, monkeypatch, node,
+                         rec={"passed": True, "sha": "abc", "detail": "1 passed"})
+    assert st == "GREEN", f"got {st}: {note}"
+
+
+def test_a_verifier_likewise_beats_an_unjudged_evidence_file(tmp_path, monkeypatch):
+    """The guard must be "an earlier source", not "suite" (#827 test plan):
+    verifier outranks evidence_file too, so the same node shaped as a
+    verifier is GREEN, not REFUSED."""
+    (tmp_path / "verify_ok.py").write_text("")
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    node = {"verifier": "verify_ok.py", "evidence_file": "e.json",
+            "covers": ["e.json"]}
+    st, note = _classify(tmp_path, monkeypatch, node,
+                         rec={"passed": True, "sha": "abc", "detail": "ok"})
+    assert st == "GREEN", f"got {st}: {note}"
+
+
+def test_a_tool_does_not_beat_an_unjudged_file_it_still_refuses(
+        tmp_path, monkeypatch):
+    """The input that defeats an over-eager guard (#827 test plan edge case):
+    evidence_file OUTRANKS tool, so a node declaring both resolves to the
+    file, and unjudged() must still apply -- a guard written as "any other
+    source present" instead of "an earlier source present" gets this wrong."""
+    (tmp_path / "t.py").write_text("")
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    node = {"tool": "t.py", "evidence_file": "e.json"}
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    why = cd.unjudged(node)
+    assert why and "no verdict" in why
+    st, note = _classify(tmp_path, monkeypatch, node,
+                         rec={"passed": True, "sha": "abc", "detail": "x"})
+    assert st == "REFUSED", f"got {st}: {note}"
+
+
+def test_run_marks_a_failing_suite_fail_not_refuse(tmp_path, monkeypatch, capsys):
+    """The second call site (#827): main()'s --run mark. A FAILING suite must
+    print FAIL. The written record carried the failure either way -- res[i]
+    is still {"passed": false} -- but printing REFUSE asserts a declined
+    verdict over one that ran and failed, the opposite direction from
+    classify()'s false abstention. Red before the fix: the mark read REFUSE."""
+    (tmp_path / "test_no.py").write_text("def test_x():\n    assert False\n")
+    (tmp_path / "e.json").write_text(json.dumps({"corner_hz": 117.9}))
+    dag = tmp_path / "dag.json"
+    dag.write_text(json.dumps({"nodes": {"CTL": {
+        "name": "ctl", "group": "foundation", "class": "implementation",
+        "suite": "test_no.py", "evidence_file": "e.json"}}}))
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    monkeypatch.setattr(cd, "DAG", dag)
+    monkeypatch.setattr(cd, "RESULTS", tmp_path / "dag-results.json")
+    monkeypatch.setattr(cd, "git", lambda *a: "deadbeef")
+    monkeypatch.setattr(cd.sc, "checkout_staleness", lambda: "")
+    monkeypatch.setattr(sys, "argv",
+                        ["compile_dag.py", "--run", "--only", "CTL", "--print"])
+    rc = cd.main()
+    assert rc == 0
+    err = capsys.readouterr().err
+    marks = [l for l in err.splitlines() if l.strip().split(maxsplit=2)[:1]
+             in (["PASS"], ["FAIL"], ["REFUSE"]) and l.split()[1] == "CTL"]
+    assert len(marks) == 1, f"expected exactly one mark line for CTL, got {marks}"
+    assert marks[0].split()[0] == "FAIL", \
+        f"a failing suite must print FAIL, got: {marks[0]!r}"
+    rec = json.loads(cd.RESULTS.read_text())["CTL"]
+    assert rec["passed"] is False, "the written record must still state the failure"
+
+
+# ---------------------------------------------------------------------------
+# #976: the refusal run_evidence() cannot reach through the shipped constant
+#
+# run_evidence()'s trailing raise -- "a key EVIDENCE_PRECEDENCE knows but
+# run_evidence() cannot execute" -- is unreachable while the constant holds
+# its shipped four keys: every key it knows has an executing branch above
+# the raise. The guard exists for the day a fifth key is added in dispatch
+# position without a branch, and a guard with no input that fires it has no
+# test either (rule 8: the guard ships with the input that defeats it). The
+# input is a monkeypatched constant, and the same patch is how main()
+# reaches the raise: its node gate is `any(k in n for k in
+# EVIDENCE_PRECEDENCE)`, so a patched key passes the gate, reaches
+# run_evidence(), and must REFUSE loudly rather than fall through.
+# ---------------------------------------------------------------------------
+def test_run_evidence_refuses_a_known_key_it_cannot_execute(monkeypatch):
+    """The raise is live when the constant gains a key with no branch."""
+    monkeypatch.setattr(cd, "EVIDENCE_PRECEDENCE",
+                        (*cd.EVIDENCE_PRECEDENCE, "oracle"))
+    with pytest.raises(SystemExit, match="REFUSED.*oracle"):
+        cd.run_evidence("X1", {"oracle": "model/oracle.py"})
+
+
+def test_main_propagates_the_run_refusal_instead_of_recording_red(
+        tmp_path, monkeypatch):
+    """Through main(), the refusal must stay loud -- SystemExit out of main,
+    and NO record for the node in RESULTS. main()'s run loop catches
+    `Exception` and records a RED `{passed: false}` line (#823), which is
+    right for a raising verifier but wrong here: a REFUSED is "this tool
+    cannot answer", not "the evidence failed", and converting the refusal
+    into a record would publish it as if it were a measurement. The shipped
+    `except Exception` lets SystemExit (a BaseException) escape, so the
+    refusal propagates and nothing is written. Red-first control for this
+    test: flip the loop's handler to `except BaseException` and this test
+    must fail -- the refusal is swallowed, a RED record is written, and
+    main() returns instead of raising."""
+    dag = tmp_path / "dag.json"
+    dag.write_text(json.dumps({"nodes": {"X1": {
+        "name": "oracle", "group": "foundation", "class": "implementation",
+        "oracle": "model/oracle.py"}}}))
+    monkeypatch.setattr(cd, "EVIDENCE_PRECEDENCE",
+                        (*cd.EVIDENCE_PRECEDENCE, "oracle"))
+    monkeypatch.setattr(cd, "ROOT", tmp_path)
+    monkeypatch.setattr(cd, "DAG", dag)
+    monkeypatch.setattr(cd, "RESULTS", tmp_path / "dag-results.json")
+    monkeypatch.setattr(cd, "git", lambda *a: "deadbeef")
+    monkeypatch.setattr(cd.sc, "checkout_staleness", lambda: "")
+    monkeypatch.setattr(sys, "argv",
+                        ["compile_dag.py", "--run", "--only", "X1", "--print"])
+    with pytest.raises(SystemExit, match="REFUSED.*oracle"):
+        cd.main()
+    # The per-node write sits after run_evidence() inside the loop, so an
+    # escaped refusal leaves the results file unwritten entirely.
+    assert not cd.RESULTS.exists(), \
+        "a REFUSED that escaped main() must not leave a record behind"
+
+
+def test_the_minimoog_fidelity_warning_is_restored_on_the_real_dag():
+    """#45, end to end on the COMMITTED graph -- the outcome #791 is for.
+
+    M3 is the only minimoog fidelity node that was green (M4 is BLOCKED), so the
+    audit's "UNVALIDATED against anything external" warning was being held off
+    by a file that was never judged. With M3 REFUSED the warning must appear.
+    Asserted against `--print`'s real output, not against a hand-built graph,
+    because the thing that must change is the document a reader quotes.
+    """
+    import subprocess
+    r = subprocess.run([sys.executable, str(pathlib.Path(cd.__file__)), "--print"],
+                       capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, r.stderr
+    assert "Minimoog voice: no green fidelity evidence" in r.stdout, r.stdout[-2000:]
+    # ...and no row may claim GREEN while saying it was never judged.
+    for line in r.stdout.splitlines():
+        if "**GREEN**" in line or "**STAMPED**" in line:
+            assert "no verdict" not in line and "EXISTS ONLY" not in line, line
 
 
 def test_a_missing_file_is_a_failure(tmp_path):
@@ -94,6 +457,53 @@ def test_an_absent_results_file_is_still_no_evidence(tmp_path, monkeypatch):
 def test_the_committed_results_file_loads():
     """Run the gate against the current state before committing it."""
     assert isinstance(cd.load_results(), dict)
+
+
+# ---------------------------------------------------------------------------
+# #787: a `--run` WITHOUT `--slow` must leave the nightly's slow records alone
+# ---------------------------------------------------------------------------
+def test_a_run_without_slow_preserves_the_slow_records(tmp_path, monkeypatch):
+    """The per-push `dag and board` job runs `compile_dag.py --run` WITHOUT
+    `--slow`, minutes after the nightly has written the slow nodes' records
+    into the same file. The skip in the --run loop means "do not touch", not
+    "overwrite with an empty record" -- the #600 docstring already records
+    how a merge once deleted the slow stamps wholesale.
+
+    Injected-bug control (docs/verification-rules.md rule 2): replacing the
+    skip with `res[i] = {}` must turn this test red.
+    """
+    nodes = {
+        "F1": {"name": "slow node", "verifier": "rtl-sketch/verify_ladder.py",
+               "slow": True, "covers": ["rtl-sketch/ladder_dp.v"]},
+        "F3": {"name": "fast node", "suite": "model/test_ladder_model.py"},
+    }
+    dag, results = tmp_path / "dag.json", tmp_path / "dag-results.json"
+    dag.write_text(json.dumps({"nodes": nodes}))
+    slow_record = {"passed": True, "sha": "1" * 40, "detail": "PASS -- 28800 samples"}
+    seed = {"F1": dict(slow_record),
+            "F3": {"passed": True, "sha": "2" * 40, "detail": "older fast run"}}
+    results.write_text(json.dumps(seed))
+
+    monkeypatch.setattr(cd, "DAG", dag)
+    monkeypatch.setattr(cd, "RESULTS", results)
+    # What is under test is the MERGE, not the verifiers: evidence answers are
+    # stubbed, and `git` returns a fresh sha for rev-parse and "nothing newer"
+    # for every staleness probe, so classify() cannot interfere.
+    monkeypatch.setattr(cd, "run_evidence", lambda nid, n: (True, "fresh run"))
+    monkeypatch.setattr(cd, "git",
+                        lambda *a: "f" * 40 if a[:2] == ("rev-parse", "HEAD") else "")
+    monkeypatch.setattr(cd.sc, "checkout_staleness", lambda: None)
+
+    # `--print` keeps the test off README.md: the per-push job's merge happens
+    # in its `--run` invocation, and the README render is a separate one.
+    monkeypatch.setattr(sys, "argv", ["compile_dag.py", "--run", "--print"])
+    assert cd.main() == 0
+
+    res = json.loads(results.read_text())
+    assert res["F1"] == slow_record, \
+        "the slow record was clobbered by a run that never ran the slow nodes"
+    assert res["F3"]["sha"] == "f" * 40 and res["F3"]["detail"] == "fresh run", \
+        "the non-slow node's record was not refreshed"
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +565,12 @@ def test_issue_824_an_unresolvable_record_sha_is_not_reported_current(monkeypatc
     this change exists to fix."""
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": "deadbeef" * 5}})
+    # `evidence_requires` because this fixture's evidence is judged by its
+    # record, not by its file content: without it, #791's unjudged() would
+    # refuse docs/dag.json (no verdict key) before the sha guard ran, and the
+    # note below would name the wrong reason.
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["README.md"]})
     assert st not in ("GREEN", "STAMPED"), \
         f"an unresolvable sha rendered the node current: {st} -- {note}"
@@ -177,6 +592,7 @@ def test_issue_824_a_sha_outside_the_history_is_refused_even_though_it_resolves(
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": orphan}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["covered.v"]})
     assert st == "REFUSED" and orphan[:8] in note
 
@@ -188,6 +604,7 @@ def test_issue_824_a_record_without_a_sha_is_refused_not_green(monkeypatch):
     for rec in ({"passed": True}, {"passed": True, "sha": ""}):
         monkeypatch.setattr(cd, "load_results", lambda r=rec: {"N": r})
         st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                  "evidence_requires": "fixture: judged by record",
                                   "covers": ["README.md"]})
         assert st == "REFUSED", f"record {rec} rendered {st}"
 
@@ -199,7 +616,8 @@ def test_issue_824_a_passing_record_with_no_covers_is_refused(monkeypatch):
     head = cd.git("rev-parse", "HEAD")
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": head}})
-    st, note = cd.classify("N", {"evidence_file": "docs/dag.json"})
+    st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record"})
     assert st == "REFUSED" and "covered" in note
 
 
@@ -218,6 +636,7 @@ def test_issue_824_858_a_failing_record_with_no_covers_stays_red_even_when_tagge
                         lambda: {"N": {"passed": False, "detail": "suite exit 1",
                                        "sha": v1}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "tag": "ctl-858"})
     assert (st, note) == ("RED", "suite exit 1"), \
         f"a failing record on a covers-less tagged node rendered {st} -- {note}"
@@ -228,6 +647,7 @@ def test_issue_824_858_a_failing_record_with_no_covers_stays_red_even_when_tagge
                         lambda: {"N": {"passed": True, "detail": "ok",
                                        "sha": v1}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "tag": "ctl-858"})
     assert st == "REFUSED" and "covered" in note, \
         f"a passing record on a covers-less tagged node rendered {st} -- {note}"
@@ -245,7 +665,12 @@ def test_issue_824_858_a_failing_record_with_no_covers_stays_red_without_a_tag(m
                        ({"detail": "no verdict key"},
                         "no verdict key"):
         monkeypatch.setattr(cd, "load_results", lambda r=rec: {"N": r})
-        st, note = cd.classify("N", {"evidence_file": "docs/dag.json"})
+        # #791 reconciliation: the node declares what makes it pass, so the
+        # unjudged question does not fire -- this test pins the #858 hoist
+        # (a failing record is RED even with no covers), not the declaration
+        # guard, which has its own tests above.
+        st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                     "evidence_requires": "fixture: judged by record"})
         assert (st, note) == ("RED", detail), \
             f"record {rec} rendered {st} -- {note}"
 
@@ -257,6 +682,7 @@ def test_issue_824_a_reachable_sha_with_a_changed_file_is_still_stale(tmp_path, 
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": v1}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["covered.v"]})
     assert st == "STALE" and "covered.v" in note
 
@@ -269,6 +695,7 @@ def test_issue_824_a_current_sha_still_renders_green(tmp_path, monkeypatch):
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": v2}})
     st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "evidence_requires": "fixture: judged by record",
                               "covers": ["covered.v"]})
     assert st == "GREEN"
 
@@ -569,6 +996,7 @@ def test_issue_863_a_merge_over_a_content_identical_file_is_not_stale(tmp_path, 
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f"]})
     assert st == "GREEN", \
         f"a content-identical merge round rendered {st} -- {note}"
@@ -581,6 +1009,7 @@ def test_issue_863_the_tag_path_on_a_content_identical_merge_is_stamped(tmp_path
     g, stamp = _merge_repo(tmp_path, monkeypatch)
     g("tag", "dag-N", stamp)
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f"], "tag": "dag-N"})
     assert st == "STAMPED", \
         f"a tag whose covered file is content-identical rendered {st} -- {note}"
@@ -593,6 +1022,7 @@ def test_issue_863_a_change_only_in_the_merge_resolution_is_stale(tmp_path, monk
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f"]})
     assert st == "STALE", \
         f"a resolution that changed the bytes rendered {st} -- {note}"
@@ -611,6 +1041,7 @@ def test_issue_863_an_unmeasurable_diff_refuses_through_classify(tmp_path, monke
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f", ":(bogus)x"]})
     assert st == "REFUSED", \
         f"an unmeasurable diff rendered {st} -- {note}"
@@ -632,6 +1063,7 @@ def test_issue_863_a_directory_cover_measures_both_ways(tmp_path, monkeypatch):
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "evidence_requires": "fixture: judged by record",
                               "covers": ["sub"]})
     assert st == "GREEN", f"an unchanged directory cover rendered {st}"
 
@@ -641,6 +1073,7 @@ def test_issue_863_a_directory_cover_measures_both_ways(tmp_path, monkeypatch):
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp2}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["sub"]})
     assert st == "STALE", f"a changed directory cover rendered {st} -- {note}"
 
@@ -657,6 +1090,7 @@ def test_issue_863_a_cover_appearing_or_vanishing_after_the_stamp_is_stale(tmp_p
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "evidence_requires": "fixture: judged by record",
                               "covers": ["new.v"]})
     assert st == "STALE", f"a cover added after the stamp rendered {st}"
 
@@ -669,6 +1103,7 @@ def test_issue_863_a_cover_appearing_or_vanishing_after_the_stamp_is_stale(tmp_p
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp2}})
     st, _ = cd.classify("N", {"evidence_file": "docs/dag.json",
+                              "evidence_requires": "fixture: judged by record",
                               "covers": ["covered.v"]})
     assert st == "STALE", f"a cover deleted after the stamp rendered {st}"
 
@@ -686,6 +1121,9 @@ def test_issue_863_a_shallow_clone_refuses_rather_than_rendering_fresh(tmp_path,
     monkeypatch.setattr(cd, "load_results",
                         lambda: {"N": {"passed": True, "sha": stamp}})
     st, note = cd.classify("N", {"evidence_file": "docs/dag.json",
+                                 "evidence_requires": "fixture: judged by record",
                                  "covers": ["f"]})
     assert st == "REFUSED", \
         f"a shallow clone rendered {st} -- {note}"
+    assert "history" in note, \
+        f"the refusal must come from the unanchorable sha, not elsewhere: {note}"

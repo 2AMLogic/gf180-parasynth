@@ -22,6 +22,7 @@ Exit 0 done, 2 refused.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import subprocess
 import sys
@@ -196,7 +197,7 @@ def summarize():
     # Points were scored before the two-sided rule; the rule is applied here
     # from their recorded fits. The control must match the record's audio, its
     # non-attack properties, and its raw attack reading.
-    cp = json.loads(json.dumps(control["measurements"]["properties"]))
+    cp = copy.deepcopy(control["measurements"]["properties"])   # rows come from json.loads: deepcopy == the old JSON round-trip
     sp = selected["diagnostics"]["properties"]
     raw = sp["Envelope attack"].get("unqualified_error", sp["Envelope attack"].get("error"))
     # A v3 record re-measures the attack with attack_fit_v3, so its raw

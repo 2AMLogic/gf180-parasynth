@@ -25,8 +25,9 @@ deleted.
 
 All five, or it is not stamped. Four out of five is not a node.
 
-1. **Tagged** — annotated git tag, `node/<id>`. Three exist:
-   `node/F1-ladder`, `node/M1-voice`, `node/M2-minimoog`.
+1. **Tagged** — annotated git tag, `node/<id>`. Which nodes are stamped, and
+   the tag each carries, is in the evidence column of the generated
+   [capability graph table](../README.md#the-capability-graph).
 2. **A named test set, green, in CI on every push** — no path filter.
 3. **Negative controls carried** — an injected defect that turns each property
    red. A test that has never failed is not evidence.
@@ -59,11 +60,11 @@ graph TD
 
 | node | capability | status |
 |---|---|---|
-| F1 | Ladder filter, bit-exact | verifier green — stamping |
-| F2 | Modal bank, bit-exact | on `drums`, PR #14 |
-| F3 | Measurement library ground truth, 60 tests | **green on main** |
-| M1 | One Moog voice, bit-exact, 255,060 frames | verifier green — stamping |
-| M2 | Musically a Minimoog, 42 tests, 6 injected defects | **green on main** |
+| F1 | Ladder filter, bit-exact | **green on main** — `verify_ladder` PASS, 28800 samples, RTL identical to model (`91398a0c`) |
+| F2 | Modal bank, bit-exact | **green on main** — `verify_modal` PASS, 57600 samples, RTL identical to model (`91398a0c`) |
+| F3 | Measurement library ground truth, 153 tests | **green on main** — 153 passed (`4fe488f1`) |
+| M1 | One Moog voice, bit-exact, 255,060 frames | **green on main** — `verify_voice` passed (`91398a0c`); the 255,060-frame count is not in the recorded detail |
+| M2 | Musically a Minimoog, 115 tests | **green on main** — 115 passed (`4fe488f1`); the earlier "6 injected defects" is unstamped: `dag-results.json` records no defect count |
 | M3 | Ladder structure vs real hardware | **BLOCKED** |
 
 **M3 is blocked on one input, not on work.** `model/moog_probe.py` is built and
@@ -364,9 +365,15 @@ the next section's `DL` is not in `docs/dag.json` at all.
 `tools/test_compile_dag_deps.py::test_no_committed_node_cites_an_issue_as_its_only_source`
 fails on any node that declares an `issue` with no evidence key and no `blocked`
 reason. It runs under `pytest tools/` on every push. Its own docstring names the
-inputs that defeat it — chiefly that *any* evidence key satisfies it, including
-a verdict-less `evidence_file`, which renders GREEN on file existence alone
-(#791).
+inputs that defeat it — chiefly that *any* evidence key satisfies the guard's
+letter, so an unevidenced node carrying an `issue` gets past it. That was a real
+hole while a verdict-less `evidence_file` rendered GREEN on file existence alone
+(#791); #810 closed it — the branch now returns False and the node renders
+REFUSED, an honest decline — so what this guard permits can no longer claim a
+pass it never measured. A companion guard in the same file,
+`test_no_committed_node_declares_a_verdict_less_evidence_file`, polices the
+declaration itself: a committed verdict-less `evidence_file` must state in its
+`note` that REFUSED is deliberate (M3 is the current, correct example).
 
 **Three alternatives were rejected**, and the reasons are the useful part:
 
@@ -377,9 +384,13 @@ a verdict-less `evidence_file`, which renders GREEN on file existence alone
 - *Point either node at a committed `evidence_file` receipt.* The
   `voice-fullset-354` receipts carry `verify_voice_exit`, not
   `passed`/`ok`/`success`/`green`, so without `evidence_requires` they land on
-  `run_evidence`'s "EXISTS ONLY — no verdict declared" branch, which **returns
-  pass**. That renders a node GREEN because a file is on disk, which is the
-  precise failure `tools/compile_dag.py` was written to prevent.
+  the no-verdict branch of `run_evidence` — which since #810 **returns
+  REFUSED**, not a pass (before #810 the branch returned pass, and that false
+  GREEN — a node rendered green by a file being on disk — was the precise
+  failure `tools/compile_dag.py` was written to prevent). The rejection
+  stands, on the corrected reason: a node pointed at these receipts asserts
+  nothing about whether the capability passed — it renders REFUSED, and stays
+  there until a re-run emits a top-level verdict over all cases.
 - *Keep the nodes and mark them `blocked`.* They were not blocked; the work was
   done. That trades a false TODO for a false BLOCKED.
 

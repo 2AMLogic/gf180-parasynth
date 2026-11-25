@@ -8,6 +8,8 @@ could plausibly be blind and require them to MOVE.
 """
 import hashlib
 import json
+import pathlib
+import re
 import wave
 
 import numpy as np
@@ -330,3 +332,106 @@ def test_a_stop_whose_onsets_cannot_be_paired_invalidates_rather_than_scores():
     metrics, _ = score.measure("E1A", evidence)
     assert metrics["Event timing"]["valid"] is False
     assert "error" not in metrics["Event timing"]
+
+
+# --------------------------------------------------------------------------- #
+# cached negative controls: reuse only while the bound files are the exact
+# bytes the report digested
+# --------------------------------------------------------------------------- #
+_CONTROL_EXTRA = (f"compile defines: INJECT_BUG_{score.CONTROL_INJECT}\n"
+                  f"FAIL -- of {CASE_FRAMES} decoded I2S periods: {CASE_FRAMES} differ "
+                  f"from the model\n"
+                  f"negative control {score.CONTROL_INJECT} CAUGHT")
+
+
+class _RerunRequested(Exception):
+    """Raised by a stubbed `run_part`: the scorer asked for a fresh RTL run."""
+
+
+def _intercept_rerun(*args, **kwargs):
+    raise _RerunRequested
+
+
+def _control_bundle(outdir, part, *, samples=None, schedule=None):
+    return _part_files(outdir, part, samples=samples, schedule=schedule,
+                       pass_line=False, verified=False, extra=_CONTROL_EXTRA)
+
+
+@pytest.mark.parametrize("changed", ["wav", "schedule"])
+def test_control_reuse_reruns_when_a_bound_file_changes(tmp_path, monkeypatch, changed):
+    folder = tmp_path / f"control-{score.CONTROL_INJECT}"
+    folder.mkdir()
+    clean = np.ones(CASE_FRAMES, dtype=np.int64)
+    mutated = -clean
+    paths, _, _, _ = _control_bundle(folder, "mix", samples=mutated)
+    evidence = {"mix": {"samples": clean}}
+
+    def read_control():
+        return score.control_report("E1A", evidence, {}, tmp_path,
+                                    simulator="verilator", timeout_s=1, reuse=True)
+
+    monkeypatch.setattr(score, "run_part", _intercept_rerun)
+    baseline = read_control()
+    assert baseline["caught"]
+    assert baseline["audio_vs_clean_mix"]["samples_differing"] == CASE_FRAMES
+
+    if changed == "wav":
+        _write_wav(paths["wav"], clean)
+    else:
+        paths["schedule"].write_text(json.dumps(_schedule("voice")))
+    try:
+        after = read_control()
+    except _RerunRequested:
+        return
+    pytest.fail(f"reused a different {changed}: caught={after['caught']}, "
+                f"audio samples differing={after['audio_vs_clean_mix']['samples_differing']}")
+
+
+@pytest.mark.parametrize("digest_line", ["decoded I2S WAV sha256 ",
+                                         "ensemble schedule sha256 "])
+def test_control_reuse_reruns_when_the_report_omits_a_digest(
+        tmp_path, monkeypatch, digest_line):
+    folder = tmp_path / f"control-{score.CONTROL_INJECT}"
+    folder.mkdir()
+    mutated = -np.ones(CASE_FRAMES, dtype=np.int64)
+    paths, text, _, _ = _control_bundle(folder, "mix", samples=mutated)
+    stripped = "\n".join(line for line in text.splitlines()
+                         if digest_line not in line) + "\n"
+    assert stripped != text
+    paths["report"].write_text(stripped)
+
+    monkeypatch.setattr(score, "run_part", _intercept_rerun)
+    with pytest.raises(_RerunRequested):
+        score.control_report("E1A", {"mix": {"samples": np.ones(CASE_FRAMES)}}, {},
+                             tmp_path, simulator="verilator", timeout_s=1, reuse=True)
+
+
+def test_per_stop_control_reuse_reruns_when_a_bound_file_changes(tmp_path, monkeypatch):
+    rows = [{"intended_frame": 2400, "landed_frame": 2403, "latency_frames": 3,
+             "accent": 1.4, "i2s_period": 2404}]
+    mutated = -np.ones(CASE_FRAMES, dtype=np.int64)
+    paths, _, _, _ = _control_bundle(
+        tmp_path, "stop:BD", samples=mutated,
+        schedule=_schedule("stop:BD", stops={"BD": rows}))
+
+    monkeypatch.setattr(score, "run_part", _intercept_rerun)
+    baseline = score._injected_event_timing("E1A", "BD", tmp_path,
+                                            simulator="verilator", timeout_s=1, reuse=True)
+    assert baseline["measured"] and baseline["exit_status"] == 0
+
+    _write_wav(paths["wav"], np.ones(CASE_FRAMES, dtype=np.int64))
+    with pytest.raises(_RerunRequested):
+        score._injected_event_timing("E1A", "BD", tmp_path,
+                                     simulator="verilator", timeout_s=1, reuse=True)
+
+
+@pytest.mark.parametrize("name", ["E1A-control-DRUM_BUS_STALE.txt",
+                                  "E1A-control-DRUM_BUS_STALE-stop-BD.txt"])
+def test_a_caught_control_report_from_the_board_binds_both_sidecars(name):
+    """Requiring the digests for reuse is only safe if the verifier emits them
+    on a caught run. Asserted against the committed E1A control reports --
+    real board output, not a fixture this file built."""
+    text = (pathlib.Path(score.ROOT) / "docs/scorecard/ensemble-e1a/rtl" / name).read_text()
+    assert f"negative control {score.CONTROL_INJECT} CAUGHT" in text
+    assert re.search(r"^verify_synth_top: decoded I2S WAV sha256 [0-9a-f]{64}$", text, re.M)
+    assert re.search(r"^verify_synth_top: ensemble schedule sha256 [0-9a-f]{64}$", text, re.M)

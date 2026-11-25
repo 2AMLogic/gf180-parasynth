@@ -22,7 +22,12 @@ REFUSES, per quantity, rather than answering:
   * the band's floor-subtracted Schroeder curve does not reach -30 dB, or the
     record ends less than 15 dB (of envelope) after the -30 dB point;
   * the late line's residual on the Schroeder curve exceeds 1.5 dB;
-  * the band holds less than 1e-6 of the energy.
+  * the band holds less than 1e-6 of the energy;
+  * in thirds(), the [t0, t1) window is empty (past the record's end) or holds
+    less than 1e-6 of the strike's first-second energy -- the same share floor
+    -- because filter ringing leaves such a window with e_tot ~ 1e-110 > 0,
+    and the band loop would report ~800 dB re that ringing as if it were data
+    (#1197).
 Known answers: tools/test_cymbal_bands.py (synthetic three-band strikes with
 planted shares and time constants; invariances; controls that must move).
 """
@@ -41,6 +46,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import run_case as rc  # noqa: E402
 import refusal
+from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
 BANDS = {"L": (2000.0, 5000.0), "Ln": (2900.0, 4100.0), "H": (6000.0, 14000.0)}
 # Ln: the low band's 3.45 kHz peak only. At its edges the shared 7.1 kHz Q 6
@@ -156,11 +162,26 @@ THIRDS = tuple(1000.0 * 2 ** (k / 3) for k in range(0, 14))     # 1.0 .. 20.2 kH
 def thirds(y, sr, t0=0.0, t1=ENERGY_S) -> dict:
     """1/3-octave energy (dB re the 200 Hz-20 kHz energy) in [t0, t1) after
     t = 0, zero-phase from the lead. Finer than L/H: where inside a band the
-    two sides differ."""
+    two sides differ.
+
+    REFUSES the window measure() refuses the record (#1197): `e_tot <= 0`
+    (an empty window, one past the record's end, or digital silence) and a
+    window holding less than 1e-6 of the strike's first-second energy. The
+    1e-6 is not a new number: it is the share floor measure() applies to band
+    shares (`eb > 1e-6 * e_tot`), here applied to the window's share of the
+    same e measure() guards. Measured on the case that motivated it, a silent
+    late window's share is 3.7e-112 -- zero-phase ringing, positive but 110
+    orders of magnitude below the floor, which a bare `e_tot <= 0` passes and
+    the loop then divides by. For the default window (t0=0, t1=ENERGY_S) the
+    window IS the reference, so the guard degenerates to `e_tot <= 0` and no
+    valid result changes."""
     y = np.asarray(y, dtype=np.float64)
     tot = _bp(y, sr, *TOTAL)
     a, b = int(t0 * sr), int(t1 * sr)
     e_tot = float(np.sum(tot[a:b] ** 2))
+    e_ref = float(np.sum(tot[:int(ENERGY_S * sr)] ** 2))
+    if e_ref <= 0 or e_tot <= 1e-6 * e_ref:
+        raise Refused("silent")
     out = {}
     for fc in THIRDS:
         lo, hi = fc / 2 ** (1 / 6), min(fc * 2 ** (1 / 6), 0.45 * sr)
@@ -199,6 +220,7 @@ def fischer(refs: pathlib.Path) -> dict:
 def _load(p):
     from scipy.io import wavfile
     sr, x = wavfile.read(str(p))
+    rc.require_int16_pcm(x, p, Refused)
     x = np.asarray(x, dtype=np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)
@@ -243,13 +265,21 @@ def main(argv=None) -> int:
     ap.add_argument("--shipped", action="store_true", help="the shipped kit against CY5025, with 1/3 octaves")
     a = ap.parse_args(argv)
     if a.shipped:
-        res = shipped_vs_fischer(pathlib.Path(a.refs))
+        try:
+            res = shipped_vs_fischer(pathlib.Path(a.refs))
+        except refusal.Refused as e:
+            print(f"REFUSED: {e}", file=sys.stderr)
+            return REFUSED
         for w, d in res["thirds"].items():
             print(w, " ".join(f"{fc}:{d['shipped'][fc] - d['fischer'][fc]:+.1f}" for fc in d["shipped"]))
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(res, indent=1) + "\n")
         return 0
-    res = ours(pathlib.Path(a.refs)) if a.ours else fischer(pathlib.Path(a.refs))
+    try:
+        res = ours(pathlib.Path(a.refs)) if a.ours else fischer(pathlib.Path(a.refs))
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return REFUSED
     res["_split"] = {"development": list(DEVELOPMENT), "confirmation": list(CONFIRMATION)}
     print(f"{'file':8s} {'tone':>4s} {'decay':>5s} | {'L share':>7s} {'L EDT':>6s} {'L T20':>6s} | "
           f"{'H share':>7s} {'H EDT':>6s} {'H T20':>6s} | H-L")

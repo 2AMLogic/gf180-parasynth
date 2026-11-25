@@ -17,9 +17,11 @@ Three outcomes, and the third is the point:
     exit 0   every control fired (its test went red under the injection)
     exit 1   a control did NOT fire -- that test cannot detect its own defect
     exit 2   REFUSED: nothing was measured, either because an injection did not
-             apply at all (the code moved) or because the interpreter did not
-             actually load it. A control that did not inject is worse than no
-             control, because its output looks exactly like a pass.
+             apply at all (the code moved), because the interpreter did not
+             actually load it, or because a test a control names is red on the
+             UNMUTATED tree (THE BASELINE, below). A control that did not
+             inject is worse than no control, because its output looks
+             exactly like a pass.
 
 Runs against a COPY of the tree in a temp dir, never the live worktree: this is
 one job in `make controls`, which runs jobs in parallel, and a control that
@@ -68,6 +70,21 @@ not evidence. Three mechanisms, each doing a different job:
 is the permanent control for all three: it reproduces the collision
 adversarially with mechanism 1 switched off and requires this harness to
 REFUSE rather than report a verdict.
+
+------------------------------------------------------------------------------
+THE BASELINE, and the false green it closes (#1125)
+------------------------------------------------------------------------------
+Until #1125 this harness ran its named tests only UNDER an injection and read
+`pytest exited non-zero` as RED (caught). Nothing had ever run those tests on
+the UNMUTATED tree, so a test red for a reason of its own -- drifted, or
+broken by the same edit that moved its injection -- satisfied every control
+naming it: 9/9 fired, exit 0, and the injections had contributed nothing. The
+receipt above is no answer to that: it proves the interpreter LOADED the
+injection, not that the test was green without it.
+
+So the declared tests now run once, UNMUTATED, before the loop, and the
+harness REFUSES unless that is green. Only then does a later red belong to
+the injection, the one thing that differs.
 """
 from __future__ import annotations
 
@@ -230,6 +247,57 @@ def _purge_pycache(tree: pathlib.Path) -> None:
         shutil.rmtree(cache, ignore_errors=True)
 
 
+def declared_tests() -> list[str]:
+    """Every test node ID some control will run, once each, in declaration
+    order: exactly what the baseline must prove green."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for injection in INJECTIONS:
+        for t in injection[4]:
+            if t not in seen:
+                seen.add(t)
+                out.append(t)
+    return out
+
+
+def baseline(tree: pathlib.Path, *, verbose: bool = False) -> tuple[int, str]:
+    """Run every declared test on the UNMUTATED staged tree. Returns pytest's
+    exit status -- 0 is the only value under which a control's later red can
+    be its injection's -- and, when it is not 0, the lines naming what was red.
+
+    `--noconftest`: the staged guard exists to vouch for an injection and
+    refuses to run unconfigured, and the baseline has none to vouch for. It
+    runs first, in a freshly staged tree, with mechanism 1 on.
+
+    Raises `ControlRefused` when a control names no test: its own `pytest`
+    would then have no selection and collect whatever the staged tree holds,
+    and its red would be nobody's. Nothing is run in that case -- an unselected
+    pytest is not a baseline either.
+    """
+    unnamed = [injection[0] for injection in INJECTIONS if not injection[4]]
+    if unnamed:
+        raise ControlRefused(
+            "these controls name no test, so their red would be nobody's: "
+            f"{'; '.join(unnamed)}")
+    tests = declared_tests()
+    if not tests:
+        raise ControlRefused("no control names a test: nothing can be proven green")
+    _purge_pycache(tree)
+    env = dict(os.environ)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    r = subprocess.run([sys.executable, "-B", "-m", "pytest", *tests,
+                        "-q", "--noconftest"],
+                       cwd=tree, capture_output=True, text=True, env=env)
+    if verbose:
+        print(r.stdout)
+        if r.stderr.strip():
+            print(r.stderr)
+    lines = r.stdout.strip().splitlines()
+    red = [ln for ln in lines if ln.startswith(("FAILED", "ERROR"))]
+    tail = ((lines or r.stderr.strip().splitlines() or ["(no output)"])[-1])
+    return r.returncode, "\n".join([*red, tail])
+
+
 def run_one(tree: pathlib.Path, injection, *, verbose: bool = False,
             no_bytecode_cache: bool = True, purge_pycache: bool = True
             ) -> tuple[bool, str]:
@@ -314,6 +382,18 @@ def main(argv: list[str]) -> int:
     with tempfile.TemporaryDirectory(prefix="manifest-controls-") as tmp:
         tree = pathlib.Path(tmp) / "tree"
         _stage(tree)
+        try:
+            rc, detail = baseline(tree, verbose=verbose)
+        except ControlRefused as exc:
+            print(f"REFUSED: {exc}")
+            return 2
+        if rc != 0:
+            print("REFUSED: a test these controls name is red on the UNMUTATED "
+                  f"tree (pytest exit {rc}) -- a control's red would then be its "
+                  "own, not its injection's, and every control naming that test "
+                  "would fire. Nothing was measured.")
+            print(detail)
+            return 2
         for injection in INJECTIONS:
             try:
                 red, tail = run_one(tree, injection, verbose=verbose)

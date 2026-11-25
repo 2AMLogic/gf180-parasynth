@@ -27,6 +27,11 @@ def sha(path):
 def load_reference(path=MANIFEST):
     try:
         manifest = json.loads(path.read_text())
+        import reference_suites
+        try:
+            reference_suites.require_suite(manifest, reference_suites.SUITE_V3_FROZEN)
+        except reference_suites.Refused as exc:
+            raise Refused(str(exc)) from exc
         if manifest.get("case_id") != "M1A" or not manifest.get("valid"):
             raise Refused("M1A reference manifest is not qualified")
         if manifest["events"] != list(reference.EVENTS):

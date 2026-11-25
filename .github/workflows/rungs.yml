@@ -67,15 +67,15 @@ jobs:
       - run: python tools/setup_ci_verilator.py
       - name: simulator identity and independent converter diagnostic
         run: |
-          verilator --version
+          python tools/setup_ci_verilator.py --assert-path
           python tools/verify_rate_conv_2x.py --simulator verilator
       - name: pulse candidate, transport, deadlines and disabling control
         run: >-
-          python tools/run_all.py --jobs 2 --timeout 900 --json build/pulse2x-ci.json
+          python tools/run_controls.py --jobs 2 --timeout 900 --json build/pulse2x-ci.json
           "python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --outdir build/pulse-voice"
           "python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --simulator verilator --outdir build/pulse-voice-verilator"
-          "python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --outdir build/pulse-smoke"
-          "python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --inject VOICE_PULSE2X_OFF --expect-fail --outdir build/pulse-off"
+          "@baseline=pulse-smoke python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --outdir build/pulse-smoke"
+          "@after=pulse-smoke python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --inject VOICE_PULSE2X_OFF --expect-fail --outdir build/pulse-off"
           "python rtl-sketch/verify_synth_top.py --filter2x --pulse2x --simulator verilator --outdir build/pulse-drums"
       - uses: actions/upload-artifact@v4
         if: always()
@@ -83,8 +83,6 @@ jobs:
           name: pulse2x-ci
           path: |
             build/pulse2x-ci.json
-            build/pulse2x-phrases.json
-            build/pulse-evidence/
 
   reference-controls:
     needs: changes
@@ -529,14 +527,24 @@ jobs:
   # Gated on `changes` like every other suite job (#457): tools/ is always
   # `full`, so an edit to a tool or its test always runs this. GitHub-hosted
   # since the operator's 2026-09-30 move of every public repo off Blacksmith
-  # (2am `docs/ci.md` §"Blacksmith: decided 2026-09-28, retire"); the
-  # 60-minute cap is ~2.9x the ~21 min measured on Blacksmith, the same kind
-  # of headroom the `python` job's 70 gives over its hosted max.
+  # (2am `docs/ci.md` §"Blacksmith: decided 2026-09-28, retire").
+  #
+  # 105, not the 60 that survived the move (#1236): the ~21 min Blacksmith
+  # measurement did not. Hosted, the directory grew to 56m49s-59m19s
+  # whole-job across five green runs on main (Actions API, 2026-11-24),
+  # ~95-96% of a 60-minute cap, and a PR run that crossed the cap was
+  # cancelled at [96%] with NO pytest summary -- the failing tests' identity
+  # had to be re-derived from dot-progress by index. A cap a growing suite
+  # reaches nondeterministically is a red unrelated to the diff, and a
+  # cancelled run reports nothing where a verdict belongs. 105 is ~1.75x the
+  # 59m44s hosted maximum, the same headroom the `python` job's 70 gives
+  # over its own 40.3 min hosted max. Re-measure once more hosted runs
+  # accumulate.
   tools:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 105
     steps:
       - uses: actions/checkout@v4
         with:
@@ -546,8 +554,17 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
-      # Three files under tools/ shell out to iverilog (test_check_f1_rtl_record,
+      # soundfile IS installed (unlike sympy below): the #1183 control
+      # tools/test_measure_repeatability_refusal.py::
+      # test_cut_into_strike_reference_exits_refused_2 reaches its subprocess
+      # only via pytest.importorskip("soundfile"), so without it the control
+      # silently skips and the refusal boundary it guards is never exercised.
+      # Measured (#1262): with soundfile the 12 files that import the
+      # soundfile-using modules give 376 passed / 0 skipped, vs 375 passed /
+      # 1 skipped without; no corpus-gated test or probe misreports.
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml soundfile
+      # Five files under tools/ shell out to iverilog (test_check_f1_rtl_record,
+      # test_check_iverilog_generate_case_string, test_run_controls,
       # test_score_f1_rtl, test_trial). sympy is deliberately NOT installed:
       # test_tone_stage_schematic's sympy witness is meant to be a VISIBLE skip
       # beside two numpy-only witnesses of the same fact that do run.
@@ -568,6 +585,81 @@ jobs:
       - name: every tools/ test, by directory
         run: python -m pytest tools/ -q
 
+  # The 16 fpga/ test files no other CI job runs (#853) -- the fpga half of the
+  # #404 shape (tools/ above is the same repair; pnr/ is #851). Measured on a
+  # hosted-runner equivalent, 2026-11-16: all 16 pass under
+  # spec/trial-environment.json -- 320 tests in ~57 s; none needs Vivado, a
+  # flashed Arty or the TR808 corpus at runtime (the "hardware" strings in
+  # these files are paths and manifest keys -- measured, not device access).
+  #
+  # The pins are the point, not a nicety: three of the 16 (the release-bound
+  # trials) preflight the spec and return NO VERDICT on drift, and the pty
+  # harness refuses without pyserial -- so the unpinned
+  # `pip install numpy scipy pytest pyyaml` the other jobs use reads here as
+  # six red tests, not a pass. The spec, not hand-written versions, is the
+  # single source of pins; --no-toolchain because no file in this set runs the
+  # simulator (their trial manifests preflight no tools).
+  #
+  # No ignores and no deselects (the tools-job rule); there is nothing to
+  # deselect: all 16 measured runnable, zero skips. The floor step is the
+  # exclusion control: collection must stay at or above the FLOOR= below, so
+  # an `--ignore`, a moved file or a deleted test cannot achieve an exclusion
+  # silently -- and tools/test_fpga_uncovered_workflow.py (run by the tools
+  # job, by directory) pins that floor to a live collection of the same
+  # paths, so the number itself cannot drift.
+  fpga-uncovered:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # ONE list, and both steps read it: the run executes it, the floor
+      # counts it. fpga/release/ is collected by directory so the seven
+      # release-evidence files cannot silently grow an eighth (#853).
+      FPGA_UNCOVERED_PATHS: >-
+        fpga/release/
+        fpga/test_bringup_arty.py
+        fpga/test_ext_io_extract.py
+        fpga/test_ext_io_timing.py
+        fpga/test_play_song.py
+        fpga/test_record_compare.py
+        fpga/test_uart_host_hold_refused.py
+        fpga/test_uart_host_pty.py
+        fpga/test_verify_flash.py
+        fpga/test_verify_live_midi_unwrap.py
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # trial receipts record HEAD / origin/main / merge-base provenance
+          # (tools/trial.py identities()); not answerable from a shallow clone.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      # Not set here, on purpose: GF180_TR808_REFS (the tools-job rule). No file
+      # in this set reads the corpus -- measured -- so nothing would skip; the
+      # rule costs nothing and keeps every suite job shaped the same.
+      - name: install the spec, not guesses (idempotent; refuses on drift)
+        run: python tools/trial_env.py bootstrap --no-toolchain
+      - name: the 16 fpga/ files no other CI job runs
+        run: python -m pytest $FPGA_UNCOVERED_PATHS -q
+      - name: collection floor -- an exclusion cannot be silent
+        run: |
+          FLOOR=326
+          st=0
+          out=$(python -m pytest $FPGA_UNCOVERED_PATHS --collect-only -q 2>&1) || st=$?
+          n=$(printf '%s\n' "$out" | sed -n 's/^\([0-9][0-9]*\) tests\? collected.*/\1/p' | tail -n 1)
+          if [ -n "$n" ]; then
+            echo "collected $n (floor $FLOOR)"
+            [ "$n" -ge "$FLOOR" ] || {
+              echo "REFUSED: collected $n < floor $FLOOR -- a test was silently lost or excluded"
+              exit 1
+            }
+          else
+            echo "REFUSED: collection itself failed (pytest exit $st, no '<n> tests collected' line) -- not a lost test; last lines:"
+            printf '%s\n' "$out" | tail -n 5
+            exit 1
+          fi
+
   # The pnr suite, collected as a DIRECTORY (#404, one directory over from
   # tools/). Before this job, 5 of the 7 pnr/**/test_*.py files on main ran
   # under `make verify` on a build box and under NO CI job at all -- the same
@@ -581,7 +673,7 @@ jobs:
   # Measured on the 8-vCPU worker (2026-11-15, origin/main @ 6be93eef):
   # 197 passed in 0.81 s -- three orders of magnitude under the tools job --
   # so the 10-minute cap is ~700x the measured runtime, the same headroom
-  # logic the tools job's 60 uses over its ~21 min.
+  # logic the tools job's 105 gives over its ~59 min hosted maximum (#1236).
   #
   # Default checkout depth: no pnr/ test reads origin/main or computes a
   # merge-base, unlike tools/test_run_case.py (measured 2026-11-15). No
@@ -718,6 +810,10 @@ jobs:
         run: |
           python rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail
           python rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail
+          # Default-config clean twin: both synth mutants below run in default
+          # config and no other clean step matches it (#1221); a red bench must
+          # stop the step before a mutant is credited as caught.
+          python rtl-sketch/verify_synth_top.py
           python rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail
           python rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail
       - name: the selected 2x path and integration reject disabling mutations
@@ -744,5 +840,59 @@ jobs:
         run: python rtl-sketch/verify_drums.py
       - name: M5A -- complete reconstructed 2x filter phrase through SPI to I2S and score decoded audio
         run: python tools/verify_m5a_filter2x_i2s.py
+      # A mutant is credited only against a clean run of its own config
+      # (#1212): the step below is the exact clean twin (same script,
+      # simulator and stimulus) of the disabling control after it, so a
+      # Verilator build break can no longer register as "detected". The
+      # full-phrase step above does not pair it -- different stimulus.
+      - name: M5A -- clean Verilator smoke baseline for the disabling control
+        run: python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --outdir build/top-clean-m5a-f2x-verilator
       - name: M5A -- Verilator integrated disabling control
         run: python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control
+      # The shipped R2 image sets PULSE2X; this is the only full-length
+      # --pulse2x phrase run (moved here from a retired standalone workflow,
+      # #760). It uses the pinned Verilator 5.052 that produced the September
+      # result, not the apt build above. setup_ci_verilator.py prepends the
+      # pinned build to PATH for the steps after it, so it sits last and the
+      # earlier steps keep the apt verilator.
+      #
+      # These four steps carry `if: ${{ !cancelled() }}` so an earlier red step
+      # (e.g. M5A above, #1148) does not skip the phrase run: with the default
+      # success() every earlier failure silently removed it, and it never
+      # executed in any dispatch (PR #1133 review, finding B).
+      #
+      # The phrase step itself additionally gates on the identity step's
+      # outcome (#1154): a failed step does NOT set cancelled(), so a bare
+      # !cancelled() phrase step would still run after a failed setup and
+      # score the phrases under the apt verilator 5.020-1, emitting an
+      # ungrounded M5A/M5B report. --assert-path refuses (rather than
+      # reports) unless PATH resolves the pinned 5.052 build, and
+      # steps.verilator_identity.outcome == 'success' turns that refusal
+      # into a skipped phrase run. An earlier red step with identity green
+      # still runs the phrases: !cancelled() keeps #1133's reachability.
+      - if: ${{ !cancelled() }}
+        run: sudo apt-get install -y autoconf flex libfl-dev bison help2man
+      - if: ${{ !cancelled() }}
+        uses: actions/cache@v4
+        with:
+          path: .tools/verilator-5.052
+          key: ubuntu24-verilator-ea338be98e1e838d3518809ce8899f85a009963c
+      - if: ${{ !cancelled() }}
+        run: python tools/setup_ci_verilator.py
+      - name: refuse the phrase run unless PATH resolves the pinned Verilator
+        id: verilator_identity
+        if: ${{ !cancelled() }}
+        run: python tools/setup_ci_verilator.py --assert-path
+      - name: pulse2x -- complete M5A and M5B phrases decoded from I2S and scored independently
+        if: ${{ !cancelled() && steps.verilator_identity.outcome == 'success' }}
+        run: >-
+          python tools/run_all.py --jobs 2 --timeout 1800 --json build/pulse2x-phrases.json
+          "python tools/verify_m5a_filter2x_i2s.py --case M5A --pulse2x --timeout 1700 --outdir build/full-M5A --verification build/pulse-evidence/M5A.txt --wav build/pulse-evidence/M5A-i2s.wav --record build/pulse-evidence/M5A.json --audio build/pulse-evidence/M5A-scored.wav"
+          "python tools/verify_m5a_filter2x_i2s.py --case M5B --pulse2x --timeout 1700 --outdir build/full-M5B --verification build/pulse-evidence/M5B.txt --wav build/pulse-evidence/M5B-i2s.wav --record build/pulse-evidence/M5B.json --audio build/pulse-evidence/M5B-scored.wav"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pulse2x-phrases
+          path: |
+            build/pulse2x-phrases.json
+            build/pulse-evidence/

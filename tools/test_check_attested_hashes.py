@@ -11,9 +11,10 @@ the committed `content_hash`, so BOTH guard-defeat shapes go red:
   * edit nothing and hand-edit the evidence hash -> drift (rule 8: the diff-shape
     check the issue rejected would pass this; the hash comparison must not)
 
-plus the drop-a-check hole (evidence stops covering a listed file), the
-inventory self-hash coupling, and the REFUSED outcomes (exit 2: missing or
-malformed evidence -- "no evidence" is not "no problem").
+plus the drop-a-check hole (evidence stops covering a listed file), a pathed
+entry with no committed hash (REFUSED: the counted-as-compared silent green,
+#932), the inventory self-hash coupling, and the REFUSED outcomes (exit 2:
+missing or malformed evidence -- "no evidence" is not "no problem").
 
 `check_tree` runs against any root, so every control here builds a small
 fixture tree in a temp dir except the last test, which pins the LIVE repo to
@@ -198,6 +199,73 @@ def test_missing_attested_file_is_drift_with_absent_hash(tmp_path):
 
 
 # =============================================================================
+# Rule 8, third shape (#932): a pathed entry whose content_hash is not a
+# non-empty string was never compared, yet was counted in the success line
+# as recomputed. An uncompared commitment is an instrument failure
+# (REFUSED, exit 2), not a pass.
+# =============================================================================
+def test_null_content_hash_pathed_entry_is_refused(tmp_path):
+    root = _tree(tmp_path, {"a.yml": b"on: push\n", "b.yml": b"steps: []\n"})
+    ev = _read_evidence(root)
+    for c in ev["attestation"]["checks"]:
+        if c.get("path") == "a.yml":
+            c["content_hash"] = None
+    _write_evidence(root, ev)
+    rc, report = cah.check_tree(root)
+    assert rc == 2
+    assert "a.yml" in report            # the report names the entry
+    assert "refused" in report.lower()
+
+
+def test_empty_content_hash_pathed_entry_is_refused(tmp_path):
+    root = _tree(tmp_path, {"a.yml": b"on: push\n", "b.yml": b"steps: []\n"})
+    ev = _read_evidence(root)
+    for c in ev["attestation"]["checks"]:
+        if c.get("path") == "a.yml":
+            c["content_hash"] = ""
+    _write_evidence(root, ev)
+    rc, report = cah.check_tree(root)
+    assert rc == 2
+    assert "a.yml" in report
+
+
+def test_missing_content_hash_key_pathed_entry_is_refused(tmp_path):
+    """`content_hash` absent entirely reads the same as null: an entry that
+    never committed a hash cannot be compared."""
+    root = _tree(tmp_path, {"a.yml": b"on: push\n", "b.yml": b"steps: []\n"})
+    ev = _read_evidence(root)
+    for c in ev["attestation"]["checks"]:
+        if c.get("path") == "a.yml":
+            del c["content_hash"]
+    _write_evidence(root, ev)
+    rc, report = cah.check_tree(root)
+    assert rc == 2
+    assert "a.yml" in report
+
+
+def test_non_string_content_hash_pathed_entry_is_refused(tmp_path):
+    root = _tree(tmp_path, {"a.yml": b"on: push\n", "b.yml": b"steps: []\n"})
+    ev = _read_evidence(root)
+    for c in ev["attestation"]["checks"]:
+        if c.get("path") == "a.yml":
+            c["content_hash"] = 12345
+    _write_evidence(root, ev)
+    rc, report = cah.check_tree(root)
+    assert rc == 2
+    assert "a.yml" in report
+
+
+def test_success_line_counts_files_actually_compared(tmp_path):
+    """Two pathed entries, both committed and compared: the success line
+    reports 2. (Pre-#932 a null-hash entry inflated this count while being
+    silently skipped.)"""
+    root = _tree(tmp_path, {"a.yml": b"on: push\n", "b.yml": b"steps: []\n"})
+    rc, report = cah.check_tree(root)
+    assert rc == 0
+    assert "2 attested file(s)" in report
+
+
+# =============================================================================
 # The gate verify-fast actually runs: the LIVE tree must stay green. Editing
 # any attested path without regenerating its evidence turns this red.
 # =============================================================================
@@ -209,6 +277,6 @@ def test_current_repo_is_green():
 def test_recipe_is_the_signoff_header_recipe(tmp_path):
     """The three artefacts and the pinned klt invocation, as the
     .github/workflows/signoff.yml header states them."""
-    assert "klayout-tools==0.8.0" in cah.RECIPE
+    assert "klayout-tools==0.9.2" in cah.RECIPE
     assert "verdict.txt" in cah.RECIPE
     assert "evidence." in cah.RECIPE and "content_hash" in cah.RECIPE

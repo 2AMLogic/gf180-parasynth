@@ -12,7 +12,11 @@ CLAUDE.md, an instrument in a wrong state REFUSES (exit 2, no evidence)
 instead of reporting.
 
 These tests run the probe against a SCRATCH COPY of the committed tree
-(`git archive HEAD`), never the live checkout. The first draft staged the
+(`git archive HEAD`), never the live checkout. Mid-merge the fixture REFUSES
+instead (#964): `git merge --no-commit` leaves HEAD at the pre-merge parent,
+so the archive would silently lack the merge -- a merged-tree measurement
+needs a merge commit, so commit the merge and then run this suite. The first
+draft staged the
 dirty tree in the live checkout for the duration of a probe subprocess, which
 collided with the concurrent `tools/check_doc_claims.py` job inside `make
 verify`'s single run_all.py pool: the checker read the harness's staged edit
@@ -23,9 +27,13 @@ checkout, and `git archive HEAD` makes the clean-tree case clean by
 construction instead of skipped on a dirty live tree.
 """
 import hashlib
+import io
+import os
 import pathlib
+import re
 import subprocess
 import sys
+import tarfile
 
 import pytest
 
@@ -46,18 +54,72 @@ DIRTY_CASES = [
      "T1: 2/11 items met"),
 ]
 
-# (file, line to append, needle naming the injected state the tree already
-# satisfies). #920: neither #913 guard fires here -- the baseline stays green
-# (the appended line does not unmatch any claim) and the injection target
+# #936: the probe's already_satisfied guard used to read a SECOND, hand-written
+# copy of the injected claim's in= path, so repointing the claim marker's own
+# in= left the guard reading the old file while the claim read the new one.
+# With the copy pre-satisfying the injected state the baseline stays green (it
+# still carries the line the claim quotes) and the injection target still
+# exists, so neither #913 nor #920 fires -- and the probe reported a
+# misattributed `FAIL  README T1 count marker goes red on a wrong count:
+# exit=0`, rc=1, for a guard that had silently stopped reading the claim's
+# file. Measured before the fix on a git archive scratch tree.
+IN_DIVERGENCE_PRESATISFIED = [
+    # (claim's doc, 1-based line of the claim, in= old, in= new,
+    #  evidence file copied, the copy's path, line appended to the copy,
+    #  needle naming the pre-satisfied state, needle naming the control)
+    ("README.md", 28,
+     "in=manifests/verdict.txt", "in=manifests/verdict_copy.txt",
+     "manifests/verdict.txt", "manifests/verdict_copy.txt",
+     "T1: 3/11 items met\n",
+     "T1: 3/11 items met", "the README T1 count control"),
+]
+
+# #936, sibling shape: repointing the milestone drum_kit claim's in= defeats control 3's
+# injection by a different door -- the find/replace string carries BOTH halves
+# of the claim, so the target stops matching and inject_or_refuse (#913)
+# refuses. Covered on main by mechanism; pinned here so it stays covered.
+IN_DIVERGENCE_TARGET_MISSES = [
+    # lineno=None: the claim is located by content at run time
+    # (_milestone_drum_kit_line) -- a hard-coded index breaks on every doc
+    # edit that inserts a marker above it (#904, #920/#927, #957, #960,
+    # #787); #787's record-step claim is the live case.
+    ("docs/milestones.md", None,
+     "in=rtl-sketch/drum_kit.v", "in=rtl-sketch/drum_kit_copy.v",
+     "rtl-sketch/drum_kit.v", "rtl-sketch/drum_kit_copy.v", "",
+     "injection target", "the milestone-3 control"),
+]
+
+# (file, how to stage, find text for swap staging, staged text, needle naming
+# the injected state the tree already satisfies, the control). #920: neither
+# #913 guard fires here -- the baseline stays green and the injection target
 # still exists -- so the control's marker has nothing to fire at and the probe
 # used to report a misattributed FAIL instead of refusing.
+#
+# History of the drum_kit.v staging choice. The append staging this table
+# originally carried passed at #920/#927's own tips but broke on their merge
+# with #904 (4c0c93bb) -- a second `^module drum_kit` line makes claim 62
+# (grep="^module drum_kit") multi-match, the checker REFUSES the tree, and
+# the probe honestly refused at the BASELINE (exit 2) instead of reaching
+# already_satisfied, leaving main's suite red in this file since the two
+# landed. Swap (renaming the declaration in place) fixed that for the
+# unanchored claim -- and then broke the same way against #960 (the #959
+# repair's anchored form): each PR green alone, red together on the merge
+# (measured at the #957 review: 2 failed, both drum_kit.v ids), because a
+# renamed line unmatches `^module drum_kit #\(` and no fixed choice opens
+# both doors. how="derive" ends the sequence: the staging is read off the
+# claim's ACTUAL committed grep= at run time (_derive_how) -- the pattern
+# matching the candidate line means append would add a second claim hit
+# (swap); not matching means swap would unmatch the only one (append). The
+# verdict.txt row keeps its hard-coded append on purpose: three claims read
+# that file, so no single claim's form decides its staging, and no colliding
+# PR touches them.
 ALREADY_SATISFIED_CASES = [
-    ("manifests/verdict.txt",
+    ("manifests/verdict.txt", "append", "",
      "T1: 3/11 items met\n",
      "T1: 3/11 items met",
      "the README T1 count control"),
-    ("rtl-sketch/drum_kit.v",
-     "module drum_kit_NOT_IN_TREE;\nendmodule\n",
+    ("rtl-sketch/drum_kit.v", "derive", "module drum_kit #(",
+     "module drum_kit_NOT_IN_TREE #(",
      "drum_kit_NOT_IN_TREE",
      "the milestone-3 control"),
     # #927: the injected claim is an UNANCHORED PREFIX match, so a module
@@ -65,8 +127,8 @@ ALREADY_SATISFIED_CASES = [
     # too. The first draft's guard pattern carried a trailing \b and stayed
     # silent on exactly this state (red-first at 17fbfe45: the control
     # reported `FAIL ...: exit=0`, rc=1, baseline green).
-    ("rtl-sketch/drum_kit.v",
-     "module drum_kit_NOT_IN_TREE_X;\nendmodule\n",
+    ("rtl-sketch/drum_kit.v", "derive", "module drum_kit #(",
+     "module drum_kit_NOT_IN_TREE_X #(",
      "drum_kit_NOT_IN_TREE",
      "the milestone-3 control"),
 ]
@@ -86,11 +148,93 @@ def _snapshot(root: pathlib.Path) -> dict[str, str]:
     return snap
 
 
+def _rebase_in_progress(root: pathlib.Path) -> bool:
+    """A rebase state directory exists, resolved per-worktree through
+    `--git-path` the same way the markers below are (the probe the
+    SQUASH_MSG refusal text uses to tell its two shapes apart)."""
+    for state in ("rebase-merge", "rebase-apply"):
+        probe = subprocess.run(["git", "rev-parse", "--git-path", state],
+                               cwd=root, capture_output=True, text=True)
+        if probe.returncode == 0:
+            state_path = pathlib.Path(probe.stdout.strip())
+            if not state_path.is_absolute():
+                state_path = root / state_path
+            if state_path.exists():
+                return True
+    return False
+
+
+def _archive_root_bytes(root: pathlib.Path) -> bytes:
+    """`git archive HEAD` of `root`, refusing a mid-flight worktree/HEAD
+    split.
+
+    #964: mid-merge (`git merge --no-commit`, MERGE_HEAD present) HEAD is
+    the PRE-merge parent -- the archive silently snapshots a tree without
+    the merge and every control run on it is a green that is not evidence.
+    Per docs/verification-rules.md an instrument in a wrong state refuses
+    rather than reports: a merged-tree measurement needs a merge COMMIT, so
+    commit the merge and re-run the suite.
+
+    #966: `git merge --squash` (SQUASH_MSG present, MERGE_HEAD deliberately
+    absent) produces the SAME split -- measured on a throwaway repo, the
+    worktree holds the staged merge while `git archive HEAD` does not and
+    the fixture used to answer anyway. The predicate follows the pathology
+    (a pending merge whose content the archive would miss) rather than one
+    of its causes, so both markers refuse; a squash-merge measurement also
+    needs a COMMIT (commit the squash, then re-run the suite).
+
+    The checks go through `git rev-parse --git-path <marker>`, which
+    resolves the per-worktree path (also where `.git` is a file) instead of
+    a hard-coded `.git`.
+
+    Deliberately NOT refused: a rebase or cherry-pick in progress that is
+    NOT stopped at a `squash`/`fixup` step -- there HEAD names a real
+    commit whose archive is what it says (rebase and cherry-pick step HEAD
+    onto commits that already carry the work), unlike the mid-merge split
+    between the worktree content and HEAD's tree. An interactive rebase's
+    `squash`/`fixup` step is the exception and IS refused: measured (this
+    git, pinned by test_archive_refuses_a_rebase_stopped_at_a_squash_step),
+    the step writes SQUASH_MSG and stops with HEAD at the pre-squash
+    parent and the melded content staged -- the identical split, so the
+    SQUASH_MSG leg catches it. Its remedy is `git rebase --continue`, not
+    commit, so the refusal names the shape from the rebase state
+    directories instead of asserting a squash merge. A clean tree has no
+    marker at all and runs as ever.
+    """
+    # SQUASH_MSG covers two shapes with different remedies: a plain
+    # `git merge --squash` commits the squash; a rebase stopped at a
+    # `squash`/`fixup` step continues. The rebase state directories tell
+    # them apart, so the message never tells a stopped rebase to commit.
+    if _rebase_in_progress(root):
+        squash_refusal = ("REFUSED: a rebase is stopped at a squash/fixup "
+                          "step; the melded content is staged but HEAD is "
+                          "pre-squash, continue the rebase "
+                          "(`git rebase --continue`)")
+    else:
+        squash_refusal = ("REFUSED: squash merge in progress; the merge is "
+                          "staged but HEAD is pre-merge, commit the squash "
+                          "first")
+    for marker, refusal in [
+        ("MERGE_HEAD", "REFUSED: merge in progress; HEAD is pre-merge, "
+                       "commit the merge first"),
+        ("SQUASH_MSG", squash_refusal),
+    ]:
+        probe = subprocess.run(["git", "rev-parse", "--git-path", marker],
+                               cwd=root, capture_output=True, text=True)
+        if probe.returncode == 0:
+            marker_path = pathlib.Path(probe.stdout.strip())
+            if not marker_path.is_absolute():
+                marker_path = root / marker_path
+            if marker_path.exists():
+                pytest.fail(refusal)
+    return subprocess.run(["git", "archive", "HEAD"], cwd=root,
+                          capture_output=True, check=True).stdout
+
+
 @pytest.fixture(scope="session")
 def _archive_bytes() -> bytes:
     """The committed tree once, for every scratch copy."""
-    return subprocess.run(["git", "archive", "HEAD"], cwd=ROOT,
-                          capture_output=True, check=True).stdout
+    return _archive_root_bytes(ROOT)
 
 
 @pytest.fixture
@@ -106,6 +250,152 @@ def scratch(_archive_bytes, tmp_path) -> pathlib.Path:
 def _run_probe(dst: pathlib.Path) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(dst / PROBE_REL)], cwd=dst,
                           capture_output=True, text=True)
+
+
+def _derive_how(scratch: pathlib.Path, rel: str, candidate: str) -> str:
+    """append-vs-swap from the injected claim's ACTUAL committed grep= (#959).
+
+    The table used to hard-code swap -- a hand-written assumption about claim
+    62's form, the same two-copies defect #936 removed from the guard, one
+    level further out. Measured at the #957 review (and reproduced here on
+    the merged tree): #957 and #960 were each green alone, red together --
+    claim 62 unanchored needs swap (an appended `module drum_kit_NOT_IN_TREE`
+    line is a SECOND `^module drum_kit` hit and the checker refuses the
+    tree), #960's anchored `^module drum_kit #\\(` needs append (a swap
+    unmatches the only hit and the baseline refuses STALE), and no fixed
+    choice opens both doors. Read the claim the milestone-3 control's
+    injection targets off the SCRATCH tree -- with the checker's own grammar,
+    via the probe module's injected_state, the same derivation
+    already_satisfied itself uses -- and apply its pattern to the candidate
+    line: a match means append would add a second claim hit (swap); no match
+    means swap would unmatch the only one (append). injected_state refuses on
+    zero-or-multiple claims, so a second rtl-sketch/drum_kit.v claim fails
+    here loudly instead of guessing.
+    """
+    sys.path.insert(0, str(ROOT / "tools" / "probes"))
+    import check_doc_claims_789_marker_controls as probe_mod
+    doc = (scratch / "docs/milestones.md").read_text(encoding="utf-8")
+    derived = probe_mod.injected_state(doc, f"in={rel}",
+                                       f"the {rel} staging decision")
+    assert derived is not None, (
+        f"could not derive the staging for {rel} from docs/milestones.md "
+        "(the REFUSED detail above names why)")
+    _, pattern = derived
+    return "swap" if re.search(pattern, candidate) else "append"
+
+
+def test_injected_state_ignores_an_injected_marker_inside_backticks():
+    """#962 red-first control (docs/verification-rules.md rule 8): the
+    input that defeats the old scan. `injected_state` must find exactly ONE
+    injected claim even when the staged text also carries the same marker
+    inside inline `backticks` -- inline documentation of the injection is an
+    example, not a second claim. The unfixed scan implemented the checker's
+    fence rule but not its backtick rule, so it counted both, found
+    len(bodies) == 2, and REFUSED (exit 2, no evidence) for a staged
+    injection that was fine. Measured red against the unfixed probe: the
+    assert below failed with derived None and "found 2" on stderr."""
+    sys.path.insert(0, str(ROOT / "tools" / "probes"))
+    import check_doc_claims_789_marker_controls as probe_mod
+    staged = "\n".join([
+        "A real injected claim:",
+        '<!-- claim: grep="drum_kit_NOT_IN_TREE_962" '
+        'in=tools/check_doc_claims.py -->',
+        'Inline docs: `<!-- claim: grep="drum_kit_NOT_IN_TREE_962" '
+        'in=tools/check_doc_claims.py -->` is an example, not a claim.',
+    ])
+    derived = probe_mod.injected_state(
+        staged, "drum_kit_NOT_IN_TREE_962", "the #962 control")
+    assert derived is not None, (
+        "injected_state refused on a backticked example marker (the #962 "
+        "divergence; the REFUSED detail above names it)")
+    files, pattern = derived
+    assert pattern == "drum_kit_NOT_IN_TREE_962"
+    assert files == [ROOT / "tools" / "check_doc_claims.py"]
+
+
+def _stage_already_satisfied(scratch: pathlib.Path, rel: str, how: str,
+                             find: str, staged: str) -> None:
+    """Write the pre-satisfied state into the scratch copy.
+
+    how='append' adds the line at end-of-file (a newline is supplied when the
+    staged text lacks one -- the drum_kit rows' text doubles as the swap
+    replacement, which must stay newline-free); how='swap' replaces `find` in
+    place; how='derive' asks the claim's own grep= which of the two keeps it
+    single-match (_derive_how).
+    """
+    f = scratch / rel
+    orig = f.read_text(encoding="utf-8")
+    if how == "derive":
+        how = _derive_how(scratch, rel, staged)
+    if how == "append":
+        f.write_text(orig + (staged if staged.endswith("\n")
+                             else staged + "\n"), encoding="utf-8")
+    else:
+        assert find and find in orig, f"swap anchor not found in {rel}"
+        f.write_text(orig.replace(find, staged), encoding="utf-8")
+
+
+def _milestone_drum_kit_line(doc: pathlib.Path) -> int:
+    """1-based line of the milestone-3 drum_kit claim, found by content --
+    a hard-coded index breaks on every doc edit that inserts a marker above
+    it (#904, #920/#927, #957, #960, #787), and #787's record-step claim is
+    the live case. The grep= content plus the in= path is unique in the
+    file; anything else fails loudly rather than staging against the wrong
+    line."""
+    lines = doc.read_text(encoding="utf-8").splitlines(keepends=True)
+    hits = [i + 1 for i, line in enumerate(lines)
+            if "claim: grep=" in line and "module drum_kit" in line
+            and "in=rtl-sketch/drum_kit.v" in line]
+    assert len(hits) == 1, (
+        f"drum_kit claim not uniquely located in {doc}: {len(hits)} matches")
+    return hits[0]
+
+
+def _anchor_claim_62_as_960_does(scratch: pathlib.Path) -> None:
+    """Recreate PR #960's two edits on the SCRATCH copy: the anchored doc
+    claim and the matching anchored find string in the probe (#960's diff
+    touches nothing else this suite reads). The #957+#960 merged tree is
+    exactly this state, so the anchored-form tests below are the collision
+    in miniature, measurable on this tree whether or not #960 ever lands.
+    Idempotent: on a tree where #960 already landed (the merged
+    configuration) both forms are already anchored and this is a no-op --
+    anything else fails the asserts loudly rather than staging a third
+    claim form."""
+    doc = scratch / "docs/milestones.md"
+    lines = doc.read_text(encoding="utf-8").splitlines(keepends=True)
+    n = _milestone_drum_kit_line(doc)
+    if 'grep="^module drum_kit" in=' in lines[n - 1]:
+        lines[n - 1] = lines[n - 1].replace('grep="^module drum_kit" in=',
+                                            'grep="^module drum_kit #\\(" in=')
+        doc.write_text("".join(lines), encoding="utf-8")
+    else:
+        assert 'grep="^module drum_kit #\\(" in=' in lines[n - 1], \
+            "drum_kit claim anchor not found (neither form)"
+    probe = scratch / PROBE_REL
+    text = probe.read_text(encoding="utf-8")
+    old = "'grep=\"^module drum_kit\" in=rtl-sketch/drum_kit.v'"
+    new = "'grep=\"^module drum_kit #\\\\(\" in=rtl-sketch/drum_kit.v'"
+    if old in text:
+        probe.write_text(text.replace(old, new), encoding="utf-8")
+    else:
+        assert new in text, "probe find-string anchor not found (neither form)"
+
+
+def _assert_refusal(before: dict[str, str], p: subprocess.CompletedProcess,
+                    blob: str, scratch: pathlib.Path, rel: str, needle: str,
+                    what: str) -> None:
+    """The already-satisfied refusal contract, shared by both claim forms:
+    exit 2 naming the file, the state and the control, no control lines, no
+    injection file, tree byte-identical."""
+    assert p.returncode == 2, f"expected REFUSED rc=2, got {p.returncode}:\n{blob}"
+    assert "REFUSED:" in blob, blob
+    assert rel in blob, f"refusal does not name the file:\n{blob}"
+    assert needle in blob, f"refusal does not name the already-satisfied state:\n{blob}"
+    assert what in blob, f"refusal does not name the control:\n{blob}"
+    assert "FAIL " not in blob, f"controls ran on a refused tree:\n{blob}"
+    assert "PASS " not in blob, f"controls ran on a refused tree:\n{blob}"
+    assert not (scratch / INJECT_REL).exists(), "refusal path wrote the injection file"
+    assert _snapshot(scratch) == before, "refusal path changed the tree"
 
 
 @pytest.mark.parametrize("rel,old,new,needle", DIRTY_CASES,
@@ -128,33 +418,147 @@ def test_dirty_tree_refuses_instead_of_reporting_control_failures(
     assert _snapshot(scratch) == before, "refusal path changed the tree"
 
 
-@pytest.mark.parametrize("rel,line,needle,what", ALREADY_SATISFIED_CASES,
+@pytest.mark.parametrize("rel,how,find,staged,needle,what",
+                         ALREADY_SATISFIED_CASES,
                          ids=[c[0] for c in ALREADY_SATISFIED_CASES])
-def test_already_satisfied_injection_refuses(scratch, rel, line, needle, what):
+def test_already_satisfied_injection_refuses(scratch, rel, how, find, staged,
+                                             needle, what):
     """#920: an injected state the tree ALREADY satisfies must refuse, not
-    report. Appending the state's own line keeps every claim green (the 2/11
-    claim still matches; a duplicate summary line does not unmatch anything)
+    report. The staging keeps every claim green (for the drum_kit rows the
+    choice is DERIVED from the claim's own grep= at run time -- swap while
+    the claim is unanchored, append under #960's anchored form -- so the
+    injected state pre-exists without unmatching or duplicating claim 62)
     and the injection target still exists, so neither #913 guard fires and
     the control's marker has nothing to fire at -- the probe used to answer
     `FAIL ...: exit=0` for that control and rc=1 overall, a guard that
     "stopped guarding" when it had nothing to guard against. The probe must
     REFUSE pre-injection: exit 2, the refusal names the file and the state,
     no control lines, tree byte-identical."""
-    f = scratch / rel
-    orig = f.read_text(encoding="utf-8")
-    f.write_text(orig + line, encoding="utf-8")
+    _stage_already_satisfied(scratch, rel, how, find, staged)
+    before = _snapshot(scratch)
+    p = _run_probe(scratch)
+    _assert_refusal(before, p, p.stdout + p.stderr, scratch, rel, needle, what)
+
+
+@pytest.mark.parametrize("staged", [
+    "module drum_kit_NOT_IN_TREE #(",
+    "module drum_kit_NOT_IN_TREE_X #(",
+], ids=["rtl-sketch/drum_kit.v0", "rtl-sketch/drum_kit.v1"])
+def test_already_satisfied_staging_survives_an_anchored_claim_form(
+        scratch, staged):
+    """#959, the collision in miniature. #960 anchors claim 62 to
+    `^module drum_kit #\\(`, and under that form the hard-coded swap staging
+    renamed drum_kit.v's only matching line -- the baseline refused STALE and
+    the already-satisfied guard was never reached (measured on the #957+#960
+    merged tree: 2 failed, both drum_kit.v ids, `refusal does not name the
+    already-satisfied state`). Red first in exactly that configuration. The
+    derived staging picks append -- the anchored pattern does not match the
+    candidate line, so a swap would unmatch the only claim hit -- the tree
+    stays green, and the refusal must still name the file, the state and the
+    control. Pins this tree against the anchored form whether or not #960
+    ever lands."""
+    _anchor_claim_62_as_960_does(scratch)
+    _stage_already_satisfied(scratch, "rtl-sketch/drum_kit.v", "derive",
+                             "module drum_kit #(", staged)
+    before = _snapshot(scratch)
+    p = _run_probe(scratch)
+    blob = p.stdout + p.stderr
+    assert "REFUSED: baseline not green" not in blob, blob
+    _assert_refusal(before, p, blob, scratch, "rtl-sketch/drum_kit.v",
+                    "drum_kit_NOT_IN_TREE", "the milestone-3 control")
+
+
+def _repoint_in(scratch: pathlib.Path, doc: str, lineno, old: str,
+                new: str) -> None:
+    """Repoint ONE claim marker's in= (line-targeted: the same in= string
+    appears on several claims in these documents). lineno=None locates the
+    milestone drum_kit claim by content instead of a hard-coded line."""
+    f = scratch / doc
+    lines = f.read_text(encoding="utf-8").splitlines(keepends=True)
+    if lineno is None:
+        lineno = _milestone_drum_kit_line(f)
+    assert old in lines[lineno - 1], f"in= anchor not on {doc}:{lineno}"
+    lines[lineno - 1] = lines[lineno - 1].replace(old, new)
+    f.write_text("".join(lines), encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "doc,lineno,old,new,src_rel,dst_rel,extra,needle,what",
+    IN_DIVERGENCE_PRESATISFIED,
+    ids=[c[0] for c in IN_DIVERGENCE_PRESATISFIED])
+def test_in_repointed_presatisfied_state_refuses(
+        scratch, doc, lineno, old, new, src_rel, dst_rel, extra, needle, what):
+    """#936, red-first: the issue's measured repro. Copy the evidence file,
+    append the injected line to the copy (the claim still matches the copy, so
+    the baseline is green), repoint the claim's in= at the copy. The guard used
+    to read the ORIGINAL file, found no pre-satisfaction, ran the control, and
+    the marker had nothing to fire at in the file the claim ACTUALLY greps:
+    `FAIL ... exit=0`, rc=1 -- a guard that works misread as one that stopped
+    guarding. The guard must be derived from the staged injection and REFUSE:
+    exit 2, naming the file the claim now reads, the state, and the control,
+    with no control lines and a byte-identical tree."""
+    (scratch / dst_rel).write_text(
+        (scratch / src_rel).read_text(encoding="utf-8") + extra,
+        encoding="utf-8")
+    _repoint_in(scratch, doc, lineno, old, new)
     before = _snapshot(scratch)
     p = _run_probe(scratch)
     blob = p.stdout + p.stderr
     assert p.returncode == 2, f"expected REFUSED rc=2, got {p.returncode}:\n{blob}"
     assert "REFUSED:" in blob, blob
-    assert rel in blob, f"refusal does not name the file:\n{blob}"
-    assert needle in blob, f"refusal does not name the already-satisfied state:\n{blob}"
+    assert dst_rel in blob, f"refusal does not name the file the claim reads:\n{blob}"
+    assert needle in blob, f"refusal does not name the pre-satisfied state:\n{blob}"
     assert what in blob, f"refusal does not name the control:\n{blob}"
     assert "FAIL " not in blob, f"controls ran on a refused tree:\n{blob}"
     assert "PASS " not in blob, f"controls ran on a refused tree:\n{blob}"
     assert not (scratch / INJECT_REL).exists(), "refusal path wrote the injection file"
     assert _snapshot(scratch) == before, "refusal path changed the tree"
+
+
+@pytest.mark.parametrize(
+    "doc,lineno,old,new,src_rel,dst_rel,extra,needle,what",
+    IN_DIVERGENCE_TARGET_MISSES,
+    ids=[c[0] for c in IN_DIVERGENCE_TARGET_MISSES])
+def test_in_repointed_defeats_injection_target_refuses(
+        scratch, doc, lineno, old, new, src_rel, dst_rel, extra, needle, what):
+    """#936, sibling shape: control 3's find string carries BOTH halves of the
+    claim, so an edited in= stops the injection from matching and #913's
+    missing-target refusal fires (rc=2, no control lines). Pinned so the
+    mechanism stays covered."""
+    (scratch / dst_rel).write_text(
+        (scratch / src_rel).read_text(encoding="utf-8") + extra,
+        encoding="utf-8")
+    _repoint_in(scratch, doc, lineno, old, new)
+    before = _snapshot(scratch)
+    p = _run_probe(scratch)
+    blob = p.stdout + p.stderr
+    assert p.returncode == 2, f"expected REFUSED rc=2, got {p.returncode}:\n{blob}"
+    assert "REFUSED:" in blob, blob
+    assert needle in blob, f"refusal does not name the missed target:\n{blob}"
+    assert what in blob, f"refusal does not name the control:\n{blob}"
+    assert "FAIL " not in blob, f"controls ran on a refused tree:\n{blob}"
+    assert "PASS " not in blob, f"controls ran on a refused tree:\n{blob}"
+    assert not (scratch / INJECT_REL).exists(), "refusal path wrote the injection file"
+    assert _snapshot(scratch) == before, "refusal path changed the tree"
+
+
+def test_in_repointed_without_presatisfaction_still_measures(scratch):
+    """#936, the scoping half: repointing the claim's in= at a copy that does
+    NOT pre-satisfy the injected state leaves the control measuring the marker
+    on the file the claim actually greps -- and it genuinely goes red there.
+    The derived guard must not over-refuse: rc=0, four PASS, tree restored."""
+    (scratch / "manifests/verdict_copy.txt").write_text(
+        (scratch / "manifests/verdict.txt").read_text(encoding="utf-8"),
+        encoding="utf-8")
+    _repoint_in(scratch, "README.md", 28,
+                "in=manifests/verdict.txt", "in=manifests/verdict_copy.txt")
+    before = _snapshot(scratch)
+    p = _run_probe(scratch)
+    blob = p.stdout + p.stderr
+    assert p.returncode == 0, blob
+    assert blob.count("PASS ") == 4, blob
+    assert "FAIL " not in blob, blob
+    assert _snapshot(scratch) == before, "clean run left the tree changed"
 
 
 def test_refused_baseline_claims_also_refuse(scratch):
@@ -199,3 +603,257 @@ def test_missing_interpreter_still_refuses_before_anything_else():
     with pytest.raises(SystemExit) as exc:
         probe_mod.interpreter()
     assert exc.value.code == 2
+
+
+# ---- #964: the archive engine must refuse a mid-merge tree ----
+
+
+def _git(*args: str, cwd: pathlib.Path) -> None:
+    subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
+                   check=True)
+
+
+def _scratch_repo(path: pathlib.Path) -> pathlib.Path:
+    """A throwaway repo with one commit on main, git-configured locally."""
+    path.mkdir(parents=True, exist_ok=True)
+    _git("init", "-b", "main", cwd=path)
+    _git("config", "user.email", "probe@example.invalid", cwd=path)
+    _git("config", "user.name", "probe", cwd=path)
+    (path / "base.txt").write_text("base\n", encoding="utf-8")
+    _git("add", "base.txt", cwd=path)
+    _git("commit", "-m", "base", cwd=path)
+    return path
+
+
+def _diverge(repo: pathlib.Path) -> None:
+    """One commit on `side`, one on `main`, both off the base commit."""
+    _git("checkout", "-b", "side", cwd=repo)
+    (repo / "side.txt").write_text("side\n", encoding="utf-8")
+    _git("add", "side.txt", cwd=repo)
+    _git("commit", "-m", "side", cwd=repo)
+    _git("checkout", "main", cwd=repo)
+    (repo / "main.txt").write_text("main\n", encoding="utf-8")
+    _git("add", "main.txt", cwd=repo)
+    _git("commit", "-m", "main", cwd=repo)
+
+
+def _merge_no_commit(repo: pathlib.Path, other: str = "side") -> None:
+    _git("merge", "--no-commit", "--no-ff", other, cwd=repo)
+
+
+def _tar_names(archive: bytes) -> list[str]:
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tf:
+        return tf.getnames()
+
+
+def test_archive_refuses_mid_merge_head_is_pre_merge(tmp_path):
+    """#964, the injected defect: mid `git merge --no-commit` the worktree
+    holds the merge but HEAD is the pre-merge parent, so `git archive HEAD`
+    silently snapshots a tree WITHOUT the merged content and every control
+    on that snapshot is a green that is not evidence. The premise is shown,
+    not assumed -- the raw archive lacks side.txt -- and then the fixture
+    engine must REFUSE instead of handing that snapshot to the suite."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    _merge_no_commit(repo)
+    bare = subprocess.run(["git", "archive", "HEAD"], cwd=repo,
+                          capture_output=True, check=True).stdout
+    assert "side.txt" not in _tar_names(bare), (
+        "premise drifted: the mid-merge archive now contains the merge")
+    with pytest.raises(pytest.fail.Exception) as exc:
+        _archive_root_bytes(repo)
+    assert "REFUSED" in str(exc.value)
+
+
+def test_archive_allows_a_committed_merge(tmp_path):
+    """#964 control: the same merge, COMMITTED, does not refuse -- and the
+    archive then contains the merge -- so the gate is satisfiable exactly
+    when its premise is fixed."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    _merge_no_commit(repo)
+    _git("commit", "--no-edit", cwd=repo)
+    assert "side.txt" in _tar_names(_archive_root_bytes(repo))
+
+
+def test_archive_allows_a_plain_clean_tree(tmp_path):
+    """#964 control: an ordinary committed tree with no merge anywhere does
+    not refuse. The rest of this module, running on the current checkout,
+    pins the same thing end to end; this pins the gate alone."""
+    repo = _scratch_repo(tmp_path / "plain")
+    assert isinstance(_archive_root_bytes(repo), bytes)
+
+
+def test_archive_refuses_mid_merge_in_a_linked_worktree(tmp_path):
+    """#964 AC edge: `.git` is a FILE in a linked worktree, so the guard
+    must reach MERGE_HEAD through `git rev-parse --git-path` (which
+    resolves the per-worktree path) rather than a hard-coded
+    `.git/MERGE_HEAD`. The merge is mid-flight in the worktree only --
+    MERGE_HEAD is per-worktree state -- so the worktree refuses while the
+    main repo of the same throwaway repo keeps answering."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    wt = tmp_path / "wt"
+    _git("worktree", "add", str(wt), "side", cwd=repo)
+    _merge_no_commit(wt, other="main")
+    with pytest.raises(pytest.fail.Exception) as exc:
+        _archive_root_bytes(wt)
+    assert "REFUSED" in str(exc.value)
+    assert isinstance(_archive_root_bytes(repo), bytes), (
+        "the guard leaked across the worktree boundary")
+
+
+# ---- #966: `git merge --squash` reproduces the split and must refuse ----
+
+
+def _merge_squash(repo: pathlib.Path, other: str = "side") -> None:
+    _git("merge", "--squash", other, cwd=repo)
+
+
+def test_archive_refuses_mid_squash_merge(tmp_path):
+    """#966, the injected defect: `git merge --squash` stages the merge into
+    the worktree and index but deliberately writes no MERGE_HEAD -- HEAD
+    stays the pre-merge parent, the exact worktree/HEAD split #964 refuses
+    `--no-commit` for, so the archive silently lacks the staged content and
+    every control on that snapshot is a green that is not evidence. The
+    premise is shown, not assumed -- the worktree holds side.txt, the raw
+    archive does not, and the MERGE_HEAD guard #964 shipped does not fire
+    on this state -- and then the fixture engine must REFUSE instead of
+    handing that snapshot to the suite."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    _merge_squash(repo)
+    assert (repo / "side.txt").exists(), (
+        "premise drifted: the squashed content is no longer staged")
+    bare = subprocess.run(["git", "archive", "HEAD"], cwd=repo,
+                          capture_output=True, check=True).stdout
+    assert "side.txt" not in _tar_names(bare), (
+        "premise drifted: the mid-squash archive now contains the merge")
+    assert not (repo / ".git" / "MERGE_HEAD").exists(), (
+        "premise drifted: squash now writes MERGE_HEAD, the #964 guard "
+        "alone covers this state")
+    with pytest.raises(pytest.fail.Exception) as exc:
+        _archive_root_bytes(repo)
+    message = str(exc.value).lower()
+    assert "REFUSED" in str(exc.value)
+    assert "squash merge" in message
+    assert "commit" in message
+    assert "rebase" not in message, (
+        "a plain `git merge --squash` has no rebase state, so the refusal "
+        f"must name the squash merge, got: {exc.value}")
+
+
+def test_archive_allows_a_committed_squash(tmp_path):
+    """#966 control: the same squash, COMMITTED, does not refuse -- and the
+    archive then contains the content -- so the gate is satisfiable exactly
+    when its premise is fixed (a squash-merge measurement needs a commit,
+    the same answer #964 gives for a --no-commit merge)."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _diverge(repo)
+    _merge_squash(repo)
+    _git("commit", "-m", "squash side", cwd=repo)
+    # measured (this git): committing the squash removes SQUASH_MSG, so the
+    # marker predicate is satisfiable exactly when the split is resolved
+    assert not (repo / ".git" / "SQUASH_MSG").exists(), (
+        "premise drifted: SQUASH_MSG survives the squash commit, the "
+        "marker predicate would refuse committed trees")
+    assert "side.txt" in _tar_names(_archive_root_bytes(repo))
+
+
+def test_archive_allows_a_rebase_in_progress(tmp_path):
+    """#966 AC edge: the docstring's "deliberately NOT refused" case must
+    survive the widened predicate -- a PLAIN rebase (no `squash`/`fixup`
+    step, so SQUASH_MSG is never written) stopped on a conflict leaves
+    neither MERGE_HEAD nor SQUASH_MSG behind, and mid-rebase HEAD names a
+    real commit whose archive is what it says, so this must still answer.
+    A rebase stopped AT a squash step writes SQUASH_MSG and is refused --
+    the other shape, pinned by
+    test_archive_refuses_a_rebase_stopped_at_a_squash_step."""
+    repo = _scratch_repo(tmp_path / "repo")
+    # both branches rewrite base.txt, so rebasing side onto main conflicts
+    _git("checkout", "-b", "side", cwd=repo)
+    (repo / "base.txt").write_text("side version\n", encoding="utf-8")
+    _git("commit", "-am", "side rewrites base", cwd=repo)
+    _git("checkout", "main", cwd=repo)
+    (repo / "base.txt").write_text("main version\n", encoding="utf-8")
+    _git("commit", "-am", "main rewrites base", cwd=repo)
+    _git("checkout", "side", cwd=repo)
+    stopped = subprocess.run(["git", "rebase", "main"], cwd=repo,
+                             capture_output=True, text=True)
+    assert stopped.returncode != 0, (
+        "premise drifted: the rebase no longer conflicts, nothing is "
+        "mid-flight")
+    assert (repo / ".git" / "rebase-merge").exists() or \
+        (repo / ".git" / "rebase-apply").exists(), (
+        "premise drifted: no rebase state directory")
+    assert isinstance(_archive_root_bytes(repo), bytes)
+
+
+def test_archive_refuses_a_rebase_stopped_at_a_squash_step(tmp_path):
+    """#966 review: an interactive rebase's `squash`/`fixup` step writes
+    SQUASH_MSG and stops there -- measured (this git): HEAD is the
+    pre-squash parent, the melded content is staged in the worktree, the
+    raw archive lacks it, and MERGE_HEAD is absent (the #964 guard does
+    not fire). That is the identical split the SQUASH_MSG leg refuses for
+    `git merge --squash`, so the fixture must refuse here too -- and the
+    refusal must name the rebase with its own remedy (`git rebase
+    --continue`), never tell this state to commit: `git commit` is not
+    the remedy for a stopped rebase. The premise is shown, not assumed:
+    SQUASH_MSG present, MERGE_HEAD absent, a rebase state directory
+    present, the melded file in the worktree and missing from the
+    archive."""
+    repo = _scratch_repo(tmp_path / "repo")
+    _git("checkout", "-b", "side", cwd=repo)
+    (repo / "s1.txt").write_text("s1\n", encoding="utf-8")
+    _git("add", "s1.txt", cwd=repo)
+    _git("commit", "-m", "side one", cwd=repo)
+    (repo / "s2.txt").write_text("s2\n", encoding="utf-8")
+    _git("add", "s2.txt", cwd=repo)
+    _git("commit", "-m", "side two", cwd=repo)
+    _git("checkout", "main", cwd=repo)
+    (repo / "m1.txt").write_text("m1\n", encoding="utf-8")
+    _git("add", "m1.txt", cwd=repo)
+    _git("commit", "-m", "main one", cwd=repo)
+    _git("checkout", "side", cwd=repo)
+    seq_edit = tmp_path / "seq-edit.sh"
+    seq_edit.write_text(
+        '#!/bin/sh\n'
+        'sed -i "s/^pick \\(.*\\) side two$/squash \\1 side two/" "$1"\n',
+        encoding="utf-8")
+    seq_edit.chmod(0o755)
+    fail_edit = tmp_path / "fail-edit.sh"
+    fail_edit.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    fail_edit.chmod(0o755)
+    env = dict(os.environ)
+    env["GIT_SEQUENCE_EDITOR"] = str(seq_edit)
+    env["GIT_EDITOR"] = str(fail_edit)
+    stopped = subprocess.run(["git", "rebase", "-i", "main"], cwd=repo,
+                             capture_output=True, text=True, env=env)
+    assert stopped.returncode != 0, (
+        "premise drifted: the squash step no longer stops for its "
+        "commit-message editor")
+    assert (repo / ".git" / "SQUASH_MSG").exists(), (
+        "premise drifted: a stopped squash step no longer writes "
+        "SQUASH_MSG")
+    assert not (repo / ".git" / "MERGE_HEAD").exists(), (
+        "premise drifted: a stopped squash step now writes MERGE_HEAD, "
+        "the #964 guard alone covers this state")
+    assert (repo / ".git" / "rebase-merge").exists() or \
+        (repo / ".git" / "rebase-apply").exists(), (
+        "premise drifted: no rebase state directory")
+    assert (repo / "s2.txt").exists(), (
+        "premise drifted: the melded content is no longer staged")
+    bare = subprocess.run(["git", "archive", "HEAD"], cwd=repo,
+                          capture_output=True, check=True).stdout
+    assert "s2.txt" not in _tar_names(bare), (
+        "premise drifted: the mid-squash archive now contains the work")
+    with pytest.raises(pytest.fail.Exception) as exc:
+        _archive_root_bytes(repo)
+    message = str(exc.value).lower()
+    assert "REFUSED" in str(exc.value)
+    assert "rebase" in message and "continue" in message, (
+        "refusal must name the rebase and its remedy "
+        f"(`git rebase --continue`), got: {exc.value}")
+    assert "commit" not in message, (
+        "refusal must not tell a stopped rebase to commit "
+        f"(`git commit` is not the remedy here), got: {exc.value}")

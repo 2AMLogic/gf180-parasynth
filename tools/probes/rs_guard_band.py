@@ -502,7 +502,14 @@ if __name__ == "__main__":
     try:
         sys.exit({"validate": cmd_validate, "compare": cmd_compare,
                   "guards": cmd_guards}[cmd]())
-    except Refused as e:
+    # The BASE class, not the local sibling (#1162): both_records() reaches
+    # run_case.load_reference / run_case.prepare, whose Refused is
+    # preparation_contract.Refused -- a sibling of this module's, so the old
+    # `except Refused` missed it and a silent reference escaped as an exit-1
+    # traceback, a refusal rendered as FAIL. Unrelated exceptions (a corpus
+    # file scipy cannot read) still escape as execution errors: the base
+    # catches only refusals, never `except Exception`.
+    except refusal.Refused as e:
         print(f"REFUSED  {e}")
         sys.exit(2)
     except KeyError:

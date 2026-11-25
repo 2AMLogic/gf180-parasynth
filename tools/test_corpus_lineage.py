@@ -106,6 +106,25 @@ def test_r1_fires_on_a_blank_licence(tree):
     assert "R1" in _rules(tree.check())
 
 
+def test_r1_fires_on_a_missing_wav_bit_depth(tree):
+    """#817: bit depth joined REQUIRED_TEXT because no manifest recorded it,
+    which is how a 24-bit pack could arrive unnoticed. The plausible shortcut
+    is a new pack copied from an old one with the field simply absent."""
+    m = tree.load()
+    del tree.pack(m, "808-from-mars")["wav_bit_depth"]
+    tree.save(m)
+    assert "R1" in _rules(tree.check())
+
+
+def test_r1_reports_a_marked_unknown_bit_depth_as_open_not_false(tree):
+    m = tree.load()
+    tree.pack(m, "808-from-mars")["wav_bit_depth"] = m["unknown_marker"]
+    tree.save(m)
+    f = tree.check()
+    assert "R1" not in _rules(f)
+    assert "R1" in _rules(f, "OPEN")
+
+
 def test_r1_reports_a_marked_unknown_as_open_not_false(tree):
     m = tree.load()
     tree.pack(m, "808-from-mars")["known_settings"] = m["unknown_marker"]
@@ -154,9 +173,9 @@ def test_r1_does_not_turn_a_stated_result_into_an_open_field(tree, stated_result
     assert not opens, f"{stated_result!r} is a stated result, not an unfilled field: {opens}"
 
 
-def test_the_committed_state_has_exactly_its_five_declared_open_fields():
-    """`docs/corpus-lineage.md` names five. Widening the OPEN predicate (above)
-    must not quietly add a sixth -- "run the gate against the current state
+def test_the_committed_state_has_exactly_its_eight_declared_open_fields():
+    """`docs/corpus-lineage.md` names eight. Widening the OPEN predicate (above)
+    must not quietly add a ninth -- "run the gate against the current state
     before committing it". If this fails, either the manifest changed or the
     predicate caught a field the document has not declared; declare it."""
     opens = {f["what"].split(" is not established")[0]
@@ -164,9 +183,12 @@ def test_the_committed_state_has_exactly_its_five_declared_open_fields():
     assert opens == {
         "boutique-808: unit",
         "boutique-808: dry_or_processed",
+        "boutique-808: wav_bit_depth",
         "ableton-factory-808: unit",
         "ableton-factory-808: dry_or_processed",
+        "ableton-factory-808: wav_bit_depth",
         "legowelt-minimoog-5529: dry_or_processed",
+        "legowelt-minimoog-5529: wav_bit_depth",
     }, sorted(opens)
 
 

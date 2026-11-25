@@ -24,6 +24,7 @@ import sys
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
@@ -281,6 +282,69 @@ def test_require_corpus_is_reachable_from_the_command_line(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
+# a silent corpus WAV is a refused precondition, not a crash (#1163)
+# ---------------------------------------------------------------------------
+SR_SILENT = 48000
+
+
+def _silent_refs(tmp_path: pathlib.Path) -> pathlib.Path:
+    """`cy8/CY0000.WAV` as a digitally silent 16-bit mono PCM file, 2 s at
+    48 kHz -- the shape that crashed `measure_windows`. That length carries
+    both the 1 s window and the 0.1 s floor estimate, so the refusals asserted
+    below cannot be the window-fit or floor ones: a missing file, a too-short
+    window and a silent record are three different outcomes, and only the
+    third is what these controls pin."""
+    refs = tmp_path / "refs"
+    (refs / "cy8").mkdir(parents=True)
+    wavfile.write(str(refs / "cy8" / "CY0000.WAV"), SR_SILENT,
+                  np.zeros(2 * SR_SILENT, dtype="<i2"))
+    return refs
+
+
+def test_a_silent_corpus_wav_refuses_the_windowed_measurement(tmp_path):
+    """Red-first at origin/main 897bacba: this drove `measure_windows` to a
+    ZeroDivisionError at the H/L division (log10 of 0/0 band energies), an
+    exit-1 traceback instead of a refusal. A silent reference recording is a
+    missing precondition -- `run_case`'s own reference load refuses it, and so
+    must the windowed measurement, with no H/L value produced."""
+    meas, why = tk.measured_or_refused(_silent_refs(tmp_path))
+    assert meas is None
+    assert "CY0000.WAV" in why and "silent" in why, why
+
+
+def test_check_on_a_silent_corpus_degrades_to_NO_VERDICT(tmp_path, capsys):
+    """The refusal must reach the CLI as the module's designed corpus-absent
+    degradation: exit 0, the windowed refusal reason reported, the two
+    corpus-gated controls NO VERDICT, and the artifact-backed alpha-law-1s
+    still decided -- the gate answers on what it can, and says so on what it
+    cannot, rather than dying between the two."""
+    assert tk.main(["--check", "--refs", str(_silent_refs(tmp_path))]) == 0
+    out = capsys.readouterr().out.splitlines()
+    joined = "\n".join(out)
+    assert "the windowed measurement REFUSED:" in joined and "CY0000.WAV" in joined, joined[-600:]
+    for d in tk.CORPUS_DEFECTS:
+        row = [ln for ln in out if ln.startswith(d)]
+        assert len(row) == 1 and "NO VERDICT" in row[0], (d, row)
+    a1 = [ln for ln in out if ln.startswith("alpha-law-1s")]
+    assert len(a1) == 1 and a1[0].rstrip().endswith("pass"), a1
+    assert "Traceback" not in joined
+
+
+def test_require_corpus_on_a_silent_corpus_exits_1(tmp_path, capsys):
+    """The other half of the contract: where the corpus controls are REQUIRED
+    (`make reference-integration`), an undecided row is a failure, and the
+    silent corpus must fail it with the required-control diagnostic rather
+    than pass by refusing."""
+    assert tk.main(["--check", "--require-corpus",
+                    "--refs", str(_silent_refs(tmp_path))]) == 1
+    out = capsys.readouterr().out.splitlines()
+    for d in tk.CORPUS_DEFECTS:
+        assert any(ln.startswith(d) and "NO VERDICT" in ln and "REFUSED" in ln
+                   for ln in out), (d, out)
+    assert "Traceback" not in "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
 # (c) refusals -- a precondition that fails must not produce a number
 # ---------------------------------------------------------------------------
 def test_from_artifact_refuses_a_file_that_is_missing_a_setting(tmp_path):
@@ -463,3 +527,29 @@ def test_the_required_corpus_gate_is_satisfiable_where_the_wavs_are():
     no gate, so this is the test that would have caught one."""
     refs = _refs_or_skip()
     assert tk.main(["--check", "--require-corpus", "--refs", str(refs)]) == 0
+
+
+@pytest.mark.parametrize("silent_band", ["H", "L"])
+def test_a_non_silent_record_with_a_silent_window_refuses_that_window(
+        tmp_path, monkeypatch, silent_band):
+    """A late click has a valid strike, a silent H tail and a too-short 1s window.
+    Exchange the passbands to exercise a silent L tail independently."""
+    refs = tmp_path / "refs"
+    (refs / "cy8").mkdir(parents=True)
+    x = np.zeros(4 * SR_SILENT, dtype="<i2")
+    x[int(3.5 * SR_SILENT)] = 20000
+    wavfile.write(str(refs / "cy8" / "CY0000.WAV"), SR_SILENT, x)
+    monkeypatch.setattr(tk, "CODES", ("00",))
+    if silent_band == "L":
+        monkeypatch.setattr(tk, "analysis_bands", lambda cfg: {"H": cb.BANDS["L"],
+                                                               "L": cb.BANDS["H"]})
+
+    meas = tk.measure_windows(refs)
+    strike = meas["hml"]["strike"]["00"]["00"]
+    assert strike == pytest.approx(4.3041 if silent_band == "H" else -4.3041, abs=0.01)
+    assert meas["hml"]["tail"]["00"]["00"] is None
+    refused = {m["window"]: m["refused"] for m in meas["floor_margins"]
+               if m["setting"] == "CY0000" and m["margin_db"] is None}
+    assert refused["tail"] == f"band(s) {silent_band} carry no energy in window tail"
+    assert "does not fit" in refused["1s"]
+    assert meas["n_refused"] == 2

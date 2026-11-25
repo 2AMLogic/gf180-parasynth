@@ -17,6 +17,9 @@ WHAT IT CHECKS, per `manifests/inventories/item-*.json`:
     `content_hash`. Raw-bytes semantics validated against the committed
     evidence on `bcf53a6a`: 25/25 item-9 and 12/12 item-10 path checks
     recompute to `match` with `hashlib.sha256(open(p, 'rb').read())`.
+    A pathed entry whose `content_hash` is not a non-empty string is
+    REFUSED (#932): an entry that never committed a hash cannot be
+    compared, and an uncompared check must not be counted as recomputed.
     Entries without a `path` (item-9's `local_only` cold_start, the pdk and
     tools pins; item-10's audit command) carry a committed outcome, not a
     hash commitment, and are NOT re-run -- hash comparison only.
@@ -37,7 +40,8 @@ OUTCOMES (docs/failure-modes.md: REFUSED is a first-class outcome):
              the report names path, committed hash, fresh hash and the
              three-artefact regeneration recipe
     exit 2   REFUSED: missing evidence/inventory, unparseable JSON, missing
-             provenance hash, or no inventories at all -- "cannot run" is
+             provenance hash, a pathed check entry with no committed
+             content_hash, or no inventories at all -- "cannot run" is
              never rendered as "pass"
 
 A deleted-but-not-regenerated attested file is exit 1, not 2: the committed
@@ -58,7 +62,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 RECIPE = """\
 Regenerate (three artefacts move together -- the authoritative recipe is the
 header of .github/workflows/signoff.yml):
-  1. K="uvx --with pyyaml --from klayout-tools==0.8.0 klt"
+  1. K="uvx --with pyyaml --from klayout-tools==0.9.2 klt"
      $K signoff --attest <item> --inventory manifests/inventories/<item>.json \\
          -o manifests/evidence/<item>.json
   2. set evidence.<item>.content_hash in manifests/gf180-parasynth.json to the
@@ -169,7 +173,12 @@ def check_tree(root: pathlib.Path = REPO) -> tuple[int, str]:
 
         # -- per-file hash comparison ----------------------------------------
         for path, committed in pathed:
-            nfiles += 1
+            if not isinstance(committed, str) or not committed:
+                return 2, (f"REFUSED: {name} attestation.checks[] entry for "
+                           f"{path} carries a path but its content_hash is "
+                           f"{committed!r} -- a check that never committed "
+                           f"a hash cannot be compared, and an uncompared "
+                           f"check is not a pass")
             attested = root / path
             if not attested.is_file():
                 drifts.append(
@@ -179,11 +188,12 @@ def check_tree(root: pathlib.Path = REPO) -> tuple[int, str]:
                     f"  fresh:     absent")
                 continue
             fresh = sha256_file(attested)
-            if committed and fresh != committed:
+            if fresh != committed:
                 drifts.append(
                     f"DRIFT {name}: attested file {path}\n"
                     f"  committed: {committed}\n"
                     f"  fresh:     {fresh}")
+            nfiles += 1
 
     if drifts:
         report = "\n\n".join(drifts)

@@ -4,11 +4,11 @@
   "evidence": {
     "9": {
       "file": "manifests/evidence/item-9.json",
-      "content_hash": "sha256:ad0f020da701f3dbc18c292cee939f071fbcbb27cf70dca72aebe7482977659a"
+      "content_hash": "sha256:24c30cfe72b5c40275f20fd4f679ccbab77d2691e7cfc587d01249fcef174ae0"
     },
     "10": {
       "file": "manifests/evidence/item-10.json",
-      "content_hash": "sha256:b3e6a45ea49d36c9f78b7c1170e2919462cd8f64b5412f8672a16aeaf8676230"
+      "content_hash": "sha256:3fae46de00b0ab05f8e5ca04b6a14b35b53861d12bb6b4970a1ab62cdfdb8e1d"
     }
   }
 }

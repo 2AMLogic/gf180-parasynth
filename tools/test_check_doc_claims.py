@@ -502,6 +502,86 @@ def test_a_marker_in_a_code_block_or_backticks_is_an_example_not_a_claim(tmp_pat
     assert [c.raw for c in found] == ["commit=abc"]
 
 
+def test_iter_claim_markers_applies_both_skip_rules_once():
+    """#962: the fence and inline-backtick skip grammar exists exactly once,
+    in `iter_claim_markers`, because two readers walk documents with it --
+    `find_claims` and the #789 probe's `injected_state` -- and a hand copy
+    in the probe had drifted (it lacked the backtick rule). Edge cases from
+    the issue's test plan: a ~~~ fence, an odd backtick count before a
+    marker on its own line, and an unterminated fence (everything after it
+    is inside the fence, so nothing further yields)."""
+    lines = [
+        "<!-- claim: commit=abc -->",        # 1: a plain claim
+        "~~~",                                # 2: tilde fence opens
+        "<!-- claim: grep=x -->",             # 3: inside the fence
+        "~~~",                                # 4: fence closes
+        "`odd <!-- claim: grep=y -->",        # 5: odd backticks before the marker
+        "`even` <!-- claim: grep=z -->",      # 6: balanced, so a claim
+        "```",                                # 7: fence opens, never closed
+        "<!-- claim: grep=w -->",             # 8: inside the unterminated fence
+    ]
+    found = [(i, m.group("body")) for i, _, m in cdc.iter_claim_markers(lines)]
+    assert found == [(1, "commit=abc"), (6, "grep=z")]
+
+
+def test_second_marker_on_one_line_is_refused_not_dropped(tmp_path):
+    """#1041 control: a satisfiable marker followed by an unsatisfiable one on
+    the SAME line. Before the fix the second was never parsed (`search`, not
+    `finditer`): rc 0, one claim counted. It must now be counted and REFUSED,
+    and the iterator both readers share must yield both."""
+    doc = tmp_path / "d.md"
+    doc.write_text(
+        "A <!-- claim: commit=HEAD --> and B "
+        "<!-- claim: grep='NO_SUCH_KEY' in=nope.json -->\n")
+    assert [m.group("body") for _, _, m in
+            cdc.iter_claim_markers(doc.read_text().splitlines())] == \
+        ["commit=HEAD", "grep='NO_SUCH_KEY' in=nope.json"]
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 2
+    assert got[0].status != cdc.REFUSED or "second claim marker" not in got[0].detail
+    assert got[1].status == cdc.REFUSED
+    assert "second claim marker" in got[1].detail
+    assert got[1].where.endswith("d.md:1")
+
+
+def test_second_marker_in_backticks_is_still_an_example(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("A <!-- claim: commit=HEAD --> and `<!-- claim: grep=x -->`\n"
+                   "```\nB <!-- claim: grep=y --> <!-- claim: grep=z -->\n```\n")
+    assert [c.raw for c in cdc.find_claims(doc)] == ["commit=HEAD"]
+
+
+def test_unclosed_opener_is_refused_not_dropped(tmp_path):
+    """#1044 control: a marker whose `-->` is on a later line. Before the fix
+    MARKER needed both ends on one line, so the opener matched nothing: the
+    claim vanished, rc 0, beside a valid claim. It must be REFUSED, naming the
+    opener's file:line, and the run must exit non-zero."""
+    doc = tmp_path / "d.md"
+    doc.write_text("ok <!-- claim: commit=HEAD -->\n"
+                   "<!-- claim: grep='NO_SUCH_KEY'\n"
+                   "     in=nope.json -->\n")
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 2
+    assert got[1].status == cdc.REFUSED
+    assert "no `-->` on its line" in got[1].detail
+    assert got[1].where.endswith("d.md:2")
+
+
+def test_unclosed_opener_in_fence_or_backticks_is_an_example(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("A <!-- claim: commit=HEAD -->\n"
+                   "see `<!-- claim: grep=x` here\n"
+                   "```\n<!-- claim: grep=y\n```\n")
+    assert [c.raw for c in cdc.find_claims(doc)] == ["commit=HEAD"]
+
+
+def test_unclosed_opener_on_last_line_is_refused(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("text\n<!-- claim: grep=x")
+    got = cdc.find_claims(doc)
+    assert len(got) == 1 and got[0].unclosed and got[0].line == 2
+
+
 def test_markers_are_found_with_the_prose_they_back(tmp_path):
     doc = tmp_path / "d.md"
     doc.write_text("\n".join([
@@ -516,6 +596,154 @@ def test_markers_are_found_with_the_prose_they_back(tmp_path):
     assert [c.line for c in found] == [4, 5]
     assert found[0].prose == "The estimator suite exists."
     assert found[1].prose == "Trailing form."
+
+
+# --------------------------------------------------------------------------
+# paragraph-splitting placement (#1033). A marker standing ALONE between two
+# prose lines of one paragraph is a CommonMark HTML-block start condition and
+# interrupts the paragraph, so the prose renders as two <p> elements where
+# the author wrote one (measured on GitHub's renderer; the two instances were
+# docs/tr808-reference.md:254 and :921). The checker refuses that placement.
+# These are the guard's controls: the injected defect (mid-paragraph, bare and
+# inside a list item) must turn red, and every placement the renderer measured
+# safe -- trailing form, paragraph end, list-item boundaries, stacked markers
+# at a paragraph end -- must stay green.
+# --------------------------------------------------------------------------
+
+def test_a_marker_between_two_prose_lines_is_refused(tmp_path):
+    """The injected defect, red by construction: remove the guard and this
+    claim validates as though its placement were fine."""
+    doc = tmp_path / "d.md"
+    doc.write_text("\n".join([
+        "The paragraph's first sentence stands here.",
+        "<!-- claim: commit=HEAD -->",
+        "The sentence after the marker continues the same paragraph.",
+    ]))
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 1
+    assert got[0].status == cdc.REFUSED
+    assert "splits its paragraph" in got[0].detail
+    assert got[0].where.endswith("d.md:2")
+
+
+def test_the_refusal_carries_the_rule8_disclosure(tmp_path):
+    """The guard catches only the adjacent form; it must say so where the
+    finding is read, not just in the documentation."""
+    doc = tmp_path / "d.md"
+    doc.write_text("Prose above.\n<!-- claim: commit=HEAD -->\nProse below.\n")
+    got = cdc.check([doc], sys.executable)
+    assert "blank line" in got[0].detail and "escapes" in got[0].detail
+
+
+def test_trailing_form_is_not_a_paragraph_split(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("\n".join([
+        "The claim trails on the claim's own line. <!-- claim: commit=HEAD -->",
+        "",
+        "Next paragraph.",
+    ]))
+    got = cdc.check([doc], sys.executable)
+    assert [c.status for c in got] == [cdc.OK], [c.detail for c in got]
+
+
+def test_marker_at_paragraph_end_is_not_a_paragraph_split(tmp_path):
+    doc = tmp_path / "d.md"
+    doc.write_text("\n".join([
+        "The paragraph's last sentence stands here.",
+        "<!-- claim: commit=HEAD -->",
+        "",
+        "A later paragraph.",
+    ]))
+    got = cdc.check([doc], sys.executable)
+    assert [c.status for c in got] == [cdc.OK], [c.detail for c in got]
+
+
+def test_marker_between_prose_lines_within_one_list_item_is_refused(tmp_path):
+    """The input that defeats 'exempt every indented marker': this marker is
+    indented exactly like a list-item boundary one, but the prose below
+    belongs to the SAME item, so the item's paragraph really is split."""
+    doc = tmp_path / "d.md"
+    doc.write_text("\n".join([
+        "- an item whose text runs to here",
+        "  <!-- claim: commit=HEAD -->",
+        "  and continues on an indented line of the same item.",
+    ]))
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 1
+    assert got[0].status == cdc.REFUSED
+    assert "splits its paragraph" in got[0].detail
+
+
+def test_list_item_boundary_markers_are_not_a_paragraph_split(tmp_path):
+    """The measured boundaries (docs/ci-segfault-2026-09-28.md:178,
+    docs/pedalboard-rig.md:237 and :257): a marker at the end of one item's
+    content with the next ITEM starting below it. There is no paragraph
+    spanning that boundary, so there is nothing to split."""
+    doc = tmp_path / "d.md"
+    doc.write_text("\n".join([
+        "1. **First item.** Its content ends on this line.",
+        "   <!-- claim: commit=HEAD -->",
+        "2. **Second item.** A numbered next item must not flag the marker.",
+        "",
+        "- **Bullet item.** Content again.",
+        "  <!-- claim: commit=HEAD -->",
+        "- **Next bullet.** Same shape, bullet flavour.",
+    ]))
+    got = cdc.check([doc], sys.executable)
+    assert [c.status for c in got] == [cdc.OK, cdc.OK], [c.detail for c in got]
+
+
+def test_stacked_markers_at_paragraph_end_are_not_a_paragraph_split(tmp_path):
+    """docs/pedalboard-rig.md:28-29: two markers one after the other, then a
+    blank line. The walk past the stack must judge the first marker by what
+    follows the last one, or this shape false-positives."""
+    doc = tmp_path / "d.md"
+    doc.write_text("\n".join([
+        "A paragraph's final line stands here.",
+        "<!-- claim: commit=HEAD -->",
+        "<!-- claim: commit=HEAD -->",
+        "",
+        "A later paragraph.",
+    ]))
+    got = cdc.check([doc], sys.executable)
+    assert [c.status for c in got] == [cdc.OK, cdc.OK], [c.detail for c in got]
+
+
+def test_stacked_markers_between_prose_lines_are_refused(tmp_path):
+    """Two stacked markers mid-paragraph split it exactly as one does, so
+    both refuse."""
+    doc = tmp_path / "d.md"
+    doc.write_text("\n".join([
+        "First half of the paragraph stands here.",
+        "<!-- claim: commit=HEAD -->",
+        "<!-- claim: commit=HEAD -->",
+        "Second half of the same paragraph.",
+    ]))
+    got = cdc.check([doc], sys.executable)
+    assert [c.status for c in got] == [cdc.REFUSED, cdc.REFUSED]
+
+
+def test_the_paragraph_split_refusal_is_scoped_to_markdown(tmp_path):
+    """The refusal's rationale is a CommonMark HTML-block property: a
+    standalone `<!--` line can interrupt a *rendered* paragraph. Nothing
+    renders a Python docstring as CommonMark, so the same placement on a
+    `.py` source file would make the guard refuse with a reason that cannot
+    be true -- a refusal that answers where it cannot. Scoping it to `.md`
+    leaves docstring markers placement-unchecked by the machine; where one
+    is deliberate it is hand-covered (tools/test_promoted_bands.py covers
+    the marker in model/promoted_measures.py, whose grep backer still has to
+    match). PR #1065's review found the unscoped guard refusing exactly that
+    docstring marker."""
+    doc = tmp_path / "d.py"
+    doc.write_text("\n".join([
+        "The docstring's first sentence stands here.",
+        "<!-- claim: commit=HEAD -->",
+        "The sentence after the marker continues it.",
+    ]))
+    got = cdc.check([doc], sys.executable)
+    assert len(got) == 1
+    assert not got[0].splits_paragraph
+    assert got[0].status == cdc.OK, got[0].detail
 
 
 # --------------------------------------------------------------------------

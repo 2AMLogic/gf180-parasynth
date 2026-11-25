@@ -474,8 +474,7 @@ def write_sweep_artifact(res: dict, path: str) -> None:
     lines.append("")
     lines.append(f"chosen by the pre-registered selection rules: LAW_DEGREE "
                  f"{res['chosen']['LAW_DEGREE']}, CORR_ENTRIES {res['chosen']['CORR_ENTRIES']}")
-    with open(path, "w") as fh:
-        fh.write("\n".join(lines) + "\n")
+    run_all.write_text_atomic(str(path), "\n".join(lines) + "\n")
 
 
 def run_validation(plan: dict, law_degree: int = LAW_DEGREE, entries: int = CORR_ENTRIES) -> dict:
@@ -528,8 +527,7 @@ def write_validation_artifact(rep: dict, plan: dict, path: str) -> None:
     for k, ok in rep["verdict"]["checks"].items():
         lines.append(f"{'PASS' if ok else 'FAIL'} {k}")
     lines.append(f"OVERALL {'PASS' if rep['verdict']['ok'] else 'FAIL'}")
-    with open(path, "w") as fh:
-        fh.write("\n".join(lines) + "\n")
+    run_all.write_text_atomic(str(path), "\n".join(lines) + "\n")
 
 
 # =============================================================================
