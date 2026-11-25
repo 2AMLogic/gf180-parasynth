@@ -9,6 +9,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import gate_between as gb  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 from probes import gate_calibrate_missing_random as probe  # noqa: E402
@@ -434,6 +435,110 @@ def test_allow_subset_is_labelled_diagnostic():
     env = _envelope(sounds=["BD"], keys=["BD"])
     cal = gc.calibrate_record(env, allow_subset=True)
     assert cal["k"] == 3 and cal["diagnostic"].startswith("DIAGNOSTIC (not authority)")
+
+
+@pytest.fixture(params=[(gc, ["calibrate"]), (gb, [])], ids=["k", "p"])
+def run_record_cli(request, tmp_path):
+    module, prefix = request.param
+    out = tmp_path / "result.json"
+
+    def run(clean, corrupt=None, allow_subset=False):
+        tables = tmp_path / "clean.json"
+        tables.write_text(json.dumps(clean))
+        args = [*prefix, "--refs", str(tmp_path), "--tables", str(tables), "--out", str(out)]
+        if corrupt is not None:
+            damaged = tmp_path / "corrupt.json"
+            damaged.write_text(json.dumps(corrupt))
+            args.extend(["--corrupt-tables", str(damaged)])
+        if allow_subset:
+            args.append("--allow-subset")
+        out.write_text(json.dumps({"decision": {"status": "QUALIFIED"}}))
+        rc = module.main(args)
+        return rc, json.loads(out.read_text())
+
+    return run
+
+
+@pytest.mark.parametrize("sounds", [["BD", None], [["BD"]]])
+@pytest.mark.parametrize("allow_subset", [False, True])
+def test_cli_refuses_malformed_sound_names(run_record_cli, sounds, allow_subset):
+    rc, report = run_record_cli(_envelope(sounds=sounds), allow_subset=allow_subset)
+    assert rc == exit_contract.REFUSED
+    assert report["decision"]["status"] == "REFUSED"
+    assert "list of sound names" in report["decision"]["why"]
+
+
+def test_cli_refuses_missing_tables(run_record_cli):
+    rc, report = run_record_cli({"sounds": list(pg.SOUNDS16)})
+    assert rc == exit_contract.REFUSED
+    assert report["decision"]["why"] == 'REFUSED: the tables file has no "tables" mapping'
+
+
+def test_empty_sound_table_replaces_stale_decision(run_record_cli, tmp_path):
+    env = _envelope(sounds=list(pg.SOUNDS16))
+    rs = env["tables"].pop("RS")
+    rs.update(rows=[], keys=[], missing=[])
+    env["tables"] = {"RS": rs, **env["tables"]}
+    # Supply a readable WAV so the old reporter reaches min([]) for RS.
+    target = tmp_path / rs["target"]
+    target.parent.mkdir(parents=True)
+    target.symlink_to(pg.ROOT / "docs/scorecard/drum-d02a-i2s/sd-solo-i2s.wav")
+
+    rc, report = run_record_cli(env)
+    assert rc == exit_contract.REFUSED
+    assert report["decision"]["status"] == "REFUSED"
+    assert "no measured rows for ['RS'] (15/16 sounds populated)" in report["decision"]["why"]
+    assert report["calibration"]["old_bar_context"] == {}
+
+
+@pytest.mark.parametrize("partial,allow_subset,status", [
+    (None, True, "QUALIFIED"),
+    ("corrupt", False, "REFUSED"),
+    ("corrupt", True, "DIAGNOSTIC (not authority): QUALIFIED"),
+    ("clean", True, "DIAGNOSTIC (not authority): QUALIFIED"),
+])
+def test_cli_decision_uses_both_records(run_record_cli, real, monkeypatch, partial, allow_subset, status):
+    subset = ["CY", "BD", "SD", "LC", "MT"]
+
+    def record(which):
+        sounds = subset if partial == which else list(pg.SOUNDS16)
+        tabs = _zero({s: real[s] for s in sounds})
+        if which == "corrupt":
+            for row in tabs["BD"]["rows"]:
+                row["d"]["spec"] = 1.0
+        return {"sounds": sounds, "tables": tabs, "corrupt": "darker" if which == "corrupt" else None}
+
+    def qualification(cal, refs, ours):
+        # Fixed audio outcomes. The real selectors carry the BD distance into its bar.
+        sounds = gc.load_bars(cal)
+        caught = int(sounds["BD"]["spec"] == real["BD"]["floor"]["spec"])
+        start_red = {s: "FAIL" for s in sounds}
+        start_red.update({s + "-silence": "REFUSED" for s in sounds})
+        return {"sounds_with_bar": list(sounds), "start_red": start_red,
+                "seeded_summary": {"n": 1, "caught": caught, "rate": caught},
+                "known_bad": {"shipped-cymbal": {"verdict": "FAIL"}, gb.CANDIDATE: {"verdict": "FAIL"}},
+                "clean": {s: "PASS" for s in sounds}, "validation": {"sounds": 1, "best_passes": 1}}
+
+    monkeypatch.setattr(gc, "qualify", qualification)
+    monkeypatch.setattr(gc, "old_bar_context", lambda *args: {})
+    rc, report = run_record_cli(record("clean"), record("corrupt"), allow_subset)
+    decision = report["decision"]
+    control = report["calibration"]["injected_control"]
+    assert decision["status"] == status
+    if status == "REFUSED":
+        assert rc == exit_contract.REFUSED
+        assert decision["unrun"] == ["Q5 corrupted corpus"]
+        assert control["qualified"] is None
+    else:
+        assert rc == exit_contract.PASS
+        assert decision["gates"]["Q5 corrupted corpus"]["ok"] is True
+        assert control["qualified"] is False
+        if partial == "corrupt":
+            assert control["diagnostic"].startswith("DIAGNOSTIC (not authority)")
+            assert control["decision"]["status"] == "DIAGNOSTIC (not authority): NOT QUALIFIED"
+        else:
+            assert not control.get("diagnostic")
+            assert control["decision"]["status"] == "NOT QUALIFIED"
 
 
 def test_random_missing_published_replay():

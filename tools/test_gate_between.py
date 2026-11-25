@@ -220,7 +220,8 @@ def test_gb_partial_record_is_refused():
     assert cal["status"].startswith("REFUSED") and cal["p"] is None and cal["sounds"] == {}
     # lying envelope: declares 16, carries 1
     lie = {"sounds": list(pg.SOUNDS16), "tables": env["tables"]}
-    assert gb.calibrate_record(lie)["status"].startswith("REFUSED")
+    refused = gb.calibrate_record(lie)
+    assert refused["status"].startswith("REFUSED") and refused["rule"] == "v2"
     assert gb.calibrate_record({"tables": r["tables"]})["status"].startswith("REFUSED")  # no "sounds"
     sub = gb.calibrate_record(env, allow_subset=True)
     assert sub["diagnostic"].startswith("DIAGNOSTIC (not authority)")
@@ -243,6 +244,31 @@ def test_gb_empty_rows_for_other_sounds_is_refused():
     assert cal["status"].startswith("REFUSED") and cal["p"] is None and cal["sounds"] == {}
     sub = gb.calibrate_record(gutted, allow_subset=True)
     assert sub["p"] == 0.5 and sub["diagnostic"].startswith("DIAGNOSTIC (not authority)")
+
+
+def test_diagnostic_skips_empty_cymbal_in_qualification(tmp_path, monkeypatch):
+    env = json.loads(TABLES.read_text())
+    for s, table in env["tables"].items():
+        if s != "BD":
+            table.update(rows=[], keys=[], missing=[])
+    tables = tmp_path / "tables.json"
+    tables.write_text(json.dumps(env))
+    (tmp_path / "CY5025-candidate.wav").touch()
+
+    def qualification(cal, refs, ours):
+        assert set(gc.load_bars(cal)) == {"BD"}
+        q = _green_q()
+        q["known_bad"]["shipped-cymbal"] = {"verdict": "REFUSED"}
+        return q
+
+    monkeypatch.setattr(gc, "qualify", qualification)
+    monkeypatch.setattr(gc, "old_bar_context", lambda *args: {})
+    out = tmp_path / "result.json"
+    rc = gb.main(["--refs", str(tmp_path), "--tables", str(tables), "--fixtures", str(tmp_path),
+                  "--allow-subset", "--out", str(out)])
+    decision = json.loads(out.read_text())["decision"]
+    assert rc == 2 and decision["status"] == "DIAGNOSTIC (not authority): REFUSED"
+    assert "Q6 rejected #374 candidate" in decision["unrun"]
 
 
 # --- #1329: a REFUSED decision must not exit 0 (tools/exit_contract.py) ---------
