@@ -705,6 +705,54 @@ def test_local_class_shadowed_by_a_borrow_covers_the_lender(tmp_path):
 # candidates (item 2), and the shadowed-alias blind-spot pin (item 4). The
 # filter and format controls started red against the unfixed scanner.
 
+REEXPORTER = '''
+from mod_a import Refused as Refused     # PEP 484 explicit re-export
+
+def fetch(p):
+    raise Refused(f"reexported: {p}")
+'''
+
+REEXPORT_CALLER = '''
+import reexporter
+
+def go(p):
+    try:
+        reexporter.fetch(p)
+    except reexporter.Refused as e:      # the lender's class, reached via the re-export
+        print("REFUSED", e)
+'''
+
+
+def test_same_name_reexport_keeps_the_lenders_origin(tmp_path):
+    """Rule-8 control for the `nm == FAMILY_NAME` guard in `_read_bindings`
+    (#1267). `from mod_a import Refused as Refused` binds `reexporter.Refused`
+    to mod_a's class, so a dotted `except reexporter.Refused` covers mod_a
+    exactly. Red under `if nm == FAMILY_NAME and a.asname is None:` (origin
+    becomes None, the site turns into a false candidate-escape); green as
+    shipped. The inverted guard is already caught by the borrow tests above.
+
+    Rule 8, other direction (stated reason, not a control): no realistic input
+    satisfies the guard while violating its intent. `_read_bindings` walks only
+    `tree.body`, so a conditional/guarded import is never seen and leaves the
+    origin None -- the pessimistic direction. Only a `del Refused` after the
+    import would defeat it, which is contrived and out of scope."""
+    files = _tree(tmp_path)
+    for name, body in (("reexporter", REEXPORTER), ("reexport_caller", REEXPORT_CALLER)):
+        f = tmp_path / f"{name}.py"
+        f.write_text(body)
+        files.append(f)
+    idx = rss.build_index(files)
+    reexp = next(m for k, m in idx.items() if k.endswith("reexporter.py"))
+    assert reexp.refused_origin == "mod_a"
+    sites = _sites_for(files, idx, "reexport_caller")
+    assert len(sites) == 1, sites
+    s = sites[0]
+    assert s["callee"] == "reexporter.fetch", s
+    assert s["classification"] == "covered(exact)", s
+    assert s["origins"] == ["mod_a"], s
+    assert s["uncovered"] == [], s
+
+
 def test_family_less_stem_collision_is_not_a_site(tmp_path):
     """Item 1: two family-less play.py candidates and a `from play import
     helper` caller used to be reported as ambiguous-callee -- "I cannot tell
