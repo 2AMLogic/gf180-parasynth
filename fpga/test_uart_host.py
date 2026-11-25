@@ -199,6 +199,37 @@ def test_main_without_port_or_dry_run_refuses():
     assert main(["--dry-run", "load"]) == 0         # dry-run needs no hardware
 
 
+@pytest.mark.parametrize("command", ["abort", "status"])
+@pytest.mark.parametrize("mode", ["live", "dry-before", "dry-after"])
+def test_management_preview_cannot_touch_a_queued_note(command, mode):
+    from uart_device_sim import SimClock, SimSerial, UartDeviceSim
+
+    clock = SimClock()
+    device = UartDeviceSim(clock=clock)
+    serial = SimSerial(device)
+    serial.write(uh.pkt_event(4800, 0, 0, 0x20, 0))  # GATE_ON at 100 ms
+    serial.run_until(0.002)
+    assert device.evq_count == 1 and not device.writes
+    serial.tx_log.clear()
+    opens = []
+
+    def open_bridge(port, baud):
+        opens.append(port)
+        return uh.Bridge.on_serial(serial, baud=baud, clock=clock)
+
+    args = {"live": [command], "dry-before": ["--dry-run", command],
+            "dry-after": [command, "--dry-run"]}[mode]
+    assert uh.main(["--port", "sim", *args], bridge_factory=open_bridge) == 0
+    serial.run_until(0.005)
+    sent = [packet.hex() for _, packet in serial.tx_log]
+    observed = (opens, sent, device.evq_count)
+    if mode == "live":
+        assert observed == (["sim"], ["58a8" if command == "abort" else "51af"],
+                            0 if command == "abort" else 1)
+    else:
+        assert observed == ([], [], 1)
+
+
 # ---- the repair's contract, as units ----------------------------------------
 def test_note_off_writes_the_gate_off():
     # an off is stateless by construction: it ALWAYS releases what sounds
