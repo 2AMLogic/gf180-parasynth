@@ -1972,20 +1972,15 @@ def main(argv=None, *, bridge_factory=None) -> int:
             commands.append(("gate-off", flag, sec, addr, data))
     for due, flag, sec, addr, data in fx_events:
         commands.append(("event", due, flag, sec, addr, data))
-    if a.cmd == "status":
-        bridge = open_bridge(a.port, a.baud)
-        print(bridge.status().describe())
-        return 0
-    if a.cmd == "abort":
-        bridge = open_bridge(a.port, a.baud)
-        bridge.send([Placed(0, "abort", pkt_abort(), 0, 0)])
-        print("sent abort (queued events discarded)")
-        return 0
+    if a.cmd in ("status", "abort"):
+        commands.append((a.cmd,))
     if not commands:
         ap.print_usage(); return 2
     played_note = (a.note if a.note is not None else 45) if (
         a.cmd == "note-on" or (a.cmd == "run" and a.note is not None)) else None
-    if a.engineering:
+    if a.cmd in ("status", "abort"):
+        pass  # management carries no musical patch to validate
+    elif a.engineering:
         print("uart_host: ENGINEERING -- release-domain validator skipped; this "
               "traffic is OUTSIDE the qualified player-facing domain", file=sys.stderr)
     else:
@@ -2046,6 +2041,15 @@ def main(argv=None, *, bridge_factory=None) -> int:
         print("uart_host: REFUSED -- no --port given (or UART_BRIDGE_PORT); "
               "use --dry-run for the schedule without hardware", file=sys.stderr)
         return 2
+    if a.cmd == "status":
+        bridge = open_bridge(a.port, a.baud)
+        print(bridge.status().describe())
+        return 0
+    if a.cmd == "abort":
+        bridge = open_bridge(a.port, a.baud)
+        bridge.send([Placed(0, "abort", pkt_abort(), 0, 0)])
+        print("sent abort (queued events discarded)")
+        return 0
     try:
         bridge = open_bridge(a.port, a.baud)
         # only a command that establishes R1's known state asserts it: a
