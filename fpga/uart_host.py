@@ -531,9 +531,7 @@ def voice_image_writes(preset: str | None = None) -> list:
     import synth_top_model as stm
     import voice_fx as vf
     import drums_fx as dx
-    import selected_preset
-    regs = (selected_preset.definition(preset)["registers"] if preset
-            else vf.VoiceFx.patch_regs())
+    regs = preset_regs(preset)
     wave_code = dict(vf.WAVE_CODE)
     w = []
     for k, s in enumerate(regs["waves"]):
@@ -553,9 +551,12 @@ def voice_image_writes(preset: str | None = None) -> list:
 def preset_regs(preset: str | None = None) -> dict:
     """The control image a named preset (or the default patch) programs."""
     import voice_fx as vf
-    import selected_preset
-    return (selected_preset.definition(preset)["registers"] if preset
-            else vf.VoiceFx.patch_regs())
+    if preset:
+        # Imported only here: selected_preset pulls in the score module and
+        # its SciPy WAV reader, which the default patch must not require (#1258).
+        import selected_preset
+        return selected_preset.definition(preset)["registers"]
+    return vf.VoiceFx.patch_regs()
 
 
 def voice_mixer_writes(preset: str | None = None) -> list:

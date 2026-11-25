@@ -408,3 +408,47 @@ def test_take_counts_every_packet_in_a_chunk_not_just_the_first_match():
         pass
     assert b.acks_seen == 8
     assert b.device_errors == [(1, 0x21)]
+
+
+# ---- #1258: the R1 quick-start must not need SciPy --------------------------
+def test_r1_quickstart_dry_run_works_without_scipy(tmp_path):
+    """The default R1 patch must run even when SciPy imports are blocked."""
+    import subprocess
+    from pathlib import Path
+    from textwrap import dedent
+
+    # This startup hook previously hid the eager import on SciPy-installed hosts.
+    (tmp_path / "sitecustomize.py").write_text("from scipy.io import wavfile\n")
+    code = dedent("""\
+        import os
+        import runpy
+        import sys
+
+        class ScipyBlocked(ModuleNotFoundError):
+            pass
+
+        class BlockScipy:
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname == "scipy" or fullname.startswith("scipy."):
+                    raise ScipyBlocked(fullname)
+
+        sys.meta_path.insert(0, BlockScipy())
+        try:
+            import scipy
+        except ScipyBlocked:
+            pass
+        else:
+            raise AssertionError("SciPy import bypassed the blocker")
+
+        del sys.argv[0]  # drop -c, so argv and sibling imports match script execution
+        sys.path.insert(0, os.path.dirname(sys.argv[0]))
+        runpy.run_path(sys.argv[0], run_name="__main__")
+    """)
+    player = Path(__file__).resolve().with_name("uart_host.py")
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code, player, "--dry-run", "run", "--note", "45",
+         "--fixture", "m5a", "--image", "r1", "--capture", tmp_path / "cap"],
+        env={**os.environ, "PYTHONPATH": str(tmp_path)}, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "FEASIBLE" in result.stdout
