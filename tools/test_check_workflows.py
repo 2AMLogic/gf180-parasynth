@@ -1967,8 +1967,8 @@ def test_restoring_pre_1223_run_all_pulse_row_is_refused(tmp_path):
     assert any("VOICE_PULSE2X_OFF" in p and "run_all" in p for p in scan.problems), scan.problems
 
 
-_I2S_BASE = "python rtl-sketch/verify_i2s_tx.py"
-_I2S_MUT = "python rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail"
+_HELP_BASE = "python rtl-sketch/verify_i2s_tx.py"
+_HELP_MUT = "python rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail"
 
 
 @pytest.mark.parametrize("flag", ["-h", "--help"])
@@ -1976,8 +1976,8 @@ _I2S_MUT = "python rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail"
 def test_help_only_batch_pair_is_not_credited(tmp_path, flag, which):
     """#1240 round 4 finding 2: `verify_i2s_tx.py -h` prints usage and exits 0 with
     no simulator on PATH, so run_controls reports 2/2 passed. Not batch-gated."""
-    base = f"{_I2S_BASE} {flag}" if which in ("both", "baseline") else _I2S_BASE
-    mut = f"{_I2S_MUT} {flag}" if which in ("both", "mutant") else _I2S_MUT
+    base = f"{_HELP_BASE} {flag}" if which in ("both", "baseline") else _HELP_BASE
+    mut = f"{_HELP_MUT} {flag}" if which in ("both", "mutant") else _HELP_MUT
     wf_dir = _copy_workflows(tmp_path)
     _write_extra(
         wf_dir,
