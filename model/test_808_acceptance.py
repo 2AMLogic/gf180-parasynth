@@ -2161,20 +2161,33 @@ def test_the_whole_kit_still_fits_its_buses():
 # ===========================================================================
 def test_meta_every_test_declares_status_and_ground_truth():
     """[meta] Every test opens with its claim status, and every test that
-    measures something names the ground-truth test in
-    `model/test_audio_measure.py` that backs the estimator it uses -- and that
-    test must exist. "Verified in a source" and "validated by our own
-    measurement" are different claims, and an acceptance suite that blurs them
-    is how an inference becomes a fact.
+    measures something names the ground-truth test (in `test_audio_measure`,
+    `test_drum_fit`, `test_tom_pitch_probe`, or `test_tom_drop_law`) that backs
+    the estimator it uses -- and that test must exist. "Verified in a source"
+    and "validated by our own measurement" are different claims, and an
+    acceptance suite that blurs them is how an inference becomes a fact.
 
     The checking logic itself is shared with `test_moog_acceptance.py`'s own
     meta-test (#222) -- `model/acceptance_meta.py` -- so a third suite can
     reuse it without copy-pasting this body; this test's only job is to name
-    ITS OWN module and ITS OWN escape hatches."""
+    ITS OWN module, its ground-truth modules, and ITS OWN escape hatches."""
     import test_808_acceptance as mod
     import test_audio_measure as gt
+    import test_drum_fit as gtf
+    import test_tom_drop_law as gtl
+    import test_tom_pitch_probe as gtp
     from acceptance_meta import assert_ground_truth_gate
-    assert_ground_truth_gate(mod, gt, not_asserted=NOT_ASSERTED, known_defects=KNOWN_DEFECTS)
+    assert_ground_truth_gate(
+        mod,
+        {
+            gt.__name__: gt,
+            gtf.__name__: gtf,
+            gtp.__name__: gtp,
+            gtl.__name__: gtl,
+        },
+        not_asserted=NOT_ASSERTED,
+        known_defects=KNOWN_DEFECTS,
+    )
 
 
 def test_meta_render_manifest_describes_what_was_played():
