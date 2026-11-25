@@ -1,5 +1,6 @@
 """Known answers for tools/gate_calibrate.py (#379). Fast: no audio is read."""
 import csv
+import json
 import pathlib
 import sys
 
@@ -10,6 +11,55 @@ import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 
 INDEX = pathlib.Path(__file__).resolve().parents[1] / "refaudio" / "index" / "808-from-mars.tsv"
+
+
+@pytest.fixture
+def measured_sounds(monkeypatch):
+    calls = []
+
+    def record(sound, refs, corrupt=None):
+        calls.append(sound)
+        return {"sound": sound, "rows": [], "missing": []}
+
+    monkeypatch.setattr(gc, "measure", record)
+    return calls
+
+
+@pytest.mark.parametrize("existing", [True, False])
+@pytest.mark.parametrize("sounds", [[], ["BDD"], ["BD", "BDD"]])
+def test_measure_rejects_invalid_sounds_before_writing(
+    tmp_path, capsys, measured_sounds, sounds, existing
+):
+    out = tmp_path / "tables.json"
+    previous = b'{"tables": {"BD": {}}}\n'
+    if existing:
+        out.write_bytes(previous)
+
+    with pytest.raises(SystemExit) as exc:
+        gc.main(
+            ["measure", "--refs", str(tmp_path), "--sounds", *sounds, "--out", str(out)]
+        )
+
+    assert exc.value.code == 2
+    reason = "invalid choice: 'BDD'" if sounds else "expected at least one argument"
+    assert f"error: argument --sounds: {reason}" in capsys.readouterr().err
+    assert measured_sounds == []
+    if existing:
+        assert out.read_bytes() == previous
+    else:
+        assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    "args, expected", [([], pg.SOUNDS16), (["--sounds", "CH", "BD"], ("CH", "BD"))]
+)
+def test_measure_writes_requested_tables(tmp_path, measured_sounds, args, expected):
+    out = tmp_path / "tables.json"
+    assert gc.main(["measure", "--refs", str(tmp_path), *args, "--out", str(out)]) == 0
+    assert measured_sounds == list(expected)
+    assert json.loads(out.read_text())["tables"] == {
+        sound: {"sound": sound, "rows": [], "missing": []} for sound in expected
+    }
 
 
 def test_twin_pairing_on_the_real_index():
