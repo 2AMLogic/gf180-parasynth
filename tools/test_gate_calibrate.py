@@ -1,5 +1,7 @@
 """Known answers for tools/gate_calibrate.py (#379). Fast: no audio is read."""
+import copy
 import csv
+import json
 import pathlib
 import sys
 
@@ -45,14 +47,30 @@ def _d(spec, **kw):
     return d
 
 
-def _tab(dists_by_group, n_keys=9):
+def _rel(g, i, sound="BD"):
+    """A synthetic take path whose REAL hash group (regroup is not patched
+    out any more) is g: search the name until group_of(key_of(.)) == g."""
+    n = 0
+    while True:
+        rel = f"{gc.FOLDER[sound]}/Clean/Digital/{sound}{i}x{n}.wav"
+        if gc.group_of(gc.key_of(rel)) == g:
+            return rel
+        n += 1
+
+
+def _tab(dists_by_group, n_keys=9, sound="BD"):
     rows = []
     for g, ds in dists_by_group.items():
         for i, sp in enumerate(ds):
-            rows.append({"rel": f"x/{g}/{i} Digital.wav", "chain": "Digital", "key": f"k{g}{i}", "group": g,
-                         "d": _d(sp)})
-    return {"sound": "BD", "target": "t", "floor": {f: 0.0 for f in pg.FEATURES}, "rows": rows,
+            rel = _rel(g, i, sound)
+            rows.append({"rel": rel, "chain": "Digital", "key": gc.key_of(rel), "group": g, "d": _d(sp)})
+    return {"sound": sound, "target": "t", "floor": {f: 0.0 for f in pg.FEATURES}, "rows": rows,
             "missing": [], "keys": [f"k{i}" for i in range(n_keys)]}
+
+
+def _idx(tabs):
+    """The synthetic index: exactly the takes the tables hold."""
+    return {s: {r["rel"] for r in t["rows"]} | {m["rel"] for m in t["missing"]} for s, t in tabs.items()}
 
 
 def test_make_bar_takes_max_over_matched_set_and_applies_floors():
@@ -64,25 +82,156 @@ def test_make_bar_takes_max_over_matched_set_and_applies_floors():
     assert gc.make_bar([], t["floor"]) is None
 
 
-def test_selection_refuses_rather_than_widen(monkeypatch):
+def test_selection_refuses_rather_than_widen():
     """Injected defect for the selection rule: the development group sits far
     from the calibration group, so no k reaches coverage. The answer is a
     REFUSED calibration with no bars, not a looser k."""
-    # keep the rows' own groups: make regroup a no-op for the synthetic table
-    monkeypatch.setattr(gc, "regroup", lambda tabs: tabs)
     far = {0: [0.1, 0.1, 0.1, 0.1, 0.1], 1: [5.0, 5.0, 5.0, 5.0, 5.0], 2: [5.0]}
-    cal = gc.calibrate({"BD": _tab(far)})
-    assert cal["k"] is None and cal["status"].startswith("REFUSED")
+    tabs = {"BD": _tab(far)}
+    cal = gc.calibrate(tabs, expected=_idx(tabs))
+    assert cal["k"] is None and cal["status"].startswith("REFUSED: no k reaches")
     assert "sounds" in cal and cal["sounds"] == {}
 
 
-def test_calibrates_when_groups_agree_and_marks_unvalidated(monkeypatch):
-    monkeypatch.setattr(gc, "regroup", lambda tabs: tabs)
+def test_calibrates_when_groups_agree_and_marks_unvalidated():
     near = {0: [0.5, 0.6, 0.7], 1: [0.5, 0.55, 0.6], 2: [0.45]}
-    cal = gc.calibrate({"BD": _tab(near), "RS": _tab({0: [0.5], 1: [0.5]}, n_keys=2)})
+    tabs = {"BD": _tab(near), "RS": _tab({0: [0.5], 1: [0.5]}, n_keys=2, sound="RS")}
+    cal = gc.calibrate(tabs, expected=_idx(tabs))
     assert cal["k"] == 1 and cal["status"] == "CALIBRATED"
     assert cal["sounds"]["BD"]["status"] == "VALIDATED"
     assert cal["sounds"]["RS"]["status"].startswith("UNVALIDATED")   # < 3 keys: cannot hold anything out
+
+
+# ---------------------------------------------------------------------------
+# #1301: a record whose sound SET is complete but whose per-sound evidence is
+# not must not calibrate where the full corpus is refused.
+# ---------------------------------------------------------------------------
+TABLES = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/gate-379/mars-calibration/tables.json"
+
+
+@pytest.fixture(scope="module")
+def real():
+    return json.loads(TABLES.read_text())["tables"]
+
+
+def _zero(tabs):
+    z = copy.deepcopy(tabs)
+    for t in z.values():
+        for r in t["rows"]:
+            r["d"] = {f: (None if v is None else 0.0) for f, v in r["d"].items()}
+    return z
+
+
+def _damage(tabs, how, keep="BD"):
+    t = copy.deepcopy(tabs)
+    for s in t:
+        if s == keep:
+            continue
+        if how == "empty":
+            t[s]["rows"], t[s]["keys"] = [], []
+        elif how == "one":
+            t[s]["rows"] = t[s]["rows"][:1]
+        elif how == "missing":
+            t[s]["missing"] = t[s]["missing"] + [{"rel": r["rel"], "why": "x"} for r in t[s]["rows"]]
+            t[s]["rows"] = []
+    return t
+
+
+def test_committed_index_matches_the_committed_record_for_all_16(real):
+    """The independent source is satisfiable: index take set == the record's."""
+    exp = gc.expected_takes()
+    assert set(exp) == set(pg.SOUNDS16) and all(exp.values())
+    for s, t in real.items():
+        assert {r["rel"] for r in t["rows"]} | {m["rel"] for m in t["missing"]} == exp[s], s
+
+
+def test_full_record_still_refuses_for_the_original_reason(real):
+    """Regression, separate from the new checks: the real record is refused by
+    the coverage rule, not by the evidence check."""
+    cal = gc.calibrate(real)
+    assert cal["k"] is None and cal["status"].startswith("REFUSED: no k reaches")
+    assert cal["selection"]["by_k"][3] == {"sounds": 9, "covered": 3, "coverage": pytest.approx(1 / 3)}
+
+
+def test_positive_control_zero_distance_real_layout_calibrates(real):
+    """The guard is not an always-refusing gate: agreeing distances on the real
+    corpus layout (9 eligible sounds) calibrate."""
+    cal = gc.calibrate(_zero(real))
+    assert cal["status"] == "CALIBRATED" and cal["k"] is not None
+    assert cal["selection"]["by_k"][cal["k"]]["sounds"] == 9
+
+
+@pytest.mark.parametrize("how", ["empty", "one", "missing"])
+def test_damaged_records_are_refused(real, how):
+    """Start-red controls: unfixed calibrate() returned k=3 CALIBRATED on 1/1
+    for each of these (recorded in the PR)."""
+    cal = gc.calibrate(_damage(real, how))
+    assert cal["k"] is None and cal["status"].startswith("REFUSED: incomplete evidence")
+
+
+def test_missing_route_names_the_empty_group(real):
+    cal = gc.calibrate(_damage(real, "missing"))
+    assert "SD: no readable take in the development and calibration group" in cal["status"]
+
+
+def test_one_take_dropped_from_a_four_take_sound_names_that_sound(real):
+    t = copy.deepcopy(real)
+    t["RS"]["rows"] = t["RS"]["rows"][1:]
+    st = gc.calibrate(t)["status"]
+    assert st.startswith("REFUSED: incomplete evidence") and "RS: expected 4 takes, found 3" in st
+    assert "BD" not in st
+
+
+def test_take_absent_from_the_index_is_refused(real):
+    t = copy.deepcopy(real)
+    extra = dict(t["RS"]["rows"][0], rel=t["RS"]["rows"][0]["rel"].replace(".wav", " extra.wav"))
+    t["RS"]["rows"].append(extra)
+    assert "RS: expected 4 takes, found 5 (0 absent, 1 not in the index)" in gc.calibrate(t)["status"]
+
+
+def test_rows_missing_overlap_and_duplicates_are_refused(real):
+    t = copy.deepcopy(real)
+    t["RS"]["missing"].append({"rel": t["RS"]["rows"][0]["rel"], "why": "x"})
+    assert "RS: 1 take(s) duplicated or in both" in gc.calibrate(t)["status"]
+    t = copy.deepcopy(real)
+    t["RS"]["rows"].append(dict(t["RS"]["rows"][0]))
+    assert "RS: 1 take(s) duplicated or in both" in gc.calibrate(t)["status"]
+
+
+@pytest.mark.parametrize("how", ["empty", "one", "missing"])
+def test_force_k_does_not_bypass_the_check(real, how):
+    cal = gc.calibrate(_damage(real, how), force_k=3)
+    assert cal["status"].startswith("REFUSED: incomplete evidence") and cal["k"] is None
+
+
+def test_one_unreadable_take_in_missing_is_not_a_refusal(real):
+    """Legitimate: a take the gate cannot read sits in `missing`; the union
+    still matches and the sound keeps readable development and calibration."""
+    t = _zero(real)
+    r = t["SD"]["rows"].pop()
+    t["SD"]["missing"].append({"rel": r["rel"], "why": "no-verdict"})
+    cal = gc.calibrate(t)
+    assert cal["status"] == "CALIBRATED"
+
+
+def test_sounds_that_cannot_populate_both_groups_stay_ineligible_not_refused(real):
+    """RS/CL/CP/MA/CB/OH/CH have no development or calibration group in the
+    index; they must not trip check 2 (the real record carries all of them)."""
+    exp = gc.expected_takes()
+    for s in ("RS", "CL", "CP", "MA", "CB", "OH", "CH"):
+        assert not {0, 1} <= {gc.group_of(gc.key_of(r)) for r in exp[s]}, s
+    assert gc.evidence_refusal(gc.regroup(real)) is None
+
+
+def test_all_sixteen_empty_is_refused(real):
+    assert gc.calibrate(_damage(real, "empty", keep=None))["status"].startswith("REFUSED: incomplete evidence")
+
+
+def test_missing_index_refuses_rather_than_passes(real, monkeypatch, tmp_path):
+    monkeypatch.setattr(gc, "INDEX", tmp_path / "absent.tsv")
+    monkeypatch.setattr(gc.expected_takes, "__defaults__", (tmp_path / "absent.tsv",))
+    cal = gc.calibrate(_zero(real))
+    assert cal["k"] is None and cal["status"].startswith("REFUSED: incomplete evidence: cannot read the file index")
 
 
 def test_decide_does_not_count_an_unrun_control_as_a_pass():
