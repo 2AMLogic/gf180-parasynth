@@ -1094,8 +1094,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "M5A -- Verilator integrated disabling control",
         "python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control",
     ): StepGatedEntry(
-        reason="Verilator --m5a-smoke --filter2x mutant has no clean Verilator smoke step in rtl-full on main yet (#1212)",
-        open_issue="#1212",
+        reason="gated by earlier exact-config step 'M5A -- clean Verilator smoke baseline for the disabling control' (#1212 shipped it)",
+        clean_baseline="python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --outdir build/top-clean-m5a-f2x-verilator",
     ),
     (
         "nightly.yml",
@@ -1287,7 +1287,24 @@ def _line_for_subcommand(
     return fallback
 
 
+def _flatten_tokens(toks: list[str], _depth: int = 0) -> list[str]:
+    """`toks` plus the words of every token that is itself a shell command line
+    (`bash -c 'python x/verify_ctl.py --inject A'`), recursively, so a verifier or
+    mutant flag inside a quoted wrapper argument is seen (#1240 round 3)."""
+    out: list[str] = []
+    for t in toks:
+        out.append(t)
+        if _depth < 4 and any(c.isspace() for c in t):
+            try:
+                inner = shlex.split(t)
+            except ValueError:
+                inner = t.split()
+            out.extend(_flatten_tokens(inner, _depth + 1))
+    return out
+
+
 def _matches_verifier_and_flag(toks: list[str]) -> bool:
+    toks = _flatten_tokens(toks)
     has_verifier = any(
         t == v or t.endswith("/" + v) for t in toks for v in WORKFLOW_VERIFIERS
     )
@@ -1298,6 +1315,7 @@ def _matches_verifier_and_flag(toks: list[str]) -> bool:
 
 
 def _is_clean_verifier(toks: list[str]) -> bool:
+    toks = _flatten_tokens(toks)
     has_verifier = any(
         t == v or t.endswith("/" + v) for t in toks for v in WORKFLOW_VERIFIERS
     )
@@ -1308,6 +1326,33 @@ def _is_clean_verifier(toks: list[str]) -> bool:
         t == f or t.startswith(f + "=") for t in toks for f in all_mutant_flags
     )
     return not has_mutant_flag and not any("INJECT_BUG" in t for t in toks)
+
+
+_PYTHON_PLAIN_OPTIONS = frozenset(
+    {"-u", "-B", "-O", "-OO", "-s", "-S", "-E", "-I", "-b", "-bb", "-P"}
+)
+
+# First word of a statement that opens/continues shell control flow or a group.
+_SHELL_CONTROL_WORDS = frozenset(
+    {"if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done",
+     "case", "esac", "select", "function", "{", "}", "(", ")"}
+)
+
+
+def _step_has_control_flow(run_node: yaml.ScalarNode) -> bool:
+    """True when the `run:` block uses `if`/`for`/`while`/`case`, a function or a
+    `{ }`/`( )` group: statement-level analysis cannot say whether a verifier
+    line inside it executes, so the step earns no credit (#1240 finding 1)."""
+    for _, logical in _logical_shell_lines(run_node):
+        try:
+            stmts = _split_shell_statements(logical)
+        except ValueError:
+            continue
+        for toks, _op in stmts:
+            first = toks[0]
+            if first in _SHELL_CONTROL_WORDS or first[0] in "({" or first.endswith("()"):
+                return True
+    return False
 
 
 _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -1329,7 +1374,10 @@ def _exec_script(toks: list[str]) -> tuple[str, int] | None:
     if posixpath.basename(prog).startswith("python"):
         j = i + 1
         while j < len(toks) and toks[j].startswith("-"):
-            if toks[j] in ("-m", "-c"):
+            # Only options known to still run the named script. `-V`/`--version`
+            # print and exit, `-m`/`-c`/`-W x`/`-X x` take a value or replace the
+            # script: anything unrecognised is not "python <script>" (#1240).
+            if toks[j] not in _PYTHON_PLAIN_OPTIONS:
                 return None
             j += 1
         if j >= len(toks):
@@ -1395,6 +1443,11 @@ def _step_or_job_neutralised(
         return f"job {jname!r} sets continue-on-error: {job_dict.get('continue-on-error')!r}"
     if cw.constant_true(step_dict.get("continue-on-error")):
         return f"step {sname!r} sets continue-on-error: {step_dict.get('continue-on-error')!r}"
+    if job_dict.get("_eff_shell") is not None:
+        return (
+            f"job {jname!r} inherits defaults.run.shell {job_dict.get('_eff_shell')!r}, "
+            f"which replaces the fail-fast `bash -e` default"
+        )
     if step_dict.get("shell") is not None:
         return f"step {sname!r} overrides shell ({step_dict.get('shell')!r})"
     if require_success_gate:
@@ -1406,6 +1459,12 @@ def _step_or_job_neutralised(
     elif not cw._constant_true_if(step_dict.get("if")):
         return f"step {sname!r} has non-unconditional if: {step_dict.get('if')!r}"
     return None
+
+
+def _default_shell(node: dict) -> object:
+    defaults = node.get("defaults")
+    run = defaults.get("run") if isinstance(defaults, dict) else None
+    return run.get("shell") if isinstance(run, dict) else None
 
 
 def _run_controls_arg_parser() -> argparse.ArgumentParser:
@@ -1460,7 +1519,8 @@ def classify_workflow_mutants(
             if not isinstance(jkey_node, yaml.ScalarNode):
                 continue
             jname = jkey_node.value
-            job_dict = jobs_dict.get(jname) or {}
+            job_dict = dict(jobs_dict.get(jname) or {})
+            job_dict["_eff_shell"] = _default_shell(job_dict) or _default_shell(doc)
             steps_node = _mapping_get(job_node, "steps")
             steps_list = job_dict.get("steps") or []
             if not isinstance(steps_node, yaml.SequenceNode):
@@ -1479,6 +1539,7 @@ def classify_workflow_mutants(
                 run_start = run_node.start_mark.line + 1
                 run_end = run_node.end_mark.line + 1
                 errexit_disabled = False
+                control_flow = _step_has_control_flow(run_node)
 
                 for line_no, logical in _logical_shell_lines(run_node):
                     try:
@@ -1502,7 +1563,7 @@ def classify_workflow_mutants(
 
                         swallowed = (
                             errexit_disabled
-                            or trailing_op in ("||", "&", "|")
+                            or trailing_op in ("&&", "||", "&", "|")
                             or (bool(toks) and toks[0] == "!")
                         )
                         # `false && <cmd>` / `x || <cmd>`: the statement may never run.
@@ -1514,6 +1575,11 @@ def classify_workflow_mutants(
                         def _blocked(neut: str | None) -> str | None:
                             if neut:
                                 return neut
+                            if control_flow:
+                                return (
+                                    "step uses shell control flow (if/for/while/case/group); "
+                                    "whether this verifier runs, and its status, is not provable"
+                                )
                             if swallowed:
                                 return f"shell exit status swallowed ({trailing_op or 'set +e / !'})"
                             if conditional:
@@ -1553,7 +1619,8 @@ def classify_workflow_mutants(
                                 # Only the verifier population is this guard's business: an
                                 # unrelated pair (`yosys -V` / `yosys -Q -V`) is not compared.
                                 if not any(
-                                    posixpath.basename(t) in WORKFLOW_VERIFIERS for t in sub_toks
+                                    posixpath.basename(t) in WORKFLOW_VERIFIERS
+                                    for t in _flatten_tokens(sub_toks)
                                 ):
                                     continue
                                 sub_line = _line_for_subcommand(
@@ -1946,7 +2013,12 @@ def test_non_executing_step_level_baseline_forms_are_not_credited(tmp_path, pref
     nightly.write_text(text.replace(
         clean, f"          {prefix}python rtl-sketch/verify_i2s_tx.py\n", 1))
     probs = classify_workflow_mutants(wf_dir).problems
-    assert any("missing active preceding clean baseline" in p for p in probs), probs
+    # `if false; then` is refused as control flow (before baseline accounting);
+    # `echo` / `true ||` fail on the missing baseline. Either way: not green.
+    assert any(
+        "missing active preceding clean baseline" in p or "control flow" in p
+        for p in probs
+    ), probs
 
 
 @pytest.mark.parametrize("baseline", [
@@ -1993,6 +2065,139 @@ def test_unrelated_baseline_after_pair_does_not_crash_the_guard(tmp_path):
     scan = classify_workflow_mutants(wf_dir)
     assert _extra_problems(scan) == []
     assert not any(b.startswith(".github/workflows/extra.yml:") for b in scan.batch_gated)
+
+
+_I2S_CLEAN = "          python rtl-sketch/verify_i2s_tx.py\n"
+_I2S_MUT = "          python rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail\n"
+
+
+def _nightly_with(tmp_path, replacement: str, *, top: str = "") -> pathlib.Path:
+    """Copy the workflows and swap the I2S clean line (and the two-line step's
+    surroundings) for `replacement`; `top` is spliced in before `jobs:`."""
+    wf_dir = _copy_workflows(tmp_path)
+    nightly = wf_dir / "nightly.yml"
+    text = nightly.read_text()
+    assert _I2S_CLEAN in text
+    text = text.replace(_I2S_CLEAN, replacement, 1)
+    if top:
+        assert "\njobs:\n" in text
+        text = text.replace("\njobs:\n", f"\n{top}\njobs:\n", 1)
+    nightly.write_text(text)
+    return wf_dir
+
+
+def test_and_list_baseline_is_not_credited(tmp_path):
+    """#1240 round 3 finding 1: `clean && echo ok` -- under `bash -e` a failing
+    left side of `&&` does not stop the step, so the mutant line still runs and
+    exits 0. The baseline must not be credited."""
+    wf_dir = _nightly_with(
+        tmp_path, "          python rtl-sketch/verify_i2s_tx.py && echo baseline-ok\n")
+    probs = classify_workflow_mutants(wf_dir).problems
+    assert any("missing active preceding clean baseline" in p for p in probs), probs
+
+
+def test_multiline_if_false_baseline_is_not_credited(tmp_path):
+    wf_dir = _nightly_with(
+        tmp_path,
+        "          if false; then\n"
+        "            python rtl-sketch/verify_i2s_tx.py\n"
+        "          fi\n",
+    )
+    probs = classify_workflow_mutants(wf_dir).problems
+    assert any("control flow" in p for p in probs), probs
+
+
+@pytest.mark.parametrize("where", ["workflow", "job"])
+def test_default_shell_without_errexit_refuses_the_step(tmp_path, where):
+    """#1240 round 3 finding 1: `defaults.run.shell: bash {0}` (workflow or job
+    scope) drops `-e`, so a failed clean command no longer stops the step."""
+    if where == "workflow":
+        wf_dir = _nightly_with(tmp_path, _I2S_CLEAN, top="defaults:\n  run:\n    shell: bash {0}")
+    else:
+        wf_dir = _copy_workflows(tmp_path)
+        nightly = wf_dir / "nightly.yml"
+        doc = yaml.safe_load(nightly.read_text())
+        doc["jobs"]["controls"]["defaults"] = {"run": {"shell": "bash {0}"}}
+        nightly.write_text(yaml.safe_dump(doc, sort_keys=False))
+    probs = classify_workflow_mutants(wf_dir).problems
+    assert any("defaults.run.shell" in p for p in probs), probs
+
+
+@pytest.mark.parametrize("runner", ["run_controls.py --serial", "run_all.py"])
+def test_mutant_inside_a_wrapper_argument_is_reported(tmp_path, runner):
+    """#1240 round 3 finding 2: an ungrouped mutant hidden in
+    `bash -c '<verifier> --inject ...'` ran (1/1 passed) yet was invisible."""
+    wf_dir = _copy_workflows(tmp_path)
+    _write_extra(
+        wf_dir,
+        f"          python tools/{runner} "
+        "\"bash -c 'python rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail'\"\n",
+    )
+    scan = classify_workflow_mutants(wf_dir)
+    probs = _extra_problems(scan)
+    assert len(probs) == 1 and "SPI_ADDR7" in probs[0], probs
+    assert re.match(r"^\.github/workflows/extra\.yml:\d+:", probs[0])
+    assert not any(b.startswith(".github/workflows/extra.yml:") for b in scan.batch_gated)
+
+
+def test_wrapped_grouped_baseline_is_not_credited(tmp_path):
+    wf_dir = _copy_workflows(tmp_path)
+    _write_extra(
+        wf_dir,
+        "          python tools/run_controls.py "
+        "\"@baseline=ctl bash -c 'python rtl-sketch/verify_ctl.py'\" "
+        '"@after=ctl python rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail"\n',
+    )
+    scan = classify_workflow_mutants(wf_dir)
+    assert _extra_problems(scan), scan
+    assert not any(b.startswith(".github/workflows/extra.yml:") for b in scan.batch_gated)
+
+
+@pytest.mark.parametrize("opt", ["-V", "--version", "-m", "-c", "-W"])
+def test_python_non_script_option_baseline_is_not_credited(tmp_path, opt):
+    """#1240 round 3 finding 3: `python -V verify_ctl.py` prints the version and
+    exits 0; it is not a verifier run, so the pair must not be batch-gated."""
+    wf_dir = _copy_workflows(tmp_path)
+    _write_extra(
+        wf_dir,
+        f'          python tools/run_controls.py "@baseline=ctl python {opt} rtl-sketch/verify_ctl.py" '
+        '"@after=ctl python rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail"\n',
+    )
+    scan = classify_workflow_mutants(wf_dir)
+    assert _extra_problems(scan), scan
+    assert not any(b.startswith(".github/workflows/extra.yml:") for b in scan.batch_gated)
+
+
+def test_python_unbuffered_option_baseline_is_still_credited(tmp_path):
+    """Guard against over-refusal: `python -u script` does run the script."""
+    wf_dir = _copy_workflows(tmp_path)
+    _write_extra(
+        wf_dir,
+        '          python tools/run_controls.py "@baseline=ctl python -u rtl-sketch/verify_ctl.py" '
+        '"@after=ctl python rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail"\n',
+    )
+    scan = classify_workflow_mutants(wf_dir)
+    assert _extra_problems(scan) == []
+    assert sum(b.startswith(".github/workflows/extra.yml:") for b in scan.batch_gated) == 1
+
+
+def test_verilator_allowlist_entry_is_bound_to_the_shipped_clean_command(tmp_path):
+    """Allowlist correction: #1212 is closed; removing the clean Verilator smoke
+    step from rtl-full must now fail the classifier itself, not only
+    `_assert_injects_are_paired`."""
+    wf_dir = _copy_workflows(tmp_path)
+    rungs = wf_dir / "rungs.yml"
+    doc = yaml.safe_load(rungs.read_text())
+    steps = doc["jobs"]["rtl-full"]["steps"]
+    clean = _step(doc, "M5A -- clean Verilator smoke baseline for the disabling control")
+    steps.remove(clean)
+    rungs.write_text(yaml.safe_dump(doc, sort_keys=False))
+    probs = classify_workflow_mutants(wf_dir).problems
+    assert any(
+        "missing active preceding clean baseline" in p and "--m5a-smoke --filter2x" in p
+        for p in probs
+    ), probs
+    assert not any(e.open_issue == "#1212" for e in STEP_GATED_ALLOWLIST.values())
 
 
 def test_two_correctly_grouped_controls_are_both_batch_gated(tmp_path):
