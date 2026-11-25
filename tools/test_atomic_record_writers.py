@@ -74,8 +74,7 @@ WRITERS = [
     ("clap_d12a_probe", "write_json"),
     ("clap_burst_timing_qual", "write_json"),
     ("clap_final_strike_experiment", "write_json"),
-    # #947 remainder: every module still writing a tracked record
-    # truncate-then-write.
+    # Nine tracked-record writers migrated in PR #954 (part of #947).
     ("sweep_m1a_attack", "write_json"),
     ("res_tuning", "write_json"),
     ("regen_discrimination_ours", "write_json"),

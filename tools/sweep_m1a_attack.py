@@ -222,10 +222,9 @@ def summarize():
               "candidates": [r["patch_id"] for r in candidates],
               "exploratory": [r["patch_id"] for r in table if r["exploratory"]],
               "scope": "patch-only; no envelope implementation change; harmonic shape "
-                       "remains an independent failure, so no point is a whole-case pass"}
-    write_json(OUT / "report.json", report)
-    report["reference_fits_in_qualified_domain"] = [
-        e["reference_fit_in_qualified_domain"] for e in table[0]["per_event"]]
+                       "remains an independent failure, so no point is a whole-case pass",
+              "reference_fits_in_qualified_domain": [
+                  e["reference_fit_in_qualified_domain"] for e in table[0]["per_event"]]}
     write_json(OUT / "report.json", report)
     print(f"{'attack':>7} {'ev1':>7} {'ev2':>7} {'ev3':>7} {'worst':>7} {'hist m/r':>12}  state       preserved model-fit lost")
     for r in table:
