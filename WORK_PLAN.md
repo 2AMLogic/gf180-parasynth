@@ -3,7 +3,7 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as its own last change — `git log --no-patch -1 --format='%h %cs' -L '/^<!-- guide:plan-body:start -->$/,/^<!-- guide:plan-body:end -->$/:WORK_PLAN.md' origin/main` — which neither a declined Guide regeneration nor a docs-only commit elsewhere in this file advances.
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-25T02:30:02Z (snapshot; compare against live labels)_
+_Generated: 2026-11-25T04:29:56Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
@@ -35,7 +35,6 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#1234**: refusal_sibling_scan: an ALIASED borrow sets refused_origin, so a dotted `except <mod>.Refused` is credited for an attribute that does not exist
 
 ## In Progress
 
@@ -50,29 +49,29 @@ Issues currently being built (`loom:building`).
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
 - **#1126**: Require a matching clean run before make controls credits an RTL mismatch
-- **#1183**: Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census
 - **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal
-- **#1207**: Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep
-- **#1219**: Consolidate duplicated UART RTL capture/replay in verify_live_midi and verify_rolling_playback (fixes --image r2 running with PULSE2X=0)
+- **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin
 - **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow
+- **#1229**: A refused rolling RTL replay now runs the rtl_control stage it used to skip
 - **#1235**: No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only
-- **#1239**: Tighten the audition help control: `>= 2` lets a silently-no-op replace retire one of its three injected defects
-- **#1248**: uart_host --dry-run status/abort renders the apply_frame sentinel -1 in the 'applies' column
-- **#1253**: render_plan prints the -1 sentinel in the applies column for status/abort rows
 - **#1258**: Remove the SciPy requirement from default-patch M5A UART playback
+- **#1262**: measure_repeatability's only refusal control never runs in CI (soundfile absent by omission, not decision)
+- **#1265**: Catch cross-module Refused at M1A / phase-cycle CLI boundaries (6 modules)
+- **#1266**: Catch cross-module Refused at M5A / M5B / mono_artifact_probe CLI boundaries (7 modules)
+- **#1267**: refusal_sibling_scan: the `nm == FAMILY_NAME` guard has no control for the explicit re-export `from lender import Refused as Refused`
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#1203**: fix: catch cross-module corpus refusals at five run_case-caller boundaries (run_case.* family of #1183)
-- **#1228**: fix: share the UART RTL capture/replay pipeline; replay live-midi r2 bytes at PULSE2X=1
-- **#1240**: test: guard workflow RTL mutant gating and baseline config match
-- **#1251**: test: require all three findings in audition help control
-- **#1254**: fix: refuse zero denominators at four cymbal log10 ratio sites
-- **#1255**: fix: render unset apply_frame as '-' in dry-run plan and echo lines
-- **#1256**: fix: render_plan prints '-' for rows with no apply frame
+- **#1201**: controls: real-verifier mixed-baseline evidence, end-to-end make controls runs, drums outdir fix
 - **#1259**: fix: let the R1 quick-start dry run work without SciPy
+- **#1264**: ci: gate default-config synth mutants behind a clean default verify_synth_top run
+- **#1269**: test: pin same-name Refused re-export against narrowed origin guard
+- **#1270**: fix: return the refusal exit status from M5 measurement tools
+- **#1272**: ci: install soundfile in tools job so the refusal control executes
+- **#1273**: fix: catch cross-module Refused at six M1A CLI boundaries
+- **#1274**: fix: skip the RTL control when the rolling replay was refused
 
 ## Approved (Awaiting Merge)
 
@@ -81,6 +80,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper *(held)* — linked issue #1062
 - **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches *(held)* — linked issue #1199
 - **#1227**: fix(nightly): gate the ctl and synth_top mutant steps on a clean run — linked issue #1222
+- **#1240**: test: guard workflow RTL mutant gating and baseline config match — linked issue #1235
 
 ## Proposed
 
@@ -147,16 +147,15 @@ Issues carrying `loom:curated`.
 - **#1110**: Judge docs-only fast path is unreachable on this host: its base-repo read uses a gh --json field this gh 2.102.0 rejects *(curated)* *(held)*
 - **#1126**: Require a matching clean run before make controls credits an RTL mismatch *(curated)*
 - **#1148**: rtl-full step 8 is red on main: M5A filter2x SPI-to-I2S diverges from the model in 815424 of 1305549 frames (62%) *(curated)* *(held)*
-- **#1183**: Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census *(curated)*
 - **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal *(curated)*
-- **#1207**: Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep *(curated)*
 - **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin *(curated)*
 - **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow *(curated)*
-- **#1234**: refusal_sibling_scan: an ALIASED borrow sets refused_origin, so a dotted `except <mod>.Refused` is credited for an attribute that does not exist *(curated)*
+- **#1229**: A refused rolling RTL replay now runs the rtl_control stage it used to skip *(curated)*
 - **#1235**: No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only *(curated)*
-- **#1239**: Tighten the audition help control: `>= 2` lets a silently-no-op replace retire one of its three injected defects *(curated)*
-- **#1248**: uart_host --dry-run status/abort renders the apply_frame sentinel -1 in the 'applies' column *(curated)*
-- **#1253**: render_plan prints the -1 sentinel in the applies column for status/abort rows *(curated)*
+- **#1262**: measure_repeatability's only refusal control never runs in CI (soundfile absent by omission, not decision) *(curated)*
+- **#1265**: Catch cross-module Refused at M1A / phase-cycle CLI boundaries (6 modules) *(curated)*
+- **#1266**: Catch cross-module Refused at M5A / M5B / mono_artifact_probe CLI boundaries (7 modules) *(curated)*
+- **#1267**: refusal_sibling_scan: the `nm == FAMILY_NAME` guard has no control for the explicit re-export `from lender import Refused as Refused` *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -169,6 +168,8 @@ Issues carrying `loom:curated`.
 - **#1172**: Wire in or remove check_nightly_slow_records.py: a 1,176-line gate nothing runs *(hermit)* *(held)*
 - **#1173**: Remove tools/audit_tracked_json_writers.py: one-shot #922 report nothing runs *(hermit)* *(held)*
 - **#1205**: Remove disk cache replay from the 808 conditioning comparison *(hermit)* *(held)*
+- **#1263**: Remove the missing-neighbour fallback from 808 gate calibration *(hermit)*
+- **#1268**: Defer SciPy and V3-reader imports in mono_m5a_score so named-preset UART, live MIDI, and demo players run without SciPy *(hermit)*
 
 ## Epics
 
@@ -182,11 +183,11 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 2 |
 | Very important | 1 |
 | Important | 5 |
-| Ready (`loom:issue`, net of holds/building/merge-pending) | 5 |
+| Ready (`loom:issue`, net of holds/building/merge-pending) | 4 |
 | In Progress (`loom:building`) | 19 |
 | PRs awaiting review | 8 |
-| Approved PRs awaiting merge | 3 |
-| Curated | 71 |
-| Architect / Hermit proposals | 9 |
+| Approved PRs awaiting merge | 4 |
+| Curated | 70 |
+| Architect / Hermit proposals | 11 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->

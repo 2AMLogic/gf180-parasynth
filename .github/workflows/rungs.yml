@@ -554,7 +554,15 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
+      # soundfile IS installed (unlike sympy below): the #1183 control
+      # tools/test_measure_repeatability_refusal.py::
+      # test_cut_into_strike_reference_exits_refused_2 reaches its subprocess
+      # only via pytest.importorskip("soundfile"), so without it the control
+      # silently skips and the refusal boundary it guards is never exercised.
+      # Measured (#1262): with soundfile the 12 files that import the
+      # soundfile-using modules give 376 passed / 0 skipped, vs 375 passed /
+      # 1 skipped without; no corpus-gated test or probe misreports.
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml soundfile
       # Five files under tools/ shell out to iverilog (test_check_f1_rtl_record,
       # test_check_iverilog_generate_case_string, test_run_controls,
       # test_score_f1_rtl, test_trial). sympy is deliberately NOT installed:
