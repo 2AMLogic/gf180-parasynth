@@ -3,7 +3,7 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as its own last change — `git log --no-patch -1 --format='%h %cs' -L '/^<!-- guide:plan-body:start -->$/,/^<!-- guide:plan-body:end -->$/:WORK_PLAN.md' origin/main` — which neither a declined Guide regeneration nor a docs-only commit elsewhere in this file advances.
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-25T04:29:56Z (snapshot; compare against live labels)_
+_Generated: 2026-11-25T05:57:43Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
@@ -53,12 +53,13 @@ Issues currently being built (`loom:building`).
 - **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin
 - **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow
 - **#1229**: A refused rolling RTL replay now runs the rtl_control stage it used to skip
-- **#1235**: No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only
 - **#1258**: Remove the SciPy requirement from default-patch M5A UART playback
 - **#1262**: measure_repeatability's only refusal control never runs in CI (soundfile absent by omission, not decision)
+- **#1263**: Remove the missing-neighbour fallback from 808 gate calibration
 - **#1265**: Catch cross-module Refused at M1A / phase-cycle CLI boundaries (6 modules)
 - **#1266**: Catch cross-module Refused at M5A / M5B / mono_artifact_probe CLI boundaries (7 modules)
 - **#1267**: refusal_sibling_scan: the `nm == FAMILY_NAME` guard has no control for the explicit re-export `from lender import Refused as Refused`
+- **#1268**: Defer SciPy and V3-reader imports in mono_m5a_score so named-preset UART, live MIDI, and demo players run without SciPy
 
 ## PRs Awaiting Review
 
@@ -69,9 +70,10 @@ PRs waiting on Judge (`loom:review-requested`).
 - **#1264**: ci: gate default-config synth mutants behind a clean default verify_synth_top run
 - **#1269**: test: pin same-name Refused re-export against narrowed origin guard
 - **#1270**: fix: return the refusal exit status from M5 measurement tools
-- **#1272**: ci: install soundfile in tools job so the refusal control executes
 - **#1273**: fix: catch cross-module Refused at six M1A CLI boundaries
 - **#1274**: fix: skip the RTL control when the rolling replay was refused
+- **#1277**: fix: load M5A audio dependencies only during scoring
+- **#1279**: fix: refuse incomplete 808 neighbour WAV sets in gate calibration
 
 ## Approved (Awaiting Merge)
 
@@ -80,7 +82,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper *(held)* — linked issue #1062
 - **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches *(held)* — linked issue #1199
 - **#1227**: fix(nightly): gate the ctl and synth_top mutant steps on a clean run — linked issue #1222
-- **#1240**: test: guard workflow RTL mutant gating and baseline config match — linked issue #1235
+- **#1272**: ci: install soundfile in tools job so the refusal control executes — linked issue #1262
 
 ## Proposed
 
@@ -151,7 +153,7 @@ Issues carrying `loom:curated`.
 - **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin *(curated)*
 - **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow *(curated)*
 - **#1229**: A refused rolling RTL replay now runs the rtl_control stage it used to skip *(curated)*
-- **#1235**: No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only *(curated)*
+- **#1252**: STEP_GATED_ALLOWLIST open_issue exemptions have no mechanical retirement, unlike the pending run_all entry *(curated)*
 - **#1262**: measure_repeatability's only refusal control never runs in CI (soundfile absent by omission, not decision) *(curated)*
 - **#1265**: Catch cross-module Refused at M1A / phase-cycle CLI boundaries (6 modules) *(curated)*
 - **#1266**: Catch cross-module Refused at M5A / M5B / mono_artifact_probe CLI boundaries (7 modules) *(curated)*
@@ -168,8 +170,8 @@ Issues carrying `loom:curated`.
 - **#1172**: Wire in or remove check_nightly_slow_records.py: a 1,176-line gate nothing runs *(hermit)* *(held)*
 - **#1173**: Remove tools/audit_tracked_json_writers.py: one-shot #922 report nothing runs *(hermit)* *(held)*
 - **#1205**: Remove disk cache replay from the 808 conditioning comparison *(hermit)* *(held)*
-- **#1263**: Remove the missing-neighbour fallback from 808 gate calibration *(hermit)*
-- **#1268**: Defer SciPy and V3-reader imports in mono_m5a_score so named-preset UART, live MIDI, and demo players run without SciPy *(hermit)*
+- **#1276**: Require a named scenario when selecting UART late-event checks *(hermit)*
+- **#1278**: Remove the module-name filter that skips 808 ground-truth citations *(hermit)*
 
 ## Epics
 
@@ -184,8 +186,8 @@ Issues carrying `loom:curated`.
 | Very important | 1 |
 | Important | 5 |
 | Ready (`loom:issue`, net of holds/building/merge-pending) | 4 |
-| In Progress (`loom:building`) | 19 |
-| PRs awaiting review | 8 |
+| In Progress (`loom:building`) | 20 |
+| PRs awaiting review | 9 |
 | Approved PRs awaiting merge | 4 |
 | Curated | 70 |
 | Architect / Hermit proposals | 11 |
