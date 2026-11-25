@@ -123,6 +123,28 @@ def test_every_control_turns_the_verifier_red_for_its_reason(control):
     assert c["caught"], c
 
 
+# ---- the RTL capture: the bytes and the schedule must agree -------------------
+@pytest.mark.parametrize("opcode", [dev.OP_WRITE, dev.OP_EVENT])
+def test_a_capture_that_drops_a_packet_refuses(opcode, tmp_path):
+    """The capture pairs the host's ACTUAL bytes with the INTENDED schedule;
+    a transmit log that drops one expected write or event must REFUSE, not
+    write a capture that silently lacks it (#1219: only one of the two
+    former copies of this serialization had the count check)."""
+    run = vrp.run_cli("demo")
+    log, dropped = [], False
+    for t, data in run["h"].ser.tx_log:
+        pkts = vrp._packets(data)
+        if not dropped:
+            k = next((i for i, p in enumerate(pkts) if p[0] == opcode), None)
+            if k is not None:
+                pkts, dropped = pkts[:k] + pkts[k + 1:], True
+        log.append((t, b"".join(pkts)))
+    assert dropped
+    run["h"].ser.tx_log = log
+    with pytest.raises(ValueError, match="writes/events"):
+        vrp.write_rtl_capture(run, tmp_path / "cap")
+
+
 # ---- the 16-bit frame log: an unwrap is a precondition, not an assumption ----
 def _log16(frames, p0):
     """What the device would log for writes at `frames` after `p0`."""
