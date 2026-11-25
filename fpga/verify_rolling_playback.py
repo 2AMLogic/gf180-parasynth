@@ -369,15 +369,18 @@ def _packets(data: bytes) -> list:
     return out
 
 
-def write_rtl_capture(run: dict, prefix: Path) -> dict:
-    """<prefix>.cmds/.plan.json in verify_uart_bridge's replay format, from
-    the host's TRANSMIT LOG (the bytes main() actually wrote, at the frames
-    it wrote them) with expectations from the INTENDED schedule. Requires a
-    run from epoch 0 so device frames and bench frames coincide."""
-    h, want = run["h"], run["want"]
-    if h.sim.epoch != 0 or h.sim.resets:
-        raise ValueError("RTL capture needs an epoch-0 run with no reset")
-    p0 = h.bridge.performance_origin
+def write_replay_capture(tx_log: list, static: list, timed: list, prefix: Path, *,
+                         source: str, performance_origin: int | None = None) -> dict:
+    """<prefix>.cmds/.plan.json in verify_uart_bridge's replay format, from a
+    host's TRANSMIT LOG (the bytes it actually wrote, at the frames it wrote
+    them) with expectations from the INTENDED schedule: `static` in send
+    order, `timed` as (frame, flag, sec, addr, data). With
+    `performance_origin` (the host's music t=0 on the device counter) the
+    timed frames are relative to it: it is re-based onto the bench's
+    timeline and recorded in the plan. Callers require an epoch-0 run with
+    no reset, so device frames and bench frames coincide. The stimulus and
+    the schedule must agree in count -- a log that drops an expected packet
+    REFUSES rather than writing a capture that silently lacks it."""
     # the wire at the TRUE baud (the bench serialises bits of 1e9/baud ns):
     # 10*CLK/baud = 1066.7 cycles a byte, not the receiver's 10*div = 1070.
     # Across a 202-packet back-to-back setup burst the difference is 21
@@ -388,10 +391,12 @@ def write_rtl_capture(run: dict, prefix: Path) -> dict:
     div = (uh.CLK_HZ + uh.DEFAULT_BAUD // 2) // uh.DEFAULT_BAUD
     rows, static_i, timed_i = [], 0, 0
     wire_free = 0
-    first_event_t = next(t for t, b in h.ser.tx_log if b and b[0] == dev.OP_EVENT)
-    k = round((first_event_t * SR - p0) / 65536)
-    p0u = p0 + 65536 * k                       # t=0 on the bench's timeline
-    for t, data in h.ser.tx_log:
+    p0u = 0
+    if performance_origin is not None:
+        first_event_t = next(t for t, b in tx_log if b and b[0] == dev.OP_EVENT)
+        k = round((first_event_t * SR - performance_origin) / 65536)
+        p0u = performance_origin + 65536 * k           # t=0 on the bench's timeline
+    for t, data in tx_log:
         send = int(t * SR) + 1                 # the bench starts on a frame edge
         for pkt in _packets(data):
             start = max(send * uh.CYC_PER_FRAME + 1, wire_free)
@@ -402,30 +407,47 @@ def write_rtl_capture(run: dict, prefix: Path) -> dict:
             row = {"index": len(rows), "packet": pkt.hex(), "send_frame": send,
                    "accept_frame": accept}
             if pkt[0] == dev.OP_WRITE:
-                f, s_, a, d = want["static"][static_i]
+                f, s_, a, d = static[static_i]
                 static_i += 1
                 row.update(kind="write", due=-1, apply_frame=accept + 1,
                            expect={"flag": f, "sec": s_, "addr": a, "data": d})
             elif pkt[0] == dev.OP_EVENT:
-                rel, f, s_, a, d = want["timed"][timed_i]
+                rel, f, s_, a, d = timed[timed_i]
                 timed_i += 1
                 row.update(kind="event", due=p0u + rel, apply_frame=p0u + rel,
                            expect={"flag": f, "sec": s_, "addr": a, "data": d})
             elif pkt[0] == dev.OP_STATUS:
                 row.update(kind="status", due=-1, apply_frame=-1, expect=None)
             else:
-                raise ValueError(f"unexpected opcode 0x{pkt[0]:02x} in the host log")
+                raise ValueError(f"unexpected opcode 0x{pkt[0]:02x} in the transmit log")
             rows.append(row)
+    if static_i != len(static) or timed_i != len(timed):
+        raise ValueError(f"capture has {static_i}/{timed_i} writes/events, schedule "
+                         f"{len(static)}/{len(timed)}")
     prefix.parent.mkdir(parents=True, exist_ok=True)
     with open(f"{prefix}.cmds", "w") as fh:
         for r in rows:
             fh.write(f"S {r['send_frame']} {bytes.fromhex(r['packet']).hex(' ')}\n")
-    rec = {"origin": 0, "baud": uh.DEFAULT_BAUD, "base_send_frame": 0,
-           "performance_origin": p0u, "source": "SimSerial transmit log",
-           "rows": rows}
+    rec = {"origin": 0, "baud": uh.DEFAULT_BAUD, "base_send_frame": 0}
+    if performance_origin is not None:
+        rec["performance_origin"] = p0u
+    rec["source"] = source
+    rec["rows"] = rows
     Path(f"{prefix}.plan.json").write_text(json.dumps(rec, indent=1) + "\n")
     return {"rows": len(rows), "writes": static_i, "events": timed_i,
             "last_due": max((r["due"] for r in rows), default=0)}
+
+
+def write_rtl_capture(run: dict, prefix: Path) -> dict:
+    """The rolling host's capture: the bytes uart_host.main actually wrote,
+    expectations from the fixture's intended schedule (times relative to the
+    host's performance origin)."""
+    h, want = run["h"], run["want"]
+    if h.sim.epoch != 0 or h.sim.resets:
+        raise ValueError("RTL capture needs an epoch-0 run with no reset")
+    return write_replay_capture(h.ser.tx_log, want["static"], want["timed"], prefix,
+                                source="SimSerial transmit log",
+                                performance_origin=h.bridge.performance_origin)
 
 
 def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
@@ -445,18 +467,36 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
     cap = write_rtl_capture(run, outdir / fixture)
     work = "rolling-rtl" if (image, target) == (uh.DEFAULT_IMAGE, uh.DEFAULT_IMAGE) \
         else f"rolling-rtl-{image}-for-{target}"
-    # the RTL defines and the model are the TARGET image's configuration
-    # (r2: PULSE2X=1; vub.image_config); the run identity records the defines,
-    # so a reuse can never cross configurations either
+    out = replay_and_analyze(fixture, cap, outdir, work, image=target,
+                             tail_frames=int(TAIL_S * SR), timeout_s=RTL_TIMEOUT_S,
+                             reuse=reuse, none_state="REFUSED")
     with vub.image_config(target):
-        rr = vub.simulate_replay(str(outdir / fixture),
-                                 ROOT / "build" / work / fixture,
-                                 tail_frames=int(TAIL_S * SR),
+        out["control"] = rtl_control(fixture, outdir, vub, work)
+    if not out["control"]["caught"] and out["state"] == "PASS":
+        out["state"] = "FAIL"
+    return out
+
+
+def replay_and_analyze(name: str, cap: dict, outdir: Path, work: str, *,
+                       image: str, tail_frames: int, timeout_s: int,
+                       reuse, none_state: str) -> dict:
+    """The shared replay stage (verify_live_midi replays through this too,
+    #1219): simulate_replay + analyze + truncation_control + the
+    run_identity.json receipt, all under the TARGET image's bench
+    configuration -- the RTL defines and the model are the image's (r2:
+    PULSE2X=1, vub.image_config); the run identity records the defines, so
+    a reuse can never cross configurations either. `none_state` is what the
+    caller reports when the simulation did not run (REFUSED here, NO
+    VERDICT in live-midi: tools/trial.py distinguishes them)."""
+    import verify_uart_bridge as vub
+    with vub.image_config(image):
+        rr = vub.simulate_replay(str(outdir / name), ROOT / "build" / work / name,
+                                 tail_frames=tail_frames,
                                  # ~258k frames of the full wrapper: 3600 s
                                  # reached 87% on a loaded machine (62 fr/s)
-                                 timeout_s=RTL_TIMEOUT_S, reuse=reuse)
+                                 timeout_s=timeout_s, reuse=reuse)
         if rr is None:
-            return {"state": "REFUSED", "reason": "RTL replay did not run",
+            return {"state": none_state, "reason": "the RTL replay did not run",
                     "capture": cap}
         ok, comp, detail = vub.analyze(rr)
         # completeness (#300 review): every period the stimulus requires, and a
@@ -465,21 +505,16 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
     # the run's RECEIPT (sources, ROMs, defines, stimulus, length, output
     # digests) is published beside the result it produced
     receipt = Path(rr["outdir"]) / "run_identity.json"
-    published = outdir / f"{fixture}.run_identity.json"
+    published = outdir / f"{name}.run_identity.json"
     published.write_bytes(receipt.read_bytes())
-    out = {"state": ("NO VERDICT" if comp.get("i2s_incomplete") or not trunc["caught"]
-                     else "PASS" if ok else "FAIL"), "capture": cap,
-           "truncation_control": trunc,
-           "comparison": comp, "detail": detail[:10],
-           "reused_rtl_run": bool(rr.get("reused")),
-           "rtl_run": vub.rtl_run_report(rr),
-           "run_receipt": {"path": published.name,
-                           "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
-    with vub.image_config(target):
-        out["control"] = rtl_control(fixture, outdir, vub, work)
-    if not out["control"]["caught"] and out["state"] == "PASS":
-        out["state"] = "FAIL"
-    return out
+    return {"state": ("NO VERDICT" if comp.get("i2s_incomplete") or not trunc["caught"]
+                      else "PASS" if ok else "FAIL"), "capture": cap,
+            "truncation_control": trunc,
+            "comparison": comp, "detail": detail[:10],
+            "reused_rtl_run": bool(rr.get("reused")),
+            "rtl_run": vub.rtl_run_report(rr),
+            "run_receipt": {"path": published.name,
+                            "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
 
 
 def rtl_control(fixture: str, outdir: Path, vub, work: str = "rolling-rtl") -> dict:
