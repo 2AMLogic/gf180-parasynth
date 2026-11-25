@@ -37,8 +37,10 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
   * every tracked file is indexed by its own path -- two same-stem files
     (audition/play.py and fpga/play.py in this tree) are both scanned with
     their own trees, and a callee imported through a colliding stem is
-    reported as `ambiguous-callee` with its candidates, never guessed
-    (#1188 "stem collision", fixed);
+    reported as `ambiguous-callee` with repo-relative candidates, never
+    guessed -- and only when some candidate actually raises that refusal:
+    a collision of quiet modules is not a site (#1188 "stem collision",
+    #1214 filter);
   * `from x import f as g` keeps the ORIGINAL name, so a `g()` call
     resolves to f's raise origins instead of vanishing (#1188 "alias
     loss", fixed);
@@ -315,6 +317,16 @@ def cli_boundary_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]) -> list
     return out
 
 
+def _rel_label(path: pathlib.Path) -> str:
+    """Repo-relative when under ROOT, absolute otherwise (synthetic test
+    trees live outside it). `site` and `candidates` must share this format so
+    the --json census is host-independent (#1214)."""
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
 def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
     by_stem = stem_map(idx)
     sites: list[dict] = []
@@ -323,10 +335,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
         if mod is None:
             continue
         boundary = cli_boundary_guards(mod, by_stem)
-        try:
-            label = str(f.relative_to(ROOT))
-        except ValueError:
-            label = str(f)                    # synthetic trees in tests
+        label = _rel_label(f)
         for node in ast.walk(mod.tree):
             callee_stem = fname = None
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
@@ -349,7 +358,14 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                 # stem collision: which module the import binds is not
                 # decidable from the AST, so name the candidates instead of
                 # guessing -- unless a base/broad guard settles coverage the
-                # same way for every one of them.
+                # same way for every one of them. A collision whose every
+                # candidate either has no family or raises no refusal for
+                # this callee cannot refuse under ANY resolution, so it is
+                # not a site at all -- the multi-candidate mirror of the
+                # single-callee filters below (#1214).
+                if not any(c.refused_names and raise_origins(c, fname or "")
+                           for c in cands):
+                    continue
                 ashapes = []
                 for tr in enclosing_try_parents(mod.tree, node):
                     for h in tr.handlers:
@@ -364,7 +380,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                     classification=(f"covered({'+'.join(ashapes)})" if ashapes
                                     else "ambiguous-callee"),
                     uncovered=[],
-                    candidates=sorted(str(c.path) for c in cands),
+                    candidates=sorted(_rel_label(c.path) for c in cands),
                 ))
                 continue
             callee = cands[0]

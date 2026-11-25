@@ -8,6 +8,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-24
 
+- **Issue #1192** (closed): check_workflows roadmap order gates key on step name, so the SET of compile_dag.py --run invocations is unasserted
+- **PR #1196**: ci: assert the compile_dag.py invocation set, not just the named order-gate steps
 - **Issue #1182** (closed): Wire in tools/performance_suite.py: the playing-behaviour gate that nothing runs
 - **Issue #1193** (closed): refusal_sibling_scan: family classes borrowed by from-import are invisible (9 census sites misclassified)
 - **PR #1224**: fix: track Refused families borrowed by from-import in refusal_sibling_scan
