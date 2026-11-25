@@ -54,6 +54,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from numbers import Real
 from typing import Callable
 
 import numpy as np
@@ -532,9 +533,8 @@ def build_properties():
 # Do NOT paste `--relock`'s whole block. It reprints every lock at today's
 # measurement, including ones that have drifted a little and are still INSIDE
 # their tolerance -- pasting those baked-in silently re-baselines drift the
-# table is supposed to keep accumulating until it is worth an argument. Two
-# entries below were re-locked in #242 and they are the only two that moved;
-# the rest are untouched at their 28dfd55 values on purpose.
+# table is supposed to keep accumulating until it is worth an argument.
+# Paste the intended changes and record each move in LOCK_CHANGELOG.
 LOCKS = {
     ("LADDER", "corner at 800 Hz / commanded"): 0.786039,
     # re-locked from 9.40462 in #242 and from 4.21473 in #546; see LOCK_CHANGELOG below
@@ -691,12 +691,15 @@ def lock_history(voice: str, name: str) -> list:
     return out
 
 
+def _finite_lock_value(value):
+    return isinstance(value, Real) and math.isfinite(value)
+
+
 def check_lock_changelog() -> list:
     """Problems with the changelog, as sentences. Empty list means every lock
     has a recorded value and a reason, and the record agrees with the table.
 
-    Three ways it can be wrong, and the first is the one that matters: a value
-    in `LOCKS` that the changelog does not end on means somebody re-locked
+    A value in `LOCKS` that the changelog does not end on means somebody re-locked
     without saying why, and every verdict that bound has issued since is
     unexplained."""
     problems = []
@@ -708,13 +711,31 @@ def check_lock_changelog() -> list:
                             f"number somebody chose")
             continue
         last = hist[-1]["to"]
-        if last is None or abs(float(last) - float(value)) > 1e-9:
+        if not _finite_lock_value(value):
+            problems.append(f"{key[0]} {key[1]!r}: LOCKS value {value!r} must be finite")
+        elif _finite_lock_value(last) and abs(last - value) > 1e-9:
             problems.append(f"{key[0]} {key[1]!r}: LOCKS says {value!r}, the "
                             f"changelog's last entry ({hist[-1]['recorded_by']}) says "
                             f"{last!r}. The lock moved with no reason recorded")
-    # Chain continuity and placeholders (issue #1303). Checking only the LAST
-    # entry lets a middle move be rewritten, a no-op "move" be recorded, or the
-    # `--relock` skeleton be committed with its <...> text still in it.
+        prev = None
+        for i, h in enumerate(hist):
+            where = f"{key[0]} {key[1]!r} entry {i} ({h['recorded_by']})"
+            was, now = h["from"], h["to"]
+            if i == 0 and was is not None:
+                problems.append(f"{where}: the first entry has from={was!r}, "
+                                f"not None. A first lock has no prior value")
+            elif i > 0 and not _finite_lock_value(was):
+                problems.append(f"{where}: from={was!r} must be finite")
+            elif i > 0 and _finite_lock_value(prev) and abs(was - prev) > 1e-9:
+                problems.append(f"{where}: from={was!r} does not continue "
+                                f"the previous entry's to={prev!r}. The chain is "
+                                f"broken, so a move went unrecorded")
+            if not _finite_lock_value(now):
+                problems.append(f"{where}: to={now!r} must be finite")
+            elif _finite_lock_value(was) and abs(now - was) <= 1e-9:
+                problems.append(f"{where}: from == to ({now!r}). A no-op is "
+                                f"not a move")
+            prev = now
     for ev in LOCK_CHANGELOG:
         for field in ("at", "recorded_by", "reason"):
             v = ev.get(field)
@@ -722,24 +743,6 @@ def check_lock_changelog() -> list:
                 problems.append(f"{ev.get('recorded_by')!r}: `{field}` is "
                                 f"{v!r} -- empty or an unedited --relock "
                                 f"placeholder. Fill it in before committing")
-    for key in sorted(LOCKS):
-        prev = None
-        for i, h in enumerate(lock_history(*key)):
-            where = f"{key[0]} {key[1]!r} entry {i} ({h['recorded_by']})"
-            if i == 0 and h["from"] is not None:
-                problems.append(f"{where}: the first entry has from={h['from']!r}, "
-                                f"not None. A first lock has no prior value")
-            if i > 0 and (h["from"] is None or prev is None
-                          or abs(float(h["from"]) - float(prev)) > 1e-9):
-                problems.append(f"{where}: from={h['from']!r} does not continue "
-                                f"the previous entry's to={prev!r}. The chain is "
-                                f"broken, so a move went unrecorded")
-            if (h["from"] is not None and h["to"] is not None
-                    and abs(float(h["to"]) - float(h["from"])) <= 1e-9):
-                problems.append(f"{where}: from == to ({h['to']!r}). A no-op is "
-                                f"not a move")
-            prev = h["to"]
-    for ev in LOCK_CHANGELOG:
         for key in ev["locks"]:
             if key not in LOCKS:
                 problems.append(f"{ev['recorded_by']} records a change to "
@@ -898,31 +901,39 @@ def main(argv=None) -> int:
         return cmd_inject(a.inject)
     res, _ = run()
     if a.relock:
-        print("LOCKS = {")
+        draft = {}
         for r in res:
-            if r.prop.kind == "lock" and r.measured is not None:
-                print(f'    ("{r.prop.voice}", "{r.prop.name}"): {r.measured:.6g},')
+            if r.prop.kind != "lock" or r.measured is None:
+                continue
+            key = (r.prop.voice, r.prop.name)
+            if not _finite_lock_value(r.measured):
+                print(f"REFUSED: {key} measured value {r.measured!r} must be finite")
+                return 1
+            if key in LOCKS and not _finite_lock_value(LOCKS[key]):
+                print(f"REFUSED: {key} LOCKS value {LOCKS[key]!r} must be finite")
+                return 1
+            # Decide which moves to record using the literal the reader will paste.
+            draft[key] = f"{r.measured:.6g}"
+        print("LOCKS = {")
+        for (voice, name), value in draft.items():
+            print(f'    ("{voice}", "{name}"): {value},')
         print("}")
         # A new table with no record of what moved is the gap issue #68 names, so
         # the skeleton comes out with it. `from` is the value being replaced; fill
         # in the reason before committing, because --check-locks will not accept
         # an entry that does not end on the new value and the report will not
         # explain a bound that moved for no stated reason.
-        print("\n# paste into LOCK_CHANGELOG, and replace the reason:")
+        print("\n# paste into LOCK_CHANGELOG, and fill in the commits and reason:")
         print("    {")
         print('        "at": "<the commit these were measured at, and LOCK above>",')
         print('        "recorded_by": "<the commit that re-locks>",')
         print('        "issue": 0,')
-        print('        "reason": "WHY these values moved. A bound that moved with no '
-              'reason is how a test goes green without the model improving.",')
+        print('        "reason": "<why these values moved>",')
         print('        "locks": {')
-        for r in res:
-            if r.prop.kind == "lock" and r.measured is not None:
-                was = LOCKS.get((r.prop.voice, r.prop.name))
-                if was is not None and abs(float(was) - float(r.measured)) <= 1e-9:
-                    continue
-                print(f'            ("{r.prop.voice}", "{r.prop.name}"): '
-                      f'({was!r}, {r.measured:.6g}),')
+        for (voice, name), value in draft.items():
+            was = LOCKS.get((voice, name))
+            if was is None or abs(was - float(value)) > 1e-9:
+                print(f'            ("{voice}", "{name}"): ({was!r}, {value}),')
         print("        },")
         print("    },")
         return 0
