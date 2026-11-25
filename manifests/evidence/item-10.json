@@ -45,21 +45,21 @@
         "role": "hygiene",
         "path": ".github/workflows/moog-acceptance.yml",
         "passed": true,
-        "content_hash": "sha256:f4f2e939c5d0d82a9d936b7897c316f971be1ea02ba92bd30396193e2b12d9ba"
+        "content_hash": "sha256:1a2eb38fff5978298b32edf076bf22b04bf982bf0a7826e639dd9612838a65ef"
       },
       {
         "check": "present",
         "role": "hygiene",
         "path": ".github/workflows/nightly.yml",
         "passed": true,
-        "content_hash": "sha256:769474327e9e0ed70d5499a29ace5a887999eda0e590c3641df0bdcce58b95f0"
+        "content_hash": "sha256:94f76e7652d90eaca1cee471d026a3f9d40dce256cb3e0f4ba48246ed477c662"
       },
       {
         "check": "present",
         "role": "hygiene",
         "path": ".github/workflows/provenance.yml",
         "passed": true,
-        "content_hash": "sha256:487cc630a66398cfa91c5115c9cf71a424138816ea953ba32709e01ccab1d71d"
+        "content_hash": "sha256:221d637759787d2a711c6d9d106f33d7ffebc2bb6e41b62ac1fad64d415c48ce"
       },
       {
         "check": "present",
