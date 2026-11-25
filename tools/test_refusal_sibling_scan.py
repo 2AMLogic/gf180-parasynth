@@ -11,6 +11,9 @@ raises nothing even though its module has a family). The #1188 section pins
 the three gaps that issue filed (try-handler credit, stem collision, alias
 loss) and the #1193 section the borrowed-family gap: each control there
 started red against the unfixed scanner, except the shadow pin noted inline.
+The #1214 section pins the ambiguous-callee filter (a non-raising collision
+is not a site), the repo-relative `candidates` format, and the shadowed-alias
+blind spot #1188's test plan named but never pinned.
 """
 from __future__ import annotations
 
@@ -244,6 +247,87 @@ from play import run
 def go(p):
     return run(p)                 # WHICH play? the census must not guess
 '''
+
+
+# --- #1214 shapes: the ambiguous-callee filter and the candidates format ----
+# Two same-stem candidates whose callees raise nothing used to be emitted as
+# `ambiguous-callee` anyway: the multi-candidate branch had no equivalent of
+# the single-callee `no family at all` / `this function raises no refusal`
+# filters. `candidates` also carried absolute host paths where `site` was
+# repo-relative, so the --json census was host-dependent.
+
+PLAY_FAMILY_RAISES = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def run(x):
+    raise Refused("no records")
+
+def quiet(x):
+    return x
+'''
+
+PLAY_PLAIN_HELPER = '''
+def helper(x):
+    return x / 0
+
+def quiet(x):
+    return x
+'''
+
+CALLER_AMBIG_FAMILYLESS = '''
+from play import helper
+
+def go(p):
+    return helper(p)              # every candidate is quiet: not a site at all
+'''
+
+CALLER_AMBIG_QUIET = '''
+from play import quiet
+
+def go(p):
+    return quiet(p)               # family present, but no candidate raises this fname
+'''
+
+CALLER_AMBIG_PARTIAL = '''
+from play import run
+
+def go(p):
+    return run(p)                 # one candidate raises: still ambiguous-callee
+'''
+
+CALLER_SHADOWED_ALIAS = '''
+from mod_a import load as l
+
+def go(p):
+    l = lambda q: q               # local rebinding: untracked (documented blind spot)
+    return l(p)                   # still attributed to mod_a.load
+'''
+
+
+def _collision_tree(tmp_path: pathlib.Path, alpha: str, beta: str,
+                    caller_name: str, caller_body: str) -> list[pathlib.Path]:
+    """The flat tree plus a two-way same-stem collision (alpha/play.py,
+    beta/play.py) and a caller importing the stem: the flat tree's stems are
+    unique, so `play` is the only collision the caller can hit."""
+    files = _tree(tmp_path)
+    for sub, body in (("alpha", alpha), ("beta", beta)):
+        d = tmp_path / sub
+        d.mkdir()
+        p = d / "play.py"
+        p.write_text(body)
+        files.append(p)
+    c = tmp_path / f"{caller_name}.py"
+    c.write_text(caller_body)
+    files.append(c)
+    return files
+
+
+def _sites_for(scan_files, idx, caller_name: str) -> list[dict]:
+    return [s for s in rss.scan(scan_files, idx)
+            if s["site"].split("/")[-1].startswith(f"{caller_name}.py:")]
 
 
 def _tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
@@ -615,3 +699,85 @@ def test_local_class_shadowed_by_a_borrow_covers_the_lender(tmp_path):
     s = _borrow_scan(tmp_path)[("class_shadowed.py", "mod_a.load")]
     assert s["classification"].startswith("covered"), s
     assert s["guard"] == "exact", s
+
+
+# --- #1214 controls: the ambiguous-callee filter (items 1), repo-relative
+# candidates (item 2), and the shadowed-alias blind-spot pin (item 4). The
+# filter and format controls started red against the unfixed scanner.
+
+def test_family_less_stem_collision_is_not_a_site(tmp_path):
+    """Item 1: two family-less play.py candidates and a `from play import
+    helper` caller used to be reported as ambiguous-callee -- "I cannot tell
+    which refusal this is" about a call that raises no refusal. The
+    single-callee path already filtered this shape; the multi-candidate
+    branch now mirrors it."""
+    files = _collision_tree(tmp_path, PLAY_PLAIN_HELPER, PLAY_PLAIN_HELPER,
+                            "caller_familyless", CALLER_AMBIG_FAMILYLESS)
+    idx = rss.build_index(files)
+    assert _sites_for(files, idx, "caller_familyless") == []
+
+
+def test_collision_where_no_candidate_raises_for_the_callee_is_not_a_site(tmp_path):
+    """Item 1, quiet-fname direction: one candidate module HAS a family but
+    its `quiet` raises nothing, the other has none -- the call cannot raise a
+    refusal under any resolution, so it is not a site (same contract as the
+    single-callee `caller_quiet` pin)."""
+    files = _collision_tree(tmp_path, PLAY_FAMILY_RAISES, PLAY_PLAIN_HELPER,
+                            "caller_quiet_stem", CALLER_AMBIG_QUIET)
+    idx = rss.build_index(files)
+    assert _sites_for(files, idx, "caller_quiet_stem") == []
+
+
+def test_partially_raising_collision_is_still_ambiguous_callee(tmp_path):
+    """The filter must not over-filter: one raising candidate keeps the site,
+    with every candidate listed (a `any`, never `all`, filter)."""
+    files = _collision_tree(tmp_path, PLAY_FAMILY_RAISES, PLAY_PLAIN_HELPER,
+                            "caller_partial", CALLER_AMBIG_PARTIAL)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_partial")
+    assert len(got) == 1, got
+    s = got[0]
+    assert s["classification"] == "ambiguous-callee", s
+    assert len(s["candidates"]) == 2, s
+
+
+def test_candidates_are_repo_relative_when_under_root(tmp_path, monkeypatch):
+    """Item 2: `candidates` used str(c.path) -- absolute, host-dependent --
+    while `site` was ROOT-relative; under a monkeypatched ROOT the json-facing
+    field must carry repo-relative paths, so the census is reproducible
+    across hosts (#1183 consumes --json)."""
+    monkeypatch.setattr(rss, "ROOT", tmp_path)
+    files = _collision_tree(tmp_path, PLAY_FAMILY_RAISES, PLAY_PLAIN_HELPER,
+                            "caller_partial", CALLER_AMBIG_PARTIAL)
+    idx = rss.build_index(files)
+    s = _sites_for(files, idx, "caller_partial")[0]
+    assert s["candidates"] == ["alpha/play.py", "beta/play.py"], s
+
+
+def test_candidates_outside_root_fall_back_to_the_absolute_path(tmp_path):
+    """Synthetic test trees live outside ROOT: the ValueError fallback keeps
+    them scannable, exactly as `site` already does."""
+    files = _collision_tree(tmp_path, PLAY_FAMILY_RAISES, PLAY_PLAIN_HELPER,
+                            "caller_partial", CALLER_AMBIG_PARTIAL)
+    idx = rss.build_index(files)
+    s = _sites_for(files, idx, "caller_partial")[0]
+    assert all(c.startswith(str(tmp_path)) for c in s["candidates"]), s
+
+
+def test_shadowed_alias_is_attributed_to_the_imported_def(tmp_path):
+    """Item 4, #1188's fourth edge case: `from mod_a import load as l` with a
+    LOCAL `l = ...` rebinding before the call. Bindings are module-level, so
+    the call is still attributed to mod_a.load -- the documented blind spot
+    (`a local name shadowing an import can misattribute`). Pinned so a future
+    scope-tracking change moves this test deliberately, not a user's census."""
+    files = _tree(tmp_path)
+    p = tmp_path / "caller_shadow.py"
+    p.write_text(CALLER_SHADOWED_ALIAS)
+    files.append(p)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_shadow")
+    assert len(got) == 1, got
+    s = got[0]
+    assert s["callee"] == "mod_a.load", s
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
