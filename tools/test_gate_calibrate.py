@@ -1,4 +1,4 @@
-"""Known answers for tools/gate_calibrate.py (#379). Fast: no audio is read."""
+"""Known answers for tools/gate_calibrate.py (#379). Uses synthetic audio for the old-bar CLI controls."""
 import copy
 import csv
 import json
@@ -300,35 +300,56 @@ def test_decide_does_not_count_an_unrun_control_as_a_pass():
 # ---------------------------------------------------------------------------
 # #1307: a missing neighbour WAV must REFUSE (exit 2, a row), never traceback.
 # ---------------------------------------------------------------------------
-def _old_bar_fixture(tmp_path, monkeypatch, drop_neighbour):
-    """Refs dir where BD's target exists and, unless `drop_neighbour`, so do its
-    neighbours. The ONLY defect in the incomplete case is the missing WAV."""
+def _old_bar_fixture(tmp_path, drop_neighbour):
+    """One BD take, all its expected reference WAVs, and a longer-decay render."""
     import numpy as np
+    from scipy.io import wavfile
 
     rel = pg.target_rel("BD")
     nbs = pg.neighbours("BD", rel)
     assert nbs, "BD must be a multi-take sound for this control to mean anything"
-    present = [rel, *nbs[1:]] if drop_neighbour else [rel, *nbs]
-    for p in present:
-        (tmp_path / p).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / p).write_bytes(b"x")
-    rng = np.random.default_rng(0)
-    sig = np.concatenate([np.zeros(2400), rng.standard_normal(9600) * np.exp(-np.arange(9600) / 1500)])
-    monkeypatch.setattr(pg, "load_wav", lambda p: (sig.copy(), 48000))
-    # One valid take row, so the COMPLETE fixture runs the real function end to end.
+    noise = np.random.default_rng(0).standard_normal(9600)
+    samples = np.arange(len(noise))
+
+    def write_hit(path, decay):
+        sig = np.concatenate([np.zeros(2400), noise * np.exp(-samples / decay)])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        wavfile.write(path, 48000, (sig / np.abs(sig).max() * 30000).astype(np.int16))
+
+    write_hit(tmp_path / rel, 1500)
+    for nb in nbs:
+        write_hit(tmp_path / nb, 1800)
+    write_hit(tmp_path / "ours" / "BD.wav", 3000)
+    if drop_neighbour:
+        (tmp_path / nbs[0]).unlink()
     tabs = {"BD": {"target": rel, "rows": [{"rel": "x/take.wav", "d": _d(0.5)}]}}
     return tabs, nbs[0]
 
 
-def test_old_bar_context_records_refused_row_naming_the_missing_wav(tmp_path, monkeypatch):
-    tabs, gone = _old_bar_fixture(tmp_path, monkeypatch, drop_neighbour=True)
+def _run_old_bar_cli(tmp_path, monkeypatch, cli, selection, *subcommand, drop_neighbour):
+    tabs, gone = _old_bar_fixture(tmp_path, drop_neighbour)
+    tpath = tmp_path / "tables.json"
+    tpath.write_text(json.dumps({"tables": tabs}))
+    # Hold the independent qualification decision fixed while exercising the real
+    # WAV lookup, bar, render comparison, JSON writer and exit path in each CLI.
+    monkeypatch.setattr(cli, "calibrate", lambda tabs, override: {"status": "CALIBRATED", **selection})
+    monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: {"sounds_with_bar": ["BD"]})
+    monkeypatch.setattr(cli, "decide", lambda q, injected: {"status": "QUALIFIED"})
+    out = tmp_path / "out.json"
+    rc = cli.main([*subcommand, "--refs", str(tmp_path), "--tables", str(tpath),
+                   "--ours", str(tmp_path / "ours"), "--out", str(out)])
+    return rc, out, gone
+
+
+def test_old_bar_context_records_refused_row_naming_the_missing_wav(tmp_path):
+    tabs, gone = _old_bar_fixture(tmp_path, drop_neighbour=True)
     out = gc.old_bar_context(tabs, tmp_path, None)
     assert out["BD"]["old_bar"] == "REFUSED"
     assert gone in out["BD"]["why"]  # not a blanket swallow: names the defect
 
 
 def test_old_bar_context_refusal_does_not_hide_other_sounds(tmp_path, monkeypatch):
-    tabs, _ = _old_bar_fixture(tmp_path, monkeypatch, drop_neighbour=True)
+    tabs, _ = _old_bar_fixture(tmp_path, drop_neighbour=True)
     real = pg.bar_for
 
     def bar_for(s, refs, T=None):
@@ -346,26 +367,18 @@ def test_old_bar_context_refusal_does_not_hide_other_sounds(tmp_path, monkeypatc
 def test_main_exits_refused_and_still_writes_out(tmp_path, monkeypatch):
     import exit_contract
 
-    tabs, _ = _old_bar_fixture(tmp_path, monkeypatch, drop_neighbour=True)
-    tpath = tmp_path / "tables.json"
-    tpath.write_text(json.dumps({"tables": tabs}))
-    monkeypatch.setattr(gc, "calibrate", lambda t, k=None: {"k": None, "status": "stub"})
-    monkeypatch.setattr(gc, "regroup", lambda t: t)
-    monkeypatch.setattr(pg, "provenance", lambda a: {})
-    out = tmp_path / "out.json"
-    rc = gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tpath), "--out", str(out)])
+    rc, out, gone = _run_old_bar_cli(tmp_path, monkeypatch, gc, {"k": 1}, "calibrate", drop_neighbour=True)
+    report = json.loads(out.read_text())
+    assert report["decision"]["status"] == "QUALIFIED"
+    row = report["calibration"]["old_bar_context"]["BD"]
+    assert row["old_bar"] == "REFUSED" and gone in row["why"]
     assert rc == exit_contract.REFUSED == 2
-    assert json.loads(out.read_text())["calibration"]["old_bar_context"]["BD"]["old_bar"] == "REFUSED"
 
 
 def test_main_exits_zero_when_every_old_bar_builds(tmp_path, monkeypatch):
-    tabs, _ = _old_bar_fixture(tmp_path, monkeypatch, drop_neighbour=False)
-    tpath = tmp_path / "tables.json"
-    tpath.write_text(json.dumps({"tables": tabs}))
-    monkeypatch.setattr(gc, "calibrate", lambda t, k=None: {"k": None, "status": "stub"})
-    monkeypatch.setattr(gc, "regroup", lambda t: t)
-    monkeypatch.setattr(pg, "provenance", lambda a: {})
-    out = tmp_path / "out.json"
-    assert gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tpath), "--out", str(out)]) == 0
-    ctx = json.loads(out.read_text())["calibration"]["old_bar_context"]
-    assert ctx["BD"]["old_bar"] != "REFUSED" and ctx["BD"]["n_takes"] == 1   # the real function ran
+    rc, out, _ = _run_old_bar_cli(tmp_path, monkeypatch, gc, {"k": 1}, "calibrate", drop_neighbour=False)
+    assert rc == 0
+    report = json.loads(out.read_text())
+    assert report["decision"]["status"] == "QUALIFIED"
+    ctx = report["calibration"]["old_bar_context"]
+    assert ctx["BD"]["old_bar"] == "808-neighbour" and ctx["BD"]["n_takes"] == 1   # the real function ran

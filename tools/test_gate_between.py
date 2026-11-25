@@ -1,15 +1,18 @@
-"""Known answers for tools/gate_between.py (#379, rule v2). Fast: no audio is read."""
+"""Known answers for tools/gate_between.py (#379, rule v2). Uses synthetic audio for the old-bar CLI controls."""
 import copy
 import json
+import math
 import pathlib
 import sys
 
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import gate_between as gb  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
+from test_gate_calibrate import _run_old_bar_cli  # noqa: E402
 
 
 def _d(spec, other=1.0):
@@ -195,38 +198,28 @@ def test_a_refused_injected_run_is_not_a_caught_control():
 # ---------------------------------------------------------------------------
 # #1307: a missing old-bar neighbour WAV must REFUSE through this CLI too.
 # ---------------------------------------------------------------------------
-def _run_between(tmp_path, monkeypatch, drop_neighbour):
-    import test_gate_calibrate as tgc
-
-    tabs, gone = tgc._old_bar_fixture(tmp_path, monkeypatch, drop_neighbour)
-    tpath = tmp_path / "tables.json"
-    tpath.write_text(json.dumps({"tables": tabs}))
-    ours = tmp_path / "ours"
-    ours.mkdir()
-    (ours / "BD.wav").write_bytes(b"x")                  # a render exists: only the neighbour is missing
-    monkeypatch.setattr(gb.gc, "calibrate", lambda t, k=None: {"k": None, "status": "stub"})
-    monkeypatch.setattr(gb, "calibrate", lambda t, p=None: {"p": None, "status": "stub"})
-    monkeypatch.setattr(pg, "provenance", lambda a: {})
-    out = tmp_path / "out.json"
-    rc = gb.main(["--refs", str(tmp_path), "--tables", str(tpath), "--ours", str(ours), "--out", str(out)])
-    return rc, out, gone
-
-
 def test_main_exits_refused_and_table_shows_the_reason(tmp_path, monkeypatch, capsys):
-    import exit_contract
-
-    rc, out, gone = _run_between(tmp_path, monkeypatch, drop_neighbour=True)
+    rc, out, gone = _run_old_bar_cli(tmp_path, monkeypatch, gb, {"p": 0.1}, drop_neighbour=True)
+    report = json.loads(out.read_text())
+    assert report["decision"]["status"] == "QUALIFIED"
+    bd = report["calibration"]["old_bar_context"]["BD"]
+    assert bd["old_bar"] == "REFUSED" and gone in bd["why"]
     assert rc == exit_contract.REFUSED == 2
-    assert gone in json.loads(out.read_text())["calibration"]["old_bar_context"]["BD"]["why"]
     capsys.readouterr()
     assert gb.main(["table", str(out)]) == 0
     table = capsys.readouterr().out
-    assert "REFUSED" in table and gone in table and "no render" not in table
+    assert f"| 1 | BD | REFUSED: {bd['why']} |" in table
 
 
 def test_main_exits_zero_and_ranks_when_the_corpus_is_complete(tmp_path, monkeypatch, capsys):
-    rc, out, _ = _run_between(tmp_path, monkeypatch, drop_neighbour=False)
+    rc, out, _ = _run_old_bar_cli(tmp_path, monkeypatch, gb, {"p": 0.1}, drop_neighbour=False)
     assert rc == 0
     capsys.readouterr()
     assert gb.main(["table", str(out)]) == 0
-    assert "REFUSED" not in capsys.readouterr().out
+    table = capsys.readouterr().out
+    report = json.loads(out.read_text())
+    assert report["decision"]["status"] == "QUALIFIED"
+    bd = report["calibration"]["old_bar_context"]["BD"]
+    ratio = bd["ours"]["worst_ratio"] / bd["mars_best"]["worst_ratio"]
+    assert math.isfinite(ratio) and ratio > 0
+    assert f"| 1 | BD | **{ratio:.1f}x** |" in table
