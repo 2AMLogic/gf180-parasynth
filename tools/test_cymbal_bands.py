@@ -200,3 +200,99 @@ def test_hp3_numerator_is_the_third_difference():
     y = [b.step([v], [(0, 0, 65535)], num=[cc.HP3]) for v in (1000, 0, 0, 0, 0)]
     # amp 65535/65536 floors each output by at most one LSB
     assert all(abs(v - w * 1000) <= 1 for v, w in zip(y, (1, -3, 3, -1, 0))), y
+
+
+# --- thirds() must refuse, not divide by, an empty or ~silent window (#1197) --
+# Both records below were measured on main BEFORE the guard: the late window of
+# the first has e_tot = 5.5e-110 > 0 (zero-phase filter ringing; window share
+# 3.7e-112 of the first-second energy) and thirds() returned 792.59 dB for
+# ALL 14 bands; the second raised ZeroDivisionError on an empty slice.
+
+
+def _silent_late_record():
+    """1 s of prepared record whose energy ends long before 300 ms -- the
+    exact shape #1197 is about. The ringing it leaves in [0.3, 1.0) is
+    positive, so only the share floor (not a bare `e_tot <= 0`) catches it."""
+    y = np.zeros(SR)
+    y[:2000] = np.random.default_rng(7).standard_normal(2000) * 0.1
+    return cb.rc.prepare(y, SR, side="silent-late")
+
+
+def test_thirds_refuses_a_window_past_the_end_of_the_record():
+    """RED on main: ZeroDivisionError, an unclassified crash, where the
+    contract says the refusal must be (#1197's short-record repro)."""
+    n = cb.rc.required_lead_samples(SR)
+    y = np.zeros(n + int(0.15 * SR))
+    y[n:n + 2000] = np.random.default_rng(8).standard_normal(2000) * 0.1
+    y = cb.rc.prepare(y, SR, side="short-record")
+    with pytest.raises(cb.Refused, match="silent"):
+        cb.thirds(y, SR, 0.3, 1.0)
+
+
+def test_thirds_refuses_a_silent_late_window_rather_than_reporting_ringing():
+    """RED on main: returns ~800 dB re ringing for every band, a finite figure
+    that looks exactly like data (#1197's silent-late repro; 792.59 dB with
+    seed 7). The share floor must refuse it: 3.7e-112 of the strike's
+    first-second energy is 110 orders of magnitude below the 1e-6 floor
+    measure() applies to band shares."""
+    with pytest.raises(cb.Refused, match="silent"):
+        cb.thirds(_silent_late_record(), SR, 0.3, 1.0)
+
+
+def test_thirds_default_window_known_answer_is_unchanged():
+    """The guard must not change valid results: for the default window
+    [0, ENERGY_S) the window IS the reference, so the floor degenerates to
+    `e_tot <= 0`. Known answers measured on main BEFORE the guard landed
+    (strike(): tau_l=0.10, tau_hs=0.012, tau_hd=0.20, seeds 1/2)."""
+    r = cb.thirds(strike(), SR)
+    expect = {"1000": -101.11, "1260": -84.68, "1587": -66.82, "2000": -42.09,
+              "2520": -13.67, "3175": -7.56, "4000": -6.97, "5040": -22.14,
+              "6350": -16.84, "8000": -8.39, "10079": -5.98, "12699": -12.76,
+              "16000": -48.19, "20159": -89.56}
+    assert sorted(r) == sorted(expect)
+    for k, v in expect.items():
+        assert r[k] == pytest.approx(v, abs=0.05), k
+
+
+def test_thirds_late_window_still_measures_a_realistic_strike_tail():
+    """The floor must not refuse a VALID late window: the same strike's
+    [0.3, 1.0) window holds 1.3e-2 of the first-second energy (measured on
+    main), six orders of magnitude above the floor, and its 10 kHz DECAY band
+    still dominates the tail exactly as in the default window."""
+    r = cb.thirds(strike(), SR, 0.3, 1.0)
+    assert len(r) == 14 and all(np.isfinite(list(r.values())))
+    assert r["10079"] == pytest.approx(-4.18, abs=1.0)
+    assert r["10079"] > r["2520"] + 3.0
+
+
+def test_refused_from_thirds_exits_refused_not_traceback_in_both_callers(
+        monkeypatch, capsys, tmp_path):
+    """Both CLIs that reach thirds() -- cymbal_bands.main --shipped via
+    shipped_vs_fischer (cymbal_bands.py:249-252) and cymbal_candidate_eval.main
+    via _main_body, which holds its thirds() calls (cymbal_candidate_eval.py:
+    187-189) -- must catch the new refusal and exit REFUSED, never 1 as a
+    traceback (#1160's contract, stated for thirds() in that module's own
+    comment at lines 145-147). The handlers are pinned here by injecting the
+    refusal at the innermost real function each main() calls."""
+    import refusal
+    from exit_contract import REFUSED
+
+    assert issubclass(cb.Refused, refusal.Refused)
+
+    def boom(refs):
+        raise cb.Refused("silent")
+
+    monkeypatch.setattr(cb, "shipped_vs_fischer", boom)
+    got = cb.main(["--shipped", "--refs", str(tmp_path), "--out", str(tmp_path / "o.json")])
+    assert got == REFUSED
+    assert "REFUSED: silent" in capsys.readouterr().err
+
+    import cymbal_candidate_eval as ce
+
+    def boom2(a, refs):
+        raise cb.Refused("silent")
+
+    monkeypatch.setattr(ce, "_main_body", boom2)
+    got = ce.main(["--refs", str(tmp_path), "--out", str(tmp_path / "o.json")])
+    assert got == REFUSED
+    assert "REFUSED: silent" in capsys.readouterr().err

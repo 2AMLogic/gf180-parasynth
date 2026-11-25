@@ -17,12 +17,12 @@ Keyboard, laid out like a piano octave:
     [ / ]     cutoff  down / up        (hold shift-ish: use { } for big steps)
     - / =     resonance down / up
     ; / '     drive down / up
-    , / .     filter envelope amount
+    < / >     filter envelope amount down / up (shift + , / .)
     SPACE     hold the last note on (sustain) -- the filter-exploring switch
     1..5      presets: bass, lead, sweep, growl, whistle
-    n m k l   drums: kick, snare, hat, open hat
+    n m , .   drums: kick, snare, hat, open hat
     o p       drums: fm tom, fm bell
-    g         glide on/off
+    G         glide on/off (capital G; lowercase g is a note)
     ?         print this again
     q         quit
 """

@@ -49,12 +49,12 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **3311 commits over 1625 hours.**
+Measured from git, not remembered. **3347 commits over 1633 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 4423 | 2.7 |
-| injected controls | 337 | 0.2 |
+| tests | 4477 | 2.7 |
+| injected controls | 347 | 0.2 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,003 | 7 |
 
@@ -509,13 +509,27 @@ locks it.
 ## Playing it
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install numpy sounddevice mido python-rtmidi pyserial
+python3 -m venv .venv && .venv/bin/pip install numpy sounddevice
 .venv/bin/python audition/play.py
 ```
 
+Keyboard audition needs only those two: without mido the player starts in
+keyboard mode and reports `midi in : none -- computer keyboard only`.
+
 `a s d f g h j k` is a white-key octave, `w e t y u` the sharps. `SPACE` holds
-a note on; `[` `]` sweep the cutoff, `-` `=` resonance, `;` `'` drive. A MIDI
-device is auto-detected (CC 74 cutoff, CC 71 resonance, CC 73 drive).
+a note on; `[` `]` sweep the cutoff, `-` `=` resonance, `;` `'` drive.
+
+Optional add-ons, each installed on the line of the tool that needs it:
+
+```bash
+.venv/bin/pip install mido python-rtmidi  # MIDI in for audition/play.py
+.venv/bin/pip install pyserial            # the FPGA UART bridge (fpga/uart_host.py, fpga/ARTY.md)
+```
+
+With mido present a MIDI device is auto-detected (CC 74 cutoff, CC 71
+resonance, CC 73 drive). A broken MIDI backend — python-rtmidi with no ALSA
+sequencer — still fails enumeration at startup; leave the MIDI pair off and
+play from the keyboard there.
 
 ```bash
 .venv/bin/python -m pytest model/ spec/reference -q   # the model's tests
