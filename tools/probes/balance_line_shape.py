@@ -676,7 +676,15 @@ if __name__ == "__main__":
                   "fixture": cmd_fixture, "noise": cmd_noise,
                   "records": cmd_records, "survey": cmd_survey,
                   "sweep": cmd_sweep, "margin": cmd_margin}[cmd](rest))
-    except Refused as e:
+    # `refusal.Refused`, not the local class (#1183, `run_case.*` family):
+    # `records` reaches `RC.load_reference` / `RC.prepare` through
+    # `_real_records()`, and `run_case.Refused` is
+    # `preparation_contract.Refused` -- a SIBLING the local handler cannot
+    # catch, which let a silent corpus WAV escape as an exit-1 traceback
+    # (#1162 fixed the same shape in rs_guard_band). Unrelated exceptions
+    # still fall through: this catches only refusals, never
+    # `except Exception`.
+    except refusal.Refused as e:
         print(f"REFUSED  {e}")
         sys.exit(2)
     except KeyError:

@@ -998,7 +998,7 @@ class Bridge:
         if not quiet:
             for row in rows:
                 print(f"  send f{row.send_frame:<6} {row.kind:<7} "
-                      f"{row.packet.hex()} -> applies f{row.apply_frame}")
+                      f"{row.packet.hex()} -> applies {fmt_apply_frame(row.apply_frame, prefix='f')}")
         return rows
 
     @staticmethod
@@ -1103,7 +1103,7 @@ class Bridge:
             if not quiet:
                 for row in rows:
                     print(f"  send f{row.send_frame:<6} {row.kind:<7} "
-                          f"{row.packet.hex()} -> applies f{row.apply_frame}")
+                          f"{row.packet.hex()} -> applies {fmt_apply_frame(row.apply_frame, prefix='f')}")
             return rows
         try:
             rows_ev = plan_shifted(ev_cmds, baud=baud, start_frame=lead2,
@@ -1121,7 +1121,7 @@ class Bridge:
         if not quiet:
             for row in rows:
                 print(f"  send f{row.send_frame:<6} {row.kind:<7} "
-                      f"{row.packet.hex()} -> applies f{row.apply_frame}")
+                      f"{row.packet.hex()} -> applies {fmt_apply_frame(row.apply_frame, prefix='f')}")
         return rows
 
     # ---- rolling scheduling --------------------------------------------------
@@ -1349,17 +1349,19 @@ class Bridge:
         return last
 
 
+def fmt_apply_frame(apply_frame: int, *, prefix: str = "") -> str:
+    """`-` for a row with no apply frame (status/abort keep the -1 default)."""
+    return f"{prefix}{apply_frame}" if apply_frame >= 0 else "-"
+
+
 def render_plan(plan_rows: list, *, anchor_frame: int = 0) -> str:
     lines = [f"{'#':>3} {'send@frame':>10} {'accept':>7} {'due':>7} {'applies':>8}  bytes",
              f"{'':>3} {'contract: device time, not host sleeps':>48}"]
     for row in plan_rows:
         due = f"{row.due}" if row.due >= 0 else "-"
         accept = f"{row.accept_frame}" if row.accept_frame >= 0 else "-"
-        # apply_frame's -1 is the "no apply frame" sentinel (status/abort);
-        # printed raw it reads as a device time
-        applies = f"{row.apply_frame}" if row.apply_frame >= 0 else "-"
         lines.append(f"{row.index:>3} {row.send_frame:>10} {accept:>7} {due:>7} "
-                     f"{applies:>8}  {row.packet.hex()}")
+                     f"{fmt_apply_frame(row.apply_frame):>8}  {row.packet.hex()}")
     return "\n".join(lines)
 
 
@@ -1524,14 +1526,14 @@ def preflight(rows: list, *, baud: int = DEFAULT_BAUD,
     The host never relies on the device dropping packets and never silently
     re-times a fixture to fit the wire."""
     cyc = byte_cycles(baud)
-    packet_frames = {8: 8 * cyc / CYC_PER_FRAME, 10: 10 * cyc / CYC_PER_FRAME}
+    frames_per_event_packet = budget(baud)["frames_per_event_packet"]
     ev_rows = [r for r in rows if r.kind == "event"]
     total_bytes = sum(len(r.packet) for r in rows)
     report = {
         "verdict": "FEASIBLE", "baud": baud, "packets": len(rows),
         "events": len(ev_rows), "bytes": total_bytes,
         "event_queue": event_queue, "watermark": watermark,
-        "frames_per_event_packet": round(packet_frames[10], 1),
+        "frames_per_event_packet": round(frames_per_event_packet, 1),
     }
     if not ev_rows:
         report["reason"] = "no scheduled events: nothing can queue"
@@ -1605,7 +1607,7 @@ def preflight(rows: list, *, baud: int = DEFAULT_BAUD,
         f"event packet {i} cannot be delivered in time: earliest acceptance "
         f"frame {first_miss['accept']} is at or after its due "
         f"{first_miss['due']}. The wire carries one 10-byte event packet per "
-        f"{packet_frames[10]:.1f} frames at {baud} baud but this fixture "
+        f"{frames_per_event_packet:.1f} frames at {baud} baud but this fixture "
         f"schedules one every {avg_gap:.1f} frames; the queue's peak demand "
         f"is {peak} against a depth of {event_queue} (first excess at packet "
         f"index {first_excess}). The fixture cannot preload and flow control "
@@ -1837,17 +1839,19 @@ def write_capture(prefix: str, rows: list, *, origin: int,
 def budget(baud: int = DEFAULT_BAUD) -> dict:
     """The link's numbers, from the contract. Quoted wherever a schedule is."""
     cyc = byte_cycles(baud)
-    per_frame = CYC_PER_FRAME / cyc
+    frames_per_write_packet = 8 * cyc / CYC_PER_FRAME
+    frames_per_event_packet = 10 * cyc / CYC_PER_FRAME
+    event_packets_per_frame = 1 / frames_per_event_packet
     return {
         "baud": baud,
         "bytes_per_s": CLK_HZ / cyc,
-        "frames_per_write_packet": CYC_PER_FRAME / (8 * cyc),
-        "frames_per_event_packet": CYC_PER_FRAME / (10 * cyc),
-        "event_packets_per_frame": per_frame / 10,
+        "frames_per_write_packet": frames_per_write_packet,
+        "frames_per_event_packet": frames_per_event_packet,
+        "event_packets_per_frame": event_packets_per_frame,
         "write_slots_per_frame": WRITE_SLOTS,
         "event_queue": EVENT_QUEUE_DEPTH,
         "write_queue": WRITE_QUEUE_DEPTH,
-        "max_sustained_event_rate_per_kframe": per_frame / 10 * 1000,
+        "max_sustained_event_rate_per_kframe": event_packets_per_frame * 1000,
     }
 
 
@@ -2032,7 +2036,7 @@ def main(argv=None, *, bridge_factory=None) -> int:
         print(render_plan(rows))
         print(f"contract: {b['write_slots_per_frame']} write slots/frame, "
               f"event queue {b['event_queue']}, write queue {b['write_queue']}, "
-              f"1 event packet per {1/b['frames_per_event_packet']:.1f} frames at this baud")
+              f"1 event packet per {b['frames_per_event_packet']:.1f} frames at this baud")
         print(f"preflight: {verdict['verdict']} ({verdict.get('mode', 'none')}) -- "
               f"{verdict['reason']}")
         if verdict["verdict"] != "FEASIBLE":
