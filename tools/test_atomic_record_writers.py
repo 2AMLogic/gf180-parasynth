@@ -234,6 +234,31 @@ def test_a_kill_during_the_record_write_leaves_the_previous_record_intact(
         f"{list(tmp_path.glob('*tmp*'))}")
 
 
+def test_sweep_report_survives_an_interrupted_replacement(tmp_path, monkeypatch):
+    import res_tuning
+
+    records = ROOT / "docs" / "res-tuning"
+    sweep = json.loads((records / "sweeps.json").read_text())
+    expected = (records / "sweeps.txt").read_bytes()
+    target = tmp_path / "sweeps.txt"
+    target.write_bytes(b"previous report\n")
+
+    def interrupt(src, dst):
+        assert pathlib.Path(src).read_bytes() == expected
+        assert pathlib.Path(dst) == target
+        raise OSError("injected interruption before replace")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "replace", interrupt)
+        with pytest.raises(OSError, match="injected interruption before replace"):
+            res_tuning.write_sweep_artifact(sweep, str(target))
+    assert target.read_bytes() == b"previous report\n"
+    assert list(tmp_path.iterdir()) == [target]
+
+    res_tuning.write_sweep_artifact(sweep, str(target))
+    assert target.read_bytes() == expected
+
+
 @pytest.mark.parametrize("modname,fn", WRITERS)
 def test_no_module_writes_a_record_inline_any_more(modname, fn):
     """The routing half of the control above. The injected kill drives the

@@ -165,25 +165,6 @@ def write_json_atomic(path: str, value, sort_keys: bool = False, default=None) -
             pass
 
 
-def write_text_atomic(path: str, text: str) -> None:
-    """Replace a plain-text report atomically (same discipline as
-    `write_json_atomic`): a kill mid-write leaves the previous file standing."""
-    parent = os.path.dirname(os.path.abspath(path))
-    os.makedirs(parent, exist_ok=True)
-    temporary = f"{path}.tmp-{os.getpid()}"
-    try:
-        with open(temporary, "w") as fh:
-            fh.write(text)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(temporary, path)
-    finally:
-        try:
-            os.unlink(temporary)
-        except FileNotFoundError:
-            pass
-
-
 def summarise(results: list[dict], tail: int = 4) -> str:
     bar = "=" * 78
     lines = [bar]

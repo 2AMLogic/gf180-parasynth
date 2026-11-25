@@ -70,6 +70,7 @@ from ring_estimator import (MIN_CYCLES, AGREE_REL, SUSTAIN_FLOOR,   # noqa: E402
                             SUSTAIN_DROP_DB, Refused, _finite,
                             is_sustained, ring_frequency)
 import voice_fx as vf                                               # noqa: E402
+from atomic_text import write_text_atomic                           # noqa: E402
 import run_all                                                      # noqa: E402
 
 
@@ -474,7 +475,7 @@ def write_sweep_artifact(res: dict, path: str) -> None:
     lines.append("")
     lines.append(f"chosen by the pre-registered selection rules: LAW_DEGREE "
                  f"{res['chosen']['LAW_DEGREE']}, CORR_ENTRIES {res['chosen']['CORR_ENTRIES']}")
-    run_all.write_text_atomic(str(path), "\n".join(lines) + "\n")
+    write_text_atomic(path, "\n".join(lines) + "\n")
 
 
 def run_validation(plan: dict, law_degree: int = LAW_DEGREE, entries: int = CORR_ENTRIES) -> dict:
@@ -527,7 +528,7 @@ def write_validation_artifact(rep: dict, plan: dict, path: str) -> None:
     for k, ok in rep["verdict"]["checks"].items():
         lines.append(f"{'PASS' if ok else 'FAIL'} {k}")
     lines.append(f"OVERALL {'PASS' if rep['verdict']['ok'] else 'FAIL'}")
-    run_all.write_text_atomic(str(path), "\n".join(lines) + "\n")
+    write_text_atomic(path, "\n".join(lines) + "\n")
 
 
 # =============================================================================

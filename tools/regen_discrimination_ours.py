@@ -93,6 +93,7 @@ sys.path.insert(0, MODEL)
 sys.path.insert(0, HERE)
 import reference_compare as rc                                      # noqa: E402
 import refusal
+from atomic_text import write_text_atomic                           # noqa: E402
 import run_all                                                      # noqa: E402
 
 
@@ -339,7 +340,7 @@ def main(argv=None) -> int:
         # reader could mistake for the product of a complete one.
         write_json(SHIPPED, shipped, default=str)
         print(f"wrote {SHIPPED} ({len(shipped)} keys)", flush=True)
-        run_all.write_text_atomic(str(report_path), r.stdout)
+        write_text_atomic(report_path, r.stdout)
         print(r.stdout)
         print(f"wrote {report_path}", flush=True)
         return 0
