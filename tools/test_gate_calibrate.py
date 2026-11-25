@@ -8,6 +8,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 
@@ -287,6 +288,52 @@ VAL9 = ("BD", "CY", "HC", "HT", "LC", "LT", "MC", "MT", "SD")
 FORCE_K5 = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/gate-379/mars-calibration/calibrationforcek5.json"
 
 
+def test_non_utf8_index_refuses_rather_than_raises(real, monkeypatch, tmp_path):
+    bad = tmp_path / "bad.tsv"
+    bad.write_bytes(b"path\n\xff\n")
+    monkeypatch.setattr(gc, "INDEX", bad)
+    monkeypatch.setattr(gc.expected_takes, "__defaults__", (bad,))
+    for fk in (None, 3):
+        cal = gc.calibrate(_zero(real), force_k=fk)
+        assert cal["k"] is None and cal["sounds"] == {}
+        assert cal["status"].startswith("REFUSED: incomplete evidence: cannot read the file index bad.tsv (UnicodeDecodeError)")
+
+
+def test_q4_refuses_non_utf8_index(monkeypatch, tmp_path):
+    record = json.loads(FORCE_K5.read_text())
+    q = record["qualification"]
+    q["validation"] = gc.summarize_validation(record["calibration"])
+    assert gc.decide(q, False)["unrun"] == []
+    bad = tmp_path / "bad.tsv"
+    bad.write_bytes(b"path\n\xff\n")
+    monkeypatch.setattr(gc, "INDEX", bad)
+    monkeypatch.setattr(gc.expected_takes, "__defaults__", (bad,))
+
+    dec = gc.decide(q, False)
+    assert dec["status"] == "REFUSED" and dec["unrun"] == ["Q4 stays green"]
+    assert "bad.tsv (UnicodeDecodeError)" in dec["gates"]["Q4 stays green"]["observed"]
+
+
+@pytest.mark.parametrize("rule", ["v1", "v2"])
+def test_inventory_refusal_skips_participation_checks_for_malformed_rows(real, rule):
+    tabs = {**real, "BD": dict(real["BD"])}
+    del tabs["BD"]["rows"]
+    why = gc.evidence_refusal(tabs, rule=rule)
+    assert "BD: record has no 'rows' list" in why
+
+
+def test_table_without_missing_key_refuses_naming_sound_and_field(real):
+    t = _zero(real)
+    assert gc.calibrate(t)["status"] == "CALIBRATED"  # control: restored input is clean
+    del t["BD"]["missing"]
+    for fk in (None, 3):
+        cal = gc.calibrate(t, force_k=fk)
+        assert cal["k"] is None and cal["sounds"] == {}
+        assert cal["status"].startswith("REFUSED: incomplete evidence") and "BD: record has no 'missing'" in cal["status"]
+    t["BD"]["missing"] = []
+    assert gc.calibrate(t)["status"] == "CALIBRATED"
+
+
 def test_decide_does_not_count_an_unrun_control_as_a_pass():
     q = {"sounds_with_bar": ["BD"], "start_red": {"BD": "FAIL", "BD-silence": "REFUSED"},
          "seeded_summary": {"n": 10, "caught": 10, "missed": [], "rate": 1.0},
@@ -329,7 +376,7 @@ def test_v1_cli_refusal_on_empty_rows_is_not_masked_by_old_bar_context(real, tmp
     tpath.write_text(json.dumps({"tables": _damage(real, "empty")}))
     out = tmp_path / "cal.json"
     rc = gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tpath), "--out", str(out), "--force-k", "3"])
-    assert rc == 0 and out.exists()
+    assert rc == exit_contract.REFUSED and out.exists()
     res = json.loads(out.read_text())
     printed = json.loads(capsys.readouterr().out)
     assert res["decision"]["status"] == "REFUSED" and printed["status"] == "REFUSED"
@@ -377,3 +424,47 @@ def test_q4_expected_validation_differs_between_v1_and_v2_rules():
     q_v1["validation"]["rule"] = "v1"
     dec_v1 = gc.decide(q_v1, False, expected=exp)
     assert dec_v1["status"] == "REFUSED" and "LT" in dec_v1["gates"]["Q4 stays green"]["observed"]
+
+
+# --- #1329: a REFUSED decision must not exit 0 (tools/exit_contract.py) ---------
+
+
+def _run_calibrate_main(tmp_path, tables, extra=()):
+    tp = tmp_path / "tables.json"
+    tp.write_text(json.dumps({"tables": tables}))
+    out = tmp_path / "out.json"
+    rc = gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tp), "--out", str(out), *extra])
+    return rc, out
+
+
+def test_main_exits_refused_when_no_k_reaches_coverage(real, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
+    rc, out = _run_calibrate_main(tmp_path, real)
+    decision = json.loads(capsys.readouterr().out)
+    assert decision["status"] == "REFUSED" and decision["why"].startswith("REFUSED: no k reaches")
+    assert json.loads(out.read_text())["decision"]["status"] == "REFUSED"   # artefact written first
+    assert rc == exit_contract.REFUSED
+
+
+def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
+    """Real main() and real decide; only the upstream measurement is faked so a
+    gate (Q3 shipped-cymbal) is genuinely unrun inside decide()."""
+    q = {"sounds_with_bar": ["BD"], "start_red": {"BD": "FAIL", "BD-silence": "REFUSED"},
+         "seeded_summary": {"n": 10, "caught": 10, "missed": [], "rate": 1.0},
+         "known_bad": {"shipped-cymbal": {"verdict": "REFUSED"}}, "clean": {"BD": "PASS"},
+         "validation": {"rule": "v1", "by_sound": {s: True for s in VAL9}}}
+    monkeypatch.setattr(gc, "calibrate", lambda tabs, force_k=None: {"k": 3, "status": "ok"})
+    monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: q)
+    monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
+    rc, _ = _run_calibrate_main(tmp_path, {})
+    decision = json.loads(capsys.readouterr().out)
+    assert decision["status"] == "REFUSED"
+    assert decision["unrun"] == ["Q3 shipped cymbal", "Q5 corrupted corpus"]
+    assert rc == exit_contract.REFUSED
+
+
+@pytest.mark.parametrize("status,code", [
+    ("REFUSED", 2), ("DIAGNOSTIC (not authority): REFUSED", 2),
+    ("QUALIFIED", 0), ("NOT QUALIFIED", 0), ("DIAGNOSTIC (not authority): QUALIFIED", 0)])
+def test_decision_exit_maps_refused_only(status, code):
+    assert gc.decision_exit({"status": status}) == code

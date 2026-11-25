@@ -66,6 +66,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 
 ROOT = pg.ROOT
@@ -304,6 +305,12 @@ def inventory_issues(tabs: dict, expected: dict) -> tuple[list[str], set[str]]:
             bad.append(f"{s}: no takes in the index")
             skip.add(s)
             continue
+        absent = [f for f in ("rows", "missing") if not isinstance(t.get(f), list)]
+        if absent:
+            # no default: an absent list would assert every take was readable
+            bad.append(f"{s}: record has no '{absent[0]}' list (malformed table)")
+            skip.add(s)
+            continue
         rows = [r["rel"] for r in t["rows"]]
         miss = [m["rel"] for m in t["missing"]]
         dup = sorted({r for r in rows + miss if (rows + miss).count(r) > 1})
@@ -420,7 +427,7 @@ def evidence_refusal(
     if expected is None:
         try:
             expected = expected_takes()
-        except (OSError, KeyError, csv.Error) as e:
+        except (OSError, KeyError, csv.Error, UnicodeDecodeError) as e:
             return (
                 f"REFUSED: incomplete evidence: cannot read the file index {INDEX.name} "
                 f"({type(e).__name__}); completeness is unchecked"
@@ -623,7 +630,7 @@ def validation_refusal_q4(
     if expected is None:
         try:
             expected = expected_takes()
-        except (OSError, KeyError, csv.Error) as e:
+        except (OSError, KeyError, csv.Error, UnicodeDecodeError) as e:
             return (
                 f"REFUSED: incomplete validation evidence: cannot read the file index "
                 f"{INDEX.name} ({type(e).__name__})"
@@ -703,6 +710,19 @@ def injected_outcome(
     return {"QUALIFIED": True, "NOT QUALIFIED": False}.get(dec["status"]), dec
 
 
+def decision_exit(dec) -> int:
+    """Exit code for a decision: REFUSED -> exit_contract.REFUSED, else PASS.
+
+    0 means "the comparison ran and agreed" (tools/exit_contract.py), so a
+    REFUSED decision must not exit 0. A DIAGNOSTIC (not authority) prefix wraps
+    the underlying status, so it is decided on the wrapped one. QUALIFIED /
+    NOT QUALIFIED keep exiting 0 -- mapping NOT QUALIFIED is a separate question.
+    """
+    status = str(dec.get("status", "REFUSED"))
+    status = status.removeprefix("DIAGNOSTIC (not authority): ")
+    return exit_contract.REFUSED if status.startswith("REFUSED") else exit_contract.PASS
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -756,7 +776,7 @@ def main(argv=None) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
     print(json.dumps(dec, indent=1))
-    return 0
+    return decision_exit(dec)
 
 
 if __name__ == "__main__":
