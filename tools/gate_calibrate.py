@@ -57,6 +57,7 @@ FROZEN BEFORE ANY DISTANCE WAS COMPUTED:
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
@@ -228,10 +229,98 @@ def twin_report(tabs: dict) -> dict:
     return rep
 
 
-def calibrate(tabs: dict, force_k: int | None = None) -> dict:
+INDEX = ROOT / "refaudio" / "index" / "808-from-mars.tsv"
+INDEX_PREFIX = "808 From Mars/WAV/01. Individual Hits/"
+
+
+def expected_takes(index: pathlib.Path = INDEX) -> dict:
+    """sound -> the set of take paths (relative to CACHE, as `corpus` writes
+    them) that the committed file index says exist, by the rule `corpus`
+    applies: FOLDER/Clean/{Digital,Tape}/**.wav, no 'Combo'. An independent
+    source for what a complete record must hold (#1301): it does not depend on
+    the submitted rows, nor on `measure`. A missing or unreadable index raises
+    OSError; the caller turns that into a refusal, never a pass."""
+    out = {s: set() for s in FOLDER}
+    with open(index, newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            p = row["path"]
+            if not p.startswith(INDEX_PREFIX) or not p.endswith(".wav"):
+                continue
+            rel = p[len(INDEX_PREFIX):]
+            if "Combo" in rel.rsplit("/", 1)[-1]:
+                continue
+            for s, folder in FOLDER.items():
+                if any(rel.startswith(f"{folder}/Clean/{c}/") for c in CHAINS):
+                    out[s].add(rel)
+    return out
+
+
+def evidence_refusal(tabs: dict, expected: dict | None = None) -> str | None:
+    """None if every declared sound's evidence is complete, else the reason.
+
+    `choose_k` takes its coverage denominator from the sounds that happen to
+    have a development bar and a calibration take, so removing a sound's
+    evidence removes it from the denominator and the record gets MORE
+    permissive (15 sounds emptied: k=3 CALIBRATED on 1/1, where the full
+    corpus is REFUSED on 3/9). Two checks, both against `expected` (the index),
+    neither touching the coverage rule itself:
+
+      1. rows and missing are disjoint, free of duplicates, and together equal
+         the index's take set for the sound. One unreadable take stays
+         legitimate (it sits in `missing`).
+      2. where the INDEX populates both group 0 and group 1 (the sounds
+         `choose_k` can treat as eligible), `rows` still holds a readable take
+         in each. This is what stops `missing` absorbing a sound's evidence
+         while check 1 still sees the full union.
+
+    RESIDUAL (rule 8, stated not closed): selective `missing` entries that
+    leave one readable take in group 0 and in group 1 but change which
+    calibration take is nearest still pass; blocking that needs a per-take
+    signal independent of the record (re-measuring). A forged `rows` plus a
+    forged index also passes; the index is a committed file at the same trust
+    level as the tables."""
+    if expected is None:
+        try:
+            expected = expected_takes()
+        except (OSError, KeyError, csv.Error) as e:
+            return f"REFUSED: incomplete evidence: cannot read the file index {INDEX.name} ({type(e).__name__}); completeness is unchecked"
+    bad = []
+    for s, t in tabs.items():
+        exp = expected.get(s)
+        if not exp:
+            bad.append(f"{s}: no takes in the index")
+            continue
+        rows = [r["rel"] for r in t["rows"]]
+        miss = [m["rel"] for m in t["missing"]]
+        dup = sorted({r for r in rows + miss if (rows + miss).count(r) > 1})
+        if dup:
+            bad.append(f"{s}: {len(dup)} take(s) duplicated or in both rows and missing (e.g. {dup[0]})")
+            continue
+        have = set(rows) | set(miss)
+        if have != exp:
+            bad.append(f"{s}: expected {len(exp)} takes, found {len(have)} ({len(exp - have)} absent, {len(have - exp)} not in the index)")
+            continue
+        idx_groups = {group_of(key_of(r)) for r in exp}
+        if {0, 1} <= idx_groups:
+            got = {group_of(key_of(r)) for r in rows}
+            lost = [GROUP_NAMES[g] for g in (0, 1) if g not in got]
+            if lost:
+                bad.append(f"{s}: no readable take in the {' and '.join(lost)} group ({len(rows)}/{len(exp)} readable)")
+    if bad:
+        return "REFUSED: incomplete evidence for " + "; ".join(bad)
+    return None
+
+
+def calibrate(tabs: dict, force_k: int | None = None, expected: dict | None = None) -> dict:
     """Pure function of the per-take tables: the between-recording bars, the
-    validity of each, and the reason for every missing one."""
+    validity of each, and the reason for every missing one. `expected` is the
+    index's take set per sound (default: the committed file index); the
+    evidence check runs unconditionally, `force_k` included."""
     tabs = regroup(tabs)
+    why = evidence_refusal(tabs, expected)
+    if why:
+        return {"selection": None, "k": None, "sounds": {}, "twins": twin_report(tabs), "status": why,
+                "diagnostic": None}
     sel = choose_k(tabs)
     k = sel["chosen"]
     diagnostic = force_k is not None
