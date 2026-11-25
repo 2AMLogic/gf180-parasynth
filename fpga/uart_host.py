@@ -998,7 +998,7 @@ class Bridge:
         if not quiet:
             for row in rows:
                 print(f"  send f{row.send_frame:<6} {row.kind:<7} "
-                      f"{row.packet.hex()} -> applies f{row.apply_frame}")
+                      f"{row.packet.hex()} -> applies {fmt_apply_frame(row.apply_frame, prefix='f')}")
         return rows
 
     @staticmethod
@@ -1103,7 +1103,7 @@ class Bridge:
             if not quiet:
                 for row in rows:
                     print(f"  send f{row.send_frame:<6} {row.kind:<7} "
-                          f"{row.packet.hex()} -> applies f{row.apply_frame}")
+                          f"{row.packet.hex()} -> applies {fmt_apply_frame(row.apply_frame, prefix='f')}")
             return rows
         try:
             rows_ev = plan_shifted(ev_cmds, baud=baud, start_frame=lead2,
@@ -1121,7 +1121,7 @@ class Bridge:
         if not quiet:
             for row in rows:
                 print(f"  send f{row.send_frame:<6} {row.kind:<7} "
-                      f"{row.packet.hex()} -> applies f{row.apply_frame}")
+                      f"{row.packet.hex()} -> applies {fmt_apply_frame(row.apply_frame, prefix='f')}")
         return rows
 
     # ---- rolling scheduling --------------------------------------------------
@@ -1349,6 +1349,11 @@ class Bridge:
         return last
 
 
+def fmt_apply_frame(apply_frame: int, *, prefix: str = "") -> str:
+    """`-` for a row with no apply frame (status/abort keep the -1 default)."""
+    return f"{prefix}{apply_frame}" if apply_frame >= 0 else "-"
+
+
 def render_plan(plan_rows: list, *, anchor_frame: int = 0) -> str:
     lines = [f"{'#':>3} {'send@frame':>10} {'accept':>7} {'due':>7} {'applies':>8}  bytes",
              f"{'':>3} {'contract: device time, not host sleeps':>48}"]
@@ -1356,7 +1361,7 @@ def render_plan(plan_rows: list, *, anchor_frame: int = 0) -> str:
         due = f"{row.due}" if row.due >= 0 else "-"
         accept = f"{row.accept_frame}" if row.accept_frame >= 0 else "-"
         lines.append(f"{row.index:>3} {row.send_frame:>10} {accept:>7} {due:>7} "
-                     f"{row.apply_frame:>8}  {row.packet.hex()}")
+                     f"{fmt_apply_frame(row.apply_frame):>8}  {row.packet.hex()}")
     return "\n".join(lines)
 
 

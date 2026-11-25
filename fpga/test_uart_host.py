@@ -199,6 +199,31 @@ def test_main_without_port_or_dry_run_refuses():
     assert main(["--dry-run", "load"]) == 0         # dry-run needs no hardware
 
 
+def _applies_cells(text):
+    """The `applies` column (4th-from-last field) of each data row."""
+    return [ln.split()[-2] for ln in text.splitlines()[2:]]
+
+
+@pytest.mark.parametrize("command", [("abort",), ("status",)])
+def test_render_plan_management_row_prints_dash_not_sentinel(command):
+    rows = uh.plan([command], start_frame=0)
+    assert rows[0].apply_frame == -1                  # the sentinel is really there
+    assert _applies_cells(uh.render_plan(rows)) == ["-"]
+
+
+def test_render_plan_write_and_event_rows_keep_their_frames():
+    rows = uh.plan([("write", 0, 0, 0x04, 0), ("event", 5000, 0, 0, 0x20, 0)],
+                   start_frame=0)
+    cells = _applies_cells(uh.render_plan(rows))
+    assert cells == [str(rows[0].accept_frame + 1), str(rows[1].due)]
+
+
+def test_fmt_apply_frame_dash_for_unset():
+    assert uh.fmt_apply_frame(-1) == "-"
+    assert uh.fmt_apply_frame(0) == "0"
+    assert uh.fmt_apply_frame(42) == "42"
+
+
 @pytest.mark.parametrize("command", ["abort", "status"])
 @pytest.mark.parametrize("mode", ["live", "dry-before", "dry-after"])
 def test_management_preview_cannot_touch_a_queued_note(command, mode):
