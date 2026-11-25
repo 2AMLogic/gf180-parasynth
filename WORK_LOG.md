@@ -8,6 +8,39 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-25
 
+- **PR #1295**: fix: validate sound selections before measuring calibration tables
+- **PR #1293**: fix: defer render-only imports so render_miniv4_suite --help/--list run on stdlib Python
+- **PR #1288**: fix: share one qualification rule between snare separator CLI and test
+- **PR #1287**: fix: defer qualified_domain import so MIDI port discovery needs no NumPy
+- **PR #1286**: fix: reject empty or unknown --scenario in the late-event verifier
+- **PR #1285**: test: retire workflow waivers when matching clean runs appear
+- **PR #1283**: fix: check all qualified ground-truth citations in acceptance gate
+- **PR #1277**: fix: load M5A audio dependencies only during scoring
+- **PR #1274**: fix: skip the RTL control when the rolling replay was refused
+- **PR #1273**: fix: catch cross-module Refused at six M1A CLI boundaries
+- **PR #1272**: ci: install soundfile in tools job so the refusal control executes
+- **PR #1270**: fix: return the refusal exit status from M5 measurement tools
+- **PR #1269**: test: pin same-name Refused re-export against narrowed origin guard
+- **PR #1259**: fix: let the R1 quick-start dry run work without SciPy
+- **PR #1201**: controls: real-verifier mixed-baseline evidence, end-to-end make controls runs, drums outdir fix
+- **Issue #1294** (closed): gate_calibrate measure --sounds with no value writes an empty table record and exits 0
+- **Issue #1292** (closed): Defer render-only dependencies in render_miniv4_suite so --list works on stdlib Python
+- **Issue #1290** (closed): Nothing pins share_bound's published values, so widening it would pass both separator entry points
+- **Issue #1284** (closed): Remove the duplicate verdict from the snare separator self-test
+- **Issue #1282** (closed): Defer the voice-model dependency during MIDI port discovery
+- **Issue #1278** (closed): Remove the module-name filter that skips 808 ground-truth citations
+- **Issue #1276** (closed): Require a named scenario when selecting UART late-event checks
+- **Issue #1268** (closed): Defer SciPy and V3-reader imports in mono_m5a_score so named-preset UART, live MIDI, and demo players run without SciPy
+- **Issue #1267** (closed): refusal_sibling_scan: the `nm == FAMILY_NAME` guard has no control for the explicit re-export `from lender import Refused as Refused`
+- **Issue #1266** (closed): Catch cross-module Refused at M5A / M5B / mono_artifact_probe CLI boundaries (7 modules)
+- **Issue #1265** (closed): Catch cross-module Refused at M1A / phase-cycle CLI boundaries (6 modules)
+- **Issue #1262** (closed): measure_repeatability's only refusal control never runs in CI (soundfile absent by omission, not decision)
+- **Issue #1258** (closed): Remove the SciPy requirement from default-patch M5A UART playback
+- **Issue #1252** (closed): STEP_GATED_ALLOWLIST open_issue exemptions have no mechanical retirement, unlike the pending run_all entry
+- **Issue #1229** (closed): A refused rolling RTL replay now runs the rtl_control stage it used to skip
+- **Issue #1202** (closed): Triage the mono_m1a/mono_m5a raiser family: 11 modules whose local-subclass Refused handlers miss the parent class (#1183 remainder)
+- **Issue #1126** (closed): Require a matching clean run before make controls credits an RTL mismatch
+
 - **Issue #1235** (closed): No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only
 - **PR #1240**: test: guard workflow RTL mutant gating and baseline config match
 - **Issue #1248** (closed): uart_host --dry-run status/abort renders the apply_frame sentinel -1 in the 'applies' column
