@@ -1,5 +1,6 @@
 """Known answers for tools/gate_between.py (#379, rule v2). Fast: no audio is read."""
 import copy
+import json
 import pathlib
 import sys
 
@@ -189,3 +190,43 @@ def test_a_refused_injected_run_is_not_a_caught_control():
     bad = _green_q()
     bad["seeded_summary"].update(caught=5, rate=0.5)
     assert gc.injected_outcome(bad)[0] is False                   # completed NOT QUALIFIED = caught
+
+
+# ---------------------------------------------------------------------------
+# #1307: a missing old-bar neighbour WAV must REFUSE through this CLI too.
+# ---------------------------------------------------------------------------
+def _run_between(tmp_path, monkeypatch, drop_neighbour):
+    import test_gate_calibrate as tgc
+
+    tabs, gone = tgc._old_bar_fixture(tmp_path, monkeypatch, drop_neighbour)
+    tpath = tmp_path / "tables.json"
+    tpath.write_text(json.dumps({"tables": tabs}))
+    ours = tmp_path / "ours"
+    ours.mkdir()
+    (ours / "BD.wav").write_bytes(b"x")                  # a render exists: only the neighbour is missing
+    monkeypatch.setattr(gb.gc, "calibrate", lambda t, k=None: {"k": None, "status": "stub"})
+    monkeypatch.setattr(gb, "calibrate", lambda t, p=None: {"p": None, "status": "stub"})
+    monkeypatch.setattr(pg, "provenance", lambda a: {})
+    out = tmp_path / "out.json"
+    rc = gb.main(["--refs", str(tmp_path), "--tables", str(tpath), "--ours", str(ours), "--out", str(out)])
+    return rc, out, gone
+
+
+def test_main_exits_refused_and_table_shows_the_reason(tmp_path, monkeypatch, capsys):
+    import exit_contract
+
+    rc, out, gone = _run_between(tmp_path, monkeypatch, drop_neighbour=True)
+    assert rc == exit_contract.REFUSED == 2
+    assert gone in json.loads(out.read_text())["calibration"]["old_bar_context"]["BD"]["why"]
+    capsys.readouterr()
+    assert gb.main(["table", str(out)]) == 0
+    table = capsys.readouterr().out
+    assert "REFUSED" in table and gone in table and "no render" not in table
+
+
+def test_main_exits_zero_and_ranks_when_the_corpus_is_complete(tmp_path, monkeypatch, capsys):
+    rc, out, _ = _run_between(tmp_path, monkeypatch, drop_neighbour=False)
+    assert rc == 0
+    capsys.readouterr()
+    assert gb.main(["table", str(out)]) == 0
+    assert "REFUSED" not in capsys.readouterr().out

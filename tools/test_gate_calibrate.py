@@ -167,7 +167,8 @@ def _old_bar_fixture(tmp_path, monkeypatch, drop_neighbour):
     rng = np.random.default_rng(0)
     sig = np.concatenate([np.zeros(2400), rng.standard_normal(9600) * np.exp(-np.arange(9600) / 1500)])
     monkeypatch.setattr(pg, "load_wav", lambda p: (sig.copy(), 48000))
-    tabs = {"BD": {"target": rel, "rows": []}}
+    # One valid take row, so the COMPLETE fixture runs the real function end to end.
+    tabs = {"BD": {"target": rel, "rows": [{"rel": "x/take.wav", "d": _d(0.5)}]}}
     return tabs, nbs[0]
 
 
@@ -215,7 +216,8 @@ def test_main_exits_zero_when_every_old_bar_builds(tmp_path, monkeypatch):
     tpath.write_text(json.dumps({"tables": tabs}))
     monkeypatch.setattr(gc, "calibrate", lambda t, k=None: {"k": None, "status": "stub"})
     monkeypatch.setattr(gc, "regroup", lambda t: t)
-    monkeypatch.setattr(gc, "old_bar_context", lambda t, r, o: {"BD": {"old_bar": "808-neighbour"}})
     monkeypatch.setattr(pg, "provenance", lambda a: {})
     out = tmp_path / "out.json"
     assert gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tpath), "--out", str(out)]) == 0
+    ctx = json.loads(out.read_text())["calibration"]["old_bar_context"]
+    assert ctx["BD"]["old_bar"] != "REFUSED" and ctx["BD"]["n_takes"] == 1   # the real function ran
