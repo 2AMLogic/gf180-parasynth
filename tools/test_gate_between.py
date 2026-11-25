@@ -189,3 +189,38 @@ def test_a_refused_injected_run_is_not_a_caught_control():
     bad = _green_q()
     bad["seeded_summary"].update(caught=5, rate=0.5)
     assert gc.injected_outcome(bad)[0] is False                   # completed NOT QUALIFIED = caught
+
+
+# --- #1329: a REFUSED decision must not exit 0 (tools/exit_contract.py) ---------
+
+def _run_between_main(tmp_path):
+    import json
+
+    tp = tmp_path / "tables.json"
+    tp.write_text(json.dumps({"tables": {}}))
+    out = tmp_path / "out.json"
+    return gb.main(["--refs", str(tmp_path), "--tables", str(tp), "--out", str(out)]), out
+
+
+def test_main_exits_refused_when_no_p_reaches_coverage(tmp_path, capsys):
+    import json
+
+    import exit_contract
+
+    rc, out = _run_between_main(tmp_path)
+    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    assert json.loads(out.read_text())["decision"]["status"] == "REFUSED"
+    assert rc == exit_contract.REFUSED
+
+
+def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
+    import exit_contract
+
+    q = _green_q()
+    q["known_bad"][gb.CANDIDATE] = {"verdict": "REFUSED"}
+    monkeypatch.setattr(gb, "calibrate", lambda tabs, force_p=None: {"p": 0.1, "status": "ok", "sounds": {}})
+    monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: q)
+    monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
+    rc, _ = _run_between_main(tmp_path)
+    assert gb.decide(q, False)["status"] == "REFUSED"
+    assert rc == exit_contract.REFUSED
