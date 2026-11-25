@@ -470,6 +470,10 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
     out = replay_and_analyze(fixture, cap, outdir, work, image=target,
                              tail_frames=int(TAIL_S * SR), timeout_s=RTL_TIMEOUT_S,
                              reuse=reuse, none_state="REFUSED")
+    if out["state"] == "REFUSED":
+        # the replay never ran: a control of it would simulate a second time
+        # to answer for a run that does not exist (#1229)
+        return out
     with vub.image_config(target):
         out["control"] = rtl_control(fixture, outdir, vub, work)
     if not out["control"]["caught"] and out["state"] == "PASS":
