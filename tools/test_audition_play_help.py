@@ -1,10 +1,12 @@
 """Controls for the audition player's keyboard guide (issue #1232).
 
 The guide must be checked against what `Player.handle` DOES, not against our
-own idea of the keymap: each key the help advertises for an action is sent to
-the real handler and the named action must happen.  Controls: the old help
-text is fed through the same check and must fail (start red), and lowercase
-`g`/`k` must still play notes.
+own idea of the keymap: for the three rows #1232 repaired — the glide toggle,
+the closed/open hat triggers (`hats[2:]` on the kick/snare/hat row), and the
+filter-envelope down/up keys — the advertised keys are sent to the real handler
+and the named action must happen.  Controls: the reconstructed pre-#1232 help
+text is fed through the same check and must fail on all three rows (start red),
+and lowercase `g`/`k` must still play notes.
 """
 from __future__ import annotations
 import io, re, sys, types, contextlib, importlib
@@ -79,7 +81,7 @@ def test_old_help_fails_control():
                            ", / .     filter envelope amount")
            .replace("n m , .   drums", "n m k l   drums")
            .replace("G         glide on/off (capital G; lowercase g is a note)", "g         glide on/off"))
-    assert len(check(old)) >= 2
+    assert len(check(old)) == 3
 
 
 def test_lowercase_g_k_still_notes():

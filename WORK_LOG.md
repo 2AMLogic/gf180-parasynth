@@ -6,8 +6,34 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-25
+
+- **Issue #1243** (closed): Use one packet-duration calculation for the UART player’s budget and preflight
+- **PR #1247**: fix: give the UART budget packet durations in audio frames
+- **Issue #1217** (closed): rungs.yml pulse2x job: the VOICE_PULSE2X_OFF control's clean twin is an adjacent run_all row, which cannot gate it
+- **PR #1223**: ci: gate the pulse2x VOICE_PULSE2X_OFF control on its clean twin via run_controls
+- **PR #1246**: fix: stop UART status and abort opening the bridge before the dry-run decision
+- **PR #1226**: docs: make MIDI and UART packages optional in the keyboard audition install
+- **PR #1218**: tools: hash tools/delta_report.py in each comparator's SOURCES
+- **PR #1209**: fix: refuse duplicate step names in the roadmap pair gate instead of last-wins
+- **Issue #1245** (closed): Remove early UART dispatch that sends abort and status during --dry-run
+- **Issue #1215** (closed): Make MIDI and UART packages optional in the keyboard audition instructions
+- **Issue #1208** (closed): Decide whether tools/delta_report.py belongs in each comparator's SOURCES (provenance now computed by unhashed code)
+- **Issue #1206** (closed): check_workflows: the #906 pair order gate lets a duplicate guarded step name through (dict-overwrite, no ambiguity refusal)
+- **Issue #1236** (closed): CI: give the full tools pytest job enough time to report its verdict
+- **PR #1242**: ci: raise the tools job budget to 105 minutes so its verdict can report
+- **Issue #1232** (closed): Remove conflicting key assignments from the audition player’s keyboard guide
+- **PR #1233**: fix: correct audition player help keys for glide, hats and filter envelope
+- **Issue #1249** (closed): Harden the audition help control: a silent str.replace no-op still satisfies it
+
 ### 2026-11-24
 
+- **Issue #1214** (closed): refusal_sibling_scan: ambiguous-callee reports family-less callees; --json leaks absolute paths
+- **PR #1230**: fix: filter non-raising stem collisions and make refusal census candidates repo-relative
+- **Issue #1212** (closed): rungs.yml rtl-full: the Verilator VOICE_FILTER2X_OFF control has no clean --m5a-smoke twin in that job
+- **PR #1220**: ci: pair rtl-full's Verilator M5A mutant with a clean smoke baseline
+- **Issue #1211** (closed): Use the ensemble scorer’s existing file hash checks for cached negative controls
+- **PR #1216**: Bind ensemble control-run reuse to the sidecar digests the report carries
 - **Issue #1192** (closed): check_workflows roadmap order gates key on step name, so the SET of compile_dag.py --run invocations is unasserted
 - **PR #1196**: ci: assert the compile_dag.py invocation set, not just the named order-gate steps
 - **Issue #1182** (closed): Wire in tools/performance_suite.py: the playing-behaviour gate that nothing runs
@@ -959,25 +985,4 @@ Closure events below record forge state, not a verified fix or a new sound resul
 - **PR #234**: refprofile: check pins after every clip render; derive pins_held_after_render (#233)
 - **Issue #49** (closed): Playing behaviour: choose our rules deliberately, then test them
 - **PR #236**: docs: decide the external feedback loop's tap, gain, delay and saturation
-
-### 2026-09-25
-
-- **PR #231**: measure: F1 matched-level Surge references + one compensated input-scaling experiment
-- **PR #232**: measure: F1A-F1C board records at the current estimator (measurement-version update)
-- **Issue #222** (closed): Repo-wide ground-truth gate: extend the 808 suite's claim/backing-test meta-test beyond one file (#45 item 1)
-- **PR #227**: test: extend the claim/ground-truth gate to test_moog_acceptance.py
-- **Issue #223** (closed): Doc-claim-to-evidence checker: flag prose claims whose backing test is missing, passing-when-cited-as-failing, or stale (#45 item 4)
-- **PR #230**: Doc-claim-to-evidence checker, and the failure-modes status list it was commissioned to correct
-- **PR #228**: measure: current F1A-F1C cutoff baseline on the selected filter path
-- **PR #226**: M1A drive experiment: no candidate chosen -- drive fixes odd-partial phase sensitivity but worsens even partials
-- **PR #219**: M1A phase-cycle capture: Mini V3 at all relative phases -- INCONCLUSIVE under the pre-registered rule
-- **Issue #21** (closed): R8: shaped excitation pulse — the ~90% discrimination term
-- **PR #221**: docs: BD excitation-shape probe for #21 -- mechanism confirmed, blocked by #220, kit unchanged
-- **PR #218**: M1A harmonic-shape diagnosis: phase-sensitive mix; no sound change supported yet
-- **PR #217**: M1A attack: record the stopping point and two qualifications
-- **Issue #22** (closed): R9: complete the 808 — the eight voices we don't have
-- **PR #214**: M1A: known-answer qualification of the attack measurement (m1a-envelope-score-v3); still no verdict
-- **Issue #1** (closed): Product target: USB-C bus-powered class-compliant sound module (keychain)
-- **PR #216**: docs: the keychain dongle, itemised from manufacturers' drawings (#1 board fit)
-- **PR #212**: arty: bind integrated-baseline DSP evidence to routed.dcp by digest; extractor records the digest
 
