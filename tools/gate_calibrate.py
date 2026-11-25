@@ -66,6 +66,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 
 ROOT = pg.ROOT
@@ -491,6 +492,19 @@ def injected_outcome(qi: dict | None) -> tuple[bool | None, dict | None]:
     return {"QUALIFIED": True, "NOT QUALIFIED": False}.get(dec["status"]), dec
 
 
+def decision_exit(dec) -> int:
+    """Exit code for a decision: REFUSED -> exit_contract.REFUSED, else PASS.
+
+    0 means "the comparison ran and agreed" (tools/exit_contract.py), so a
+    REFUSED decision must not exit 0. A DIAGNOSTIC (not authority) prefix wraps
+    the underlying status, so it is decided on the wrapped one. QUALIFIED /
+    NOT QUALIFIED keep exiting 0 -- mapping NOT QUALIFIED is a separate question.
+    """
+    status = str(dec.get("status", "REFUSED"))
+    status = status.removeprefix("DIAGNOSTIC (not authority): ")
+    return exit_contract.REFUSED if status.startswith("REFUSED") else exit_contract.PASS
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -544,7 +558,7 @@ def main(argv=None) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
     print(json.dumps(dec, indent=1))
-    return 0
+    return decision_exit(dec)
 
 
 if __name__ == "__main__":
