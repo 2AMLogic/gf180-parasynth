@@ -244,7 +244,7 @@ def roadmap_check_precedes_run_in_step(workflow, step_name: str = ROADMAP_STEP):
                        f"nothing to guard")
     if len(found) > 1:
         return False, (f"{len(found)} steps named {step_name!r} "
-                       f"({', '.join(j for j, _ in found)}) -- ambiguous")
+                       f"({', '.join(str(j) for j, _ in found)}) -- ambiguous")
     jname, step = found[0]
     invs = _compile_dag_invocations(str(step.get("run", "")))
     if not invs:
@@ -282,17 +282,17 @@ def roadmap_check_step_precedes_record_step(workflow,
     in-step gate -- never last-wins (#1206)."""
     if isinstance(workflow, (str, pathlib.Path)):
         workflow = yaml.safe_load(pathlib.Path(workflow).read_text())
-    found: list[tuple[str, str, int, dict]] = []
+    found: list[tuple[str, object, int, dict]] = []
     for jname, job in ((workflow or {}).get("jobs") or {}).items():
         for i, s in enumerate((job or {}).get("steps") or []):
             if isinstance(s, dict) and s.get("name") in (check_step, record_step):
                 found.append((s.get("name"), jname, i, s))
-    named: dict[str, tuple[str, int, dict]] = {}
+    named: dict[str, tuple[object, int, dict]] = {}
     for guarded in (check_step, record_step):
         hits = [(j, i, s) for n, j, i, s in found if n == guarded]
         if len(hits) > 1:
             return False, (f"{len(hits)} steps named {guarded!r} "
-                           f"({', '.join(j for j, _, _ in hits)}) -- ambiguous")
+                           f"({', '.join(str(j) for j, _, _ in hits)}) -- ambiguous")
         if hits:
             named[guarded] = hits[0]
     if check_step not in named:

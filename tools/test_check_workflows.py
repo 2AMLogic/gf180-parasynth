@@ -633,8 +633,9 @@ def test_a_check_step_that_also_rewrites_is_red():
 # occurrence was ever order-checked. These pin the ambiguity refusal that
 # mirrors the in-step gate's (a duplicate is never last-wins).
 # =============================================================================
+@pytest.mark.parametrize("job_id", ["full-rtl", "on"])
 def test_a_duplicate_record_step_name_is_refused_not_last_wins(
-        tmp_path, monkeypatch, capsys):
+        tmp_path, monkeypatch, capsys, job_id):
     """The issue's reproducer: record, check, record. The dict kept the last
     record step, so the gate went green while an ungated --run --slow rewrote
     the README before anything judged it -- the #906 harm itself."""
@@ -645,7 +646,7 @@ def test_a_duplicate_record_step_name_is_refused_not_last_wins(
 name: dup
 on: workflow_dispatch
 jobs:
-  full-rtl:
+  {job_id}:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -661,6 +662,22 @@ jobs:
     errors = capsys.readouterr().err.splitlines()
     assert any(line.lstrip().startswith("dup.yml: ") and cw.ROADMAP_RECORD_STEP in line
                and "ambiguous" in line for line in errors), errors
+
+
+def test_duplicate_in_step_name_is_reported_with_unquoted_on_job_id():
+    wf = _workflow(f"""\
+  on:
+    steps:
+      - name: {cw.ROADMAP_STEP}
+        run: |
+          python tools/compile_dag.py --check
+          python tools/compile_dag.py --run
+    """)
+    steps = next(iter(wf["jobs"].values()))["steps"]
+    steps.append(steps[0].copy())
+    ok, reason = cw.roadmap_check_precedes_run_in_step(wf)
+    assert not ok
+    assert cw.ROADMAP_STEP in reason and "ambiguous" in reason
 
 
 def test_a_duplicate_check_step_name_is_also_refused():
