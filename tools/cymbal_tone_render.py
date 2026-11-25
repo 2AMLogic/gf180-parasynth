@@ -352,6 +352,10 @@ def band_shares(anchor_level: dict) -> dict:
             x = cb._bp(p, sr, lo, hi)
             row[name] = float(np.sum(x[:int(cb.ENERGY_S * sr)] ** 2))
         out[band] = row
+    for name in ("L", "H"):
+        if not sum(out[b][name] for b in out) > 0.0:
+            raise Refused(f"band_shares: all three band-only renders are silent in {name}; "
+                          f"no share can be reported against a zero total")
     return out
 
 
