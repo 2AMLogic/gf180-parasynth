@@ -746,6 +746,10 @@ def verdict(d: dict, bar: dict) -> dict:
             "features": per}
 
 
+def feature_suffix(feature: str | None, *, sep: str = " ") -> str:
+    return f"{sep}({feature})" if feature is not None else ""
+
+
 # ---------------------------------------------------------------------------
 # seeded defects, applied to the 808 target itself. Magnitudes frozen here,
 # before any was run, each an audibly wrong sound:

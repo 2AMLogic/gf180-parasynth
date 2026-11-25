@@ -374,7 +374,7 @@ def diagnose(refs: pathlib.Path, sounds, hashes=None) -> dict:
                             "ours_cents_5ms": [round(float(c), 1) if l else None
                                                for c, l in zip(to["cents"][:n], to["live"][:n])]}}
         r = out[s]
-        print(f"{s} {r['verdict']} worst {r['worst']:.1f} ({r['worst_feature']}) "
+        print(f"{s} {r['verdict']} worst {r['worst']:.1f}{pg.feature_suffix(r['worst_feature'])} "
               f"pitch_shape {r['ratio']['pitch_shape']:.1f}x impulse {r['ratio']['impulse']:.1f}x", flush=True)
         print("   impulse dB (strike, body):", {k: [round(q, 1) for q in v_] for k, v_ in imp.items()})
         print("   808 cents :", r["pitch"]["target_cents_5ms"][:12])
@@ -470,7 +470,8 @@ def run(refs: pathlib.Path, prereg: dict, sounds=None, codes=None) -> dict:
             rows[f"{s}{c}"] = row
             print(f"{s}{c} [{row['split']}] x{ratio:.3f} " + " | ".join(
                 f"{k}: ps {v['ratio']['pitch_shape']:.2f} imp {v['ratio']['impulse']:.2f} "
-                f"worst {v['worst']:.1f}({v['worst_feature']})" for k, v in row["variants"].items()), flush=True)
+                f"worst {v['worst']:.1f}{pg.feature_suffix(v['worst_feature'], sep='')}"
+                for k, v in row["variants"].items()), flush=True)
     return {"rows": rows}
 
 
@@ -567,7 +568,8 @@ def twin(refs: pathlib.Path, prereg: dict, sounds=None, codes=None) -> dict:
             rows[f"{s}{c}"] = row
             print(f"{s}{c} [{row['split']}] " + " | ".join(
                 f"{k}: ps {v['ratio']['pitch_shape']:.2f} decay {v['ratio']['decay']:.2f} imp {v['ratio']['impulse']:.2f} "
-                f"worst {v['worst']:.1f}({v['worst_feature']})" for k, v in row["variants"].items()), flush=True)
+                f"worst {v['worst']:.1f}{pg.feature_suffix(v['worst_feature'], sep='')}"
+                for k, v in row["variants"].items()), flush=True)
     return {"rows": rows, "post_hoc": True}
 
 

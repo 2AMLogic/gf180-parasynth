@@ -159,6 +159,18 @@ def test_a_perfect_render_with_worst_ratio_zero_is_not_labelled_no_render():
     assert "no render" in lines["RS"]
 
 
+def test_perfect_mars_take_omits_the_feature_from_its_cell():
+    exact = pg.verdict({"spec": 0.0}, {"spec": 1.0})
+    named = pg.verdict({"spec": 2.0}, {"spec": 1.0})
+    context = {"old_bar": "x", "n_takes": 1}
+    rows = gb.rank_rows({"LT": {**context, "ours": named, "mars_best": exact, "mars_takes_passing_old_bar": 1},
+                         "MT": {**context, "ours": exact, "mars_best": named, "mars_takes_passing_old_bar": 0}})
+    table = gb.render_table(rows)
+    assert "None" not in table
+    assert "| 2.0 (spec) | 0.0 |" in table
+    assert "| 0.0 | 2.0 (spec) |" in table
+
+
 @pytest.mark.parametrize("bad", [float("nan"), float("inf")])
 @pytest.mark.parametrize("side", ["ours", "mars_best"])
 def test_rank_refuses_a_non_finite_ratio_rather_than_sort_it(bad, side):
