@@ -144,9 +144,13 @@ class ModInfo:
                     if a.name == FAMILY_NAME:
                         # a BORROWED family class binds its name (aliased or
                         # not) to the LENDER's stem, last binding wins -- the
-                        # same rule the Assign alias below follows (#1193)
+                        # same rule the Assign alias below follows (#1193).
+                        # Only a binding named `Refused` exposes
+                        # `<mod>.Refused`, so only that sets refused_origin:
+                        # `import Refused as R` binds just `R` (#1234)
                         nm = a.asname or FAMILY_NAME
-                        self.refused_origin = stem
+                        if nm == FAMILY_NAME:
+                            self.refused_origin = stem
                         self.refused_names[nm] = stem
             elif isinstance(node, ast.ClassDef) and node.name == FAMILY_NAME:
                 self.refused_origin = self.path.stem      # a local class
