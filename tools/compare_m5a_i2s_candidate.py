@@ -19,7 +19,8 @@ import delta_report  # noqa: E402
 #: The sources a delta record's `provenance.source_sha256` identifies the
 #: comparison by (kept at module scope, as `compare_drum_i2s_candidate` does).
 SOURCES = ("tools/compare_m5a_i2s_candidate.py",
-           "tools/measure_m5a_filter_oversample.py", "tools/mono_m5a_score.py")
+           "tools/measure_m5a_filter_oversample.py", "tools/mono_m5a_score.py",
+           "tools/delta_report.py")
 
 
 def _row(record: dict, label: str) -> dict:
