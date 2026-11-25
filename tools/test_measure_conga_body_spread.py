@@ -91,6 +91,7 @@ def test_main_exits_nonzero_when_descent_records_a_defect(tmp_path, monkeypatch)
     """Through `main`, so the exit code is the shipped one and not the helper's."""
     floor = {k: 0.0 for k in ("lead_1ms_db", "lead_10ms_db", "sample_rate_44k_to_48k_db",
                               "quantisation_16bit_db", "window_10ms_db")}
+    _make_corpus(tmp_path)  # the inventory check is real; only rendering is stubbed
     monkeypatch.setattr(probe, "validate_reproduction", lambda refdir: [], raising=True)
     monkeypatch.setattr(probe, "validation_status", lambda report: 0)
     monkeypatch.setattr(probe, "floor_for_these_signals",
@@ -102,3 +103,99 @@ def test_main_exits_nonzero_when_descent_records_a_defect(tmp_path, monkeypatch)
     monkeypatch.setattr(sys, "argv", ["probe", "--refs", str(tmp_path),
                                       "--descent", str(tmp_path)])
     assert probe.main() == 3
+
+
+# --- #1309: an incomplete expected set must REFUSE, never shrink the spread ---
+def _make_corpus(root, voices=("LC", "MC", "HC")):
+    from scipy.io import wavfile
+    t = np.arange(8820) / 44100
+    x = (np.exp(-t * 20) * np.sin(2 * np.pi * 200 * t) * 20000).astype(np.int16)
+    for rel in probe.expected_takes(voices):
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        wavfile.write(str(p), 44100, x)
+
+
+def test_complete_corpus_measures_all_fifteen_takes(tmp_path):
+    _make_corpus(tmp_path)  # positive control
+    assert len(probe.measure_corpus(tmp_path)) == 15
+
+
+def test_missing_voice_dir_and_a_non_anchor_take_are_named(tmp_path):
+    import shutil
+    _make_corpus(tmp_path)
+    shutil.rmtree(tmp_path / "mc8")
+    (tmp_path / "lc8" / "LC75.WAV").unlink()
+    with pytest.raises(probe.InventoryRefused) as e:
+        probe.measure_corpus(tmp_path)
+    assert set(e.value.missing) == {"lc8/LC75.WAV", *probe.expected_takes(("MC",))}
+
+
+def test_a_directory_at_a_wav_path_is_not_a_take(tmp_path):
+    _make_corpus(tmp_path)
+    (tmp_path / "hc8" / "HC10.WAV").unlink()
+    (tmp_path / "hc8" / "HC10.WAV").mkdir()
+    with pytest.raises(probe.InventoryRefused) as e:
+        probe.measure_corpus(tmp_path)
+    assert e.value.missing == ["hc8/HC10.WAV"]
+
+
+def test_an_equal_count_substitute_with_another_name_does_not_stand_in(tmp_path):
+    _make_corpus(tmp_path)
+    (tmp_path / "hc8" / "HC10.WAV").rename(tmp_path / "hc8" / "HC99.WAV")
+    with pytest.raises(probe.InventoryRefused) as e:
+        probe.measure_corpus(tmp_path)
+    assert e.value.missing == ["hc8/HC10.WAV"]
+
+
+def test_an_lc_only_request_needs_only_lc_takes(tmp_path):
+    _make_corpus(tmp_path, ("LC",))
+    assert len(probe.measure_corpus(tmp_path, voices=("LC",))) == 5
+
+
+def test_windowed_alike_refuses_a_missing_anchor(tmp_path):
+    with pytest.raises(probe.InventoryRefused) as e:
+        probe.windowed_alike(tmp_path, [])
+    assert set(e.value.missing) == {"lc8/LC50.WAV", "hc8/HC50.WAV"}
+
+
+def test_floor_refuses_a_missing_take(tmp_path):
+    _make_corpus(tmp_path, ("LC", "HC"))
+    (tmp_path / "lc8" / "LC00.WAV").unlink()
+    with pytest.raises(probe.InventoryRefused):
+        probe.floor_for_these_signals(tmp_path)
+
+
+def _stub_controls(monkeypatch):
+    monkeypatch.setattr(probe, "validate_reproduction", lambda refdir: [], raising=True)
+    monkeypatch.setattr(probe, "validation_status", lambda report: 0)
+
+
+@pytest.mark.parametrize("extra", [[], ["--descent"]])
+def test_main_full_run_refuses_with_every_missing_path_and_no_statistics(
+        tmp_path, monkeypatch, capsys, extra):
+    _stub_controls(monkeypatch)
+    _make_corpus(tmp_path)
+    (tmp_path / "mc8" / "MC00.WAV").unlink()
+    (tmp_path / "hc8" / "HC10.WAV").unlink()
+    out = tmp_path / "r.json"
+    argv = ["probe", "--refs", str(tmp_path), "--json", str(out)]
+    if extra:
+        argv += ["--descent", str(tmp_path)]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert probe.main() == 2
+    err = capsys.readouterr().err
+    assert "mc8/MC00.WAV" in err and "hc8/HC10.WAV" in err
+    import json
+    rep = json.loads(out.read_text())
+    assert sorted(rep["refusal"]["missing"]) == ["hc8/HC10.WAV", "mc8/MC00.WAV"]
+    assert not {"corpus", "spread", "sensitivity", "within_10pct"} & set(rep)
+
+
+def test_check_with_a_directory_at_an_anchor_refuses_instead_of_crashing(
+        tmp_path, monkeypatch):
+    _make_corpus(tmp_path)
+    (tmp_path / "lc8" / "LC50.WAV").unlink()
+    (tmp_path / "lc8" / "LC50.WAV").mkdir()
+    monkeypatch.setattr(sys, "argv", ["probe", "--check", "--refs", str(tmp_path)])
+    assert probe.main() == 2

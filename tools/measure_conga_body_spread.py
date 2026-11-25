@@ -83,6 +83,38 @@ PUBLISHED = {
 FISCHER_TUNING = {"00": 0.0, "25": 2.5, "50": 5.0, "75": 7.5, "10": 10.0}
 
 
+class InventoryRefused(Exception):
+    """An expected reference take is absent or is not a regular file.
+
+    The corpus readers used to skip such takes (`exists()` + `continue`), so a
+    partial corpus produced a complete-looking row set and a narrower spread
+    with nothing recording the loss (#1309): dropping hc8/HC10.WAV alone moves
+    the HC range from 7.27 dB to 1.54 dB while both anchors are still present."""
+
+    def __init__(self, missing: list[str]):
+        self.missing = list(missing)
+        super().__init__("expected reference takes absent or not files: "
+                         + ", ".join(self.missing))
+
+
+def expected_takes(voices=("LC", "MC", "HC")) -> list[str]:
+    """Relative paths of every take the full study requires: each requested
+    voice at each of the five FISCHER_TUNING positions."""
+    return [f"{v.lower()}8/{v}{k}.WAV" for v in voices for k in FISCHER_TUNING]
+
+
+def missing_takes(refdir: pathlib.Path, rels) -> list[str]:
+    """Every relative path in `rels` that is not a regular file (a directory
+    at a WAV path does not count as present)."""
+    return [r for r in rels if not (refdir / r).is_file()]
+
+
+def require_takes(refdir: pathlib.Path, rels) -> None:
+    gone = missing_takes(refdir, rels)
+    if gone:
+        raise InventoryRefused(gone)
+
+
 # --------------------------------------------------------------------------
 # The definition
 # --------------------------------------------------------------------------
@@ -188,7 +220,7 @@ def validate_reproduction(refdir: pathlib.Path) -> list[dict]:
     out = []
     for voice, p in PUBLISHED.items():
         path = refdir / p["ref_file"]
-        if not path.exists():
+        if not path.is_file():
             out.append(dict(voice=voice, file=p["ref_file"], status="REFUSED",
                             why="reference file not on this host"))
             continue
@@ -227,8 +259,9 @@ def floor_for_these_signals(refdir: pathlib.Path) -> list[dict]:
     and what each one does to a conga recording, is conga-specific.
     """
     def signals():
-        files = [("LC", f) for f in sorted((refdir / "lc8").glob("LC*.WAV"))]
-        files += [("HC", f) for f in sorted((refdir / "hc8").glob("HC*.WAV"))]
+        require_takes(refdir, expected_takes(("LC", "HC")))
+        files = [(v, refdir / r) for v in ("LC", "HC")
+                 for r in expected_takes((v,))]
         for voice, path in files:
             x, sr = read_wav(path)
 
@@ -292,11 +325,10 @@ def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
     #104); only the render and the two alignment geometries are conga-specific.
     """
     import drums_fx as dx
+    require_takes(refdir, [p["ref_file"] for p in PUBLISHED.values()])
     pairs = []
     for voice, p in PUBLISHED.items():
         path = refdir / p["ref_file"]
-        if not path.exists():
-            continue
         x, sr = read_wav(path)
         n = int(2.2 * dx.SR)
         d = dx.DrumsFx()
@@ -338,11 +370,11 @@ def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------
 def measure_corpus(refdir: pathlib.Path, voices=("LC", "MC", "HC")) -> list[dict]:
     out = []
+    require_takes(refdir, expected_takes(voices))
     for voice in voices:
         d = refdir / f"{voice.lower()}8"
-        if not d.exists():
-            continue
-        for path in sorted(d.glob("*.WAV")):
+        for rel in expected_takes((voice,)):
+            path = refdir / rel
             x, sr = read_wav(path)
             v, why = body_spectrum(x, sr, voice)
             key = path.stem[2:]
@@ -625,6 +657,16 @@ def main(argv=None) -> int:
         if args.json:
             args.json.write_text(json.dumps(report, indent=2))
         return 0
+
+    gone = missing_takes(refdir, expected_takes())
+    if gone:
+        report["refusal"] = dict(why="expected reference takes missing or not files",
+                                 missing=gone)
+        if args.json:
+            args.json.write_text(json.dumps(report, indent=2))
+        print("REFUSED: incomplete reference corpus; no statistics reported. "
+              "Missing: " + ", ".join(gone), file=sys.stderr)
+        return 2
 
     report["floor"] = floor_for_these_signals(refdir)
     print("\n== the estimator's floor ON THESE SIGNALS, per perturbation "
