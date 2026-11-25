@@ -99,6 +99,16 @@ CORPUS_ENV_TEST_FILES = {
         "_probe",       # sets REFS_ENV + the alias on the child environment
         "_mode_drive",  # ditto, for the sibling probe
     }),
+    # #1183's cross-module-refusal controls: each drives a tool as a subprocess
+    # and must set the corpus location on the CHILD's environment by the
+    # resolver's own attribute names (configured_refs() reads the PARENT's
+    # environment, which is not what an entry-point control needs). Helper
+    # functions only: a hand-rolled read anywhere else in these files still
+    # trips the scan.
+    pathlib.PurePosixPath("tools/test_ab_808_refusal.py"): frozenset({"_ab"}),
+    pathlib.PurePosixPath("tools/test_balance_line_shape_refusal.py"): frozenset({"_probe"}),
+    pathlib.PurePosixPath("tools/test_estimator_defects_refusal.py"): frozenset({"_probe"}),
+    pathlib.PurePosixPath("tools/test_probe_tom_numerator_refusal.py"): frozenset({"_probe"}),
 }
 SELF = pathlib.PurePosixPath("tools/test_corpus_path_single_source.py")
 ENV_NAMES = {"GF180_TR808_REFS", "TR808_REFS", "GF180_TR808_REFS_DEFAULT"}   # env-var keys
