@@ -1,5 +1,6 @@
 """Known answers for tools/gate_between.py (#379, rule v2). Fast: no audio is read."""
 import copy
+import json
 import pathlib
 import sys
 
@@ -9,6 +10,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import gate_between as gb  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
+
+
+TABLES = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/gate-379/mars-calibration/tables.json"
 
 
 def _d(spec, other=1.0):
@@ -28,7 +32,7 @@ def _tab(specs_by_group, other=1.0, sound="BD"):
             "missing": [], "keys": sorted({r["key"] for r in rows})}
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _keep_groups(monkeypatch):
     # synthetic rows carry their own groups; the hash rule is gate_calibrate's
     monkeypatch.setattr(gc, "regroup", lambda tabs: tabs)
@@ -76,7 +80,7 @@ def _refusing_pool(n_near=14, n_far=6):
     return tab
 
 
-def test_selection_refuses_rather_than_widen_when_halves_disagree():
+def test_selection_refuses_rather_than_widen_when_halves_disagree(_keep_groups):
     """The answer is REFUSED with no bars, not a looser p.
 
     Defeating input (verification rule 8): `_refusing_pool`, where every p in
@@ -95,7 +99,7 @@ def test_selection_refuses_rather_than_widen_when_halves_disagree():
     assert cal["sounds"] == {}                                  # no bars emitted
 
 
-def test_calibrates_homogeneous_pool_validates_and_labels_weak_sounds():
+def test_calibrates_homogeneous_pool_validates_and_labels_weak_sounds(_keep_groups):
     pool = {0: [0.30 + 0.002 * i for i in range(8)], 1: [0.30 + 0.002 * i for i in range(8)], 2: [0.301]}
     cal = gb.calibrate({"BD": _tab(pool), "RS": _tab({0: [0.5], 1: [0.5]}, sound="RS")})
     by = cal["selection"]["by_p"]
@@ -109,7 +113,7 @@ def test_calibrates_homogeneous_pool_validates_and_labels_weak_sounds():
     assert cal["sounds"]["RS"]["kind"].startswith("WEAK")     # said wherever it is used
 
 
-def test_selection_never_reads_the_untouched_group():
+def test_selection_never_reads_the_untouched_group(_keep_groups):
     """Leak control: rewriting every VAL (group 2) row to nonsense must not move
     the selection or the bar. If it does, VAL is not untouched."""
     pool = {0: [0.30 + 0.002 * i for i in range(8)], 1: [0.30 + 0.002 * i for i in range(8)], 2: [0.305, 0.31]}
@@ -141,6 +145,22 @@ def test_rank_orders_by_distance_to_the_real_recordings_and_marks_missing_render
     rows = gb.rank_rows(ctx)
     assert [r["sound"] for r in rows] == ["B", "A", "C"]          # 9x, 2x, then the one with no render
     assert "no render" in gb.render_table(rows)
+
+
+def test_a_perfect_render_with_worst_ratio_zero_is_not_labelled_no_render():
+    # the input that defeated the old `if not r["ours"]` / `or -1` guards: 0.0 is falsy.
+    # The missing row is listed BEFORE the zero row so a stable sort on a tied key keeps it ahead.
+    mars = {"old_bar": "x", "n_takes": 1, "mars_takes_passing_old_bar": 0,
+            "mars_best": {"worst_ratio": 2.0, "worst_feature": "spec"}}
+    ctx = {"SD": {**mars, "ours": {"worst_ratio": 4.0, "worst_feature": "decay"}},
+           "RS": dict(mars),
+           "BD": {**mars, "ours": {"worst_ratio": 0.0, "worst_feature": None}}}
+    rows = gb.rank_rows(ctx)
+    assert [r["sound"] for r in rows] == ["SD", "BD", "RS"]       # 2.0x, 0.0x, then no render
+    lines = {l.split("|")[2].strip(): l for l in gb.render_table(rows).splitlines()[2:]}
+    assert "no render" not in lines["BD"] and "0.0x" in lines["BD"]
+    assert "None" not in lines["BD"]
+    assert "no render" in lines["RS"]
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf")])
@@ -194,9 +214,7 @@ def test_a_refused_injected_run_is_not_a_caught_control():
 # ---- #1296: same refusal for the between-recording rule
 
 def test_gb_partial_record_is_refused():
-    import json
-    root = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/gate-379/mars-calibration"
-    r = json.loads((root / "tables.json").read_text())
+    r = json.loads(TABLES.read_text())
     env = {"sounds": ["BD"], "tables": {"BD": r["tables"]["BD"]}}
     cal = gb.calibrate_record(env)
     assert cal["status"].startswith("REFUSED") and cal["p"] is None and cal["sounds"] == {}
@@ -211,9 +229,7 @@ def test_gb_partial_record_is_refused():
 def test_gb_empty_rows_for_other_sounds_is_refused():
     """Rule-8 control (row level) through gb.calibrate_record: all 16 keys present,
     but 15 sounds have empty `rows`."""
-    import json
-    root = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/gate-379/mars-calibration"
-    r = json.loads((root / "tables.json").read_text())
+    r = json.loads(TABLES.read_text())
     gutted = copy.deepcopy(r)
     for s in pg.SOUNDS16:
         if s != "BD":
@@ -227,3 +243,37 @@ def test_gb_empty_rows_for_other_sounds_is_refused():
     assert cal["status"].startswith("REFUSED") and cal["p"] is None and cal["sounds"] == {}
     sub = gb.calibrate_record(gutted, allow_subset=True)
     assert sub["p"] == 0.5 and sub["diagnostic"].startswith("DIAGNOSTIC (not authority)")
+
+
+# --- #1329: a REFUSED decision must not exit 0 (tools/exit_contract.py) ---------
+
+def _run_between_main(tmp_path):
+    out = tmp_path / "out.json"
+    return gb.main(["--refs", str(tmp_path), "--tables", str(TABLES), "--out", str(out)]), out
+
+
+def test_main_exits_refused_when_no_p_reaches_coverage(tmp_path, monkeypatch, capsys):
+    import exit_contract
+
+    monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
+    rc, out = _run_between_main(tmp_path)
+    decision = json.loads(capsys.readouterr().out)
+    assert decision["status"] == "REFUSED"
+    assert decision["why"].startswith("REFUSED: no p ")
+    assert json.loads(out.read_text())["decision"]["status"] == "REFUSED"
+    assert rc == exit_contract.REFUSED
+
+
+def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
+    import exit_contract
+
+    q = _green_q()
+    q["known_bad"][gb.CANDIDATE] = {"verdict": "REFUSED"}
+    monkeypatch.setattr(gb, "calibrate", lambda tabs, force_p=None: {"p": 0.1, "status": "ok", "sounds": {}})
+    monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: q)
+    monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
+    rc, _ = _run_between_main(tmp_path)
+    decision = json.loads(capsys.readouterr().out)
+    assert decision["status"] == "REFUSED"
+    assert "Q6 rejected #374 candidate" in decision["unrun"]
+    assert rc == exit_contract.REFUSED
