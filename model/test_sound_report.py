@@ -369,36 +369,105 @@ def test_the_commit_the_locks_were_measured_at_exists_in_this_repository():
         "provenance is a dangling sha cannot be bisected against.")
 
 
-def test_every_relock_names_a_real_property_and_a_real_commit():
-    """A re-lock records WHICH commit changed the sound. If that key does not
-    match a property, or that sha does not resolve, the record is decoration."""
+def test_every_changelog_entry_names_a_real_property_and_real_commits():
+    """A lock move records WHICH commit changed the sound. If the key matches no
+    property, or an `at` / `recorded_by` sha does not resolve, it is decoration.
+    One table now (#1303): `LOCK_CHANGELOG` feeds the report and --check-locks."""
     props = {(p.voice, p.name) for p in sr.build_properties()}
-    for key, (commit, was, why) in sr.RELOCKS.items():
-        assert key in props, f"RELOCKS names {key}, which build_properties() does not create"
-        assert key in sr.LOCKS, f"RELOCKS names {key}, which has no entry in LOCKS"
-        assert abs(sr.LOCKS[key] - was) > 0, (
-            f"RELOCKS says {key} moved away from {was}, but LOCKS still holds {was}")
-        assert len(why) > 40, f"{key}'s re-lock gives no reason"
-        if _in_a_git_checkout():
-            _assert_history_reaches_the_shas()
-            r = _git("cat-file", "-t", commit)
-            assert r.returncode == 0 and r.stdout.strip() == "commit", (
-                f"{key} is re-locked against '{commit}', which is not a commit here")
+    for ev in sr.LOCK_CHANGELOG:
+        for key in ev["locks"]:
+            assert key in props, f"LOCK_CHANGELOG names {key}, which build_properties() does not create"
+            assert key in sr.LOCKS, f"LOCK_CHANGELOG names {key}, which has no entry in LOCKS"
+        assert len(ev["reason"]) > 40, f"{ev['recorded_by']} gives no reason"
+    if _in_a_git_checkout():
+        _assert_history_reaches_the_shas()
+        for ev in sr.LOCK_CHANGELOG:
+            for field in ("at", "recorded_by"):
+                r = _git("cat-file", "-t", ev[field])
+                assert r.returncode == 0 and r.stdout.strip() == "commit", (
+                    f"LOCK_CHANGELOG {field}={ev[field]!r} is not a commit here")
 
 
 def test_a_relocked_propertys_provenance_reaches_the_line_the_report_prints():
     """The provenance has to be where the number is read. `Result.sentence()`
-    is the only text a reader sees when a lock goes OUT, so the re-lock record
-    is appended to `source`, which that sentence quotes."""
+    is the only text a reader sees when a lock goes OUT, so the latest move,
+    derived from LOCK_CHANGELOG, is appended to `source`."""
     props = {(p.voice, p.name): p for p in sr.build_properties()}
-    for key, (commit, _, _) in sr.RELOCKS.items():
+    moved = 0
+    for key in sr.LOCKS:
+        moves = [h for h in sr.lock_history(*key) if h["from"] is not None]
+        if not moves:
+            continue
+        moved += 1
         p = props[key]
-        assert f"RE-LOCKED at {commit}" in p.source, (
+        assert f"RE-LOCKED at {moves[-1]['recorded_by']}" in p.source, (
             f"{key}'s re-lock provenance is not in its source line")
-        # build_properties() leaves a lock's value None; run() fills it from LOCKS
         p.value = sr.LOCKS[key]
         s = sr.Result(p, p.value + 10 * p.tol, False, "", 10 * p.tol).sentence()
-        assert commit in s, f"{key} going OUT would not print which commit re-locked it"
+        assert moves[-1]["recorded_by"] in s, (
+            f"{key} going OUT would not print which commit re-locked it")
+    assert moved == 2, "expected the two re-locked properties (LADDER corner ratio drift, LT attack)"
+
+
+def _with_changelog(extra, locks=None):
+    """Run check_lock_changelog against a modified copy, then restore."""
+    import copy
+    orig_cl, orig_locks = copy.deepcopy(sr.LOCK_CHANGELOG), dict(sr.LOCKS)
+    try:
+        sr.LOCK_CHANGELOG = orig_cl + extra
+        if locks:
+            sr.LOCKS.update(locks)
+        return sr.check_lock_changelog()
+    finally:
+        sr.LOCK_CHANGELOG[:] = orig_cl
+        sr.LOCKS.clear()
+        sr.LOCKS.update(orig_locks)
+
+
+def _ev(key, was, now, **kw):
+    e = {"at": "28dfd55", "recorded_by": "50d7aaf", "issue": 1,
+         "reason": "a real and sufficiently long reason", "locks": {key: (was, now)}}
+    e.update(kw)
+    return e
+
+
+def test_the_clean_changelog_has_no_problems():
+    assert sr.check_lock_changelog() == []
+
+
+def test_a_broken_from_to_chain_is_flagged():
+    # LT attack is held at 6.27083; this entry claims it moved from 999 -> 8.
+    probs = _with_changelog([_ev(("LT", "attack"), 999.0, 8.0)],
+                            {("LT", "attack"): 8.0})
+    assert any("does not continue" in p for p in probs), probs
+
+
+def test_a_no_op_move_is_flagged():
+    v = sr.LOCKS[("BD", "T20")]
+    probs = _with_changelog([_ev(("BD", "T20"), v, v)])
+    assert any("from == to" in p for p in probs), probs
+
+
+def test_an_unedited_relock_placeholder_is_flagged():
+    v = sr.LOCKS[("BD", "T20")]
+    probs = _with_changelog([_ev(("BD", "T20"), v, 250.0,
+                                 at="<the commit these were measured at>",
+                                 recorded_by="<the commit that re-locks>",
+                                 reason="")],
+                            {("BD", "T20"): 250.0})
+    assert sum("placeholder" in p for p in probs) == 3, probs
+
+
+def test_a_new_changelog_move_reaches_the_printed_line_without_a_second_table():
+    import copy
+    orig = copy.deepcopy(sr.LOCK_CHANGELOG)
+    try:
+        v = sr.LOCKS[("BD", "T20")]
+        sr.LOCK_CHANGELOG.append(_ev(("BD", "T20"), v, 250.0, recorded_by="abc1234"))
+        props = {(p.voice, p.name): p for p in sr.build_properties()}
+        assert "RE-LOCKED at abc1234" in props[("BD", "T20")].source
+    finally:
+        sr.LOCK_CHANGELOG[:] = orig
 
 
 def test_the_plain_report_never_prints_the_words_the_nightly_gate_used_to_grep_for():

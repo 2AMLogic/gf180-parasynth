@@ -223,7 +223,7 @@ jobs:
               echo "::error::a declared property is outside its tolerance:"
               grep -E "^ +OUT " nightly-report/sound-report.txt || true
               echo "A [lock] outside tolerance means the model CHANGED -- fix it,"
-              echo "or re-lock it in model/sound_report.py's LOCKS and RELOCKS and"
+              echo "or re-lock it in model/sound_report.py's LOCKS and LOCK_CHANGELOG and"
               echo "say in the commit message which commit changed the sound."
               exit 1 ;;
             *)
