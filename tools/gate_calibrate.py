@@ -286,13 +286,18 @@ def evidence_refusal(tabs: dict, expected: dict | None = None) -> str | None:
     if expected is None:
         try:
             expected = expected_takes()
-        except (OSError, KeyError, csv.Error) as e:
+        except (OSError, KeyError, csv.Error, UnicodeDecodeError) as e:
             return f"REFUSED: incomplete evidence: cannot read the file index {INDEX.name} ({type(e).__name__}); completeness is unchecked"
     bad = []
     for s, t in tabs.items():
         exp = expected.get(s)
         if not exp:
             bad.append(f"{s}: no takes in the index")
+            continue
+        absent = [f for f in ("rows", "missing") if not isinstance(t.get(f), list)]
+        if absent:
+            # no default: an absent list would assert every take was readable
+            bad.append(f"{s}: record has no '{absent[0]}' list (malformed table)")
             continue
         rows = [r["rel"] for r in t["rows"]]
         miss = [m["rel"] for m in t["missing"]]
