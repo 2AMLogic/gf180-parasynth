@@ -27,14 +27,10 @@ def write(path, x):
 
 
 def fx_ladder_factory(**cfg):
-    """Drop-in for dsp.ladder that routes through the fixed-point model."""
-    state = {}
+    """Match dsp.ladder's fresh state for each audition note."""
 
     def f(x, cutoff_hz, res, drive=1.0, oversample=2, tanh_impl=None, **_):
-        key = id(x.base) if x.base is not None else None
-        lad = state.get("lad")
-        if lad is None:
-            lad = state["lad"] = fixed.LadderFx(**cfg)
+        lad = fixed.LadderFx(**cfg)
         r = float(np.mean(res)) if np.ndim(res) else float(res)
         q = lad.process(fixed.f2q15(np.clip(x, -1.0, 1.0)), np.asarray(cutoff_hz, float), r, drive)
         return fixed.q15f(q)
