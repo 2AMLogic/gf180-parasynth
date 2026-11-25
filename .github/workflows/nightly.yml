@@ -125,10 +125,12 @@ jobs:
 
       - name: the control link -- the exact defect that shipped
         run: |
+          python rtl-sketch/verify_ctl.py
           python rtl-sketch/verify_ctl.py --inject SPI_ADDR7  --expect-fail
           python rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail
       - name: the chip at its pins
         run: |
+          python rtl-sketch/verify_synth_top.py
           python rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail
           python rtl-sketch/verify_synth_top.py --inject VOICE_DRUM_CLAMP16    --expect-fail
           python rtl-sketch/verify_synth_top.py --inject I2S_SHIFT             --expect-fail
