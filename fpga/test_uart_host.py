@@ -412,29 +412,43 @@ def test_take_counts_every_packet_in_a_chunk_not_just_the_first_match():
 
 # ---- #1258: the R1 quick-start must not need SciPy --------------------------
 def test_r1_quickstart_dry_run_works_without_scipy(tmp_path):
-    """Run the documented R1 command in a fresh interpreter in which importing
-    scipy raises. Only --wav-out and named presets may need it. Control: the
-    blocker itself is asserted live first, so a no-op blocker cannot pass."""
+    """The default R1 patch must run even when SciPy imports are blocked."""
     import subprocess
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    blocker = ("import sys\n"
-               "class _B:\n"
-               "    def find_spec(self, n, p=None, t=None):\n"
-               "        if n == 'scipy' or n.startswith('scipy.'):\n"
-               "            raise ModuleNotFoundError('scipy blocked (#1258)')\n"
-               "sys.meta_path.insert(0, _B())\n")
-    try:
-        subprocess.run([sys.executable, "-I", "-c", blocker + "import scipy"],
-                       check=True, capture_output=True)
-        pytest.fail("scipy blocker is inert")
-    except subprocess.CalledProcessError:
-        pass
-    code = (blocker + "import sys, runpy\n"
-            "sys.argv = ['uart_host.py', '--dry-run', 'run', '--note', '45', "
-            "'--fixture', 'm5a', '--image', 'r1', '--capture', %r]\n"
-            "runpy.run_path(%r, run_name='__main__')\n"
-            % (str(tmp_path / "cap"), os.path.join(root, "fpga", "uart_host.py")))
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                       text=True, cwd=root)
-    assert r.returncode == 0, r.stderr[-800:]
-    assert "FEASIBLE" in r.stdout
+    from pathlib import Path
+    from textwrap import dedent
+
+    # This startup hook previously hid the eager import on SciPy-installed hosts.
+    (tmp_path / "sitecustomize.py").write_text("from scipy.io import wavfile\n")
+    code = dedent("""\
+        import os
+        import runpy
+        import sys
+
+        class ScipyBlocked(ModuleNotFoundError):
+            pass
+
+        class BlockScipy:
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname == "scipy" or fullname.startswith("scipy."):
+                    raise ScipyBlocked(fullname)
+
+        sys.meta_path.insert(0, BlockScipy())
+        try:
+            import scipy
+        except ScipyBlocked:
+            pass
+        else:
+            raise AssertionError("SciPy import bypassed the blocker")
+
+        del sys.argv[0]  # drop -c, so argv and sibling imports match script execution
+        sys.path.insert(0, os.path.dirname(sys.argv[0]))
+        runpy.run_path(sys.argv[0], run_name="__main__")
+    """)
+    player = Path(__file__).resolve().with_name("uart_host.py")
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code, player, "--dry-run", "run", "--note", "45",
+         "--fixture", "m5a", "--image", "r1", "--capture", tmp_path / "cap"],
+        env={**os.environ, "PYTHONPATH": str(tmp_path)}, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "FEASIBLE" in result.stdout
