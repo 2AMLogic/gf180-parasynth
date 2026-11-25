@@ -52,12 +52,15 @@ CLAIM_STATUS_TAGS = (
     "[measured-here:", "[defect:", "[method]", "[meta]",
 )
 
-# Qualified test citation `<module>.test_<name>` (including dotted module paths).
-# Recognition is intentionally independent of `ground_truth_mods` so citing an
-# unregistered or misspelled module fails resolution instead of disappearing
-# silently; plain-language exemptions (e.g. "none needed -- register read-back")
-# and non-test dotted tokens (e.g. `audio_measure.py`, `2.0`) do not match.
-GROUND_TRUTH_REF_RE = re.compile(r"\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.(test_\w+)")
+# Qualified citation `<module>.<name>` (including dotted module paths). A
+# reference is checked when EITHER its module is registered in
+# `ground_truth_mods` (any target name, so a typo such as `.tst_x` in a
+# registered module fails) OR its target starts with `test_` (so an
+# unregistered or misspelled module fails instead of disappearing silently).
+# Plain-language exemptions (e.g. "none needed -- register read-back") and
+# non-test dotted tokens in unregistered modules (e.g. `audio_measure.py`,
+# `audio_measure.rms_envelope`, `2.0`) are left alone.
+GROUND_TRUTH_REF_RE = re.compile(r"\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.(\w+)")
 
 
 def assert_ground_truth_gate(mod, ground_truth_mods, *, meta_prefix="test_meta_",
@@ -119,10 +122,11 @@ def assert_ground_truth_gate(mod, ground_truth_mods, *, meta_prefix="test_meta_"
         # `<module>.test_<fn>` citation is checked against `known`, so an
         # unregistered or misspelled module fails instead of disappearing.
         for mod_name, fn_name in GROUND_TRUTH_REF_RE.findall(m.group(1)):
-            if mod_name not in known:
+            if mod_name in known:
+                if fn_name not in known[mod_name]:
+                    unknown_gt.append(f"{name} -> {mod_name}.{fn_name}")
+            elif fn_name.startswith("test_"):
                 unknown_gt.append(f"{name} -> {mod_name}.{fn_name} (unknown module)")
-            elif fn_name not in known[mod_name]:
-                unknown_gt.append(f"{name} -> {mod_name}.{fn_name}")
 
     assert not missing_tag, f"tests without a claim-status tag: {missing_tag}"
     assert not missing_gt, f"tests that name no estimator ground truth: {missing_gt}"

@@ -229,9 +229,10 @@ def test_known_defeat_boundary_unqualified_and_non_test_tokens():
     """docs/verification-rules.md rule 8: record the inputs that defeat this
     guard by construction. Plain-language exemptions may mention bare `test_*`
     names (e.g. `test_bd_rendered_decay_at_each_setting` in the 808 suite) or
-    non-test dotted attributes (`audio_measure.rms_envelope`), so the fixed
-    pattern intentionally matches only qualified `<module>.test_<fn>` citations.
-    An unqualified bare name or a misspelled `test_` prefix therefore passes.
+    non-test dotted attributes of an UNREGISTERED module
+    (`audio_measure.rms_envelope`), so those pass. A qualified citation into a
+    REGISTERED module is always checked, whatever the target is called, so a
+    misspelled `tst_` target there fails (see the next test).
     """
     gt = _make_module("test_audio_measure", {"test_known": ""})
     suite = _make_module(
@@ -241,10 +242,28 @@ def test_known_defeat_boundary_unqualified_and_non_test_tokens():
                 "[method] Defeat control.\n\n"
                 "Ground truth: test_missing_without_module\n"
             ),
-            "test_non_test_prefix": (
+            "test_prose_attribute": (
                 "[method] Defeat control.\n\n"
-                "Ground truth: test_audio_measure.tst_missing\n"
+                "Ground truth: none needed; see audio_measure.rms_envelope\n"
             ),
         },
     )
     acceptance_meta.assert_ground_truth_gate(suite, gt)
+
+
+def test_catches_misspelled_target_in_registered_module():
+    """A `tst_` typo in a registered module's target must be named."""
+    gt = _make_module("test_audio_measure", {"test_known": ""})
+    suite = _make_module(
+        "test_suite",
+        {
+            "test_non_test_prefix": (
+                "[method] Typo control.\n\n"
+                "Ground truth: test_audio_measure.tst_missing\n"
+            ),
+        },
+    )
+    with pytest.raises(AssertionError) as exc_info:
+        acceptance_meta.assert_ground_truth_gate(suite, gt)
+    assert "test_non_test_prefix -> test_audio_measure.tst_missing" in str(
+        exc_info.value)
