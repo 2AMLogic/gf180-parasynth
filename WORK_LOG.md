@@ -8,6 +8,11 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-25
 
+- **PR #1264**: ci: gate default-config synth mutants behind a clean default verify_synth_top run
+- **PR #1279**: fix: refuse incomplete 808 neighbour WAV sets in gate calibration
+- **Issue #1315 (closed)**: create-issue.sh is dead on hosts whose defaults.json exceeds 128 KiB (config-resolver passes tiers as argv) — forward to rjwalters/loom
+- **Issue #1221 (closed)**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin
+- **Issue #1263 (closed)**: Remove the missing-neighbour fallback from 808 gate calibration
 - **PR #1295**: fix: validate sound selections before measuring calibration tables
 - **PR #1293**: fix: defer render-only imports so render_miniv4_suite --help/--list run on stdlib Python
 - **PR #1288**: fix: share one qualification rule between snare separator CLI and test
