@@ -8,6 +8,13 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-25
 
+- **Issue #1248** (closed): uart_host --dry-run status/abort renders the apply_frame sentinel -1 in the 'applies' column
+- **Issue #1207** (closed): Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep
+- **PR #1254**: Audit four cymbal log ratios and fix invalid balance verdicts
+- **Issue #1234** (closed): refusal_sibling_scan: an ALIASED borrow sets refused_origin, so a dotted `except <mod>.Refused` is credited for an attribute that does not exist
+- **PR #1261**: fix: refusal_sibling_scan credits <mod>.Refused only for a binding named Refused
+- **Issue #1219** (closed): Consolidate duplicated UART RTL capture/replay in verify_live_midi and verify_rolling_playback (fixes --image r2 running with PULSE2X=0)
+- **PR #1228**: fix: share the UART RTL capture/replay pipeline; replay live-midi r2 bytes at PULSE2X=1
 - **Issue #1253** (closed): render_plan prints the -1 sentinel in the applies column for status/abort rows
 - **PR #1255**: fix: render unset apply_frame as '-' in dry-run plan and echo lines
 - **Issue #1183** (closed): Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census
