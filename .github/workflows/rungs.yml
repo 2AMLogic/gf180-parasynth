@@ -563,7 +563,8 @@ jobs:
       # soundfile-using modules give 376 passed / 0 skipped, vs 375 passed /
       # 1 skipped without; no corpus-gated test or probe misreports.
       - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml soundfile
-      # Three files under tools/ shell out to iverilog (test_check_f1_rtl_record,
+      # Five files under tools/ shell out to iverilog (test_check_f1_rtl_record,
+      # test_check_iverilog_generate_case_string, test_run_controls,
       # test_score_f1_rtl, test_trial). sympy is deliberately NOT installed:
       # test_tone_stage_schematic's sympy witness is meant to be a VISIBLE skip
       # beside two numpy-only witnesses of the same fact that do run.

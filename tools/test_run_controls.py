@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import shutil
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -266,3 +268,59 @@ def test_the_baseline_config_guard_accepts_a_matching_mutant():
     assert _mutant_matches_baseline(
         "verify_ctl.py --outdir b",
         "verify_ctl.py --link dr7rev1 --expect-fail --outdir m")
+
+
+# -- close-out: the mixed-baseline run with REAL verifiers, not stand-ins ------
+
+ROOT = Path(run_controls.__file__).resolve().parents[1]
+CTL = f"{PY} {shlex.quote(str(ROOT / 'rtl-sketch' / 'verify_ctl.py'))}"
+
+# The green half is the shipped pair: the clean rev2 link, then the SPI_ADDR7
+# mutant, properly credited only because its baseline passed. The red half's
+# BASELINE is `--link dr7rev1` with no --expect-fail: the standing
+# negative-control receiver, a real bench that is genuinely red before any
+# injection flag (106 of 209 addresses moved, measured 2026-11-24) -- the
+# #1126 defect shape. Its dependent is the shipped rev1 mutant, which exits 0
+# ("CAUGHT") when run bare and must get NO verdict behind a failed baseline.
+# The report is preseeded with a stale PASS for that mutant: a red run must
+# replace it, not leave it standing.
+def _have_sim_tools() -> bool:
+    """The verifier's own discovery (PATH, then $OSS_CAD_SUITE/bin) for BOTH
+    tools: verify_ctl refuses unless iverilog AND vvp resolve that way."""
+    sys.path.insert(0, str(ROOT / "rtl-sketch"))
+    from verify_ladder import tool
+    return bool(tool("iverilog") and tool("vvp"))
+
+
+@pytest.mark.skipif(not _have_sim_tools(),
+                    reason="iverilog/vvp not discoverable by the verifier: the real bench cannot run")
+def test_mixed_baselines_with_a_real_always_red_verifier(tmp_path):
+    report = tmp_path / "controls.json"
+    report.write_text(json.dumps(
+        [{"cmd": f"{CTL} --link dr7rev1 --expect-fail --outdir {tmp_path}/m",
+          "state": "PASS", "rc": 0, "out": "stale", "secs": 1.0}]))
+    rc = run_controls.main([
+        "--json", str(report), "--timeout", "300",
+        f"@baseline=ctl-green {CTL} --outdir {tmp_path}/clean",
+        f"@after=ctl-green {CTL} --inject SPI_ADDR7 --expect-fail --outdir {tmp_path}/addr7",
+        f"@baseline=ctl-rev1 {CTL} --link dr7rev1 --outdir {tmp_path}/rev1-clean",
+        f"@after=ctl-rev1 {CTL} --link dr7rev1 --expect-fail --outdir {tmp_path}/rev1-mut"])
+    rep = json.loads(report.read_text())
+    assert rc == 1, "the red baseline must fail the whole invocation"
+    assert rep[0]["state"] == "PASS" and rep[0]["role"] == "baseline"
+    assert rep[1]["state"] == "PASS" and rep[1]["baseline"] == "ctl-green"
+    assert rep[2]["state"] == "FAIL" and rep[2]["role"] == "baseline"
+    # The positive population the evidence rests on, not just the outcomes: the
+    # SPI_ADDR7 mutant must be CAUGHT *because the address property moved*, and
+    # the red baseline must be red *because the addresses are wrong*. A run that
+    # exits PASS/FAIL for any other reason (a flipped datum, a traceback)
+    # satisfies the four outcomes above and none of this.
+    m = re.search(r"MOVED\s+address\s+(\d+) of (\d+)", rep[1]["out"])
+    assert m and int(m.group(1)) > 0 and int(m.group(2)) > 0, rep[1]["out"]
+    m = re.search(r"wrong address (\d+),", rep[2]["out"])
+    assert m and int(m.group(1)) > 0, rep[2]["out"]
+    assert rep[3]["state"] == "NO-VERDICT" and rep[3]["skipped"]
+    assert "ctl-rev1" in rep[3]["out"]
+    assert "--link dr7rev1 --expect-fail" in rep[3]["cmd"], "skipped, still identifiable"
+    assert not any(r["state"] == "PASS" and "rev1" in r["cmd"] for r in rep), \
+        "the preseeded PASS must not survive the failed run"
