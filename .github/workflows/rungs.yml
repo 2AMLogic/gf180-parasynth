@@ -71,11 +71,11 @@ jobs:
           python tools/verify_rate_conv_2x.py --simulator verilator
       - name: pulse candidate, transport, deadlines and disabling control
         run: >-
-          python tools/run_all.py --jobs 2 --timeout 900 --json build/pulse2x-ci.json
+          python tools/run_controls.py --jobs 2 --timeout 900 --json build/pulse2x-ci.json
           "python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --outdir build/pulse-voice"
           "python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --simulator verilator --outdir build/pulse-voice-verilator"
-          "python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --outdir build/pulse-smoke"
-          "python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --inject VOICE_PULSE2X_OFF --expect-fail --outdir build/pulse-off"
+          "@baseline=pulse-smoke python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --outdir build/pulse-smoke"
+          "@after=pulse-smoke python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --inject VOICE_PULSE2X_OFF --expect-fail --outdir build/pulse-off"
           "python rtl-sketch/verify_synth_top.py --filter2x --pulse2x --simulator verilator --outdir build/pulse-drums"
       - uses: actions/upload-artifact@v4
         if: always()

@@ -6,8 +6,30 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-25
+
+- **PR #1246**: fix: stop UART status and abort opening the bridge before the dry-run decision
+- **PR #1226**: docs: make MIDI and UART packages optional in the keyboard audition install
+- **PR #1218**: tools: hash tools/delta_report.py in each comparator's SOURCES
+- **PR #1209**: fix: refuse duplicate step names in the roadmap pair gate instead of last-wins
+- **Issue #1245** (closed): Remove early UART dispatch that sends abort and status during --dry-run
+- **Issue #1215** (closed): Make MIDI and UART packages optional in the keyboard audition instructions
+- **Issue #1208** (closed): Decide whether tools/delta_report.py belongs in each comparator's SOURCES (provenance now computed by unhashed code)
+- **Issue #1206** (closed): check_workflows: the #906 pair order gate lets a duplicate guarded step name through (dict-overwrite, no ambiguity refusal)
+- **Issue #1236** (closed): CI: give the full tools pytest job enough time to report its verdict
+- **PR #1242**: ci: raise the tools job budget to 105 minutes so its verdict can report
+- **Issue #1232** (closed): Remove conflicting key assignments from the audition player’s keyboard guide
+- **PR #1233**: fix: correct audition player help keys for glide, hats and filter envelope
+- **Issue #1249** (closed): Harden the audition help control: a silent str.replace no-op still satisfies it
+
 ### 2026-11-24
 
+- **Issue #1214** (closed): refusal_sibling_scan: ambiguous-callee reports family-less callees; --json leaks absolute paths
+- **PR #1230**: fix: filter non-raising stem collisions and make refusal census candidates repo-relative
+- **Issue #1212** (closed): rungs.yml rtl-full: the Verilator VOICE_FILTER2X_OFF control has no clean --m5a-smoke twin in that job
+- **PR #1220**: ci: pair rtl-full's Verilator M5A mutant with a clean smoke baseline
+- **Issue #1211** (closed): Use the ensemble scorer’s existing file hash checks for cached negative controls
+- **PR #1216**: Bind ensemble control-run reuse to the sidecar digests the report carries
 - **Issue #1192** (closed): check_workflows roadmap order gates key on step name, so the SET of compile_dag.py --run invocations is unasserted
 - **PR #1196**: ci: assert the compile_dag.py invocation set, not just the named order-gate steps
 - **Issue #1182** (closed): Wire in tools/performance_suite.py: the playing-behaviour gate that nothing runs
