@@ -206,3 +206,24 @@ def test_gb_partial_record_is_refused():
     assert gb.calibrate_record({"tables": r["tables"]})["status"].startswith("REFUSED")  # no "sounds"
     sub = gb.calibrate_record(env, allow_subset=True)
     assert sub["diagnostic"].startswith("DIAGNOSTIC (not authority)")
+
+
+def test_gb_empty_rows_for_other_sounds_is_refused():
+    """Rule-8 control (row level) through gb.calibrate_record: all 16 keys present,
+    but 15 sounds have empty `rows`."""
+    import json
+    root = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/gate-379/mars-calibration"
+    r = json.loads((root / "tables.json").read_text())
+    gutted = copy.deepcopy(r)
+    for s in pg.SOUNDS16:
+        if s != "BD":
+            gutted["tables"][s]["rows"] = []
+            gutted["tables"][s]["missing"] = []
+            gutted["tables"][s]["keys"] = []
+    # Confirm the pure function calibrates on this gutted record (proves the control is live)
+    pure = gb.calibrate(gutted["tables"])
+    assert pure["p"] == 0.5 and pure["status"] == "CALIBRATED"
+    cal = gb.calibrate_record(gutted)
+    assert cal["status"].startswith("REFUSED") and cal["p"] is None and cal["sounds"] == {}
+    sub = gb.calibrate_record(gutted, allow_subset=True)
+    assert sub["p"] == 0.5 and sub["diagnostic"].startswith("DIAGNOSTIC (not authority)")

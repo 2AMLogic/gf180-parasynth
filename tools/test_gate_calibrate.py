@@ -149,20 +149,63 @@ def test_record_without_sounds_or_empty_is_refused():
 
 
 def test_declared_set_is_compared_to_the_rows_not_to_itself():
-    """Rule-8 control: the input that satisfies a check of `sounds` alone (or of
-    the keys alone) while violating its intent."""
-    # claims all 16, carries one
+    """Rule-8 control (set level): the input that satisfies a check of `sounds`
+    alone (or of the table keys alone) while violating its intent."""
+    # claims all 16, carries one table key
     lie = _envelope(sounds=list(pg.SOUNDS16), keys=["BD"])
     assert gc.calibrate_record(lie)["status"].startswith("REFUSED")
-    # carries all 16, declares one
+    # carries all 16 table keys, declares one
     assert gc.calibrate_record(_envelope(sounds=["BD"]))["status"].startswith("REFUSED")
     # 16 names, but not the right 16
     other = _envelope(sounds=list(pg.SOUNDS16)[:-1] + ["XX"])
     assert gc.calibrate_record(other)["status"].startswith("REFUSED")
-    # extra row beyond the 16
+    # extra table key beyond the 16
     extra = _envelope(sounds=list(pg.SOUNDS16))
     extra["tables"]["XX"] = extra["tables"]["BD"]
     assert gc.calibrate_record(extra)["status"].startswith("REFUSED")
+
+
+def _gut_rows(env, keep, clear_keys=True):
+    """Keep all 16 table keys, but empty `rows` (and `missing`) for sounds outside `keep`."""
+    import copy
+    out = copy.deepcopy(env)
+    for s in pg.SOUNDS16:
+        if s not in keep:
+            out["tables"][s]["rows"] = []
+            out["tables"][s]["missing"] = []
+            if clear_keys:
+                out["tables"][s]["keys"] = []
+    return out
+
+
+def test_empty_rows_for_other_sounds_is_refused():
+    """Rule-8 control (row level): declares all 16 and carries all 16 table keys,
+    but only a subset has measured rows (the shape `measure` writes against a
+    partial recordings cache). A key-set-only guard lets this calibrate."""
+    full = _envelope(sounds=list(pg.SOUNDS16))
+    bd_only = _gut_rows(full, {"BD"})
+    assert gc.calibrate(bd_only["tables"])["k"] == 3
+    assert gc.calibrate(bd_only["tables"])["status"] == "CALIBRATED"
+    cal = gc.calibrate_record(bd_only)
+    assert cal["status"].startswith("REFUSED") and cal["k"] is None and cal["sounds"] == {}
+
+    # Keeping the non-empty `keys` list while emptying `rows` must still be refused
+    bd_kept_keys = _gut_rows(full, {"BD"}, clear_keys=False)
+    assert gc.calibrate_record(bd_kept_keys)["status"].startswith("REFUSED")
+
+    # 5-sound CY subset with 11 sounds' rows emptied
+    cy5 = _gut_rows(full, {"CY", "BD", "SD", "LC", "MT"})
+    assert gc.calibrate(cy5["tables"])["k"] == 5
+    assert gc.calibrate_record(cy5)["status"].startswith("REFUSED")
+
+    # Missing `rows` field on a single sound is refused, not a crash
+    no_rows_key = _envelope(sounds=list(pg.SOUNDS16))
+    del no_rows_key["tables"]["RS"]["rows"]
+    assert gc.calibrate_record(no_rows_key)["status"].startswith("REFUSED")
+
+    # Explicit diagnostic opt-in still works and labels the result not-authority
+    sub = gc.calibrate_record(bd_only, allow_subset=True)
+    assert sub["k"] == 3 and sub["diagnostic"].startswith("DIAGNOSTIC (not authority)")
 
 
 def test_allow_subset_is_labelled_diagnostic():

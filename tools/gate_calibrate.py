@@ -402,18 +402,37 @@ SUBSET_LABEL = "DIAGNOSTIC (not authority): partial sound set, explicitly reques
 
 def record_refusal(envelope: dict) -> str | None:
     """Why a loaded tables file may not be calibrated, or None if it may (#1296).
-    The declared `"sounds"` is compared with the rows actually present and both
-    with all of pg.SOUNDS16: a check of either alone is satisfied by a file that
-    claims sixteen and carries one."""
+    Checks three things: `"sounds"` equals pg.SOUNDS16, `tables` carries those
+    exact sixteen keys, and every sound's table carries at least one measured
+    row (a partial recordings cache yields empty `rows` for missing folders
+    while still populating all sixteen keys).
+
+    Known bounded blind spot (rule 8): an envelope with all sixteen sounds
+    carrying >= 1 row where 15 sounds are truncated to 1 row (or 4 rows / 2
+    keys for `gb`) still passes here while `choose_k`/`choose_p` skip those
+    sounds. Any higher per-sound floor would refuse the real single-take voices
+    (RS/CL/CP/MA/CB/CH have 4 rows / 2 keys in the committed MARS record)."""
     want = set(pg.SOUNDS16)
     if "sounds" not in envelope:
         return "REFUSED: the tables file declares no \"sounds\" set, so its coverage cannot be checked"
-    declared, present = set(envelope["sounds"]), set(envelope.get("tables", {}))
+    sounds = envelope["sounds"]
+    if not isinstance(sounds, (list, tuple, set)):
+        return "REFUSED: the tables file \"sounds\" field is not a list of sound names"
+    tables = envelope.get("tables")
+    if not isinstance(tables, dict):
+        tables = {}
+    declared, present = set(sounds), set(tables)
     if declared != want:
         return f"REFUSED: partial record: declared sounds {sorted(declared)} are not all of the sixteen"
     if present != want:
         return (f"REFUSED: the record declares all sixteen sounds but its tables hold {sorted(present)}"
                 f" (missing {sorted(want - present)}, extra {sorted(present - want)})")
+    empty = sorted(s for s in want if not (isinstance(tables[s], dict)
+                                           and isinstance(tables[s].get("rows"), list)
+                                           and len(tables[s]["rows"]) > 0))
+    if empty:
+        return (f"REFUSED: partial record: tables carry no measured rows for {empty}"
+                f" ({len(want) - len(empty)}/{len(want)} sounds populated)")
     return None
 
 
