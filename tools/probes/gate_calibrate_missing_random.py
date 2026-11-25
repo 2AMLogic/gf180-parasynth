@@ -27,6 +27,7 @@ import gate_calibrate as gc  # noqa: E402
 TABLES = ROOT / "docs/scorecard/gate-379/mars-calibration/tables.json"
 TRIALS = 5000
 MOVE = 226
+COVERAGE_REFUSAL = "REFUSED: no k reaches the development->calibration coverage requirement"
 KEEP = dict(BD=1, SD=1, LT=6, LC=1, MT=11, MC=1, HT=3, HC=3, CY=3)
 
 
@@ -44,15 +45,39 @@ def move(tabs, removed):
     return out
 
 
-def classify(res):
-    st = res["status"]
-    if st == "CALIBRATED":
-        return "CALIBRATED"
-    if "incomplete evidence" in st:
-        return "EVIDENCE_REFUSED"
-    if st.startswith("REFUSED: no k reaches"):
-        return "COVERAGE_REFUSED"
-    return "UNEXPECTED"
+def check_partition(tabs, expected, removed):
+    """Check the exact requested move against the index, including multiplicity."""
+    if tabs.keys() != expected.keys() or not removed <= set().union(*expected.values()):
+        raise ValueError("partition contains an unindexed path or the wrong sounds")
+    for sound, indexed in expected.items():
+        for field, wanted in (("rows", indexed - removed), ("missing", indexed & removed)):
+            actual = [r["rel"] for r in tabs[sound][field]]
+            if len(actual) != len(wanted) or set(actual) != wanted:
+                raise ValueError(f"{sound}: {field} partition differs from the requested move")
+
+
+def evaluate(tabs, expected, removed):
+    if len(removed) != MOVE:
+        raise ValueError(f"expected {MOVE} distinct removals, got {len(removed)}")
+    altered = move(tabs, removed)
+    check_partition(altered, expected, removed)
+    res = gc.calibrate(altered)  # default path: the gate must still read its own index
+    status = res["status"]
+    if status == "CALIBRATED":
+        return res, "CALIBRATED"
+    if status == COVERAGE_REFUSAL:
+        return res, "COVERAGE_REFUSED"
+    if status.startswith("REFUSED: incomplete evidence for "):
+        # Only an indexed, formerly eligible sound losing a whole group counts.
+        # Confirm the actual refusal against the known-good index as well.
+        for sound, table in tabs.items():
+            before = {r["group"] for r in table["rows"]}
+            after = {r["group"] for r in altered[sound]["rows"]}
+            if {0, 1} <= before and not {0, 1} <= after:
+                if gc.evidence_refusal(altered, expected) == status:
+                    return res, "EVIDENCE_REFUSED"
+                break
+    raise ValueError(f"unexpected calibration result: {status}")
 
 
 def cov(res, k=3):
@@ -64,69 +89,76 @@ def draw(paths, seed):
     return set(random.Random(seed).sample(paths, MOVE))
 
 
-def controls(tabs):
+def controls(tabs, expected=None):
+    if expected is None:
+        expected = gc.expected_takes()
+    check_partition(tabs, expected, set())
+    if (len(tabs) != 16 or sum(map(len, expected.values())) != 772
+            or len(set().union(*expected.values())) != 772):
+        raise ValueError("complete control requires 16 sounds and 772 distinct readable paths")
     clean = gc.calibrate(tabs)
-    assert len(tabs) == 16 and sum(len(t["rows"]) for t in tabs.values()) == 772
-    assert all(not t["missing"] for t in tabs.values())
-    assert classify(clean) == "COVERAGE_REFUSED" and clean["k"] is None and cov(clean) == (3, 9), clean["status"]
+    if (clean["status"], clean["k"], cov(clean)) != (COVERAGE_REFUSAL, None, (3, 9)):
+        raise ValueError(f"complete control expected a coverage refusal at 3/9, got {clean['status']}")
     removed = set()
     for s, n in KEEP.items():
         dev = sorted((r for r in tabs[s]["rows"] if r["group"] == 0), key=lambda r: r["d"]["spec"])
         removed |= {r["rel"] for r in dev[:-n]}
-    assert len(removed) == MOVE
-    sel = move(tabs, removed)
-    assert gc.evidence_refusal(sel) is None
-    res = gc.calibrate(sel)
-    assert (res["status"], res["k"], cov(res)) == ("CALIBRATED", 3, (9, 9)), res["status"]
+    res, verdict = evaluate(tabs, expected, removed)
+    if (verdict, res["k"], cov(res)) != ("CALIBRATED", 3, (9, 9)):
+        raise ValueError(f"selected control expected CALIBRATED k=3 at 9/9, got {res['status']}")
     return "complete record REFUSED k=None 3/9; selected 226 -> CALIBRATED k=3 9/9"
 
 
-def main():
+def experiment(args):
+    tabs = load()
+    expected = gc.expected_takes()
+    print(controls(tabs, expected))
+    paths = sorted(set().union(*expected.values()))
+    counts, hits = {}, []
+    seeds = [args.replay] if args.replay is not None else range(args.trials)
+    for seed in seeds:
+        try:
+            removed = draw(paths, seed)
+            res, verdict = evaluate(tabs, expected, removed)
+        except Exception as exc:
+            raise ValueError(f"seed {seed}: {exc}") from exc
+        counts[verdict] = counts.get(verdict, 0) + 1
+        if args.replay is not None or verdict == "CALIBRATED":
+            ordered = sorted(removed)
+            entry = {"seed": seed, "k": res["k"], "cov_k3": cov(res), "cov_chosen_k": cov(res, res["k"]),
+                     "removed_sha256": hashlib.sha256("\n".join(ordered).encode()).hexdigest()}
+            if args.replay is not None:
+                print(json.dumps(dict(entry, verdict=verdict)))
+                return
+            if not hits:
+                entry["removed"] = ordered
+            hits.append(entry)
+
+    # Every attempted trial returned a recognised verdict before we get here.
+    summary = {"trials": args.trials, "move": MOVE, "counts": counts, "errors_or_unexpected": 0,
+               "tables_sha256": hashlib.sha256(TABLES.read_bytes()).hexdigest(),
+               "calibrated_hits": hits,
+               "upper95_one_sided": (1 - 0.05 ** (1 / args.trials)) if not hits else None}
+    print(json.dumps({k: v for k, v in summary.items() if k != "calibrated_hits"}, indent=1))
+    print(f"hits: {[h['seed'] for h in hits]}")
+    if args.out:
+        pathlib.Path(args.out).write_text(json.dumps(summary, indent=1) + "\n")
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--trials", type=int, default=TRIALS)
     ap.add_argument("--out")
     ap.add_argument("--replay", type=int)
-    a = ap.parse_args()
-    tabs = load()
-    paths = sorted(r["rel"] for t in tabs.values() for r in t["rows"])
-    assert len(paths) == len(set(paths)) == 772
-    print(controls(tabs))
-    if a.replay is not None:
-        rem = draw(paths, a.replay)
-        res = gc.calibrate(move(tabs, rem))
-        print(json.dumps({"seed": a.replay, "verdict": classify(res), "k": res["k"], "cov_k3": cov(res),
-                          "removed_sha256": hashlib.sha256("\n".join(sorted(rem)).encode()).hexdigest()}))
-        return 0
-    counts, hits, bad = {}, [], 0
-    for seed in range(a.trials):
-        rem = draw(paths, seed)
-        try:
-            res = gc.calibrate(move(tabs, rem))
-            v = classify(res)
-        except Exception as e:  # an execution error invalidates the run
-            print(f"seed {seed}: ERROR {type(e).__name__}: {e}")
-            bad += 1
-            continue
-        counts[v] = counts.get(v, 0) + 1
-        if v == "CALIBRATED":
-            h = {"seed": seed, "k": res["k"], "cov_k3": cov(res), "cov_chosen_k": cov(res, res["k"]),
-                 "removed_sha256": hashlib.sha256("\n".join(sorted(rem)).encode()).hexdigest()}
-            if not hits:  # one exact, replayable path set is published in full
-                h["removed"] = sorted(rem)
-            hits.append(h)
-        elif v == "UNEXPECTED":
-            bad += 1
-    n = a.trials
-    hit = counts.get("CALIBRATED", 0)
-    summary = {"trials": n, "move": MOVE, "counts": counts, "errors_or_unexpected": bad,
-               "tables_sha256": hashlib.sha256(TABLES.read_bytes()).hexdigest(),
-               "calibrated_hits": hits,
-               "upper95_one_sided": (1 - 0.05 ** (1 / n)) if hit == 0 else None}
-    print(json.dumps({k: v for k, v in summary.items() if k != "calibrated_hits"}, indent=1))
-    print(f"hits: {[h['seed'] for h in hits]}")
-    if a.out:
-        pathlib.Path(a.out).write_text(json.dumps(summary, indent=1) + "\n")
-    return 2 if bad or sum(counts.values()) != n else 0
+    args = ap.parse_args(argv)
+    if args.trials < 1:
+        ap.error("--trials must be positive")
+    try:
+        experiment(args)
+    except Exception as exc:
+        print(f"Invalid experiment: {exc}", file=sys.stderr)
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
