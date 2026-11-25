@@ -284,8 +284,16 @@ CTL = f"{PY} {shlex.quote(str(ROOT / 'rtl-sketch' / 'verify_ctl.py'))}"
 # ("CAUGHT") when run bare and must get NO verdict behind a failed baseline.
 # The report is preseeded with a stale PASS for that mutant: a red run must
 # replace it, not leave it standing.
-@pytest.mark.skipif(shutil.which("iverilog") is None,
-                    reason="iverilog not installed: the real bench cannot run")
+def _have_sim_tools() -> bool:
+    """The verifier's own discovery (PATH, then $OSS_CAD_SUITE/bin) for BOTH
+    tools: verify_ctl refuses unless iverilog AND vvp resolve that way."""
+    sys.path.insert(0, str(ROOT / "rtl-sketch"))
+    from verify_ladder import tool
+    return bool(tool("iverilog") and tool("vvp"))
+
+
+@pytest.mark.skipif(not _have_sim_tools(),
+                    reason="iverilog/vvp not discoverable by the verifier: the real bench cannot run")
 def test_mixed_baselines_with_a_real_always_red_verifier(tmp_path):
     report = tmp_path / "controls.json"
     report.write_text(json.dumps(
@@ -302,6 +310,15 @@ def test_mixed_baselines_with_a_real_always_red_verifier(tmp_path):
     assert rep[0]["state"] == "PASS" and rep[0]["role"] == "baseline"
     assert rep[1]["state"] == "PASS" and rep[1]["baseline"] == "ctl-green"
     assert rep[2]["state"] == "FAIL" and rep[2]["role"] == "baseline"
+    # The positive population the evidence rests on, not just the outcomes: the
+    # SPI_ADDR7 mutant must be CAUGHT *because the address property moved*, and
+    # the red baseline must be red *because the addresses are wrong*. A run that
+    # exits PASS/FAIL for any other reason (a flipped datum, a traceback)
+    # satisfies the four outcomes above and none of this.
+    m = re.search(r"MOVED\s+address\s+(\d+) of (\d+)", rep[1]["out"])
+    assert m and int(m.group(1)) > 0 and int(m.group(2)) > 0, rep[1]["out"]
+    m = re.search(r"wrong address (\d+),", rep[2]["out"])
+    assert m and int(m.group(1)) > 0, rep[2]["out"]
     assert rep[3]["state"] == "NO-VERDICT" and rep[3]["skipped"]
     assert "ctl-rev1" in rep[3]["out"]
     assert "--link dr7rev1 --expect-fail" in rep[3]["cmd"], "skipped, still identifiable"

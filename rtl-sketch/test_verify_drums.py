@@ -15,7 +15,7 @@ with an absolute --outdir passed -- the apparatus state, not the load.
 
 The sibling verifiers normalise in main (verify_ctl.py:
 `a.outdir = os.path.abspath(a.outdir)`); this pins the same for drums. No
-iverilog needed: subprocess.run is recorded and faked, and the recorded argv
+iverilog needed: tool lookup is stubbed, subprocess.run is recorded and faked, and the recorded argv
 is the defect.
 """
 from __future__ import annotations
@@ -43,6 +43,9 @@ def test_a_relative_outdir_reaches_iverilog_absolute(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setattr(verify_drums.subprocess, "run", fake_run)
+    # simulate() resolves both executables before it ever calls subprocess.run:
+    # without this stub the test passes only where iverilog/vvp are installed.
+    monkeypatch.setattr(verify_drums, "tool", lambda name: f"/stub/bin/{name}")
     rc = verify_drums.main(["--short", "--outdir", "reldrum"])  # rc is the comparison's, not under test
     assert calls, "iverilog was never invoked"
     iverilog = [c for c in calls if os.path.basename(c[0][0]).startswith("iverilog")][0]
