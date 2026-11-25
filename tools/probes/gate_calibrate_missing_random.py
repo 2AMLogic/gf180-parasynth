@@ -68,12 +68,18 @@ def evaluate(tabs, expected, removed):
     if status == COVERAGE_REFUSAL:
         return res, "COVERAGE_REFUSED"
     if status.startswith("REFUSED: incomplete evidence for "):
-        # Only an indexed, formerly eligible sound losing a whole group counts.
-        # Confirm the actual refusal against the known-good index as well.
+        # A verified partition can prevent v1 selection or held-out validation.
+        # Check participation independently before accepting the gate's refusal.
         for sound, table in tabs.items():
             before = {r["group"] for r in table["rows"]}
-            after = {r["group"] for r in altered[sound]["rows"]}
-            if {0, 1} <= before and not {0, 1} <= after:
+            retained = altered[sound]["rows"]
+            after = {r["group"] for r in retained}
+            lost_selection = {0, 1} <= before and not {0, 1} <= after
+            validated = {1, 2} <= before and len(table["keys"]) >= 3
+            lost_validation = validated and (
+                not {1, 2} <= after or len({r["key"] for r in retained}) < 3
+            )
+            if lost_selection or lost_validation:
                 if gc.evidence_refusal(altered, expected) == status:
                     return res, "EVIDENCE_REFUSED"
                 break

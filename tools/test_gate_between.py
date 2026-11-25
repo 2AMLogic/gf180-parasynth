@@ -2,6 +2,7 @@
 import copy
 import json
 import pathlib
+import subprocess
 import sys
 
 import numpy as np
@@ -342,6 +343,33 @@ def test_cli_refusal_on_empty_rows_is_not_masked_by_old_bar_context(real, tmp_pa
     assert gb.rank_rows(res["calibration"]["old_bar_context"])   # descriptive table without `ours` does not crash
 
 
+@pytest.mark.parametrize(("fault", "reason"), [
+    (None, None),
+    ("missing", "no readable MARS takes"),
+    ("nonfinite", "non-finite worst ratio"),
+    ("serialized_nonfinite", "non-finite worst ratio"),
+])
+def test_table_command_reports_rank_refusal(tmp_path, fault, reason):
+    rec = json.loads(BETWEEN_P075.read_text())
+    hc = rec["calibration"]["old_bar_context"]["HC"]
+    if fault == "missing":
+        hc.update(mars_best=None, n_takes=0, mars_takes_passing_old_bar=0)
+    elif fault == "nonfinite":
+        hc["ours"]["worst_ratio"] = float("nan")
+    elif fault == "serialized_nonfinite":
+        hc["mars_best"]["worst_ratio"] = pg._r(float("inf"))
+    path = tmp_path / "between.json"
+    path.write_text(json.dumps(rec))
+    cmd = subprocess.run([sys.executable, gb.__file__, "table", str(path)], capture_output=True, text=True)
+    if reason:
+        assert cmd.returncode == exit_contract.REFUSED, cmd.stderr
+        assert cmd.stderr.startswith(f"REFUSED: HC: {reason}") and "Traceback" not in cmd.stderr
+        assert not cmd.stdout
+    else:
+        assert cmd.returncode == exit_contract.PASS and not cmd.stderr
+        assert len(cmd.stdout.splitlines()) == 18 and "| HC |" in cmd.stdout
+
+
 def test_rank_refuses_when_ours_present_but_no_mars_takes():
     ctx = {"SD": {"old_bar": "WEAK", "n_takes": 0, "mars_takes_passing_old_bar": 0,
                   "mars_best": None, "ours": {"worst_ratio": 4.0, "worst_feature": "decay"}}}
@@ -394,6 +422,58 @@ def test_q4_count_only_7_of_8_after_omitting_hc_cannot_qualify():
     q["validation"] = {"sounds": len(per), "best_passes": sum(per.values())}
     assert gc.decide(q, False)["status"] == "REFUSED"
     assert gb.decide(q, False)["status"] == "REFUSED"
+
+
+@pytest.mark.parametrize("gate", [gc, gb], ids=["v1", "v2"])
+@pytest.mark.parametrize(("modulation", "verdict", "passes"), [
+    (0.0, "PASS", True),
+    (1.0, "FAIL", False),
+    (None, "REFUSED", None),
+])
+def test_q4_preserves_held_out_verdict(real, gate, modulation, verdict, passes):
+    tabs = _zero(real)
+    held = {r["rel"]: r["d"] for r in tabs["BD"]["rows"] if gc.group_of(gc.key_of(r["rel"])) == 2}
+    assert len(held) == 44
+    for d in held.values():
+        d["modulation"] = modulation
+
+    cal = gate.calibrate(tabs)
+    assert cal["status"] == "CALIBRATED"
+    bd = cal["sounds"]["BD"]
+    validation = bd["validation"]
+    matched = validation["matched"][0] if gate is gc else validation["matched"]
+    assert pg.verdict(held[matched], bd["bar"])["verdict"] == verdict
+
+    q = json.loads(BETWEEN_P075.read_text())["qualification"]
+    q["validation"] = gc.summarize_validation(cal)
+    dec = gate.decide(q, False)
+    q4 = dec["gates"]["Q4 stays green"]
+    if verdict == "REFUSED":
+        assert dec["status"] == "REFUSED", q4
+        assert dec["unrun"] == ["Q4 stays green"] and q4["ok"] is None
+        assert "BD" in q4["observed"] and "REFUSED" in q4["observed"]
+        assert "REFUSED" in bd["status"]
+        assert q["validation"]["by_sound"]["BD"] is None and q["validation"]["best_passes"] is None
+    else:
+        assert dec["status"] == "QUALIFIED" and q4["ok"] is True
+        assert ("9/9" if passes else "8/9") in q4["observed"]
+    assert validation["best_passes"] is passes
+
+
+@pytest.mark.parametrize("record_path", [
+    SCORECARD / "mars-calibration/calibrationforcek5.json", BETWEEN_P075,
+])
+def test_stored_validation_booleans_agree_with_measured_verdicts(real, record_path):
+    # Legacy False could also mean REFUSED. Check each archived take against
+    # its stored bar before relying on the historical 2/9 and 7/9 replays.
+    cal = json.loads(record_path.read_text())["calibration"]
+    for sound in VAL9:
+        row = cal["sounds"][sound]
+        val = row["validation"]
+        matched = val["matched"]
+        rel = matched[0] if isinstance(matched, list) else matched
+        d = next(r["d"] for r in real[sound]["rows"] if r["rel"] == rel)
+        assert pg.verdict(d, row["bar"])["verdict"] == ("PASS" if val["best_passes"] else "FAIL")
 
 
 def test_q4_replay_on_stored_v2_diagnostic_covers_both_callers():

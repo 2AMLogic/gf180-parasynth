@@ -3,6 +3,7 @@ import copy
 import csv
 import json
 import pathlib
+import random
 import subprocess
 import sys
 
@@ -362,6 +363,17 @@ def test_random_missing_published_replay():
     assert res["status"] == "CALIBRATED" and res["k"] == hit["k"] == 5
     assert probe.cov(res) == tuple(hit["cov_k3"]) == (5, 9)
     assert probe.cov(res, res["k"]) == tuple(hit["cov_chosen_k"]) == (8, 9)
+
+
+def test_random_missing_accounts_for_validation_group_loss():
+    tabs = probe.load()
+    expected = gc.expected_takes()
+    val = {r["rel"] for r in tabs["BD"]["rows"] if r["group"] == 2}
+    other = sorted(set().union(*expected.values()) - expected["BD"])
+    removed = val | set(random.Random(0).sample(other, probe.MOVE - len(val)))
+    res, verdict = probe.evaluate(tabs, expected, removed)
+    assert verdict == "EVIDENCE_REFUSED"
+    assert "BD: no readable take in the validation group" in res["status"]
 
 
 def test_eighteen_selected_losses_from_published_draw_still_calibrate():

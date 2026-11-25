@@ -185,6 +185,16 @@ def passes(d: dict, bar: dict) -> bool:
     return pg.verdict(d, bar)["verdict"] == "PASS"
 
 
+# Held-out comparisons are tri-state in both calibration formats. Only a
+# measured FAIL contributes False to Q4. JSON null records a refused take.
+HELD_OUT_PASS = {"PASS": True, "FAIL": False, "REFUSED": None}
+VALIDATION_STATUS = {
+    "PASS": "VALIDATED",
+    "FAIL": "VALIDATION-FAILED: best untouched take fails the bar",
+    "REFUSED": "VALIDATION-REFUSED: best untouched take lacks an applicable feature",
+}
+
+
 def choose_k(tabs: dict) -> dict:
     """Development only: the bar from the development group, tried on the
     calibration group's nearest sample. Returns per-k coverage and the choice.
@@ -484,11 +494,12 @@ def calibrate(tabs: dict, force_k: int | None = None, expected: dict | None = No
         if len(t["keys"]) < 3 or not val:
             row["status"] = "UNVALIDATED: no untouched take to test the bar on"
         else:
-            res = [passes(r["d"], bar) for r in val]
-            row["validation"] = {"matched": [r["rel"] for r in val], "pass": res,
-                                 "best_passes": passes(val[0]["d"], bar),
-                                 "worst_ratio_best": pg.verdict(val[0]["d"], bar)["worst_ratio"]}
-            row["status"] = "VALIDATED" if row["validation"]["best_passes"] else "VALIDATION-FAILED: best untouched take fails the bar"
+            verdicts = [pg.verdict(r["d"], bar) for r in val]
+            passed = [HELD_OUT_PASS[v["verdict"]] for v in verdicts]
+            best = verdicts[0]
+            row["validation"] = {"matched": [r["rel"] for r in val], "pass": passed,
+                                 "best_passes": passed[0], "worst_ratio_best": best["worst_ratio"]}
+            row["status"] = VALIDATION_STATUS[best["verdict"]]
         out["sounds"][s] = row
     out["status"] = "DIAGNOSTIC-CALIBRATION" if diagnostic else "CALIBRATED"
     return out
@@ -537,17 +548,16 @@ def summarize_validation(cal: dict) -> dict:
     `decide` compares participating sound identities against the index's expected
     set rather than trusting reduced counts (#1304)."""
     by_sound = {
-        s: r["validation"]["best_passes"]
+        s: r["validation"].get("best_passes")
         for s, r in sorted(cal["sounds"].items())
         if isinstance(r, dict)
         and isinstance(r.get("validation"), dict)
-        and isinstance(r["validation"].get("best_passes"), bool)
     }
     return {
         "rule": cal.get("rule", "v1"),
         "by_sound": by_sound,
         "sounds": len(by_sound),
-        "best_passes": sum(by_sound.values()),
+        "best_passes": sum(by_sound.values()) if all(isinstance(x, bool) for x in by_sound.values()) else None,
     }
 
 
@@ -628,7 +638,7 @@ def validation_refusal_q4(
     if isinstance(v, dict) and "rule" in v and v["rule"] != rule:
         return f"REFUSED: incomplete validation evidence: rule mismatch ({v['rule']!r} vs {rule!r})"
     by_sound = v.get("by_sound") if isinstance(v, dict) else None
-    if not isinstance(by_sound, dict) or not all(isinstance(x, bool) for x in by_sound.values()):
+    if not isinstance(by_sound, dict):
         return "REFUSED: incomplete validation evidence: per-sound validation results absent"
     if expected is None:
         try:
@@ -642,12 +652,15 @@ def validation_refusal_q4(
     have = set(by_sound)
     missing = sorted(want - have)
     extra = sorted(have - want)
-    if missing or extra:
-        parts = []
-        if missing:
-            parts.append(f"missing {', '.join(missing)} ({len(have & want)}/{len(want)} expected)")
-        if extra:
-            parts.append(f"unexpected {', '.join(extra)}")
+    unreadable = sorted(s for s in want & have if not isinstance(by_sound[s], bool))
+    parts = []
+    if missing:
+        parts.append(f"missing {', '.join(missing)} ({len(have & want)}/{len(want)} expected)")
+    if extra:
+        parts.append(f"unexpected {', '.join(extra)}")
+    if unreadable:
+        parts.append(f"no readable held-out verdict for {', '.join(unreadable)}")
+    if parts:
         return "REFUSED: incomplete validation evidence: " + "; ".join(parts)
     return None
 
