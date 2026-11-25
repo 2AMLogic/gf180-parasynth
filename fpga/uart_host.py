@@ -1355,8 +1355,11 @@ def render_plan(plan_rows: list, *, anchor_frame: int = 0) -> str:
     for row in plan_rows:
         due = f"{row.due}" if row.due >= 0 else "-"
         accept = f"{row.accept_frame}" if row.accept_frame >= 0 else "-"
+        # apply_frame's -1 is the "no apply frame" sentinel (status/abort);
+        # printed raw it reads as a device time
+        applies = f"{row.apply_frame}" if row.apply_frame >= 0 else "-"
         lines.append(f"{row.index:>3} {row.send_frame:>10} {accept:>7} {due:>7} "
-                     f"{row.apply_frame:>8}  {row.packet.hex()}")
+                     f"{applies:>8}  {row.packet.hex()}")
     return "\n".join(lines)
 
 

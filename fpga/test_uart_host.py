@@ -365,3 +365,28 @@ def test_take_counts_every_packet_in_a_chunk_not_just_the_first_match():
         pass
     assert b.acks_seen == 8
     assert b.device_errors == [(1, 0x21)]
+
+
+# ---- render_plan: the "no apply frame" sentinel is not a device time --------
+def _applies_column(text: str) -> list:
+    """The `applies` cell of each data row. Rows are
+    `#  send@frame  accept  due  applies  bytes`, so it is field 4."""
+    return [line.split()[4] for line in text.splitlines()[2:]]
+
+
+@pytest.mark.parametrize("kind", ["status", "abort"])
+def test_render_plan_management_row_applies_is_dash_not_minus_one(kind):
+    rows = uh.plan([(kind,)], start_frame=0)
+    assert rows[0].apply_frame == -1        # the sentinel is what we guard
+    assert _applies_column(uh.render_plan(rows)) == ["-"]
+
+
+def test_render_plan_write_and_event_rows_still_render_a_number():
+    # control: the guard must not blank real apply frames. Removing the
+    # `>= 0` guard turns the management test red; inverting it turns this red.
+    rows = uh.plan([("write", 0, 0, 0x21, 0), ("event", 5000, 0, 0, 0, 0),
+                    ("status",)], start_frame=14)
+    cells = _applies_column(uh.render_plan(rows))
+    assert cells[0] == str(rows[0].apply_frame) and rows[0].apply_frame >= 0
+    assert cells[1] == "5000"
+    assert cells[2] == "-"
