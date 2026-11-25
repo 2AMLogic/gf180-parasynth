@@ -27,7 +27,9 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "audition"))
 
+import audio_measure                                                # noqa: E402
 import dsp                                                          # noqa: E402
+import refprofile                                                   # noqa: E402
 import reference_suites as rs                                       # noqa: E402
 import render_miniv4_suite as rv                                    # noqa: E402
 
@@ -45,7 +47,7 @@ def good_identity(version=None) -> dict:
 def fake_identity(monkeypatch, version=None, present=True):
     ident = good_identity(version)
     ident["present"] = present
-    monkeypatch.setattr(rv.rp, "plugin_identity", lambda _path: ident)
+    monkeypatch.setattr(refprofile, "plugin_identity", lambda _path: ident)
 
 
 class FakeRig:
@@ -156,7 +158,7 @@ def test_an_octave_default_is_refused(monkeypatch, capsys, rig_ready):
 
 def test_an_unreadable_calibration_pitch_is_refused(monkeypatch, capsys, rig_ready):
     monkeypatch.setattr(FakeRig, "silent", True)
-    monkeypatch.setattr(rv.am, "dominant_frequency",
+    monkeypatch.setattr(audio_measure, "dominant_frequency",
                         lambda *a, **k: types.SimpleNamespace(
                             ok=False, value=None, reason="no prominent line"))
     # silence refuses first -- unreadability is reached from a sounding rig
@@ -266,3 +268,25 @@ def test_every_suite_case_is_listable_and_carries_render_settings():
     for c in suite["cases"]:
         assert isinstance(c["phrase_s"], (int, float))
         assert c["render_state"] == "awaiting-render"
+
+
+@pytest.mark.parametrize("flag", ["--help", "--list"])
+def test_help_and_list_run_without_numpy(flag):
+    """#1292: the fleet-worker dry run must work on stdlib Python. numpy and
+    the render-only modules are blocked in an isolated interpreter, so a
+    regression to an eager top-level import fails here."""
+    import subprocess
+    script = pathlib.Path(rv.__file__).resolve()
+    code = (
+        "import runpy, sys\n"
+        "for m in ('numpy', 'scipy', 'audio_measure', 'dsp', 'refprofile'):\n"
+        "    sys.modules[m] = None\n"
+        f"sys.argv = [{str(script)!r}, {flag!r}]\n"
+        f"runpy.run_path({str(script)!r}, run_name='__main__')\n")
+    r = subprocess.run([sys.executable, "-ISB", "-c", code],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    if flag == "--list":
+        assert "32 of 32 cases" in r.stdout
+    else:
+        assert "usage" in r.stdout.lower()
