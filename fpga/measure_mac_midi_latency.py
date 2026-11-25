@@ -69,9 +69,10 @@ for _p in (HERE, HERE / "release", ROOT / "model", ROOT / "audition"):
 
 import coremidi_input as cmi                               # noqa: E402
 import live_midi_contract as C                             # noqa: E402
-import midi_session as ms                                  # noqa: E402
 import uart_device_sim as dev                              # noqa: E402
-import verify_live_midi as vlm                             # noqa: E402
+
+# Keep measurement imports local so argument parsing works without NumPy.
+# verify_live_midi imports NumPy at module load (#1297).
 
 SR = C.SR
 OUT = ROOT / "fpga/reports/live-midi/mac-host-latency.json"
@@ -128,6 +129,7 @@ class DirectBackend:
 
 
 def dist(xs) -> dict:
+    import verify_live_midi as vlm
     return {"n": len(xs), "min": min(xs, default=None), "p50": vlm.pctl(xs, 50) if xs else None,
             "p95": vlm.pctl(xs, 95) if xs else None, "p99": vlm.pctl(xs, 99) if xs else None,
             "max": max(xs, default=None)}
@@ -150,6 +152,7 @@ class Probe:
     (the control). It changes nothing the session decides."""
 
     def __init__(self, s, ser, sim, *, stall_ms: float = 0.0, stall_at: float | None = None):
+        import midi_session as ms
         self.s, self.ser, self.sim = s, ser, sim
         self.stall_ms = stall_ms
         self.receipts, self.map_err, self.value_t, self.sent, self.stalled = [], [], {}, [], []
@@ -317,6 +320,8 @@ def sim_reference(seconds: float = 5.0, *, stall_ms: float = 0.0, inject=()) -> 
     run_session drives the session: its endpoint distribution must equal
     check()'s, which pairs by the independent oracle (the apparatus's
     known-answer test, fpga/test_measure_mac_midi_latency.py)."""
+    import midi_session as ms
+    import verify_live_midi as vlm
     events = vlm.sc_sustained(seconds)
     clock = dev.SimClock()
     sim = dev.UartDeviceSim(clock=clock)
@@ -337,6 +342,8 @@ def sim_reference(seconds: float = 5.0, *, stall_ms: float = 0.0, inject=()) -> 
 
 
 def measure(source: str, seconds: float, *, stall_ms: float = 0.0, stall_at_s: float = 3.0) -> dict:
+    import midi_session as ms
+    import verify_live_midi as vlm
     events = vlm.sc_sustained(seconds)
     wire = [vlm.enc(e) for e in events]
     backend = vsrc = None
@@ -436,6 +443,7 @@ def main(argv=None) -> int:
                          "worst case); recorded in the result")
     ap.add_argument("--json", type=Path, default=OUT)
     a = ap.parse_args(argv)
+    import verify_live_midi as vlm
     if a.source == "coremidi" and sys.platform != "darwin":
         print(f"mac-latency: REFUSED -- --source coremidi needs macOS (this is {sys.platform})")
         return 2

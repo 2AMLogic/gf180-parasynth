@@ -3,7 +3,7 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as its own last change — `git log --no-patch -1 --format='%h %cs' -L '/^<!-- guide:plan-body:start -->$/,/^<!-- guide:plan-body:end -->$/:WORK_PLAN.md' origin/main` — which neither a declined Guide regeneration nor a docs-only commit elsewhere in this file advances.
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-25T05:57:43Z (snapshot; compare against live labels)_
+_Generated: 2026-11-25T11:11:00Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
@@ -35,6 +35,7 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
+- **#1309**: Refuse incomplete Fischer reference sets in the conga body-spread report
 
 ## In Progress
 
@@ -48,32 +49,28 @@ Issues currently being built (`loom:building`).
 - **#847**: Wire check_m1a_drive_report.py into make verify; record why check_m1a_selection.py and three others are not unwired gates
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
-- **#1126**: Require a matching clean run before make controls credits an RTL mismatch
 - **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal
 - **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin
 - **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow
-- **#1229**: A refused rolling RTL replay now runs the rtl_control stage it used to skip
-- **#1258**: Remove the SciPy requirement from default-patch M5A UART playback
-- **#1262**: measure_repeatability's only refusal control never runs in CI (soundfile absent by omission, not decision)
-- **#1263**: Remove the missing-neighbour fallback from 808 gate calibration
-- **#1265**: Catch cross-module Refused at M1A / phase-cycle CLI boundaries (6 modules)
-- **#1266**: Catch cross-module Refused at M5A / M5B / mono_artifact_probe CLI boundaries (7 modules)
-- **#1267**: refusal_sibling_scan: the `nm == FAMILY_NAME` guard has no control for the explicit re-export `from lender import Refused as Refused`
-- **#1268**: Defer SciPy and V3-reader imports in mono_m5a_score so named-preset UART, live MIDI, and demo players run without SciPy
+- **#1289**: max() accumulators elsewhere drop a NaN the same way #1284's separator did
+- **#1296**: calibrate accepts a one-sound table that the full corpus refuses (the input that survives #1294's guard)
+- **#1297**: fpga/measure_mac_midi_latency.py --help needs NumPy it never uses (same class as #1282)
+- **#1301**: A complete sound set with empty per-sound tables still calibrates on one sound's evidence (rule-8 sibling of #1296)
+- **#1302**: Honor --image in fpga/play_song.py render instead of silently rendering R1 for --image r2
+- **#1303**: Consolidate model/sound_report.py RELOCKS into LOCK_CHANGELOG so one record feeds the report and --check-locks
+- **#1307**: gate_calibrate: bar_for's corpus-completeness Refused escapes uncaught, reporting REFUSED as exit 1
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#1201**: controls: real-verifier mixed-baseline evidence, end-to-end make controls runs, drums outdir fix
-- **#1259**: fix: let the R1 quick-start dry run work without SciPy
-- **#1264**: ci: gate default-config synth mutants behind a clean default verify_synth_top run
-- **#1269**: test: pin same-name Refused re-export against narrowed origin guard
-- **#1270**: fix: return the refusal exit status from M5 measurement tools
-- **#1273**: fix: catch cross-module Refused at six M1A CLI boundaries
-- **#1274**: fix: skip the RTL control when the rolling replay was refused
-- **#1277**: fix: load M5A audio dependencies only during scoring
-- **#1279**: fix: refuse incomplete 808 neighbour WAV sets in gate calibration
+- **#1291**: fix: refuse nonfinite readings in two max() accumulators
+- **#1298**: fix: refuse to calibrate a partial-sound tables record
+- **#1299**: fix: defer NumPy-pulling imports in the Mac latency probe so --help works
+- **#1305**: fix: refuse calibration on incomplete per-sound evidence (index-backed)
+- **#1310**: fix: honor --image in play_song render (r2 uses pulse_2x)
+- **#1311**: refactor: fold RELOCKS into LOCK_CHANGELOG and tighten lock-chain checks
+- **#1312**: fix: gate_calibrate refuses with exit 2 when an old-bar neighbour WAV is missing
 
 ## Approved (Awaiting Merge)
 
@@ -82,7 +79,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper *(held)* — linked issue #1062
 - **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches *(held)* — linked issue #1199
 - **#1227**: fix(nightly): gate the ctl and synth_top mutant steps on a clean run — linked issue #1222
-- **#1272**: ci: install soundfile in tools job so the refusal control executes — linked issue #1262
+- **#1264**: ci: gate default-config synth mutants behind a clean default verify_synth_top run — linked issue #1221
 
 ## Proposed
 
@@ -147,17 +144,16 @@ Issues carrying `loom:curated`.
 - **#1062**: CI flake: pulse2x-rtl reds on an apt mirror timeout in its iverilog install step (9 unprotected apt call sites) *(curated)*
 - **#1085**: Probe klt drc, klt lvs (power_connectivity) and klt erc on the committed ladder_dp route, and file each klt gap upstream (tool probe; no T1 credit) *(curated)* *(held)*
 - **#1110**: Judge docs-only fast path is unreachable on this host: its base-repo read uses a gh --json field this gh 2.102.0 rejects *(curated)* *(held)*
-- **#1126**: Require a matching clean run before make controls credits an RTL mismatch *(curated)*
 - **#1148**: rtl-full step 8 is red on main: M5A filter2x SPI-to-I2S diverges from the model in 815424 of 1305549 frames (62%) *(curated)* *(held)*
 - **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal *(curated)*
 - **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin *(curated)*
 - **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow *(curated)*
-- **#1229**: A refused rolling RTL replay now runs the rtl_control stage it used to skip *(curated)*
-- **#1252**: STEP_GATED_ALLOWLIST open_issue exemptions have no mechanical retirement, unlike the pending run_all entry *(curated)*
-- **#1262**: measure_repeatability's only refusal control never runs in CI (soundfile absent by omission, not decision) *(curated)*
-- **#1265**: Catch cross-module Refused at M1A / phase-cycle CLI boundaries (6 modules) *(curated)*
-- **#1266**: Catch cross-module Refused at M5A / M5B / mono_artifact_probe CLI boundaries (7 modules) *(curated)*
-- **#1267**: refusal_sibling_scan: the `nm == FAMILY_NAME` guard has no control for the explicit re-export `from lender import Refused as Refused` *(curated)*
+- **#1289**: max() accumulators elsewhere drop a NaN the same way #1284's separator did *(curated)*
+- **#1296**: calibrate accepts a one-sound table that the full corpus refuses (the input that survives #1294's guard) *(curated)*
+- **#1297**: fpga/measure_mac_midi_latency.py --help needs NumPy it never uses (same class as #1282) *(curated)*
+- **#1301**: A complete sound set with empty per-sound tables still calibrates on one sound's evidence (rule-8 sibling of #1296) *(curated)*
+- **#1307**: gate_calibrate: bar_for's corpus-completeness Refused escapes uncaught, reporting REFUSED as exit 1 *(curated)*
+- **#1309**: Refuse incomplete Fischer reference sets in the conga body-spread report *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -170,8 +166,8 @@ Issues carrying `loom:curated`.
 - **#1172**: Wire in or remove check_nightly_slow_records.py: a 1,176-line gate nothing runs *(hermit)* *(held)*
 - **#1173**: Remove tools/audit_tracked_json_writers.py: one-shot #922 report nothing runs *(hermit)* *(held)*
 - **#1205**: Remove disk cache replay from the 808 conditioning comparison *(hermit)* *(held)*
-- **#1276**: Require a named scenario when selecting UART late-event checks *(hermit)*
-- **#1278**: Remove the module-name filter that skips 808 ground-truth citations *(hermit)*
+- **#1281**: Deduplicate autocorrelation submultiple resolution in discrimination_features onto audio_measure._shortest_submultiple *(hermit)* *(held)*
+- **#1300**: Replace the clap probe’s caller-defined manifest with the pinned Fischer corpus digest *(hermit)* *(held)*
 
 ## Epics
 
@@ -185,11 +181,11 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 2 |
 | Very important | 1 |
 | Important | 5 |
-| Ready (`loom:issue`, net of holds/building/merge-pending) | 4 |
-| In Progress (`loom:building`) | 20 |
-| PRs awaiting review | 9 |
+| Ready (`loom:issue`, net of holds/building/merge-pending) | 5 |
+| In Progress (`loom:building`) | 18 |
+| PRs awaiting review | 7 |
 | Approved PRs awaiting merge | 4 |
-| Curated | 70 |
+| Curated | 69 |
 | Architect / Hermit proposals | 11 |
 | Active epics | 2 |
 <!-- guide:plan-body:end -->

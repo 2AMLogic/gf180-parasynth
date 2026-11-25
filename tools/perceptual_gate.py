@@ -83,6 +83,7 @@ import sys
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import butter, hilbert, lfilter, resample_poly, sosfilt, sosfiltfilt, welch
+from exit_contract import REFUSED as EXIT_REFUSED
 import refusal
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -637,18 +638,22 @@ def resampled(x, sr, r: float) -> tuple:
 
 
 def survey(refs: pathlib.Path, sounds, rs=(1.02, 1.05, 1.10)) -> dict:
+    plan = [(s, rel := target_rel(s), neighbours(s, rel)) for s in sounds]
+    missing = [str(refs / p) for _, rel, expected in plan
+               for p in (rel, *expected) if not (refs / p).is_file()]
+    if missing:
+        raise Refused(
+            f"survey: missing expected reference WAV(s): {', '.join(dict.fromkeys(missing))}"
+        )
     res = {}
-    for s in sounds:
-        rel = target_rel(s)
-        T = Target(*load_wav(refs / rel), s, rel)
+    for s, rel, expected in plan:
+        loaded = {p: load_wav(refs / p) for p in (rel, *expected)}
+        x, sr = loaded[rel]
+        T = Target(x, sr, s, rel)
         row = {"target": rel, "span_s": round(T.plan["span_s"], 3),
-               "f_ref": T.plan.get("f_ref"), "neighbours": {}, "resampled": {}}
-        for nb in neighbours(s, rel):
-            if (refs / nb).exists():
-                row["neighbours"][nb] = T.distance(*load_wav(refs / nb), nb)
-        x, sr = load_wav(refs / rel)
-        for r in rs:
-            row["resampled"][str(r)] = T.distance(*resampled(x, sr, r), f"x{r}")
+               "f_ref": T.plan.get("f_ref"),
+               "neighbours": {nb: T.distance(*loaded[nb], nb) for nb in expected},
+               "resampled": {str(r): T.distance(*resampled(x, sr, r), f"x{r}") for r in rs}}
         res[s] = row
         print(s, json.dumps(row, default=lambda v: round(v, 4) if isinstance(v, float) else v), flush=True)
     return res
@@ -691,14 +696,16 @@ def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None) -> dict:
 
     Single-take sounds: the WEAK calibration (WEAK_R, above)."""
     rel = target_rel(sound)
-    T = T or Target(*load_wav(refs / rel), sound, rel)
-    nbs = {}
-    for nb in neighbours(sound, rel):
-        if (refs / nb).exists():
-            nbs[nb] = T.distance(*candidate_path(*load_wav(refs / nb)), nb)
-    x, sr = load_wav(refs / rel)
+    expected = neighbours(sound, rel)
+    missing = [str(refs / p) for p in (rel, *expected) if not (refs / p).is_file()]
+    if missing:
+        raise Refused(f"{sound} ({rel}): missing expected reference WAV(s): {', '.join(missing)}")
+    loaded = {p: load_wav(refs / p) for p in (rel, *expected)}
+    x, sr = loaded[rel]
+    T = T or Target(x, sr, sound, rel)
+    nbs = {nb: T.distance(*candidate_path(*loaded[nb]), nb) for nb in expected}
     floor = T.distance(*candidate_path(x, sr), "apparatus floor")
-    if nbs:
+    if expected:
         best = min(nbs, key=lambda k: nbs[k]["spec"])
         base, kind, frm = nbs[best], "808-neighbour", best
     else:
@@ -1015,24 +1022,28 @@ def main(argv=None) -> int:
     pr.add_argument("target")
     pr.add_argument("others", nargs="+")
     a = ap.parse_args(argv)
-    if a.cmd == "survey":
-        sounds = a.sounds or list(TWO_KNOB) + list(ONE_KNOB) + list(SINGLE)
-        res = survey(a.refs, sounds)
-        a.out.parent.mkdir(parents=True, exist_ok=True)
-        a.out.write_text(json.dumps(res, indent=1, default=float) + "\n")
+    try:
+        if a.cmd == "survey":
+            sounds = a.sounds or list(TWO_KNOB) + list(ONE_KNOB) + list(SINGLE)
+            res = survey(a.refs, sounds)
+            a.out.parent.mkdir(parents=True, exist_ok=True)
+            a.out.write_text(json.dumps(res, indent=1, default=float) + "\n")
+            return 0
+        if a.cmd in ("prove", "rank", "crosscheck"):
+            res = (prove(a.refs, a.fixtures) if a.cmd == "prove" else
+                   rank(a.refs, a.wavs) if a.cmd == "rank" else crosscheck(a.refs, a.other))
+            res["provenance"] = provenance(a)
+            a.out.parent.mkdir(parents=True, exist_ok=True)
+            a.out.write_text(json.dumps(_r(res), indent=1) + "\n")
+            return 0
+        T = Target(*load_wav(a.target), a.sound, a.target)
+        for o in a.others:
+            print(o, json.dumps({k: (None if v is None else round(v, 4))
+                                 for k, v in T.distance(*load_wav(o), o).items()}))
         return 0
-    if a.cmd in ("prove", "rank", "crosscheck"):
-        res = (prove(a.refs, a.fixtures) if a.cmd == "prove" else
-               rank(a.refs, a.wavs) if a.cmd == "rank" else crosscheck(a.refs, a.other))
-        res["provenance"] = provenance(a)
-        a.out.parent.mkdir(parents=True, exist_ok=True)
-        a.out.write_text(json.dumps(_r(res), indent=1) + "\n")
-        return 0
-    T = Target(*load_wav(a.target), a.sound, a.target)
-    for o in a.others:
-        print(o, json.dumps({k: (None if v is None else round(v, 4))
-                             for k, v in T.distance(*load_wav(o), o).items()}))
-    return 0
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return EXIT_REFUSED
 
 
 if __name__ == "__main__":
