@@ -736,8 +736,3 @@ class LiveMusicHost(MusicHost):
         if not self._live_events:
             return {"writes": 0, "max_frames": 0, "max_us": 0.0}
         return live_latency(placed, min(e[0] for e in self._live_events))
-
-
-def knob_cost() -> dict:
-    """Writes per knob turn, which is the only unit that matters on this link."""
-    return {"cutoff": 1, "resonance": 3, "decay": 2, "volume": 1}
