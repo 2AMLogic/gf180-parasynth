@@ -295,20 +295,51 @@ def synthetic_mixture(share: float, sr: int = 44100, dur: float = 0.25,
     return tone + a * nz
 
 
-def self_test(verbose: bool = True) -> float:
-    """Recover a known noise share from synthetic mixtures. Returns the worst
-    absolute error in percentage points."""
-    worst = 0.0
+# The one set of qualification targets and bounds. The CLI self-test and
+# model/test_drum_fit.py both read these, so the two entry points cannot
+# disagree about what "qualified" means.
+SELF_TEST_TARGETS = (0.0, 0.011, 0.05, 0.1855, 0.2766, 0.50, 0.80, 0.90)
+
+
+def share_bound(target: float) -> float:
+    """The method's MEASURED accuracy (fraction): 0.6 pp up to a 30 % share,
+    1.5 pp above. The estimate is biased slightly high, growing with noise."""
+    return 0.006 if target <= 0.30 else 0.015
+
+
+def share_failure(target: float, got: float):
+    """None if `got` qualifies for `target`, else the reason. A nonfinite
+    estimate fails (NaN compares False against every bound, so it would pass
+    any `not (err > bound)` style check); so does an UNDER-estimate."""
+    if not math.isfinite(got):
+        return f"target {target}: nonfinite estimate {got!r}"
+    if got < target - 0.002:
+        return f"target {target}, got {got}: an UNDER-estimate is a new failure mode"
+    if not abs(got - target) < share_bound(target):
+        return f"target {target}, got {got}: outside {share_bound(target) * 100:.1f} pp"
+    return None
+
+
+def self_test(verbose: bool = True):
+    """Recover a known noise share from synthetic mixtures. Returns
+    (worst finite error in percentage points or None, list of failures)."""
+    worst = None
+    failures = []
     if verbose:
         print("  true      estimated   error")
-    for target in (0.0, 0.011, 0.05, 0.1855, 0.2766, 0.50, 0.80, 0.90):
+    for target in SELF_TEST_TARGETS:
         x = synthetic_mixture(target)
         got = noise_share(x, 44100, VOICE_MODES["SD"])["share"]
         err = abs(got - target) * 100
-        worst = max(worst, err)
+        if math.isfinite(err):
+            worst = err if worst is None else max(worst, err)
+        why = share_failure(target, got)
+        if why:
+            failures.append(why)
         if verbose:
-            print(f"  {target * 100:6.2f} %   {got * 100:7.2f} %   {err:5.2f} pp")
-    return worst
+            print(f"  {target * 100:6.2f} %   {got * 100:7.2f} %   {err:5.2f} pp"
+                  + ("   FAIL" if why else ""))
+    return worst, failures
 
 
 # ---------------------------------------------------------------- main --------
@@ -321,10 +352,15 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.self_test or not a.refs:
         print("separator validation -- synthetic mixtures, noise share set by construction:")
-        worst = self_test()
-        print(f"  worst error {worst:.2f} percentage points")
+        worst, failures = self_test()
+        if failures:
+            for f in failures:
+                print(f"  FAIL: {f}")
+            print("  separator validation FAILED; not trusting it for the reference report")
+            return 1
+        print(f"  worst error {worst:.2f} percentage points; all targets within bound")
         if not a.refs:
-            return 0 if worst < 1.0 else 1
+            return 0
 
     print()
     print("SD -- the SNAPPY law, noise share by damped-mode subtraction, 250 ms window")
