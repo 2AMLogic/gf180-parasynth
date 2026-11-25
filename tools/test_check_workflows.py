@@ -1180,26 +1180,10 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
     ),
 }
 
-# Pre-#1223 transition entry: on `origin/main` @ `a8fd2139`, `rungs.yml` `pulse2x-rtl`
-# still invokes `tools/run_all.py` (#1217; PR #1223 converts it to `tools/run_controls.py`
-# with `@baseline=pulse-smoke` / `@after=pulse-smoke`). Once #1223 lands on main, the row
-# classifies directly as `batch_gated` and this entry can be retired so reverting
-# `run_controls.py` -> `run_all.py` on that one line is also refused.
-PENDING_RUN_ALL_ALLOWLIST: dict[tuple[str, str, str, str], str] = {
-    (
-        "rungs.yml",
-        "pulse2x-rtl",
-        "pulse candidate, transport, deadlines and disabling control",
-        "python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --inject VOICE_PULSE2X_OFF --expect-fail --outdir build/pulse-off",
-    ): "open #1217 / PR #1223 converts this run_all.py batch row to run_controls.py @baseline=pulse-smoke / @after=pulse-smoke",
-}
-
-
 @dataclass
 class MutantScan:
     batch_gated: list[str] = field(default_factory=list)
     step_gated: list[str] = field(default_factory=list)
-    pending_batch: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
 
 
@@ -1339,6 +1323,22 @@ _SHELL_CONTROL_WORDS = frozenset(
 )
 
 
+def _set_errexit_effect(toks: list[str]) -> bool | None:
+    """For a `set` builtin: True if it turns errexit OFF (`+e`, `+eu`, `+o errexit`),
+    False if it turns it ON, None if it is not a `set` or does not touch errexit.
+    The last such option wins, as in the shell."""
+    if not toks or toks[0] != "set":
+        return None
+    effect: bool | None = None
+    args = toks[1:]
+    for i, a in enumerate(args):
+        if a in ("+o", "-o") and i + 1 < len(args) and args[i + 1] == "errexit":
+            effect = a == "+o"
+        elif len(a) > 1 and a[0] in "+-" and a[1] != "-" and "o" not in a[1:] and "e" in a[1:]:
+            effect = a[0] == "+"
+    return effect
+
+
 def _step_has_control_flow(run_node: yaml.ScalarNode) -> bool:
     """True when the `run:` block uses `if`/`for`/`while`/`case`, a function or a
     `{ }`/`( )` group: statement-level analysis cannot say whether a verifier
@@ -1391,6 +1391,19 @@ def _exec_name(toks: list[str]) -> str | None:
     return None if found is None else posixpath.basename(found[0])
 
 
+_HELP_FLAGS = frozenset({"-h", "--help"})
+
+
+def _is_help_invocation(toks: list[str]) -> bool:
+    """`-h`/`--help` (or an argparse-abbreviated `--he`/`--hel`) makes a verifier print
+    usage and exit 0 without running: a clean run and its mutant both "pass" on a
+    host with no simulator (#1240 finding 2)."""
+    args = toks[(_exec_script(toks) or ("", len(toks)))[1]:]
+    return any(
+        t in _HELP_FLAGS or (t.startswith("--he") and "--help".startswith(t)) for t in args
+    )
+
+
 def _plain_verifier_problem(cmd: str) -> str | None:
     """Why `cmd` (a quoted `run_controls.py` sub-command, which run_controls
     hands to a shell) is not ONE plain verifier invocation whose exit status is
@@ -1408,6 +1421,8 @@ def _plain_verifier_problem(cmd: str) -> str | None:
     toks = stmts[0][0]
     if _exec_name(toks) not in WORKFLOW_VERIFIERS:
         return f"executes {_exec_name(toks)!r}, not a verifier"
+    if _is_help_invocation(toks):
+        return "is a help/usage invocation (-h/--help prints usage and exits 0 without running)"
     if any(t in ("!", "(", ")", "{", "}") or "$(" in t or "`" in t for t in toks):
         return "uses a shell construct that can mask the verifier's status"
     return None
@@ -1490,17 +1505,14 @@ def classify_workflow_mutants(
     wf_dir: pathlib.Path = REPO / ".github" / "workflows",
     *,
     allowlist: dict[tuple[str, str, str, str], StepGatedEntry] = STEP_GATED_ALLOWLIST,
-    pending_run_all: dict[tuple[str, str, str, str], str] = PENDING_RUN_ALL_ALLOWLIST,
 ) -> MutantScan:
     """Walk every `.github/workflows/*.yml|*.yaml` `run:` row matching
     `WORKFLOW_VERIFIERS` x `FLAGS` and classify each into `batch_gated` or
-    `step_gated` (plus the pre-#1223 `pending_batch` transition entry); record
+    `step_gated`; record
     any unclassifiable, config-mismatched, neutralised, or stale-allowlist item
     in `problems` with its `.github/workflows/<file>:<line>:` prefix."""
     scan = MutantScan()
     matched_allowlist: set[tuple[str, str, str, str]] = set()
-    matched_pending: set[tuple[str, str, str, str]] = set()
-    graduated_batch: set[tuple[str, str, str, str]] = set()
     rc_parser = _run_controls_arg_parser()
 
     files = sorted(wf_dir.glob("*.yml")) + sorted(wf_dir.glob("*.yaml"))
@@ -1539,6 +1551,7 @@ def classify_workflow_mutants(
                 run_start = run_node.start_mark.line + 1
                 run_end = run_node.end_mark.line + 1
                 errexit_disabled = False
+                terminated = False  # an earlier `exit`/`return`: later lines never run
                 control_flow = _step_has_control_flow(run_node)
 
                 for line_no, logical in _logical_shell_lines(run_node):
@@ -1554,11 +1567,12 @@ def classify_workflow_mutants(
                     prev_op: str | None = None
                     for toks, trailing_op in stmts:
                         stmt_prev_op, prev_op = prev_op, trailing_op
-                        if toks[:2] == ["set", "+e"]:
-                            errexit_disabled = True
+                        set_effect = _set_errexit_effect(toks)
+                        if set_effect is not None:
+                            errexit_disabled = set_effect
                             continue
-                        if toks[:2] == ["set", "-e"]:
-                            errexit_disabled = False
+                        if toks and toks[0] in ("exit", "return"):
+                            terminated = True
                             continue
 
                         swallowed = (
@@ -1580,6 +1594,10 @@ def classify_workflow_mutants(
                                     "step uses shell control flow (if/for/while/case/group); "
                                     "whether this verifier runs, and its status, is not provable"
                                 )
+                            if _is_help_invocation(toks):
+                                return "help/usage invocation (-h/--help) does not run the verifier"
+                            if terminated:
+                                return "runs after an earlier exit/return in this step (never reached)"
                             if swallowed:
                                 return f"shell exit status swallowed ({trailing_op or 'set +e / !'})"
                             if conditional:
@@ -1627,8 +1645,6 @@ def classify_workflow_mutants(
                                     raw_lines, run_start, run_end, sub_norm, line_no
                                 )
                                 is_mutant_cmd = _matches_verifier_and_flag(sub_toks)
-                                if is_mutant_cmd or spec["role"] == "mutant":
-                                    graduated_batch.add((path.name, jname, sname, sub_norm))
                                 if spec["role"] == "baseline" or (
                                     spec["role"] == "mutant" and is_mutant_cmd
                                 ):
@@ -1724,8 +1740,7 @@ def classify_workflow_mutants(
 
                         # 4. Anything else (`run_all.py`, `bash -c`, `echo`, `time` ...): a
                         #    verifier mutant among its arguments is not credited; it is a problem
-                        #    unless it is the one pending run_all transition row.
-                        is_run_all = exec_name == "run_all.py"
+                        #    (there is no run_all exemption: #1223 converted the last row).
                         neut = _step_or_job_neutralised(
                             job_dict, jname, step_dict, sname, require_success_gate=False
                         )
@@ -1753,12 +1768,6 @@ def classify_workflow_mutants(
                             sub_line = _line_for_subcommand(
                                 raw_lines, run_start, run_end, sub_norm, line_no
                             )
-                            pkey = (path.name, jname, sname, sub_norm)
-                            if is_run_all and pkey in pending_run_all:
-                                matched_pending.add(pkey)
-                                if not neut and not swallowed and not conditional:
-                                    scan.pending_batch.append(f"{rel}:{sub_line}: {sub_norm}")
-                                    continue
                             why = (
                                 neut
                                 or _blocked(None)
@@ -1772,12 +1781,6 @@ def classify_workflow_mutants(
             scan.problems.append(
                 f".github/workflows/{key[0]}:1: stale step-gated allowlist entry "
                 f"matched no workflow row: {key!r}"
-            )
-    for pkey in pending_run_all:
-        if pkey not in matched_pending and pkey not in graduated_batch:
-            scan.problems.append(
-                f".github/workflows/{pkey[0]}:1: stale pending run_all allowlist entry "
-                f"matched neither run_all nor batch_gated row: {pkey!r}"
             )
     return scan
 
@@ -1821,7 +1824,7 @@ def test_live_workflow_mutants_are_classified_with_no_stale_exemptions():
     # step-gated census equals the allowlist; grouped batch rows may grow (#1223 and
     # later PRs add correctly grouped controls), so only require the pulse row.
     assert len(scan.step_gated) == len(STEP_GATED_ALLOWLIST)
-    assert len(scan.batch_gated) + len(scan.pending_batch) >= 1
+    assert len(scan.batch_gated) >= 1
 
 
 def test_pulse2x_run_controls_batch_is_classified_as_batch_gated(tmp_path):
@@ -1831,8 +1834,77 @@ def test_pulse2x_run_controls_batch_is_classified_as_batch_gated(tmp_path):
     scan = classify_workflow_mutants(wf_dir)
     assert scan.problems == [], "\n".join(scan.problems)
     assert any("VOICE_PULSE2X_OFF" in b for b in scan.batch_gated), scan.batch_gated
-    assert not any("VOICE_PULSE2X_OFF" in b for b in scan.pending_batch)
     assert len(scan.step_gated) == len(STEP_GATED_ALLOWLIST)
+
+
+def test_restoring_pre_1223_run_all_pulse_row_is_refused(tmp_path):
+    """#1240 round 4 finding 1: rolling the pulse2x row back to the ungated
+    `run_all.py` form (exactly the pre-#1223 step on `92af9c9a^1`) must be a
+    problem now that #1223 has merged; there is no transition exemption."""
+    wf_dir = _copy_workflows(tmp_path)
+    rungs = wf_dir / "rungs.yml"
+    text = rungs.read_text()
+    converted = _convert_pulse2x_to_run_controls(text)
+    reverted = (
+        converted.replace("python tools/run_controls.py --jobs 2 --timeout 900 --json build/pulse2x-ci.json",
+                          "python tools/run_all.py --jobs 2 --timeout 900 --json build/pulse2x-ci.json", 1)
+        .replace('"@baseline=pulse-smoke python', '"python', 1)
+        .replace('"@after=pulse-smoke python', '"python', 1)
+    )
+    assert reverted != converted, "pulse2x-rtl step text drifted"
+    rungs.write_text(reverted)
+    scan = classify_workflow_mutants(wf_dir)
+    assert any("VOICE_PULSE2X_OFF" in p and "run_all" in p for p in scan.problems), scan.problems
+
+
+_I2S_BASE = "python rtl-sketch/verify_i2s_tx.py"
+_I2S_MUT = "python rtl-sketch/verify_i2s_tx.py --inject I2S_SWAP --expect-fail"
+
+
+@pytest.mark.parametrize("flag", ["-h", "--help"])
+@pytest.mark.parametrize("which", ["both", "baseline", "mutant"])
+def test_help_only_batch_pair_is_not_credited(tmp_path, flag, which):
+    """#1240 round 4 finding 2: `verify_i2s_tx.py -h` prints usage and exits 0 with
+    no simulator on PATH, so run_controls reports 2/2 passed. Not batch-gated."""
+    base = f"{_I2S_BASE} {flag}" if which in ("both", "baseline") else _I2S_BASE
+    mut = f"{_I2S_MUT} {flag}" if which in ("both", "mutant") else _I2S_MUT
+    wf_dir = _copy_workflows(tmp_path)
+    _write_extra(
+        wf_dir,
+        f'          python tools/run_controls.py --serial "@baseline=i2s {base}" "@after=i2s {mut}"\n',
+    )
+    scan = classify_workflow_mutants(wf_dir)
+    assert any("help/usage" in p for p in scan.problems), scan.problems
+    assert not any("I2S_SWAP" in b and "extra.yml" in b for b in scan.batch_gated)
+
+
+@pytest.mark.parametrize("replacement", [
+    "          exit 0\n          python rtl-sketch/verify_i2s_tx.py\n",
+    "          set +o errexit\n          python rtl-sketch/verify_i2s_tx.py\n",
+    "          set +eu\n          python rtl-sketch/verify_i2s_tx.py\n",
+    "          return 0\n          python rtl-sketch/verify_i2s_tx.py\n",
+])
+def test_skipped_or_errexit_disabled_clean_step_is_not_credited(tmp_path, replacement):
+    """#1240 round 4 finding 3: `exit 0` or `set +o errexit` before the clean
+    verifier means a failing clean run no longer fails the step, yet the mutant
+    kept its step-gated credit. The baseline must not be credited."""
+    wf_dir = _nightly_with(tmp_path, replacement)
+    probs = classify_workflow_mutants(wf_dir).problems
+    assert probs, "expected the I2S pair to lose its credit"
+    assert any("missing active preceding clean baseline" in p or "exit" in p or "errexit" in p
+               or "swallowed" in p for p in probs), probs
+
+
+def test_skipped_clean_spi_verifier_in_rungs_is_not_credited(tmp_path):
+    """#1240 round 4 finding 3, second reproduction: `exit 0` before the clean SPI verifier (rungs.yml I2)."""
+    wf_dir = _copy_workflows(tmp_path)
+    rungs = wf_dir / "rungs.yml"
+    old = "        run: python rtl-sketch/verify_ctl.py\n"
+    assert old in rungs.read_text()
+    rungs.write_text(rungs.read_text().replace(
+        old, "        run: |\n          exit 0\n          python rtl-sketch/verify_ctl.py\n", 1))
+    probs = classify_workflow_mutants(wf_dir).problems
+    assert any("missing active preceding clean baseline" in p for p in probs), probs
 
 
 def test_injected_a_bare_mutant_in_run_controls_batch_fails_with_file_and_line(tmp_path):
