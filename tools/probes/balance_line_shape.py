@@ -30,10 +30,10 @@ LINE'S SHAPE rather than its height, because the height is what the pick biased:
   slope        the log-log slope of (P0/Pd)^2 - 1 against d over all the offsets.
                The same d^2 law, so the closed form is exactly 2 -- read over a
                range of d instead of from two adjacent points.
-  fit resid    a least-squares fit of the Lorentzian itself to the drops at
-               +-n_bins, scored by its RMS residual in dB. SHIPPED.
-  floorless /  the same fit with and without an additive pedestal term for
-  with floor   whatever else the record holds at those offsets.
+  floorless dB RMS residual of the Lorentzian fit to the drops at +-n_bins.
+               This is the fit used by the shipping gate.
+  fit resid dB the same fit with an additive pedestal for whatever else the
+               record holds at those offsets.
 
 THE NUMBERS THE SHIPPING GATE WAS SET FROM (`margin 24`, 2026-09-27, 48 kHz),
 over 8 real partials and 96 white-noise partials at n_bins=6:
@@ -102,9 +102,8 @@ COMMANDS:
 `records`, `survey`, `margin` and `sweep` need the Fischer corpus (tidalcycles/sounds-tr808-fischer)
 at $GF180_TR808_REFS / $TR808_REFS / /tmp/tr808-ref and REFUSE without it.
 
-WRONG BEFORE IT WAS RIGHT (6 -- five caught by a measurement rather than by
-inspection, the sixth by review; the rate a reader should calibrate the tables
-above against):
+WRONG BEFORE IT WAS RIGHT (7 -- six caught by measurement, one by review;
+the rate a reader should calibrate the tables above against):
 
   1. The direction of the peak test, item 1. Written the way #389 suggested it,
      the gate refuses all four real records and passes noise.
@@ -141,12 +140,16 @@ above against):
      An assertion that cannot fail on the case it names is the `failure-modes.md`
      pattern one level up: rigorous in form, and not a check. `fixture` exists
      because the bar now has to be read off a measurement.
+  7. The candidate table and width sweep used the floorless fit for both
+     columns (#1339). On a 10 ms line with a known -10 dB pedestal the
+     candidate table reported 1.3566613 dB in the pedestal column. Enabling
+     the pedestal recovers the injected floor with residual below 1e-10 dB.
 
 """
 import math
-import os
 import pathlib
 import sys
+from functools import partial
 
 import numpy as np
 
@@ -222,27 +225,24 @@ def cand_slope(p0, ds, vs, drops, seconds):
     return float(c[0])
 
 
-def cand_fit0(p0, ds, vs, drops, seconds):
-    """RMS dB residual of a FLOORLESS Lorentzian fit. Refuted: a mode whose skirt
-    has fallen into the record's own floor by the last bin cannot fit it."""
-    return float(PT._lorentzian_fit(ds, drops, pedestal=False)["resid_db"])
+# Column names are shared by the candidate table and width sweep. Keep the
+# model explicit even for the floorless fit, which is the estimator's default.
+FIT_MODES = {"floorless dB": False, "fit resid dB": True}
 
 
-def cand_fit(p0, ds, vs, drops, seconds):
-    """RMS dB residual of the mode-plus-floor Lorentzian fit. SHIPPED."""
-    return float(PT._lorentzian_fit(ds, drops)["resid_db"])
+def cand_fit(p0, ds, vs, drops, seconds, *, pedestal):
+    return PT._lorentzian_fit(ds, drops, pedestal=pedestal)["resid_db"]
 
 
-CANDS = {"drop1 dB": cand_drop1, "ratio2": cand_ratio2, "slope": cand_slope,
-         "floorless dB": cand_fit0, "fit resid dB": cand_fit}
+CANDS = {"drop1 dB": cand_drop1, "ratio2": cand_ratio2, "slope": cand_slope}
+CANDS.update({name: partial(cand_fit, pedestal=ped) for name, ped in FIT_MODES.items()})
 
 
 def row(x, sr, f, seconds):
     p0, ds, vs, drops = offsets_db(x, sr, f, seconds)
     vals = {k: fn(p0, ds, vs, drops, seconds) for k, fn in CANDS.items()}
-    tau = PT._lorentzian_fit(ds, drops)["tau_ms"]
     shipped = PT.line_is_resolved(x, sr, f, seconds=seconds)
-    return vals, tau, shipped
+    return vals, shipped["tau_ms"], shipped
 
 
 def fmt(vals, tau, shipped):
@@ -525,16 +525,6 @@ def cmd_survey(argv):
     return 0
 
 
-def _flat_resid_db(drops):
-    """RMS residual of the best CONSTANT fit to the same drops -- the null the
-    Lorentzian is being compared against. A record with no line in it fits a
-    constant about as well as it fits a Lorentzian; a real mode does not."""
-    m = np.isfinite(drops)
-    if m.sum() < 2:
-        return math.inf
-    return float(np.std(drops[m]))
-
-
 def _offsets_by_group(seeds, n_bins=6):
     """(name, T, ds, drops) for every real partial and every noise partial, so a
     statistic can be re-scored without re-measuring the projections."""
@@ -576,7 +566,7 @@ def cmd_margin(argv):
     print("NO tolerance at all: the bound is 1.0, meaning 'a struck mode decays")
     print("inside the window the estimator reads it over', which is the estimator's")
     print("own window and not a chosen constant.\n")
-    for ped in (False, True):
+    for ped in FIT_MODES.values():
         out = {}
         for g, rows in groups.items():
             res, taus = [], []
@@ -606,10 +596,31 @@ def cmd_margin(argv):
     return 0
 
 
+def _width_stats(groups, width, column):
+    """Worst record, best noise and separation for one displayed fit."""
+    min_points = max(4, int(1.5 * width))
+    stop = 2 * width
+
+    def residuals(rows):
+        for _, _, ds, drops in rows:
+            fit = PT._lorentzian_fit(
+                ds[:stop],
+                drops[:stop],
+                min_points=min_points,
+                pedestal=FIT_MODES[column],
+            )
+            yield fit["resid_db"]  # inf when too few offsets hold energy
+
+    record_max = max(residuals(groups["records"]))
+    noise_min = min(residuals(groups["noise"]))
+    ratio = noise_min / record_max if record_max > 0 else math.inf
+    return record_max, noise_min, ratio
+
+
 def cmd_sweep(argv):
     """n_bins is the gate's ONE free parameter. Sweep it before arguing about
     it: for each width, the worst real record against the best noise record, for
-    both the absolute residual and the residual relative to a no-line fit.
+    both Lorentzian fits. Rank widths by the floorless noise/record ratio.
 
     Offsets are measured ONCE at the widest width and sliced, so every row reads
     the same projections and the comparison is not confounded by re-measurement.
@@ -617,52 +628,38 @@ def cmd_sweep(argv):
     entries are exactly +-1..+-k bins."""
     seeds = int(next((a for a in argv if a.isdigit()), 8))
     widths = (3, 4, 6, 8, 12, 16, 24)
-    wide = max(widths)
-    groups = {"records": [], "noise": []}
-    for label, op, side, y, sr in _real_records(refdir()):
-        for rng in (op["f_lo_range"], op["f_hi_range"]):
-            f = PT.find_partial(y, sr, *rng, seconds=op["t_end"])
-            groups["records"].append(
-                (f"{label} {side[:14]} {f:7.1f}",)
-                + PT.line_offsets(y, sr, f, seconds=op["t_end"], n_bins=wide)[1:])
-    for label, op in OPS.items():
-        for seed in range(seeds):
-            x = 0.01 * np.random.default_rng(seed).standard_normal(
-                int(NOISE_SECONDS[label] * SR))
-            for rng in (op["f_lo_range"], op["f_hi_range"]):
-                f = PT.find_partial(x, SR, *rng, seconds=op["t_end"])
-                groups["noise"].append(
-                    (f"{label} seed {seed} {f:7.1f}",)
-                    + PT.line_offsets(x, SR, f, seconds=op["t_end"], n_bins=wide)[1:])
-    print(f"{len(groups['records'])} real partials against {len(groups['noise'])} "
-          f"noise partials ({seeds} seeds x 2 OPs x 2 ranges), 48 kHz.")
-    print("`resid` is the mode-plus-floor fit's RMS dB residual (what ships);")
-    print("`floorless` is the same fit with the pedestal term forced to zero.")
-    print(f"    {'n_bins':>6s} {'rec resid max':>13s} {'noi resid min':>13s} {'gap':>6s}"
-          f" {'ratio':>6s}   {'rec f-less':>10s} {'noi f-less':>10s} {'ratio':>6s}")
+    groups = _offsets_by_group(seeds, n_bins=max(widths))
+    print(
+        f"{len(groups['records'])} real partials against {len(groups['noise'])} "
+        f"noise partials ({seeds} seeds x 2 OPs x 2 ranges), 48 kHz."
+    )
+    print(
+        "`resid` is the RMS dB residual with a fitted pedestal (candidate: fit resid dB)."
+    )
+    print(
+        "`f-less` is the floorless dB fit used by the shipping gate and to rank widths."
+    )
+    print(
+        f"    {'n_bins':>6s} {'rec resid max':>13s} {'noi resid min':>13s} {'gap':>6s}"
+        f" {'ped ratio':>9s}   {'rec f-less':>10s} {'noi f-less':>10s} {'f-less ratio':>12s}"
+    )
     best = None
     for k in widths:
-        stats = {}
-        for g, rows in groups.items():
-            resids, rels = [], []
-            for name, ds, drops in rows:
-                d, y = ds[:2 * k], drops[:2 * k]
-                r = PT._lorentzian_fit(d, y, min_points=max(4, int(1.5 * k)))
-                resids.append(r["resid_db"] if r["ok"] else math.inf)
-                r0 = PT._lorentzian_fit(d, y, min_points=max(4, int(1.5 * k)),
-                                        pedestal=False)
-                rels.append(r0["resid_db"] if r0["ok"] else math.inf)
-            stats[g] = (np.asarray(resids), np.asarray(rels))
-        rr, rl = stats["records"]
-        nr, nl = stats["noise"]
-        gap, ratio = nr.min() - rr.max(), nr.min() / rr.max() if rr.max() > 0 else math.inf
-        rel_ratio = nl.min() / rl.max() if rl.max() > 0 else math.inf
-        print(f"    {k:6d} {rr.max():13.2f} {nr.min():13.2f} {gap:6.2f} {ratio:6.2f}"
-              f"   {rl.max():10.2f} {nl.min():10.2f} {rel_ratio:6.2f}")
-        if best is None or ratio > best[1]:
-            best = (k, ratio)
-    print(f"\n    widest absolute-residual separation at n_bins={best[0]} "
-          f"(noise min / records max = {best[1]:.2f}x).")
+        ped_rec, ped_noise, ped_ratio = _width_stats(groups, k, "fit resid dB")
+        floorless_rec, floorless_noise, floorless_ratio = _width_stats(
+            groups, k, "floorless dB"
+        )
+        gap = ped_noise - ped_rec
+        print(
+            f"    {k:6d} {ped_rec:13.2f} {ped_noise:13.2f} {gap:6.2f} {ped_ratio:9.2f}"
+            f"   {floorless_rec:10.2f} {floorless_noise:10.2f} {floorless_ratio:12.2f}"
+        )
+        if best is None or floorless_ratio > best[1]:
+            best = (k, floorless_ratio)
+    print(
+        f"\n    widest floorless separation at n_bins={best[0]} "
+        f"(noise min / records max = {best[1]:.2f}x)."
+    )
     print("    A ratio near 1 is not a gate: it means one more record or one more")
     print("    seed can land on the wrong side of any threshold between them.")
     return 0
