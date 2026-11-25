@@ -38,6 +38,7 @@ import numpy as np
 from scipy.io import wavfile
 
 import diagnose_m1a_harmonic_phase as d
+import refusal
 import run_all
 
 bass, lead, am, SR = d.bass, d.lead, d.am, d.SR
@@ -461,7 +462,7 @@ def main():
                           "rows": verdict["rows"], "reference_drift_hz": drift, "cents": cents,
                           "model_drift_hz": model["drift_hz"]}, indent=1))
         return 0
-    except Refused as exc:
+    except refusal.Refused as exc:
         write_json(CAPTURE / "analysis-refused.json", {"state": "REFUSED", "reason": str(exc)})
         print(f"REFUSED: {exc}")
         return 2

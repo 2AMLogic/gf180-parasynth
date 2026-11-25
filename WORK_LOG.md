@@ -8,6 +8,8 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-25
 
+- **Issue #1235** (closed): No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only
+- **PR #1240**: test: guard workflow RTL mutant gating and baseline config match
 - **Issue #1248** (closed): uart_host --dry-run status/abort renders the apply_frame sentinel -1 in the 'applies' column
 - **Issue #1207** (closed): Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep
 - **PR #1254**: Audit four cymbal log ratios and fix invalid balance verdicts

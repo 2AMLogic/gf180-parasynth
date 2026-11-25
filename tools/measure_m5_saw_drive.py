@@ -40,6 +40,8 @@ sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools"), str(ROOT / "fpga"), st
 import mono_m5a_score as score  # noqa: E402
 import mono_artifact_probe as mp  # noqa: E402
 import measure_m5_operating_level as ol  # noqa: E402
+import refusal  # noqa: E402
+from exit_contract import REFUSED  # noqa: E402
 
 BASE_DRIVE = 0.75
 CANDIDATES = (0.5, 0.35, 0.3)
@@ -161,7 +163,7 @@ def select(rows):
             "chosen": chosen, "confirmation": conf}
 
 
-def main(argv=None):
+def _run(argv) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--engine", choices=("pulse2x", "r1"), default="pulse2x")
     ap.add_argument("--drives", type=float, nargs="+")
@@ -202,6 +204,14 @@ def main(argv=None):
     a.out.write_text(json.dumps(res, indent=1) + "\n")
     print(f"wrote {a.out}")
     return 0
+
+
+def main(argv=None) -> int:
+    try:
+        return _run(argv)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
 
 
 if __name__ == "__main__":
