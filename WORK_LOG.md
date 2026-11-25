@@ -8,6 +8,14 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-25
 
+- **PR #1246**: fix: stop UART status and abort opening the bridge before the dry-run decision
+- **PR #1226**: docs: make MIDI and UART packages optional in the keyboard audition install
+- **PR #1218**: tools: hash tools/delta_report.py in each comparator's SOURCES
+- **PR #1209**: fix: refuse duplicate step names in the roadmap pair gate instead of last-wins
+- **Issue #1245** (closed): Remove early UART dispatch that sends abort and status during --dry-run
+- **Issue #1215** (closed): Make MIDI and UART packages optional in the keyboard audition instructions
+- **Issue #1208** (closed): Decide whether tools/delta_report.py belongs in each comparator's SOURCES (provenance now computed by unhashed code)
+- **Issue #1206** (closed): check_workflows: the #906 pair order gate lets a duplicate guarded step name through (dict-overwrite, no ambiguity refusal)
 - **Issue #1236** (closed): CI: give the full tools pytest job enough time to report its verdict
 - **PR #1242**: ci: raise the tools job budget to 105 minutes so its verdict can report
 - **Issue #1232** (closed): Remove conflicting key assignments from the audition player’s keyboard guide

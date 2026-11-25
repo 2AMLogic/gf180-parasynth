@@ -244,7 +244,7 @@ def roadmap_check_precedes_run_in_step(workflow, step_name: str = ROADMAP_STEP):
                        f"nothing to guard")
     if len(found) > 1:
         return False, (f"{len(found)} steps named {step_name!r} "
-                       f"({', '.join(j for j, _ in found)}) -- ambiguous")
+                       f"({', '.join(str(j) for j, _ in found)}) -- ambiguous")
     jname, step = found[0]
     invs = _compile_dag_invocations(str(step.get("run", "")))
     if not invs:
@@ -277,22 +277,24 @@ def roadmap_check_step_precedes_record_step(workflow,
     """(ok, reason): in some one job, the step named `check_step` precedes the
     step named `record_step`; the check step invokes `tools/compile_dag.py`
     with `--check` and never `--run` (a check that also rewrites judges
-    nothing); the record step invokes it with `--run`."""
+    nothing); the record step invokes it with `--run`. Either guarded name
+    appearing more than once in the file is ambiguous and refused, like the
+    in-step gate -- never last-wins (#1206)."""
     if isinstance(workflow, (str, pathlib.Path)):
         workflow = yaml.safe_load(pathlib.Path(workflow).read_text())
-    named: dict[str, tuple[str, int, dict]] = {}
-    seen: dict[str, int] = {}
+    found: list[tuple[str, object, int, dict]] = []
     for jname, job in ((workflow or {}).get("jobs") or {}).items():
         for i, s in enumerate((job or {}).get("steps") or []):
             if isinstance(s, dict) and s.get("name") in (check_step, record_step):
-                seen[s["name"]] = seen.get(s["name"], 0) + 1
-                named[s["name"]] = (jname, i, s)
-    for dup, n in seen.items():
-        if n > 1:
-            # A dict keyed on name keeps only the LAST of a duplicate, so an
-            # earlier ungated --run would vanish from the order check (#1196).
-            return False, (f"step name {dup!r} occurs {n} times -- ambiguous: "
-                           f"the pair gate cannot tell which one it guards")
+                found.append((s.get("name"), jname, i, s))
+    named: dict[str, tuple[object, int, dict]] = {}
+    for guarded in (check_step, record_step):
+        hits = [(j, i, s) for n, j, i, s in found if n == guarded]
+        if len(hits) > 1:
+            return False, (f"{len(hits)} steps named {guarded!r} "
+                           f"({', '.join(str(j) for j, _, _ in hits)}) -- ambiguous")
+        if hits:
+            named[guarded] = hits[0]
     if check_step not in named:
         return False, (f"no step named {check_step!r} -- the order gate has "
                        f"nothing to guard")
@@ -439,6 +441,7 @@ def compile_dag_invocation_set_accounted(parsed: list[tuple[str, dict]]):
                         f"selects (#1192)")
                     continue
                 signature, _reason = entry
+                matched.add((fname, name))
                 if names_in_file.count(name) > 1:
                     unaccounted.append(
                         f"{fname}:{jname}: allowlisted step name {shown!r} "
@@ -454,7 +457,6 @@ def compile_dag_invocation_set_accounted(parsed: list[tuple[str, dict]]):
                         f"allowlist reason against the new shape (#1192)")
                     continue
                 n_allowed += 1
-                matched.add((fname, name))
     if not hits:
         return False, ("no workflow step invokes tools/compile_dag.py -- the "
                        "invocation-set gate matched nothing (vacuous)")
