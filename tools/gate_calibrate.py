@@ -66,6 +66,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 
 ROOT = pg.ROOT
@@ -274,20 +275,30 @@ def evidence_refusal(tabs: dict, expected: dict | None = None) -> str | None:
 
     RESIDUAL (rule 8, stated not closed): selective `missing` entries that
     leave one readable take in group 0 and in group 1 but change which
-    calibration take is nearest still pass; blocking that needs a per-take
+    calibration take is nearest still pass. MEASURED (#1317): the selected
+    226-take construction reaches CALIBRATED k=3 at 9/9, and so does
+    DISTANCE-INDEPENDENT loss: 66 of 5000 seeded draws of 226 uniformly random
+    takes (1.3%) reach CALIBRATED, all at k=5, where the complete record is
+    REFUSED (3/9 at k=3); see docs/scorecard/gate-379/mars-calibration/
+    missing-random-1317.md. Blocking that needs a per-take
     signal independent of the record (re-measuring). A forged `rows` plus a
     forged index also passes; the index is a committed file at the same trust
     level as the tables."""
     if expected is None:
         try:
             expected = expected_takes()
-        except (OSError, KeyError, csv.Error) as e:
+        except (OSError, KeyError, csv.Error, UnicodeDecodeError) as e:
             return f"REFUSED: incomplete evidence: cannot read the file index {INDEX.name} ({type(e).__name__}); completeness is unchecked"
     bad = []
     for s, t in tabs.items():
         exp = expected.get(s)
         if not exp:
             bad.append(f"{s}: no takes in the index")
+            continue
+        absent = [f for f in ("rows", "missing") if not isinstance(t.get(f), list)]
+        if absent:
+            # no default: an absent list would assert every take was readable
+            bad.append(f"{s}: record has no '{absent[0]}' list (malformed table)")
             continue
         rows = [r["rel"] for r in t["rows"]]
         miss = [m["rel"] for m in t["missing"]]
@@ -486,6 +497,19 @@ def injected_outcome(qi: dict | None) -> tuple[bool | None, dict | None]:
     return {"QUALIFIED": True, "NOT QUALIFIED": False}.get(dec["status"]), dec
 
 
+def decision_exit(dec) -> int:
+    """Exit code for a decision: REFUSED -> exit_contract.REFUSED, else PASS.
+
+    0 means "the comparison ran and agreed" (tools/exit_contract.py), so a
+    REFUSED decision must not exit 0. A DIAGNOSTIC (not authority) prefix wraps
+    the underlying status, so it is decided on the wrapped one. QUALIFIED /
+    NOT QUALIFIED keep exiting 0 -- mapping NOT QUALIFIED is a separate question.
+    """
+    status = str(dec.get("status", "REFUSED"))
+    status = status.removeprefix("DIAGNOSTIC (not authority): ")
+    return exit_contract.REFUSED if status.startswith("REFUSED") else exit_contract.PASS
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -539,7 +563,7 @@ def main(argv=None) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
     print(json.dumps(dec, indent=1))
-    return 0
+    return decision_exit(dec)
 
 
 if __name__ == "__main__":
