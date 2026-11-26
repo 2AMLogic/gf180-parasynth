@@ -352,6 +352,10 @@ def band_shares(anchor_level: dict) -> dict:
             x = cb._bp(p, sr, lo, hi)
             row[name] = float(np.sum(x[:int(cb.ENERGY_S * sr)] ** 2))
         out[band] = row
+    for name in ("L", "H"):
+        if not sum(out[b][name] for b in out) > 0.0:
+            raise Refused(f"band_shares: all three band-only renders are silent in {name}; "
+                          f"no share can be reported against a zero total")
     return out
 
 
@@ -790,7 +794,10 @@ def run_knob_render(out: pathlib.Path) -> int:
         mrow, mident, _ = sweep_row(cc.TONE_ANCHOR, kit_fn=saturated_kit,
                                     _audio={d: audio50[d] for d in ("00", "25", "50")})
         mutant = decay_row_verdict(mrow, mident, fi[cc.TONE_ANCHOR])
-    except Refused as exc:
+    except refusal.Refused as exc:
+        # the base, not this module's sibling: cb.measure inside sweep_row and
+        # measure_render raises cymbal_bands.Refused (#1160), which the local
+        # `except Refused` never caught -- a refusal exited 1 as a traceback.
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 3
     # The DECAY gate the command enforces: the four clean properties must PASS on
@@ -854,7 +861,10 @@ def main(argv=None) -> int:
         sup = superposition_check(shares, ours["h_minus_l_anchored_db"])
         req = (required_short_band_offset(shares, ref["50"]["h_minus_l_anchored_db"])
                if sup["ok"] else None)
-    except Refused as exc:
+    except refusal.Refused as exc:
+        # the base, not this module's sibling: cb.measure inside sweep_row and
+        # measure_render raises cymbal_bands.Refused (#1160), which the local
+        # `except Refused` never caught -- a refusal exited 1 as a traceback.
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 3
     res = {"precondition": pre, "levels": cal, "preservation": pres,

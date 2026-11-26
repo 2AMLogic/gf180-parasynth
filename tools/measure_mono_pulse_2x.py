@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import voice_fx as vf
 import mono_m5a_score as score
+import refusal
+from exit_contract import REFUSED
 from measure_m5a_filter_oversample import _compare_incremental
 from compare_m5a_i2s_candidate import _event_errors
 
@@ -168,14 +170,23 @@ def measure(case_id, directory):
     return report
 
 
-if __name__ == "__main__":
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", choices=("M5A", "M5B"), required=True)
     parser.add_argument("--out", type=Path, default=ROOT / "build/mono-pulse-2x")
     parser.add_argument("--rect-gain-q15", type=int, default=None,
                         help="rectangle gain for the candidate AND the gain-only control "
                              "(default: the model's own; 24248 is the #333 headroom value)")
-    args = parser.parse_args()
-    if args.rect_gain_q15 is not None:
-        set_rect_gain(args.rect_gain_q15)
-    measure(args.case, args.out)
+    args = parser.parse_args(argv)
+    try:
+        if args.rect_gain_q15 is not None:
+            set_rect_gain(args.rect_gain_q15)
+        measure(args.case, args.out)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

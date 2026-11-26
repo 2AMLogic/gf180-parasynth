@@ -10,6 +10,7 @@ import subprocess
 import numpy as np
 from scipy.io import wavfile
 import mono_m1a_score as bass
+import refusal
 import run_all
 
 ROOT, SR = bass.ROOT, bass.SR
@@ -65,7 +66,7 @@ def oscillator_mapping(manifest):
             "scope": "isolated open-filter audio; offset applied only in diagnostic challenger"}
 
 
-def main():
+def _run() -> int:
     manifest, reference = bass.load_reference()
     patch = bass.patch_for_reference(manifest, BASELINE_PATCH)
     engine = bass.lead.engine_configuration("selected")
@@ -127,7 +128,16 @@ def main():
               "corroboration": {"Model D cross-check": {"state": "not measured", "required_for_M1A": False}},
               "scope": "volume challenger accepted as component improvement; detune run diagnostic only; no filter redesign or threshold changes"}
     write_json(OUT / "report.json", report)
+    return 0
+
+
+def main() -> int:
+    try:
+        return _run()
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

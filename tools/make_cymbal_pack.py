@@ -23,6 +23,8 @@ import run_case as rc  # noqa: E402
 import cymbal_candidate as cc  # noqa: E402
 import cymbal_candidate_eval as ev  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
+import refusal  # noqa: E402
+from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
 SR = 48000
 
@@ -38,11 +40,27 @@ def main(argv=None):
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
-    cal = ev.calibrate()
-    ref, rsr = cb._load(pathlib.Path(a.refs) / "cy8" / "CY5025.WAV")
-    if rsr != SR:
-        from scipy.signal import resample_poly
-        ref = resample_poly(ref, SR, rsr)
+    # The corpus is the precondition, asserted BEFORE calibration (#1160):
+    # a silent reference is a missing precondition (it made _trim die in an
+    # IndexError after the calibration had already run), and cb._load raises
+    # its own module's Refused once #1117's width guard lands -- both must
+    # exit REFUSED (2), never 1 as a traceback.
+    try:
+        ref, rsr = cb._load(pathlib.Path(a.refs) / "cy8" / "CY5025.WAV")
+        if rsr != SR:
+            from scipy.signal import resample_poly
+            ref = resample_poly(ref, SR, rsr)
+        if not np.any(ref):
+            raise refusal.Refused(f"{a.refs}/cy8/CY5025.WAV is silent; there is no "
+                                  "reference loudness to match the pack to")
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return REFUSED
+    try:
+        cal = ev.calibrate()      # raises the base class since #1160
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return REFUSED
     ship, _ = rc.render_drum_solo("CY")
     cand, _ = cc.render(ev.kit_with_levels(cal["amps"]), "CY")
     a.out.mkdir(parents=True, exist_ok=True)

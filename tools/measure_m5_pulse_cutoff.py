@@ -44,6 +44,8 @@ sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import mono_m5a_score as score  # noqa: E402
 import mono_artifact_probe as mp  # noqa: E402
 import measure_m5_operating_level as ol  # noqa: E402
+import refusal  # noqa: E402
+from exit_contract import REFUSED  # noqa: E402
 
 BASE_CUT = 14073
 CANDIDATES = (17000, 20000)
@@ -117,7 +119,7 @@ def verdict(b, c, case):
     return why
 
 
-def main(argv=None):
+def _run(argv) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
@@ -163,6 +165,14 @@ def main(argv=None):
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1) + "\n")
     return 0
+
+
+def main(argv=None) -> int:
+    try:
+        return _run(argv)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
 
 
 if __name__ == "__main__":

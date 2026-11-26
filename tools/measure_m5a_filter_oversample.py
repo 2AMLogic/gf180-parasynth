@@ -24,6 +24,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m5a_score as m5a
+import refusal
+from exit_contract import REFUSED
 import voice_fx as vf
 import fixed
 import filter_rate_chain as frc
@@ -318,7 +320,11 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="build/scorecard/m5a-filter-rate-v1.json")
     args = parser.parse_args(argv)
-    report = run(ROOT / "build/scorecard/m5a-filter-rate-audio")
+    try:
+        report = run(ROOT / "build/scorecard/m5a-filter-rate-audio")
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
     out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")

@@ -8,6 +8,41 @@ fitted and nothing was tuned. The instrument is
 [`tools/probes/excitation_energy.py`](../tools/probes/excitation_energy.py),
 nineteen self-tests, two of them injected-bug controls.
 
+> **Unit correction, #1129 (2026-11-23).** After this investigation was
+> written, `trajectory()`'s normalisation was found to carry a hidden `n_seg/2`
+> multiplier, so every absolute map cell below was measured roughly **28.2 dB
+> (machine, 44.1 kHz) to 28.6 dB (ours, 48 kHz) above its true value** — a band's
+> share of its window's energy times the window's share of the clip's is the unit
+> `trajectory()` now reports and always documented. Those two figures are the
+> *stationary-window* limit, `10*log10(n_seg/2)`; the old code scaled each window
+> by a constant while the new code scales by the window's own energy, so for a
+> transient the shift is not one constant: on a decaying drum clip it measured
+> −28.08 dB (spread −28.39 .. −27.84) at 44.1 kHz and −28.49 dB (−28.80 ..
+> −28.21) at 48 kHz. Consequences for the numbers in this document and the
+> `docs/excitation-energy-*.txt` reports it cites: every **absolute** cell (a
+> `machine`/`ours` reading, an F4 quantisation-floor level) moves down by about
+> that amount and every **cross-rate** ours-minus-machine difference loses a
+> spurious **+0.37 dB** (+0.368 dB stationary); the −75 dB clamp now sits at a
+> true −75 dB instead of a true −103 dB. **Within-rate** differences — the `move`
+> table in F2, the `#152 said` columns, every decay rate and every comparison
+> against a floor computed by the same estimator — were re-measured on cells
+> unclamped under both estimators. **The bound depends on the clip class:** on a
+> decaying noise-plus-tone drum pair a within-rate difference moves by at most
+> **0.52 dB** (mean 0.32 dB, 352 cells, both rates); on near-steady tones by at
+> most **0.22 dB** (mean 0.07 dB, 98 cells). A transient moves further than a
+> steady clip, and drum hits are what this map measures, so **0.52 dB is the
+> figure to use**; it is about three times BD's 0.159 dB session-to-session
+> spread, so do not treat it as negligible for an absolute or near-threshold
+> comparison. It does not flip any published verdict: `report_reconcile` needs
+> `max(MARGIN_DB=6.0, 2*scatter)` before a row is anything but "GONE", so every
+> verdict drawn from a within-rate contrast stands as written. Instrument:
+> [`tools/probes/trajectory_within_rate_drift.py`](../tools/probes/trajectory_within_rate_drift.py)
+> (clip definitions, merge-base estimator read from git, five controls). The
+> first within-rate bound published here (0.34 dB max, 0.15 dB mean) was measured
+> on near-steady clips only and was wrong for drums. The absolute numbers stand
+> as historical measurements in the old unit until the reports are regenerated
+> on the corpus.
+
 ---
 
 ## The answer, in four sentences

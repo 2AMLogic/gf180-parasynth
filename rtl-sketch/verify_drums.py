@@ -216,6 +216,10 @@ def main(argv=None) -> int:
     ap.add_argument("--compare-only", default=None, metavar="FILE")
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
     a = ap.parse_args(argv)
+    a.outdir = os.path.abspath(a.outdir)  # iverilog runs with cwd=HERE: a relative
+    # --outdir would put the .vvp under rtl-sketch/ while the stimulus lands
+    # under the caller's CWD (the "Code generator failure: -1" that NO-VERDICTed
+    # every drums control until #1126's baselines ran the recipe end to end)
     print(f"verify_drums: model DrumsFx({dx.N_ENV} envelopes, {dx.N_PATH} paths, bank {dx.N_MODES} modes / "
           f"{dx.N_NUMS} with numerators, headroom {dx.BODY_HR}, {dx.BODY_BITS}-bit body word)")
     expected, n, _ = generate(a.outdir, a.short)

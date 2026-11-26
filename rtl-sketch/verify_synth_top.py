@@ -111,7 +111,6 @@ sys.path.insert(0, os.path.join(ROOT, "audition"))
 import hashlib
 import shutil
 import numpy as np
-from scipy.io import wavfile
 import voice_fx as vf
 import drums_fx as dx
 import synth_top_model as stm
@@ -1642,6 +1641,7 @@ def main(argv=None) -> int:
         if not (a.m5a or a.drum_solo or a.ensemble):
             print("verify_synth_top: REFUSED -- --wav-out requires --m5a, --drum-solo or --ensemble")
             return 2
+        from scipy.io import wavfile  # only the WAV output needs SciPy (#1258)
         os.makedirs(os.path.dirname(os.path.abspath(a.wav_out)), exist_ok=True)
         wavfile.write(a.wav_out, 48000, wav_samples.astype(np.int16))
         print(f"verify_synth_top: decoded I2S WAV written to {a.wav_out}")

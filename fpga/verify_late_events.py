@@ -487,7 +487,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--model-only", action="store_true")
     ap.add_argument("--control", choices=("model-revolution", "rtl-frame-lag"))
-    ap.add_argument("--scenario", nargs="*", default=list(SCENARIOS))
+    ap.add_argument("--scenario", nargs="+", choices=list(SCENARIOS), default=list(SCENARIOS))
     ap.add_argument("--json", type=Path, default=ROOT / "build/late-events/verification.json")
     ap.add_argument("--workdir", type=Path, default=None)
     a = ap.parse_args(argv)

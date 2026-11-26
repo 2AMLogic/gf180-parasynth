@@ -560,7 +560,14 @@ if __name__ == "__main__":
     try:
         sys.exit({"derive": cmd_derive, "sweep": cmd_sweep,
                   "confirm": cmd_confirm, "distort": cmd_distort}[cmd]())
-    except Refused as e:
+    # The BASE class, not the local sibling (#1162): reference() reaches
+    # run_case.load_reference / run_case.prepare, whose Refused is
+    # preparation_contract.Refused -- a sibling of this module's, so the old
+    # `except Refused` missed it and a silent reference escaped confirm and
+    # distort as an exit-1 traceback, a refusal rendered as FAIL. The same
+    # widening as rs_guard_band.py, same corpus input. Unrelated exceptions
+    # still escape as execution errors.
+    except refusal.Refused as e:
         print(f"REFUSED  {e}")
         sys.exit(2)
     except KeyError:

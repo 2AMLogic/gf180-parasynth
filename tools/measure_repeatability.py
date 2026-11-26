@@ -1273,7 +1273,13 @@ def loops_main(a) -> int:
                          if v['tolerance'] is not None else "  (no tolerance row)")
                       + f"   ({take['metrics'][k]['loops']}, {take['metrics'][k]['strikes_refused']})")
             rc_ = MEASURED
-    except Refused as why:
+    except refusal.Refused as why:
+        # The widened CLI boundary (#1183, `run_case.*` family): the corpus
+        # records pass through `rc.prepare`, whose
+        # `preparation_contract.Refused` is a SIBLING of this module's local
+        # class the old `except Refused` could not catch -- a record cut into
+        # the strike escaped as an exit-1 traceback. Catches only refusals;
+        # an unreadable corpus file's soundfile error still exits 1.
         print(f"REFUSED  {why}")
         return REFUSED
     if a.json:
@@ -1342,7 +1348,17 @@ def main(argv: list[str]) -> int:
             print("VERDICTS   each tolerance beside what it has to beat")
             out["verdicts"] = verdicts(machine, out.get("self_test") or self_test(
                 report=lambda *x: None)[1], travel)
-    except Refused as why:
+    except refusal.Refused as why:
+        # The widened CLI boundary (#1183, `run_case.*` family): every corpus
+        # record passes through `rc.prepare`, whose
+        # `preparation_contract.Refused` is a SIBLING of this module's local
+        # class the old `except Refused` could not catch -- a record cut into
+        # the strike escaped as an exit-1 traceback, below this harness's own
+        # contract where REFUSED is a declared outcome. Catches only
+        # refusals; an unreadable corpus file's soundfile error still
+        # exits 1. The per-record `except rc.Refused` in `take_to_take` was
+        # already exact and stays; the double-time check stays LOCAL because
+        # it asserts a refusal this module itself raises.
         print(f"REFUSED  {why}")
         return REFUSED
     if a.json:

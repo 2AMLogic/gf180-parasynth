@@ -88,6 +88,7 @@ def load_reference(voice):
     if not path.exists():
         raise Refused(f"reference recording missing: {REF_MAIN[voice]} under {REFDIR}")
     sr, x = wavfile.read(str(path))
+    rc.require_int16_pcm(x, path, Refused)
     x = np.asarray(x, dtype=np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)

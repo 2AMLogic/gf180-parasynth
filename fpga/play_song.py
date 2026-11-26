@@ -173,11 +173,17 @@ def render(cmds: list, length: int, path: str, *, image: str) -> dict:
     import numpy as np
     from scipy.io import wavfile
     import synth_top_model as stm
+    if image not in uh.IMAGE_REVISION:
+        raise ValueError(f"unknown image {image!r}; expected one of "
+                         f"{sorted(uh.IMAGE_REVISION)}")
+    sys.path.insert(0, os.path.join(ROOT, "fpga", "release"))
+    import qualified_domain as qd
     start = 64                                     # after the image, like the device
     writes = [(0, *c[1:]) for c in cmds if c[0] == "write"]
     writes += [(start + c[1], *c[2:]) for c in cmds if c[0] == "event"]
     n = start + length + uh.SR                     # one second of release tail
-    m = stm.SynthTopModel(oversample_2x=True, filter_2x=True).run(writes, n)
+    m = stm.SynthTopModel(oversample_2x=True, filter_2x=True,
+                          pulse_2x=image in qd.PULSE2X_IMAGES).run(writes, n)
     s = np.asarray(m["sample"], dtype=np.int16)
     wavfile.write(path, uh.SR, s)
     return {"frames": n, "peak": int(np.abs(s.astype(np.int32)).max())}

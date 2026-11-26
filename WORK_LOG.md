@@ -6,6 +6,162 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-25
+
+- **Issue #1302 (closed)**: Honor --image in fpga/play_song.py render instead of silently rendering R1 for --image r2
+- **PR #1310**: fix: honor --image in play_song render (r2 uses pulse_2x)
+- **Issue #1329 (closed)**: gate_calibrate/gate_between: a REFUSED decision still exits 0, next to the branch that now exits 2
+- **PR #1333**: fix: gate CLIs exit REFUSED (2) when the decision is REFUSED
+- **Issue #1319 (closed)**: gate_between table labels a perfect render with worst ratio 0 as “no render”
+- **PR #1321**: fix: show a zero worst-ratio render in the gate_between table instead of 'no render'
+- **Issue #1289 (closed)**: max() accumulators elsewhere drop a NaN the same way #1284's separator did
+- **PR #1291**: fix: refuse nonfinite readings in two max() accumulators
+- **Issue #1338 (closed)**: gate_calibrate: evidence_refusal's new 'rows' guard arm cannot fire through calibrate() (regroup dereferences rows first)
+- **Issue #1306 (closed)**: gate_calibrate: a non-UTF-8 index or a table without `missing` raises out of calibrate() instead of refusing
+- **PR #1324**: fix: refuse on non-UTF-8 index or table lacking 'missing' instead of raising
+- **Issue #1331 (closed)**: Upstream (rjwalters/loom): config-resolver.sh jq --argjson exceeds MAX_ARG_STRLEN, breaking create-issue.sh on this host
+- **Issue #1325 (closed)**: create-issue.sh is broken on this host: config-resolver.sh exceeds jq's per-argument limit (upstream, needs operator to forward)
+- **Issue #1323 (closed)**: record_refusal: a 1-row-per-sound record still calibrates (the blind spot #1298 discloses)
+- **Issue #1297 (closed)**: fpga/measure_mac_midi_latency.py --help needs NumPy it never uses (same class as #1282)
+- **PR #1299**: fix: defer NumPy-pulling imports in the Mac latency probe so --help works
+- **Issue #1301 (closed)**: A complete sound set with empty per-sound tables still calibrates on one sound's evidence (rule-8 sibling of #1296)
+- **PR #1305**: fix: refuse calibration on incomplete per-sound evidence (index-backed)
+- **PR #1264**: ci: gate default-config synth mutants behind a clean default verify_synth_top run
+- **PR #1279**: fix: refuse incomplete 808 neighbour WAV sets in gate calibration
+- **Issue #1315 (closed)**: create-issue.sh is dead on hosts whose defaults.json exceeds 128 KiB (config-resolver passes tiers as argv) — forward to rjwalters/loom
+- **Issue #1221 (closed)**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin
+- **Issue #1263 (closed)**: Remove the missing-neighbour fallback from 808 gate calibration
+- **PR #1295**: fix: validate sound selections before measuring calibration tables
+- **PR #1293**: fix: defer render-only imports so render_miniv4_suite --help/--list run on stdlib Python
+- **PR #1288**: fix: share one qualification rule between snare separator CLI and test
+- **PR #1287**: fix: defer qualified_domain import so MIDI port discovery needs no NumPy
+- **PR #1286**: fix: reject empty or unknown --scenario in the late-event verifier
+- **PR #1285**: test: retire workflow waivers when matching clean runs appear
+- **PR #1283**: fix: check all qualified ground-truth citations in acceptance gate
+- **PR #1277**: fix: load M5A audio dependencies only during scoring
+- **PR #1274**: fix: skip the RTL control when the rolling replay was refused
+- **PR #1273**: fix: catch cross-module Refused at six M1A CLI boundaries
+- **PR #1272**: ci: install soundfile in tools job so the refusal control executes
+- **PR #1270**: fix: return the refusal exit status from M5 measurement tools
+- **PR #1269**: test: pin same-name Refused re-export against narrowed origin guard
+- **PR #1259**: fix: let the R1 quick-start dry run work without SciPy
+- **PR #1201**: controls: real-verifier mixed-baseline evidence, end-to-end make controls runs, drums outdir fix
+- **Issue #1294** (closed): gate_calibrate measure --sounds with no value writes an empty table record and exits 0
+- **Issue #1292** (closed): Defer render-only dependencies in render_miniv4_suite so --list works on stdlib Python
+- **Issue #1290** (closed): Nothing pins share_bound's published values, so widening it would pass both separator entry points
+- **Issue #1284** (closed): Remove the duplicate verdict from the snare separator self-test
+- **Issue #1282** (closed): Defer the voice-model dependency during MIDI port discovery
+- **Issue #1278** (closed): Remove the module-name filter that skips 808 ground-truth citations
+- **Issue #1276** (closed): Require a named scenario when selecting UART late-event checks
+- **Issue #1268** (closed): Defer SciPy and V3-reader imports in mono_m5a_score so named-preset UART, live MIDI, and demo players run without SciPy
+- **Issue #1267** (closed): refusal_sibling_scan: the `nm == FAMILY_NAME` guard has no control for the explicit re-export `from lender import Refused as Refused`
+- **Issue #1266** (closed): Catch cross-module Refused at M5A / M5B / mono_artifact_probe CLI boundaries (7 modules)
+- **Issue #1265** (closed): Catch cross-module Refused at M1A / phase-cycle CLI boundaries (6 modules)
+- **Issue #1262** (closed): measure_repeatability's only refusal control never runs in CI (soundfile absent by omission, not decision)
+- **Issue #1258** (closed): Remove the SciPy requirement from default-patch M5A UART playback
+- **Issue #1252** (closed): STEP_GATED_ALLOWLIST open_issue exemptions have no mechanical retirement, unlike the pending run_all entry
+- **Issue #1229** (closed): A refused rolling RTL replay now runs the rtl_control stage it used to skip
+- **Issue #1202** (closed): Triage the mono_m1a/mono_m5a raiser family: 11 modules whose local-subclass Refused handlers miss the parent class (#1183 remainder)
+- **Issue #1126** (closed): Require a matching clean run before make controls credits an RTL mismatch
+
+- **Issue #1235** (closed): No mechanical guard that workflow injected-defect controls are gated; the run_controls guards read the Makefile recipe only
+- **PR #1240**: test: guard workflow RTL mutant gating and baseline config match
+- **Issue #1248** (closed): uart_host --dry-run status/abort renders the apply_frame sentinel -1 in the 'applies' column
+- **Issue #1207** (closed): Four log10-over-ratio sites in tools/cymbal_*.py were not individually named in #1197's class sweep
+- **PR #1254**: Audit four cymbal log ratios and fix invalid balance verdicts
+- **Issue #1234** (closed): refusal_sibling_scan: an ALIASED borrow sets refused_origin, so a dotted `except <mod>.Refused` is credited for an attribute that does not exist
+- **PR #1261**: fix: refusal_sibling_scan credits <mod>.Refused only for a binding named Refused
+- **Issue #1219** (closed): Consolidate duplicated UART RTL capture/replay in verify_live_midi and verify_rolling_playback (fixes --image r2 running with PULSE2X=0)
+- **PR #1228**: fix: share the UART RTL capture/replay pipeline; replay live-midi r2 bytes at PULSE2X=1
+- **Issue #1253** (closed): render_plan prints the -1 sentinel in the applies column for status/abort rows
+- **PR #1255**: fix: render unset apply_frame as '-' in dry-run plan and echo lines
+- **Issue #1183** (closed): Triage the remaining cross-module refusal escape candidates from the refusal_sibling_scan census
+- **PR #1203**: fix: catch cross-module corpus refusals at five run_case-caller boundaries (run_case.* family of #1183)
+- **Issue #1239** (closed): Tighten the audition help control: `>= 2` lets a silently-no-op replace retire one of its three injected defects
+- **PR #1251**: test: require all three findings in audition help control
+- **Issue #1243** (closed): Use one packet-duration calculation for the UART player’s budget and preflight
+- **PR #1247**: fix: give the UART budget packet durations in audio frames
+- **Issue #1217** (closed): rungs.yml pulse2x job: the VOICE_PULSE2X_OFF control's clean twin is an adjacent run_all row, which cannot gate it
+- **PR #1223**: ci: gate the pulse2x VOICE_PULSE2X_OFF control on its clean twin via run_controls
+- **PR #1246**: fix: stop UART status and abort opening the bridge before the dry-run decision
+- **PR #1226**: docs: make MIDI and UART packages optional in the keyboard audition install
+- **PR #1218**: tools: hash tools/delta_report.py in each comparator's SOURCES
+- **PR #1209**: fix: refuse duplicate step names in the roadmap pair gate instead of last-wins
+- **Issue #1245** (closed): Remove early UART dispatch that sends abort and status during --dry-run
+- **Issue #1215** (closed): Make MIDI and UART packages optional in the keyboard audition instructions
+- **Issue #1208** (closed): Decide whether tools/delta_report.py belongs in each comparator's SOURCES (provenance now computed by unhashed code)
+- **Issue #1206** (closed): check_workflows: the #906 pair order gate lets a duplicate guarded step name through (dict-overwrite, no ambiguity refusal)
+- **Issue #1236** (closed): CI: give the full tools pytest job enough time to report its verdict
+- **PR #1242**: ci: raise the tools job budget to 105 minutes so its verdict can report
+- **Issue #1232** (closed): Remove conflicting key assignments from the audition player’s keyboard guide
+- **PR #1233**: fix: correct audition player help keys for glide, hats and filter envelope
+- **Issue #1249** (closed): Harden the audition help control: a silent str.replace no-op still satisfies it
+
+### 2026-11-24
+
+- **Issue #1214** (closed): refusal_sibling_scan: ambiguous-callee reports family-less callees; --json leaks absolute paths
+- **PR #1230**: fix: filter non-raising stem collisions and make refusal census candidates repo-relative
+- **Issue #1212** (closed): rungs.yml rtl-full: the Verilator VOICE_FILTER2X_OFF control has no clean --m5a-smoke twin in that job
+- **PR #1220**: ci: pair rtl-full's Verilator M5A mutant with a clean smoke baseline
+- **Issue #1211** (closed): Use the ensemble scorer’s existing file hash checks for cached negative controls
+- **PR #1216**: Bind ensemble control-run reuse to the sidecar digests the report carries
+- **Issue #1192** (closed): check_workflows roadmap order gates key on step name, so the SET of compile_dag.py --run invocations is unasserted
+- **PR #1196**: ci: assert the compile_dag.py invocation set, not just the named order-gate steps
+- **Issue #1182** (closed): Wire in tools/performance_suite.py: the playing-behaviour gate that nothing runs
+- **Issue #1193** (closed): refusal_sibling_scan: family classes borrowed by from-import are invisible (9 census sites misclassified)
+- **PR #1224**: fix: track Refused families borrowed by from-import in refusal_sibling_scan
+- **PR #1204**: fix: refuse empty and near-silent windows in cymbal_bands.thirds
+- **Issue #1197** (closed): cymbal_bands.thirds divides by an unguarded e_tot; its zero case is prevented only by call-site ordering
+- **PR #1194**: tools: fix the three refusal_sibling_scan blind-spot gaps (try bodies, stem collisions, import aliases)
+- **Issue #1188** (closed): Complete refusal_sibling_scan's blind-spot list: three unrecorded modelling gaps (all zero-instance today)
+- **PR #1191**: Extract the shared compare-candidate tail into tools/delta_report.py
+- **PR #1190**: fix: refuse a silent corpus WAV in cymbal_tone_knob's windowed measurement
+- **Issue #1187** (closed): Dedupe provenance block and output guard copy-pasted across three compare_*_candidate scripts
+- **Issue #1163** (closed): cymbal_tone_knob: a silent corpus WAV crashes measure_windows with ZeroDivisionError instead of refusing
+- **PR #1186**: test: gate every --pulse2x rtl-full step on the identity outcome
+- **Issue #1177** (closed): rtl-full identity gate: the pytest guard pins the one named phrase step, not that no OTHER step runs the pulse2x phrases ungated
+- **PR #1184**: fix: catch refusal.Refused at the rimshot probes' CLI dispatch, with the cross-module census
+- **PR #1145**: controls: require a clean baseline run before crediting an RTL mutant
+- **PR #1144**: fix: refuse non-16-bit WAVs in five unguarded reference readers
+- **PR #1131**: fix: refuse injected-defect controls whose suite is red before any injection
+- **Issue #1162** (closed): Handle cross-module refusals in the rimshot probe and check other CLI callers
+- **Issue #1125** (closed): Three injected-defect harnesses have no unmutated-suite baseline: inject_manifest_defects, control_capability_verdicts, control_dag_churn
+- **Issue #1117** (closed): Twelve more unguarded `wavfile.read` + /32768 readers survive #817, including `run_case.py`'s reference loader
+- **PR #1179**: check_workflows: refuse a step if: that cannot be shown to run on a pull_request
+- **PR #1176**: test: require exact success-polarity gate in verilator identity phrase check
+- **PR #1175**: ci: refuse rather than report simulator identity in pulse2x-rtl
+- **PR #1161**: fix: refuse by name on null provenance/config in m5a compare and m1a regen tools
+- **Issue #1178** (closed): step_would_block_pull_request's step arm misses an `if:` that keeps the step off pull requests (the #1168 shape, one level down)
+- **Issue #1171** (closed): pulse2x-rtl's simulator-identity step reports rather than refuses; it is safe only by default success() gating
+- **Issue #1170** (closed): rtl-full identity gate: the pytest guard accepts any mention of steps.verilator_identity.outcome, not the 'success' polarity
+- **Issue #1165** (closed): observe the rtl-full verilator_identity gate on a real dispatch (post-merge follow-up to #1154)
+- **Issue #1155** (closed): Same-shape sweep from #1100: three provenance reads still crash on a present-but-null field
+- **PR #1174**: fix: refuse any job-level if: in the signoff harness (_locate)
+- **PR #1169**: refactor: adopt control_dag_lib harness in control_capability_verdicts
+- **Issue #1168** (closed): check_workflows: the job and step `if:` arms still disagree (the `continue-on-error` half was #1158)
+- **PR #1166**: ci: gate the rtl-full phrase run on a Verilator identity refusal step
+- **PR #1164**: fix: catch refusal.Refused at cymbal_bands callers' cross-module call sites
+- **Issue #1160** (closed): cymbal_bands.Refused is caught by nobody: its three callers each define a sibling Refused, so a cymbal refusal exits 1 (FAIL), not 2
+- **PR #1159**: fix: treat expression-form continue-on-error as neutralising at job and step level
+- **Issue #1158** (closed): check_workflows: the job/step `continue-on-error` neutralisation check misses the `${{ ... }}` expression form
+- **Issue #1154** (closed): rtl-full's pulse2x phrase step can run under the wrong Verilator: assert the simulator identity at the point of use
+- **PR #1105**: refactor: consolidate the triplicated control_dag harness into control_dag_lib
+- **Issue #1099** (closed): Adopt control_dag_lib in control_capability_verdicts.py (same harness shape found by #1097's closing search)
+- **Issue #1097** (closed): Consolidate duplicated control_dag harness (RUNNER/run_one/main) into one shared helper
+- **PR #1150**: test: refuse job-level if/continue-on-error in the regrade harness
+- **Issue #1152** (closed): check_workflows: job-level continue-on-error only matches the bare YAML boolean (rule-8 input)
+- **Issue #1143** (closed): test_signoff_klt_version REFUSES on a step-level kill switch but reports green on a job-level one
+- **PR #1147**: fix: normalise trajectory() cells to a share of clip energy, independent of sample rate
+- **Issue #1129** (closed): trajectory() cells carry an n_seg/2 length multiplier, biasing every ours-minus-machine cell +0.368 dB (48 kHz vs 44.1 kHz)
+- **PR #1142**: fix(probe): refuse a holdout control whose red is outside its recorded tests
+- **Issue #1136** (closed): holdout probe: a FIRED control's red is still not attributed to its injection (candidate 2 from #1124)
+- **PR #1151**: fix: refuse malformed provenance and read quoted klt pins in signoff regrade
+- **Issue #1100** (closed): Fix malformed-provenance refusals and quoted-pin comparisons in signoff
+- **PR #1134**: refactor: remove five unreferenced defs, moving their explanations to live code
+- **Issue #800** (closed): Remove 6 unreferenced top-level defs in model/ and tools/: each is a dead duplicate of logic inlined at its call site
+- **PR #1133**: ci: re-home full pulse2x phrase run into rtl-full, delete pulse_audio workflow
+- **Issue #760** (closed): Retire or re-home pulse_audio.yml: its only push trigger is a branch that merged in September
+
 ### 2026-11-23
 
 - **PR #1141**: fix: baseline refusal names pytest's real exit status
@@ -900,38 +1056,4 @@ Closure events below record forge state, not a verified fix or a new sound resul
 - **PR #234**: refprofile: check pins after every clip render; derive pins_held_after_render (#233)
 - **Issue #49** (closed): Playing behaviour: choose our rules deliberately, then test them
 - **PR #236**: docs: decide the external feedback loop's tap, gain, delay and saturation
-
-### 2026-09-25
-
-- **PR #231**: measure: F1 matched-level Surge references + one compensated input-scaling experiment
-- **PR #232**: measure: F1A-F1C board records at the current estimator (measurement-version update)
-- **Issue #222** (closed): Repo-wide ground-truth gate: extend the 808 suite's claim/backing-test meta-test beyond one file (#45 item 1)
-- **PR #227**: test: extend the claim/ground-truth gate to test_moog_acceptance.py
-- **Issue #223** (closed): Doc-claim-to-evidence checker: flag prose claims whose backing test is missing, passing-when-cited-as-failing, or stale (#45 item 4)
-- **PR #230**: Doc-claim-to-evidence checker, and the failure-modes status list it was commissioned to correct
-- **PR #228**: measure: current F1A-F1C cutoff baseline on the selected filter path
-- **PR #226**: M1A drive experiment: no candidate chosen -- drive fixes odd-partial phase sensitivity but worsens even partials
-- **PR #219**: M1A phase-cycle capture: Mini V3 at all relative phases -- INCONCLUSIVE under the pre-registered rule
-- **Issue #21** (closed): R8: shaped excitation pulse — the ~90% discrimination term
-- **PR #221**: docs: BD excitation-shape probe for #21 -- mechanism confirmed, blocked by #220, kit unchanged
-- **PR #218**: M1A harmonic-shape diagnosis: phase-sensitive mix; no sound change supported yet
-- **PR #217**: M1A attack: record the stopping point and two qualifications
-- **Issue #22** (closed): R9: complete the 808 — the eight voices we don't have
-- **PR #214**: M1A: known-answer qualification of the attack measurement (m1a-envelope-score-v3); still no verdict
-- **Issue #1** (closed): Product target: USB-C bus-powered class-compliant sound module (keychain)
-- **PR #216**: docs: the keychain dongle, itemised from manufacturers' drawings (#1 board fit)
-- **PR #212**: arty: bind integrated-baseline DSP evidence to routed.dcp by digest; extractor records the digest
-
-### 2026-09-24
-
-- **PR #210**: Musical-length playback: rolling UART delivery, qualified through the RTL
-- **PR #211**: M1A: select the −4 dB gain patch; two-sided attack qualification; exploratory attack sweep
-- **PR #209**: publish: derive dsp_feedback_review_complete from DCP-bound evidence
-- **PR #197**: measure: publish M1A gain improvement and diagnose oscillator cancellation
-- **PR #203**: Qualify M1A attack measurement: envelope becomes a valid metric; M1A valid fail (21/100)
-- **PR #199**: Build and publish Arty A7-100T baseline with SPI-to-I2S verification
-- **PR #202**: USB-UART control bridge: device-side event scheduling, one-command playback
-- **PR #201**: Qualify external I/O timing: I2S forwarded clock, SPI MISO return, documented LED exceptions
-- **PR #200**: Dismiss the 13 DPREG-4 DSP feedback warnings with mapped-simulation evidence
-- **PR #204**: Integrated qualified Arty baseline: DSP disposition + external I/O timing + UART bridge in one image
 

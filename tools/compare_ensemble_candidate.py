@@ -33,8 +33,6 @@ Exit status: 0 the comparison was made, 2 REFUSED (no comparison).
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
-import hashlib
 import json
 import math
 import pathlib
@@ -47,6 +45,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import run_case as rc
 import scorecard
 from score_ensemble_i2s import Refused
+import delta_report  # noqa: E402
 
 #: The three properties `docs/scorecard/cases.csv` requires of every Ensemble
 #: case, with the units and tolerance basis the frozen policy gives them. A
@@ -57,6 +56,11 @@ CONTRACT = {
     "output artifacts": ("% of samples", 0.01, "rail"),
 }
 ENSEMBLE_ENGINES = ("fixed-model", "integrated-rtl")
+
+#: The sources a delta record's `provenance.source_sha256` identifies the
+#: comparison by (kept at module scope, as `compare_drum_i2s_candidate` does).
+SOURCES = ("tools/compare_ensemble_candidate.py", "tools/score_ensemble_i2s.py",
+           "tools/run_case.py", "tools/scorecard.py", "tools/delta_report.py")
 
 
 def _case(case_id: str) -> dict:
@@ -191,21 +195,8 @@ def compare_files(baseline_path: pathlib.Path, candidate_path: pathlib.Path) -> 
     except (OSError, json.JSONDecodeError) as exc:
         raise Refused(f"cannot load an Ensemble score record: {exc}") from exc
     report = compare_records(baseline, candidate)
-    sources = ("tools/compare_ensemble_candidate.py", "tools/score_ensemble_i2s.py",
-               "tools/run_case.py", "tools/scorecard.py")
-    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
-                            check=True, capture_output=True, text=True).stdout.strip()
-    dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
-                                check=True, capture_output=True, text=True).stdout.strip())
-    report["provenance"] = {
-        "source_commit": commit, "source_dirty": dirty,
-        "input_sha256": {
-            "baseline_record": hashlib.sha256(baseline_path.read_bytes()).hexdigest(),
-            "candidate_record": hashlib.sha256(candidate_path.read_bytes()).hexdigest()},
-        "source_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-                          for name in sources},
-        "run_at_utc": datetime.now(timezone.utc).isoformat(),
-    }
+    report["provenance"] = delta_report.comparison_provenance(
+        baseline_path, candidate_path, SOURCES, root=ROOT)
     return report
 
 
@@ -216,25 +207,16 @@ def main(argv=None) -> int:
     ap.add_argument("candidate", help="the integrated-rtl record under consideration")
     ap.add_argument("--out", default="build/scorecard/ensemble-integrated-delta.json")
     a = ap.parse_args(argv)
-    baseline = pathlib.Path(a.baseline)
-    candidate = pathlib.Path(a.candidate)
-    if not baseline.is_absolute():
-        baseline = ROOT / baseline
-    if not candidate.is_absolute():
-        candidate = ROOT / candidate
+    baseline = delta_report.repo_path(a.baseline, root=ROOT)
+    candidate = delta_report.repo_path(a.candidate, root=ROOT)
     try:
         report = compare_files(baseline, candidate)
     except (OSError, ValueError, Refused, subprocess.CalledProcessError) as exc:
         print(f"compare_ensemble_candidate: REFUSED -- {exc}")
         return 2
-    out = pathlib.Path(a.out)
-    if not out.is_absolute():
-        out = ROOT / out
-    if not out.resolve().is_relative_to(ROOT):
-        print("compare_ensemble_candidate: REFUSED -- output must remain inside the repository")
+    out = delta_report.write_report(report, a.out, "compare_ensemble_candidate", root=ROOT)
+    if out is None:
         return 2
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, indent=2) + "\n")
     comparison = report["comparison"]
     print(json.dumps({"report": str(out.relative_to(ROOT)),
                       "comparison_mode": report["comparison_mode"],
