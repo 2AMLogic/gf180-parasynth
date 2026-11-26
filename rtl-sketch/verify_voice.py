@@ -91,7 +91,9 @@ Exit status (a CI job asserting that a negative control fails must require
 exactly 1):
   0  every sample and every tap identical, final state identical
   1  the simulation ran to completion and something differed
-  2  it did not run: tool missing, compile error, timeout, short output
+  2  it did not run: tool missing, compile error, timeout, short or malformed
+     output (the trace must be exactly the declared frame rows plus one
+     complete final-state record)
 
   --inject NAME     compile with -DINJECT_BUG_VOICE_<NAME>; the negative controls
   --expect-fail     exit 0 only if the comparison gave 1
@@ -620,23 +622,53 @@ def compare(expected, state, report, out_file, name="verify_voice") -> int:
         lines = [l.split() for l in open(out_file) if l.strip()]
     except OSError:
         print(f"{name}: no RTL output at {out_file}"); return 2
-    rows = [l for l in lines if l[0] != "STATE"]
-    st = [l for l in lines if l[0] == "STATE"]
+    # The declared layout (tb_voice.v:238, the closing $fdisplay sequence):
+    # exactly len(expected) frame rows, then ONE complete final-state row, then
+    # end of input. Reading it in order -- rather than filtering the STATE rows
+    # out of a pile and zipping the common prefix -- is what makes a truncated,
+    # displaced or surplus final state refuse (status 2) instead of passing as
+    # identical (#1356): a trace can no longer omit the final-state evidence
+    # and still report it. Status 2 is "no verdict", and an injected-defect
+    # control must require exactly 1, so malformed output cannot satisfy one.
     n = len(expected)
-    if len(rows) < n or not st:
-        print(f"{name}: RTL produced {len(rows)} of {n} frames{' and no STATE line' if not st else ''} -- did not run to completion")
+    width = 1 + len(FIELDS) + 1                        # frame index, the taps, strobe cycles
+    if any(l[0] == "STATE" for l in lines[:n]):
+        print(f"{name}: STATE record before the final frame row -- output is not the declared layout")
         return 2
+    if len(lines) < n + 1:
+        print(f"{name}: RTL produced {len(lines)} of {n} frames and no STATE line -- did not run to completion")
+        return 2
+    cycles = []
+    for i in range(n):
+        row = lines[i]
+        if len(row) != width:
+            print(f"{name}: frame row {i} carries {len(row)} of {width} values -- output is not the declared layout")
+            return 2
+        try:
+            cycles.append(int(row[width - 1]))
+        except ValueError:
+            print(f"{name}: frame row {i} strobe cycle {row[width - 1]!r} is not a number -- output is not the declared layout")
+            return 2
+    if lines[n][0] != "STATE":
+        print(f"{name}: RTL produced {sum(1 for l in lines if l[0] != 'STATE')} of {n} frames -- surplus frame output")
+        return 2
+    if len(lines) > n + 1:
+        print(f"{name}: {len(lines) - n - 1} surplus record(s) after the STATE line -- output is not the declared layout")
+        return 2
+    if len(lines[n]) != 1 + len(STATE_FIELDS):
+        print(f"{name}: STATE record carries {len(lines[n]) - 1} of {len(STATE_FIELDS)} values -- output is not the declared layout")
+        return 2
+    rows = lines[:n]
+    st_got = lines[n][1:]
     mism = {f: 0 for f in FIELDS}
     first = {}
     per_scn = [[0, 0] for _ in report]                            # per segment: sample mismatches, tap mismatches
     scn_of = []
     for i, r in enumerate(report):
         scn_of += [i] * r["n"]
-    cycles = []
     xs = 0
     for i in range(n):
         got = rows[i][1:1 + len(FIELDS)]
-        cycles.append(int(rows[i][1 + len(FIELDS)]))
         for j, f in enumerate(FIELDS):
             g = got[j]
             try:
@@ -647,7 +679,6 @@ def compare(expected, state, report, out_file, name="verify_voice") -> int:
                 mism[f] += 1
                 per_scn[scn_of[i]][0 if f == "sample" else 1] += 1
                 if f not in first: first[f] = (i, expected[i][j], g, report[scn_of[i]]["key"])
-    st_got = st[0][1:]
     st_mism = [(f, e, g) for f, e, g in zip(STATE_FIELDS, state, st_got) if str(e) != g]
     total = sum(mism.values())
     print(f"{name}: cycles from go to sample_valid: best {min(cycles)}, mean {sum(cycles) / len(cycles):.1f}, "
