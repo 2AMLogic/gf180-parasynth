@@ -290,3 +290,79 @@ def test_help_and_list_run_without_numpy(flag):
         assert "32 of 32 cases" in r.stdout
     else:
         assert "usage" in r.stdout.lower()
+
+
+# ===========================================================================
+# the shipping adapter against a processor that has DawDreamer's API (#1403)
+# ===========================================================================
+class _DawProcessor:
+    """Exposes ONLY the DawDreamer PluginProcessor methods the adapter may
+    use, so a call to a method that class lacks (`add_note`) raises
+    AttributeError exactly as on a real host."""
+
+    def __init__(self, log, latency=0):
+        self.log, self.latency = log, latency
+
+    def clear_midi(self):
+        self.log.append(("clear_midi",))
+
+    def add_midi_note(self, note, velocity, start, duration):
+        self.log.append(("add_midi_note", note, velocity, start, duration))
+
+    def get_latency_samples(self):
+        return self.latency
+
+
+class _DawEngine:
+    def __init__(self, log, audio):
+        self.log, self.audio = log, audio
+
+    def render(self, seconds):
+        self.log.append(("render", seconds))
+
+    def get_audio(self):
+        self.log.append(("get_audio",))
+        return self.audio
+
+
+def _shipping_rig(log, audio, latency=0):
+    rig = rv._Rig.__new__(rv._Rig)
+    rig.p = _DawProcessor(log, latency)
+    rig.eng = _DawEngine(log, audio)
+    return rig
+
+
+def test_render_note_dispatches_midi_through_the_daw_api_in_order():
+    log = []
+    audio = np.vstack([np.arange(100.0), -np.arange(100.0)]).astype(np.float32)
+    rig = _shipping_rig(log, audio, latency=10)
+    y = rig.render_note(64, 0.5, velocity=90, note_at=0.03)
+    assert log == [("clear_midi",), ("add_midi_note", 64, 90, 0.03, 0.5),
+                   ("render", 0.5), ("get_audio",)]
+    # first channel only, host latency removed
+    assert np.array_equal(y, np.arange(10.0, 100.0))
+
+
+def test_render_note_refuses_a_non_finite_host_buffer():
+    audio = np.zeros((2, 50), dtype=np.float32)
+    audio[0, 7] = np.nan
+    rig = _shipping_rig([], audio)
+    with pytest.raises(Exception):
+        rig.render_note(60, 0.1)
+
+
+def test_the_old_method_name_fails_at_note_dispatch():
+    """Injected-bug control: a processor that offers only `add_note` (the
+    pre-#1403 call) must NOT satisfy the adapter."""
+    class OldNameOnly(_DawProcessor):
+        add_midi_note = None
+
+        def add_note(self, *a):
+            self.log.append(("add_note",) + a)
+
+    log = []
+    rig = _shipping_rig(log, np.ones((2, 10), dtype=np.float32))
+    rig.p = OldNameOnly(log)
+    with pytest.raises(TypeError):
+        rig.render_note(60, 0.1)
+    assert ("add_note", 60, 100, 0.02, 0.1) not in log
