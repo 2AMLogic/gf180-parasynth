@@ -58,6 +58,8 @@ FOUR OUTCOMES, AND REFUSED IS ONE OF THEM
 Preconditions asserted at the point of use, each its own refusal code:
 
   SR_MISMATCH        the file's rate is not the rate the caller declared
+  NONFINITE_INPUT    the window holds a NaN or an infinite sample: a corrupt
+                     recording, not a silent oscillator
   TOO_FEW_PERIODS    fewer than MIN_PERIODS clean periods in the window
   LOW_LEVEL          the window is silent
   WINDOW_SPANS_SILENCE
@@ -76,6 +78,12 @@ holding one monotone excursion is equally the first quarter of something slow
 and periodic, and no estimator can tell those apart; the probe refuses rather
 than picking one. A drift magnitude here therefore needs SECONDS of ONE
 oscillator held, which is a constraint on the stimulus, not a bug.
+
+An unavailable diagnostic is NaN in memory and `null` in the `--json` file
+(RFC 8259 has no NaN): `walk_exponent` on a window too short for three lags,
+for instance. `write_json` is where that conversion happens, and a non-finite
+number under any other key is a defect in the report, which it refuses to
+write (#1406).
 
 WHAT SEPARATES DRIFT FROM BEATING, in one sentence
 --------------------------------------------------
@@ -339,7 +347,9 @@ def drift_report(x: np.ndarray, sr: int, f0_nominal: float, *,
     `x` is a mono float signal holding ONE held tone at (nominally)
     `f0_nominal`. Level envelopes are fine -- an amplitude envelope does not
     move the zeros of a sinusoid -- but a note boundary is not: trim to the
-    held part before calling.
+    held part before calling. A NaN or infinite sample anywhere in `x` refuses
+    under NONFINITE_INPUT before anything is computed from the window: an
+    `rms <= 0` test cannot see a NaN rms.
 
     Returns a dict that always carries `verdict`; on REFUSED it carries
     `refusal` and NO magnitude, because a magnitude from an apparatus whose
@@ -350,6 +360,14 @@ def drift_report(x: np.ndarray, sr: int, f0_nominal: float, *,
         if sr_expected is not None and int(sr) != int(sr_expected):
             raise Refusal("SR_MISMATCH", f"{sr} != declared {sr_expected}")
         x = np.asarray(x, dtype=np.float64)
+        finite = np.isfinite(x)
+        if not finite.all():
+            bad = np.flatnonzero(~finite)
+            raise Refusal(
+                "NONFINITE_INPUT",
+                f"{len(bad)} of {len(x)} samples are not finite (first: "
+                f"{float(x[bad[0]]):g} at sample {bad[0]}): a corrupt "
+                f"recording, not a silent oscillator")
         dur = len(x) / sr
         out["duration_s"] = dur
         if dur * f0_nominal < MIN_PERIODS:
@@ -584,6 +602,46 @@ def static_detune_mix(sr: int, dur_s: float, f0: float,
 
 
 # ---- CLI -------------------------------------------------------------------
+OPTIONAL_DIAGNOSTICS = frozenset({
+    "walk_exponent", "wobble_hz", "wobble_line_fraction", "env_corr",
+    "wobble_cycles", "repeat_r", "acorr_time_s", "taus_in_window",
+})
+
+
+def _for_export(value, key=None, where=""):
+    """`value` with every unavailable optional diagnostic as None.
+
+    In memory an unavailable estimate is NaN, which comparisons and console
+    formatting can use; only here does it become null. A non-finite number
+    under any OTHER key is not an unavailable estimate but a defect in the
+    report, and raises ValueError naming the field."""
+    if isinstance(value, dict):
+        return {k: _for_export(v, k, f"{where}.{k}" if where else str(k))
+                for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_for_export(v, key, f"{where}[{i}]") for i, v in enumerate(value)]
+    if isinstance(value, float) and not math.isfinite(value):
+        if key in OPTIONAL_DIAGNOSTICS and math.isnan(value):
+            return None
+        raise ValueError(
+            f"{where} is {float(value)!r}: only an unavailable optional "
+            f"diagnostic (NaN as one of {sorted(OPTIONAL_DIAGNOSTICS)}) may be "
+            f"non-finite, so the report is a defect and nothing was written")
+    return value
+
+
+def write_json(path: str, payload: dict) -> None:
+    """Write `payload` as ONE strict JSON document: RFC 8259, so no NaN and
+    no Infinity token. The whole text is serialized before `path` is touched,
+    so a report that cannot be encoded raises and the destination is neither
+    created nor truncated."""
+    text = json.dumps(_for_export(payload), indent=1, sort_keys=True,
+                      allow_nan=False)
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w") as fh:
+        fh.write(text)
+
+
 def _window(x: np.ndarray, sr: int, t0: float, t1: float) -> np.ndarray:
     return x[max(0, int(t0 * sr)):min(len(x), int(t1 * sr))]
 
@@ -625,9 +683,7 @@ def main(argv=None) -> int:
                           f"walk {r['walk_exponent']:.2f}"))
     out = {"reports": reports, "across_note": across_note_drift(reports)}
     if a.json:
-        os.makedirs(os.path.dirname(os.path.abspath(a.json)), exist_ok=True)
-        with open(a.json, "w") as fh:
-            json.dump(out, fh, indent=1, sort_keys=True)
+        write_json(a.json, out)
         print(f"-- wrote {a.json}")
     return 0
 
