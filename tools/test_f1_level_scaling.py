@@ -204,3 +204,221 @@ def test_rule_refuses_selection_when_words_equal_the_baseline():
 def test_rule_rejects_an_insufficient_corner_gain():
     ev = fls.evaluate(_fake_table(-14.0))
     assert not ev["verdicts"]["half"]["checks"]["3_corner"] and ev["selection"] is None
+
+
+# --- the worker's grid check, through a recording rig and no plugin (#1391) --
+#: Tone 12 of the open20k grid: what the frozen profile holds and what the
+#: same `np.geomspace` call regenerates as on Linux x86_64 with Python 3.12.3
+#: and NumPy 2.5.5. One binary64 step apart; the same float32 stimulus.
+ULP_PAIR = (float.fromhex("0x1.6bde96b0d5dc1p+8"), float.fromhex("0x1.6bde96b0d5dc0p+8"))
+GRID_REFUSAL = "the frozen stepped-tone grid differs from reference_compare.FREQS: "
+
+
+def _frozen_grid():
+    clip = cap.CONDITIONS["open20k"][1]
+    return [float(f) for f in cap.rp.load_profile()["clips"][clip]["freqs_hz"]]
+
+
+def _reported_pair(frozen):
+    """The open20k grid with tone 12 set to the OTHER of the two reported
+    values, whichever of them the frozen profile holds."""
+    assert frozen[12] in ULP_PAIR, "the profile this pair was reported against"
+    return frozen[:12] + [ULP_PAIR[1 - ULP_PAIR.index(frozen[12])]] + frozen[13:]
+
+
+def _tone(f, amp=0.25):
+    """(float32 samples, integer window start and length) of one grid tone."""
+    import reference_rigs as rr
+    settle, window = rr.SurgeRig.TONE_SETTLE_S, rr.SurgeRig.TONE_WINDOW_S
+    x, [(start, n, _f)] = rr.tone_train([f], amp, settle, window)
+    return x.astype("float32"), (int(start), int(n))
+
+
+def _same_tone(a, b, amp):
+    (x, p), (y, q) = _tone(a, amp), _tone(b, amp)
+    return x.tobytes() == y.tobytes() and p == q
+
+
+@pytest.fixture
+def recording_rig(monkeypatch):
+    """`worker` with no plugin behind it. `SurgeRig` keeps its pin table,
+    stimulus constants and projection, and the filter is a wire: the clip is
+    the stimulus `tone_render` was handed, and an open filter reads 0 dB
+    against the frozen wide-open clip, which is the same wire at 0.25. Every
+    `tone_render` call is recorded. `regenerate` sets the grid that
+    `reference_compare.FREQS` appears to produce."""
+    import types
+    import reference_rigs as rr
+    frozen = _frozen_grid()
+    names = {idx: name for idx, _val, name, _want in rr.SurgeRig.PINS}
+    texts = {idx: want for idx, _val, _name, want in rr.SurgeRig.PINS}
+    texts[rr.SurgeRig.I["f1_type"]] = "LP Vintage Ladder"
+    texts[rr.SurgeRig.I["f1_sub"]] = "Type 2"
+    frozen_y, frozen_parts = rr.tone_train(
+        frozen, 0.25, rr.SurgeRig.TONE_SETTLE_S, rr.SurgeRig.TONE_WINDOW_S)
+    calls = []
+
+    class RecordingRig(rr.SurgeRig):
+        def __init__(self, subtype="Type 2"):
+            self.block = rr.BLOCK
+            self.p = types.SimpleNamespace(
+                get_parameter_name=names.__getitem__,
+                get_parameter_text=texts.__getitem__,
+                get_latency_samples=lambda: 0)
+
+        def tone_render(self, freqs, cut, res, amp):
+            calls.append((list(freqs), cut, res, amp))
+            x, parts = rr.tone_train(freqs, amp, self.TONE_SETTLE_S, self.TONE_WINDOW_S)
+            return x, parts, cut
+
+    monkeypatch.setitem(sys.modules, "dawdreamer", types.ModuleType("dawdreamer"))
+    monkeypatch.setattr(rr, "SurgeRig", RecordingRig)
+    monkeypatch.setattr(cap, "assert_plugin_identity", dict)
+    monkeypatch.setattr(
+        cap.rp, "load_clip",
+        lambda clip_id, prof=None: (frozen_y, rr.SR, {"amp": 0.25, "parts": frozen_parts}))
+
+    def regenerate(grid):
+        monkeypatch.setattr(cap.rp, "_freqs", lambda: list(grid))
+
+    return types.SimpleNamespace(calls=calls, frozen=frozen, regenerate=regenerate)
+
+
+def _assert_take_used_the_frozen_tones(rig, tmp_path, rec, amp):
+    import json
+    conditions = [(cut, cap.RES, amp) for cut, _fz in cap.CONDITIONS.values()]
+    assert rig.calls == [(rig.frozen, *command) for command in conditions]
+    assert json.loads((tmp_path / "take.json").read_text()) == rec
+    assert set(rec["clips"]) == set(cap.CONDITIONS)
+    for clip in rec["clips"].values():
+        assert clip["freqs_hz"] == rig.frozen
+        assert [f for _start, _n, f in clip["parts"]] == rig.frozen
+
+
+def _assert_refused_before_any_render(rig, tmp_path, grid, diagnostic):
+    """The worker refuses with exactly `diagnostic`, renders nothing and
+    writes nothing."""
+    rig.regenerate(grid)
+    with pytest.raises(cap.Refused) as refused:
+        cap.worker(0.25, 1, tmp_path)
+    assert str(refused.value) == diagnostic
+    assert rig.calls == []
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("amp", cap.AMPS)
+def test_worker_takes_every_condition_on_the_exact_grid_with_the_frozen_tones(
+    recording_rig, tmp_path, amp
+):
+    rig = recording_rig
+    rig.regenerate(rig.frozen)
+    rec = cap.worker(amp, 1, tmp_path)
+    _assert_take_used_the_frozen_tones(rig, tmp_path, rec, amp)
+
+
+@pytest.mark.parametrize("amp", cap.AMPS)
+def test_worker_takes_every_condition_on_the_one_ulp_grid_with_the_frozen_tones(
+    recording_rig, tmp_path, amp
+):
+    """The reported pair, with the regenerated side set to whichever of the
+    two literals this host does not produce on its own."""
+    rig = recording_rig
+    regenerated = _reported_pair(rig.frozen)
+    assert _same_tone(regenerated[12], rig.frozen[12], amp)
+    rig.regenerate(regenerated)
+    rec = cap.worker(amp, 1, tmp_path)
+    _assert_take_used_the_frozen_tones(rig, tmp_path, rec, amp)
+
+
+def _tone_differs(index, frozen, regenerated, why):
+    """The worker's diagnostic for one tone that is not the frozen one."""
+    return f"{index}: {frozen.hex()} frozen, {regenerated.hex()} regenerated: {why}"
+
+
+NOT_ADJACENT = "not an adjacent binary64 value"
+STIMULUS_DIFFERS = ("adjacent values, but not the same float32 stimulus and windows "
+                    "at amp 0.25")
+
+
+def _refused_grid(*tones):
+    """The whole diagnostic for a grid whose entries `tones_differs` describe."""
+    return GRID_REFUSAL + "; ".join(tones)
+
+
+def test_issue_1391_control_the_exact_list_comparison_still_refuses_the_reported_pair(
+    recording_rig, monkeypatch, tmp_path
+):
+    """The comparison that shipped, kept red. Put back as exact list equality,
+    it refuses the reported pair, so the take accepted above is the input the
+    bug refused and not a copy of the exact grid."""
+    rig = recording_rig
+
+    def exact_list_comparison(frozen, regenerated, *_amp_settle_window):
+        return [] if frozen == regenerated else [""]
+
+    monkeypatch.setattr(cap, "grid_differences", exact_list_comparison)
+    _assert_refused_before_any_render(rig, tmp_path, _reported_pair(rig.frozen), GRID_REFUSAL)
+
+
+def test_worker_refuses_a_tone_that_keeps_its_window_and_moves_its_samples(
+    recording_rig, tmp_path
+):
+    """The near miss from #1391: `np.isclose` accepts it, the window is the
+    frozen tone's, and most of the float32 samples move."""
+    rig = recording_rig
+    a, moved = rig.frozen[12], rig.frozen[12] + 1e-6
+    frozen_tone, moved_tone = _tone(a), _tone(moved)
+    assert np.isclose(moved, a) and frozen_tone[1] == moved_tone[1]
+    assert np.count_nonzero(frozen_tone[0] != moved_tone[0]) > len(frozen_tone[0]) // 2
+    _assert_refused_before_any_render(
+        rig, tmp_path, rig.frozen[:12] + [moved] + rig.frozen[13:],
+        _refused_grid(_tone_differs(12, a, moved, NOT_ADJACENT)))
+
+
+def test_worker_refuses_an_adjacent_value_whose_float32_tone_differs(recording_rig, tmp_path):
+    """One step ABOVE tone 12: adjacent, the step the reported pair does not
+    take, and one float32 sample moves. Adjacency alone must not admit it."""
+    rig = recording_rig
+    a, adjacent = rig.frozen[12], float(np.nextafter(rig.frozen[12], math.inf))
+    frozen_tone, adjacent_tone = _tone(a), _tone(adjacent)
+    assert frozen_tone[1] == adjacent_tone[1]
+    assert adjacent_tone[0].tobytes() != frozen_tone[0].tobytes()
+    _assert_refused_before_any_render(
+        rig, tmp_path, rig.frozen[:12] + [adjacent] + rig.frozen[13:],
+        _refused_grid(_tone_differs(12, a, adjacent, STIMULUS_DIFFERS)))
+
+
+def test_worker_refuses_a_tone_two_steps_away_whose_float32_tone_is_unchanged(
+    recording_rig, tmp_path
+):
+    """The bound is ONE binary64 step, and it is not implied by the stimulus
+    comparison: two steps below tone 12 is still the same float32 tone in the
+    same window, and it is refused all the same."""
+    rig = recording_rig
+    a = rig.frozen[12]
+    two_steps = float(np.nextafter(np.nextafter(a, -math.inf), -math.inf))
+    assert _same_tone(two_steps, a, 0.25)
+    _assert_refused_before_any_render(
+        rig, tmp_path, rig.frozen[:12] + [two_steps] + rig.frozen[13:],
+        _refused_grid(_tone_differs(12, a, two_steps, NOT_ADJACENT)))
+
+
+@pytest.mark.parametrize("case", ["missing", "reordered", "nan", "infinite"])
+def test_worker_refuses_a_grid_with_a_missing_reordered_or_non_finite_tone(
+    recording_rig, tmp_path, case
+):
+    rig = recording_rig
+    a, b = rig.frozen[12], rig.frozen[13]
+    grids = {
+        "missing": (rig.frozen[:-1], f"{GRID_REFUSAL}{len(rig.frozen)} frozen tones, "
+                                      f"{len(rig.frozen) - 1} regenerated"),
+        "reordered": (rig.frozen[:12] + [b, a] + rig.frozen[14:],
+                      _refused_grid(_tone_differs(12, a, b, NOT_ADJACENT),
+                                    _tone_differs(13, b, a, NOT_ADJACENT))),
+        "nan": (rig.frozen[:12] + [math.nan] + rig.frozen[13:],
+                _refused_grid(_tone_differs(12, a, math.nan, NOT_ADJACENT))),
+        "infinite": (rig.frozen[:12] + [math.inf] + rig.frozen[13:],
+                     _refused_grid(_tone_differs(12, a, math.inf, NOT_ADJACENT))),
+    }
+    grid, diagnostic = grids[case]
+    _assert_refused_before_any_render(rig, tmp_path, grid, diagnostic)

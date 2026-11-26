@@ -21,6 +21,13 @@ nominal-level takes against the frozen bytes.
 
 PRECONDITIONS, asserted at the point of use; each one REFUSES (exit 2)
 ----------------------------------------------------------------------
+  * the frozen stepped-tone grid is the study's (`reference_compare.FREQS`) as
+    a STIMULUS: every tone regenerates exactly or one binary64 step away, and
+    the whole train is then the same float32 input bytes and the same integer
+    windows at the take's amplitude (#1391). A different grid is a different
+    reference, as a different Surge build is. The frozen values are what the
+    rig renders and every clip records; a moved, missing or reordered tone
+    REFUSES before the first render
   * dawdreamer imports; the Surge bundle exists
   * bundle version AND binary sha256 equal the ones the frozen profile records
     -- a different Surge build is a different reference, not a second take
@@ -155,6 +162,60 @@ def _projected_low_db(y, parts, amp, n=4) -> float:
     return float(np.median(g))
 
 
+def _adjacent(a: float, b: float) -> bool:
+    """Both finite and at most one binary64 step apart."""
+    return (math.isfinite(a) and math.isfinite(b)
+            and (np.nextafter(a, b) == b or np.nextafter(b, a) == a))
+
+
+def _same_stimulus(frozen, regenerated, amp: float, settle_s: float, window_s: float) -> bool:
+    """`tone_train` on each grid at `amp`: the same float32 input bytes, and
+    the same integer window starts and lengths."""
+    import reference_rigs as rr
+    x, p = rr.tone_train(frozen, amp, settle_s, window_s)
+    y, q = rr.tone_train(regenerated, amp, settle_s, window_s)
+    return (len(x) == len(y)
+            and x.astype(np.float32).tobytes() == y.astype(np.float32).tobytes()
+            and [(int(s), int(n)) for s, n, _f in p] == [(int(s), int(n)) for s, n, _f in q])
+
+
+def grid_differences(frozen, regenerated, amp: float, settle_s: float,
+                     window_s: float) -> list[str]:
+    """Why `regenerated` is not the frozen grid as a stimulus at `amp`; []
+    when it is.
+
+    The frozen profile's grid was computed on another platform, Python and
+    NumPy than the one regenerating it (#1391: Darwin / 3.14.7 / 2.5.3 against
+    Linux x86_64 / 3.12.3 / 2.5.5), so a tone can come back one binary64 step
+    off. That step is accepted only when nothing the rig receives moves with
+    it: every differing tone must be the adjacent finite value, and the whole
+    train built from the regenerated grid must then be the frozen one as
+    float32 input bytes and integer windows at this take's amplitude.
+
+    Neither half is enough on its own. A relative tolerance admits a tone
+    moved 1e-6 Hz: it keeps the frozen window and moves 11,782 of 12,540
+    float32 samples. Adjacency admits one step ABOVE the reported tone: the
+    window stays and one sample moves. And the stimulus comparison alone admits
+    two steps BELOW it, byte for byte the same tone on the Linux host that
+    measured all three, so the one-step bound is what refuses that one.
+
+    `frozen` is what gets rendered, projected and recorded either way."""
+    if len(frozen) != len(regenerated):
+        return [f"{len(frozen)} frozen tones, {len(regenerated)} regenerated"]
+    moved = [(i, float(a), float(b))
+             for i, (a, b) in enumerate(zip(frozen, regenerated)) if a != b]
+    if not moved:
+        return []
+    far = [(i, a, b) for i, a, b in moved if not _adjacent(a, b)]
+    if far:
+        return [f"{i}: {a.hex()} frozen, {b.hex()} regenerated: not an adjacent binary64 value"
+                for i, a, b in far]
+    if not _same_stimulus(frozen, regenerated, amp, settle_s, window_s):
+        return [f"{i}: {a.hex()} frozen, {b.hex()} regenerated: adjacent values, but not the "
+                f"same float32 stimulus and windows at amp {amp:g}" for i, a, b in moved]
+    return []
+
+
 # ---------------------------------------------------------------------------
 # the worker: ONE take, one process, one freshly loaded and qualified plugin
 # ---------------------------------------------------------------------------
@@ -172,8 +233,10 @@ def worker(amp: float, take: int, out: pathlib.Path) -> dict:
                       f"{frozen['host']['block']}/{frozen['host']['sr']}")
     prof = rp.load_profile()
     freqs = [float(f) for f in prof["clips"][CONDITIONS["open20k"][1]]["freqs_hz"]]
-    if freqs != rp._freqs():
-        raise Refused("the frozen stepped-tone grid differs from reference_compare.FREQS")
+    bad = grid_differences(freqs, rp._freqs(), amp, dev.TONE_SETTLE_S, dev.TONE_WINDOW_S)
+    if bad:
+        raise Refused("the frozen stepped-tone grid differs from reference_compare.FREQS: "
+                      + "; ".join(bad))
     frozen_open_y, _, frozen_open_meta = rp.load_clip(CONDITIONS["open20k"][1], prof)
     fparts = [(int(a), int(b), float(f)) for a, b, f in frozen_open_meta["parts"]]
     frozen_open_low = _projected_low_db(frozen_open_y, fparts, float(frozen_open_meta["amp"]))
