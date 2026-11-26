@@ -114,3 +114,57 @@ effect on a known-answer fixture: a constant 1.0e-4 of peak, worth at most
 small on that fixture. It has not been measured on the real references, whose
 converter offset is 0.1 to 0.4 % of peak, so it is an open item and not a
 clearance. Filed as #637.
+
+## Added 2026-11-26 against `origin/main` @ `4b4c4935`: a paired site the search does not reach (#1407)
+
+The two tables above come from the search under "How the list was produced".
+`model/osc_drift_probe.py` `across_note_drift` is in neither, and no entry
+matches `osc_drift` or `drift`, so until this entry the site was recorded
+nowhere. The search cannot reach it: no audio passes through it. Each window
+is measured on its own by `drift_report`, and the comparison reads only the
+reports that come back, so there is no shared `prepare` or `condition` to
+find.
+
+| site | paired? | tag |
+|---|---|---|
+| `model/osc_drift_probe.py` `across_note_drift` | yes: two or more windows of ONE note in ONE render, ours or a reference. `tools/measure_osc_drift_reference.py` reaches it with the frozen Mini V3 pairs, and the module's own `--wav` command reaches it with every window it is given | **asserts what the windows declare** (`f0_nominal`, `sr`); **neither** for whether they are one render. Not the **asserts** tag of this document: it calls no shared preparation helper |
+
+The mechanical tag means one thing: the site calls
+`preparation_contract.check_prepared_pair` or `assert_same_preparation` on the
+pair. This site calls neither and prepares nothing. What it does is local to
+`across_note_drift` and runs over the reports, which is why the row does not
+borrow that tag. Whether a window is usable at all is a separate question,
+filed as #1405, and not this row's subject.
+
+It checks two fields, and only those two. Every usable window must declare the
+same nominal pitch (`f0_nominal`) and the same sample rate (`sr`), compared
+directly, before any span is computed. A mismatch in either returns `REFUSED`
+in the aggregate result with the field and the offending window named, and no
+drift value.
+<!-- claim: test=model/test_osc_drift_probe.py::test_across_note_refuses_two_notes_each_stable_at_its_own_pitch -->
+<!-- claim: test=model/test_osc_drift_probe.py::test_across_note_refuses_one_note_rendered_at_two_sample_rates -->
+<!-- claim: test=model/test_osc_drift_probe.py::test_across_note_finds_a_mismatch_wherever_it_sits[3-2-f0_nominal-F0_NOMINAL_MISMATCH] -->
+
+A window whose `f0_nominal` or `sr` is missing, or is not a finite positive
+number, is refused the same way, so matching missing values do not read as
+agreement.
+<!-- claim: test=model/test_osc_drift_probe.py::test_across_note_refuses_when_no_window_declares_the_comparison_field[f0_nominal-F0_NOMINAL_MISMATCH] -->
+<!-- claim: test=model/test_osc_drift_probe.py::test_across_note_refuses_when_no_window_declares_the_comparison_field[sr-SAMPLE_RATE_MISMATCH] -->
+
+Measured pitch (`f0_measured_hz`) is not compared, because it is the
+measurement: the same two tones that refuse when the second is declared 17
+cents up are reported as a 17-cent drift when both declare one pitch.
+<!-- claim: test=model/test_osc_drift_probe.py::test_across_note_still_measures_a_pitch_step_under_one_declared_pitch -->
+
+The `--wav` command refuses the same way, read back from its `--json`.
+<!-- claim: test=model/test_osc_drift_probe.py::test_cli_across_note_refuses_two_rates_under_one_declared_pitch -->
+
+**What it cannot assert, and the caller must: that the windows come from ONE
+continuous render.** Two renders, two takes, or two files that declare the
+same pitch and rate pass every check here, and their difference is reported
+as drift. The reports carry nothing that separates one render from two, so
+the assumption is neither asserted nor recorded at the site, and inferring it
+from filenames or labels was left out of #1407.
+`tools/measure_osc_drift_reference.py` meets it by construction: a pair is
+selected by label prefix, and a prefix names one frozen file. A caller that
+hands the command several `--wav` files takes it on itself.
