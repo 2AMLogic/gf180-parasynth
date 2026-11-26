@@ -392,6 +392,43 @@ def test_across_note_still_measures_a_pitch_step_under_one_declared_pitch():
     assert abs(across["span_cents"] - 17.0) < 0.2, across
 
 
+@pytest.mark.parametrize("field, code, left, right", [
+    ("sr", RATE_MISMATCH, np.float16(48000), 48001),
+    ("f0_nominal", PITCH_MISMATCH, np.float32(F0), F0),
+    ("sr", RATE_MISMATCH, np.uint64(2**53 + 1), float(2**53)),
+    ("f0_nominal", PITCH_MISMATCH, np.nextafter(np.longdouble(1), np.longdouble(2)), 1.0),
+    pytest.param("sr", RATE_MISMATCH, 10**5000, 10**5000 + 1, id="adjacent-huge-ints"),
+])
+def test_across_note_refuses_distinct_scalar_declarations(good, field, code, left, right):
+    for first, second in [(left, right), (right, left)]:
+        rows = [dict(good[0], **{field: first}), dict(good[1], **{field: second})]
+        _assert_incomparable(odp.across_note_drift(rows), field, code, at=1, label="n1")
+
+
+@pytest.mark.parametrize("field, left, right", [
+    ("sr", np.float16(48000), 48000),
+    ("f0_nominal", np.float32(F0), float(np.float32(F0))),
+    ("sr", np.uint64(2**53 + 1), 2**53 + 1),
+    pytest.param("f0_nominal", 10**310, 10**310, id="equal-huge-ints"),
+])
+def test_across_note_accepts_exactly_equal_scalar_declarations(good, field, left, right):
+    rows = [dict(good[0], **{field: left}), dict(good[1], **{field: right})]
+    across = odp.across_note_drift(rows)
+    assert across["verdict"] == odp.STABLE, across
+    assert across["span_cents"] == 0, across
+
+
+@pytest.mark.parametrize("field, code", COMPARISON_FIELDS)
+@pytest.mark.parametrize("invalid", [
+    pytest.param(-(10**310), id="beyond-float-range"),
+    pytest.param(-(10**5000), id="beyond-decimal-print-limit"),
+    pytest.param(np.timedelta64(3, "D"), id="duration"),
+])
+def test_across_note_refuses_invalid_scalar_declarations(good, field, code, invalid):
+    rows = [good[0], dict(good[1], **{field: invalid})]
+    _assert_incomparable(odp.across_note_drift(rows), field, code, at=1, label="n1")
+
+
 def _write_tone(path, sr: int, f0: float) -> str:
     from scipy.io import wavfile
 

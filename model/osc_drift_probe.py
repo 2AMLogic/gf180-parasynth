@@ -99,6 +99,7 @@ import math
 import numbers
 import os
 import sys
+from fractions import Fraction
 
 import numpy as np
 
@@ -515,12 +516,27 @@ COMPARISON_MISMATCH = {"f0_nominal": "F0_NOMINAL_MISMATCH",
                        "sr": "SAMPLE_RATE_MISMATCH"}
 
 
-def _declared(value) -> bool:
-    """Whether a window declared `value` for a comparison field: a finite,
-    positive real number. A bool is not one, and neither is a value that is
-    not a number at all."""
-    return (isinstance(value, numbers.Real) and not isinstance(value, bool)
-            and math.isfinite(value) and value > 0)
+def _declaration_value(value) -> numbers.Real | None:
+    """A finite positive declaration, comparable without NumPy scalar promotion."""
+    # Both bool and NumPy durations are registered as real numbers.
+    if not isinstance(value, numbers.Real) or isinstance(value, (bool, np.timedelta64)):
+        return None
+    if not 0 < value < math.inf:
+        return None
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        # This preserves the stored value even when it is wider than a Python float.
+        return Fraction(*value.as_integer_ratio())
+    return value
+
+
+def _declaration_text(value) -> str:
+    try:
+        return repr(value)
+    except ValueError:
+        # Python limits decimal conversion of large integers, including in repr().
+        return f"<{type(value).__name__}>"
 
 
 def _incomparable(ok: list) -> tuple[str, int, str] | None:
@@ -531,20 +547,24 @@ def _incomparable(ok: list) -> tuple[str, int, str] | None:
     so matching missing values are not agreement. The offending window of a
     mismatch is the first one that disagrees with the first."""
     for field in COMPARISON_FIELDS:
+        values = []
         for i, r in enumerate(ok):
-            v = r.get(field)
-            if not _declared(v):
+            declared = r.get(field)
+            value = _declaration_value(declared)
+            if value is None:
                 return (field, i,
                         f"window {i} of {len(ok)} ({r.get('label', '')}) "
-                        f"declares {field} {v!r}, which is not a finite "
-                        f"positive number")
-        first = ok[0][field]
-        for i, r in enumerate(ok):
-            if r[field] != first:
+                        f"declares {field} {_declaration_text(declared)}, "
+                        f"which is not a finite positive number")
+            values.append(value)
+        for i, value in enumerate(values):
+            if value != values[0]:
+                r = ok[i]
+                first = ok[0]
                 return (field, i,
                         f"window {i} of {len(ok)} ({r.get('label', '')}) "
-                        f"declares {field} {r[field]!r}; window 0 "
-                        f"({ok[0].get('label', '')}) declares {first!r}")
+                        f"declares {field} {_declaration_text(r[field])}; window 0 "
+                        f"({first.get('label', '')}) declares {_declaration_text(first[field])}")
     return None
 
 
