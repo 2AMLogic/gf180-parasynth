@@ -60,3 +60,24 @@ def test_green_baseline_reaches_mutants(tmp_path, key):
     assert "baseline" not in out and "REFUSED:" not in out and "probe REFUSED" not in out
     assert "SURVIVED" in out
     assert target.read_bytes() == before
+
+
+def test_sound_mutant_collection_error_refuses(tmp_path):
+    script, target = stage(tmp_path, "sound", "")
+    before = target.read_bytes()
+    target.with_suffix(".original").write_bytes(before)
+    suite = tmp_path / CASES["sound"][2]
+    suite.write_text(
+        "from pathlib import Path\n"
+        "source = Path(__file__).with_name('sound_report.py')\n"
+        "if source.read_bytes() != source.with_suffix('.original').read_bytes():\n"
+        "    raise ImportError('injected collection failure')\n"
+        "def test_fixture():\n"
+        "    Path('baseline-executed').touch()\n"
+    )
+    result = run(script, tmp_path)
+    assert (tmp_path / "baseline-executed").exists()
+    assert target.read_bytes() == before
+    assert result.returncode == 2, result.stdout
+    assert "REFUSED" in result.stdout
+    assert "RED (good)" not in result.stdout
