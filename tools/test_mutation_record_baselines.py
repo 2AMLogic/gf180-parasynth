@@ -239,6 +239,34 @@ def test_sound_intended_assertions_still_get_kill_credit(tmp_path):
     assert target.read_bytes() == before
 
 
+def test_silent_snare_under_centroid_mutant_gets_no_kill_credit(tmp_path):
+    """Reproduce the review control through the real probe and sound tests."""
+    script = tmp_path / "model/probe_injection_discrimination.py"
+    target = tmp_path / "model/sound_report.py"
+    shutil.copytree(REPO / "model", tmp_path / "model",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    (tmp_path / "audition").symlink_to(REPO / "audition", target_is_directory=True)
+    (tmp_path / "tools").symlink_to(REPO / "tools", target_is_directory=True)
+    (tmp_path / "model" / "conftest.py").write_text(
+        "from pathlib import Path\n"
+        "import pytest\n\n"
+        "@pytest.fixture(autouse=True)\n"
+        "def silent_snare(monkeypatch):\n"
+        "    import sound_report as sr\n"
+        "    if 'ctx[\"centroid_weight\"] = weight' not in Path(sr.__file__).read_text():\n"
+        "        monkeypatch.setattr(sr, 'm_sd_brightness', lambda ctx: None)\n")
+    before = target.read_bytes()
+    result = run(script, tmp_path)
+    out = result.stdout + result.stderr
+    assert target.read_bytes() == before
+    assert result.returncode == 2, out
+    assert _line(out, "centroid injection sets nothing").startswith("REFUSED"), out
+    assert "the snare rendered silent" in out
+    assert _line(out, "envelope patch is a pass-through").startswith("RED (good)"), out
+    assert _line(out, "brightness lock removed").startswith("RED (good)"), out
+    assert "mutants killed" not in out
+
+
 def test_sound_survivor_outranks_a_refusal_exits_one(tmp_path):
     """The holdout probe's precedence (#1113), so the two probes read alike: a
     mutant that survived is a measured hole in the suite and is not hidden

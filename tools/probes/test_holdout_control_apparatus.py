@@ -250,6 +250,20 @@ def test_a_renamed_expected_test_is_refused_not_silently_passed(
     assert rc == 2 and "every control fired" not in out, out
 
 
+def test_wrong_assertion_in_expected_holdout_test_is_refused(
+        monkeypatch, tmp_path, capsys):
+    _synthetic_expected(monkeypatch)
+    suite = _green_then_red().replace(
+        "def test_gate_off_site_is_present():",
+        "def test_gate_off_site_is_present():\n"
+        "    assert 'if False and is_holdout(case):' not in "
+        "pathlib.Path('tools/run_case.py').read_text(), 'apparatus failed'")
+    rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, test_holdout=suite))
+    assert rc == 2, out
+    assert "GATE_OFF: REFUSED" in out and "apparatus failed" in out
+    assert out.count("red, 1 test(s) caught it") == 2
+
+
 def test_an_empty_expected_set_is_refused(monkeypatch, tmp_path, capsys):
     _synthetic_expected(monkeypatch, CLEAN_OFF=set())
     rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, _green_then_red()))
