@@ -24,27 +24,24 @@ PRECONDITIONS, asserted at the point of use; each one REFUSES (exit 2)
   * dawdreamer imports; the Surge bundle exists
   * bundle version AND binary sha256 equal the ones the frozen profile records
     -- a different Surge build is a different reference, not a second take
-  * the rig's own qualification: every pinned parameter holds its NAME and its
-    READBACK after a render (`check_pins_post_render`: the rig's pins, plus the
-    measured Audio-In name alias for 259/260/264/265). This is the check that
-    catches Surge's by-oscillator-type renaming of 259-267 (the Audio In high
-    cut); it is re-run after EVERY clip, not only at construction
+  * after every render, `refprofile.check_pins_post_render` checks each pinned
+    parameter's name and readback, allowing the measured Classic-to-Audio In
+    rename at 259/260/264/265
   * filter type/subtype read back 'LP Vintage Ladder' / 'Type 2'
   * cutoff readback within 0.5 % of the commanded Hz
   * host block and sample rate equal the frozen profile's (512 / 48 kHz). No
     clip automates a parameter, so the block rate cannot enter a number; it is
     asserted anyway because it is part of the rig's recorded state
-  * the rendered clip is finite, not silent, and its wide-open low band sits
-    within 6 dB of the frozen wide-open clip's (a gross wrong-state guard: a
-    stray high cut or mute reads tens of dB down; it is NOT a level-dependence
-    test, which is what the captures are for)
+  * rendered clips are finite and peak above refprofile.LEVEL_FLOOR
+  * the rendered wide-open low band stays within 6 dB of the frozen wide-open
+    clip's low band. A stray high cut or mute reads tens of dB down.
 
 Licence: Surge XT is GPL-3 open source; no licence state exists to assert.
 Octave: the stimulus enters through the Audio In oscillator, so no oscillator
 pitch/range setting is in the path; the held MIDI note only opens the gate.
 
-Exit: 0 verified, 1 a clip is present and is not what the manifest says,
-2 refused.
+Archive verification checks each clip's integrity, finiteness and level.
+Exit codes are 0 for success, 1 for failed clip verification and 2 for refusal.
 """
 from __future__ import annotations
 
@@ -64,6 +61,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 
+import audio_measure as am
 import refprofile as rp        # noqa: E402
 import refusal
 
@@ -122,31 +120,16 @@ def assert_plugin_identity() -> dict:
     return got
 
 
-#: Surge's TRUE names for the Audio In oscillator's parameters. `SurgeRig.PINS`
-#: carries the Classic oscillator's names because that is what dawdreamer
-#: reports straight after construction; measured here (2026-09-25), the names
-#: flip to these after the NEXT render -- 0.1 s of silence is enough -- with
-#: every readback unchanged. The refprofile renderer never saw this because it
-#: checks pins once, before rendering any clip, and records
-#: `pins_held_after_render: true` as a constant. A post-render check must
-#: therefore accept either name for these four indices and still demand the
-#: readback; any other index keeps its single expected name.
-AUDIO_IN_NAMES = {259: "A Osc 1 Audio In Channel", 260: "A Osc 1 Audio In Gain",
-                  264: "A Osc 1 Low Cut", 265: "A Osc 1 High Cut"}
-
-
-def check_pins_post_render(dev) -> list:
-    """`SurgeRig.check_pins` with the one measured name alias above. Readback
-    is required for every pin exactly as the rig states it."""
-    bad = []
-    for idx, _val, name, want in dev.PINS:
-        got_name = dev.p.get_parameter_name(idx)
-        ok_names = {name, AUDIO_IN_NAMES.get(idx, name)}
-        if name is not None and got_name not in ok_names:
-            bad.append((idx, "NAME", sorted(ok_names), got_name))
-        elif want is not None and dev.text(idx) != want:
-            bad.append((idx, "VALUE", want, dev.text(idx)))
-    return bad
+def _checked_peak(y: np.ndarray, clip: str) -> float:
+    """Apply the reference audio requirements before writing or using a clip."""
+    try:
+        am.require_finite(y, clip)
+    except am.NonFiniteAudio as why:
+        raise Refused(str(why)) from why
+    peak = float(np.max(np.abs(y), initial=0.0))
+    if not (peak > rp.LEVEL_FLOOR):
+        raise Refused(rp.level_refusal(clip, peak))
+    return peak
 
 
 def _projected_low_db(y, parts, amp, n=4) -> float:
@@ -183,20 +166,22 @@ def worker(amp: float, take: int, out: pathlib.Path) -> dict:
            "block": dev.block, "sr": rr.SR, "latency_samples": int(dev.p.get_latency_samples()),
            "pinned_readback": None, "clips": {}}
     for cond, (cut, _fz) in CONDITIONS.items():
-        y, parts, read = dev.tone_render(freqs, cut, RES, amp)
-        bad = check_pins_post_render(dev)
+        try:
+            y, parts, read = dev.tone_render(freqs, cut, RES, amp)
+        except am.NonFiniteAudio as why:
+            raise Refused(f"{cond}: {why}") from why
+        bad, _aliased = rp.check_pins_post_render(dev)
         if bad:
             raise Refused(f"{cond}: pinned settings did not hold after render: {bad}")
         if dev.text(dev.I["f1_type"]) != "LP Vintage Ladder" or dev.text(dev.I["f1_sub"]) != "Type 2":
             raise Refused(f"{cond}: filter reads {dev.text(dev.I['f1_type'])!r}/"
                           f"{dev.text(dev.I['f1_sub'])!r}")
-        if abs(read - cut) / cut > READBACK_TOL:
+        if not (math.isfinite(read) and abs(read - cut) / cut <= READBACK_TOL):
             raise Refused(f"{cond}: cutoff readback {read} Hz vs commanded {cut} Hz")
-        if not np.all(np.isfinite(y)) or float(np.abs(y).max()) <= 1e-9:
-            raise Refused(f"{cond}: non-finite or silent render")
+        peak = _checked_peak(y, cond)
         if cond == "open20k":
             low = _projected_low_db(y, parts, amp)
-            if abs(low - frozen_open_low) > OPEN_GUARD_DB:
+            if not (math.isfinite(low) and abs(low - frozen_open_low) <= OPEN_GUARD_DB):
                 raise Refused(f"open low band {low:.2f} dB vs frozen {frozen_open_low:.2f} dB: "
                               f"the path is not in the frozen rig's state")
         dest = out / f"{cond}.wav"
@@ -208,9 +193,9 @@ def worker(amp: float, take: int, out: pathlib.Path) -> dict:
             "freqs_hz": freqs,
             "frames": int(len(y)), "sha256": rp.file_sha256(dest),
             "bytes": dest.stat().st_size,
-            "peak": round(float(np.abs(y).max()), 9),
+            "peak": round(peak, 9),
             "rms": round(float(np.sqrt(np.mean(np.square(y)))), 9)}
-        print(f"take {take} amp {amp} {cond}: readback {read} Hz peak {np.abs(y).max():.5f}",
+        print(f"take {take} amp {amp} {cond}: readback {read} Hz peak {peak:.5f}",
               flush=True)
     rec["pinned_readback"] = dev.pinned_report()
     (out / "take.json").write_text(json.dumps(rec, indent=1) + "\n")
@@ -329,9 +314,8 @@ def load_manifest() -> dict:
 
 def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
                  inject: str = "") -> tuple[np.ndarray, dict]:
-    """(audio, clip meta). REFUSES if the archived bytes do not hash to the
-    manifest's sha256 (`inject='TAMPERED'` moves the expected hash, for the
-    control)."""
+    """Return finite, above-floor audio and its metadata after checking the
+    manifest's SHA-256, sample rate and frame count."""
     m = manifest or load_manifest()
     key = clip_key(cond, amp, take)
     if key not in m["clips"]:
@@ -351,7 +335,9 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
     sr, y = wavfile.read(io.BytesIO(b))
     if sr != rp.SR or len(y) != meta["frames"]:
         raise Refused(f"{key}: sr {sr} / {len(y)} frames, manifest says {rp.SR} / {meta['frames']}")
-    return np.asarray(y, dtype=np.float64), meta
+    y = np.asarray(y, dtype=np.float64)
+    _checked_peak(y, key)
+    return y, meta
 
 
 def capture_curve(cond: str, amp: float, take: int, manifest=None, inject="") -> tuple:

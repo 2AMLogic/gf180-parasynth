@@ -1287,8 +1287,8 @@ def _param_dump(p) -> dict:
 
 
 #: The one name change a pinned Surge parameter may show after a render, and
-#: only at these four indices. Measured in #231 (`tools/f1_level_capture.py`,
-#: whose `AUDIO_IN_NAMES` this matches): straight after construction dawdreamer
+#: only at these four indices. Measured in the #231 F1 captures and shared by
+#: the F1 and frozen-profile renderers. Straight after construction dawdreamer
 #: reports 259/260/264/265 under the Classic oscillator's names -- which is
 #: what `SurgeRig.PINS` carries -- and after the NEXT render under their true
 #: Audio In names, every readback unchanged. Keyed by index AND by the Classic

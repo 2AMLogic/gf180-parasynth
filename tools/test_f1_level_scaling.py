@@ -9,12 +9,18 @@ equal the baseline's.
 """
 from __future__ import annotations
 
+import hashlib
+import io
+import json
 import math
 import pathlib
 import sys
+import types
+import zipfile
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "probes"))
@@ -24,6 +30,7 @@ sys.path.insert(0, str(ROOT / "model"))
 import f1_level_scaling as fls       # noqa: E402
 import f1_level_capture as cap       # noqa: E402
 import f1_selected_path as f1        # noqa: E402
+import reference_rigs as rr
 
 CUT = 1000.0
 FREQS = [200.0, 1000.0, 3000.0]      # a short stimulus: the controls need words, not curves
@@ -164,8 +171,146 @@ def test_captures_are_separate_from_the_frozen_profile():
     assert cap.OUT_DIR.relative_to(ROOT).parts[:3] == ("docs", "scorecard", "f1-level")
 
 
-def test_post_render_pin_alias_is_limited_to_the_four_audio_in_indices():
-    assert set(cap.AUDIO_IN_NAMES) == {259, 260, 264, 265}
+@pytest.fixture
+def capture_rig(monkeypatch):
+    """Replay the recorded F1 pin readbacks and tone grid with synthetic audio."""
+    manifest = cap.load_manifest()
+    names, texts = {}, {}
+    for pin, value in manifest["pinned_readback"].items():
+        idx, name = pin.split(":", 1)
+        names[int(idx)] = name
+        texts[int(idx)] = value
+    texts[rr.SurgeRig.I["f1_type"]] = "LP Vintage Ladder"
+    texts[rr.SurgeRig.I["f1_sub"]] = "Type 2"
+    grid = manifest["clips"][cap.clip_key("open20k", 0.25, 1)]["freqs_hz"]
+    monkeypatch.setattr(cap.rp, "_freqs", lambda: grid)
+    tone, parts = rr.tone_train(grid, 1.0, 0.0, 0.02)
+
+    class StubSurge(rr.SurgeRig):
+        def __init__(self, subtype):
+            self.block = rr.BLOCK
+            self.p = types.SimpleNamespace(
+                get_parameter_name=names.__getitem__,
+                get_parameter_text=texts.__getitem__,
+                get_latency_samples=lambda: 0,
+            )
+
+        def tone_render(self, freqs, cut, res, amp):
+            return amp * tone, parts, cut
+
+    monkeypatch.setitem(sys.modules, "dawdreamer", types.ModuleType("dawdreamer"))
+    monkeypatch.setattr(rr, "SurgeRig", StubSurge)
+    monkeypatch.setattr(cap, "assert_plugin_identity", dict)
+    monkeypatch.setattr(
+        cap.rp,
+        "load_clip",
+        lambda *args: (0.25 * tone, rr.SR, {"amp": 0.25, "parts": parts}),
+    )
+    return StubSurge
+
+
+def test_worker_accepts_recorded_audio_in_aliases(capture_rig, tmp_path):
+    rec = cap.worker(0.25, 1, tmp_path)
+    assert rec["pinned_readback"] == cap.load_manifest()["pinned_readback"]
+    assert {p.stem for p in tmp_path.glob("*.wav")} == set(cap.CONDITIONS)
+    assert json.loads((tmp_path / "take.json").read_text()) == rec
+
+
+def test_worker_refuses_edited_classic_name_even_with_audio_in_readback(
+    capture_rig, tmp_path
+):
+    capture_rig.PINS = tuple(
+        (idx, val, "A Osc 1 Wrong Pin" if idx == 265 else name, want)
+        for idx, val, name, want in capture_rig.PINS
+    )
+    with pytest.raises(
+        cap.Refused, match="open20k: pinned settings.*265.*A Osc 1 Wrong Pin"
+    ):
+        cap.worker(0.25, 1, tmp_path)
+    assert not (tmp_path / "open20k.wav").exists()
+    assert not (tmp_path / "take.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("peak", "read", "reason"),
+    [
+        (0.25, math.nan, "cutoff readback nan"),
+        (5e-7, 250.0, "level floor"),
+        (math.inf, 250.0, "non-finite"),
+    ],
+)
+def test_worker_refuses_invalid_cut250(capture_rig, tmp_path, peak, read, reason):
+    render = capture_rig.tone_render
+
+    def faulty_render(self, freqs, cut, res, amp):
+        y, parts, readback = render(self, freqs, cut, res, amp)
+        if cut == 250.0:
+            return np.full_like(y, peak), parts, read
+        return y, parts, readback
+
+    capture_rig.tone_render = faulty_render
+    with pytest.raises(cap.Refused, match=f"cut250.*{reason}"):
+        cap.worker(0.25, 1, tmp_path)
+    assert (tmp_path / "open20k.wav").exists()
+    assert not (tmp_path / "cut250.wav").exists()
+    assert not (tmp_path / "take.json").exists()
+
+
+def test_worker_refuses_nan_open_band(capture_rig, monkeypatch, tmp_path):
+    # The frozen wide-open reference is projected first, then the rendered clip.
+    projections = iter([0.0, math.nan])
+    monkeypatch.setattr(cap, "_projected_low_db", lambda *args: next(projections))
+    with pytest.raises(cap.Refused, match="open low band nan"):
+        cap.worker(0.25, 1, tmp_path)
+    assert not (tmp_path / "open20k.wav").exists()
+    assert not (tmp_path / "take.json").exists()
+
+
+def test_worker_reports_nonfinite_audio_caught_inside_rig(capture_rig, tmp_path):
+    def render(self, freqs, cut, res, amp):
+        rr.am.require_finite(np.array([math.nan]), "host output")
+
+    capture_rig.tone_render = render
+    with pytest.raises(cap.Refused, match="open20k.*host output.*non-finite"):
+        cap.worker(0.25, 1, tmp_path)
+    assert not (tmp_path / "open20k.wav").exists()
+
+
+@pytest.mark.parametrize(
+    ("samples", "reason"),
+    [
+        ([5e-7], "level floor"),
+        ([0.25, math.nan], "non-finite"),
+        ([], "level floor"),
+    ],
+)
+def test_unusable_archived_audio_refuses_even_when_hash_matches(
+    monkeypatch, tmp_path, capsys, samples, reason
+):
+    key = cap.clip_key("cut250", 0.25, 1)
+    buf = io.BytesIO()
+    wavfile.write(buf, cap.rp.SR, np.asarray(samples, dtype=np.float32))
+    blob = buf.getvalue()
+    monkeypatch.setattr(cap, "ARCHIVE", tmp_path / "audio.zip")
+    monkeypatch.setattr(cap, "MANIFEST", tmp_path / "manifest.json")
+    with zipfile.ZipFile(cap.ARCHIVE, "w") as archive:
+        archive.writestr("clip.wav", blob)
+    meta = {
+        "sha256": hashlib.sha256(blob).hexdigest(),
+        "archive_member": "clip.wav",
+        "frames": len(samples),
+    }
+    cap.MANIFEST.write_text(json.dumps({"clips": {key: meta}}))
+
+    with pytest.raises(cap.Refused, match=f"{key}.*{reason}"):
+        cap.load_capture("cut250", 0.25, 1)
+    assert cap.verify() == cap.FAIL
+    assert "0 verified, 1 failed" in capsys.readouterr().out
+
+
+def test_every_committed_capture_verifies(capsys):
+    assert cap.verify() == cap.OK
+    assert "24 verified, 0 failed" in capsys.readouterr().out
 
 
 # --- the rule itself, on synthetic tables ------------------------------------

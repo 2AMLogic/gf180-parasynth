@@ -46,7 +46,7 @@ import reference_rigs as rr                                         # noqa: E402
 import refprofile as rp                                             # noqa: E402
 
 #: The Audio In names Surge reports after the first post-construction render,
-#: measured in #231 (`tools/f1_level_capture.AUDIO_IN_NAMES`). Written out here
+#: measured in the #231 F1 captures. Written out here
 #: rather than imported so the test states the expectation independently.
 AUDIO_IN = {259: "A Osc 1 Audio In Channel", 260: "A Osc 1 Audio In Gain",
             264: "A Osc 1 Low Cut", 265: "A Osc 1 High Cut"}
@@ -234,10 +234,8 @@ def test_a_rename_on_an_index_outside_the_four_refuses(stub_render):
 
 
 def test_the_permitted_aliases_are_exactly_the_four_measured_ones():
-    """The renderer's alias table and #231's capture tool's must not drift."""
-    import f1_level_capture as cap
+    """Each observed Audio In name belongs to its original Classic pin."""
     assert {i: v[1] for i, v in rp.SURGE_AUDIO_IN_ALIASES.items()} == AUDIO_IN
-    assert {i: v[1] for i, v in rp.SURGE_AUDIO_IN_ALIASES.items()} == cap.AUDIO_IN_NAMES
     pinned = {i: n for i, _v, n, _w in rr.SurgeRig.PINS}
     assert all(pinned[i] == v[0] for i, v in rp.SURGE_AUDIO_IN_ALIASES.items())
 
