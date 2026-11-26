@@ -54,6 +54,9 @@ BOOM = ("import pytest\n\n\n"
         "def boom():\n"
         "    raise RuntimeError('apparatus control')\n")
 
+FAIL_THEN_EXIT = ("import pytest\n\n\ndef test_a():\n    assert 0\n\n\n"
+                  "def test_b():\n    pytest.exit('stop', returncode={status})\n")
+
 #: Every way a `tools/test_holdout.py` cannot go green, with the pytest status
 #: each one produces: (file text or None to leave it out, conftest, status).
 BROKEN = {
@@ -64,9 +67,8 @@ BROKEN = {
     # A failing test AND pytest.exit(returncode=2): rc 2 WITH a parsed FAILED
     # line, so the baseline's `if failed:` branch must name 2, not a literal 1
     # (#1128).
-    "failed_then_exit": ("import pytest\n\n\ndef test_a():\n    assert 0\n\n\n"
-                         "def test_b():\n    pytest.exit('stop', returncode=2)\n",
-                         None, 2),
+    "failed_then_exit": (FAIL_THEN_EXIT.format(status=2), None, 2),
+    "failed_then_exit_zero": (FAIL_THEN_EXIT.format(status=0), None, 0),
 }
 
 

@@ -157,6 +157,40 @@ def _no_kill_credit(out):
     assert "RED (good)" not in out and "killed" not in out, out
 
 
+def test_sound_baseline_with_failures_and_zero_exit_stops_before_mutation(tmp_path):
+    # These three assertions fail even on the unmutated source. Accepting its
+    # forced zero exit would let the same failures earn every mutant a kill.
+    suite = READS_TARGET + """
+import pytest
+
+def test_the_moving_average_injection_ripples_at_the_carrier_it_cannot_resolve():
+    clean_db = broken_db = 0
+    assert broken_db > clean_db + 3.0
+
+def test_the_centroid_injection_switches_which_field_the_brightness_property_reads():
+    power = amplitude = 1
+    assert amplitude > 2.0 * power
+
+def test_the_lock_changelog_agrees_with_the_live_table():
+    problems = ['broken baseline']
+    assert problems == []
+
+def test_stop_after_results():
+    if SRC == PRISTINE:
+        pytest.exit('end of baseline', returncode=0)
+    pathlib.Path('mutant-executed').touch()
+"""
+    script, target = stage_sound(tmp_path, suite)
+    before = target.read_bytes()
+    result = run(script, tmp_path)
+    out = result.stdout + result.stderr
+    assert result.returncode == 2, out
+    assert "REFUSED" in out and "baseline" in out and "3 failed" in out, out
+    _no_kill_credit(out)
+    assert not (tmp_path / "mutant-executed").exists()
+    assert target.read_bytes() == before
+
+
 def test_sound_mutant_collection_error_refuses(tmp_path):
     """The issue's reproduction, as it ran on `origin/main` @ `4b4c4935`: the
     baseline test executes, then every mutant is uncollectable, and the probe
@@ -279,20 +313,35 @@ def test_sound_survivor_outranks_a_refusal_exits_one(tmp_path):
     assert target.read_bytes() == before
 
 
-def test_sound_fired_alongside_a_refusal_exits_two(tmp_path):
+@pytest.mark.parametrize("cause", ["collection_error", "failed_then_exit_zero"])
+def test_sound_fired_alongside_a_refusal_exits_two(tmp_path, cause):
     """Nothing survived and not everything was measured: exit 2, not 0, and
     the two genuine kills are still printed as kills."""
     script, target = stage_real_sound(tmp_path)
     target.with_suffix(".original").write_bytes(target.read_bytes())
     suite = tmp_path / sound.TESTS
-    suite.write_text(suite.read_text() + "\n"
-                     + _uncollectable_under("centroid injection sets nothing", ""))
+    if cause == "collection_error":
+        extra = _uncollectable_under("centroid injection sets nothing", "")
+    else:
+        # The real snare assertion has failed before pytest is told to exit 0.
+        extra = """
+def test_stop_after_centroid_results():
+    import pytest
+    from pathlib import Path
+    if 'ctx["centroid_weight"] = weight' not in Path(sr.__file__).read_text():
+        pytest.exit('end of measurement', returncode=0)
+"""
+    suite.write_text(suite.read_text() + "\n" + extra)
     before = target.read_bytes()
     result = run(script, tmp_path)
     out = result.stdout + result.stderr
     assert result.returncode == 2, out
     assert out.count("RED (good)") == len(sound.MUTANTS) - 1, out
-    assert _line(out, "centroid injection sets nothing").startswith("REFUSED"), out
+    refused = _line(out, "centroid injection sets nothing")
+    assert refused.startswith("REFUSED"), out
+    if cause == "failed_then_exit_zero":
+        assert "pytest exited 0" in refused, out
+        assert "test_the_centroid_injection_switches_which_field_the_brightness_property_reads" in refused
     assert "SURVIVED" not in out and "mutants killed" not in out
     assert target.read_bytes() == before
 
