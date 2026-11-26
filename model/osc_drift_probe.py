@@ -77,6 +77,11 @@ and periodic, and no estimator can tell those apart; the probe refuses rather
 than picking one. A drift magnitude here therefore needs SECONDS of ONE
 oscillator held, which is a constraint on the stimulus, not a bug.
 
+`across_note_drift` compares windows, not audio, and asserts what the reports
+can support (#1407): every window DECLARES the same `f0_nominal` and the same
+`sr`, else F0_NOMINAL_MISMATCH or SAMPLE_RATE_MISMATCH. Whether they came from
+one render is in no report and stays with the caller.
+
 WHAT SEPARATES DRIFT FROM BEATING, in one sentence
 --------------------------------------------------
 Beating modulates the fundamental's AMPLITUDE and its apparent FREQUENCY
@@ -91,8 +96,10 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import numbers
 import os
 import sys
+from fractions import Fraction
 
 import numpy as np
 
@@ -503,6 +510,64 @@ def drift_report(x: np.ndarray, sr: int, f0_nominal: float, *,
         return out
 
 
+# ---- what windows must DECLARE alike before they are compared ---------------
+COMPARISON_FIELDS = ("f0_nominal", "sr")
+COMPARISON_MISMATCH = {"f0_nominal": "F0_NOMINAL_MISMATCH",
+                       "sr": "SAMPLE_RATE_MISMATCH"}
+
+
+def _declaration_value(value) -> numbers.Real | None:
+    """A finite positive declaration, comparable without NumPy scalar promotion."""
+    # Both bool and NumPy durations are registered as real numbers.
+    if not isinstance(value, numbers.Real) or isinstance(value, (bool, np.timedelta64)):
+        return None
+    if not 0 < value < math.inf:
+        return None
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        # This preserves the stored value even when it is wider than a Python float.
+        return Fraction(*value.as_integer_ratio())
+    return value
+
+
+def _declaration_text(value) -> str:
+    try:
+        return repr(value)
+    except ValueError:
+        # Python limits decimal conversion of large integers, including in repr().
+        return f"<{type(value).__name__}>"
+
+
+def _incomparable(ok: list) -> tuple[str, int, str] | None:
+    """(field, window, detail) naming why the usable windows `ok` cannot be
+    compared, or None when they can. `ok` holds at least one window.
+
+    Every window is asked to DECLARE each field before any two are compared,
+    so matching missing values are not agreement. The offending window of a
+    mismatch is the first one that disagrees with the first."""
+    for field in COMPARISON_FIELDS:
+        values = []
+        for i, r in enumerate(ok):
+            declared = r.get(field)
+            value = _declaration_value(declared)
+            if value is None:
+                return (field, i,
+                        f"window {i} of {len(ok)} ({r.get('label', '')}) "
+                        f"declares {field} {_declaration_text(declared)}, "
+                        f"which is not a finite positive number")
+            values.append(value)
+        for i, value in enumerate(values):
+            if value != values[0]:
+                r = ok[i]
+                first = ok[0]
+                return (field, i,
+                        f"window {i} of {len(ok)} ({r.get('label', '')}) "
+                        f"declares {field} {_declaration_text(r[field])}; window 0 "
+                        f"({first.get('label', '')}) declares {_declaration_text(first[field])}")
+    return None
+
+
 # ---- a pair of notes of the SAME pitch, far apart in one render -------------
 def _finite(value) -> bool:
     try:
@@ -546,7 +611,17 @@ def across_note_drift(reports: list) -> dict:
     `f0_measured_hz` and `floor_cents` before its late refusals, so a window
     it REFUSED for holding a mix still carries both, and its "pitch" is a
     median over two oscillators. A refusal names the first unusable window by
-    index and carries that window's own code, and no magnitude."""
+    index and carries that window's own code, and no magnitude.
+
+    Every window must also DECLARE the same nominal pitch (`f0_nominal`) and
+    the same sample rate (`sr`), compared directly (#1407): two different
+    notes, each stable at its own pitch, or one note at two rates, are not two
+    instances of one note, and the distance between them is not drift. Measured
+    pitch stays free to differ -- that is the measurement. A window that
+    declares no finite positive value for either field refuses the same way.
+
+    That the windows come from ONE render is in none of the reports and is the
+    caller's to establish. Nothing here can tell one render from two."""
     reports = list(reports)
     labels = [r.get("label", "") for r in reports]
     refused = {"verdict": REFUSED, "n_windows": len(reports), "labels": labels}
@@ -560,6 +635,11 @@ def across_note_drift(reports: list) -> dict:
             return dict(refused, refusal=why[0], unusable_window=i,
                         refusal_detail=f"window {i} of {len(reports)} "
                                        f"({labels[i]}) is unusable: {why[1]}")
+    why = _incomparable(reports)
+    if why:
+        field, i, detail = why
+        return dict(refused, refusal=COMPARISON_MISMATCH[field],
+                    field=field, offending_window=i, refusal_detail=detail)
     dev = [float(cents(r["f0_measured_hz"], reports[0]["f0_measured_hz"]))
            for r in reports]
     floor = max(r["floor_cents"] for r in reports)
