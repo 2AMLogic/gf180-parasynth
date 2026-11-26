@@ -199,3 +199,62 @@ def test_check_with_a_directory_at_an_anchor_refuses_instead_of_crashing(
     (tmp_path / "lc8" / "LC50.WAV").mkdir()
     monkeypatch.setattr(sys, "argv", ["probe", "--check", "--refs", str(tmp_path)])
     assert probe.main() == 2
+
+
+# --- review round 2 (#1322): preflight ordering, outcome code, order, iterator ---
+import json as _json
+
+
+def _run_main(monkeypatch, argv):
+    monkeypatch.setattr(sys, "argv", ["probe", *argv])
+    return probe.main()
+
+
+@pytest.mark.parametrize("extra", [[], ["descent"]])
+def test_full_mode_names_every_missing_take_even_with_an_absent_anchor(
+        tmp_path, monkeypatch, capsys, extra):
+    """No stubs: the real controls must not pre-empt the inventory."""
+    _make_corpus(tmp_path)
+    (tmp_path / "lc8" / "LC50.WAV").unlink()       # anchor
+    (tmp_path / "mc8" / "MC00.WAV").unlink()       # non-anchor
+    out = tmp_path / "r.json"
+    argv = ["--refs", str(tmp_path), "--json", str(out)]
+    if extra:
+        argv += ["--descent", str(tmp_path)]
+    rc = _run_main(monkeypatch, argv)
+    err = capsys.readouterr().err
+    rep = _json.loads(out.read_text())
+    assert rc == 2 and rep["outcome_code"] == rc
+    assert sorted(rep["refusal"]["missing"]) == ["lc8/LC50.WAV", "mc8/MC00.WAV"]
+    assert "lc8/LC50.WAV" in err and "mc8/MC00.WAV" in err
+
+
+def test_check_keeps_its_two_anchor_scope(tmp_path, monkeypatch):
+    _make_corpus(tmp_path)
+    (tmp_path / "mc8" / "MC00.WAV").unlink()        # not an anchor
+    (tmp_path / "lc8" / "LC50.WAV").unlink()        # anchor
+    out = tmp_path / "r.json"
+    rc = _run_main(monkeypatch, ["--check", "--refs", str(tmp_path),
+                                 "--json", str(out)])
+    assert rc == 2
+    assert "refusal" not in _json.loads(out.read_text())
+
+
+def test_nonexistent_root_writes_the_requested_json(tmp_path, monkeypatch):
+    out = tmp_path / "r.json"
+    rc = _run_main(monkeypatch, ["--refs", str(tmp_path / "nope"),
+                                 "--json", str(out)])
+    assert rc == 2 and _json.loads(out.read_text())["outcome_code"] == 2
+
+
+def test_complete_reports_keep_sorted_filename_order(tmp_path):
+    _make_corpus(tmp_path)
+    want = [f"lc8/LC{k}.WAV" for k in ("00", "10", "25", "50", "75")]
+    got = [r["file"] for r in probe.measure_corpus(tmp_path, voices=("LC",))]
+    assert got == want
+    assert probe.expected_takes(("LC",)) == want
+
+
+def test_measure_corpus_consumes_a_one_shot_voice_iterator_once(tmp_path):
+    _make_corpus(tmp_path, ("LC",))
+    assert len(probe.measure_corpus(tmp_path, iter(("LC",)))) == 5

@@ -99,8 +99,11 @@ class InventoryRefused(Exception):
 
 def expected_takes(voices=("LC", "MC", "HC")) -> list[str]:
     """Relative paths of every take the full study requires: each requested
-    voice at each of the five FISCHER_TUNING positions."""
-    return [f"{v.lower()}8/{v}{k}.WAV" for v in voices for k in FISCHER_TUNING]
+    voice at each of the five FISCHER_TUNING positions, in sorted filename order
+    (the order the readers' directory globs produced before #1309, which the
+    report's row order and the equivalence probe depend on)."""
+    return [f"{v.lower()}8/{v}{k}.WAV" for v in voices
+            for k in sorted(FISCHER_TUNING)]
 
 
 def missing_takes(refdir: pathlib.Path, rels) -> list[str]:
@@ -370,6 +373,7 @@ def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------
 def measure_corpus(refdir: pathlib.Path, voices=("LC", "MC", "HC")) -> list[dict]:
     out = []
+    voices = tuple(voices)       # an iterator would be spent by the inventory pass
     require_takes(refdir, expected_takes(voices))
     for voice in voices:
         d = refdir / f"{voice.lower()}8"
@@ -616,15 +620,35 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     refdir = args.refs
+    report = dict(provenance=provenance(refdir))
     if not refdir.exists():
         print(f"REFUSED  no reference corpus at {refdir}", file=sys.stderr)
+        report["refusal"] = dict(why="reference corpus directory does not exist",
+                                 missing=expected_takes() if not args.check else
+                                 [p["ref_file"] for p in PUBLISHED.values()])
+        report["outcome_code"] = 2
+        if args.json:
+            args.json.write_text(json.dumps(report, indent=2))
         return 2
-
-    report = dict(provenance=provenance(refdir))
     report["definition"] = (
         "10*log10(E[split..2000] / E[20..split]) over the first 150 ms after "
         "prepare()'s onset trim, band_energy 4th-order Butterworth sosfiltfilt; "
         "LC split 700 Hz, HC split 1300 Hz; tolerance 3.0 dB flat")
+
+    # Full inventory BEFORE either anchor is read (#1309): a full or descent run
+    # needs all fifteen takes, so an absent non-anchor take must be named even
+    # when an anchor is also absent. --check keeps its two-anchor scope.
+    if not args.check:
+        gone = missing_takes(refdir, expected_takes())
+        if gone:
+            report["refusal"] = dict(
+                why="expected reference takes missing or not files", missing=gone)
+            report["outcome_code"] = 2
+            if args.json:
+                args.json.write_text(json.dumps(report, indent=2))
+            print("REFUSED: incomplete reference corpus; no statistics reported. "
+                  "Missing: " + ", ".join(gone), file=sys.stderr)
+            return 2
 
     report["known_answer"] = validate_known_answer()
     report["reproduction"] = validate_reproduction(refdir)
@@ -657,16 +681,6 @@ def main(argv=None) -> int:
         if args.json:
             args.json.write_text(json.dumps(report, indent=2))
         return 0
-
-    gone = missing_takes(refdir, expected_takes())
-    if gone:
-        report["refusal"] = dict(why="expected reference takes missing or not files",
-                                 missing=gone)
-        if args.json:
-            args.json.write_text(json.dumps(report, indent=2))
-        print("REFUSED: incomplete reference corpus; no statistics reported. "
-              "Missing: " + ", ".join(gone), file=sys.stderr)
-        return 2
 
     report["floor"] = floor_for_these_signals(refdir)
     print("\n== the estimator's floor ON THESE SIGNALS, per perturbation "
