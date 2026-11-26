@@ -53,6 +53,27 @@ def test_bd_finite():
     assert bd.worst_column_move([1, 2, 3, 4], [1, 2, 3, 4.25]) == 0.25
 
 
+@pytest.mark.parametrize("a, b", [
+    ([0.1, 0.2], [0.1, 0.2, NAN]),
+    ([0.1, 0.2, NAN], [0.1, 0.2]),
+    ([1], [1, 2]),
+    ([], []),
+    ([], [1]),
+    ([1], []),
+])
+def test_bd_invalid_row_widths_refuse(a, b):
+    with pytest.raises(bd.Refused, match=rf"got {len(a)} and {len(b)} columns"):
+        bd.worst_column_move(a, b)
+
+
+@pytest.mark.parametrize("a, b, expected", [
+    ([1], [3], 2),
+    ([1, 2, 3, 4, 5], [1, 5, 3, 4, 6], 3),
+])
+def test_bd_equal_width_iterables(a, b, expected):
+    assert bd.worst_column_move(iter(a), iter(b)) == expected
+
+
 def test_bd_zero_window_is_nan_row():
     r = df.band_energy_interval(np.zeros(48000), 48000, bd.EDGES, bd.T0, bd.T1)
     assert all(np.isnan(r))

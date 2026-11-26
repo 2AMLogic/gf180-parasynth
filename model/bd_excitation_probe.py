@@ -390,12 +390,18 @@ def check_preconditions(refs: str, verbose: bool = True) -> dict:
 
 
 def worst_column_move(a, b) -> float:
-    """Largest |a_i - b_i|. A nonfinite column refuses (#1289): `max()` drops a
-    NaN that is not first and `nan < 0.5` is False, so the self-test's verdict
-    would otherwise depend on which column the NaN sat in."""
+    """Largest |a_i - b_i| for nonempty rows of equal width.
+
+    A nonfinite column refuses (#1289): `max()` drops a NaN that is not first
+    and `nan < 0.5` is False, so the self-test's verdict would otherwise
+    depend on which column the NaN sat in."""
+    a, b = list(a), list(b)
+    if not a or len(a) != len(b):
+        raise Refused("expected equal, nonempty band-share rows, "
+                      f"got {len(a)} and {len(b)} columns")
     d = [abs(x - y) for x, y in zip(a, b)]
     if not all(math.isfinite(v) for v in d):
-        raise Refused(f"nonfinite band-share column in {list(a)} vs {list(b)}")
+        raise Refused(f"nonfinite band-share column in {a} vs {b}")
     return max(d)
 
 
