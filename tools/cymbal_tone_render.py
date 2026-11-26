@@ -33,9 +33,18 @@ ORDER, FIXED BEFORE ANY NUMBER WAS READ.
     7.1 kHz band-pass, which is acceptance item 4.
  5. THE MEASUREMENT, with the frozen instrument (`tools/cymbal_bands.measure`):
     H - L, H's EDT10 and Ln's EDT10 at all five TONE positions, ANCHORED at
-    TONE 50 so the unresolved inter-band balance (#396) cancels as far as it
-    can, against the 808's own anchored curves in all five DECAY columns
-    (`docs/scorecard/cymbal-369/fischer.json`, measured by the same instrument).
+    TONE 50, against the 808's own anchored curves in all five DECAY columns
+    (`docs/scorecard/cymbal-369/fischer.json`, measured by the same
+    instrument). #396 did not leave the inter-band balance unresolved: it
+    REFUSED to apply one (PR #414, `docs/scorecard/cymbal-369/balance/`),
+    because the evidence did not establish the three swing VCAs' drive levels
+    (Q16/Q17/Q18) -- the balance's binding absent input -- so the absolute
+    band split is not established. Referencing each curve to its own TONE 50
+    value is therefore not a stand-in for that balance: it lets a reader
+    compare how the band balance CHANGES as TONE moves (step 9's question,
+    with one balance free) rather than the absolute balance #396 refused to
+    apply. The unknown offset cancels only as far as it is constant in TONE,
+    which is the qualification on the anchored comparison.
 
 WHAT IS NOT CLAIMED. The DECAY knob's law -- VR2 sits on the other rail and step
 9 says nothing about it -- so the render sits at the shipped kit's one DECAY and
