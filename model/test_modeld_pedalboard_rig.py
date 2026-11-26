@@ -465,6 +465,15 @@ def test_a_pin_whose_write_does_not_take_is_refused(monkeypatch, tmp_path):
     assert [b for b in bad.detail["bad"] if b[0] == 3 and b[1] == "RAW"]
 
 
+def test_missing_raw_readback_refuses_a_rig_with_a_stuck_pin(monkeypatch, tmp_path):
+    rig = install(monkeypatch, tmp_path, sticky=(3,))
+    monkeypatch.setattr(rig, "written_pin_problems", lambda self: None)
+    with pytest.raises(rq.RigRefusal) as refusal:
+        rig()
+    check = by_name(refusal.value.qualification)["pins written (raw readback)"]
+    assert check.outcome == rq.REFUSED
+
+
 def test_a_text_readback_that_lags_the_raw_value_is_refused(monkeypatch, tmp_path):
     """The Diva cutoff that read 90 for a whole session. The raw value is
     right, the name is right, and the plugin's two readback routes disagree

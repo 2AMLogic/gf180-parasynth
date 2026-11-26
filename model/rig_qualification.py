@@ -551,7 +551,15 @@ def check_pins(check_pins_fn, *, n_pins: int | None = None, name="pins") -> Chec
     A rig with ZERO pins is REFUSED, not passed. Every plugin here has
     sound-changing controls that are not the thing under test, so an empty pin
     table means nobody has written them down yet -- and an empty check that
-    reports success is the exact shape of a false green."""
+    reports success is the exact shape of a false green.
+
+    The same shape one level up, and this was wrong before it was right
+    (#1354): a declared pin count with no reader, and a reader that returns
+    `None`, both fell through to an empty mismatch list and recorded the
+    settings as held. A declared pin nobody read back is an assertion, not a
+    measurement, so both are REFUSED. A reader that returns a real empty
+    list is still a PASS -- that is a readback that found nothing wrong, and
+    it is a different claim from a readback that never happened."""
     det = {}
     if n_pins is not None:
         det["n_pins"] = int(n_pins)
@@ -559,8 +567,19 @@ def check_pins(check_pins_fn, *, n_pins: int | None = None, name="pins") -> Chec
             return Check(name, REFUSED,
                          "the rig pins no parameters, so there is nothing to hold: "
                          "a rig that cannot prove its own settings has no verdict", det)
+    if check_pins_fn is None:
+        return Check(name, REFUSED,
+                     "the rig declares pinned parameters but supplied no reader "
+                     "for them: a pin count with no readback is an assertion "
+                     "nobody measured", det)
     try:
-        bad = list(check_pins_fn() or ())
+        readback = check_pins_fn()
+        if readback is None:
+            return Check(name, REFUSED,
+                         "the pin reader returned no result, so no readback was "
+                         "measured: held is a claim a missing list cannot make",
+                         det)
+        bad = list(readback)
     except Exception as e:                                          # pragma: no cover
         return Check(name, REFUSED, f"the pin check itself failed: "
                                     f"{type(e).__name__}: {e}", det)
@@ -609,7 +628,7 @@ def qualify_voice(*, rig: str, host: str, render_note, render_cutoff, note_hz,
     steady = steady or (lambda y: y)
     checks = []
     if check_pins_fn is not None or n_pins is not None:
-        checks.append(check_pins(check_pins_fn or (lambda: []), n_pins=n_pins))
+        checks.append(check_pins(check_pins_fn, n_pins=n_pins))
 
     y = np.asarray(render_note(int(note)), dtype=np.float64).ravel()
     checks.append(check_sounding(y))
