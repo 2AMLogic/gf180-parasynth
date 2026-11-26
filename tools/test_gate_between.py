@@ -143,6 +143,34 @@ def test_rank_orders_by_distance_to_the_real_recordings_and_marks_missing_render
     assert "no render" in gb.render_table(rows)
 
 
+def test_a_perfect_render_with_worst_ratio_zero_is_not_labelled_no_render():
+    # the input that defeated the old `if not r["ours"]` / `or -1` guards: 0.0 is falsy.
+    # The missing row is listed BEFORE the zero row so a stable sort on a tied key keeps it ahead.
+    mars = {"old_bar": "x", "n_takes": 1, "mars_takes_passing_old_bar": 0,
+            "mars_best": {"worst_ratio": 2.0, "worst_feature": "spec"}}
+    ctx = {"SD": {**mars, "ours": {"worst_ratio": 4.0, "worst_feature": "decay"}},
+           "RS": dict(mars),
+           "BD": {**mars, "ours": {"worst_ratio": 0.0, "worst_feature": None}}}
+    rows = gb.rank_rows(ctx)
+    assert [r["sound"] for r in rows] == ["SD", "BD", "RS"]       # 2.0x, 0.0x, then no render
+    lines = {l.split("|")[2].strip(): l for l in gb.render_table(rows).splitlines()[2:]}
+    assert "no render" not in lines["BD"] and "0.0x" in lines["BD"]
+    assert "None" not in lines["BD"]
+    assert "no render" in lines["RS"]
+
+
+def test_perfect_mars_take_omits_the_feature_from_its_cell():
+    exact = pg.verdict({"spec": 0.0}, {"spec": 1.0})
+    named = pg.verdict({"spec": 2.0}, {"spec": 1.0})
+    context = {"old_bar": "x", "n_takes": 1}
+    rows = gb.rank_rows({"LT": {**context, "ours": named, "mars_best": exact, "mars_takes_passing_old_bar": 1},
+                         "MT": {**context, "ours": exact, "mars_best": named, "mars_takes_passing_old_bar": 0}})
+    table = gb.render_table(rows)
+    assert "None" not in table
+    assert "| 2.0 (spec) | 0.0 |" in table
+    assert "| 0.0 | 2.0 (spec) |" in table
+
+
 @pytest.mark.parametrize("bad", [float("nan"), float("inf")])
 @pytest.mark.parametrize("side", ["ours", "mars_best"])
 def test_rank_refuses_a_non_finite_ratio_rather_than_sort_it(bad, side):
@@ -189,3 +217,38 @@ def test_a_refused_injected_run_is_not_a_caught_control():
     bad = _green_q()
     bad["seeded_summary"].update(caught=5, rate=0.5)
     assert gc.injected_outcome(bad)[0] is False                   # completed NOT QUALIFIED = caught
+
+
+# --- #1329: a REFUSED decision must not exit 0 (tools/exit_contract.py) ---------
+
+def _run_between_main(tmp_path):
+    import json
+
+    tp = tmp_path / "tables.json"
+    tp.write_text(json.dumps({"tables": {}}))
+    out = tmp_path / "out.json"
+    return gb.main(["--refs", str(tmp_path), "--tables", str(tp), "--out", str(out)]), out
+
+
+def test_main_exits_refused_when_no_p_reaches_coverage(tmp_path, capsys):
+    import json
+
+    import exit_contract
+
+    rc, out = _run_between_main(tmp_path)
+    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    assert json.loads(out.read_text())["decision"]["status"] == "REFUSED"
+    assert rc == exit_contract.REFUSED
+
+
+def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
+    import exit_contract
+
+    q = _green_q()
+    q["known_bad"][gb.CANDIDATE] = {"verdict": "REFUSED"}
+    monkeypatch.setattr(gb, "calibrate", lambda tabs, force_p=None: {"p": 0.1, "status": "ok", "sounds": {}})
+    monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: q)
+    monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
+    rc, _ = _run_between_main(tmp_path)
+    assert gb.decide(q, False)["status"] == "REFUSED"
+    assert rc == exit_contract.REFUSED

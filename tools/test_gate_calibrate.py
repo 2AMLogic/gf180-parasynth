@@ -3,6 +3,7 @@ import copy
 import csv
 import json
 import pathlib
+import subprocess
 import sys
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
+from probes import gate_calibrate_missing_random as probe  # noqa: E402
 
 INDEX = pathlib.Path(__file__).resolve().parents[1] / "refaudio" / "index" / "808-from-mars.tsv"
 
@@ -283,6 +285,29 @@ def test_missing_index_refuses_rather_than_passes(real, monkeypatch, tmp_path):
     assert cal["k"] is None and cal["status"].startswith("REFUSED: incomplete evidence: cannot read the file index")
 
 
+def test_non_utf8_index_refuses_rather_than_raises(real, monkeypatch, tmp_path):
+    bad = tmp_path / "bad.tsv"
+    bad.write_bytes(b"path\n\xff\n")
+    monkeypatch.setattr(gc, "INDEX", bad)
+    monkeypatch.setattr(gc.expected_takes, "__defaults__", (bad,))
+    for fk in (None, 3):
+        cal = gc.calibrate(_zero(real), force_k=fk)
+        assert cal["k"] is None and cal["sounds"] == {}
+        assert cal["status"].startswith("REFUSED: incomplete evidence: cannot read the file index bad.tsv (UnicodeDecodeError)")
+
+
+def test_table_without_missing_key_refuses_naming_sound_and_field(real):
+    t = _zero(real)
+    assert gc.calibrate(t)["status"] == "CALIBRATED"  # control: restored input is clean
+    del t["BD"]["missing"]
+    for fk in (None, 3):
+        cal = gc.calibrate(t, force_k=fk)
+        assert cal["k"] is None and cal["sounds"] == {}
+        assert cal["status"].startswith("REFUSED: incomplete evidence") and "BD: record has no 'missing'" in cal["status"]
+    t["BD"]["missing"] = []
+    assert gc.calibrate(t)["status"] == "CALIBRATED"
+
+
 def test_decide_does_not_count_an_unrun_control_as_a_pass():
     q = {"sounds_with_bar": ["BD"], "start_red": {"BD": "FAIL", "BD-silence": "REFUSED"},
          "seeded_summary": {"n": 10, "caught": 10, "missed": [], "rate": 1.0},
@@ -295,3 +320,154 @@ def test_decide_does_not_count_an_unrun_control_as_a_pass():
     assert gc.decide(q, True)["status"] == "NOT QUALIFIED"        # a corrupted corpus qualified: reject
     q["seeded_summary"].update(caught=5, rate=0.5)
     assert gc.decide(q, False)["status"] == "NOT QUALIFIED"       # a bar that misses seeds is not authority
+
+
+def test_random_missing_published_replay():
+    record = json.loads(TABLES.with_name("missing-random-1317.json").read_text())
+    hit = next(h for h in record["calibrated_hits"] if h["seed"] == 127)
+    tabs = probe.load()
+    paths = sorted(r["rel"] for t in tabs.values() for r in t["rows"])
+    assert len(hit["removed"]) == 226
+    assert sorted(probe.draw(paths, 127)) == hit["removed"]
+
+    res = gc.calibrate(probe.move(tabs, set(hit["removed"])))
+    assert res["status"] == "CALIBRATED" and res["k"] == hit["k"] == 5
+    assert probe.cov(res) == tuple(hit["cov_k3"]) == (5, 9)
+    assert probe.cov(res, res["k"]) == tuple(hit["cov_chosen_k"]) == (8, 9)
+
+
+def test_eighteen_selected_losses_from_published_draw_still_calibrate():
+    record = json.loads(TABLES.with_name("missing-random-1317.json").read_text())
+    published = set(next(h["removed"] for h in record["calibrated_hits"] if h["seed"] == 127))
+    tabs = probe.load()
+    removed = set()
+    for sound in probe.KEEP:
+        rows = tabs[sound]["rows"]
+        for group, needed in ((0, 5), (1, 1)):
+            for row in gc.matched(rows, group, len(rows)):
+                if row["rel"] in published:
+                    removed.add(row["rel"])
+                else:
+                    needed -= 1
+                    if needed == 0:
+                        break
+
+    assert len(removed) == 18
+    res = gc.calibrate(probe.move(tabs, removed))
+    assert (res["status"], res["k"], probe.cov(res, 5)) == ("CALIBRATED", 5, (8, 9))
+
+
+@pytest.mark.parametrize("args", [["--trials", "1"], ["--replay", "0"]])
+@pytest.mark.parametrize("fault", ["index", "wrong_paths", "duplicate", None])
+def test_random_missing_trial_accounting(args, fault, monkeypatch, tmp_path, capsys):
+    # Force a legitimate 226-path draw that empties BD's development group.
+    # The same draw with a broken index or partition invalidates the experiment.
+    tabs = probe.load()
+    dev = {r["rel"] for r in tabs["BD"]["rows"] if r["group"] == 0}
+    move = probe.move
+
+    def draw(paths, seed):
+        rest = sorted(set(paths) - dev)
+        removed = dev.union(rest[:226 - len(dev)])
+        if fault == "index":
+            def unreadable():
+                raise OSError("injected index read failure")
+            monkeypatch.setattr(gc, "expected_takes", unreadable)
+        elif fault == "wrong_paths":
+            swapped = (removed - {min(dev)}) | {rest[-1]}
+            monkeypatch.setattr(probe, "move", lambda tables, requested: move(tables, swapped))
+        elif fault == "duplicate":
+            def duplicate(tables, requested):
+                altered = move(tables, requested)
+                altered["BD"]["missing"].append(altered["BD"]["missing"][0])
+                return altered
+            monkeypatch.setattr(probe, "move", duplicate)
+        return removed
+
+    monkeypatch.setattr(probe, "draw", draw)
+    out = tmp_path / "summary.json"
+    rc = probe.main([*args, "--out", str(out)])
+    stdout, stderr = capsys.readouterr()
+    if fault:
+        assert rc != 0
+        reason = "cannot read the file index" if fault == "index" else "partition"
+        assert reason in stderr
+        assert "upper95_one_sided" not in stdout
+        assert not out.exists()
+    elif args[0] == "--replay":
+        assert rc == 0 and json.loads(stdout.splitlines()[-1])["verdict"] == "EVIDENCE_REFUSED"
+    else:
+        assert rc == 0
+        summary = json.loads(out.read_text())
+        assert summary["counts"] == {"EVIDENCE_REFUSED": 1}
+        assert summary["errors_or_unexpected"] == 0
+        assert summary["upper95_one_sided"] == pytest.approx(0.95)
+
+
+def test_optimized_missing_probe_rejects_a_noop_move():
+    code = """
+import sys
+sys.path.insert(0, sys.argv.pop(1))
+from probes import gate_calibrate_missing_random as probe
+probe.move = lambda tables, removed: tables
+sys.exit(probe.main())
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-O", "-c", code, str(pathlib.Path(gc.__file__).parent), "--trials", "1"],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0 and "partition" in result.stderr
+    assert "selected 226 -> CALIBRATED" not in result.stdout
+
+
+@pytest.mark.parametrize("count", ["0", "-1"])
+def test_random_missing_requires_positive_trial_count(count, capsys):
+    with pytest.raises(SystemExit) as exc:
+        probe.main(["--trials", count])
+    assert exc.value.code == 2
+    output = capsys.readouterr()
+    assert "--trials must be positive" in output.err
+    assert "upper95_one_sided" not in output.out
+
+
+# --- #1329: a REFUSED decision must not exit 0 (tools/exit_contract.py) ---------
+
+import exit_contract  # noqa: E402
+
+
+def _run_calibrate_main(tmp_path, tables, extra=()):
+    tp = tmp_path / "tables.json"
+    tp.write_text(json.dumps({"tables": tables}))
+    out = tmp_path / "out.json"
+    rc = gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tp), "--out", str(out), *extra])
+    return rc, out
+
+
+def test_main_exits_refused_when_no_k_reaches_coverage(tmp_path, capsys):
+    """Real main(), real calibrate/decide: empty tables leave no k -> REFUSED decision."""
+    rc, out = _run_calibrate_main(tmp_path, {})
+    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    assert json.loads(out.read_text())["decision"]["status"] == "REFUSED"   # artefact written first
+    assert rc == exit_contract.REFUSED
+
+
+def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
+    """Real main() and real decide; only the upstream measurement is faked so a
+    gate (Q3 shipped-cymbal) is genuinely unrun inside decide()."""
+    q = {"sounds_with_bar": ["BD"], "start_red": {"BD": "FAIL", "BD-silence": "REFUSED"},
+         "seeded_summary": {"n": 10, "caught": 10, "missed": [], "rate": 1.0},
+         "known_bad": {"shipped-cymbal": {"verdict": "REFUSED"}}, "clean": {"BD": "PASS"},
+         "validation": {"sounds": 1, "best_passes": 1}}
+    monkeypatch.setattr(gc, "calibrate", lambda tabs, force_k=None: {"k": 3, "status": "ok"})
+    monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: q)
+    monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
+    rc, _ = _run_calibrate_main(tmp_path, {})
+    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    assert rc == exit_contract.REFUSED
+
+
+@pytest.mark.parametrize("status,code", [
+    ("REFUSED", 2), ("DIAGNOSTIC (not authority): REFUSED", 2),
+    ("QUALIFIED", 0), ("NOT QUALIFIED", 0), ("DIAGNOSTIC (not authority): QUALIFIED", 0)])
+def test_decision_exit_maps_refused_only(status, code):
+    assert gc.decision_exit({"status": status}) == code

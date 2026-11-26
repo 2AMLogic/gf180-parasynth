@@ -258,3 +258,51 @@ def test_the_model_plays_the_written_pitches(tmp_path):
                          "--render", str(wav)])
     assert rc == 0, err
     assert _written_pitches_ok(wav, notes) > 80
+
+
+# --- --image selects what the preview computes (R2 = pulse_2x) -------------------
+
+def _render_cli(tmp_path, image, preset, monkeypatch):
+    """Render via the CLI; also return the writes/length the model was given, so the
+    reference below runs the true model on exactly the same input."""
+    import synth_top_model as stm
+    seen = {}
+    real = stm.SynthTopModel.run
+
+    def spy(self, writes, n):
+        seen["writes"], seen["n"] = writes, n
+        return real(self, writes, n)
+    monkeypatch.setattr(stm.SynthTopModel, "run", spy)
+    wav = tmp_path / f"{image}-{preset}.wav"
+    rc, _o, err = run(["--notes", "C4:0.5 C5:0.5", "--bpm", "120", "--preset", preset,
+                       "--image", image, "--render", str(wav)])
+    assert rc == 0, err
+    from scipy.io import wavfile
+    return wavfile.read(str(wav))[1], seen
+
+
+def _true_model(seen, pulse_2x):
+    import synth_top_model as stm
+    m = stm.SynthTopModel(oversample_2x=True, filter_2x=True,
+                          pulse_2x=pulse_2x).run(seen["writes"], seen["n"])
+    return np.asarray(m["sample"], dtype=np.int16)
+
+
+def test_image_r2_renders_the_pulse_2x_engine(tmp_path, monkeypatch):
+    r2, seen = _render_cli(tmp_path, "r2", "m5a-pulse", monkeypatch)
+    r1, _ = _render_cli(tmp_path, "r1", "m5a-pulse", monkeypatch)
+    assert np.array_equal(r2, _true_model(seen, True))
+    assert np.array_equal(r1, _true_model(seen, False))
+    assert not np.array_equal(r1, r2)             # the flag audibly matters on pulse
+
+
+def test_image_does_not_change_a_saw_only_patch(tmp_path, monkeypatch):
+    # control: saws are untouched by PULSE2X, so r1 and r2 must agree
+    r1, _ = _render_cli(tmp_path, "r1", "m5a-saw", monkeypatch)
+    r2, _ = _render_cli(tmp_path, "r2", "m5a-saw", monkeypatch)
+    assert np.array_equal(r1, r2)
+
+
+def test_render_refuses_an_unknown_image(tmp_path):
+    with pytest.raises(ValueError, match="unknown image"):
+        ps.render([], 0, str(tmp_path / "x.wav"), image="bogus")
