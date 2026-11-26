@@ -20,12 +20,14 @@ The known answers here are constructed from an exact phase integral
 """
 from __future__ import annotations
 
+import json
 import math
 import os
 import sys
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -201,6 +203,241 @@ def test_refuses_a_monotone_ramp(slope):
     assert r["refusal"] == "SHORT_FOR_WOBBLE", r
     assert r["taus_in_window"] < odp.MIN_TAUS, r
     assert "drift_rms_cents" not in r
+
+
+# ---- 7. a corrupt sample, and an export a strict parser accepts ------------
+NONFINITE = [np.nan, np.inf, -np.inf]
+
+
+def _reject_constant(name):
+    raise ValueError(f"non-standard JSON token {name}")
+
+
+def _read_strict(path):
+    """Parse the file as a strict parser does. RFC 8259 has no NaN and no
+    Infinity; `json.loads` accepts all three unless told otherwise, which is
+    how the bare NaN in #1406 went unnoticed."""
+    with open(path) as fh:
+        return json.load(fh, parse_constant=_reject_constant)
+
+
+def _steady_tone(dur_s):
+    return odp.fm_tone(SR, dur_s, F0, np.zeros(8), harmonics=4)
+
+
+def _as_filed(x):
+    """The samples `read_wav` hands `drift_report` for a float32 file of `x`."""
+    return np.asarray(x, dtype=np.float32).astype(np.float64)
+
+
+def _float32_wav(tmp_path, name, x):
+    path = tmp_path / f"{name}.wav"
+    wavfile.write(str(path), SR, np.asarray(x, dtype=np.float32))
+    return str(path)
+
+
+def _cli_json_strict(wav, dest, *more):
+    argv = ["--wav", wav, "--f0", repr(F0), "--json", str(dest)] + list(more)
+    return odp.main(argv), _read_strict(dest)
+
+
+def _no_label(report):
+    return {k: v for k, v in report.items() if k != "label"}
+
+
+def _outcome(report):
+    return report["verdict"], report.get("refusal")
+
+
+@pytest.mark.parametrize("bad", NONFINITE)
+def test_a_nonfinite_sample_refuses_before_any_level_or_pitch(bad):
+    """`rms <= 0` is False for a NaN rms (IEEE, #134), so one NaN used to walk
+    past the LOW_LEVEL guard. The verdict was still REFUSED -- NO_TRACK, from
+    the band-pass the NaN poisoned -- but the report carried `rms` and `peak`
+    as NaN. A corrupt recording refuses under its own code, first."""
+    x = _steady_tone(3.0)
+    x[SR + 1000] = bad
+    r = odp.drift_report(x, SR, F0)
+    assert _outcome(r) == (odp.REFUSED, "NONFINITE_INPUT"), r
+    for k in ("rms", "peak", "f0_measured_hz", "f0_offset_cents", "floor_cents",
+              "drift_rms_cents", "walk_exponent"):
+        assert k not in r, (k, r)
+    assert "at sample 49000" in r["refusal_detail"], r
+
+
+def test_digital_silence_is_low_level_not_nonfinite():
+    """The distinction #337 has to read off a report: a silent oscillator has
+    a level, zero; a corrupt recording has none."""
+    r = odp.drift_report(np.zeros(SR * 3), SR, F0)
+    assert _outcome(r) == (odp.REFUSED, "LOW_LEVEL"), r
+    assert (r["rms"], r["peak"]) == (0.0, 0.0), r
+
+
+@pytest.mark.parametrize("bad", NONFINITE)
+def test_a_corrupt_sample_refuses_wherever_it_sits(bad):
+    """The issue placed one non-finite sample at each of 145 positions and got
+    435 NO_TRACK refusals. The code must now come from the input, not from
+    wherever the poisoned band-pass happened to fail -- at any position, in an
+    all-corrupt window, and in one too short to hold a period."""
+    x = _steady_tone(3.0)
+    for i in (0, 1, SR // 2, SR + 1000, 2 * SR, len(x) - 2, len(x) - 1):
+        y = x.copy()
+        y[i] = bad
+        r = odp.drift_report(y, SR, F0)
+        assert _outcome(r) == (odp.REFUSED, "NONFINITE_INPUT"), (i, r)
+        assert "rms" not in r, (i, r)
+    for n in (SR * 3, SR // 2, 64):
+        r = odp.drift_report(np.full(n, bad), SR, F0)
+        assert _outcome(r) == (odp.REFUSED, "NONFINITE_INPUT"), (n, r)
+
+
+def test_a_corrupt_sample_outside_the_window_leaves_a_clean_one_clean():
+    """The guard reads the SELECTED window: a NaN at 1.02 s must not refuse
+    the held tone that follows it."""
+    x = _steady_tone(3.0)
+    x[SR + 1000] = np.nan
+    r = odp.drift_report(x[int(1.5 * SR):], SR, F0)
+    assert r["verdict"] == odp.STABLE, r
+
+
+def test_cli_refuses_a_corrupt_wav_with_a_strict_json_file(tmp_path):
+    """The issue's own reproduction: the same tone as a float32 WAV with one
+    NaN at sample 49000. At 4b4c4935 the CLI exited 0 with NO_TRACK and a file
+    holding a bare NaN in both `rms` and `peak`."""
+    x = _steady_tone(3.0)
+    x[SR + 1000] = np.nan
+    rc, doc = _cli_json_strict(_float32_wav(tmp_path, "corrupt", x),
+                               tmp_path / "corrupt.json")
+    assert rc == 0
+    r = doc["reports"][0]
+    assert _outcome(r) == (odp.REFUSED, "NONFINITE_INPUT"), r
+    assert "rms" not in r and "peak" not in r, r
+
+
+@pytest.mark.parametrize("name, dur_s", [("clean", 3.0), ("short", 0.5)])
+def test_cli_exports_a_clean_tone_complete_and_strict(tmp_path, name, dur_s):
+    """Both clean controls keep their STABLE verdict and every available
+    measurement. On the short one `walk_exponent` is UNAVAILABLE (fewer than
+    three usable lags) and leaves as null; strict encoding alone refused this
+    accepted measurement."""
+    x = _steady_tone(dur_s)
+    rc, doc = _cli_json_strict(_float32_wav(tmp_path, name, x),
+                               tmp_path / f"{name}.json")
+    assert rc == 0
+    got = _no_label(doc["reports"][0])
+    mem = _no_label(odp.drift_report(_as_filed(x), SR, F0))
+    assert got["verdict"] == mem["verdict"] == odp.STABLE, got
+    assert got.keys() == mem.keys()
+    for k in got:
+        if k == "walk_exponent" and math.isnan(mem[k]):
+            assert got[k] is None, k
+        else:
+            assert got[k] == mem[k], (k, got[k], mem[k])
+    assert [k for k, v in got.items() if v is None] == (
+        ["walk_exponent"] if dur_s == 0.5 else []), got
+
+
+def test_cli_checks_the_selected_window_not_the_whole_file(tmp_path):
+    """`--window` selects what the guard reads: one corrupt file refuses the
+    window that holds the NaN and measures the one that does not."""
+    x = _steady_tone(3.0)
+    x[SR + 1000] = np.nan
+    wav = _float32_wav(tmp_path, "windows", x)
+    rc, doc = _cli_json_strict(wav, tmp_path / "windows.json",
+                               "--window", "0:1.1", "--window", "1.5:3.0")
+    assert rc == 0
+    a, b = doc["reports"]
+    assert _outcome(a) == (odp.REFUSED, "NONFINITE_INPUT"), a
+    assert b["verdict"] == odp.STABLE, b
+
+
+INJECTED = [(f, b) for f in ("rms", "drift_rms_cents", "f0_measured_hz")
+            for b in NONFINITE]
+INJECTED += [("walk_exponent", np.inf), ("walk_exponent", -np.inf)]
+
+
+@pytest.mark.parametrize("field, bad", INJECTED)
+def test_an_unexpected_non_finite_number_fails_the_export_before_touching_the_file(
+        tmp_path, monkeypatch, field, bad):
+    """The writer on its own: finite input, a real report, ONE number
+    replaced, through the CLI's own call. It raises naming the field, leaves
+    an existing destination exactly as it was, and does not create one. An
+    infinity under a known diagnostic is unexpected too; only NaN there means
+    unavailable."""
+    broken = dict(odp.drift_report(_steady_tone(3.0), SR, F0))
+    assert math.isfinite(broken[field])
+    broken[field] = bad
+    monkeypatch.setattr(odp, "drift_report", lambda *a, **k: dict(broken))
+    wav = _float32_wav(tmp_path, "held", _steady_tone(0.5))
+    pattern = rf"reports\[0\]\.{field}\b"
+
+    dest = tmp_path / "existing.json"
+    dest.write_text("an earlier report")
+    with pytest.raises(ValueError, match=pattern):
+        odp.main(["--wav", wav, "--f0", repr(F0), "--json", str(dest)])
+    assert dest.read_text() == "an earlier report"
+
+    fresh = tmp_path / "new" / "report.json"
+    with pytest.raises(ValueError, match=pattern):
+        odp.main(["--wav", wav, "--f0", repr(F0), "--json", str(fresh)])
+    assert not fresh.exists() and not fresh.parent.exists()
+
+
+def test_the_export_checks_the_across_note_block_too(tmp_path, monkeypatch):
+    """The whole payload is held to the standard, not only the window
+    reports."""
+    monkeypatch.setattr(odp, "across_note_drift",
+                        lambda reports: {"verdict": odp.STABLE,
+                                         "span_cents": float("nan")})
+    dest = tmp_path / "dest.json"
+    dest.write_text("an earlier report")
+    with pytest.raises(ValueError, match=r"across_note\.span_cents"):
+        _cli_json_strict(_float32_wav(tmp_path, "held", _steady_tone(0.5)), dest)
+    assert dest.read_text() == "an earlier report"
+
+
+def test_every_unavailable_diagnostic_leaves_as_null(tmp_path, monkeypatch):
+    """The allowlist, exercised at the real assignment sites: each helper is
+    made to answer "unavailable" on a real tone, so every key `drift_report`
+    can hold NaN under goes through the CLI and must come back null with the
+    rest of the report unchanged. `env_corr` is the one key this cannot reach
+    -- it needs a deviation with exactly zero scatter -- and is listed by
+    reading the code."""
+    nan = float("nan")
+    monkeypatch.setattr(odp, "_walk_exponent", lambda d, rate: nan)
+    monkeypatch.setattr(odp, "_dominant_wobble", lambda d, rate: (nan, nan))
+    monkeypatch.setattr(odp, "_acorr_time", lambda d, rate: nan)
+    ou = odp.ou_cents(4000, 500.0, rms_cents=3.0, tau_s=1.0, seed=7)
+    tones = (("stable", _steady_tone(3.0)),
+             ("wander", odp.fm_tone(SR, 8.0, F0, ou, harmonics=6)))
+    wavs = [_float32_wav(tmp_path, n, x) for n, x in tones]
+    dest = tmp_path / "all.json"
+    argv = [arg for wav in wavs for arg in ("--wav", wav)]
+    rc = odp.main(argv + ["--f0", repr(F0), "--json", str(dest)])
+    assert rc == 0
+    doc = _read_strict(dest)
+    assert [r["verdict"] for r in doc["reports"]] == [odp.STABLE, odp.REFUSED]
+    for got, (_, x) in zip(doc["reports"], tones):
+        mem = _no_label(odp.drift_report(_as_filed(x), SR, F0))
+        want = {k: (None if k in odp.OPTIONAL_DIAGNOSTICS
+                    and isinstance(v, float) and math.isnan(v) else v)
+                for k, v in mem.items()}
+        assert _no_label(got) == want, got["verdict"]
+    nulled = {k for r in doc["reports"] for k, v in r.items() if v is None}
+    assert nulled == odp.OPTIONAL_DIAGNOSTICS - {"env_corr"}, nulled
+
+
+def test_the_strict_encoder_alone_still_refuses_a_nan(tmp_path, monkeypatch):
+    """`allow_nan=False` is the floor under the known-diagnostic conversion:
+    with that conversion switched off, the short tone's NaN `walk_exponent`
+    must still fail the export rather than reach the file."""
+    monkeypatch.setattr(odp, "_for_export", lambda payload: payload)
+    dest = tmp_path / "dest.json"
+    dest.write_text("an earlier report")
+    with pytest.raises(ValueError):
+        _cli_json_strict(_float32_wav(tmp_path, "short", _steady_tone(0.5)),
+                         dest)
+    assert dest.read_text() == "an earlier report"
 
 
 # ---- the across-note measurement -------------------------------------------
