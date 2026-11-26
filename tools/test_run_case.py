@@ -2656,3 +2656,118 @@ def test_control_outcome_refuses_a_non_numeric_worst(bad):
         out = rc.control_outcome("changed", "REF_CORNER_2X", ["F1A"],
                                  {"F1A": "filter"}, c, i)
         assert out[0] == "refused", (bad, out)
+
+
+# --- #1353: the preview selects exactly what a run would measure -------------
+
+def _preview_case_ids(capsys, argv):
+    """The ordered case IDs a `--list` preview prints for `argv`, parsed from
+    the table it prints. The parse is anchored on the catalog's own IDs, so a
+    malformed row is a miss, not a silent pass."""
+    known = {c["case_id"] for c in rc.load_cases()}
+    code = rc.main([*argv, "--list"])
+    captured = capsys.readouterr()
+    assert code == 0, captured.err
+    return [line[:7].strip() for line in captured.out.splitlines()
+            if line[:7].strip() in known]
+
+
+def _execution_case_ids(monkeypatch, tmp_path, argv):
+    """The ordered case IDs the execution boundary would measure for the same
+    `argv`, with every renderer, base check and write stubbed out and
+    `--dry-run` on so a forgotten stub still writes nothing."""
+    ids = []
+    monkeypatch.setattr(rc, "base_check", lambda allow_stale: {"checked": False, "why": "t"})
+    monkeypatch.setattr(rc, "plan_for", lambda cid: "drum")
+
+    def spy(case, *a, **k):
+        ids.append(case["case_id"])
+        return {}
+
+    monkeypatch.setattr(rc, "run_case", spy)
+    monkeypatch.setattr(rc, "verdict_of", lambda c, res: ("no verdict", None, ""))
+    rc.main([*argv, "--dry-run", "--results", str(tmp_path)])
+    return ids
+
+
+def test_a_preview_for_one_valid_id_is_that_case_and_only_it(capsys, monkeypatch, tmp_path):
+    """The issue's F2A row, as the M1A regression case: a run of M1A measures
+    M1A alone, so `--list M1A` previews M1A alone -- not the whole catalog the
+    old list-mode selector printed while ignoring the argument."""
+    preview = _preview_case_ids(capsys, ["M1A"])
+    with monkeypatch.context() as mp:
+        execution = _execution_case_ids(mp, tmp_path, ["M1A"])
+    assert preview == ["M1A"] == execution
+
+
+def test_a_preview_for_an_unknown_id_refuses_like_a_run(capsys):
+    """A run of NO_SUCH_CASE exits 2 with `no such case`; the preview must
+    refuse with the same words and code, not fall back to the catalog as if
+    the argument had been ignored."""
+    code = rc.main(["--list", "NO_SUCH_CASE"])
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "no such case: NO_SUCH_CASE" in captured.err
+    assert captured.out == ""
+
+
+def test_overlapping_batch_and_family_preview_the_runs_selection(capsys, monkeypatch, tmp_path):
+    """`--batch 'First 32' --family Mono` names two groups that share 8 cases
+    at this catalog; a run measures the union (56 distinct cases here, in
+    first-seen order), while the old preview printed the 8-case intersection.
+    The preview's ordered IDs must equal the execution boundary's."""
+    argv = ["--batch", "First 32", "--family", "Mono"]
+    preview = _preview_case_ids(capsys, argv)
+    with monkeypatch.context() as mp:
+        execution = _execution_case_ids(mp, tmp_path, argv)
+    all_cases = rc.load_cases()
+    batch = [c["case_id"] for c in all_cases if c["batch"] == "First 32"]
+    family = [c["case_id"] for c in all_cases if c["family"] == "Mono"]
+    assert len(set(batch) & set(family)) == 8, "the overlap this test turns on"
+    assert list(dict.fromkeys(batch + family)) == preview == execution
+    assert len(preview) == 56
+
+
+def test_a_bare_listing_is_the_whole_catalog(capsys, monkeypatch, tmp_path):
+    """Bare `--list` previews every case in the catalog, in catalog order --
+    the same ordered selection a run of `--all` would measure."""
+    preview = _preview_case_ids(capsys, [])
+    assert preview == [c["case_id"] for c in rc.load_cases()]
+    with monkeypatch.context() as mp:
+        execution = _execution_case_ids(mp, tmp_path, ["--all"])
+    assert preview == execution
+
+
+def test_the_preview_returns_before_renders_or_base_checks(monkeypatch, capsys):
+    """The preview is selection and nothing else: no base check, no renderer,
+    no result write, no output directory. Each spy records what reached it, so
+    a preview that gains a render reports it instead of passing."""
+    reached, made = [], []
+    monkeypatch.setattr(rc, "base_check",
+                        lambda *a, **k: reached.append("base_check")
+                        or {"checked": False, "why": "t"})
+    monkeypatch.setattr(rc, "run_case",
+                        lambda *a, **k: reached.append("run_case") or {})
+    monkeypatch.setattr(rc, "write_result",
+                        lambda *a, **k: reached.append("write_result"))
+    monkeypatch.setattr(pathlib.Path, "mkdir",
+                        lambda self, *a, **k: made.append(str(self)))
+    code = rc.main(["--list", "--batch", "First 32", "--family", "Mono"])
+    assert code == 0
+    capsys.readouterr()
+    assert reached == [], f"the preview reached {reached}"
+    assert made == [], f"the preview created {made}"
+
+
+def test_the_preview_distinguishes_a_planned_bass_case_from_an_unplanned_one(capsys):
+    """M1A is an implemented mono-bass plan scored against the frozen Mini V3;
+    M1B is unplanned. 'no plan in this runner' belongs to the unplanned kind
+    alone, so the two adjacent rows must not read the same."""
+    code = rc.main(["--list", "--family", "Mono"])
+    rows = {line[:7].strip(): line
+            for line in capsys.readouterr().out.splitlines()
+            if line[:7].strip() in ("M1A", "M1B")}
+    assert code == 0 and set(rows) == {"M1A", "M1B"}
+    assert "frozen Mini V3" in rows["M1A"], rows
+    assert "no plan in this runner" not in rows["M1A"], rows
+    assert "no plan in this runner" in rows["M1B"], rows

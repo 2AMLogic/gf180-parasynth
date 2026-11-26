@@ -4135,7 +4135,7 @@ def cmd_list(cases: list[dict]) -> int:
                 why = f"REFUSED: {e}"
             if is_holdout(c):
                 why = f"[sealed holdout] {why}"
-        elif kind == "mono":
+        elif kind in ("mono", "mono-bass"):
             why = ("fixed integer-model phrase vs frozen Mini V3; " +
                    ("includes SPI-to-I2S smoke" if c["case_id"] == "M5A"
                     else "model-only; no integrated RTL claim"))
@@ -4179,14 +4179,9 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     all_cases = load_cases()
-    if a.list:
-        sel = all_cases
-        if a.batch:
-            sel = [c for c in sel if c["batch"] == a.batch]
-        if a.family:
-            sel = [c for c in sel if c["family"] == a.family]
-        return cmd_list(sel)
-
+    # One selector for both modes (#1353): the preview lists exactly the cases
+    # a run would measure, validated, combined and deduplicated identically.
+    # Bare `--list` keeps its old meaning -- the whole catalog.
     by_id = {c["case_id"]: c for c in all_cases}
     chosen: list[dict] = []
     for cid in a.cases:
@@ -4200,6 +4195,8 @@ def main(argv=None) -> int:
         chosen += [c for c in all_cases if c["family"] == a.family]
     if a.all:
         chosen += all_cases
+    if a.list and not (a.cases or a.batch or a.family or a.all):
+        chosen = all_cases
     if not chosen:
         ap.error("name at least one case, or --batch / --family / --all / --list")
     if a.expect and not a.inject:
@@ -4210,6 +4207,10 @@ def main(argv=None) -> int:
             seen.add(c["case_id"])
             uniq.append(c)
     chosen = uniq
+    if a.list:
+        # Selection and nothing else: before base checks, output directory
+        # creation, renders or holdout reads.
+        return cmd_list(chosen)
 
     outdir = pathlib.Path(a.results) if a.results else RESULTS
     # An injected control's output is not evidence. It must not be able to
