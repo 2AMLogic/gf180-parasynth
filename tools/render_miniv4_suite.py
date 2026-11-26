@@ -120,6 +120,7 @@ class _Rig:
             raise Refused(f"no dawdreamer on this machine ({exc}); "
                           f"Mini V4 renders need the plugin host installed")
         import dawdreamer as daw
+        self.path = path
         self.block = block
         self.eng = engine if engine is not None else daw.RenderEngine(SR, block)
         try:
@@ -130,7 +131,7 @@ class _Rig:
 
     def identity(self) -> dict:
         import refprofile as rp
-        return rp.plugin_identity(PATH_MINIV4)
+        return rp.plugin_identity(self.path)
 
     def set_parameter(self, idx: int, value: float) -> None:
         self.p.set_parameter(int(idx), float(value))
@@ -169,6 +170,14 @@ def check_plugin_version(path: str = PATH_MINIV4) -> dict:
             f"exactly {rs.V4_REQUIRED_VERSION!r}. A plugin update is a change "
             f"of instrument: record the new identity in the suite registry "
             f"first, never render over it")
+    if not ident.get("binary_sha256"):
+        raise Refused(
+            f"the Mini V4 bundle at {path} claims {version!r} but has no "
+            f"readable binary under Contents/MacOS, so there is no "
+            f"binary_sha256 to record. The version string is what the bundle "
+            f"CLAIMS and the hash is what it IS; a bundle that cannot be "
+            f"hashed cannot anchor the V4 baseline (the same case "
+            f"refprofile.environment_tuple refuses)")
     return ident
 
 
@@ -243,25 +252,6 @@ def _demo_artefact_scan(y, f0_hz: float) -> dict:
 # ===========================================================================
 # the render itself
 # ===========================================================================
-def environment_tuple(ident: dict, licence: str, host_version: str) -> dict:
-    """The #123 tuple, every field required. A field nobody established is
-    the literal string 'unstated' -- a tuple with a field missing must never
-    look like a tuple whose field was never asked about."""
-    return {
-        "host": rig_host(),
-        "host_version": host_version or "unstated",
-        "plugin": ident,
-        "block": BLOCK,
-        "sr": SR,
-        "licence": {"stated_by_operator": licence},
-        "preset": "suite default patch (per-case patch fields in suite.json); no vendor preset loaded",
-    }
-
-
-def rig_host() -> str:
-    return _Rig.host
-
-
 def host_version() -> str:
     try:
         return importlib.metadata.version("dawdreamer")
@@ -272,11 +262,13 @@ def host_version() -> str:
 def render_case(case: dict, rig: _Rig, licence: str, out_dir: pathlib.Path) -> dict:
     """Render one case from the suite definition and write its record.
 
-    The record carries the environment tuple and the top-level `identity`
-    block -- the block `reference_suites.require_suite` reads at the
-    scoring boundary. Before rendering, the identity the record will carry
-    is checked through that same gate, so the writer and the reader cannot
-    drift apart: a record no scorer can classify refuses here, having
+    The record carries the top-level `identity` block -- the block
+    `reference_suites.require_suite` reads at the scoring boundary -- and
+    the #123 environment tuple, built by the ONE recorder,
+    `refprofile.environment_tuple`, from this rig's own host, block and
+    loaded bundle. Both are checked before anything renders, so the
+    writer and the reader cannot drift apart and a record whose plugin
+    has no binary hash, or whose block nobody pinned, refuses here having
     measured nothing. The `suite` stamp is for humans, not for the gate.
     Raw float32 WAV, no normalisation, complete release inside the stated
     phrase length."""
@@ -291,6 +283,20 @@ def render_case(case: dict, rig: _Rig, licence: str, out_dir: pathlib.Path) -> d
     except rs.Refused as exc:
         raise Refused(f"this render's identity is not classifiable as "
                       f"{rs.SUITE_V4}: {exc}") from exc
+    import refprofile as rp
+    try:
+        env = rp.environment_tuple(
+            host=rig.host, host_version=host_version(), plugin=plugin,
+            block=rig.block, sr=SR,
+            licence={"stated_by_operator": licence},
+            preset="suite default patch (per-case patch fields in suite.json); "
+                   "no vendor preset loaded",
+            automates=False)
+    except rp.Refused as exc:
+        # rp.Refused and this module's Refused are siblings under
+        # refusal.Refused, so the CLI boundary would not catch it unraised.
+        raise Refused(f"the environment record for {case['case_id']}: "
+                      f"{exc}") from exc
     phrase_s = float(case["phrase_s"])
     note = case["base_midi_note"]
     if note is None:
@@ -309,7 +315,7 @@ def render_case(case: dict, rig: _Rig, licence: str, out_dir: pathlib.Path) -> d
         "identity": identity,
         "suite_manifest": "docs/scorecard/miniv4-suite/suite.json",
         "plugin_required_version": rs.V4_REQUIRED_VERSION,
-        "environment": environment_tuple(plugin, licence, host_version()),
+        "environment": env,
         "audio": {
             "file": wav_path.name,
             "sample_rate_hz": SR,
