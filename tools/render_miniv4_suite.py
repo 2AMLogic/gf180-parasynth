@@ -137,18 +137,9 @@ class _Rig:
 
     def render_note(self, note: int, seconds: float,
                     velocity: int = VELOCITY, note_at: float = 0.02):
-        import numpy as np
-        import audio_measure as am
-        self.p.clear_midi()
-        self.p.add_note(note, velocity, note_at, seconds)
-        self.eng.render(seconds)
-        a = self.eng.get_audio()
-        y = np.asarray(a).astype(np.float64)
-        if y.ndim == 2:
-            y = y[0]
-        am.require_finite(y, f"{self.name}'s {seconds:.3f} s render")
-        lat = self.p.get_latency_samples()
-        return y[lat:] if lat else y
+        import reference_rigs as rr
+        return rr.render_midi_note(self.p, self.eng, self.name, note, velocity,
+                                   note_at, seconds, seconds)
 
 
 # ===========================================================================
