@@ -92,7 +92,7 @@ BOUNDARIES = (
     ("tools/run_case.py", "prepare",
      "both sides of every drum comparison pass through here before any metric "
      "sees them; it is the render path's boundary as well as the reference's"),
-    ("model/reference_rigs.py", "_Plugin.render",
+    ("model/reference_rigs.py", "render_midi_note",
      "the plugin host's output buffer -- a plugin in a wrong state (unlicensed, "
      "un-set-up, denormal-blowup) is exactly where non-finite audio comes from"),
 )

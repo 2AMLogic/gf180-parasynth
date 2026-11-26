@@ -549,14 +549,49 @@ def _incomparable(ok: list) -> tuple[str, int, str] | None:
 
 
 # ---- a pair of notes of the SAME pitch, far apart in one render -------------
+def _finite(value) -> bool:
+    try:
+        return math.isfinite(value)
+    except TypeError:
+        return False
+
+
+def _unusable(r: dict) -> tuple[str, str] | None:
+    """(code, detail) naming why one window cannot enter an across-note
+    comparison, or None when it can."""
+    v = r.get("verdict")
+    if v == REFUSED:
+        code = r.get("refusal") or "UNUSABLE_WINDOW"
+        return code, f"{code}: {r.get('refusal_detail', '')}"
+    if v not in (STABLE, PERIODIC, DRIFTING):
+        return "UNUSABLE_WINDOW", f"no reported verdict (got {v!r})"
+    pitch = r.get("f0_measured_hz")
+    if not _finite(pitch) or pitch <= 0:
+        return ("UNUSABLE_WINDOW",
+                f"f0_measured_hz {pitch!r} is not a finite positive pitch")
+    floor = r.get("floor_cents")
+    if not _finite(floor) or floor < 0:
+        return ("UNUSABLE_WINDOW",
+                f"floor_cents {floor!r} is not a finite non-negative floor")
+    return None
+
+
 def across_note_drift(reports: list) -> dict:
-    """Drift between two instances of the same note in one continuous render.
+    """Drift between two or more instances of the same note in one continuous
+    render.
 
     This is the measurement a short note still supports: two takes of the same
     pitch seconds apart in the same render differ in f0 by exactly the drift
     accumulated between them, and the floor is each window's own f0 precision
-    rather than its trajectory scatter. Refuses unless every input reported an
-    f0 (a REFUSED window has none).
+    rather than its trajectory scatter.
+
+    Refuses unless EVERY requested window carries a reported verdict, a finite
+    pitch and a measured floor (#1405). A window's qualification is its own
+    `verdict`, never the presence of a field: `drift_report` writes
+    `f0_measured_hz` and `floor_cents` before its late refusals, so a window
+    it REFUSED for holding a mix still carries both, and its "pitch" is a
+    median over two oscillators. A refusal names the first unusable window by
+    index and carries that window's own code, and no magnitude.
 
     Every window must also DECLARE the same nominal pitch (`f0_nominal`) and
     the same sample rate (`sr`), compared directly (#1407): two different
@@ -567,26 +602,32 @@ def across_note_drift(reports: list) -> dict:
 
     That the windows come from ONE render is in none of the reports and is the
     caller's to establish. Nothing here can tell one render from two."""
-    ok = [r for r in reports if "f0_measured_hz" in r]
-    if len(ok) < 2:
-        return {"verdict": REFUSED, "refusal": "TOO_FEW_WINDOWS",
-                "refusal_detail": f"{len(ok)} windows carried an f0"}
-    why = _incomparable(ok)
+    reports = list(reports)
+    labels = [r.get("label", "") for r in reports]
+    refused = {"verdict": REFUSED, "n_windows": len(reports), "labels": labels}
+    if len(reports) < 2:
+        return dict(refused, refusal="TOO_FEW_WINDOWS",
+                    refusal_detail=f"{len(reports)} windows requested; "
+                                   f"two are needed")
+    for i, r in enumerate(reports):
+        why = _unusable(r)
+        if why:
+            return dict(refused, refusal=why[0], unusable_window=i,
+                        refusal_detail=f"window {i} of {len(reports)} "
+                                       f"({labels[i]}) is unusable: {why[1]}")
+    why = _incomparable(reports)
     if why:
         field, i, detail = why
-        return {"verdict": REFUSED, "refusal": COMPARISON_MISMATCH[field],
-                "field": field, "offending_window": i,
-                "refusal_detail": detail, "n_windows": len(ok),
-                "labels": [r.get("label", "") for r in ok]}
-    fs = [r["f0_measured_hz"] for r in ok]
-    ref = fs[0]
-    dev = [float(cents(f, ref)) for f in fs]
-    floor = max(r.get("floor_cents", 0.0) for r in ok)
+        return dict(refused, refusal=COMPARISON_MISMATCH[field],
+                    field=field, offending_window=i, refusal_detail=detail)
+    dev = [float(cents(r["f0_measured_hz"], reports[0]["f0_measured_hz"]))
+           for r in reports]
+    floor = max(r["floor_cents"] for r in reports)
     span = max(dev) - min(dev)
     return {"verdict": DRIFTING if span > SNR_SIGMA * floor else STABLE,
-            "n_windows": len(ok), "cents_vs_first": dev,
+            "n_windows": len(reports), "cents_vs_first": dev,
             "span_cents": span, "floor_cents": floor,
-            "labels": [r.get("label", "") for r in ok]}
+            "labels": labels}
 
 
 # ---- generators used by the controls, and reusable as stimuli ---------------

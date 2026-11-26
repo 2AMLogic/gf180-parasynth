@@ -435,3 +435,176 @@ def test_cli_across_note_still_compares_two_files_of_one_rate(tmp_path):
     assert verdicts == [odp.STABLE, odp.STABLE], out["reports"]
     assert out["across_note"]["verdict"] == odp.STABLE, out["across_note"]
     assert out["across_note"]["span_cents"] < 0.05, out["across_note"]
+
+
+@pytest.mark.parametrize("bad_window", ["mixed", "silent"])
+def test_cli_across_note_requires_all_requested_pitches(tmp_path, bad_window):
+    """A single capture of two valid notes and an unusable third window, read
+    back through the CLI's JSON. `mixed` is a LATE refusal: the probe writes a
+    pitch before it decides the window holds two oscillators, and the
+    comparison used to spend that pitch -- 2.658 cents of DRIFTING read off
+    three constant-frequency tones. `silent` is an EARLY refusal, which used to
+    vanish: STABLE over two of the three requested windows (#1405)."""
+    import json
+
+    from scipy.io import wavfile
+
+    t = np.arange(3 * SR) / SR
+    tone = 0.4 * np.sin(2 * np.pi * F0 * t)
+    mix = tone + 0.32 * np.sin(2 * np.pi * F0 * 2 ** (7 / 1200) * t)
+    third = mix if bad_window == "mixed" else np.zeros_like(tone)
+    capture = tmp_path / "notes.wav"
+    report = tmp_path / "report.json"
+    wavfile.write(capture, SR, np.concatenate([tone, tone, third]).astype("float32"))
+    args = ["--wav", str(capture), "--sr-expected", str(SR), "--f0", str(F0),
+            "--window", "0:3", "--window", "3:6", "--json", str(report)]
+    assert odp.main(args) == 0
+    clean = json.loads(report.read_text())
+    assert [r["verdict"] for r in clean["reports"]] == [odp.STABLE, odp.STABLE]
+    assert clean["across_note"]["verdict"] == odp.STABLE
+
+    odp.main(args + ["--window", "6:9"])
+    observed = json.loads(report.read_text())
+    rejected = observed["reports"][2]
+    assert rejected["verdict"] == odp.REFUSED
+    assert rejected["refusal"] == ("MULTI_PARTIAL" if bad_window == "mixed" else "LOW_LEVEL")
+    across = observed["across_note"]
+    assert across["verdict"] == odp.REFUSED, across
+    assert across["refusal"] == rejected["refusal"], across
+    assert across["unusable_window"] == 2, across
+    assert across["n_windows"] == 3, across
+    assert "span_cents" not in across, across
+
+
+# ---- the across-note comparison: one unusable window, wherever it sits ------
+def _held(dur_s: float = 3.0) -> np.ndarray:
+    return odp.fm_tone(SR, dur_s, F0, np.zeros(8), harmonics=4)
+
+
+def _weak_fundamental() -> np.ndarray:
+    t = np.arange(int(8.0 * SR)) / SR
+    return 0.02 * np.sin(2 * math.pi * F0 * t) \
+        + 0.4 * np.sin(2 * math.pi * 2 * F0 * t)
+
+
+def _non_finite() -> np.ndarray:
+    x = _held()
+    x[SR + 1000:SR + 1010] = np.nan
+    return x
+
+
+REFUSED_WINDOWS = [
+    # id, how the window is built, the code, and whether `drift_report` still
+    # wrote `f0_measured_hz` on it before refusing
+    ("silent", lambda: np.zeros(3 * SR), "LOW_LEVEL", False),
+    ("short", lambda: _held(0.05), "TOO_FEW_PERIODS", False),
+    ("non-finite", _non_finite, "NO_TRACK", False),
+    ("mix", lambda: odp.static_detune_mix(SR, 8.0, F0, detune_cents=(0.0, 7.0),
+                                          gains=(1.0, 0.8), harmonics=4),
+     "MULTI_PARTIAL", True),
+    ("monotone-ramp",
+     lambda: odp.fm_tone(SR, 8.0, F0, np.linspace(0.0, 5.0, 4000),
+                         harmonics=6),
+     "SHORT_FOR_WOBBLE", True),
+    ("note-then-silence",
+     lambda: np.concatenate([_held(4.0), np.zeros(2 * SR)]),
+     "WINDOW_SPANS_SILENCE", True),
+    ("octave-partner", _weak_fundamental, "ESTIMATOR_DISAGREE", True),
+]
+
+_MISSING = object()
+MALFORMED = [
+    ("pitch-nan", "f0_measured_hz", math.nan),
+    ("pitch-inf", "f0_measured_hz", math.inf),
+    ("pitch-zero", "f0_measured_hz", 0.0),
+    ("pitch-negative", "f0_measured_hz", -F0),
+    ("pitch-absent", "f0_measured_hz", _MISSING),
+    ("floor-nan", "floor_cents", math.nan),
+    ("floor-inf", "floor_cents", math.inf),
+    ("floor-negative", "floor_cents", -1.0),
+    ("floor-absent", "floor_cents", _MISSING),
+    ("verdict-absent", "verdict", _MISSING),
+    ("verdict-unknown", "verdict", "OK"),
+    ("verdict-empty", "verdict", None),
+]
+
+
+@pytest.fixture(scope="module")
+def good():
+    return [odp.drift_report(_held(), SR, F0, label=f"n{i}") for i in range(2)]
+
+
+@pytest.fixture(scope="module")
+def refused():
+    return {name: odp.drift_report(build(), SR, F0, label=name)
+            for name, build, _, _ in REFUSED_WINDOWS}
+
+
+@pytest.mark.parametrize("at", [0, 1, 2])
+@pytest.mark.parametrize("name, code, carries_pitch",
+                         [(n, c, p) for n, _, c, p in REFUSED_WINDOWS],
+                         ids=[n for n, _, _, _ in REFUSED_WINDOWS])
+def test_across_note_refuses_naming_the_unusable_window(good, refused, name,
+                                                        code, carries_pitch, at):
+    """A refused window at ANY position refuses the comparison with that
+    window's own code and index, whether or not it carries a pitch. `armed` is
+    the adversarial form: the same refused window given a pitch nine cents off
+    the held notes and a floor of zero, so that admitting it would read
+    DRIFTING and a missing floor would read as no floor at all."""
+    bad = refused[name]
+    assert (bad["verdict"], bad["refusal"]) == (odp.REFUSED, code), bad
+    assert ("f0_measured_hz" in bad) == carries_pitch, bad
+    armed = dict(bad, f0_measured_hz=F0 * 2 ** (9.0 / 1200.0), floor_cents=0.0)
+    for window in (bad, armed):
+        across = odp.across_note_drift(good[:at] + [window] + good[at:])
+        assert across["verdict"] == odp.REFUSED, across
+        assert across["refusal"] == code, across
+        assert across["unusable_window"] == at, across
+        assert (across["n_windows"], across["labels"][at]) == (3, name), across
+        assert not ({"span_cents", "cents_vs_first", "floor_cents"}
+                    & across.keys()), across
+
+
+@pytest.mark.parametrize("name, key, value", MALFORMED)
+def test_across_note_refuses_a_window_with_no_usable_pitch_or_floor(good, name,
+                                                                    key, value):
+    """The comparison's own preconditions, on a window that carries a verdict:
+    a finite positive pitch and a finite non-negative floor. A NaN span
+    compares False against every floor and a missing floor defaulted to zero,
+    so each of these used to be compared as STABLE or DRIFTING."""
+    assert odp.across_note_drift(good + [good[0]])["verdict"] == odp.STABLE
+    bad = dict(good[0], label=name)
+    if value is _MISSING:
+        bad.pop(key)
+    else:
+        bad[key] = value
+    across = odp.across_note_drift(good + [bad])
+    assert across["verdict"] == odp.REFUSED, across
+    assert across["refusal"] == "UNUSABLE_WINDOW", across
+    assert across["unusable_window"] == 2, across
+    assert not ({"span_cents", "cents_vs_first", "floor_cents"}
+                & across.keys()), across
+
+
+def test_across_note_uses_a_window_that_reported_drifting_or_periodic(good):
+    """A reported verdict qualifies a window; STABLE is not required. A window
+    whose pitch wanders is still one oscillator with a mean f0, and the frozen
+    Mini V3 pair `m1a-osc2-midi48-4.0s-apart` is DRIFTING in one of its two
+    windows. Its own verdict is not the comparison's to re-derive."""
+    wander = odp.ou_cents(4000, 500.0, rms_cents=1.0, tau_s=1.0, seed=7)
+    vibrato = 8.0 * np.sin(2 * math.pi * 0.7 * np.linspace(0.0, 8.0, 4000))
+    reports = [odp.drift_report(odp.fm_tone(SR, 8.0, F0, dev, harmonics=h),
+                                SR, F0, label=label)
+               for dev, h, label in ((wander, 6, "drifting"),
+                                     (vibrato, 4, "periodic"))]
+    assert [r["verdict"] for r in reports] == [odp.DRIFTING, odp.PERIODIC], reports
+    across = odp.across_note_drift([good[0]] + reports)
+    assert across["n_windows"] == 3, across
+    assert across["verdict"] in (odp.STABLE, odp.DRIFTING), across
+    assert math.isfinite(across["span_cents"]), across
+
+
+def test_across_note_accepts_any_iterable_of_windows(good):
+    across = odp.across_note_drift(iter(good))
+    assert across["verdict"] == odp.STABLE, across
+    assert across["n_windows"] == 2, across
