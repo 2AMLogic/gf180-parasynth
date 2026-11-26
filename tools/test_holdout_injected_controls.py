@@ -26,11 +26,22 @@ Issue #1124 added the gate in front of the loop: `main()` runs `baseline()`
 (the UNMUTATED tree) first and a baseline that is not green is exit 2 with no
 control run at all. So `_drive` stands in for a green baseline as well as for
 `run()`; the first case pins the red one.
+
+Issue #1400: the decision itself, `verdict()`, is no longer this probe's alone
+-- `model/probe_injection_discrimination.py` imports it for its own mutants,
+which is what let a pytest collection error there print as three kills. The
+suite that ran became an argument, and a required one; the last two cases pin
+that. They call `verdict()` directly because the point is the message, and the
+staged runs in `tools/probes/test_holdout_control_apparatus.py` only assert its
+status; the one that reaches this branch covers the call site, not the
+argument.
 """
 from __future__ import annotations
 
 import pathlib
 import sys
+
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "probes"))
 import holdout_injected_controls as hic  # noqa: E402
@@ -120,3 +131,22 @@ def test_a_refusal_reason_names_the_status_that_produced_it(monkeypatch, capsys)
                          hic.Result(hic.FIRED, ["test_b"], "")])
     out = capsys.readouterr().out
     assert "pytest exited 4" in out
+
+
+def test_verdict_names_the_suite_that_ran_when_no_failed_line_parses():
+    # `suite` names the file THIS probe ran. It was a literal here before the
+    # sound probe began sharing the decision, and the literal was this
+    # probe's own suite: reused unchanged, the sound probe would have refused
+    # naming a file it never ran.
+    res = hic.verdict(1, [], frozenset({"test_a"}), suite="model/other.py")
+    assert res.outcome == hic.REFUSED
+    assert "no FAILED model/other.py:: line was parsed" in res.reason
+    assert "tools/test_holdout.py" not in res.reason
+
+
+def test_verdict_refuses_to_guess_the_suite():
+    # No default on purpose: a caller that omits `suite` is the input that
+    # defeats the case above (docs/verification-rules.md rule 8), and it must
+    # fail here rather than refuse against the wrong file's name.
+    with pytest.raises(TypeError):
+        hic.verdict(1, [], frozenset({"test_a"}))

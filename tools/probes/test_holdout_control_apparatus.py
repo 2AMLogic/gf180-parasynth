@@ -1,5 +1,5 @@
 """Controls for the apparatus of tools/probes/holdout_injected_controls.py
-(issues #1118 and #1124).
+(issues #1118 and #1124, and the shared verdict's suite, #1400).
 
 The probe measures whether injected defects turn `tools/test_holdout.py` red,
 so the probe itself is the apparatus. Each case builds a throwaway tree (the
@@ -174,6 +174,19 @@ def test_run_alone_still_maps_a_broken_suite_status_to_a_refusal(
     res = hic.run("GATE_OFF")
     assert res.outcome == hic.REFUSED
     assert f"pytest exited {status}" in res.reason
+
+
+def test_run_names_its_own_suite_when_no_failed_line_parses(monkeypatch, tmp_path):
+    """The suite became an argument of `verdict()` when the sound probe began
+    sharing it (#1400), so this probe hands it its own at the call site. That
+    is a literal again, and a wrong one is invisible in every case above: the
+    reason is the only place a refusal is spoken, and it would name a file
+    this probe never ran."""
+    test_holdout, conftest, _status = BROKEN["error_only"]
+    monkeypatch.setattr(hic, "ROOT", _tree(tmp_path, test_holdout, conftest))
+    res = hic.run("GATE_OFF")
+    assert res.outcome == hic.REFUSED
+    assert "no FAILED tools/test_holdout.py:: line was parsed" in res.reason
 
 
 def test_a_missing_injection_point_keeps_its_own_distinct_refusal(

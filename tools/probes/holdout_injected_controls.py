@@ -52,7 +52,7 @@ tail.
 
 And a red is not THIS injection's red unless the tests that went red include
 the ones recorded above (issue #1136). `EXPECTED` holds each control's recorded
-names as data, and `_verdict()` REFUSES a red that is disjoint from them: the
+names as data, and `verdict()` REFUSES a red that is disjoint from them: the
 unmutated tree was green, yet the control's red fell entirely elsewhere (a
 flaky or order-dependent test, a defect that arose after the baseline copy), so
 "fired" would be a claim about some other defect. Overlap is enough -- a
@@ -60,6 +60,14 @@ superset is still FIRED and the unexpected extras are printed as information,
 so a newly added test does not make the probe noisy; only a renamed-away or
 empty expected set refuses. Exact-set pinning was rejected as coupling the
 probe to every test rename.
+
+`verdict()` is the one decision for two probes (issue #1400).
+`model/probe_injection_discrimination.py` kept its own until then, and it read
+ANY nonzero pytest status as a kill: a suite that raised at collection under
+every mutant printed three kills and exited 0. It now imports this function
+and supplies its own suite and recorded names, so the same three outcomes --
+an expected failure, a survivor, a run that could establish neither -- hold
+for the sound mutants too.
 """
 from __future__ import annotations
 
@@ -141,14 +149,22 @@ def _suite(work: pathlib.Path) -> tuple[int, list[str], str]:
     return out.returncode, failed, out.stdout
 
 
-def _verdict(rc: int, failed: list[str],
-             expected: frozenset[str] = frozenset()) -> Result:
+def verdict(rc: int, failed: list[str],
+            expected: frozenset[str] = frozenset(), *, suite: str) -> Result:
     """pytest's status in this probe's outcome space (#1118): 1 with named
     failures is FIRED, 0 is NO_FIRE, and every other status -- 2 a collection
     error, 4 the path gone, 5 nothing collected -- or 1 with no parseable
     FAILED line is REFUSED naming the status. A red disjoint from `expected` --
     or with no `expected` to compare against -- is REFUSED too (#1136): it is
-    not attributable to the injection."""
+    not attributable to the injection.
+
+    One decision for two probes (#1400):
+    `model/probe_injection_discrimination.py` imports this instead of keeping
+    its own, which read any nonzero status as a kill. `suite` is the test file
+    that ran, as pytest prints it before `::`. It is required and has no
+    default on purpose: this message used to name this probe's suite from a
+    literal, and a second probe reusing it would have refused naming a file it
+    never ran."""
     if rc == 0:
         return Result(NO_FIRE, failed, "pytest stayed green")
     if rc == 1 and failed:
@@ -164,8 +180,8 @@ def _verdict(rc: int, failed: list[str],
         return Result(FIRED, failed, "pytest exited 1")
     if rc == 1:
         return Result(REFUSED, [],
-                      "pytest exited 1 but no FAILED tools/test_holdout.py::"
-                      " line was parsed; nothing was measured")
+                      f"pytest exited 1 but no FAILED {suite}::"
+                      f" line was parsed; nothing was measured")
     return Result(REFUSED, [], f"pytest exited {rc}; nothing was measured")
 
 
@@ -185,7 +201,8 @@ def run(name: str) -> Result:
                           f"skipped")
         target.write_text(new)
         rc, failed, _stdout = _suite(work)
-        return _verdict(rc, failed, EXPECTED.get(name, frozenset()))
+        return verdict(rc, failed, EXPECTED.get(name, frozenset()),
+                       suite="tools/test_holdout.py")
 
 
 def baseline() -> Result:
