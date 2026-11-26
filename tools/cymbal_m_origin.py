@@ -12,8 +12,8 @@ The answer is no, and it is a bound rather than a fit. Everything here is
 arithmetic on the two digitised W14b artifacts plus the committed measurement;
 no candidate is rendered and no kit is changed. It is a probe.
 
-THE ANSWER, and it does not depend on the unresolved inter-band balance
-----------------------------------------------------------------------
+THE ANSWER, and it does not depend on the inter-band balance #396 refused
+-------------------------------------------------------------------------
 For each of the three bands, the documented cascade -- its own band-pass at
 Q 6, its Sallen-Key high-pass, its tone-stage path and the LEVEL stage -- puts
 its energy in M (891-2828 Hz) this far below its energy in Ln (2900-4100 Hz):
@@ -28,10 +28,15 @@ A mix of the three cannot beat the best of them. For positive weights a_b,
     (Sum a_b X_b) / (Sum a_b R_b)  <=  max_b (X_b / R_b)
 
 -- a weighted mediant never exceeds the largest of the ratios it mixes -- so NO
-inter-band balance, including the one §10 leaves unresolved (TONE_K1's `peak_db`,
-9-18 dB uncertain, #396), can put the documented chain's M above **-13.10 dB re
-Ln**, or its Mn above **-30.30 dB**. `bound()` states it and `bound_grid()`
-checks the algebra against a brute-force sweep of the balance.
+inter-band balance can put the documented chain's M above **-13.10 dB re Ln**,
+or its Mn above **-30.30 dB**: the bound holds for every positive mixture
+whatever the absolute levels, so the balance's own state cannot touch it.
+That state is a refusal, not an open question: #396 closed REFUSED
+(2026-09-28) because the swing VCAs' drive levels were not established then,
+and the later schematic read (docs/scorecard/cymbal-369/vca-drive/) put Q16
+and Q17 on one drive node -- there are not three drives to read, and the
+missing factor is not in the VCA section. `bound()` states it and
+`bound_grid()` checks the algebra against a brute-force sweep of the balance.
 
 The recordings, measured over the first second by the same instrument:
 
@@ -140,10 +145,13 @@ TAU_S = {"low": 0.100, "decay": 0.380, "short": 0.020}
 ATTACK_S = 1e-4
 
 # The filter chain's own peak gains put the DECAY band +7.2 dB and the short band
-# +10.0 dB above the low band (§10, "What to implement"). The tone stage then
-# imposes an inter-band balance Figure 9 does NOT resolve, so the sweep spans far
-# past its stated 9-18 dB uncertainty in both directions: a bound that does not
-# bracket the answer is not a bound.
+# +10.0 dB above the low band (§10, "What to implement"). SWEEP_DB is the range
+# this probe exercised for the inter-band balance, wide on both sides of any
+# level the question ever carried: a bound that does not bracket the answer is
+# not a bound. It is deliberately NOT tied to a stated uncertainty -- the 9-18
+# dB this comment used to blame was an artifact of reading all three Figure 9
+# curves at 7.1 kHz when each band's level is set at its own centre (PR #414),
+# and #396 closed REFUSED on the swing VCA drives: a refusal, not a window.
 CHAIN_DB = {"low": 0.0, "decay": 7.2, "short": 10.0}
 SWEEP_DB = (-12.0, -6.0, 0.0, 6.0, 9.0, 12.0, 15.0, 18.0, 24.0, 30.0)
 
@@ -202,9 +210,9 @@ def bound(energies=None, which="ref", bands=("M", "Mn")) -> dict:
 
     For positive weights, (Sum a_b X_b) / (Sum a_b R_b) <= max_b (X_b / R_b): a
     weighted mediant never exceeds the largest ratio it mixes. So the bound is the
-    per-band maximum, and it holds for every inter-band balance -- including the
-    one the reference leaves unresolved, which is what makes this a bound and not
-    a fit."""
+    per-band maximum, and it holds for every inter-band balance, whatever its
+    verdict -- #396's REFUSAL included -- which is what makes this a bound and
+    not a fit."""
     e = energies or band_energies()
     out = {}
     for name in bands:
