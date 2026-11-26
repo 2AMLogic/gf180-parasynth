@@ -413,3 +413,24 @@ def test_live_queue_can_accept_more_events_after_a_drain():
     second = live.schedule(BENCH)
     assert len(second) > len(first)
     assert len([p for p in second if p.w.tag == "gate"]) == 2
+
+
+def test_tom_bend_is_independent_of_the_mode_gain():
+    """Only the two pole words belong in the low tom's bend schedule (#598)."""
+    base = dx.A_MODE + dx.M_LT * dx.MODE_STRIDE
+
+    def bend(gain_word, accent):
+        kit = dict(dx.kit_808())
+        kit[base + 2] = gain_word
+        host = sh.MusicHost(kit=list(kit.items()))
+        host.load()
+        assert host.image[base + 2] == gain_word
+        host.hits([(5000, dx.LT, accent)])
+        writes = [(w.frame, w.addr, w.data) for w in host.w if w.tag == "tom-bend"]
+        assert len(writes) == 14
+        assert {addr for _, addr, _ in writes} == {base, base + 1}
+        return writes
+
+    baseline = bend(0, 1.0)
+    assert baseline == bend(65535, 1.0)
+    assert baseline != bend(0, 2.0)
