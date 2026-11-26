@@ -309,6 +309,26 @@ class OurLadder:
 # ===========================================================================
 # the plugin rigs
 # ===========================================================================
+def render_midi_note(processor, engine, name, note, velocity, start, duration,
+                     seconds):
+    """Deliver one MIDI note to a DawDreamer PluginProcessor, render, and read
+    the first channel back: finite-checked (#134) and with the plugin's own
+    latency removed. Returns mono float64.
+
+    Shared by `_Plugin.render` and `tools/render_miniv4_suite.py` so the host
+    call that delivers the note exists once (#1403): the Mini V4 adapter called
+    `add_note`, which DawDreamer's PluginProcessor does not have, and its test
+    passed because the fake rig sat above that call. The caller keeps its own
+    timing -- note, velocity, start and duration are explicit."""
+    processor.clear_midi()
+    processor.add_midi_note(note, velocity, start, duration)
+    engine.render(seconds)
+    y = np.asarray(engine.get_audio())[0].astype(np.float64)
+    am.require_finite(y, f"{name}'s {seconds:.3f} s render")
+    lat = processor.get_latency_samples()
+    return y[lat:] if lat else y
+
+
 class _Plugin:
     """One dawdreamer engine holding one plugin, with an optional audio input.
     Parameters are set by index; every index used here was found by name from
@@ -487,14 +507,9 @@ class _Plugin:
             buf[0, :m] = x[:m]
             buf[1, :m] = x[:m]
             self.pb.set_data(buf)
-        self.p.clear_midi()
-        self.p.add_midi_note(self.note, 100, note_at, seconds if note_len is None else note_len)
-        self.eng.render(seconds)
-        a = self.eng.get_audio()
-        y = a[0].astype(np.float64)
-        am.require_finite(y, f"{self.name}'s {seconds:.3f} s render")
-        lat = self.p.get_latency_samples()
-        return y[lat:] if lat else y
+        return render_midi_note(self.p, self.eng, self.name, self.note, 100,
+                                note_at, seconds if note_len is None else note_len,
+                                seconds)
 
     def silence_state(self, seconds=0.4):
         """Render silence with no note so the filter state decays before the
