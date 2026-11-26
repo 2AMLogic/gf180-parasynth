@@ -347,22 +347,21 @@ def test_render_note_refuses_a_non_finite_host_buffer():
     audio = np.zeros((2, 50), dtype=np.float32)
     audio[0, 7] = np.nan
     rig = _shipping_rig([], audio)
-    with pytest.raises(Exception):
+    with pytest.raises(audio_measure.NonFiniteAudio, match=r"\(1 NaN, 0 Inf; first at index 7\)"):
         rig.render_note(60, 0.1)
 
 
 def test_the_old_method_name_fails_at_note_dispatch():
     """Injected-bug control: a processor that offers only `add_note` (the
     pre-#1403 call) must NOT satisfy the adapter."""
-    class OldNameOnly(_DawProcessor):
-        add_midi_note = None
-
-        def add_note(self, *a):
-            self.log.append(("add_note",) + a)
-
     log = []
     rig = _shipping_rig(log, np.ones((2, 10), dtype=np.float32))
-    rig.p = OldNameOnly(log)
-    with pytest.raises(TypeError):
+    rig.p = types.SimpleNamespace(
+        clear_midi=rig.p.clear_midi,
+        add_note=lambda *args: log.append(("add_note", *args)),
+        get_latency_samples=rig.p.get_latency_samples,
+    )
+    with pytest.raises(AttributeError) as exc:
         rig.render_note(60, 0.1)
-    assert ("add_note", 60, 100, 0.02, 0.1) not in log
+    assert exc.value.name == "add_midi_note"
+    assert log == [("clear_midi",)]
