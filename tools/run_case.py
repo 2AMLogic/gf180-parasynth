@@ -106,8 +106,8 @@ mistaken for it.
 A CLEAN run is the one those refusals cannot cover. Until #1422 both mono
 writers chose the published WAV themselves and were never told the results
 directory, so a run given a `--results` of its own still wrote the file the
-board's row names. A clean run's model WAV now follows its record like every
-other artefact (`model_wav_destination`), and a `--results` whose WAV would BE
+board's row names. A clean off-board run's model WAV now goes beside the JSON,
+including under model-twin/ when the case has an RTL anchor. A run whose WAV would be
 the published one -- `build/scorecard` for an M5 case, its own directory for
 M1A -- is refused before anything runs, with the case, the published WAV and
 the colliding destination on stderr.
@@ -3472,7 +3472,7 @@ RUBRIC_CHANGE = "rubric change (measurement-version change), not a sound change"
 MODEL_TWIN_DIR = "model-twin"
 
 
-def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
+def result_destination(dest: pathlib.Path, res: dict, *, prepare: bool = True) -> pathlib.Path:
     """Where this result may be written, which is not always where it was asked
     to go.
 
@@ -3487,7 +3487,9 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
 
     So an anchor is kept and the model result is written beside it under
     `results/model-twin/`, with the swap announced. Neither is discarded, and
-    `tools/compare_ensemble_candidate.py` is the tool that compares them."""
+    `tools/compare_ensemble_candidate.py` is the tool that compares them.
+    During WAV preflight, prepare=False selects the same path without
+    creating the directory or announcing a JSON write."""
     if res.get("engine") == "integrated-rtl" or not dest.is_file():
         return dest
     try:
@@ -3506,6 +3508,8 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
     if held.get("engine") != "integrated-rtl":
         return dest
     twin = dest.parent / MODEL_TWIN_DIR / dest.name
+    if not prepare:
+        return twin
     twin.parent.mkdir(parents=True, exist_ok=True)
     print(f"{dest.stem}: {dest.name} holds an integrated-rtl measurement "
           f"({held.get('source_commit', '?')}); this {res.get('engine')} result is written to "
@@ -3623,8 +3627,9 @@ def model_wav_destination(results_dir: pathlib.Path, kind: str, case_id: str, *,
     or `None` when the run writes none.
 
     On the board it is the published WAV, so a default run keeps the path its
-    published record names. Anywhere else it is beside the record under the
-    same file name, resolved, so a directory outside the checkout is stated
+    published record names. Anywhere else it is beside the selected model
+    record (under model-twin/ for an RTL anchor) under the same file name,
+    so a directory outside the checkout is stated
     absolutely (`stated_path`) -- except when "beside the record" IS the
     published WAV. `--results build/scorecard` (M5B) and `--results
     docs/scorecard/mono-m1a-miniv3` (M1A) are legal spellings of exactly that:
@@ -3645,12 +3650,19 @@ def model_wav_destination(results_dir: pathlib.Path, kind: str, case_id: str, *,
         return None
     if on_board(results_dir):
         return published
-    dest = results_dir.resolve() / published.name
+    # main creates --results before measuring. Inspect its eventual directory
+    # even if a component before ".." does not exist yet during preflight.
+    directory = results_dir.resolve()
+    record = result_destination(directory / f"{case_id}.json", {"engine": ENGINE},
+                                prepare=False)
+    dest = record.parent.resolve() / published.name
     if _names_one_file(dest, published):
-        colliding = pathlib.Path(os.path.abspath(results_dir)) / published.name
+        # Keep symlink/.. in this spelling: collapsing it lexically can name
+        # a different file from the one the filesystem actually reached.
+        candidate = results_dir.absolute() / record.parent.relative_to(directory) / published.name
         raise Refused(f"{case_id}: --results would put this run's model WAV at "
-                      f"{stated_path(colliding)}, which is the published WAV "
-                      f"{stated_path(published)} that "
+                      f"{stated_path(candidate)}, which is the published WAV "
+                      f"{stated_path(published.resolve())} that "
                       f"{stated_path(RESULTS / f'{case_id}.json')} names; "
                       "pass another --results")
     return dest

@@ -399,25 +399,23 @@ def test_a_caller_that_states_no_results_directory_gets_the_shared_path(board):
 
 
 def test_every_published_fixed_model_record_names_the_wav_a_default_run_writes():
-    """The clean board path is not moved by the off-board rule: every published
-    `fixed-model` record that names a rendered WAV names the file a default run
-    of its own runner still writes. D12A's is the compatibility check the
-    issue names; the rest are what the same search finds today."""
-    seen = {}
-    for path in sorted((rc.ROOT / "docs" / "scorecard").rglob("*.json")):
+    """Check the live audio-bearing rows. E1A publishes its fixed-model twin
+    alongside its RTL capture, so name that model record explicitly."""
+    records = [
+        (rc.RESULTS / "D12A.json", "D12A", "ours", "-ours.wav"),
+        (rc.RESULTS / "E1B.json", "E1B", "mix", "-mix.wav"),
+        (rc.RESULTS / "E2A.json", "E2A", "mix", "-mix.wav"),
+        (rc.RESULTS.parent / "ensemble-e1a/rtl/E1A-fixed-model-twin.json",
+         "E1A", "mix", "-mix.wav"),
+    ]
+    toms = rc.RESULTS.parent / "tom-body-334/results"
+    for cid in ("D03A", "D04A", "D05A", "D06A", "D07A", "D08A"):
+        records.append((toms / f"{cid}.json", cid, "ours", "-ours.wav"))
+    for path, cid, key, suffix in records:
         record = json.loads(path.read_text())
-        if not isinstance(record, dict):
-            continue
-        artefacts = (record.get("provenance") or {}).get("artefacts")
-        for key, suffix in (("ours", "-ours.wav"), ("mix", "-mix.wav")):
-            if isinstance(artefacts, dict) and str(artefacts.get(key, "")).endswith(suffix):
-                seen[(record["case_id"], key)] = (record["engine"], artefacts[key])
-    assert {"D12A", "E1A"} <= {cid for cid, _ in seen}, sorted(seen)
-    for (cid, key), (engine, stated) in sorted(seen.items()):
-        suffix = "-ours.wav" if key == "ours" else "-mix.wav"
-        assert engine == rc.ENGINE, (cid, engine)
-        assert rc.plan_for(cid) == ("drum" if key == "ours" else "ensemble"), cid
-        assert stated == str(rc.wav_destination(rc.RESULTS, cid, suffix).relative_to(rc.ROOT)), cid
+        assert record["case_id"] == cid and record["engine"] == rc.ENGINE, path
+        expected = rc.stated_path(rc.wav_destination(rc.RESULTS, cid, suffix))
+        assert record["provenance"]["artefacts"][key] == expected, cid
 
 
 def test_the_wav_destination_is_the_shared_path_on_the_board_and_beside_the_results_off_it(

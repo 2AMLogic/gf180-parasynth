@@ -31,8 +31,7 @@ ownership and not about a synthesizer:
 
   * M1A's render (`render_mono_fx` as its runner calls it) is a synthetic
     three-note phrase, the shape `tools/test_mono_m1a_score.py` gives the same
-    seam. The real one is slow where M5B's is not, and this file runs M1A
-    eight times;
+    seam. The real one is slow and this file runs M1A repeatedly;
   * M1A's estimator qualification (`qualify_envelope_basis`), the known-answer
     suite its runner re-derives on every run before the estimator may gate a
     case. Its subject is the estimator and not a destination, as `base_check`'s
@@ -267,12 +266,8 @@ def _off_board(board, monkeypatch, trial: pathlib.Path, cid: str, key: str,
 
 
 def _spellings(board, key: str, name: str) -> list[tuple[str, str, pathlib.Path]]:
-    """Five ways to say "the published WAV" to `--results`, each with the
-    directory the refusal must name it by: the published directory itself,
-    by a relative spelling through a symlink from another working directory,
-    and with `.` and `..` in it; then two other directories whose file of that
-    name IS the published WAV, by symlink and by hard link. Only resolution can
-    tell the first, fourth and fifth from an ordinary directory."""
+    """Spellings of the published directory or a link to its WAV, with the
+    candidate directory that the refusal must identify."""
     published = board[key]
     relative = {"shared": "build/scorecard",
                 "m1a": "docs/scorecard/mono-m1a-miniv3"}[key]
@@ -285,18 +280,25 @@ def _spellings(board, key: str, name: str) -> list[tuple[str, str, pathlib.Path]
     hard = board["base"] / "hard"
     hard.mkdir()
     os.link(published / name, hard / name)
+    hop = board["cwd"] / "hop"
+    board["board"].mkdir()
+    hop.symlink_to(board["board"], target_is_directory=True)
+    via_parent = pathlib.Path("hop") / ".." / published.name
+    assert via_parent.resolve() == published
+    assert pathlib.Path(os.path.abspath(via_parent)) != published
     return [(f"relative, through a symlink ({relative}, from another cwd)", relative, through),
             ("the directory itself", str(published), published),
-            ("with . and .. in it", str(published / "." / ".." / published.name / "."), published),
+            ("with .. in it", str(published / ".." / published.name), published / ".." / published.name),
             ("a symlink to the published WAV", str(soft), soft),
-            ("a hard link to the published WAV", str(hard), hard)]
+            ("a hard link to the published WAV", str(hard), hard),
+            (".. after a symlink", str(via_parent), board["cwd"] / via_parent)]
 
 
 @pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
 def test_a_clean_run_cannot_put_its_wav_on_the_published_path(
         board, monkeypatch, capsys, cid, kind, key, name, tagged):
     """The input #1414 could not have, through the CLI: a CLEAN run whose
-    `--results` names its own published directory, five ways. Each is refused
+    `--results` names its own published WAV several ways. Each is refused
     before anything is measured, says which case, which published WAV and which
     destination, and leaves the sentinel and the directory as they were."""
     published = board[key] / name
@@ -308,8 +310,8 @@ def test_a_clean_run_cannot_put_its_wav_on_the_published_path(
         err = capsys.readouterr().err
         assert code == 2, (label, err)
         assert "REFUSED" in err and cid in err and REFUSAL in err, (label, err)
-        assert rc.stated_path(published) in err, (label, err)              # the published WAV
-        assert rc.stated_path(said / name) in err, (label, err)             # the destination
+        assert f"at {rc.stated_path(said / name)}," in err, (label, err)
+        assert f"published WAV {rc.stated_path(published.resolve())} " in err, (label, err)
         # the board row that names the published WAV
         assert rc.stated_path(rc.RESULTS / f"{cid}.json") in err, (label, err)
         assert published.read_bytes() == before, label
@@ -333,6 +335,54 @@ def test_a_clean_off_board_run_writes_its_wav_beside_its_record(
     assert obs["stated"] == str(trial / name)
     assert obs["record"]["audio"] == obs["stated"]
     assert sorted(p.name for p in trial.iterdir()) == sorted([f"{cid}.json", name])
+
+
+@pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
+def test_off_board_rtl_anchor_keeps_the_model_wav_with_its_twin(
+        board, monkeypatch, tmp_path, cid, kind, key, name, tagged):
+    published = board[key] / name
+    before = _seed(published)
+    # M1A's requested directory would collide if the WAV ignored the twin.
+    trial = published.parent if cid == "M1A" else tmp_path
+    anchor = trial / f"{cid}.json"
+    if cid == "M5B":
+        shutil.copyfile(rc.ROOT / "docs/scorecard/mono-pulse-2x/rtl/M5B.json", anchor)
+    else:
+        anchor.write_text(json.dumps({"case_id": cid, "engine": "integrated-rtl"}))
+    anchor_bytes = anchor.read_bytes()
+    _cli(board, monkeypatch, cid, "--results", str(trial))
+    assert anchor.read_bytes() == anchor_bytes
+    record_path = trial / "model-twin" / anchor.name
+    assert record_path.is_file(), "expected a model JSON beside the preserved anchor"
+    record = json.loads(record_path.read_text())
+    assert _measured(record), record.get("note")
+    wav = record_path.with_name(name)
+    assert record["audio"] == record["provenance"]["artefacts"]["ours"]
+    assert _resolved(record["audio"]) == wav
+    assert _is_render(wav, _rendered(cid))
+    assert list(trial.glob("*.wav")) == ([published] if trial == published.parent else [])
+    assert published.read_bytes() == before
+
+
+@pytest.mark.parametrize("through_missing_parent", [False, True], ids=["direct", "missing-parent"])
+def test_collision_in_model_twin_refuses_before_render(
+        board, monkeypatch, tmp_path, capsys, through_missing_parent):
+    published = board["m1a"] / "m1a-model.wav"
+    before = _seed(published)
+    anchor = tmp_path / "M1A.json"
+    anchor_bytes = b'{"case_id":"M1A","engine":"integrated-rtl"}'
+    anchor.write_bytes(anchor_bytes)
+    twin = tmp_path / "model-twin"
+    twin.symlink_to(published.parent, target_is_directory=True)
+    trial = tmp_path / "missing" / ".." if through_missing_parent else tmp_path
+    assert _cli(board, monkeypatch, "M1A", "--results", str(trial)) == 2
+    err = capsys.readouterr().err
+    assert REFUSAL in err and str(trial / twin.name / published.name) in err
+    assert board["renders"] == 0
+    assert anchor.read_bytes() == anchor_bytes
+    assert published.read_bytes() == before
+    assert not (twin / anchor.name).exists()
+    assert not (tmp_path / "missing").exists()
 
 
 @pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
@@ -489,29 +539,38 @@ def test_the_model_wav_destination_is_the_published_path_on_the_board_and_beside
     assert rc.model_wav_destination(m1a.parent, "mono-bass", "M1A", keep_audio=False) is None
 
 
-def test_every_published_mono_record_names_the_wav_a_default_run_writes():
-    """The clean board path is not moved by the off-board rule: every published
-    record of a mono family case that names a `-model.wav` names the file a
-    default run of its own runner still writes. M1A's and M5B's are the two
-    the issue names; the search is over every record, so a new one is covered
-    the day it lands. (M5A's row is an integrated-RTL capture and names other
-    files, so it is not among them.)"""
-    seen = {}
-    for path in sorted((rc.ROOT / "docs" / "scorecard").rglob("*.json")):
+def _check_published_mono_wavs():
+    """The live rows and the archived M5 model rows each carry their own path."""
+    repro = rc.RESULTS.parent / "m5-artifacts-333/repro"
+    for cid, path in (("M1A", rc.RESULTS / "M1A.json"), ("M5B", rc.RESULTS / "M5B.json"),
+                      ("M5A", repro / "model-M5A.json"), ("M5B", repro / "model-M5B.json")):
         record = json.loads(path.read_text())
-        if not isinstance(record, dict):
-            continue
-        kind = rc.plan_for(str(record.get("case_id", "")))
-        if kind not in ("mono", "mono-bass"):
-            continue
-        ours = str(((record.get("provenance") or {}).get("artefacts") or {}).get("ours", ""))
-        if ours.endswith("-model.wav"):
-            seen[record["case_id"]] = (record, ours)
-    assert {"M1A", "M5B"} <= set(seen), sorted(seen)
-    for cid, (record, ours) in sorted(seen.items()):
+        assert record["case_id"] == cid
         assert record["engine"] == rc.ENGINE, cid
-        assert ours == record["audio"], cid
-        assert ours == rc.stated_path(rc.published_model_wav(rc.plan_for(cid), cid)), cid
+        expected = rc.stated_path(rc.model_wav_destination(rc.RESULTS, rc.plan_for(cid), cid))
+        assert record["audio"] == record["provenance"]["artefacts"]["ours"] == expected, cid
+
+
+def test_every_published_mono_record_names_the_wav_a_default_run_writes():
+    _check_published_mono_wavs()
+
+
+def test_archived_m5b_cannot_mask_a_renamed_live_wav(tmp_path, monkeypatch):
+    results = tmp_path / "results"
+    results.mkdir()
+    for cid in ("M1A", "M5B"):
+        shutil.copyfile(rc.RESULTS / f"{cid}.json", results / f"{cid}.json")
+    archive = "m5-artifacts-333"
+    (tmp_path / archive).symlink_to(rc.RESULTS.parent / archive, target_is_directory=True)
+    monkeypatch.setattr(rc, "RESULTS", results)
+    _check_published_mono_wavs()
+
+    live = results / "M5B.json"
+    row = json.loads(live.read_text())
+    row["audio"] = row["provenance"]["artefacts"]["ours"] = "build/scorecard/M5B-renamed.wav"
+    live.write_text(json.dumps(row))
+    with pytest.raises(AssertionError, match="M5B"):
+        _check_published_mono_wavs()
 
 
 def test_a_caller_that_states_no_destination_gets_the_published_path(board, monkeypatch):

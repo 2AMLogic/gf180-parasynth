@@ -255,11 +255,11 @@ response curves and rendered WAVs live; the control's curve or WAV goes beside
 its own `--results` (#1412, #1414). A control's output is not evidence about
 the instrument.
 
-A clean mono run is the case no control covers: its model WAV used to go to
-the published path whatever `--results` said. It now follows its record like
-the others, and a `--results` whose WAV would be the published one —
-`build/scorecard` for an M5 case, `docs/scorecard/mono-m1a-miniv3` for M1A —
-is refused with exit 2 before anything is measured (#1422).
+A clean mono run keeps the published WAV path on the board. With an off-board
+`--results`, it writes the WAV beside its model JSON. If the directory already
+holds an integrated-RTL record for that case, both model files go into
+`model-twin/` and the RTL record stays in place. If the selected WAV path
+would overwrite the published WAV, the run exits 2 before measuring (#1422).
 
 Three more cover the frozen profile, and the last is the one that makes
 "frozen" mean anything:
