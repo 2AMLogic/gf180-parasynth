@@ -256,6 +256,77 @@ def test_the_fixed_model_runner_keeps_an_off_board_curve_with_its_results(
     assert (board["shared"] / MODEL_CURVE).read_bytes() == clean_curve
 
 
+def _relative_candidate(board):
+    """The fixture's isolated directory as a caller spells it on the command
+    line: relative, so the working directory decides where it lands (#1415)."""
+    return (board["base"] / "candidate").relative_to(rc.ROOT)
+
+
+def test_a_relative_results_directory_inside_the_checkout_states_its_curve_relative_to_it(
+        board, monkeypatch):
+    """#1415, run from the checkout: a relative `--results` is a directory
+    inside it, so `stated_path`'s contract states its curve relative to the
+    checkout -- as the RTL scorer states its own -- and the record travels
+    with the checkout. Checked on the LITERAL string: resolved before
+    comparing, the absolute spelling that was the defect passes."""
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(rc.ROOT)
+    relative = _relative_candidate(board)
+    inside = rc.ROOT / relative
+    # the premise of "inside" -- no symlink on the way -- and that nothing
+    # wrote there before this run, so what is there afterwards is this run's
+    assert inside.resolve() == inside
+    assert not inside.exists()
+
+    assert rc.main(["F1A", "--results", str(relative)]) == 0
+    record = json.loads((inside / "F1A.json").read_text())
+    stated = record["provenance"]["artefacts"]["ours"]
+    assert stated == str(relative / MODEL_CURVE)
+    assert record["audio"].endswith(f"ours {stated}")
+    # the name opens, relative to the checkout, onto the curve written beside
+    # the record: the directory's other file, carrying the record's engine,
+    # profile and cutoff
+    assert sorted(p.name for p in inside.iterdir()) == [MODEL_CURVE, "F1A.json"]
+    curve, config = json.loads(_curve_named_by(record)), record["provenance"]["config"]
+    assert (curve["engine"], curve["engine_profile"], curve["cut_hz"]) == (
+        record["engine"], config["engine_profile"], config["cut_hz"])
+
+    # a later run into the same directory leaves the same name on its own
+    # record, with its OWN curve under it: the name follows the record's run,
+    # not whichever file was there first
+    clean_curve = _curve_named_by(record)
+    assert rc.main(["F1A", "--inject", "REF_CORNER_2X", "--results", str(relative)]) == 1
+    control = json.loads((inside / "F1A.json").read_text())
+    assert control["INJECTED_CONTROL"] == "REF_CORNER_2X"
+    assert control["provenance"]["artefacts"]["ours"] == stated
+    assert _curve_named_by(control) != clean_curve
+
+
+def test_a_relative_results_directory_outside_the_checkout_stays_with_its_caller(
+        board, monkeypatch, tmp_path):
+    """#1415, from a working directory outside the checkout -- and the input
+    that defeats the obvious fix. `ROOT / outdir` is the RTL scorer's rule and
+    was this issue's first suggestion; applied to this CLI it would move
+    another caller's files into a checkout they are not standing in. The same
+    relative spelling puts BOTH files under the working directory, as before,
+    and the record then names its curve absolutely."""
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(tmp_path)
+    assert not tmp_path.is_relative_to(rc.ROOT)
+    relative = _relative_candidate(board)
+
+    assert rc.main(["F1A", "--results", str(relative)]) == 0
+    there = tmp_path / relative
+    assert sorted(p.name for p in there.iterdir()) == [MODEL_CURVE, "F1A.json"]
+    record = json.loads((there / "F1A.json").read_text())
+    stated = record["provenance"]["artefacts"]["ours"]
+    assert pathlib.Path(stated).is_absolute()
+    assert stated == str(there / MODEL_CURVE)
+    assert len(_gains(_curve_named_by(record))) == len(GRID)
+    # and nothing of the run reached the checkout under the same spelling
+    assert not (board["base"] / "candidate").exists()
+
+
 def test_every_published_f1_row_names_the_curve_a_default_run_of_its_engine_writes():
     """The clean board path is not moved by the off-board rule: each published
     F1 row names the file a default run of its own engine writes."""
