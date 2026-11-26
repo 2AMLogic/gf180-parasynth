@@ -8,6 +8,24 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 ### 2026-11-25
 
+- **Issue #1302 (closed)**: Honor --image in fpga/play_song.py render instead of silently rendering R1 for --image r2
+- **PR #1310**: fix: honor --image in play_song render (r2 uses pulse_2x)
+- **Issue #1329 (closed)**: gate_calibrate/gate_between: a REFUSED decision still exits 0, next to the branch that now exits 2
+- **PR #1333**: fix: gate CLIs exit REFUSED (2) when the decision is REFUSED
+- **Issue #1319 (closed)**: gate_between table labels a perfect render with worst ratio 0 as “no render”
+- **PR #1321**: fix: show a zero worst-ratio render in the gate_between table instead of 'no render'
+- **Issue #1289 (closed)**: max() accumulators elsewhere drop a NaN the same way #1284's separator did
+- **PR #1291**: fix: refuse nonfinite readings in two max() accumulators
+- **Issue #1338 (closed)**: gate_calibrate: evidence_refusal's new 'rows' guard arm cannot fire through calibrate() (regroup dereferences rows first)
+- **Issue #1306 (closed)**: gate_calibrate: a non-UTF-8 index or a table without `missing` raises out of calibrate() instead of refusing
+- **PR #1324**: fix: refuse on non-UTF-8 index or table lacking 'missing' instead of raising
+- **Issue #1331 (closed)**: Upstream (rjwalters/loom): config-resolver.sh jq --argjson exceeds MAX_ARG_STRLEN, breaking create-issue.sh on this host
+- **Issue #1325 (closed)**: create-issue.sh is broken on this host: config-resolver.sh exceeds jq's per-argument limit (upstream, needs operator to forward)
+- **Issue #1323 (closed)**: record_refusal: a 1-row-per-sound record still calibrates (the blind spot #1298 discloses)
+- **Issue #1297 (closed)**: fpga/measure_mac_midi_latency.py --help needs NumPy it never uses (same class as #1282)
+- **PR #1299**: fix: defer NumPy-pulling imports in the Mac latency probe so --help works
+- **Issue #1301 (closed)**: A complete sound set with empty per-sound tables still calibrates on one sound's evidence (rule-8 sibling of #1296)
+- **PR #1305**: fix: refuse calibration on incomplete per-sound evidence (index-backed)
 - **PR #1264**: ci: gate default-config synth mutants behind a clean default verify_synth_top run
 - **PR #1279**: fix: refuse incomplete 808 neighbour WAV sets in gate calibration
 - **Issue #1315 (closed)**: create-issue.sh is dead on hosts whose defaults.json exceeds 128 KiB (config-resolver passes tiers as argv) — forward to rjwalters/loom

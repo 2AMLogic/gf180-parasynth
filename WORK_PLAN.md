@@ -3,13 +3,12 @@
 Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sounding mono Moog-like synth and complete 808 kit. Lifecycle labels describe workflow, not acoustic acceptance. Preserve the recorded pulse2x operator override and qualify improvements on untouched conditions before claiming delivery. As-of date: the generated region below is as current as its own last change — `git log --no-patch -1 --format='%h %cs' -L '/^<!-- guide:plan-body:start -->$/,/^<!-- guide:plan-body:end -->$/:WORK_PLAN.md' origin/main` — which neither a declined Guide regeneration nor a docs-only commit elsewhere in this file advances.
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-25T11:11:00Z (snapshot; compare against live labels)_
+_Generated: 2026-11-25T21:16:04Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`).
 
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper
-- **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches
 
 ## Very Important
 
@@ -35,7 +34,6 @@ Human-approved issues (`loom:issue`) ready for implementation — excluding held
 - **#306**: uart_host: live held-note hold overshoots the requested 1920 frames by ~1235 frames (~26 ms)
 - **#325**: Consolidated physical setup session sheet (R0 first, then R1)
 - **#372**: M5 phrase stimulus lands later notes up to 0.56 ms early (with or without override)
-- **#1309**: Refuse incomplete Fischer reference sets in the conga body-spread report
 
 ## In Progress
 
@@ -50,36 +48,39 @@ Issues currently being built (`loom:building`).
 - **#947**: Atomic-write remainder: 16 confirmed tracked JSON records across 14 modules
 - **#949**: check_doc_claims: a grep= marker whose only match is its own marker line grades OK, guarding nothing
 - **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal
-- **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin
 - **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow
-- **#1289**: max() accumulators elsewhere drop a NaN the same way #1284's separator did
 - **#1296**: calibrate accepts a one-sound table that the full corpus refuses (the input that survives #1294's guard)
-- **#1297**: fpga/measure_mac_midi_latency.py --help needs NumPy it never uses (same class as #1282)
-- **#1301**: A complete sound set with empty per-sound tables still calibrates on one sound's evidence (rule-8 sibling of #1296)
-- **#1302**: Honor --image in fpga/play_song.py render instead of silently rendering R1 for --image r2
 - **#1303**: Consolidate model/sound_report.py RELOCKS into LOCK_CHANGELOG so one record feeds the report and --check-locks
+- **#1304**: gate_between.choose_p and Q4 vcov aggregate over sounds that have data (same shape as #1301)
 - **#1307**: gate_calibrate: bar_for's corpus-completeness Refused escapes uncaught, reporting REFUSED as exit 1
+- **#1309**: Refuse incomplete Fischer reference sets in the conga body-spread report
+- **#1316**: worst_column_move's nonfinite guard is defeated by a length mismatch or an empty row
+- **#1317**: gate_calibrate: the stated `missing` residual reaches CALIBRATED (9/9), not just a shifted k
+- **#1328**: loom tool finding: config-resolver.sh dies with jq 'Argument list too long' when the private defaults config exceeds 128 KiB
+- **#1330**: gate_between/tom_conga_gate print a literal (None) for a zero worst ratio at three more sites
+- **#1339**: D10A/D13A line-shape probe computes the floorless fit in both comparison columns
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#1291**: fix: refuse nonfinite readings in two max() accumulators
+- **#954**: fix: route 9 modules' tracked-JSON record writes through write_json_atomic
+- **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches
 - **#1298**: fix: refuse to calibrate a partial-sound tables record
-- **#1299**: fix: defer NumPy-pulling imports in the Mac latency probe so --help works
-- **#1305**: fix: refuse calibration on incomplete per-sound evidence (index-backed)
-- **#1310**: fix: honor --image in play_song render (r2 uses pulse_2x)
 - **#1311**: refactor: fold RELOCKS into LOCK_CHANGELOG and tighten lock-chain checks
-- **#1312**: fix: gate_calibrate refuses with exit 2 when an old-bar neighbour WAV is missing
+- **#1320**: fix: refuse lost v2 pool and Q4 validation voices against index
+- **#1322**: fix: refuse an incomplete Fischer conga set instead of shrinking the spread
+- **#1326**: probe: random take loss reaches CALIBRATED in 66/5000 seeded trials
+- **#1332**: docs: record config-resolver argv-limit finding as unfiled upstream defect
+- **#1340**: fix: distinguish pedestal and floorless fits in the partial-balance probe
+- **#1341**: fix: refuse empty or unequal band-share rows in the bass-drum probe
 
 ## Approved (Awaiting Merge)
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#1064**: ci: route the nine apt dependency steps through a retry-wrapped helper *(held)* — linked issue #1062
-- **#1213**: fix: gate bare injected controls on clean baselines; normalise relative --outdir in ladder/modal benches *(held)* — linked issue #1199
 - **#1227**: fix(nightly): gate the ctl and synth_top mutant steps on a clean run — linked issue #1222
-- **#1264**: ci: gate default-config synth mutants behind a clean default verify_synth_top run — linked issue #1221
 
 ## Proposed
 
@@ -146,14 +147,14 @@ Issues carrying `loom:curated`.
 - **#1110**: Judge docs-only fast path is unreachable on this host: its base-repo read uses a gh --json field this gh 2.102.0 rejects *(curated)* *(held)*
 - **#1148**: rtl-full step 8 is red on main: M5A filter2x SPI-to-I2S diverges from the model in 815424 of 1305549 frames (62%) *(curated)* *(held)*
 - **#1199**: Pair clean baselines with the bare injected controls outside make controls (nightly.yml job, verify-full row) and normalise relative --outdir in verify_ladder/verify_modal *(curated)*
-- **#1221**: rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin *(curated)*
 - **#1222**: nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow *(curated)*
-- **#1289**: max() accumulators elsewhere drop a NaN the same way #1284's separator did *(curated)*
 - **#1296**: calibrate accepts a one-sound table that the full corpus refuses (the input that survives #1294's guard) *(curated)*
-- **#1297**: fpga/measure_mac_midi_latency.py --help needs NumPy it never uses (same class as #1282) *(curated)*
-- **#1301**: A complete sound set with empty per-sound tables still calibrates on one sound's evidence (rule-8 sibling of #1296) *(curated)*
+- **#1304**: gate_between.choose_p and Q4 vcov aggregate over sounds that have data (same shape as #1301) *(curated)*
 - **#1307**: gate_calibrate: bar_for's corpus-completeness Refused escapes uncaught, reporting REFUSED as exit 1 *(curated)*
 - **#1309**: Refuse incomplete Fischer reference sets in the conga body-spread report *(curated)*
+- **#1317**: gate_calibrate: the stated `missing` residual reaches CALIBRATED (9/9), not just a shifted k *(curated)*
+- **#1328**: loom tool finding: config-resolver.sh dies with jq 'Argument list too long' when the private defaults config exceeds 128 KiB *(curated)*
+- **#1330**: gate_between/tom_conga_gate print a literal (None) for a zero worst ratio at three more sites *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -178,13 +179,13 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 2 |
+| Operator merge-risk holds | 1 |
 | Very important | 1 |
 | Important | 5 |
-| Ready (`loom:issue`, net of holds/building/merge-pending) | 5 |
-| In Progress (`loom:building`) | 18 |
-| PRs awaiting review | 7 |
-| Approved PRs awaiting merge | 4 |
+| Ready (`loom:issue`, net of holds/building/merge-pending) | 4 |
+| In Progress (`loom:building`) | 20 |
+| PRs awaiting review | 10 |
+| Approved PRs awaiting merge | 2 |
 | Curated | 69 |
 | Architect / Hermit proposals | 11 |
 | Active epics | 2 |
