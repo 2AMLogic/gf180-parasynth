@@ -34,7 +34,8 @@ against `dut.sample` -- the DUT's own output -- which is circular and cannot
 detect a bit shift, a channel swap or a wrong D. The comparison here is
 against a number the chip had no part in producing.
 
-Exit status, as verify_ladder.py: 0 identical, 1 differed, 2 did not run.
+Exit status: 0 identical, 1 differed, 2 unable to compare (including a capture
+with fewer or more register writes than the host sent).
 
 WHAT THE STIMULUS COVERS, and why each case is here. These are the joins, not
 the blocks; every one of them can be wrong while `verify_voice`, `verify_drums`
@@ -1232,6 +1233,7 @@ LAST: dict = {}
 
 
 def main(argv=None) -> int:
+    LAST.clear()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--inject", default=None); ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--short", action="store_true"); ap.add_argument("--frames", type=int, default=None)
@@ -1500,14 +1502,15 @@ def main(argv=None) -> int:
 
     # ---- what the chip says it received, and when --------------------------
     wr = rows(out["wrs"])
+    LAST.update(writes_seen=len(wr), writes_sent=len(cmds))
     if len(wr) != len(cmds):
-        print(f"verify_synth_top: FAIL -- {len(wr)} writes reached the register port, {len(cmds)} were sent")
-        if not wr: return 2
+        print(f"verify_synth_top: REFUSED -- {len(wr)} writes reached the register port, {len(cmds)} were sent")
+        return 2
     bad = 0
     for (want, got) in zip(cmds, wr):
         if (int(got[1]), int(got[2]), int(got[3]), int(got[4])) != (want[1], want[2], want[3], want[4] & 0xFFFFFFFF):
             bad += 1
-    LAST.update(writes_bad=bad, writes_seen=len(wr), writes_sent=len(cmds))
+    LAST.update(writes_bad=bad)
     if bad:
         print(f"verify_synth_top: FAIL -- {bad} of {len(cmds)} writes arrived corrupted "
               f"(run verify_ctl.py: that is the link, not the datapath)")
@@ -1730,12 +1733,17 @@ def main(argv=None) -> int:
     return 1
 
 
-if __name__ == "__main__":
+def cli() -> int:
     st = main()
-    ap_fail = "--expect-fail" in sys.argv
-    if ap_fail:
+    if "--expect-fail" not in sys.argv:
+        return st
+    if st == 1:
         inj = sys.argv[sys.argv.index("--inject") + 1] if "--inject" in sys.argv else "?"
-        if st == 1:
-            print(f"verify_synth_top: negative control {inj} CAUGHT (comparison failed as required)"); sys.exit(0)
-        print(f"verify_synth_top: NEGATIVE CONTROL NOT CAUGHT (status {st})"); sys.exit(1 if st == 0 else 2)
-    sys.exit(st)
+        print(f"verify_synth_top: negative control {inj} CAUGHT (comparison failed as required)")
+        return 0
+    print(f"verify_synth_top: NEGATIVE CONTROL NOT CAUGHT (status {st})")
+    return 1 if st == 0 else 2
+
+
+if __name__ == "__main__":
+    sys.exit(cli())
