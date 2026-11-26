@@ -34,7 +34,7 @@ Result on this tree, 2026-09-26 -- all three killed, no survivors:
     RED (good)   centroid injection sets nothing:  1 failed, 6 passed
     RED (good)   brightness lock removed:          1 failed, 6 passed
 
-A red is a kill only if it is the INTENDED TESTS' red (issue #1400) -- the
+A red is a kill only if the intended assertion failed (issue #1400) -- the
 third condition, which this probe was not making. It read any nonzero pytest
 status as `RED (good)`, so a suite that raised `ImportError` at collection
 under every mutant printed three kills and exited 0 with no mutant having
@@ -46,13 +46,12 @@ local:
 
   * exit 0 is NO_FIRE -- the suite stayed green with the injection neutered,
     so that mutant SURVIVED and is a hole in the test;
-  * exit 1 whose FAILED lines include a recorded name is FIRED;
+  * exit 1 with a failure at a recorded assertion in its test is FIRED;
   * everything else is REFUSED, with no kill credit: a collection error (2),
     the path gone (4), nothing collected (5), an ERROR-only run, or a red
-    entirely outside the recorded names (#1136) -- "fired" there would be a
-    claim about some other defect.
+    at an apparatus check or outside the recorded tests (#1136).
 
-`EXPECTED` holds the tests that caught each mutant on the real suite, as data.
+`EXPECTED` holds the test and assertion that caught each mutant on the real suite.
 Overlap is enough: a superset still fires and its extras are printed as
 information, so a new test does not make the probe noisy, while a renamed-away
 or empty record refuses rather than passing silently.
@@ -64,17 +63,16 @@ Re-run 2026-11-26 (`4b4c4935` with this change applied, Python 3.12.3, pytest
     RED (good)   centroid injection sets nothing:  1 test(s) caught it
     RED (good)   brightness lock removed:          3 test(s) caught it
 
-Exit 0 if every mutant was killed, 1 if any survived, 2 if nothing could be
-measured. A survivor is a finding about the tree and outranks a refusal, as in
+Exit 0 if every mutant was killed, 1 if any survived, or 2 if any refused
+and none survived. A survivor is a finding about the tree and outranks a refusal, as in
 the holdout probe: a mix exits 1 and names both. Exit 2 is REFUSED when a
 mutant's search text no longer matches (the probe is measuring a file that has
-moved under it), when the unmutated suite is red (issue #1130), or when every
-mutant refused -- the honest answer in each case, not a green.
+moved under it), when the unmutated suite is red (issue #1130), or when any
+mutant refused and none survived -- the honest answer in each case, not a green.
 """
 from __future__ import annotations
 
 import pathlib
-import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -98,37 +96,29 @@ MUTANTS: dict[str, tuple[str, str]] = {
         ''),
 }
 
-#: The tests that caught each mutant on the real suite (2026-11-26, the run
-#: recorded above), as data so that something compares them. Keep in step with
-#: the docstring.
-EXPECTED: dict[str, frozenset[str]] = {
-    "envelope patch is a pass-through": frozenset({
-        "test_the_moving_average_injection_really_replaces_drum_verify_envelope",
-        "test_the_moving_average_injection_ripples_at_the_carrier_it_cannot_resolve",
-        "test_the_moving_average_injection_shortens_the_decay_it_is_asked_to_measure",
-    }),
-    "centroid injection sets nothing": frozenset({
-        "test_the_centroid_injection_switches_which_field_the_brightness_property_reads",
-    }),
-    "brightness lock removed": frozenset({
-        "test_the_brightness_property_is_locked_and_the_lock_is_the_power_weighted_one",
-        "test_the_lock_changelog_agrees_with_the_live_table",
-        "test_check_locks_exits_nonzero_when_the_record_disagrees",
-    }),
+# The failed condition, independent of the test's line number or diagnostic.
+EXPECTED = {
+    "envelope patch is a pass-through": {
+        "test_the_moving_average_injection_really_replaces_drum_verify_envelope":
+            hic.Site("assert np.allclose(got, want)"),
+        "test_the_moving_average_injection_ripples_at_the_carrier_it_cannot_resolve":
+            hic.Site("assert broken_db > clean_db + 3.0"),
+        "test_the_moving_average_injection_shortens_the_decay_it_is_asked_to_measure":
+            hic.Site('assert broken["t20_ms"] < 0.8 * clean["t20_ms"]'),
+    },
+    "centroid injection sets nothing": {
+        "test_the_centroid_injection_switches_which_field_the_brightness_property_reads":
+            hic.Site("assert amplitude > 2.0 * power"),
+    },
+    "brightness lock removed": {
+        "test_the_brightness_property_is_locked_and_the_lock_is_the_power_weighted_one":
+            hic.Site("assert key in sr.LOCKS"),
+        "test_the_lock_changelog_agrees_with_the_live_table":
+            hic.Site("assert problems == []"),
+        "test_check_locks_exits_nonzero_when_the_record_disagrees":
+            hic.Site('assert sr.main(["--check-locks"]) == 0'),
+    },
 }
-
-
-def _suite() -> tuple[int, list[str]]:
-    """`pytest model/test_sound_report.py` on the tree as it stands -- the
-    probe mutates in place: its process status, and the sorted names on its
-    `FAILED model/test_sound_report.py::` lines."""
-    out = subprocess.run([sys.executable, "-m", "pytest", TESTS,
-                          "-q", "--no-header", "--tb=no"],
-                         cwd=ROOT, capture_output=True, text=True)
-    failed = sorted({ln.split("::")[1].split()[0]
-                     for ln in out.stdout.splitlines()
-                     if ln.startswith(f"FAILED {TESTS}::")})
-    return out.returncode, failed
 
 
 def main(argv=None) -> int:
@@ -142,10 +132,12 @@ def main(argv=None) -> int:
         print("The file has changed under the probe. Update the mutants; do not read this as a pass.")
         return 2
 
-    base_rc, _base_failed = _suite()
-    if base_rc != 0:
+    base_rc, failed, output = hic.run_suite(ROOT, TESTS)
+    if base_rc != 0 or failed is None:
         print(f"probe REFUSED -- baseline `pytest {TESTS}` exits {base_rc} on the "
-              "unmutated tree, so a red run under a mutant proves nothing. No mutant was run.")
+              "unmutated tree" + (" without a failure report" if failed is None else "")
+              + ". No mutant was run.")
+        print(output[-hic.TAIL:].rstrip())
         return 2
 
     survivors = []
@@ -153,11 +145,10 @@ def main(argv=None) -> int:
     for name, (old, new) in MUTANTS.items():
         TARGET.write_text(original.replace(old, new, 1))
         try:
-            rc, failed = _suite()
+            rc, failed, _ = hic.run_suite(ROOT, TESTS)
         finally:
             TARGET.write_text(original)
-        recorded = EXPECTED.get(name, frozenset())
-        res = hic.verdict(rc, failed, recorded, suite=TESTS)
+        res = hic.verdict(rc, failed, EXPECTED.get(name, {}), suite=TESTS)
         if res.outcome == hic.REFUSED:
             refused += 1
             print(f"{'REFUSED':24s}  {name}: {res.reason}")
@@ -168,10 +159,8 @@ def main(argv=None) -> int:
             print(f"{'RED (good)':24s}  {name}: {len(res.failed)} test(s) caught it")
             for test in res.failed:
                 print(f"    {test}")
-            extra = sorted(set(res.failed) - recorded)
-            if extra:
-                print(f"    (not in the recorded set, information only: "
-                      f"{', '.join(extra)})")
+            if res.other:
+                print(f"    (other failures, information only: {', '.join(res.other)})")
 
     # A survivor -- a hole in the test -- outranks a refusal, as in the holdout
     # probe: 1 when any mutant survived (a mix included), else 2 when any

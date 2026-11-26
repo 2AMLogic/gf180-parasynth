@@ -111,8 +111,11 @@ def _synthetic_expected(monkeypatch, **override) -> None:
     """Repoint `EXPECTED` at the names `_green_then_red()` produces (the real
     names belong to the real suite, which this tree does not carry); `override`
     replaces one control's set."""
-    exp = {n: frozenset({f"test_{n.lower()}_site_is_present"}) for n in hic.INJECTS}
-    exp.update({k: frozenset(v) for k, v in override.items()})
+    exp = {}
+    for control, (_, pattern, _) in hic.INJECTS.items():
+        site = hic.Site(f"assert re.search({pattern!r}, src)")
+        names = override.get(control, {f"test_{control.lower()}_site_is_present"})
+        exp[control] = {name: site for name in names}
     monkeypatch.setattr(hic, "EXPECTED", exp)
 
 
@@ -186,7 +189,7 @@ def test_run_names_its_own_suite_when_no_failed_line_parses(monkeypatch, tmp_pat
     monkeypatch.setattr(hic, "ROOT", _tree(tmp_path, test_holdout, conftest))
     res = hic.run("GATE_OFF")
     assert res.outcome == hic.REFUSED
-    assert "no FAILED tools/test_holdout.py:: line was parsed" in res.reason
+    assert "no call failure was recorded for tools/test_holdout.py" in res.reason
 
 
 def test_a_missing_injection_point_keeps_its_own_distinct_refusal(
@@ -275,23 +278,19 @@ def test_a_superset_of_the_expected_set_still_fires_and_names_the_extras(
         monkeypatch, tmp_path, capsys):
     """Overlap is enough: an added test, or a recorded name that no longer
     exists beside one that does, must not turn the probe noisy."""
-    monkeypatch.setattr(hic, "EXPECTED", {
-        "GATE_OFF": frozenset({"test_gate_off_site_is_present", "test_gone"}),
-        "CLEAN_OFF": frozenset({"test_clean_off_site_is_present"}),
-        "STALE_OFF": frozenset({"test_stale_off_site_is_present"}),
-    })
+    _synthetic_expected(monkeypatch, GATE_OFF={"test_gate_off_site_is_present", "test_gone"})
     rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, _green_then_red()))
     assert rc == 0, out
     assert "every control fired" in out
 
 
-def test_run_names_extra_failures_as_information_only(monkeypatch, capsys):
-    monkeypatch.setattr(hic, "EXPECTED", {"X": frozenset({"test_a"})})
-    monkeypatch.setattr(hic, "INJECTS", {"X": ("f", "", "")})
-    monkeypatch.setattr(hic, "baseline",
-                        lambda: hic.Result(hic.NO_FIRE, [], "green"))
-    monkeypatch.setattr(hic, "run",
-                        lambda n: hic.Result(hic.FIRED, ["test_a", "test_b"], "x"))
-    assert hic.main() == 0
-    out = capsys.readouterr().out
-    assert "information only: test_b" in out
+def test_run_names_extra_failures_as_information_only(monkeypatch, tmp_path, capsys):
+    _synthetic_expected(monkeypatch)
+    suite = _green_then_red() + (
+        "\ndef test_extra():\n"
+        "    assert 'if False and is_holdout(case):' not in "
+        "pathlib.Path('tools/run_case.py').read_text()\n")
+    rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, test_holdout=suite))
+    assert rc == 0, out
+    assert "GATE_OFF: red, 1 test(s) caught it" in out
+    assert "information only: test_extra" in out

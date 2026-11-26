@@ -33,15 +33,15 @@ Each injection is deleted in a COPY of the worktree, never in place: a control
 that can leave the tree broken behind it is a control nobody runs twice.
 
 pytest's own process exit status is NOT this probe's outcome (issue #1118):
-`run()` maps it -- 1 with named failures is FIRED, 0 is NO_FIRE, and every
+`run()` maps it -- 1 with an attributed failure is FIRED, 0 is NO_FIRE, and every
 other status (2 a collection error, 4 the path gone, 5 nothing collected, or
-1 with no parseable FAILED line) is REFUSED naming the status. A deleted
+1 with no recorded call failure) is REFUSED naming the status. A deleted
 `tools/test_holdout.py` used to exit 4 in all three copies and print
 "every control fired" -- a false green over the exact drift this probe exists
 to surface.
 
 And a red is not the injection's red unless the UNMUTATED tree is green
-(issue #1124). `run()` decides FIRED from `rc == 1 and failed`, so a
+(issue #1124). `run()` once decided FIRED from `rc == 1 and failed`, so a
 `tools/test_holdout.py` with any always-failing test read as three healthy
 controls: this probe printed "every control fired" and exited 0 having
 measured nothing. `main()` now runs the unmutated copy once, first, and
@@ -50,27 +50,14 @@ red can mean anything on a suite that is already red. The refusal names the
 status and the tests that are red before any injection, and prints pytest's
 tail.
 
-And a red is not THIS injection's red unless the tests that went red include
-the ones recorded above (issue #1136). `EXPECTED` holds each control's recorded
-names as data, and `verdict()` REFUSES a red that is disjoint from them: the
-unmutated tree was green, yet the control's red fell entirely elsewhere (a
-flaky or order-dependent test, a defect that arose after the baseline copy), so
-"fired" would be a claim about some other defect. Overlap is enough -- a
-superset is still FIRED and the unexpected extras are printed as information,
-so a newly added test does not make the probe noisy; only a renamed-away or
-empty expected set refuses. Exact-set pinning was rejected as coupling the
-probe to every test rename.
-
-`verdict()` is the one decision for two probes (issue #1400).
-`model/probe_injection_discrimination.py` kept its own until then, and it read
-ANY nonzero pytest status as a kill: a suite that raised at collection under
-every mutant printed three kills and exited 0. It now imports this function
-and supplies its own suite and recorded names, so the same three outcomes --
-an expected failure, a survivor, a run that could establish neither -- hold
-for the sound mutants too.
+Both this probe and the sound probe require a recorded test to fail at its
+intended assertion (#1136, #1400). A setup error, another assertion in the
+same test, or an exception inside the code under test cannot earn credit.
+One matching failure is sufficient. Other failures are reported separately.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import shutil
@@ -99,6 +86,24 @@ class Result(NamedTuple):
     failed: list[str]
     reason: str
     tail: str = ""        # pytest's own last lines, where they must be seen
+    other: tuple[str, ...] = ()  # failed, but did not earn credit
+
+
+class Site(NamedTuple):
+    statement: str
+    exception: str = "AssertionError"
+
+
+class Failure(NamedTuple):
+    statement: str
+    exception: str
+    reason: str
+
+    def matches(self, site: Site) -> bool:
+        # An assert can carry a diagnostic after the condition.
+        at_site = (self.statement == site.statement
+                   or self.statement.startswith(site.statement + ","))
+        return at_site and site.exception in (self.exception, self.reason)
 
 
 INJECTS = {
@@ -114,18 +119,28 @@ INJECTS = {
 }
 
 
-#: The tests recorded above as catching each control (issue #1136), as data so
-#: that something compares them. Keep in step with the docstring.
+# Pin the statement as well as the test. The GATE_OFF KeyErrors specifically
+# identify the missing holdout block, even where the assertion reads two keys.
 EXPECTED = {
-    "GATE_OFF": frozenset({
-        "test_a_sealed_holdout_whose_reference_is_not_frozen_is_a_stated_no_verdict",
-        "test_an_unsealed_holdout_case_is_refused_and_carries_no_distance",
-        "test_an_unsealed_seal_directory_makes_f1d_refuse_for_the_seal_and_not_the_clip",
-        "test_the_runner_records_a_read_with_the_seal_hash_and_the_model_state",
-    }),
-    "CLEAN_OFF": frozenset({"test_a_seal_with_uncommitted_modifications_is_refused"}),
-    "STALE_OFF": frozenset({"test_a_seal_edited_after_it_was_read_is_reported_stale"}),
+    "GATE_OFF": {
+        "test_a_sealed_holdout_whose_reference_is_not_frozen_is_a_stated_no_verdict":
+            Site('assert res["holdout"]["state"] == ho.SEALED', "KeyError: 'holdout'"),
+        "test_an_unsealed_holdout_case_is_refused_and_carries_no_distance":
+            Site('assert res["holdout"]["state"] == "unsealed"', "KeyError: 'holdout'"),
+        "test_an_unsealed_seal_directory_makes_f1d_refuse_for_the_seal_and_not_the_clip":
+            Site('assert "not committed" in res["note"]'),
+        "test_the_runner_records_a_read_with_the_seal_hash_and_the_model_state":
+            Site('assert res["holdout"]["ledger_read"] == 1', "KeyError: 'holdout'"),
+    },
+    "CLEAN_OFF": {
+        "test_a_seal_with_uncommitted_modifications_is_refused":
+            Site("with pytest.raises(ho.Refused) as e:", "Failed"),
+    },
+    "STALE_OFF": {
+        "test_a_seal_edited_after_it_was_read_is_reported_stale": Site("assert code == ho.FAIL"),
+    },
 }
+SUITE = "tools/test_holdout.py"
 
 
 def _copy(parent: pathlib.Path) -> pathlib.Path:
@@ -137,51 +152,42 @@ def _copy(parent: pathlib.Path) -> pathlib.Path:
     return work
 
 
-def _suite(work: pathlib.Path) -> tuple[int, list[str], str]:
-    """`pytest tools/test_holdout.py` inside `work`: its process status, the
-    sorted names on its `FAILED tools/test_holdout.py::` lines, its stdout."""
-    out = subprocess.run([sys.executable, "-m", "pytest", "tools/test_holdout.py",
-                          "-q", "--no-header", "-p", "no:cacheprovider"],
-                         cwd=work, capture_output=True, text=True)
-    failed = sorted({ln.split("::")[1].split()[0]
-                     for ln in out.stdout.splitlines()
-                     if ln.startswith("FAILED tools/test_holdout.py::")})
-    return out.returncode, failed, out.stdout
+def run_suite(work: pathlib.Path, suite: str) -> tuple[int, dict[str, Failure] | None, str]:
+    """Pair each pytest call failure with its own traceback and diagnostic."""
+    runner = pathlib.Path(__file__).with_name("pytest_failure_sites.py")
+    with tempfile.TemporaryDirectory() as tmp:
+        report = pathlib.Path(tmp) / "failures.json"
+        out = subprocess.run([sys.executable, str(runner), suite, str(report)], cwd=work,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        try:
+            failures = json.loads(report.read_text())
+        except (OSError, json.JSONDecodeError):
+            return out.returncode, None, out.stdout
+    return out.returncode, {name: Failure(*data) for name, data in failures.items()}, out.stdout
 
 
-def verdict(rc: int, failed: list[str],
-            expected: frozenset[str] = frozenset(), *, suite: str) -> Result:
-    """pytest's status in this probe's outcome space (#1118): 1 with named
-    failures is FIRED, 0 is NO_FIRE, and every other status -- 2 a collection
-    error, 4 the path gone, 5 nothing collected -- or 1 with no parseable
-    FAILED line is REFUSED naming the status. A red disjoint from `expected` --
-    or with no `expected` to compare against -- is REFUSED too (#1136): it is
-    not attributable to the injection.
-
-    One decision for two probes (#1400):
-    `model/probe_injection_discrimination.py` imports this instead of keeping
-    its own, which read any nonzero status as a kill. `suite` is the test file
-    that ran, as pytest prints it before `::`. It is required and has no
-    default on purpose: this message used to name this probe's suite from a
-    literal, and a second probe reusing it would have refused naming a file it
-    never ran."""
+def verdict(rc: int, failed: dict[str, Failure] | None,
+            expected: dict[str, Site], *, suite: str) -> Result:
+    """Credit only recorded assertions that actually failed under the mutant."""
+    if failed is None:
+        return Result(REFUSED, [], f"pytest exited {rc} without a failure report for {suite}")
     if rc == 0:
-        return Result(NO_FIRE, failed, "pytest stayed green")
+        return Result(NO_FIRE, [], "pytest stayed green")
     if rc == 1 and failed:
+        names = sorted(failed)
         if not expected:
-            return Result(REFUSED, failed,
-                          "no expected test names are recorded for this control, "
+            return Result(REFUSED, names, "no expected assertions are recorded for this control, "
                           "so its red cannot be attributed to the injection")
-        if not expected & set(failed):
-            return Result(REFUSED, failed,
-                          f"red but none of the expected tests caught it: expected "
-                          f"{sorted(expected)}, parsed {failed}; the red is not "
-                          f"this injection's")
-        return Result(FIRED, failed, "pytest exited 1")
+        caught = sorted(name for name in expected.keys() & failed.keys()
+                        if failed[name].matches(expected[name]))
+        if caught:
+            return Result(FIRED, caught, "pytest exited 1",
+                          other=tuple(sorted(failed.keys() - set(caught))))
+        details = ", ".join(f"{name} ({failed[name].reason})" for name in names)
+        return Result(REFUSED, names, f"no intended assertion failed: expected {sorted(expected)}, "
+                      f"observed {details}")
     if rc == 1:
-        return Result(REFUSED, [],
-                      f"pytest exited 1 but no FAILED {suite}::"
-                      f" line was parsed; nothing was measured")
+        return Result(REFUSED, [], f"pytest exited 1 but no call failure was recorded for {suite}")
     return Result(REFUSED, [], f"pytest exited {rc}; nothing was measured")
 
 
@@ -200,9 +206,8 @@ def run(name: str) -> Result:
                           f"control cannot fire and must be repaired, not "
                           f"skipped")
         target.write_text(new)
-        rc, failed, _stdout = _suite(work)
-        return verdict(rc, failed, EXPECTED.get(name, frozenset()),
-                       suite="tools/test_holdout.py")
+        rc, failed, _stdout = run_suite(work, SUITE)
+        return verdict(rc, failed, EXPECTED.get(name, {}), suite=SUITE)
 
 
 def baseline() -> Result:
@@ -211,18 +216,19 @@ def baseline() -> Result:
     Anything else is REFUSED -- on a suite that is red on its own, every
     control's "fired" measures nothing."""
     with tempfile.TemporaryDirectory() as tmp:
-        rc, failed, stdout = _suite(_copy(pathlib.Path(tmp)))
-    if rc == 0:
+        rc, failed, stdout = run_suite(_copy(pathlib.Path(tmp)), SUITE)
+    if failed is None:
+        what = f"pytest exited {rc} on the UNMUTATED tree without a failure report"
+    elif rc == 0:
         return Result(NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
-    if failed:
+    elif failed:
         what = (f"pytest exited {rc} on the UNMUTATED tree, {len(failed)} test(s) red "
                 f"before any injection ({', '.join(failed)})")
     elif rc == 1:
-        what = ("pytest exited 1 on the UNMUTATED tree with no FAILED "
-                "tools/test_holdout.py:: line parsed")
+        what = f"pytest exited 1 on the UNMUTATED tree with no call failure recorded for {SUITE}"
     else:
         what = f"pytest exited {rc} on the UNMUTATED tree"
-    return Result(REFUSED, failed, f"{what} -- no control's red can mean anything",
+    return Result(REFUSED, sorted(failed or {}), f"{what} -- no control's red can mean anything",
                   stdout[-TAIL:])
 
 
@@ -249,10 +255,8 @@ def main() -> int:
         print(f"{name}: red, {len(res.failed)} test(s) caught it")
         for f in res.failed:
             print(f"    {f}")
-        extra = sorted(set(res.failed) - EXPECTED[name])
-        if extra:
-            print(f"    (not in the recorded set, information only: "
-                  f"{', '.join(extra)})")
+        if res.other:
+            print(f"    (other failures, information only: {', '.join(res.other)})")
     # A seal defect (bad) outranks a refusal: 1 when any control genuinely did
     # not fire (a mix included), else 2 when any refused, else 0. Exit 2 is the
     # runner's NO-VERDICT channel (tools/run_all.py, tools/exit_contract.py) --

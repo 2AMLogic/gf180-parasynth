@@ -15,8 +15,8 @@ are GREEN on the unmutated target and do one specific thing under a mutant --
 the only state in which the question can be asked -- and each must be REFUSED
 (exit 2, the NO-VERDICT channel) with no kill credit: a collection error (the
 shape the issue reproduced), an ERROR-only run, and a red outside the recorded
-names (#1136). The healthy case is pinned from the probe's own MUTANTS and
-EXPECTED as data, so a probe that refused everything cannot pass this file,
+names (#1136). A silent snare fails an apparatus check in the expected test.
+The healthy case runs the real sound suite against each production mutant,
 and a mix follows the holdout probe's precedence (#1113): a survivor is a
 finding about the tree and outranks a refusal, so it exits 1.
 """
@@ -42,7 +42,8 @@ CASES = {
 
 #: What a script needs beside its target to run alone. The sound probe does
 #: not decide its own verdicts: it imports the holdout probe's (#1400).
-DEPENDENCIES = {"sound": ("tools/probes/holdout_injected_controls.py",)}
+DEPENDENCIES = {"sound": ("tools/probes/holdout_injected_controls.py",
+                          "tools/probes/pytest_failure_sites.py")}
 
 
 def stage(tmp, key, suite_src):
@@ -134,18 +135,6 @@ def stage_sound(tmp, suite_src):
     return script, target
 
 
-def _intended_body():
-    """One test per recorded name, each asserting its own mutant's search text
-    is still in the target: GREEN on the unmutated file and, under a mutant,
-    red in exactly the tests the probe records for it. Built from the probe's
-    MUTANTS and EXPECTED so the fixture cannot drift from the record."""
-    out = []
-    for mutant, (old, _new) in sound.MUTANTS.items():
-        for name in sorted(sound.EXPECTED[mutant]):
-            out.append(f"def {name}():\n    assert {old!r} in SRC, {mutant!r}\n")
-    return "".join(out)
-
-
 def _uncollectable_under(mutant, body):
     """`body` as the suite, plus an ImportError at collection under `mutant`
     ONLY: the other mutants still run it, so one probe run holds a refusal
@@ -195,7 +184,7 @@ def test_sound_mutant_error_only_run_refuses(tmp_path):
     assert "pytest exited 1" in out
     # The suite that ran is named: this probe's, not the holdout probe's whose
     # decision it borrows.
-    assert "no FAILED model/test_sound_report.py:: line was parsed" in out
+    assert "no call failure was recorded for model/test_sound_report.py" in out
     assert "tools/test_holdout.py" not in out
     assert target.read_bytes() == before
 
@@ -221,11 +210,22 @@ def test_sound_mutant_failure_outside_the_recorded_names_refuses(tmp_path):
     assert target.read_bytes() == before
 
 
+def stage_real_sound(tmp_path):
+    """Copy the suite and the file the sound probe edits into a private tree."""
+    script = tmp_path / "model/probe_injection_discrimination.py"
+    target = tmp_path / "model/sound_report.py"
+    shutil.copytree(REPO / "model", tmp_path / "model",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    (tmp_path / "audition").symlink_to(REPO / "audition", target_is_directory=True)
+    (tmp_path / "tools").symlink_to(REPO / "tools", target_is_directory=True)
+    return script, target
+
+
 def test_sound_intended_assertions_still_get_kill_credit(tmp_path):
     """The other half: attribution must not refuse everything. With the real
     mutant sites and the real recorded names, each mutant is killed, the tests
     that caught it are named, and the probe exits 0."""
-    script, target = stage_sound(tmp_path, READS_TARGET + _intended_body())
+    script, target = stage_real_sound(tmp_path)
     before = target.read_bytes()
     result = run(script, tmp_path)
     out = result.stdout + result.stderr
@@ -235,18 +235,13 @@ def test_sound_intended_assertions_still_get_kill_credit(tmp_path):
     assert "REFUSED" not in out and "SURVIVED" not in out
     for names in sound.EXPECTED.values():
         for name in names:
-            assert name in out
+            assert f"    {name}" in out.splitlines(), out
     assert target.read_bytes() == before
 
 
 def test_silent_snare_under_centroid_mutant_gets_no_kill_credit(tmp_path):
     """Reproduce the review control through the real probe and sound tests."""
-    script = tmp_path / "model/probe_injection_discrimination.py"
-    target = tmp_path / "model/sound_report.py"
-    shutil.copytree(REPO / "model", tmp_path / "model",
-                    ignore=shutil.ignore_patterns("__pycache__"))
-    (tmp_path / "audition").symlink_to(REPO / "audition", target_is_directory=True)
-    (tmp_path / "tools").symlink_to(REPO / "tools", target_is_directory=True)
+    script, target = stage_real_sound(tmp_path)
     (tmp_path / "model" / "conftest.py").write_text(
         "from pathlib import Path\n"
         "import pytest\n\n"
@@ -287,9 +282,11 @@ def test_sound_survivor_outranks_a_refusal_exits_one(tmp_path):
 def test_sound_fired_alongside_a_refusal_exits_two(tmp_path):
     """Nothing survived and not everything was measured: exit 2, not 0, and
     the two genuine kills are still printed as kills."""
-    script, target = stage_sound(
-        tmp_path, _uncollectable_under("centroid injection sets nothing",
-                                       _intended_body()))
+    script, target = stage_real_sound(tmp_path)
+    target.with_suffix(".original").write_bytes(target.read_bytes())
+    suite = tmp_path / sound.TESTS
+    suite.write_text(suite.read_text() + "\n"
+                     + _uncollectable_under("centroid injection sets nothing", ""))
     before = target.read_bytes()
     result = run(script, tmp_path)
     out = result.stdout + result.stderr

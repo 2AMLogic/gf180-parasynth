@@ -138,9 +138,9 @@ def test_verdict_names_the_suite_that_ran_when_no_failed_line_parses():
     # sound probe began sharing the decision, and the literal was this
     # probe's own suite: reused unchanged, the sound probe would have refused
     # naming a file it never ran.
-    res = hic.verdict(1, [], frozenset({"test_a"}), suite="model/other.py")
+    res = hic.verdict(1, {}, {"test_a": hic.Site("assert ok")}, suite="model/other.py")
     assert res.outcome == hic.REFUSED
-    assert "no FAILED model/other.py:: line was parsed" in res.reason
+    assert "no call failure was recorded for model/other.py" in res.reason
     assert "tools/test_holdout.py" not in res.reason
 
 
@@ -149,4 +149,33 @@ def test_verdict_refuses_to_guess_the_suite():
     # defeats the case above (docs/verification-rules.md rule 8), and it must
     # fail here rather than refuse against the wrong file's name.
     with pytest.raises(TypeError):
-        hic.verdict(1, [], frozenset({"test_a"}))
+        hic.verdict(1, {}, {"test_a": hic.Site("assert ok")})
+
+
+def test_an_exception_while_evaluating_the_expected_assertion_refuses(tmp_path):
+    suite = "test_example.py"
+    (tmp_path / suite).write_text(
+        "def broken():\n"
+        "    __tracebackhide__ = True\n"
+        "    assert False, 'helper failed'\n"
+        "def test_helper():\n"
+        "    assert broken()\n"
+        "def test_key():\n"
+        "    assert {}['unrelated']\n")
+    expected = {"test_helper": hic.Site("assert broken()"),
+                "test_key": hic.Site("assert {}['unrelated']", "KeyError: 'holdout'")}
+    rc, failed, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 1 and set(failed) == set(expected)
+    res = hic.verdict(rc, failed, expected, suite=suite)
+    assert res.outcome == hic.REFUSED
+    assert "helper failed" in res.reason and "KeyError: 'unrelated'" in res.reason
+
+
+def test_zero_exit_without_a_completed_pytest_report_refuses(tmp_path):
+    suite = "test_example.py"
+    (tmp_path / suite).write_text("import os\ndef test_exit():\n    os._exit(0)\n")
+    rc, failed, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 0
+    res = hic.verdict(rc, failed, {}, suite=suite)
+    assert res.outcome == hic.REFUSED
+    assert "without a failure report" in res.reason
