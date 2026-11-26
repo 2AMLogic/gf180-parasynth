@@ -3,7 +3,8 @@
 
 Same contract as verify_ladder.py: the model runs a stimulus, the RTL is
 driven with the identical integers under iverilog, every output sample is
-compared with no tolerance. Exit 0 identical / 1 mismatch / 2 did not run;
+compared with no tolerance. Exit 0 identical / 1 mismatch / 2 did not run or
+the capture is not the declared output (sample-count mismatch, short or surplus);
 --inject NAME compiles -DINJECT_BUG_MODAL_<NAME>, --expect-fail inverts.
 
 The bank here is the standalone four-mode one (NUMS = 2, headroom 10, the

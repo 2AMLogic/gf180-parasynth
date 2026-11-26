@@ -13,7 +13,8 @@ The Python model IS the specification. This script
   3. compares the two, value for value, with NO tolerance (verify_ladder's
      comparator on the interleaved stream), and reports the first mismatch.
 
-Exit status, as verify_ladder.py: 0 identical, 1 differed, 2 did not run.
+Exit status, as verify_ladder.py: 0 identical, 1 differed, 2 did not run or
+the capture is not the declared output (sample-count mismatch, short or surplus).
 
   --inject NAME     compile with -DINJECT_BUG_<NAME> (DRUM_ENV_FLOOR, DRUM_LEVEL_TRIG,
                     DRUM_LFSR_TAP, DRUM_TAP_NOSAT, DRUM_LAST_PATH, DRUM_SQ_LONE,
