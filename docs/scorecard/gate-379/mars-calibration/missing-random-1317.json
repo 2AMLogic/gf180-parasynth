@@ -1,0 +1,1099 @@
+{
+ "trials": 5000,
+ "move": 226,
+ "counts": {
+  "COVERAGE_REFUSED": 4934,
+  "CALIBRATED": 66
+ },
+ "errors_or_unexpected": 0,
+ "tables_sha256": "29f648c93be36cbd2be70f86d767de799e459b22283cdb7c9e87ddf11c6492ba",
+ "calibrated_hits": [
+  {
+   "seed": 127,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "428cd1df0b584acd18fbd9e4bef30db52fa0c0952f38e6838967338ecef766ff",
+   "removed": [
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay A 03.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay A 04.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay A 05.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay B 01.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay B 02.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay C 02.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay D 05.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay E 01.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay E 04.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay E 05.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay F 01.wav",
+    "01. Bass Drum/Clean/Digital/A/BD A 808 Decay F 05.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay A 05.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay B 04.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay B 05.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay C 03.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay C 04.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay D 06.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay E 02.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay E 03.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay E 04.wav",
+    "01. Bass Drum/Clean/Digital/B/BD B 808 Decay F 05.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay A 05.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay B 05.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay B 06.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay C 02.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay D 03.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay E 02.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay E 04.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay E 05.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay E 06.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay F 03.wav",
+    "01. Bass Drum/Clean/Tape/A/BD A 808 Tape Decay F 05.wav",
+    "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay A 03.wav",
+    "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay B 05.wav",
+    "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay C 05.wav",
+    "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay D 02.wav",
+    "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay E 05.wav",
+    "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay F 01.wav",
+    "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay F 02.wav",
+    "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay F 04.wav",
+    "02. Snare Drum/Clean/Digital/A/SD A 808 Tone A 03.wav",
+    "02. Snare Drum/Clean/Digital/A/SD A 808 Tone B 02.wav",
+    "02. Snare Drum/Clean/Digital/A/SD A 808 Tone C 01.wav",
+    "02. Snare Drum/Clean/Digital/A/SD A 808 Tone C 04.wav",
+    "02. Snare Drum/Clean/Digital/A/SD A 808 Tone C 06.wav",
+    "02. Snare Drum/Clean/Digital/A/SD A 808 Tone D 01.wav",
+    "02. Snare Drum/Clean/Digital/A/SD A 808 Tone E 01.wav",
+    "02. Snare Drum/Clean/Digital/A/SD A 808 Tone F 02.wav",
+    "02. Snare Drum/Clean/Digital/A/SD A 808 Tone F 04.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone A 02.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone A 05.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone B 03.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone C 03.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone D 02.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone D 03.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone D 05.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone D 06.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone E 04.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone E 06.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone F 01.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone F 03.wav",
+    "02. Snare Drum/Clean/Digital/B/SD B 808 Tone F 06.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone A 04.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone B 01.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone B 04.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone C 03.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone C 04.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone C 05.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone D 02.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone E 05.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone F 01.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone F 02.wav",
+    "02. Snare Drum/Clean/Digital/C/SD C 808 Tone F 04.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone A 03.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone A 06.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone B 01.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone B 03.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone B 04.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone C 01.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone C 04.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone C 06.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone D 05.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone D 06.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone E 02.wav",
+    "02. Snare Drum/Clean/Tape/A/SD A 808 Tape Tone E 04.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone A 02.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone A 03.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone A 04.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone B 04.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone C 01.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone C 02.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone D 01.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone D 03.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone D 05.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone E 06.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone F 03.wav",
+    "02. Snare Drum/Clean/Tape/B/SD B 808 Tape Tone F 06.wav",
+    "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone A 02.wav",
+    "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone B 06.wav",
+    "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone C 02.wav",
+    "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone C 04.wav",
+    "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone C 05.wav",
+    "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone C 06.wav",
+    "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone D 03.wav",
+    "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone F 02.wav",
+    "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone F 04.wav",
+    "03. Low Tom/Clean/Digital/A/Tom Low A 808 08.wav",
+    "03. Low Tom/Clean/Digital/B/Tom Low B 808 06.wav",
+    "03. Low Tom/Clean/Digital/B/Tom Low B 808 09.wav",
+    "03. Low Tom/Clean/Digital/B/Tom Low B 808 11.wav",
+    "03. Low Tom/Clean/Digital/C/Tom Low C 808 01.wav",
+    "03. Low Tom/Clean/Digital/C/Tom Low C 808 03.wav",
+    "03. Low Tom/Clean/Digital/C/Tom Low C 808 04.wav",
+    "03. Low Tom/Clean/Digital/C/Tom Low C 808 06.wav",
+    "03. Low Tom/Clean/Digital/C/Tom Low C 808 08.wav",
+    "03. Low Tom/Clean/Digital/C/Tom Low C 808 09.wav",
+    "03. Low Tom/Clean/Digital/C/Tom Low C 808 10.wav",
+    "03. Low Tom/Clean/Tape/A/Tom Low A 808 Tape 04.wav",
+    "03. Low Tom/Clean/Tape/B/Tom Low B 808 Tape 05.wav",
+    "03. Low Tom/Clean/Tape/B/Tom Low B 808 Tape 10.wav",
+    "03. Low Tom/Clean/Tape/C/Tom Low C 808 Tape 03.wav",
+    "03. Low Tom/Clean/Tape/C/Tom Low C 808 Tape 08.wav",
+    "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 04.wav",
+    "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 06.wav",
+    "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 07.wav",
+    "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 11.wav",
+    "04. Mid Tom/Clean/Digital/B/Tom Mid B 808 01.wav",
+    "04. Mid Tom/Clean/Digital/B/Tom Mid B 808 03.wav",
+    "04. Mid Tom/Clean/Digital/B/Tom Mid B 808 04.wav",
+    "04. Mid Tom/Clean/Digital/B/Tom Mid B 808 06.wav",
+    "04. Mid Tom/Clean/Digital/C/Tom Mid C 808 01.wav",
+    "04. Mid Tom/Clean/Digital/C/Tom Mid C 808 04.wav",
+    "04. Mid Tom/Clean/Digital/C/Tom Mid C 808 09.wav",
+    "04. Mid Tom/Clean/Digital/C/Tom Mid C 808 11.wav",
+    "04. Mid Tom/Clean/Tape/A/Tom Mid A 808 Tape 03.wav",
+    "04. Mid Tom/Clean/Tape/A/Tom Mid A 808 Tape 06.wav",
+    "04. Mid Tom/Clean/Tape/B/Tom Mid B 808 Tape 01.wav",
+    "04. Mid Tom/Clean/Tape/B/Tom Mid B 808 Tape 03.wav",
+    "04. Mid Tom/Clean/Tape/B/Tom Mid B 808 Tape 04.wav",
+    "04. Mid Tom/Clean/Tape/B/Tom Mid B 808 Tape 08.wav",
+    "04. Mid Tom/Clean/Tape/B/Tom Mid B 808 Tape 09.wav",
+    "04. Mid Tom/Clean/Tape/C/Tom Mid C 808 Tape 04.wav",
+    "04. Mid Tom/Clean/Tape/C/Tom Mid C 808 Tape 08.wav",
+    "05. Hi Tom/Clean/Digital/A/Tom Hi A 808 03.wav",
+    "05. Hi Tom/Clean/Digital/B/Tom Hi B 808 07.wav",
+    "05. Hi Tom/Clean/Digital/C/Tom Hi C 808 04.wav",
+    "05. Hi Tom/Clean/Digital/C/Tom Hi C 808 05.wav",
+    "05. Hi Tom/Clean/Digital/C/Tom Hi C 808 09.wav",
+    "05. Hi Tom/Clean/Tape/A/Tom Hi A 808 Tape 02.wav",
+    "05. Hi Tom/Clean/Tape/A/Tom Hi A 808 Tape 06.wav",
+    "05. Hi Tom/Clean/Tape/B/Tom Hi B 808 Tape 01.wav",
+    "05. Hi Tom/Clean/Tape/B/Tom Hi B 808 Tape 02.wav",
+    "05. Hi Tom/Clean/Tape/B/Tom Hi B 808 Tape 05.wav",
+    "05. Hi Tom/Clean/Tape/B/Tom Hi B 808 Tape 11.wav",
+    "05. Hi Tom/Clean/Tape/C/Tom Hi C 808 Tape 04.wav",
+    "05. Hi Tom/Clean/Tape/C/Tom Hi C 808 Tape 07.wav",
+    "05. Hi Tom/Clean/Tape/C/Tom Hi C 808 Tape 08.wav",
+    "06. Low Conga/Clean/Digital/A/Conga Low A 808 01.wav",
+    "06. Low Conga/Clean/Digital/A/Conga Low A 808 02.wav",
+    "06. Low Conga/Clean/Digital/A/Conga Low A 808 08.wav",
+    "06. Low Conga/Clean/Digital/A/Conga Low A 808 10.wav",
+    "06. Low Conga/Clean/Digital/B/Conga Low B 808 02.wav",
+    "06. Low Conga/Clean/Digital/B/Conga Low B 808 03.wav",
+    "06. Low Conga/Clean/Digital/B/Conga Low B 808 04.wav",
+    "06. Low Conga/Clean/Digital/B/Conga Low B 808 08.wav",
+    "06. Low Conga/Clean/Digital/B/Conga Low B 808 09.wav",
+    "06. Low Conga/Clean/Tape/A/Conga Low A 808 Tape 04.wav",
+    "06. Low Conga/Clean/Tape/A/Conga Low A 808 Tape 05.wav",
+    "06. Low Conga/Clean/Tape/A/Conga Low A 808 Tape 06.wav",
+    "06. Low Conga/Clean/Tape/A/Conga Low A 808 Tape 10.wav",
+    "06. Low Conga/Clean/Tape/B/Conga Low B 808 Tape 02.wav",
+    "06. Low Conga/Clean/Tape/B/Conga Low B 808 Tape 04.wav",
+    "06. Low Conga/Clean/Tape/B/Conga Low B 808 Tape 05.wav",
+    "06. Low Conga/Clean/Tape/B/Conga Low B 808 Tape 09.wav",
+    "06. Low Conga/Clean/Tape/B/Conga Low B 808 Tape 10.wav",
+    "07. Mid Conga/Clean/Digital/A/Conga Mid A 808 05.wav",
+    "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 01.wav",
+    "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 04.wav",
+    "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 05.wav",
+    "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 06.wav",
+    "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 09.wav",
+    "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 11.wav",
+    "07. Mid Conga/Clean/Tape/A/Conga Mid A 808 Tape 07.wav",
+    "07. Mid Conga/Clean/Tape/A/Conga Mid A 808 Tape 08.wav",
+    "07. Mid Conga/Clean/Tape/A/Conga Mid A 808 Tape 09.wav",
+    "07. Mid Conga/Clean/Tape/B/Conga Mid B 808 Tape 02.wav",
+    "07. Mid Conga/Clean/Tape/B/Conga Mid B 808 Tape 03.wav",
+    "07. Mid Conga/Clean/Tape/B/Conga Mid B 808 Tape 04.wav",
+    "07. Mid Conga/Clean/Tape/B/Conga Mid B 808 Tape 07.wav",
+    "08. Hi Conga/Clean/Digital/A/Conga Hi A 808 02.wav",
+    "08. Hi Conga/Clean/Digital/A/Conga Hi A 808 06.wav",
+    "08. Hi Conga/Clean/Digital/A/Conga Hi A 808 09.wav",
+    "08. Hi Conga/Clean/Digital/A/Conga Hi A 808 10.wav",
+    "08. Hi Conga/Clean/Digital/A/Conga Hi A 808 11.wav",
+    "08. Hi Conga/Clean/Digital/B/Conga Hi B 808 05.wav",
+    "08. Hi Conga/Clean/Digital/B/Conga Hi B 808 07.wav",
+    "08. Hi Conga/Clean/Tape/A/Conga Hi A 808 Tape 05.wav",
+    "08. Hi Conga/Clean/Tape/A/Conga Hi A 808 Tape 09.wav",
+    "08. Hi Conga/Clean/Tape/B/Conga Hi B 808 Tape 05.wav",
+    "08. Hi Conga/Clean/Tape/B/Conga Hi B 808 Tape 11.wav",
+    "09. Rim Shot/Clean/Digital/Rim Shot A 808.wav",
+    "10. Hand Clap/Clean/Digital/Clap B 808.wav",
+    "10. Hand Clap/Clean/Tape/Clap A 808 Tape.wav",
+    "12. Maracas/Clean/Tape/Maracas B 808 Tape.wav",
+    "13. Cowbell/Clean/Digital/Cowbell A 808.wav",
+    "13. Cowbell/Clean/Digital/Cowbell B 808.wav",
+    "14. Cymbal/Clean/Digital/A/Cym A 808 Decay B 03.wav",
+    "14. Cymbal/Clean/Digital/A/Cym A 808 Decay C 03.wav",
+    "14. Cymbal/Clean/Digital/A/Cym A 808 Decay C 04.wav",
+    "14. Cymbal/Clean/Digital/B/Cym B 808 Decay A 01.wav",
+    "14. Cymbal/Clean/Digital/B/Cym B 808 Decay A 03.wav",
+    "14. Cymbal/Clean/Digital/B/Cym B 808 Decay B 03.wav",
+    "14. Cymbal/Clean/Digital/B/Cym B 808 Decay B 04.wav",
+    "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay A 01.wav",
+    "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay A 02.wav",
+    "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay A 04.wav",
+    "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay B 02.wav",
+    "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay C 01.wav",
+    "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay C 04.wav",
+    "14. Cymbal/Clean/Tape/B/Cym B 808 Tape Decay A 02.wav",
+    "14. Cymbal/Clean/Tape/B/Cym B 808 Tape Decay A 03.wav",
+    "14. Cymbal/Clean/Tape/B/Cym B 808 Tape Decay A 04.wav",
+    "14. Cymbal/Clean/Tape/B/Cym B 808 Tape Decay B 04.wav",
+    "15. Open HH/Clean/Tape/OH 808 Tape Decay 01.wav",
+    "16. Closed HH/Clean/Digital/CH B 808.wav"
+   ]
+  },
+  {
+   "seed": 257,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "1d6c484b431640cdc68e3025cffd0086b6eca4299143dcd37e2168f1e1bfdc31"
+  },
+  {
+   "seed": 261,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "b00c3d1d9feda02da276f6c627fbca8e4fb07d5c237db384fc7397df224be12e"
+  },
+  {
+   "seed": 275,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "8b68da6ea9ba1554be1caa2b37ca383e78a897cfd61736f4092128d35dfebb7b"
+  },
+  {
+   "seed": 298,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "6cc757270fdedb96deb67d0f4ace9e14420b55e48c799493eb572b6a9343c5e4"
+  },
+  {
+   "seed": 366,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "b0f96afe698e78cb2b0435272313e31a71a2f5beba80bd1020b7d6edaf3f8652"
+  },
+  {
+   "seed": 387,
+   "k": 5,
+   "cov_k3": [
+    3,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "a28c506cd02525ce2dcad12f380bc7d091ff1c54f72211be04300766ecb0602e"
+  },
+  {
+   "seed": 484,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "1fb7789261b1e89f2bca544197164e2f92d4baea2874868d383df4e3a2a834dd"
+  },
+  {
+   "seed": 527,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "5ca103b45c4b98c3325faff5d17cbae3a94b21ad76dc325768e21dd93a1d9966"
+  },
+  {
+   "seed": 649,
+   "k": 5,
+   "cov_k3": [
+    3,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "74fc75ab7e0c7cccb753a3cb33276cbc89ba2921edba129c481f09df92b0d162"
+  },
+  {
+   "seed": 875,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "cc0f72d63ef12c76691aea3cc95161534d2befbcb0c3513cfe4fdd2212bf8c07"
+  },
+  {
+   "seed": 883,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "d5a5d8fd076be3eff7877ad10879fa64c524daca58202f3f0ca436dd6799ae0b"
+  },
+  {
+   "seed": 886,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "555aadc7cf9d07325e96a389ba745824acee992e750e39960013aeb5dad8fcd4"
+  },
+  {
+   "seed": 970,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "255a4b22f128be0e12b14466013c030480a8d36d2ce3c8f563ba1323cf529eed"
+  },
+  {
+   "seed": 1196,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "368c17be9accd20a00ad4826349633fc816785998efd680dcfcd08a6892b2a7b"
+  },
+  {
+   "seed": 1379,
+   "k": 5,
+   "cov_k3": [
+    3,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "5fdffa534b84ebc43f6b9fb0496951127138247d868a30654313a98a7adbd89b"
+  },
+  {
+   "seed": 1387,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "24b3d7bc5485c63e08f2ae8e98a0877167ccdd9cb4e718a484dd2ba5fd97359a"
+  },
+  {
+   "seed": 1632,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "8366302744372c7c6f49094669100a6161f3cc772bc5f8cc7a585c640d993ad2"
+  },
+  {
+   "seed": 1715,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "034413be45635483d3dc8216901ea221a2b76f96526301ec9dad00a47e459f10"
+  },
+  {
+   "seed": 1806,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "f1a971418045444ed7f9b2ced2bcc26083b9242d335c2056524cf9f15c3f13be"
+  },
+  {
+   "seed": 1839,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "b5b011d7712b3f9fd7faa1ab248d339ced94550f73dcca6e8e208727e856f0ed"
+  },
+  {
+   "seed": 1855,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "318cb2200fe374aee9708cab962e8ca33e0ae4cc58603ffba533e127ae36d396"
+  },
+  {
+   "seed": 1990,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "910440d76eef017c838a5d6356a3379ee952098e7ea23c0a222a0761ba45b684"
+  },
+  {
+   "seed": 2074,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "cdd1b77ae469df60644ed473adf1cdb80dd6d2053aa3a97e0a3d6d6abe423a58"
+  },
+  {
+   "seed": 2089,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "40dde9fc6bdc5f2ca9c9ce91e7e8725ff4cd2d1f6402442199e8bccecba86948"
+  },
+  {
+   "seed": 2153,
+   "k": 5,
+   "cov_k3": [
+    3,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "151015f37fdff6971512eccc15c12acabbd32dbcf5d6be4b5ed46c5812a5d6ba"
+  },
+  {
+   "seed": 2170,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "6a404bb7ec61d8de1195b8ebf3edf41eefad28a7e42a834482ada065c0c5963d"
+  },
+  {
+   "seed": 2206,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "15043f96e0dc84d5d412e2c55d0b4dd60c0979637dff273df6a887869379e7c5"
+  },
+  {
+   "seed": 2279,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    9,
+    9
+   ],
+   "removed_sha256": "1d3a22bb38c9fae4a7b01f39e8dcac47676b972f1e7cda13d3ade2c4a6f863b9"
+  },
+  {
+   "seed": 2324,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "b3da1947cfed7bdd3972302f2c35996c5490696d70aaf98a483c7d3df25b9e59"
+  },
+  {
+   "seed": 2352,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "a65be58f1daa0d3b88d39219d1ec28bd511eef4e82ae23e944055e790ee7907c"
+  },
+  {
+   "seed": 2416,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "ccf03f84e0c73d179e79c48fcdbe61292ef66d5761a4ebd7907af051232e5ee9"
+  },
+  {
+   "seed": 2489,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "6fbb505857ecdb6847ab30dadf7950429a94fac77ab510389c79ccf753a5a488"
+  },
+  {
+   "seed": 2540,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "ec7fab214058073de31603828d16b6c1e0bb21fcd23509cc7e2c7b3c8708f183"
+  },
+  {
+   "seed": 2784,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "e280b4f31dc5982ffeb6abd31b747c56b7fdeaa87e110980819b589233b2c527"
+  },
+  {
+   "seed": 2839,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "08a4836110946205a60b24ea935b850299eccc2bf4dcd9f8e0ae39708b117fe5"
+  },
+  {
+   "seed": 2849,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "23b1273193830ff14bcfe3fdbd64e62b15f0a1839053f5aeaac16d1b83536bf2"
+  },
+  {
+   "seed": 2935,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "9534d9ed8efabce3611f4ef05f839036a2ee3b7286868ce64551aed703778eec"
+  },
+  {
+   "seed": 3088,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "1b77eccf0e9ea1cc5fede0b9baa8b276405cdddc745d6775b4259b808d3515ae"
+  },
+  {
+   "seed": 3165,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    9,
+    9
+   ],
+   "removed_sha256": "8a30c143143b96ec0dd641b34863b9e6699d7e7476dc54e52298ce1b6c4a32dc"
+  },
+  {
+   "seed": 3204,
+   "k": 5,
+   "cov_k3": [
+    3,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "a89c237523ddaa659e9dd2c74e5623225783e7d44e3099a02d313aac74fcdef4"
+  },
+  {
+   "seed": 3250,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "843c7a1e7af156093138fc05d94ada5dbeb8781ab7922d4335be432314ae3c90"
+  },
+  {
+   "seed": 3329,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "2a9c0fcdeb74930c8281fe84ba4c82605400d5ff36ca7b3cb3551c9d2a01a635"
+  },
+  {
+   "seed": 3476,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "cb4965f61b2c2f87518622a1f0407dbbf352d6a7e619e09e4cd30d1f8f10dde6"
+  },
+  {
+   "seed": 3560,
+   "k": 5,
+   "cov_k3": [
+    3,
+    9
+   ],
+   "cov_chosen_k": [
+    9,
+    9
+   ],
+   "removed_sha256": "1b28cc5af3158b5941705e1dd04eba7b67e54de5d8311ddce54ecfde0625a002"
+  },
+  {
+   "seed": 3600,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "b7de5acba9f50ff3caf8d379a991776bb25ff54ae1ab92461ab6031fb57f55b9"
+  },
+  {
+   "seed": 3610,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "9a47bb5f793f18b8bfcc37e384609f1ad54a1b6f8992ad8ebd766401fd54b1c8"
+  },
+  {
+   "seed": 3634,
+   "k": 5,
+   "cov_k3": [
+    3,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "79db1cfcbf927e00ad0622da660460a8bed9c54a22eae6d61d4d3ea76672946c"
+  },
+  {
+   "seed": 3658,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "b7b2f81ddfd574637b3fdfcccc35af5dfc3e4612e525f044e0592f173889305f"
+  },
+  {
+   "seed": 3667,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "bbf0dae0e7bc45eb11945aa17433d7032b3e6cb4ce936c0d4da460a14925c582"
+  },
+  {
+   "seed": 3830,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    9,
+    9
+   ],
+   "removed_sha256": "b6b7c164dfec8dfbebfa8c7f23e2e5f931253e711e7cb4914042b8eea7897b18"
+  },
+  {
+   "seed": 3837,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "417632cca8ba5e4e89b5dd4dd6c261c2087409a4850a802ef8f79a2e1a36b593"
+  },
+  {
+   "seed": 3893,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "9ced32ca9bbc7a574092ae59d8d6461331df30de29aa821d21ea322e498b704a"
+  },
+  {
+   "seed": 3908,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "06548c92980bd3b57de773d9bc2fd94a16b9bdb608b155a1bbbf9aae130a728b"
+  },
+  {
+   "seed": 4105,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "9bbf780068a1d801d112443e8e12debdf56b8991de4d195c6de7b7f55d5a6247"
+  },
+  {
+   "seed": 4171,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "c279970703a5cfeee46be2cfcc40e602f00e05412c724cc99986715f1a74a48d"
+  },
+  {
+   "seed": 4198,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "8eebc3124ec4caeb01b73042ff9a088ed36e1fa0d7c1186dc8727f2521020a74"
+  },
+  {
+   "seed": 4332,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "caa03014f351b2a39d6286266c2b92f8ac6859ea54e0aecfd638fddd83925dbb"
+  },
+  {
+   "seed": 4388,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "00745d180a755a31076168f6a45a6acfbe04ba1372abc70b1a687773beeade72"
+  },
+  {
+   "seed": 4491,
+   "k": 5,
+   "cov_k3": [
+    6,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "684963b2d19087af231e07c168c0a0a74f2aefa5178daa4c6e795dee3f6f8055"
+  },
+  {
+   "seed": 4493,
+   "k": 5,
+   "cov_k3": [
+    3,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "f0e35909b345da6ebc7a0a993c4124fa8ca346acc3b7172f4b57bce60aeaac9f"
+  },
+  {
+   "seed": 4522,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "6d55dfe5c2340a56b74a9faac1899f77228a3bf85d54c7ae7011d8cb8d288fdc"
+  },
+  {
+   "seed": 4562,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "5ea3a2f74772dae63c805f4efa2a30f6a1d5839b576d150db4db512754c023de"
+  },
+  {
+   "seed": 4823,
+   "k": 5,
+   "cov_k3": [
+    4,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "31549946d029f436ccfe9da17b9c2a85a9918b52555d2c2410a2b232016e24ec"
+  },
+  {
+   "seed": 4921,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "0d3b5fb01653e085c0d48aef4c398db72f918947cb3745c9dcc98c4e882d8f27"
+  },
+  {
+   "seed": 4950,
+   "k": 5,
+   "cov_k3": [
+    5,
+    9
+   ],
+   "cov_chosen_k": [
+    8,
+    9
+   ],
+   "removed_sha256": "d530167409aafcfac68620b0eacc3fdcf95360de95f0a4ede0873e28633b2c61"
+  }
+ ],
+ "upper95_one_sided": null
+}
