@@ -152,6 +152,7 @@ from finite_number import is_finite_number                           # noqa: E40
 import drum_verify as dv                                             # noqa: E402
 import holdout                                                       # noqa: E402
 import refprofile as rp                                              # noqa: E402
+import refusal                                                       # noqa: E402
 import mono_m5a_score as mono_m5a                                    # noqa: E402
 import provenance                                                    # noqa: E402
 import partial_trajectory as PT                                      # noqa: E402
@@ -2620,7 +2621,10 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
     except fp.Refused as e:
         raise Refused(f"F1 selected filter path: {e}")
     except Exception as e:                      # a substituted path's own refusal
-        if engine_path is not None and type(e).__name__ == "Refused":
+        # by CLASS, not by name (#1357): a differently named subclass of the
+        # shared base is a refusal, while an unrelated exception NAMED Refused
+        # is an implementation error and must propagate as one.
+        if engine_path is not None and isinstance(e, refusal.Refused):
             raise Refused(f"F1 {record_engine} filter path: {e}")
         raise
     legacy = _legacy_reads(dut_f, cut, spec["res_ours"], amp, open_f, spec["open_hz"])

@@ -53,6 +53,7 @@ for _p in (ROOT / "model", ROOT / "tools", ROOT / "tools" / "probes"):
         sys.path.insert(0, str(_p))
 
 import f1_rtl_filter_path as rtlpath   # noqa: E402
+import refusal                         # noqa: E402
 import run_case as rc                  # noqa: E402
 import scorecard                       # noqa: E402
 
@@ -166,7 +167,11 @@ def main(argv=None) -> int:
         record = rc.run_filter_case(case, "", keep_audio=not a.no_audio,
                                     engine_path=path, engine=rtlpath.ENGINE,
                                     artifact_tag="-rtl")
-    except (rtlpath.Refused, rc.Refused) as exc:
+    except refusal.Refused as exc:
+        # the shared base (#1357): the loader's `refprofile.Refused` (frozen
+        # audio absent) escaped the old engine-classes tuple and rendered a
+        # refusal with exit 1 -- a measured mismatch's status. Any module's
+        # refusal is exit 2; an unrelated exception still propagates.
         print(f"score_f1_rtl: REFUSED -- {exc}", file=sys.stderr)
         return 2
 
