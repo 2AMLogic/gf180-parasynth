@@ -2671,7 +2671,10 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
                                    "cut_hz": cut, "res_ours": spec["res_ours"],
                                    "res_reference": spec["res_ref"], "amp": amp},
                                   indent=1) + "\n")
-        audio_path = stated_path(pth)
+        # For relative --results, record the target of the completed write.
+        # Resolving the directory before writing would bypass filesystem checks
+        # on the caller's path and miss a symlink at the curve filename.
+        audio_path = stated_path(pth if pth.is_absolute() else pth.resolve())
         audio = f"{audio}; ours {audio_path}"
 
     import reference_rigs as rr
@@ -4265,13 +4268,6 @@ def main(argv=None) -> int:
     chosen = uniq
 
     outdir = pathlib.Path(a.results) if a.results else RESULTS
-    # A relative --results is relative to the caller's working directory, not to
-    # the checkout (#1415; `ROOT / outdir` would move another caller's files).
-    # Made absolute here, against that directory, so that `stated_path` states
-    # an in-checkout curve relative to the checkout rather than always
-    # absolutely. Where the files go does not change.
-    if not outdir.is_absolute():
-        outdir = outdir.resolve()
     # An injected control's output is not evidence. It must not be able to
     # land on the board, whatever else goes wrong in this invocation.
     if a.inject and outdir.resolve() == RESULTS.resolve():

@@ -327,6 +327,54 @@ def test_a_relative_results_directory_outside_the_checkout_stays_with_its_caller
     assert not (board["base"] / "candidate").exists()
 
 
+def test_relative_results_cannot_traverse_a_regular_file(board, monkeypatch, tmp_path):
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text("existing receipt")
+
+    with pytest.raises(NotADirectoryError):
+        rc.main(["F1A", "--results", "receipt.json/../candidate"])
+    assert receipt.read_text() == "existing receipt"
+    assert not (tmp_path / "candidate").exists()
+
+
+def test_relative_results_cannot_create_a_dangling_directory_target(board, monkeypatch, tmp_path):
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(tmp_path)
+    candidate = tmp_path / "candidate"
+    candidate.symlink_to("missing-volume/results", target_is_directory=True)
+
+    with pytest.raises(FileExistsError):
+        rc.main(["F1A", "--results", "candidate"])
+    assert candidate.readlink() == pathlib.Path("missing-volume/results")
+    assert not (tmp_path / "missing-volume").exists()
+
+
+def test_relative_results_record_keeps_the_written_curve_after_retargeting_its_symlink(
+        board, monkeypatch, tmp_path):
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(tmp_path)
+    assert not tmp_path.is_relative_to(rc.ROOT)
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    original = candidate / "curve-v1.json"
+    original.write_text("{}")
+    replacement = candidate / "curve-v2.json"
+    replacement.write_text("{}")
+    link = candidate / MODEL_CURVE
+    link.symlink_to(original.name)
+
+    assert rc.main(["F1A", "--results", "candidate"]) == 0
+    record = json.loads((candidate / "F1A.json").read_text())
+    measured = original.read_bytes()
+    assert len(_gains(measured)) == len(GRID)
+    link.unlink()
+    link.symlink_to(replacement.name)
+    assert _curve_named_by(record) == measured
+    assert record["provenance"]["artefacts"]["ours"] == str(original)
+
+
 def test_every_published_f1_row_names_the_curve_a_default_run_of_its_engine_writes():
     """The clean board path is not moved by the off-board rule: each published
     F1 row names the file a default run of its own engine writes."""
