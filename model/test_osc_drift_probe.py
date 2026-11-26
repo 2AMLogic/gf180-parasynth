@@ -226,3 +226,33 @@ def test_across_note_refuses_without_two_measured_windows():
     bad = odp.drift_report(np.zeros(SR), SR, F0)
     across = odp.across_note_drift([bad])
     assert across["verdict"] == odp.REFUSED, across
+
+
+@pytest.mark.parametrize("bad_window", ["mixed", "silent"])
+def test_cli_across_note_requires_all_requested_pitches(tmp_path, bad_window):
+    """A single capture of two valid notes and an unusable third window."""
+    import json
+
+    from scipy.io import wavfile
+
+    t = np.arange(3 * SR) / SR
+    tone = 0.4 * np.sin(2 * np.pi * F0 * t)
+    mix = tone + 0.32 * np.sin(2 * np.pi * F0 * 2 ** (7 / 1200) * t)
+    third = mix if bad_window == "mixed" else np.zeros_like(tone)
+    capture = tmp_path / "notes.wav"
+    report = tmp_path / "report.json"
+    wavfile.write(capture, SR, np.concatenate([tone, tone, third]).astype("float32"))
+    args = ["--wav", str(capture), "--sr-expected", str(SR), "--f0", str(F0),
+            "--window", "0:3", "--window", "3:6", "--json", str(report)]
+    assert odp.main(args) == 0
+    clean = json.loads(report.read_text())
+    assert [r["verdict"] for r in clean["reports"]] == [odp.STABLE, odp.STABLE]
+    assert clean["across_note"]["verdict"] == odp.STABLE
+
+    odp.main(args + ["--window", "6:9"])
+    observed = json.loads(report.read_text())
+    rejected = observed["reports"][2]
+    assert rejected["verdict"] == odp.REFUSED
+    assert rejected["refusal"] == ("MULTI_PARTIAL" if bad_window == "mixed" else "LOW_LEVEL")
+    across = observed["across_note"]
+    assert across["verdict"] == odp.REFUSED, across
