@@ -210,13 +210,18 @@ verify:
 ## nothing and cannot go red on simulator noise. The rest of rtl-sketch's
 ## pytest files DO need iverilog and stay in `make verify` only.
 ##
-## fpga/test_verify_xdc_binding.py and tools/test_check_arty_evidence_binding.py
-## are in the fpga bundle rather than only in `make verify` because THIS target
-## is what CI runs (rungs.yml `make verify-fast`) and #404 -- no CI job collects
-## tools/ or fpga/ wholesale -- is still open. Without them the constraint
-## bench's start-red on the pre-#315 file, and the publication rung's controls,
-## would be checks that only ever ran on a developer's machine. 2.5 s measured
-## together, against a 600 s cap.
+## fpga/test_verify_xdc_binding.py is in the fpga bundle rather than only in
+## `make verify` because THIS target is what CI runs (rungs.yml `make
+## verify-fast`) and no CI job collects fpga/ wholesale: the fpga-uncovered
+## job names the sixteen fpga/ files no other job runs (#853); the ones here
+## are this gate's own. Without it the constraint bench's start-red on the
+## pre-#315 file, and the publication rung's controls, would be checks that
+## only ever ran on a developer's machine.
+## tools/test_check_arty_evidence_binding.py, named in the same paragraph by
+## #404's "no CI job collects tools/ wholesale" premise, left this recipe
+## with the other 36 in #812: #404 closed (2026-09-30) and the rungs.yml
+## `tools` job collects tools/ wholesale, so that premise had gone false
+## for it.
 ## fpga/test_publish_binding.py (the publisher's drift-refusing evidence
 ## binding, fpga/ARTY.md) and fpga/test_arty_sd_top.py (the arty_a7_sd_top
 ## pin/MMCM replay) are in the same bundle for the same reason: they sit on the
@@ -225,38 +230,52 @@ verify:
 ## SKIPs without it; the m5a-fast job installs iverilog before `make
 ## verify-fast` (rungs.yml), so it runs there.
 ##
-## THE TIMEOUT IS PER JOB, SO THE SHAPE OF THE SPLIT IS THE GATE'S HEADROOM.
-## tools/test_run_case.py is its own job rather than a member of the big one
-## (review of PR #405). That bundle was one 292 s job on main against a 600 s
-## cap -- 49 % of it, which is 97 % of it on the 2x-slower runner this repo's own
-## logs show `ubuntu-latest` handing out (`measure_m5a_signal_path` 24.0 s vs
-## 48.2 s, `verify_mono_case` 43.5 s vs 76.2 s, the fpga bundle 13.9 s vs 22.5 s,
-## same commit-adjacent jobs) -- and #389's six new tests took it over the cap
-## twice, NO-VERDICT at 600.0 s. A NO-VERDICT is not a FAIL, which is exactly
-## why it must not be tolerated: it is the gate reporting nothing in the place a
-## result belongs.
+## #812 (OPERATOR OPTION a): THE 37 tools/ PATHS THIS RECIPE ONCE ENUMERATED
+## ARE GONE, and with them the hand-balanced two-way split. They ran twice per
+## change-scoped PR -- here, and in the rungs.yml `tools` job's wholesale
+## `pytest tools/ -q` ("No deselects.") under a byte-identical change guard --
+## and the duplication is what kept this gate at the edge of its 600 s
+## per-command cap. The history, because it is why the load went rather than
+## the cap rising: the unsplit bundle was one 292 s job, 49 % of the cap, 97 %
+## of it on the 2x-slower runner this repo's own logs show `ubuntu-latest`
+## handing out -- and #389's six new tests took it over the cap twice,
+## NO-VERDICT at 600.0 s. The fix then was to split the load by hand
+## (tools/test_run_case.py alone 274.6-335.8 s in CI, the rest 323.6-444.9 s,
+## "worst 74 % of cap" on a 3.1x-slow runner) and to keep rebalancing it on
+## every added test. #812 removed the load instead: exactly the 37 tools/
+## paths the operator's 881c4631 baseline enumerated, ruled out of this
+## recipe and left to the sibling job that already runs them unpinned under
+## the same guard. A NO-VERDICT is not a FAIL, which is exactly why it must
+## not be tolerated: it is the gate reporting nothing in the place a result
+## belongs -- and this is the SOUND gate (#282), so its headroom is the
+## milestone's, not bookkeeping.
 ##
-## Measured on an 8-vCPU worker before choosing the split (serial, so the two
-## numbers are each job's own cost and not a scheduling artifact):
-##   tools/test_run_case.py alone   282.9 s   112 tests
-##   every other file in the bundle 278.7 s   424 tests
-## AND THEN MEASURED IN CI, WHICH DISAGREED ABOUT THE BALANCE -- worth leaving
-## here rather than quoting only the local numbers, because the runner's own
-## speed is the variable this gate keeps tripping over. Two m5a-fast runs of the
-## same commit, with `measure_m5a_signal_path` alongside as the runner's ruler
-## (main measured it at 24.0 s):
-##   ruler 49.5 s   test_run_case 274.6 s   other files 323.6 s   worst 54 % of cap
-##   ruler 74.1 s   test_run_case 335.8 s   other files 444.9 s   worst 74 % of cap
-## so the split is even to ~15 % rather than to 1.5 %, the OTHER-FILES job is now
-## the longer one, and a 3.1x runner still leaves a quarter of the cap spare --
-## against 97 % of it for main's single 292 s bundle on a 2x runner, and past the
-## cap entirely for the unsplit version. `run_all.py` runs jobs concurrently with
-## `min(len(cmds), cpu_count)` workers and these two are submitted FIRST, so they
-## both start at t=0 on the runner's two cores; the remaining jobs queue behind
-## whichever finishes first, so the target's own wall clock does not grow.
-## Adding a file to either job is fine; adding a 150 s test to one is the thing
-## that broke this, so put the next expensive file in whichever job is shorter --
-## which the CI rows above, not the local ones, say is tools/test_run_case.py.
+## What is still enumerated, and why each part is here rather than only in a
+## sibling job:
+##   the fpga/ bundle   no wholesale fpga/ collection anywhere (above)
+##   the pnr/ paths     the pnr job does collect pnr/ wholesale, but the
+##                      ruling scoped the removal to the 37 tools/ paths;
+##                      these stay outside it
+##   the rtl-sketch/    m5a-fast is the only CI job that runs them at all
+##   the model/ files   m5a-fast is their only UNPINNED run: the rungs.yml
+##                      `python` job wraps `pytest model/ spec/` in
+##                      `--require-thread-pins` deliberately (the #422
+##                      crash-rate control, rungs.yml's own comment), so
+##                      dropping them here would remove the unpinned arm
+##                      for those three files outright
+##   the newer tools/   added after the 881c4631 baseline, outside the
+##                      ruling's scope; kept by the decision, not by
+##                      oversight -- they still run twice until someone
+##                      rules on them
+## The one suite whose CI wiring was literal membership -- the manifest
+## suite -- moved its ownership to the `tools` job with the load:
+## tools/test_manifest.py now asserts that job collects it and is not
+## narrowed away from it, and the suite's injected-defect control stages
+## exactly that narrowing (a text-preserving `--ignore`) against rungs.yml.
+## The #564 collection inventory (tools/pytest_collection_inventory.py)
+## still proves no tools/ or model/ file stops being collected anywhere.
+##
+## MEASURED-PER-COMMAND PLACEHOLDER (filled from the build-box run)
 ##
 ## tools/test_signoff_klt_version.py (#1095) is the local half of the regrade
 ## job's `evidence envelopes were attested by the pinned klt` step (#1089),
@@ -268,11 +287,10 @@ verify:
 ## 32 tests, ~1 s measured. `make controls` runs the same file.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest tools/test_run_case.py -q" \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_regen_m1a_units.py tools/test_verify_attack_context_model.py tools/test_check_attack_context_rebind.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_compare_candidate_tails.py tools/test_result_destination.py tools/test_run_all.py tools/test_refusal_exit_census.py tools/test_manifest.py tools/test_characterize_synth_top.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_setup_ci_verilator.py tools/test_check_attested_hashes.py tools/test_signoff_klt_version.py tools/test_provenance_retention.py tools/test_corpus_path_single_source.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_verify_drums.py rtl-sketch/test_synth_count.py -q" \
- 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py fpga/test_probe_xdc_bindings.py tools/test_check_arty_evidence_binding.py fpga/test_publish_binding.py fpga/test_arty_sd_top.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py fpga/test_named_r1.py fpga/test_named_r2.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_regen_m1a_units.py tools/test_compare_candidate_tails.py tools/test_refusal_exit_census.py tools/test_characterize_synth_top.py tools/test_setup_ci_verilator.py tools/test_check_attested_hashes.py tools/test_signoff_klt_version.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_verify_drums.py rtl-sketch/test_synth_count.py -q" \
+ 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py fpga/test_probe_xdc_bindings.py fpga/test_publish_binding.py fpga/test_arty_sd_top.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py fpga/test_named_r1.py fpga/test_named_r2.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
- 	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
+ 	  "$(PY) -m pytest model/test_pulse_oversample.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
 	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \
 	  "$(PY) tools/verify_mono_case.py" \

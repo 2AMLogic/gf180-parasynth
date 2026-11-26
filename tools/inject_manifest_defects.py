@@ -215,10 +215,11 @@ INJECTIONS = [
      '    pass  # _single_path_component("case_id", case_id)',
      [f"{TESTS}::test_render_refuses_a_case_id_that_is_not_one_path_component"]),
 
-    ("the suite is dropped from the one make target CI invokes",
-     "Makefile",
-     " tools/test_manifest.py", "",
-     [f"{TESTS}::test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs"]),
+    ("the tools job's wholesale run is narrowed away from the suite (text intact)",
+     ".github/workflows/rungs.yml",
+     "run: python -m pytest tools/ -q",
+     "run: python -m pytest tools/ -q --ignore=tools/test_manifest.py",
+     [f"{TESTS}::test_this_suite_runs_in_a_ci_job_that_collects_tools_wholesale"]),
 ]
 
 
