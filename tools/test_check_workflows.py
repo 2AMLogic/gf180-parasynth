@@ -1214,8 +1214,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the control link -- the exact defect that shipped",
         "python rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail",
     ): StepGatedEntry(
-        reason="nightly controls step had no clean verify_ctl.py run on main yet (#1222)",
-        open_issue="#1222",
+        reason="The control-link step runs the clean SPI verifier before its mutants.",
+        clean_baseline="python rtl-sketch/verify_ctl.py",
     ),
     (
         "nightly.yml",
@@ -1223,8 +1223,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the control link -- the exact defect that shipped",
         "python rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail",
     ): StepGatedEntry(
-        reason="nightly controls step had no clean verify_ctl.py run on main yet (#1222)",
-        open_issue="#1222",
+        reason="The control-link step runs the clean SPI verifier before its mutants.",
+        clean_baseline="python rtl-sketch/verify_ctl.py",
     ),
     (
         "nightly.yml",
@@ -1232,8 +1232,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the chip at its pins",
         "python rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail",
     ): StepGatedEntry(
-        reason="nightly controls step had no clean verify_synth_top.py run on main yet (#1222)",
-        open_issue="#1222",
+        reason="The chip-at-pins step runs the clean top-level verifier before its mutants.",
+        clean_baseline="python rtl-sketch/verify_synth_top.py",
     ),
     (
         "nightly.yml",
@@ -1241,8 +1241,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the chip at its pins",
         "python rtl-sketch/verify_synth_top.py --inject VOICE_DRUM_CLAMP16 --expect-fail",
     ): StepGatedEntry(
-        reason="nightly controls step had no clean verify_synth_top.py run on main yet (#1222)",
-        open_issue="#1222",
+        reason="The chip-at-pins step runs the clean top-level verifier before its mutants.",
+        clean_baseline="python rtl-sketch/verify_synth_top.py",
     ),
     (
         "nightly.yml",
@@ -1250,8 +1250,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the chip at its pins",
         "python rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail",
     ): StepGatedEntry(
-        reason="nightly controls step had no clean verify_synth_top.py run on main yet (#1222)",
-        open_issue="#1222",
+        reason="The chip-at-pins step runs the clean top-level verifier before its mutants.",
+        clean_baseline="python rtl-sketch/verify_synth_top.py",
     ),
     (
         "nightly.yml",
@@ -1259,8 +1259,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the chip at its pins",
         "python rtl-sketch/verify_synth_top.py --inject I2S_DELAY --expect-fail",
     ): StepGatedEntry(
-        reason="nightly controls step had no clean verify_synth_top.py run on main yet (#1222)",
-        open_issue="#1222",
+        reason="The chip-at-pins step runs the clean top-level verifier before its mutants.",
+        clean_baseline="python rtl-sketch/verify_synth_top.py",
     ),
     (
         "nightly.yml",
@@ -1268,8 +1268,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the chip at its pins",
         "python rtl-sketch/verify_synth_top.py --inject MODAL_NUM_HOLD --expect-fail",
     ): StepGatedEntry(
-        reason="nightly controls step had no clean verify_synth_top.py run on main yet (#1222)",
-        open_issue="#1222",
+        reason="The chip-at-pins step runs the clean top-level verifier before its mutants.",
+        clean_baseline="python rtl-sketch/verify_synth_top.py",
     ),
     (
         "nightly.yml",
@@ -1277,8 +1277,8 @@ STEP_GATED_ALLOWLIST: dict[tuple[str, str, str, str], StepGatedEntry] = {
         "the chip at its pins",
         "python rtl-sketch/verify_synth_top.py --inject DRUM_ENV_FLOOR --expect-fail",
     ): StepGatedEntry(
-        reason="nightly controls step had no clean verify_synth_top.py run on main yet (#1222)",
-        open_issue="#1222",
+        reason="The chip-at-pins step runs the clean top-level verifier before its mutants.",
+        clean_baseline="python rtl-sketch/verify_synth_top.py",
     ),
     (
         "nightly.yml",
