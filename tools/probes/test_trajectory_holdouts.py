@@ -58,3 +58,60 @@ def test_removing_low_tom_holdouts_cannot_turn_fit_clips_into_report_rows(report
     row, rendered = report("LT", ["00", "50", "10"])
     assert not rendered, f"missing holdouts triggered renders at fit positions {rendered}"
     assert row is None
+
+
+def test_a_fit_only_corpus_its_refusal_is_named_and_attributed(report, capsys):
+    """The None of the test above is a REFUSAL, not a silent skip: it must be
+    emitted, attributed to the voice, and say what was actually wrong -- an
+    adjustable voice whose corpus holds fit settings only -- so it can never
+    be read back as 'no knob to hold out', the label the old fallback gave
+    it (#1362)."""
+    row, rendered = report("LT", ["00", "50", "10"])
+    assert row is None and not rendered
+    out = capsys.readouterr().out
+    assert "LT" in out, out
+    assert "REFUSED" in out and "no held-out recording" in out, out
+    assert "no knob to hold out" not in out, out
+
+
+@pytest.fixture
+def fit_only_corpus(tmp_path, monkeypatch):
+    """The same fit-only low-tom corpus for the two 808 reports that do not
+    go through `compare` or `voice_map`: `--bands` and `--shared` carried the
+    identical fallback at 570e4632 (excitation_energy.py:1039 and :1256) and
+    select through `td.report_clips` now. The law fitters are stubbed because
+    this file tests SELECTION, not fitting, and `render` is recorded so a
+    refusal that still rendered would be visible."""
+    sr = 44100
+    t = np.arange(sr // 3) / sr
+    tone = np.sin(2 * np.pi * 100 * t) * np.exp(-t / 0.08)
+    rendered = []
+
+    def render(voice, knobs, laws, arm):
+        rendered.append(knobs)
+        return tone, sr
+
+    monkeypatch.setattr(energy.td, "render", render)
+    monkeypatch.setattr(energy.td, "fit_laws", lambda *a, **k: {})
+    directory = tmp_path / energy.td.ALL_REF["LT"][0]
+    directory.mkdir()
+    for code in ("00", "50", "10"):
+        wavfile.write(directory / f"LT{code}.WAV", sr,
+                      (16000 * tone).astype(np.int16))
+    return str(tmp_path), rendered
+
+
+def test_the_bands_report_refuses_a_fit_only_corpus(fit_only_corpus, capsys):
+    refdir, rendered = fit_only_corpus
+    energy.report_bands(refdir, voices=["LT"])
+    assert not rendered, f"missing holdouts triggered renders at fit positions {rendered}"
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "LT" in out and "no held-out recording" in out, out
+
+
+def test_the_shared_circuit_report_refuses_a_fit_only_corpus(fit_only_corpus, capsys):
+    refdir, rendered = fit_only_corpus
+    energy.report_shared(refdir, voices=["LT"])
+    assert not rendered, f"missing holdouts triggered renders at fit positions {rendered}"
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "LT" in out and "no held-out recording" in out, out
