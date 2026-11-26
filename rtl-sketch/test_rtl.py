@@ -107,9 +107,29 @@ VOICE_BUGS = [("SQUARE_SIGN", "default"),          # the square takes the saw's 
 def test_voice_bench_fails_on_a_stub(tmp_path):
     """The red run of docs/verification-rules.md: voice_dp's ports with no
     behaviour and every output X must give status exactly 1 -- a mismatch,
-    with the frames reported as undefined -- never a pass and never 2."""
-    assert verify_voice.main(["--set", "quick", "--only", "default", "--outdir", str(tmp_path),
-                              "--rtl", os.path.join(HERE, "stubs", "voice_dp_stub.v")]) == 1
+    with the frames reported as undefined -- never a pass and never 2.
+    Exit 1 alone cannot tell an X sample from a defined wrong one, so the
+    same run's evidence is asserted with it: a strobed, X sample on every
+    requested frame, a final STATE row of exactly 17 X values, and the drift
+    taps (drift_cnt, drift_acc[0..2], whose absence once killed the compile)
+    diagnosed as X -- a defined but wrong drift value that still exits 1
+    fails here."""
+    rc = verify_voice.main(["--set", "quick", "--only", "default", "--outdir", str(tmp_path),
+                            "--rtl", os.path.join(HERE, "stubs", "voice_dp_stub.v")])
+    assert rc == 1, f"raw exit {rc}: 1 = mismatch, 0 = control passed, 2 = did not run"
+    lc = verify_voice.LAST_COMPARE
+    assert lc["status"] == 1 and lc["n"] > 0
+    rows = [l.split() for l in open(os.path.join(str(tmp_path), "voice_rtl_out.txt")) if l.strip()]
+    frames = [r for r in rows if r[0] != "STATE"]
+    state = [r for r in rows if r[0] == "STATE"]
+    assert len(frames) == lc["n"], "every requested frame strobed a sample"
+    assert all(r[j] == "x" for r in frames for j in range(1, 1 + len(verify_voice.FIELDS))), \
+        "every sample and every tap must be undefined on the stub"
+    assert len(state) == 1 and state[0][1:] == ["x"] * len(verify_voice.STATE_FIELDS), \
+        "final STATE row must be exactly 17 X values"
+    got = {f: g for f, _e, g in lc["state_mismatch"]}
+    assert [got.get(f) for f in ("drift_cnt", "drift_acc0", "drift_acc1", "drift_acc2")] \
+        == ["x"] * 4, "the drift taps must be diagnosed as X, not merely as wrong"
 
 
 @needs_sim
