@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import ast
 import os
+import subprocess
 import sys
 
 import numpy as np
@@ -333,56 +334,6 @@ def test_check_locks_exits_nonzero_when_the_record_disagrees(monkeypatch):
 # `LOCK` named `ce400a6`, an object that does not exist in this repository. Both are mechanism failures, so both get
 # a mechanism here rather than a note.
 # ===========================================================================
-def _git(*args):
-    import subprocess
-    return subprocess.run(["git", "-C", os.path.dirname(HERE), *args],
-                          capture_output=True, text=True)
-
-
-def _in_a_git_checkout() -> bool:
-    return _git("rev-parse", "--git-dir").returncode == 0
-
-
-def _history_is_truncated() -> bool:
-    """A shallow clone has not fetched the ancestors these tests resolve, so
-    `git cat-file -t <real ancestor sha>` fails there with exactly the error a
-    dangling sha gives. That is the apparatus in a wrong state, not a finding:
-    the first CI run of these tests went red on `28dfd55`/`50d7aaf`, both of
-    which resolve fine in a full clone, because `moog-acceptance.yml` checked
-    out at the default depth of 1.
-
-    Report it as its own outcome -- named, and still red. Skipping instead
-    would hand back a green run for the one check #242 exists to install, which
-    is the blind spot rather than a fix for it."""
-    return _git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
-
-
-def _assert_history_reaches_the_shas():
-    assert not _history_is_truncated(), (
-        "REFUSED: this is a shallow clone, so the lock table's ancestor commits "
-        "were never fetched and `git cat-file` cannot answer whether they exist. "
-        "Not a provenance failure -- a checkout-depth one. Clone with full "
-        "history, or set `fetch-depth: 0` on the workflow's checkout step.")
-
-
-def test_the_commit_the_locks_were_measured_at_exists_in_this_repository():
-    """`LOCK = "ce400a6"` for months and `git cat-file -t ce400a6` fails: it
-    was a pre-squash commit on #51's branch. Every "locked at ..." line in the
-    report therefore cited nothing, and the bisect the report's own advice
-    recommends could not be started at all -- the concrete cost, in #242, was
-    re-measuring 17 historical trees to recover two answers the table should
-    have carried."""
-    if not _in_a_git_checkout():
-        import pytest
-        pytest.skip("not a git checkout")
-    _assert_history_reaches_the_shas()
-    r = _git("cat-file", "-t", sr.LOCK)
-    assert r.returncode == 0 and r.stdout.strip() == "commit", (
-        f'sound_report.LOCK = "{sr.LOCK}" is not a commit in this repository '
-        f'({r.stdout.strip() or r.stderr.strip()}). A lock table whose own '
-        "provenance is a dangling sha cannot be bisected against.")
-
-
 def test_every_changelog_entry_names_a_real_property_and_real_commits(lock_changelog):
     """A lock move records WHICH commit changed the sound. If the key matches no
     property, or an `at` / `recorded_by` sha does not resolve, it is decoration.
@@ -393,13 +344,7 @@ def test_every_changelog_entry_names_a_real_property_and_real_commits(lock_chang
             assert key in props, f"LOCK_CHANGELOG names {key}, which build_properties() does not create"
             assert key in sr.LOCKS, f"LOCK_CHANGELOG names {key}, which has no entry in LOCKS"
         assert len(ev["reason"]) > 40, f"{ev['recorded_by']} gives no reason"
-    if _in_a_git_checkout():
-        _assert_history_reaches_the_shas()
-        for ev in lock_changelog:
-            for field in ("at", "recorded_by"):
-                r = _git("cat-file", "-t", ev[field])
-                assert r.returncode == 0 and r.stdout.strip() == "commit", (
-                    f"LOCK_CHANGELOG {field}={ev[field]!r} is not a commit here")
+    assert sr.check_lock_changelog() == []
 
 
 def test_a_relocked_propertys_provenance_reaches_the_line_the_report_prints(lock_changelog):
@@ -443,6 +388,63 @@ def _ev(key, was, now, **kw):
          "reason": "a real and sufficiently long reason", "locks": {key: (was, now)}}
     e.update(kw)
     return e
+
+
+@pytest.mark.parametrize("field", ["at", "recorded_by", "LOCK"])
+def test_check_locks_rejects_a_moving_commit_reference(monkeypatch, capsys, field):
+    key = ("CP", "attack")
+    old = sr.LOCKS[key]
+    move = _ev(key, old, old + 1, reason="Fixture moving the clap attack one millisecond later.")
+    if field == "LOCK":
+        monkeypatch.setattr(sr, "LOCK", "HEAD")
+    else:
+        move[field] = "HEAD"
+    monkeypatch.setattr(sr, "LOCK_CHANGELOG", [*sr.LOCK_CHANGELOG, move])
+    monkeypatch.setitem(sr.LOCKS, key, old + 1)
+
+    assert sr.main(["--check-locks"]) == 1
+    assert any(field in line and "HEAD" in line and "commit" in line
+               for line in capsys.readouterr().out.splitlines())
+
+
+@pytest.fixture
+def measurement_repo(tmp_path):
+    def git(*args):
+        return subprocess.check_output(
+            ["git", "-C", str(tmp_path), "-c", "user.name=Test", "-c", "user.email=test@example.org",
+             *args], text=True).strip()
+
+    git("init", "-q")
+    git("commit", "-q", "--allow-empty", "-m", "measurement")
+    return git
+
+
+def test_lock_commit_must_resolve_to_its_own_object(tmp_path, monkeypatch, measurement_repo):
+    git = measurement_repo
+    full = git("rev-parse", "HEAD")
+    short = git("rev-parse", "--short", "HEAD")
+    tree = git("rev-parse", "HEAD^{tree}")
+    monkeypatch.setattr(sr, "HERE", str(tmp_path))
+    assert sr._lock_commit_problems([("at", full), ("recorded_by", short)]) == []
+    assert sr._lock_commit_problems([("at", tree)]) == [
+        f"at={tree!r} does not identify a unique commit in this repository"]
+
+    # A hex branch can shadow a genuine object prefix. Git accepts the text
+    # as a commit even though the branch now points at a different commit.
+    git("commit", "-q", "--allow-empty", "-m", "later measurement")
+    git("branch", short, "HEAD")
+    assert git("rev-parse", "--verify", short) != full
+    assert sr._lock_commit_problems([("at", short)]) == [
+        f"at={short!r} does not identify a unique commit in this repository"]
+
+
+def test_check_locks_refuses_a_shallow_checkout(tmp_path, monkeypatch, capsys, measurement_repo):
+    measurement_repo("commit", "-q", "--allow-empty", "-m", "later measurement")
+    shallow = tmp_path / "shallow"
+    measurement_repo("clone", "-q", "--depth=1", tmp_path.as_uri(), str(shallow))
+    monkeypatch.setattr(sr, "HERE", str(shallow))
+    assert sr.main(["--check-locks"]) == 2
+    assert "REFUSED: checking lock commits requires a full Git checkout" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("field", ["LOCKS", "from", "to"])

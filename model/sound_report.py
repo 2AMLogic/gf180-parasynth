@@ -695,6 +695,39 @@ def _finite_lock_value(value):
     return isinstance(value, Real) and math.isfinite(value)
 
 
+class LockHistoryUnavailable(Exception):
+    """The checkout cannot verify the recorded lock commits."""
+
+
+def _lock_commit_problems(citations):
+    """Check each citation against the object database in this checkout."""
+    def git(*args):
+        return subprocess.run(["git", "-C", HERE, *args], capture_output=True, text=True)
+
+    try:
+        depth = git("rev-parse", "--is-shallow-repository")
+    except FileNotFoundError as exc:
+        raise LockHistoryUnavailable("Git is unavailable to check the lock commits") from exc
+    if depth.returncode or depth.stdout.strip() != "false":
+        raise LockHistoryUnavailable("checking lock commits requires a full Git checkout "
+                                     "(use fetch-depth: 0 in CI)")
+
+    problems = []
+    for field, value in citations:
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{4,40}", value):
+            problems.append(f"{field}={value!r} must be a full or abbreviated Git commit ID")
+            continue
+        # Object-prefix lookup ignores ref names. Ordinary revision lookup must
+        # resolve to that same, unique object, even if a ref is also named in hex.
+        objects = git("rev-parse", f"--disambiguate={value.lower()}")
+        resolved = git("rev-parse", "--verify", value)
+        if (objects.returncode or resolved.returncode
+                or objects.stdout.splitlines() != [resolved.stdout.strip()]
+                or git("cat-file", "-t", value).stdout.strip() != "commit"):
+            problems.append(f"{field}={value!r} does not identify a unique commit in this repository")
+    return problems
+
+
 def check_lock_changelog() -> list:
     """Problems with the changelog, as sentences. Empty list means every lock
     has a recorded value and a reason, and the record agrees with the table.
@@ -736,20 +769,23 @@ def check_lock_changelog() -> list:
                 problems.append(f"{where}: from == to ({now!r}). A no-op is "
                                 f"not a move")
             prev = now
-    for ev in LOCK_CHANGELOG:
+    citations = [("LOCK", LOCK)]
+    for i, ev in enumerate(LOCK_CHANGELOG):
         for field in ("at", "recorded_by", "reason"):
             v = ev.get(field)
             if not isinstance(v, str) or not v.strip() or re.search(r"<[^<>\n]*>", v):
                 problems.append(f"{ev.get('recorded_by')!r}: `{field}` is "
                                 f"{v!r} -- empty or an unedited --relock "
                                 f"placeholder. Fill it in before committing")
+            elif field != "reason":
+                citations.append((f"event {i} `{field}`", v))
         for key in ev["locks"]:
             if key not in LOCKS:
                 problems.append(f"{ev['recorded_by']} records a change to "
                                 f"{key[0]} {key[1]!r}, which is not a lock. Either "
                                 f"the property was removed and the entry is stale, "
                                 f"or the name in one of the two is wrong")
-    return problems
+    return problems + _lock_commit_problems(citations)
 
 
 # ===========================================================================
@@ -886,7 +922,11 @@ def main(argv=None) -> int:
             print(f"  {k:18s} {','.join(v):8s} {d}")
         return 0
     if a.check_locks:
-        problems = check_lock_changelog()
+        try:
+            problems = check_lock_changelog()
+        except LockHistoryUnavailable as exc:
+            print(f"REFUSED: {exc}")
+            return 2
         for p in problems:
             print(f"  {p}")
         print(f"\n{len(LOCKS)} lock(s), {len(LOCK_CHANGELOG)} changelog event(s), "
