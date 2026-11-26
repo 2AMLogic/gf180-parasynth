@@ -1542,16 +1542,53 @@ def distance_curve(refdir, cache, voice, matrix_fn, level_match=True, floor_clam
     return out
 
 
+class FitOnlyCorpus(Exception):
+    """`ours_distance` in held-out mode was asked to measure an adjustable
+    voice whose corpus holds the settings its knob law was fitted on and none
+    of the held-out ones (#1371).
+
+    A paired distance over fit settings is indistinguishable in form from a
+    generalisation result and carries none of its content: the law was fitted
+    through those very points, so they cannot ask how it generalises. The
+    fallback this class replaced measured them silently, with no refusal and
+    no label -- the same pathology #1362 removed from the two trajectory
+    reports. Reporting callers catch it and translate it into their per-voice
+    refusal row; `test_only=False`, the explicit all-settings mode, never
+    sees it.
+
+    A bare NaN would not do: `knob_equivalent_distance` already means
+    "further than the knob can travel" by NaN, so a refusal rendered as NaN
+    would collide with the reports' out-of-range display and be read as the
+    strongest separation the corpus can name."""
+    pass
+
+
 def ours_distance(refs, cache, voice, arm, matrix_fn, test_only=True, scale=None) -> float:
     """Median feature-space distance between the real machine and our render
     at the SAME knob setting, over the held-out settings.
 
     Our arm is one of our clips for every real clip, at the same knobs;
     matching the settings one for one is what makes the paired distance
-    possible."""
+    possible.
+
+    An adjustable voice whose corpus holds fit settings and no held-out
+    recording is REFUSED (`FitOnlyCorpus`) in held-out mode, before any
+    vector is requested: the fallback it replaced paired real and ours on
+    the settings the knob law was fitted on, which cannot measure how it
+    generalises (#1371). A voice with no knob has nothing to hold out, so
+    its recordings are still compared as a descriptive result; a voice with
+    no recording at all still answers nan; and `test_only=False` still asks
+    for every setting explicitly and gets it."""
     use = [c for c in refs if c.voice == voice and (c.is_test or not test_only)]
-    if not use:
-        use = [c for c in refs if c.voice == voice]
+    if not use and test_only:
+        clips = [c for c in refs if c.voice == voice]
+        if clips and any(c.knobs for c in clips):
+            raise FitOnlyCorpus(
+                f"fit-only corpus: {len(clips)} recording(s) of {voice}, all at "
+                f"fit settings, no held-out recording -- a distance on the "
+                f"settings the knob law was fitted on cannot measure how it "
+                f"generalises")
+        use = clips
     if not use:
         return float("nan")
     A = matrix_fn(use)
@@ -2271,6 +2308,99 @@ def test_the_frozen_ruler_makes_the_two_distances_commensurate():
     # property that hides the mismatch rather than the property we want
     assert np.allclose(_zspace(None, np.vstack([a, b])),
                        _zspace(None, np.vstack([a * 7.0, b * 7.0])))
+
+
+# ---- #1371: a fit-only corpus is a refusal, not a silent fit measurement ----
+def test_ours_distance_refuses_a_fit_only_corpus_without_requesting_any_vector():
+    """`ours_distance` in held-out mode used to fall back to a voice's every
+    recording when no held-out one existed, so an adjustable voice whose
+    corpus held fit settings only was measured on the settings its knob law
+    was fitted on -- silently, no refusal, no label, and the row was
+    indistinguishable in form from a generalisation result. The refusal is
+    raised BEFORE any vector is requested, so a fit-only corpus can never
+    make the callback fetch the very vectors the fallback was about to
+    measure. Restoring the fallback fails this test twice: the raise
+    disappears and the callback sees the fit settings. The study runner never
+    reaches this state (its per-voice rows are built from held-out clips and
+    a missing row is skipped first, `discrimination_run.py` ~line 355), so
+    the refusal is for the report path that can reach it."""
+    calls = []
+
+    def mfn(clips):
+        calls.append([c.knobs for c in clips])
+        return np.zeros((len(clips), 2))
+
+    fit = [Clip("BD", (k, k), "real") for k in (0.0, 5.0, 10.0)]
+    for kwargs in ({}, {"scale": (np.zeros(2), np.ones(2))}):
+        try:
+            ours_distance(fit, None, "BD", "ours", mfn, **kwargs)
+        except FitOnlyCorpus as e:
+            assert "BD" in str(e) and "no held-out recording" in str(e), str(e)
+        else:
+            raise AssertionError("a fit-only adjustable voice was not refused")
+    assert calls == []                    # no vector, on either scale
+    # the explicit all-settings mode still measures, and still gets the fit
+    # settings it asked for by name
+    d = ours_distance(fit, None, "BD", "ours", mfn, test_only=False)
+    assert math.isfinite(d)
+    assert calls[0] == [(0.0, 0.0), (5.0, 5.0), (10.0, 10.0)]
+    assert calls[1] == calls[0]           # ours paired one for one
+
+
+def test_ours_distance_pairs_exactly_the_held_out_settings():
+    """The behaviour-preserving half of #1371: on a mixed grid the paired
+    distance uses exactly the settings with a held-out axis -- a two-knob
+    clip qualifies when EITHER axis is held out -- and the value is the one
+    an independent recomputation of the published formula gives, with and
+    without a frozen scale. If the selection ever widened back to the fit
+    settings, both the captured clips and the hand-computed values would
+    move."""
+    fit = [(0.0, 0.0), (5.0, 5.0), (10.0, 10.0)]
+    held = [(2.5, 0.0), (0.0, 7.5), (5.0, 2.5)]
+    refs = [Clip("BD", k, "real") for k in fit + held]
+    vec = {(k, "real"): np.array([k[0], k[1], 1.0]) for k in fit + held}
+    vec.update({(k, "ours"): np.array([k[0] + 0.5, k[1], 1.0]) for k in fit + held})
+    calls = []
+
+    def mfn(clips):
+        calls.append([c.knobs for c in clips])
+        return np.asarray([vec[(c.knobs, c.side)] for c in clips])
+
+    def expected(scale=None):
+        A = np.asarray([vec[(k, "real")] for k in held])
+        B = np.asarray([vec[(k, "ours")] for k in held])
+        Z = np.vstack([A, B])
+        mu, sd = scale if scale is not None else (Z.mean(0), Z.std(0))
+        sd = np.where(sd < 1e-9, 1.0, sd)
+        Z = (Z - mu) / sd
+        n = len(A)
+        return float(np.median(np.linalg.norm(Z[:n] - Z[n:], axis=1)))
+
+    got = ours_distance(refs, None, "BD", "ours", mfn)
+    assert calls[0] == held and calls[1] == held
+    assert got == expected()
+    sc = (np.array([5.0, 5.0, 1.0]), np.array([3.0, 3.0, 0.5]))
+    assert ours_distance(refs, None, "BD", "ours", mfn, scale=sc) == expected(sc)
+
+
+def test_ours_distance_keeps_the_fixed_and_empty_voice_behaviour():
+    """A voice with no knob has nothing to hold out, so its one recording is
+    still compared -- descriptive, exactly what `report_clips` (#1362) says
+    that comparison is -- and a voice with no recording at all still answers
+    nan rather than raising. Both are the behaviours the callers' own
+    pre-refusals are written against, and neither may be swept up by the
+    #1371 refusal."""
+    calls = []
+
+    def mfn(clips):
+        calls.append([c.knobs for c in clips])
+        return np.zeros((len(clips), 1))
+
+    one = [Clip("CB", (), "real")]
+    assert math.isfinite(ours_distance(one, None, "CB", "ours", mfn))
+    assert calls == [[()], [()]]
+    assert math.isnan(ours_distance([], None, "BD", "ours", mfn))
+    assert len(calls) == 2               # the empty voice asked for nothing
 
 
 # ---- #413: the CY knob branch is the shipped constructor, not a fitted law ----

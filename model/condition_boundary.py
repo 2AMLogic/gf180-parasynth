@@ -233,7 +233,11 @@ def artefact_table(refs, cache) -> dict:
 
 def knob_equivalents(refs, cache, mode) -> dict:
     """Section 2. `distance_curve` / `ours_distance` / `knob_equivalent_distance`
-    exactly as discrimination_run.py calls them, on one mode's vectors."""
+    exactly as discrimination_run.py calls them, on one mode's vectors.
+
+    A voice whose corpus holds fit settings and no held-out recording is
+    refused by `ours_distance` (#1371) and gets the per-voice refused row the
+    no-knob voices already get; every other voice is unaffected."""
     flat = {k: v[mode] for k, v in cache.items()}
     mfn = lambda cl: np.asarray([flat[(c.voice, c.knobs, c.side)] for c in cl])
     out = {}
@@ -241,25 +245,29 @@ def knob_equivalents(refs, cache, mode) -> dict:
         if ALL_REF[v][2] == 0:
             out[v] = dict(refused="no knob -> no held-out setting and no yardstick")
             continue
-        dc = td.distance_curve(None, flat, v, mfn)
-        od = td.ours_distance(refs, flat, v, "ours", mfn)
-        ke = td.knob_equivalent_distance(od, dc)
-        sc = td.voice_scale(refs, v, mfn)
-        dcf = td.distance_curve(None, flat, v, mfn, scale=sc)
-        odf = td.ours_distance(refs, flat, v, "ours", mfn, scale=sc)
-        # How steep is the yardstick where we land? A knob-equivalent is read
-        # off an interpolation over four points, so a small distance change
-        # can move it a long way -- and if it can, the published one-decimal
-        # figure is carrying more uncertainty than it shows. This reports the
-        # knob-equivalent at +/-1 % of the measured distance.
-        lo = td.knob_equivalent_distance(od * 0.99, dc)
-        hi = td.knob_equivalent_distance(od * 1.01, dc)
-        out[v] = dict(knob_equivalent=ke, ours_distance=od,
-                      knob_equivalent_frozen=td.knob_equivalent_distance(odf, dcf),
-                      ours_distance_frozen=odf,
-                      ke_at_dist_minus_1pct=lo, ke_at_dist_plus_1pct=hi,
-                      curve={f"{k[0]}|{k[1]}": val for k, val in dc.items()},
-                      knob10=max(dc.values()) if dc else float("nan"))
+        try:
+            dc = td.distance_curve(None, flat, v, mfn)
+            od = td.ours_distance(refs, flat, v, "ours", mfn)
+            ke = td.knob_equivalent_distance(od, dc)
+            sc = td.voice_scale(refs, v, mfn)
+            dcf = td.distance_curve(None, flat, v, mfn, scale=sc)
+            odf = td.ours_distance(refs, flat, v, "ours", mfn, scale=sc)
+            # How steep is the yardstick where we land? A knob-equivalent is
+            # read off an interpolation over four points, so a small distance
+            # change can move it a long way -- and if it can, the published
+            # one-decimal figure is carrying more uncertainty than it shows.
+            # This reports the knob-equivalent at +/-1 % of the measured
+            # distance.
+            lo = td.knob_equivalent_distance(od * 0.99, dc)
+            hi = td.knob_equivalent_distance(od * 1.01, dc)
+            out[v] = dict(knob_equivalent=ke, ours_distance=od,
+                          knob_equivalent_frozen=td.knob_equivalent_distance(odf, dcf),
+                          ours_distance_frozen=odf,
+                          ke_at_dist_minus_1pct=lo, ke_at_dist_plus_1pct=hi,
+                          curve={f"{k[0]}|{k[1]}": val for k, val in dc.items()},
+                          knob10=max(dc.values()) if dc else float("nan"))
+        except td.FitOnlyCorpus as e:
+            out[v] = dict(refused=str(e))
     return out
 
 
