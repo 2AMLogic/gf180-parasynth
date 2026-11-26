@@ -95,8 +95,12 @@ that are easy to get wrong are injectable and are checked in
     REF_MISSING    point the reference at a file that is not there: the case
                    MUST come back `no verdict`, with a stated reason
 
-`--inject` refuses to write into `docs/scorecard/results`. A control's output
-is not evidence about the instrument and must never be mistaken for it.
+`--inject` refuses to write into `docs/scorecard/results`, and into
+`build/scorecard`, where the board's response curves live: a filter case's
+curve is written beside its record (`response_destination`), so a control
+given any other `--results` cannot replace a clean board's curve (#1412). A
+control's output is not evidence about the instrument and must never be
+mistaken for it.
 
 PROVENANCE, AND THE EXIT CODE
 -----------------------------
@@ -2574,7 +2578,7 @@ def _legacy_reads(ref_f, cut, res, amp, open_f, open_hz):
 
 def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
                     engine_path=None, engine: str | None = None,
-                    artifact_tag: str = "") -> dict:
+                    response_dest: pathlib.Path | None = None) -> dict:
     """One F1 case, scored against its frozen Surge clip.
 
     `engine_path` replaces the model filter path with any object offering
@@ -2586,6 +2590,12 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
     second copy of this function would have been free to drift from its twin.
     `engine` names what produced the numbers and lands on the record; a caller
     that swaps the path and forgets the label is refused below.
+
+    `response_dest` is the file the response curve is written to, resolved by
+    the caller from where the record goes (`response_destination`); both CLIs
+    pass it. Left at None, a caller that states no results directory gets the
+    established model path. This function never places the curve itself, which
+    is what let every caller's run share one file (#1412).
     """
     # Asserted before anything is loaded or rendered, so a caller that swaps the
     # engine and forgets to say so cannot spend twenty minutes of simulation
@@ -2648,7 +2658,8 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
     audio = f"reference {spec['ref_clip']} (frozen, sha256 {meta['sha256'][:12]})"
     audio_path = "not written (--no-audio)"
     if keep_audio:
-        pth = AUDIO_OUT / f"{cid}-ours-response{artifact_tag}.json"
+        pth = (AUDIO_OUT / f"{cid}-ours-response.json"
+               if response_dest is None else response_dest)
         pth.parent.mkdir(parents=True, exist_ok=True)
         pth.write_text(json.dumps({"freqs_hz": [float(f) for f in dut_f],
                                    "reference_freqs_hz": [float(f) for f in ref_f],
@@ -2660,7 +2671,7 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
                                    "cut_hz": cut, "res_ours": spec["res_ours"],
                                    "res_reference": spec["res_ref"], "amp": amp},
                                   indent=1) + "\n")
-        audio_path = str(pth.relative_to(ROOT))
+        audio_path = stated_path(pth)
         audio = f"{audio}; ours {audio_path}"
 
     import reference_rigs as rr
@@ -3493,6 +3504,39 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
     return twin
 
 
+def stated_path(path: pathlib.Path) -> str:
+    """A path as a record states it: relative to the checkout while it is
+    inside one, absolute once it is not.
+
+    `path.relative_to(ROOT)` raised for anything outside the checkout, so an
+    artefact written out there could not have been recorded at all."""
+    if path.is_relative_to(ROOT):
+        return str(path.relative_to(ROOT))
+    return str(path if path.is_absolute() else path.resolve())
+
+
+def response_destination(results_dir: pathlib.Path, case_id: str,
+                         tag: str = "") -> pathlib.Path:
+    """Where a filter case's response curve is written, resolved from the same
+    decision as the record's destination rather than independently of it.
+
+    A run that lands on the board keeps the established path under
+    `build/scorecard`, because that is the path the published records name
+    (`provenance.artefacts.ours`). Any other results directory gets its curve
+    beside its record, including one outside the checkout, which the record
+    then states absolutely. Until #1412 the writer took a file-name SUFFIX and
+    chose the directory itself, so every run of an engine wrote one shared
+    file: an injected control given a `--results` of its own still replaced
+    the clean board curve, and the control's record named the clean run's
+    curve as its own.
+
+    This only selects a path. A results directory equal to `AUDIO_OUT` yields
+    the shared path, which is why both CLIs refuse that directory to an
+    injected run."""
+    on_board = results_dir.resolve() == RESULTS.resolve()
+    return (AUDIO_OUT if on_board else results_dir) / f"{case_id}-ours-response{tag}.json"
+
+
 def write_result(case: dict, dest: pathlib.Path, res: dict, *,
                  carry_history: bool = True) -> pathlib.Path:
     """The batch write path, in the order it must run: choose WHERE
@@ -3853,7 +3897,12 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
     records the read. A holdout scored like an ordinary development case is the
     failure this repository could not detect after the fact -- "there is no way
     to tell afterwards which it was" -- and it costs one function call to make
-    impossible."""
+    impossible.
+
+    `results_dir` is where this run's records go, and so where a filter case's
+    response curve is placed beside its record (`response_destination`); a
+    caller that leaves it unstated gets the established board path for the
+    curve."""
     cid = case["case_id"]
     kind = plan_for(cid)
     if kind == "not-run":
@@ -3875,7 +3924,7 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
             if inject:
                 res["INJECTED_CONTROL"] = inject
             return res
-    res = _measure_case(case, refdir, inject, keep_audio)
+    res = _measure_case(case, refdir, inject, keep_audio, results_dir=results_dir)
     if res is None:
         return None
     if block is not None:
@@ -3898,7 +3947,7 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
 
 
 def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
-                  keep_audio: bool = True) -> dict | None:
+                  keep_audio: bool = True, *, results_dir: str = "") -> dict | None:
     """The measurement itself. `run_case` is the entry point: it holds the
     holdout gate, which must not be reachable around."""
     cid = case["case_id"]
@@ -3917,7 +3966,9 @@ def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
         if kind == "ensemble":
             return run_ensemble_case(case, keep_audio)
         if kind == "filter":
-            return run_filter_case(case, inject, keep_audio)
+            dest = (response_destination(pathlib.Path(results_dir), cid)
+                    if results_dir else None)
+            return run_filter_case(case, inject, keep_audio, response_dest=dest)
         if kind == "mono":
             control_audio = (ROOT / f"build/scorecard/{cid}-model-control-{inject}.wav"
                              if inject else None)
@@ -4160,7 +4211,9 @@ def main(argv=None) -> int:
     ap.add_argument("--list", action="store_true", help="print the plan and stop")
     ap.add_argument("--refs", default=str(configured_refs()),
                     help=f"the Fischer TR-808 corpus (default {REFS_DEFAULT}, ${REFS_ENV})")
-    ap.add_argument("--results", default=None, help="where result JSON goes")
+    ap.add_argument("--results", default=None,
+                    help="where result JSON goes; off the board, a filter case's "
+                         "response curve goes beside it")
     ap.add_argument("--inject", default="",
                     choices=["", "REF_F0_20PCT", "REF_MISSING", "REF_CORNER_2X",
                              "MONO_PITCH_UP_25_CENTS", "CB_GATE_THE_SUM",
@@ -4217,6 +4270,13 @@ def main(argv=None) -> int:
     if a.inject and outdir.resolve() == RESULTS.resolve():
         print("--inject refuses to write into docs/scorecard/results; pass --results",
               file=sys.stderr)
+        return 2
+    # Nor into the directory the board's response curves live in: a filter
+    # case's curve is written beside its results, so a control whose --results
+    # IS that directory would replace the clean board curve (#1412).
+    if a.inject and outdir.resolve() == AUDIO_OUT.resolve():
+        print(f"--inject refuses to write into {stated_path(AUDIO_OUT)}, where the "
+              "board's response curves live; pass another --results", file=sys.stderr)
         return 2
 
     # The premise of the batch, asserted before any of it runs. A stale
