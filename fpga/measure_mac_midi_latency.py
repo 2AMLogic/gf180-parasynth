@@ -71,7 +71,7 @@ import coremidi_input as cmi                               # noqa: E402
 import live_midi_contract as C                             # noqa: E402
 import uart_device_sim as dev                              # noqa: E402
 
-# Keep measurement imports local so argument parsing works without NumPy.
+# Keep measurement imports local so help and host preflight work without NumPy.
 # verify_live_midi imports NumPy at module load (#1297).
 
 SR = C.SR
@@ -443,7 +443,6 @@ def main(argv=None) -> int:
                          "worst case); recorded in the result")
     ap.add_argument("--json", type=Path, default=OUT)
     a = ap.parse_args(argv)
-    import verify_live_midi as vlm
     if a.source == "coremidi" and sys.platform != "darwin":
         print(f"mac-latency: REFUSED -- --source coremidi needs macOS (this is {sys.platform})")
         return 2
@@ -503,6 +502,7 @@ def main(argv=None) -> int:
         print(f"mac-latency: control {'CAUGHT' if caught else 'NOT DEMONSTRATED'} (on_time "
               f"must move from a clean on_time run) -- {matrix}")
     rec["verdict"] = verdict
+    import verify_live_midi as vlm
     a.json.parent.mkdir(parents=True, exist_ok=True)
     a.json.write_text(json.dumps(vlm._clean(rec), indent=1, default=str) + "\n")
     print(f"mac-latency: {verdict} -> {a.json}")
