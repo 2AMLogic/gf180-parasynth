@@ -66,3 +66,90 @@ def test_r2_does_not_write_r1_or_r0_records():
     src = (HERE / "r2_release.py").read_text()
     for name in ("r1-2025.1.json", "r1-candidate.json", "baseline-2025.1.json"):
         assert f'{name}").write' not in src
+
+
+# ---- the frozen sources: r2_candidate's derivation, never the working tree (#1392)
+def test_the_real_working_tree_is_never_read_for_the_binding(monkeypatch):
+    """The release's frozen sources must not consult build_arty.sources()/roms(),
+    the working tree's path lists, anywhere on the way to a verdict."""
+    import build_arty as ba
+
+    def boom():
+        raise AssertionError("working-tree path list consulted")
+    monkeypatch.setattr(ba, "sources", boom)
+    monkeypatch.setattr(ba, "roms", boom)
+    verdict, detail = r2r.check()
+    assert verdict == "BOUND", detail
+
+
+def test_a_post_r2_source_or_rom_in_the_tree_stays_bound(monkeypatch):
+    """build_arty.roms() is the glob of rtl-sketch/*.hex and build_arty.sources()
+    the working tree's SRCS: that is how a file added after R2 (a correction ROM
+    for #257, a new module) appears in the tree. It must not reach R2's release."""
+    import build_arty as ba
+    roms, sources = ba.roms(), ba.sources()          # the tree's own listings, taken now
+    extra_rom, extra_src = (r2r.ROOT / "rtl-sketch/post_r2_corr.hex",
+                            r2r.ROOT / "rtl-sketch/post_r2_new.v")
+    monkeypatch.setattr(ba, "roms", lambda: roms + [extra_rom])
+    monkeypatch.setattr(ba, "sources", lambda: sources + [extra_src])
+    assert extra_rom in ba.roms() and extra_src in ba.sources()      # the tree lists both
+    verdict, detail = r2r.check()
+    assert verdict == "BOUND", detail
+
+
+def test_a_candidate_refusal_is_reported_as_the_releases_own(monkeypatch):
+    """r2_candidate.Refused and r2_release.Refused are siblings under
+    refusal.Refused. Untranslated, the candidate's escapes check() as a
+    traceback instead of the REFUSED, with its reason, that it is."""
+    import r2_candidate as r2c
+    pub = json.loads((r2r.PUB_DIR / "publication.json").read_text())
+
+    def refuse(*commit):
+        raise r2c.Refused("injected: candidate refusal")
+    monkeypatch.setattr(r2c, "rtl", refuse)
+    monkeypatch.setattr(r2c, "_frozen_blob", refuse)
+    with pytest.raises(r2r.Refused, match="injected: candidate refusal"):
+        r2r.frozen_rtl()
+    with pytest.raises(r2r.Refused, match="injected: candidate refusal"):
+        r2r.constraint_binding(r2r.PUB_DIR, pub)
+    assert r2r.check() == ("REFUSED", "injected: candidate refusal")
+
+
+def test_an_unreadable_freeze_refuses_not_a_traceback(monkeypatch):
+    monkeypatch.setattr(r2r, "R2_FROZEN_AT", "0" * 40)
+    verdict, detail = r2r.check()
+    assert verdict == "REFUSED" and "shallow clone" in detail, detail
+
+
+def test_an_empty_freeze_refuses_by_name(monkeypatch):
+    monkeypatch.setattr(r2r, "R2_FROZEN_AT", "")
+    assert r2r.check() == ("REFUSED", "R2_FROZEN_AT is not set: no R2 image has been built")
+
+
+def test_image_identity_threads_the_freeze_into_the_constraint_binding(monkeypatch):
+    """The XDC the #315 reports are checked against is the one at the commit the
+    sources were read at, handed over by the caller, not the module's default
+    read a second time."""
+    seen = []
+    real = r2r.constraint_binding
+
+    def spy(pub_dir, pub, frozen_at=None):
+        seen.append(frozen_at)
+        return real(pub_dir, pub, frozen_at)
+    monkeypatch.setattr(r2r, "constraint_binding", spy)
+    r2r.image_identity()
+    assert seen == [r2r.R2_FROZEN_AT]
+
+
+def test_the_constraint_binding_reads_the_xdc_at_the_freeze_it_is_given(monkeypatch):
+    freeze, pub = r2r.R2_FROZEN_AT, json.loads((r2r.PUB_DIR / "publication.json").read_text())
+    monkeypatch.setattr(r2r, "R2_FROZEN_AT", "0" * 40)       # the module default: unreadable
+    got = r2r.constraint_binding(r2r.PUB_DIR, pub, frozen_at=freeze)
+    assert got == json.loads(r2r.MANIFEST.read_text())["image"]["constraint_binding"]
+
+
+def test_a_fresh_derivation_is_the_committed_manifest_byte_for_byte():
+    """What --write emits is the committed file, key order included. check()
+    compares values; this compares the bytes."""
+    fresh = (json.dumps(r2r.build(), indent=2) + "\n").encode()
+    assert fresh == r2r.MANIFEST.read_bytes()

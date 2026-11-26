@@ -101,8 +101,19 @@ def _frozen_at() -> str:
     return r2_release.R2_FROZEN_AT
 
 
-def _frozen_blob(rel: str, commit: str | None = None) -> bytes:
+def _freeze(commit: str | None = None) -> str:
+    """The commit R2's frozen files are read at: `commit`, else R2_FROZEN_AT as
+    it stands now (a control may substitute it). An empty one is refused by
+    name: `git show :path`, what an empty commit string builds, reads the INDEX
+    -- the working tree's staged bytes -- and returns them without a word."""
     commit = commit or _frozen_at()
+    if not commit:
+        raise Refused("R2_FROZEN_AT is not set: no R2 image has been built")
+    return commit
+
+
+def _frozen_blob(rel: str, commit: str | None = None) -> bytes:
+    commit = _freeze(commit)
     try:
         return subprocess.run(["git", "-C", str(ROOT), "show", f"{commit}:{rel}"],
                               capture_output=True, check=True).stdout
@@ -111,40 +122,44 @@ def _frozen_blob(rel: str, commit: str | None = None) -> bytes:
                       "cannot verify the freeze") from None
 
 
-def _frozen_paths() -> tuple:
-    """(sources, roms) of R2's freeze, listed from git at R2_FROZEN_AT and not
-    from the working tree, so a file ADDED after R2 neither enters the hash nor
-    goes red. Mirrors build_arty.sources()/roms(): the wrapper, the SRCS of
-    rtl-sketch/verify_synth_top.py (as frozen), the UART bridge; every *.hex
-    beside the RTL plus the ones a frozen source's parameter names."""
+def _frozen_paths(commit: str | None = None) -> tuple:
+    """(sources, roms) of R2's freeze, listed from git at `commit` (default
+    R2_FROZEN_AT) and not from the working tree, so a file ADDED after R2 neither
+    enters the hash nor goes red. Mirrors build_arty.sources()/roms(): the wrapper,
+    the SRCS of rtl-sketch/verify_synth_top.py (as frozen), the UART bridge; every
+    *.hex beside the RTL plus the ones a frozen source's parameter names."""
     import ast
     import posixpath
     import re
-    tree = ast.parse(_frozen_blob("rtl-sketch/verify_synth_top.py").decode())
+    commit = _freeze(commit)
+    tree = ast.parse(_frozen_blob("rtl-sketch/verify_synth_top.py", commit).decode())
     names = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
                  and any(isinstance(t, ast.Name) and t.id == "SRCS" for t in n.targets))
     srcs = ["fpga/rtl/arty_a7_top.v"] + [f"rtl-sketch/{n}" for n in names] + \
            ["rtl-sketch/uart_bridge.v"]
-    ls = subprocess.run(["git", "-C", str(ROOT), "ls-tree", "--name-only", _frozen_at(),
+    ls = subprocess.run(["git", "-C", str(ROOT), "ls-tree", "--name-only", commit,
                          "rtl-sketch/"], capture_output=True, text=True)
     if ls.returncode:
-        raise Refused(f"cannot list rtl-sketch/ at {_frozen_at()[:12]}")
+        raise Refused(f"cannot list rtl-sketch/ at {commit[:12]}")
     roms = {f for f in ls.stdout.split() if f.endswith(".hex")}
     for rel in srcs:
-        for name in re.findall(r'parameter \w+\s*=\s*"([^"]+\.hex)"', _frozen_blob(rel).decode()):
+        for name in re.findall(r'parameter \w+\s*=\s*"([^"]+\.hex)"',
+                               _frozen_blob(rel, commit).decode()):
             roms.add(posixpath.normpath(f"rtl-sketch/{name}"))
     return srcs, sorted(roms)
 
 
-def rtl() -> dict:
+def rtl(commit: str | None = None) -> dict:
     """R2's compiled sources, ROMs and XDC AS FROZEN: read from git at
-    R2_FROZEN_AT, never from the working tree (as r1_candidate.rtl_identity
-    does for R1). The tree may move on (a post-R2 RTL change) without touching
-    R2's identity; how far it has moved is reported by tree_drift(), not bound."""
+    R2_FROZEN_AT (`commit` names another commit to read them at), never from
+    the working tree (as r1_candidate.rtl_identity does for R1). The tree may
+    move on (a post-R2 RTL change) without touching R2's identity; how far it
+    has moved is reported by tree_drift(), not bound."""
     import build_arty as ba
     import r1_candidate as r1c
-    h = lambda rel: hashlib.sha256(_frozen_blob(rel)).hexdigest()      # noqa: E731
-    src_paths, rom_paths = _frozen_paths()
+    commit = _freeze(commit)
+    h = lambda rel: hashlib.sha256(_frozen_blob(rel, commit)).hexdigest()  # noqa: E731
+    src_paths, rom_paths = _frozen_paths(commit)
     srcs = {rel: h(rel) for rel in src_paths}
     roms = {rel: h(rel) for rel in rom_paths}
     xdc = {XDC_REL: h(XDC_REL)}
@@ -157,17 +172,17 @@ def rtl() -> dict:
     missing = sorted(set(EXPECTED_CHANGES) - set(changed))
     if missing:
         raise Refused(f"R2's stated changes are absent from its freeze: {missing}")
-    src = _frozen_blob("rtl-sketch/voice_dp.v").decode()
+    src = _frozen_blob("rtl-sketch/voice_dp.v", commit).decode()
     if src.count("if (!blep || (use_osc2x && shape_osc2x)) state <= S_MIX;") != 1:
         raise Refused("voice_dp.v does not hold the skip2xwin S_WIN condition exactly once")
-    pair = _frozen_blob("rtl-sketch/polyblep_saw_pair.v").decode()
+    pair = _frozen_blob("rtl-sketch/polyblep_saw_pair.v", commit).decode()
     if pair.count("localparam signed [15:0] RECT_GAIN_Q15=16'sd24248;") != 1:
         raise Refused("polyblep_saw_pair.v does not hold the 24248 rectangle headroom exactly once")
-    lad = _frozen_blob("rtl-sketch/ladder_dp_n.v").decode()
+    lad = _frozen_blob("rtl-sketch/ladder_dp_n.v", commit).decode()
     if lad.count("xg    <= xg_full[SW+1:0];") != 1 or "reg signed [SW+1:0] xg;" not in lad:
         raise Refused("ladder_dp_n.v does not hold the #354 26-bit xg repair")
     import xdc_bindings as xb
-    xdc_text = _frozen_blob(XDC_REL).decode()
+    xdc_text = _frozen_blob(XDC_REL, commit).decode()
     try:
         xb.object_queries(xdc_text)
     except xb.Refused as exc:

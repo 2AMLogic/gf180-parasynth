@@ -35,9 +35,7 @@ BOUND means the committed r2-2025.1.json equals a fresh derivation AND:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -68,37 +66,24 @@ Refused = r1r.Refused
 sha, _rel, _need, _json = r1r.sha, r1r._rel, r1r._need, r1r._json
 
 
-def _blob(commit: str, rel: str) -> bytes:
-    r = subprocess.run(["git", "-C", str(ROOT), "show", f"{commit}:{rel}"], capture_output=True)
-    if r.returncode:
-        raise Refused(f"cannot read {rel} at {commit[:12]} (a shallow clone cannot verify "
-                      "the freeze)")
-    return r.stdout
-
-
 # ---- the frozen sources ---------------------------------------------------------
 def frozen_rtl(frozen_at: str | None = None) -> dict:
     """R2's compiled sources, ROMs and XDC read from git at R2_FROZEN_AT, and
-    how they differ from R1's freeze: exactly the reviewed set."""
-    import build_arty as ba
-    import r1_candidate as r1c
+    how they differ from R1's freeze: exactly the reviewed set.
+
+    One derivation for both R2 records: r2_candidate.rtl() lists the paths from
+    git at the freeze, so a source or ROM added after R2 neither enters this
+    image's hashes nor turns its release gate red (#658). Its refusal becomes
+    this module's, reason intact: the two Refused classes are siblings."""
     import r2_candidate as r2c
     frozen_at = frozen_at or R2_FROZEN_AT
     if not frozen_at:
         raise Refused("R2_FROZEN_AT is not set: no R2 image has been built")
-    h = lambda rel: hashlib.sha256(_blob(frozen_at, rel)).hexdigest()      # noqa: E731
-    srcs = {_rel(p): h(_rel(p)) for p in ba.sources()}
-    roms = {_rel(p): h(_rel(p)) for p in ba.roms()}
-    xdc = {_rel(ba.XDC): h(_rel(ba.XDC))}
-    changed = [rel for rel, digest in {**srcs, **roms, **xdc}.items()
-               if hashlib.sha256(_blob(r1c.RTL_FROZEN_AT, rel)).hexdigest() != digest]
-    if sorted(changed) != sorted(r2c.EXPECTED_CHANGES):
-        raise Refused(f"R2's frozen sources differ from R1's freeze in {sorted(changed)}, "
-                      f"not exactly the reviewed set {sorted(r2c.EXPECTED_CHANGES)}")
-    return {"frozen_at": frozen_at, "configuration": dict(ba.IMAGE_CONFIGS[IMAGE_KEY]),
-            "part": ba.PART, "sources": srcs, "roms": roms, "constraints": xdc,
-            "differs_from_r1_freeze": {k: r2c.EXPECTED_CHANGES[k] for k in sorted(changed)},
-            "r1_freeze": r1c.RTL_FROZEN_AT}
+    try:
+        rtl = r2c.rtl(frozen_at)
+    except r2c.Refused as exc:
+        raise Refused(str(exc)) from None
+    return {"frozen_at": frozen_at, **{k: v for k, v in rtl.items() if k != "defines"}}
 
 
 # ---- the image ------------------------------------------------------------------
@@ -115,14 +100,16 @@ def image_identity(pub_dir: Path | None = None, frozen_at: str | None = None) ->
         raise Refused(f"the publication names image {pub.get('image')!r}, not {IMAGE_KEY!r}")
     img["image"] = IMAGE_KEY
     img["differs_from_r1_freeze"] = rtl["differs_from_r1_freeze"]
-    img["constraint_binding"] = constraint_binding(pub_dir, pub)
+    img["constraint_binding"] = constraint_binding(pub_dir, pub, rtl["frozen_at"])
     return img
 
 
-def constraint_binding(pub_dir: Path, pub: dict) -> dict:
+def constraint_binding(pub_dir: Path, pub: dict, frozen_at: str | None = None) -> dict:
     """#315 on THIS image: the build's own query counts and routed exception
     report, shipped and bound by digest, re-checked by fpga/xdc_bindings
-    against the image's XDC as frozen."""
+    against the image's XDC as frozen (at `frozen_at`, default R2_FROZEN_AT),
+    through the candidate's own reader."""
+    import r2_candidate as r2c
     import xdc_bindings as xb
     out = {}
     for name in (xb.REPORT, xb.EXCEPTIONS):
@@ -130,7 +117,10 @@ def constraint_binding(pub_dir: Path, pub: dict) -> dict:
         if sha(p) != pub["published_sha256"].get(name):
             raise Refused(f"{name} is not the one publication.json binds")
         out[name] = sha(p)
-    xdc = _blob(R2_FROZEN_AT, "fpga/boards/arty-a7-100.xdc").decode()
+    try:
+        xdc = r2c._frozen_blob(r2c.XDC_REL, frozen_at or R2_FROZEN_AT).decode()
+    except r2c.Refused as exc:
+        raise Refused(str(exc)) from None
     report = (pub_dir / xb.REPORT).read_text()
     probs = xb.check_report(report, xdc) + \
         xb.check_route(report, (pub_dir / xb.EXCEPTIONS).read_text(), xdc)
