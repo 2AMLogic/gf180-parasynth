@@ -444,6 +444,27 @@ def sensitivity(corpus: list[dict]) -> list[dict]:
     return out
 
 
+#: `measure_harness.descent_test`'s two verdicts. It compares the FULL-precision
+#: correlation with the threshold and rounds only to display it; deciding again
+#: from the displayed value moved the boundary by half a display step
+#: (0.94997528 shows as 0.9500 and read as a match, #1334). Matched literally,
+#: so a reworded harness verdict REFUSES here rather than relabelling every row.
+_HARNESS_MATCH = "a re-pressing of the reference set -- not an independent source"
+_HARNESS_NO_MATCH = "no reference file matches it"
+
+
+def fischer_verdict(harness_verdict: str) -> str:
+    """The conga report's wording for one `measure_harness.descent_test`
+    verdict, carrying the harness's decision across unchanged."""
+    if harness_verdict == _HARNESS_MATCH:
+        return "a re-pressing of the Fischer set -- not a second machine"
+    if harness_verdict == _HARNESS_NO_MATCH:
+        return "no Fischer file matches it"
+    raise ValueError(f"unrecognised measure_harness.descent_test verdict "
+                     f"{harness_verdict!r}: the conga report cannot reword "
+                     "a decision it did not recognise")
+
+
 def descent_test(refdir: pathlib.Path, candidates: pathlib.Path) -> list[dict]:
     """Is a candidate "808 conga" recording a RE-PRESSING of the Fischer set?
 
@@ -453,6 +474,14 @@ def descent_test(refdir: pathlib.Path, candidates: pathlib.Path) -> list[dict]:
     every Fischer file of the same voice, allowing a small resampling ratio
     because a re-pressing is usually pitch-shifted.  A best correlation near
     1.0 is the same recording and carries no independent information.
+
+    The basis is the five NAMED takes of the candidate's voice
+    (`expected_takes`), required before anything is compared: globbing the
+    directory answered "no Fischer file matches it" for a candidate whose match
+    was merely absent, and let any stray `*.WAV` beside the takes win (#1334).
+    Only the candidate's own voice is required, so an LC-only comparison needs
+    the five LC files. The verdict is the harness's, decided at full precision
+    before it rounds the correlation for display; only its wording changes here.
 
     The cross-correlation/re-pressing check itself is `measure_harness.
     descent_test` (issue #104) -- it is the check every future reference-corpus
@@ -467,8 +496,9 @@ def descent_test(refdir: pathlib.Path, candidates: pathlib.Path) -> list[dict]:
                              {"LC": ("low",), "MC": ("mid",), "HC": ("hi", "high")}[v])), None)
         if voice is None or "conga" not in path.name.lower():
             return None
-        return dict(voice=voice,
-                    refs=sorted((refdir / f"{voice.lower()}8").glob("*.WAV")))
+        rels = expected_takes((voice,))
+        require_takes(refdir, rels)
+        return dict(voice=voice, refs=[refdir / r for r in rels])
 
     def measure(x, sr, info):
         return body_spectrum(x, sr, info["voice"])
@@ -499,9 +529,7 @@ def descent_test(refdir: pathlib.Path, candidates: pathlib.Path) -> list[dict]:
                            match_threshold=mh.MATCH_THRESHOLD)
     for r in rows:
         if "best_match" in r:
-            r["verdict"] = ("a re-pressing of the Fischer set -- not a second machine"
-                            if r["best_correlation"] >= mh.MATCH_THRESHOLD else
-                            "no Fischer file matches it")
+            r["verdict"] = fischer_verdict(r["verdict"])
     return rows
 
 

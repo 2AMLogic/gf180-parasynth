@@ -1,4 +1,5 @@
 """Controls for the recovered conga instrument, including its false-green CLI."""
+import math
 import pathlib
 import sys
 
@@ -298,3 +299,168 @@ def test_complete_reports_keep_sorted_filename_order(tmp_path):
 def test_measure_corpus_consumes_a_one_shot_voice_iterator_once(tmp_path):
     _make_corpus(tmp_path, ("LC",))
     assert len(probe.measure_corpus(tmp_path, iter(("LC",)))) == 5
+
+
+# --- #1334: the descent comparison reads the named inventory, not a glob, and
+# --- keeps the shared harness's full-precision decision
+def _descent(refdir, candidates):
+    """`probe.descent_test` behind its reader precondition. Without
+    `soundfile` the wrapper returns a REFUSED row: that is "did not run", and
+    no control below may read it as a caught defect, so it is named, not skipped."""
+    try:
+        import soundfile  # noqa: F401
+    except ImportError:
+        pytest.fail("soundfile is not installed: the descent comparison did not run")
+    return probe.descent_test(refdir, candidates)
+
+
+def _burst(seed, lead=512):
+    """White noise behind pre-onset silence: off-centre autocorrelation ~0, so
+    a copy correlates 1 with its own take and ~0 with every other."""
+    return np.pad(np.random.default_rng(seed).integers(-20000, 20000, 4096), (lead, 0))
+
+
+def _write_burst(path, x):
+    from scipy.io import wavfile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wavfile.write(str(path), 44100, np.asarray(x, dtype=np.int16))
+
+
+def _write_distinct(root, rels):
+    """A different burst per take; returns them keyed by relative path."""
+    out = {}
+    for i, rel in enumerate(rels):
+        out[rel] = _burst(1334 + i)
+        _write_burst(root / rel, out[rel])
+    return out
+
+
+def _candidates(root, files):
+    cands = root / "candidates"
+    for name, x in files.items():
+        _write_burst(cands / name, x)
+    return cands
+
+
+def test_descent_refuses_when_the_matched_take_is_absent(tmp_path):
+    takes = _write_distinct(tmp_path, probe.expected_takes(("LC",)))
+    cands = _candidates(tmp_path, {"low conga.wav": takes["lc8/LC75.WAV"]})
+    row, = _descent(tmp_path, cands)
+    assert (row["best_match"], row["best_correlation"]) == ("LC75.WAV", 1.0)
+    (tmp_path / "lc8" / "LC75.WAV").unlink()
+    with pytest.raises(probe.InventoryRefused) as e:
+        _descent(tmp_path, cands)
+    assert e.value.missing == ["lc8/LC75.WAV"]
+
+
+def test_descent_refuses_an_equal_count_take_with_another_name(tmp_path):
+    takes = _write_distinct(tmp_path, probe.expected_takes(("LC",)))
+    cands = _candidates(tmp_path, {"low conga.wav": takes["lc8/LC75.WAV"]})
+    (tmp_path / "lc8" / "LC75.WAV").rename(tmp_path / "lc8" / "LC99.WAV")
+    with pytest.raises(probe.InventoryRefused) as e:
+        _descent(tmp_path, cands)
+    assert e.value.missing == ["lc8/LC75.WAV"]
+
+
+def test_descent_refuses_a_directory_at_an_expected_take(tmp_path):
+    takes = _write_distinct(tmp_path, probe.expected_takes(("LC",)))
+    cands = _candidates(tmp_path, {"low conga.wav": takes["lc8/LC50.WAV"]})
+    (tmp_path / "lc8" / "LC50.WAV").unlink()
+    (tmp_path / "lc8" / "LC50.WAV").mkdir()
+    with pytest.raises(probe.InventoryRefused) as e:
+        _descent(tmp_path, cands)
+    assert e.value.missing == ["lc8/LC50.WAV"]
+
+
+def test_an_unrelated_wav_cannot_make_an_independent_candidate_a_repressing(tmp_path):
+    _write_distinct(tmp_path, probe.expected_takes(("LC",)))
+    independent = _burst(4242)
+    _write_burst(tmp_path / "lc8" / "DECOY.WAV", independent)
+    cands = _candidates(tmp_path, {"low conga.wav": independent})
+    row, = _descent(tmp_path, cands)
+    assert row["verdict"] == "no Fischer file matches it"
+    assert row["best_match"] in {pathlib.Path(r).name for r in probe.expected_takes(("LC",))}
+
+
+def test_an_unrelated_wav_leaves_a_match_to_a_named_take_unchanged(tmp_path):
+    takes = _write_distinct(tmp_path, probe.expected_takes(("LC",)))
+    cands = _candidates(tmp_path, {"low conga.wav": takes["lc8/LC75.WAV"]})
+    before, = _descent(tmp_path, cands)
+    assert before["verdict"] == "a re-pressing of the Fischer set -- not a second machine"
+    _write_burst(tmp_path / "lc8" / "DECOY.WAV", takes["lc8/LC75.WAV"])
+    after, = _descent(tmp_path, cands)
+    assert after == before and after["best_match"] == "LC75.WAV"
+
+
+def test_descent_needs_only_the_takes_of_the_candidates_voice(tmp_path):
+    takes = _write_distinct(tmp_path, probe.expected_takes(("LC",)))
+    cands = _candidates(tmp_path, {"low conga.wav": takes["lc8/LC50.WAV"]})
+    row, = _descent(tmp_path, cands)
+    assert (row["best_match"], row["verdict"]) == (
+        "LC50.WAV", "a re-pressing of the Fischer set -- not a second machine")
+
+
+@pytest.mark.parametrize("names", [[], ["kick.wav", "conga.wav", "low tom.wav"]])
+def test_descent_skips_unrecognised_candidates_before_any_inventory(tmp_path, names):
+    cands = tmp_path / "candidates"
+    cands.mkdir()
+    for name in names:
+        (cands / name).write_bytes(b"")
+    assert _descent(tmp_path, cands) == []
+
+
+def test_descent_offers_the_harness_the_named_takes_in_inventory_order(tmp_path, monkeypatch):
+    takes = _write_distinct(tmp_path, probe.expected_takes())
+    cands = _candidates(tmp_path, {
+        "low conga.wav": takes["lc8/LC75.WAV"], "mid conga.wav": takes["mc8/MC10.WAV"],
+        "hi conga.wav": takes["hc8/HC00.WAV"]})
+    offered, real = {}, probe.mh.descent_test
+
+    def spy(candidates, classify, *a, **k):
+        for path in sorted(candidates.iterdir()):
+            info = classify(path)
+            if info:
+                offered[info["voice"]] = [r.relative_to(tmp_path).as_posix() for r in info["refs"]]
+        return real(candidates, classify, *a, **k)
+
+    monkeypatch.setattr(probe.mh, "descent_test", spy)
+    assert len(_descent(tmp_path, cands)) == 3
+    assert offered == {v: probe.expected_takes((v,)) for v in ("LC", "MC", "HC")}
+
+
+@pytest.mark.parametrize("target", [0.94, 0.94998, 0.95002])
+def test_descent_keeps_the_shared_decision_on_both_sides_of_the_threshold(tmp_path, target):
+    """Two orthogonal +-1 columns put the candidate's correlation with the
+    reference at exactly `target`; 0.94998 and 0.95002 both DISPLAY as 0.9500."""
+    pairs = np.tile([[1, 1], [1, -1], [-1, 1], [-1, -1]], (1024, 1))
+    np.random.default_rng(282).shuffle(pairs)
+    reference, noise = pairs.T
+    candidate = target * reference + math.sqrt(1 - target ** 2) * noise
+    reference = np.rint(reference * 20000).astype(np.int16)
+    candidate = np.rint(candidate * 20000).astype(np.int16)
+    expected = float(np.corrcoef(reference, candidate)[0, 1])
+    assert abs(expected - target) < 0.000015  # quantisation kept it on its side of 0.95
+
+    refdir = tmp_path / "refs"
+    for rel in probe.expected_takes():
+        _write_burst(refdir / rel, np.pad(reference, (512, 0)))
+    cands = _candidates(tmp_path, {"mid conga.wav": np.pad(candidate, (512, 0))})
+
+    shared, = probe.mh.descent_test(
+        cands, lambda p: {"refs": [refdir / "mc8" / "MC50.WAV"]},
+        probe.read_wav, probe.prepare, read_candidate=probe.read_wav)
+    reported, = _descent(refdir, cands)
+    assert reported["at_resample_ratio"] == shared["at_resample_ratio"] == 1.0
+    assert reported["best_correlation"] == shared["best_correlation"] == round(target, 4)
+    is_match = expected >= probe.mh.MATCH_THRESHOLD
+    assert ("re-pressing" in shared["verdict"]) == is_match
+    assert set(reported) == {"voice", "file", "sr_in", "body_spectrum_db", "best_match",
+                             "best_correlation", "at_resample_ratio", "verdict"}
+    assert reported["verdict"] == (
+        "a re-pressing of the Fischer set -- not a second machine" if is_match
+        else "no Fischer file matches it")
+
+
+def test_an_unrecognised_harness_verdict_refuses_instead_of_relabelling():
+    with pytest.raises(ValueError):
+        probe.fischer_verdict("a re-worded harness verdict")
