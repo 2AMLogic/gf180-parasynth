@@ -27,13 +27,21 @@ twin -- it takes the filter path as an argument. A second scoring path would
 have been free to drift from the twin, and then a difference between the two
 engines could not be told from a difference between two scorers.
 
-WHAT IT REPORTS THAT #94 ASKED FOR EXPLICITLY. The twin's metric values are read
-off the board BEFORE this record replaces them and land on the new record under
-`engine_comparison`, together with the board state each engine produces. If the
-RTL disagrees -- either in the raw sample stream or in a scored metric -- the
-difference is printed and recorded rather than silently overwritten, because
-#94's own instruction is that a disagreement means every model row on the board
-needs re-reading.
+WHAT IT REPORTS THAT #94 ASKED FOR EXPLICITLY. The twin's metric values land
+on the new record under `engine_comparison`, together with the board state
+each engine produces. The twin is the fixed-model reading of this case,
+wherever the board keeps it: the board slot (`results/<case>.json`) on a
+first run; on a repeat run the slot holds the previous integrated-rtl anchor,
+and `run_case.result_destination` parks a fixed-model result beside it under
+`results/model-twin/` (run_case.py) -- that is where it is read from. A record
+qualifies as the twin by naming this case and the fixed-model engine, not by
+occupying the slot: #1390 found the published F1A row comparing the RTL
+against the previous RTL run and calling it the fixed-model twin. If neither
+location has a qualifying result the missing comparison is recorded and no
+metric agreement is claimed. If the RTL disagrees -- either in the raw sample
+stream or in a scored metric -- the difference is printed and recorded rather
+than silently overwritten, because #94's own instruction is that a
+disagreement means every model row on the board needs re-reading.
 
 Exit: 0 the case was measured and passes, 1 it was measured and fails,
 2 REFUSED -- no measurement (a refusal never writes a record).
@@ -63,11 +71,63 @@ CASES = ("F1A", "F1B", "F1C")
 METRIC_SAME = 1e-4
 
 
-def compare_with_twin(case: dict, twin: dict | None, new: dict) -> dict:
+def find_model_twin(case_id: str, board: pathlib.Path):
+    """The fixed-model reading of this case, from wherever the board keeps it.
+
+    The board slot (`<board>/<case>.json`) holds the twin on a first run. On a
+    repeat run that slot holds the previous integrated-rtl anchor, and
+    `run_case.result_destination` parks a fixed-model result beside it under
+    `<board>/model-twin/<case>.json` -- that is the model writer's own answer
+    to "where does the model result go when an anchor is in the way", so it is
+    where this reader looks. A record qualifies as the twin only by naming
+    this case AND the `fixed-model` engine: whatever occupies a slot is not
+    the twin by occupation, which is how the published F1A row ended up
+    comparing the RTL against the previous RTL run (#1390).
+
+    Returns ``(twin, where, why_missing, unreadable)``: `twin` is the
+    qualifying record or None; `where` names the slot a twin came from;
+    `why_missing` explains a None; `unreadable` is set when a present-but-
+    damaged candidate means the caller must refuse rather than report.
+    """
+    slots = ((f"the board slot {board / (case_id + '.json')}",
+              board / f"{case_id}.json"),
+             (f"{board / rc.MODEL_TWIN_DIR / (case_id + '.json')}",
+              board / rc.MODEL_TWIN_DIR / f"{case_id}.json"))
+    occupants = []
+    for where, path in slots:
+        if not path.is_file():
+            continue
+        try:
+            held = json.loads(path.read_text())
+            if not isinstance(held, dict):
+                raise ValueError(f"top level is {type(held).__name__}, not a JSON object")
+        except ValueError as exc:
+            return None, None, None, (
+                f"the fixed-model twin at {path} is present but unreadable as a record, "
+                f"so a disagreement could not be reported: {exc}")
+        occupants.append(
+            f"{where} holds engine {held.get('engine')!r}"
+            + ("" if held.get("case_id") in (None, case_id)
+               else f" for case {held.get('case_id')!r}"))
+        if held.get("engine") == rc.ENGINE and held.get("case_id") == case_id:
+            return held, where, None, None
+    if not occupants:
+        return None, None, "no earlier record for this case: nothing to compare with", None
+    return None, None, (
+        "; ".join(occupants)
+        + f"; looked for a fixed-model result for {case_id} in the board slot and "
+          f"{board / rc.MODEL_TWIN_DIR / (case_id + '.json')}: the metric comparison "
+          f"is missing rather than assumed"), None
+
+
+def compare_with_twin(case: dict, twin: dict | None, new: dict, *,
+                      twin_where: str | None = None,
+                      why_missing: str | None = None) -> dict:
     """What the two engines say about the same case, metric by metric."""
     if twin is None:
         return {"twin_present": False,
-                "why": "no earlier record for this case: nothing to compare with"}
+                "why": why_missing or "no earlier record for this case: nothing to "
+                                      "compare with"}
     before = scorecard.evaluate(case, twin)
     after = scorecard.evaluate(case, new)
     metrics = {}
@@ -87,6 +147,7 @@ def compare_with_twin(case: dict, twin: dict | None, new: dict) -> dict:
             "twin_engine": twin.get("engine"),
             "twin_source_commit": twin.get("source_commit"),
             "twin_analysis_run": twin.get("analysis_run"),
+            "twin_read_from": twin_where,
             "twin_state": before["state"], "rtl_state": after["state"],
             "twin_worst": before["worst"], "rtl_worst": after["worst"],
             "state_changed": before["state"] != after["state"],
@@ -148,16 +209,10 @@ def main(argv=None) -> int:
         return 2
 
     dest = outdir / f"{a.case}.json"
-    twin = None
-    board_record = rc.RESULTS / f"{a.case}.json"
-    if board_record.is_file():
-        try:
-            twin = json.loads(board_record.read_text())
-        except ValueError as exc:
-            print(f"score_f1_rtl: REFUSED -- the board record for {a.case} is not "
-                  f"readable JSON, so a disagreement could not be reported: {exc}",
-                  file=sys.stderr)
-            return 2
+    twin, twin_where, twin_missing_why, unreadable = find_model_twin(a.case, rc.RESULTS)
+    if unreadable is not None:
+        print(f"score_f1_rtl: REFUSED -- {unreadable}", file=sys.stderr)
+        return 2
 
     try:
         path = rtlpath.RtlFilterChainPath(inject=a.inject, timeout_s=a.timeout_s)
@@ -171,11 +226,16 @@ def main(argv=None) -> int:
         return 2
 
     agreement = stream_agreement(record)
-    comparison = compare_with_twin(case, twin, record)
+    comparison = compare_with_twin(case, twin, record, twin_where=twin_where,
+                                   why_missing=twin_missing_why)
     record["engine_comparison"] = {
         "why": ("#94: an integrated-rtl reading of a case whose twin is fixed-model. A "
                 "disagreement means every model row on the board needs re-reading, so "
-                "both readings are on this record rather than one overwriting the other."),
+                "both readings are on this record rather than one overwriting the other."
+                if twin is not None else
+                "#94: an integrated-rtl reading with no fixed-model twin to stand next "
+                f"to ({twin_missing_why}). The sample-stream comparison below is still "
+                "on the record; no metric agreement is claimed."),
         "rtl_vs_model_samples": agreement,
         "rtl_vs_model_metrics": comparison,
         "controls": {
@@ -214,6 +274,8 @@ def main(argv=None) -> int:
     print(f"  RTL vs model samples: "
           f"{'BIT-EXACT' if agreement['bit_exact'] else 'DIFFERS'} "
           f"({agreement['total_mismatches']} of {agreement['total_frames']} frames)")
+    if not comparison.get("twin_present"):
+        print(f"  no fixed-model twin for {a.case}: {comparison['why']}")
     for name, m in (comparison.get("metrics") or {}).items():
         mark = "same" if m["same"] else "MOVED"
         print(f"  {name:<18} rtl {m['rtl_value']} vs fixed-model {m['twin_value']} "

@@ -102,6 +102,20 @@ def test_a_missing_twin_is_stated_not_assumed_to_agree():
     assert cmp["twin_present"] is False and "agrees" not in cmp
 
 
+def test_a_missing_twin_names_why_it_is_missing():
+    cmp = score.compare_with_twin(
+        _case(), None, _rtl(),
+        why_missing="the board slot holds an integrated-rtl anchor and no fixed-model "
+                    "result is parked beside it")
+    assert "integrated-rtl anchor" in cmp["why"]
+
+
+def test_the_comparison_records_where_the_twin_was_read_from():
+    cmp = score.compare_with_twin(_case(), _twin(), _rtl(),
+                                  twin_where="the board slot results/F1A.json")
+    assert "board slot" in cmp["twin_read_from"]
+
+
 def test_stream_agreement_sums_every_curve_and_flags_a_mismatch():
     record = {"model_path": {"rtl_chain": {"curves": [
         {"tag": "a", "cut_hz": 250.0,
@@ -112,6 +126,89 @@ def test_stream_agreement_sums_every_curve_and_flags_a_mismatch():
     assert agree["total_frames"] == 200 and agree["total_mismatches"] == 3
     assert agree["bit_exact"] is False
     assert score.stream_agreement({})["bit_exact"] is False
+
+
+def _board(tmp_path):
+    board = tmp_path / "results"
+    board.mkdir()
+    return board
+
+
+def _write(path, record):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record))
+
+
+def test_a_first_run_reads_the_twin_from_the_board_slot(tmp_path):
+    """The layout the first anchor saw: the board slot holds the fixed-model
+    reading this record is about to replace."""
+    board = _board(tmp_path)
+    _write(board / "F1A.json", _twin())
+    twin, where, why, unreadable = score.find_model_twin("F1A", board)
+    assert twin is not None and twin["engine"] == "fixed-model"
+    assert "board slot" in where and "F1A.json" in where
+    assert why is None and unreadable is None
+
+
+def test_a_repeat_run_reads_the_model_twin_parked_beside_the_anchor(tmp_path):
+    """The repeat-run layout: the board slot holds the previous RTL anchor, and
+    `run_case.result_destination` parks a fixed-model result beside it under
+    `results/model-twin/` (run_case.py). That, not the anchor, is the twin."""
+    board = _board(tmp_path)
+    _write(board / "F1A.json", _rtl())
+    _write(board / rc.MODEL_TWIN_DIR / "F1A.json", _twin())
+    twin, where, why, unreadable = score.find_model_twin("F1A", board)
+    assert twin is not None and twin["engine"] == "fixed-model"
+    assert rc.MODEL_TWIN_DIR in where
+    assert why is None and unreadable is None
+
+
+def test_an_rtl_board_row_with_no_model_twin_is_a_missing_comparison(tmp_path):
+    """The layout that produced the published defect: an anchor in the slot and
+    no fixed-model result anywhere. The comparison is missing, not assumed
+    against whatever occupies the slot (#1390)."""
+    board = _board(tmp_path)
+    _write(board / "F1A.json", _rtl())
+    twin, where, why, unreadable = score.find_model_twin("F1A", board)
+    assert twin is None and where is None and unreadable is None
+    assert "integrated-rtl" in why and rc.MODEL_TWIN_DIR in why
+
+
+def test_a_board_row_that_names_another_case_is_not_the_twin(tmp_path):
+    board = _board(tmp_path)
+    other = _twin()
+    other["case_id"] = "F1B"
+    _write(board / "F1A.json", other)
+    twin, where, why, unreadable = score.find_model_twin("F1A", board)
+    assert twin is None and unreadable is None
+    assert "F1B" in why
+
+
+def test_an_unreadable_candidate_refuses_rather_than_guesses(tmp_path):
+    board = _board(tmp_path)
+    _write(board / "F1A.json", _rtl())
+    unreadable_path = board / rc.MODEL_TWIN_DIR / "F1A.json"
+    unreadable_path.parent.mkdir(parents=True, exist_ok=True)
+    unreadable_path.write_text("{not json")
+    twin, where, why, unreadable = score.find_model_twin("F1A", board)
+    assert twin is None and unreadable is not None and "unreadable" in unreadable
+
+
+def test_a_candidate_that_is_not_a_json_object_refuses(tmp_path):
+    """Valid JSON whose top level is not a record is the same failure: present,
+    but unusable as a twin. The old lookup crashed on it."""
+    board = _board(tmp_path)
+    _write(board / "F1A.json", _rtl())
+    _write(board / rc.MODEL_TWIN_DIR / "F1A.json", "a json string, not a record")
+    twin, where, why, unreadable = score.find_model_twin("F1A", board)
+    assert twin is None and unreadable is not None and "not a JSON object" in unreadable
+
+
+def test_no_board_record_at_all_is_a_missing_comparison(tmp_path):
+    board = _board(tmp_path)
+    twin, where, why, unreadable = score.find_model_twin("F1A", board)
+    assert twin is None and unreadable is None
+    assert "no earlier record" in why
 
 
 def test_an_injected_control_cannot_write_into_the_board():

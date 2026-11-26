@@ -21,7 +21,14 @@ record that says `fixed-model` honestly. So this gate refuses anything that
     two curves an F1 case needs (the commanded cutoff and the wide-open plateau);
   * was produced by a truncated stimulus or with an RTL defect compiled in;
   * omits the `engine_comparison` block that #94 requires -- the fixed-model
-    twin's reading, so a disagreement is on the record and not overwritten.
+    twin's reading, so a disagreement is on the record and not overwritten;
+  * claims a fixed-model twin that names another engine. Whatever occupied
+    the board slot is not the twin by occupation: the published F1A row's
+    "twin" was the previous RTL run (#1390), and a cross-engine comparison
+    cannot be established by another reading of the same engine. A record
+    whose twin is explicitly missing (`twin_present: false`, with the reason)
+    is accepted -- that is a stated absence, not a claim -- but it must not
+    claim metric agreement either.
 
 Exit: 0 the record is what it says it is, 1 it is not, 2 it could not be read.
 """
@@ -121,15 +128,28 @@ def check_record(record: dict, *, root: pathlib.Path = ROOT) -> dict:
         raise Rejected("no engine_comparison block: #94 requires the fixed-model twin's "
                        "reading to be on the record, not overwritten by this one")
     metrics = (comparison.get("rtl_vs_model_metrics") or {})
-    if metrics.get("twin_present") and not isinstance(metrics.get("metrics"), dict):
-        raise Rejected("engine_comparison names a twin but records no per-metric comparison")
+    if metrics.get("twin_present"):
+        if metrics.get("twin_engine") != "fixed-model":
+            raise Rejected(f"the claimed fixed-model twin names engine "
+                           f"{metrics.get('twin_engine')!r}: whatever occupied the board "
+                           f"slot is not the twin by occupation (#1390), and a "
+                           f"cross-engine comparison cannot be established by another "
+                           f"reading of the same engine")
+        if not isinstance(metrics.get("metrics"), dict):
+            raise Rejected("engine_comparison names a twin but records no per-metric comparison")
+    elif metrics.get("agrees") is not None:
+        raise Rejected("rtl_vs_model_metrics claims agreement with no twin present: "
+                       "a missing comparison must be stated, not agreed")
 
     return {"case_id": case_id, "engine": ENGINE,
             "simulator": f"{chain['simulator']} {versions[chain['simulator']]}",
             "curves": len(curves), "frames": frames, "mismatches": mismatches,
             "bit_exact_against_model": mismatches == 0,
             "twin_engine": metrics.get("twin_engine"),
+            "twin_source_commit": metrics.get("twin_source_commit"),
+            "twin_analysis_run": metrics.get("twin_analysis_run"),
             "twin_agrees": metrics.get("agrees"),
+            "twin_missing_why": metrics.get("why") if not metrics.get("twin_present") else None,
             "metrics_that_moved": metrics.get("metrics_that_moved")}
 
 
@@ -157,7 +177,10 @@ def main(argv=None) -> int:
     if summary["twin_engine"]:
         print(f"  fixed-model twin recorded: agrees={summary['twin_agrees']}"
               + (f", moved: {', '.join(summary['metrics_that_moved'])}"
-                 if summary["metrics_that_moved"] else ""))
+                 if summary["metrics_that_moved"] else "")
+              + f" (twin source {summary['twin_source_commit']})")
+    elif summary["twin_missing_why"]:
+        print(f"  no fixed-model twin on the record: {summary['twin_missing_why']}")
     return 0
 
 

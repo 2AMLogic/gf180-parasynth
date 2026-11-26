@@ -526,9 +526,10 @@
     },
     "rtl_vs_model_metrics": {
       "twin_present": true,
-      "twin_engine": "integrated-rtl",
-      "twin_source_commit": "62809b3",
-      "twin_analysis_run": "run_case@e57b03f5bb24 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T22:57:44Z",
+      "twin_engine": "fixed-model",
+      "twin_source_commit": "e356498",
+      "twin_analysis_run": "run_case@06eba1bead1c + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-26T01:54:24Z",
+      "twin_read_from": "git history a4618723:docs/scorecard/results/F1A.json -- the fixed-model record that occupied the board slot before the first integrated-rtl anchor (c50ff10e); identified as the most recent fixed-model version of docs/scorecard/results/F1A.json in history",
       "twin_state": "pass",
       "rtl_state": "pass",
       "twin_worst": 0.7624751347399561,
