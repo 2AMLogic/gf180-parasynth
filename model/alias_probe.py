@@ -36,12 +36,10 @@ the filter's gain and response -- and cross-checked against a CONVERGED
 higher-rate render for the harmonic amplitudes, so a response difference cannot
 masquerade as an aliasing difference.
 
-**One metric, one setting, everywhere.** `MEASURE` fixes record length, window,
-zero-padding and guard width; every reading in every table comes through
-`frac()` with those settings, at the rate the signal is actually at, and every
-reading is printed beside the RMS of the signal it came from and beside the
-estimator's own floor for that f0/rate/length. A reading that is not clear of
-its floor is not a measurement.
+Oscillator and ladder alias fractions use `frac()` at the signal's sample rate.
+The report names the windows for the alias fraction and the band split
+separately. Each alias reading is compared against the estimator's own floor
+for that f0, rate and record length.
 
     .venv/bin/python model/alias_probe.py --out build/alias/<tag>
 
@@ -70,7 +68,7 @@ CYCLE = 1 << PHASE_BITS
 FS = 32768.0                      # Q1.15 full scale
 
 # ---- the metric, fixed once (point 5: hold it still) -----------------------
-MEASURE = dict(seconds=0.5, guard=5, window="hann", pad=1)
+MEASURE = dict(seconds=0.5, guard=5, pad=1)
 GUARD = MEASURE["guard"]
 
 NOTES = (40, 52, 64, 76, 88, 100)
@@ -111,7 +109,8 @@ def provenance(argv=None) -> dict:
                 diff_sha256=hashlib.sha256(diff.encode()).hexdigest()[:16],
                 command=" ".join(argv or sys.argv),
                 python=sys.version.split()[0], numpy=np.__version__,
-                measure=dict(MEASURE), deps=deps,
+                measure=dict(MEASURE, alias_fraction_window=am.INHARMONIC_FRACTION_WINDOW,
+                             band_split_window="hann"), deps=deps,
                 utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
 
 
@@ -126,8 +125,7 @@ def frac(x: np.ndarray, f0: float, sr: int, what: str = "") -> float:
 
     `min_headroom_db=None` (#115): this probe's whole discipline is that it
     measures the estimator's own floor per f0/rate/length and prints every
-    reading beside it -- "a reading that is not clear of its floor is not a
-    measurement" (module docstring), and `validate_estimator` goes further and
+    reading beside it. `validate_estimator` goes further and
     adds the floor back in closed form (`want = 10log10(s + floor*(1-s))`),
     which is the same additive bias `INHARMONIC_MIN_HEADROOM_DB` was derived
     from. So the floor-clearance check lives HERE, in the probe, not in the
@@ -304,7 +302,7 @@ def band_split(x: np.ndarray, f0: float, sr: int, edge: float, guard: int = GUAR
     harmonics are not in the signal -- and which a drop-decimator moves into
     the baseband wholesale."""
     n = len(x)
-    _, X = am.spectrum(x, sr)
+    _, X = am.spectrum(x, sr, window=True)
     p = X ** 2
     mask = np.zeros_like(p, dtype=bool)
     lo = np.zeros_like(p, dtype=bool)
@@ -799,7 +797,7 @@ def main(argv=None):
     print(f"# alias_probe: commit {prov['commit'][:12]} "
           f"{'DIRTY(' + prov['diff_sha256'] + ')' if prov['dirty'] else 'clean'} "
           f"| {prov['utc']} | artefacts -> {out}")
-    print(f"# metric held fixed: {MEASURE}\n")
+    print(f"# metric settings: {prov['measure']}\n")
 
     vrows = validate_estimator()
     if not report_validation(vrows):

@@ -1531,6 +1531,7 @@ def _harmonic_mask(n: int, f0: float, sr: int, guard: int) -> np.ndarray:
 #: agree rather than each carrying its own number. The closed form is checked
 #: against planted-share signals in `tools/probes/estimator_domains.py` 6.
 INHARMONIC_MIN_HEADROOM_DB = 6.0
+INHARMONIC_FRACTION_WINDOW = "blackman-harris-4"
 
 INHARMONIC_DOMAIN = register_domain(ValidatedDomain(
     estimator="inharmonic_fraction_db",
@@ -1680,7 +1681,7 @@ def inharmonic_fraction_db(x, f0: float, sr: int = SR_DEFAULT, *, guard: int = 5
         floor_db = 10.0 * math.log10(max(pr[~harm].sum(), 1e-300) / pr.sum())
     headroom_db = value - floor_db
     detail = dict(covered=float(harm.mean()), floor_db=floor_db,
-                  headroom_db=headroom_db, window="blackman-harris-4",
+                  headroom_db=headroom_db, window=INHARMONIC_FRACTION_WINDOW,
                   guard_bins=guard, min_headroom_db=min_headroom_db)
     if min_headroom_db is not None and headroom_db < min_headroom_db:
         # The reading is declined, not discarded: `value_db` is what it would
