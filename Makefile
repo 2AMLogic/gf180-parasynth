@@ -275,7 +275,29 @@ verify:
 ## The #564 collection inventory (tools/pytest_collection_inventory.py)
 ## still proves no tools/ or model/ file stops being collected anywhere.
 ##
-## MEASURED-PER-COMMAND PLACEHOLDER (filled from the build-box run)
+## Measured per command after the cut, so the headroom claim is a number
+## and not a derivation: run at 559d1d38 (this change, rebased onto
+## 691524da) on the 8-vCPU dispatch worker, `run_all.py --serial` at
+## load ~8 (contended, so these OVERSTATE a quiet runner; the historical
+## local figures above were the same class of host), per-command 600 s
+## cap unchanged:
+##   the 14-file bundle (model + newer tools + pnr + rtl-sketch)   13.9 s
+##   the 24-file fpga bundle                                       11.9 s
+##   verify_live_midi                                               1.3 s
+##   model/test_pulse_oversample.py                                 0.2 s
+##   model/test_audio_measure.py -q -k foldback                     0.3 s
+##   measure_m5a_signal_path --cutoff 14073 --drive 1.0 0.75       11.5 s
+##   verify_mono_case                                               27.0 s
+##   check_workflows / check_attested_hashes / sound_report         0.7 s
+##   inject_manifest_defects (9/9 controls fired)                   3.1 s
+## 11/11 PASS, 70.0 s serial, worst command 27.0 s = 4.5 % of the cap,
+## against the pre-change worst of 444.9 s = 74 % -- measured on a
+## contended worker, so the CI figure on an uncontended runner can only
+## be better. The deleted commands were the expensive ones:
+## tools/test_run_case.py alone was 282.9 s local / 274.6-335.8 s in CI,
+## and the 32-file bundle it sat beside was 278.7 s local / 323.6-444.9 s
+## in CI. Re-measure in CI on the first run of this shape and let those
+## rows supersede these.
 ##
 ## tools/test_signoff_klt_version.py (#1095) is the local half of the regrade
 ## job's `evidence envelopes were attested by the pinned klt` step (#1089),
