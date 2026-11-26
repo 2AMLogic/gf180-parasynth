@@ -209,6 +209,24 @@ def test_q2_control_false_when_tracking_is_broken():
     assert q["q2_tracks_introduced_magnitude"]["answer"] is False
 
 
+@pytest.mark.parametrize("scale, accept", [(1.0, True), (0.0, False), (3.0, False)])
+def test_q2_decay_magnitude_at_the_declared_resolution(scale, accept):
+    """Correct timing, a missed response, and a proportional overestimate."""
+    case = next(c for c in pl.ESTIMATOR_CASES if c.name == "decay_tau")
+    base_tau = 0.030
+    rows = _rows_scales_inverse(base_tau, pl.RESAMPLE_RATIO)
+    for row in rows:
+        # The fixture derives the true change from tape speed: tau' = tau / a.
+        row["measured_delta"] = scale * row["expected_delta"]
+        row["measured_value"] = base_tau + row["measured_delta"]
+    errors = [abs(r["measured_delta"] - r["expected_delta"]) for r in rows]
+    outside = sum(e > case.resolution * base_tau for e in errors)
+    assert (outside == 0) == accept
+    result = pl.five_questions("scales_inverse", case.resolution, case.relative,
+                               base_tau, rows)["q2_tracks_introduced_magnitude"]
+    assert result["answer"] is accept, (result, outside, len(rows), max(errors))
+
+
 # ---------------------------------------------------------------------------
 # 7. five_questions -- Q4
 # ---------------------------------------------------------------------------
