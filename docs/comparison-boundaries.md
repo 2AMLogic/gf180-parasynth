@@ -165,6 +165,26 @@ same pitch and rate pass every check here, and their difference is reported
 as drift. The reports carry nothing that separates one render from two, so
 the assumption is neither asserted nor recorded at the site, and inferring it
 from filenames or labels was left out of #1407.
-`tools/measure_osc_drift_reference.py` meets it by construction: a pair is
-selected by label prefix, and a prefix names one frozen file. A caller that
-hands the command several `--wav` files takes it on itself.
+`tools/measure_osc_drift_reference.py` meets it by construction for three of
+its four baselines: each M1A pair is selected by a label prefix and a note
+together (`m1a/phrase0/` with 36, `m1a/osc1_open/` with 36 and
+`m1a/osc2_open/` with 48), and a prefix names one frozen file. The fourth,
+`m5a-midi84-13.6s-apart`, is selected by the note alone: every report in the
+combined M1A and M5A list whose note is 84 is taken, with no label test. Both
+of its windows come from `m5a-miniv3-raw.wav` today because of what the
+frozen manifests contain, not because the selector asks. On the manifests at
+`014fdbc6` the M5A picker gives every window the manifest's one audio file
+and the M5A timeline holds two note-84 events, while the M1A picker yields no
+note-84 window: its notes are 36 and 43, and 48 and 55 for the `osc2_open`
+octave control. A later M1A render with a window at note 84 would enter that
+selection, and nothing here would refuse it. Establishing that this pair is
+ONE continuous render therefore remains the caller's responsibility, here
+whoever changes the frozen renders, as it does for a caller that hands the
+command several `--wav` files.
+<!-- claim: grep='startswith\("m1a/phrase0/"\)' in=tools/measure_osc_drift_reference.py -->
+<!-- claim: grep='startswith\("m1a/osc1_open/"\)' in=tools/measure_osc_drift_reference.py -->
+<!-- claim: grep='startswith\("m1a/osc2_open/"\)' in=tools/measure_osc_drift_reference.py -->
+<!-- claim: grep='r\.get\("note"\) == 84' in=tools/measure_osc_drift_reference.py note="the MIDI-84 predicate reads the note alone, over the combined M1A and M5A reports" -->
+<!-- claim: grep='fn = man\["audio"\]\["file"\]' in=tools/measure_osc_drift_reference.py note="the M5A picker reads one audio file for every window" -->
+<!-- claim: commit=014fdbc6 covers=docs/scorecard/mono-m1a-miniv3/manifest.json note="the M1A note set above was read from this manifest at this commit; a later commit to it makes the claim STALE so the set is re-derived with _windows_m1a" -->
+<!-- claim: commit=014fdbc6 covers=docs/scorecard/mono-m5a-miniv3/manifest.json note="the two note-84 events above were read from this manifest at this commit; a later commit to it makes the claim STALE so the count is re-derived with _windows_m5a" -->
