@@ -248,7 +248,6 @@ def test_provenance_names_the_commit_the_run_started_from(monkeypatch, tmp_path)
     assert p["commit_at_end"] == "B" and p["head_moved_during_run"] and p["dirty_at_end"]
 
 
-# ---- #1263: per-take neighbour calibration refuses partial or missing sets ----
 def _write_tom_take(refs: pathlib.Path, rel: str, hz: float) -> None:
     from scipy.io import wavfile
     t = np.arange(int(1.0 * 44100)) / 44100
@@ -259,6 +258,47 @@ def _write_tom_take(refs: pathlib.Path, rel: str, hz: float) -> None:
     wavfile.write(p, 44100, np.round(16000 * y).astype(np.int16))
 
 
+@pytest.fixture
+def lt_takes(tmp_path):
+    for code, hz in (("25", 80.0), ("50", 90.0), ("75", 110.0)):
+        _write_tom_take(tmp_path, tc.take_rel("LT", code), hz)
+    return (pg.load_wav(tmp_path / tc.take_rel("LT", "50")),
+            pg.load_wav(tmp_path / tc.take_rel("LT", "75")))
+
+
+def test_diagnose_prints_a_perfect_match_without_a_feature(tmp_path, lt_takes, monkeypatch, capsys):
+    target, _ = lt_takes
+    monkeypatch.setattr(pg, "render_ours", lambda sound: target)
+    row = tc.diagnose(tmp_path, ["LT"])["LT"]
+    assert row["worst_feature"] is None
+    assert capsys.readouterr().out.splitlines()[0] == "LT PASS worst 0.0 pitch_shape 0.0x impulse 0.0x"
+
+
+@pytest.mark.parametrize("probe, named_variant", [(tc.run, "BP"), (tc.twin, "twin-BP")])
+def test_variant_output_shows_only_present_features(probe, named_variant, tmp_path, lt_takes, monkeypatch, capsys):
+    import run_case as rc
+
+    target, detuned = lt_takes
+    monkeypatch.setattr(rc, "render_drum_solo", lambda sound: target)
+    monkeypatch.setattr(tc, "render", lambda sound, ratio=1.0, kind=None: target if kind is None else detuned)
+    monkeypatch.setattr(tc, "render_twin", lambda sound, ratio, numer: target if numer == (1.0,) else detuned)
+    hashes = {p.relative_to(tmp_path).as_posix(): tc.sha16(p) for p in tmp_path.rglob("*.WAV")}
+    prereg = {"corpus": {"sha256_16": hashes}, "split_of": {"LT50": "development"},
+              "candidates": {"BP": "BP"}, "attribution": {"floor_gain_db": []}}
+
+    variants = probe(tmp_path, prereg, sounds=["LT"], codes=["50"])["rows"]["LT50"]["variants"]
+    assert variants["shipped"]["worst"] == 0.0 and variants["shipped"]["worst_feature"] is None
+    named = variants[named_variant]
+    assert named["worst"] > 0 and named["worst_feature"] in pg.FEATURES
+    output = capsys.readouterr().out
+    assert "None" not in output
+    fields = output.strip().split(" | ")
+    assert any("shipped: " in field and field.endswith("worst 0.0") for field in fields)
+    expected = f"worst {named['worst']:.1f}({named['worst_feature']})"
+    assert any(f"{named_variant}: " in field and field.endswith(expected) for field in fields)
+
+
+# ---- #1263: per-take neighbour calibration refuses partial or missing sets ----
 @pytest.mark.parametrize("mode", ["nearest", "farthest", "all", "directory"])
 def test_bar_for_take_refuses_incomplete_neighbours_before_distances(tmp_path, monkeypatch, mode):
     target = tc.take_rel("LT", "50")
