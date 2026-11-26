@@ -44,8 +44,8 @@ here. `verdict()` in `tools/probes/holdout_injected_controls.py` is imported
 and applied to each mutant, with this probe's suite and recorded names kept
 local:
 
-  * exit 0 is NO_FIRE -- the suite stayed green with the injection neutered,
-    so that mutant SURVIVED and is a hole in the test;
+  * exit 0 with an empty failure report is NO_FIRE -- the suite stayed green
+    with the injection neutered, so that mutant SURVIVED and is a hole in the test;
   * exit 1 with a failure at a recorded assertion in its test is FIRED;
   * everything else is REFUSED, with no kill credit: a collection error (2),
     the path gone (4), nothing collected (5), an ERROR-only run, or a red
@@ -132,12 +132,10 @@ def main(argv=None) -> int:
         print("The file has changed under the probe. Update the mutants; do not read this as a pass.")
         return 2
 
-    base_rc, failed, output = hic.run_suite(ROOT, TESTS)
-    if base_rc != 0 or failed is None:
-        print(f"probe REFUSED -- baseline `pytest {TESTS}` exits {base_rc} on the "
-              "unmutated tree" + (" without a failure report" if failed is None else "")
-              + ". No mutant was run.")
-        print(output[-hic.TAIL:].rstrip())
+    base = hic.run_baseline(ROOT, TESTS)
+    if base.outcome == hic.REFUSED:
+        print(f"probe REFUSED -- baseline `pytest {TESTS}`: {base.reason}. No mutant was run.")
+        print(base.tail.rstrip())
         return 2
 
     survivors = []

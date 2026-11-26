@@ -33,9 +33,9 @@ Each injection is deleted in a COPY of the worktree, never in place: a control
 that can leave the tree broken behind it is a control nobody runs twice.
 
 pytest's own process exit status is NOT this probe's outcome (issue #1118):
-`run()` maps it -- 1 with an attributed failure is FIRED, 0 is NO_FIRE, and every
-other status (2 a collection error, 4 the path gone, 5 nothing collected, or
-1 with no recorded call failure) is REFUSED naming the status. A deleted
+`run()` maps it -- 1 with an attributed failure is FIRED and 0 with an empty
+failure report is NO_FIRE. A contradictory status or a run that could establish
+neither outcome is REFUSED naming the status. A deleted
 `tools/test_holdout.py` used to exit 4 in all three copies and print
 "every control fired" -- a false green over the exact drift this probe exists
 to surface.
@@ -172,6 +172,10 @@ def verdict(rc: int, failed: dict[str, Failure] | None,
     if failed is None:
         return Result(REFUSED, [], f"pytest exited {rc} without a failure report for {suite}")
     if rc == 0:
+        if failed:
+            names = sorted(failed)
+            return Result(REFUSED, names, f"pytest exited 0 with recorded failures in {suite}: "
+                          + ", ".join(names))
         return Result(NO_FIRE, [], "pytest stayed green")
     if rc == 1 and failed:
         names = sorted(failed)
@@ -210,26 +214,27 @@ def run(name: str) -> Result:
         return verdict(rc, failed, EXPECTED.get(name, {}), suite=SUITE)
 
 
-def baseline() -> Result:
-    """The UNMUTATED tree, run once before any control (issue #1124): NO_FIRE
-    when it is green, because only then can a control's red be the injection's.
-    Anything else is REFUSED -- on a suite that is red on its own, every
-    control's "fired" measures nothing."""
-    with tempfile.TemporaryDirectory() as tmp:
-        rc, failed, stdout = run_suite(_copy(pathlib.Path(tmp)), SUITE)
+def run_baseline(work: pathlib.Path, suite: str) -> Result:
+    """Run the unmutated suite. Both probes require exit 0 and an empty failure report."""
+    rc, failed, stdout = run_suite(work, suite)
     if failed is None:
         what = f"pytest exited {rc} on the UNMUTATED tree without a failure report"
-    elif rc == 0:
-        return Result(NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
     elif failed:
         what = (f"pytest exited {rc} on the UNMUTATED tree, {len(failed)} test(s) red "
                 f"before any injection ({', '.join(failed)})")
+    elif rc == 0:
+        return Result(NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
     elif rc == 1:
-        what = f"pytest exited 1 on the UNMUTATED tree with no call failure recorded for {SUITE}"
+        what = f"pytest exited 1 on the UNMUTATED tree with no call failure recorded for {suite}"
     else:
         what = f"pytest exited {rc} on the UNMUTATED tree"
     return Result(REFUSED, sorted(failed or {}), f"{what} -- no control's red can mean anything",
                   stdout[-TAIL:])
+
+
+def baseline() -> Result:
+    with tempfile.TemporaryDirectory() as tmp:
+        return run_baseline(_copy(pathlib.Path(tmp)), SUITE)
 
 
 def main() -> int:
