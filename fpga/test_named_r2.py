@@ -140,13 +140,8 @@ def test_the_live_midi_rtl_replay_of_r2_runs_pulse2x(monkeypatch, tmp_path):
 
 
 def test_midi_session_r2_known_state_equals_r1s():
-    class _Nul:
-        timeout = 0
-        def write(self, b): return len(b)
-        def read(self, n=1): return b""
-        def flush(self): pass
-    assert ms.MidiSession(_Nul(), image="r2").init_writes() == \
-        ms.MidiSession(_Nul(), image="r1").init_writes()
+    assert ms.MidiSession(object(), image="r2").init_writes() == \
+        ms.MidiSession(object(), image="r1").init_writes()
 
 
 def test_r2_gets_r1s_frozen_sound_positions_for_the_five_pairs():
@@ -158,10 +153,5 @@ def test_r2_gets_r1s_frozen_sound_positions_for_the_five_pairs():
 
 
 def test_midi_session_r2_plays_the_alternates_like_r1():
-    class _Nul:
-        timeout = 0
-        def write(self, b): return len(b)
-        def read(self, n=1): return b""
-        def flush(self): pass
-    assert ms.MidiSession(_Nul(), image="r2").presets == \
-        ms.MidiSession(_Nul(), image="r1").presets
+    assert ms.MidiSession(object(), image="r2").presets == \
+        ms.MidiSession(object(), image="r1").presets
