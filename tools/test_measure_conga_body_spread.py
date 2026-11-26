@@ -24,10 +24,17 @@ def test_check_refuses_an_empty_existing_reference_directory(tmp_path, monkeypat
 
 
 def test_check_fails_an_injected_band_direction_error(tmp_path, monkeypatch):
+    _write_takes(tmp_path, ["lc8/LC50.WAV", "hc8/HC50.WAV"])
+    # Hold reproduction at its passing value to isolate the two-tone control.
+    rows = probe.validate_reproduction(tmp_path)
+    for row in rows:
+        row.update(published_db=row["recomputed_db"], delta_db=0.0)
+    monkeypatch.setattr(probe, "validate_reproduction", lambda refdir: rows)
+    argv = ["--check", "--refs", str(tmp_path)]
+    assert probe.main(argv) == 0
     real = probe.am.band_energy
     monkeypatch.setattr(probe.am, "band_energy", lambda *a, **kw: real(*a, **kw)[::-1])
-    monkeypatch.setattr(sys, "argv", ["probe", "--check", "--refs", str(tmp_path)])
-    assert probe.main() == 1
+    assert probe.main(argv) == 1
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), 1.0])
@@ -107,10 +114,14 @@ def test_main_exits_nonzero_when_descent_records_a_defect(tmp_path, monkeypatch)
 
 # --- #1309: an incomplete expected set must REFUSE, never shrink the spread ---
 def _make_corpus(root, voices=("LC", "MC", "HC")):
+    _write_takes(root, probe.expected_takes(voices))
+
+
+def _write_takes(root, rels):
     from scipy.io import wavfile
     t = np.arange(8820) / 44100
     x = (np.exp(-t * 20) * np.sin(2 * np.pi * 200 * t) * 20000).astype(np.int16)
-    for rel in probe.expected_takes(voices):
+    for rel in rels:
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         wavfile.write(str(p), 44100, x)
@@ -229,22 +240,51 @@ def test_full_mode_names_every_missing_take_even_with_an_absent_anchor(
     assert "lc8/LC50.WAV" in err and "mc8/MC00.WAV" in err
 
 
-def test_check_keeps_its_two_anchor_scope(tmp_path, monkeypatch):
-    _make_corpus(tmp_path)
-    (tmp_path / "mc8" / "MC00.WAV").unlink()        # not an anchor
-    (tmp_path / "lc8" / "LC50.WAV").unlink()        # anchor
+def test_check_keeps_its_two_anchor_scope(tmp_path):
+    _write_takes(tmp_path, ["lc8/LC50.WAV", "hc8/HC50.WAV"])
     out = tmp_path / "r.json"
-    rc = _run_main(monkeypatch, ["--check", "--refs", str(tmp_path),
-                                 "--json", str(out)])
-    assert rc == 2
-    assert "refusal" not in _json.loads(out.read_text())
+    code = probe.main(["--check", "--refs", str(tmp_path), "--json", str(out)])
+    report = _json.loads(out.read_text())
+    assert code == report["outcome_code"] == 1  # synthetic anchors differ from Fischer's
+    assert [r["file"] for r in report["reproduction"]] == ["lc8/LC50.WAV", "hc8/HC50.WAV"]
+    assert all(r["delta_db"] is not None for r in report["reproduction"])
 
 
-def test_nonexistent_root_writes_the_requested_json(tmp_path, monkeypatch):
+def test_check_names_the_missing_anchor_before_decoding_either(tmp_path, capsys):
+    (tmp_path / "lc8").mkdir()
+    (tmp_path / "lc8/LC50.WAV").write_bytes(b"broken header")
     out = tmp_path / "r.json"
-    rc = _run_main(monkeypatch, ["--refs", str(tmp_path / "nope"),
-                                 "--json", str(out)])
-    assert rc == 2 and _json.loads(out.read_text())["outcome_code"] == 2
+    code = probe.main(["--check", "--refs", str(tmp_path), "--json", str(out)])
+    assert "hc8/HC50.WAV" in capsys.readouterr().err
+    report = _json.loads(out.read_text())
+    assert code == report["outcome_code"] == 2
+    assert report["refusal"]["missing"] == ["hc8/HC50.WAV"]
+    with pytest.raises(probe.InventoryRefused) as exc:
+        probe.validate_reproduction(tmp_path)
+    assert exc.value.missing == ["hc8/HC50.WAV"]
+
+
+@pytest.mark.parametrize("descent", [False, True])
+@pytest.mark.parametrize("write_json", [False, True])
+def test_nonexistent_root_names_all_missing_takes(tmp_path, capsys, descent, write_json):
+    # The inventory in section 3 of the historical study, independent of the probe.
+    expected = {f"{voice.lower()}8/{voice}{suffix}.WAV"
+                for voice in ("LC", "MC", "HC") for suffix in ("00", "25", "50", "75", "10")}
+    argv = ["--refs", str(tmp_path / "nope")]
+    if descent:
+        argv += ["--descent", str(tmp_path)]
+    out = tmp_path / "r.json"
+    if write_json:
+        argv += ["--json", str(out)]
+    code = probe.main(argv)
+    err = capsys.readouterr().err
+    assert code == 2
+    assert {name for name in expected if name in err} == expected
+    if write_json:
+        report = _json.loads(out.read_text())
+        assert report["outcome_code"] == code
+        assert set(report["refusal"]["missing"]) == expected
+        assert "spread" not in report
 
 
 def test_complete_reports_keep_sorted_filename_order(tmp_path):

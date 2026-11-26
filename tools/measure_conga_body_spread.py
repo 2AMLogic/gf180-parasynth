@@ -73,6 +73,7 @@ PUBLISHED = {
     "HC": dict(ref_file="hc8/HC50.WAV", ref_value=-31.2884, ours_value=-34.4438,
                worst=1.05),
 }
+PUBLISHED_TAKES = tuple(anchor["ref_file"] for anchor in PUBLISHED.values())
 
 #: Fischer's TUNING knob position for each file.  His README: the knob has
 #: "11 uniformly spaced position marks … I consider these 11 marks to be 0
@@ -220,13 +221,10 @@ def validate_reproduction(refdir: pathlib.Path) -> list[dict]:
     """Does this implementation reproduce the numbers D04A/D08A published for
     the SAME files?  If not, it is measuring something else and every number
     below is about a different quantity."""
+    require_takes(refdir, PUBLISHED_TAKES)
     out = []
     for voice, p in PUBLISHED.items():
         path = refdir / p["ref_file"]
-        if not path.is_file():
-            out.append(dict(voice=voice, file=p["ref_file"], status="REFUSED",
-                            why="reference file not on this host"))
-            continue
         x, sr = read_wav(path)
         got, why = body_spectrum(x, sr, voice)
         out.append(dict(voice=voice, file=p["ref_file"],
@@ -328,7 +326,7 @@ def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
     #104); only the render and the two alignment geometries are conga-specific.
     """
     import drums_fx as dx
-    require_takes(refdir, [p["ref_file"] for p in PUBLISHED.values()])
+    require_takes(refdir, PUBLISHED_TAKES)
     pairs = []
     for voice, p in PUBLISHED.items():
         path = refdir / p["ref_file"]
@@ -621,37 +619,24 @@ def main(argv=None) -> int:
 
     refdir = args.refs
     report = dict(provenance=provenance(refdir))
-    if not refdir.exists():
-        print(f"REFUSED  no reference corpus at {refdir}", file=sys.stderr)
-        report["refusal"] = dict(why="reference corpus directory does not exist",
-                                 missing=expected_takes() if not args.check else
-                                 [p["ref_file"] for p in PUBLISHED.values()])
-        report["outcome_code"] = 2
-        if args.json:
-            args.json.write_text(json.dumps(report, indent=2))
-        return 2
     report["definition"] = (
         "10*log10(E[split..2000] / E[20..split]) over the first 150 ms after "
         "prepare()'s onset trim, band_energy 4th-order Butterworth sosfiltfilt; "
         "LC split 700 Hz, HC split 1300 Hz; tolerance 3.0 dB flat")
 
-    # Full inventory BEFORE either anchor is read (#1309): a full or descent run
-    # needs all fifteen takes, so an absent non-anchor take must be named even
-    # when an anchor is also absent. --check keeps its two-anchor scope.
-    if not args.check:
-        gone = missing_takes(refdir, expected_takes())
-        if gone:
-            report["refusal"] = dict(
-                why="expected reference takes missing or not files", missing=gone)
-            report["outcome_code"] = 2
-            if args.json:
-                args.json.write_text(json.dumps(report, indent=2))
-            print("REFUSED: incomplete reference corpus; no statistics reported. "
-                  "Missing: " + ", ".join(gone), file=sys.stderr)
-            return 2
-
-    report["known_answer"] = validate_known_answer()
-    report["reproduction"] = validate_reproduction(refdir)
+    try:
+        require_takes(refdir, PUBLISHED_TAKES if args.check else expected_takes())
+        report["known_answer"] = validate_known_answer()
+        report["reproduction"] = validate_reproduction(refdir)
+    except InventoryRefused as exc:
+        report["refusal"] = dict(why="expected reference takes missing or not files",
+                                 missing=exc.missing)
+        report["outcome_code"] = 2
+        if args.json:
+            args.json.write_text(json.dumps(report, indent=2))
+        print(f"REFUSED: incomplete reference corpus at {refdir}. "
+              "Missing: " + ", ".join(exc.missing), file=sys.stderr)
+        return 2
     report["outcome_code"] = validation_status(report)
     if report["outcome_code"]:
         if args.json:
