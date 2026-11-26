@@ -10,6 +10,7 @@ own model (CLAUDE.md), which is exactly what these two avoid.
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 
@@ -117,6 +118,38 @@ def test_across_note_baselines_bound_long_term_drift(measured):
     assert ac["span_cents"] < 0.02, ac
     ac = measured["across_note"]["m1a-osc2-midi48-4.0s-apart"]
     assert ac["span_cents"] < 0.05, ac
+
+
+@needs_frozen
+def test_every_across_note_pair_accounts_for_all_of_its_windows(measured):
+    """#1405, on real reference audio. A pair the probe accepts is built from
+    windows that each carry a reported verdict, a finite pitch and a floor; a
+    pair it refuses names a window that is itself REFUSED and carries that
+    window's own code. The comparison used to drop a refused window and
+    compare whatever was left, so a pair could be accepted, or report
+    TOO_FEW_WINDOWS, without saying which of its windows it had used."""
+    reports = measured["reports"]
+    by_label = {r["label"]: r for r in reports}
+    assert len(by_label) == len(reports)
+    accepted = []
+    for name, ac in measured["across_note"].items():
+        wins = [by_label[label] for label in ac.get("labels", ())]
+        assert ac.get("n_windows") == len(wins), (name, ac)
+        assert len(wins) >= 2, (name, ac)
+        if ac["verdict"] == odp.REFUSED:
+            bad = wins[ac["unusable_window"]]
+            assert bad["verdict"] == odp.REFUSED, (name, ac)
+            assert ac["refusal"] == bad["refusal"], (name, ac, bad)
+            assert "span_cents" not in ac, (name, ac)
+        else:
+            accepted.append(name)
+            for r in wins:
+                assert r["verdict"] in (odp.STABLE, odp.PERIODIC,
+                                         odp.DRIFTING), (name, r)
+                assert 0 < r["f0_measured_hz"] < math.inf, (name, r)
+                assert 0 <= r["floor_cents"] < math.inf, (name, r)
+    assert accepted, ("no pair accepted on the frozen audio, so the branch "
+                      "above never ran")
 
 
 @needs_frozen
