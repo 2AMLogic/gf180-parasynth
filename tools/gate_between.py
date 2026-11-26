@@ -220,10 +220,6 @@ def rank_rows(old_bar_context: dict) -> list:
     return sorted(rows, key=lambda x: math.inf if x["ours"] is None else -x["ours_over_mars"])
 
 
-def _feat(f) -> str:
-    return f" ({f})" if f is not None else ""
-
-
 def render_table(rows: list) -> str:
     out = ["| rank | sound | ours / MARS best | ours (worst, vs old bar) | MARS best (worst) | MARS takes | bar |",
            "|---|---|---|---|---|---|---|"]
@@ -231,8 +227,9 @@ def render_table(rows: list) -> str:
         if r["ours"] is None:
             out.append(f"| {i} | {r['sound']} | no render | | | | |")
             continue
-        out.append(f"| {i} | {r['sound']} | **{r['ours_over_mars']:.1f}x** | {r['ours']:.1f}{_feat(r['ours_feature'])} "
-                   f"| {r['mars_best']:.1f} ({r['mars_feature']}) | {r['n_takes']} | {r['bar']} |")
+        out.append(f"| {i} | {r['sound']} | **{r['ours_over_mars']:.1f}x** "
+                   f"| {r['ours']:.1f}{pg.feature_suffix(r['ours_feature'])} "
+                   f"| {r['mars_best']:.1f}{pg.feature_suffix(r['mars_feature'])} | {r['n_takes']} | {r['bar']} |")
     return "\n".join(out)
 
 
