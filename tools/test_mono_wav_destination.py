@@ -1,0 +1,535 @@
+#!/usr/bin/env python3
+"""Where a mono family's model WAV goes, and whose it is once written (#1422).
+
+`results/M5B.json` names `build/scorecard/M5B-model.wav` and `results/M1A.json`
+names `docs/scorecard/mono-m1a-miniv3/m1a-model.wav` in
+`provenance.artefacts.ours`: the render each mono row's numbers were taken
+from. Until #1422 both mono writers chose that path themselves and neither was
+told the results directory, so
+
+    tools/run_case.py M5B --results /tmp/mono-m5b
+
+put its record in `/tmp/mono-m5b/` and its WAV on the published path, and the
+board's row then pointed at another run's render. #1414 was the same defect in
+the drum and ensemble writers, and `tools/test_wav_destination.py` is the
+pattern this file follows.
+
+THE INPUT #1414 COULD NOT HAVE. A clean run carries no `--inject`, so none of
+the refusals `run_case.main` gives an injected control applies to it, and
+`--results build/scorecard` (M5B) or `--results docs/scorecard/mono-m1a-miniv3`
+(M1A) is a legal spelling whose "beside the record" IS the published WAV. Such
+a run is refused here: exit 2 before anything is measured, with the published
+bytes untouched.
+
+WHAT IS THE SHIPPED CODE AND WHAT IS A DOUBLE. Both writers run through
+`run_case.main()`. The routing to a family's runner, the destination rule and
+its refusal, M5B's whole measurement (`mono_m5a_score.measure`: its render, its
+analysis, its WAV writer), M1A's reference loader, comparison, WAV writer and
+provenance, the record writer (`write_result`) and every field of each record
+are the shipped code. Five things are doubled, because this file is about file
+ownership and not about a synthesizer:
+
+  * M1A's render (`render_mono_fx` as its runner calls it) is a synthetic
+    three-note phrase, the shape `tools/test_mono_m1a_score.py` gives the same
+    seam. The real one is slow where M5B's is not, and this file runs M1A
+    eight times;
+  * M1A's estimator qualification (`qualify_envelope_basis`), the known-answer
+    suite its runner re-derives on every run before the estimator may gate a
+    case. Its subject is the estimator and not a destination, as `base_check`'s
+    is the checkout: the same kind of double. Measured on 2026-11-26 under
+    `cProfile` around `mono_m1a_score.run(case, '', False)` with the render
+    doubled: 19.3 s, of which this is 14.4 s and the real comparison 4.8 s.
+    M5B's whole real measurement, under `time`, is 7.6 s and is not doubled;
+  * the published places (`RESULTS`, `AUDIO_OUT`, M1A's published WAV) are a
+    scratch board under the checkout's gitignored `build/`, and the fixture
+    asserts at teardown that the two real published WAVs are what they were;
+  * the sentinel WAVs seeded on those published paths;
+  * `base_check`, whose subject is this checkout's relation to origin/main.
+
+The doubles substitute INPUTS and PLACES. No destination is stubbed, no writer
+is replaced, and the test writes no record field: those are the things under
+test.
+
+WHY A SENTINEL AND NOT A COMPARISON OF TWO RENDERS. A clean run renders what
+the board's own run rendered, so replacing the published WAV with it changes
+nothing visible in the bytes -- the issue could not show M1A rewriting its
+tracked WAV for exactly that reason. Each published path is seeded with a
+16-sample WAV first, so "the published WAV is byte-identical" can be read
+without knowing what the model sounds like.
+
+WHAT A PASSING RUN HERE DOES NOT ESTABLISH. Any acoustic property of either
+case: no test here reads a verdict, and `fail` from the model is as good as
+`pass` provided the run reached its writers. That a run DID reach them is
+asserted (`_measured`), because a refused run writes no WAV and would
+otherwise pass an ownership check on nothing. Which WAV paths the PUBLISHED
+records name is checked against the real module constants, apart from any run.
+"""
+from __future__ import annotations
+
+import json
+import os
+import pathlib
+import shutil
+import tempfile
+
+import numpy as np
+import pytest
+from scipy.io import wavfile
+
+import mono_m1a_score as bass
+import run_case as rc
+
+SR = 48000
+INJECT = "MONO_PITCH_UP_25_CENTS"             # the one control both mono families take
+REFUSAL = "would put this run's model WAV"     # what separates this refusal from any other
+REAL_RENDER = bass.lead.vf.render_mono_fx      # as imported, before any test doubles it
+
+#: The two mono writers as `run_case.main` reaches each: the case, its plan
+#: (`plan_for`), where the fixture keeps that family's published directory, the
+#: published file name, and the name an injected control's WAV has always taken.
+WRITERS = [pytest.param("M5B", "mono", "shared", "M5B-model.wav",
+                        f"M5B-model-control-{INJECT}.wav", id="mono"),
+           pytest.param("M1A", "mono-bass", "m1a", "m1a-model.wav",
+                        f"M1A-{INJECT}-model.wav", id="mono-bass")]
+
+#: What this file checks of an off-board run, and what a violation is called.
+PUBLISHED_WAV = "the published WAV is byte-identical"
+OWN_WAV = "the record names a WAV of its own, beside its record"
+OWN_PCM = "that WAV is there, and is this run's render"
+PROPERTIES = (PUBLISHED_WAV, OWN_WAV, OWN_PCM)
+
+
+def _bass_phrase(cents: float = 0.0) -> np.ndarray:
+    """The render double: M1A's three notes as 16-bit PCM, each a 5 ms attack
+    into a 50 ms release, so the real analysis accepts them. `cents` is the
+    invocation's tag: a control's phrase is 25 cents sharp."""
+    t = np.arange(round(bass.reference.SECONDS * bass.SR)) / bass.SR
+    audio = np.zeros_like(t)
+    for event in bass.reference.EVENTS:
+        dt = t - event["on_s"]
+        env = np.clip(dt / .005, 0, 1)
+        off = dt >= event["gate_s"]
+        env[off] = np.exp(-(dt[off] - event["gate_s"]) / .05)
+        hz = 440 * 2 ** ((event["note"] - 69 + cents / 100) / 12)
+        audio += .1 * env * (np.sin(2 * np.pi * hz * t)
+                             + .2 * np.sin(4 * np.pi * hz * t)
+                             + .1 * np.sin(6 * np.pi * hz * t))
+    return np.asarray(audio * 32768, dtype=np.int16)
+
+
+def _bass_render(seq, seconds, voice) -> np.ndarray:
+    """`render_mono_fx` as M1A's runner calls it: the phrase at the pitch the
+    sequence asks for, so a control's WAV differs from a clean run's."""
+    cents = round(100 * (seq[0][1] - bass.reference.EVENTS[0]["note"]), 6)
+    return _bass_phrase(cents)
+
+
+@pytest.fixture
+def board(monkeypatch, tmp_path):
+    """A board, a shared-WAV directory and an M1A directory of this test's
+    own, plus the input doubles, so nothing here can reach
+    `docs/scorecard/results`, `build/scorecard` or the tracked `m1a-model.wav`.
+
+    Under the checkout's gitignored `build/`, in a directory nobody else can
+    name, and removed afterwards. Under the ROOT rather than in a tmp_path
+    because an on-board WAV is STATED relative to the checkout, and a directory
+    outside it cannot be; what a run states is half of what is checked here.
+
+    That nothing reached the real published paths is asserted at teardown,
+    not assumed: a fixture that redirected the wrong name would let a red run
+    rewrite the artefact these tests exist to protect, and go on looking like
+    a clean test."""
+    scratch_root = rc.ROOT / "build"
+    scratch_root.mkdir(exist_ok=True)
+    base = pathlib.Path(tempfile.mkdtemp(prefix="mono-wav-", dir=scratch_root))
+    places = {"base": base, "board": base / "board", "shared": base / "shared",
+              "m1a": base / "m1a", "cwd": base / "cwd", "refs": tmp_path / "refs",
+              "renders": 0}
+    places["cwd"].mkdir()          # the other working directory a relative --results is read from
+    kept = {path: (path.read_bytes() if path.exists() else None)
+            for path in (rc.AUDIO_OUT / "M5B-model.wav",
+                         bass.MANIFEST.parent / "m1a-model.wav")}
+    try:
+        monkeypatch.setattr(rc, "RESULTS", places["board"])
+        monkeypatch.setattr(rc, "AUDIO_OUT", places["shared"])
+        # created if absent, so this file run against a tree without the fix
+        # reports the behaviour there and not a missing name
+        monkeypatch.setattr(bass, "PUBLISHED_MODEL_WAV",
+                            places["m1a"] / "m1a-model.wav", raising=False)
+        # `main` overwrites this module global; the double's value must not
+        # outlive the test that asked for it
+        monkeypatch.setattr(rc, "BASE_STATE", rc.BASE_STATE)
+        monkeypatch.setattr(rc, "base_check",
+                            lambda allow_stale=False: {"checked": False, "why": "a test double"})
+        monkeypatch.setattr(bass.reference, "qualify_envelope_basis", lambda: {
+            "note": "a test double: the estimator's known-answer suite did not run"})
+        yield places
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+        for path, before in kept.items():
+            after = path.read_bytes() if path.exists() else None
+            if after != before:
+                if before is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    path.write_bytes(before)
+                raise AssertionError(
+                    f"this test rewrote the published WAV {rc.stated_path(path)} "
+                    f"(restored): the fixture's redirection did not hold")
+
+
+def _cli(board, monkeypatch, case_id: str, *argv) -> int:
+    """`run_case.main` for one case, against the isolated board. M1A's render
+    is the double and M5B's is the real one; both are counted in
+    `board["renders"]`, so a test can tell a refusal that came before any
+    measurement from one that came after."""
+    def counted(seq, seconds, voice):
+        board["renders"] += 1
+        return _bass_render(seq, seconds, voice) if case_id == "M1A" \
+            else REAL_RENDER(seq, seconds, voice)
+    monkeypatch.setattr(bass.lead.vf, "render_mono_fx", counted)
+    return rc.main([case_id, "--refs", str(board["refs"]), *argv])
+
+
+def _seed(published: pathlib.Path) -> bytes:
+    """Put a sentinel on a published path -- a valid WAV of 16 samples, which
+    no render of a 7.5 s phrase resembles in bytes or in length -- and return
+    its bytes."""
+    published.parent.mkdir(parents=True, exist_ok=True)
+    wavfile.write(str(published), SR, np.arange(16, dtype="<i2"))
+    return published.read_bytes()
+
+
+def _resolved(stated: str) -> pathlib.Path:
+    """The file a record names, resolved the way a reader would: relative to
+    the checkout unless absolute."""
+    path = pathlib.Path(stated)
+    return path if path.is_absolute() else rc.ROOT / path
+
+
+def _pcm(path: pathlib.Path) -> np.ndarray:
+    """The samples of a WAV as written, read by scipy rather than by anything
+    `run_case` owns."""
+    assert path.exists(), f"{path} is named by a record but was not written"
+    sr, x = wavfile.read(str(path))
+    assert sr == SR and x.dtype == np.int16 and x.ndim == 1, (path, sr, x.dtype)
+    return x
+
+
+def _is_render(path: pathlib.Path, phrase: np.ndarray | None = None) -> bool:
+    """Whether `path` holds a phrase rather than a sentinel: at least seven
+    seconds of int16, and equal to `phrase` where the test knows the render --
+    over the WAV's whole length, because M1A's writer trims its render to the
+    reference's length (the frozen recording has its host latency removed)."""
+    try:
+        x = _pcm(path)
+    except (AssertionError, OSError, ValueError):
+        return False
+    if x.size < 7 * SR:
+        return False
+    return phrase is None or (x.size <= phrase.size and np.array_equal(x, phrase[:x.size]))
+
+
+def _measured(record: dict) -> bool:
+    """The run reached its writers: no runner refused before them. A refusal
+    writes a record with no artefact, so a test that read one as a pass would
+    be green on nothing -- `no verdict` is not ownership."""
+    return not record.get("note", "").startswith("REFUSED") and "traceback" not in record
+
+
+def _rendered(case_id: str) -> np.ndarray | None:
+    """What a clean run of `case_id` writes, where the test knows it."""
+    return _bass_phrase() if case_id == "M1A" else None
+
+
+def _off_board(board, monkeypatch, trial: pathlib.Path, cid: str, key: str,
+               name: str) -> dict:
+    """A clean run into a directory of its own, outside the checkout, and what
+    was observed of it: the properties violated, in `PROPERTIES` order, and the
+    record. The same run is the bench the control at the end of this file must
+    turn red."""
+    assert not trial.is_relative_to(rc.ROOT)
+    published = board[key] / name
+    before = published.read_bytes()
+    _cli(board, monkeypatch, cid, "--results", str(trial))
+    record = json.loads((trial / f"{cid}.json").read_text())
+    assert _measured(record), record.get("note")
+    stated = record["provenance"]["artefacts"]["ours"]
+    named = _resolved(stated)
+    violated = []
+    if published.read_bytes() != before:
+        violated.append(PUBLISHED_WAV)
+    if named != trial / name:
+        violated.append(OWN_WAV)
+    if not _is_render(named, _rendered(cid)):
+        violated.append(OWN_PCM)
+    return {"violated": violated, "record": record, "stated": stated}
+
+
+def _spellings(board, key: str, name: str) -> list[tuple[str, str, pathlib.Path]]:
+    """Five ways to say "the published WAV" to `--results`, each with the
+    directory the refusal must name it by: the published directory itself,
+    by a relative spelling through a symlink from another working directory,
+    and with `.` and `..` in it; then two other directories whose file of that
+    name IS the published WAV, by symlink and by hard link. Only resolution can
+    tell the first, fourth and fifth from an ordinary directory."""
+    published = board[key]
+    relative = {"shared": "build/scorecard",
+                "m1a": "docs/scorecard/mono-m1a-miniv3"}[key]
+    through = board["cwd"] / relative
+    through.parent.mkdir(parents=True)
+    through.symlink_to(published, target_is_directory=True)
+    soft = board["base"] / "soft"
+    soft.mkdir()
+    (soft / name).symlink_to(published / name)
+    hard = board["base"] / "hard"
+    hard.mkdir()
+    os.link(published / name, hard / name)
+    return [(f"relative, through a symlink ({relative}, from another cwd)", relative, through),
+            ("the directory itself", str(published), published),
+            ("with . and .. in it", str(published / "." / ".." / published.name / "."), published),
+            ("a symlink to the published WAV", str(soft), soft),
+            ("a hard link to the published WAV", str(hard), hard)]
+
+
+@pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
+def test_a_clean_run_cannot_put_its_wav_on_the_published_path(
+        board, monkeypatch, capsys, cid, kind, key, name, tagged):
+    """The input #1414 could not have, through the CLI: a CLEAN run whose
+    `--results` names its own published directory, five ways. Each is refused
+    before anything is measured, says which case, which published WAV and which
+    destination, and leaves the sentinel and the directory as they were."""
+    published = board[key] / name
+    before = _seed(published)
+    monkeypatch.chdir(board["cwd"])
+    for label, spelling, said in _spellings(board, key, name):
+        capsys.readouterr()
+        code = _cli(board, monkeypatch, cid, "--results", spelling)
+        err = capsys.readouterr().err
+        assert code == 2, (label, err)
+        assert "REFUSED" in err and cid in err and REFUSAL in err, (label, err)
+        assert rc.stated_path(published) in err, (label, err)              # the published WAV
+        assert rc.stated_path(said / name) in err, (label, err)             # the destination
+        # the board row that names the published WAV
+        assert rc.stated_path(rc.RESULTS / f"{cid}.json") in err, (label, err)
+        assert published.read_bytes() == before, label
+        # ...and, refused before the batch began, nothing was measured and no
+        # record was written beside it
+        assert board["renders"] == 0, label
+        assert sorted(p.name for p in published.parent.iterdir()) == [name], label
+
+
+@pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
+def test_a_clean_off_board_run_writes_its_wav_beside_its_record(
+        board, monkeypatch, tmp_path, cid, kind, key, name, tagged):
+    """The issue's reproduction, through the CLI, repaired: the record and the
+    WAV land together in a directory outside the checkout, the record states
+    the WAV absolutely because there is no checkout-relative spelling of it,
+    and the published WAV is not touched."""
+    trial = tmp_path / "trial"
+    _seed(board[key] / name)
+    obs = _off_board(board, monkeypatch, trial, cid, key, name)
+    assert obs["violated"] == []
+    assert obs["stated"] == str(trial / name)
+    assert obs["record"]["audio"] == obs["stated"]
+    assert sorted(p.name for p in trial.iterdir()) == sorted([f"{cid}.json", name])
+
+
+@pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
+def test_a_run_on_the_board_keeps_the_published_wav(
+        board, monkeypatch, cid, kind, key, name, tagged):
+    """The off-board rule does not move the board's own path: a default run
+    still replaces the published WAV, under the name the published record
+    states, and its record lands on the board."""
+    published = board[key] / name
+    _seed(published)
+    _cli(board, monkeypatch, cid)
+    record = json.loads((board["board"] / f"{cid}.json").read_text())
+    assert _measured(record), record.get("note")
+    assert record["provenance"]["artefacts"]["ours"] == str(published.relative_to(rc.ROOT))
+    assert record["audio"] == record["provenance"]["artefacts"]["ours"]
+    assert _is_render(published, _rendered(cid))
+    assert sorted(p.name for p in board["board"].iterdir()) == [f"{cid}.json"]
+    assert sorted(p.name for p in published.parent.iterdir()) == [name]
+
+
+@pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
+def test_an_injected_control_keeps_its_tagged_wav(
+        board, monkeypatch, tmp_path, cid, kind, key, name, tagged):
+    """A control's WAV is unchanged by this issue: tagged with its injection
+    under the shared directory, where the control's record names it, and never
+    the clean published name."""
+    published = board[key] / name
+    before = _seed(published)
+    control = tmp_path / "control"
+    _cli(board, monkeypatch, cid, "--inject", INJECT, "--results", str(control))
+    record = json.loads((control / f"{cid}.json").read_text())
+    assert _measured(record), record.get("note")
+    # how a control's record says so is each runner's own and is not changed here
+    if cid == "M1A":
+        assert record["diagnostics"]["configuration"]["inject"] == INJECT
+    else:
+        assert record["INJECTED_CONTROL"] == INJECT
+    wav = board["shared"] / tagged
+    assert record["provenance"]["artefacts"]["ours"] == str(wav.relative_to(rc.ROOT))
+    assert _is_render(wav, _bass_phrase(25.0) if cid == "M1A" else None)
+    assert published.read_bytes() == before
+    assert sorted(p.name for p in control.iterdir()) == [f"{cid}.json"]
+
+
+def test_m1a_without_audio_writes_no_wav_even_into_its_published_directory(
+        board, monkeypatch, capsys):
+    """`--no-audio` is preserved for M1A, and it is what makes a colliding
+    `--results` harmless: with no WAV to write there is nothing the refusal
+    protects, so the run proceeds, and only its record lands there."""
+    published = board["m1a"] / "m1a-model.wav"
+    before = _seed(published)
+    capsys.readouterr()
+    _cli(board, monkeypatch, "M1A", "--no-audio", "--results", str(published.parent))
+    assert REFUSAL not in capsys.readouterr().err
+    record = json.loads((published.parent / "M1A.json").read_text())
+    assert _measured(record), record.get("note")
+    assert "ours" not in record["provenance"]["artefacts"] and record["audio"] == ""
+    assert record["diagnostics"]["model_audio_sha256"] is None
+    # the sentinel is still the only WAV there: nothing was written over it or
+    # beside it
+    assert published.read_bytes() == before
+    assert sorted(p.name for p in published.parent.iterdir()) \
+        == sorted(["M1A.json", "m1a-model.wav"])
+
+
+def test_no_audio_is_not_a_licence_for_the_mono_family(board, monkeypatch, capsys):
+    """M5's measurement writes its model WAV whatever `--no-audio` says -- its
+    `measure` has no such switch, which is its own matter and not this issue's.
+    So for M5B the flag does not make the published directory safe: a run that
+    will write there is refused with it or without it, before anything renders."""
+    published = board["shared"] / "M5B-model.wav"
+    before = _seed(published)
+    capsys.readouterr()
+    code = _cli(board, monkeypatch, "M5B", "--no-audio", "--results", str(published.parent))
+    err = capsys.readouterr().err
+    assert code == 2 and REFUSAL in err, err
+    assert board["renders"] == 0
+    assert published.read_bytes() == before
+
+
+@pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
+def test_the_shared_path_writer_is_a_control_that_stays_red(
+        board, monkeypatch, tmp_path, capsys, cid, kind, key, name, tagged):
+    """The defect as it shipped, kept where the verdict is issued (#1422): a
+    writer that writes the published WAV whatever `--results` says, and is
+    never refused it. Both benches above must go red on it.
+
+    What each property sees:
+
+    ==========================  =========================================
+    property                    under a shared-path writer
+    ==========================  =========================================
+    the published WAV           MOVED   replaced by this run's render
+    names a WAV of its own      MOVED   it names the published path, truly
+    that WAV is this run's      BLIND   the published file now holds it
+    ==========================  =========================================
+
+    The last row is why the content is read back only once the path is known
+    to be the run's own: content alone cannot tell whose file it is when the
+    overwrite succeeded."""
+    monkeypatch.setattr(rc, "model_wav_destination",
+                        lambda results_dir, kind, case_id, **_:
+                        rc.AUDIO_OUT / f"{case_id}-model.wav" if kind == "mono"
+                        else bass.PUBLISHED_MODEL_WAV)
+    published = board[key] / name
+    _seed(published)
+    obs = _off_board(board, monkeypatch, tmp_path / "trial", cid, key, name)
+    assert obs["violated"] == [PUBLISHED_WAV, OWN_WAV]
+    assert [p for p in PROPERTIES if p not in obs["violated"]] == [OWN_PCM]
+    # the record is not lying: it names the file the writer really wrote
+    assert obs["record"]["provenance"]["artefacts"]["ours"] == rc.stated_path(published)
+
+    _seed(published)
+    capsys.readouterr()
+    _cli(board, monkeypatch, cid, "--results", str(published.parent))
+    assert REFUSAL not in capsys.readouterr().err
+    assert _is_render(published, _rendered(cid))         # the sentinel is gone
+    assert (published.parent / f"{cid}.json").exists()  # and the run went ahead
+
+
+def test_the_model_wav_destination_is_the_published_path_on_the_board_and_beside_the_results_off_it(
+        tmp_path):
+    """The rule both mono writers resolve through, pinned apart from any run --
+    and pinned to the drum and ensemble writers': one decision about what the
+    board is."""
+    m1a = bass.PUBLISHED_MODEL_WAV
+    assert m1a == bass.MANIFEST.parent / "m1a-model.wav"
+    for kind, cid, published in (("mono", "M5B", rc.AUDIO_OUT / "M5B-model.wav"),
+                                 ("mono-bass", "M1A", m1a)):
+        assert rc.published_model_wav(kind, cid) == published
+        assert rc.model_wav_destination(rc.RESULTS, kind, cid) == published
+        # the board reached by another spelling is still the board
+        assert rc.model_wav_destination(rc.RESULTS / "." / ".." / rc.RESULTS.name, kind, cid) \
+            == published
+        # off the board: beside the results, whatever directory that is
+        inside = rc.ROOT / "build" / "candidate"
+        assert not tmp_path.is_relative_to(rc.ROOT)
+        for results_dir in (inside, tmp_path):
+            assert rc.model_wav_destination(results_dir, kind, cid) \
+                == results_dir.resolve() / published.name
+            assert rc.model_wav_destination(results_dir, kind, cid).parent \
+                == rc.wav_destination(results_dir, cid, "-x.wav").parent.resolve()
+    # ...but not when that is the case's own published WAV, however reached
+    with pytest.raises(rc.Refused, match=REFUSAL):
+        rc.model_wav_destination(rc.AUDIO_OUT, "mono", "M5B")
+    with pytest.raises(rc.Refused, match=REFUSAL):
+        rc.model_wav_destination(m1a.parent, "mono-bass", "M1A")
+    # another family's published directory is an ordinary off-board directory
+    assert rc.model_wav_destination(rc.AUDIO_OUT, "mono-bass", "M1A") \
+        == rc.AUDIO_OUT.resolve() / "m1a-model.wav"
+    assert rc.model_wav_destination(m1a.parent, "mono", "M5B") \
+        == m1a.parent.resolve() / "M5B-model.wav"
+    # an M1A run that writes no WAV has no destination to collide
+    assert rc.model_wav_destination(m1a.parent, "mono-bass", "M1A", keep_audio=False) is None
+
+
+def test_every_published_mono_record_names_the_wav_a_default_run_writes():
+    """The clean board path is not moved by the off-board rule: every published
+    record of a mono family case that names a `-model.wav` names the file a
+    default run of its own runner still writes. M1A's and M5B's are the two
+    the issue names; the search is over every record, so a new one is covered
+    the day it lands. (M5A's row is an integrated-RTL capture and names other
+    files, so it is not among them.)"""
+    seen = {}
+    for path in sorted((rc.ROOT / "docs" / "scorecard").rglob("*.json")):
+        record = json.loads(path.read_text())
+        if not isinstance(record, dict):
+            continue
+        kind = rc.plan_for(str(record.get("case_id", "")))
+        if kind not in ("mono", "mono-bass"):
+            continue
+        ours = str(((record.get("provenance") or {}).get("artefacts") or {}).get("ours", ""))
+        if ours.endswith("-model.wav"):
+            seen[record["case_id"]] = (record, ours)
+    assert {"M1A", "M5B"} <= set(seen), sorted(seen)
+    for cid, (record, ours) in sorted(seen.items()):
+        assert record["engine"] == rc.ENGINE, cid
+        assert ours == record["audio"], cid
+        assert ours == rc.stated_path(rc.published_model_wav(rc.plan_for(cid), cid)), cid
+
+
+def test_a_caller_that_states_no_destination_gets_the_published_path(board, monkeypatch):
+    """`tools/regen_m1a_units.py` re-labels the published M1A record through
+    `mono_m1a_score.run()` from the cached audio, stating no destination, and
+    `run_case.run_case` is called without a results directory by other tests.
+    Both calls are unchanged: a caller that states none gets the established
+    path."""
+    case = next(c for c in rc.load_cases() if c["case_id"] == "M1A")
+    monkeypatch.setattr(bass.lead.vf, "render_mono_fx", _bass_render)
+    published = board["m1a"] / "m1a-model.wav"
+    _seed(published)
+
+    res = bass.run(case, "", True)
+    assert res["provenance"]["artefacts"]["ours"] == rc.stated_path(published)
+    assert _is_render(published, _bass_phrase())
+
+    _seed(published)
+    res = rc.run_case(case, board["refs"], "", True)
+    assert res["provenance"]["artefacts"]["ours"] == rc.stated_path(published)
+    assert _is_render(published, _bass_phrase())

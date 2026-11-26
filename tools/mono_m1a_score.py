@@ -17,6 +17,10 @@ import attack_fit_v3
 
 ROOT, SR = lead.ROOT, lead.SR
 MANIFEST = ROOT / "docs/scorecard/mono-m1a-miniv3/manifest.json"
+#: Where a clean run's model WAV goes when its record lands on the board, and
+#: so the file `results/M1A.json` names in `provenance.artefacts.ours`: beside
+#: the frozen reference it was measured against.
+PUBLISHED_MODEL_WAV = MANIFEST.parent / "m1a-model.wav"
 Refused = lead.Refused
 
 
@@ -299,7 +303,19 @@ def load_model_cache(record, patch, engine):
     return pcm
 
 
-def run(case, inject="", keep_audio=True, cached_record=None):
+def run(case, inject="", keep_audio=True, cached_record=None, wav_dest=None):
+    """One M1A measurement, with its model WAV written to `wav_dest`.
+
+    A caller that states no destination gets the established path: the
+    published WAV (`PUBLISHED_MODEL_WAV`) for a clean run, and under
+    `build/scorecard`, tagged with the injection, for a control. `run_case`
+    states one for every run it routes here, so that a clean run's WAV follows
+    its record as every other family's does (`run_case.model_wav_destination`);
+    until #1422 it was told nothing and wrote the published WAV whatever
+    `--results` said.
+
+    Wherever the WAV goes, the record states it as `run_case.stated_path`
+    does: relative to the checkout while inside it, absolute once outside."""
     import run_case
     source_commit = run_case.source_commit()
     source_tree = run_case.worktree_state()
@@ -321,13 +337,17 @@ def run(case, inject="", keep_audio=True, cached_record=None):
         voice = lead._voice_for_engine(engine)
         pcm = lead.vf.render_mono_fx(sequence, reference.SECONDS, voice)[:len(reference_pcm)]
     measured = compare_audio(pcm.astype(np.float64) / 32768., reference_pcm)
-    output = (ROOT / f"build/scorecard/M1A-{inject}-model.wav" if inject else
-              MANIFEST.parent / "m1a-model.wav")
+    if wav_dest is not None:
+        output = Path(wav_dest)
+    elif inject:
+        output = ROOT / f"build/scorecard/M1A-{inject}-model.wav"
+    else:
+        output = PUBLISHED_MODEL_WAV
     artifacts = {}
     if keep_audio:
         output.parent.mkdir(parents=True, exist_ok=True)
         wavfile.write(output, SR, pcm.astype('<i2'))
-        artifacts["ours"] = str(output.relative_to(ROOT))
+        artifacts["ours"] = run_case.stated_path(output)
     config = {"engine": engine, "patch_id": SELECTED_PATCH, "patch": patch, "inject": inject or None,
               "mapping_qualification": {
                   "output_volume": f"{PATCH_VERSIONS[SELECTED_PATCH]['output_volume_db']:+g} dB fixed "
