@@ -73,6 +73,7 @@ PUBLISHED = {
     "HC": dict(ref_file="hc8/HC50.WAV", ref_value=-31.2884, ours_value=-34.4438,
                worst=1.05),
 }
+PUBLISHED_TAKES = tuple(anchor["ref_file"] for anchor in PUBLISHED.values())
 
 #: Fischer's TUNING knob position for each file.  His README: the knob has
 #: "11 uniformly spaced position marks … I consider these 11 marks to be 0
@@ -81,6 +82,41 @@ PUBLISHED = {
 #: at 1.0.  Confirmed by the measured f0, which is monotone in exactly that
 #: order and only in that order (LC 184.7 < 189.5 < 200.4 < 211.7 < 224.8 Hz).
 FISCHER_TUNING = {"00": 0.0, "25": 2.5, "50": 5.0, "75": 7.5, "10": 10.0}
+
+
+class InventoryRefused(Exception):
+    """An expected reference take is absent or is not a regular file.
+
+    The corpus readers used to skip such takes (`exists()` + `continue`), so a
+    partial corpus produced a complete-looking row set and a narrower spread
+    with nothing recording the loss (#1309): dropping hc8/HC10.WAV alone moves
+    the HC range from 7.27 dB to 1.54 dB while both anchors are still present."""
+
+    def __init__(self, missing: list[str]):
+        self.missing = list(missing)
+        super().__init__("expected reference takes absent or not files: "
+                         + ", ".join(self.missing))
+
+
+def expected_takes(voices=("LC", "MC", "HC")) -> list[str]:
+    """Relative paths of every take the full study requires: each requested
+    voice at each of the five FISCHER_TUNING positions, in sorted filename order
+    (the order the readers' directory globs produced before #1309, which the
+    report's row order and the equivalence probe depend on)."""
+    return [f"{v.lower()}8/{v}{k}.WAV" for v in voices
+            for k in sorted(FISCHER_TUNING)]
+
+
+def missing_takes(refdir: pathlib.Path, rels) -> list[str]:
+    """Every relative path in `rels` that is not a regular file (a directory
+    at a WAV path does not count as present)."""
+    return [r for r in rels if not (refdir / r).is_file()]
+
+
+def require_takes(refdir: pathlib.Path, rels) -> None:
+    gone = missing_takes(refdir, rels)
+    if gone:
+        raise InventoryRefused(gone)
 
 
 # --------------------------------------------------------------------------
@@ -185,13 +221,10 @@ def validate_reproduction(refdir: pathlib.Path) -> list[dict]:
     """Does this implementation reproduce the numbers D04A/D08A published for
     the SAME files?  If not, it is measuring something else and every number
     below is about a different quantity."""
+    require_takes(refdir, PUBLISHED_TAKES)
     out = []
     for voice, p in PUBLISHED.items():
         path = refdir / p["ref_file"]
-        if not path.exists():
-            out.append(dict(voice=voice, file=p["ref_file"], status="REFUSED",
-                            why="reference file not on this host"))
-            continue
         x, sr = read_wav(path)
         got, why = body_spectrum(x, sr, voice)
         out.append(dict(voice=voice, file=p["ref_file"],
@@ -227,8 +260,9 @@ def floor_for_these_signals(refdir: pathlib.Path) -> list[dict]:
     and what each one does to a conga recording, is conga-specific.
     """
     def signals():
-        files = [("LC", f) for f in sorted((refdir / "lc8").glob("LC*.WAV"))]
-        files += [("HC", f) for f in sorted((refdir / "hc8").glob("HC*.WAV"))]
+        require_takes(refdir, expected_takes(("LC", "HC")))
+        files = [(v, refdir / r) for v in ("LC", "HC")
+                 for r in expected_takes((v,))]
         for voice, path in files:
             x, sr = read_wav(path)
 
@@ -292,11 +326,10 @@ def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
     #104); only the render and the two alignment geometries are conga-specific.
     """
     import drums_fx as dx
+    require_takes(refdir, PUBLISHED_TAKES)
     pairs = []
     for voice, p in PUBLISHED.items():
         path = refdir / p["ref_file"]
-        if not path.exists():
-            continue
         x, sr = read_wav(path)
         n = int(2.2 * dx.SR)
         d = dx.DrumsFx()
@@ -338,11 +371,12 @@ def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------
 def measure_corpus(refdir: pathlib.Path, voices=("LC", "MC", "HC")) -> list[dict]:
     out = []
+    voices = tuple(voices)       # an iterator would be spent by the inventory pass
+    require_takes(refdir, expected_takes(voices))
     for voice in voices:
         d = refdir / f"{voice.lower()}8"
-        if not d.exists():
-            continue
-        for path in sorted(d.glob("*.WAV")):
+        for rel in expected_takes((voice,)):
+            path = refdir / rel
             x, sr = read_wav(path)
             v, why = body_spectrum(x, sr, voice)
             key = path.stem[2:]
@@ -584,18 +618,25 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     refdir = args.refs
-    if not refdir.exists():
-        print(f"REFUSED  no reference corpus at {refdir}", file=sys.stderr)
-        return 2
-
     report = dict(provenance=provenance(refdir))
     report["definition"] = (
         "10*log10(E[split..2000] / E[20..split]) over the first 150 ms after "
         "prepare()'s onset trim, band_energy 4th-order Butterworth sosfiltfilt; "
         "LC split 700 Hz, HC split 1300 Hz; tolerance 3.0 dB flat")
 
-    report["known_answer"] = validate_known_answer()
-    report["reproduction"] = validate_reproduction(refdir)
+    try:
+        require_takes(refdir, PUBLISHED_TAKES if args.check else expected_takes())
+        report["known_answer"] = validate_known_answer()
+        report["reproduction"] = validate_reproduction(refdir)
+    except InventoryRefused as exc:
+        report["refusal"] = dict(why="expected reference takes missing or not files",
+                                 missing=exc.missing)
+        report["outcome_code"] = 2
+        if args.json:
+            args.json.write_text(json.dumps(report, indent=2))
+        print(f"REFUSED: incomplete reference corpus at {refdir}. "
+              "Missing: " + ", ".join(exc.missing), file=sys.stderr)
+        return 2
     report["outcome_code"] = validation_status(report)
     if report["outcome_code"]:
         if args.json:
