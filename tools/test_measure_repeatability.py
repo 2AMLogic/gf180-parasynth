@@ -16,9 +16,11 @@ import sys
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import measure_repeatability as mr                                 # noqa: E402
+import refaudio_local as rl                                        # noqa: E402
 
 SR = 44100
 
@@ -314,6 +316,237 @@ def test_loop_audit_refuses_when_the_files_are_absent(monkeypatch, tmp_path):
     monkeypatch.setattr(mr, "LOOPS_DIR", tmp_path / "nope")
     with pytest.raises(mr.Refused, match="refaudio_s3.py"):
         mr.loop_files()
+
+
+# ---------------------------------------------------------------------------
+# #1427: the loop reader is held to its inventory. catalog.json carries no
+# per-file index for 808_loops_from_mars.zip, so the WAVs its 4x4 folder holds
+# are committed by name, read once from the hash-verified archive, and a folder
+# that does not hold every one of them is REFUSED before any loop is read.
+# ---------------------------------------------------------------------------
+def _short(name: str) -> str:
+    """The label `loop_audit` keys a loop by: its own shortening, repeated."""
+    return name.replace("BD 4x4 ", "").replace(" 808 Loops", "")[:-4]
+
+
+def _placeholders(d: pathlib.Path, names) -> pathlib.Path:
+    """A `LOOPS_DIR` holding each of `names` as an empty file: enough for the
+    membership check, which reads names and nothing else."""
+    d.mkdir(exist_ok=True)
+    for n in names:
+        (d / n).touch()
+    return d
+
+
+def _loop(bpm: float, seed0: int, pasted: bool = False, pattern: bool = False) -> np.ndarray:
+    """Six bars of one bass drum per beat at `bpm`. Each strike is an
+    independent take, a few samples off the grid as a sequencer free-running
+    against the DAW puts them. `pasted` is one strike tiled; `pattern` adds a
+    second strike on every off-beat. Every strike has the same shape, so a
+    metric that reads it against its own onset (attack) reads a spread of
+    exactly zero, which the report table has to survive."""
+    beat = 60.0 / bpm * SR
+    n = int(round(beat * 6))
+    x = np.zeros(n)
+    rng = np.random.default_rng(seed0)
+    for bar in range(6):
+        s = _one(seed=seed0 if pasted else seed0 + bar)[:int(beat) - 60]
+        j = int(round(bar * beat)) + 20 + int(rng.integers(-6, 7))
+        x[j:j + len(s)] += s
+        if pattern:
+            k = int(round(bar * beat + beat / 2)) + 20
+            off = s[:max(0, n - k)]
+            x[k:k + len(off)] += 0.9 * off
+    return (x / np.abs(x).max()).astype(np.float32)
+
+
+def _loops_cli(monkeypatch, tmp_path, pattern=(), pasted=()):
+    """`--loops` with the real audit and measurement over the whole committed
+    inventory. The apparatus controls are the one thing stubbed: they are
+    synthetic, and `test_loop_controls_all_pass` runs them."""
+    pytest.importorskip("soundfile")
+    names = mr.expected_loops()
+    d = tmp_path / "4x4"
+    d.mkdir()
+    for i, name in enumerate(names):
+        bpm = float(mr.LOOP_BPM_RE.search(name)["bpm"])
+        wavfile.write(str(d / name), SR, _loop(bpm, 100 * i, pasted=name in pasted,
+                                              pattern=name in pattern))
+    monkeypatch.setattr(mr, "LOOPS_DIR", d)
+    monkeypatch.setattr(mr, "loop_controls",
+                        lambda report=print: (True, {"stubbed": "not what these tests measure"}))
+    return d, names
+
+
+def test_the_committed_inventory_is_the_published_loop_set():
+    """Twenty-seven names, sorted, each carrying a bpm. Shortened, they are the
+    27 audit labels `docs/bd-repeatability-results.json` published from the
+    real archive: an independent record that the right folder was read."""
+    names = mr.expected_loops()
+    assert len(names) == 27 and names == sorted(names)
+    assert all(mr.LOOP_BPM_RE.search(n) for n in names)
+    audit = json.loads((mr.REPO / "docs" / "bd-repeatability-results.json").read_text(
+        encoding="utf-8"))["take_to_take"]["audit"]["loops"]
+    assert {_short(n) for n in names} == set(audit)
+
+
+def test_the_inventory_is_bound_to_the_catalogued_archive():
+    """The list is evidence only if it is tied to the archive it was read from.
+    Its header carries that archive's SHA-256, which is the one catalog.json
+    records, and the commands to regenerate the list and to fetch the loops."""
+    head = [ln for ln in mr.LOOPS_INVENTORY.read_text(encoding="utf-8").splitlines()
+            if ln.startswith("#")]
+    want = rl.pack_record(mr.LOOPS_ARCHIVE)["archive_sha256"]
+    assert f"# archive_sha256 {want}" in head
+    assert any(f"tools/refaudio_member_list.py {mr.LOOPS_ARCHIVE} " in ln and "4x4" in ln
+               for ln in head), head
+    assert any(f"tools/refaudio_s3.py --prefix {mr.LOOPS_ARCHIVE} " in ln for ln in head), head
+
+
+@pytest.mark.parametrize("body", [None, "", "# a header and nothing else\n\n"])
+def test_an_unavailable_or_empty_inventory_is_refused(tmp_path, monkeypatch, body):
+    p = tmp_path / "inventory.txt"
+    if body is not None:
+        p.write_text(body, encoding="utf-8")
+    _placeholders(tmp_path / "4x4", ["BD 4x4 whatever 808 Loops 120.wav"])
+    monkeypatch.setattr(mr, "LOOPS_DIR", tmp_path / "4x4")
+    monkeypatch.setattr(mr, "LOOPS_INVENTORY", p)
+    with pytest.raises(mr.Refused, match="inventory"):
+        mr.loop_files()
+
+
+def test_an_inventory_that_lists_a_loop_twice_is_refused(tmp_path, monkeypatch):
+    """`loop_audit` reads each listed file and appends each to its admitted
+    list, so a loop the inventory names twice would be read twice and counted
+    twice."""
+    p = tmp_path / "inventory.txt"
+    p.write_text("# a header\nBD 4x4 twice 808 Loops 120.wav\nBD 4x4 twice 808 Loops 120.wav\n",
+                 encoding="utf-8")
+    _placeholders(tmp_path / "4x4", ["BD 4x4 twice 808 Loops 120.wav"])
+    monkeypatch.setattr(mr, "LOOPS_DIR", tmp_path / "4x4")
+    monkeypatch.setattr(mr, "LOOPS_INVENTORY", p)
+    with pytest.raises(mr.Refused, match="more than once"):
+        mr.loop_files()
+
+
+def test_a_complete_folder_reads_every_inventory_loop_in_order(tmp_path, monkeypatch):
+    names = mr.expected_loops()
+    d = _placeholders(tmp_path / "4x4", names)
+    monkeypatch.setattr(mr, "LOOPS_DIR", d)
+    got = mr.loop_files()
+    assert [p.name for p in got] == names and got == sorted(got)
+
+
+def test_one_absent_loop_is_named(tmp_path, monkeypatch):
+    """The old reader returned the other 26 and every spread was read over them."""
+    names = mr.expected_loops()
+    d = _placeholders(tmp_path / "4x4", names)
+    (d / names[0]).unlink()
+    monkeypatch.setattr(mr, "LOOPS_DIR", d)
+    with pytest.raises(mr.Refused) as e:
+        mr.loop_files()
+    assert names[0] in str(e.value) and mr.LOOPS_INVENTORY.name in str(e.value)
+
+
+def test_an_equal_count_substitute_does_not_stand_in_for_a_loop(tmp_path, monkeypatch):
+    """The folder holds 27 WAVs again, so the old glob audited a stranger as the loop."""
+    names = mr.expected_loops()
+    d = _placeholders(tmp_path / "4x4", names)
+    stranger = names[0].replace("120.wav", "999.wav")
+    (d / names[0]).rename(d / stranger)
+    assert len(list(d.glob("*.wav"))) == 27
+    monkeypatch.setattr(mr, "LOOPS_DIR", d)
+    with pytest.raises(mr.Refused) as e:
+        mr.loop_files()
+    assert names[0] in str(e.value) and stranger not in str(e.value)
+
+
+def test_an_unexpected_wav_never_contributes(tmp_path, monkeypatch):
+    names = mr.expected_loops()
+    d = _placeholders(tmp_path / "4x4", names)
+    (d / "not one of them.wav").touch()
+    monkeypatch.setattr(mr, "LOOPS_DIR", d)
+    assert [p.name for p in mr.loop_files()] == names
+
+
+def test_an_empty_folder_keeps_the_fetch_hint(tmp_path, monkeypatch):
+    """Nothing fetched is a different diagnosis from a partly fetched folder:
+    it names the command, as before, and not 27 names."""
+    (tmp_path / "4x4").mkdir()
+    monkeypatch.setattr(mr, "LOOPS_DIR", tmp_path / "4x4")
+    with pytest.raises(mr.Refused, match="refaudio_s3.py"):
+        mr.loop_files()
+
+
+def test_the_loops_cli_measures_the_complete_inventory(tmp_path, monkeypatch, capsys):
+    """All 27 are audited and admitted, every one yields strikes the estimators
+    read, the report is MEASURED, and the audit's keys are the inventory's names."""
+    _loops_cli(monkeypatch, tmp_path)
+    out = tmp_path / "result.json"
+    assert mr.main(["--loops", "--json", str(out)]) == 0
+    text = capsys.readouterr().out
+    assert "are incomplete" not in text and "are not in refaudio/cache" not in text
+    res = json.loads(out.read_text(encoding="utf-8"))["take_to_take"]
+    assert res["outcome"] == "MEASURED"
+    assert sorted(res["audit"]["loops"]) == sorted(_short(n) for n in mr.expected_loops())
+    assert sorted(res["audit"]["admitted"]) == sorted(res["audit"]["loops"])
+    assert res["audit"]["excluded_not_one_per_beat"] == res["audit"]["refused_copy_paste"] == []
+    read = [row["Pitch trajectory"]["n"] for row in res["measure"]["per_loop"].values()]
+    assert len(read) == 27 and all(n >= 3 for n in read), read
+
+
+def test_per_loop_acoustic_exclusions_are_kept_on_a_complete_inventory(tmp_path, monkeypatch):
+    """Complete inventory, two loops the ACOUSTICS exclude -- a pattern and a
+    pasted strike -- and they are excluded with their reasons, as before, while
+    the report is still measured over the rest."""
+    names = mr.expected_loops()
+    _loops_cli(monkeypatch, tmp_path, pattern=names[1:2], pasted=names[2:3])
+    out = tmp_path / "result.json"
+    assert mr.main(["--loops", "--json", str(out)]) == 0
+    res = json.loads(out.read_text(encoding="utf-8"))["take_to_take"]
+    assert res["outcome"] == "MEASURED"
+    assert res["audit"]["excluded_not_one_per_beat"] == [_short(names[1])]
+    assert res["audit"]["refused_copy_paste"] == [_short(names[2])]
+    assert len(res["audit"]["admitted"]) == 25
+
+
+def test_the_loops_cli_refuses_a_missing_loop_and_leaves_the_json_intact(
+        tmp_path, monkeypatch, capsys):
+    names = mr.expected_loops()
+    d = _placeholders(tmp_path / "4x4", names)
+    (d / names[5]).unlink()
+    monkeypatch.setattr(mr, "LOOPS_DIR", d)
+    monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
+    out = tmp_path / "result.json"
+    previous = '{"session_to_session": "the previous run"}'
+    out.write_text(previous, encoding="utf-8")
+    assert mr.main(["--loops", "--json", str(out)]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and names[5] in text and mr.LOOPS_INVENTORY.name in text
+    assert "MEASURE" not in text
+    assert out.read_text(encoding="utf-8") == previous
+
+
+def test_the_loops_cli_refuses_an_equal_count_substitute(tmp_path, monkeypatch, capsys):
+    names = mr.expected_loops()
+    d = _placeholders(tmp_path / "4x4", names)
+    stranger = names[7].replace(".wav", " edit.wav")
+    (d / names[7]).rename(d / stranger)
+    assert len(list(d.glob("*.wav"))) == 27
+    monkeypatch.setattr(mr, "LOOPS_DIR", d)
+    monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
+    assert mr.main(["--loops"]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and names[7] in text and stranger not in text
+
+
+def test_the_loops_cli_keeps_the_fetch_hint_for_an_empty_folder(tmp_path, monkeypatch, capsys):
+    (tmp_path / "4x4").mkdir()
+    monkeypatch.setattr(mr, "LOOPS_DIR", tmp_path / "4x4")
+    monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
+    assert mr.main(["--loops"]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "refaudio_s3.py" in text
 
 
 def test_loop_compare_reads_the_committed_floors():

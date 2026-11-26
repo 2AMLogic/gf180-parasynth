@@ -60,7 +60,10 @@ knob to sweep (Cowbell, Rim Shot, Claves) carry no trailing number at all.
 is `808_loops_from_mars.zip`'s bass-drum-only 4/4 loops, in which one setting is
 struck repeatedly inside one continuous take — that pack is indexed in
 `catalog.json` and, since 2026-10-02, reachable from the private S3 working copy
-via `tools/refaudio_s3.py` (`REFAUDIO_S3`); no per-file index is committed for it.
+via `tools/refaudio_s3.py` (`REFAUDIO_S3`). It has no per-file index; the one
+folder of it this repository reads by name, its bass-drum `4x4` loops, has a
+scoped inventory instead, read from the hash-verified archive (#1427):
+[`index/808_loops_from_mars-4x4.txt`](index/808_loops_from_mars-4x4.txt) (27 files).
 → [`index/808-from-mars.tsv`](index/808-from-mars.tsv) (1,562 files). The
 vendor's superseded earlier edition is indexed too, as a second recording
 session of the same machine: [`index/808_from_mars_legacy.tsv`](index/808_from_mars_legacy.tsv).
@@ -84,6 +87,7 @@ second Moog ladder instrument, the Micromoog:
 | [`CATALOG.md`](CATALOG.md) | All 89 packs by category: source instrument, WAV count, hours, format, archive name |
 | `catalog.json` | The same, machine-readable, plus per-pack folder breakdowns, sample-rate and bit-depth histograms, the pack's own notes on its naming convention, and the archive SHA-256 |
 | `index/*.tsv` | Every WAV in the four packs above: `path, bytes, sample_rate, bits, channels, seconds`. Plain text, so it greps and diffs from a console |
+| `index/*-<scope>.txt` | A scoped inventory: the WAVs of ONE folder in a pack that has no per-file index, one name per line. `tools/refaudio_member_list.py` reads them from the hash-verified archive's own directory; the `#` lines record the archive's SHA-256 and the commands to regenerate the list and to fetch the members |
 | `cache/` | Where fetched audio lands. Gitignored |
 
 Only four packs are indexed file-by-file, on purpose: the full index is 21 MB

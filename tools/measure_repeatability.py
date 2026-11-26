@@ -921,6 +921,11 @@ def verdicts(machine: dict, estimator: dict, travel: dict, report=print) -> dict
 # ===========================================================================
 LOOPS_DIR = (CACHE / "808_loops_from_mars" / "808 Loops From Mars" / "WAV" /
              "03. Bass Drum" / "4x4")
+LOOPS_ARCHIVE = "808_loops_from_mars.zip"
+#: The WAVs the 4x4 folder holds, by name. catalog.json has no per-file index
+#: for this pack, so they were read from the hash-verified archive's own
+#: directory and committed (tools/refaudio_member_list.py).
+LOOPS_INVENTORY = REPO / "refaudio" / "index" / "808_loops_from_mars-4x4.txt"
 LOOPS_FETCH = ("REFAUDIO_S3=s3://2am-batch-jobs-221082181346/refaudio/samples-from-mars "
                "REFAUDIO_S3_PROFILE=batch-runner-submit tools/refaudio_s3.py --prefix "
                "808_loops_from_mars.zip '808 Loops From Mars/WAV/03. Bass Drum/4x4/'")
@@ -1037,10 +1042,53 @@ def duplicate_fraction(slices: list[np.ndarray], maxlag: int = 64) -> tuple[floa
         "duplicate_pairs": int(sum(dup))}
 
 
+def expected_loops(path: pathlib.Path | None = None) -> list[str]:
+    """Every WAV the 4x4 folder holds, by name, from the committed inventory
+    -- or REFUSED when the inventory cannot say.
+
+    `catalog.json` has no per-file index for `808_loops_from_mars.zip`, so the
+    names were read once from the archive's own directory -- after it hashed to
+    the catalogued SHA-256 -- and committed: `path`'s `#` header records that
+    hash and the two commands, and `tools/refaudio_member_list.py` regenerates
+    it. A cache glob cannot stand in for them (#1427): it sees only what is on
+    disk, so a partly fetched folder enumerated short and every spread after
+    it was read over fewer loops with nothing recording the loss."""
+    path = path or LOOPS_INVENTORY
+    if not path.is_file():
+        raise Refused(f"the loop inventory {path} is missing: nothing committed says "
+                      "which WAVs the 4x4 folder holds")
+    names = [ln for ln in path.read_text(encoding="utf-8").splitlines()
+             if ln.strip() and not ln.startswith("#")]
+    if not names:
+        raise Refused(f"the loop inventory {path} lists no WAV: an empty inventory "
+                      "cannot stand for the 4x4 folder")
+    if len(set(names)) != len(names):
+        raise Refused(f"the loop inventory {path} lists a WAV more than once: "
+                      + ", ".join(sorted(n for n in set(names) if names.count(n) > 1)))
+    return names
+
+
 def loop_files() -> list[pathlib.Path]:
-    if not LOOPS_DIR.is_dir() or not list(LOOPS_DIR.glob("*.wav")):
-        raise Refused(f"the 4x4 bass-drum loops are not in refaudio/cache -- run:\n         {LOOPS_FETCH}")
-    return sorted(LOOPS_DIR.glob("*.wav"))
+    """The 4x4 loops, by name from the committed inventory and sorted -- or REFUSED.
+
+    A folder that holds none of them was never fetched, and keeps the fetch
+    hint. One that holds some but not all is refused by name (#1427): the old
+    reader took every `*.wav` on disk, so a partly fetched folder was audited
+    as the whole set. A WAV of a name the inventory does not list is not a loop
+    and is never read. Presence is all this establishes: a file of the right
+    name holding other audio is read as that loop."""
+    hint = f"the 4x4 bass-drum loops are not in refaudio/cache -- run:\n         {LOOPS_FETCH}"
+    if not LOOPS_DIR.is_dir():
+        raise Refused(hint)
+    paths = sorted(LOOPS_DIR / n for n in expected_loops())
+    if not any(p.is_file() for p in paths):
+        raise Refused(hint)
+    gone = [p.name for p in paths if not p.is_file()]
+    if gone:
+        raise Refused(f"the 4x4 bass-drum loops in refaudio/cache are incomplete: "
+                      f"{len(gone)} of the {len(paths)} WAVs in {LOOPS_INVENTORY.name} "
+                      f"are absent -- " + ", ".join(gone))
+    return paths
 
 
 def loop_audit(report=print, files: list[pathlib.Path] | None = None) -> tuple[dict, dict]:

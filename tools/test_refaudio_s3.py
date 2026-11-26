@@ -5,6 +5,11 @@
 
 A fake `aws` writes a small zip, so what is exercised is the real hash check,
 extraction and cleanup, with no network and no licensed audio.
+
+`tools/refaudio_member_list.py` (#1427) shares that download and hash check
+and then lists a folder instead of extracting it, so its tests live here on
+the same fixtures: what it lists, what it refuses, and the round trip from the
+file it writes to the reader that consumes it.
 """
 from __future__ import annotations
 
@@ -19,9 +24,11 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import refaudio_s3 as s3                                           # noqa: E402
+import refaudio_member_list as ml                                 # noqa: E402
 
 ARCH = "808_loops_from_mars.zip"
 MEMBER = "808 Loops From Mars/WAV/03. Bass Drum/4x4/x.wav"
+FOLDER = "808 Loops From Mars/WAV/03. Bass Drum/4x4"
 
 
 def _zip(payload: bytes = b"RIFFfake") -> bytes:
@@ -125,3 +132,114 @@ def test_profile_is_passed(env, monkeypatch):
     calls = _fake_aws(monkeypatch, _zip())
     s3.main([ARCH, MEMBER])
     assert calls[0][:3] == ["aws", "--profile", "batch-runner-submit"]
+
+
+# ---------------------------------------------------------------------------
+# tools/refaudio_member_list.py: the folder's immediate WAVs, from a
+# hash-verified archive, as the inventory file the loop reader consumes.
+# ---------------------------------------------------------------------------
+def _folder_zip() -> bytes:
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr(FOLDER + "/BD 4x4 Zeta 808 Loops 128.wav", b"b")
+        z.writestr(FOLDER + "/BD 4x4 Alpha 808 Loops 120.wav", b"a")
+        z.writestr(FOLDER + "/Read Me.txt", b"t")
+        z.writestr(FOLDER + "/Processed/BD 4x4 nested 808 Loops 120.wav", b"n")
+        z.writestr(FOLDER + " Tops/BD 4x4 sibling 808 Loops 120.wav", b"s")
+        z.writestr("__MACOSX/" + FOLDER + "/BD 4x4 Alpha 808 Loops 120.wav", b"junk")
+    return b.getvalue()
+
+
+def _names(text: str) -> list[str]:
+    """The member lines of an inventory: everything that is not a `#` header."""
+    return [ln for ln in text.splitlines() if ln and not ln.startswith("#")]
+
+
+def test_member_list_lists_the_folders_immediate_wavs_and_nothing_else(env, monkeypatch, capsys):
+    """Sorted, and only the folder's own WAVs: not a sub-folder's, not the
+    sibling folder that begins with the same name, not another extension, not
+    a resource fork. No audio is extracted and the archive is not kept."""
+    _fake_aws(monkeypatch, _folder_zip())
+    assert ml.main([ARCH, FOLDER]) == ml.LISTED
+    out = capsys.readouterr().out
+    assert _names(out) == ["BD 4x4 Alpha 808 Loops 120.wav", "BD 4x4 Zeta 808 Loops 128.wav"]
+    head = [ln for ln in out.splitlines() if ln.startswith("#")]
+    assert f"# archive_sha256 {hashlib.sha256(_folder_zip()).hexdigest()}" in head
+    assert any("tools/refaudio_member_list.py " in ln and FOLDER in ln for ln in head), head
+    assert any("tools/refaudio_s3.py --prefix " in ln and f"{FOLDER}/" in ln
+               and "REFAUDIO_S3=s3://bucket/prefix" in ln for ln in head), head
+    assert not (s3.ARCHIVES / ARCH).exists()
+    assert not (s3.CACHE / ARCH[:-4]).exists()
+
+
+def test_member_list_is_deterministic_so_a_regeneration_diffs_clean(env, monkeypatch, capsys):
+    _fake_aws(monkeypatch, _folder_zip())
+    ml.main([ARCH, FOLDER])
+    first = capsys.readouterr().out
+    ml.main([ARCH, FOLDER])
+    assert capsys.readouterr().out == first
+
+
+def test_member_list_write_keeps_stdout_quiet_and_the_commands_in_the_file(
+        env, monkeypatch, capsys):
+    _fake_aws(monkeypatch, _folder_zip())
+    out = env / "inventory.txt"
+    assert ml.main([ARCH, FOLDER, "--write", str(out), "--keep-archive"]) == ml.LISTED
+    assert capsys.readouterr().out == ""
+    text = out.read_text(encoding="utf-8")
+    assert len(_names(text)) == 2
+    assert any(f"--write {out}" in ln for ln in text.splitlines() if ln.startswith("#"))
+    assert (s3.ARCHIVES / ARCH).exists()
+
+
+def test_the_loop_reader_reads_what_the_lister_wrote(env, monkeypatch):
+    import measure_repeatability as mr
+    _fake_aws(monkeypatch, _folder_zip())
+    out = env / "inventory.txt"
+    assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.LISTED
+    assert mr.expected_loops(out) == ["BD 4x4 Alpha 808 Loops 120.wav",
+                                      "BD 4x4 Zeta 808 Loops 128.wav"]
+
+
+def test_member_list_refuses_a_folder_with_no_wav(env, monkeypatch, capsys):
+    """An empty inventory must never be written: the reader would refuse it,
+    and a reader that did not would read whatever was on disk."""
+    _fake_aws(monkeypatch, _folder_zip())
+    out = env / "inventory.txt"
+    assert ml.main([ARCH, "808 Loops From Mars/WAV/03. Bass Drum", "--write", str(out)]) == ml.REFUSED
+    assert "holds no WAV" in capsys.readouterr().out
+    assert not out.exists()
+
+
+def test_member_list_refuses_a_hash_mismatch_before_reading_a_name(env, monkeypatch, capsys):
+    _fake_aws(monkeypatch, _folder_zip(), want_sha="0" * 64)
+    out = env / "inventory.txt"
+    assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.REFUSED
+    assert "not the archive the catalogue describes" in capsys.readouterr().out
+    assert not out.exists()
+    assert not (s3.ARCHIVES / ARCH).exists()
+
+
+def test_member_list_refuses_without_a_route_or_for_an_unknown_archive(monkeypatch, env):
+    monkeypatch.delenv("REFAUDIO_S3", raising=False)
+    assert ml.main([ARCH, FOLDER]) == ml.REFUSED
+    monkeypatch.setenv("REFAUDIO_S3", "s3://bucket/prefix")
+    assert ml.main(["nope.zip", FOLDER]) == ml.REFUSED
+
+
+def test_member_list_transfer_failure_is_FAIL_not_refused(env, monkeypatch):
+    _fake_aws(monkeypatch, b"", rc=1)
+    assert ml.main([ARCH, FOLDER]) == ml.FAIL
+
+
+def test_member_list_refuses_a_name_that_cannot_be_listed_one_per_line(env, monkeypatch, capsys):
+    """The file's format is one member a line; a name holding a line break
+    would list as two members, neither of which exists."""
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr(FOLDER + "/BD 4x4\ninjected 808 Loops 120.wav", b"x")
+    _fake_aws(monkeypatch, b.getvalue())
+    out = env / "inventory.txt"
+    assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.REFUSED
+    assert "line break" in capsys.readouterr().out
+    assert not out.exists()

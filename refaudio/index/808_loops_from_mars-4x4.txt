@@ -1,0 +1,37 @@
+# The 27 WAVs this folder holds in 808_loops_from_mars.zip, by name:
+#   808 Loops From Mars/WAV/03. Bass Drum/4x4
+# archive_sha256 0142b505baed5d05360950635c1a2b3d09950d36b22c31f6fd174bd7c7be6361
+# Read from the archive's own directory after the whole archive hashed to the
+# SHA-256 above, which is the one refaudio/catalog.json records. Generated,
+# never edited (refaudio/README.md); regenerate and diff:
+#   python tools/refaudio_member_list.py 808_loops_from_mars.zip '808 Loops From Mars/WAV/03. Bass Drum/4x4' --write refaudio/index/808_loops_from_mars-4x4.txt
+# Fetch the members into refaudio/cache/ (hashes the archive again, extracts
+# only this folder):
+#   REFAUDIO_S3=s3://2am-batch-jobs-221082181346/refaudio/samples-from-mars REFAUDIO_S3_PROFILE=batch-runner-submit python tools/refaudio_s3.py --prefix 808_loops_from_mars.zip '808 Loops From Mars/WAV/03. Bass Drum/4x4/'
+BD 4x4 Alternate 808 Loops 120.wav
+BD 4x4 Bellsy 808 Loops 128.wav
+BD 4x4 Chaos 808 Loops 128.wav
+BD 4x4 Dark 808 Loops 120.wav
+BD 4x4 Define 808 Loops 120.wav
+BD 4x4 Drive 808 Loops 120.wav
+BD 4x4 Flex 808 Loops 120.wav
+BD 4x4 Fluid 808 Loops 120.wav
+BD 4x4 Goosed 808 Loops 128.wav
+BD 4x4 Grit 808 Loops 120.wav
+BD 4x4 Inside 808 Loops 120.wav
+BD 4x4 Machina 808 Loops 128.wav
+BD 4x4 Memory 808 Loops 128.wav
+BD 4x4 Meserole 808 Loops 120.wav
+BD 4x4 Nineties 808 Loops 120.wav
+BD 4x4 Peak 808 Loops 128.wav
+BD 4x4 Punch 808 Loops 120.wav
+BD 4x4 Sassy 808 Loops 120.wav
+BD 4x4 Sat 808 Loops 120.wav
+BD 4x4 Shifty 808 Loops 125.wav
+BD 4x4 Simple 808 Loops 125.wav
+BD 4x4 Sky Dive 808 Loops 120.wav
+BD 4x4 Smash 808 Loops 120.wav
+BD 4x4 Starter 808 Loops 120.wav
+BD 4x4 Tite 808 Loops 120.wav
+BD 4x4 Trio 808 Loops 120.wav
+BD 4x4 Warrior 808 Loops 128.wav
