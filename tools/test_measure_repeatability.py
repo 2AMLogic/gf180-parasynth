@@ -10,6 +10,7 @@ are tested against signals whose answer is constructed, not observed.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 
@@ -344,3 +345,25 @@ def test_a_defect_in_the_conditioner_is_not_reported_as_a_refusal(monkeypatch):
     e = _conditioned(monkeypatch, TypeError("bug"))
     assert not e.ok
     assert "TypeError" in e.reason and "refused" not in e.reason
+
+
+# ---------------------------------------------------------------------------
+# The report table itself. `loop_compare` answers None for tolerance / take
+# when the take is exactly 0, and the table used to format that None as a float.
+# ---------------------------------------------------------------------------
+def test_the_report_prints_a_metric_whose_take_to_take_is_exactly_zero(tmp_path, monkeypatch, capsys):
+    """A traceback, exit 1, after the whole corpus was measured and before
+    --json was written. Found by #1427's complete-inventory test on built
+    loops, whose attack reads the same in every strike. The table shows the
+    ratio as unbounded; the JSON keeps the None, which is the honest value."""
+    take = {"metrics": {"attack": {"units": "ms", "loops": 1, "strikes_refused": 0,
+                                   "pairwise_abs_diff_median_of_loops": 0.0}}}
+    monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
+    monkeypatch.setattr(mr, "loop_audit", lambda report=print, files=None: ({"x": ([], 44100)}, {}))
+    monkeypatch.setattr(mr, "loop_measure", lambda admitted, report=print: take)
+    out = tmp_path / "result.json"
+    assert mr.main(["--loops", "--json", str(out)]) == 0
+    row = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("  attack"))
+    assert "inf" in row, row
+    got = json.loads(out.read_text(encoding="utf-8"))["take_to_take"]
+    assert got["outcome"] == "MEASURED" and got["compare"]["attack"]["tolerance_over_take"] is None

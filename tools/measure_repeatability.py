@@ -1267,9 +1267,14 @@ def loops_main(a) -> int:
                 if "refused" in v:
                     print(f"  {k:24s} REFUSED: {v['refused']}")
                     continue
+                # A take of exactly 0 has no finite tolerance / take; it is
+                # unbounded, and was formatted as `None`: a traceback (exit 1)
+                # after the corpus was measured and before --json was written
+                # (#1427, on a built corpus).
+                tot = v["tolerance_over_take"]
                 print(f"  {k:24s} {v['units']:5s} {v['take_pairwise_median']:12.4f} "
                       f"{v['session_floor']:14.4f} {(v['take_over_session'] or 0):12.3f}  "
-                      + (f"{v['tolerance']:5.2f} {v['tolerance_over_take']:9.1f}"
+                      + (f"{v['tolerance']:5.2f} {(tot if tot is not None else float('inf')):9.1f}"
                          if v['tolerance'] is not None else "  (no tolerance row)")
                       + f"   ({take['metrics'][k]['loops']}, {take['metrics'][k]['strikes_refused']})")
             rc_ = MEASURED
