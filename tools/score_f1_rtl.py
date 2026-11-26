@@ -11,6 +11,14 @@ wide-open reference), about twenty minutes of iverilog. The CHEAP control is
 which compares the streams without scoring a case; `make controls` runs that
 one.
 
+WHERE THE CURVE GOES (#1412). The record and the response curve it names are
+written to one decision: on the board the curve stays at the published
+`build/scorecard/<case>-ours-response-rtl.json`; with any other `--results` it
+goes beside the record, and the record states where. Until that, the writer
+took a suffix and chose the directory itself, so an injected control's curve
+replaced the clean board curve whatever `--results` said, and both records
+named the same file.
+
 WHY THIS EXISTS. #94 asked for four `integrated-rtl` anchors -- one drum, one
 mono, one filter, one ensemble -- because every scorecard case said
 `fixed-model`, so nothing on the board had been measured on the instrument that
@@ -111,9 +119,11 @@ def main(argv=None) -> int:
     ap.add_argument("--case", choices=CASES, default="F1A")
     ap.add_argument("--inject", choices=rtlpath.INJECTS, default=None,
                     help="compile a defect into the RTL. A control, never evidence: it "
-                         "refuses to write into the board's results.")
+                         "refuses to write into the board's results, or into the "
+                         "directory the board's response curves live in.")
     ap.add_argument("--results", default=None,
-                    help=f"where the record goes (default {rc.RESULTS.relative_to(ROOT)})")
+                    help=f"where the record goes (default {rc.stated_path(rc.RESULTS)}); "
+                         "off the board, the response curve goes beside it")
     ap.add_argument("--no-audio", action="store_true",
                     help="do not write the response-curve artefact")
     ap.add_argument("--allow-stale", action="store_true",
@@ -129,6 +139,13 @@ def main(argv=None) -> int:
     if on_board and a.inject:
         print("score_f1_rtl: REFUSED -- an injected control must not write into "
               "docs/scorecard/results; pass --results", file=sys.stderr)
+        return 2
+    # The directory the board's curves live in is not a directory of the
+    # control's own either: its curve would be the clean board curve's path.
+    if a.inject and outdir.resolve() == rc.AUDIO_OUT.resolve():
+        print("score_f1_rtl: REFUSED -- an injected control must not write into "
+              f"{rc.stated_path(rc.AUDIO_OUT)}, where the board's response curves "
+              "live; pass another --results", file=sys.stderr)
         return 2
 
     # The premise of the run, asserted before any of it runs (run_case.base_check).
@@ -159,13 +176,14 @@ def main(argv=None) -> int:
                   file=sys.stderr)
             return 2
 
+    response_dest = rc.response_destination(outdir, a.case, "-rtl")
     try:
         path = rtlpath.RtlFilterChainPath(inject=a.inject, timeout_s=a.timeout_s)
         print(f"score_f1_rtl: {a.case} on {rtlpath.ENGINE} "
               f"({path.tools['iverilog']}); this runs two RTL curves")
         record = rc.run_filter_case(case, "", keep_audio=not a.no_audio,
                                     engine_path=path, engine=rtlpath.ENGINE,
-                                    artifact_tag="-rtl")
+                                    response_dest=response_dest)
     except (rtlpath.Refused, rc.Refused) as exc:
         print(f"score_f1_rtl: REFUSED -- {exc}", file=sys.stderr)
         return 2
@@ -228,7 +246,8 @@ def main(argv=None) -> int:
     if on_board:
         rc.carry_rubric_history(case, dest, record)
     dest.write_text(json.dumps(record, indent=2, sort_keys=False) + "\n")
-    print(f"score_f1_rtl: wrote {dest.relative_to(ROOT) if dest.is_relative_to(ROOT) else dest}")
+    print(f"score_f1_rtl: wrote {rc.stated_path(dest)}")
+    print(f"score_f1_rtl: response curve {record['provenance']['artefacts']['ours']}")
     if a.inject:
         print("score_f1_rtl: this record is a CONTROL, not evidence")
     return 0 if verdict["state"] == scorecard.PASS else 1
