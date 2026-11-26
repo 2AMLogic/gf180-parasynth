@@ -1203,7 +1203,7 @@ def load_clip(clip_id: str, profile: dict | None = None) -> tuple[np.ndarray, in
     # #134: one shared implementation now (`audio_measure.require_finite`), used
     # by every boundary where audio enters -- this reader, `write_clip`,
     # `render`'s freeze decision, `run_case.load_reference`, `run_case.prepare`,
-    # `reference_rigs._Plugin.render` and `audio_measure._as_float`. Which
+    # `reference_rigs.render_midi_note` and `audio_measure._as_float`. Which
     # boundaries those are is written down in `tools/nan_guard_audit.py`, whose
     # `--check` asserts each one still makes the assertion.
     try:
