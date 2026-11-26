@@ -77,6 +77,11 @@ and periodic, and no estimator can tell those apart; the probe refuses rather
 than picking one. A drift magnitude here therefore needs SECONDS of ONE
 oscillator held, which is a constraint on the stimulus, not a bug.
 
+`across_note_drift` compares windows, not audio, and asserts what the reports
+can support (#1407): every window DECLARES the same `f0_nominal` and the same
+`sr`, else F0_NOMINAL_MISMATCH or SAMPLE_RATE_MISMATCH. Whether they came from
+one render is in no report and stays with the caller.
+
 WHAT SEPARATES DRIFT FROM BEATING, in one sentence
 --------------------------------------------------
 Beating modulates the fundamental's AMPLITUDE and its apparent FREQUENCY
@@ -91,6 +96,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import numbers
 import os
 import sys
 
@@ -503,6 +509,45 @@ def drift_report(x: np.ndarray, sr: int, f0_nominal: float, *,
         return out
 
 
+# ---- what windows must DECLARE alike before they are compared ---------------
+COMPARISON_FIELDS = ("f0_nominal", "sr")
+COMPARISON_MISMATCH = {"f0_nominal": "F0_NOMINAL_MISMATCH",
+                       "sr": "SAMPLE_RATE_MISMATCH"}
+
+
+def _declared(value) -> bool:
+    """Whether a window declared `value` for a comparison field: a finite,
+    positive real number. A bool is not one, and neither is a value that is
+    not a number at all."""
+    return (isinstance(value, numbers.Real) and not isinstance(value, bool)
+            and math.isfinite(value) and value > 0)
+
+
+def _incomparable(ok: list) -> tuple[str, int, str] | None:
+    """(field, window, detail) naming why the usable windows `ok` cannot be
+    compared, or None when they can. `ok` holds at least one window.
+
+    Every window is asked to DECLARE each field before any two are compared,
+    so matching missing values are not agreement. The offending window of a
+    mismatch is the first one that disagrees with the first."""
+    for field in COMPARISON_FIELDS:
+        for i, r in enumerate(ok):
+            v = r.get(field)
+            if not _declared(v):
+                return (field, i,
+                        f"window {i} of {len(ok)} ({r.get('label', '')}) "
+                        f"declares {field} {v!r}, which is not a finite "
+                        f"positive number")
+        first = ok[0][field]
+        for i, r in enumerate(ok):
+            if r[field] != first:
+                return (field, i,
+                        f"window {i} of {len(ok)} ({r.get('label', '')}) "
+                        f"declares {field} {r[field]!r}; window 0 "
+                        f"({ok[0].get('label', '')}) declares {first!r}")
+    return None
+
+
 # ---- a pair of notes of the SAME pitch, far apart in one render -------------
 def across_note_drift(reports: list) -> dict:
     """Drift between two instances of the same note in one continuous render.
@@ -511,11 +556,28 @@ def across_note_drift(reports: list) -> dict:
     pitch seconds apart in the same render differ in f0 by exactly the drift
     accumulated between them, and the floor is each window's own f0 precision
     rather than its trajectory scatter. Refuses unless every input reported an
-    f0 (a REFUSED window has none)."""
+    f0 (a REFUSED window has none).
+
+    Every window must also DECLARE the same nominal pitch (`f0_nominal`) and
+    the same sample rate (`sr`), compared directly (#1407): two different
+    notes, each stable at its own pitch, or one note at two rates, are not two
+    instances of one note, and the distance between them is not drift. Measured
+    pitch stays free to differ -- that is the measurement. A window that
+    declares no finite positive value for either field refuses the same way.
+
+    That the windows come from ONE render is in none of the reports and is the
+    caller's to establish. Nothing here can tell one render from two."""
     ok = [r for r in reports if "f0_measured_hz" in r]
     if len(ok) < 2:
         return {"verdict": REFUSED, "refusal": "TOO_FEW_WINDOWS",
                 "refusal_detail": f"{len(ok)} windows carried an f0"}
+    why = _incomparable(ok)
+    if why:
+        field, i, detail = why
+        return {"verdict": REFUSED, "refusal": COMPARISON_MISMATCH[field],
+                "field": field, "offending_window": i,
+                "refusal_detail": detail, "n_windows": len(ok),
+                "labels": [r.get("label", "") for r in ok]}
     fs = [r["f0_measured_hz"] for r in ok]
     ref = fs[0]
     dev = [float(cents(f, ref)) for f in fs]
