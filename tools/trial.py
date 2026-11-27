@@ -141,10 +141,20 @@ def _walk_keys(obj, where=""):
             yield from _walk_keys(v, f"{where}[{i}]")
 
 
-def _valid_rolling_fixtures(fixtures) -> bool:
+def _valid_replay_fixtures(fixtures) -> bool:
     return (isinstance(fixtures, list)
             and bool(fixtures)
             and all(isinstance(fx, str) and bool(fx.strip()) for fx in fixtures))
+
+
+def _live_midi_fixture_problem(tid, mode_name, mode) -> str | None:
+    if (tid, mode_name) == ("T-LIVE-MIDI", "rtl"):
+        for child in mode.get("required", []):
+            if child.get("id") == "session-rtl" and not _valid_replay_fixtures(
+                    child.get("fixtures")):
+                return (f"{tid}/{mode_name}/session-rtl: must declare non-empty 'fixtures' "
+                        "for RTL replay coverage")
+    return None
 
 
 def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -> dict:
@@ -181,7 +191,7 @@ def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -
                         raise RegistryError(f"{tid}/{mname}/{c['id']}: unknown interpreter "
                                             f"{c['interpret']!r}")
                     if (role == "required" and c["interpret"] == "rolling_record"
-                            and not _valid_rolling_fixtures(c.get("fixtures"))):
+                            and not _valid_replay_fixtures(c.get("fixtures"))):
                         raise RegistryError(
                             f"{tid}/{mname}/{c['id']}: required rolling_record child must declare "
                             f"non-empty 'fixtures' for RTL replay coverage")
@@ -190,6 +200,8 @@ def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -
                     ids.add(c["id"])
             if not mode.get("required"):
                 raise RegistryError(f"{tid}/{mname}: no required children -- nothing to answer")
+            if problem := _live_midi_fixture_problem(tid, mname, mode):
+                raise RegistryError(problem)
     return reg
 
 
@@ -341,7 +353,7 @@ def interpret_rolling_record(spec, run, out, role):
         if not c.get("caught"):
             missed.append(f"host control {name} not caught")
     fixtures = spec.get("fixtures")
-    has_fixtures = _valid_rolling_fixtures(fixtures)
+    has_fixtures = _valid_replay_fixtures(fixtures)
     fixture_list = fixtures if has_fixtures else []
     metrics = {}
     periods, required_p = {}, {}
@@ -1136,6 +1148,9 @@ def membership_problems(rec: dict, root: pathlib.Path = ROOT) -> list[str]:
         req, ctl = _children(mode, as_cand)
     except (KeyError, TypeError, AttributeError, RegistryError) as exc:
         return [f"population: the recorded registry has no such mode ({exc!r})"]
+    # A pre-fix receipt and its authenticated registry can agree on zero replays.
+    if problem := _live_midi_fixture_problem(t["id"], t["mode"], mode):
+        return [problem]
     out = []
     for label, got, want in (
             ("required", [_member(c, "required") for c in rec.get("children", [])

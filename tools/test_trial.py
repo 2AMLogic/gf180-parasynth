@@ -92,10 +92,10 @@ class Repo:
         (self.controls if role == "control" else self.children).append(spec)
         return bid
 
-    def registry(self, timeout=60):
-        reg = {"schema": 1, "environment": "spec/env.json", "trials": {"T-X": {
+    def registry(self, timeout=60, *, tid="T-X", mode="m"):
+        reg = {"schema": 1, "environment": "spec/env.json", "trials": {tid: {
             "question": "q?", "criterion_version": "x/1", "scope": {"c": 1},
-            "dag_nodes": ["X"], "modes": {"m": {
+            "dag_nodes": ["X"], "modes": {mode: {
                 "timeout_s": timeout, "tools": self.tools, "requires": self.requires,
                 "required": self.children, "controls": self.controls}}}}}
         p = self.root / "docs/trials.json"
@@ -945,6 +945,71 @@ def test_live_midi_control_is_caught_only_with_its_exit_zero(tmp_path):
     (tmp_path / "verification.json").write_text(json.dumps(rec))
     assert trial.interpret_live_midi_record(spec, {"rc": 0}, tmp_path, "control")["caught"]
     assert not trial.interpret_live_midi_record(spec, {"rc": 1}, tmp_path, "control")["caught"]
+
+
+def _live_midi_registry(repo, mode, *, replays=False, declaration=None):
+    """Keep the shipped session arguments, host evidence and caught control fixed."""
+    modes = json.loads(trial.REGISTRY.read_text())["trials"]["T-LIVE-MIDI"]["modes"]
+    session, = modes[mode]["required"]
+    archive = REAL_ROOT / "fpga/reports/live-midi/full-kit-298/verification-rtl.json"
+    record = json.loads(archive.read_text())
+    if not replays:
+        record["rtl"] = {}
+    if declaration is None:
+        declaration = {"fixtures": session["fixtures"]} if "fixtures" in session else {}
+    repo.child({"rc": 0, "files": {"verification.json": record}}, id=session["id"],
+               interpret=session["interpret"], **declaration)
+    repo.children[0]["args"].extend(session["args"])
+    repo.child(late_control(), role="control")
+    return repo.registry(tid="T-LIVE-MIDI", mode=mode)
+
+
+def _run_live_midi(repo, registry, mode):
+    return trial.run_trial("T-LIVE-MIDI", mode=mode, root=repo.root, registry=registry,
+                           dag=repo.root / "docs/dag.json")
+
+
+@pytest.mark.parametrize("declaration", [{}, {"fixtures": []}, {"fixtures": [" "]}],
+                         ids=["omitted", "empty", "blank-name"])
+def test_live_midi_rtl_registry_requires_replay_fixtures(repo, declaration):
+    registry = _live_midi_registry(repo, "rtl", declaration=declaration)
+    diagnostic = r"T-LIVE-MIDI/rtl/session-rtl: .*fixtures.*RTL replay"
+    with pytest.raises(trial.RegistryError, match=diagnostic):
+        trial.load_registry(registry, repo.root / "docs/dag.json")
+
+
+@pytest.mark.parametrize("declaration", [{}, {"fixtures": []}], ids=["omitted", "empty"])
+def test_live_midi_old_rtl_pass_requires_replay_fixtures(repo, declaration, monkeypatch, capsys):
+    registry = _live_midi_registry(repo, "rtl", declaration=declaration)
+    # Reproduce the old writer, which accepted this declaration. The dispatcher
+    # itself executes both checkers, hashes the artifacts and seals the PASS.
+    with monkeypatch.context() as old:
+        old.setattr(trial, "load_registry", lambda path, dag: json.loads(path.read_text()))
+        run_dir, rec = _run_live_midi(repo, registry, "rtl")
+    assert rec["verdict"] == trial.PASS and rec["controls"][0]["caught"]
+    rc = trial.main(["check-receipt", str(run_dir / "receipt.json"), "--require", trial.PASS])
+    out = capsys.readouterr().out
+    assert rc == 1, out
+    assert out.count("REJECTED:") == 1, out
+    assert "REJECTED: T-LIVE-MIDI/rtl/session-rtl:" in out
+    assert "fixtures" in out and "RTL replay" in out
+
+
+@pytest.mark.parametrize("mode, replays, verdict", [
+    ("rtl", True, trial.PASS), ("rtl", False, trial.NO_VERDICT), ("sim", False, trial.PASS),
+])
+def test_live_midi_archived_session_receipt(repo, capsys, mode, replays, verdict):
+    registry = _live_midi_registry(repo, mode, replays=replays)
+    run_dir, rec = _run_live_midi(repo, registry, mode)
+    assert rec["controls"][0]["caught"]
+    assert rec["verdict"] == verdict, rec["verdict_reasons"]
+    if verdict == trial.NO_VERDICT:
+        for fixture in ("coverage", "alternates", "pressure", "sustained"):
+            assert f"no RTL replay recorded for {fixture}" in rec["children"][0]["reasons"]
+    rc = trial.main(["check-receipt", str(run_dir / "receipt.json"), "--require", trial.PASS])
+    out = capsys.readouterr().out
+    assert f"VALID: T-LIVE-MIDI {verdict}" in out
+    assert rc == (0 if verdict == trial.PASS else 1), out
 
 
 # ---- T-PHYSICAL (#208): the capture record and its synthetic controls --------
