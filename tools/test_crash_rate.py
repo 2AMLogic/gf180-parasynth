@@ -235,6 +235,42 @@ def test_disabled():
         assert summary["crash_rate"] == (0 if ran else None)
 
 
+def test_a_body_that_never_started_is_not_an_exercised_run(tmp_path):
+    marker = tmp_path / "entered"
+    target = _write(tmp_path, "test_empty.py", f"""
+import pathlib
+import unittest
+import pytest
+
+class Case(unittest.TestCase):
+    def setUp(self):
+        raise RuntimeError("setup fails before the method")
+    def test_measure(self):
+        pathlib.Path({str(marker)!r}).touch()
+
+@pytest.mark.xfail(strict=True)
+async def test_coroutine():
+    pathlib.Path({str(marker)!r}).touch()
+    assert False
+
+@pytest.mark.xfail(strict=True)
+def test_sync():
+    pathlib.Path({str(marker)!r}).touch()
+    assert False
+""")
+    out = tmp_path / "report.json"
+    for test, expected_rc, ran in [("Case::test_measure", 2, False),
+                                   ("test_coroutine", 2, False),
+                                   ("test_sync", 0, True)]:
+        marker.unlink(missing_ok=True)
+        rc = cr.main(["--target", f"{target}::{test}", "--runs", "1", "--json", str(out)])
+        assert marker.exists() is ran, test
+        assert rc == expected_rc, test
+        summary = json.loads(out.read_text())["summary"]
+        assert summary["runs_that_exercised_the_target"] == int(ran), test
+        assert summary["crash_rate"] == (0 if ran else None), test
+
+
 @pytest.mark.parametrize("option", ["--fixtures", "--fixtures-per-test"])
 def test_listing_fixtures_cannot_supply_a_crash_rate(tmp_path, option):
     marker = tmp_path / "entered"
