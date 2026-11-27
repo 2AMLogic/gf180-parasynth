@@ -1094,25 +1094,30 @@ class _NoiseResponseRig(_Plugin):
 
     def noise_curve(self, freqs, cut, res, seconds=4.0, level=1.0):
         filtered = self.noise_render(cut, res, seconds, level)
-        reference_power = self._wide_open_power(seconds, level)
         f, power = _welch(filtered, "filtered capture")
-        # Floor the relative gain for a silent output. An absolute power floor
-        # would change the transfer when both recordings are scaled equally.
-        with np.errstate(divide="ignore"):
-            gain_db = 10 * (np.log10(power) - np.log10(reference_power))
-        return _smooth_log(f, np.maximum(gain_db, -300.0), freqs)
-
-    def _wide_open_power(self, seconds, level):
         key = (seconds, level)
         cached = getattr(self, "_wide_open_cache", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
-        reference = self.noise_render(1.0, 0.0, seconds, level)
-        _, power = _welch(reference, "wide-open reference")
-        if np.any(power == 0):
-            raise am.InsufficientEvidence("wide-open reference is silent in one or more Welch bins")
-        self._wide_open_cache = (key, power)
-        return power
+        reusing_reference = cached is not None and cached[0] == key
+        if reusing_reference:
+            reference_power = cached[1]
+        else:
+            reference = self.noise_render(1.0, 0.0, seconds, level)
+            _, reference_power = _welch(reference, "wide-open reference")
+
+        gains = []
+        for band in _smoothing_bands(f, freqs):
+            denominator = reference_power[band]
+            if np.any(denominator == 0):
+                if reusing_reference:
+                    self._wide_open_cache = None  # retry this grid with a fresh capture
+                raise am.InsufficientEvidence("wide-open reference is silent in a requested Welch bin")
+            # Floor each relative gain before averaging in dB. An absolute
+            # power floor would change the result when both captures scale.
+            with np.errstate(divide="ignore"):
+                gain_db = 10 * (np.log10(power[band]) - np.log10(denominator))
+            gains.append(np.mean(np.maximum(gain_db, -300.0)))
+        self._wide_open_cache = (key, reference_power)
+        return np.array(gains)
 
 
 class DivaRig(_NoiseResponseRig):
@@ -1294,7 +1299,7 @@ def _welch(x, what, nfft=8192):
     """Power spectrum, Hann windows, 50 % overlap, averaged. `len(x)/nfft*2`
     segments, so the per-bin standard error is 1/sqrt(that) -- about 0.9 dB
     for a 4 s record, taken down under 0.2 dB by the 1/12-octave smoothing
-    `_smooth_log` applies after."""
+    applied to the resulting gain curve."""
     x = am.require_finite(np.asarray(x, dtype=np.float64), what)
     w = np.hanning(nfft)
     step = nfft // 2
@@ -1306,10 +1311,8 @@ def _welch(x, what, nfft=8192):
     return np.fft.rfftfreq(nfft, 1.0 / SR), power
 
 
-def _smooth_log(f, g_db, at, frac: float = 1 / 12.0):
-    """Average a dB curve over a fractional-octave band at each requested
-    frequency. In dB (the quantity being compared), and the band is stated."""
-    out = []
+def _smoothing_bands(f, at, frac: float = 1 / 12.0):
+    """Select a fractional-octave band, falling back to neighboring FFT bins."""
     for fc in at:
         lo, hi = fc * 2 ** (-frac / 2), fc * 2 ** (frac / 2)
         sel = (f >= lo) & (f <= hi)
@@ -1317,8 +1320,7 @@ def _smooth_log(f, g_db, at, frac: float = 1 / 12.0):
             i = int(np.argmin(np.abs(f - fc)))
             sel = np.zeros(len(f), bool)
             sel[max(0, i - 1):i + 2] = True
-        out.append(float(np.mean(g_db[sel])))
-    return np.array(out)
+        yield sel
 
 
 PATH_MODELD = f"{VST3}/Model D.vst3"
