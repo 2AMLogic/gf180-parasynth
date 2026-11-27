@@ -75,6 +75,7 @@ import pathlib
 import re
 import stat
 import sys
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 
@@ -99,6 +100,9 @@ LEGACY = (CACHE / "808_from_mars_legacy" / "808 From Mars - Legacy" / "WAV" /
 
 FETCH = ("tools/refaudio_local.py --prefix 808-from-mars.zip "
          "'808 From Mars/WAV/01. Individual Hits/01. Bass Drum/Clean/'")
+LEGACY_FETCH = ("tools/refaudio_local.py --prefix 808_from_mars_legacy.zip "
+                "'808 From Mars - Legacy/WAV/1. Individual Hits/01. Bass Drum/"
+                "1. Clean/1. Digital/1. No Accent/'")
 
 
 class Refused(refusal.Refused, Exception):
@@ -190,6 +194,9 @@ TRAVEL_CHAIN = "Digital"
 TRAVEL_ACCENTS = ("A", "B")
 DECAYS = "ABCDEF"
 TONES = tuple(range(1, 7))
+FULL_GRID = tuple(itertools.product(DECAYS, TONES))
+Setting = tuple[str, int]
+RecordingGrid = dict[Setting, pathlib.Path]
 
 
 def setting_name(accent: str, decay: str, tone: int) -> str:
@@ -197,34 +204,46 @@ def setting_name(accent: str, decay: str, tone: int) -> str:
     return f"BD {accent} 808 Decay {decay} {tone:02d}.wav"
 
 
-def travel_grids() -> dict[str, dict[tuple[str, int], pathlib.Path]]:
-    """Each travel accent's 36 indexed settings, by name and in measurement
-    order, or REFUSED -- and by then nothing has been opened.
-
-    `grid()` returns whatever a folder holds. `knob_travel` aggregated that,
-    so a partly fetched cache printed a shorter travel as the machine's whole
-    knob range, and a hole in accent B reached the JSON, because
-    `cross_session` counts accent A alone (#1436). So every path is built from
-    the naming pattern above and must be a file; a WAV the index does not list
-    is not returned, so it is never measured."""
-    out: dict = {}
-    missing: list[str] = []
-    for accent in TRAVEL_ACCENTS:
-        folder = CURRENT / TRAVEL_CHAIN / accent
-        out[accent] = {(d, t): folder / setting_name(accent, d, t)
-                       for d in DECAYS for t in TONES}
-        gone = [f"Decay {d} {t:02d}" for (d, t), p in out[accent].items()
-                if not p.is_file()]
-        if len(gone) == len(out[accent]):
-            missing.append(f"{TRAVEL_CHAIN}/{accent} holds none of the "
-                           f"{len(out[accent])} indexed settings")
-        elif gone:
-            missing.append(f"{TRAVEL_CHAIN}/{accent} is missing {len(gone)} of the "
-                           f"{len(out[accent])} indexed settings: {', '.join(gone)}")
+def require_settings(grids: Iterable[RecordingGrid], root: pathlib.Path, fetch: str) -> None:
+    """Check every named file before the reader opens the first recording."""
+    missing = []
+    for grid in grids:
+        gone = [path for path in grid.values() if not path.is_file()]
+        if not gone:
+            continue
+        folder = gone[0].parent.relative_to(root)
+        if len(gone) == len(grid):
+            missing.append(
+                f"{folder} holds none of the {len(grid)} indexed settings "
+                f"(including {gone[0].name})"
+            )
+        else:
+            names = ", ".join(path.name for path in gone)
+            missing.append(
+                f"{folder} is missing {len(gone)} of the {len(grid)} indexed settings: {names}"
+            )
     if missing:
-        raise Refused("\n         ".join(missing)
-                      + " -- run:\n         " + FETCH)
-    return out
+        raise Refused("\n         ".join(missing) + " -- run:\n         " + fetch)
+
+
+def travel_grids(
+    accents: Sequence[str] = TRAVEL_ACCENTS, settings: Sequence[Setting] = FULL_GRID
+) -> dict[str, RecordingGrid]:
+    """The required indexed paths in each current Digital accent folder."""
+    grids = {}
+    for accent in accents:
+        folder = CURRENT / TRAVEL_CHAIN / accent
+        grids[accent] = {(d, t): folder / setting_name(accent, d, t) for d, t in settings}
+    require_settings(grids.values(), CURRENT, FETCH)
+    return grids
+
+
+def legacy_no_accent_grid(settings: Sequence[Setting] = FULL_GRID) -> RecordingGrid:
+    """The legacy session uses its own indexed names for the same knob positions."""
+    folder = LEGACY / "1. Digital" / "1. No Accent"
+    grid = {(d, t): folder / f"BD_Clean_NoAcc_{d}_808_{t:02d}.wav" for d, t in settings}
+    require_settings((grid,), LEGACY, LEGACY_FETCH)
+    return grid
 
 
 # ===========================================================================
@@ -514,47 +533,44 @@ def audit(report=print) -> tuple[bool, dict]:
     """Are the trailing-numbered bass-drum files repeats of one setting?
 
     Returns (is_repeats, evidence). False is the finding, not a failure."""
+    grids = travel_grids()
     ev: dict = {"groups": [], "vendor_note": "A/B = accent; per catalog.json "
                 "the BD clean set is 'Multi-Sampled Levels of 808 Decay and "
                 "Tone at 2 accent levels'"}
     plan = metrics()
     report("  group                       metric                   rho   span")
     mono = collections.Counter()
-    for chain in ("Digital",):
-        for accent in ("A", "B"):
-            g = current_grid(accent, chain)
-            if len(g) != 36:
-                raise Refused(f"{chain}/{accent} holds {len(g)} of the 36 indexed files")
-            for decay in "ABCDEF":
-                sigs, vals = [], collections.defaultdict(list)
-                for tone in range(1, 7):
-                    x, sr = load(g[(decay, tone)])
-                    sigs.append(x)
-                    y = rc.prepare(x, sr)
-                    for k, v in measure_all(y, sr, plan).items():
-                        vals[k].append(v)
-                frac, loading = rank1_fraction(sigs)
-                row = {"group": f"{chain}/{accent}/Decay {decay}",
-                       "rank1_variance_fraction": round(frac, 4),
-                       "rank1_loading_spearman": round(spearman(loading), 4),
-                       "metrics": {}}
-                for k, v in vals.items():
-                    if any(t is None for t in v):
-                        continue
-                    rho, span = spearman(v), max(v) - min(v)
-                    row["metrics"][k] = {"spearman_vs_tone_index": round(rho, 4),
-                                         "span": round(span, 4),
-                                         "values": [round(t, 4) for t in v]}
-                    if abs(rho) == 1.0:
-                        mono[k] += 1
-                ev["groups"].append(row)
-                report(f"  {row['group']:26s} rank-1 variance {frac*100:5.1f} %  "
-                       f"loading rho {spearman(loading):+.2f}")
-                for k in ("body spectrum", "early/body energy", "Pitch trajectory", "decay"):
-                    if k in row["metrics"]:
-                        d_ = row["metrics"][k]
-                        report(f"      {k:24s} rho {d_['spearman_vs_tone_index']:+.2f}"
-                               f"   span {d_['span']:8.3f}")
+    for accent, g in grids.items():
+        for decay in DECAYS:
+            sigs, vals = [], collections.defaultdict(list)
+            for tone in TONES:
+                x, sr = load(g[(decay, tone)])
+                sigs.append(x)
+                y = rc.prepare(x, sr)
+                for k, v in measure_all(y, sr, plan).items():
+                    vals[k].append(v)
+            frac, loading = rank1_fraction(sigs)
+            row = {"group": f"{TRAVEL_CHAIN}/{accent}/Decay {decay}",
+                   "rank1_variance_fraction": round(frac, 4),
+                   "rank1_loading_spearman": round(spearman(loading), 4),
+                   "metrics": {}}
+            for k, v in vals.items():
+                if any(t is None for t in v):
+                    continue
+                rho, span = spearman(v), max(v) - min(v)
+                row["metrics"][k] = {"spearman_vs_tone_index": round(rho, 4),
+                                     "span": round(span, 4),
+                                     "values": [round(t, 4) for t in v]}
+                if abs(rho) == 1.0:
+                    mono[k] += 1
+            ev["groups"].append(row)
+            report(f"  {row['group']:26s} rank-1 variance {frac*100:5.1f} %  "
+                   f"loading rho {spearman(loading):+.2f}")
+            for k in ("body spectrum", "early/body energy", "Pitch trajectory", "decay"):
+                if k in row["metrics"]:
+                    d_ = row["metrics"][k]
+                    report(f"      {k:24s} rho {d_['spearman_vs_tone_index']:+.2f}"
+                           f"   span {d_['span']:8.3f}")
     ev["monotone_group_count"] = dict(mono)
     ev["groups_total"] = len(ev["groups"])
     return False, ev
@@ -598,6 +614,7 @@ def synthetic_bd(sr: int = 44100, f0: float = 50.0, tau: float = 0.120,
 
 def self_test(report=print) -> tuple[bool, dict]:
     """Estimator noise, so the machine numbers have something to be a ratio to."""
+    g = travel_grids(("A",), tuple((d, 3) for d in DECAYS))["A"]
     plan = metrics()
     sr = 44100
     ev: dict = {}
@@ -634,7 +651,6 @@ def self_test(report=print) -> tuple[bool, dict]:
     # cut at the head and at the tail. Both jitters are taken from the corpus
     # itself rather than invented -- the onset lands on sample 5 to 9 across the
     # bass drums, and file lengths at one decay position spread by up to 0.8 %.
-    g = current_grid("A", "Digital")
     x, sr = load(g[("C", 3)])
     copies = []
     for head in (0, 2, 4):
@@ -775,11 +791,9 @@ def knob_travel(report=print) -> dict:
 def cross_session(report=print) -> dict:
     """The same machine, two recording sessions, at the one knob position that
     is reproducible without calibration."""
+    cur = travel_grids(("A",))["A"]
+    leg = legacy_no_accent_grid()
     plan = metrics()
-    cur = current_grid("A", "Digital")
-    leg = legacy_grid("1. No Accent", "1. Digital")
-    if len(cur) != 36 or len(leg) != 36:
-        raise Refused(f"expected a 6x6 grid in each session, got {len(cur)} and {len(leg)}")
 
     # The end-stop evidence, stated as a table rather than assumed.
     t20 = rc._t20_ms(0.005)
@@ -856,8 +870,8 @@ def f0_knob_attribution(report=print) -> dict:
     This bounds the knob-attributable part: take df0/dln(T20) from the current
     session's own A->B step, multiply by the observed ln(T20) mismatch. If that
     is small against the f0 difference, the difference is the machine."""
-    cur = current_grid("A", "Digital")
-    leg = legacy_grid("1. No Accent", "1. Digital")
+    cur = travel_grids(("A",), (("A", 1), ("B", 1)))["A"]
+    leg = legacy_no_accent_grid((("A", 1),))
     t20, f0 = rc._t20_ms(0.005), rc._f0("BD", 0.010, 0.500)
 
     def read(p):
@@ -1441,6 +1455,12 @@ def main(argv: list[str]) -> int:
         "files": 144, "verified": "SHA-256 of the archive against refaudio/catalog.json, "
                                   "per-member size against refaudio/index/"}}
     try:
+        # A later stage may require files the first reader never touches.
+        if a.measure or a.all:
+            travel_grids()
+            legacy_no_accent_grid()
+        elif a.self_test and a.audit:
+            travel_grids()
         if a.self_test or a.all:
             print("ESTIMATOR, before the machine")
             ok, ev = self_test()

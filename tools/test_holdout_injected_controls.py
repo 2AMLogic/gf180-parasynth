@@ -26,25 +26,37 @@ Issue #1124 added the gate in front of the loop: `main()` runs `baseline()`
 (the UNMUTATED tree) first and a baseline that is not green is exit 2 with no
 control run at all. So `_drive` stands in for a green baseline as well as for
 `run()`; the first case pins the red one.
+
+Issue #1400: the decision itself, `verdict()`, is no longer this probe's alone
+-- `model/probe_injection_discrimination.py` imports it for its own mutants,
+which is what let a pytest collection error there print as three kills. The
+suite that ran became an argument, and a required one; the last two cases pin
+that. They call `verdict()` directly because the point is the message, and the
+staged runs in `tools/probes/test_holdout_control_apparatus.py` only assert its
+status; the one that reaches this branch covers the call site, not the
+argument.
 """
 from __future__ import annotations
 
 import pathlib
 import sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "probes"))
 import holdout_injected_controls as hic  # noqa: E402
 
-GREEN = hic.Result(hic.NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
+GREEN = hic.Baseline(hic.SuiteReport({}, {"test_a": "passed"}),
+                     "pytest stayed green on the UNMUTATED tree")
 
 
-def _drive(monkeypatch, results, base: hic.Result | None = None):
+def _drive(monkeypatch, results, base: hic.Baseline | None = None):
     """Run main() with `baseline()` patched to `base` (a GREEN baseline unless
     given) and `run()` patched to return a Result per control, in INJECTS
     order (GATE_OFF, CLEAN_OFF, STALE_OFF)."""
     order = iter(results)
     monkeypatch.setattr(hic, "baseline", lambda: GREEN if base is None else base)
-    monkeypatch.setattr(hic, "run", lambda _name: next(order))
+    monkeypatch.setattr(hic, "run", lambda _name, _baseline: next(order))
     return hic.main()
 
 
@@ -53,11 +65,11 @@ def test_a_baseline_that_is_not_green_refuses_before_any_control_runs(
     # The #1124 false green: a suite red before any injection made all three
     # controls "fire". Nothing may run behind it, and the exit is the
     # NO-VERDICT channel, not the seal-defect one.
-    def _no_control_may_run(_name):
+    def _no_control_may_run(_name, _baseline):
         raise AssertionError("a control ran although the unmutated tree was red")
     monkeypatch.setattr(hic, "run", _no_control_may_run)
-    monkeypatch.setattr(hic, "baseline", lambda: hic.Result(
-        hic.REFUSED, ["test_a"],
+    monkeypatch.setattr(hic, "baseline", lambda: hic.Baseline(
+        None,
         "pytest exited 1 on the UNMUTATED tree, 1 test(s) red before any "
         "injection (test_a) -- no control's red can mean anything",
         "FAILED tools/test_holdout.py::test_a - assert 0\n1 failed in 0.01s"))
@@ -120,3 +132,158 @@ def test_a_refusal_reason_names_the_status_that_produced_it(monkeypatch, capsys)
                          hic.Result(hic.FIRED, ["test_b"], "")])
     out = capsys.readouterr().out
     assert "pytest exited 4" in out
+
+
+def test_verdict_names_the_suite_that_ran_when_no_failed_line_parses():
+    # `suite` names the file THIS probe ran. It was a literal here before the
+    # sound probe began sharing the decision, and the literal was this
+    # probe's own suite: reused unchanged, the sound probe would have refused
+    # naming a file it never ran.
+    res = hic.verdict(1, hic.SuiteReport({}, {}), {"test_a": hic.Site("assert ok")},
+                      suite="model/other.py", baseline=GREEN.report)
+    assert res.outcome == hic.REFUSED
+    assert "no call failure was recorded for model/other.py" in res.reason
+    assert "tools/test_holdout.py" not in res.reason
+
+
+def test_verdict_refuses_to_guess_the_suite():
+    # No default on purpose: a caller that omits `suite` is the input that
+    # defeats the case above (docs/verification-rules.md rule 8), and it must
+    # fail here rather than refuse against the wrong file's name.
+    with pytest.raises(TypeError):
+        hic.verdict(1, hic.SuiteReport({}, {}), {"test_a": hic.Site("assert ok")}, baseline=GREEN.report)
+
+
+def test_an_exception_while_evaluating_the_expected_assertion_refuses(tmp_path):
+    suite = "test_example.py"
+    (tmp_path / suite).write_text(
+        "def broken():\n"
+        "    __tracebackhide__ = True\n"
+        "    assert False, 'helper failed'\n"
+        "def test_helper():\n"
+        "    assert broken()\n"
+        "def test_key():\n"
+        "    assert {}['unrelated']\n")
+    expected = {"test_helper": hic.Site("assert broken()"),
+                "test_key": hic.Site("assert {}['unrelated']", "KeyError: 'holdout'")}
+    rc, report, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 1 and report is not None and set(report.failures) == set(expected)
+    base = hic.SuiteReport({}, {name: "passed" for name in expected})
+    res = hic.verdict(rc, report, expected, suite=suite, baseline=base)
+    assert res.outcome == hic.REFUSED
+    assert "helper failed" in res.reason and "KeyError: 'unrelated'" in res.reason
+
+
+def test_zero_exit_without_a_completed_pytest_report_refuses(tmp_path):
+    suite = "test_example.py"
+    (tmp_path / suite).write_text("import os\ndef test_exit():\n    os._exit(0)\n")
+    rc, report, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 0
+    res = hic.verdict(rc, report, {}, suite=suite, baseline=GREEN.report)
+    assert res.outcome == hic.REFUSED
+    assert "without a failure report" in res.reason
+
+
+@pytest.mark.parametrize("kind,src,expected_substr", [
+    ("setup_error_exit_zero",
+     "import pytest\n"
+     "@pytest.fixture\ndef broken():\n    raise RuntimeError('setup boom')\n"
+     "def test_a(broken):\n    assert 1\n"
+     "def test_b():\n    pytest.exit('stop', returncode=0)\n",
+     "setup: test_a"),
+    ("teardown_error_exit_zero",
+     "import pytest\n"
+     "@pytest.fixture\ndef broken():\n    yield\n    raise RuntimeError('teardown boom')\n"
+     "def test_a(broken):\n    assert 1\n"
+     "def test_b():\n    pytest.exit('stop', returncode=0)\n",
+     "teardown: test_a"),
+    ("early_exit_zero_incomplete",
+     "import pytest\n"
+     "def test_a():\n    assert 1\n"
+     "def test_b():\n    pytest.exit('early', returncode=0)\n"
+     "def test_c():\n    assert 0\n",
+     "1/3 collected test(s) completed"),
+    ("all_skipped_in_setup",
+     "import pytest\n"
+     "@pytest.mark.skip('no apparatus')\ndef test_a():\n    assert 1\n",
+     "executed no tests"),
+    ("all_skipped_in_call",
+     "import pytest\n"
+     "def test_a():\n    pytest.skip('no apparatus')\n",
+     "no test passed"),
+    ("strict_xpass_exit_zero",
+     "import pytest\n"
+     "@pytest.mark.xfail(strict=True)\ndef test_a():\n    assert 1\n"
+     "def test_b():\n    pytest.exit('stop', returncode=0)\n",
+     "test_a"),
+])
+def test_zero_exit_with_incomplete_or_errored_run_refuses(tmp_path, kind, src, expected_substr):
+    suite = f"test_{kind}.py"
+    (tmp_path / suite).write_text(src)
+    rc, report, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 0
+    res = hic.verdict(rc, report, {}, suite=suite, baseline=GREEN.report)
+    assert res.outcome == hic.REFUSED, res
+    assert expected_substr in res.reason, res
+    base = hic.run_baseline(tmp_path, suite)
+    assert base.report is None, base
+    assert expected_substr in base.reason, base
+
+
+def test_collect_only_refuses_while_executed_passing_suite_is_no_fire(tmp_path, monkeypatch):
+    suite = "test_example.py"
+    (tmp_path / suite).write_text("def test_pass():\n    assert 1\n")
+    monkeypatch.setenv("PYTEST_ADDOPTS", "--collect-only")
+    rc, report, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 0 and report is not None and len(report.outcomes) == 1 and report.executed == 0
+    res = hic.verdict(rc, report, {}, suite=suite, baseline=GREEN.report)
+    assert res.outcome == hic.REFUSED and "executed no tests" in res.reason
+    base = hic.run_baseline(tmp_path, suite)
+    assert base.report is None and "executed no tests" in base.reason
+
+    monkeypatch.delenv("PYTEST_ADDOPTS")
+    rc2, report2, _ = hic.run_suite(tmp_path, suite)
+    assert rc2 == 0 and report2 is not None and report2.executed == 1 and report2.passed == {"test_pass"}
+    base = hic.run_baseline(tmp_path, suite)
+    assert base.report is not None
+    assert hic.verdict(rc2, report2, {}, suite=suite, baseline=base.report).outcome == hic.NO_FIRE
+
+
+def test_parameter_cases_need_their_own_comparable_pass(tmp_path):
+    suite = "test_cases.py"
+    (tmp_path / suite).write_text("""
+from pathlib import Path
+import pytest
+
+@pytest.mark.parametrize("case", ["baseline", "mutant", "always"])
+def test_value(case):
+    if case == Path("skip-case").read_text():
+        pytest.skip("case unavailable")
+    assert True
+""")
+    marker = tmp_path / "skip-case"
+    marker.write_text("baseline")
+    base = hic.run_baseline(tmp_path, suite)
+    assert base.report is not None
+    marker.write_text("mutant")
+    rc, report, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 0 and report is not None
+    for case in ("baseline", "mutant", "always"):
+        name = f"test_value[{case}]"
+        res = hic.verdict(rc, report, {name: hic.Site("assert True")}, suite=suite, baseline=base.report)
+        if case == "always":
+            assert res.outcome == hic.NO_FIRE, res
+        else:
+            assert res.outcome == hic.REFUSED and name in res.reason, res
+
+
+def test_disjoint_passing_tests_cannot_establish_a_survivor(tmp_path):
+    suite = "test_example.py"
+    path = tmp_path / suite
+    path.write_text("def test_before(): pass")
+    base = hic.run_baseline(tmp_path, suite)
+    assert base.report is not None
+    path.write_text("def test_after_mutation(): pass")
+    rc, report, _ = hic.run_suite(tmp_path, suite)
+    res = hic.verdict(rc, report, {}, suite=suite, baseline=base.report)
+    assert rc == 0 and res.outcome == hic.REFUSED and "both runs" in res.reason
