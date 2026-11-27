@@ -25,22 +25,41 @@ WHAT IS REFUSED, in the order `validate_clean_pass` asks it:
     can count with `FAIL --` and still ends the run in `PASS --` when the wire
     matches (#1376), so "it says PASS" has never meant "it says only PASS".
   * no `PASS --` at all.
+  * more than one of a record the bench prints once per run: its backend
+    declaration, its final PASS verdict, its decoded-WAV digest (#1562). Two
+    clean runs cleared every check above, and the scorer then read the FIRST
+    run's controls against the second run's WAV. Each record is counted on
+    its own, so a second run that prints no backend line is refused on its two
+    verdicts and two digests, and two runs that agree are still two runs.
   * a decoded-WAV digest that is not the offered WAV's, when one is offered.
   * no `simulator backend verilator` or `simulator backend iverilog` line: an
     apparatus nobody named.
 
 WHAT IT CANNOT SEE, stated rather than left to be found (verification rule 8).
-It reads text. A `PASS --` printed by any tool satisfies it, so a file holding
-two captures -- one failing, one passing -- is caught through the failing
-run's tokens and through nothing else. What keeps a passing run of some OTHER
-stimulus from scoring is what the scorers add: their own case's
-`... verified from SPI pins ...` line, which the bench prints only on its
-exit-0 path, and the digest of the very WAV they were offered.
+It reads text. A `PASS --` printed by any tool satisfies it, and a file edited
+to hold one of each record from different runs is not told from a captured
+one. The record count sees a second run only once it has printed its backend
+declaration. The bench prints that directly after the stimulus header the
+scorers read, so a run that stopped between the two -- a stretch that only
+formats -- leaves a header nothing here counts. What keeps a complete passing
+run of some OTHER stimulus from scoring is what the scorers add: their own
+case's `... verified from SPI pins ...` line, which the bench prints only on
+its exit-0 path, and the digest of the very WAV they were offered.
 """
 from __future__ import annotations
 
 FORBIDDEN = ("REFUSED", "FAIL --", "NO-VERDICT")
 SIMULATORS = ("verilator", "iverilog")
+
+#: The records one run of the bench prints once each, each written as the
+#: statement in `rtl-sketch/verify_synth_top.py` that prints it begins:
+#: `simulator backend {a.simulator}`, `PASS -- {nper} I2S periods decoded from
+#: the wire ...` and `decoded I2S WAV sha256 {wav_sha256}`.
+ONE_RUN_RECORDS = (
+    ("simulator backend declaration", "verify_synth_top: simulator backend"),
+    ("PASS verdict", "verify_synth_top: PASS --"),
+    ("decoded I2S WAV digest", "verify_synth_top: decoded I2S WAV sha256"),
+)
 
 
 def refuse_mutation(text: str, *, refuse=ValueError, prefix: str = "") -> None:
@@ -53,9 +72,14 @@ def refuse_mutation(text: str, *, refuse=ValueError, prefix: str = "") -> None:
         raise refuse(f"{prefix}mutation runs cannot provide sound evidence")
 
 
+def record_counts(text: str) -> dict[str, int]:
+    """How many of each once-per-run record `text` holds, by record name."""
+    return {name: text.count(record) for name, record in ONE_RUN_RECORDS}
+
+
 def validate_clean_pass(text: str, *, wav_sha256: str | None = None,
                         refuse=ValueError, prefix: str = "") -> str:
-    """Refuse `text` unless it is a clean, un-injected PASS from a known
+    """Refuse `text` unless it is ONE clean, un-injected PASS from a known
     simulator that binds `wav_sha256`; return the simulator's name.
 
     `refuse` is the exception class to raise -- a scorer's own `Refused` --
@@ -70,6 +94,11 @@ def validate_clean_pass(text: str, *, wav_sha256: str | None = None,
     if "PASS --" not in text:
         raise refuse(f"{prefix}the report is not a clean PASS of the whole-chip comparison: "
                      "no PASS -- line")
+    repeated = {name: count for name, count in record_counts(text).items() if count > 1}
+    if repeated:
+        raise refuse(f"{prefix}ambiguous transcript: it holds "
+                     f"{', '.join(f'{count} {name}s' for name, count in repeated.items())}, "
+                     "and one run prints one of each")
     if wav_sha256 is not None and f"decoded I2S WAV sha256 {wav_sha256}" not in text:
         raise refuse(f"{prefix}the report does not bind this decoded I2S WAV")
     simulator = next((name for name in SIMULATORS if f"simulator backend {name}" in text), None)
