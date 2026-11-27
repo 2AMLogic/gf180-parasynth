@@ -65,3 +65,44 @@ def test_true_2x_path_is_close_to_the_qualified_external_target():
     # measurement command.
     assert measured["inharmonic_db"] < -44.0
     assert abs(measured["f0_cents"]) < 0.02
+
+
+def _decode(path):
+    import wave
+    with wave.open(str(path), "rb") as w:
+        assert (w.getnchannels(), w.getsampwidth(), w.getframerate()) == (1, 2, m.SR)
+        return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+
+
+def test_component_wavs_replay_the_scored_integer_words_exactly(tmp_path, monkeypatch):
+    """Regression for #1547: the writer used to scale by 32767 after the
+    measurement divided by 32768, changing ~half the saved words by 1 LSB.
+    Drives the real `run()` output path; only the Surge apparatus is stubbed
+    (host-specific), with the reference taken from the integer oscillator so
+    it passes qualification. Negative control: x32767 fails this assertion."""
+    n = int(m.SECONDS * m.SR)
+    inc = vf.phase_inc(vf.note_hz(m.NOTE))
+    ref_words = np.asarray(vf.OscFx(m.WAVE, smooth=False).render(n, inc))
+    monkeypatch.setattr(m, "_apparatus", lambda: {"rig": None, "reference": ref_words / 32768.0})
+    _, report = m.run(tmp_path)
+    assert report["status"] == "VALID", report
+    expect = {
+        "dut-polyblep.wav": np.asarray(vf.OscFx(m.WAVE, smooth=True).render(n, inc)),
+        "dut-2x-decimated.wav": np.asarray(os2.render_saw(n, inc)),
+        "reference-surge.wav": ref_words,
+    }
+    for name, words in expect.items():
+        got = _decode(tmp_path / name)
+        assert np.array_equal(got, words.astype(np.int16)), name
+    for key, name in (("reference_sha256", "reference-surge.wav"),
+                      ("dut_sha256", "dut-polyblep.wav"),
+                      ("dut_2x_sha256", "dut-2x-decimated.wav")):
+        assert report["audio"][key] == m._sha256(tmp_path / name), key
+
+
+def test_shared_encoder_round_trips_every_int16_word(tmp_path):
+    import manifest as mf
+    words = np.arange(-32768, 32768, dtype=np.int64)
+    mf._write_wav16(tmp_path / "all.wav", words / 32768.0, m.SR)
+    assert np.array_equal(_decode(tmp_path / "all.wav"), words.astype(np.int16))
+    assert not hasattr(m, "_write_wav"), "private duplicate encoder must stay removed"
