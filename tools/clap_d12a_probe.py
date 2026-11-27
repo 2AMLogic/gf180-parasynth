@@ -114,6 +114,9 @@ def verify_manifest(refdir: pathlib.Path, manifest: pathlib.Path) -> dict:
     if not manifest.exists():
         raise Refused(f"reference manifest missing: {manifest}")
     rows = [ln.split(None, 1) for ln in manifest.read_text().splitlines() if ln.strip()]
+    if not rows:
+        raise Refused(f"reference manifest is empty: {manifest} -- no reference "
+                      f"file was hashed, so the reference is unverified")
     bad = []
     for digest, rel in rows:
         p = refdir / rel.strip()

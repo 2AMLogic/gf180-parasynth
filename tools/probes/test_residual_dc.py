@@ -37,7 +37,11 @@ def test_property_holds_on_the_real_estimator(name, prop):
 def test_every_injected_defect_turns_something_red():
     rows = R.controls_matrix()
     clean = rows.pop("(clean)")
+    # Pin the population (#1469): an empty clean row passes all() and an empty
+    # matrix passes the loop below, both without asserting anything.
+    assert clean, "controls_matrix() evaluated no property in the clean row"
     assert all(v == "ok" for v in clean.values()), clean
+    assert rows, "controls_matrix() returned no defect row: nothing to turn red"
     for defect, row in rows.items():
         assert "MOVED" in row.values(), f"{defect} is invisible to every property: {row}"
 
@@ -46,6 +50,7 @@ def test_each_property_catches_at_least_one_defect():
     """A property no defect moves is a property that tests nothing."""
     rows = R.controls_matrix()
     rows.pop("(clean)")
+    assert rows, "controls_matrix() returned no defect row: every property would read as dead"
     dead = [n for n, _ in R.PROPERTIES if all(r[n] != "MOVED" for r in rows.values())]
     # EXEMPT, stated: polarity and zero-mean are guarded by construction
     # (|X0|^2 is sign-blind; a zero-mean burst has nothing for a defect to
@@ -1144,3 +1149,14 @@ def test_an_all_refused_output_floor_exits_2_not_0(monkeypatch):
                         lambda v, c, probe=R.REAL_FLOOR: _frow(v) if v == "RS"
                         else dict(voice=v, status="REFUSED", reason="r"))
     assert R.main(["--output-floor", "--voices", "RS,HT"]) == 0
+
+
+# --- the matrix tests' population (#1469) ---------------------------------
+
+def test_matrix_tests_fail_on_an_empty_matrix(monkeypatch):
+    """`test_every_injected_defect_turns_something_red` loops over the defect
+    rows and `all()`s the clean row. Handed `{"(clean)": {}}` it passed
+    without asserting anything: an empty record read as a green control."""
+    monkeypatch.setattr(R, "controls_matrix", lambda: {"(clean)": {}})
+    with pytest.raises(AssertionError):
+        test_every_injected_defect_turns_something_red()

@@ -61,3 +61,27 @@ def test_manifest_mismatch_refuses(tmp_path):
     m.write_text("0" * 64 + "  ./a.wav\n")
     with pytest.raises(cp.Refused):
         cp.verify_manifest(tmp_path, m)
+
+
+def test_empty_manifest_refuses_instead_of_verifying_nothing(tmp_path):
+    """#1469: a zero-byte manifest gave `rows == []`, so `bad == []` and the
+    reference-hash precondition passed without hashing one file."""
+    (tmp_path / "cp8").mkdir()
+    (tmp_path / "cp8" / "CP.WAV").write_bytes(b"cp")
+    m = tmp_path / "m.sha256"
+    m.write_bytes(b"")
+    with pytest.raises(cp.Refused) as e:
+        cp.verify_manifest(tmp_path, m)
+    assert "empty" in str(e.value)
+
+
+def test_populated_manifest_passes_and_still_names_a_mismatch(tmp_path):
+    # the good case beside the refusal: one file, its true digest, accepted
+    import hashlib
+    (tmp_path / "cp8").mkdir()
+    (tmp_path / "cp8" / "CP.WAV").write_bytes(b"cp")
+    (tmp_path / "a.wav").write_bytes(b"abc")
+    m = tmp_path / "m.sha256"
+    m.write_text(hashlib.sha256(b"abc").hexdigest() + "  ./a.wav\n")
+    got = cp.verify_manifest(tmp_path, m)
+    assert got["files_checked"] == 1 and got["files_mismatched"] == 0

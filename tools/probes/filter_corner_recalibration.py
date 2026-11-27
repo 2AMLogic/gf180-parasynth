@@ -37,7 +37,8 @@ Huovilainen mode, seven commanded cutoffs each, with their raw `freqs` and
 question #146 got wrong -- how much of an apparent trend across cutoffs is the
 instrument -- on real plugin audio rather than on closed forms.
 
-It exits non-zero if a stated invariant fails.
+It exits non-zero if a stated invariant fails, and REFUSES (exit 2) when no
+invariant could be checked -- the results file absent, or holding no curve.
 """
 from __future__ import annotations
 
@@ -59,9 +60,11 @@ import reference_compare as rcmp                                    # noqa: E402
 
 RESULTS = ROOT / "docs" / "reference-compare-results.json"
 fails: list[str] = []
+checked: list[str] = []       # every invariant check() was asked, held or not
 
 
 def check(ok: bool, what: str):
+    checked.append(what)
     print(f"      {'OK  ' if ok else 'FAIL'}  {what}")
     if not ok:
         fails.append(what)
@@ -218,15 +221,24 @@ def real_curves():
 
 
 def main() -> int:
+    fails.clear()
+    checked.clear()
     ours()
     reference_side()
     real_curves()
     print("\n" + "=" * 78)
+    if not checked:
+        # The verdict is derived from `fails`, which only check() fills. With
+        # no results file real_curves() returns before its two check() calls,
+        # so an empty `fails` here means nothing was compared (#1469).
+        print("REFUSED  no invariant was checked -- the results file above is "
+              "missing or holds no response curve, so there is no verdict.")
+        return 2
     if fails:
         for f in fails:
             print(f"   {f}")
         return 1
-    print("every stated invariant holds")
+    print(f"every stated invariant holds ({len(checked)} checked)")
     return 0
 
 
