@@ -25,7 +25,7 @@ def signal(cents=0, *, low_note_ramp=240, low_note_power=1):
 
 
 @pytest.mark.parametrize(("span", "expected"), [(347, "fail"), (348, "fail"), (346, "pass")])
-def test_qualified_attack_grade_survives_score_serialization(span, expected):
+def test_qualified_attack_grade_survives_score_serialization(span, expected, capsys):
     measured = bass.compare_audio(signal(low_note_ramp=span),
                                   signal(low_note_ramp=75, low_note_power=3))
     metrics = bass.required_metrics(measured)
@@ -45,6 +45,9 @@ def test_qualified_attack_grade_survives_score_serialization(span, expected):
     assert (distance <= 1) == passed
     assert attack["error"] == worst
     assert distance == max(abs(worst) / 5, abs(release["error"]) / release["tolerance"])
+    selection.print_properties(measured)
+    line = next(s for s in capsys.readouterr().out.splitlines() if s.strip().startswith("Envelope attack "))
+    assert line.split()[-1] == expected
 
 
 def test_known_bass_and_pitch_mutation():
