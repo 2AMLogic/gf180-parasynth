@@ -49,14 +49,14 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **3752 commits over 1691 hours.**
+Measured from git, not remembered. **3781 commits over 1693 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 4983 | 2.9 |
+| tests | 5009 | 3.0 |
 | injected controls | 472 | 0.3 |
 | bit-exact verifiers | 9 | — |
-| lines of RTL | 11,003 | 7 |
+| lines of RTL | 11,003 | 6 |
 
 **Cycle time, which is the measure that matters.** 46 merged pull requests, **median 14 minutes** from open to merged, and PR size barely moves it — large changes (>1000 lines) median 16 minutes against 14 for small. That is because the work happens in the agent *before* the PR opens, so the real cost is agent wall-clock: **4–25 minutes** for a brief with one deliverable, **2–3.5 hours** for one containing "and" several times over.
 

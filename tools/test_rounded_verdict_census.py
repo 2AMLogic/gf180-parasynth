@@ -297,6 +297,7 @@ def test_cli_skips_test_basenames_and_symlinked_subdirectories(tmp_path):
     consumer = nested / "excitation_energy.py"  # pytest also collects this probe
     source = consumer_with('r["score"] >= threshold')
     consumer.write_text(source)
+    (nested / "notes.txt").touch()
     for name in ("test_probe.py", "probe_test.py"):
         (root / "tools" / name).write_text(source)
 
@@ -304,19 +305,20 @@ def test_cli_skips_test_basenames_and_symlinked_subdirectories(tmp_path):
     ordinary = subprocess.run(cmd, capture_output=True, text=True)
     assert (ordinary.returncode, ordinary.stderr) == (exit_contract.PASS, "")
     header = ordinary.stdout.splitlines()[0].split()
-    assert {"files=2", "test-files-skipped=2", "cross-module-pairs=1"} <= set(header)
+    assert {"files=2", "test-files-skipped=2", "dirs-skipped=0", "cross-module-pairs=1"} <= set(header)
     assert "score  cross-module-pairs=1" in ordinary.stdout.splitlines()
     assert f"{PRODUCER}:" in ordinary.stdout
     assert "tools/probes/excitation_energy.py:" in ordinary.stdout
 
     moved = nested.rename(tmp_path / "outside")
-    nested.symlink_to(moved, target_is_directory=True)
-    assert consumer.samefile(moved / consumer.name)
-    linked = subprocess.run(cmd, capture_output=True, text=True)
-    assert (linked.returncode, linked.stderr) == (exit_contract.PASS, "")
-    header = linked.stdout.splitlines()[0].split()
-    assert {"files=1", "test-files-skipped=2", "rounded-stores=1", "ordered-field-compares=0",
-            "cross-module-pairs=0"} <= set(header)
+    for count, link in enumerate((nested, root / "model" / "probes"), start=1):
+        link.symlink_to(moved, target_is_directory=True)
+        assert (link / consumer.name).samefile(moved / consumer.name)
+        linked = subprocess.run(cmd, capture_output=True, text=True)
+        assert (linked.returncode, linked.stderr) == (exit_contract.PASS, "")
+        header = linked.stdout.splitlines()[0].split()
+        assert {"files=1", "test-files-skipped=2", f"dirs-skipped={count}", "rounded-stores=1",
+                "ordered-field-compares=0", "cross-module-pairs=0"} <= set(header)
 
 
 def test_a_directory_outside_the_scan_is_not_read(tmp_path):
