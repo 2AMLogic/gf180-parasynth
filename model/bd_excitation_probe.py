@@ -65,7 +65,11 @@ PRECONDITIONS, asserted rather than assumed (docs/failure-modes.md):
   * the reference file must exist and reproduce the published 41.2 %;
   * the shipped arm must reproduce the published 22.3 %;
   * the (b) replay harness must reproduce the shipped render BIT FOR BIT from
-    the recorded excitation and coefficients before any shape is substituted.
+    the recorded excitation and coefficients before any shape is substituted;
+  * the corpus must hold all 25 bass-drum settings the knob dial encodes. The
+    range in section 1 is the machine's own spread, so one absent take narrows
+    it and every `INSIDE` verdict after it reads against the narrower line
+    (#1420).
 
 Any of those failing raises `Refused`. An apparatus that answers when its own
 controls have moved is worse than one that is absent.
@@ -78,7 +82,6 @@ Usage:
 """
 from __future__ import annotations
 import argparse
-import glob
 import math
 import os
 import statistics
@@ -110,7 +113,6 @@ PUBLISHED_OURS = 22.3
 PUBLISHED_TOL = 2.0                        # percentage points
 
 REF_BD = os.path.join("bd8", "BD5050.WAV")
-REF_GLOB = os.path.join("bd8", "BD*.WAV")
 HIT_FRAME = 10
 DUR_S = 0.8
 TAIL_DUR_S = 1.5                           # long enough for the decay to be over
@@ -138,8 +140,9 @@ def first4(x: np.ndarray, sr: int) -> list:
 
 def reference_row(refs: str) -> tuple:
     path = os.path.join(refs, REF_BD)
-    if not os.path.exists(path):
-        raise Refused(f"no reference bass drum at {path}; clone sounds-tr808-fischer")
+    if not os.path.isfile(path):
+        raise Refused(f"reference bass drum absent or not a regular file at {path}; "
+                      "clone sounds-tr808-fischer")
     sr, x = df.read_wav(path)
     return first4(x, sr), sr
 
@@ -150,13 +153,15 @@ def reference_range(refs: str) -> dict:
     This is what says whether a single file's 41.2 % is a target or an
     accident: if the machine's own knobs moved the split as far as our gap,
     the gap would not be evidence of anything.
+
+    Raises `drum_fit.Refused`, naming them, when any of the 25 settings the
+    knob dial encodes is absent: a range over fewer settings is narrower, and
+    would still read as the machine's whole spread.
     """
     rows = []
-    for p in sorted(glob.glob(os.path.join(refs, REF_GLOB))):
+    for p in df.reference_takes(refs, "BD"):
         sr, x = df.read_wav(p)
         rows.append((os.path.basename(p), first4(x, sr)))
-    if not rows:
-        raise Refused(f"no bass-drum files under {os.path.join(refs, REF_GLOB)}")
     cols = list(zip(*[r for _, r in rows]))
     return dict(rows=rows,
                 lo=[min(c) for c in cols], hi=[max(c) for c in cols],
@@ -458,7 +463,11 @@ def main(argv=None) -> int:
     print("  both anchors reproduce\n")
 
     print("=== 1. THE MACHINE'S OWN RANGE over every BD setting in the corpus ===")
-    rng = reference_range(a.refs)
+    try:
+        rng = reference_range(a.refs)
+    except df.Refused as e:
+        print(f"REFUSED: {e}")
+        return 2
     print(header())
     print(row_str(f"machine, min over {len(rng['rows'])}", rng["lo"]))
     print(row_str("machine, median", rng["median"]))
