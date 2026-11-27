@@ -387,15 +387,18 @@ class _Plugin:
                 and cls.render_cutoff is not _Plugin.render_cutoff)
 
     def qualify(self):
-        """Pins first (unchanged contract: RuntimeError), then -- for any rig
-        that defines `render_note`/`render_cutoff` -- the signal-side causality
-        battery of `model/rig_qualification.py`, so a rig whose commands cause
-        nothing REFUSES construction with the record attached (#137). A rig
-        with no adapters keeps `self.qualification = None`: NOT MEASURED, which
-        is not the same as qualified. The battery drives the patch away from
-        its measurement state, so `setup()` is re-run afterwards."""
+        """Pins first (unchanged contract: RuntimeError on mismatch), then --
+        for any rig that defines `render_note`/`render_cutoff` -- the
+        signal-side causality battery of `model/rig_qualification.py`, so a rig
+        whose commands cause nothing REFUSES construction with the record
+        attached (#137). A rig with no adapters keeps `self.qualification =
+        None`: NOT MEASURED, which is not the same as qualified. The battery
+        drives the patch away from its measurement state, so `setup()` is
+        re-run afterwards."""
         pins = self._qualify_pins()
         if not self.has_causality_adapters():
+            if not pins.ok:
+                raise RuntimeError(f"{self.name}: {pins.why}")
             return
         try:
             battery = rq.qualify_voice(
@@ -405,10 +408,12 @@ class _Plugin:
                 steady=self.steady, cutoff_knobs=self.CUTOFF_KNOBS)
         finally:
             self.setup()
-        self.qualification = rq.Qualification(self.name, self.host, (pins, *battery.checks))
+        checks = [pins]
+        checks.extend(battery.checks)
+        self.qualification = rq.Qualification(self.name, self.host, tuple(checks))
         self.qualification.require()
 
-    def _qualify_pins(self):
+    def _qualify_pins(self) -> rq.Check:
         """Render once, then hold every pinned setting to its NAME and its
         READBACK. Both halves are needed and neither is decoration:
 
@@ -428,8 +433,8 @@ class _Plugin:
         self.p.clear_midi()
         self.eng.render(0.05)
         pins = self._pins_check()
-        if pins.outcome != rq.PASS:
-            raise RuntimeError(f"{self.name}: {pins.why}")
+        if pins.outcome == rq.FAIL:
+            raise RuntimeError(f"{self.name}: pinned settings did not hold: {pins.detail['bad']}")
         return pins
 
     # -- helpers -------------------------------------------------------------

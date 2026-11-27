@@ -282,6 +282,24 @@ print(json.dumps({"threads_before_import": before,
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
+def batch_report(target, requested_runs, runs, env, json_path):
+    counts = {v: sum(1 for r in runs if r["verdict"] == v)
+              for v in (PASS, TESTFAIL, CRASH, ERROR, TIMEOUT)}
+    exercised = counts[PASS] + counts[TESTFAIL] + counts[CRASH]
+    peak = max((r["peak_rss_kb"] for r in runs), default=0)
+    summary = {
+        "target": target, "runs": requested_runs, "counts": counts,
+        "runs_that_exercised_the_target": exercised,
+        "crash_rate": (None if exercised == 0 else counts[CRASH] / exercised),
+        "peak_rss_kb": peak,
+        "median_seconds": sorted(r["seconds"] for r in runs)[len(runs) // 2] if runs else None,
+    }
+    report = {"environment": env, "summary": summary, "runs": runs}
+    if json_path:
+        pathlib.Path(json_path).write_text(json.dumps(report, indent=2) + "\n")
+    return summary
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -311,6 +329,14 @@ def main(argv: list[str] | None = None) -> int:
             pathlib.Path(a.json).write_text(json.dumps(report, indent=2) + "\n")
         return 2 if "refused" in report["probe"] else 0
 
+    if a.runs < 1:
+        if a.json:
+            batch_report(a.target, a.runs, [], env, a.json)
+        print(f"REFUSED: --runs must be at least 1, got {a.runs}. A batch that "
+              "ran nothing has no crash rate to report. This is NOT 'zero "
+              "crashes'.", file=sys.stderr)
+        return 2
+
     bad = preconditions(a.target)
     if bad:
         print("REFUSED: preconditions failed, no crash rate can be reported:",
@@ -336,21 +362,10 @@ def main(argv: list[str] | None = None) -> int:
             for line in r["tail"].splitlines():
                 print(f"        | {line}")
 
-    counts = {v: sum(1 for r in runs if r["verdict"] == v)
-              for v in (PASS, TESTFAIL, CRASH, ERROR, TIMEOUT)}
-    exercised = counts[PASS] + counts[TESTFAIL] + counts[CRASH]
-    peak = max((r["peak_rss_kb"] for r in runs), default=0)
-    summary = {
-        "target": a.target, "runs": a.runs, "counts": counts,
-        "runs_that_exercised_the_target": exercised,
-        "crash_rate": (None if exercised == 0 else counts[CRASH] / exercised),
-        "peak_rss_kb": peak,
-        "median_seconds": sorted(r["seconds"] for r in runs)[len(runs) // 2] if runs else None,
-    }
-    report = {"environment": env, "summary": summary, "runs": runs}
-    if a.json:
-        pathlib.Path(a.json).write_text(json.dumps(report, indent=2) + "\n")
-
+    summary = batch_report(a.target, a.runs, runs, env, a.json)
+    counts = summary["counts"]
+    exercised = summary["runs_that_exercised_the_target"]
+    peak = summary["peak_rss_kb"]
     print("\n" + "-" * 68)
     for k, v in counts.items():
         print(f"  {k:<10} {v}")

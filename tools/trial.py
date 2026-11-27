@@ -141,16 +141,29 @@ def _walk_keys(obj, where=""):
             yield from _walk_keys(v, f"{where}[{i}]")
 
 
+def _valid_rolling_fixtures(fixtures) -> bool:
+    return (isinstance(fixtures, list)
+            and bool(fixtures)
+            and all(isinstance(fx, str) and bool(fx.strip()) for fx in fixtures))
+
+
 def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -> dict:
     """Parse and check the registry against docs/dag.json. Structural errors are
     raised: a malformed registry is a defect in the repository, not a verdict."""
-    reg = json.loads(pathlib.Path(path).read_text())
+    try:
+        reg = json.loads(pathlib.Path(path).read_text())
+    except json.JSONDecodeError as exc:
+        raise RegistryError(f"{path}: invalid JSON: {exc}") from exc
+    try:
+        trials = reg["trials"]
+    except KeyError as exc:
+        raise RegistryError(f"{path}: missing 'trials' key") from exc
     dag = json.loads(pathlib.Path(dag_path).read_text())["nodes"]
-    for where, key in _walk_keys(reg.get("trials", {})):
+    for where, key in _walk_keys(trials):
         if key in FORBIDDEN_KEYS:
             raise RegistryError(f"{path}: {where} -- trials.json references checkers and DAG "
                                 f"nodes; it must not carry {key!r}")
-    for tid, t in reg["trials"].items():
+    for tid, t in trials.items():
         for key in ("question", "criterion_version", "scope", "dag_nodes", "modes"):
             if key not in t:
                 raise RegistryError(f"{tid}: missing {key!r}")
@@ -167,6 +180,11 @@ def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -
                     if c["interpret"] not in INTERPRETERS:
                         raise RegistryError(f"{tid}/{mname}/{c['id']}: unknown interpreter "
                                             f"{c['interpret']!r}")
+                    if (role == "required" and c["interpret"] == "rolling_record"
+                            and not _valid_rolling_fixtures(c.get("fixtures"))):
+                        raise RegistryError(
+                            f"{tid}/{mname}/{c['id']}: required rolling_record child must declare "
+                            f"non-empty 'fixtures' for RTL replay coverage")
                     if c["id"] in ids:
                         raise RegistryError(f"{tid}/{mname}: duplicate child id {c['id']!r}")
                     ids.add(c["id"])
@@ -176,6 +194,11 @@ def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -
 
 
 # ---- interpreters: each reads ONE checker's own evidence --------------------
+def _format_reasons(reasons):
+    """Checker diagnostics can contain structured JSON. Convert only for display."""
+    return "; ".join(map(str, reasons))
+
+
 def _result(verdict, reasons, *, expected=None, observed=None, metrics=None, caught=None):
     r = {"verdict": verdict, "reasons": list(reasons),
          "coverage": {"expected": expected, "observed": observed},
@@ -217,7 +240,7 @@ def interpret_deadline_record(spec, run, out, role):
         return _result(NO_VERDICT, [f"record status {status!r} is not PASS/FAIL/REFUSED"],
                        metrics=metrics, **cov)
     if status == "REFUSED":
-        return _result(NO_VERDICT, ["checker REFUSED: " + "; ".join(rec.get("reasons") or [])],
+        return _result(NO_VERDICT, ["checker REFUSED: " + _format_reasons(rec.get("reasons") or [])],
                        metrics=metrics, **cov, caught=False if role == "control" else None)
     gaps = []
     if not required:
@@ -229,7 +252,7 @@ def interpret_deadline_record(spec, run, out, role):
     if not sched.get("frames"):
         gaps.append("the schedule trace holds no frames")
     if rec.get("evidence_problems"):
-        gaps.append("evidence problems: " + "; ".join(rec["evidence_problems"][:3]))
+        gaps.append("evidence problems: " + _format_reasons(rec["evidence_problems"][:3]))
     if gaps:
         return _result(NO_VERDICT, ["coverage incomplete -- " + g for g in gaps],
                        metrics=metrics, **cov, caught=False if role == "control" else None)
@@ -317,9 +340,12 @@ def interpret_rolling_record(spec, run, out, role):
     for name, c in (rec.get("controls") or {}).items():
         if not c.get("caught"):
             missed.append(f"host control {name} not caught")
+    fixtures = spec.get("fixtures")
+    has_fixtures = _valid_rolling_fixtures(fixtures)
+    fixture_list = fixtures if has_fixtures else []
     metrics = {}
     periods, required_p = {}, {}
-    for fx in spec.get("fixtures", []):
+    for fx in fixture_list:
         rr = (rec.get("rtl") or {}).get(fx)
         if rr is None:
             gaps.append(f"no RTL replay recorded for {fx}")
@@ -356,14 +382,17 @@ def interpret_rolling_record(spec, run, out, role):
             fails.append(f"RTL replay {fx}: {bad}")
         if not (rr.get("control") or {}).get("caught"):
             missed.append(f"RTL control due+1 for {fx} not caught")
-    reuse, rgaps = rtl_reuse_report(spec, rec.get("rtl"), spec.get("fixtures", []))
+    reuse, rgaps = rtl_reuse_report(spec, rec.get("rtl"), fixture_list)
     gaps += rgaps
     if reuse:
         metrics["rtl_reuse"] = reuse
-    cov = dict(expected={"rtl_fixtures": spec.get("fixtures", []), "i2s_periods": required_p},
+    cov = dict(expected={"rtl_fixtures": fixtures if isinstance(fixtures, list) else [],
+                         "i2s_periods": required_p},
                observed={"i2s_periods": periods, "clean_host_cases": len(clean)})
     if fails and not gaps:
         return _result(FAIL, fails + missed, metrics=metrics, **cov)
+    if not has_fixtures:
+        gaps.append("no RTL replay fixtures declared: zero RTL replays required")
     if gaps or missed:
         return _result(NO_VERDICT, gaps + missed + fails, metrics=metrics, **cov)
     if state != "PASS":
@@ -428,7 +457,7 @@ def interpret_held_note_record(spec, run, out, role):
                        metrics=metrics, caught=nv_caught, **cov)
     reasons = []
     if rec.get("init_problems"):
-        reasons.append("init bytes are not the frozen target: " + "; ".join(rec["init_problems"]))
+        reasons.append("init bytes are not the frozen target: " + _format_reasons(rec["init_problems"]))
     if rec["replay_status"] == 1:
         reasons.append("the UART replay is not bit-exact against the model")
     if peak < floor:
@@ -686,10 +715,10 @@ def composite(required: list[dict], controls: list[dict]) -> tuple[str, list[str
                             "required population is not a PASS (#283)"]
     fails = [c for c in required if c["verdict"] == FAIL]
     if fails:
-        return FAIL, [f"{c['id']}: FAIL -- " + "; ".join(c["reasons"][:3]) for c in fails]
+        return FAIL, [f"{c['id']}: FAIL -- " + _format_reasons(c["reasons"][:3]) for c in fails]
     open_ = [c for c in required if c["verdict"] != PASS]
     if open_:
-        return NO_VERDICT, [f"{c['id']}: {c['verdict']} -- " + "; ".join(c["reasons"][:3])
+        return NO_VERDICT, [f"{c['id']}: {c['verdict']} -- " + _format_reasons(c["reasons"][:3])
                             for c in open_]
     if not controls:
         return NO_VERDICT, ["no control declared: the apparatus was not shown able to fail "
@@ -697,7 +726,7 @@ def composite(required: list[dict], controls: list[dict]) -> tuple[str, list[str
     missed = [c for c in controls if not c.get("caught")]
     if missed:
         return NO_VERDICT, [f"control {c['id']} not caught -- the apparatus was not shown able "
-                            "to fail: " + "; ".join(c["reasons"][:3]) for c in missed]
+                            "to fail: " + _format_reasons(c["reasons"][:3]) for c in missed]
     return PASS, []
 
 
@@ -1192,10 +1221,11 @@ def check_receipt(path: pathlib.Path, root: pathlib.Path = ROOT
                 problems.append(f"{c.get('id')}: {why}")
                 continue
             if got["verdict"] != c.get("verdict") or got.get("caught") != c.get("caught"):
+                why_got = _format_reasons(got.get("reasons") or [])
                 problems.append(
                     f"{c.get('id')}: the receipt says verdict {c.get('verdict')} caught "
                     f"{c.get('caught')}, but its evidence re-derives to {got['verdict']} caught "
-                    f"{got.get('caught')}")
+                    f"{got.get('caught')}" + (f" ({why_got})" if why_got else ""))
             # #313: the reuse status the receipt states is the one its evidence shows
             want_reuse = (got.get("metrics") or {}).get("rtl_reuse")
             if want_reuse != (c.get("metrics") or {}).get("rtl_reuse"):

@@ -139,7 +139,8 @@ def main() -> int:
         scratch.unlink(missing_ok=True)
         return 2
 
-    original = doc.read_text(encoding="utf-8")
+    original_bytes = doc.read_bytes()
+    original = original_bytes.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
     results: dict[str, tuple[int, str]] = {}
     try:
         doc.write_text(original + STALE_MARKER, encoding="utf-8")
@@ -152,7 +153,7 @@ def main() -> int:
             print("\n".join(out.strip().splitlines()[-6:]))
             print()
     finally:
-        doc.write_text(original, encoding="utf-8")
+        doc.write_bytes(original_bytes)
         scratch.unlink(missing_ok=True)
 
     b_code, b_out = results["before"]

@@ -623,29 +623,49 @@ import reference_rigs as rr                                         # noqa: E402
 
 
 class _Stub:
+    def __init__(self, names=None, texts=None):
+        self._names = dict(names or {})
+        self._texts = dict(texts or {})
+
     def get_parameter_name(self, idx):
-        return "Gain" if idx == 0 else None
+        return self._names.get(int(idx))
+
+    def get_parameter_text(self, idx):
+        return self._texts.get(int(idx))
 
     def __getattr__(self, _name):
         return lambda *a, **k: None
 
 
-def _fake_rig(*, cutoff="normal", transposes=True, adapters=True):
+_DEFAULT_PINS = ((0, 0.5, "Cutoff", "50 %"),)
+
+
+def _fake_rig(*, cutoff="normal", transposes=True, adapters=True,
+              pins=_DEFAULT_PINS, readback_text="50 %"):
     synth = _SynthRig(cutoff=cutoff, transposes=transposes)
+    names = {idx: name for idx, _val, name, _want in pins}
+    texts = {idx: readback_text for idx, _val, _name, _want in pins}
 
     class Fake(rr._Plugin):
         name = "fake"
-        PINS = ((0, None, "Gain", None),)
         have_input = False
+        PINS = pins
         setups = 0
+        pin_checks = 0
 
         def __init__(self):                 # no dawdreamer: skip the host
-            self.p, self.eng, self.qualification = _Stub(), _Stub(), None
+            self.p = _Stub(names=names, texts=texts)
+            self.eng = _Stub()
+            self.qualification = None
             self.setup()
             self.qualify()
 
         def setup(self):
             type(self).setups += 1
+
+        def check_pins(self):
+            type(self).pin_checks += 1
+            return super().check_pins()
 
         if adapters:
             def render_note(self, note, seconds=None):
@@ -659,10 +679,8 @@ def _fake_rig(*, cutoff="normal", transposes=True, adapters=True):
 
 @pytest.mark.parametrize("pins", [(), ((0, None, None, None),)])
 def test_plugin_cannot_claim_held_pins_from_an_empty_table(pins):
-    rig = _fake_rig()
-    rig.PINS = pins
     with pytest.raises(RuntimeError, match="no pinned"):
-        rig()
+        _fake_rig(adapters=False, pins=pins)()
 
 
 def test_declared_pins_without_a_reader_do_not_qualify():
@@ -685,29 +703,52 @@ def test_pin_reader_requires_a_count_but_the_audio_only_battery_does_not():
 
 
 def test_plugin_reports_only_pins_with_an_expectation():
-    rig = _fake_rig()
-    rig.PINS += ((1, None, None, None),)
+    rig = _fake_rig(pins=(*_DEFAULT_PINS, (1, None, None, None)))
     check = rig().qualification.checks[0]
     assert check.outcome == rq.PASS
     assert check.detail["n_pins"] == 1
 
 
 def test_wiring_a_connected_rig_qualifies_and_carries_the_battery():
-    rig = _fake_rig()()
-    names = {c.name for c in rig.qualification.checks}
+    cls = _fake_rig()
+    rig = cls()
+    by = {c.name: c for c in rig.qualification.checks}
     assert rig.qualification.qualified
-    assert {"pitch causality", "filter causality"} <= names
+    assert {"pins", "pitch causality", "filter causality"} <= set(by)
+    assert by["pins"].outcome == rq.PASS
+    assert by["pins"].detail["n_pins"] == 1
+    assert cls.pin_checks == 1
 
 
 def test_wiring_a_disconnected_cutoff_refuses_construction_with_the_record():
     with pytest.raises(rq.RigRefusal, match="filter causality") as e:
         _fake_rig(cutoff="dead")()
     assert "pitch causality: " not in str(e.value)      # only the broken one
+    assert "pins: " not in str(e.value)
 
 
 def test_wiring_a_dead_pitch_command_refuses_construction():
-    with pytest.raises(rq.RigRefusal, match="pitch causality"):
+    with pytest.raises(rq.RigRefusal, match="pitch causality") as e:
         _fake_rig(transposes=False)()
+    assert "pins: " not in str(e.value)
+
+
+@pytest.mark.parametrize("pins", [(), ((0, None, None, None),)])
+def test_wiring_empty_pins_cannot_qualify(pins):
+    cls = _fake_rig(pins=pins)
+    with pytest.raises(rq.RigRefusal, match="pins") as e:
+        cls()
+    by = {c.name: c for c in e.value.qualification.checks}
+    assert by["pins"].outcome == rq.REFUSED
+    assert by["pins"].detail["n_pins"] == 0
+    assert cls.pin_checks == 0
+
+
+def test_wiring_mismatched_pin_raises_construction_error_and_reads_pins_once():
+    cls = _fake_rig(readback_text="0 %")
+    with pytest.raises(RuntimeError, match="pinned settings did not hold"):
+        cls()
+    assert cls.pin_checks == 1
 
 
 def test_wiring_restores_the_measurement_patch_after_the_battery():
@@ -717,5 +758,7 @@ def test_wiring_restores_the_measurement_patch_after_the_battery():
 
 
 def test_wiring_a_rig_without_adapters_is_not_measured_rather_than_qualified():
-    rig = _fake_rig(adapters=False)()
+    cls = _fake_rig(adapters=False)
+    rig = cls()
     assert rig.qualification is None
+    assert cls.pin_checks == 1
