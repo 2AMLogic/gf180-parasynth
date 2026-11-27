@@ -908,6 +908,9 @@ def test_the_naive_exit_code_rule_would_certify_each_of_these(repo, monkeypatch,
 
 
 # ---- T-LIVE-MIDI's interpreter (fpga/verify_live_midi.py's record) -----------
+LIVE_MIDI_ARCHIVE = REAL_ROOT / "fpga/reports/live-midi/full-kit-298/verification-rtl.json"
+
+
 def _lm_record(tmp_path, **over):
     lat = {"n": 905, "p50_ms": 16.0, "p95_ms": 16.7, "p99_ms": 17.0, "max_ms": 17.0}
     rec = {"verdict": "PASS",
@@ -921,7 +924,7 @@ def _lm_record(tmp_path, **over):
 
 
 def test_live_midi_pass_needs_every_scenario_and_a_caught_control(tmp_path):
-    spec = {"interpret": "live_midi_record"}
+    spec = {"interpret": "live_midi_record", "id": "session-sim"}
     run = {"rc": 0}
     assert trial.interpret_live_midi_record(spec, run, _lm_record(tmp_path), "required")[
         "verdict"] == trial.PASS
@@ -934,26 +937,50 @@ def test_live_midi_pass_needs_every_scenario_and_a_caught_control(tmp_path):
 
 
 def test_live_midi_rtl_with_zero_periods_is_no_verdict(tmp_path):
-    spec = {"interpret": "live_midi_record", "fixtures": ["coverage"]}
+    spec = {"interpret": "live_midi_record", "id": "session-rtl", "fixtures": ["coverage"]}
     d = _lm_record(tmp_path, rtl={"coverage": {"state": "PASS", "comparison": {"periods": 0}}})
     assert trial.interpret_live_midi_record(spec, {"rc": 0}, d, "required")[
         "verdict"] == trial.NO_VERDICT
 
 
-def test_live_midi_control_is_caught_only_with_its_exit_zero(tmp_path):
+@pytest.mark.parametrize("declaration", [{}, {"fixtures": []}, {"fixtures": None},
+                                         {"fixtures": [" "]}],
+                         ids=["omitted", "empty", "null", "blank-name"])
+def test_live_midi_interpreter_requires_rtl_replay_declaration(tmp_path, declaration):
+    spec = {"id": "session-rtl", **declaration}
+    result = trial.interpret_live_midi_record(spec, {"rc": 0}, _lm_record(tmp_path), "required")
+    assert result["verdict"] == trial.NO_VERDICT
+    assert any("RTL replay fixtures" in reason for reason in result["reasons"])
+
+
+@pytest.mark.parametrize("spec", [{}, {"id": "session-rlt"}, {"id": "candidate:"}],
+                         ids=["missing", "unknown", "unnamed-candidate"])
+def test_live_midi_host_evidence_requires_a_session_id(tmp_path, spec):
+    result = trial.interpret_live_midi_record(spec, {"rc": 0}, _lm_record(tmp_path), "required")
+    assert result["verdict"] == trial.NO_VERDICT
+    assert any("session ID" in reason for reason in result["reasons"])
+
+
+def test_live_midi_named_control_and_candidate(tmp_path):
     spec = {"interpret": "live_midi_record"}
-    rec = {"verdict": "FAIL", "control": {"control": "X", "caught": True, "verdict": "FAIL"}}
+    control = json.loads(LIVE_MIDI_ARCHIVE.read_text())["controls"]["DROP_NOTE_OFF"]
+    rec = {"verdict": control["verdict"], "control": control}
     (tmp_path / "verification.json").write_text(json.dumps(rec))
     assert trial.interpret_live_midi_record(spec, {"rc": 0}, tmp_path, "control")["caught"]
     assert not trial.interpret_live_midi_record(spec, {"rc": 1}, tmp_path, "control")["caught"]
+
+    # As a candidate the named control supplies no clean session scenarios.
+    candidate = dict(spec, id="candidate:drop-note-off")
+    result = trial.interpret_live_midi_record(candidate, {"rc": 1}, tmp_path, "required")
+    assert result["verdict"] == trial.NO_VERDICT
+    assert "scenario coverage did not run" in result["reasons"]
 
 
 def _live_midi_registry(repo, mode, *, replays=False, declaration=None, session_mode=None):
     """Keep the shipped session arguments, host evidence and caught control fixed."""
     modes = json.loads(trial.REGISTRY.read_text())["trials"]["T-LIVE-MIDI"]["modes"]
     session, = modes[session_mode or mode]["required"]
-    archive = REAL_ROOT / "fpga/reports/live-midi/full-kit-298/verification-rtl.json"
-    record = json.loads(archive.read_text())
+    record = json.loads(LIVE_MIDI_ARCHIVE.read_text())
     if not replays:
         record["rtl"] = {}
     if declaration is None:
@@ -993,17 +1020,30 @@ def test_live_midi_rtl_registry_rejects_sim_session(repo):
 def test_live_midi_old_rtl_pass_requires_replay_fixtures(
         repo, session_mode, declaration, reason, monkeypatch, capsys):
     registry = _live_midi_registry(repo, "rtl", session_mode=session_mode, declaration=declaration)
-    # Reproduce the old writer, which accepted this declaration. The dispatcher
-    # itself executes both checkers, hashes the artifacts and seals the PASS.
+    # The old writer accepted the registry and judged both sessions as host-only.
+    # Keep the original child ID in the receipt while reproducing that judgment.
     with monkeypatch.context() as old:
         old.setattr(trial, "load_registry", lambda path, dag: json.loads(path.read_text()))
+        old.setitem(trial.INTERPRETERS, "live_midi_record",
+                    lambda spec, run, out, role: trial.interpret_live_midi_record(
+                        dict(spec, id="session-sim"), run, out, role))
         run_dir, rec = _run_live_midi(repo, registry, "rtl")
     assert rec["verdict"] == trial.PASS and rec["controls"][0]["caught"]
     assert rec["children"][0]["coverage"]["observed"]["i2s_periods"] == {}
+    if session_mode == "rtl":
+        # Check interpretation independently of the registry membership rejection below.
+        child = rec["children"][0]
+        assert "id" not in child["interpreter"]
+        result, error = trial._rederive(child, run_dir, cancelled=False)
+        assert error is None
+        assert result["verdict"] == trial.NO_VERDICT
+        assert any("RTL replay fixtures" in msg for msg in result["reasons"])
     rc = trial.main(["check-receipt", str(run_dir / "receipt.json"), "--require", trial.PASS])
     out = capsys.readouterr().out
     assert rc == 1, out
-    assert out.count("REJECTED:") == 1, out
+    # Both membership and re-derivation reject the malformed RTL declaration.
+    # A sim receipt in the RTL population fails membership alone.
+    assert out.count("REJECTED:") == (2 if session_mode == "rtl" else 1), out
     assert "REJECTED: T-LIVE-MIDI/rtl" in out and "session-rtl" in out
     assert reason in out and "RTL replay" in out
 

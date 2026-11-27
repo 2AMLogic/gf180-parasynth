@@ -12,7 +12,8 @@ import numpy as np
 import pytest
 import dsp, engines
 import voice_fx as vf
-from voice_fx_sweep import inharmonic_db
+from audio_measure import inharmonic_fraction_db
+from voice_fx_sweep import print_aliasing, saw_alias
 from dsp import SR
 
 
@@ -29,6 +30,24 @@ def _note(note):
 
 
 # ---- oscillators -----------------------------------------------------------
+def test_aliasing_report_refuses_note_28_and_continues(capsys):
+    print_aliasing((28, 40))
+    low, following = capsys.readouterr().out.splitlines()[-2:]
+    note, f0, *cells = low.split()
+    assert (note, f0) == ("28", "41.2")
+    assert cells == "REFUSED (harmonic guards cover the spectrum)".split() * 5, low
+    note, f0, *readings = following.split()
+    assert (note, f0) == ("40", "82.4")
+    assert len(readings) == 5 and all(float(db) < 0 for db in readings)
+
+
+def test_inharmonic_fraction_recovers_planted_tone_power():
+    t = np.arange(SR // 2) / SR
+    x = np.sin(2 * np.pi * 1000 * t) + 0.1 * np.sin(2 * np.pi * 1500 * t)
+    expected_db = 10 * math.log10(0.1 ** 2 / (1 + 0.1 ** 2))
+    assert inharmonic_fraction_db(x, 1000, SR).require() == pytest.approx(expected_db, abs=0.01)
+
+
 @pytest.mark.parametrize("shape", ["saw", "square", "pulse25", "tri", "sine"])
 def test_oscillators_track_the_float_model(shape):
     """Every shape within 4 LSB (Q1.15) of the float PolyBLEP oscillator at
@@ -46,11 +65,9 @@ def test_oscillators_track_the_float_model(shape):
 def test_fixed_polyblep_suppresses_aliasing(note):
     """The integer PolyBLEP must reach the float one's suppression (~16 dB
     below naive, DR 0001) within half a dB."""
-    n = int(0.5 * SR)
-    inc, f0 = _note(note)
-    naive = inharmonic_db(vf.OscFx("saw", blep=False).render(n, inc) / 32768.0, f0)
-    fl = inharmonic_db(dsp.osc_bl("saw", dsp.ramp(n, inc), inc), f0)
-    fx = inharmonic_db(vf.OscFx("saw").render(n, inc) / 32768.0, f0)
+    naive = saw_alias(note, "naive").require(f"note {note}, naive saw")
+    fl = saw_alias(note, "float").require(f"note {note}, float saw")
+    fx = saw_alias(note, "fixed").require(f"note {note}, fixed saw")
     assert fx <= naive - 14.0, f"note {note}: naive {naive:.1f}, fixed {fx:.1f}"
     assert fx <= fl + 0.5, f"note {note}: float {fl:.1f}, fixed {fx:.1f}"
 
@@ -58,11 +75,9 @@ def test_fixed_polyblep_suppresses_aliasing(note):
 def test_square_correction_has_the_right_sign():
     """A square steps UP at the wrap where a saw steps DOWN. With the sign
     inverted the square measures ~5 dB WORSE than naive."""
-    n = int(0.5 * SR)
-    inc, f0 = _note(88)
-    naive = inharmonic_db(vf.OscFx("square", blep=False).render(n, inc) / 32768.0, f0)
-    fx = inharmonic_db(vf.OscFx("square").render(n, inc) / 32768.0, f0)
-    assert fx <= naive - 12.0
+    naive = saw_alias(88, "naive", shape="square").require("note 88, naive square")
+    fx = saw_alias(88, "fixed", shape="square").require("note 88, fixed square")
+    assert fx <= naive - 12.0, f"note 88: naive {naive:.1f}, fixed {fx:.1f}"
 
 
 def test_reciprocal_width_is_set_by_waveform_accuracy_not_aliasing():
@@ -72,10 +87,11 @@ def test_reciprocal_width_is_set_by_waveform_accuracy_not_aliasing():
     n = int(0.5 * SR)
     inc, f0 = _note(88)
     ref = dsp.osc_bl("saw", dsp.ramp(n, inc), inc)
-    fl = inharmonic_db(ref, f0)
+    fl = inharmonic_fraction_db(ref, f0, SR).require("note 88, float saw")
     coarse = vf.OscFx("saw", True, 16, 8).render(n, inc)
     fine = vf.OscFx("saw", True, 16, 16).render(n, inc)
-    assert inharmonic_db(coarse / 32768.0, f0) <= fl + 0.5
+    coarse_db = inharmonic_fraction_db(coarse / 32768.0, f0, SR).require("note 88, 8-bit saw")
+    assert coarse_db <= fl + 0.5, f"note 88: float {fl:.1f}, 8-bit {coarse_db:.1f}"
     assert np.abs(coarse - ref * 32768).max() > 32
     assert np.abs(fine - ref * 32768).max() <= 4
 
