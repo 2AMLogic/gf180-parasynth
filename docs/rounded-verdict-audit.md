@@ -8,12 +8,12 @@ decisions must not flip because a number was rounded for display.
 
 ## Result in one paragraph
 
-Of 544 pairs in 30 fields, **5 pairs (1 group, field `worst_db`) are a
-defect** with #1334's exact shape, in the **cymbal** tone-network tool, not in
-the mono path. **539 are not a defect.** **0 are "cannot tell".** None of the
-mono attack (M1A) or per-note M5A/M5B consumers re-decides a verdict that the
-producer made at full precision. Three in-module sites outside the census
-population (below) are the same arithmetic with no overridden verdict.
+The mono attack (M1A) and per-note M5A/M5B paths preserve their producers'
+full-precision decisions. Two cymbal tools can accept a 3.0004 dB error
+against a 3.0 dB bound. Both reversals were constructed. Of the 544 census
+pairs in 30 fields, **37 point to two defect groups** for `worst_db` (5 nodal,
+32 knob). **507 are not a defect** and **0 are unresolved**. The counts are
+name matches grouped by comparison site. Each reversal occurs within one tool.
 
 ## Population and method
 
@@ -50,17 +50,16 @@ rounded field. When only the rounded value ever decides, there is nothing to
 override: the effective threshold moves by at most half a rounding step, the
 same at every consumer.
 
-**Depth, stated plainly.** Boundary execution was done for the one defect
-(below) and for the `best_correlation` control only. For "not a defect"
-groups, the argument is the trace, not a run. No "cannot tell" remains because
-every comparison read resolved to a local, an attribute, a constant, or a
-record with no full-precision twin (the `f0_hz` corpus origin is the one
-untraced read, and it is bounded by the window argument). Wrong-then-right on this review: 1
-(`model/tom_drop_docs.py` `c["worst"]` first read as a consumer of
-`measure_harness`'s rounded `worst`; it reads a local unrounded `float(np.max
-...)` at `tom_drop_docs.py:229`).
+**Depth and corrections.** Both cymbal defect groups have boundary runs below.
+The other classifications rest on source traces. Two initial readings were
+corrected. At `model/tom_drop_docs.py:229`, `c["worst"]` comes from a local
+unrounded maximum. The first reading attributed it to `measure_harness`.
+The first audit also missed the full-precision count inside `fit_balance` and
+classified the 32 knob pairs as rounded-only. The one-point control below
+exposes that disagreement. The conga corpus trace is recorded in the
+`f0_hz` row.
 
-## The defect
+## Defects in the cymbal tools
 
 **`worst_db`, 5 pairs: `tools/cymbal_tone_nodal.py:385` vs the five rounded
 `worst_db` stores in `model/ladder_candidates.py:1069`,
@@ -69,7 +68,7 @@ The census pairs `cymbal_tone_nodal.py:385` with those five stores by name
 only; the live defect is the same-file pair inside `cymbal_tone_nodal.choose`
 (its own store at `:380` is excluded from the census as same-module):
 
-- Full-precision decision, `cymbal_tone_nodal.py:~374`:
+- Full-precision decision, `cymbal_tone_nodal.py:375`:
   `key = (worst > SHAPE_BOUND_DB, ...)` on the unrounded `worst`.
 - The record stores `"worst_db": round(worst, 3)` and `choose` then re-decides,
   `:385`: `if got["worst_db"] > SHAPE_BOUND_DB: raise Refused(...)`.
@@ -85,12 +84,62 @@ worktree on Python 3.12 (numpy, scipy only):
 | 3.0006 | outside bound | REFUSED |
 | 2.9996 | inside bound | ACCEPTED (nearby value, both agree) |
 
-So an out-of-bound realisation within 0.0005 dB of the bound is accepted.
-Consequence on sound: negligible (a cymbal tone-network shape error 0.0005 dB
-over a 3 dB bound, no reachable audible difference). It is a real instance of
-the class and the repair is #1334's: take the verdict from the unrounded
-`key[0]` (forward it) instead of recomputing from `got["worst_db"]`. Repair
-work is out of scope here; repair is tracked in #1499.
+The rounded comparison admits the first out-of-bound realisation. The repair
+can forward the decision in `key[0]`. [Nodal repair #1499](https://github.com/2AMLogic/gf180-parasynth/issues/1499)
+
+**`worst_db`, 32 pairs in `tools/cymbal_tone_knob.py`.** Eight comparisons
+each match four external stores by name (`ladder_candidates.py:1069`,
+`cymbal_tone_nodal.py:380`, `cymbal_tone_render.py:388,477`). All eight
+actually read the top-level `worst_db` from `fit_balance` at line 455. The
+producer selects the smallest unrounded worst residual and rounds it to three
+decimals for display. In the same record, line 465 counts balances with
+`worst <= BOUND_DB` at full precision. A positive count means the best fit
+meets the bound. Independently, `balance_region` applies the same default
+3.0 dB bound to the unrounded residuals at line 486 and refuses an empty region.
+
+| Consumer in `cymbal_tone_knob.py` | Decision using the rounded fit |
+|---|---|
+| `shape_audit:529`, `_alpha_law:806` | Mark a shape reachable or the tone law acceptable at or below the bound. |
+| `_alternative_fails:846` | Mark a structural alternative excluded above the bound. |
+| `verdict:968,981,983,985` | Classify the headline, classify and describe each fitted alternative, and list mappings inside the bound. The headline fit at line 955 also passes through `balance_region` at line 962, so an empty headline region raises before line 968. |
+| CLI `main:1065` | Print whether the alternative fit exceeds the bound. |
+
+This constructed input fixes the balance grid at one point. Adding a known
+delta to the last TONE setting leaves the anchor intact and makes that delta
+the worst residual. Run from the repository root at `8e8551b3` with NumPy and
+SciPy installed.
+
+```python
+from unittest.mock import patch
+
+import numpy as np
+from tools import cymbal_tone_knob as knob
+
+g = knob.gain_table()
+prediction = knob.predicted_hml(g, np.zeros(3))
+with patch.object(knob, "BALANCE_DB", np.array([0.0])):
+    for delta in (3.0004, 3.0006, 2.9996):
+        column = dict(zip(knob.CODES, prediction))
+        column[knob.CODES[-1]] += delta
+        measured = {knob.ANCHOR_TONE: column}
+        fit = knob.fit_balance(g, measured)
+        try:
+            region = knob.balance_region(g, measured)["n_inside"]
+        except knob.Refused as exc:
+            region = str(exc)
+        ok = knob._alpha_law(g, measured)["ok"]
+        print(delta, fit["n_inside_bound"], region, fit["worst_db"], ok)
+```
+
+| Added residual (dB) | Expected at 3.0 dB | `n_inside_bound` | `balance_region` | Displayed `worst_db` | Observed `_alpha_law["ok"]` |
+|---:|---|---:|---|---:|---|
+| 3.0004 | outside | 0 | REFUSED, no balance reaches 3.0 dB | 3.000 | **True** |
+| 3.0006 | outside | 0 | REFUSED, no balance reaches 3.0 dB | 3.001 | False |
+| 2.9996 | inside | 1 | admits one balance | 3.000 | True |
+
+Only the first row reverses the law verdict. The construction measures how the
+tool decides at the boundary. Its effect on shipped recordings is unmeasured.
+[Knob repair #1505](https://github.com/2AMLogic/gf180-parasynth/issues/1505)
 
 ## Groups: not a defect
 
@@ -107,28 +156,24 @@ and every consumer sees the same rounded value.
 | `explained_ratio` (4) | 2 stores (`attack_fit_v3.py:109`, `measure_mono_m1a_reference.py:266`) x 2 compares (`qualify_m1a_attack.py:69,104`), 4 | ONLY. The full-precision gate (`explained < 0.6`) refuses upstream of the round; the floors (0.7 to 0.99) are applied only to the rounded value, both when the domain table is built (`:69`) and when it is used (`:104`) |
 | `max_abs_error_ms` (1) | `qualify_m1a_attack.py:84` -> `mono_m1a_score.py:135` | ONLY, and monotone: the producer keeps rows with `worst <= 1.0` at full precision, and `round(worst, 4) <= 1.0` follows because the bound is on the rounding grid, so the guard cannot flip a pass |
 | `d_unwanted_rel_db` (1) | `mono_artifact_probe.py:596` vs `measure_m5_saw_drive.py:158` | NC for the pairing: `:158` reads the delta that module builds at `:153`. That in-module rounded delta (3 dp) against `<= 1.0` is ONLY (M5B saw drive; shift <= 0.0005 dB on a 1 dB limit) |
-| `worst_db` (32 of 37) | 4 stores x 8 compares in `cymbal_tone_knob.py` (`:529,806,846,968,981,983,985,1065`) | ONLY. `fit_balance` returns rounded `worst_db` and decides `<= BOUND_DB` from it everywhere; no full-precision verdict exists beside it |
 | `margin_db` (34) | 18 pairs: `probes/residual_dc.py:268,1632` x 9 stores; 16 pairs: `measure_saw_alias_after_2x.py:560,569,587,596` x 4 cross-module stores | NC for the 18 (`st['margin_db']` is computed unrounded in-module). The 16: a running-max tracker compares an unrounded candidate with the rounded stored best; it chooses which note is reported worst, not a verdict. ONLY |
 | `rms` (6), `rms_dbfs` (4) | `lead_drive_337.py:75` (local `summarise`), `reference_compare.py:394`, `measure_mono_m1a_reference.py:438` (unrounded local) | NC |
 | `amp` (7), `db` (2), `decay` (1), `f0` (2), `level` (3), `max` (6), `median` (1), `onset_s` (4), `peak` (3), `peak_db` (2), `tol` (2), `worst` (1) | comparisons read arrays, dataclass attributes, constants (`rule['peak_db']`, `TOL['level']`, `np.iinfo().max`), baselines or per-record locals; the `worst` case is the wrong-then-right above | NC (all 34 pairs) |
-| `f0_hz` (13) | 13 stores x 1 compare, `measure_conga_body_spread.py:554` `0.9*f0 <= r['f0_hz'] <= 1.1*f0` | The corpus origin was not traced. Even if it holds the rounded values, it is a +-10 % selection window, so a step of at most 5e-4 Hz is not a verdict: ONLY |
+| `f0_hz` (13) | 13 external stores × 1 comparison in `measure_conga_body_spread.py:554` | NC for all 13. In the same file, `measure_corpus` (lines 372–388) stores `round(f, 3)` for a valid `f0_of` result. Line 712 saves those rows as `report["corpus"]` and line 743 passes them to `within_10pct_of_f0`. Lines 553–554 read both the anchor and each candidate from those rows. ONLY in-module, since the ±10% selection first occurs on the rounded values. |
 | `fit_residual_db` (1), `headroom_db` (3), `inharmonic_db` (1), `margin` (2), `over_leak_1s_db` (1), `residual_db` (1), `worst_cents` (1) | `audio_measure.py:2202` and `estimator_domains.py:411` read `Estimate.detail` (unrounded); `reference_voice.py:394` is a `>` display marker; `noise_fixture_duration.py:419` is a printed line; `cymbal_400_production_tail.py:230` re-checks `over_leak_1s_db` that `cymbal_mid` never tests at 1 s (its own gates are `edt`/`late`); `r0_capture.py:957` and `compare_ladder_candidates.py:575` read their own records | NC or ONLY (shift <= 0.005 dB / 0.05 cents against 6 dB / 5 cents limits) |
 
-Group sizes reconcile to the table at the top: 322 + 45 + 33 + 4 + 1 + 1 +
-32 + 34 + 10 + 34 + 13 + 10 = 539 = 544 - 5 (the defect group).
+The clear groups sum to 322 + 45 + 33 + 4 + 1 + 1 + 34 + 10 + 34 + 13 +
+10 = 507. Adding the 5 nodal and 32 knob pairs accounts for all 544.
 
 ## Outside the census population (not counted above)
 
-The census cannot see a field compared in the module that stored it, or one
-passing through a local (its docstring lists both). Three sites met while
-reading are that shape with **no** full-precision verdict, hence not defects:
-`tools/r0_capture.py:956-957` (`residual_db` rounded to 2 dp, then compared),
-`tools/measure_m5_saw_drive.py:153-158` (above), `tools/cymbal_tone_knob.py`
-(`worst_db` rounded in `fit_balance`). The defect above is in this class's
-sibling: the same module holds both the rounded record and the re-check, but a
-full-precision key beside it. That is the case a future reading should look for
-first, and the census does not find it (`cymbal_tone_nodal.py` stores and
-compares in one file, so the `worst_db` pair that names it is accidental).
+The census omits same-module pairs and values passed through a local. At
+`tools/r0_capture.py:956-957` (`residual_db`) and
+`tools/measure_m5_saw_drive.py:153-158` (the saw-drive delta), the rounded
+record supplies the only threshold decision. The conga selection above has
+the same property. In both cymbal tools, the producer also makes the decision
+at full precision. Cross-module name matches led to those consumers, and the
+same-module traces and boundary runs establish the defects.
 
 ## Reproduce
 
