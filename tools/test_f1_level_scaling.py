@@ -478,3 +478,57 @@ def test_stereo_audio_with_mono_peak_and_rms_cannot_verify(monkeypatch, tmp_path
     rc = _verify_with(monkeypatch, tmp_path, lambda m: None, stereo)
     out = capsys.readouterr().out
     assert rc == cap.FAIL and "expected mono audio" in out and "0 verified, 24 failed" in out
+
+
+_EVIDENCE_FIELDS = ("sha256", "archive_member", "frames", "peak", "rms", "bytes", "parts", "freqs_hz")
+
+
+def _swap_levels(manifest, cond="cut250", lo=0.0625, hi=0.125):
+    clips = manifest["clips"]
+    for take in cap.TAKES:
+        a, b = clips[cap.clip_key(cond, lo, take)], clips[cap.clip_key(cond, hi, take)]
+        for f in _EVIDENCE_FIELDS:
+            a[f], b[f] = b[f], a[f]
+
+
+def test_complete_level_swap_refuses_in_both_readers(monkeypatch, capsys):
+    """Both takes' whole evidence exchanged between two levels: every digest is
+    still distinct and each key keeps its own condition/settings/take, so only
+    the frozen-clip anchor can see it (the gain moved by 6.02 dB)."""
+    manifest = cap.load_manifest()
+    _swap_levels(manifest)
+    assert len({m["sha256"] for m in manifest["clips"].values()}) == 12
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.main([]) == cap.REFUSED
+    out = capsys.readouterr().out
+    assert "not made at that level" in out and " verified," not in out
+    with pytest.raises(cap.LevelBindingError, match="not made at that level"):
+        fls.surge_side(manifest)
+
+
+def test_level_anchor_accepts_the_committed_captures():
+    manifest = cap.load_manifest()
+    for amp in cap.AMPS:
+        for cond in cap.CONDITIONS:
+            cap.capture_curve(cond, amp, 1, manifest)
+
+
+def test_surge_side_refuses_digest_only_second_takes():
+    manifest = cap.load_manifest()
+    clips = manifest["clips"]
+    for key in list(clips):
+        if key.endswith("/take2"):
+            clips[key] = {"sha256": clips[key]["sha256"]}
+    with pytest.raises(cap.Refused):
+        fls.surge_side(manifest)
+
+
+@pytest.mark.parametrize("field", ["sha256", "archive_member", "frames"])
+def test_missing_clip_field_refuses_instead_of_raising(monkeypatch, capsys, field):
+    manifest = cap.load_manifest()
+    del manifest["clips"][cap.clip_key("cut250", 0.125, 1)][field]
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.main([]) == cap.REFUSED
+    assert "REFUSED" in capsys.readouterr().out
+    with pytest.raises(cap.Refused):
+        fls.surge_side(manifest)

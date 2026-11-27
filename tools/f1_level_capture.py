@@ -87,6 +87,12 @@ CONDITIONS = {
 RES = 0.0
 READBACK_TOL = 0.005
 OPEN_GUARD_DB = 6.0
+#: How far a capture's low-band gain may sit from the FROZEN clip of the same
+#: condition. The frozen profile is committed independently of these captures
+#: and Surge is linear here, so a genuine capture agrees at every level; a
+#: recording filed under the wrong level is off by 20*log10(amp ratio), which
+#: is 6.02 dB for neighbouring levels. Half of that is the threshold.
+LEVEL_ANCHOR_DB = 3.0
 
 
 class Refused(refusal.Refused, Exception):
@@ -95,6 +101,10 @@ class Refused(refusal.Refused, Exception):
 
 class CaptureIdentityError(Refused):
     """The manifest cannot establish which capture the bytes belong to."""
+
+
+class LevelBindingError(CaptureIdentityError):
+    """A recording's level disagrees with the frozen clip for its condition."""
 
 
 class ProjectionError(Refused):
@@ -114,7 +124,9 @@ def require_distinct_capture_cells(clips: dict) -> None:
     cell_by_digest = {}
     for key, meta in clips.items():
         cell = key.rsplit("/", 1)[0]
-        digest = meta["sha256"]
+        digest = meta.get("sha256") if isinstance(meta, dict) else None
+        if not isinstance(digest, str):
+            raise CaptureIdentityError(f"{key}: capture record has no sha256 digest")
         owner = cell_by_digest.setdefault(digest, cell)
         if owner != cell:
             raise CaptureIdentityError(f"{digest[:12]} shared across capture cells {owner} and {cell}")
@@ -375,6 +387,11 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
             or type(meta.get("take")) is not int
             or command.get("cut_hz") != CONDITIONS[cond][0] or command.get("amp") != amp):
         raise CaptureIdentityError(f"{key}: capture identity differs from its manifest key")
+    missing = [f for f in ("sha256", "archive_member", "frames") if f not in meta]
+    if missing:
+        raise CaptureIdentityError(f"{key}: capture record lacks {', '.join(missing)}")
+    if not isinstance(meta["sha256"], str) or not isinstance(meta["archive_member"], str):
+        raise CaptureIdentityError(f"{key}: sha256 and archive_member must be strings")
     want = meta["sha256"]
     if inject == "TAMPERED":
         want = ("0" if want[0] != "0" else "1") + want[1:]
@@ -464,7 +481,29 @@ def capture_curve(cond: str, amp: float, take: int, manifest=None, inject="") ->
         g = rr.SurgeRig.tone_project(y, meta["parts"], amp, key)
     except am.InsufficientEvidence as e:
         raise ProjectionError(f"{key}: unusable projection window: {e}") from e
+    _bind_level_to_frozen_clip(cond, amp, key, g)
     return np.asarray(meta["freqs_hz"], dtype=np.float64), np.asarray(g, dtype=np.float64)
+
+
+@cache
+def _frozen_low_db(cond: str) -> float:
+    prof = rp.load_profile()
+    y, _, meta = rp.load_clip(CONDITIONS[cond][1], prof)
+    parts = [(int(a), int(b), float(f)) for a, b, f in meta["parts"]]
+    return _projected_low_db(y, parts, float(meta["amp"]))
+
+
+def _bind_level_to_frozen_clip(cond: str, amp: float, key: str, g) -> None:
+    """REFUSE a recording whose level cannot be the amplitude its key claims.
+    The manifest fields that name a level (digest, member, peak, rms, windows)
+    move together, so swapping two levels' complete evidence leaves them
+    self-consistent; the frozen clip does not move with them."""
+    got, want = float(np.median(np.asarray(g)[:4])), _frozen_low_db(cond)
+    if not math.isfinite(got) or abs(got - want) > LEVEL_ANCHOR_DB:
+        raise LevelBindingError(
+            f"{key}: low-band gain {got:.2f} dB re the commanded {amp:g} amplitude is "
+            f"{got - want:+.2f} dB from the frozen {CONDITIONS[cond][1]} ({want:.2f} dB); "
+            f"this recording was not made at that level")
 
 
 def verify() -> int:
@@ -486,21 +525,27 @@ def verify() -> int:
               f"{len(clips)}/{len(expected)} expected clips (missing {missing[:4]}, "
               f"unexpected {extra[:4]}), so the capture set is incomplete")
         return REFUSED
-    verified = {}
+    verified, unanchored, verified_or_anchored = {}, [], {}
     for key, meta in sorted(clips.items()):
         cond, tag, take = key.split("/")
         try:
             capture_curve(cond, float(tag[1:]), int(take[4:]), m)
-            verified[key] = meta
+            verified[key] = verified_or_anchored[key] = meta
+        except LevelBindingError as e:
+            unanchored.append(e)
+            verified_or_anchored[key] = meta     # reported after the cell-sharing check, which names the cause
         except (CaptureIdentityError, ProjectionError) as e:
             print(f"REFUSED  {e}")
             return REFUSED
         except Refused as e:
             print(f"FAIL     {e}")
     try:
-        require_distinct_capture_cells(verified)
+        require_distinct_capture_cells(verified_or_anchored)
     except CaptureIdentityError as e:
         print(f"REFUSED  {e}")
+        return REFUSED
+    if unanchored:
+        print(f"REFUSED  {unanchored[0]}")
         return REFUSED
     for key, meta in verified.items():
         print(f"ok       {key}  {meta['sha256'][:12]}")

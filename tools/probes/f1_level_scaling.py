@@ -225,12 +225,17 @@ def reads(freqs, g, cut, open_plateau) -> dict:
 def surge_side(manifest) -> dict:
     """Surge's reads at each level from the captures. Takes must be
     bit-identical (asserted); take 1 is read."""
-    cap.require_distinct_capture_cells(manifest["clips"])
+    clips = manifest.get("clips") if isinstance(manifest, dict) else None
+    if not isinstance(clips, dict):
+        raise cap.CaptureIdentityError("the capture manifest has no clip table")
+    cap.require_distinct_capture_cells(clips)
     out = {}
     for amp in AMPS:
         for cond in list(CASES.values()) + [OPEN]:
-            k1, k2 = cap.clip_key(cond, amp, 1), cap.clip_key(cond, amp, 2)
-            if manifest["clips"][k1]["sha256"] != manifest["clips"][k2]["sha256"]:
+            # Both takes are read in full (record, archive member, digest,
+            # windows) before the one-take shortcut is allowed.
+            metas = [cap.load_capture(cond, amp, t, manifest)[1] for t in (1, 2)]
+            if metas[0]["sha256"] != metas[1]["sha256"]:
                 raise Refused(f"Surge takes differ for {cond} at {amp}; take-to-take spread "
                               f"must be measured before a single take is used")
         fo, go = cap.capture_curve(OPEN, amp, 1, manifest)
