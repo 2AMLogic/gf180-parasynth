@@ -89,10 +89,12 @@ def _event_errors(event: dict, label: str) -> dict[str, dict[str, float]]:
     identity = f"{label}:{event.get('wave')}/{event.get('midi')}"
     try:
         recorded_excess = event["foldback_db"]["excess_over_reference_db"]
+        if isinstance(recorded_excess, bool) or not isinstance(recorded_excess, (int, float)):
+            raise m5a.Refused(f"{identity} foldback excess must be a JSON number")
         excess = float(recorded_excess)
     except (KeyError, TypeError, ValueError, OverflowError) as exc:
         raise m5a.Refused(f"{identity} lacks a numeric foldback excess") from exc
-    if isinstance(recorded_excess, bool) or not 0 <= excess < math.inf:
+    if not 0 <= excess < math.inf:
         raise m5a.Refused(f"{identity} foldback excess must be finite and nonnegative")
 
     try:

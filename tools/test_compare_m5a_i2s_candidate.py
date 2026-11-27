@@ -46,7 +46,8 @@ def scored_records():
 
 @pytest.mark.parametrize("side", ["baseline", "candidate"])
 @pytest.mark.parametrize("excess", [
-    "NaN", -1, "Infinity", "-Infinity", False, None, pytest.param(10**400, id="overflow"),
+    "0_0", "-1e-400", "NaN", "Infinity", "-Infinity", False, None,
+    -1, float("nan"), float("inf"), pytest.param(10**400, id="overflow"),
 ])
 def test_refuses_damaged_per_note_foldback(scored_records, side, excess):
     baseline, candidate = scored_records
@@ -59,6 +60,7 @@ def test_refuses_damaged_per_note_foldback(scored_records, side, excess):
 @pytest.mark.parametrize("excess, category", [
     (1.9171, "preserved_per_note_passes"),
     (0.0, "preserved_per_note_passes"),
+    (3, "preserved_per_note_passes"),
     (3.0, "preserved_per_note_passes"),
     (3.01, "lost_per_note_passes"),
 ])
