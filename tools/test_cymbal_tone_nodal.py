@@ -135,6 +135,69 @@ def test_revision_3s_low_band_is_outside_its_own_bound_at_every_tone_position():
     assert r["worst_fig9_db"] < tn.SHAPE_BOUND_DB, r     # and inside it against Figure 9
 
 
+@pytest.mark.parametrize(
+    "err_db, recorded_db, prop_ok, has_marker",
+    [
+        (3.0, 3.0, False, False),
+        (3.0004, 3.0, True, True),
+        (3.0006, 3.001, True, True),
+    ],
+)
+def test_rev3_low_boundary_uses_full_precision_while_keeping_recorded_db_rounded(
+        monkeypatch, err_db, recorded_db, prop_ok, has_marker):
+    """#1513: 3.0004 dB exceeds the 3.0 dB bound at every TONE position, while
+    its 3-dp display figure rounds to 3.0. Both `rev3-low-out-of-bound` and
+    `report()`'s `OUTSIDE BOUND` marker must decide at full precision while
+    preserving the rounded reporting fields."""
+    original = tn.shape_error_db
+
+    def planted(band, *args, **kwargs):
+        if band == "low" and "target" not in kwargs:
+            return err_db
+        return original(band, *args, **kwargs)
+
+    monkeypatch.setattr(tn, "shape_error_db", planted)
+    r = tn.rev3_realisation("low", tn.config())
+    assert r["worst_nodal_db"] == recorded_db
+    assert all(v == recorded_db for v in r["per_tone_nodal_db"].values())
+
+    prop = tn.properties()["rev3-low-out-of-bound"]
+    row = next(line for line in tn.report() if line.startswith("  low"))
+    assert prop["value_db"] == recorded_db
+    assert prop["ok"] is prop_ok
+    assert ("OUTSIDE BOUND" in row) is has_marker
+
+
+@pytest.mark.parametrize(
+    "per_pos, prop_ok, has_marker",
+    [
+        ([3.5, 3.5, 3.5, 3.5, 2.9], False, True),
+        ([3.5, 3.5, 3.5, 3.5, 3.5], True, True),
+        ([2.5, 2.5, 2.5, 2.5, 3.0004], False, True),
+        ([3.5, 3.5, 3.5, 3.5, 3.0004], True, True),
+    ],
+)
+def test_rev3_property_checks_every_position_while_report_marker_checks_any(
+        monkeypatch, per_pos, prop_ok, has_marker):
+    """#1513: `rev3-low-out-of-bound` asks whether EVERY TONE position exceeds
+    `SHAPE_BOUND_DB` (min over the five); `report()`'s `OUTSIDE BOUND` marker
+    asks whether ANY position exceeds it (max over the five), both unrounded."""
+    cfg = tn.config()
+    by_alpha = {tn.alpha_of(c, cfg): val for c, val in zip(tn.CODES, per_pos)}
+    original = tn.shape_error_db
+
+    def planted(band, alpha, *args, **kwargs):
+        if band == "low" and "target" not in kwargs and alpha in by_alpha:
+            return by_alpha[alpha]
+        return original(band, alpha, *args, **kwargs)
+
+    monkeypatch.setattr(tn, "shape_error_db", planted)
+    prop = tn.properties(cfg)["rev3-low-out-of-bound"]
+    row = next(line for line in tn.report(cfg) if line.startswith("  low"))
+    assert prop["ok"] is prop_ok
+    assert ("OUTSIDE BOUND" in row) is has_marker
+
+
 # ---------------------------------------------------------------------------
 # the choice is an enumeration over the circuit, not a fit
 # ---------------------------------------------------------------------------
@@ -340,3 +403,28 @@ def test_the_record_is_serialisable_and_carries_its_bounds():
     assert blob["anchor"] == "50"
     assert blob["budget"]["modes"] == 20
     assert set(blob["tone_gain_db"]) == set(tn.CODES)
+
+
+def test_rev3_raw_fields_stay_out_of_the_serialised_record(tmp_path):
+    """`rev3_realisation` carries full-precision `*_raw` fields for in-memory
+    bound checks, while `record()` and `--json` serialise only the rounded
+    reporting fields."""
+    import json
+    cfg = tn.config()
+    expected_keys = {"band", "poles", "dc_zeros", "worst_nodal_db",
+                     "worst_fig9_db", "per_tone_nodal_db"}
+    rec = tn.record(cfg)
+    for band in tn.BANDS:
+        raw = tn.rev3_realisation(band, cfg)
+        assert raw["worst_nodal_db_raw"] == max(raw["per_tone_nodal_db_raw"].values())
+        assert raw["worst_nodal_db"] == round(raw["worst_nodal_db_raw"], 3)
+        assert raw["per_tone_nodal_db"] == {
+            c: round(v, 3) for c, v in raw["per_tone_nodal_db_raw"].items()
+        }
+        assert set(rec["rev3"][band]) == expected_keys
+    out = tmp_path / "nodal.json"
+    assert tn.main(["--json", str(out)]) == 0
+    blob = json.loads(out.read_text())
+    for band in tn.BANDS:
+        assert set(blob["rev3"][band]) == expected_keys
+    assert "_raw" not in out.read_text()
