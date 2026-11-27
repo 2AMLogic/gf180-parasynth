@@ -134,3 +134,83 @@ def test_refused_legacy_r1_is_present_but_unmeasured(tmp_path):
     ]
     _, counts = c.compare(rows)
     assert counts == {"measured": 0, "refused": 1, "not_run": 0}
+
+
+def _reports_with_unavailable(tmp_path, rows):
+    record = tmp_path / "sweep.json"
+    record.write_text(json.dumps({"rows": rows}))
+    comparison = tmp_path / "comparison.json"
+    assert c.main([str(record), "--out", str(comparison)]) == 2
+    report = json.loads(comparison.read_text())
+    assert report["accepted_under_declared_rule"] == "NO VERDICT"
+    summary = tmp_path / "summary.json"
+    assert probe.main(["summarize", str(record), "--out", str(summary)]) == 0
+    return json.loads(summary.read_text()), report
+
+
+@pytest.mark.parametrize("engine,cutoff,q,drive", [
+    ("pulse2x", 8000, 0.5, 1.6),
+    ("r1", 20000, 0.0, 0.75),  # also used for preset stage localization
+])
+def test_refused_output_only_withholds_its_fresh_pair(tmp_path, engine, cutoff, q, drive):
+    archive = probe.ROOT / "docs/scorecard/m5-artifacts-333/pulse-level-repair"
+    rows, _ = c._load([archive / f"fresh-{part}.json.gz" for part in (0, 1)])
+    point = {"wave": "pulse29", "note": 42, "cutoff": cutoff, "q": q, "drive": drive}
+    row, = (r for r in rows if r["engine"] == engine and r["note"] == 42
+            and r["nominal"] == {"waves": ["pulse29"] * 3, "cutoff": [cutoff] * 2,
+                                 "q": q, "drive": drive})
+    row["stages"]["output"] = {"refused": "non-finite samples"}
+
+    summary, report = _reports_with_unavailable(tmp_path, rows)
+    unavailable, = summary["confirmation"]["unavailable_pairs"]
+    reason = unavailable["verdict"]
+    assert reason.startswith("NO VERDICT") and "non-finite samples" in reason
+    assert unavailable == {**point, "verdict": reason}
+    refusal, = summary["refused"]
+    assert refusal["engine"] == engine and "non-finite samples" in refusal["reason"]
+    assert len(summary["pulse2x_vs_r1"]) == 111
+    assert report["counts"] == {"measured": 111, "refused": 1, "not_run": 0}
+    original = json.loads((archive / "r2-074-drivecomp-fresh.json").read_text())
+    for result, expected in zip(report["points"], original["points"], strict=True):
+        if all(expected[k] == v for k, v in point.items()):
+            assert result == {**unavailable, "development": False}
+        else:
+            assert result == expected
+    if engine == "r1":
+        local, = (r for r in summary["localization"]
+                  if (r["engine"], r["wave"], r["note"]) == ("r1", "pulse29", 42))
+        assert "non-finite samples" in local["refused"]
+        assert local["output_intended_dbfs"] is None
+        assert local["unwanted_inband_dbfs"]["oscillator"] == (
+            row["stages"]["oscillator"]["unwanted_inband_dbfs"]
+        )
+
+
+@pytest.mark.parametrize("engine, defect", [("r1", "refusal"), ("pulse2x", "level")])
+def test_disagreeing_duplicates_refuse_in_both_orders(tmp_path, engine, defect):
+    archive = probe.ROOT / "docs/scorecard/m5-artifacts-333/r2-compare"
+    rows, _ = c._load([archive / f"s074-{part}.json.gz" for part in (0, 1)])
+    repeated = [r for r in rows if r["note"] == 96 and r["patch"]["waves"][0] == "pulse29"
+                and r["patch"]["cutoff"][0] == 20000 and r["patch"]["q"] == 0.0
+                and r["patch"]["drive"] == 0.75]
+    assert len(repeated) == 4
+    row, = (r for r in repeated if r["engine"] == engine and r["group"] == "pairwise")
+    if defect == "refusal":
+        row.update(verdict="REFUSED", reason="silent")
+    else:
+        row["stages"]["output"]["unwanted_dbfs"] += 10
+
+    results = []
+    for ordered in (repeated, repeated[::-1]):
+        summary, report = _reports_with_unavailable(tmp_path, ordered)
+        assert report["counts"] == {"measured": 0, "refused": 1, "not_run": 0}
+        assert summary["pulse2x_vs_r1"] == []
+        unavailable, = summary["confirmation"]["unavailable_pairs"]
+        assert "conflicting duplicate" in unavailable["verdict"]
+        assert report["points"] == [{**unavailable, "development": True}]
+        if defect == "level":
+            local, = (r for r in summary["localization"] if r["engine"] == engine)
+            assert "conflicting duplicate" in local["refused"]
+            assert local["output_unwanted_rel_db"] is None
+        results.append((summary, report["points"]))
+    assert results[0] == results[1]

@@ -557,6 +557,31 @@ def drive_sweep(notes=(72, 84, 96), drives=(0.05, 0.25, 0.5, 0.75, 1.0, 1.6),
 
 DEV_CONDITIONS = {(84, 20000, 0.0, 0.75), (96, 20000, 0.0, 0.75), (72, 20000, 0.0, 0.75)}
 STAGES = ("oscillator", "mixer", "ladder_in_96k", "ladder_out_96k", "ladder_out", "output")
+NO_R1_ROW = "NOT RUN (no R1 row)"
+
+
+def _output_status(row):
+    if row["verdict"] == "MEASURED":
+        output = row["stages"]["output"]
+        if "refused" in output:
+            return f"output REFUSED: {output['refused']}"
+    return row["verdict"]
+
+
+def _resolve_measurement(rows):
+    """Count repeated evidence once. Disagreement withholds the measurement,
+    including when one run measured and another refused. Group and nominal
+    patch describe scheduling rather than the rendered measurement."""
+    first = rows[0]
+    if len(rows) > 1:
+        def evidence(row):
+            return {k: v for k, v in row.items() if k not in ("group", "nominal")}
+
+        reference = evidence(first)
+        if any(evidence(row) != reference for row in rows[1:]):
+            statuses = sorted({_output_status(row) for row in rows})
+            return None, f"conflicting duplicate rows ({', '.join(statuses)})"
+    return first, _output_status(first)
 
 
 def scheduled_pulse_pairs(rows):
@@ -576,19 +601,20 @@ def scheduled_pulse_pairs(rows):
             patch["q"],
             patch["drive"],
         )
-        rows_by_condition[row["engine"], condition] = row
+        rows_by_condition.setdefault((row["engine"], condition), []).append(row)
 
-    for (engine, condition), candidate in rows_by_condition.items():
+    for (engine, condition), group in sorted(rows_by_condition.items()):
         if engine != "pulse2x":
             continue
-        base = rows_by_condition.get(("r1", condition))
+        candidate, candidate_status = _resolve_measurement(group)
+        baselines = rows_by_condition.get(("r1", condition))
+        if baselines is None:
+            yield condition, None, candidate, NO_R1_ROW
+            continue
+        base, base_status = _resolve_measurement(baselines)
         reason = None
-        if base is None:
-            reason = "NOT RUN (no R1 row)"
-        elif base["verdict"] != "MEASURED" or candidate["verdict"] != "MEASURED":
-            reason = (
-                f"NO VERDICT (r1 {base['verdict']}, candidate {candidate['verdict']})"
-            )
+        if base_status != "MEASURED" or candidate_status != "MEASURED":
+            reason = f"NO VERDICT (r1 {base_status}, candidate {candidate_status})"
         yield condition, base, candidate, reason
 
 
@@ -598,25 +624,32 @@ def summarize(paths) -> dict:
     are separated from the untouched ones; nothing is averaged across
     properties -- each is counted on its own."""
     rows = [r for pth in paths for r in json.loads(pathlib.Path(pth).read_text())["rows"]]
-    bad = [r for r in rows if r["verdict"] != "MEASURED"]
+    refused = []
     preset_rows = {}
     for r in rows:
+        status = _output_status(r)
+        if status != "MEASURED":
+            refused.append({"engine": r["engine"], "note": r["note"], "patch": r["patch"],
+                            "reason": r.get("reason", status)})
         if r["verdict"] != "MEASURED":
             continue
         patch = r["patch"]
         if patch["cutoff"] == [20000, 20000] and patch["q"] == 0.0 and patch["drive"] == 0.75:
-            preset_rows[r["engine"], patch["waves"][0], r["note"]] = r
+            preset_rows.setdefault((r["engine"], patch["waves"][0], r["note"]), []).append(r)
 
     loc = []
-    for (eng, wave, note), r in sorted(preset_rows.items()):
-        st = r["stages"]
-        loc.append({"engine": eng, "wave": wave, "note": note,
-                    "unwanted_inband_dbfs": {n: st[n].get("unwanted_inband_dbfs") for n in STAGES if n in st},
-                    "unwanted_outband_96k_dbfs": {n: st[n].get("unwanted_outband_dbfs")
-                                                  for n in ("ladder_in_96k", "ladder_out_96k") if n in st},
-                    "output_unwanted_rel_db": st["output"]["unwanted_rel_db"],
-                    "output_upper_wanted_rel_db": st["output"]["upper_wanted_rel_db"],
-                    "output_intended_dbfs": st["output"]["intended_dbfs"]})
+    for (eng, wave, note), group in sorted(preset_rows.items()):
+        r, status = _resolve_measurement(group)
+        st = r["stages"] if r is not None else {}
+        local = {"engine": eng, "wave": wave, "note": note,
+                 "unwanted_inband_dbfs": {n: st[n].get("unwanted_inband_dbfs") for n in STAGES if n in st},
+                 "unwanted_outband_96k_dbfs": {n: st[n].get("unwanted_outband_dbfs")
+                                               for n in ("ladder_in_96k", "ladder_out_96k") if n in st}}
+        for prop in ("unwanted_rel_db", "upper_wanted_rel_db", "intended_dbfs"):
+            local[f"output_{prop}"] = st["output"][prop] if status == "MEASURED" else None
+        if status != "MEASURED":
+            local["refused"] = status
+        loc.append(local)
     pairs = []
     unavailable = []
     for (wave, note, cut, q, drv), base, cand, reason in scheduled_pulse_pairs(rows):
@@ -649,7 +682,7 @@ def summarize(paths) -> dict:
         t["new_rail_samples"] = sum(1 for p in sel if p["cand_rail"] > p["base_rail"])
         t["new_dropouts"] = sum(1 for p in sel if p["cand_dropout_db"] < DROPOUT_DB <= p["base_dropout_db"])
         return t
-    return {"refused": [{k: r.get(k) for k in ("engine", "note", "patch", "reason")} for r in bad],
+    return {"refused": refused,
             "localization": loc, "pulse2x_vs_r1": pairs,
             "confirmation": {"development": tally([p for p in pairs if p["dev"]]),
                              "untouched": tally([p for p in pairs if not p["dev"]]),

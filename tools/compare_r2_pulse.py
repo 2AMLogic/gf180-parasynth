@@ -59,12 +59,12 @@ def _load(paths):
 def compare(rows, dev=mp.DEV_CONDITIONS):
     # (the "fresh" schedule has no development points: none of its notes is 72/84/96)
     out, counts = [], {"measured": 0, "refused": 0, "not_run": 0}
-    for (wave, note, cut, q, drv), base, cand, reason in sorted(mp.scheduled_pulse_pairs(rows)):
+    for (wave, note, cut, q, drv), base, cand, reason in mp.scheduled_pulse_pairs(rows):
         rec = {"wave": wave, "note": note, "cutoff": cut, "q": q, "drive": drv,
                "development": (note, cut, q, drv) in dev and wave == "pulse29"}
         if reason is not None:
             rec["verdict"] = reason
-            counts["not_run" if base is None else "refused"] += 1
+            counts["not_run" if reason == mp.NO_R1_ROW else "refused"] += 1
             out.append(rec)
             continue
         counts["measured"] += 1
@@ -72,7 +72,7 @@ def compare(rows, dev=mp.DEV_CONDITIONS):
         fails = []
         for prop, worse in PROPS:
             b, c = ob.get(prop), oc.get(prop)
-            if b is None or c is None or "refused" in ob or "refused" in oc:
+            if b is None or c is None:
                 rec[prop] = {"r1": b, "candidate": c, "verdict": "NO VERDICT"}
                 continue
             d = round(c - b, 3)
