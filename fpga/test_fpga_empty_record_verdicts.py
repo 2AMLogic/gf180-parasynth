@@ -197,7 +197,9 @@ def test_verify_uart_bridge_main_zero_write_scenario_exits_no_verdict(
     out = capsys.readouterr().out
     assert code == NO_VERDICT, out
     rec = json.loads((tmp_path / "controls.json").read_text())
-    assert rec["state"] == "NO VERDICT"
+    assert rec == {"state": "REFUSED", "runs": {"phrase": "NO VERDICT"}}
+    child = json.loads((sub / "verification.json").read_text())
+    assert (child["state"], child["exit_code"]) == ("NO VERDICT", 2)
 
 
 def test_verify_uart_bridge_rule8_pass_and_fail_runs_keep_their_exits(

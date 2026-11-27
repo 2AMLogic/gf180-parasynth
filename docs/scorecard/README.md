@@ -73,7 +73,8 @@ claim than `M5A`'s: it covers the filter path, not the pin-to-pin chip.
 both modules, so the claim cannot outlive the RTL it was made about.
 
 **The RTL reading and its `fixed-model` twin come from the same scorer.**
-`run_case.run_filter_case` takes the filter path as an argument, so both engines
+`run_case.run_filter_case` takes the filter path as an argument, and the record's
+engine label is that path's own `engine` (there is no separate label argument, #1492), so both engines
 meet the same estimators, the same frozen Surge clips and the same tolerance
 policy; a second scoring path would have left a difference between engines
 indistinguishable from a difference between scorers. Both readings stay on the
