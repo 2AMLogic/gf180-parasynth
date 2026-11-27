@@ -76,6 +76,7 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import capture_commands                                        # noqa: E402
 import provenance                                              # noqa: E402
 import run_all                                                 # noqa: E402
 import trial_env                                               # noqa: E402
@@ -574,13 +575,32 @@ def interpret_live_midi_record(spec, run, out, role):
     return _result(PASS, [], metrics=metrics, **cov)
 
 
+def _physical_fixture_problem(fixtures) -> str | None:
+    """Required physical capture children must declare all five diagnostic
+    commands (order-independent) before a PASS can be granted (#1540)."""
+    if not isinstance(fixtures, list):
+        return (
+            "fixture declaration missing: required diagnostic commands "
+            + ", ".join(capture_commands.REQUIRED_COMMANDS)
+        )
+    declared = {c for c in fixtures if isinstance(c, str)}
+    missing = [c for c in capture_commands.REQUIRED_COMMANDS if c not in declared]
+    if missing:
+        return (
+            "fixture declaration incomplete: missing required diagnostic commands "
+            + ", ".join(missing)
+        )
+    return None
+
+
 def interpret_physical_capture_record(spec, run, out, role):
     """tools/r0_capture.py analyse writes <out>/analysis.json: verdict PASS /
     FAIL / REFUSED, exit 0 / 1 / 2. REFUSED is NO VERDICT -- including the
     operator-blocked state when no capture session exists, which is a
     workflow state and never a result (docs/trials.md rule 4). A PASS also
-    needs the declared diagnostic set on disk: each required command has a
-    take, and some command was taken twice."""
+    needs the declared diagnostic set on disk: a required child must declare
+    all five diagnostic commands, each declared command has a take, and some
+    non-silence command was taken twice."""
     rec, err = _load_json(out / "analysis.json")
     nv_caught = False if role == "control" else None
     if rec is None:
@@ -596,10 +616,13 @@ def interpret_physical_capture_record(spec, run, out, role):
                        metrics={"image_id": rec.get("image_id")})
     have = {}
     for t in takes:
-        have[t.get("command_id")] = have.get(t.get("command_id"), 0) + 1
-    need = list(spec.get("fixtures", []))
+        cid = t.get("command_id")
+        if isinstance(cid, str) and cid:
+            have[cid] = have.get(cid, 0) + 1
+    raw_fixtures = spec.get("fixtures")
+    need = list(raw_fixtures) if isinstance(raw_fixtures, list) else []
     cov = dict(expected={"commands": need, "repeat_take": True},
-               observed={"commands": sorted(k for k in have if k), "takes": len(takes)})
+               observed={"commands": sorted(have), "takes": len(takes)})
     metrics = {"properties": rec.get("properties"), "calibration": rec.get("calibration"),
                "noise_floor_dbfs": rec.get("noise_floor_dbfs"),
                "identity": rec.get("identity"), "operator_blocked": bool(rec.get("operator_blocked"))}
@@ -614,7 +637,10 @@ def interpret_physical_capture_record(spec, run, out, role):
     if verdict == "REFUSED":
         return _result(NO_VERDICT, list(rec.get("reasons") or ["REFUSED"]), metrics=metrics,
                        caught=nv_caught, **cov)
-    gaps = [f"no take of {c}" for c in need if not have.get(c)]
+    if role == "required" and verdict == "PASS":
+        if decl_problem := _physical_fixture_problem(raw_fixtures):
+            return _result(NO_VERDICT, [decl_problem], metrics=metrics, caught=nv_caught, **cov)
+    gaps = [f"no take of {c}" for c in need if not isinstance(c, str) or not have.get(c)]
     if not any(v >= 2 for k, v in have.items() if k != "silence"):
         gaps.append("no repeat take")
     if verdict == "PASS" and gaps:

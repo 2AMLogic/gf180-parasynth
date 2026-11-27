@@ -121,6 +121,7 @@ def trial_cli(repo):
     tools.mkdir()
     for name in (
         "trial.py",
+        "capture_commands.py",
         "provenance.py",
         "run_all.py",
         "exit_contract.py",
@@ -1114,6 +1115,285 @@ def test_physical_execution_error_exit_3_is_no_verdict(repo):
     _, r = _physical(repo, rec, 3)
     assert r["children"][0]["verdict"] == trial.NO_VERDICT
     assert r["verdict"] == trial.NO_VERDICT
+
+
+# ---- #1540: physical capture requires all five diagnostic commands declared --
+def _physical_child_spec(image_id: str, declaration: dict) -> dict:
+    spec = {"interpret": "physical_capture_record", "image_id": image_id}
+    spec.update(declaration)
+    return spec
+
+
+def _write_analysis(out: pathlib.Path, rec: dict) -> pathlib.Path:
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "analysis.json").write_text(json.dumps(rec))
+    (out / "log.txt").write_text("")
+    return out
+
+
+def _rederive_physical(spec: dict, run_dir: pathlib.Path, child_dir: pathlib.Path, rc: int) -> dict:
+    entry = {
+        "id": f"{spec['image_id']}-capture",
+        "role": "required",
+        "dir": child_dir.name,
+        "interpreter": dict(spec),
+        "execution": {"state": "PASS" if rc == 0 else "FAIL", "rc": rc, "secs": 0.1},
+    }
+    got, err = trial._rederive(entry, run_dir, cancelled=False)
+    assert err is None, err
+    return got
+
+
+@pytest.mark.parametrize("image_id", ["r0", "r1"])
+@pytest.mark.parametrize(
+    "declaration, missing_cmds, expected_cov",
+    [
+        pytest.param({}, PHYS_FIXTURES, [], id="omitted"),
+        pytest.param({"fixtures": []}, PHYS_FIXTURES, [], id="empty"),
+        pytest.param(
+            {"fixtures": ["demo"]},
+            ["silence", "held-m5a-saw", "held-default", "bar808-full"],
+            ["demo"],
+            id="demo-only",
+        ),
+        pytest.param(
+            {"fixtures": ["demo", "demo", "held-m5a-saw", "held-default", "bar808-full"]},
+            ["silence"],
+            ["demo", "demo", "held-m5a-saw", "held-default", "bar808-full"],
+            id="five-with-duplicate-demo",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "takes_cmds",
+    [
+        pytest.param(["demo", "demo"], id="two-demo-takes"),
+        pytest.param(PHYS_FIXTURES + ["demo"], id="complete-takes"),
+    ],
+)
+def test_physical_incomplete_declaration_is_no_verdict_fresh_and_rederived(
+    tmp_path, image_id, declaration, missing_cmds, expected_cov, takes_cmds
+):
+    """#1540: a required R0/R1 capture cannot PASS without declaring all five
+    diagnostic commands, even when every take is present on disk."""
+    spec = _physical_child_spec(image_id, declaration)
+    rec = _capture_rec("PASS", commands=takes_cmds, image_id=image_id)
+    child_dir = _write_analysis(tmp_path / f"{image_id}-capture", rec)
+    run = {"state": "PASS", "rc": 0, "secs": 0.1, "out": ""}
+
+    fresh = trial.judge_child(spec, run, child_dir, "required")
+    rederived = _rederive_physical(spec, tmp_path, child_dir, rc=0)
+
+    for res in (fresh, rederived):
+        assert res["verdict"] == trial.NO_VERDICT, res
+        assert any("fixture declaration" in r for r in res["reasons"]), res["reasons"]
+        joined = " ".join(res["reasons"])
+        for cmd in missing_cmds:
+            assert cmd in joined, (cmd, res["reasons"])
+        assert not any("no take of" in r for r in res["reasons"]), res["reasons"]
+        assert res["coverage"]["expected"]["commands"] == expected_cov
+        assert res["coverage"]["observed"]["commands"] == sorted(set(takes_cmds))
+        assert res["coverage"]["observed"]["takes"] == len(takes_cmds)
+    assert fresh == rederived
+
+
+@pytest.mark.parametrize("image_id", ["r0", "r1"])
+@pytest.mark.parametrize(
+    "declaration, takes_cmds",
+    [
+        pytest.param({}, ["demo", "demo"], id="omitted-two-demos"),
+        pytest.param({}, PHYS_FIXTURES + ["demo"], id="omitted-complete-takes"),
+        pytest.param({"fixtures": []}, ["demo", "demo"], id="empty-two-demos"),
+        pytest.param({"fixtures": ["demo"]}, ["demo", "demo"], id="demo-only-two-demos"),
+        pytest.param(
+            {"fixtures": ["demo", "demo", "held-m5a-saw", "held-default", "bar808-full"]},
+            PHYS_FIXTURES + ["demo"],
+            id="five-with-duplicate-demo-complete-takes",
+        ),
+    ],
+)
+def test_physical_forged_pass_receipt_with_incomplete_declaration_is_rejected(
+    repo, image_id, declaration, takes_cmds
+):
+    """A pre-fix or forged PASS receipt whose interpreter spec omits or
+    shortens fixtures must be rejected by check_receipt via re-derivation."""
+    rec = _capture_rec("PASS", commands=takes_cmds, image_id=image_id)
+    repo.child(
+        {"rc": 0, "files": {"analysis.json": rec}},
+        interpret="physical_capture_record",
+        image_id=image_id,
+        **declaration,
+    )
+    repo.child(
+        {"rc": 0, "files": {"controls.json": _controls_rec()}},
+        interpret="capture_controls_record",
+        role="control",
+    )
+    run_dir, receipt = repo.run()
+    assert receipt["verdict"] == trial.NO_VERDICT
+    assert any("fixture declaration" in r for r in receipt["children"][0]["reasons"])
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
+    assert ok, problems
+
+    # Simulate a pre-fix receipt that sealed PASS for the same evidence and spec.
+    forged = copy.deepcopy(receipt)
+    forged["verdict"] = trial.PASS
+    forged["verdict_reasons"] = []
+    forged["children"][0]["verdict"] = trial.PASS
+    forged["children"][0]["reasons"] = []
+    ok, problems, _ = _forge(run_dir / "receipt.json", forged)
+    assert not ok
+    assert any("fixture declaration" in p for p in problems), problems
+
+
+@pytest.mark.parametrize("image_id", ["r0", "r1"])
+def test_physical_valid_declaration_order_independent_and_extra_command(tmp_path, image_id):
+    """Order of the five required commands does not matter; any additional
+    declared command still requires a recorded take."""
+    reordered = list(reversed(PHYS_FIXTURES))
+    complete_takes = PHYS_FIXTURES + ["demo"]
+    run = {"state": "PASS", "rc": 0, "secs": 0.1, "out": ""}
+
+    # Reordered five commands + complete takes -> PASS (fresh and re-derived).
+    spec = _physical_child_spec(image_id, {"fixtures": reordered})
+    cdir = _write_analysis(
+        tmp_path / "reordered",
+        _capture_rec("PASS", commands=complete_takes, image_id=image_id),
+    )
+    fresh = trial.judge_child(spec, run, cdir, "required")
+    rederived = _rederive_physical(spec, tmp_path, cdir, rc=0)
+    assert fresh["verdict"] == trial.PASS and rederived == fresh
+
+    # Additional declared command without a take -> NO VERDICT naming it.
+    spec_extra = _physical_child_spec(image_id, {"fixtures": PHYS_FIXTURES + ["run-m5a"]})
+    fresh_miss = trial.judge_child(spec_extra, run, cdir, "required")
+    rederived_miss = _rederive_physical(spec_extra, tmp_path, cdir, rc=0)
+    assert fresh_miss["verdict"] == trial.NO_VERDICT
+    assert any("no take of run-m5a" in r for r in fresh_miss["reasons"])
+    assert rederived_miss == fresh_miss
+
+    # Additional declared command with a take -> PASS.
+    cdir_extra = _write_analysis(
+        tmp_path / "with-extra",
+        _capture_rec("PASS", commands=complete_takes + ["run-m5a"], image_id=image_id),
+    )
+    fresh_ok = trial.judge_child(spec_extra, run, cdir_extra, "required")
+    rederived_ok = _rederive_physical(spec_extra, tmp_path, cdir_extra, rc=0)
+    assert fresh_ok["verdict"] == trial.PASS and rederived_ok == fresh_ok
+
+
+@pytest.mark.parametrize("image_id", ["r0", "r1"])
+def test_physical_valid_declaration_take_coverage_and_existing_diagnostics(tmp_path, image_id):
+    """With a valid declaration, two demos name all four missing commands,
+    all five + second demo pass, repeating only silence fails repeat, and
+    existing image/refusal/exit/fail diagnostics are preserved."""
+    spec = _physical_child_spec(image_id, {"fixtures": PHYS_FIXTURES})
+    other_image = "r1" if image_id == "r0" else "r0"
+
+    # Two demo takes -> NO VERDICT naming all four missing commands.
+    c_two = _write_analysis(
+        tmp_path / "two-demo",
+        _capture_rec("PASS", commands=["demo", "demo"], image_id=image_id),
+    )
+    r_two = trial.judge_child(spec, {"state": "PASS", "rc": 0, "secs": 0.1, "out": ""}, c_two, "required")
+    assert r_two == _rederive_physical(spec, tmp_path, c_two, rc=0)
+    assert r_two["verdict"] == trial.NO_VERDICT
+    for missing in ("silence", "held-m5a-saw", "held-default", "bar808-full"):
+        assert any(f"no take of {missing}" in reason for reason in r_two["reasons"]), r_two["reasons"]
+    assert not any("fixture declaration" in reason for reason in r_two["reasons"])
+
+    # Repeating only silence -> NO VERDICT, no repeat take.
+    c_sil = _write_analysis(
+        tmp_path / "silence-repeat",
+        _capture_rec("PASS", commands=PHYS_FIXTURES + ["silence"], image_id=image_id),
+    )
+    r_sil = trial.judge_child(spec, {"state": "PASS", "rc": 0, "secs": 0.1, "out": ""}, c_sil, "required")
+    assert r_sil == _rederive_physical(spec, tmp_path, c_sil, rc=0)
+    assert r_sil["verdict"] == trial.NO_VERDICT
+    assert any("no repeat take" in reason for reason in r_sil["reasons"])
+
+    # All five + second demo -> PASS.
+    c_pass = _write_analysis(
+        tmp_path / "complete",
+        _capture_rec("PASS", commands=PHYS_FIXTURES + ["demo"], image_id=image_id),
+    )
+    r_pass = trial.judge_child(spec, {"state": "PASS", "rc": 0, "secs": 0.1, "out": ""}, c_pass, "required")
+    assert r_pass == _rederive_physical(spec, tmp_path, c_pass, rc=0)
+    assert r_pass["verdict"] == trial.PASS
+
+    # Image mismatch -> NO VERDICT naming the image.
+    c_img = _write_analysis(
+        tmp_path / "wrong-image",
+        _capture_rec("PASS", commands=PHYS_FIXTURES + ["demo"], image_id=other_image),
+    )
+    r_img = trial.judge_child(spec, {"state": "PASS", "rc": 0, "secs": 0.1, "out": ""}, c_img, "required")
+    assert r_img == _rederive_physical(spec, tmp_path, c_img, rc=0)
+    assert r_img["verdict"] == trial.NO_VERDICT and "image" in r_img["reasons"][0]
+
+    # Analyser REFUSED (operator-blocked) -> NO VERDICT with operator-blocked reason.
+    c_ref = _write_analysis(
+        tmp_path / "refused",
+        _capture_rec(
+            "REFUSED",
+            commands=[],
+            image_id=image_id,
+            operator_blocked=True,
+            reasons=[f"operator-blocked: no capture session at captures/{image_id}/session.json"],
+        ),
+    )
+    r_ref = trial.judge_child(spec, {"state": "FAIL", "rc": 2, "secs": 0.1, "out": ""}, c_ref, "required")
+    assert r_ref == _rederive_physical(spec, tmp_path, c_ref, rc=2)
+    assert r_ref["verdict"] == trial.NO_VERDICT and "operator-blocked" in r_ref["reasons"][0]
+
+    # Exit disagreement -> NO VERDICT with exit diagnostic.
+    r_exit = trial.judge_child(spec, {"state": "FAIL", "rc": 1, "secs": 0.1, "out": ""}, c_pass, "required")
+    assert r_exit == _rederive_physical(spec, tmp_path, c_pass, rc=1)
+    assert r_exit["verdict"] == trial.NO_VERDICT and "exit status 1 disagrees" in r_exit["reasons"][0]
+
+    # Genuine analyser FAIL -> FAIL with analyser reason.
+    c_fail = _write_analysis(
+        tmp_path / "fail",
+        _capture_rec("FAIL", commands=PHYS_FIXTURES + ["demo"], image_id=image_id, reasons=["drums-1: dropout"]),
+    )
+    r_fail = trial.judge_child(spec, {"state": "FAIL", "rc": 1, "secs": 0.1, "out": ""}, c_fail, "required")
+    assert r_fail == _rederive_physical(spec, tmp_path, c_fail, rc=1)
+    assert r_fail["verdict"] == trial.FAIL and r_fail["reasons"] == ["drums-1: dropout"]
+
+
+def test_physical_removing_declaration_guard_flips_controls_to_false_pass(tmp_path, monkeypatch):
+    """Removing only the declaration guard causes the incomplete-declaration
+    negative controls to revert to the pre-fix false PASS."""
+    monkeypatch.setattr(trial, "_physical_fixture_problem", lambda _fixtures: None)
+    run = {"state": "PASS", "rc": 0, "secs": 0.1, "out": ""}
+    c_two = _write_analysis(
+        tmp_path / "two-demo",
+        _capture_rec("PASS", commands=["demo", "demo"], image_id="r0"),
+    )
+    c_all = _write_analysis(
+        tmp_path / "complete",
+        _capture_rec("PASS", commands=PHYS_FIXTURES + ["demo"], image_id="r0"),
+    )
+    for declaration, child_dir in (
+        ({}, c_two),
+        ({"fixtures": []}, c_two),
+        ({"fixtures": ["demo"]}, c_two),
+        ({}, c_all),
+        ({"fixtures": ["demo", "demo", "held-m5a-saw", "held-default", "bar808-full"]}, c_all),
+    ):
+        spec = _physical_child_spec("r0", declaration)
+        res = trial.judge_child(spec, run, child_dir, "required")
+        assert res["verdict"] == trial.PASS, (declaration, res)
+
+
+def test_physical_shipped_registry_satisfies_shared_required_commands():
+    """Both shipped T-PHYSICAL modes declare the shared diagnostic command set."""
+    import capture_commands
+
+    assert list(capture_commands.REQUIRED_COMMANDS) == PHYS_FIXTURES
+    reg = trial.load_registry()
+    for mode_name in ("capture", "capture-r1"):
+        child = reg["trials"]["T-PHYSICAL"]["modes"][mode_name]["required"][0]
+        assert trial._physical_fixture_problem(child.get("fixtures")) is None, mode_name
 
 # ---- R1 (#279, plan088): the image a record ran is the image the child declares
 def _r1_rolling(image):
