@@ -262,21 +262,45 @@ def test_cli_refuses_every_red_it_cannot_attribute(tmp_path):
     _staged_tree_untouched(tmp_path, before)
 
 
-def test_cli_reports_a_clean_survivor_apart_from_refusals(tmp_path):
+@pytest.mark.parametrize("addopts", ["", "-q"], ids=["default", "quiet"])
+def test_cli_reports_a_clean_survivor_apart_from_refusals(tmp_path, monkeypatch, addopts):
     """The distinct case: a test that executes, completes and stays green
     under the mutant is a survivor, printed as such and exiting 1 -- also
     when other mutants refused, because a survivor is a finding about the
     controls and a refusal is a finding about the apparatus."""
+    monkeypatch.setenv("PYTEST_ADDOPTS", addopts)
     _stage(tmp_path, knob0=_SURVIVOR)
     before = {rel: (tmp_path / rel).read_bytes() for rel in m.FILES}
     code, out = _run(tmp_path)
     assert code == 1, out
+    baselines = [line.split() for line in out.splitlines() if line.startswith("baseline -k ")]
+    assert [(fields[2], fields[3]) for fields in baselines] == [(k, "1") for k in m.SELECTIONS]
     assert _verdict(out, "unqualified-knob-admitted").startswith("SURVIVED"), out
     for name in NAMES:
         if name != "unqualified-knob-admitted":
             assert _verdict(out, name).startswith("REFUSED"), out
     assert "mutants red" not in out
     _staged_tree_untouched(tmp_path, before)
+
+
+def test_cli_names_the_skipped_baseline_parameter_and_counts_only_passes(tmp_path):
+    # Both cases are collected. Only the second can catch the boolean guard.
+    suite = """@pytest.mark.parametrize("case", [
+    pytest.param("first", id="True-100", marks=pytest.mark.skip(reason="unavailable")),
+    pytest.param("second", id="10-True"),
+])
+def test_cli_refuses_invalid_baseline_numbers(case):
+    readings_code, readings_out = (0, "") if "finite_number.py" in _mutated() else (2, "REFUSED")
+    assert readings_code == 2 and "REFUSED" in readings_out, readings_out
+"""
+    _stage(tmp_path, invalid_baseline_numbers=suite)
+    code, out = _run(tmp_path)
+    assert _verdict(out, "bool-accepted-as-number").startswith("RED -- 1 test(s) caught it"), out
+    assert code == 1, out  # the other two mutants sharing this selection survive
+    prefix = "baseline -k invalid_baseline_numbers"
+    line, = (line for line in out.splitlines() if line.startswith(prefix))
+    assert line.removeprefix(prefix).split()[:3] == ["1", "test(s)", "green"], out
+    assert "skipped: test_cli_refuses_invalid_baseline_numbers[True-100]" in out, out
 
 
 def test_cli_refuses_negative_spread_when_only_the_diagnostic_fails(tmp_path, monkeypatch):

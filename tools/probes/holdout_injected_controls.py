@@ -175,17 +175,21 @@ def _copy(parent: pathlib.Path) -> pathlib.Path:
 
 
 def run_suite(work: pathlib.Path, suite: str, targets: Sequence[str] = (), *,
-              python: str = sys.executable) -> tuple[int, SuiteReport | None, str]:
+              python: str = sys.executable,
+              pytest_options: Sequence[str] = ()) -> tuple[int, SuiteReport | None, str]:
     """Run one pytest suite and record its outcomes, phase errors, and failure sites.
 
     `suite` is the identity every recorded node ID is labelled against. With
     `targets` empty the whole suite is collected; otherwise exactly those node
     IDs are, so a focused run deselects nothing (`_zero_exit_problem` refuses
-    any deselection) and `suite` still decides what counts as in-suite."""
+    any deselection) and `suite` still decides what counts as in-suite. A caller
+    can request collection with `pytest_options` and read the selected IDs from
+    the returned report."""
     runner = pathlib.Path(__file__).with_name("pytest_failure_sites.py")
     with tempfile.TemporaryDirectory() as tmp:
         report = pathlib.Path(tmp) / "report.json"
-        out = subprocess.run([python, str(runner), suite, str(report), *targets],
+        out = subprocess.run([python, str(runner), suite, str(report),
+                              *(targets or [suite]), *pytest_options],
                              cwd=work, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         try:
             data = json.loads(report.read_text())

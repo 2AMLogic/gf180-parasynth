@@ -70,7 +70,6 @@ from __future__ import annotations
 
 import pathlib
 import shutil
-import subprocess
 import sys
 import tempfile
 
@@ -206,15 +205,6 @@ EXPECTED = {
 }
 
 
-def _targets(dst: pathlib.Path, k: str) -> tuple[int, list[str]]:
-    """The explicit node IDs one `-k` selection collects, and pytest's status."""
-    r = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q",
-                        "-p", "no:cacheprovider", TEST, "-k", k],
-                       cwd=dst, capture_output=True, text=True)
-    return r.returncode, [ln.strip() for ln in r.stdout.splitlines()
-                          if ln.strip().startswith(TEST + "::")]
-
-
 def report(results: dict[str, hic.Result]) -> int:
     """One line per mutant with the evidence beside it, then the summary; the
     return value is the script's exit status (see the module docstring)."""
@@ -263,12 +253,14 @@ def main() -> int:
                 return 2
         targets = {}
         for k in SELECTIONS:
-            rc, ids = _targets(dst, k)
-            if rc != 0 or not ids:
-                print(f"REFUSED: `pytest {TEST} -k {k}` collects no test on the UNMUTATED tree "
-                      f"(pytest exit {rc}) -- no mutant's verdict can mean anything")
+            rc, collection, output = hic.run_suite(
+                dst, TEST, pytest_options=("--collect-only", "-k", k))
+            if rc != 0 or collection is None or collection.errors or not collection.outcomes:
+                print(f"REFUSED: could not establish the targets of `pytest {TEST} -k {k}` "
+                      f"on the UNMUTATED tree (pytest exit {rc})")
+                print(output[-hic.TAIL:].rstrip())
                 return 2
-            targets[k] = ids
+            targets[k] = [f"{TEST}::{test}" for test in collection.outcomes]
         # Precondition 2: every selection is GREEN on the UNMUTATED tree, by
         # the SAME explicit targets its mutants are then run with.
         baselines = {}
@@ -284,7 +276,10 @@ def main() -> int:
                       f"{len(targets[k])} target(s) -- the report is not of the focused run")
                 return 2
             baselines[k] = base.report
-            print(f"baseline -k {k:38s} {len(recorded)} test(s) green on the UNMUTATED tree")
+            print(f"baseline -k {k:38s} {len(base.report.passed)} test(s) green on the UNMUTATED tree")
+            for test, outcome in base.report.outcomes.items():
+                if outcome != "passed":
+                    print(f"    {outcome}: {test}")
         results = {}
         for name, (rel, old, new, k) in MUTANTS.items():
             for r, src in originals.items():              # restore every file
