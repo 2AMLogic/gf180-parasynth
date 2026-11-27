@@ -7,6 +7,7 @@ from __future__ import annotations
 import math
 import pathlib
 import sys
+import wave
 
 import numpy as np
 import pytest
@@ -39,6 +40,32 @@ def test_identical_is_zero():
     d = dist("LT", x, x)
     for f, v in d.items():
         assert v is None or v < 1e-9, (f, v)
+
+
+@pytest.mark.parametrize("width", [2, 1], ids=["signed-pcm16", "unsigned-pcm8"])
+def test_pair_identifies_unsupported_pcm_before_scoring_the_strike(width, tmp_path, capsys):
+    # Quantise once, then encode exactly the same hit at each WAV width.
+    hit, rate = strike()
+    codes = np.rint(64 * hit).astype(np.int16)
+
+    def write(name, width):
+        samples = (codes + 128).astype(np.uint8) if width == 1 else (codes * 256).astype("<i2")
+        path = tmp_path / name
+        with wave.open(str(path), "wb") as wav:
+            wav.setparams((1, width, rate, 0, "NONE", "not compressed"))
+            wav.writeframes(samples.tobytes())
+        return str(path)
+
+    target = write("target.wav", 2)
+    candidate = write("candidate.wav", width)
+    result = g.main(["pair", "LT", target, candidate])
+    output = capsys.readouterr()
+    if width == 1:
+        assert result == g.EXIT_REFUSED
+        assert "uint8" in output.err, output.err
+    else:
+        assert result == 0
+        assert '"spec": 0.0' in output.out
 
 
 def test_gain_lead_and_rate_do_not_move_it():
