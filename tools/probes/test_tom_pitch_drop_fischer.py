@@ -10,6 +10,11 @@ START RED: `TPD592_INJECT=stub pytest tools/probes/test_tom_pitch_drop_fischer.p
 runs the whole file against the estimator stub (every estimate NO-DROP). The
 known-answer tests for non-zero drops must fail; the record of that run is in
 docs/scorecard/tom-pitch-drop-592/README.md.
+
+The CLI's `knownanswer` verdict is read off the record's rows against the
+declared grid. The inputs that defeated the counter-only verdict it replaced
+-- an empty generator, a 3 / 3 summary with no rows, a missing case, a
+duplicate standing in for one -- are the committed controls (#1451).
 """
 from __future__ import annotations
 
@@ -18,6 +23,7 @@ import math
 import os
 import pathlib
 import sys
+from collections import Counter
 
 import numpy as np
 import pytest
@@ -359,8 +365,13 @@ def test_route_b_refuses_an_unconverged_refinement(monkeypatch):
     assert e.value.reason == "fit-failed"
 
 
-def _good_ka():
-    return {"n": 3, "n_ok": 3, "rows": []}
+# ---- the CLI's verdict: the rows are the evidence, the counters are not ----
+#: the archived passing run: 195 executed rows, every one inside its bounds
+KA_ARCHIVE = tp.PREREG.parent / "rerun-8fedbf4" / "knownanswer.json"
+
+
+def _archived_ka():
+    return json.loads(KA_ARCHIVE.read_text())
 
 
 def _good_controls():
@@ -369,14 +380,39 @@ def _good_controls():
             "mutants": {m: {"verdict": "CAUGHT"} for m in tp.INJECTIONS}}
 
 
+def _out_of_bounds(rec):
+    """The first executed drop reads outside its frozen bounds; returns its index."""
+    i = next(k for k, r in enumerate(rec["rows"]) if r["class"] == "DROP")
+    rec["rows"][i].update(ok=False, why="E 0.0900 vs 0.0200 (|e| 0.0700)")
+    return i
+
+
+def _cli_knownanswer(tmp_path, monkeypatch, record=None, cases=None):
+    """The normal entry point, `knownanswer --out`. `record` replaces the record
+    generator wholesale; `cases` replaces the case generator and lets the REAL
+    `knownanswer` build the record. Provenance is stubbed (a dirty tree is its
+    own precondition, not the verdict under test). Returns the exit status and
+    the record the CLI wrote."""
+    monkeypatch.setattr(tp, "provenance", lambda refs: {"commit": "x"})
+    monkeypatch.setattr(tp, "close_provenance", lambda prov: prov)
+    if record is not None:
+        monkeypatch.setattr(tp, "knownanswer", lambda *a, _r=record, **k: json.loads(json.dumps(_r)))
+    if cases is not None:
+        monkeypatch.setattr(tp, "ka_cases", lambda full: list(cases))
+    out = tmp_path / "knownanswer.json"
+    return tp.main(["knownanswer", "--out", str(out)]), json.loads(out.read_text())
+
+
 @pytest.mark.parametrize("cmd", ["knownanswer", "controls"])
 def test_cli_exit_status_is_red_for_a_failed_verification_then_green(cmd, tmp_path, monkeypatch):
     """The command's own acceptance path: bad record -> nonzero (and not the
-    refusal status 2), the record is still written; good record -> 0."""
-    good = {"knownanswer": _good_ka, "controls": _good_controls}[cmd]()
+    refusal status 2), the record is still written; good record -> 0. The
+    known-answer pair is the ARCHIVED run (195 executed rows), not a summary
+    that claims success (#1451)."""
+    good = {"knownanswer": _archived_ka, "controls": _good_controls}[cmd]()
     bad = json.loads(json.dumps(good))
     if cmd == "knownanswer":
-        bad["n_ok"] = 2
+        _out_of_bounds(bad)
     else:
         bad["mutants"][tp.INJECTIONS[0]]["verdict"] = "MISSED"
     fn = {"knownanswer": "knownanswer", "controls": "controls"}[cmd]
@@ -390,6 +426,93 @@ def test_cli_exit_status_is_red_for_a_failed_verification_then_green(cmd, tmp_pa
         out.unlink(missing_ok=True)
         assert tp.main([cmd, "--out", str(out)]) == want
         assert out.exists()  # the diagnostic record is retained either way
+
+
+def test_the_archived_passing_record_is_the_whole_declared_grid():
+    """What every test below leans on: the archive is 195 EXECUTED rows, each
+    inside its bounds, covering the declared grid exactly. A grid change fails
+    this, and the archive must be re-run before it is the passing case again."""
+    rec = _archived_ka()
+    assert rec["n"] == rec["n_ok"] == len(rec["rows"]) == len(tp.KA_GRID) > 0
+    assert all(r["ok"] is True for r in rec["rows"])
+    assert (Counter(tp.ka_identity(r["case"]) for r in rec["rows"])
+            == Counter(tp.ka_identity(c) for c in tp.KA_GRID))
+    assert tp.verification_failures("knownanswer", rec) == []
+
+
+def test_cli_knownanswer_refuses_an_empty_generator(tmp_path, monkeypatch, capsys):
+    """#1451's reproduction: the REAL `knownanswer` with a case generator that
+    yields nothing. Its two counters still agree (0 / 0) -- all the old verdict
+    read -- so this exited 0."""
+    status, rec = _cli_knownanswer(tmp_path, monkeypatch, cases=[])
+    assert status == 1
+    assert rec["rows"] == [] and rec["n"] == rec["n_ok"] == 0     # the record that used to pass
+    assert f"FAILED: known answers: 0 / {len(tp.KA_GRID)} declared cases present" in capsys.readouterr().out
+
+
+def test_cli_knownanswer_refuses_success_counters_with_no_rows(tmp_path, monkeypatch, capsys):
+    """The fixture this file used to PASS the CLI on: a summary claiming
+    3 / 3 with not one row behind it."""
+    status, rec = _cli_knownanswer(tmp_path, monkeypatch, record={"n": 3, "n_ok": 3, "rows": []})
+    assert status == 1
+    assert rec["rows"] == []     # the diagnostic record is still written
+    assert "FAILED: known answers: 0 / 195 declared cases present" in capsys.readouterr().out
+
+
+def test_cli_knownanswer_refuses_a_missing_case(tmp_path, monkeypatch, capsys):
+    """A run that lost one case keeps its counters equal (194 / 194)."""
+    rec = _archived_ka()
+    gone = rec["rows"].pop(100)["case"]
+    rec["n"] = rec["n_ok"] = 194
+    status, _ = _cli_knownanswer(tmp_path, monkeypatch, record=rec)
+    assert status == 1
+    out = capsys.readouterr().out
+    assert "FAILED: known answers: 194 / 195 declared cases present" in out
+    assert tp.ka_identity(gone) in out     # it says WHICH case the evidence lacks
+
+
+def test_cli_knownanswer_refuses_a_duplicate_in_place_of_a_case(tmp_path, monkeypatch, capsys):
+    """Same count, same 195 / 195: one case's row is standing in for another's."""
+    rec = _archived_ka()
+    gone = rec["rows"][100]["case"]
+    rec["rows"][100] = json.loads(json.dumps(rec["rows"][101]))
+    status, _ = _cli_knownanswer(tmp_path, monkeypatch, record=rec)
+    assert status == 1
+    out = capsys.readouterr().out
+    assert "FAILED: known answers: 194 / 195 declared cases present" in out
+    assert tp.ka_identity(gone) in out
+    assert "repeated in place of a declared case" in out
+
+
+def test_cli_knownanswer_keeps_an_executed_case_outside_its_bounds_red(tmp_path, monkeypatch, capsys):
+    """Completeness is not correctness: a full grid with one bad measurement is
+    still a FAILED measurement (exit 1), not a precondition refusal (2)."""
+    rec = _archived_ka()
+    i = _out_of_bounds(rec)
+    status, _ = _cli_knownanswer(tmp_path, monkeypatch, record=rec)
+    assert status == 1
+    assert (f"{tp.ka_identity(rec['rows'][i]['case'])} ran outside its frozen bounds: "
+            "E 0.0900 vs 0.0200 (|e| 0.0700)") in capsys.readouterr().out
+
+
+def test_knownanswer_verdict_reads_each_row_as_the_record_serialises_it():
+    """The verdict judges each row as the record serialises it: a numpy
+    `True_` (which `is True` would reject) and an archived JSON `true` read
+    the same. A malformed row or record is a failure to REPORT, not an
+    exception out of the verdict."""
+    whole = [{"case": c, "ok": np.True_} for c in tp.KA_GRID]
+    assert tp.verification_failures("knownanswer", {"n": 195, "n_ok": 195, "rows": whole}) == []
+    no_id = _archived_ka()
+    no_id["rows"][7] = {"ok": True}
+    assert any("row 7 carries no case identity" in w for w in tp.verification_failures("knownanswer", no_id))
+    for bare in ({"n": 195, "n_ok": 195}, {"rows": None}):
+        assert tp.verification_failures("knownanswer", bare) == ["known answers: the record carries no row list"]
+
+
+def test_knownanswer_verdict_refuses_an_empty_declared_grid(monkeypatch):
+    """Nothing declared and nothing run is not "0 / 0 within the bounds"."""
+    monkeypatch.setattr(tp, "KA_GRID", ())
+    assert tp.verification_failures("knownanswer", {"n": 0, "n_ok": 0, "rows": []})
 
 
 def test_cli_controls_red_on_non_caught_variants_and_dirty_clean():

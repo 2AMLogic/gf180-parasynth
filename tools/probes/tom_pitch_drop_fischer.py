@@ -31,7 +31,9 @@ constants below), not a filter, a residual or an optimiser.
 
 Commands
   knownanswer  analytic decaying tones (closed-form phase, NO DrumsFx):
-               every f/phase/decay/drop cell against the frozen bounds.
+               every f/phase/decay/drop cell against the frozen bounds. The
+               verdict reads the record's ROWS against the declared grid
+               (KA_GRID), never the summary counters (#1451).
   controls     the stub and the injected defects, MOVED/BLIND per property.
   measure      the Fischer takes of one pre-registered split, and the shipped
                engine (and the production host's staircase) at each take's
@@ -58,6 +60,7 @@ import statistics
 import subprocess
 import sys
 import time
+from collections import Counter
 
 import numpy as np
 from scipy.optimize import least_squares, minimize_scalar
@@ -552,6 +555,13 @@ def ka_cases(full=True):
                 cases.append(dict(family="lti", name=name, numer=num, numer_name=nm, f_inf=f, E=0.0,
                                   tau=None, tau_a=ta, phi0=None, sr=48000))
     return cases
+
+
+#: the grid the CLI's `knownanswer` promises to run, bound at import from the
+#: frozen constants above. The verdict measures a record's rows against THIS
+#: and never re-consults the generator, so a generator that yields nothing or
+#: drops a case cannot shrink the grid it is measured against (#1451).
+KA_GRID = tuple(ka_cases(full=True))
 
 
 def ka_signal(c):
@@ -1293,14 +1303,60 @@ def close_provenance(prov: dict) -> dict:
     return prov
 
 
+def ka_identity(case: dict) -> str:
+    """A known-answer case's full identity: every field the generator declares
+    (the numerator is named by `numer_name`), serialised exactly as the record
+    serialises it -- so an archived row and a fresh case compare equal, where
+    an un-rounded `tau_a` would not."""
+    return json.dumps(_json({k: v for k, v in case.items() if k != "numer"}), sort_keys=True)
+
+
+def _listed(c: Counter, show: int = 3) -> str:
+    ids = [k + (f" x{v}" if v > 1 else "") for k, v in sorted(c.items())]
+    return "; ".join(ids[:show]) + (f"; and {len(ids) - show} more" if len(ids) > show else "")
+
+
+def ka_evidence_failures(rows) -> list:
+    """Why a known-answer record is not one executed, in-bounds measurement
+    for EVERY case of the declared grid (empty = it is).
+
+    Read off the rows. The summary counters (`n`, `n_ok`) are for report
+    readers and are not consulted: they come from the same loop as the rows,
+    so a run that lost every case kept them equal (0 / 0) and the verdict
+    `n_ok != n` read it as a pass (#1451).
+
+    BLIND TO: whether a row was MEASURED. A complete set of rows asserting
+    `ok` satisfies this exactly as a real run does; that the rows came from
+    the estimator at a commit is what `provenance` is for."""
+    if not isinstance(rows, list):
+        return ["known answers: the record carries no row list"]
+    want = Counter(ka_identity(c) for c in KA_GRID)
+    got, why = Counter(), []
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict) or not isinstance(r.get("case"), dict):
+            why.append(f"known answers: row {i} carries no case identity")
+            continue
+        got[ka_identity(r["case"])] += 1
+        if _json(r.get("ok")) is not True:
+            why.append(f"known answers: {ka_identity(r['case'])} ran outside its frozen bounds: {r.get('why')}")
+    if not want:
+        why.append("known answers: the declared grid is empty; nothing was promised, so nothing is shown")
+    missing, extra = want - got, got - want
+    if missing:
+        why.append(f"known answers: {sum((want & got).values())} / {sum(want.values())} declared cases present; "
+                   f"absent: {_listed(missing)}")
+    if extra:
+        why.append("known answers: undeclared, or repeated in place of a declared case: " + _listed(extra))
+    return why
+
+
 def verification_failures(cmd: str, res: dict) -> list:
     """Why a knownanswer/controls record must NOT exit green (empty = holds).
     A failed check is exit 1; a scientific REFUSED is exit 0; a Refused
     precondition is exit 2."""
     why = []
     if cmd == "knownanswer":
-        if res["n_ok"] != res["n"]:
-            why.append(f"known answers: {res['n_ok']} / {res['n']} ok")
+        why += ka_evidence_failures(res.get("rows"))
     elif cmd == "controls":
         why += [f"control {m}: {r['verdict']}" for m, r in res["mutants"].items() if r["verdict"] != "CAUGHT"]
         for key in ("clean", "clean_again"):
