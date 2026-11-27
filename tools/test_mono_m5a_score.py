@@ -1,5 +1,6 @@
 import hashlib
 import json
+import pathlib
 
 import pytest
 
@@ -216,19 +217,43 @@ def test_shared_mono_engine_profiles_name_effective_wave_and_every_filter_flag()
     assert legacy["saw_volume_correction_db"] == 0.0
 
 
-def test_saw_cutoff_override_is_scored_on_complete_phrase_and_leaves_pulse_fixed():
+def test_saw_cutoff_override_is_scored_on_complete_phrase_and_leaves_pulse_fixed(monkeypatch, tmp_path):
     import score_m5a_i2s
+    from scipy.io import wavfile
 
+    scorer_write = wavfile.write
+
+    def write_only_under_tmp_path(path, *args, **kwargs):
+        if not pathlib.Path(path).is_relative_to(tmp_path):
+            pytest.fail(f"the scorer wrote {path} outside tmp_path")
+        return scorer_write(path, *args, **kwargs)
+
+    monkeypatch.setattr(wavfile, "write", write_only_under_tmp_path)
+    monkeypatch.setattr(score, "ROOT", tmp_path)
+    default_wav = tmp_path / "build/scorecard/M5A-model.wav"
     common = {"pulse_shape": "pulse479",
               "voice_factory": score_m5a_i2s._candidate_factory}
-    cutoff_reference = int(round(json.loads(score.MANIFEST.read_text())
-                                 ["patch"]["cutoff_measurement"]["f0_hz"]))
+    manifest = json.loads(score.MANIFEST.read_text())
+    cutoff_reference = int(round(manifest["patch"]["cutoff_measurement"]["f0_hz"]))
     baseline = score.measure(**common, model_label="cutoff-control-baseline",
                              saw_cutoff_override=cutoff_reference,
-                             saw_volume_correction_db=0.0)
+                             saw_volume_correction_db=0.0,
+                             output_path=tmp_path / "cutoff-control-baseline.wav")
+    assert not default_wav.exists(), "the baseline call wrote the default M5A model WAV"
+    default_wav.parent.mkdir(parents=True)
+    seeded = b"seeded in place of the archived M5A model WAV\x00\xff\x00\xff"
+    default_wav.write_bytes(seeded)
     candidate = score.measure(**common, model_label="cutoff-control-20000",
                               saw_cutoff_override=20000,
-                              saw_volume_correction_db=-0.45428)
+                              saw_volume_correction_db=-0.45428,
+                              output_path=tmp_path / "cutoff-control-20000.wav")
+    assert default_wav.read_bytes() == seeded, "the candidate call rewrote the default M5A model WAV"
+
+    assert baseline["reference_sha256"] == candidate["reference_sha256"] == manifest["audio"]["sha256"]
+    phrase = [(segment["wave"], int(event["note"])) for segment in manifest["timeline"]["segments"]
+              for event in segment["midi_events"]]
+    assert [(event["wave"], event["midi"]) for event in baseline["event_diagnostics"]] == phrase
+    assert [(event["wave"], event["midi"]) for event in candidate["event_diagnostics"]] == phrase
 
     assert set(candidate["metrics"]) == set(score.TOLERANCES)
     assert candidate["model_configuration"]["saw_cutoff_override_hz"] == 20000

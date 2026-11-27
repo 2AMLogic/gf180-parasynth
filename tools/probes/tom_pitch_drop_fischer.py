@@ -31,7 +31,9 @@ constants below), not a filter, a residual or an optimiser.
 
 Commands
   knownanswer  analytic decaying tones (closed-form phase, NO DrumsFx):
-               every f/phase/decay/drop cell against the frozen bounds.
+               every f/phase/decay/drop cell against the frozen bounds. The
+               verdict reads the record's ROWS against the declared grid
+               in the frozen 8fedbf4 archive (#1451).
   controls     the stub and the injected defects, MOVED/BLIND per property.
   measure      the Fischer takes of one pre-registered split, and the shipped
                engine (and the production host's staircase) at each take's
@@ -58,6 +60,7 @@ import statistics
 import subprocess
 import sys
 import time
+from collections import Counter
 
 import numpy as np
 from scipy.optimize import least_squares, minimize_scalar
@@ -73,6 +76,8 @@ if _REFUSAL_TOOLS not in sys.path:
 import refusal  # noqa: E402
 
 PREREG = ROOT / "docs" / "scorecard" / "tom-pitch-drop-592" / "prereg.json"
+KA_ARCHIVE = PREREG.parent / "rerun-8fedbf4" / "knownanswer.json"
+KA_ARCHIVE_SHA256 = "3f2f1b44779c9cc3b8651b9a021f0fabd29c9658db6f6b6b82305d1e304f9dc4"
 TOMS = ("LT", "MT", "HT")
 
 
@@ -1293,14 +1298,69 @@ def close_provenance(prov: dict) -> dict:
     return prov
 
 
+def ka_identity(case: dict) -> str:
+    """A known-answer case's full identity: every field the generator declares
+    (the numerator is named by `numer_name`), serialised exactly as the record
+    serialises it -- so an archived row and a fresh case compare equal, where
+    an un-rounded `tau_a` would not."""
+    return json.dumps(_json({k: v for k, v in case.items() if k != "numer"}), sort_keys=True)
+
+
+def archived_ka_identities() -> Counter:
+    """Read the promised case identities independently of the live generator."""
+    try:
+        data = KA_ARCHIVE.read_bytes()
+    except OSError as exc:
+        raise Refused("knownanswer-archive", str(exc)) from exc
+    if hashlib.sha256(data).hexdigest() != KA_ARCHIVE_SHA256:
+        raise Refused("knownanswer-archive", f"{KA_ARCHIVE} differs from the frozen 8fedbf4 record")
+    return Counter(ka_identity(row["case"]) for row in json.loads(data)["rows"])
+
+
+def _listed(c: Counter, show: int = 3) -> str:
+    ids = [k + (f" x{v}" if v > 1 else "") for k, v in sorted(c.items())]
+    return "; ".join(ids[:show]) + (f"; and {len(ids) - show} more" if len(ids) > show else "")
+
+
+def ka_evidence_failures(rows) -> list:
+    """Why a known-answer record is not one executed, in-bounds measurement
+    for EVERY case of the declared grid (empty = it is).
+
+    Read off the rows. The summary counters (`n`, `n_ok`) are for report
+    readers and are not consulted: they come from the same loop as the rows,
+    so a run that lost every case kept them equal (0 / 0) and the verdict
+    `n_ok != n` read it as a pass (#1451).
+
+    BLIND TO: whether a row was MEASURED. A complete set of rows asserting
+    `ok` satisfies this exactly as a real run does; that the rows came from
+    the estimator at a commit is what `provenance` is for."""
+    if not isinstance(rows, list):
+        return ["known answers: the record carries no row list"]
+    want = archived_ka_identities()
+    got, why = Counter(), []
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict) or not isinstance(r.get("case"), dict):
+            why.append(f"known answers: row {i} carries no case identity")
+            continue
+        got[ka_identity(r["case"])] += 1
+        if _json(r.get("ok")) is not True:
+            why.append(f"known answers: {ka_identity(r['case'])} ran outside its frozen bounds: {r.get('why')}")
+    missing, extra = want - got, got - want
+    if missing:
+        why.append(f"known answers: {sum((want & got).values())} / {sum(want.values())} declared cases present; "
+                   f"absent: {_listed(missing)}")
+    if extra:
+        why.append("known answers: undeclared, or repeated in place of a declared case: " + _listed(extra))
+    return why
+
+
 def verification_failures(cmd: str, res: dict) -> list:
     """Why a knownanswer/controls record must NOT exit green (empty = holds).
     A failed check is exit 1; a scientific REFUSED is exit 0; a Refused
     precondition is exit 2."""
     why = []
     if cmd == "knownanswer":
-        if res["n_ok"] != res["n"]:
-            why.append(f"known answers: {res['n_ok']} / {res['n']} ok")
+        why += ka_evidence_failures(res.get("rows"))
     elif cmd == "controls":
         why += [f"control {m}: {r['verdict']}" for m, r in res["mutants"].items() if r["verdict"] != "CAUGHT"]
         for key in ("clean", "clean_again"):
@@ -1359,12 +1419,12 @@ def main(argv=None) -> int:
             print(json.dumps(_json(res["judgement"]), indent=1))
         res["inject"] = sorted(INJECT)
         res["provenance"] = close_provenance(prov)
+        failures = verification_failures(a.cmd, res)
     except Refused as e:
         print("REFUSED:", e)
         return 2
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(_json(res), indent=1) + "\n")
-    failures = verification_failures(a.cmd, res)
     for w in failures:
         print("FAILED:", w)
     return 1 if failures else 0
