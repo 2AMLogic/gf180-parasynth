@@ -196,6 +196,15 @@ def response_curve(dev, name, cut_setting, res, amp=0.25):
     return dev.tone_gain_db(FREQS, cut_setting, res, amp)
 
 
+def _measure_response(dev, name, cut_setting, cut_hz, res, amp=0.25):
+    try:
+        gain = response_curve(dev, name, cut_setting, res, amp)
+    except am.InsufficientEvidence as exc:
+        return dict(device=name, cut_setting=cut_setting, cut_hz=cut_hz, res=res,
+                    ok=False, why=str(exc))
+    return response_row(FREQS, np.asarray(gain), cut_hz, name, res, cut_setting)
+
+
 # The resonance at which each device's free ring stops decaying, MEASURED in
 # `--stage selfosc` and written down here so the drive study can put every
 # filter at the same fraction of its own threshold. Surge's Huovilainen
@@ -222,11 +231,14 @@ def stage_peakdrive(dev, name, cut_setting, cut_hz):
     res = 0.9 * ONSET_RES[name]
     for lv in (-60.0, -48.0, -36.0, -24.0, -12.0):
         amp = 10 ** (lv / 20.0)
-        g = np.asarray(response_curve(dev, name, cut_setting, res, amp))
-        r = response_row(FREQS, g, cut_hz, name, res, cut_setting)
+        r = _measure_response(dev, name, cut_setting, cut_hz, res, amp)
         r.update(level_dbfs=lv, onset_res=ONSET_RES[name])
         rows.append(r)
-        print(f"  {name:12s} in {lv:+6.1f} dBFS res {res:.3f}  peak "
+        point = f"  {name:12s} in {lv:+6.1f} dBFS res {res:.3f}"
+        if r.get("ok") is False:
+            print(f"{point}  REFUSED {r['why']}", flush=True)
+            continue
+        print(f"{point}  peak "
               f"{r['peak_db'] and round(r['peak_db'], 1)} dB  Q "
               f"{r['peak_q'] and round(r['peak_q'], 2)}  corner "
               f"{r['corner_hz'] and round(r['corner_hz'], 1)}", flush=True)
@@ -306,12 +318,14 @@ def stage_response(dev, name, points):
     rows = []
     for cut_setting, cut_hz, res in points:
         t0 = time.time()
-        g = response_curve(dev, name, cut_setting, res)
-        r = response_row(FREQS, np.asarray(g), cut_hz, name, res, cut_setting)
+        r = _measure_response(dev, name, cut_setting, cut_hz, res)
         r["secs"] = round(time.time() - t0, 2)
         rows.append(r)
-        print(f"  {name:12s} cut {str(cut_hz or cut_setting):>8s} res {res:5.2f}  "
-              f"corner {r['corner_hz'] and round(r['corner_hz'], 1)}  "
+        point = f"  {name:12s} cut {str(cut_hz or cut_setting):>8s} res {res:5.2f}"
+        if r.get("ok") is False:
+            print(f"{point}  REFUSED {r['why']}", flush=True)
+            continue
+        print(f"{point}  corner {r['corner_hz'] and round(r['corner_hz'], 1)}  "
               f"slope {r['slope_db_oct'] and round(r['slope_db_oct'], 1)}  "
               f"peak {r['peak_db'] and round(r['peak_db'], 1)} dB "
               f"Q {r['peak_q'] and round(r['peak_q'], 2)}", flush=True)
@@ -356,7 +370,10 @@ KIND = {"ours": "ours", "ours-tanh256": "probe", "ours-huovtune": "probe",
 
 def _load(out, stage, dev):
     p = os.path.join(out, f"{stage}-{dev}.json")
-    return json.load(open(p)) if os.path.exists(p) else None
+    if not os.path.exists(p):
+        return None
+    with open(p) as f:
+        return json.load(f)
 
 
 def _f(v, n=1, w=8):
@@ -442,6 +459,9 @@ def report(out):                                                  # noqa: C901
             continue
         for r in rows:
             c, k, sl = r.get("cut_hz"), r.get("corner_hz"), r.get("slope_db_oct")
+            if r.get("why"):
+                print(f"{d:14s} {c:7.0f} REFUSED {r['why']}")
+                continue
             ideal = (ideal_4pole_slope(r["slope_band"], k / 0.435)
                      if (sl is not None and k) else None)
             print(f"{d:14s} {c:7.0f} {_f(k, 1, 8)} {_f(k / c if k and c else None, 3, 6)} "
@@ -461,6 +481,9 @@ def report(out):                                                  # noqa: C901
             continue
         cells = []
         for r in rows:
+            if r.get("why"):
+                cells.append(f"REFUSED ({r['why']})")
+                continue
             pk, q = r.get("peak_db"), r.get("peak_q")
             cells.append(f"{_f(pk, 1, 5)}/{'  --' if not (q and np.isfinite(q)) else '%4.1f' % q}")
         print(f"{d:14s} {rows[0]['res']:6.3f}   " + "  ".join(cells))
@@ -586,7 +609,10 @@ def main(argv=None) -> int:
     devices = [d for d in a.devices.split(",") if d]
     stages = ["selfosc", "response", "tracking", "drive"] if a.stage == "all" else [a.stage]
     cache_path = os.path.join(a.out, "knobs.json")
-    cache = json.load(open(cache_path)) if os.path.exists(cache_path) else {}
+    cache = {}
+    if os.path.exists(cache_path):
+        with open(cache_path) as f:
+            cache = json.load(f)
 
     for name in devices:
         print(f"\n===== {name} =====", flush=True)
@@ -651,7 +677,8 @@ def main(argv=None) -> int:
         for k, v in out.items():
             with open(os.path.join(a.out, f"{k}-{name}.json"), "w") as f:
                 json.dump(v, f, indent=1, default=str)
-        json.dump(cache, open(cache_path, "w"), indent=1)
+        with open(cache_path, "w") as f:
+            json.dump(cache, f, indent=1)
     print(f"\nwritten to {a.out}", flush=True)
     return 0
 
