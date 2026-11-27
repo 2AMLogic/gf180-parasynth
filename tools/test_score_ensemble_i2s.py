@@ -495,3 +495,15 @@ def test_a_caught_control_report_from_the_board_binds_both_sidecars(name):
     assert f"negative control {score.CONTROL_INJECT} CAUGHT" in text
     assert re.search(r"^verify_synth_top: decoded I2S WAV sha256 [0-9a-f]{64}$", text, re.M)
     assert re.search(r"^verify_synth_top: ensemble schedule sha256 [0-9a-f]{64}$", text, re.M)
+
+
+def test_measurement_sources_hash_the_transcript_gate():
+    """Mirror of #1208: the module this scorer calls to validate transcripts
+    must be in its own hashed sources, derived from the import rather than a
+    literal so a future extraction cannot silently fall outside
+    `measurement_source_sha256`."""
+    helper = "tools/" + pathlib.Path(score.i2s_transcript.__file__).name
+    assert helper in score.MEASUREMENT_SOURCES
+    root = pathlib.Path(score.ROOT)
+    missing = [rel for rel in score.MEASUREMENT_SOURCES if not (root / rel).is_file()]
+    assert missing == []

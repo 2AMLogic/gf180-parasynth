@@ -193,3 +193,15 @@ def test_every_committed_m5a_run_that_binds_a_wav_still_passes_with_its_own_dige
                                                case_id=controls_line.group(1))
         assert controls["simulator"] in ("verilator", "iverilog"), rel
     assert len(bound) >= 16, bound
+
+
+def test_measurement_sources_hash_the_transcript_gate():
+    """Mirror of #1208: the module this scorer calls to validate transcripts
+    must be in its own hashed sources, derived from the import rather than a
+    literal so a future extraction cannot silently fall outside
+    `measurement_source_sha256`."""
+    helper = "tools/" + pathlib.Path(scorer.i2s_transcript.__file__).name
+    assert helper in scorer.MEASUREMENT_SOURCES
+    root = pathlib.Path(scorer.ROOT)
+    missing = [rel for rel in scorer.MEASUREMENT_SOURCES if not (root / rel).is_file()]
+    assert missing == []

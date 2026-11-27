@@ -19,6 +19,20 @@ import i2s_transcript
 import run_case
 import voice_fx as vf
 
+MEASUREMENT_SOURCES = (
+    "tools/score_m5a_i2s.py", "tools/i2s_transcript.py",
+    "tools/verify_m5a_filter2x_i2s.py",
+    "tools/mono_m5a_score.py", "model/filter_rate_chain.py",
+    "model/synth_top_model.py", "model/voice_fx.py",
+    "rtl-sketch/verify_synth_top.py", "rtl-sketch/tb_top_bx.v",
+    "rtl-sketch/synth_top.v", "rtl-sketch/spi_ctl.v",
+    "rtl-sketch/voice_dp.v", "rtl-sketch/ladder_dp_n.v",
+    "rtl-sketch/rate_conv_2x.v", "rtl-sketch/i2s_tx.v",
+    "rtl-sketch/osc_2x_saw_bank.v", "rtl-sketch/osc_2x_saw_path.v",
+    "rtl-sketch/polyblep_saw_pair.v", "rtl-sketch/decimate_2x_tm_sym.v",
+    "rtl-sketch/osc_substep_pair.v",
+)
+
 
 def _candidate_factory(*, pulse_2x=False):
     cfg = {**vf.LADDER_CFG, "oversample": 2}
@@ -144,17 +158,6 @@ def main(argv=None) -> int:
                             check=True, capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
                                 check=True, capture_output=True, text=True).stdout.strip())
-    source_files = (
-        "tools/score_m5a_i2s.py", "tools/verify_m5a_filter2x_i2s.py",
-        "tools/mono_m5a_score.py", "model/filter_rate_chain.py",
-        "model/synth_top_model.py", "model/voice_fx.py",
-        "rtl-sketch/verify_synth_top.py", "rtl-sketch/tb_top_bx.v",
-        "rtl-sketch/synth_top.v", "rtl-sketch/spi_ctl.v",
-        "rtl-sketch/voice_dp.v", "rtl-sketch/ladder_dp_n.v",
-        "rtl-sketch/rate_conv_2x.v", "rtl-sketch/i2s_tx.v",
-        "rtl-sketch/osc_2x_saw_bank.v", "rtl-sketch/osc_2x_saw_path.v",
-        "rtl-sketch/polyblep_saw_pair.v", "rtl-sketch/decimate_2x_tm_sym.v",
-        "rtl-sketch/osc_substep_pair.v")
     engine = m5a.engine_configuration("selected")
     provenance = run_case.provenance(
         run_case.model_input_hashes({
@@ -190,7 +193,7 @@ def main(argv=None) -> int:
          "scored_audio_artifact_sha256": hashlib.sha256(candidate_audio.read_bytes()).hexdigest(),
          "measurement_source_sha256": {
              rel: hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
-             for rel in source_files}})
+             for rel in MEASUREMENT_SOURCES}})
     provenance["engine"] = "integrated-rtl"
     record = {
         "engine": "integrated-rtl",

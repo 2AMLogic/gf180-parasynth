@@ -202,6 +202,15 @@ def test_the_scored_record_binds_its_own_measurement_sources():
     assert missing == []
 
 
+def test_measurement_sources_hash_the_transcript_gate():
+    """Mirror of #1208: the module this scorer calls to validate transcripts
+    must be in its own hashed sources, derived from the import rather than a
+    literal so a future extraction cannot silently fall outside
+    `measurement_source_sha256`."""
+    helper = "tools/" + pathlib.Path(score.i2s_transcript.__file__).name
+    assert helper in score.MEASUREMENT_SOURCES
+
+
 def test_the_committed_record_is_an_integrated_rtl_record_bound_to_its_evidence():
     """The anchor this issue exists to produce, checked as it stands on disk:
     a Drums row whose engine is the chip, whose audio artefact is committed,

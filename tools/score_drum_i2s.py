@@ -58,7 +58,8 @@ ANALYSIS_SCHEMA = "drum-i2s-score-v1"
 # The sources that decide what this number is. Hashed into the record so a
 # reader can tell a re-measurement from a changed measurement.
 MEASUREMENT_SOURCES = (
-    "tools/score_drum_i2s.py", "tools/run_case.py", "tools/scorecard.py",
+    "tools/score_drum_i2s.py", "tools/i2s_transcript.py",
+    "tools/run_case.py", "tools/scorecard.py",
     "model/drums_fx.py", "model/modal_fixed.py", "model/audio_measure.py",
     "model/synth_top_model.py", "rtl-sketch/verify_synth_top.py",
     "rtl-sketch/tb_top_bx.v", "rtl-sketch/synth_top.v", "rtl-sketch/spi_ctl.v",

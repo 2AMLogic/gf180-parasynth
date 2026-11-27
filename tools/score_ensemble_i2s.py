@@ -79,7 +79,8 @@ CONTROL_INJECT = "DRUM_BUS_STALE"
 #: Sources whose content decides what this number means. Hashed onto the record
 #: so a later reader can tell a stale anchor from a current one.
 MEASUREMENT_SOURCES = (
-    "tools/score_ensemble_i2s.py", "tools/compare_ensemble_candidate.py",
+    "tools/score_ensemble_i2s.py", "tools/i2s_transcript.py",
+    "tools/compare_ensemble_candidate.py",
     "tools/run_case.py", "tools/scorecard.py", "model/audio_measure.py",
     "model/drums_fx.py", "model/voice_fx.py", "model/synth_top_model.py",
     "audition/patches.py",
