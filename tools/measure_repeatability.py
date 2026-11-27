@@ -175,6 +175,56 @@ def legacy_grid(accent: str = "1. No Accent", chain: str = "1. Digital"):
     return grid(LEGACY / chain / accent, LEG_RE)
 
 
+#: What one Digital accent folder of the current pack holds: the six DECAY
+#: letters x the six TONE positions, named `BD <accent> 808 Decay <letter>
+#: <tone:02d>.wav`. That is what `refaudio/index/808-from-mars.tsv` lists
+#: under `01. Bass Drum/Clean/Digital/{A,B}`, 36 files an accent, and
+#: `test_the_expected_settings_are_the_ones_the_pack_index_lists` holds this
+#: pattern to that index. It is a SET, not a count: `CUR_RE` takes any
+#: two-digit tone, so tone 07 where tone 06 was keeps 36 files and loses a
+#: setting, and it keys on decay and tone alone, so the other accent's file
+#: passes for one of this accent's (#1436).
+TRAVEL_CHAIN = "Digital"
+TRAVEL_ACCENTS = ("A", "B")
+DECAYS = "ABCDEF"
+TONES = tuple(range(1, 7))
+
+
+def setting_name(accent: str, decay: str, tone: int) -> str:
+    """The indexed file name of one setting of the Digital chain."""
+    return f"BD {accent} 808 Decay {decay} {tone:02d}.wav"
+
+
+def travel_grids() -> dict[str, dict[tuple[str, int], pathlib.Path]]:
+    """Each travel accent's 36 indexed settings, by name and in measurement
+    order, or REFUSED -- and by then nothing has been opened.
+
+    `grid()` returns whatever a folder holds. `knob_travel` aggregated that,
+    so a partly fetched cache printed a shorter travel as the machine's whole
+    knob range, and a hole in accent B reached the JSON, because
+    `cross_session` counts accent A alone (#1436). So every path is built from
+    the naming pattern above and must be a file; a WAV the index does not list
+    is not returned, so it is never measured."""
+    out: dict = {}
+    missing: list[str] = []
+    for accent in TRAVEL_ACCENTS:
+        folder = CURRENT / TRAVEL_CHAIN / accent
+        out[accent] = {(d, t): folder / setting_name(accent, d, t)
+                       for d in DECAYS for t in TONES}
+        gone = [f"Decay {d} {t:02d}" for (d, t), p in out[accent].items()
+                if not p.is_file()]
+        if len(gone) == len(out[accent]):
+            missing.append(f"{TRAVEL_CHAIN}/{accent} holds none of the "
+                           f"{len(out[accent])} indexed settings")
+        elif gone:
+            missing.append(f"{TRAVEL_CHAIN}/{accent} is missing {len(gone)} of the "
+                           f"{len(out[accent])} indexed settings: {', '.join(gone)}")
+    if missing:
+        raise Refused("\n         ".join(missing)
+                      + " -- run:\n         " + FETCH)
+    return out
+
+
 # ===========================================================================
 # 2. The metrics -- the board's own estimators, imported, not re-implemented
 # ===========================================================================
@@ -664,11 +714,15 @@ def self_test(report=print) -> tuple[bool, dict]:
 #   all. That makes f0 the one metric here that is cleanly attributable.
 # ===========================================================================
 def knob_travel(report=print) -> dict:
-    """Every board metric's full range across the 6 x 6 decay/tone grid."""
+    """Every board metric's full range across the 6 x 6 decay/tone grid.
+
+    REFUSED, naming each accent and setting that is absent, unless both
+    Digital accent folders hold the whole grid (#1436): the travel is the
+    machine's entire knob range, or it is not a travel."""
+    grids = travel_grids()
     plan = metrics()
     out: dict = {}
-    for accent in ("A", "B"):
-        g = current_grid(accent, "Digital")
+    for accent, g in grids.items():
         vals = collections.defaultdict(list)
         per_axis = {"decay": collections.defaultdict(list), "tone": collections.defaultdict(list)}
         for (d, t), path in sorted(g.items()):
