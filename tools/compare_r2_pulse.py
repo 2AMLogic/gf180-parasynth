@@ -56,34 +56,15 @@ def _load(paths):
     return rows, meta
 
 
-def _key(r):
-    """Pair by the SCHEDULE's point. A repair that changes the rendered patch
-    (e.g. drive compensation) must still pair with R1's row for the same
-    condition; the first version keyed on the rendered patch, paired nothing,
-    and reported acceptance over zero measured points."""
-    p = r.get("nominal") or r["patch"]
-    return (p["waves"][0], r["note"], p["cutoff"][0], p["q"], p["drive"])
-
-
 def compare(rows, dev=mp.DEV_CONDITIONS):
     # (the "fresh" schedule has no development points: none of its notes is 72/84/96)
-    by = {(r["engine"],) + _key(r): r for r in rows}
     out, counts = [], {"measured": 0, "refused": 0, "not_run": 0}
-    for k, cand in sorted(by.items()):
-        if k[0] != "pulse2x":
-            continue
-        base = by.get(("r1",) + k[1:])
-        wave, note, cut, q, drv = k[1:]
+    for (wave, note, cut, q, drv), base, cand, reason in mp.scheduled_pulse_pairs(rows):
         rec = {"wave": wave, "note": note, "cutoff": cut, "q": q, "drive": drv,
                "development": (note, cut, q, drv) in dev and wave == "pulse29"}
-        if base is None:
-            rec["verdict"] = "NOT RUN (no R1 row)"
-            counts["not_run"] += 1
-            out.append(rec)
-            continue
-        if cand["verdict"] != "MEASURED" or base["verdict"] != "MEASURED":
-            rec["verdict"] = f"NO VERDICT (r1 {base['verdict']}, candidate {cand['verdict']})"
-            counts["refused"] += 1
+        if reason is not None:
+            rec["verdict"] = reason
+            counts["not_run" if reason == mp.NO_R1_ROW else "refused"] += 1
             out.append(rec)
             continue
         counts["measured"] += 1
@@ -91,7 +72,7 @@ def compare(rows, dev=mp.DEV_CONDITIONS):
         fails = []
         for prop, worse in PROPS:
             b, c = ob.get(prop), oc.get(prop)
-            if b is None or c is None or "refused" in ob or "refused" in oc:
+            if b is None or c is None:
                 rec[prop] = {"r1": b, "candidate": c, "verdict": "NO VERDICT"}
                 continue
             d = round(c - b, 3)
