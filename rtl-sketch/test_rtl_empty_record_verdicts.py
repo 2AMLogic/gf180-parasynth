@@ -143,13 +143,14 @@ def _fake_synth_top_out(tmp_path: pathlib.Path, cmds: list, i2s_lines: list[str]
     )
 
 
+@pytest.mark.parametrize("period", [999999, -352])
 def test_verify_synth_top_zero_compared_i2s_periods_is_no_verdict(
-        tmp_path, monkeypatch, capsys):
+        tmp_path, monkeypatch, capsys, period):
     """Pre-fix: `i2s` with one row whose period index `p >= n` broke out of
     the loop on row 0 (0 periods compared), printed `PASS -- 1 I2S periods
     decoded from the wire, every one identical to the model` and exited 0."""
     cmds, _, _ = vst.script(short=True)
-    fake = _fake_synth_top_out(tmp_path, cmds, ["999999 0 0 32 32"])
+    fake = _fake_synth_top_out(tmp_path, cmds, [f"{period} 0 0 32 32"])
     monkeypatch.setattr(vst, "simulate", lambda *a, **kw: fake)
     code = vst.main(["--short", "--outdir", str(tmp_path)])
     out = capsys.readouterr().out
@@ -204,7 +205,7 @@ def test_verify_synth_top_rule8_real_match_passes_and_core_mismatch_fails(
     # Real match over 5 periods inside 0..n-1: PASS (exit 0)
     i2s_ok = [f"{p} {int(exp_i2s[p])} {int(exp_i2s[p])} 32 32" for p in range(5)]
     samp_ok = [f"{p} {int(exp_s[p])}" for p in range(5)]
-    fake_ok = _fake_synth_top_out(tmp_path, cmds, i2s_ok, samp_ok)
+    fake_ok = _fake_synth_top_out(tmp_path, cmds, i2s_ok, samp_ok + [f"{-n} 123"])
     monkeypatch.setattr(vst, "simulate", lambda *a, **kw: fake_ok)
     code = vst.main(["--short", "--outdir", str(tmp_path)])
     out = capsys.readouterr().out

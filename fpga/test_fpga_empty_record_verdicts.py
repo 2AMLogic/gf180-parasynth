@@ -72,12 +72,13 @@ def _fake_fixture_out(tmp_path: pathlib.Path, i2s_lines: list[str],
     return out, truth, n_fix
 
 
+@pytest.mark.parametrize("period", [999999, -8380])
 def test_verify_fixture_zero_compared_i2s_periods_is_no_verdict(
-        tmp_path, monkeypatch, capsys):
+        tmp_path, monkeypatch, capsys, period):
     """Pre-fix: `i2s` with one row whose period `p_ >= n` broke out of the
     loop on row 0 (0 periods compared), printed `PASS -- 1 I2S periods (0 ms
     of audio) ...` and exited 0."""
-    fake, _, _ = _fake_fixture_out(tmp_path, ["999999 0 0 32 32"])
+    fake, _, _ = _fake_fixture_out(tmp_path, [f"{period} 0 0 32 32"])
     monkeypatch.setattr(vst, "simulate", lambda *a, **kw: fake)
     code = vf.main(["--outdir", str(tmp_path)])
     out = capsys.readouterr().out
@@ -111,7 +112,7 @@ def test_verify_fixture_rule8_real_match_passes_and_core_mismatch_fails(
 
     i2s_ok = [f"{p} {int(exp_i2s[p])} {int(exp_i2s[p])} 32 32" for p in range(5)]
     samp_ok = [f"{p} {int(exp_s[p])}" for p in range(5)]
-    fake_ok, _, _ = _fake_fixture_out(tmp_path, i2s_ok, samp_ok)
+    fake_ok, _, _ = _fake_fixture_out(tmp_path, i2s_ok, samp_ok + [f"{-n} 123"])
     monkeypatch.setattr(vst, "simulate", lambda *a, **kw: fake_ok)
     code = vf.main(["--outdir", str(tmp_path)])
     out = capsys.readouterr().out
@@ -152,6 +153,8 @@ def test_verify_uart_bridge_empty_scenarios_is_no_verdict(
         tmp_path, monkeypatch, capsys):
     """Pre-fix: `SCENARIOS = {}` left `work = []`, `all([])` was True,
     wrote `{"state": "PASS", "runs": {}}` and exited 0."""
+    summary = tmp_path / "controls.json"
+    summary.write_text(json.dumps({"state": "PASS", "runs": {"phrase": "PASS"}}))
     monkeypatch.setattr(vub, "SCENARIOS", {})
     monkeypatch.setattr(vub, "simulate", lambda *a, **kw: (_ for _ in ()).throw(
         AssertionError("simulate() must not run when there are no scenarios")))
@@ -159,7 +162,7 @@ def test_verify_uart_bridge_empty_scenarios_is_no_verdict(
     out = capsys.readouterr().out
     assert code == NO_VERDICT, out
     assert "NO VERDICT" in out, out
-    assert not (tmp_path / "controls.json").exists(), "controls.json must not record PASS"
+    assert json.loads(summary.read_text()) == {"state": "REFUSED", "runs": {}}
 
 
 def test_verify_uart_bridge_analyze_empty_planned_is_not_clean(tmp_path):
@@ -235,3 +238,65 @@ def test_verify_uart_bridge_rule8_pass_and_fail_runs_keep_their_exits(
     code_fail = vub.main(["--scenario", "phrase", "--outdir", str(tmp_path)])
     capsys.readouterr()
     assert code_fail == FAIL
+
+
+@pytest.mark.parametrize("scenario, defect, state, code, diagnostic", [
+    ("phrase", "missing-audio", "NO VERDICT", 2, "0 of 634 required I2S periods decoded"),
+    ("phrase", "strobe", "FAIL", 1, "worst_strobe_cycle"),
+    ("overflow", None, "FAIL", 1, "expected 6 ERR(event-queue overflow), got 0"),
+    ("held", None, "NO VERDICT", 2, "release"),
+    ("reset-mid", None, "NO VERDICT", 2, "reset"),
+])
+def test_uart_empty_capture_verdict(tmp_path, monkeypatch, capsys, scenario, defect,
+                                    state, code, diagnostic):
+    def simulate(sc, inject, path):
+        path.mkdir()
+        run = _empty_uart_run(path, planned=[[]], scenario=sc,
+                              extra_report=["SEG 0 origin_tcc 0 periods 0 strobes 0"])
+        if defect == "missing-audio":
+            body = [("write", 0, 0, 0, 0)]
+            rows = vub.uh.plan(body)
+            frame = rows[0].apply_frame
+            run.update(bodies=[body], planned=[rows], model_tail=634 - frame)
+            (path / "wrs.txt").write_text(f"{frame} 0 0 0 0 {frame}\n")
+            (path / "txd.txt").write_text(f"{frame} {vub.uh.RSP_ACK}\n{frame} 0\n")
+            run["files"].update(wrs=path / "wrs.txt", txd=path / "txd.txt")
+            run["report"][1] = "writes drained 1, spi+uart slot collisions 0"
+            run["report"][-1] = "TX bytes captured 2"
+        elif defect == "strobe":
+            run["report"][2] = run["report"][2].replace("cycle 100", "cycle 256")
+        (path / "transcript.txt").write_text("\n".join(run["report"]))
+        return run
+
+    monkeypatch.setattr(vub, "simulate", simulate)
+    rc = vub.main(["--scenario", scenario, "--outdir", str(tmp_path)])
+    output = capsys.readouterr().out
+    child = json.loads((tmp_path / scenario / "verification.json").read_text())
+    assert rc == code, output
+    assert (child["state"], child["exit_code"]) == (state, code)
+    if defect == "strobe":
+        assert child["comparison"][diagnostic] == 256
+    else:
+        assert diagnostic in output
+    assert json.loads((tmp_path / "controls.json").read_text()) == {
+        "state": "REFUSED" if code == 2 else state, "runs": {scenario: state}}
+
+
+def test_uart_injection_without_comparison_propagates_refusal(tmp_path, monkeypatch):
+    def simulate(sc, inject, path):
+        path.mkdir()
+        run = _empty_uart_run(path, planned=[[]], scenario=sc,
+                              extra_report=["SEG 0 origin_tcc 0 periods 0 strobes 0"])
+        run["inject"] = inject
+        # The expected checksum ERR is present. No comparison demonstrated a defect.
+        tx = path / "txd.txt"
+        tx.write_text("".join(f"0 {b}\n" for b in (vub.uh.RSP_ERR, vub.uh.ERR_CHECKSUM, 0, 0)))
+        run["files"]["txd"] = tx
+        run["report"][-1] = "TX bytes captured 4"
+        (path / "transcript.txt").write_text("\n".join(run["report"]))
+        return run
+
+    monkeypatch.setattr(vub, "simulate", simulate)
+    rc = vub.main(["--inject", "UART_NO_CHECKSUM", "--outdir", str(tmp_path)])
+    child = json.loads((tmp_path / "drop-byte-inject-UART_NO_CHECKSUM/verification.json").read_text())
+    assert (rc, child["state"], child["exit_code"]) == (2, "NO VERDICT", 2)
