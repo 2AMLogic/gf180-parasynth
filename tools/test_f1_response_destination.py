@@ -414,3 +414,66 @@ def test_a_stated_path_is_relative_inside_the_checkout_and_absolute_outside(tmp_
     # stated where it actually went, not relative to a cwd nobody kept
     assert rc.stated_path(pathlib.Path("elsewhere/x.json")) \
         == str(pathlib.Path("elsewhere/x.json").resolve())
+
+
+#: Each CLI that reaches the F1 curve writer, as (its `main`, the module and
+#: class it builds its filter path from, the double for that class, the
+#: arguments of a clean F1A, the file name its curve is written under).
+_CLIS = {
+    "model": (rc, fp, "SelectedFilterPath", _CurveDouble, ["F1A"], MODEL_CURVE),
+    "rtl": (score, rtlpath, "RtlFilterChainPath", _rtl_double(), ["--case", "F1A"],
+            RTL_CURVE),
+}
+
+
+def _clean_run_into(cli, monkeypatch, results):
+    """One clean F1A through the named CLI, its curve written into `results`.
+    Returns the CLI's exit status."""
+    module, paths, cls, double, argv, _ = _CLIS[cli]
+    monkeypatch.setattr(paths, cls, double)
+    return module.main([*argv, "--results", str(results)])
+
+
+@pytest.mark.parametrize("cli, where", [(cli, where) for cli in _CLIS
+                                        for where in ("outside", "inside")])
+def test_an_absolute_results_directory_records_the_target_of_the_curve_filename_symlink(
+        board, monkeypatch, tmp_path, cli, where):
+    """#1435: the absolute spelling of #1415's retargeting control, through
+    both CLIs that reach the F1 curve writer. A symlink AT the curve filename
+    receives the write, and the record states that link by its own name -- so
+    once the link is retargeted, the name opens the replacement's `{}` and no
+    longer the measured curve. The record must name the file the write landed
+    in: relative to the checkout when that file is inside it, absolute when it
+    is not.
+
+    An absolute `--results` is the board's own default (`ROOT / "build" /
+    "scorecard"`), and the RTL scorer's rule for every spelling, so it is the
+    spelling the published rows are written under. Checked on the LITERAL
+    strings of both fields that carry the path.
+
+    What a pass does not establish: that the named file's BYTES are pinned. A
+    link moved between the write and the resolution, or the target itself
+    replaced afterwards, is not guarded against."""
+    candidate = (tmp_path if where == "outside" else board["base"]) / "candidate"
+    candidate.mkdir()
+    # the premise of each spelling -- and that no symlink sits on the way to
+    # the directory, so only the filename's own link is under test
+    assert candidate.is_absolute()
+    assert candidate.is_relative_to(rc.ROOT) == (where == "inside")
+    assert candidate.resolve() == candidate
+    original, replacement = candidate / "curve-v1.json", candidate / "curve-v2.json"
+    original.write_text("{}")
+    replacement.write_text("{}")
+    link = candidate / _CLIS[cli][5]
+    link.symlink_to(original.name)
+
+    assert _clean_run_into(cli, monkeypatch, candidate) == 0
+    record = json.loads((candidate / "F1A.json").read_text())
+    measured = original.read_bytes()
+    assert len(_gains(measured)) == len(GRID)        # the first target received the write
+    link.unlink()
+    link.symlink_to(replacement.name)
+    assert _curve_named_by(record) == measured, "the record follows the retargeted symlink"
+    stated = str(original.relative_to(rc.ROOT) if where == "inside" else original)
+    assert record["provenance"]["artefacts"]["ours"] == stated
+    assert record["audio"].endswith(f"ours {stated}")

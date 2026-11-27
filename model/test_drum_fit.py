@@ -14,9 +14,15 @@ A control that cannot be shown wrong proves nothing, so
 `test_the_whole_span_hann_split_is_the_artefact_it_is_recorded_as` asserts the
 withdrawn method's error, not just the new method's accuracy.
 
+The reference readers are held to their inventory as well (#1420). Each consumes
+the 25 takes the knob dial encodes for its voice, by name, and refuses its
+own law when one is absent, is a directory, or has been replaced by a file of
+another name. A glob sees only what is on disk, so a missing take used to leave
+a row averaged over four takes with nothing recording the loss.
+
     .venv/bin/python -m pytest model/test_drum_fit.py -q
 """
-import os, sys
+import glob, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audition"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
@@ -222,3 +228,185 @@ def test_a_short_window_fft_invents_a_peak_where_band_energy_does_not():
         sh = df.band_energy_interval(x, SR, edges, 0.0, t1)
         assert np.argmax(sh) == 0, (t1, sh)         # the 20-80 Hz band, every time
         assert sh[0] > 75.0, (t1, sh)
+
+
+KNOB_POSITIONS = ["0.0", "2.5", "5.0", "7.5", "10.0"]
+KNOB_VALUES = [0.0, 2.5, 5.0, 7.5, 10.0]
+
+
+def _take(voice: str, tone: float, decay: float, sr: int = 44100) -> np.ndarray:
+    """A synthetic take for knob position (tone, decay). The two filename
+    fields are made distinguishable in what the readers measure -- the bass
+    drum's body frequency follows TUNING and its decay follows DECAY, the
+    snare's noise share follows SNAPPY -- so a row can be shown to rest on
+    five DIFFERENT takes. It stands in for audio and claims nothing about the
+    machine."""
+    if voice == "BD":
+        t = np.arange(int(0.10 * sr)) / sr
+        return 0.5 * np.exp(-t / (0.02 + 0.02 * decay)) * np.sin(2 * np.pi * (44.0 + 2.0 * tone) * t)
+    x = df.synthetic_mixture(0.02 * decay / 2.5, sr=sr, dur=0.10,
+                             tone_hz=(160.0 + tone, 320.0 + 2.0 * tone),
+                             seed=int(tone * 10 + decay * 100))
+    return 0.5 * x / np.abs(x).max()
+
+
+def _make_corpus(root, voices=("BD", "SD")) -> None:
+    """Every take the knob dial encodes for each voice, in the reference set's
+    layout `<voice>8/<VOICE><tone><decay>.WAV`, and the cowbell the report
+    reads by its exact name once the two readers are done."""
+    from scipy.io import wavfile
+    files = {f"{v.lower()}8/{v}{a}{b}.WAV": _take(v, k1, k2)
+             for v in voices for a, k1 in df.KNOB.items() for b, k2 in df.KNOB.items()}
+    files["cb8/CB.WAV"] = _take("SD", 5.0, 5.0)
+    for rel, x in files.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        wavfile.write(str(p), 44100, np.round(x * 32767).astype(np.int16))
+
+
+def _section(out: str, title: str) -> list[str]:
+    """The data rows of the report section whose title holds `title`, its
+    column header skipped -- or [] when that section never printed."""
+    lines = out.splitlines()
+    for i, line in enumerate(lines):
+        if title in line:
+            rows = []
+            for nxt in lines[i + 2:]:
+                if not nxt.strip():
+                    break
+                rows.append(nxt)
+            return rows
+    return []
+
+
+def _positions(rows: list[str]) -> list[str]:
+    """The knob position that begins each report row."""
+    return [r.split()[0] for r in rows]
+
+
+def test_a_complete_set_reaches_the_knob_curve_with_five_takes_in_every_law_row(tmp_path):
+    _make_corpus(tmp_path, ("SD",))
+    c = df.knob_curve(str(tmp_path), "SD")
+    assert len(c["share"]) == 25
+    assert sorted(c["law"]) == KNOB_VALUES
+    assert {k2: sum(1 for k in c["share"] if k[1] == k2) for k2 in c["law"]} == dict.fromkeys(c["law"], 5)
+    means = [c["law"][k2][0] for k2 in sorted(c["law"])]
+    assert all(b > a for a, b in zip(means, means[1:])), means
+
+
+def test_a_complete_set_reaches_the_decay_law_with_five_takes_in_every_row(tmp_path):
+    _make_corpus(tmp_path, ("BD",))
+    law = df.bd_decay_law(str(tmp_path))
+    assert sorted(law["hz"]) == KNOB_VALUES
+    assert all(len(v) == 5 for v in law["hz"].values())
+    assert all(len(v) == 5 for v in law["taus"].values())
+    for k2 in law["hz"]:
+        assert sorted(law["hz"][k2]) == pytest.approx([44.0, 49.0, 54.0, 59.0, 64.0], abs=0.5), k2
+    taus = [float(np.mean(law["taus"][k2])) for k2 in sorted(law["taus"])]
+    assert all(b > a for a, b in zip(taus, taus[1:])), taus
+
+
+def test_the_inventory_is_what_the_readers_sorted_globs_returned_on_a_complete_corpus(tmp_path):
+    """Same paths, same order, as the globs the readers used before #1420 --
+    so a complete corpus is read exactly as it was, and the report's row order
+    and its means cannot move."""
+    _make_corpus(tmp_path)
+    root = str(tmp_path)
+    for voice, pats in (("BD", ("BD????.WAV", "BD*.WAV")), ("SD", ("SD????.WAV",))):
+        for pat in pats:
+            old = sorted(glob.glob(os.path.join(root, voice.lower() + "8", pat)))
+            assert df.reference_takes(root, voice) == old, (voice, pat)
+    names = [os.path.basename(p) for p in df.reference_takes(root, "BD")]
+    assert names == sorted(f"BD{a}{b}.WAV" for a in df.KNOB for b in df.KNOB)
+    assert names[:5] == ["BD0000.WAV", "BD0010.WAV", "BD0025.WAV", "BD0050.WAV", "BD0075.WAV"]
+
+
+def test_the_cli_reports_both_laws_from_a_complete_corpus(tmp_path, capsys):
+    """Positive control for every refusal below: with all fifty takes present
+    the report runs to its end and exits 0 with five rows in each law."""
+    _make_corpus(tmp_path)
+    assert df.main(["--refs", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert _positions(_section(out, "the SNAPPY law")) == KNOB_POSITIONS
+    assert _positions(_section(out, "the DECAY law")) == KNOB_POSITIONS
+    assert "REFUSED" not in out
+
+
+def test_the_cli_refuses_the_snappy_law_before_printing_it_when_a_take_is_absent(tmp_path, capsys):
+    _make_corpus(tmp_path)
+    (tmp_path / "sd8" / "SD0025.WAV").unlink()
+    assert df.main(["--refs", str(tmp_path)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "sd8/SD0025.WAV" in out
+    assert "the SNAPPY law" not in out
+
+
+def test_the_cli_refuses_the_decay_law_before_printing_it_and_keeps_the_complete_snappy_law(tmp_path, capsys):
+    """The check is limited to the set each reader consumes: the snare's set is
+    complete, so its law is published; the bass drum's is not, so its law is
+    refused -- by name, before a row of it prints, where the glob used to
+    average the DECAY 2.5 row over four takes."""
+    _make_corpus(tmp_path)
+    (tmp_path / "bd8" / "BD0025.WAV").unlink()
+    assert (tmp_path / "bd8" / "BD5050.WAV").is_file()
+    assert df.main(["--refs", str(tmp_path)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "bd8/BD0025.WAV" in out
+    assert _positions(_section(out, "the SNAPPY law")) == KNOB_POSITIONS
+    assert "the DECAY law" not in out
+
+
+_READERS = [("SD", lambda root: df.knob_curve(root, "SD")), ("BD", df.bd_decay_law)]
+_READER_IDS = ["snappy_law", "decay_law"]
+
+
+@pytest.mark.parametrize("voice,read", _READERS, ids=_READER_IDS)
+def test_a_reader_names_an_absent_take(tmp_path, voice, read):
+    _make_corpus(tmp_path, (voice,))
+    (tmp_path / f"{voice.lower()}8" / f"{voice}0025.WAV").unlink()
+    with pytest.raises(df.Refused) as e:
+        read(str(tmp_path))
+    assert e.value.missing == [f"{voice.lower()}8/{voice}0025.WAV"]
+
+
+@pytest.mark.parametrize("voice,read", _READERS, ids=_READER_IDS)
+def test_an_equal_count_substitute_is_refused_by_name_not_by_a_parsing_error(tmp_path, voice, read):
+    """The substitute keeps the file count and still matches the reader's old
+    glob. The old reader then read it as a take and died in `KNOB['99']` -- a
+    KeyError, which is not a diagnostic: it names no take and says no law."""
+    _make_corpus(tmp_path, (voice,))
+    d = tmp_path / f"{voice.lower()}8"
+    (d / f"{voice}0025.WAV").rename(d / f"{voice}9999.WAV")
+    with pytest.raises(df.Refused) as e:
+        read(str(tmp_path))
+    assert e.value.missing == [f"{voice.lower()}8/{voice}0025.WAV"]
+    assert not isinstance(e.value, KeyError)
+
+
+@pytest.mark.parametrize("voice,read", _READERS, ids=_READER_IDS)
+def test_a_directory_at_a_wav_path_is_not_a_take(tmp_path, voice, read):
+    _make_corpus(tmp_path, (voice,))
+    p = tmp_path / f"{voice.lower()}8" / f"{voice}0025.WAV"
+    p.unlink()
+    p.mkdir()
+    with pytest.raises(df.Refused) as e:
+        read(str(tmp_path))
+    assert e.value.missing == [f"{voice.lower()}8/{voice}0025.WAV"]
+
+
+@pytest.mark.parametrize("voice,read,n", [("SD", lambda root: df.knob_curve(root, "SD")["share"], 25),
+                                              ("BD", lambda root: df.bd_decay_law(root)["hz"], 5)],
+                             ids=_READER_IDS)
+def test_a_reader_requires_only_the_takes_it_consumes(tmp_path, voice, read, n):
+    _make_corpus(tmp_path, (voice,))
+    assert len(read(str(tmp_path))) == n
+
+
+@pytest.mark.parametrize("present,read,absent", [("BD", _READERS[0][1], "SD"), ("SD", df.bd_decay_law, "BD")],
+                         ids=["bd_present_reads_sd", "sd_present_reads_bd"])
+def test_a_reader_names_every_take_of_its_own_set_and_no_other_when_its_voice_is_absent(
+        tmp_path, present, read, absent):
+    _make_corpus(tmp_path, (present,))
+    with pytest.raises(df.Refused) as e:
+        read(str(tmp_path))
+    assert e.value.missing == sorted(f"{absent.lower()}8/{absent}{a}{b}.WAV" for a in df.KNOB for b in df.KNOB)
