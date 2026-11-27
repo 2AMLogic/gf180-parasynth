@@ -228,13 +228,37 @@ def test_run_case_load_reference_refuses_every_unhandled_width(label, tmp_path):
 
 
 def test_partial_balance_load_reference_refuses_24bit_and_answers_16bit(tmp_path, monkeypatch):
+    rel, _ = rc.REF_MAIN["RS"]
     monkeypatch.setattr(mpb, "REFDIR", tmp_path)
-    p = _place(tmp_path, mpb.REF_MAIN["RS"], _write_24bit)
+    p = _place(tmp_path, rel, _write_24bit)
     _refuses(lambda: mpb.load_reference("RS"), p)
     p.unlink()
-    _place(tmp_path, mpb.REF_MAIN["RS"], _write_16bit)
+    _place(tmp_path, rel, _write_16bit)
     x, sr, _, _ = mpb.load_reference("RS")
     assert sr == SR and abs(_peak(x) - PEAK) < 1e-3, _peak(x)
+
+
+@pytest.mark.parametrize("bad, counted", [(np.nan, "1 NaN, 0 Inf"), (np.inf, "0 NaN, 1 Inf")],
+                         ids=["nan", "inf"])
+def test_partial_balance_load_reference_refuses_non_finite_before_the_width_guard(
+        tmp_path, monkeypatch, bad, counted):
+    """#1568. The tool's private reader guarded the sample width FIRST, so a
+    float32 WAV holding a NaN was refused as `float32 samples, expected 16-bit
+    PCM` -- a format mismatch -- and the NaN, the defect that defeats the
+    silence test (#133, #134), was never named. run_case's order is finiteness
+    first; the tool loads through run_case now and inherits it. On the private
+    reader this landed RED with the format refusal."""
+    monkeypatch.setattr(mpb, "REFDIR", tmp_path)
+    sig = _sine().astype(np.float32)
+    sig[10] = bad
+    p = _place(tmp_path, rc.REF_MAIN["RS"][0], lambda q: wavfile.write(str(q), SR, sig))
+    _, written = wavfile.read(str(p))               # the fixture is what it claims
+    assert written.dtype == np.float32 and not np.isfinite(written[10]), written.dtype
+    assert np.isfinite(written).sum() == len(written) - 1, "exactly one non-finite sample, at index 10"
+    with pytest.raises(refusal.Refused, match=r"non-finite") as why:
+        mpb.load_reference("RS")
+    assert counted in str(why.value), str(why.value)
+    assert "16-bit" not in str(why.value), str(why.value)
 
 
 def test_cymbal_bands_load_refuses_24bit_and_answers_16bit(tmp_path):

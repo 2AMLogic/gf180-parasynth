@@ -26,20 +26,17 @@ here cannot drift from the ones D10A/D13A are scored at.
 Needs the Fischer corpus (tidalcycles/sounds-tr808-fischer) at $GF180_TR808_REFS (alias
 $TR808_REFS), else /tmp/tr808-ref. REFUSES rather than reports when it is absent.
 """
-import math, os, sys, pathlib, hashlib, subprocess, datetime
+import math, sys, pathlib, hashlib, subprocess, datetime
 import numpy as np
-from scipy.io import wavfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
-import audio_measure as am                      # noqa: E402
 import partial_trajectory as PT                 # noqa: E402
 import preparation_contract as pc               # noqa: E402
 import run_case as rc                           # noqa: E402
 
 REFDIR = rc.configured_refs()
-REF_MAIN = {"RS": "rs8/RS.WAV", "CB": "cb8/CB.WAV"}
 
 
 # A precondition of the apparatus failed. REFUSED is a first-class outcome here,
@@ -80,33 +77,12 @@ def sha(p):
 
 
 def load_reference(voice):
-    """The recording, UNPREPARED: the caller prepares it, so the pair can be checked."""
-    if not REFDIR.exists():
-        raise Refused(f"reference corpus not at {REFDIR} -- clone "
-                      f"tidalcycles/sounds-tr808-fischer or point GF180_TR808_REFS at it")
-    path = REFDIR / REF_MAIN[voice]
-    if not path.exists():
-        raise Refused(f"reference recording missing: {REF_MAIN[voice]} under {REFDIR}")
-    sr, x = wavfile.read(str(path))
-    rc.require_int16_pcm(x, path, Refused)
-    x = np.asarray(x, dtype=np.float64)
-    if x.ndim > 1:
-        x = x.mean(axis=1)
-    if am.is_silent(x / 32768.0):
-        raise Refused(f"reference recording {REF_MAIN[voice]} is silent")
-    return x / 32768.0, sr, REF_MAIN[voice], sha(path)
-
-
-def render_ours(voice, seconds=2.2, accent=1.0):
-    """Our render, UNPREPARED (see load_reference)."""
-    import drums_fx as dx
-    n = int(seconds * dx.SR)
-    d = dx.DrumsFx()
-    dm, bd = d.play(dx.hit_writes([(int(0.01 * dx.SR), dx.SOUND_STOP[voice], accent)],
-                                  dx.kit_with_sounds(voice)), n)
-    g = dx.accent_reg(0.45)
-    out = dx.output_fx(np.zeros(n), 0, dm, g, bd, g)
-    return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR
+    """The recording, UNPREPARED, loaded by `run_case.load_reference`: its
+    guards (finiteness before sample width, #133/#134) and its `REF_MAIN`,
+    not a copy of either (#1568). The caller prepares it, so the pair can be
+    checked."""
+    x, sr, rel, _ = rc.load_reference(voice, REFDIR)
+    return x, sr, rel, sha(REFDIR / rel)
 
 
 # Operating points. The window, hop, search ranges and `t_end` are READ FROM the
@@ -219,7 +195,7 @@ def cmd_measure():
         raw = {}
         x, sr, rel, h = load_reference(voice)
         raw["reference"] = (x, sr, f"the reference recording {rel}", f"{rel} {h}")
-        x, sr = render_ours(voice)
+        x, sr = rc.render_drum_solo(voice)
         raw["ours"] = (x, sr, f"our {voice} render", "drums_fx render, accent 1.0, bus 0.45")
         prep = dict(zip(("reference", "ours"),
                         prepare_pair(raw["reference"][:3], raw["ours"][:3])))
