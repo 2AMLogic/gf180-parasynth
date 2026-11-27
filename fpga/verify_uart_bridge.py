@@ -78,12 +78,18 @@ import uart_host as uh                              # noqa: E402
 import verify_synth_top as top                      # noqa: E402
 from build_arty import roms                         # noqa: E402
 import record_compare as rc                         # noqa: E402
+_REFUSAL_TOOLS = str(ROOT / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+from exit_contract import FAIL, PASS, REFUSED  # noqa: E402
 
 BENCH = ROOT / "rtl-sketch/tb_uart_bx.v"
 WRAPPER = ROOT / "fpga/rtl/arty_a7_top.v"
 STUB = ROOT / "fpga/stubs/arty_a7_uart_stub.v"
 BRIDGE = ROOT / "rtl-sketch/uart_bridge.v"
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
+EXIT_CODE = {"PASS": PASS, "FAIL": FAIL, "REFUSED": REFUSED}
+VERDICTS = ("PASS", "FAIL")
 
 
 def config_defines() -> list:
@@ -185,18 +191,6 @@ def phrase_items(*, smoke=True):
         items.append(("event", f, flag, sec, addr, data))
         f += 1
     items.append(("wait", int(tail)))
-    return items
-
-
-def _base_dues_items(n_events, *, spread, hold_before_reset=0, pre=None):
-    items = list(pre or boot_items())
-    items += key_events_items([(0, "on", 45)])
-    f = 400
-    for i in range(n_events):
-        items.append(("event", f, 0, 0, 0x40 + (i % 3), 0x111111 * (i + 1) & 0xFFFFFFFF))
-        f += spread
-    if hold_before_reset:
-        items.append(("wait", hold_before_reset))
     return items
 
 
@@ -1018,12 +1012,6 @@ def record_for(run, comp, ok):
     for path in roms():
         hashed[str(path.relative_to(ROOT))] = hashlib.sha256(path.read_bytes()).hexdigest()
     transcript = (Path(run["outdir"]) / "transcript.txt").read_bytes()
-    comparison = {k: v for k, v in comp.items()
-                  if k in ("wire_mismatch", "swap", "width", "core_bad",
-                           "writes_bad", "frame_pred_bad", "frame_no_pred",
-                           "busy_at_tick", "overrun", "overflow",
-                           "frames_no_sample", "periods", "writes_seen",
-                           "writes_sent", "worst_strobe_cycle")}
     return {"state": "PASS" if ok else "FAIL", "exit_code": 0 if ok else 1,
             "inject": run["inject"], "scenario": run["scenario"],
             "configuration": CONFIG,
@@ -1180,12 +1168,13 @@ def _main(a) -> int:
               f"corrupt {comp.get('writes_bad')}, timing bad {comp.get('frame_pred_bad')})")
         return 0
 
-    good = all(r is not None and r["state"] == "PASS" for _, r, _, _ in results)
     summary = {name: (rec or {}).get("state", "REFUSED") for name, rec, _, _ in results}
-    (outdir / "controls.json").write_text(json.dumps(
-        {"state": "PASS" if good else "FAIL", "runs": summary}, indent=2) + "\n")
-    print(json.dumps({"state": "PASS" if good else "FAIL", "runs": summary}))
-    return 0 if good else 1
+    state = ("REFUSED" if any(s not in VERDICTS for s in summary.values())
+             else "FAIL" if any(s != "PASS" for s in summary.values()) else "PASS")
+    result = {"state": state, "runs": summary}
+    (outdir / "controls.json").write_text(json.dumps(result, indent=2) + "\n")
+    print(json.dumps(result))
+    return EXIT_CODE[state]
 
 
 if __name__ == "__main__":
