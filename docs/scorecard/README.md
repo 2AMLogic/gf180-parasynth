@@ -265,6 +265,16 @@ holds an integrated-RTL record for that case, both model files go into
 `model-twin/` and the RTL record stays in place. If the selected WAV path
 would overwrite the published WAV, the run exits 2 before measuring (#1422).
 
+The same holds for a clean drum, ensemble or filter run (#1430), in
+`tools/run_case.py` and in `tools/score_f1_rtl.py`: off the board the WAV or
+the curve goes beside its record, and a `--results` whose file *is* the
+published one — `build/scorecard` itself, a symlink to it, a link to the file —
+exits 2 before anything runs, naming the case, the destination and the
+published file. `--no-audio` is asked nothing, because it writes nothing: it
+now covers the mono cases too, whose record then says the model WAV was not
+written. That is what keeps an `--expect` control's clean baseline — measured
+without audio — from writing the published M5 WAV.
+
 Three more cover the frozen profile, and the last is the one that makes
 "frozen" mean anything:
 

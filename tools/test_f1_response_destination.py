@@ -27,6 +27,22 @@ filter:
 The doubles substitute INPUTS. No destination is stubbed, no writer is
 replaced, and the test writes no record field: those are the things under test.
 
+A CLEAN RUN AND THE PUBLISHED CURVE (#1430). Every test above reaches the
+board guard through `--inject`. A clean run carries none, so until #1430
+
+    tools/run_case.py F1B --results build/scorecard
+
+was refused by nothing: off the board a curve goes beside its record, and
+with that `--results` "beside the record" IS the published curve. The bench at
+the end of this file (`_clean_collision`) points a clean run of each row at
+its own published curve six ways and reads four properties off it
+(`PROTECTED`). The rows are the ones a published record names: `results/F1B.json`
+names the fixed-model curve `run_case.py` writes, `results/F1A.json` the RTL
+curve `tools/score_f1_rtl.py` does. The two CLIs read a relative `--results`
+differently -- against the working directory, and against the checkout -- so
+the bench gives each its own relative spelling rather than one that would
+send the RTL scorer into the real `build/scorecard`.
+
 WHAT A PASSING RUN HERE DOES NOT ESTABLISH. Any acoustic property of the
 filter, or that the real RTL curve equals the model's. `tools/
 test_score_f1_rtl.py` covers the scorer's comparison logic and `make verify`
@@ -35,6 +51,7 @@ runs the real anchor.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import shutil
 import tempfile
@@ -128,14 +145,22 @@ def board(monkeypatch):
     scratch_root = rc.ROOT / "build"
     scratch_root.mkdir(exist_ok=True)
     base = pathlib.Path(tempfile.mkdtemp(prefix="f1-response-", dir=scratch_root))
-    places = {"base": base, "board": base / "board", "shared": base / "shared"}
+    places = {"base": base, "board": base / "board", "shared": base / "shared",
+              "cwd": base / "cwd", "runs": 0, "base_checks": 0}
+    # the other working directory `run_case.main` reads a relative --results
+    # from (#1430)
+    places["cwd"].mkdir()
     monkeypatch.setattr(rc, "RESULTS", places["board"])
     monkeypatch.setattr(rc, "AUDIO_OUT", places["shared"])
     # each CLI overwrites this module global; the double's value must not
     # outlive the test that asked for it
     monkeypatch.setattr(rc, "BASE_STATE", rc.BASE_STATE)
-    monkeypatch.setattr(rc, "base_check",
-                        lambda allow_stale=False: {"checked": False, "why": "a test double"})
+
+    def base_check(allow_stale=False):
+        places["base_checks"] += 1        # so a test can tell a refusal that
+        return {"checked": False, "why": "a test double"}   # came before it
+
+    monkeypatch.setattr(rc, "base_check", base_check)
     monkeypatch.setattr(rc, "load_filter_reference", _reference)
     monkeypatch.setattr(rc, "_legacy_reads",
                         lambda *args: {"engine": "test double -- not rendered"})
@@ -279,9 +304,13 @@ def test_the_response_destination_is_the_shared_path_on_the_board_and_beside_the
     inside = rc.ROOT / "build" / "candidate"
     assert rc.response_destination(inside, "F1A", "-rtl") == inside / RTL_CURVE
     assert rc.response_destination(tmp_path, "F1A", "-rtl") == tmp_path / RTL_CURVE
-    # ...even when that directory is the shared one. The path is then the clean
-    # board curve's own, which is why an injected run is refused that directory.
-    assert rc.response_destination(shared, "F1A", "-rtl") == shared / RTL_CURVE
+    # ...but never onto the clean board curve's own path, which is exactly what
+    # a `--results` of the shared directory spells (#1430). An injected run was
+    # already refused that directory; a clean one is refused the FILE.
+    with pytest.raises(rc.Refused, match=REFUSAL):
+        rc.response_destination(shared, "F1A", "-rtl")
+    with pytest.raises(rc.Refused, match=REFUSAL):
+        rc.response_destination(shared, "F1B")
 
 
 def test_a_stated_path_is_relative_inside_the_checkout_and_absolute_outside(tmp_path):
@@ -358,3 +387,303 @@ def test_an_absolute_results_directory_records_the_target_of_the_curve_filename_
     stated = str(original.relative_to(rc.ROOT) if where == "inside" else original)
     assert record["provenance"]["artefacts"]["ours"] == stated
     assert record["audio"].endswith(f"ours {stated}")
+
+
+# ===========================================================================
+# A clean run and the published curve (#1430)
+# ===========================================================================
+
+#: The two rows a published record names through this writer, each with the
+#: curve's own name: `results/F1B.json` names the fixed-model curve
+#: `run_case.py` writes, `results/F1A.json` the RTL curve of
+#: `tools/score_f1_rtl.py`.
+PUBLISHED = [pytest.param("model", "F1B", "F1B-ours-response.json", id="fixed-model"),
+             pytest.param("rtl", "F1A", RTL_CURVE, id="integrated-rtl")]
+
+#: What separates this refusal from every other exit 2: an RTL path that cannot
+#: be built is REFUSED with exit 2 as well.
+REFUSAL = "would put this run's response curve"
+
+#: What the collision bench checks, and what a violation is called.
+REFUSED_NAMING = "refused, naming the case, the destination and the published curve"
+PUBLISHED_CURVE = "the published curve is byte-identical"
+NOTHING_BESIDE = "nothing was written into the published directory"
+NOTHING_RAN = "nothing ran: neither base_check nor the filter path"
+PROTECTED = (REFUSED_NAMING, PUBLISHED_CURVE, NOTHING_BESIDE, NOTHING_RAN)
+
+#: The six spellings, by what a run given one of them writes beside its curve:
+#: a run given the published DIRECTORY (by any name) puts its record there too,
+#: so `NOTHING_BESIDE` sees it; a run given a link to the published FILE puts
+#: its record beside the link, where that property cannot look.
+RELATIVE, DOTDOT = "relative", "with .. in it"
+SOFT, HARD_LINK = "a symlink to the published curve", "a hard link to the published curve"
+TO_THE_DIRECTORY = (RELATIVE, DOTDOT, "the directory itself", "with . in it")
+TO_A_LINK = (SOFT, HARD_LINK)
+#: The spellings that reach the published curve through an alias rather than by
+#: its directory's own name.
+ALIASES = (RELATIVE, DOTDOT, SOFT, HARD_LINK)
+#: What a spelling that proceeds violates, by kind.
+THROUGH_THE_DIRECTORY = PROTECTED
+THROUGH_A_LINK = (REFUSED_NAMING, PUBLISHED_CURVE, NOTHING_RAN)
+
+
+#: Every spelling, and what each violates when it proceeds unchecked.
+ALL = TO_THE_DIRECTORY + TO_A_LINK
+UNCHECKED = ({label: THROUGH_THE_DIRECTORY for label in TO_THE_DIRECTORY}
+             | {label: THROUGH_A_LINK for label in TO_A_LINK})
+
+
+def _readings(proceeded: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+    """The bench's reading when the spellings in `proceeded` ran, violating
+    what it says of each, and every other spelling was refused."""
+    return {label: proceeded.get(label, tuple()) for label in ALL}
+
+
+def _lexical_catches(engine: str) -> tuple[str, ...]:
+    """The spellings a comparison of spellings catches: the directory's own
+    name -- and, for the RTL scorer, its relative spelling too, because that
+    CLI makes a relative `--results` absolute against the checkout before any
+    comparison is made."""
+    return ("the directory itself", "with . in it") + (() if engine == "model" else (RELATIVE,))
+
+
+def _double(board, monkeypatch, engine: str) -> None:
+    """The doubled filter path a row's CLI scores through, counting how often
+    it is built, so a test can tell a refusal that came before the run."""
+    base = _CurveDouble if engine == "model" else _rtl_double()
+
+    class _Counted(base):
+        def __init__(self, *args, **kwargs):
+            board["runs"] += 1
+            super().__init__(*args, **kwargs)
+
+    name, module = (("SelectedFilterPath", fp) if engine == "model"
+                    else ("RtlFilterChainPath", rtlpath))
+    monkeypatch.setattr(module, name, _Counted)
+
+
+def _cli(engine: str, *argv) -> int:
+    """The row's own CLI: `run_case.main` for the fixed-model curve,
+    `score_f1_rtl.main` for the RTL one."""
+    if engine == "rtl":
+        return score.main(["--case", "F1A", *argv])
+    return rc.main(["F1B", *argv])
+
+
+def _case(engine: str) -> str:
+    return "F1A" if engine == "rtl" else "F1B"
+
+
+def _seed(curve: pathlib.Path) -> bytes:
+    """Put a sentinel on a published path -- bytes no run writes -- and return
+    them."""
+    curve.parent.mkdir(parents=True, exist_ok=True)
+    curve.write_bytes(b'{"ours_gain_db": "sentinel: written by a test, by no run"}\n')
+    return curve.read_bytes()
+
+
+def _relative(board, engine: str) -> tuple[str, str, pathlib.Path]:
+    """The relative spelling of the published directory, read the way the row's
+    own CLI reads one."""
+    if engine == "model":
+        # `run_case.main`: against the working directory, here through a symlink
+        through = board["cwd"] / "build" / "scorecard"
+        through.parent.mkdir(parents=True)
+        through.symlink_to(board["shared"], target_is_directory=True)
+        return ("relative", "build/scorecard", through)
+    # `score_f1_rtl.main`: against the checkout
+    return ("relative", os.path.relpath(board["shared"], rc.ROOT), board["shared"])
+
+
+def _spellings(board, engine: str, curve: str) -> list[tuple[str, str, pathlib.Path]]:
+    """Spellings of the published directory, or of a link to its curve, each
+    with the directory whose file the refusal has to name."""
+    shared = board["shared"]
+    soft, hard = board["base"] / "soft", board["base"] / "hard"
+    soft.mkdir()
+    (soft / curve).symlink_to(shared / curve)
+    hard.mkdir()
+    os.link(shared / curve, hard / curve)
+    return [_relative(board, engine),
+            ("the directory itself", str(shared), shared),
+            ("with . in it", f"{shared}/.", shared),
+            (DOTDOT, str(shared / ".." / shared.name), shared / ".." / shared.name),
+            (SOFT, str(soft), soft),
+            (HARD_LINK, str(hard), hard)]
+
+
+def _select_without_refusing(results_dir, case_id, tag=""):
+    """`response_destination` as #1412 shipped it: the path, and no refusal."""
+    return rc.artefact_directory(results_dir) / f"{case_id}-ours-response{tag}.json"
+
+
+def _clean_collision(board, monkeypatch, capsys, engine: str, curve: str) -> dict[str, list[str]]:
+    """A CLEAN run pointed at its own published curve, through the row's CLI,
+    once per spelling of `_spellings`. Returns, per spelling, the properties of
+    `PROTECTED` it violated -- the bench the controls below must turn red.
+
+    Every spelling starts from the same state -- the sentinel, and nothing
+    else in the published directory -- so what an earlier spelling left behind
+    is never read as a later one's doing."""
+    case_id = _case(engine)
+    published = board["shared"] / curve
+    _seed(published)                      # the hard link needs the file to exist
+    _double(board, monkeypatch, engine)
+    monkeypatch.chdir(board["cwd"])
+    seen = {}
+    for label, spelling, said in _spellings(board, engine, curve):
+        before = _seed(published)
+        ran = (board["runs"], board["base_checks"])
+        capsys.readouterr()
+        code = _cli(engine, "--results", spelling)
+        err = capsys.readouterr().err
+        violated = []
+        # exit 2 alone is not the refusal: an RTL path that cannot be built is
+        # exit 2 too
+        if not (code == 2 and "REFUSED" in err and case_id in err and REFUSAL in err
+                and f"at {rc.stated_path(said / curve)}," in err
+                and f"published response curve {rc.stated_path(published.resolve())} " in err
+                and rc.stated_path(rc.RESULTS / f"{case_id}.json") in err):
+            violated.append(REFUSED_NAMING)
+        if not published.exists() or published.read_bytes() != before:
+            violated.append(PUBLISHED_CURVE)
+        if sorted(p.name for p in board["shared"].iterdir()) != [curve]:
+            violated.append(NOTHING_BESIDE)
+        if (board["runs"], board["base_checks"]) != ran:
+            violated.append(NOTHING_RAN)
+        seen[label] = violated
+        for stray in board["shared"].iterdir():
+            if stray.name != curve:
+                stray.unlink()
+    return seen
+
+
+@pytest.mark.parametrize("engine,case_id,curve", PUBLISHED)
+def test_a_clean_run_cannot_put_its_curve_on_the_published_path(
+        board, monkeypatch, capsys, engine, case_id, curve):
+    """The input #1412's guard could not have, through each CLI: a CLEAN run
+    whose `--results` names its own published curve, six ways. Each is refused
+    with exit 2 before `base_check` and before the filter path is built, says
+    which case, which destination and which published curve, and leaves the
+    sentinel and the directory as they were."""
+    seen = _clean_collision(board, monkeypatch, capsys, engine, curve)
+    assert {label: violated for label, violated in seen.items() if violated} == {}, seen
+
+
+@pytest.mark.parametrize("engine,case_id,curve", PUBLISHED)
+def test_the_published_curve_is_protected_before_it_exists(
+        board, monkeypatch, capsys, engine, case_id, curve):
+    """A published curve nobody has measured yet is still the published path: a
+    clean run must not be the thing that creates it. The comparison is of
+    paths, so it needs neither file to exist -- including through a link left
+    dangling by the absent curve."""
+    shared = board["shared"]
+    shared.mkdir()
+    dangling = board["base"] / "dangling"
+    dangling.mkdir()
+    (dangling / curve).symlink_to(shared / curve)       # a link to what is not there
+    _double(board, monkeypatch, engine)
+    monkeypatch.chdir(board["cwd"])
+    spellings = [_relative(board, engine),
+                 ("the directory itself", str(shared), shared),
+                 ("with .. in it", str(shared / ".." / shared.name), shared),
+                 ("a symlink to the curve, not there yet", str(dangling), dangling)]
+    for label, spelling, _said in spellings:
+        capsys.readouterr()
+        assert _cli(engine, "--results", spelling) == 2, label
+        err = capsys.readouterr().err
+        assert REFUSAL in err and case_id in err, (label, err)
+    assert (board["runs"], board["base_checks"]) == (0, 0)
+    assert list(shared.iterdir()) == []
+    assert [p.name for p in dangling.iterdir()] == [curve] and (dangling / curve).is_symlink()
+
+
+@pytest.mark.parametrize("engine,case_id,curve", PUBLISHED)
+def test_no_audio_needs_no_refusal_and_leaves_the_published_curve_alone(
+        board, monkeypatch, capsys, engine, case_id, curve):
+    """The collision check applies only when the invocation will write the
+    curve (AC 2). With `--no-audio` the published directory is an ordinary
+    off-board one: the run proceeds, its record alone lands there, and the
+    record says the curve was not written."""
+    _double(board, monkeypatch, engine)
+    before = _seed(board["shared"] / curve)
+    capsys.readouterr()
+    _cli(engine, "--no-audio", "--results", str(board["shared"]))
+    assert REFUSAL not in capsys.readouterr().err
+    record = json.loads((board["shared"] / f"{case_id}.json").read_text())
+    assert record["provenance"]["artefacts"]["ours"] == NO_AUDIO
+    assert (board["shared"] / curve).read_bytes() == before
+    assert sorted(p.name for p in board["shared"].iterdir()) == sorted([curve, f"{case_id}.json"])
+
+
+def test_a_path_that_cannot_be_built_is_not_read_as_a_collision_refusal(
+        board, monkeypatch, capsys, tmp_path):
+    """The other way exit 2 arrives from this CLI: an RTL path that cannot be
+    built is REFUSED, on stderr, with the same status. It shares the collision
+    refusal's shape and nothing else, which is why the bench reads the words."""
+    def cannot_build(*args, **kwargs):
+        raise rtlpath.Refused("iverilog: not found (a test double)")
+
+    monkeypatch.setattr(rtlpath, "RtlFilterChainPath", cannot_build)
+    capsys.readouterr()
+    assert score.main(["--case", "F1A", "--results", str(tmp_path / "scratch")]) == 2
+    err = capsys.readouterr().err
+    assert "REFUSED" in err and REFUSAL not in err
+    assert (board["runs"], board["base_checks"]) == (0, 1)
+
+
+@pytest.mark.parametrize("engine,case_id,curve", PUBLISHED)
+def test_the_unrefused_shared_curve_is_a_control_that_stays_red(
+        board, monkeypatch, capsys, engine, case_id, curve):
+    """The defect as #1430 found it on these writers, kept where the verdict is
+    issued: a destination that selects the path and never refuses it. The bench
+    above must go red on it, for every spelling.
+
+        ==========================  =========================================
+        property                    under a destination that never refuses
+        ==========================  =========================================
+        refused, naming ...         MOVED   the run went ahead, every spelling
+        the published curve         MOVED   replaced by this run's curve
+        nothing written beside      MOVED   for the four directory spellings:
+                                            its record lands there too. BLIND
+                                            to the two file links: the record
+                                            lands beside the link, as it should
+        nothing ran                 MOVED   base_check and the path, every time
+        ==========================  =========================================
+    """
+    monkeypatch.setattr(rc, "response_destination", _select_without_refusing)
+    seen = _clean_collision(board, monkeypatch, capsys, engine, curve)
+    assert {label: tuple(violated) for label, violated in seen.items()} == _readings(UNCHECKED)
+
+
+@pytest.mark.parametrize("engine,case_id,curve", PUBLISHED)
+def test_a_comparison_of_spellings_is_a_control_that_stays_red(
+        board, monkeypatch, capsys, engine, case_id, curve):
+    """Constructed at write time (rule 8), from no bug this project made: the
+    guard compares the two paths as written. Every alias defeats it, exactly
+    as the control above is defeated; the directory's own name is all it
+    catches -- under two spellings for `run_case.py`, and three for
+    `score_f1_rtl.py`, which makes a relative `--results` absolute against
+    the checkout (`_lexical_catches`)."""
+    monkeypatch.setattr(rc, "_names_one_file", lambda candidate, published: candidate == published)
+    seen = _clean_collision(board, monkeypatch, capsys, engine, curve)
+    caught = _lexical_catches(engine)
+    assert {label: tuple(violated) for label, violated in seen.items()} \
+        == _readings({label: v for label, v in UNCHECKED.items() if label not in caught})
+    assert seen[DOTDOT] == list(PROTECTED)
+
+
+@pytest.mark.parametrize("engine,case_id,curve", PUBLISHED)
+def test_a_comparison_without_the_inode_leg_is_a_control_that_stays_red(
+        board, monkeypatch, capsys, engine, case_id, curve):
+    """The other leg, constructed the same way: resolved paths, and no
+    same-file test. A hard link is the one spelling that defeats it, because
+    a hard link is another name for the inode and no path comparison sees it.
+    `NOTHING_BESIDE` is BLIND to that spelling, for the reason the first
+    control gives: the record lands beside the link."""
+    monkeypatch.setattr(rc, "_names_one_file",
+                        lambda candidate, published: candidate.resolve() == published.resolve())
+    seen = _clean_collision(board, monkeypatch, capsys, engine, curve)
+    assert {label: tuple(violated) for label, violated in seen.items()} \
+        == _readings({HARD_LINK: THROUGH_A_LINK})
+    assert seen[HARD_LINK] == list(THROUGH_A_LINK)

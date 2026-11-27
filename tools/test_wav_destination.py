@@ -41,6 +41,21 @@ replaced with itself -- and comparing the clean WAV alone reports an intact
 board. So the second invocation of each case renders a different signal, and
 the samples are read back from the file the control's record names.
 
+A CLEAN RUN AND THE PUBLISHED WAV (#1430). Every test above reaches the board
+guard through `--inject`. A clean run carries none, so until #1430
+
+    tools/run_case.py D12A --results build/scorecard
+
+was refused by nothing: `build/scorecard` is off the board (it is not
+`docs/scorecard/results`), so "beside the record" named the published WAV
+itself, and the run replaced it. The collision bench at the end of this file
+(`_clean_collision`) points a clean run at its own published WAV six ways --
+the directory, two spellings of it, a symlink to the file, a hard link to it,
+and a relative path through a symlinked directory from another working
+directory -- and reads four properties off it (`PROTECTED`). `E1B` is the
+ensemble row here, because `results/E1B.json` is the fixed-model record that
+names `build/scorecard/E1B-mix.wav`; E1A's row is an integrated-rtl capture.
+
 WHAT A PASSING RUN HERE DOES NOT ESTABLISH. Any acoustic property of the clap
 or of the ensemble, or that the synthetic corpus resembles a TR-808. Which
 WAV paths the PUBLISHED records name is checked against the real module
@@ -50,6 +65,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import pathlib
 import shutil
 import tempfile
@@ -130,14 +146,18 @@ class _Renders:
 
     def __init__(self) -> None:
         self.hz = FIRST
+        self.calls = 0                     # renders asked for, so a test can tell
+                                          # a refusal before any measurement
 
     def drum(self, sound: str, accent: float = 1.0, inject: str | None = None,
              hit_frame: int | None = None, frames: int | None = None) -> tuple:
         assert sound in ("CP", "SD")
+        self.calls += 1
         return _strike_pcm(self.hz) / 32768.0, SR
 
     def ensemble(self, patch_name: str, dense: bool, seconds: float = 6.0,
                  bpm: float = 124.0) -> dict:
+        self.calls += 1
         return _ensemble(self.hz, patch_name)
 
 
@@ -156,7 +176,9 @@ def board(monkeypatch, tmp_path):
     scratch_root.mkdir(exist_ok=True)
     base = pathlib.Path(tempfile.mkdtemp(prefix="wav-dest-", dir=scratch_root))
     places = {"base": base, "board": base / "board", "shared": base / "shared",
-              "corpus": tmp_path / "corpus"}
+              "corpus": tmp_path / "corpus", "cwd": base / "cwd"}
+    # the other working directory a relative --results is read from (#1430)
+    places["cwd"].mkdir()
     monkeypatch.setattr(rc, "RESULTS", places["board"])
     monkeypatch.setattr(rc, "AUDIO_OUT", places["shared"])
     # `main` overwrites this module global; the double's value must not outlive
@@ -525,6 +547,278 @@ def test_the_wav_destination_is_the_shared_path_on_the_board_and_beside_the_resu
             assert rc.wav_destination(results_dir, cid, suffix) == results_dir / f"{cid}{suffix}"
             assert rc.wav_destination(results_dir, cid, suffix).parent \
                 == rc.response_destination(results_dir, "F1A").parent
-    # ...even when that directory is the shared one. The path is then the clean
-    # board WAV's own, which is why an injected run is refused that directory.
-    assert rc.wav_destination(shared, "D12A", "-ours.wav") == shared / "D12A-ours.wav"
+    # ...but never onto the clean board WAV's own path, which is exactly what a
+    # `--results` of the shared directory spells (#1430). An injected run was
+    # already refused that directory; a clean one is refused the FILE.
+    with pytest.raises(rc.Refused, match=REFUSAL):
+        rc.wav_destination(shared, "D12A", "-ours.wav")
+
+
+# ===========================================================================
+# A clean run and the published WAV (#1430)
+# ===========================================================================
+
+#: The rows a published fixed-model record names through these two writers --
+#: `results/D12A.json` and `results/E1B.json` -- with the writer's own suffix.
+PUBLISHED = [pytest.param("D12A", "D12A-ours.wav", "ours", "-ours.wav", id="drum"),
+             pytest.param("E1B", "E1B-mix.wav", "mix", "-mix.wav", id="ensemble")]
+
+#: What separates this refusal from every other exit 2: a missing Fischer
+#: reference is `no verdict`, which is exit 2 as well.
+REFUSAL = "would put this run's WAV"
+
+#: What the collision bench checks, and what a violation is called.
+REFUSED_NAMING = "refused, naming the case, the destination and the published WAV"
+PUBLISHED_WAV = "the published WAV is byte-identical"
+NOTHING_BESIDE = "nothing was written into the published directory"
+NOTHING_MEASURED = "nothing was measured"
+PROTECTED = (REFUSED_NAMING, PUBLISHED_WAV, NOTHING_BESIDE, NOTHING_MEASURED)
+
+#: The six spellings, by what a run given one of them writes beside its WAV: a
+#: run given the published DIRECTORY (by any name) puts its record there too,
+#: so `NOTHING_BESIDE` sees it; a run given a link to the published FILE puts
+#: its record beside the link, where that property cannot look.
+RELATIVE = "relative, through a symlink (build/scorecard, from another cwd)"
+DOTDOT = "with .. in it"
+SOFT, HARD = "a symlink to the published WAV", "a hard link to the published WAV"
+TO_THE_DIRECTORY = (RELATIVE, DOTDOT, "the directory itself", "with . in it")
+TO_A_LINK = (SOFT, HARD)
+#: The spellings that reach the published WAV through an alias rather than by
+#: its directory's own name.
+ALIASES = (RELATIVE, DOTDOT, SOFT, HARD)
+#: What a spelling that proceeds violates, by kind.
+THROUGH_THE_DIRECTORY = PROTECTED
+THROUGH_A_LINK = (REFUSED_NAMING, PUBLISHED_WAV, NOTHING_MEASURED)
+
+
+#: Every spelling, and what each violates when it proceeds unchecked.
+ALL = TO_THE_DIRECTORY + TO_A_LINK
+UNCHECKED = ({label: THROUGH_THE_DIRECTORY for label in TO_THE_DIRECTORY}
+             | {label: THROUGH_A_LINK for label in TO_A_LINK})
+
+
+def _readings(proceeded: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+    """The bench's reading when the spellings in `proceeded` ran, violating
+    what it says of each, and every other spelling was refused."""
+    return {label: proceeded.get(label, tuple()) for label in ALL}
+
+
+def _seed(published: pathlib.Path) -> bytes:
+    """Put a sentinel on a published path -- a valid WAV of 16 samples, which no
+    render here resembles in bytes or in length -- and return its bytes."""
+    published.parent.mkdir(parents=True, exist_ok=True)
+    wavfile.write(str(published), SR, np.arange(16, dtype="<i2"))
+    return published.read_bytes()
+
+
+def _spellings(board, wav: str) -> list[tuple[str, str, pathlib.Path]]:
+    """Spellings of the published directory, or of a link to its WAV, each with
+    the directory whose file the refusal has to name."""
+    shared = board["shared"]
+    through = board["cwd"] / "build" / "scorecard"      # relative, from another cwd
+    through.parent.mkdir(parents=True)
+    through.symlink_to(shared, target_is_directory=True)
+    soft, hard = board["base"] / "soft", board["base"] / "hard"
+    soft.mkdir()
+    (soft / wav).symlink_to(shared / wav)
+    hard.mkdir()
+    os.link(shared / wav, hard / wav)
+    return [(RELATIVE, "build/scorecard", through),
+            ("the directory itself", str(shared), shared),
+            ("with . in it", f"{shared}/.", shared),
+            (DOTDOT, str(shared / ".." / shared.name), shared / ".." / shared.name),
+            (SOFT, str(soft), soft),
+            (HARD, str(hard), hard)]
+
+
+def _select_without_refusing(results_dir, case_id, suffix, **_):
+    """`wav_destination` as #1414 shipped it: the path, and no refusal. Takes
+    what the writers pass today, `injected` included, and answers none of it."""
+    return rc.artefact_directory(results_dir or rc.RESULTS,
+                                 model_wav_case=case_id) / f"{case_id}{suffix}"
+
+
+def _clean_collision(board, monkeypatch, capsys, case_id: str, wav: str) -> dict[str, list[str]]:
+    """A CLEAN run pointed at its own published WAV, through the CLI, once per
+    spelling of `_spellings`. Returns, per spelling, the properties of
+    `PROTECTED` it violated -- so this is the bench the controls below must
+    turn red, and which properties each of them moves stays readable.
+
+    Every spelling starts from the same state -- the sentinel, and nothing
+    else in the published directory -- so what an earlier spelling left behind
+    is never read as a later one's doing."""
+    published = board["shared"] / wav
+    _seed(published)                      # the hard link needs the file to exist
+    monkeypatch.chdir(board["cwd"])
+    seen = {}
+    for label, spelling, said in _spellings(board, wav):
+        before = _seed(published)
+        renders = board["renders"].calls
+        capsys.readouterr()
+        code = _cli(board, case_id, "--results", spelling)
+        err = capsys.readouterr().err
+        violated = []
+        # exit 2 alone is not the refusal: a missing reference is exit 2 too
+        if not (code == 2 and "REFUSED" in err and case_id in err and REFUSAL in err
+                and f"at {rc.stated_path(said / wav)}," in err
+                and f"published WAV {rc.stated_path(published.resolve())} " in err
+                and rc.stated_path(rc.RESULTS / f"{case_id}.json") in err):
+            violated.append(REFUSED_NAMING)
+        if not published.exists() or published.read_bytes() != before:
+            violated.append(PUBLISHED_WAV)
+        if sorted(p.name for p in board["shared"].iterdir()) != [wav]:
+            violated.append(NOTHING_BESIDE)
+        if board["renders"].calls != renders:
+            violated.append(NOTHING_MEASURED)
+        seen[label] = violated
+        for stray in board["shared"].iterdir():
+            if stray.name != wav:
+                stray.unlink()
+    return seen
+
+
+@pytest.mark.parametrize("case_id,wav,key,suffix", PUBLISHED)
+def test_a_clean_run_cannot_put_its_wav_on_the_published_path(
+        board, monkeypatch, capsys, case_id, wav, key, suffix):
+    """The input #1414's guard could not have, through the CLI: a CLEAN run
+    whose `--results` names its own published WAV, six ways. Each is refused
+    with exit 2 before anything is measured, says which case, which
+    destination and which published WAV, and leaves the sentinel and the
+    directory as they were."""
+    seen = _clean_collision(board, monkeypatch, capsys, case_id, wav)
+    assert {label: violated for label, violated in seen.items() if violated} == {}, seen
+
+
+@pytest.mark.parametrize("case_id,wav,key,suffix", PUBLISHED)
+def test_the_published_wav_is_protected_before_it_exists(
+        board, monkeypatch, capsys, case_id, wav, key, suffix):
+    """A published WAV nobody has rendered yet is still the published path: a
+    clean run must not be the thing that creates it. The comparison is of
+    paths, so it needs neither file to exist -- including through a link left
+    dangling by the absent WAV."""
+    shared = board["shared"]
+    shared.mkdir()
+    dangling = board["base"] / "dangling"
+    dangling.mkdir()
+    (dangling / wav).symlink_to(shared / wav)        # a link to what is not there
+    through = board["cwd"] / "build" / "scorecard"
+    through.parent.mkdir(parents=True)
+    through.symlink_to(shared, target_is_directory=True)
+    monkeypatch.chdir(board["cwd"])
+    for label, spelling in (("relative, through a symlink", "build/scorecard"),
+                            ("the directory itself", str(shared)),
+                            ("with .. in it", str(shared / ".." / shared.name)),
+                            ("a symlink to the WAV, not there yet", str(dangling))):
+        capsys.readouterr()
+        assert _cli(board, case_id, "--results", spelling) == 2, label
+        err = capsys.readouterr().err
+        assert REFUSAL in err and case_id in err, (label, err)
+    assert board["renders"].calls == 0
+    assert list(shared.iterdir()) == []
+    assert [p.name for p in dangling.iterdir()] == [wav] and (dangling / wav).is_symlink()
+
+
+def test_the_model_twin_directory_cannot_be_the_published_one(board, capsys, tmp_path):
+    """#1414 sends an off-board WAV into `model-twin/` when an RTL anchor holds
+    the requested JSON path. That directory aliased to the published one is the
+    same collision one level down, and is refused on the file it resolves to."""
+    published = board["shared"] / "D12A-ours.wav"
+    before = _seed(published)
+    anchor = tmp_path / "D12A.json"
+    anchor.write_text(json.dumps({"case_id": "D12A", "engine": "integrated-rtl"}))
+    (tmp_path / "model-twin").symlink_to(board["shared"], target_is_directory=True)
+    capsys.readouterr()
+    assert _cli(board, "D12A", "--results", str(tmp_path)) == 2
+    err = capsys.readouterr().err
+    assert REFUSAL in err and str(tmp_path / "model-twin" / "D12A-ours.wav") in err, err
+    assert board["renders"].calls == 0
+    assert published.read_bytes() == before
+    assert [p.name for p in board["shared"].iterdir()] == ["D12A-ours.wav"]
+
+
+@pytest.mark.parametrize("case_id,wav,key,suffix", PUBLISHED)
+def test_no_audio_needs_no_refusal_and_leaves_the_published_wav_alone(
+        board, capsys, case_id, wav, key, suffix):
+    """The collision check applies only when the invocation will write the WAV
+    (AC 2). With `--no-audio` the published directory is an ordinary off-board
+    one: the run proceeds, its record alone lands there, and the record says
+    the WAV was not written."""
+    before = _seed(board["shared"] / wav)
+    capsys.readouterr()
+    _cli(board, case_id, "--no-audio", "--results", str(board["shared"]))
+    assert REFUSAL not in capsys.readouterr().err
+    record = json.loads((board["shared"] / f"{case_id}.json").read_text())
+    assert _measured(record), record.get("note")
+    assert record["provenance"]["artefacts"][key] == NO_AUDIO
+    assert (board["shared"] / wav).read_bytes() == before
+    assert sorted(p.name for p in board["shared"].iterdir()) == sorted([wav, f"{case_id}.json"])
+
+
+def test_an_ordinary_no_verdict_is_not_read_as_a_collision_refusal(board, capsys, tmp_path):
+    """The other way exit 2 arrives: a missing Fischer reference is `no
+    verdict`, a result with no evidence. It shares the collision refusal's
+    status and nothing else, which is why the bench reads the diagnostic and
+    not the code."""
+    (board["corpus"] / rc.REF_MAIN["CP"][0]).unlink()
+    scratch = tmp_path / "scratch"
+    capsys.readouterr()
+    assert _cli(board, "D12A", "--results", str(scratch)) == 2
+    captured = capsys.readouterr()
+    assert REFUSAL not in captured.out + captured.err
+    record = json.loads((scratch / "D12A.json").read_text())
+    assert record["note"].startswith("REFUSED") and not _measured(record)
+
+
+@pytest.mark.parametrize("case_id,wav,key,suffix", PUBLISHED)
+def test_the_unrefused_shared_path_is_a_control_that_stays_red(
+        board, monkeypatch, capsys, case_id, wav, key, suffix):
+    """The defect as #1430 found it on these writers, kept where the verdict is
+    issued: a destination that selects the path and never refuses it. The bench
+    above must go red on it, for every spelling.
+
+        ==========================  =========================================
+        property                    under a destination that never refuses
+        ==========================  =========================================
+        refused, naming ...         MOVED   the run went ahead, every spelling
+        the published WAV           MOVED   replaced by this run's render
+        nothing written beside      MOVED   for the four directory spellings:
+                                            its record lands there too. BLIND
+                                            to the two file links: the record
+                                            lands beside the link, as it should
+        nothing measured            MOVED   the render ran, every spelling
+        ==========================  =========================================
+    """
+    monkeypatch.setattr(rc, "wav_destination", _select_without_refusing)
+    seen = _clean_collision(board, monkeypatch, capsys, case_id, wav)
+    assert {label: tuple(violated) for label, violated in seen.items()} == _readings(UNCHECKED)
+
+
+@pytest.mark.parametrize("case_id,wav,key,suffix", PUBLISHED)
+def test_a_comparison_of_spellings_is_a_control_that_stays_red(
+        board, monkeypatch, capsys, case_id, wav, key, suffix):
+    """Constructed at write time (rule 8), from no bug this project made: the
+    guard compares the two paths as written. Every alias defeats it, exactly
+    as the control above is defeated; the directory's own two spellings are
+    all it catches."""
+    monkeypatch.setattr(rc, "_names_one_file", lambda candidate, published: candidate == published)
+    seen = _clean_collision(board, monkeypatch, capsys, case_id, wav)
+    caught = ("the directory itself", "with . in it")
+    assert {label: tuple(violated) for label, violated in seen.items()} \
+        == _readings({label: v for label, v in UNCHECKED.items() if label not in caught})
+    assert seen[RELATIVE] == seen[DOTDOT] == list(PROTECTED)
+
+
+@pytest.mark.parametrize("case_id,wav,key,suffix", PUBLISHED)
+def test_a_comparison_without_the_inode_leg_is_a_control_that_stays_red(
+        board, monkeypatch, capsys, case_id, wav, key, suffix):
+    """The other leg, constructed the same way: resolved paths, and no
+    same-file test. A hard link is the one spelling that defeats it, because
+    a hard link is another name for the inode and no path comparison sees it.
+    `NOTHING_BESIDE` is BLIND to that spelling, for the reason the first
+    control gives: the record lands beside the link."""
+    monkeypatch.setattr(rc, "_names_one_file",
+                        lambda candidate, published: candidate.resolve() == published.resolve())
+    seen = _clean_collision(board, monkeypatch, capsys, case_id, wav)
+    assert {label: tuple(violated) for label, violated in seen.items()} \
+        == _readings({HARD: THROUGH_A_LINK})
+    assert seen[HARD] == list(THROUGH_A_LINK)
