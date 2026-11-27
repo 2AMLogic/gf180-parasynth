@@ -642,3 +642,48 @@ def test_the_pedalboard_base_inherits_the_pin_discipline_rather_than_copying_it(
         assert getattr(rr._PedalboardPlugin, meth) is not getattr(rr._Plugin, meth), meth
     # The Model D patch itself is the dawdreamer rig's, taken by reference.
     assert rr.ModelDPedalboardRig._base_setup is rr.ModelDRig.setup
+
+
+@pytest.mark.parametrize(("control", "check_name"), [
+    ("Tune", "pins written (raw readback)"),
+    ("o1_range", "osc range calibration"),
+    ("master", "level trim"),
+])
+def test_an_unreadable_raw_parameter_prevents_qualification(
+        monkeypatch, tmp_path, control, check_name):
+    """Keep the fake synth sounding normally while its host loses one readback."""
+    Rig = install(monkeypatch, tmp_path)
+    index = 3 if control == "Tune" else Rig.I[control]
+    param = Rig.fake._parameters[index]
+
+    class UnreadableParam(_FakeParam):
+        reads = 0
+
+        @_FakeParam.raw_value.getter
+        def raw_value(self):
+            self.reads += 1
+            return math.nan
+
+        @property
+        def string_value(self):
+            return self.get_text_for_raw_value(self.raw_value)
+
+    faulty = UnreadableParam(index, param.name, steps=param.num_steps)
+    faulty.raw_value = param.raw_value
+    Rig.fake._parameters[index] = faulty
+    # The fake normally synthesizes through the same getter used by the host.
+    # Read its actual stored setting so the sole defect is in host readback.
+    def internal_setting(key):
+        return Rig.fake._parameters[Rig.I[key]]._raw
+
+    monkeypatch.setattr(Rig.fake, "_raw", internal_setting)
+    try:
+        qualification = Rig().qualification
+    except rq.RigRefusal as exc:
+        qualification = exc.qualification
+    assert faulty.reads > 0
+    check = by_name(qualification)[check_name]
+    assert not qualification.qualified and check.outcome in (rq.REFUSED, rq.FAIL), (
+        f"{control} read back NaN, {check_name} returned {check.outcome}, "
+        f"rig verdict {qualification.verdict}"
+    )
