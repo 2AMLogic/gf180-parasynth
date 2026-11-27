@@ -113,6 +113,10 @@ jobs:
   # not a quiet one. Every control here has been seen failing locally; if one
   # stops failing, either the defect stopped being injected or the check
   # stopped checking, and both are worse than a red build.
+  # #1126/#1199: every injected run also needs a CLEAN run of its script beside
+  # it, before it -- a bench that is red before any injection turns every
+  # --expect-fail into a false PASS, and the mutants share one default clean
+  # configuration. The verify_i2s_tx step below has always been paired this way.
   controls:
     runs-on: ubuntu-24.04
     timeout-minutes: 120

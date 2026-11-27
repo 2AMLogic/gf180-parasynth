@@ -5,10 +5,17 @@ with real subprocesses, so exit statuses and the JSON report are the shipped
 ones. The wiring tests read the live `controls` recipe, because a runner nobody
 calls proves nothing ("check that the thing you are testing is the thing that
 ships").
+
+#1199 extends the same contract to the two runners #1126 did not touch:
+`make verify-full`'s Verilator VOICE_FILTER2X_OFF control (an adjacent clean
+$(RUN) row cannot gate it -- run_all records each row independently -- so the
+pair itself moves behind run_controls) and the nightly workflow's `controls`
+job, where every injected run needs a clean run of its script before it.
 """
 from __future__ import annotations
 
 import json
+import pathlib
 import re
 import shlex
 import shutil
@@ -141,8 +148,8 @@ def test_malformed_specs_are_refused_and_nothing_runs(tmp_path, cmds):
 
 # -- wiring: the live `controls` recipe -------------------------------------
 
-def _entries():
-    recipe = makefile_recipe("controls")
+def _entries(target="controls"):
+    recipe = makefile_recipe(target)
     out = []
     for ln in recipe.split("\n"):
         m = re.search(r'"(.*?)"', ln)
@@ -268,6 +275,135 @@ def test_the_baseline_config_guard_accepts_a_matching_mutant():
     assert _mutant_matches_baseline(
         "verify_ctl.py --outdir b",
         "verify_ctl.py --link dr7rev1 --expect-fail --outdir m")
+
+
+# -- #1199: verify-full's Verilator control ----------------------------------
+
+def test_verify_full_verilator_control_is_behind_a_clean_baseline():
+    """The VOICE_FILTER2X_OFF Verilator row used to be a bare $(RUN) row with
+    no clean twin in the target, and $(RUN) is run_all, which records each row
+    independently: a red adjacent clean row would not stop the mutant, and
+    --expect-fail would credit it against a broken baseline. It must be an
+    @after= whose @baseline= is the clean --simulator verilator --m5a-smoke
+    --filter2x run (the `make controls` baseline top-m5a-f2x is iverilog and
+    is not this pair's baseline)."""
+    recipe = makefile_recipe("verify-full")
+    assert "tools/run_controls.py" in recipe, \
+        "verify-full's injected control must run through the baseline runner"
+    entries = _entries("verify-full")
+    bare = [e for e in entries if not e.startswith("@") and "--inject" in e]
+    assert not bare, f"injected rows not gated on a clean baseline: {bare}"
+    specs = run_controls.parse([e for e in entries if e.startswith("@")])
+    run_controls.validate(specs)               # refuses a shared --outdir, too
+    base = {s["group"]: s for s in specs if s["role"] == "baseline"}
+    muts = [s for s in specs if s["role"] == "mutant"]
+    assert muts, "verify-full has no @baseline=/@after= pair"
+    for s in muts:
+        assert _mutant_matches_baseline(base[s["group"]]["cmd"], s["cmd"]), \
+            (s["group"], base[s["group"]]["cmd"], s["cmd"])
+    pair = [s for s in specs if "verilator" in s["cmd"] and "--filter2x" in s["cmd"]]
+    assert {s["role"] for s in pair} == {"baseline", "mutant"}, \
+        "the Verilator m5a-smoke filter2x clean run and its mutant must be one pair"
+
+
+def _stub_synth_top(tmp_path, monkeypatch):
+    """A double with the pair's shape: records every invocation, exits with
+    STUB_RC<n> where n is the invocation count. The test, not the double,
+    decides what each invocation means."""
+    stub = tmp_path / "stub_synth_top.py"
+    log = tmp_path / "stub.log"
+    stub.write_text(
+        "import os, sys\n"
+        "log = os.environ['STUB_LOG']\n"
+        "with open(log, 'a') as fh:\n"
+        "    fh.write(' '.join(sys.argv[1:]) + '\\n')\n"
+        "n = sum(1 for _ in open(log))\n"
+        "sys.exit(int(os.environ.get('STUB_RC%d' % n, 0)))\n")
+    monkeypatch.setenv("STUB_LOG", str(log))
+    return f"{PY} {stub}", log
+
+
+def _verify_full_pair(run_cmd, tmp_path):
+    """The #1199 pair's shape: same simulator and stimulus, distinct outdirs,
+    mutant = baseline + --inject VOICE_FILTER2X_OFF --expect-fail."""
+    return [
+        f"@baseline=top-m5a-f2x-vrt {run_cmd} --simulator verilator "
+        f"--m5a-smoke --filter2x --outdir {tmp_path}/clean",
+        f"@after=top-m5a-f2x-vrt {run_cmd} --simulator verilator "
+        f"--m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail "
+        f"--outdir {tmp_path}/mut",
+    ]
+
+
+def test_verify_full_pair_a_red_clean_baseline_never_runs_the_mutant(tmp_path, monkeypatch):
+    """#1199 AC-A. With the clean baseline forced red the mutant must NEVER
+    run (a run would credit itself via --expect-fail), must be recorded
+    NO-VERDICT with skipped: true, and the overall exit must be 1. This is
+    the behavior a `make -n verify-full` dry run cannot show: it prints
+    commands, not outcomes."""
+    run_cmd, log = _stub_synth_top(tmp_path, monkeypatch)
+    monkeypatch.setenv("STUB_RC1", "1")       # the clean bench is red
+    rc, rep = run(tmp_path, _verify_full_pair(run_cmd, tmp_path))
+    assert rc == 1
+    assert rep[0]["state"] == "FAIL" and rep[0]["role"] == "baseline"
+    m = rep[1]
+    assert m["state"] == "NO-VERDICT" and m["skipped"] is True
+    assert m["baseline"] == "top-m5a-f2x-vrt"
+    assert "VOICE_FILTER2X_OFF" in m["cmd"], "a skipped mutant must stay identifiable"
+    lines = log.read_text().splitlines()
+    assert len(lines) == 1 and "VOICE_FILTER2X_OFF" not in lines[0], \
+        "the mutant ran although its clean baseline was red"
+
+
+def test_verify_full_pair_a_green_baseline_runs_and_judges_the_mutant(tmp_path, monkeypatch):
+    """#1199 AC-A, positive case: baseline PASS starts the mutant, which is
+    judged on its OWN exit status -- exit 0 (a caught mutant under
+    --expect-fail) passes the pair, exit 1 (an ineffective one) fails it."""
+    run_cmd, log = _stub_synth_top(tmp_path, monkeypatch)
+    monkeypatch.setenv("STUB_RC1", "0")
+    monkeypatch.setenv("STUB_RC2", "0")
+    rc, rep = run(tmp_path, _verify_full_pair(run_cmd, tmp_path))
+    assert rc == 0 and [r["state"] for r in rep] == ["PASS", "PASS"]
+    lines = log.read_text().splitlines()
+    assert len(lines) == 2 and "VOICE_FILTER2X_OFF" in lines[1]
+    assert not rep[1]["skipped"]
+
+    monkeypatch.setenv("STUB_RC2", "1")       # the mutant is not caught
+    log.write_text("")                         # count invocations within THIS run
+    rc, rep = run(tmp_path, _verify_full_pair(run_cmd, tmp_path))
+    assert rc == 1
+    assert rep[0]["state"] == "PASS" and rep[1]["state"] == "FAIL"
+    assert not rep[1]["skipped"]
+
+
+# -- #1199: the nightly workflow's controls job -------------------------------
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+NIGHTLY = REPO_ROOT / ".github" / "workflows" / "nightly.yml"
+
+
+def test_nightly_controls_run_a_clean_script_before_its_injected_mutants():
+    """The nightly `controls` job used to run eight injected controls with no
+    clean run beside them -- the exact SPI_ADDR7 verdict error #1126
+    reproduces, in a second runner. Any line carrying --inject must follow a
+    clean invocation of the same script, so a bench that is red before any
+    injection stops the step instead of crediting every mutant."""
+    import yaml                                              # a CI dep wherever tools/ runs
+    wf = yaml.safe_load(NIGHTLY.read_text())
+    lines = [ln.strip()
+             for s in wf["jobs"]["controls"]["steps"]
+             for ln in str(s.get("run", "")).splitlines() if ln.strip()]
+    clean, unpaired = set(), []
+    for ln in lines:
+        m = re.match(r"python\s+(\S+\.py)\b", ln)
+        if not m:
+            continue
+        if "--inject" in ln:
+            if m.group(1) not in clean:
+                unpaired.append(ln)
+        else:
+            clean.add(m.group(1))
+    assert not unpaired, f"injected controls with no clean run before them: {unpaired}"
 
 
 # -- close-out: the mixed-baseline run with REAL verifiers, not stand-ins ------

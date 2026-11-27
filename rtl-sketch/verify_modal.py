@@ -137,6 +137,11 @@ def main(argv=None) -> int:
     ap.add_argument("--tb", default=os.path.join(HERE, "tb_modal_fx.v"))
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
     a = ap.parse_args(argv)
+    # #1199: the simulator runs under cwd=HERE; a relative --outdir must be
+    # pinned to the CALLER's cwd or the vectors, the -o and the +vec=/+out=
+    # paths resolve against two different directories. Same normalisation
+    # verify_ctl/verify_synth_top ship.
+    a.outdir = os.path.abspath(a.outdir)
     m = ModalFx(nums=NUMS)
     print(f"verify_modal: model ModalFx(coef Q2.{m.CF}, state {m.SB}-bit/{m.SQ} fraction, "
           f"headroom {m.HR}, {m.OB}-bit word, {m.M} modes, {m.NUMS} with numerators, {'rounding' if m.RND else 'floor'})")

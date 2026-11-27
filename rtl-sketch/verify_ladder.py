@@ -256,6 +256,11 @@ def main(argv=None) -> int:
     ap.add_argument("--out-bits", type=int, default=OUT_BITS, choices=(16, 19),
                     help="ladder output width: 19 (Q4.15, the voice's) or 16 (Q1.15, rev 1)")
     a = ap.parse_args(argv)
+    # #1199: the simulator runs under cwd=HERE (so $readmemh(ROM_FILE) resolves
+    # like yosys's does); a relative --outdir must be pinned to the CALLER's
+    # cwd or the vectors, the -o and the +vec=/+out= paths resolve against two
+    # different directories. Same normalisation verify_ctl/verify_synth_top ship.
+    a.outdir = os.path.abspath(a.outdir)
     log2n = {16: 4, 256: 8}[a.tanh_n]
     rom = {16: "tanh16.hex", 256: "tanh256.hex"}[a.tanh_n]
     print(f"verify_ladder: model LadderFx(24-bit state, 20 fraction, {a.tanh_n}-entry interpolated tanh, "
