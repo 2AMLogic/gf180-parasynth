@@ -33,12 +33,14 @@ Issue #1463 adds a second exception.  The script decided each verdict from
 pytest's exit status alone, so a focused run that exited 1 for ANY reason --
 an unrelated test, another assertion in the right test, a setup error, a run
 that left no report -- was counted RED (#1400's shape, found in #1401's class
-search).  The two CLI tests at the end stage a tree the script takes for the
+search).  Two CLI tests stage a tree the script takes for the
 repository and give each of those pathologies its own mutant, so one run
 (~4 s) holds all of them beside the summary that must rank them: every
 red refused exits 2; a clean survivor is printed SURVIVED and exits 1 over
 any refusal.  They execute the STAGED script -- never this checkout's, whose
 ROOT is the real tree and would run the real suite instead of the fixture.
+A third runs the genuine suite with a diagnostic-only failure injected into
+the negative-spread case. Only the invocation with readings can earn its RED.
 """
 from __future__ import annotations
 
@@ -215,11 +217,10 @@ def _mkdir(tmp, rel):
     return tmp / rel
 
 
-def _run(tmp):
-    """The STAGED runner, whose ROOT is the staged tree -- never SCRIPT, whose
-    ROOT is this checkout and would run the real suite instead of the fixture."""
-    r = subprocess.run([sys.executable, str(tmp / "tools" / SCRIPT.name)],
-                       cwd=tmp, capture_output=True, text=True)
+def _run(tree):
+    """Run the CLI from the tree containing the suite we want to exercise."""
+    r = subprocess.run([sys.executable, str(tree / "tools" / SCRIPT.name)],
+                       cwd=tree, capture_output=True, text=True)
     return r.returncode, r.stdout + r.stderr
 
 
@@ -278,10 +279,42 @@ def test_cli_reports_a_clean_survivor_apart_from_refusals(tmp_path):
     _staged_tree_untouched(tmp_path, before)
 
 
+def test_cli_refuses_negative_spread_when_only_the_diagnostic_fails(tmp_path, monkeypatch):
+    """Both invocations refuse. Only the diagnostic loses its refusal message."""
+    guard = m.MUTANTS["negative-spread"][1]
+    (tmp_path / "diagnostic_only_failure.py").write_text(f'''
+from pathlib import Path
+import pytest
+
+@pytest.fixture(autouse=True)
+def diagnostic_only_failure(request, monkeypatch):
+    if request.node.name != "test_cli_refuses_invalid_baseline_numbers[-5-100]":
+        return
+    if {guard!r} in Path(request.module.bp.__file__).read_text():
+        return
+
+    def refuse(tmp_path, baseline, readings, capsys):
+        return 2, "diagnostic output lost" if readings is None else "REFUSED"
+
+    monkeypatch.setattr(request.module, "_cli", refuse)
+''')
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path), prepend=os.pathsep)
+    monkeypatch.setenv("PYTEST_PLUGINS", "diagnostic_only_failure", prepend=",")
+    code, out = _run(ROOT)
+    assert code == 2, out
+    line = _verdict(out, "negative-spread")
+    assert line.startswith("REFUSED -- no intended assertion failed"), out
+    assert "diagnostic output lost" in line, out
+    for name in NAMES:
+        if name != "negative-spread":
+            assert _verdict(out, name).startswith("RED --"), out
+    assert "mutants red" not in out, out
+
+
 @pytest.mark.parametrize("name", NAMES)
-def test_expected_sites_name_a_statement_in_the_real_test(name):
+def test_expected_sites_identify_one_statement_in_the_real_test(name):
     """The fast tier for EXPECTED: every recorded test function exists in TEST
-    and its recorded statement is a line of that function, by the same rule
+    and its recorded statement matches exactly one line in it, by the same rule
     the reporter matches statements with.  Only `make controls` proves the
     statement is the one that fails; this is the staleness check."""
     src = (ROOT / m.TEST).read_text()
@@ -291,8 +324,9 @@ def test_expected_sites_name_a_statement_in_the_real_test(name):
     for test, site in m.EXPECTED[name].items():
         fn = functions[test.partition("[")[0]]
         body = [ln.strip() for ln in lines[fn.lineno - 1:fn.end_lineno]]
-        assert site.statement in body or any(ln.startswith(site.statement + ",") for ln in body), (
-            f"{name}: {test} no longer contains {site.statement!r} -- `make controls` REFUSES")
+        matches = [ln for ln in body if ln == site.statement or ln.startswith(site.statement + ",")]
+        assert len(matches) == 1, (
+            f"{name}: {test} has {len(matches)} matches for {site.statement!r}; expected one")
 
 
 _OUTCOME = {"red": "fired", "survived": "no-fire", "refused": "refused"}

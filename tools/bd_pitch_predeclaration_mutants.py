@@ -145,27 +145,27 @@ SELECTIONS = tuple(sorted({k for *_, k in MUTANTS.values()}))
 # `non-dict-entry-unguarded` removes, the validator raised AttributeError from
 # inside itself and the recorded statement was empty, so the test now asserts
 # the refusal itself and the mutant fails there.
-_CLI_REFUSES = hic.Site('assert code == 2 and "REFUSED" in out, out')
+_READINGS_REFUSED = hic.Site('assert readings_code == 2 and "REFUSED" in readings_out, readings_out')
 _CAUGHT_NOT_DERIVED = hic.Site('assert _caught(bp.check(bad), "is not its derivation")')
 _CAUGHT_NOT_UNQUALIFIED = hic.Site(
     'assert _caught(bp.check(bad), "exactly the untouched Fischer conditions at unqualified knobs")')
 ENTRY = "test_non_dict_reading_entry_refuses"
 EXPECTED = {
     "bool-accepted-as-number": {
-        "test_cli_refuses_invalid_baseline_numbers[True-100]": _CLI_REFUSES,
-        "test_cli_refuses_invalid_baseline_numbers[10-True]": _CLI_REFUSES,
+        "test_cli_refuses_invalid_baseline_numbers[True-100]": _READINGS_REFUSED,
+        "test_cli_refuses_invalid_baseline_numbers[10-True]": _READINGS_REFUSED,
     },
     "negative-spread": {
-        "test_cli_refuses_invalid_baseline_numbers[-5-100]": _CLI_REFUSES,
+        "test_cli_refuses_invalid_baseline_numbers[-5-100]": _READINGS_REFUSED,
     },
     "negative-threshold": {
         "test_negative_evaluated_threshold_is_refused":
             hic.Site('with pytest.raises(bp.Refused, match="non-negative"):', "Failed"),
     },
     "non-finite-deficit": {
-        "test_cli_refuses_invalid_baseline_numbers[10-inf]": _CLI_REFUSES,
-        "test_cli_refuses_invalid_baseline_numbers[10-100_0]": _CLI_REFUSES,
-        "test_cli_refuses_invalid_baseline_numbers[10-True]": _CLI_REFUSES,
+        "test_cli_refuses_invalid_baseline_numbers[10-inf]": _READINGS_REFUSED,
+        "test_cli_refuses_invalid_baseline_numbers[10-100_0]": _READINGS_REFUSED,
+        "test_cli_refuses_invalid_baseline_numbers[10-True]": _READINGS_REFUSED,
     },
     "strict-at-equality": {
         "test_satisfiable_at_equality":

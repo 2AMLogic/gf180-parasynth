@@ -207,10 +207,11 @@ def _cli(tmp_path, baseline, readings=None, capsys=None):
     (-100, 100), (-5, 100), (10, float("inf")), (True, 100), (10, "100"), (10, True),
     (float("nan"), 100), ("10", 100), (None, 100), (10, None)])
 def test_cli_refuses_invalid_baseline_numbers(tmp_path, capsys, record, spread, deficit):
-    code, out = _cli(tmp_path, _baseline(spread, deficit), _readings(record), capsys)
-    assert code == 2 and "REFUSED" in out, out
-    code, out = _cli(tmp_path, _baseline(spread, deficit), None, capsys)
-    assert code == 2 and "REFUSED" in out, out
+    baseline = _baseline(spread, deficit)
+    readings_code, readings_out = _cli(tmp_path, baseline, _readings(record), capsys)
+    assert readings_code == 2 and "REFUSED" in readings_out, readings_out
+    diagnostic_code, diagnostic_out = _cli(tmp_path, baseline, None, capsys)
+    assert diagnostic_code == 2 and "REFUSED" in diagnostic_out, diagnostic_out
 
 
 @pytest.mark.parametrize("bl", [[], "x", {"provenance": []}, {"provenance": {"commit": "a", "sources_dirty": False}}])
