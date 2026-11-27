@@ -2499,12 +2499,10 @@ def cmd_check(args) -> int:
                   f"{v.detail}")
         return 1
     if exercised == 0:
-        # Nothing failed because nothing was exercised: an empty tally is not
-        # a pass, whichever of the checks above ran and held.
         print("\n  No estimator outcome was exercised this run. Rows present but")
-        print(f"  not outcomes: {not_outcomes}. The axis, inventory and conversion")
-        print("  checks passed, and are bookkeeping. An empty tally is not a pass:")
-        print("  check the --estimator / --kind selection.")
+        print(f"  not outcomes: {not_outcomes}.")
+        print("  The axis, inventory and conversion checks recorded no failures.")
+        print("  Check the --estimator / --kind selection.")
         print(f"{exercised} estimator {noun} exercised "
               f"-- NO VERDICT (NO ESTIMATOR EXERCISED)")
         return 2

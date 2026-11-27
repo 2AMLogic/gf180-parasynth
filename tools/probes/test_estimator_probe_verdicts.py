@@ -414,6 +414,8 @@ def test_ground_truth_entirely_empty_record_is_no_verdict(gt, monkeypatch, capsy
     code, out = _ground_truth_main(gt, capsys)
     assert code == NO_VERDICT, _shows(out, f"exit {code}, expected 2")
     assert _tail(out) == COUNTED_EMPTY_GROUND_TRUTH, _shows(out, "the verdict")
+    assert "checks passed" not in " ".join(out.lower().split()), _shows(
+        out, "empty auxiliary results were reported as passing checks")
 
 
 @pytest.mark.parametrize("rows", [(), "skip-only"], ids=["no-rows", "skip-rows"])
