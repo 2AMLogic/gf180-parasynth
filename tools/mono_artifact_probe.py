@@ -559,6 +559,39 @@ DEV_CONDITIONS = {(84, 20000, 0.0, 0.75), (96, 20000, 0.0, 0.75), (72, 20000, 0.
 STAGES = ("oscillator", "mixer", "ladder_in_96k", "ladder_out_96k", "ladder_out", "output")
 
 
+def scheduled_pulse_pairs(rows):
+    """Yield each pulse2x condition, its R1 and candidate rows, and any reason
+    the comparison is unavailable. A drive repair changes the rendered patch
+    while the two engines still share the same scheduled condition."""
+    rows_by_condition = {}
+    for row in rows:
+        patch = row.get("nominal") or row["patch"]
+        if row["verdict"] == "REFUSED" and not row.get("nominal"):
+            # Early sweeps stored only held_patch overrides on refusal.
+            patch = held_patch(**patch)
+        condition = (
+            patch["waves"][0],
+            row["note"],
+            patch["cutoff"][0],
+            patch["q"],
+            patch["drive"],
+        )
+        rows_by_condition[row["engine"], condition] = row
+
+    for (engine, condition), candidate in rows_by_condition.items():
+        if engine != "pulse2x":
+            continue
+        base = rows_by_condition.get(("r1", condition))
+        reason = None
+        if base is None:
+            reason = "NOT RUN (no R1 row)"
+        elif base["verdict"] != "MEASURED" or candidate["verdict"] != "MEASURED":
+            reason = (
+                f"NO VERDICT (r1 {base['verdict']}, candidate {candidate['verdict']})"
+            )
+        yield condition, base, candidate, reason
+
+
 def summarize(paths) -> dict:
     """Stage localization and the pulse2x-versus-R1 confirmation from sweep
     records. Development conditions (the M5A/M5B notes at the preset filter)
@@ -566,13 +599,16 @@ def summarize(paths) -> dict:
     properties -- each is counted on its own."""
     rows = [r for pth in paths for r in json.loads(pathlib.Path(pth).read_text())["rows"]]
     bad = [r for r in rows if r["verdict"] != "MEASURED"]
-    key = lambda r: (r["patch"]["waves"][0], r["note"], tuple(r["patch"]["cutoff"]),
-                     r["patch"]["q"], r["patch"]["drive"])
-    by = {(r["engine"],) + key(r): r for r in rows if r["verdict"] == "MEASURED"}
-    loc = []
-    for (eng, wave, note, cut, q, drv), r in sorted(by.items()):
-        if cut != (20000, 20000) or q != 0.0 or drv != 0.75:
+    preset_rows = {}
+    for r in rows:
+        if r["verdict"] != "MEASURED":
             continue
+        patch = r["patch"]
+        if patch["cutoff"] == [20000, 20000] and patch["q"] == 0.0 and patch["drive"] == 0.75:
+            preset_rows[r["engine"], patch["waves"][0], r["note"]] = r
+
+    loc = []
+    for (eng, wave, note), r in sorted(preset_rows.items()):
         st = r["stages"]
         loc.append({"engine": eng, "wave": wave, "note": note,
                     "unwanted_inband_dbfs": {n: st[n].get("unwanted_inband_dbfs") for n in STAGES if n in st},
@@ -582,16 +618,14 @@ def summarize(paths) -> dict:
                     "output_upper_wanted_rel_db": st["output"]["upper_wanted_rel_db"],
                     "output_intended_dbfs": st["output"]["intended_dbfs"]})
     pairs = []
-    for k, cand in by.items():
-        if k[0] != "pulse2x":
-            continue
-        base = by.get(("r1",) + k[1:])
-        if base is None:
+    unavailable = []
+    for (wave, note, cut, q, drv), base, cand, reason in scheduled_pulse_pairs(rows):
+        point = {"wave": wave, "note": note, "cutoff": cut, "q": q, "drive": drv}
+        if reason is not None:
+            unavailable.append({**point, "verdict": reason})
             continue
         o_b, o_c = base["stages"]["output"], cand["stages"]["output"]
-        wave, note, cut, q, drv = k[1:]
-        pairs.append({"wave": wave, "note": note, "cutoff": cut[0], "q": q, "drive": drv,
-                      "dev": (note, cut[0], q, drv) in DEV_CONDITIONS and wave == "pulse29",
+        pairs.append({**point, "dev": (note, cut, q, drv) in DEV_CONDITIONS and wave == "pulse29",
                       "d_unwanted_dbfs": round(o_c["unwanted_dbfs"] - o_b["unwanted_dbfs"], 3),
                       "d_unwanted_rel_db": round(o_c["unwanted_rel_db"] - o_b["unwanted_rel_db"], 3),
                       "d_residual_dbfs": round(o_c["residual_dbfs"] - o_b["residual_dbfs"], 3),
@@ -618,7 +652,8 @@ def summarize(paths) -> dict:
     return {"refused": [{k: r.get(k) for k in ("engine", "note", "patch", "reason")} for r in bad],
             "localization": loc, "pulse2x_vs_r1": pairs,
             "confirmation": {"development": tally([p for p in pairs if p["dev"]]),
-                             "untouched": tally([p for p in pairs if not p["dev"]])}}
+                             "untouched": tally([p for p in pairs if not p["dev"]]),
+                             "unavailable_pairs": unavailable}}
 
 
 def provenance() -> dict:
