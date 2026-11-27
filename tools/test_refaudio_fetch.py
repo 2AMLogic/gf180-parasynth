@@ -138,3 +138,23 @@ def test_pack_without_an_index_says_size_is_unchecked(lib, monkeypatch, capsys):
     monkeypatch.setenv("STUB_BYTES", "10")
     assert rf.main(["noindex.zip", "x/y.wav"]) == rf.FETCHED
     assert "sizes will NOT be checked" in capsys.readouterr().out
+
+
+# --- the index the sizes are checked against ----------------------------------
+
+@pytest.mark.parametrize(("row", "field"), [
+    ("Pack A/kick.wav", "bytes"),
+    ("Pack A/kick.wav\t", "bytes"),
+    ("\t12", "path"),
+])
+def test_an_incomplete_index_row_is_an_error_naming_the_field_not_a_size(lib, row, field):
+    """A row with no `path` or no `bytes` is not an index entry. This tool used
+    to carry its own reader of `refaudio/index/*.tsv` and read the empty path
+    as `{'': 12}`: with that row in the index `main()` still printed FETCHED
+    and exited 0. The other two rows died inside `int()` with a message that
+    named no field (#1551). The sizes are now read by `tools/refaudio_local.py`'s
+    one reader, which names the line and the field."""
+    assert rf.indexed_sizes(ARCHIVE) == {MEMBER: SIZE}, "the complete index must still read"
+    (lib / "index" / "pack_a.tsv").write_text(f"path\tbytes\n{row}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=f"missing {field}"):
+        rf.indexed_sizes(ARCHIVE)

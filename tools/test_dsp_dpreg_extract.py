@@ -46,7 +46,7 @@ def box(tmp_path):
     return d
 
 
-def _fake(box_dir, fail_at=None):
+def _fake(box_dir, fail_at=None, drc=None):
     calls = []
 
     def sh(cmd, **kw):
@@ -60,13 +60,13 @@ def _fake(box_dir, fail_at=None):
                 name = Path(src.split(":", 1)[-1]).name
                 shutil.copyfile(box_dir / name, dst)
         if rc == 0 and cmd[-1].startswith("cat "):
-            out = (PUB / "drc.rpt").read_text()
+            out = (PUB / "drc.rpt").read_text() if drc is None else drc
         return subprocess.CompletedProcess(cmd, rc, out, "")
     return calls, sh
 
 
-def _run(monkeypatch, tmp_path, box_dir, where, fail_at=None):
-    calls, sh = _fake(box_dir, fail_at)
+def _run(monkeypatch, tmp_path, box_dir, where, fail_at=None, drc=None):
+    calls, sh = _fake(box_dir, fail_at, drc)
     monkeypatch.setattr(dx, "sh", sh)
     ev = tmp_path / f"ev-{where}-{fail_at}" / "dsp-dpreg-evidence"
     try:
@@ -130,3 +130,30 @@ def test_the_post_run_digest_check_still_refuses_in_local_mode(monkeypatch, tmp_
     (box / "dsp_cells_dump.txt").write_text("tampered after the manifest\n")
     rc, _calls, _ev = _run(monkeypatch, tmp_path, box, "local")
     assert rc == 1
+
+
+SAME_INSTANCE_TWICE = """\
+| DPREG-4 | Warning  | DSP48E1_PregDynOpmodeZmuxP: | 2      |
+DPREG-4#1 Warning
+DSP48E1_PregDynOpmodeZmuxP:
+The DSP48E1 cell u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0 with the given dynamic OPMODE[6:0] connections may lead
+Related violations: <none>
+
+DPREG-4#2 Warning
+DSP48E1_PregDynOpmodeZmuxP:
+The DSP48E1 cell u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0 with the given dynamic OPMODE[6:0] connections may lead
+Related violations: <none>
+"""
+
+
+def test_a_drc_flagging_one_instance_twice_refuses_before_any_tcl_is_staged(
+        monkeypatch, tmp_path, box):
+    """That drc.rpt used to be expanded into duplicate cells, a Tcl staged and
+    Vivado run, all for the analyser to refuse the dump (#1557)."""
+    rc, calls, ev = _run(monkeypatch, tmp_path, box, "local",
+                         drc=SAME_INSTANCE_TWICE)
+    assert rc == "SystemExit: REFUSED: drc.rpt flags the same instance twice"
+    issued = [" ".join(cmd) + (inp or "") for cmd, inp in calls]
+    assert not any("vivado" in s or "dsp_dpreg_extract.tcl" in s
+                   for s in issued)
+    assert not (ev / "dsp_dpreg_extract.tcl").exists()
