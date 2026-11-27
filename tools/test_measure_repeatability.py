@@ -171,6 +171,39 @@ def test_reader_accepts_only_its_own_indexed_inputs(indexed_hits, monkeypatch, r
         assert result["cross_correlation"] < 0.9999
 
 
+def test_measure_scores_the_restored_legacy_grid(indexed_hits, tmp_path, monkeypatch, capsys):
+    legacy = indexed_hits[LEGACY_FOLDER]
+    member = legacy / LEGACY_F06
+    wrong = member.with_name("BD_Clean_Acc_F_808_06.wav")
+    member.rename(wrong)
+    dest = tmp_path / "measure.json"
+    args = ["--measure", "--json", str(dest)]
+    monkeypatch.setattr(mr, "load", unexpected_load)
+    assert mr.main(args) == 2
+    assert member.name in capsys.readouterr().out
+    wrong.rename(member)
+
+    def load(path):
+        assert path.is_file()
+        # A short end stop keeps the full cross-correlation cheap. Give the
+        # self-test's 400 ms truncation control a long, still-sounding E/03.
+        tau = 0.03 if "Decay B" in path.name else 0.02
+        if path.name == "BD A 808 Decay E 03.wav":
+            tau = 0.20
+        return mr.synthetic_bd(
+            SR, seconds=10 * tau, tau=tau, f0=55 if path.parent == legacy else 50
+        ), SR
+
+    monkeypatch.setattr(mr, "load", load)
+    assert mr.main(args) == 0
+    result = json.loads(dest.read_text())
+    for accent in ("accent A", "accent B"):
+        assert result["knob_travel"][accent]["Pitch trajectory"]["n"] == 36
+    attribution = result["session_to_session"]["f0_attribution"]
+    assert attribution["f0_difference_hz"] == pytest.approx(5, abs=0.1)
+    assert result["verdicts"]
+
+
 # ---------------------------------------------------------------------------
 # longest_true_run -- the precondition that decides clipping
 # ---------------------------------------------------------------------------
