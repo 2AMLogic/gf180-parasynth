@@ -352,3 +352,25 @@ def test_absent_congas_are_required_only_by_the_congas_flag(root, tmp_path, monk
     res = json.loads((tmp_path / "all.json").read_text(encoding="utf-8"))
     assert sorted(res["voices"]) == ["HC", "HT", "LC", "LT", "MC", "MT"]
     assert res["voices"]["HC"]["B"]["n_ok"] == 11 and "C" not in res["voices"]["HC"]
+
+
+@pytest.mark.parametrize("by_accent", [False, True], ids=["by-tuning", "by-accent"])
+def test_tom_axis_report_follows_the_fixture(root, tmp_path, monkeypatch, capsys, by_accent):
+    if by_accent:
+        # All eleven positions at one accent hold the same pitch.
+        monkeypatch.setattr(
+            sys.modules[__name__], "_hz",
+            lambda name: {"A": 320.0, "B": 420.0, "C": 520.0}[name.split()[2]],
+        )
+    _cache(root, tm.VOICES)
+    monkeypatch.setattr(tm, "CACHE", root)
+    monkeypatch.setattr(tm.P, "measure", _fast_measure)
+    out = tmp_path / "report.json"
+    assert tm.main(["--json", str(out)]) == 0
+    report = json.loads(out.read_text())
+    for voice in report["voices"].values():
+        assert voice["control_tuning_span_hz"] == (0 if by_accent else 200)
+        assert voice["control_accent_span_hz"] == (200 if by_accent else 0)
+    text = capsys.readouterr().out
+    if by_accent:
+        assert "-> 01..11 is tuning, A/B/C is not" not in text
