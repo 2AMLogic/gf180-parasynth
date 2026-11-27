@@ -228,6 +228,252 @@ def test_across_note_refuses_without_two_measured_windows():
     assert across["verdict"] == odp.REFUSED, across
 
 
+# ---- the across-note comparison: windows that cannot be compared (#1407) ----
+PITCH_MISMATCH, RATE_MISMATCH = "F0_NOMINAL_MISMATCH", "SAMPLE_RATE_MISMATCH"
+COMPARISON_FIELDS = [("f0_nominal", PITCH_MISMATCH), ("sr", RATE_MISMATCH)]
+DRIFT_VALUES = {"span_cents", "cents_vs_first"}
+
+
+def _steady_window(sr: int, f0: float, label: str, dur_s: float = 3.0) -> dict:
+    """One usable window: a tone with NO wander, measured against the pitch
+    and the rate it was generated at. `fm_tone` integrates the phase exactly,
+    so "this tone does not drift" is the stimulus's own property and not a
+    reading the probe has to be trusted for."""
+    x = odp.fm_tone(sr, dur_s, f0, np.zeros(8), harmonics=4)
+    return odp.drift_report(x, sr, f0, label=label)
+
+
+def _assert_incomparable(across: dict, field: str, code: str, at: int,
+                         label: str) -> None:
+    """The aggregate refusal #1407 asks for: REFUSED, naming the field and
+    the offending window, and carrying no drift value."""
+    assert across["verdict"] == odp.REFUSED, across
+    assert across["refusal"] == code, across
+    assert across["field"] == field, across
+    assert across["offending_window"] == at, across
+    assert across["labels"][at] == label, across
+    assert across["refusal_detail"], across
+    assert not (DRIFT_VALUES & across.keys()), across
+
+
+def test_across_note_refuses_two_notes_each_stable_at_its_own_pitch():
+    """The 17-cent example of #1407. Each window is STABLE against its own
+    nominal pitch. Compared, they read DRIFTING with a span of 17.000 cents:
+    the distance between the two NOTES, reported as drift."""
+    f1 = F0 * 2 ** (17 / 1200)
+    a, b = _steady_window(SR, F0, "first"), _steady_window(SR, f1, "second")
+    assert [r["verdict"] for r in (a, b)] == [odp.STABLE, odp.STABLE], (a, b)
+    _assert_incomparable(odp.across_note_drift([a, b]), "f0_nominal",
+                         PITCH_MISMATCH, at=1, label="second")
+
+
+def test_across_note_refuses_one_note_rendered_at_two_sample_rates():
+    """The same pitch at 48,000 and 44,100 Hz: two stable windows under one
+    nominal pitch, read as STABLE across a span of 0.000 cents (rounded).
+    One render has one rate, so these are not two instances of one note in
+    one render whatever their pitches measure."""
+    a, b = _steady_window(48000, F0, "48k"), _steady_window(44100, F0, "44.1k")
+    assert [r["verdict"] for r in (a, b)] == [odp.STABLE, odp.STABLE], (a, b)
+    _assert_incomparable(odp.across_note_drift([a, b]), "sr",
+                         RATE_MISMATCH, at=1, label="44.1k")
+
+
+def _row(n: int, at: int, field: str) -> list:
+    """`n` usable windows whose window `at` alone declares a different
+    `field`: a tone 17 cents up measured against itself for `f0_nominal`, the
+    same tone at 44,100 Hz for `sr`."""
+    rows = []
+    for i in range(n):
+        if i == at and field == "f0_nominal":
+            rows.append(_steady_window(SR, F0 * 2 ** (17 / 1200), f"n{i}"))
+        elif i == at:
+            rows.append(_steady_window(44100, F0, f"n{i}"))
+        else:
+            rows.append(_steady_window(SR, F0, f"n{i}"))
+    return rows
+
+
+@pytest.mark.parametrize("field, code", COMPARISON_FIELDS)
+@pytest.mark.parametrize("n, at", [(3, 2), (3, 1), (3, 0), (4, 3), (4, 1)])
+def test_across_note_finds_a_mismatch_wherever_it_sits(field, code, n, at):
+    """The only mismatch in the LAST of three otherwise comparable windows
+    defeats a check of the first pair alone. `at` is where the odd window
+    sits; with it FIRST every other window disagrees with it, and window 1 is
+    the first one found to."""
+    rows = _row(n, at, field)
+    assert [r["verdict"] for r in rows] == [odp.STABLE] * n, rows
+    found = 1 if at == 0 else at
+    _assert_incomparable(odp.across_note_drift(rows), field, code,
+                         at=found, label=f"n{found}")
+
+
+@pytest.mark.parametrize("field, code", COMPARISON_FIELDS)
+def test_across_note_refuses_when_no_window_declares_the_comparison_field(
+        field, code):
+    """Matching missing values are not agreement. With the key gone from every
+    report no two windows differ, so a guard that only looks for a difference
+    between them finds none."""
+    rows = [_steady_window(SR, F0, f"n{i}") for i in range(3)]
+    assert odp.across_note_drift(rows)["verdict"] == odp.STABLE, rows
+    for r in rows:
+        r.pop(field)
+    _assert_incomparable(odp.across_note_drift(rows), field, code,
+                         at=0, label="n0")
+
+
+_NOT_A_DECLARATION = [
+    ("nan", math.nan), ("inf", math.inf), ("neg-inf", -math.inf),
+    ("zero", 0), ("zero-float", 0.0), ("negative", -F0), ("none", None),
+    ("text", "48000"), ("bool", True),
+]
+
+
+@pytest.mark.parametrize("field, code", COMPARISON_FIELDS)
+@pytest.mark.parametrize("value", [v for _, v in _NOT_A_DECLARATION],
+                         ids=[n for n, _ in _NOT_A_DECLARATION])
+def test_across_note_refuses_a_field_that_is_not_a_finite_positive_number(
+        field, code, value):
+    """A declared comparison field is a finite positive number. NaN, the
+    infinities, zero, a negative, None, a string and a bool are not, in
+    every window alike: NaN compares unequal to itself and every other value
+    here compares equal, so a difference search refuses the first for the
+    wrong reason and passes the rest."""
+    rows = [_steady_window(SR, F0, f"n{i}") for i in range(3)]
+    for r in rows:
+        r[field] = value
+    _assert_incomparable(odp.across_note_drift(rows), field, code,
+                         at=0, label="n0")
+
+
+@pytest.mark.parametrize("field, code", COMPARISON_FIELDS)
+def test_across_note_refuses_one_window_that_declares_nothing(field, code):
+    """The LAST window alone lacks the field and the other two agree, so a
+    check that stops at the first pair admits it."""
+    rows = [_steady_window(SR, F0, f"n{i}") for i in range(3)]
+    rows[2][field] = None
+    _assert_incomparable(odp.across_note_drift(rows), field, code,
+                         at=2, label="n2")
+
+
+@pytest.mark.parametrize("sr, f0, field, code, measurable", [
+    (SR, F0 * 2 ** (1.0 / 1200), "f0_nominal", PITCH_MISMATCH, True),
+    (SR, math.nextafter(F0, math.inf), "f0_nominal", PITCH_MISMATCH, False),
+    (48001, F0, "sr", RATE_MISMATCH, False)],
+    ids=["one-cent", "one-float-step", "one-hertz"])
+def test_across_note_compares_what_the_windows_declare_with_no_tolerance(
+        sr, f0, field, code, measurable):
+    """The declared fields are compared directly, with no tolerance. A second
+    window declared a single cent from the first refuses. So does one declared
+    a float step away, or at a rate a hertz away: those two differ in nothing
+    a measurement can resolve (`measurable` says whether the pitch difference
+    clears the floor), and still refuse. A tolerance would admit a commanded
+    pitch change smaller than itself and report it as drift. A caller that
+    holds ONE nominal pitch value per note is unaffected."""
+    a, b = _steady_window(SR, F0, "first"), _steady_window(sr, f0, "second")
+    assert [r["verdict"] for r in (a, b)] == [odp.STABLE, odp.STABLE], (a, b)
+    step = abs(float(odp.cents(b["f0_measured_hz"], a["f0_measured_hz"])))
+    assert (step > a["floor_cents"]) == measurable, (step, a["floor_cents"])
+    _assert_incomparable(odp.across_note_drift([a, b]), field, code,
+                         at=1, label="second")
+
+
+def test_across_note_still_measures_a_pitch_step_under_one_declared_pitch():
+    """What the guard must NOT refuse: the same two tones as the 17-cent
+    example, with the second window declared at the first's nominal pitch.
+    The 17 cents is then a measured change between two instances of one note,
+    which is the comparison's whole subject. The guard keys on what the windows
+    DECLARE, never on what they measure."""
+    f1 = F0 * 2 ** (17 / 1200)
+    a = _steady_window(SR, F0, "first")
+    b = odp.drift_report(odp.fm_tone(SR, 3.0, f1, np.zeros(8), harmonics=4),
+                         SR, F0, label="second")
+    across = odp.across_note_drift([a, b])
+    assert across["verdict"] == odp.DRIFTING, across
+    assert abs(across["span_cents"] - 17.0) < 0.2, across
+
+
+@pytest.mark.parametrize("field, code, left, right", [
+    ("sr", RATE_MISMATCH, np.float16(48000), 48001),
+    ("f0_nominal", PITCH_MISMATCH, np.float32(F0), F0),
+    ("sr", RATE_MISMATCH, np.uint64(2**53 + 1), float(2**53)),
+    ("f0_nominal", PITCH_MISMATCH, np.nextafter(np.longdouble(1), np.longdouble(2)), 1.0),
+    pytest.param("sr", RATE_MISMATCH, 10**5000, 10**5000 + 1, id="adjacent-huge-ints"),
+])
+def test_across_note_refuses_distinct_scalar_declarations(good, field, code, left, right):
+    for first, second in [(left, right), (right, left)]:
+        rows = [dict(good[0], **{field: first}), dict(good[1], **{field: second})]
+        _assert_incomparable(odp.across_note_drift(rows), field, code, at=1, label="n1")
+
+
+@pytest.mark.parametrize("field, left, right", [
+    ("sr", np.float16(48000), 48000),
+    ("f0_nominal", np.float32(F0), float(np.float32(F0))),
+    ("sr", np.uint64(2**53 + 1), 2**53 + 1),
+    pytest.param("f0_nominal", 10**310, 10**310, id="equal-huge-ints"),
+])
+def test_across_note_accepts_exactly_equal_scalar_declarations(good, field, left, right):
+    rows = [dict(good[0], **{field: left}), dict(good[1], **{field: right})]
+    across = odp.across_note_drift(rows)
+    assert across["verdict"] == odp.STABLE, across
+    assert across["span_cents"] == 0, across
+
+
+@pytest.mark.parametrize("field, code", COMPARISON_FIELDS)
+@pytest.mark.parametrize("invalid", [
+    pytest.param(-(10**310), id="beyond-float-range"),
+    pytest.param(-(10**5000), id="beyond-decimal-print-limit"),
+    pytest.param(np.timedelta64(3, "D"), id="duration"),
+])
+def test_across_note_refuses_invalid_scalar_declarations(good, field, code, invalid):
+    rows = [good[0], dict(good[1], **{field: invalid})]
+    _assert_incomparable(odp.across_note_drift(rows), field, code, at=1, label="n1")
+
+
+def _write_tone(path, sr: int, f0: float) -> str:
+    from scipy.io import wavfile
+
+    wavfile.write(str(path), sr,
+                  odp.fm_tone(sr, 3.0, f0, np.zeros(8), harmonics=4)
+                  .astype("float32"))
+    return str(path)
+
+
+def _cli(tmp_path, *tones) -> dict:
+    """The WAV command's JSON report over `(sr, f0, name)` tones: two files,
+    one shared `--f0`, no `--sr-expected`."""
+    import json
+
+    args = ["--f0", str(F0), "--json", str(tmp_path / "report.json")]
+    for sr, f0, name in tones:
+        args += ["--wav", _write_tone(tmp_path / name, sr, f0)]
+    assert odp.main(args) == 0
+    return json.loads((tmp_path / "report.json").read_text())
+
+
+def test_cli_across_note_refuses_two_rates_under_one_declared_pitch(tmp_path):
+    """The mixed-rate case through the command that ships. Each file measures
+    STABLE on its own; the aggregate refuses, and the JSON read back from disk
+    names the field and the window. A different commanded pitch cannot be
+    reached this way: the command takes one nominal pitch per invocation."""
+    out = _cli(tmp_path, (48000, F0, "tone-48k.wav"),
+               (44100, F0, "tone-44k.wav"))
+    verdicts = [r["verdict"] for r in out["reports"]]
+    assert verdicts == [odp.STABLE, odp.STABLE], out["reports"]
+    _assert_incomparable(out["across_note"], "sr", RATE_MISMATCH, at=1,
+                         label=out["reports"][1]["label"])
+
+
+def test_cli_across_note_still_compares_two_files_of_one_rate(tmp_path):
+    """The control for the test above: two files at one rate under one
+    declared pitch are still compared, and the JSON carries the span. A
+    command that refused every pair would satisfy the refusal test alone."""
+    out = _cli(tmp_path, (48000, F0, "a.wav"), (48000, F0, "b.wav"))
+    verdicts = [r["verdict"] for r in out["reports"]]
+    assert verdicts == [odp.STABLE, odp.STABLE], out["reports"]
+    assert out["across_note"]["verdict"] == odp.STABLE, out["across_note"]
+    assert out["across_note"]["span_cents"] < 0.05, out["across_note"]
+
+
 @pytest.mark.parametrize("bad_window", ["mixed", "silent"])
 def test_cli_across_note_requires_all_requested_pitches(tmp_path, bad_window):
     """A single capture of two valid notes and an unusable third window, read
