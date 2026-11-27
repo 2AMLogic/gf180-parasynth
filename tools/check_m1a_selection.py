@@ -91,6 +91,17 @@ def _passes(measured):
             if p.get("valid") and abs(p["error"]) <= p["tolerance"]}
 
 
+def print_properties(measured):
+    passing = _passes(measured)
+    for name, p in measured["properties"].items():
+        state = ("unqualified" if not p.get("valid") else
+                 "pass" if name in passing else "fail")
+        value = (f"{p['error']:+.5f} {p['units']}" if p.get("valid") else
+                 f"[unqualified reading {p['unqualified_error']:+.5f} {p['units']}] {p['why']}"
+                 if "unqualified_error" in p else p.get("why", ""))
+        print(f"  {name:<18} {value:<24} {state}")
+
+
 def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list[str]:
     """Every reason the record is not the selected candidate; [] when it is."""
     problems = []
@@ -181,16 +192,9 @@ def main(argv=None) -> int:
         print("MISMATCH:", p)
     if problems:
         return 1
-    props = record["diagnostics"]["properties"]
     print(f"MATCH: {bass.SELECTED_PATCH}; audio {candidate['sha256']}; per-event max "
           f"deviation {candidate_event_deviation(record, candidate):.3g}")
-    for name, p in props.items():
-        state = ("unqualified" if not p.get("valid") else
-                 "pass" if abs(p["error"]) <= p["tolerance"] else "fail")
-        value = (f"{p['error']:+.5f} {p['units']}" if p.get("valid") else
-                 f"[unqualified reading {p['unqualified_error']:+.5f} {p['units']}] {p['why']}"
-                 if "unqualified_error" in p else p.get("why", ""))
-        print(f"  {name:<18} {value:<24} {state}")
+    print_properties(record["diagnostics"])
     return 0
 
 
