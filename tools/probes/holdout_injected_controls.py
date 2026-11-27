@@ -54,7 +54,9 @@ tail.
 Both this probe and the sound probe require a recorded test to fail at its
 intended assertion (#1136, #1400). A setup error, another assertion in the
 same test, or an exception inside the code under test cannot earn credit.
-One matching failure is sufficient. Other failures are reported separately.
+One matching failure from a test that passed on the baseline is sufficient.
+A survivor requires the collected checks for that control to pass in both runs.
+Other failures are reported separately.
 """
 from __future__ import annotations
 
@@ -109,12 +111,21 @@ class Failure(NamedTuple):
 
 class SuiteReport(NamedTuple):
     failures: dict[str, Failure]
+    outcomes: dict[str, str]  # suite-relative pytest IDs, including parameter IDs
     errors: tuple[str, ...] = ()
-    collected: int = 0
     executed: int = 0
-    passed: int = 0
     completed: int = 0
     deselected: int = 0
+
+    @property
+    def passed(self) -> set[str]:
+        return {test for test, outcome in self.outcomes.items() if outcome == "passed"}
+
+
+class Baseline(NamedTuple):
+    report: SuiteReport | None  # present only for a clean, completed run
+    reason: str
+    tail: str = ""
 
 
 INJECTS = {
@@ -176,9 +187,8 @@ def run_suite(work: pathlib.Path, suite: str) -> tuple[int, SuiteReport | None, 
             suite_report = SuiteReport(
                 failures=failures,
                 errors=tuple(data["errors"]),
-                collected=int(data["collected"]),
+                outcomes=data["outcomes"],
                 executed=int(data["executed"]),
-                passed=int(data["passed"]),
                 completed=int(data["completed"]),
                 deselected=int(data["deselected"]),
             )
@@ -194,22 +204,23 @@ def _zero_exit_problem(report: SuiteReport, suite: str) -> str | None:
         return f"recorded failures in {suite}: " + ", ".join(names)
     if report.errors:
         return f"phase error(s) in {suite}: " + ", ".join(report.errors)
-    if report.collected == 0:
+    collected = len(report.outcomes)
+    if not collected:
         return f"collected no tests for {suite}"
     if report.deselected > 0:
         return f"{report.deselected} test(s) deselected in {suite}"
     if report.executed == 0:
-        return f"executed no tests for {suite} ({report.collected} collected)"
-    if report.passed == 0:
+        return f"executed no tests for {suite} ({collected} collected)"
+    if not report.passed:
         return f"no test passed in {suite}"
-    if report.completed < report.collected:
-        return (f"only {report.completed}/{report.collected} collected test(s) "
+    if report.completed < collected:
+        return (f"only {report.completed}/{collected} collected test(s) "
                 f"completed in {suite}")
     return None
 
 
 def verdict(rc: int, report: SuiteReport | None,
-            expected: dict[str, Site], *, suite: str) -> Result:
+            expected: dict[str, Site], *, suite: str, baseline: SuiteReport) -> Result:
     """Credit only recorded assertions that actually failed under the mutant."""
     if report is None:
         return Result(REFUSED, [], f"pytest exited {rc} without a failure report for {suite}")
@@ -217,17 +228,32 @@ def verdict(rc: int, report: SuiteReport | None,
         problem = _zero_exit_problem(report, suite)
         if problem is not None:
             return Result(REFUSED, sorted(report.failures), f"pytest exited 0: {problem}")
+        paired = baseline.passed & report.passed
+        # An insensitive suite can collect none of the recorded tests. If it
+        # does collect one in either run, skipping or losing it can hide a kill.
+        recorded = expected.keys() & (baseline.outcomes.keys() | report.outcomes.keys())
+        missing = sorted(recorded - paired)
+        if missing:
+            details = ", ".join(f"{name} (baseline {baseline.outcomes.get(name, 'absent')}, "
+                                f"mutant {report.outcomes.get(name, 'absent')})" for name in missing)
+            return Result(REFUSED, [], f"recorded checks did not pass in both runs: {details}")
+        if not paired:
+            return Result(REFUSED, [], f"no test in {suite} passed in both runs")
         return Result(NO_FIRE, [], "pytest stayed green")
     if rc == 1 and report.failures:
         names = sorted(report.failures)
         if not expected:
             return Result(REFUSED, names, "no expected assertions are recorded for this control, "
                           "so its red cannot be attributed to the injection")
-        caught = sorted(name for name in expected.keys() & report.failures.keys()
-                        if report.failures[name].matches(expected[name]))
+        at_site = {name for name in expected.keys() & report.failures.keys()
+                   if report.failures[name].matches(expected[name])}
+        caught = sorted(at_site & baseline.passed)
         if caught:
             return Result(FIRED, caught, "pytest exited 1",
                           other=tuple(sorted(report.failures.keys() - set(caught))))
+        if at_site:
+            return Result(REFUSED, names, "intended failure(s) in tests that did not pass "
+                          "on the clean baseline: " + ", ".join(sorted(at_site)))
         details = ", ".join(f"{name} ({report.failures[name].reason})" for name in names)
         return Result(REFUSED, names, f"no intended assertion failed: expected {sorted(expected)}, "
                       f"observed {details}")
@@ -238,7 +264,7 @@ def verdict(rc: int, report: SuiteReport | None,
     return Result(REFUSED, [], f"pytest exited {rc}; nothing was measured")
 
 
-def run(name: str) -> Result:
+def run(name: str, baseline: SuiteReport) -> Result:
     rel, pattern, replacement = INJECTS[name]
     with tempfile.TemporaryDirectory() as tmp:
         work = _copy(pathlib.Path(tmp))
@@ -254,10 +280,10 @@ def run(name: str) -> Result:
                           f"skipped")
         target.write_text(new)
         rc, report, _stdout = run_suite(work, SUITE)
-        return verdict(rc, report, EXPECTED.get(name, {}), suite=SUITE)
+        return verdict(rc, report, EXPECTED.get(name, {}), suite=SUITE, baseline=baseline)
 
 
-def run_baseline(work: pathlib.Path, suite: str) -> Result:
+def run_baseline(work: pathlib.Path, suite: str) -> Baseline:
     """Run the unmutated suite. Both probes require exit 0 and a clean, executed run."""
     rc, report, stdout = run_suite(work, suite)
     if report is None:
@@ -269,7 +295,7 @@ def run_baseline(work: pathlib.Path, suite: str) -> Result:
     elif rc == 0:
         problem = _zero_exit_problem(report, suite)
         if problem is None:
-            return Result(NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
+            return Baseline(report, "pytest stayed green on the UNMUTATED tree")
         what = f"pytest exited 0 on the UNMUTATED tree: {problem}"
     elif report.errors:
         what = (f"pytest exited {rc} on the UNMUTATED tree with phase error(s) in {suite}: "
@@ -278,18 +304,17 @@ def run_baseline(work: pathlib.Path, suite: str) -> Result:
         what = f"pytest exited 1 on the UNMUTATED tree with no call failure recorded for {suite}"
     else:
         what = f"pytest exited {rc} on the UNMUTATED tree"
-    return Result(REFUSED, sorted(report.failures if report else {}),
-                  f"{what} -- no control's red can mean anything", stdout[-TAIL:])
+    return Baseline(None, f"{what} -- no control's red can mean anything", stdout[-TAIL:])
 
 
-def baseline() -> Result:
+def baseline() -> Baseline:
     with tempfile.TemporaryDirectory() as tmp:
         return run_baseline(_copy(pathlib.Path(tmp)), SUITE)
 
 
 def main() -> int:
     base = baseline()
-    if base.outcome == REFUSED:
+    if base.report is None:
         print(f"BASELINE: REFUSED -- {base.reason}")
         print(base.tail.rstrip())
         return 2
@@ -297,7 +322,7 @@ def main() -> int:
     bad = 0      # a control genuinely did not fire: a defect in the seal
     refused = 0  # nothing was measured: the apparatus cannot run
     for name in INJECTS:
-        res = run(name)
+        res = run(name, base.report)
         if res.outcome == REFUSED:
             print(f"{name}: REFUSED -- {res.reason}")
             refused += 1

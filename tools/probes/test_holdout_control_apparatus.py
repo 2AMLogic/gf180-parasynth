@@ -197,7 +197,7 @@ def test_run_alone_still_maps_a_broken_suite_status_to_a_refusal(
     what breaks the suite reaches `run()` with a green baseline behind it."""
     test_holdout, conftest, status = BROKEN[shape]
     monkeypatch.setattr(hic, "ROOT", _tree(tmp_path, test_holdout, conftest))
-    res = hic.run("GATE_OFF")
+    res = hic.run("GATE_OFF", hic.SuiteReport({}, {"test_a": "passed"}))
     assert res.outcome == hic.REFUSED
     assert f"pytest exited {status}" in res.reason
 
@@ -210,7 +210,7 @@ def test_run_names_its_own_suite_when_no_failed_line_parses(monkeypatch, tmp_pat
     this probe never ran."""
     test_holdout, conftest, _status = BROKEN["error_only"]
     monkeypatch.setattr(hic, "ROOT", _tree(tmp_path, test_holdout, conftest))
-    res = hic.run("GATE_OFF")
+    res = hic.run("GATE_OFF", hic.SuiteReport({}, {"test_a": "passed"}))
     assert res.outcome == hic.REFUSED
     assert "no call failure was recorded for tools/test_holdout.py" in res.reason
 
@@ -333,15 +333,42 @@ def test_collect_only_refuses_baseline_and_mutant_while_executed_passing_suite_i
     assert "CONTROL DID NOT FIRE" not in out
     _assert_no_control_ran(out)
 
-    res = hic.run("GATE_OFF")
+    res = hic.run("GATE_OFF", hic.SuiteReport({}, {"test_a": "passed"}))
     assert res.outcome == hic.REFUSED
     assert "pytest exited 0" in res.reason and "executed no tests" in res.reason
 
     # Without --collect-only, the same passing suite genuinely executes and
     # produces NO_FIRE (survivor).
     monkeypatch.delenv("PYTEST_ADDOPTS")
-    res_exec = hic.run("GATE_OFF")
+    base = hic.baseline()
+    assert base.report is not None
+    res_exec = hic.run("GATE_OFF", base.report)
     assert res_exec.outcome == hic.NO_FIRE
     rc_exec, out_exec = _probe(monkeypatch, capsys, root)
     assert rc_exec == 1, out_exec
     assert "CONTROL DID NOT FIRE" in out_exec
+
+
+def test_only_baseline_passes_earn_credit_alongside_skips(monkeypatch, tmp_path, capsys):
+    gate = "test_gate_off_site_is_present"
+    extra = "test_gate_off_skipped_on_baseline"
+    _synthetic_expected(monkeypatch, GATE_OFF={gate, extra})
+    # Both tests fail at the same assertion under GATE_OFF. Only one ran cleanly.
+    rel, pattern, _ = hic.INJECTS["GATE_OFF"]
+    suite = _green_then_red() + f"""
+import pytest
+
+def {extra}():
+    src = pathlib.Path({rel!r}).read_text()
+    if 'if False and is_holdout(case):' not in src:
+        pytest.skip('baseline apparatus unavailable')
+    assert re.search({pattern!r}, src)
+
+def test_unrelated():
+    pytest.skip('unavailable')
+"""
+    rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, test_holdout=suite))
+    assert rc == 0, out
+    assert "GATE_OFF: red, 1 test(s) caught it" in out, out
+    assert f"    {gate}" in out.splitlines()
+    assert f"other failures, information only: {extra}" in out

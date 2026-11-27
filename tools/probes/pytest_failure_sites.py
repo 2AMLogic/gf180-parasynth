@@ -14,10 +14,9 @@ class FailureSites:
         self.suite = Path(suite).as_posix()
         self.failures: dict[str, list[str]] = {}
         self.errors: list[str] = []
-        self.collected_ids: set[str] = set()
+        self.outcomes: dict[str, str] = {}
         self.completed_ids: set[str] = set()
         self.executed = 0
-        self.passed = 0
         self.deselected = 0
 
     def _label(self, nodeid: str) -> str:
@@ -30,8 +29,8 @@ class FailureSites:
         self.deselected += len(items)
 
     def pytest_collection_finish(self, session):
-        self.collected_ids = {
-            item.nodeid for item in session.items
+        self.outcomes = {
+            self._label(item.nodeid): "collected" for item in session.items
             if item.nodeid.partition("::")[0] == self.suite
         }
 
@@ -69,9 +68,8 @@ class FailureSites:
         if report.when == "call":
             if in_suite:
                 self.executed += 1
-                if report.passed:
-                    self.passed += 1
-                elif report.failed and test not in self.failures:
+                self.outcomes[test] = report.outcome
+                if report.failed and test not in self.failures:
                     first = report.longreprtext.strip().splitlines()
                     reason = first[0] if first else "failed"
                     self.failures[test] = ["", "Failed", reason]
@@ -80,8 +78,11 @@ class FailureSites:
         elif report.failed:
             self.errors.append(f"{report.when}: {self._label(report.nodeid)}")
 
-        if report.when == "teardown" and report.nodeid in self.collected_ids:
-            self.completed_ids.add(report.nodeid)
+        if in_suite and report.skipped:
+            self.outcomes[test] = "skipped"
+        # Teardown marks the end of the protocol, even for a skipped test.
+        if report.when == "teardown" and in_suite and test in self.outcomes:
+            self.completed_ids.add(test)
 
     def pytest_sessionfinish(self, session, exitstatus):
         if session.testsfailed and not self.failures and not self.errors:
@@ -91,9 +92,8 @@ class FailureSites:
         return {
             "failures": self.failures,
             "errors": self.errors,
-            "collected": len(self.collected_ids),
+            "outcomes": self.outcomes,
             "executed": self.executed,
-            "passed": self.passed,
             "completed": len(self.completed_ids),
             "deselected": self.deselected,
         }

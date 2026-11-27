@@ -192,6 +192,21 @@ def test_stop_after_results():
     assert target.read_bytes() == before
 
 
+FAILING_RECORDED_CHECKS = """
+def test_the_moving_average_injection_ripples_at_the_carrier_it_cannot_resolve(apparatus):
+    clean_db = broken_db = 0
+    assert broken_db > clean_db + 3.0
+
+def test_the_centroid_injection_switches_which_field_the_brightness_property_reads(apparatus):
+    power = amplitude = 1
+    assert amplitude > 2.0 * power
+
+def test_the_lock_changelog_agrees_with_the_live_table(apparatus):
+    problems = ['broken baseline']
+    assert problems == []
+"""
+
+
 def test_sound_baseline_with_setup_errors_and_zero_exit_stops_before_mutation(tmp_path):
     """Reproduce the review control: setup errors on the unmutated baseline
     followed by `pytest.exit(..., returncode=0)` must REFUSE before any mutant
@@ -204,17 +219,7 @@ def apparatus():
     if SRC == PRISTINE:
         raise RuntimeError('apparatus unavailable')
 
-def test_the_moving_average_injection_ripples_at_the_carrier_it_cannot_resolve(apparatus):
-    clean_db = broken_db = 0
-    assert broken_db > clean_db + 3.0
-
-def test_the_centroid_injection_switches_which_field_the_brightness_property_reads(apparatus):
-    power = amplitude = 1
-    assert amplitude > 2.0 * power
-
-def test_the_lock_changelog_agrees_with_the_live_table(apparatus):
-    problems = ['broken baseline']
-    assert problems == []
+""" + FAILING_RECORDED_CHECKS + """
 
 def test_stop_after_results():
     if SRC == PRISTINE:
@@ -231,6 +236,36 @@ def test_stop_after_results():
     _no_kill_credit(out)
     assert not (tmp_path / "mutant-executed").exists()
     assert target.read_bytes() == before
+
+
+def test_sound_failures_skipped_on_the_baseline_cannot_earn_kills(tmp_path):
+    suite = READS_TARGET + """
+import pytest
+
+@pytest.fixture
+def apparatus():
+    if SRC == PRISTINE and not (HERE / 'enable-checks').exists():
+        pytest.skip('apparatus unavailable')
+
+def test_housekeeping():
+    assert True
+""" + FAILING_RECORDED_CHECKS
+    script, target = stage_sound(tmp_path, suite)
+    before = target.read_bytes()
+    result = run(script, tmp_path)
+    out = result.stdout + result.stderr
+    assert target.read_bytes() == before
+
+    # Enable the very same assertions on the original target. Each is already red.
+    (target.parent / "enable-checks").touch()
+    pristine = subprocess.run([sys.executable, "-m", "pytest", "-q", sound.TESTS],
+                              cwd=tmp_path, capture_output=True, text=True)
+    assert pristine.returncode == 1 and "3 failed, 1 passed" in pristine.stdout, pristine.stdout
+    assert result.returncode == 2, out
+    for mutant in sound.MUTANTS:
+        assert _line(out, mutant).startswith("REFUSED"), out
+    assert "baseline" in out and "SURVIVED" not in out, out
+    _no_kill_credit(out)
 
 
 def test_sound_collect_only_refuses_instead_of_reporting_survivors(tmp_path):
@@ -352,6 +387,27 @@ def test_silent_snare_under_centroid_mutant_gets_no_kill_credit(tmp_path):
     assert _line(out, "envelope patch is a pass-through").startswith("RED (good)"), out
     assert _line(out, "brightness lock removed").startswith("RED (good)"), out
     assert "mutants killed" not in out
+
+
+def test_skipped_centroid_comparison_cannot_establish_survival(tmp_path):
+    script, target = stage_real_sound(tmp_path)
+    (target.parent / "conftest.py").write_text('''
+from pathlib import Path
+import pytest
+
+@pytest.fixture(autouse=True)
+def apparatus(request):
+    centroid = "test_the_centroid_injection_switches_which_field_the_brightness_property_reads"
+    if request.node.name == centroid and 'ctx["centroid_weight"] = weight' not in (
+            Path(__file__).with_name("sound_report.py").read_text()):
+        pytest.skip("centroid comparison unavailable")
+''')
+    result = run(script, tmp_path)
+    out = result.stdout + result.stderr
+    assert result.returncode == 2, out
+    line = _line(out, "centroid injection sets nothing")
+    assert line.startswith("REFUSED") and "test_the_centroid_injection" in line, out
+    assert out.count("RED (good)") == 2 and "SURVIVED" not in out, out
 
 
 def test_sound_survivor_outranks_a_refusal_exits_one(tmp_path):

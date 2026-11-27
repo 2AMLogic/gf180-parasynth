@@ -44,10 +44,11 @@ here. `verdict()` in `tools/probes/holdout_injected_controls.py` is imported
 and applied to each mutant, with this probe's suite and recorded names kept
 local:
 
-  * exit 0 after a clean, completed, executed suite run is NO_FIRE -- the suite
+  * exit 0 with comparable passes, including all collected checks for this
+    mutant, is NO_FIRE -- the suite
     stayed green with the injection neutered, so that mutant SURVIVED and is a
     hole in the test;
-  * exit 1 with a failure at a recorded assertion in its test is FIRED;
+  * exit 1 at a recorded assertion whose test passed on the baseline is FIRED;
   * everything else is REFUSED, with no kill credit: a collection error (2),
     the path gone (4), nothing collected (5), zero tests executed (e.g.
     `--collect-only`), any phase error (setup/teardown/collection), an
@@ -136,7 +137,7 @@ def main(argv=None) -> int:
         return 2
 
     base = hic.run_baseline(ROOT, TESTS)
-    if base.outcome == hic.REFUSED:
+    if base.report is None:
         print(f"probe REFUSED -- baseline `pytest {TESTS}`: {base.reason}. No mutant was run.")
         print(base.tail.rstrip())
         return 2
@@ -149,7 +150,7 @@ def main(argv=None) -> int:
             rc, report, _ = hic.run_suite(ROOT, TESTS)
         finally:
             TARGET.write_text(original)
-        res = hic.verdict(rc, report, EXPECTED.get(name, {}), suite=TESTS)
+        res = hic.verdict(rc, report, EXPECTED.get(name, {}), suite=TESTS, baseline=base.report)
         if res.outcome == hic.REFUSED:
             refused += 1
             print(f"{'REFUSED':24s}  {name}: {res.reason}")
