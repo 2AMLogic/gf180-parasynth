@@ -1031,3 +1031,18 @@ def test_fpga_real_suite_kills_all_mutants_at_recorded_assertions(tmp_path):
         assert _verdict_line(out, mutant).startswith("KILLED"), out
         for name in names:
             assert f"    {name}" in out.splitlines(), (mutant, name)
+
+
+def test_fpga_empty_mutant_table_refuses(tmp_path, monkeypatch, capsys):
+    """#1469: `M = {}` exited 0 ('0 mutant(s) killed.') without running a mutant;
+    must exit 2 (REFUSED)."""
+    fpga = _fpga_record()
+    script, target = stage_fpga(tmp_path, "def test_ok():\n    assert 1\n")
+    monkeypatch.setattr(fpga, "ROOT", tmp_path)
+    monkeypatch.setattr(fpga, "TARGET", target)
+    monkeypatch.setattr(fpga, "M", {})
+    monkeypatch.setattr(sys, "argv", [str(script)])
+    rc = fpga.main()
+    out = capsys.readouterr().out
+    assert rc == 2, out
+    assert "REFUSED" in out and "mutant(s) killed" not in out

@@ -179,6 +179,9 @@ def main() -> int:
     parser.add_argument("--python", metavar="PY", default=sys.executable,
                         help="interpreter for the baseline and mutant suites")
     args = parser.parse_args()
+    if not M:
+        print("REFUSED -- M declares no mutants; nothing can be measured.")
+        return 2
     original = TARGET.read_bytes()
     text = original.decode()
 
