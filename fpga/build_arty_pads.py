@@ -166,14 +166,12 @@ def validate_verification(directory: Path, paths: list) -> dict:
 # ---- the verdict after Vivado ---------------------------------------------------------
 def pads_inputs_report(text: str) -> list:
     """Problems in pads_inputs.rpt (empty = all six inputs dispositioned)."""
-    got, end = {}, None
+    got = {}
     for line in text.splitlines():
         f = line.split("\t")
         if f[0] == "INPUT" and len(f) >= 3:
             got[f[1]] = f[2]
-        elif f[0] == "END" and len(f) == 2:
-            end = int(f[1])
-    probs = [] if end == 0 else [f"{PADS_REPORT}: END {end}"]
+    probs = xb.check_footer(text, PADS_REPORT, "END")
     for p in INPUTS:
         if got.get(p) != "1":
             probs.append(f"{PADS_REPORT}: input {p} is {got.get(p, 'absent')}")
@@ -261,15 +259,16 @@ def main(argv=None):
                       "(exit 3 = a constraint or pads-input check refused; see runner.log)")
         save()
         return 1
-    xdc_text = snapshots[n].read_text()
-    problems = xb.check_report((directory / xb.REPORT).read_text(), xdc_text)
-    problems += xb.check_route((directory / xb.REPORT).read_text(),
-                               (directory / xb.EXCEPTIONS).read_text(), xdc_text)
-    problems += pads_inputs_report((directory / PADS_REPORT).read_text())
+    problems = []
     try:
+        xdc_text = snapshots[n].read_text()
+        constraints = (directory / xb.REPORT).read_text()
+        problems += xb.check_report(constraints, xdc_text)
+        problems += xb.check_route(constraints, (directory / xb.EXCEPTIONS).read_text(), xdc_text)
+        problems += pads_inputs_report((directory / PADS_REPORT).read_text())
         summary = publish.inspect_reports(directory, design=TOP)
         report["timing"] = summary["timing"]
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
         problems.append(str(exc))
     report["problems"] = problems
     report["state"] = "PASS" if not problems else "FAIL"

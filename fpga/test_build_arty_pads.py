@@ -146,8 +146,9 @@ def _replay(tmp_path, after=""):
     defect a real build could produce) and writes the two binary outputs.
     Returns (build directory, exit status, report.json)."""
     verification = tmp_path / "verification"
-    verification.mkdir()
-    _records(verification, bp.sources() + bp.roms())
+    if not verification.exists():
+        verification.mkdir()
+        _records(verification, bp.sources() + bp.roms())
     hook = tmp_path / "after_reports.py"
     hook.write_text(after)
     vivado = tmp_path / "vivado"
@@ -203,19 +204,41 @@ def test_post_vivado_verdict_reads_every_report(tmp_path, after, changed, proble
         assert any(problem in p for p in report["problems"]), report["problems"]
 
 
-def test_the_verdict_reads_the_compiled_xdc_snapshot_not_the_live_tree(tmp_path):
+@pytest.mark.parametrize("name,old,new,problem", [
+    (xb.REPORT, "ROUTE_END\t0", "ROUTE_END\t1", "ROUTE_END records 1 refused"),
+    (xb.REPORT, "ROUTE_END\t0", "ROUTE_END\t", "malformed ROUTE_END"),
+    (xb.REPORT, "ROUTE_END\t0", "ROUTE_END\t1\nROUTE_END\t0", "multiple ROUTE_END"),
+    (xb.REPORT, "\nEND\t0", "\nEND\t?", "malformed END"),
+    (bp.PADS_REPORT, "\nEND\t0", "\nEND\t?", "malformed END"),
+    (xb.REPORT, "MATCH\t107\t", "MATCH\tbad-line\t", "bad-line"),
+], ids=["route-refused", "route-empty", "route-duplicate", "binding-end", "pads-end", "match-line"])
+def test_bad_constraint_report_replaces_previous_pass(tmp_path, name, old, new, problem):
+    build, rc, passing = _replay(tmp_path)
+    assert rc == 0 and passing["state"] == "PASS"
+    _, rc, current = _replay(tmp_path, _rewrite(name, old, new))
+    assert (build / name).read_text() == (PADS_REPORTS / name).read_text().replace(old, new)
+    assert rc == 1 and current["state"] == "FAIL", current
+    assert any(problem in message for message in current["problems"]), current
+    assert current["artifact_sha256"][name] == _sha(build / name) != passing["artifact_sha256"][name]
+
+
+def test_the_verdict_reads_the_compiled_xdc_snapshot_not_the_live_tree(tmp_path, monkeypatch):
     """A line pushed into the live XDC while Vivado runs shifts every query's
     line number: the verdict must still be about the XDC the build compiled."""
-    original = bp.XDC.read_text()
-    try:
-        after = (f"p = Path({str(bp.XDC)!r})\n"
-                 "p.write_text('# edited in the live tree while Vivado ran\\n' + p.read_text())\n")
-        build, rc, report = _replay(tmp_path, after)
-        assert bp.XDC.read_text() != original
-    finally:
-        bp.XDC.write_text(original)
+    key = bp.XDC.relative_to(bp.ROOT)
+    live = tmp_path / key
+    live.parent.mkdir(parents=True)
+    shutil.copyfile(bp.XDC, live)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(bp, "XDC", key)
+    assert bp.XDC.resolve() == live
+    original = live.read_text()
+    edit = "# edited in the live tree while Vivado ran\n"
+    after = f"p = Path({str(live)!r})\np.write_text({edit!r} + p.read_text())\n"
+    build, rc, report = _replay(tmp_path, after)
+    assert live.read_text() == edit + original
     assert rc == 0 and report["state"] == "PASS" and report["problems"] == [], report
-    assert (build / "inputs" / bp._key(bp.XDC)).read_text() == original
+    assert (build / "inputs" / key).read_text() == original
 
 
 def test_pads_inputs_report():
