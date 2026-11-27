@@ -16,6 +16,7 @@ import copy
 import json
 import os
 import pathlib
+import shutil
 import signal
 import subprocess
 import sys
@@ -493,6 +494,29 @@ def test_altered_artifact_is_rejected(repo):
     assert not ok and any("artifact altered: c1/record.json" in p for p in problems)
 
 
+def test_check_all_rejects_altered_control_with_object_reason_and_checks_next(repo, capsys):
+    source = _pass_run(repo)
+    batch = repo.root / "batch"
+    altered = shutil.copytree(source, batch / "a-altered")
+    valid = shutil.copytree(source, batch / "b-valid")
+    record = altered / "c2" / "record.json"
+    data = json.loads(record.read_text())
+    data.update(status="PASS", reasons=[{"detail": "unexpected schedule"}])
+    record.write_text(json.dumps(data))
+
+    assert trial.main(["check-all", str(batch)]) == 1
+    out = capsys.readouterr().out
+    assert "artifact altered: c2/record.json" in out
+    assert "re-derives to PASS caught False" in out and "unexpected schedule" in out
+    rejected, accepted = [line for line in out.splitlines() if line.startswith(("REJECTED", "VALID"))]
+    assert rejected.startswith("REJECTED") and rejected.endswith(str(altered / "receipt.json"))
+    assert accepted.startswith("VALID") and accepted.endswith(str(valid / "receipt.json"))
+    assert out.splitlines()[-1] == "1/2 receipts valid"
+
+    assert trial.main(["check-receipt", str(altered / "receipt.json")]) == 1
+    assert "unexpected schedule" in capsys.readouterr().out
+
+
 def test_deleted_artifact_is_rejected(repo):
     run_dir = _pass_run(repo)
     (run_dir / "c1" / "log.txt").unlink()
@@ -858,6 +882,17 @@ def test_physical_pass_needs_the_whole_diagnostic_set_and_a_repeat(repo):
     assert r["verdict"] == trial.PASS
 
 
+@pytest.mark.parametrize("status,rc,verdict", [
+    ("FAIL", 1, trial.FAIL), ("REFUSED", 2, trial.NO_VERDICT),
+])
+def test_physical_object_reason_survives_composite_and_recheck(repo, status, rc, verdict):
+    run_dir, receipt = _physical(repo, _capture_rec(status, reasons=[{"detail": "bad take"}]), rc)
+    assert receipt["verdict"] == verdict
+    assert "bad take" in receipt["verdict_reasons"][0]
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
+    assert ok, problems
+
+
 @pytest.mark.parametrize("commands,gap", [
     (["silence", "held-default", "bar808-full", "demo", "demo"], "no take of held-m5a-saw"),
     (PHYS_FIXTURES, "no repeat take"),
@@ -1074,7 +1109,6 @@ def test_judge_forged_removal_of_the_reuse_requirement(repo):
 # A receipt is only as strong as its child LIST: deleting the failing child (and
 # its directory) and re-sealing used to leave a receipt every other check
 # accepted -- check_receipt walked whatever the receipt said it contained.
-import shutil                                                  # noqa: E402
 
 
 def _failing_late():

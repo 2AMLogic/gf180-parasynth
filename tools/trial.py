@@ -187,6 +187,11 @@ def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -
 
 
 # ---- interpreters: each reads ONE checker's own evidence --------------------
+def _format_reasons(reasons):
+    """Checker diagnostics can contain structured JSON. Convert only for display."""
+    return "; ".join(map(str, reasons))
+
+
 def _result(verdict, reasons, *, expected=None, observed=None, metrics=None, caught=None):
     r = {"verdict": verdict, "reasons": list(reasons),
          "coverage": {"expected": expected, "observed": observed},
@@ -228,7 +233,7 @@ def interpret_deadline_record(spec, run, out, role):
         return _result(NO_VERDICT, [f"record status {status!r} is not PASS/FAIL/REFUSED"],
                        metrics=metrics, **cov)
     if status == "REFUSED":
-        return _result(NO_VERDICT, ["checker REFUSED: " + "; ".join(rec.get("reasons") or [])],
+        return _result(NO_VERDICT, ["checker REFUSED: " + _format_reasons(rec.get("reasons") or [])],
                        metrics=metrics, **cov, caught=False if role == "control" else None)
     gaps = []
     if not required:
@@ -240,7 +245,7 @@ def interpret_deadline_record(spec, run, out, role):
     if not sched.get("frames"):
         gaps.append("the schedule trace holds no frames")
     if rec.get("evidence_problems"):
-        gaps.append("evidence problems: " + "; ".join(rec["evidence_problems"][:3]))
+        gaps.append("evidence problems: " + _format_reasons(rec["evidence_problems"][:3]))
     if gaps:
         return _result(NO_VERDICT, ["coverage incomplete -- " + g for g in gaps],
                        metrics=metrics, **cov, caught=False if role == "control" else None)
@@ -445,7 +450,7 @@ def interpret_held_note_record(spec, run, out, role):
                        metrics=metrics, caught=nv_caught, **cov)
     reasons = []
     if rec.get("init_problems"):
-        reasons.append("init bytes are not the frozen target: " + "; ".join(rec["init_problems"]))
+        reasons.append("init bytes are not the frozen target: " + _format_reasons(rec["init_problems"]))
     if rec["replay_status"] == 1:
         reasons.append("the UART replay is not bit-exact against the model")
     if peak < floor:
@@ -703,10 +708,10 @@ def composite(required: list[dict], controls: list[dict]) -> tuple[str, list[str
                             "required population is not a PASS (#283)"]
     fails = [c for c in required if c["verdict"] == FAIL]
     if fails:
-        return FAIL, [f"{c['id']}: FAIL -- " + "; ".join(c["reasons"][:3]) for c in fails]
+        return FAIL, [f"{c['id']}: FAIL -- " + _format_reasons(c["reasons"][:3]) for c in fails]
     open_ = [c for c in required if c["verdict"] != PASS]
     if open_:
-        return NO_VERDICT, [f"{c['id']}: {c['verdict']} -- " + "; ".join(c["reasons"][:3])
+        return NO_VERDICT, [f"{c['id']}: {c['verdict']} -- " + _format_reasons(c["reasons"][:3])
                             for c in open_]
     if not controls:
         return NO_VERDICT, ["no control declared: the apparatus was not shown able to fail "
@@ -714,7 +719,7 @@ def composite(required: list[dict], controls: list[dict]) -> tuple[str, list[str
     missed = [c for c in controls if not c.get("caught")]
     if missed:
         return NO_VERDICT, [f"control {c['id']} not caught -- the apparatus was not shown able "
-                            "to fail: " + "; ".join(c["reasons"][:3]) for c in missed]
+                            "to fail: " + _format_reasons(c["reasons"][:3]) for c in missed]
     return PASS, []
 
 
@@ -1209,7 +1214,7 @@ def check_receipt(path: pathlib.Path, root: pathlib.Path = ROOT
                 problems.append(f"{c.get('id')}: {why}")
                 continue
             if got["verdict"] != c.get("verdict") or got.get("caught") != c.get("caught"):
-                why_got = "; ".join(got.get("reasons") or [])
+                why_got = _format_reasons(got.get("reasons") or [])
                 problems.append(
                     f"{c.get('id')}: the receipt says verdict {c.get('verdict')} caught "
                     f"{c.get('caught')}, but its evidence re-derives to {got['verdict']} caught "
