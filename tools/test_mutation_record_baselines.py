@@ -773,6 +773,38 @@ def _verdict_line(out, name):
     return hits[0]
 
 
+def _credited_ids(out, name):
+    """Test IDs credited under `name`'s own verdict header: the indented,
+    non-parenthesised lines up to the next unindented line (the next verdict
+    header or the summary). A search of the whole output lets a mutant that
+    shares IDs with another borrow its credits."""
+    _verdict_line(out, name)
+    lines = out.splitlines()
+    start = next(i for i, ln in enumerate(lines)
+                 if ln.startswith(("KILLED", "SURVIVED", "EXPECTED SURVIVOR", "REFUSED"))
+                 and name in ln)
+    ids = []
+    for ln in lines[start + 1:]:
+        if not ln.startswith(" "):
+            break
+        item = ln.strip()
+        if item and not item.startswith("("):
+            ids.append(item)
+    return ids
+
+
+def test_credited_ids_are_read_from_the_mutants_own_group():
+    """Control: the first group lost both IDs while the second keeps them."""
+    out = ("KILLED   A\n"
+           "KILLED   B\n"
+           "    t1\n"
+           "    t2[x-y]\n"
+           "    (note: diagnostic)\n"
+           "2 mutant(s) killed\n")
+    assert _credited_ids(out, "A") == []
+    assert _credited_ids(out, "B") == ["t1", "t2[x-y]"]
+
+
 def _survivors(out):
     return [ln for ln in out.splitlines() if ln.startswith("SURVIVED")]
 
@@ -1029,8 +1061,10 @@ def test_fpga_real_suite_kills_all_mutants_at_recorded_assertions(tmp_path):
     assert f"{len(fpga.M)} mutant(s) killed." in out, out
     for mutant, names in fpga.EXPECTED.items():
         assert _verdict_line(out, mutant).startswith("KILLED"), out
-        for name in names:
-            assert f"    {name}" in out.splitlines(), (mutant, name)
+        credited = _credited_ids(out, mutant)
+        assert sorted(credited) == sorted(names), (
+            mutant, "missing", sorted(set(names) - set(credited)),
+            "unexpected", sorted(set(credited) - set(names)))
 
 
 def test_fpga_empty_mutant_table_refuses(tmp_path, monkeypatch, capsys):
