@@ -32,13 +32,8 @@ ownership and not about a synthesizer:
   * M1A's render (`render_mono_fx` as its runner calls it) is a synthetic
     three-note phrase, the shape `tools/test_mono_m1a_score.py` gives the same
     seam. The real one is slow and this file runs M1A repeatedly;
-  * M1A's estimator qualification (`qualify_envelope_basis`), the known-answer
-    suite its runner re-derives on every run before the estimator may gate a
-    case. Its subject is the estimator and not a destination, as `base_check`'s
-    is the checkout: the same kind of double. Measured on 2026-11-26 under
-    `cProfile` around `mono_m1a_score.run(case, '', False)` with the render
-    doubled: 19.3 s, of which this is 14.4 s and the real comparison 4.8 s.
-    M5B's whole real measurement, under `time`, is 7.6 s and is not doubled;
+  * M1A's estimator qualification (`mono_m1a_score.qualify_envelope_basis`).
+    The fixture substitutes the qualification report for these destination tests;
   * the published places (`RESULTS`, `AUDIO_OUT`, M1A's published WAV) are a
     scratch board under the checkout's gitignored `build/`, and the fixture
     asserts at teardown that the two real published WAVs are what they were;
@@ -160,7 +155,7 @@ def board(monkeypatch, tmp_path):
         monkeypatch.setattr(rc, "BASE_STATE", rc.BASE_STATE)
         monkeypatch.setattr(rc, "base_check",
                             lambda allow_stale=False: {"checked": False, "why": "a test double"})
-        monkeypatch.setattr(bass.reference, "qualify_envelope_basis", lambda: {
+        monkeypatch.setattr(bass, "qualify_envelope_basis", lambda: {
             "note": "a test double: the estimator's known-answer suite did not run"})
         yield places
     finally:

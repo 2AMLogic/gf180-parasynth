@@ -35,7 +35,7 @@ test.
 
 WHY THE TWO INVOCATIONS ARE MADE TO SOUND DIFFERENT. In a real run the drum
 control moves the REFERENCE and leaves our render alone, and the ensemble
-runner is told nothing about an injection, so two runs of a case write the
+render is the same for an injected run, so two runs of a case write the
 same bytes. A shared-path rewrite is then invisible in the board WAV -- it is
 replaced with itself -- and comparing the clean WAV alone reports an intact
 board. So the second invocation of each case renders a different signal, and
@@ -286,7 +286,7 @@ def test_an_injected_control_leaves_the_clean_board_wav_and_record_untouched(
             != clean["windowing"]["reference"]["onset_index"]
         assert control["audio"] == f"reference {rc.REF_MAIN['CP'][0]}; ours {obs['stated']}"
     else:
-        # the ensemble runner is told nothing about an injection; what makes
+        # the ensemble measurement is identical for an injection; what makes
         # this run a control is the directory it was given
         assert "INJECTED_CONTROL" not in control
         assert control["audio"] == obs["stated"]
@@ -345,7 +345,7 @@ def test_the_shared_path_writer_is_a_control_that_stays_red(
     is known to be the control's own: content alone cannot tell whose file
     it is when the overwrite succeeded."""
     monkeypatch.setattr(rc, "wav_destination",
-                        lambda results_dir, case_id, suffix: rc.AUDIO_OUT / f"{case_id}{suffix}")
+                        lambda results_dir, case_id, suffix, **kw: rc.AUDIO_OUT / f"{case_id}{suffix}")
     obs = _control_beside_its_record(board, tmp_path / "scratch", case_id, wav, key)
     assert obs["violated"] == [CLEAN_WAV, OWN_WAV]
     assert [p for p in PROPERTIES if p not in obs["violated"]] == [CLEAN_RECORD, OWN_PCM]
@@ -434,11 +434,18 @@ def test_injected_wav_alias_refused_before_overwriting_the_clean_recording(
     assert published.read_bytes() == clean_wav, "the injected render overwrote the clean WAV"
     assert status == 2
     err = capsys.readouterr().err
-    assert "--inject" in err and rc.stated_path(published) in err and rc.stated_path(candidate) in err
+    assert "--inject" in err and rc.stated_path(published) in err
+    assert rc.stated_path(candidate) in err
     assert model_record.read_bytes() == clean_record
     assert not (candidate.parent / trial_record.name).exists()
     if case_id == "E1A":
         assert board_record.read_bytes() == trial_record.read_bytes() == anchor
+
+    # Imported callers reach the writers without the CLI's batch preflight.
+    case = next(c for c in rc.load_cases() if c["case_id"] == case_id)
+    measured = rc.run_case(case, board["corpus"], "REF_F0_20PCT", results_dir=str(trial))
+    assert measured["note"].startswith(f"REFUSED: {case_id}: --inject")
+    assert published.read_bytes() == clean_wav
 
 
 @pytest.mark.parametrize("case_id,wav,key", WRITERS)
