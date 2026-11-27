@@ -272,6 +272,7 @@ def shape_error(band, poles, corner_hz, *, defect=None):
     w = (10.0 ** (chain / 10.0)) * active
     offset = float(np.sum(w * dev) / np.sum(w))
     shape = dev - offset
+    peak = float(np.max(np.abs(shape[active])))
     return {
         "band": band, "centre_hz": CENTRE_HZ[band],
         "active_hz": [float(THIRDS[active][0]), float(THIRDS[active][-1])],
@@ -281,7 +282,7 @@ def shape_error(band, poles, corner_hz, *, defect=None):
                         got - float(np.interp(CENTRE_HZ[band], THIRDS, got))],
         "deviation_db": [round(float(v), 2) for v in dev],
         "level_offset_db": round(offset, 2),
-        "shape_max_db": round(float(np.max(np.abs(shape[active]))), 2),
+        "shape_max_db": round(peak, 2), "shape_max_db_raw": peak,
         "shape_max_hz": float(THIRDS[active][int(np.argmax(np.abs(shape[active])))]),
     }
 
@@ -359,8 +360,8 @@ def properties(poles, corner_hz, fig9, *, defect=None) -> dict:
                          f"max {worst:.2f} dB from the recorded net tilt ({at}), bound {NET_TOL_DB}")
 
     rows = {b: shape_error(b, poles, corner_hz, defect=defect) for b in BANDS}
-    bad = {b: r["shape_max_db"] for b, r in rows.items() if r["shape_max_db"] > SHAPE_BOUND_DB}
-    out["shape-bound"] = (not bad,
+    in_bound = all(r["shape_max_db_raw"] <= SHAPE_BOUND_DB for r in rows.values())
+    out["shape-bound"] = (in_bound,
                           "  ".join(f"{b} {r['shape_max_db']:.2f}" for b, r in rows.items())
                           + f"  bound {SHAPE_BOUND_DB}")
 
@@ -490,6 +491,15 @@ def report(poles, corner_hz) -> list[str]:
 
 def record(poles, corner_hz, fig9) -> dict:
     ok, lines = check(poles, corner_hz, fig9)
+    bands = {}
+    for b in BANDS:
+        row = shape_error(b, poles, corner_hz)
+        del row["shape_max_db_raw"]
+        row["realisation"] = realisation(b, poles)
+        row["net_tilt_2k_20k_db"] = round(net_tilt_db(b, poles, corner_hz), 2)
+        rev2 = shape_error(b, poles, corner_hz, defect="CAND2_LEVEL_ONLY")
+        row["revision2_shape_max_db"] = rev2["shape_max_db"]
+        bands[b] = row
     return {
         "tool": "tools/cymbal_tone_realisation.py",
         "sources": {"tone": str(w9.ARTIFACT.relative_to(ROOT)),
@@ -498,12 +508,7 @@ def record(poles, corner_hz, fig9) -> dict:
         "tone_poles_hz": {b: list(v) for b, v in poles.items()},
         "thirds_hz": [float(f) for f in THIRDS],
         "active_db": ACTIVE_DB, "shape_bound_db": SHAPE_BOUND_DB,
-        "bands": {b: {**shape_error(b, poles, corner_hz),
-                      "realisation": realisation(b, poles),
-                      "net_tilt_2k_20k_db": round(net_tilt_db(b, poles, corner_hz), 2),
-                      "revision2_shape_max_db":
-                          shape_error(b, poles, corner_hz, defect="CAND2_LEVEL_ONLY")["shape_max_db"]}
-              for b in BANDS},
+        "bands": bands,
         "gate": {"pass": bool(ok), "lines": lines},
     }
 

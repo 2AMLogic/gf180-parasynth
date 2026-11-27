@@ -121,6 +121,7 @@ def test_the_precondition_gate_passes_on_the_current_tree():
     got = tre.assert_realisation_is_the_validated_one()
     assert got["check_ok"]
     assert got["budget"]["addressable"]
+    assert all("worst_db_raw" not in row for row in got["chosen"].values())
 
 
 def test_the_precondition_gate_refuses_a_model_that_drifted(monkeypatch):
@@ -482,6 +483,21 @@ def test_every_recorded_property_flag_is_a_real_boolean():
         assert isinstance(col["h_minus_l_ok"], bool) and isinstance(col["h_edt10_ok"], bool)
     assert isinstance(d["preservation"]["ok"], bool)
     assert isinstance(d["superposition"]["ok"], bool)
+
+
+def test_replaying_the_recorded_milliseconds_preserves_the_candidate_verdict():
+    record = json.loads(RECORD.read_text())
+    got = tre.verdict(record["render"], record["fischer"])
+    saved = record["verdict"]
+    assert got["properties"] == saved["properties"]
+    for dec, col in got["columns"].items():
+        for key in ("h_minus_l_anchored_delta_db", "h_minus_l_worst_db",
+                    "h_minus_l_ok", "h_edt10_ok"):
+            assert col[key] == saved["columns"][dec][key]
+    # CY1050: 142.98/147.25 against the recorded Fischer ratio. Premature
+    # rounding gave 0.4665. Both the row and its maximum display four places.
+    assert got["columns"]["50"]["h_edt10_ratio_rel_err"]["10"] == 0.4666
+    assert got["columns"]["50"]["h_edt10_worst_rel"] == 0.4666
 
 
 def test_the_verdicts_flags_are_booleans_before_they_are_serialised():

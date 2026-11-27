@@ -51,6 +51,7 @@ import math
 import pathlib
 import subprocess
 import sys
+from fractions import Fraction
 
 import numpy as np
 
@@ -117,7 +118,7 @@ def assert_realisation_is_the_validated_one() -> dict:
     if not bud["addressable"]:
         raise Refused(f"the realisation needs mode {bud['last_mode']}, which the "
                       f"8-bit register map cannot address")
-    return {"chosen": chosen, "budget": bud, "check_ok": ok}
+    return {"chosen": tn.chosen_record(chosen), "budget": bud, "check_ok": ok}
 
 
 # ---------------------------------------------------------------------------
@@ -426,11 +427,22 @@ def bracket_db() -> dict:
     return out
 
 
+def _edt_ratios(curve: dict, band: str) -> dict:
+    """Use the measured decimal milliseconds for an exact inclusive comparison."""
+    times = curve.get(f"{band}_edt10_ms")
+    if times is None:  # Direct callers can supply an already-normalized curve.
+        return {c: Fraction(str(v)) for c, v in curve[f"{band}_edt10_ratio"].items()}
+    anchor = Fraction(str(times[ANCHOR]))
+    return {c: Fraction(str(v)) / anchor for c, v in times.items()}
+
+
 def verdict(ours: dict, ref: dict) -> dict:
     """Every named property, per DECAY column, with its bound. No averaged
     score: each column and each TONE position is reported."""
     br = bracket_db()
     a = ours["h_minus_l_anchored_db"]
+    h_ratio = _edt_ratios(ours, "h")
+    ln_ratio = _edt_ratios(ours, "ln")
     seq = [a[c] for c in CODES]
     out = {
         "h-minus-l-monotone": {
@@ -452,14 +464,18 @@ def verdict(ours: dict, ref: dict) -> dict:
             "value": ours["h_edt10_ratio"],
             "what": "H's own EDT10 falls as TONE opens -- a decay, so no balance can fake it"},
         "ln-edt-tone-invariant": {
-            "ok": all(abs(v - 1.0) <= LN_INVARIANCE for v in ours["ln_edt10_ratio"].values()),
+            "ok": all(abs(v - 1) <= LN_INVARIANCE for v in ln_ratio.values()),
             "value": ours["ln_edt10_ratio"], "bound": LN_INVARIANCE,
             "what": "the low band's decay does not move with TONE (the machine's moves +-3 %)"},
     }
     cols = {}
     for dec, r in ref.items():
+        # Both H-L operands are measured on the frozen 0.001 dB grid.
+        # Restore that grid after binary subtraction at the inclusive bound.
         d_hml = {c: round(a[c] - r["h_minus_l_anchored_db"][c], 3) for c in CODES}
-        d_hed = {c: round(ours["h_edt10_ratio"][c] / r["h_edt10_ratio"][c] - 1.0, 4) for c in CODES}
+        ref_ratio = _edt_ratios(r, "h")
+        d_hed = {c: h_ratio[c] / ref_ratio[c] - 1 for c in CODES}
+        worst_hed = max(abs(v) for v in d_hed.values())
         cols[dec] = {
             "settings": r["settings"],
             "split": {c: ("development" if r["settings"][c] in cb.DEVELOPMENT else "confirmation")
@@ -467,9 +483,9 @@ def verdict(ours: dict, ref: dict) -> dict:
             "h_minus_l_anchored_delta_db": d_hml,
             "h_minus_l_worst_db": round(max(abs(v) for v in d_hml.values()), 3),
             "h_minus_l_ok": bool(max(abs(v) for v in d_hml.values()) <= BOUND_DB),
-            "h_edt10_ratio_rel_err": d_hed,
-            "h_edt10_worst_rel": round(max(abs(v) for v in d_hed.values()), 4),
-            "h_edt10_ok": bool(max(abs(v) for v in d_hed.values()) <= TIME_TOL),
+            "h_edt10_ratio_rel_err": {c: float(round(v, 4)) for c, v in d_hed.items()},
+            "h_edt10_worst_rel": float(round(worst_hed, 4)),
+            "h_edt10_ok": worst_hed <= TIME_TOL,
         }
     out["h-minus-l-tracks-808"] = {
         "ok": all(v["h_minus_l_ok"] for v in cols.values()),

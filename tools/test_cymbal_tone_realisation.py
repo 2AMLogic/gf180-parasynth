@@ -220,8 +220,8 @@ def test_shape_bound_uses_the_active_range_maximum(figs, lp_hz, expected_db, pas
 
     assert ct.shape_error("low", poles, corner)["shape_max_db"] == 3.00
     _, lines = ct.check(poles, corner, fig9)
-    status, = [line.split()[0] for line in lines if "shape-bound" in line.split()[1:2]]
-    assert status == ("PASS" if passes else "FAIL")
+    line = next(line for line in lines if "shape-bound" in line)
+    assert line.split()[:2] == ["PASS" if passes else "FAIL", "shape-bound"]
 
 
 def test_the_active_range_excludes_where_the_band_has_no_energy(figs):
