@@ -8,6 +8,14 @@ the estimator, and differences that are NOT permitted must still move it.
     python3 tools/probes/permitted_differences.py --false-alarm-rate 50
     python3 tools/probes/permitted_differences.py --safety-sweep 20
 
+WHAT THE EXIT STATUS COUNTS (#1466). A row's verdict is the worst of its
+trials, so a row that ran none is REFUSED, never PASS, and `--trials` below 1
+is NO VERDICT (exit 2) before any mode runs; `--cal-trials` below 1 likewise
+under `--calibrate`. Before that, `--trials 0` printed `FAIL 0 REFUSED 0
+PASS 18`, a 0.0000 % false-alarm rate and `observed red (none)` under an
+injection -- three exit-0 answers to a request that measured nothing.
+`--policies` is a listing and runs no comparison on purpose.
+
 #158: "**A detector that fires on every difference is useless.** Leading
 silence must not move an onset-relative decay; polarity reversal must not move
 spectral magnitude or estimated frequency; gain must not move a level-normalised
@@ -1342,6 +1350,11 @@ class RowResult:
 
 
 def run_case(c: Case, trials: int, seed_base: int, inject: str | None) -> RowResult:
+    if trials <= 0:
+        # #1466: a row's verdict is the worst of its trials, and with no trial
+        # there is no worst. `--trials 0` reached this and every row read PASS
+        # (`exceed` 0, and `0 > 0` is False) -- eighteen passes over nothing.
+        return RowResult(c, REFUSED, trials, 0, 0, [], [f"{trials} trial(s) requested: nothing was measured"])
     res, reasons, exceed, refus = [], [], 0, 0
     for i in range(trials):
         t = run_trial(c, seed_base, i, inject)
@@ -2033,6 +2046,17 @@ def main(argv=None) -> int:
     if a.policies:
         print_policies()
         return 0
+    # #1466: no trial, no verdict. `--trials 0` ran every mode on an empty
+    # record and exited 0 three ways (the suite, --false-alarm-rate,
+    # --inject). Refused here once, before any mode, so each mode's own exit
+    # mapping is untouched. --policies above is a listing and legitimately
+    # runs no comparison; --calibrate reads --cal-trials, not --trials.
+    if not a.calibrate and a.trials < 1:
+        print(f"\n   NO VERDICT -- --trials {a.trials}: no trial would run, so no row could be judged")
+        return 2
+    if a.calibrate and a.cal_trials < 1:
+        print(f"\n   NO VERDICT -- --cal-trials {a.cal_trials}: no calibration draw would run")
+        return 2
     if a.calibrate:
         return calibrate(a.cal_trials)
     if a.margins:

@@ -1089,7 +1089,8 @@ def main() -> int:
     print("Axis coverage (#158: frequency, duration, phase, SNR, level)")
     print("=" * 78)
     bad = 0
-    for kind, axis, n, spread, ok, note in axis_coverage(fx):
+    cov = axis_coverage(fx)
+    for kind, axis, n, spread, ok, note in cov:
         flag = "OK  " if ok else "FAIL"
         if not ok:
             bad += 1
@@ -1104,7 +1105,13 @@ def main() -> int:
     if bad:
         print(f"{bad} coverage check(s) FAILED.")
         return 1
-    print("Axis coverage OK.")
+    if not cov:
+        # #1466: nothing failed because no (family, axis) row existed. An
+        # empty FAMILIES printed `TOTAL 0 records` and then this line.
+        print(f"NO VERDICT -- {len(fx)} records and {len(cov)} (family, axis) rows: "
+              "nothing was swept, and an empty coverage table is not a covered one")
+        return 2
+    print(f"Axis coverage OK -- {len(cov)} (family, axis) rows over {len(fx)} records.")
     return 0
 
 

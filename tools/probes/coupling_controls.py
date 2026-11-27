@@ -20,8 +20,9 @@ THREE OUTCOMES, not two, per docs/verification-rules.md:
     NO VERDICT  the apparatus could not decide: the clean model is not green,
                 a property raised something that is not an assertion (a
                 traceback is not a verdict), the defect changed nothing at
-                all (inactive: no property moved), or a tool is missing
-                (exit 2)
+                all (inactive: no property moved), no defect is declared
+                (an empty MUTANTS is not `PASS: 0 defects`, #1466), or a tool
+                is missing (exit 2)
 
 The matrix is properties x defects: MOVED where a property went red under a
 defect, `.` where it stayed green. A property no defect moves is printed as
@@ -347,6 +348,13 @@ def main(argv=None) -> int:
         for k, (_, prop, why) in MUTANTS.items():
             print(f"{k:24s} -> test_coupling_{prop}   ({why})")
         return 0
+    # #1466: with no mutant declared there is no control, so the clean run
+    # below would precondition nothing and `PASS: 0 defects` would follow.
+    # Refused before any property runs.
+    if not MUTANTS:
+        print("NO VERDICT -- no defect is declared (MUTANTS is empty): nothing was "
+              "injected, so nothing was shown about what the suite can see")
+        return NO_VERDICT
     missing = [prop for _, prop, _ in MUTANTS.values() if "test_coupling_" + prop not in PROPS]
     if missing:
         print(f"NO VERDICT: declared properties absent from the suite: {missing}")
