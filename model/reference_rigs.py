@@ -1089,7 +1089,33 @@ class MiniV3Rig(_Plugin):
         return y[pre:pre + n]
 
 
-class DivaRig(_Plugin):
+class _NoiseResponseRig(_Plugin):
+    """Measure the ladder against its own noise source with the filter wide open."""
+
+    def noise_curve(self, freqs, cut, res, seconds=4.0, level=1.0):
+        filtered = self.noise_render(cut, res, seconds, level)
+        reference_power = self._wide_open_power(seconds, level)
+        f, power = _welch(filtered, "filtered capture")
+        # Floor the relative gain for a silent output. An absolute power floor
+        # would change the transfer when both recordings are scaled equally.
+        with np.errstate(divide="ignore"):
+            gain_db = 10 * (np.log10(power) - np.log10(reference_power))
+        return _smooth_log(f, np.maximum(gain_db, -300.0), freqs)
+
+    def _wide_open_power(self, seconds, level):
+        key = (seconds, level)
+        cached = getattr(self, "_wide_open_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        reference = self.noise_render(1.0, 0.0, seconds, level)
+        _, power = _welch(reference, "wide-open reference")
+        if np.any(power == 0):
+            raise am.InsufficientEvidence("wide-open reference is silent in one or more Welch bins")
+        self._wide_open_cache = (key, power)
+        return power
+
+
+class DivaRig(_NoiseResponseRig):
     """u-he Diva, VCF model "Ladder" in 24 dB mode. Diva has NO audio input,
     so the source is its own white-noise generator, gated off after the first
     30 ms for the free-ring measurement and held on for the response
@@ -1220,29 +1246,6 @@ class DivaRig(_Plugin):
         return self.FREQ_ANCHOR_HZ * 2.0 ** ((30.0 + 120.0 * knob
                                               - self.FREQ_ANCHOR_VALUE) / 12.0)
 
-    def noise_curve(self, freqs, cut, res, seconds=4.0, level=1.0):
-        """Transfer by noise excitation: the filter's own white noise through
-        the ladder at (cut, res), divided by the SAME source through the ladder
-        wide open. The ratio removes the source spectrum and the output path;
-        what is left is the filter, at a stated drive.
-
-        Diva has no audio input, so this is the only way to measure it. The
-        method's agreement with the stepped tone is checked on Surge, where
-        both are possible (`--stage validate`); it is not assumed."""
-        num = self.noise_render(cut, res, seconds, level)
-        den = self._wide_open(seconds, level)
-        fn, pn = _welch(num)
-        _, pd = _welch(den)
-        g = 10 * np.log10(np.maximum(pn, 1e-30) / np.maximum(pd, 1e-30))
-        return _smooth_log(fn, g, freqs)
-
-    def _wide_open(self, seconds=4.0, level=1.0):
-        key = (round(seconds, 3), round(level, 6))
-        if getattr(self, "_wo_key", None) != key:
-            self._wo = self.noise_render(1.0, 0.0, seconds, level)
-            self._wo_key = key
-        return self._wo
-
     def drive_tone(self, f, cut, res, amp):
         raise NotImplementedError(
             "Diva has 0 audio input channels, so no known signal can be put into its "
@@ -1287,19 +1290,20 @@ def _knob(cache, dev, name, hz):
     return cache[key]
 
 
-def _welch(x, nfft=8192):
+def _welch(x, what, nfft=8192):
     """Power spectrum, Hann windows, 50 % overlap, averaged. `len(x)/nfft*2`
     segments, so the per-bin standard error is 1/sqrt(that) -- about 0.9 dB
     for a 4 s record, taken down under 0.2 dB by the 1/12-octave smoothing
     `_smooth_log` applies after."""
-    x = np.asarray(x, dtype=np.float64)
+    x = am.require_finite(np.asarray(x, dtype=np.float64), what)
     w = np.hanning(nfft)
     step = nfft // 2
     segs = [np.abs(np.fft.rfft(x[i:i + nfft] * w)) ** 2
             for i in range(0, len(x) - nfft + 1, step)]
     if not segs:
-        raise ValueError("record shorter than one FFT window")
-    return np.fft.rfftfreq(nfft, 1.0 / SR), np.mean(segs, axis=0)
+        raise am.InsufficientEvidence(f"{what} is shorter than one FFT window")
+    power = am.require_finite(np.mean(segs, axis=0), f"{what} Welch power")
+    return np.fft.rfftfreq(nfft, 1.0 / SR), power
 
 
 def _smooth_log(f, g_db, at, frac: float = 1 / 12.0):
@@ -1320,7 +1324,7 @@ def _smooth_log(f, g_db, at, frac: float = 1 / 12.0):
 PATH_MODELD = f"{VST3}/Model D.vst3"
 
 
-class ModelDRig(_Plugin):
+class ModelDRig(_NoiseResponseRig):
     """**Moog's own Minimoog Model D.** Not another third-party interpretation:
     written by the people with the schematics, with the brand's name on it.
 
@@ -1423,21 +1427,6 @@ class ModelDRig(_Plugin):
         y = self.render(np.zeros(1), seconds)
         self.set(self.I['noise_on'], 0.0)
         return y[int(0.35 * SR):]
-
-    def noise_curve(self, freqs, cut, res, seconds=4.0, level=1.0):
-        num = self.noise_render(cut, res, seconds, level)
-        den = self._wide_open(seconds, level)
-        fn, pn = _welch(num)
-        _, pd = _welch(den)
-        g = 10 * np.log10(np.maximum(pn, 1e-30) / np.maximum(pd, 1e-30))
-        return _smooth_log(fn, g, freqs)
-
-    def _wide_open(self, seconds=4.0, level=1.0):
-        key = (round(seconds, 3), round(level, 6))
-        if getattr(self, "_wo_key", None) != key:
-            self._wo = self.noise_render(1.0, 0.0, seconds, level)
-            self._wo_key = key
-        return self._wo
 
     def drive_tone(self, f, cut, res, amp):
         raise NotImplementedError(

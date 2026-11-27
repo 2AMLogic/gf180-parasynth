@@ -27,8 +27,10 @@ def rig_with_captures(rig_class, filtered, references):
 
 
 @pytest.mark.parametrize("rig_class", [rr.DivaRig, rr.ModelDRig])
-def test_half_amplitude_has_known_gain(rig_class):
-    rig = rig_with_captures(rig_class, 0.5 * SOURCE, [SOURCE])
+@pytest.mark.parametrize("scale", [1.0, 1e-20])
+def test_half_amplitude_has_known_gain(rig_class, scale):
+    source = scale * SOURCE
+    rig = rig_with_captures(rig_class, 0.5 * source, [source])
     gain = rig.noise_curve(rc.FREQS, 0.5, 0.05)
     assert gain.shape == rc.FREQS.shape
     np.testing.assert_allclose(gain, HALF_GAIN_DB, rtol=0, atol=1e-10)
@@ -40,6 +42,12 @@ def test_silent_reference_refuses_for_either_filtered_capture(rig_class, filtere
     rig = rig_with_captures(rig_class, filtered, [SILENCE])
     with pytest.raises(am.InsufficientEvidence, match="wide-open reference"):
         rig.noise_curve(rc.FREQS, 0.5, 0.05)
+
+
+def test_silent_filter_with_valid_reference_has_flat_floor():
+    rig = rig_with_captures(rr.DivaRig, SILENCE, [SOURCE])
+    gain = rig.noise_curve(rc.FREQS, 0.5, 0.05)
+    np.testing.assert_array_equal(gain, np.full(rc.FREQS.shape, -300.0))
 
 
 @pytest.mark.parametrize("rig_class", [rr.DivaRig, rr.ModelDRig])
