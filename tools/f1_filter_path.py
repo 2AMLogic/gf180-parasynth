@@ -85,6 +85,10 @@ def host_regs(cut_hz: float, res: float, calibration: str | None) -> dict:
 class SelectedFilterPath:
     """Build once per case; `curve` per condition."""
 
+    #: The identity written onto every record this path produces (#1492); the
+    #: scorer reads it from the path rather than taking a separate label.
+    engine = "fixed-model"
+
     def __init__(self, profile: str = ENGINE_PROFILE, calibration: str | None = CALIBRATION,
                  *, substitute_profile: str | None = None):
         self.calibration = calibration

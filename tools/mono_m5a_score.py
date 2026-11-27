@@ -2,6 +2,11 @@
 
 The Mini V3 recording is a software-synth reference, not a physical Model D.
 This module refuses if the frozen audio or its manifest has changed.
+
+The model WAV is the record's artefact (`audio`) and an input to no metric.
+`keep_audio=False` writes none -- creating no file and overwriting none -- and
+`audio` says so; until #1430 the WAV was written whatever the caller meant by
+`--no-audio`.
 """
 from __future__ import annotations
 
@@ -233,7 +238,8 @@ def _model_note(note: float, injection: str = "") -> float:
 def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             model_label=None, engine="selected", output_path=None,
             candidate_wav=None, saw_cutoff_override=None,
-            saw_volume_correction_db=None, case_id="M5A", inject=""):
+            saw_volume_correction_db=None, case_id="M5A", inject="",
+            keep_audio=True):
     from scipy.io import wavfile
     from measure_mono_m5a_reference import envelope_timing
 
@@ -464,14 +470,19 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     else:
         combined = np.concatenate([part for i, part in enumerate(model_parts)
                                    if i == 0] + [np.zeros(silence)] + model_parts[1:])
-    out = ROOT / f"build/scorecard/{case_id}-model.wav" if output_path is None else pathlib.Path(output_path)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    pcm_out = np.clip(combined * 32768.0, -32768, 32767).astype("<i2")
-    wavfile.write(out, SR, pcm_out)
-    try:
-        audio_path = str(out.relative_to(ROOT))
-    except ValueError:
-        audio_path = str(out)
+    # The WAV is the record's artefact and an input to nothing above it: with
+    # `keep_audio` off (`--no-audio`) none is written, and the record says so.
+    audio_path = "not written (--no-audio)"
+    if keep_audio:
+        out = (ROOT / f"build/scorecard/{case_id}-model.wav"
+               if output_path is None else pathlib.Path(output_path))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        pcm_out = np.clip(combined * 32768.0, -32768, 32767).astype("<i2")
+        wavfile.write(out, SR, pcm_out)
+        try:
+            audio_path = str(out.relative_to(ROOT))
+        except ValueError:
+            audio_path = str(out)
     return {"analysis_version": ANALYSIS_VERSIONS[case_id],
             "metrics": metrics, "audio": audio_path,
             "model_configuration": {
