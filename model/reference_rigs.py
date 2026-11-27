@@ -432,7 +432,7 @@ class _Plugin:
             self.pb.set_data(np.zeros((2, int(0.05 * SR)), dtype=np.float32))
         self.p.clear_midi()
         self.eng.render(0.05)
-        pins = rq.check_pins(self.check_pins, n_pins=len(self.PINS))
+        pins = self._pins_check()
         if pins.outcome == rq.FAIL:
             raise RuntimeError(f"{self.name}: pinned settings did not hold: {pins.detail['bad']}")
         return pins
@@ -470,11 +470,18 @@ class _Plugin:
         return {f"{i}:{self.p.get_parameter_name(i)}": self.text(i)
                 for i, _v, _n, _w in self.PINS}
 
+    def _pin_expectations(self):
+        return [(idx, name, want) for idx, _val, name, want in self.PINS
+                if name is not None or want is not None]
+
+    def _pins_check(self):
+        return rq.check_pins(self.check_pins, n_pins=len(self._pin_expectations()))
+
     def check_pins(self) -> list:
         """Every pinned index must still carry the name it was pinned by, and
         read back what it was set to. Call this AFTER a render."""
         bad = []
-        for idx, _val, name, want in self.PINS:
+        for idx, name, want in self._pin_expectations():
             got_name = self.p.get_parameter_name(idx)
             if name is not None and got_name != name:
                 bad.append((idx, "NAME", name, got_name))
@@ -1855,8 +1862,7 @@ class _PedalboardPlugin(_Plugin):
         qualified is a finding with numbers in it. `RigRefusal` carries the same
         record."""
         self.silence_state(0.05)
-        checks = [rq.check_pins(self.check_pins, n_pins=len(self.PINS)),
-                  self.written_pins_check()]
+        checks = [self._pins_check(), self.written_pins_check()]
         checks.extend(self.patch_checks())
         battery = rq.qualify_voice(
             rig=self.name, host=self.host, render_note=self.render_note,
