@@ -26,6 +26,7 @@ measurement's empirical artefact floor -- not a synthetic one.
 """
 from __future__ import annotations
 import csv
+import stat
 import argparse, hashlib, json, pathlib, subprocess, sys
 import numpy as np
 
@@ -112,7 +113,10 @@ def indexed_members(folder: str, accent: str, index: dict | None = None) -> list
 def absent(folder: str, accent: str, names: list[str]) -> list[str]:
     """The named recordings that are not regular files in the group's cache folder."""
     d = CACHE / STEM / group_rel(folder, accent)
-    return [n for n in names if not (d / n).is_file()]
+    try:
+        return [n for n in names if not stat.S_ISREG(rl.inventory_path_mode(d / n))]
+    except OSError as why:
+        raise Refused(f"cannot inspect the tom cache folder {d} ({why})") from why
 
 
 def incomplete(folder: str, accent: str, gone: list[str]) -> str:

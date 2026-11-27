@@ -248,6 +248,45 @@ def test_the_cli_refuses_an_unreadable_index_and_leaves_the_json_intact(
     assert out.read_text(encoding="utf-8") == previous
 
 
+def test_the_cli_refuses_an_inaccessible_tom_cache(tmp_path, monkeypatch, capsys):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    monkeypatch.setattr(tm, "CACHE", cache)
+    out = tmp_path / "result.json"
+    previous = b'{"previous": true}\n'
+    out.write_bytes(previous)
+    cache.chmod(0)
+    try:
+        if os.access(cache, os.X_OK):
+            pytest.skip("requires a user subject to directory search permissions")
+        assert tm.main(["--json", str(out)]) == 2
+    finally:
+        cache.chmod(0o700)
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "Permission denied" in text and str(cache) in text
+    assert out.read_bytes() == previous
+
+
+@pytest.mark.parametrize(("row", "field"), [
+    ("folder/take.wav", "bytes"),
+    ("folder/take.wav\t", "bytes"),
+    ("\t12", "path"),
+])
+def test_the_cli_refuses_an_incomplete_tsv_row(tmp_path, monkeypatch, capsys, row, field):
+    index = tmp_path / "index" / tm.INDEX.name
+    index.parent.mkdir()
+    index.write_text(f"path\tbytes\n{row}\n", encoding="utf-8")
+    monkeypatch.setattr(rl, "REFAUDIO", tmp_path)
+    monkeypatch.setattr(tm, "INDEX", index)
+    out = tmp_path / "result.json"
+    previous = b'{"previous": true}\n'
+    out.write_bytes(previous)
+    assert tm.main(["--json", str(out)]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and str(index) in text and field in text
+    assert out.read_bytes() == previous
+
+
 def test_the_cli_names_every_absent_take_in_every_requested_group(root, monkeypatch, capsys):
     _cache(root, tm.VOICES)
     monkeypatch.setattr(tm, "CACHE", root)

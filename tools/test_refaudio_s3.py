@@ -265,6 +265,23 @@ def test_every_name_the_lister_accepts_is_read_back_unchanged(env, monkeypatch):
     assert mr.expected_loops(out) == sorted(names)
 
 
+def test_duplicate_zip_members_leave_the_previous_inventory_readable(env, monkeypatch, capsys):
+    import measure_repeatability as mr
+    out = env / "inventory.txt"
+    with monkeypatch.context() as good:
+        _fake_aws(good, _zip_of("original.wav"))
+        assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.LISTED
+    previous = out.read_bytes()
+    with pytest.warns(UserWarning, match="Duplicate name"):
+        blob = _zip_of("same.wav", "other.wav", "same.wav")
+    _fake_aws(monkeypatch, blob)
+    assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.REFUSED
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "same.wav" in text and FOLDER in text
+    assert out.read_bytes() == previous
+    assert mr.expected_loops(out) == ["original.wav"]
+
+
 @pytest.mark.parametrize("bad", ["#2.wav", "a\x85b.wav", "a\u2028b.wav", "a\x0bb.wav",
                                  "a\x1cb.wav", "a\rb.wav"])
 def test_a_name_the_reader_would_drop_or_split_is_refused_before_writing(

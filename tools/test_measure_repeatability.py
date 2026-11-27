@@ -11,6 +11,7 @@ are tested against signals whose answer is constructed, not observed.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import sys
 
@@ -614,6 +615,35 @@ def test_the_loops_cli_names_every_loop_when_the_whole_folder_is_substituted(
     text = capsys.readouterr().out
     assert "REFUSED" in text and "refaudio_s3.py" in text
     assert all(n in text for n in names) and "other 0.wav" not in text
+
+
+@pytest.mark.parametrize("blocked", ["index", "cache", "4x4"])
+def test_the_loops_cli_refuses_an_inaccessible_directory(tmp_path, monkeypatch, capsys, blocked):
+    inventory = tmp_path / "index" / "loops.txt"
+    inventory.parent.mkdir()
+    inventory.write_text("expected.wav\n", encoding="utf-8")
+    cache = tmp_path / "cache"
+    folder = cache / "4x4"
+    folder.mkdir(parents=True)
+    (folder / "expected.wav").touch()
+    monkeypatch.setattr(mr, "LOOPS_INVENTORY", inventory)
+    monkeypatch.setattr(mr, "LOOPS_DIR", folder)
+    monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
+    out = tmp_path / "result.json"
+    previous = b'{"take_to_take": "previous"}\n'
+    out.write_bytes(previous)
+
+    directory = {"index": inventory.parent, "cache": cache, "4x4": folder}[blocked]
+    directory.chmod(0)
+    try:
+        if os.access(directory, os.X_OK):
+            pytest.skip("requires a user subject to directory search permissions")
+        assert mr.main(["--loops", "--json", str(out)]) == 2
+    finally:
+        directory.chmod(0o700)
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "Permission denied" in text and str(directory) in text
+    assert out.read_bytes() == previous
 
 
 def _unreadable(monkeypatch, target):

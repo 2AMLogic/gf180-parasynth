@@ -73,6 +73,7 @@ import json
 import math
 import pathlib
 import re
+import stat
 import sys
 
 import numpy as np
@@ -86,6 +87,7 @@ import run_case as rc                                             # noqa: E402
 import promoted_bands as pb                                       # noqa: E402
 import promoted_measures as pm                                    # noqa: E402
 import refusal
+from refaudio_local import inventory_path_mode
 
 MEASURED, FALSE, REFUSED = 0, 1, 2
 
@@ -1054,10 +1056,10 @@ def expected_loops(path: pathlib.Path | None = None) -> list[str]:
     disk, so a partly fetched folder enumerated short and every spread after
     it was read over fewer loops with nothing recording the loss."""
     path = path or LOOPS_INVENTORY
-    if not path.is_file():
-        raise Refused(f"the loop inventory {path} is missing: nothing committed says "
-                      "which WAVs the 4x4 folder holds")
     try:
+        if not stat.S_ISREG(inventory_path_mode(path)):
+            raise Refused(f"the loop inventory {path} is missing or not a regular file: "
+                          "nothing committed says which WAVs the 4x4 folder holds")
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as why:
         # An inventory that cannot be read cannot say which WAVs the folder
@@ -1084,10 +1086,13 @@ def loop_files() -> list[pathlib.Path]:
     and is never read. Presence is all this establishes: a file of the right
     name holding other audio is read as that loop."""
     hint = f"the 4x4 bass-drum loops are not in refaudio/cache -- run:\n         {LOOPS_FETCH}"
-    if not LOOPS_DIR.is_dir():
-        raise Refused(hint)
-    paths = sorted(LOOPS_DIR / n for n in expected_loops())
-    gone = [p.name for p in paths if not p.is_file()]
+    try:
+        if not stat.S_ISDIR(inventory_path_mode(LOOPS_DIR)):
+            raise Refused(hint)
+        paths = sorted(LOOPS_DIR / n for n in expected_loops())
+        gone = [p.name for p in paths if not stat.S_ISREG(inventory_path_mode(p))]
+    except OSError as why:
+        raise Refused(f"cannot inspect the 4x4 loop folder {LOOPS_DIR} ({why})") from why
     if len(gone) == len(paths):
         try:
             others = sorted(q.name for q in LOOPS_DIR.iterdir())

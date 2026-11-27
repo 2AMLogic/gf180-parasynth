@@ -33,7 +33,7 @@ THREE OUTCOMES, the same contract as the fetch tools:
     exit 2  REFUSED  a precondition is not met, so nothing was listed: no
                      REFAUDIO_S3, unknown archive, no hash to vouch with,
                      hash mismatch, a folder that holds no WAV, a member name
-                     that cannot be written one per line
+                     that cannot be written one per line, or duplicate members
 
 Generated, never edited: `refaudio/README.md` -- "The index is generated from
 the archives, not edited by hand."
@@ -41,6 +41,7 @@ the archives, not edited by hand."
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import os
 import pathlib
 import subprocess
@@ -128,6 +129,11 @@ def main(argv: list[str]) -> int:
     if not names:
         print(f"REFUSED  {args.folder!r} holds no WAV in {args.archive}: an empty "
               "inventory would leave a reader to enumerate whatever is on disk")
+        return REFUSED
+    duplicates = [name for name, count in Counter(names).items() if count > 1]
+    if duplicates:
+        print(f"REFUSED  duplicate WAV members under {args.folder!r} in {args.archive}: "
+              + ", ".join(repr(n) for n in duplicates))
         return REFUSED
     bad = unrepresentable(names)
     if bad:
