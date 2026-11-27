@@ -93,6 +93,10 @@ OPEN_GUARD_DB = 6.0
 #: recording filed under the wrong level is off by 20*log10(amp ratio), which
 #: is 6.02 dB for neighbouring levels. Half of that is the threshold.
 LEVEL_ANCHOR_DB = 3.0
+#: The closest two frozen shapes (cut4000 and open20k) are 11.44 dB RMS
+#: apart across the tone grid after removing low-band gain. A 5 dB radius
+#: keeps the four acceptance regions disjoint.
+CONDITION_ANCHOR_DB = 5.0
 
 
 class Refused(refusal.Refused, Exception):
@@ -107,10 +111,12 @@ class LevelBindingError(CaptureIdentityError):
     """A recording's level disagrees with the frozen clip for its condition."""
 
 
+class ConditionBindingError(CaptureIdentityError):
+    """The recording's response shape disagrees with its declared cutoff."""
+
+
 class FrozenReferenceUnavailable(Refused):
-    """The frozen Surge clip the level anchor binds to cannot be read (cache
-    absent or altered). refprofile.Refused is a sibling class, not a parent,
-    so it is re-raised here in this module's vocabulary."""
+    """The reference clip cannot supply a gain curve for this condition."""
 
 
 class ProjectionError(Refused):
@@ -487,33 +493,43 @@ def capture_curve(cond: str, amp: float, take: int, manifest=None, inject="") ->
         g = rr.SurgeRig.tone_project(y, meta["parts"], amp, key)
     except am.InsufficientEvidence as e:
         raise ProjectionError(f"{key}: unusable projection window: {e}") from e
-    _bind_level_to_frozen_clip(cond, amp, key, g)
+    _bind_to_frozen_clip(cond, amp, key, g)
     return np.asarray(meta["freqs_hz"], dtype=np.float64), np.asarray(g, dtype=np.float64)
 
 
 @cache
-def _frozen_low_db(cond: str) -> float:
+def _frozen_gain_db(cond: str) -> np.ndarray:
+    import audio_measure as am
+    import reference_rigs as rr
+    clip = CONDITIONS[cond][1]
     try:
-        prof = rp.load_profile()
-        y, _, meta = rp.load_clip(CONDITIONS[cond][1], prof)
-    except rp.Refused as e:
-        raise FrozenReferenceUnavailable(
-            f"cannot anchor the level of {cond}: {e}") from e
-    parts = [(int(a), int(b), float(f)) for a, b, f in meta["parts"]]
-    return _projected_low_db(y, parts, float(meta["amp"]))
+        y, _, meta = rp.load_clip(clip)
+        _validate_windows(meta, len(y), clip)
+        if meta.get("amp") != rp.PROBE_AMP:
+            raise FrozenReferenceUnavailable(f"{clip}: expected frozen amplitude {rp.PROBE_AMP}")
+        return rr.SurgeRig.tone_project(y, meta["parts"], rp.PROBE_AMP, clip)
+    except (rp.Refused, am.InsufficientEvidence) as e:
+        raise FrozenReferenceUnavailable(f"cannot anchor {cond} to {clip}: {e}") from e
 
 
-def _bind_level_to_frozen_clip(cond: str, amp: float, key: str, g) -> None:
-    """REFUSE a recording whose level cannot be the amplitude its key claims.
-    The manifest fields that name a level (digest, member, peak, rms, windows)
-    move together, so swapping two levels' complete evidence leaves them
-    self-consistent; the frozen clip does not move with them."""
-    got, want = float(np.median(np.asarray(g)[:4])), _frozen_low_db(cond)
-    if not math.isfinite(got) or abs(got - want) > LEVEL_ANCHOR_DB:
+def _bind_to_frozen_clip(cond: str, amp: float, key: str, g: np.ndarray) -> None:
+    """Check the commanded level and cutoff against an independently filed clip."""
+    frozen = _frozen_gain_db(cond)
+    low_db = float(np.median(g[:4]))
+    frozen_low_db = float(np.median(frozen[:4]))
+    level_error = low_db - frozen_low_db
+    if not math.isfinite(level_error) or abs(level_error) > LEVEL_ANCHOR_DB:
         raise LevelBindingError(
-            f"{key}: low-band gain {got:.2f} dB re the commanded {amp:g} amplitude is "
-            f"{got - want:+.2f} dB from the frozen {CONDITIONS[cond][1]} ({want:.2f} dB); "
+            f"{key}: low-band gain {low_db:.2f} dB re the commanded {amp:g} amplitude is "
+            f"{level_error:+.2f} dB from the frozen {CONDITIONS[cond][1]} ({frozen_low_db:.2f} dB); "
             f"this recording was not made at that level")
+    # Removing each curve's low-band gain isolates the cutoff from input level.
+    shape_error = (g - low_db) - (frozen - frozen_low_db)
+    rms_db = float(np.sqrt(np.mean(shape_error ** 2)))
+    if not math.isfinite(rms_db) or rms_db > CONDITION_ANCHOR_DB:
+        raise ConditionBindingError(
+            f"{key}: cutoff response differs from frozen {CONDITIONS[cond][1]} by "
+            f"{rms_db:.2f} dB RMS over {len(g)} tones (limit {CONDITION_ANCHOR_DB:g} dB)")
 
 
 def verify() -> int:
@@ -541,7 +557,7 @@ def verify() -> int:
         try:
             capture_curve(cond, float(tag[1:]), int(take[4:]), m)
             verified[key] = verified_or_anchored[key] = meta
-        except LevelBindingError as e:
+        except (LevelBindingError, ConditionBindingError) as e:
             unanchored.append(e)
             verified_or_anchored[key] = meta     # reported after the cell-sharing check, which names the cause
         except (CaptureIdentityError, ProjectionError, FrozenReferenceUnavailable) as e:

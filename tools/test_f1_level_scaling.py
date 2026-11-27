@@ -9,6 +9,7 @@ equal the baseline's.
 """
 from __future__ import annotations
 
+import itertools
 import math
 import pathlib
 import sys
@@ -526,10 +527,48 @@ def test_complete_condition_swap_refuses(monkeypatch, capsys, first, second, amp
 
 
 def test_level_anchor_accepts_the_committed_captures():
+    """Measure the cutoff identity margin for all accepted levels and takes."""
+    def shape(gains):
+        return gains - np.median(gains[:4])
+
+    def rms(a, b):
+        return np.sqrt(np.mean((a - b) ** 2))
+
+    # Project the independent references through the scorecard's own loader.
+    frozen = {cond: shape(fls.rc.load_filter_reference(clip)[1])
+              for cond, (_, clip) in cap.CONDITIONS.items()}
+    closest_pair = min(rms(a, b) for a, b in itertools.combinations(frozen.values(), 2))
+    assert 2 * cap.CONDITION_ANCHOR_DB < closest_pair
+
     manifest = cap.load_manifest()
-    for amp in cap.AMPS:
-        for cond in cap.CONDITIONS:
-            cap.capture_curve(cond, amp, 1, manifest)
+    matching, other = [], []
+    for cond, amp, take in itertools.product(frozen, cap.AMPS, cap.TAKES):
+        _, gains = cap.capture_curve(cond, amp, take, manifest)
+        captured = shape(gains)
+        matching.append(rms(captured, frozen[cond]))
+        other.extend(rms(captured, ref) for name, ref in frozen.items() if name != cond)
+    print(f"{len(matching)} matching curves: worst {max(matching):.8f} dB RMS; "
+          f"{len(other)} wrong cutoffs: closest {min(other):.5f} dB RMS")
+    assert max(matching) < cap.CONDITION_ANCHOR_DB < min(other)
+
+
+@pytest.mark.parametrize("field", ["amp", "parts"])
+def test_unusable_frozen_curve_refuses(monkeypatch, capsys, field):
+    load_clip = cap.rp.load_clip
+
+    def damaged(*args, **kwargs):
+        y, sr, meta = load_clip(*args, **kwargs)
+        # A truncated grid still carries all four low-band tones.
+        return y, sr, {**meta, field: 0 if field == "amp" else meta["parts"][:-1]}
+
+    cap._frozen_gain_db.cache_clear()
+    monkeypatch.setattr(cap.rp, "load_clip", damaged)
+    try:
+        assert cap.main([]) == cap.REFUSED
+    finally:
+        cap._frozen_gain_db.cache_clear()
+    reason = "expected frozen amplitude" if field == "amp" else "one projection window per tone"
+    assert reason in capsys.readouterr().out
 
 
 def test_surge_side_refuses_digest_only_second_takes():
@@ -559,11 +598,11 @@ def test_absent_frozen_cache_refuses_through_main_instead_of_raising(monkeypatch
     absent cache (independent of the host's cache state)."""
     def absent(*a, **k):
         raise cap.rp.Refused("the frozen reference audio is not in the cache")
-    cap._frozen_low_db.cache_clear()
+    cap._frozen_gain_db.cache_clear()
     monkeypatch.setattr(cap.rp, "load_clip", absent)
     try:
         assert cap.main([]) == cap.REFUSED
     finally:
-        cap._frozen_low_db.cache_clear()
+        cap._frozen_gain_db.cache_clear()
     out = capsys.readouterr().out
     assert "REFUSED" in out and "not in the cache" in out
