@@ -227,3 +227,11 @@ The frozen recordings support three observations.
 
 Point 5 gives the musical basis for the chosen drift range. The frozen
 recordings constrain pitch variation only where it was observed.
+
+`docs/minimoog-reference.md` (under W3a, citing contract 6.11 and this record)
+retains its earlier summary wording ("every isolated-oscillator window in the
+frozen Mini V3 set wanders by 0.001–0.024 cents rms, 30–100× below audibility,
+so they bound drift instead") because that document is hash-frozen under
+`docs/scorecard/reference-suite-freeze.sha256` (#1050) and is not edited in
+place. Read the scoped statement above and in `spec/NUMERIC-CONTRACT.md` item
+18 instead.
