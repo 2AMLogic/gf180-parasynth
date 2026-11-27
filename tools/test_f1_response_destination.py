@@ -510,6 +510,18 @@ def test_no_audio_seeds_no_curve_and_the_record_still_follows_the_anchor(
     assert (scratch / "F1A.json").read_bytes() == _published_f1a_anchor()
 
 
+def test_dry_run_without_audio_can_measure_over_a_damaged_record(
+        board, monkeypatch, tmp_path):
+    seed = tmp_path / "F1A.json"
+    seed.write_bytes(b"{damaged")
+
+    assert _clean_run_into("model", monkeypatch, tmp_path, "--dry-run", "--no-audio") == 0
+
+    assert seed.read_bytes() == b"{damaged"
+    assert _files_under(tmp_path) == ["F1A.json"]
+    assert _files_under(board["shared"]) == []
+
+
 def test_a_corrupt_seeded_record_refuses_before_any_curve_is_written(
         board, monkeypatch, tmp_path):
     """A damaged file at the record's path may BE an anchor, so no model

@@ -4031,7 +4031,7 @@ def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
         if kind == "ensemble":
             return run_ensemble_case(case, keep_audio, results_dir=record_dir)
         if kind == "filter":
-            dest = response_destination(record_dir, cid) if record_dir else None
+            dest = response_destination(record_dir, cid) if keep_audio and record_dir else None
             return run_filter_case(case, inject, keep_audio, response_dest=dest)
         if kind == "mono":
             control_audio = (ROOT / f"build/scorecard/{cid}-model-control-{inject}.wav"
