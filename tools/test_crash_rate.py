@@ -19,6 +19,8 @@ which nothing executed must REFUSE rather than report zero.
 from __future__ import annotations
 import json, os, pathlib, signal, sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import crash_rate as cr
 
@@ -152,6 +154,26 @@ def test_disabled():
         summary = json.loads(out.read_text())["summary"]
         assert summary["runs_that_exercised_the_target"] == int(ran)
         assert summary["crash_rate"] == (0 if ran else None)
+
+
+@pytest.mark.parametrize("option", ["--fixtures", "--fixtures-per-test"])
+def test_listing_fixtures_cannot_supply_a_crash_rate(tmp_path, option):
+    marker = tmp_path / "entered"
+    target = _write(tmp_path, "test_marker.py", f"""
+from pathlib import Path
+def test_mark():
+    Path({str(marker)!r}).touch()
+""")
+    out = tmp_path / "report.json"
+    args = ["--target", target, "--runs", "1", "--json", str(out)]
+    assert cr.main(args) == 0
+    assert marker.is_file()
+    marker.unlink()
+    rc = cr.main([*args, "--env", f"PYTEST_ADDOPTS={option}"])
+    assert not marker.exists()
+    assert rc == 2
+    summary = json.loads(out.read_text())["summary"]
+    assert summary["runs_that_exercised_the_target"] == 0 and summary["crash_rate"] is None
 
 
 def test_a_failing_test_is_a_result_not_a_crash(tmp_path):

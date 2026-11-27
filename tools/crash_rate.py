@@ -189,9 +189,16 @@ class TargetCalls:
         if report.when == "call" and (not report.skipped or hasattr(report, "wasxfail")):
             self.completed += 1
 
-    def pytest_sessionfinish(self, session, exitstatus):
-        if exitstatus in (0, 1) and not self.completed:
-            session.exitstatus = 5  # pytest.ExitCode.NO_TESTS_COLLECTED
+
+def run_pytest(args):
+    import pytest
+
+    calls = TargetCalls()
+    status = pytest.main(args, plugins=[calls])
+    # Some successful CLI modes (e.g. --fixtures) bypass pytest_sessionfinish.
+    if status in (pytest.ExitCode.OK, pytest.ExitCode.TESTS_FAILED) and not calls.completed:
+        return pytest.ExitCode.NO_TESTS_COLLECTED
+    return status
 
 
 def run_once(target: str, extra_env: dict, timeout: float) -> dict:
@@ -201,8 +208,7 @@ def run_once(target: str, extra_env: dict, timeout: float) -> dict:
     wait status, forwarded unaltered."""
     env = dict(os.environ, **extra_env)
     env.setdefault("PYTHONFAULTHANDLER", "1")   # the traceback we would need next time
-    invoke = ("import sys, pytest; from tools.crash_rate import TargetCalls; "
-              "sys.exit(pytest.main(sys.argv[1:], plugins=[TargetCalls()]))")
+    invoke = "import sys; from tools.crash_rate import run_pytest; sys.exit(run_pytest(sys.argv[1:]))"
     cmd = [sys.executable, "-X", "faulthandler", "-c", invoke, target,
            "-q", "-p", "no:cacheprovider", "--no-header"]
     t0 = time.monotonic()
