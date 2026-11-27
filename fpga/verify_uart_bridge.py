@@ -932,6 +932,11 @@ def analyze(run):
                     comp["core_bad"] += 1
     comp["periods"] = total_periods
     comp["periods_required"] = required_periods
+    if required_periods == 0:
+        # #1466: an empty plan or segments with zero expected writes skipped
+        # the model loop (`if not exp: continue`), leaving `coverage_gaps`
+        # empty and `clean` True over zero comparisons.
+        coverage_gaps.append("no I2S period was required or compared (0 expected writes)")
     comp["i2s_incomplete"] = bool(coverage_gaps)
     if coverage_gaps:
         detail[:0] = ["I2S coverage INCOMPLETE (no verdict on missing periods): "
@@ -1126,6 +1131,11 @@ def _main(a) -> int:
     for sc in scenarios:
         name = f"{sc}-inject-{a.inject}" if a.inject else sc
         work.append((sc, a.inject, name))
+    if not work:
+        # #1466: `all([])` is True, so an empty run list printed state PASS and
+        # exited 0 without simulating anything.
+        print("verify_uart_bridge: NO VERDICT -- no scenario to run: nothing was simulated")
+        return 2
 
     def do(job):
         sc, inject, name = job
@@ -1134,8 +1144,17 @@ def _main(a) -> int:
             return name, None, False, {}
         ok, comp, detail = analyze(run)
         rec = record_for(run, comp, ok)
+        _fail_keys = ("writes_bad", "frame_pred_bad", "frame_no_pred", "x_bad",
+                      "wire_mismatch", "swap", "width", "core_bad",
+                      "collisions", "busy_at_tick", "overrun", "overflow",
+                      "frames_no_sample", "ack_missing", "status_bad")
+        if (not ok and comp.get("periods_required", 0) == 0
+                and comp.get("i2s_incomplete")
+                and not any(comp.get(k, 0) for k in _fail_keys)):
+            rec["state"] = "NO VERDICT"
+            rec["exit_code"] = 2
         (outdir / name / "verification.json").write_text(json.dumps(rec, indent=2) + "\n")
-        tag = "PASS" if ok else "FAIL"
+        tag = rec["state"]
         print(f"verify_uart_bridge[{name}]: {tag} -- "
               f"writes {comp.get('writes_seen')}/{comp.get('writes_sent')}, "
               f"timing bad {comp.get('frame_pred_bad')}, corrupt {comp.get('writes_bad')}, "
@@ -1179,6 +1198,15 @@ def _main(a) -> int:
               f"reason (writes {comp.get('writes_seen')}/{comp.get('writes_sent')}, "
               f"corrupt {comp.get('writes_bad')}, timing bad {comp.get('frame_pred_bad')})")
         return 0
+
+    if any(r is not None and r.get("state") == "NO VERDICT" for _, r, _, _ in results):
+        summary = {name: (rec or {}).get("state", "REFUSED") for name, rec, _, _ in results}
+        has_fail = any(s == "FAIL" for s in summary.values())
+        state = "FAIL" if has_fail else "NO VERDICT"
+        (outdir / "controls.json").write_text(json.dumps(
+            {"state": state, "runs": summary}, indent=2) + "\n")
+        print(json.dumps({"state": state, "runs": summary}))
+        return 1 if has_fail else 2
 
     good = all(r is not None and r["state"] == "PASS" for _, r, _, _ in results)
     summary = {name: (rec or {}).get("state", "REFUSED") for name, rec, _, _ in results}

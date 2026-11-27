@@ -144,6 +144,30 @@ def test_zero_calibration_draws_is_no_verdict():
     assert "NO VERDICT" in p.stdout + p.stderr, _shows(p.stdout, "the refusal must be named")
 
 
+@pytest.mark.parametrize("flag,val", [
+    ("--false-alarm-rate", "0"),
+    ("--false-alarm-rate", "-1"),
+    ("--safety-sweep", "0"),
+    ("--safety-sweep", "-1"),
+])
+def test_non_positive_sweep_or_false_alarm_reps_is_no_verdict(flag, val):
+    """`--false-alarm-rate -1` had `range(-1)` empty, printed a 100 % upper
+    bound over -18 comparisons in 0.0 s, and exited 0; `0` was silently
+    treated as flag omitted. Both must refuse with exit 2."""
+    p = _cli(PD, flag, val)
+    assert p.returncode == NO_VERDICT, _shows(p.stdout + p.stderr, f"{flag} {val}: exit {p.returncode}")
+    assert "NO VERDICT" in p.stdout + p.stderr, _shows(p.stdout, "the refusal must be named")
+
+
+def test_empty_cases_table_is_no_verdict(monkeypatch, capsys):
+    """`CASES = []`: pre-fix printed `FAIL 0  REFUSED 0  PASS 0` and exited 0."""
+    monkeypatch.setattr(pd, "CASES", [])
+    code = pd.main(["--trials", "1"])
+    out = capsys.readouterr().out
+    assert code == NO_VERDICT, _shows(out, f"exit {code}")
+    assert "NO VERDICT" in out, _shows(out, "the refusal must be named")
+
+
 def test_the_default_run_still_passes_and_counts():
     """A clean nonempty run: exit 0, and the summary counts what ran."""
     p = _cli(PD)
