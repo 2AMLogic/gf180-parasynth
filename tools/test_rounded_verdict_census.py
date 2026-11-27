@@ -290,18 +290,33 @@ def test_every_read_form_of_an_ordered_comparison_is_seen(tmp_path, label, compa
     assert [p[0] for p in pairs(result)] == ["best_correlation"]
 
 
-def test_a_test_file_is_not_scanned_however_it_compares(tmp_path):
-    """The same bytes under a test name: seen before the rename, gone after."""
-    root = write_tree(tmp_path)
-    assert len(pairs(census_mod.census(root))) == 1
+def test_cli_skips_test_basenames_and_symlinked_subdirectories(tmp_path):
+    root = write_tree(tmp_path / "root", producer="dict(score=round(x, 4))\n", consumer=None)
+    nested = root / "tools" / "probes"
+    nested.mkdir()
+    consumer = nested / "excitation_energy.py"  # pytest also collects this probe
+    source = consumer_with('r["score"] >= threshold')
+    consumer.write_text(source)
+    for name in ("test_probe.py", "probe_test.py"):
+        (root / "tools" / name).write_text(source)
 
-    (root / "tools" / "test_probe.py").write_text((root / CONSUMER).read_text())
-    (root / CONSUMER).unlink()
-    result = census_mod.census(root)
-    assert (result["files"], result["test_files"]) == (1, 1)
-    assert seen(result, "compares") == set()
-    assert len(seen(result, "stores")) == 1
-    assert pairs(result) == set()
+    cmd = [sys.executable, "-I", str(TOOLS / "rounded_verdict_census.py"), str(root)]
+    ordinary = subprocess.run(cmd, capture_output=True, text=True)
+    assert (ordinary.returncode, ordinary.stderr) == (exit_contract.PASS, "")
+    header = ordinary.stdout.splitlines()[0].split()
+    assert {"files=2", "test-files-skipped=2", "cross-module-pairs=1"} <= set(header)
+    assert "score  cross-module-pairs=1" in ordinary.stdout.splitlines()
+    assert f"{PRODUCER}:" in ordinary.stdout
+    assert "tools/probes/excitation_energy.py:" in ordinary.stdout
+
+    moved = nested.rename(tmp_path / "outside")
+    nested.symlink_to(moved, target_is_directory=True)
+    assert consumer.samefile(moved / consumer.name)
+    linked = subprocess.run(cmd, capture_output=True, text=True)
+    assert (linked.returncode, linked.stderr) == (exit_contract.PASS, "")
+    header = linked.stdout.splitlines()[0].split()
+    assert {"files=1", "test-files-skipped=2", "rounded-stores=1", "ordered-field-compares=0",
+            "cross-module-pairs=0"} <= set(header)
 
 
 def test_a_directory_outside_the_scan_is_not_read(tmp_path):
