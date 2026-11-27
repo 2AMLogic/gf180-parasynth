@@ -239,16 +239,29 @@ def _bands(hml=-1.0, h_ms=500.0, ln_ms=500.0):
     return {"H_minus_L_db": hml, "H": {"edt10_ms": h_ms}, "Ln": {"edt10_ms": ln_ms}}
 
 
+def _measured_edt(ms, sr):
+    # Place the last large sample immediately before the desired crossing.
+    # The second pulse leaves less than a tenth of the energy in the tail.
+    crossing = round(ms * sr / 1000)
+    signal = np.zeros(crossing + sr // 4)
+    signal[crossing - 1] = 1.0
+    signal[crossing + 100] = 0.2
+    measured = cb.band_decay(signal, sr)["edt10_ms"]
+    assert measured == ms
+    return measured
+
+
 def _boundary_verdict(monkeypatch, tmp_path, candidate, reference):
     # Plant measurements before either producer anchors or rounds. Only the
     # intersection of TONE 10 and DECAY 25 can miss the tracking bounds.
     anchor = _bands()
+    ref_anchor = _bands(hml=-2.0)
     other_column = _bands(hml=candidate["H_minus_L_db"], h_ms=600.0)
     fischer = {}
     for dec in tre.CODES:
         for tone in tre.CODES:
             row = reference if dec == "25" else other_column
-            fischer[f"CY{tone}{dec}"] = row if tone == "10" else anchor
+            fischer[f"CY{tone}{dec}"] = row if tone == "10" else ref_anchor
     path = tmp_path / "fischer.json"
     path.write_text(json.dumps(fischer))
     refs = tre.fischer_curves(path)
@@ -277,9 +290,9 @@ def test_h_minus_l_boundary_on_the_frozen_measurement_grid(
             patch.setattr(cb, "band_decay", lambda x, sr: {"edt10_ms": 500.0})
             return cb.measure([1.0], 48000)
 
-    candidate, reference = measure_hml(input_db), measure_hml(0.001)
+    candidate, reference = measure_hml(input_db), measure_hml(-0.999)
     assert candidate["H_minus_L_db"] == measured_db
-    assert reference["H_minus_L_db"] == 0.001
+    assert reference["H_minus_L_db"] == -0.999
     ours, verdict = _boundary_verdict(monkeypatch, tmp_path, candidate, reference)
     assert ours["h_minus_l_anchored_db"]["10"] == round(measured_db + 1, 3)
     col = verdict["columns"]["25"]
@@ -297,11 +310,9 @@ def test_h_minus_l_boundary_on_the_frozen_measurement_grid(
 ])
 def test_h_edt10_boundary_before_both_ratio_roundings(
         monkeypatch, tmp_path, candidate_ms, fischer_ms, passes):
-    # Times the instrument can return at the candidate and recording sample rates.
-    for ms, sr in ((candidate_ms, 48000), (fischer_ms, 44100)):
-        assert round(round(ms * sr / 1000) * 1000 / sr, 2) == ms
-    _, verdict = _boundary_verdict(monkeypatch, tmp_path, _bands(h_ms=candidate_ms),
-                                   _bands(h_ms=fischer_ms))
+    candidate = _bands(h_ms=_measured_edt(candidate_ms, 48000))
+    reference = _bands(h_ms=_measured_edt(fischer_ms, 44100))
+    _, verdict = _boundary_verdict(monkeypatch, tmp_path, candidate, reference)
     col = verdict["columns"]["25"]
     assert col["h_edt10_ok"] is passes
     assert all(v["h_edt10_ok"] for d, v in verdict["columns"].items() if d != "25")
@@ -313,8 +324,8 @@ def test_h_edt10_boundary_before_both_ratio_roundings(
 ])
 def test_ln_edt10_invariance_boundary_before_ratio_rounding(monkeypatch, tmp_path, ms,
                                                            displayed, passes):
-    assert round(round(ms * 48) / 48, 2) == ms
-    ours, verdict = _boundary_verdict(monkeypatch, tmp_path, _bands(ln_ms=ms), _bands())
+    candidate = _bands(ln_ms=_measured_edt(ms, 48000))
+    ours, verdict = _boundary_verdict(monkeypatch, tmp_path, candidate, _bands())
     prop = verdict["properties"]["ln-edt-tone-invariant"]
     assert ours["ln_edt10_ratio"]["10"] == prop["value"]["10"] == displayed
     assert prop["ok"] is passes
