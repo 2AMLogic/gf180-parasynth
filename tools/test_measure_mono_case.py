@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import wave
 
 import numpy as np
 import pytest
@@ -147,3 +148,28 @@ def test_full_scale_guard_passes_exact_endpoints_and_counts_the_excursion():
     x[7], x[9] = 1.5, -1.5
     with pytest.raises(m.Refused, match=r"^dut_2x signal exceeds full scale: 2 of \d+ samples"):
         m._assert_full_scale("dut_2x", x)
+
+
+def _read_words(path):
+    with wave.open(str(path), "rb") as w:
+        return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+
+
+@pytest.mark.parametrize("name", ["reference", "dut", "dut_2x"])
+def test_without_the_full_scale_guard_an_over_range_run_is_a_control_that_stays_red(monkeypatch, tmp_path, name):
+    """The defect as it shipped (#1552), kept where the verdict is issued: with no
+    full-scale check the writer hard-clips the signal and the run still reports
+    VALID beside a WAV that no longer replays what was scored."""
+    monkeypatch.setattr(m, "_assert_full_scale", lambda signal, x: None)
+    over = _over_range_reference(1.0)
+    ref = over
+    if name == "dut":
+        monkeypatch.setattr(vf.OscFx, "render", lambda self, n, inc: 32768.0 * over)
+        ref = _saw_reference(0.5)
+    elif name == "dut_2x":
+        monkeypatch.setattr(os2, "render_saw", lambda n, inc: 32768.0 * over)
+        ref = _saw_reference(0.5)
+    code, rep = _run_with_reference(monkeypatch, tmp_path, ref)
+    assert (code, rep["status"]) == (0, "VALID")
+    words = _read_words(tmp_path / "out" / rep["audio"][name])
+    assert np.count_nonzero(words == 32767) >= np.count_nonzero(over > 1.0)
