@@ -139,6 +139,7 @@ class Verdict:
     label: str
     status: str
     detail: str = ""
+    raised: bool = False
 
 
 def _ok(detail=""):
@@ -2323,7 +2324,9 @@ def run(kinds=None, estimators=None, fixtures=None) -> list[Verdict]:
             try:
                 status, detail = spec.check(fx)
             except Exception as e:                           # noqa: BLE001
-                status, detail = FAIL, f"{type(e).__name__}: {e}"
+                out.append(Verdict(spec.name, fx.kind, fx.label, FAIL,
+                                   f"{type(e).__name__}: {e}", raised=True))
+                continue
             out.append(Verdict(spec.name, fx.kind, fx.label, status, detail))
     return out
 

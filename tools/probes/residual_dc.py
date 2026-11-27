@@ -507,6 +507,8 @@ PROPERTIES = (
 def controls_matrix():
     """{defect name: {property: MOVED|BLIND}} plus the clean row. MOVED = the
     property turned red under the defect (the control did its job)."""
+    if not MUTANTS or not PROPERTIES:
+        raise Refused("residual DC controls require both mutants and properties")
     rows = {"(clean)": {n: ("ok" if f(REAL) else "RED") for n, f in PROPERTIES}}
     for M in MUTANTS:
         est = M()
@@ -1332,12 +1334,17 @@ def floor_report(paths, json_out=None):
         print(f"OUTPUT-FLOOR ENDING from {', '.join(paths)}\nREFUSED: cannot read a record: {e}")
         return 2
     status, ends, why = floor_verdicts(recs)
+    try:
+        controls = floor_controls_matrix()
+    except Refused as e:
+        print(f"REFUSED: {e}")
+        return 2
     ref = reference_gate()
     rep = dict(schema="residual-dc-output-floor-report/1",
                commit=git("rev-parse", "HEAD"), dirty=bool(git("status", "--porcelain")),
                reference=dict(status=ref["status"], dc=ref["dc"], reasons=ref["reasons"]),
                records=recs,
-               controls=_jsonable(floor_controls_matrix()),
+               controls=_jsonable(controls),
                status=status, endings=ends if status == "OK" else None,
                refused_reasons=why)
     if json_out:
@@ -1471,6 +1478,8 @@ FLOOR_PROPERTIES = (
 def floor_controls_matrix():
     """{defect: {property: MOVED|BLIND}} for the output-floor apparatus, plus
     the clean row. Same contract as `controls_matrix`."""
+    if not FLOOR_MUTANTS or not FLOOR_PROPERTIES:
+        raise Refused("output-floor controls require both mutants and properties")
     rows = {"(clean)": {n: ("ok" if f(REAL_FLOOR) else "RED") for n, f in FLOOR_PROPERTIES}}
     for M in FLOOR_MUTANTS:
         est = M()
@@ -1941,7 +1950,11 @@ def main(argv=None):
             print(f"{k} = {globals()[k]}")
         print("CONDITIONS =", json.dumps(CONDITIONS))
     if a.controls:
-        rows = controls_matrix()
+        try:
+            rows = controls_matrix()
+        except Refused as e:
+            print(f"REFUSED: {e}")
+            return 2
         print_matrix(rows)
         bad = [d for d, r in rows.items() if d != "(clean)" and "MOVED" not in r.values()]
         return 1 if bad or any(v == "RED" for v in rows["(clean)"].values()) else 0

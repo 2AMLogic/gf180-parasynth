@@ -697,7 +697,7 @@ def control_fixtures():
     return out
 
 
-def _pairs(verdicts) -> dict:
+def _pairs(verdicts, *, mutant=False) -> dict:
     """(estimator, family) -> the SET of statuses seen over the control set.
 
     A set and not a single worst status, because the two questions asked of a
@@ -708,7 +708,9 @@ def _pairs(verdicts) -> dict:
     be reported as a hole."""
     out = {}
     for v in verdicts:
-        out.setdefault((v.estimator, v.kind), set()).add(v.status)
+        # A crashing mutant supplied no reading to the intended assertion.
+        status = f"ERROR {v.detail}" if mutant and v.raised else v.status
+        out.setdefault((v.estimator, v.kind), set()).add(status)
     return out
 
 
@@ -726,7 +728,7 @@ def _run_mutated(fixtures, attr, replacement) -> dict:
     saved = getattr(am, attr)
     setattr(am, attr, replacement)
     try:
-        return _pairs(gt.run(list(ef.FAMILIES), None, fixtures))
+        return _pairs(gt.run(list(ef.FAMILIES), None, fixtures), mutant=True)
     finally:
         setattr(am, attr, saved)
 
@@ -839,18 +841,19 @@ def cmd_controls(args=None) -> int:
     clean = _run(fixtures)
     answered = sorted(k for k, s in clean.items() if _answered(s))
     red = sorted(k for k, s in clean.items() if _any_red(s))
+    print(f"  clean run: {len(answered)} green (estimator, family) pairs answered, "
+          f"{len(red)} red")
+    if red:
+        for k in red:
+            print(f"  FAIL clean run is already red: {k[0]} on {k[1]} "
+                  f"({sorted(clean[k])})")
+        print(f"controls: FAIL ({len(red)} red clean pairs)")
+        return 1
     if not answered:
         print("REFUSED: clean run answered 0 (estimator, family) pairs -- "
               "nothing was measured, so neither stubs nor mutants can be graded.")
         return 2
-    print(f"  clean run: {len(answered)} (estimator, family) pairs answered, "
-          f"{len(red)} red")
     bad = 0
-    if red:
-        bad += len(red)
-        for k in red:
-            print(f"  FAIL clean run is already red: {k[0]} on {k[1]} "
-                  f"({sorted(clean[k])})")
 
     print("\n" + "-" * 78)
     print("1. Start red (rule 1): the suite against a stub with no behaviour")

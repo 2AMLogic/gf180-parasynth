@@ -757,7 +757,9 @@ def test_floor_and_round_match_an_independent_reference_on_random_accumulators()
     RTL tacc range, against divmod-floor and CPython Fraction rounding."""
     rng = np.random.default_rng(618)
     acc = rng.integers(-(1 << 38) + 1, 1 << 38, 4096, dtype=np.int64)
-    for a, f, x in zip(acc.tolist(), R.floor_out(acc).tolist(), R.rint_out(acc).tolist()):
+    floor, rounded = R.floor_out(acc), R.rint_out(acc)
+    assert floor.shape == rounded.shape == acc.shape == (4096,), "expected outputs for 4096 accumulators"
+    for a, f, x in zip(acc.tolist(), floor.tolist(), rounded.tolist(), strict=True):
         assert f == _ref_floor(a), a
         assert x == _ref_round(a), a
 
@@ -1171,7 +1173,7 @@ def test_controls_cli_refuses_empty_population(monkeypatch, capsys, population):
     if population in ("properties", "both"):
         monkeypatch.setattr(R, "PROPERTIES", ())
     assert R.main(["--controls"]) == 2
-    assert "REFUSED" in capsys.readouterr().out
+    assert "REFUSED: residual DC controls" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("population", ["FLOOR_MUTANTS", "FLOOR_PROPERTIES"])
@@ -1179,37 +1181,33 @@ def test_floor_report_refuses_empty_control_population(monkeypatch, tmp_path, ca
     monkeypatch.setattr(R, population, ())
     recs = json.loads(QUAL.read_text())["records"]
     assert R.main(["--floor-verdict", *_write(tmp_path, *recs)]) == 2
-    assert "REFUSED" in capsys.readouterr().out
+    assert "REFUSED: output-floor controls" in capsys.readouterr().out
 
 
 def test_matrix_tests_fail_on_an_empty_matrix(monkeypatch, tmp_path):
-    """Both matrix pairs (`controls_matrix` and `floor_controls_matrix`) loop
-    over defect rows and `all()` the clean row, and
-    `test_the_committed_records_pass_the_arithmetic_gate` loops over
-    `q['records']`. Handed empty populations they passed without asserting
-    anything: an empty record read as a green control."""
+    """Pin the assertion that rejected each empty clean row, mutant set or record list."""
     monkeypatch.setattr(R, "controls_matrix", lambda: {"(clean)": {}})
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="evaluated no property"):
         test_every_injected_defect_turns_something_red()
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="returned no defect row"):
         test_each_property_catches_at_least_one_defect()
 
     monkeypatch.setattr(R, "controls_matrix", lambda: {"(clean)": {"p": "ok"}})
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="returned no defect row"):
         test_every_injected_defect_turns_something_red()
 
     monkeypatch.setattr(R, "floor_controls_matrix", lambda: {"(clean)": {}})
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="evaluated no property"):
         test_every_floor_mutant_turns_something_red()
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="returned no defect row"):
         test_each_floor_property_moves_at_least_one_defect()
 
     monkeypatch.setattr(R, "floor_controls_matrix", lambda: {"(clean)": {"p": "ok"}})
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="returned no defect row"):
         test_every_floor_mutant_turns_something_red()
 
     empty_qual = tmp_path / "empty-qual.json"
     empty_qual.write_text('{"records": []}')
     monkeypatch.setattr(sys.modules[__name__], "QUAL", empty_qual)
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="qualification JSON holds no records"):
         test_the_committed_records_pass_the_arithmetic_gate()

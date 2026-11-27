@@ -26,8 +26,12 @@ def _load():
 
 
 @pytest.fixture()
-def mod():
-    return _load()
+def mod(monkeypatch):
+    module = _load()
+    # Only the archived curve section grades these invariants.
+    monkeypatch.setattr(module, "ours", lambda: None)
+    monkeypatch.setattr(module, "reference_side", lambda: None)
+    return module
 
 
 def test_missing_results_file_refuses_instead_of_declaring_every_invariant_holds(
@@ -51,8 +55,6 @@ def test_results_file_holding_no_usable_curves_refuses(
     empty = tmp_path / "empty-results.json"
     empty.write_text(payload)
     monkeypatch.setattr(mod, "RESULTS", empty)
-    monkeypatch.setattr(mod, "ours", lambda: None)
-    monkeypatch.setattr(mod, "reference_side", lambda: None)
     rc = mod.main()
     out = capsys.readouterr().out
     assert rc == 2
@@ -61,7 +63,7 @@ def test_results_file_holding_no_usable_curves_refuses(
     assert "get worse" not in out
 
 
-@pytest.mark.parametrize("subset", ["one-device", "duplicate-cutoff", "wrong-device"])
+@pytest.mark.parametrize("subset", ["one-device", "duplicate-cutoff", "wrong-device", "refused-corner"])
 def test_trend_needs_each_device_across_the_measured_range(
         mod, tmp_path, monkeypatch, capsys, subset):
     data = json.loads(mod.RESULTS.read_text())
@@ -70,13 +72,13 @@ def test_trend_needs_each_device_across_the_measured_range(
         data = {"response-diva": [r for r in diva if r["cut_hz"] in (400, 800)]}
     elif subset == "duplicate-cutoff":
         diva[-1] = diva[-2]
-    else:
+    elif subset == "wrong-device":
         diva[-1]["device"] = "miniv3"
+    else:
+        diva[-1]["gain_db"] = [0.0] * len(diva[-1]["freqs"])
     results = tmp_path / "results.json"
     results.write_text(json.dumps(data))
     monkeypatch.setattr(mod, "RESULTS", results)
-    monkeypatch.setattr(mod, "ours", lambda: None)
-    monkeypatch.setattr(mod, "reference_side", lambda: None)
     assert mod.main() == 2
     out = capsys.readouterr().out
     assert "REFUSED" in out and "get worse" not in out
@@ -90,15 +92,25 @@ def test_populated_results_still_checks_and_holds(mod, capsys):
     assert rc == 0
     assert out.count("      OK  ") == 2
     assert "every stated invariant holds" in out
+    assert "4 of 8 configurations get worse" in out
 
 
 def test_a_failed_invariant_still_fails(mod, monkeypatch, capsys):
-    # and a populated bad case is still red: force one check false
-    real_check = mod.check
-    mod.check = lambda ok, what: real_check(ok and False, what)
-    try:
-        rc = mod.main()
-    finally:
-        mod.check = real_check
-    assert rc == 1
-    assert "every stated invariant holds" not in capsys.readouterr().out
+    # Keep all curves and make the repaired corner wrong at one grid point.
+    real_estimator = mod.rc.filt_corner
+
+    def shifted_corner(cut):
+        read = real_estimator(cut)
+        if cut != 6400:
+            return read
+
+        def shifted(freqs, gains):
+            result = read(freqs, gains)
+            return mod.am.Estimate(2 * result.value, True, "", result.detail)
+
+        return shifted
+
+    monkeypatch.setattr(mod.rc, "filt_corner", shifted_corner)
+    assert mod.main() == 1
+    out = capsys.readouterr().out
+    assert "FAIL  over 400 Hz" in out and "every stated invariant holds" not in out

@@ -37,8 +37,8 @@ Huovilainen mode, seven commanded cutoffs each, with their raw `freqs` and
 question #146 got wrong -- how much of an apparent trend across cutoffs is the
 instrument -- on real plugin audio rather than on closed forms.
 
-It exits non-zero if a stated invariant fails, and REFUSES (exit 2) when no
-invariant could be checked -- the results file absent, or holding no curve.
+It exits 1 if a stated invariant fails and REFUSES (exit 2) when any of the
+eight configurations lacks a usable curve on the five-cutoff trend grid.
 """
 from __future__ import annotations
 
@@ -59,6 +59,11 @@ import refprofile as rp                                             # noqa: E402
 import reference_compare as rcmp                                    # noqa: E402
 
 RESULTS = ROOT / "docs" / "reference-compare-results.json"
+# Configurations compared in the archived #146 experiment, including three
+# model variants. Each trend needs two accepted corners at every grid point.
+TREND_DEVICES = ("diva", "miniv3", "ours", "ours-2pole", "ours-huovtune",
+                "ours-skew30", "surge-huov", "surge-rk")
+TREND_CUTOFFS = (400, 800, 1600, 3200, 6400)
 fails: list[str] = []
 checked: list[str] = []       # every invariant check() was asked, held or not
 
@@ -137,10 +142,6 @@ def reference_side():
     print("   a corrected error needs both sides measured by the corrected")
     print("   instrument, and correcting only ours would be worse than not")
     print("   correcting at all.")
-    print("\n   AND A FACTOR CANNOT BE TRANSFERRED, WHICH WAS THE OBVIOUS SHORTCUT.")
-    print("   Section 3 measures the repair's effect on five real devices at the")
-    print("   same commanded cutoff. If it were the same for all five it could be")
-    print("   applied to the F1 reference corners already on the board. It is not.")
 
 
 # ===========================================================================
@@ -148,22 +149,31 @@ def reference_side():
 # ===========================================================================
 def real_curves():
     print("\n" + "=" * 78)
-    print("3. The repair on 56 real measured response curves (#146's question)")
+    print("3. The repair on measured response curves (#146's question)")
     print("=" * 78)
     if not RESULTS.exists():
         print(f"   {RESULTS} is missing")
         return
     data = json.loads(RESULTS.read_text())
-    keys = [k for k in data if k.startswith("response-")]
+    if not isinstance(data, dict):
+        print(f"   {RESULTS} lacks device response sections")
+        return
     print(f"   {'device':14}{'cut':>6}{'SHIPPED (pre-#150)':>19}"
           f"{'REPAIRED (#150)':>16}{'new/old':>9}"
           f"{'shipped (pre-#150) ratio':>25}{'repaired (#150) ratio':>22}")
     factors: dict[float, list[float]] = {}
     trends: dict[str, tuple] = {}
-    for k in sorted(keys):
-        rows = data[k]
-        o_r, n_r = [], []
+    for device in TREND_DEVICES:
+        rows = data.get(f"response-{device}", [])
+        if not isinstance(rows, list):
+            print(f"   {device}: missing response list")
+            return
+        ratios = {}
         for r in rows:
+            if (not isinstance(r, dict) or r.get("device") != device or "cut_hz" not in r
+                    or not r.get("freqs") or len(r["freqs"]) != len(r.get("gain_db", []))):
+                print(f"   {device}: missing or misidentified response curve")
+                return
             f = np.asarray(r["freqs"], float)
             g = np.asarray(r["gain_db"], float)
             cut = float(r["cut_hz"])
@@ -175,22 +185,25 @@ def real_curves():
                 print(f"   {r['device']:14}{cut:6.0f}{o.value:19.3f}"
                       f"{'REFUSED':>16}   {n.reason.split(' -- ')[0][:44]}")
                 continue
-            factors.setdefault(cut, []).append(n.value / o.value)
-            if cut >= 250.0:
-                o_r.append(o.value / cut)
-                n_r.append(n.value / cut)
+            if cut in TREND_CUTOFFS:
+                if cut in ratios:
+                    print(f"   {device}: duplicate response at {cut:g} Hz")
+                    return
+                ratios[cut] = (o.value / cut, n.value / cut)
+                factors.setdefault(cut, []).append(n.value / o.value)
             print(f"   {r['device']:14}{cut:6.0f}{o.value:19.3f}{n.value:16.3f}"
                   f"{n.value/o.value:9.4f}{o.value/cut:25.4f}{n.value/cut:22.4f}")
-        if o_r:
-            trends[rows[0]["device"]] = (max(o_r) / min(o_r) - 1, max(n_r) / min(n_r) - 1)
-    print("\n   The repair's factor at each commanded cutoff, across five devices:")
+        missing = sorted(set(TREND_CUTOFFS) - ratios.keys())
+        if missing:
+            print(f"   {device}: missing usable response at {missing} Hz")
+            return
+        old, new = zip(*ratios.values())
+        trends[device] = (max(old) / min(old) - 1, max(new) / min(new) - 1)
+    print(f"\n   The repair's factor at each cutoff across {len(trends)} configurations:")
     print(f"   {'commanded':>10}{'mean':>9}{'spread':>9}")
     for cut in sorted(factors):
         v = factors[cut]
         print(f"   {cut:9.0f} {np.mean(v):9.4f}{100*(max(v)/min(v)-1):8.2f}%")
-    print("\n   It is DEVICE DEPENDENT at the bottom and nearly constant at the top,")
-    print("   so there is no single factor to apply to a corner already on the")
-    print("   board. The refusal in section 2 is the honest outcome, not laziness.")
     print("\n   The trend each device's own corner/cutoff ratio shows across the")
     print("   cutoffs this dataset holds inside the validated domain -- 400 Hz to")
     print("   6.4 kHz -- which is the quantity #146 read as our cutoff mapping:")
@@ -198,26 +211,14 @@ def real_curves():
           f"{'REPAIRED (#150) spread':>23}{'moved':>10}")
     for dev, (o, n) in trends.items():
         print(f"   {dev:14}{100*o:25.2f}%{100*n:22.2f}%{100*(o-n):+9.2f} pts")
-    print("\n   AND THE ANSWER IS THE OPPOSITE OF THE ONE THIS PROBE EXPECTED.")
-    print("   Over 400 Hz-6.4 kHz the repair moves every device's apparent droop by")
-    print("   at most 1.9 points, in BOTH directions -- four of eight get worse.")
-    print("   The instrument contributes essentially nothing up there, so the droop")
-    print("   these five devices show over 400 Hz-6.4 kHz is theirs.")
-    print("\n   The instrument's contribution is concentrated BELOW 400 Hz, which is")
-    print("   where F1A sits and where #146's trend has its low end, and this")
-    print("   dataset has no 250 Hz row to show it on. Section 1 does: our own")
-    print("   ladder's F1 corners move -17.0 / -3.9 / -1.1 % at 250 / 1000 / 4000,")
-    print("   a 15.9-POINT TREND, against the 8.2-point trend #146 attributed to")
-    print("   our cutoff mapping. On one side of the comparison the correction is")
-    print("   nearly twice the effect being explained. Whether it cancels against")
-    print("   the reference side is exactly what section 2 cannot measure here.")
-    if not trends:
-        print(f"   {RESULTS} holds no usable response curves")
-        return
-    check(all(abs(o - n) < 0.02 for o, n in trends.values()),
+    worst = max(abs(o - n) for o, n in trends.values())
+    worse = sum(n > o for o, n in trends.values())
+    print(f"\n   Over 400 Hz-6.4 kHz the largest change in droop is "
+          f"{100 * worst:.2f} points. {worse} of {len(trends)} configurations get worse.")
+    check(worst < 0.02,
           "over 400 Hz-6.4 kHz the repair moves no device's droop by more than "
           "2 points: up there the instrument is not the explanation, either way")
-    check(any(n > o for o, n in trends.values()),
+    check(worse > 0,
           "and it moves some of them the WRONG way, which is what 'the instrument "
           "contributes nothing here' looks like when it is measured instead of "
           "assumed")
@@ -235,7 +236,7 @@ def main() -> int:
         # no results file real_curves() returns before its two check() calls,
         # so an empty `fails` here means nothing was compared (#1469).
         print("REFUSED  no invariant was checked -- the results file above is "
-              "missing or holds no response curve, so there is no verdict.")
+              "missing or lacks the required usable curves.")
         return 2
     if fails:
         for f in fails:

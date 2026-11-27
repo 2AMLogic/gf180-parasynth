@@ -500,16 +500,20 @@ def main(argv=None):
     if not manifest_lines:
         print("REFUSED: box manifest MANIFEST.sha256 is empty; no pulled file was verified")
         return 2
-    bad = []
-    checked = []
+    members = []
     for line in manifest_lines:
         parts = line.split(None, 1)
         if len(parts) != 2:
             print(f"REFUSED: malformed MANIFEST.sha256 line: {line!r}")
             return 2
-        h, name = parts
-        name = name.strip().lstrip("*")
-        checked.append(name)
+        digest, name = parts
+        members.append((digest, name.strip().removeprefix("*")))
+    names = sorted(name for _, name in members)
+    if names != sorted(MANIFEST_FILES):
+        print(f"REFUSED: box manifest covers {names}, expected {list(MANIFEST_FILES)}")
+        return 2
+    bad = []
+    for h, name in members:
         local = evidence / name
         got = hashlib.sha256(local.read_bytes()).hexdigest()
         status = "OK" if got == h else "MISMATCH"
@@ -519,9 +523,6 @@ def main(argv=None):
     if bad:
         print(f"REFUSED: local copies differ from box manifest: {bad}")
         return 1
-    if len(checked) != len(MANIFEST_FILES) or set(checked) != set(MANIFEST_FILES):
-        print(f"REFUSED: box manifest covers {checked}, expected {list(MANIFEST_FILES)}")
-        return 2
     # and the drc.rpt the targets were derived from is the box's bytes
     box_hash = next((l.split()[0]
                      for l in (evidence / "drc_rpt.sha256").read_text().splitlines()

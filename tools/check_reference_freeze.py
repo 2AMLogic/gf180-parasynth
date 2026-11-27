@@ -61,6 +61,11 @@ FREEZE_DOCS = (
     "docs/moog-recording-protocol.md",
 )
 
+# The record inventory at the freeze (43d81436), independent of the supplied
+# manifest and root. SHA-256 of the sorted git ls-tree -r --name-only paths
+# under the three SUITE_V3_FROZEN directories, joined with LF, no trailing LF.
+FROZEN_RECORD_PATHS_SHA256 = "2beb6985593a753a9681840b754361893f63422a3d874ed64c2716a026572a80"
+
 #: Canonical (sorted-keys JSON) hashes of objects inside files that must stay
 #: editable as a whole. Key is the dotted path from the JSON root.
 CORPUS_MANIFEST = "docs/corpus-lineage.json"
@@ -123,15 +128,13 @@ def manifest_entries(path: pathlib.Path) -> list[tuple[str, str, str]]:
                       f"so there is no freeze to check")
     file_subjects = {s for k, _d, s in entries if k == "file"}
     canon_subjects = {s for k, _d, s in entries if k == "canon"}
-    missing_canon = [k for k in FREEZE_CANON_KEYS if k not in canon_subjects]
-    missing_docs = [d for d in FREEZE_DOCS if d not in file_subjects]
-    empty_dirs = [d for d in rs.SUITE_RECORDS[rs.SUITE_V3_FROZEN]
-                  if not any(s == d or s.startswith(d.rstrip("/") + "/")
-                             for s in file_subjects)]
-    if missing_canon or missing_docs or empty_dirs:
-        raise Refused(
-            f"freeze manifest is incomplete: {path} (missing canon={missing_canon}, "
-            f"docs={missing_docs}, frozen dirs with 0 files={empty_dirs})")
+    record_paths = sorted(file_subjects.difference(FREEZE_DOCS))
+    inventory = hashlib.sha256("\n".join(record_paths).encode()).hexdigest()
+    if (inventory != FROZEN_RECORD_PATHS_SHA256 or not set(FREEZE_DOCS) <= file_subjects
+            or canon_subjects != set(FREEZE_CANON_KEYS)
+            or len(entries) != len(file_subjects) + len(canon_subjects)):
+        raise Refused(f"freeze manifest is incomplete or differs from the frozen inventory: "
+                      f"{path} ({len(record_paths)} record paths)")
     return entries
 
 

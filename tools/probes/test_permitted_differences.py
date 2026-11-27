@@ -424,7 +424,9 @@ def test_threshold_comparison_rejects_truncated_scaled_cases(monkeypatch, count)
 def test_the_sweep_only_moves_the_thresholds_that_depend_on_safety():
     """A resolution floor is not SAFETY x anything. If the sweep scaled one, it
     would be reporting a sensitivity to a parameter the row does not have."""
-    for a, b in zip(pd.CASES, pd.scaled_cases(100.0)):
+    scaled = pd.scaled_cases(100.0)
+    assert len(scaled) == len(pd.CASES) >= 18, "expected scaled cases for every declared row"
+    for a, b in zip(pd.CASES, scaled, strict=True):
         assert a.cid == b.cid
         if a.policy.tightness == "floor":
             assert a.policy.threshold == b.policy.threshold, a.cid

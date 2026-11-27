@@ -92,6 +92,10 @@ class Refused(refusal.Refused, Exception):
     pass
 
 
+class CaptureIdentityError(Refused):
+    """The manifest cannot establish which capture the bytes belong to."""
+
+
 def amp_tag(amp: float) -> str:
     return f"a{amp:.4f}"
 
@@ -337,6 +341,12 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
     if key not in m["clips"]:
         raise Refused(f"{key} is not a capture in the manifest")
     meta = m["clips"][key]
+    command = meta.get("commanded") if isinstance(meta, dict) else None
+    if (not isinstance(command, dict) or cond not in CONDITIONS
+            or meta.get("condition") != cond or meta.get("take") != take
+            or type(meta.get("take")) is not int
+            or command.get("cut_hz") != CONDITIONS[cond][0] or command.get("amp") != amp):
+        raise CaptureIdentityError(f"{key}: capture identity differs from its manifest key")
     want = meta["sha256"]
     if inject == "TAMPERED":
         want = ("0" if want[0] != "0" else "1") + want[1:]
@@ -388,6 +398,9 @@ def verify() -> int:
         try:
             load_capture(cond, float(tag[1:]), int(take[4:]), m)
             print(f"ok       {key}  {meta['sha256'][:12]}")
+        except CaptureIdentityError as e:
+            print(f"REFUSED  {e}")
+            return REFUSED
         except Refused as e:
             bad += 1
             print(f"FAIL     {e}")

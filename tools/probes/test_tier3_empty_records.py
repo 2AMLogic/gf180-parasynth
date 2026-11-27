@@ -107,9 +107,10 @@ def test_egtc_populated_good_and_bad_cases_via_caller(monkeypatch, capsys):
         return rows
 
     monkeypatch.setattr(egt, "run", record_run)
+    original_rms = am.rms
     # Populated good case: mutant doubles rms -> caught, stubs redden rms -> exit 0
     monkeypatch.setattr(egtc, "MUTANTS", [
-        ("rms x2", "rms", lambda: (lambda x: 2.0 * am.rms(x)), ("rms", "damped_sine")),
+        ("rms x2", "rms", lambda: (lambda x: 2.0 * original_rms(x)), ("rms", "damped_sine")),
     ])
     assert egt.main(["controls"]) == 0
     assert "controls: PASS" in capsys.readouterr().out
@@ -123,7 +124,6 @@ def test_egtc_populated_good_and_bad_cases_via_caller(monkeypatch, capsys):
     ])
     assert egt.main(["controls"]) == 1
     assert "controls: FAIL" in capsys.readouterr().out
-
 
     # Reinstate the recursive replacement that used to earn credit for a crash.
     monkeypatch.setattr(egtc, "MUTANTS", [
@@ -156,18 +156,26 @@ def test_census_reconciles_against_known_tier3_set():
             g = ",".join(pathlib.Path(k).name for k, t in texts.items() if p.name in t) or "-"
             (tests if p.name.startswith("test_") else tools).append((rel, g))
     non_gated = {r for r, g in tools if g == "-"}
-    # Every original #1469 non-gated tool except mutate_pnr_report.py (whose
-    # `if bad:` became `if survivors:` in #1418, and whose empty-M case is
-    # fixed anyway) plus refaudio_member_list.py (#1484) must be accounted for.
-    assert "tools/refaudio_member_list.py" in non_gated
-    assert "tools/check_reference_freeze.py" in non_gated
+    table = ROOT / "docs/tier3-empty-records.md"
+    assert table.is_file(), "missing tier-3 disposition table"
+    paths = re.findall(r"^\| `([^`]+\.py)` · ", table.read_text(), re.M)
+    assert len(paths) == len(set(paths)) == 48, "expected one disposition per audited path"
+    historical = "fpga/testdata/mutate_pnr_report.py"  # 'if bad:' became 'if survivors:'
+    current = non_gated | {path for path, _ in tests}
+    assert historical not in current
+    assert current | {historical} == set(paths), "census differs from disposition table"
 
 
-def test_two_tools_cannot_satisfy_the_census(monkeypatch, tmp_path):
+@pytest.mark.parametrize("with_table", [False, True])
+def test_two_tools_cannot_satisfy_the_census(monkeypatch, tmp_path, with_table):
     (tmp_path / "tools").mkdir()
     (tmp_path / "Makefile").touch()
     for name in ("refaudio_member_list.py", "check_reference_freeze.py"):
-        (tmp_path / "tools" / name).write_text("if bad: pass\\n")
+        (tmp_path / "tools" / name).write_text("if bad: pass\n")
+    if with_table:
+        table = pathlib.Path("docs/tier3-empty-records.md")
+        (tmp_path / table.parent).mkdir()
+        (tmp_path / table).write_bytes((ROOT / table).read_bytes())
     monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
     with pytest.raises(AssertionError, match="disposition table"):
         test_census_reconciles_against_known_tier3_set()
