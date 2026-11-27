@@ -2671,7 +2671,7 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
                                    "cut_hz": cut, "res_ours": spec["res_ours"],
                                    "res_reference": spec["res_ref"], "amp": amp},
                                   indent=1) + "\n")
-        audio_path = stated_path(pth)
+        audio_path = stated_path(pth.resolve())
         audio = f"{audio}; ours {audio_path}"
 
     import reference_rigs as rr
