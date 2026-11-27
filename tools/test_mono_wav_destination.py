@@ -86,6 +86,11 @@ from scipy.io import wavfile
 import mono_m1a_score as bass
 import mono_m5a_score as m5a
 import run_case as rc
+from test_wav_destination import (
+    _assert_default_wav,
+    _check_live_model_wavs,
+    _copy_published_results,
+)
 
 SR = 48000
 INJECT = "MONO_PITCH_UP_25_CENTS"             # the one control both mono families take
@@ -745,36 +750,49 @@ def test_the_model_wav_destination_is_the_published_path_on_the_board_and_beside
 
 
 def _check_published_mono_wavs():
-    """The live rows and the archived M5 model rows each carry their own path."""
+    _check_live_model_wavs(rc.MODEL_WAV_KINDS, {"M1A", "M5B"})
     repro = rc.RESULTS.parent / "m5-artifacts-333/repro"
-    for cid, path in (("M1A", rc.RESULTS / "M1A.json"), ("M5B", rc.RESULTS / "M5B.json"),
-                      ("M5A", repro / "model-M5A.json"), ("M5B", repro / "model-M5B.json")):
-        record = json.loads(path.read_text())
-        assert record["case_id"] == cid
-        assert record["engine"] == rc.ENGINE, cid
-        expected = rc.stated_path(rc.model_wav_destination(rc.RESULTS, rc.plan_for(cid), cid))
-        assert record["audio"] == record["provenance"]["artefacts"]["ours"] == expected, cid
+    for cid in ("M5A", "M5B"):
+        path = repro / f"model-{cid}.json"
+        _assert_default_wav(path, json.loads(path.read_text()), cid, rc.plan_for(cid))
 
 
 def test_every_published_mono_record_names_the_wav_a_default_run_writes():
     _check_published_mono_wavs()
 
 
-def test_archived_m5b_cannot_mask_a_renamed_live_wav(tmp_path, monkeypatch):
-    results = tmp_path / "results"
-    results.mkdir()
-    for cid in ("M1A", "M5B"):
-        shutil.copyfile(rc.RESULTS / f"{cid}.json", results / f"{cid}.json")
-    archive = "m5-artifacts-333"
-    (tmp_path / archive).symlink_to(rc.RESULTS.parent / archive, target_is_directory=True)
-    monkeypatch.setattr(rc, "RESULTS", results)
+@pytest.mark.parametrize("damage", ["renamed", "missing"])
+def test_archived_m5b_cannot_mask_a_renamed_live_wav(tmp_path, monkeypatch, damage):
+    results = _copy_published_results(tmp_path, monkeypatch, "m5-artifacts-333")
     _check_published_mono_wavs()
 
     live = results / "M5B.json"
-    row = json.loads(live.read_text())
-    row["audio"] = row["provenance"]["artefacts"]["ours"] = "build/scorecard/M5B-renamed.wav"
-    live.write_text(json.dumps(row))
+    if damage == "missing":
+        live.unlink()
+    else:
+        row = json.loads(live.read_text())
+        row["audio"] = row["provenance"]["artefacts"]["ours"] = "build/scorecard/M5B-renamed.wav"
+        live.write_text(json.dumps(row))
     with pytest.raises(AssertionError, match="M5B"):
+        _check_published_mono_wavs()
+
+
+@pytest.mark.parametrize("renamed", ["audio", "ours", "both"])
+def test_new_live_mono_render_checks_both_paths(tmp_path, monkeypatch, renamed):
+    results = _copy_published_results(tmp_path, monkeypatch, "m5-artifacts-333")
+    archive = tmp_path / "m5-artifacts-333/repro/model-M5A.json"
+    live = results / "M5A.json"
+    shutil.copyfile(archive, live)
+    _check_published_mono_wavs()
+
+    row = json.loads(live.read_text())
+    wrong = "build/scorecard/M5A-renamed"
+    if renamed in ("audio", "both"):
+        row["audio"] = wrong
+    if renamed in ("ours", "both"):
+        row["provenance"]["artefacts"]["ours"] = wrong
+    live.write_text(json.dumps(row))
+    with pytest.raises(AssertionError, match=live.name):
         _check_published_mono_wavs()
 
 

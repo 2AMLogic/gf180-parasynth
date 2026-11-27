@@ -506,24 +506,84 @@ def test_a_caller_that_states_no_results_directory_gets_the_shared_path(board):
     assert np.array_equal(_pcm(_resolved(stated)), _rendered("D12A", FIRST))
 
 
-def test_every_published_fixed_model_record_names_the_wav_a_default_run_writes():
-    """Check the live audio-bearing rows. E1A publishes its fixed-model twin
-    alongside its RTL capture, so name that model record explicitly."""
-    records = [
-        (rc.RESULTS / "D12A.json", "D12A", "ours", "-ours.wav"),
-        (rc.RESULTS / "E1B.json", "E1B", "mix", "-mix.wav"),
-        (rc.RESULTS / "E2A.json", "E2A", "mix", "-mix.wav"),
-        (rc.RESULTS.parent / "ensemble-e1a/rtl/E1A-fixed-model-twin.json",
-         "E1A", "mix", "-mix.wav"),
-    ]
+def _assert_default_wav(path, record, cid, kind):
+    assert record["case_id"] == cid and record["engine"] == rc.ENGINE, path
+    if kind in rc.MODEL_WAV_KINDS:
+        expected = rc.stated_path(rc.model_wav_destination(rc.RESULTS, kind, cid))
+        assert record.get("audio") == expected, path
+    else:
+        expected = rc.stated_path(rc.wav_destination(rc.RESULTS, cid, rc.RENDERED_WAV_SUFFIX[kind]))
+    key = "mix" if kind == "ensemble" else "ours"
+    assert record["provenance"].get("artefacts", {}).get(key) == expected, path
+
+
+def _check_live_model_wavs(kinds, required):
+    """Discover renders in the live directory. Only a checked live file counts toward required."""
+    checked = set()
+    for path in sorted(rc.RESULTS.glob("*.json")):
+        row = json.loads(path.read_text())
+        if row["engine"] != rc.ENGINE:
+            continue
+        kind = rc.plan_for(row["case_id"])
+        if kind not in kinds:
+            continue
+        key = "mix" if kind == "ensemble" else "ours"
+        artefacts = row["provenance"].get("artefacts", {})
+        if artefacts.get(key, NO_AUDIO) == NO_AUDIO:
+            audio = row.get("audio", "")
+            # A drum can still name its reference when the run wrote no model audio.
+            if audio in ("", "none", NO_AUDIO) or (
+                kind == "drum" and audio.endswith("; ours not written")
+            ):
+                continue
+        _assert_default_wav(path, row, path.stem, kind)
+        checked.add(path.stem)
+    assert required <= checked, (
+        f"Missing live fixed-model WAV records: {sorted(required - checked)}"
+    )
+
+
+def _check_published_rendered_wavs():
+    _check_live_model_wavs(rc.RENDERED_WAV_SUFFIX, {"D12A", "E1B", "E2A"})
+
+    twin = rc.RESULTS.parent / "ensemble-e1a/rtl/E1A-fixed-model-twin.json"
+    _assert_default_wav(twin, json.loads(twin.read_text()), "E1A", "ensemble")
     toms = rc.RESULTS.parent / "tom-body-334/results"
     for cid in ("D03A", "D04A", "D05A", "D06A", "D07A", "D08A"):
-        records.append((toms / f"{cid}.json", cid, "ours", "-ours.wav"))
-    for path, cid, key, suffix in records:
-        record = json.loads(path.read_text())
-        assert record["case_id"] == cid and record["engine"] == rc.ENGINE, path
-        expected = rc.stated_path(rc.wav_destination(rc.RESULTS, cid, suffix))
-        assert record["provenance"]["artefacts"][key] == expected, cid
+        path = toms / f"{cid}.json"
+        _assert_default_wav(path, json.loads(path.read_text()), cid, "drum")
+
+
+def test_every_published_fixed_model_record_names_the_wav_a_default_run_writes():
+    _check_published_rendered_wavs()
+
+
+def _copy_published_results(tmp_path, monkeypatch, *archives):
+    results = shutil.copytree(rc.RESULTS, tmp_path / "results")
+    for archive in archives:
+        (tmp_path / archive).symlink_to(rc.RESULTS.parent / archive, target_is_directory=True)
+    monkeypatch.setattr(rc, "RESULTS", results)
+    return results
+
+
+@pytest.mark.parametrize("cid,key", [("D01A", "ours"), ("E1A", "mix")])
+def test_new_live_render_must_name_its_default_wav(tmp_path, monkeypatch, cid, key):
+    results = _copy_published_results(tmp_path, monkeypatch, "ensemble-e1a", "tom-body-334")
+    live = results / f"{cid}.json"
+    if cid == "D01A":
+        row = json.loads(live.read_text())
+        row["provenance"]["artefacts"][key] = "build/scorecard/D01A-ours.wav"
+        row["audio"] = "reference bd8/BD5050.WAV; ours build/scorecard/D01A-ours.wav"
+    else:
+        twin = tmp_path / "ensemble-e1a/rtl/E1A-fixed-model-twin.json"
+        row = json.loads(twin.read_text())
+    live.write_text(json.dumps(row))
+    _check_published_rendered_wavs()
+
+    row["provenance"]["artefacts"][key] = f"build/scorecard/{cid}-renamed.wav"
+    live.write_text(json.dumps(row))
+    with pytest.raises(AssertionError, match=live.name):
+        _check_published_rendered_wavs()
 
 
 def test_the_wav_destination_is_the_shared_path_on_the_board_and_beside_the_results_off_it(
