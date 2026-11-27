@@ -237,21 +237,55 @@ def _run(a) -> int:
     strobed, missing_s, worst = (int(x) for x in ms_.groups())
     LAST.update(busy_at_tick=busy, overrun=overrun, overflow=overflow,
                 frames_no_sample=missing_s, worst_strobe_cycle=worst)
+
+    # ---- CAPTURE COMPLETENESS, before ANY comparison verdict ------------------
+    # A capture that is not of this stream must REFUSE (2) whatever else is wrong
+    # with it: a comparison verdict (1) from an incomplete capture would satisfy
+    # --expect-fail as "caught" (#1482). So every refusal below precedes every
+    # `return 1`, including the frame-budget one.
+    wr = vst.rows(out["wrs"])
+    LAST.update(writes_sent=len(sent), writes_seen=len(wr))
+    if len(wr) != len(sent):
+        print(f"verify_fixture: REFUSED -- {len(wr)} writes reached the register port, "
+              f"{len(sent)} were sent: the capture is not of this stream")
+        return 2
+    for r in wr:
+        if len(r) != 6:
+            print("verify_fixture: REFUSED -- the write capture has a malformed row")
+            return 2
+    try:
+        wr = [tuple(int(c) for c in r) for r in wr]
+    except ValueError:
+        print("verify_fixture: REFUSED -- the write capture has a non-integer field")
+        return 2
+    # Exactly five integer fields per I2S row: period, left, right, nbl, nbr.
+    i2s = []
+    for r in vst.rows(out["i2s"]):
+        try:
+            if len(r) != 5:
+                raise ValueError(len(r))
+            i2s.append(tuple(int(c) for c in r))
+        except ValueError:
+            print("verify_fixture: REFUSED -- the I2S capture has a malformed row")
+            return 2
+    # The decoded periods must be exactly 0..P-1 in order and cover the simulated
+    # span. tb_top_bx stops `tail` ticks after its last SENT write, so a --wrong
+    # stream that ends early simulates fewer frames than n: the floor follows it.
+    expected_frames = min(n, max(p.land for p in sent) + tail)
+    required = max(1, expected_frames - I2S_DRAIN)
+    problems = i2s_completeness([r[0] for r in i2s], required)
+    LAST.update(i2s_required=required, i2s_seen=len(i2s))
+    if problems:
+        print("verify_fixture: REFUSED -- " + "; ".join(problems))
+        return 2
+
+    # ---- verdicts: the capture is complete, so a mismatch is a real finding ----
     if busy or overrun or overflow or missing_s:
         print(f"verify_fixture: FAIL -- frame budget not met: busy at {busy} tick(s), "
               f"overrun {overrun}, link overflow {overflow}, {missing_s} frame(s) with no sample")
         return 1
 
     # ---- did every transaction arrive, intact, in the frame the HOST predicted? --
-    wr = vst.rows(out["wrs"])
-    # A capture with the wrong NUMBER of writes is not a capture of this run: it
-    # cannot pass, and it cannot satisfy --expect-fail either (a zip() below would
-    # silently compare only the common prefix). REFUSE, never fall through.
-    LAST.update(writes_sent=len(sent), writes_seen=len(wr))
-    if len(wr) != len(sent):
-        print(f"verify_fixture: REFUSED -- {len(wr)} writes reached the register port, "
-              f"{len(sent)} were sent: the capture is not of this stream")
-        return 2
     bad = sum(1 for p, g in zip(sent, wr)
               if (int(g[1]), int(g[2]), int(g[3]), int(g[4])) != p.w.key())
     pin_bad = [(i, p, int(g[5])) for i, (p, g) in enumerate(zip(sent, wr))
@@ -291,26 +325,6 @@ def _run(a) -> int:
         return 2
 
     # ---- the comparison: the WIRE against the MODEL, no tolerance ------------
-    i2s = vst.rows(out["i2s"])
-    # Apparatus precondition: the decoded periods must be exactly 0..P-1 in order
-    # and cover the simulated span, or a silent prefix compares equal to "music".
-    # tb_top_bx stops `tail` ticks after its last SENT write, so a --wrong stream
-    # that ends early simulates fewer frames than n: the floor follows the span.
-    try:
-        idx = [int(r[0]) for r in i2s]
-        for r in i2s:
-            for c in r[1:5]:
-                int(c)
-    except (ValueError, IndexError):
-        print("verify_fixture: REFUSED -- the I2S capture has a malformed row")
-        return 2
-    expected_frames = min(n, max(p.land for p in sent) + tail)
-    required = max(1, expected_frames - I2S_DRAIN)
-    problems = i2s_completeness(idx, required)
-    LAST.update(i2s_required=required, i2s_seen=len(idx))
-    if problems:
-        print("verify_fixture: REFUSED -- " + "; ".join(problems))
-        return 2
     nper = min(len(i2s), n)
     mism = swap = width = 0
     first = None
