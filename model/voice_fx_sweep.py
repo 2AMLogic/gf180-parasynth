@@ -2,8 +2,8 @@
 """What the integer oscillators and envelopes need, measured.
 
   1. ALIASING: inharmonic energy of a sawtooth, naive vs float PolyBLEP vs
-     integer PolyBLEP, at several notes. Same measurement as DR 0001 (0.5 s,
-     Hann window, +-5 bins around every harmonic), so the numbers compare.
+     integer PolyBLEP, at several notes. The shared Blackman-Harris estimator
+     checks harmonic-guard coverage and measurement headroom on each record.
   2. RECIPROCAL WIDTH: how many bits the note-on reciprocal 1/dt needs before
      the integer PolyBLEP stops losing suppression, and how many bits of phase
      the fraction ph/dt has to keep.
@@ -19,22 +19,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 import dsp
 import voice_fx as vf
+from audio_measure import inharmonic_fraction_db
 from dsp import SR
-
-
-def inharmonic_db(x, f0, guard=5):
-    """Energy outside +-guard bins of every harmonic of f0, relative to total.
-    Reproduces DR 0001's naive-saw figures to 0.1 dB."""
-    n = len(x)
-    S = np.abs(np.fft.rfft(x * np.hanning(n))) ** 2
-    harm = np.zeros_like(S, dtype=bool)
-    k = 1
-    while k * f0 < SR / 2:
-        c = int(round(k * f0 * n / SR))
-        harm[max(0, c - guard):c + guard + 1] = True
-        k += 1
-    harm[:guard + 1] = True
-    return 10 * math.log10(S[~harm].sum() / S.sum())
 
 
 def saw_alias(note, kind, mant_bits=16, recip_bits=16, shape="saw", dur=0.5):
@@ -46,28 +32,37 @@ def saw_alias(note, kind, mant_bits=16, recip_bits=16, shape="saw", dur=0.5):
         x = dsp.osc_bl(shape, dsp.ramp(n, inc), inc)
     else:
         x = vf.OscFx(shape, True, mant_bits, recip_bits).render(n, inc) / 32768.0
-    return inharmonic_db(x, f0)
+    return inharmonic_fraction_db(x, f0, SR)
+
+
+def _alias_cell(note, kind, **oscillator):
+    estimate = saw_alias(note, kind, **oscillator)
+    return f"{estimate.value:.1f}" if estimate.ok else f"REFUSED ({estimate.reason})"
+
+
+def print_aliasing(notes):
+    print("ALIASING  (inharmonic energy, dB re total; lower is better)")
+    print(f"  {'note':>4} {'f0':>7}  {'naive':>7} {'float BLEP':>11} {'fixed BLEP':>11}  {'square naive':>12} {'square fixed':>12}")
+    for note in notes:
+        f0 = dsp.note_hz(note)
+        print(f"  {note:4} {f0:7.1f}  {_alias_cell(note, 'naive'):>7} {_alias_cell(note, 'float'):>11} "
+              f"{_alias_cell(note, 'fixed'):>11}  {_alias_cell(note, 'naive', shape='square'):>12} "
+              f"{_alias_cell(note, 'fixed', shape='square'):>12}")
 
 
 def main():
-    print("ALIASING  (inharmonic energy, dB re total; lower is better)")
-    print(f"  {'note':>4} {'f0':>7}  {'naive':>7} {'float BLEP':>11} {'fixed BLEP':>11}  {'square naive':>12} {'square fixed':>12}")
-    for note in (28, 40, 64, 88, 100):
-        f0 = dsp.note_hz(note)
-        print(f"  {note:4} {f0:7.1f}  {saw_alias(note,'naive'):7.1f} {saw_alias(note,'float'):11.1f} "
-              f"{saw_alias(note,'fixed'):11.1f}  {saw_alias(note,'naive',shape='square'):12.1f} "
-              f"{saw_alias(note,'fixed',shape='square'):12.1f}")
+    print_aliasing((28, 40, 64, 88, 100))
 
     print("\nRECIPROCAL WIDTH  (fixed BLEP saw, inharmonic dB; mantissa 16 bits)")
     print(f"  {'recip bits':>10}" + "".join(f" {'note '+str(n):>9}" for n in (40, 64, 88, 100)))
     for rb in (4, 6, 8, 10, 12, 14, 16):
-        print(f"  {rb:10}" + "".join(f" {saw_alias(n,'fixed',16,rb):9.1f}" for n in (40, 64, 88, 100)))
-    print(f"  {'float':>10}" + "".join(f" {saw_alias(n,'float'):9.1f}" for n in (40, 64, 88, 100)))
+        print(f"  {rb:10}" + "".join(f" {_alias_cell(n, 'fixed', recip_bits=rb):>9}" for n in (40, 64, 88, 100)))
+    print(f"  {'float':>10}" + "".join(f" {_alias_cell(n, 'float'):>9}" for n in (40, 64, 88, 100)))
 
     print("\nPHASE FRACTION WIDTH  (bits of ph kept before the multiply; reciprocal 16 bits)")
     print(f"  {'mant bits':>10}" + "".join(f" {'note '+str(n):>9}" for n in (40, 64, 88, 100)))
     for mb in (6, 8, 10, 12, 16):
-        print(f"  {mb:10}" + "".join(f" {saw_alias(n,'fixed',mb,16):9.1f}" for n in (40, 64, 88, 100)))
+        print(f"  {mb:10}" + "".join(f" {_alias_cell(n, 'fixed', mant_bits=mb):>9}" for n in (40, 64, 88, 100)))
 
     print("\nBLEP ARITHMETIC ERROR vs float PolyBLEP  (max |error| in Q1.15 LSB, saw)")
     n = int(0.5 * SR)
