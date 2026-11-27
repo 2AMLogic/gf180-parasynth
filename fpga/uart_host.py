@@ -614,11 +614,11 @@ def known_state_preamble() -> list:
     return [tuple(w) for w in r1_candidate.PREAMBLE]
 
 
-def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
-                held: bool = False) -> list:
-    """One key event through the model's own KeyHost (contract 5.6): pitch
-    increments, note track and the gate. `held` says a key is already down, so
-    a note-off of the last key is GATE_OFF and a note-on while held is TRIG.
+def note_writes(note: int, on: bool, *, preset_regs: dict | None = None) -> list:
+    """One key event through the model's own KeyHost (contract 5.6): for an
+    ON, three jumping pitch increments, the note track and GATE_ON; for an
+    OFF, the gate-off write alone. Stateful key handling (held keys, TRIG)
+    lives in midi_session.MonoKeys and play_song.song_writes, not here.
 
     An OFF is stateless by construction -- this host is a command line, it
     does not know which keys are down -- so an off ALWAYS means "release what
@@ -631,8 +631,7 @@ def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
     if not on:
         return [(0, sh.SEC_VOICE, stm.A_GATE_OFF, 0)]
     regs = preset_regs or vf.VoiceFx.patch_regs()
-    events = [(0, "on", note)] + ([(1, "off", 45)] if held else [])
-    out = vf.KeyHost().writes(events, regs, first_from_reset=not held)
+    out = vf.KeyHost().writes([(0, "on", note)], regs, first_from_reset=True)
     writes = []
     for f, op, *args in out:
         if op == "INC":
@@ -642,6 +641,8 @@ def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
             writes.append((0, sh.SEC_VOICE, stm.A_TRACK, args[0]))
         elif op == "GATE":
             writes.append((0, sh.SEC_VOICE, stm.A_GATE_ON if args[0] else stm.A_GATE_OFF, 0))
+        else:
+            raise ValueError(f"unexpected KeyHost op {op!r}")
     return writes
 
 
