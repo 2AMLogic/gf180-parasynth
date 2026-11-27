@@ -535,6 +535,8 @@ class MusicHost:
                 self.voice(f, stm.A_GLIDE, args[0], tag="glide")
             elif op == "MWHEEL":
                 self.voice(f, stm.A_MWHEEL, args[0], tag="mwheel")
+            else:
+                raise ValueError(f"unexpected KeyHost op {op!r}")
         for f, kind, note in events:
             self.events.append((f, f"key {kind} {note}"))
         return self
