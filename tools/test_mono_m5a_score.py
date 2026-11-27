@@ -385,3 +385,24 @@ def test_supplied_i2s_listening_wav_keeps_the_captured_gap_between_segments(monk
     assert scored_sr == sr
     np.testing.assert_array_equal(scored[start:stop], marked[start:stop])
     np.testing.assert_array_equal(scored, marked[:phrase])
+
+
+def test_measure_without_audio_writes_no_wav_and_changes_nothing_else(tmp_path):
+    """`keep_audio=False` is the writer's switch for `--no-audio` (#1430), and
+    until it existed `measure` wrote its WAV to whatever destination it was
+    given. With the switch off it overwrites nothing -- the sentinel at the
+    destination is read back byte for byte -- and everything it returns but
+    `audio` is what the audio-enabled call returns, metrics included. The
+    audio-enabled call is unchanged: the default still writes, where it is
+    told."""
+    sentinel = tmp_path / "M5B-model.wav"
+    sentinel.write_bytes(b"sentinel: written by a test, by no render")
+    quiet = score.measure(case_id="M5B", output_path=sentinel, keep_audio=False)
+    assert quiet["audio"] == "not written (--no-audio)"
+    assert sentinel.read_bytes() == b"sentinel: written by a test, by no render"
+
+    loud = score.measure(case_id="M5B", output_path=sentinel)
+    assert sentinel.read_bytes() != b"sentinel: written by a test, by no render"
+    assert loud["audio"] != "not written (--no-audio)"
+    assert {k: v for k, v in quiet.items() if k != "audio"} \
+        == {k: v for k, v in loud.items() if k != "audio"}

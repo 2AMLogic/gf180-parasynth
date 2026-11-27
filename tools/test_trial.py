@@ -114,6 +114,33 @@ def repo(tmp_path):
     return Repo(tmp_path)
 
 
+@pytest.fixture
+def trial_cli(repo):
+    # The CLI resolves its registry relative to its source tree at import time.
+    tools = repo.root / "tools"
+    tools.mkdir()
+    for name in (
+        "trial.py",
+        "provenance.py",
+        "run_all.py",
+        "exit_contract.py",
+        "trial_env.py",
+    ):
+        shutil.copy(HERE / name, tools)
+
+    def invoke(*args):
+        return subprocess.run(
+            [PY, tools / "trial.py", *args],
+            cwd=repo.root,
+            text=True,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+    return invoke
+
+
 def deadline(**facts):
     rec = copy.deepcopy(REAL_DEADLINE)
     rec["facts"].update(facts)
@@ -731,6 +758,60 @@ def test_compare_same_inputs_agree_and_a_moved_number_disagrees(repo):
 
 
 # ---- the registry itself ----------------------------------------------------
+@pytest.mark.parametrize(
+    "args,reason",
+    [
+        (["run", "T-NO-SUCH-TRIAL"], "unknown trial 'T-NO-SUCH-TRIAL'"),
+        (["run", "T-X", "--mode", "nope"], "T-X has no mode 'nope'"),
+        (["run", "T-X", "--as-candidate", "nope"], "no control 'nope' in this mode"),
+        (["list"], "T-X: missing 'criterion_version'"),
+    ],
+)
+def test_cli_refuses_invalid_request(repo, trial_cli, args, reason):
+    repo.child(ok_deadline())
+    registry = repo.registry()
+    if args == ["list"]:
+        data = json.loads(registry.read_text())
+        del data["trials"]["T-X"]["criterion_version"]
+        registry.write_text(json.dumps(data))
+
+    result = trial_cli(*args)
+    assert result.returncode == 2, result.stdout
+    (line,) = result.stdout.splitlines()
+    assert line.startswith(f"REFUSED: {reason}")
+    assert not (repo.root / "build/trials").exists()
+
+
+@pytest.mark.parametrize(
+    "verdict,rc", [(trial.PASS, 0), (trial.FAIL, 1), (trial.NO_VERDICT, 2)]
+)
+def test_cli_reports_receipt_for_executed_trial(repo, trial_cli, verdict, rc):
+    if verdict == trial.NO_VERDICT:
+        (repo.root / "tools/crash.py").write_text(
+            "from trial import RegistryError\nraise RegistryError('child crashed')\n"
+        )
+        repo.child({}, checker="tools/crash.py")
+    elif verdict == trial.FAIL:
+        repo.child(_failing_late())
+    else:
+        repo.child(ok_deadline())
+    repo.child(late_control(), role="control")
+    repo.registry()
+
+    result = trial_cli("run", "T-X")
+    assert result.returncode == rc, result.stdout
+    (receipt,) = (repo.root / "build/trials/T-X").glob("*/receipt.json")
+    assert f"receipt: {receipt}" in result.stdout
+    ok, problems, rec = trial.check_receipt(receipt, root=repo.root)
+    assert ok, problems
+    assert rec["verdict"] == verdict
+    if verdict == trial.NO_VERDICT:
+        assert (
+            "RegistryError: child crashed"
+            in (receipt.parent / "c1/log.txt").read_text()
+        )
+
+
 def test_registry_refuses_copied_commands_and_unknown_dag_nodes(repo):
     repo.child(ok_deadline())
     reg = repo.registry()
@@ -1109,7 +1190,6 @@ def test_judge_forged_removal_of_the_reuse_requirement(repo):
 # A receipt is only as strong as its child LIST: deleting the failing child (and
 # its directory) and re-sealing used to leave a receipt every other check
 # accepted -- check_receipt walked whatever the receipt said it contained.
-
 
 def _failing_late():
     return {"rc": 1, "files": {"record.json": copy.deepcopy(REAL_LATE)}}

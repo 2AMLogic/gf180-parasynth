@@ -57,8 +57,8 @@ when that registry cannot be retrieved the result is `UNVERIFIABLE`, never
 VALID. The registry hash is the receipt's own claim: a forger who also supplies
 a registry file with a matching hash is a re-run / provenance matter.
 
-Exit: 0 PASS, 1 FAIL, 2 NO VERDICT (the repository's verifier convention; the
-receipt, not this number, is the record).
+Exit: 0 PASS, 1 FAIL, 2 NO VERDICT (including usage and registry errors).
+For an executed trial, the receipt records the verdict and its evidence.
 """
 from __future__ import annotations
 
@@ -1320,19 +1320,30 @@ def main(argv=None) -> int:
     k.add_argument("b", type=pathlib.Path)
     a = ap.parse_args(argv)
 
-    if a.cmd == "list":
-        reg = load_registry()
-        for tid, t in reg["trials"].items():
-            print(f"{tid:<16} modes {sorted(t['modes'])}  {t['question']}")
-        return 0
-    if a.cmd == "run":
-        cancel = _Cancel()
-        signal.signal(signal.SIGTERM, cancel.handler)
-        signal.signal(signal.SIGINT, cancel.handler)
-        run_dir, rec = run_trial(a.trial, mode=a.mode, as_candidate=a.as_candidate,
-                                 timeout=a.timeout, out_base=a.out, cancel=cancel, jobs=a.jobs)
-        _print_receipt(run_dir, rec)
-        return {PASS: 0, FAIL: 1}.get(rec["verdict"], 2)
+    try:
+        if a.cmd == "list":
+            reg = load_registry()
+            for tid, t in reg["trials"].items():
+                print(f"{tid:<16} modes {sorted(t['modes'])}  {t['question']}")
+            return 0
+        if a.cmd == "run":
+            cancel = _Cancel()
+            signal.signal(signal.SIGTERM, cancel.handler)
+            signal.signal(signal.SIGINT, cancel.handler)
+            run_dir, rec = run_trial(
+                a.trial,
+                mode=a.mode,
+                as_candidate=a.as_candidate,
+                timeout=a.timeout,
+                out_base=a.out,
+                cancel=cancel,
+                jobs=a.jobs,
+            )
+            _print_receipt(run_dir, rec)
+            return {PASS: 0, FAIL: 1}.get(rec["verdict"], 2)
+    except RegistryError as exc:
+        print(f"REFUSED: {exc}")
+        return 2
     if a.cmd == "check-receipt":
         ok, problems, rec = check_receipt(a.receipt)
         for p in problems:
