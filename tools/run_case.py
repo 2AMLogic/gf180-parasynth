@@ -3536,26 +3536,27 @@ def on_board(results_dir: pathlib.Path) -> bool:
     return results_dir.resolve() == RESULTS.resolve()
 
 
-def artefact_directory(results_dir: pathlib.Path) -> pathlib.Path:
-    """The directory a run's artefacts are written to, decided from where the
-    run's RECORD goes rather than independently of it. One decision, shared by
-    the filter writers' response curve (`response_destination`), by the
-    drum and ensemble writers' WAV (`wav_destination`) and by the mono writers'
-    model WAV (`model_wav_destination`, which asks it through `on_board`
-    because M1A publishes in a directory of its own), so no writer can place
-    its file by a rule of its own.
+def artefact_directory(results_dir: pathlib.Path, *,
+                       model_wav_case: str | None = None) -> pathlib.Path:
+    """Choose where to write a filter response curve or a rendered WAV.
 
     A run that lands on the board keeps the established directory under
     `build/scorecard`, because that is the path the published records name
-    (`provenance.artefacts`). Any other results directory gets its artefacts
-    beside its record, including one outside the checkout, which the record
-    then states absolutely (`stated_path`).
+    (`provenance.artefacts`). Off the board, a drum or ensemble WAV follows
+    its model record into `model-twin/` when an RTL anchor occupies the
+    requested JSON path (`model_wav_destination` applies the same rule for
+    mono cases through `on_board`, since M1A publishes in a directory of its
+    own). Filter curves use the requested results directory.
 
-    This only selects a directory. A results directory equal to `AUDIO_OUT`
-    yields the shared directory, which is why both CLIs (`main` here,
-    `tools/score_f1_rtl.py` for the RTL curve) refuse that directory to an
-    injected run."""
-    return AUDIO_OUT if on_board(results_dir) else results_dir
+    Both CLIs (`main` here and `tools/score_f1_rtl.py` for the RTL curve)
+    refuse an injected run whose requested directory is `AUDIO_OUT`, where
+    the run could overwrite a board artefact."""
+    if on_board(results_dir):
+        return AUDIO_OUT
+    if model_wav_case is not None:
+        record = results_dir / f"{model_wav_case}.json"
+        return result_destination(record, {"engine": ENGINE}, prepare=False).parent
+    return results_dir
 
 
 def response_destination(results_dir: pathlib.Path, case_id: str,
@@ -3586,7 +3587,7 @@ def wav_destination(results_dir: pathlib.Path | None, case_id: str,
     direct caller, `tools/clap_d12a_probe.py`, which takes the clap's numbers
     alone and writes no record. It gets the established shared path, as
     `run_filter_case` gives its curve."""
-    directory = AUDIO_OUT if results_dir is None else artefact_directory(results_dir)
+    directory = artefact_directory(results_dir or RESULTS, model_wav_case=case_id)
     return directory / f"{case_id}{suffix}"
 
 
