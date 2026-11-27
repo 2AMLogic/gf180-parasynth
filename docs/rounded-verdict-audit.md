@@ -8,12 +8,15 @@ decisions must not flip because a number was rounded for display.
 
 ## Result in one paragraph
 
-The mono attack (M1A) and per-note M5A/M5B paths preserve their producers'
-full-precision decisions. Two cymbal tools can accept a 3.0004 dB error
-against a 3.0 dB bound. Both reversals were constructed. Of the 544 census
-pairs in 30 fields, **37 point to two defect groups** for `worst_db` (5 nodal,
-32 knob). **507 are not a defect** and **0 are unresolved**. The counts are
-name matches grouped by comparison site. Each reversal occurs within one tool.
+The per-note M5A/M5B paths preserve their producers' full-precision
+decisions. Two cymbal tools can accept a 3.0004 dB error against a 3.0 dB
+bound, and the M1A attack aggregate can count a 5.000004 ms worst-event error
+as passing while the scorer has already failed that event. All three reversals
+were constructed. Of the 544 census pairs in 30 fields, **61 point to three
+defect groups**: `worst_db` (5 nodal, 32 knob) and `tolerance` (24, the M1A
+attack property). **483 are not a defect** and **0 are unresolved**. The counts
+are name matches grouped by comparison site. Each reversal occurs within one
+tool chain.
 
 ## Population and method
 
@@ -50,13 +53,15 @@ rounded field. When only the rounded value ever decides, there is nothing to
 override: the effective threshold moves by at most half a rounding step, the
 same at every consumer.
 
-**Depth and corrections.** Both cymbal defect groups have boundary runs below.
+**Depth and corrections.** All three defect groups have boundary runs below.
 The other classifications rest on source traces. Two initial readings were
 corrected. At `model/tom_drop_docs.py:229`, `c["worst"]` comes from a local
 unrounded maximum. The first reading attributed it to `measure_harness`.
 The first audit also missed the full-precision count inside `fit_balance` and
 classified the 32 knob pairs as rounded-only. The one-point control below
-exposes that disagreement. The conga corpus trace is recorded in the
+exposes that disagreement. The first audit also classified all 33 `tolerance`
+pairs as rounded-only, which missed the producer's per-event attack grade; the
+M1A section below corrects it. The conga corpus trace is recorded in the
 `f0_hz` row.
 
 ## Defects in the cymbal tools
@@ -141,6 +146,68 @@ Only the first row reverses the law verdict. The construction measures how the
 tool decides at the boundary. Its effect on shipped recordings is unmeasured.
 [Knob repair #1505](https://github.com/2AMLogic/gf180-parasynth/issues/1505)
 
+## Defect in the M1A attack selection
+
+**`tolerance`, 24 of 33 pairs.** The three stores (`measure_repeatability.py:930`,
+`probes/f1_selected_path.py:259`, `run_case.py:3824`) are never the producer
+of the value read. The eleven comparison sites read `properties[...]` of a
+measurement from one of two producers, so the sites were split by producer and
+by the property they read:
+
+| comparison site | reads | verdict |
+|---|---|---|
+| `check_m1a_selection.py:91` (`_passes`), `:189` (printed grade) | M1A properties from `mono_m1a_score.compare_audio` (live candidate, or the stored record's `diagnostics.properties`) | **defect** for `Envelope attack` |
+| `measure_m1a_drive.py:61` (`passes`, recorded at `:204`; compared at `:77`) | same producer | **defect** |
+| `measure_m1a_volume_mapping.py:35,36` (`counts`), `:110,112` (preservation of a baseline pass) | same producer | **defect** |
+| `sweep_m1a_attack.py:65` (`passes`, used at `:136`, `:158`) | same producer | **defect** |
+| `measure_m1a_volume_mapping.py:107` | per-note gain recomputed from `events[].rms_dbfs` (full precision) against the Gain tolerance | NC: not the rounded field. The `:110,112` Gain comparison is subsumed, since `:107` refuses first on any note above the Gain limit |
+| `measure_m5a_filter_oversample.py:266` (and `:69-70`) | `mono_m5a_score.measure` metrics | ONLY, see below |
+| `clap_d12a_probe.py:207` | `run_case.measure_pair`, `error`/`tolerance` rounded to 4 dp | ONLY: `measure_pair` keeps no full-precision pass |
+
+Eight defect sites x 3 stores = **24 pairs**; the other three sites x 3 = 9
+pairs are not a defect. This follows the convention used for the knob group: a
+cross-module name match is counted by the comparison site that reads a live
+defect. Every one of the eight sites reads all M1A properties; only
+`Envelope attack` has a producer-side decision to override. `Pitch`,
+`Harmonic shape`, `Envelope release`, `Gain` and `Clipping` are decided only
+from the rounded aggregate (ONLY).
+
+Producer-to-decision trace for `Envelope attack`:
+
+- `mono_m1a_score.py:270-274`: each event's `attack_state` is graded at full
+  precision, `abs(model - reference) <= 5.0`, or `unqualified`.
+- `:277-293`: the property takes the worst event by the same difference and
+  `mono_m5a_score._metric` (`:162-167`) stores `error` at 5 dp. The tolerance
+  is `5.0` (`:287-292`).
+- The eight sites re-decide `abs(error) <= tolerance` from that rounded error.
+- The board repeats it: `required_metrics` (`:314-332`) stores the normalized
+  `envelope` distance through `_metric` again, and `scorecard.metric_distance`
+  reads it. This is outside the 33 census pairs; the same repair covers it
+  ([repair #1509](https://github.com/2AMLogic/gf180-parasynth/issues/1509)).
+
+Reproduced on constructed three-note phrases (the reproducer is in #1509; run
+from the repository root at this branch's merge of `8e8551b3`, Python 3.12,
+NumPy, SciPy; only the attack ramp of the two MIDI 36 events changes, the
+middle note is identical and is the internal pass control):
+
+| worst attack error (ms, full precision) | event grades | stored `error` | `_passes` includes attack | board `envelope` distance |
+|---:|---|---:|---|---:|
+| 5.000004425139033 | fail, pass, fail | 5.0 | **yes** (reversal) | 1.0 (inside) |
+| 5.016671091805701 | fail, pass, fail | 5.01667 | no (agrees) | 1.00333 |
+| 4.983337758472366 | pass, pass, pass | 4.98334 | yes (agrees) | 0.99667 |
+
+Only the first row reverses the verdict. #1509 records that the committed M1A
+board record already marks attack and envelope unqualified, so no shipped
+decision is known to flip. The effect on shipped recordings is unmeasured.
+
+**M5A is distinct.** `mono_m5a_score.measure` (`:447-462`) selects the worst
+pair per metric by the unrounded `abs(ours - ref)` and then emits it through
+`_metric`. That is a selection of *which* measurement to report, not a
+verdict: no pass/fail is made at full precision there, so the later
+`error <= tolerance` comparisons (`measure_m5a_filter_oversample.py:69-70,266`)
+are the only decision. ONLY; the effective threshold moves by at most half of
+the 5th decimal.
+
 ## Groups: not a defect
 
 `NC` = name collision: the comparison reads a different object than the
@@ -152,7 +219,7 @@ and every consumer sees the same rounded value.
 |---|---|---|
 | `value` (322) | 15 dict/keyword stores x 23 compares, all `[attribute]` (`.value` of an `Estimate`, an AST node, etc.), 322 | NC. A dict key cannot be read by attribute; the one keyword store (`measure_saw_alias_after_2x.py:441`) builds a `dict(...)` |
 | `error` (45) | 9 stores x 5 compares (`compare_m5a_i2s_candidate.py:184,185,194`, `measure_mono_pulse_2x.py:115` x2), 45 | NC, the control. The compares read the dict built by `_event_errors` (`compare_m5a_i2s_candidate.py:101`) from `event_diagnostics` fields, not the `error` stores. Note the real per-note producer (`mono_m5a_score.py:428-439`, rounded to 4-5 dp) has no full-precision per-note verdict; the aggregate metrics are decided from unrounded `observed`, and the per-note comparator is a separate decision of its own: ONLY (shift <= 1e-4 of ms/dB/cents) |
-| `tolerance` (33) | 3 stores x 11 compares (`abs(p['error']) <= p['tolerance']` in `check_m1a_selection`, `measure_m1a_drive`, `measure_m1a_volume_mapping`, `measure_m5a_filter_oversample`, `sweep_m1a_attack`, `clap_d12a_probe`), 33 | ONLY. `run_case.measure_pair` (`:3821-3824`) stores `error` and `tolerance` rounded to 4 dp and keeps no full-precision pass; the board itself (`scorecard.normalised`) divides the same rounded fields. Every consumer agrees; no reversal exists |
+| `tolerance` (9 of 33) | 3 stores x 3 compares: `measure_m1a_volume_mapping.py:107` (NC, per-note gain), `measure_m5a_filter_oversample.py:266`, `clap_d12a_probe.py:207`; the other 24 are the M1A defect above | NC / ONLY. `run_case.measure_pair` (`:3821-3824`) stores `error` and `tolerance` rounded to 4 dp and keeps no full-precision pass; the M5A producer selects its worst measurement unrounded but decides nothing there (see the M1A section) |
 | `explained_ratio` (4) | 2 stores (`attack_fit_v3.py:109`, `measure_mono_m1a_reference.py:266`) x 2 compares (`qualify_m1a_attack.py:69,104`), 4 | ONLY. The full-precision gate (`explained < 0.6`) refuses upstream of the round; the floors (0.7 to 0.99) are applied only to the rounded value, both when the domain table is built (`:69`) and when it is used (`:104`) |
 | `max_abs_error_ms` (1) | `qualify_m1a_attack.py:84` -> `mono_m1a_score.py:135` | ONLY, and monotone: the producer keeps rows with `worst <= 1.0` at full precision, and `round(worst, 4) <= 1.0` follows because the bound is on the rounding grid, so the guard cannot flip a pass |
 | `d_unwanted_rel_db` (1) | `mono_artifact_probe.py:596` vs `measure_m5_saw_drive.py:158` | NC for the pairing: `:158` reads the delta that module builds at `:153`. That in-module rounded delta (3 dp) against `<= 1.0` is ONLY (M5B saw drive; shift <= 0.0005 dB on a 1 dB limit) |
@@ -162,8 +229,8 @@ and every consumer sees the same rounded value.
 | `f0_hz` (13) | 13 external stores × 1 comparison in `measure_conga_body_spread.py:554` | NC for all 13. In the same file, `measure_corpus` (lines 372–388) stores `round(f, 3)` for a valid `f0_of` result. Line 712 saves those rows as `report["corpus"]` and line 743 passes them to `within_10pct_of_f0`. Lines 553–554 read both the anchor and each candidate from those rows. ONLY in-module, since the ±10% selection first occurs on the rounded values. |
 | `fit_residual_db` (1), `headroom_db` (3), `inharmonic_db` (1), `margin` (2), `over_leak_1s_db` (1), `residual_db` (1), `worst_cents` (1) | `audio_measure.py:2202` and `estimator_domains.py:411` read `Estimate.detail` (unrounded); `reference_voice.py:394` is a `>` display marker; `noise_fixture_duration.py:419` is a printed line; `cymbal_400_production_tail.py:230` re-checks `over_leak_1s_db` that `cymbal_mid` never tests at 1 s (its own gates are `edt`/`late`); `r0_capture.py:957` and `compare_ladder_candidates.py:575` read their own records | NC or ONLY (shift <= 0.005 dB / 0.05 cents against 6 dB / 5 cents limits) |
 
-The clear groups sum to 322 + 45 + 33 + 4 + 1 + 1 + 34 + 10 + 34 + 13 +
-10 = 507. Adding the 5 nodal and 32 knob pairs accounts for all 544.
+The clear groups sum to 322 + 45 + 9 + 4 + 1 + 1 + 34 + 10 + 34 + 13 +
+10 = 483. Adding the 5 nodal, 32 knob and 24 M1A pairs accounts for all 544.
 
 ## Outside the census population (not counted above)
 
@@ -171,8 +238,8 @@ The census omits same-module pairs and values passed through a local. At
 `tools/r0_capture.py:956-957` (`residual_db`) and
 `tools/measure_m5_saw_drive.py:153-158` (the saw-drive delta), the rounded
 record supplies the only threshold decision. The conga selection above has
-the same property. In both cymbal tools, the producer also makes the decision
-at full precision. Cross-module name matches led to those consumers, and the
+the same property. In both cymbal tools and in the M1A attack aggregate, the
+producer also makes the decision at full precision. Cross-module name matches led to those consumers, and the
 same-module traces and boundary runs establish the defects.
 
 ## Reproduce
