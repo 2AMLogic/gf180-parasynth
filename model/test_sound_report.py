@@ -510,3 +510,40 @@ def test_a_silent_hit_is_a_refusal_not_a_nan_value(monkeypatch):
     r = _noise_share_only(monkeypatch, np.zeros(int(0.4 * SR)))
     assert r.measured is None, f"a silent hit was reported as a value: {r.measured!r}"
     assert r.why == REFUSED
+
+
+# ===========================================================================
+# #1479: an empty sound report is a refusal (exit 2), not 0 failures (exit 0)
+# ===========================================================================
+def test_plain_report_refuses_empty_rows_and_preserves_nonempty_outcomes(monkeypatch, capsys):
+    p1 = sr.Prop("BD", "p1", "ms", "lock", 10.0, 1.0, "test", lambda ctx: None)
+    p2 = sr.Prop("SD", "p2", "ms", "lock", 20.0, 1.0, "test", lambda ctx: None)
+    ok_row = sr.Result(p1, 10.2, True, "", 0.2)
+    bad_row1 = sr.Result(p1, 15.0, False, "", 5.0)
+    bad_row2 = sr.Result(p2, 25.0, False, "", 5.0)
+
+    # empty: refuses with explicit diagnostic and exits 2
+    monkeypatch.setattr(sr, "run", lambda: ([], set()))
+    rc = sr.main([])
+    out = capsys.readouterr().out
+    assert rc == 2, f"empty sound report must exit 2, got {rc}"
+    assert "REFUSED" in out and "0 properties" in out, out
+    assert "Traceback" not in out
+    assert sr.print_report([], "test") is None
+    capsys.readouterr()
+
+    # nonempty, all in tolerance: failure count 0 and exit 0
+    monkeypatch.setattr(sr, "run", lambda: ([ok_row], set()))
+    assert sr.main([]) == 0
+    out_ok = capsys.readouterr().out
+    assert "0 properties outside tolerance" in out_ok
+    assert sr.print_report([ok_row], "test") == 0
+    capsys.readouterr()
+
+    # nonempty, violations: failure count preserved and exit 1
+    monkeypatch.setattr(sr, "run", lambda: ([bad_row1, bad_row2], set()))
+    assert sr.main([]) == 1
+    out_bad = capsys.readouterr().out
+    assert "2 properties outside tolerance" in out_bad
+    assert sr.print_report([bad_row1, bad_row2], "test") == 2
+    capsys.readouterr()

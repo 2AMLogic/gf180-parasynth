@@ -771,10 +771,14 @@ def run(inject=None):
     return out, touched
 
 
-def print_report(results, title):
+def print_report(results, title) -> int | None:
     print("=" * 94)
     print(title)
     print("=" * 94)
+    results = list(results)
+    if not results:
+        print("\nREFUSED: 0 properties measured across 0 voices -- nothing to report.")
+        return None
     voices = []
     for r in results:
         if r.prop.voice not in voices:
@@ -912,7 +916,10 @@ def main(argv=None) -> int:
         print("        },")
         print("    },")
         return 0
-    return 1 if print_report(res, "SOUND REPORT -- per voice, per property") else 0
+    nfail = print_report(res, "SOUND REPORT -- per voice, per property")
+    if nfail is None:
+        return 2
+    return 1 if nfail else 0
 
 
 if __name__ == "__main__":
