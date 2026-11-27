@@ -85,6 +85,7 @@ import drums_fx as dx                                        # noqa: E402
 import synth_top_model as stm                                # noqa: E402
 import fixtures                                              # noqa: E402
 import verify_synth_top as vst                               # noqa: E402  (rtl-sketch/)
+from verify_deadline import I2S_DRAIN, i2s_completeness     # noqa: E402  (rtl-sketch/)
 from spi_host import FRAME_PS, TX_BYTES, LinkTiming, Placed  # noqa: E402
 
 LINKS = {"bench": sh.BENCH, "max": sh.CONTRACT}
@@ -151,6 +152,17 @@ def main(argv=None) -> int:
     ap.add_argument("--frames", type=int, default=None)
     ap.add_argument("--outdir", default=os.path.join(ROOT, "build", "fixture"))
     a = ap.parse_args(argv)
+    st = _run(a)
+    if not a.expect_fail:
+        return st
+    if st == 1:
+        print(f"verify_fixture: wrong stream {a.wrong!r} CAUGHT (comparison failed as required)")
+        return 0
+    print(f"verify_fixture: WRONG STREAM NOT CAUGHT (status {st})")
+    return 1 if st == 0 else 2
+
+
+def _run(a) -> int:
     a.outdir = os.path.abspath(a.outdir)
     os.makedirs(a.outdir, exist_ok=True)
     link = LINKS[a.link]
@@ -232,11 +244,14 @@ def main(argv=None) -> int:
 
     # ---- did every transaction arrive, intact, in the frame the HOST predicted? --
     wr = vst.rows(out["wrs"])
+    # A capture with the wrong NUMBER of writes is not a capture of this run: it
+    # cannot pass, and it cannot satisfy --expect-fail either (a zip() below would
+    # silently compare only the common prefix). REFUSE, never fall through.
+    LAST.update(writes_sent=len(sent), writes_seen=len(wr))
     if len(wr) != len(sent):
-        print(f"verify_fixture: FAIL -- {len(wr)} writes reached the register port, "
-              f"{len(sent)} were sent")
-        if not wr:
-            return 2
+        print(f"verify_fixture: REFUSED -- {len(wr)} writes reached the register port, "
+              f"{len(sent)} were sent: the capture is not of this stream")
+        return 2
     bad = sum(1 for p, g in zip(sent, wr)
               if (int(g[1]), int(g[2]), int(g[3]), int(g[4])) != p.w.key())
     pin_bad = [(i, p, int(g[5])) for i, (p, g) in enumerate(zip(sent, wr))
@@ -277,8 +292,24 @@ def main(argv=None) -> int:
 
     # ---- the comparison: the WIRE against the MODEL, no tolerance ------------
     i2s = vst.rows(out["i2s"])
-    if not i2s:
-        print("verify_fixture: FAIL -- no I2S periods decoded from the wire")
+    # Apparatus precondition: the decoded periods must be exactly 0..P-1 in order
+    # and cover the simulated span, or a silent prefix compares equal to "music".
+    # tb_top_bx stops `tail` ticks after its last SENT write, so a --wrong stream
+    # that ends early simulates fewer frames than n: the floor follows the span.
+    try:
+        idx = [int(r[0]) for r in i2s]
+        for r in i2s:
+            for c in r[1:5]:
+                int(c)
+    except (ValueError, IndexError):
+        print("verify_fixture: REFUSED -- the I2S capture has a malformed row")
+        return 2
+    expected_frames = min(n, max(p.land for p in sent) + tail)
+    required = max(1, expected_frames - I2S_DRAIN)
+    problems = i2s_completeness(idx, required)
+    LAST.update(i2s_required=required, i2s_seen=len(idx))
+    if problems:
+        print("verify_fixture: REFUSED -- " + "; ".join(problems))
         return 2
     nper = min(len(i2s), n)
     mism = swap = width = 0
@@ -326,12 +357,4 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    st_ = main()
-    if "--expect-fail" in sys.argv:
-        w = sys.argv[sys.argv.index("--wrong") + 1] if "--wrong" in sys.argv else "?"
-        if st_ == 1:
-            print(f"verify_fixture: wrong stream {w!r} CAUGHT (comparison failed as required)")
-            sys.exit(0)
-        print(f"verify_fixture: WRONG STREAM NOT CAUGHT (status {st_})")
-        sys.exit(1 if st_ == 0 else 2)
-    sys.exit(st_)
+    sys.exit(main())
