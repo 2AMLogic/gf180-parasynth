@@ -54,9 +54,15 @@ def inventory_path_mode(path: pathlib.Path) -> int:
         return 0
 
 
-def indexed_sizes(archive: str) -> dict[str, int] | None:
-    """member path -> bytes, or None when this pack has no committed index."""
-    tsv = REFAUDIO / "index" / (archive[:-4] + ".tsv")
+def read_indexed_sizes(tsv: pathlib.Path) -> dict[str, int] | None:
+    """The rows of one `refaudio/index/*.tsv` as member path -> bytes, or None
+    when there is no file at `tsv` -- the one reader of the index's sizes, so
+    no tool carries a copy that can drift from it (#1551).
+
+    Only a missing path is `None`; any other reason the file cannot be opened
+    is raised. A row with no `path` or no `bytes` is not an entry: it raises
+    `ValueError` naming the line and the field, rather than becoming a size
+    for the empty path."""
     try:
         fh = tsv.open(encoding="utf-8", newline="")
     except (FileNotFoundError, NotADirectoryError):
@@ -70,6 +76,11 @@ def indexed_sizes(archive: str) -> dict[str, int] | None:
                     raise ValueError(f"line {rows.line_num}: missing {field}")
             sizes[row["path"]] = int(row["bytes"])
         return sizes
+
+
+def indexed_sizes(archive: str) -> dict[str, int] | None:
+    """member path -> bytes, or None when this pack has no committed index."""
+    return read_indexed_sizes(REFAUDIO / "index" / (archive[:-4] + ".tsv"))
 
 
 def sha256_of(path: pathlib.Path) -> str:

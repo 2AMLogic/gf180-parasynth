@@ -97,6 +97,84 @@ def test_the_comparator_refuses_audio_the_index_does_not_vouch_for():
             C.reference_wav("LT", "A", 6, sizes)              # indexed, absent
 
 
+def _repoint_the_index(tmp_path, monkeypatch) -> pathlib.Path:
+    """Point the comparator at an index under `tmp_path`; nothing is written yet."""
+    index = tmp_path / "index" / C.INDEX.name
+    index.parent.mkdir()
+    monkeypatch.setattr(C, "INDEX", index)
+    return index
+
+
+@pytest.mark.parametrize(("row", "field"), [
+    ("folder/take.wav", "bytes"),
+    ("folder/take.wav\t", "bytes"),
+    ("\t12", "path"),
+])
+def test_the_comparator_refuses_an_incomplete_index_row(tmp_path, monkeypatch, capsys, row, field):
+    """An index row with no `path` or no `bytes` vouches for nothing. The
+    comparator used to carry its own reader of the index: it read the empty
+    path as `{'': 12}`, and the other two rows escaped `main()`'s
+    `except Refused` as a `ValueError` / `TypeError` traceback (#1551). The
+    sizes are now read by `tools/refaudio_local.py`'s one reader, as
+    `tom_drop_measure` reads them, and the row is a named REFUSED before
+    anything is measured."""
+    index = _repoint_the_index(tmp_path, monkeypatch)
+    index.write_text(f"path\tbytes\n{row}\n", encoding="utf-8")
+    with pytest.raises(C.Refused, match=f"missing {field}"):
+        C.indexed_sizes()
+    out = tmp_path / "result.json"
+    previous = '{"sentinel": "the previous run"}'
+    out.write_text(previous, encoding="utf-8")
+    assert C.main(["--json", str(out)]) == 2
+    err = capsys.readouterr().err
+    assert "REFUSED" in err and str(index) in err and f"missing {field}" in err
+    assert out.read_text(encoding="utf-8") == previous
+
+
+def test_the_comparator_refuses_a_missing_index(tmp_path, monkeypatch):
+    monkeypatch.setattr(C, "INDEX", tmp_path / "no-index" / C.INDEX.name)
+    with pytest.raises(C.Refused, match="is missing"):
+        C.indexed_sizes()
+
+
+def _a_directory_at_the_index(index: pathlib.Path) -> None:
+    index.mkdir()
+
+
+def _a_file_nobody_can_read(index: pathlib.Path) -> None:
+    index.write_text("path\tbytes\nfolder/take.wav\t12\n", encoding="utf-8")
+    index.chmod(0)
+
+
+@pytest.mark.parametrize(("make_it", "why"), [
+    (_a_directory_at_the_index, "IsADirectoryError"),
+    (_a_file_nobody_can_read, "PermissionError"),
+])
+def test_the_comparator_refuses_an_index_it_cannot_read(tmp_path, monkeypatch, capsys, make_it, why):
+    """An index that is there and cannot be read is an unavailable one: a named
+    REFUSED and exit 2 that leaves the previous JSON alone, not an `OSError`
+    traceback out of `main()` (#1551). Two ways a committed file is unreadable
+    are put for real, not by patching the reader: something else sits at the
+    path, and the permission is taken away."""
+    index = _repoint_the_index(tmp_path, monkeypatch)
+    make_it(index)
+    try:
+        if why == "PermissionError" and os.access(index, os.R_OK):
+            pytest.skip("requires a user subject to file read permissions")
+        with pytest.raises(C.Refused, match=why):
+            C.indexed_sizes()
+        out = tmp_path / "result.json"
+        previous = '{"sentinel": "the previous run"}'
+        out.write_text(previous, encoding="utf-8")
+        assert C.main(["--json", str(out)]) == 2
+        err = capsys.readouterr().err
+        assert "REFUSED" in err and str(index) in err and why in err
+        assert out.read_text(encoding="utf-8") == previous
+    finally:
+        if index.is_file():
+            index.chmod(0o600)
+
+
 def test_the_resample_control_refuses_a_conversion_that_filters_the_onset(monkeypatch):
     """`validate_resample` is the comparator's own injected-bug control and it
     runs on every comparison. The defect it exists to catch is a conversion that

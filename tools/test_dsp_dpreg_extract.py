@@ -51,7 +51,7 @@ def box(tmp_path):
     return d
 
 
-def _fake(box_dir, fail_at=None):
+def _fake(box_dir, fail_at=None, drc=None):
     calls = []
 
     def sh(cmd, **kw):
@@ -65,13 +65,13 @@ def _fake(box_dir, fail_at=None):
                 name = Path(src.split(":", 1)[-1]).name
                 shutil.copyfile(box_dir / name, dst)
         if rc == 0 and cmd[-1].startswith("cat "):
-            out = (PUB / "drc.rpt").read_text()
+            out = (PUB / "drc.rpt").read_text() if drc is None else drc
         return subprocess.CompletedProcess(cmd, rc, out, "")
     return calls, sh
 
 
-def _run(monkeypatch, tmp_path, box_dir, where, fail_at=None):
-    calls, sh = _fake(box_dir, fail_at)
+def _run(monkeypatch, tmp_path, box_dir, where, fail_at=None, drc=None):
+    calls, sh = _fake(box_dir, fail_at, drc)
     monkeypatch.setattr(dx, "sh", sh)
     ev = tmp_path / f"ev-{where}-{fail_at}" / "dsp-dpreg-evidence"
     try:
@@ -250,18 +250,18 @@ def test_opmode_feedback_requires_observed_connections(monkeypatch, tmp_path, bo
     out = capsys.readouterr().out
     if connection == "independent":
         assert rc == 0 and "extraction OK" in out
-        _, records, _ = dx.analyser.derive(evidence)
+        _, records, _ = dx.dsp_dpreg_analyse.derive(evidence)
         assert len(records) == 13
         assert [r["name"] for r in records if r["p_feedback_reachable"]] == [first]
     else:
         assert rc == 2 and "REFUSED" in out and "extraction OK" not in out
         assert "OPMODE" in out and first in out
-        with pytest.raises(dx.analyser.Refused, match="OPMODE"):
-            dx.analyser.derive(evidence)
+        with pytest.raises(dx.dsp_dpreg_analyse.Refused, match="OPMODE"):
+            dx.dsp_dpreg_analyse.derive(evidence)
 
 
-@pytest.mark.parametrize("props", [(p,) for p in dx.analyser.MANDATORY_PROPS]
-                         + [dx.analyser.MANDATORY_PROPS], ids="-".join)
+@pytest.mark.parametrize("props", [(p,) for p in dx.dsp_dpreg_analyse.MANDATORY_PROPS]
+                         + [dx.dsp_dpreg_analyse.MANDATORY_PROPS], ids="-".join)
 def test_failed_property_read_refuses_even_with_a_complete_manifest(
         monkeypatch, tmp_path, box, capsys, props):
     path = box / "dsp_cells_dump.txt"
@@ -276,8 +276,8 @@ def test_failed_property_read_refuses_even_with_a_complete_manifest(
     out = capsys.readouterr().out
     assert rc == 2 and "REFUSED" in out and "extraction OK" not in out
     assert all(p in out for p in props)
-    with pytest.raises(dx.analyser.Refused, match=props[0]):
-        dx.analyser.derive(evidence)
+    with pytest.raises(dx.dsp_dpreg_analyse.Refused, match=props[0]):
+        dx.dsp_dpreg_analyse.derive(evidence)
 
 
 def test_phase3_manifest_command_does_not_mask_sha256sum_failure(monkeypatch, tmp_path, box):
@@ -292,3 +292,30 @@ def test_phase3_manifest_command_does_not_mask_sha256sum_failure(monkeypatch, tm
     rewritten = phase3_cmd.replace(f"cd {REMOTE}", f"cd {work}")
     r = subprocess.run(["bash", "-c", rewritten], capture_output=True, text=True)
     assert r.returncode != 0, f"sha256sum failure was masked (rc=0): {rewritten}"
+
+
+SAME_INSTANCE_TWICE = """\
+| DPREG-4 | Warning  | DSP48E1_PregDynOpmodeZmuxP: | 2      |
+DPREG-4#1 Warning
+DSP48E1_PregDynOpmodeZmuxP:
+The DSP48E1 cell u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0 with the given dynamic OPMODE[6:0] connections may lead
+Related violations: <none>
+
+DPREG-4#2 Warning
+DSP48E1_PregDynOpmodeZmuxP:
+The DSP48E1 cell u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0 with the given dynamic OPMODE[6:0] connections may lead
+Related violations: <none>
+"""
+
+
+def test_a_drc_flagging_one_instance_twice_refuses_before_any_tcl_is_staged(
+        monkeypatch, tmp_path, box):
+    """That drc.rpt used to be expanded into duplicate cells, a Tcl staged and
+    Vivado run, all for the analyser to refuse the dump (#1557)."""
+    rc, calls, ev = _run(monkeypatch, tmp_path, box, "local",
+                         drc=SAME_INSTANCE_TWICE)
+    assert rc == "SystemExit: REFUSED: drc.rpt flags the same instance twice"
+    issued = [" ".join(cmd) + (inp or "") for cmd, inp in calls]
+    assert not any("vivado" in s or "dsp_dpreg_extract.tcl" in s
+                   for s in issued)
+    assert not (ev / "dsp_dpreg_extract.tcl").exists()

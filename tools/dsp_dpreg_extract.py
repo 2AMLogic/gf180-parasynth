@@ -40,7 +40,10 @@ import re
 import subprocess
 import sys
 
-import dsp_dpreg_analyse as analyser
+_TOOLS = str(pathlib.Path(__file__).resolve().parent)
+if _TOOLS not in sys.path:
+    sys.path.append(_TOOLS)
+import dsp_dpreg_analyse  # noqa: E402
 
 BOX = "repo-remote-wt-arty-bringup"
 DCP = "/home/ubuntu/parasynth-arty-attempt02/build/arty/routed.dcp"
@@ -270,26 +273,14 @@ def make_tcl(dcp, remote_dir, cells):
 
 
 def flagged_from_drc(drc_text):
-    """DPREG-4 instance names from the DRC body, with the summary-table
-    cross-check the analyser applies (same regex, same refusals)."""
-    table = re.search(
-        r"^\|\s*DPREG-4\s*\|\s*Warning\s*\|.*?\|\s*(\d+)\s*\|",
-        drc_text, re.M)
-    blocks = re.findall(
-        r"^DPREG-4#(\d+) Warning\n.*?^The DSP48E1 cell (\S+) "
-        r"with the given dynamic OPMODE",
-        drc_text, re.M | re.S)
-    if not table or not blocks:
-        raise SystemExit("REFUSED: drc.rpt has no parsable DPREG-4 findings")
-    ids = [int(i) for i, _ in blocks]
-    names = [n for _, n in blocks]
-    if ids != list(range(1, len(ids) + 1)):
-        raise SystemExit(f"REFUSED: DPREG-4 ids not contiguous: {ids}")
-    if int(table.group(1)) != len(names):
-        raise SystemExit(
-            f"REFUSED: summary says {table.group(1)} DPREG-4 violations, "
-            f"body lists {len(names)}")
-    return names
+    """DPREG-4 instance names from the DRC body, in report order, as the
+    analyser's parse_drc_targets derives them: the same regex and the same
+    refusals because it IS that parser, not a copy of it. A refusal keeps
+    this tool's contract and exits REFUSED."""
+    try:
+        return dsp_dpreg_analyse.parse_drc_targets(drc_text)
+    except dsp_dpreg_analyse.Refused as exc:
+        raise SystemExit(f"REFUSED: {exc}") from None
 
 
 def cell_targets(flagged):
@@ -353,7 +344,7 @@ def dump_cell_problems(dump, cells):
     if not want:
         return ["the DRC yielded no target cells, so nothing could be verified"]
     try:
-        parsed = analyser.parse_cells(dump)
+        parsed = dsp_dpreg_analyse.parse_cells(dump)
         missing = sorted(want - parsed.keys())
         if missing:
             return [f"{len(missing)} of {len(want)} cell sections absent, e.g. {missing[:3]}"]
@@ -361,8 +352,8 @@ def dump_cell_problems(dump, cells):
         if extra:
             return [f"unrequested cell sections {extra[:3]}"]
         for name, cell in parsed.items():
-            analyser.validate_required_cell(name, cell)
-    except analyser.Refused as e:
+            dsp_dpreg_analyse.validate_required_cell(name, cell)
+    except dsp_dpreg_analyse.Refused as e:
         return [str(e)]
     return []
 
