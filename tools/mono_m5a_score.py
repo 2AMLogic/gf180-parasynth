@@ -459,8 +459,11 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
                                 ("cents" if name == "Pitch" else
                                  ("ms" if "Envelope" in name else "%")), limit, basis)
 
-    combined = np.concatenate([part for i, part in enumerate(model_parts)
-                               if i == 0] + [np.zeros(silence)] + model_parts[1:])
+    if candidate_pcm is not None:
+        combined = candidate_pcm
+    else:
+        combined = np.concatenate([part for i, part in enumerate(model_parts)
+                                   if i == 0] + [np.zeros(silence)] + model_parts[1:])
     out = ROOT / f"build/scorecard/{case_id}-model.wav" if output_path is None else pathlib.Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     pcm_out = np.clip(combined * 32768.0, -32768, 32767).astype("<i2")
