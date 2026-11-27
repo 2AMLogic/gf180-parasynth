@@ -11,6 +11,8 @@ are tested against signals whose answer is constructed, not observed.
 from __future__ import annotations
 
 import pathlib
+import re
+import shutil
 import sys
 
 import numpy as np
@@ -344,3 +346,280 @@ def test_a_defect_in_the_conditioner_is_not_reported_as_a_refusal(monkeypatch):
     e = _conditioned(monkeypatch, TypeError("bug"))
     assert not e.ok
     assert "TypeError" in e.reason and "refused" not in e.reason
+
+
+# ---------------------------------------------------------------------------
+# knob_travel is held to the pack's inventory (#1436).
+#
+# `knob_travel` used to aggregate whatever `*.wav` its two Digital accent
+# folders held. A partly fetched cache therefore printed a shorter travel as
+# the machine's whole knob range, and a hole in accent B reached the JSON,
+# because the `cross_session` count behind it reads accent A alone.
+#
+# The cache is built here, so its answer is known; no audio from the licensed
+# pack is used. Discovery, membership, aggregation, the report and the JSON
+# are the tool's own. `load` and `measure_all` are stand-ins whose every
+# reading names the setting it was taken from.
+# ---------------------------------------------------------------------------
+BD_F06 = "BD {} 808 Decay F 06.wav"
+
+
+def _name(accent: str, decay: str, tone: int) -> str:
+    return f"BD {accent} 808 Decay {decay} {tone:02d}.wav"
+
+
+def _folder(root: pathlib.Path, accent: str) -> pathlib.Path:
+    return root / "Digital" / accent
+
+
+def _cache(root: pathlib.Path) -> pathlib.Path:
+    """A stand-in for `CURRENT` whose Digital folders hold every indexed
+    setting of both accents, as empty entries: no audio is read."""
+    for accent in "AB":
+        _folder(root, accent).mkdir(parents=True)
+        for decay in "ABCDEF":
+            for tone in range(1, 7):
+                (_folder(root, accent) / _name(accent, decay, tone)).write_bytes(b"RIFF")
+    return root
+
+
+def _expected_paths(root: pathlib.Path) -> list[pathlib.Path]:
+    return [_folder(root, a) / _name(a, d, t)
+            for a in "AB" for d in "ABCDEF" for t in range(1, 7)]
+
+
+def _value(path: pathlib.Path) -> float:
+    """The stand-in's reading of one setting: 100 a DECAY letter, 1 a TONE
+    step, 1000 more under accent B. Distinct for every indexed file, and
+    every count, span and axis mean asserted below is closed form. A name the
+    pack does not have reads below them all, so a stranger that is measured
+    moves the minimum."""
+    m = re.fullmatch(r"BD ([AB]) 808 Decay ([A-F]) (\d\d)\.wav", path.name)
+    if m is None:
+        return -1.0
+    return float(1000 * (m[1] == "B") + 100 * "ABCDEF".index(m[2]) + int(m[3]))
+
+
+def _standing_in_for_the_audio(monkeypatch, decline=()) -> list[pathlib.Path]:
+    """`load` records each path it is handed and returns a short synthetic
+    record; `measure_all` answers every metric with that path's `_value`,
+    except the (metric, file) pairs in `decline`, which it cannot score and
+    answers None, as the board's own estimators do. Returns the record."""
+    loaded: list[pathlib.Path] = []
+    record = mr.synthetic_bd(SR, seconds=0.1)
+
+    def load(path):
+        loaded.append(path)
+        return record, SR
+
+    def measure_all(y, sr, plan):
+        return {k: None if (k, loaded[-1].name) in decline else _value(loaded[-1])
+                for k in plan}
+
+    monkeypatch.setattr(mr, "load", load)
+    monkeypatch.setattr(mr, "measure_all", measure_all)
+    return loaded
+
+
+def _pointed_at(tmp_path, monkeypatch, broken: dict[str, str]) -> pathlib.Path:
+    """A cache under `CURRENT` with each `(accent): file` in `broken` absent,
+    and `LEGACY` pointing at nothing -- so should the grid refusal not fire,
+    what follows is the session refusal, never a read of a real cache."""
+    root = _cache(tmp_path / "Clean")
+    for accent, gone in broken.items():
+        (_folder(root, accent) / gone).unlink()
+    monkeypatch.setattr(mr, "CURRENT", root)
+    monkeypatch.setattr(mr, "LEGACY", tmp_path / "no-legacy-session")
+    return root
+
+
+ROW = re.compile(r"\d+\.\d{3}")
+
+
+def test_the_expected_settings_are_the_ones_the_pack_index_lists():
+    """`setting_name` over `DECAYS x TONES`, read under `CURRENT`, is the
+    tool's statement of what a Digital accent folder holds;
+    `refaudio/index/808-from-mars.tsv` is the pack's own list. Held together,
+    so neither the pattern nor the folder can drift from the pack without
+    this going red."""
+    rows = (mr.REPO / "refaudio" / "index" / "808-from-mars.tsv").read_text(
+        encoding="utf-8").splitlines()
+    assert rows[0].startswith("path\tbytes\t")
+    clean = "808 From Mars/WAV/01. Individual Hits/01. Bass Drum/Clean"
+    assert mr.CURRENT.relative_to(mr.CACHE / "808-from-mars").as_posix() == clean
+    pack = f"{clean}/{mr.TRAVEL_CHAIN}/"
+    digital = [r.split("\t")[0] for r in rows[1:] if r.startswith(pack)]
+    assert {p[len(pack):].split("/")[0] for p in digital} == set(mr.TRAVEL_ACCENTS)
+    for accent in mr.TRAVEL_ACCENTS:
+        listed = sorted(p[len(pack + accent + "/"):] for p in digital
+                        if p.startswith(pack + accent + "/"))
+        assert len(listed) == 36
+        assert listed == sorted(mr.setting_name(accent, d, t)
+                                for d in mr.DECAYS for t in mr.TONES)
+
+
+@pytest.mark.parametrize("accent", "AB")
+def test_measure_refuses_a_missing_setting_before_any_recording_is_opened(
+        tmp_path, monkeypatch, capsys, accent):
+    """Through the CLI, with everything after `knob_travel` real: the refusal
+    is the grid's own and names the accent and the setting, not the session
+    refusal standing in for it. No travel row, no JSON, nothing loaded."""
+    _pointed_at(tmp_path, monkeypatch, {accent: BD_F06.format(accent)})
+    loaded = _standing_in_for_the_audio(monkeypatch)
+    out = tmp_path / "result.json"
+    assert mr.main(["--measure", "--json", str(out)]) == mr.REFUSED
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and f"Digital/{accent}" in text and "Decay F 06" in text
+    assert "expected a 6x6 grid" not in text
+    assert not ROW.search(text), text
+    assert "SESSION TO SESSION" not in text
+    assert loaded == [] and not out.exists()
+
+
+def test_an_equal_count_substitute_does_not_stand_in_for_a_setting(
+        tmp_path, monkeypatch, capsys):
+    """The folder holds 36 WAVs again and `grid()` keys all 36 settings from
+    their names, so the count its sibling readers refuse on reads a whole
+    grid, with tone 06 gone and a tone 07 the pack does not have in its
+    place."""
+    root = _pointed_at(tmp_path, monkeypatch, {})
+    d = _folder(root, "B")
+    (d / BD_F06.format("B")).rename(d / "BD B 808 Decay F 07.wav")
+    assert len(list(d.glob("*.wav"))) == 36 and len(mr.grid(d, mr.CUR_RE)) == 36
+    loaded = _standing_in_for_the_audio(monkeypatch)
+    assert mr.main(["--measure", "--json", str(tmp_path / "result.json")]) == mr.REFUSED
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "Digital/B" in text and "Decay F 06" in text
+    assert "expected a 6x6 grid" not in text and "Decay F 07" not in text
+    assert not ROW.search(text), text
+    assert loaded == []
+
+
+def test_the_other_accents_file_under_its_own_name_is_not_a_setting(
+        tmp_path, monkeypatch, capsys):
+    """36 WAVs and every (decay, tone) key present: B's `Decay F 06` copied
+    into A's folder satisfies a count AND a key-presence check, because
+    `grid()` keys on decay and tone and drops the accent in the name."""
+    root = _pointed_at(tmp_path, monkeypatch, {})
+    a, b = _folder(root, "A"), _folder(root, "B")
+    (a / BD_F06.format("A")).unlink()
+    shutil.copyfile(b / BD_F06.format("B"), a / BD_F06.format("B"))
+    assert len(mr.grid(a, mr.CUR_RE)) == 36 and ("F", 6) in mr.grid(a, mr.CUR_RE)
+    loaded = _standing_in_for_the_audio(monkeypatch)
+    assert mr.main(["--measure", "--json", str(tmp_path / "result.json")]) == mr.REFUSED
+    text = capsys.readouterr().out
+    assert "Digital/A" in text and "Decay F 06" in text and "Digital/B" not in text
+    assert not ROW.search(text), text
+    assert loaded == []
+
+
+def test_a_directory_where_a_setting_should_be_is_not_a_setting(tmp_path, monkeypatch):
+    """`glob("*.wav")` matches a folder of that name. A folder is not a
+    recording, and must be found absent before any other file is opened."""
+    root = _pointed_at(tmp_path, monkeypatch, {})
+    gone = _folder(root, "A") / "BD A 808 Decay C 03.wav"
+    gone.unlink()
+    gone.mkdir()
+    assert len(mr.grid(_folder(root, "A"), mr.CUR_RE)) == 36
+    loaded = _standing_in_for_the_audio(monkeypatch)
+    with pytest.raises(mr.Refused) as e:
+        mr.knob_travel(report=lambda *a: None)
+    assert "Digital/A" in str(e.value) and "Decay C 03" in str(e.value)
+    assert loaded == []
+
+
+def test_an_unfetched_cache_is_refused_as_an_instruction(tmp_path, monkeypatch):
+    """Nothing fetched, the usual state of a development host: said once an
+    accent, with the fetch command, and not as a list of 72 settings."""
+    monkeypatch.setattr(mr, "CURRENT", tmp_path / "not-fetched")
+    with pytest.raises(mr.Refused) as e:
+        mr.knob_travel(report=lambda *a: None)
+    msg = str(e.value)
+    assert "Digital/A holds none of the 36 indexed settings" in msg
+    assert "Digital/B holds none of the 36 indexed settings" in msg
+    assert mr.FETCH in msg
+
+
+def test_a_wav_the_pack_does_not_list_is_never_measured(tmp_path, monkeypatch):
+    """A whole grid plus strangers: a tone the pack lacks, a Tape-chain name,
+    and the other accent's file. The travel is about the 72 indexed files."""
+    root = _pointed_at(tmp_path, monkeypatch, {})
+    for stranger in ("BD A 808 Decay C 07.wav", "BD A 808 Tape Decay C 03.wav",
+                     BD_F06.format("B")):
+        (_folder(root, "A") / stranger).write_bytes(b"RIFF")
+    loaded = _standing_in_for_the_audio(monkeypatch)
+    travel = mr.knob_travel(report=lambda *a: None)
+    assert loaded == _expected_paths(root)
+    assert travel["accent A"]["decay"]["n"] == 36
+    assert travel["accent A"]["decay"]["grid_min"] == 1.0
+
+
+def test_a_complete_grid_is_measured_whole_for_each_accent_and_for_both(tmp_path, monkeypatch):
+    """The other half of the control: with every setting present the same
+    stand-in DOES produce the rows, from the 72 indexed files alone and in
+    setting order, with the counts and spans a 6 x 6 grid of `_value` has."""
+    root = _pointed_at(tmp_path, monkeypatch, {})
+    loaded = _standing_in_for_the_audio(monkeypatch)
+    lines = []
+    travel = mr.knob_travel(report=lines.append)
+    assert loaded == _expected_paths(root)
+    assert list(travel) == ["accent A", "accent B", "both accents"]
+    whole = {"n": 36, "grid_min": 1.0, "grid_max": 506.0, "grid_span": 505.0,
+             "decay_axis_span": 500.0, "tone_axis_span": 5.0}
+    accented = {**whole, "grid_min": 1001.0, "grid_max": 1506.0}
+    both = {k: v for k, v in whole.items() if k != "n"}
+    both.update(grid_max=1506.0, grid_span=1505.0)
+    plan = mr.metrics()
+    assert set(travel["accent A"]) == set(plan)
+    for metric, (units, *_rest) in plan.items():
+        assert travel["accent A"][metric] == {"units": units, **whole}
+        assert travel["accent B"][metric] == {"units": units, **accented}
+        assert travel["both accents"][metric] == {"units": units, **both}
+    assert any("1506.000" in ln for ln in lines), lines
+
+
+def test_an_estimator_that_cannot_score_one_take_is_not_an_inventory_refusal(
+        tmp_path, monkeypatch):
+    """Every setting present, and the estimator declines one metric on accent
+    B's `Decay F 06`, the stand-in's largest setting. Still MEASURED, as
+    before: that metric reads 35 takes and its maximum falls to the next
+    setting; every other metric keeps all 36."""
+    _pointed_at(tmp_path, monkeypatch, {})
+    _standing_in_for_the_audio(monkeypatch, decline={("decay", BD_F06.format("B"))})
+    travel = mr.knob_travel(report=lambda *a: None)
+    assert travel["accent B"]["decay"]["n"] == 35
+    assert travel["accent B"]["decay"]["grid_max"] == 1505.0
+    assert travel["both accents"]["decay"]["grid_max"] == 1505.0
+    assert travel["both accents"]["decay"]["grid_span"] == 1504.0
+    assert travel["both accents"]["attack"]["grid_max"] == 1506.0
+    assert travel["accent B"]["attack"]["n"] == 36
+
+
+def test_no_later_check_is_needed_to_keep_a_partial_grid_out_of_the_json(
+        tmp_path, monkeypatch, capsys):
+    """`cross_session` counts accent A alone, so a hole in B is not its
+    refusal to make. Everything after `knob_travel` is stood in for by
+    recorders answering as if it had succeeded, so this holds only if the
+    refusal is `knob_travel`'s own: nothing after it runs, no JSON is
+    written, and the previous result is left as it was."""
+    _pointed_at(tmp_path, monkeypatch, {"B": BD_F06.format("B")})
+    loaded = _standing_in_for_the_audio(monkeypatch)
+    reached = []
+
+    def later(name, answer):
+        def stand_in(*a, **k):
+            reached.append(name)
+            return answer
+        return stand_in
+
+    monkeypatch.setattr(mr, "cross_session", later("cross_session", {"metrics": {}}))
+    monkeypatch.setattr(mr, "f0_knob_attribution", later("f0_knob_attribution", {}))
+    monkeypatch.setattr(mr, "self_test", later("self_test", (True, {"editing_noise": {}})))
+    monkeypatch.setattr(mr, "verdicts", later("verdicts", {}))
+    out = tmp_path / "result.json"
+    previous = '{"knob_travel": "the previous run"}'
+    out.write_text(previous, encoding="utf-8")
+    assert mr.main(["--measure", "--json", str(out)]) == mr.REFUSED
+    assert "Decay F 06" in capsys.readouterr().out
+    assert reached == [] and loaded == []
+    assert out.read_text(encoding="utf-8") == previous
