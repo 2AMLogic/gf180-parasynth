@@ -46,13 +46,30 @@ def pack_record(archive: str) -> dict:
     raise Refused(f"{archive!r} is not an archive in refaudio/catalog.json")
 
 
+def inventory_path_mode(path: pathlib.Path) -> int:
+    """Stat an inventory path. Only a missing path counts as absent (mode 0)."""
+    try:
+        return path.stat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return 0
+
+
 def indexed_sizes(archive: str) -> dict[str, int] | None:
     """member path -> bytes, or None when this pack has no committed index."""
     tsv = REFAUDIO / "index" / (archive[:-4] + ".tsv")
-    if not tsv.exists():
+    try:
+        fh = tsv.open(encoding="utf-8", newline="")
+    except (FileNotFoundError, NotADirectoryError):
         return None
-    with tsv.open(encoding="utf-8", newline="") as fh:
-        return {r["path"]: int(r["bytes"]) for r in csv.DictReader(fh, delimiter="\t")}
+    with fh:
+        rows = csv.DictReader(fh, delimiter="\t")
+        sizes = {}
+        for row in rows:
+            for field in ("path", "bytes"):
+                if not row.get(field):
+                    raise ValueError(f"line {rows.line_num}: missing {field}")
+            sizes[row["path"]] = int(row["bytes"])
+        return sizes
 
 
 def sha256_of(path: pathlib.Path) -> str:

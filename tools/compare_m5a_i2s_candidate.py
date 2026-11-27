@@ -23,6 +23,20 @@ SOURCES = ("tools/compare_m5a_i2s_candidate.py",
            "tools/delta_report.py")
 
 
+class _NegativeUnderflow(float):
+    """A strictly negative JSON number that rounded to -0.0."""
+
+
+def _parse_score_float(token: str) -> float:
+    value = float(token)
+    if value == 0.0 and token.startswith("-"):
+        # Exponent digits do not distinguish an exact zero from underflow.
+        significand = token.lower().partition("e")[0]
+        if any(digit in "123456789" for digit in significand):
+            return _NegativeUnderflow(value)
+    return value
+
+
 def _row(record: dict, label: str) -> dict:
     if record.get("engine") != "integrated-rtl" or record.get("case_id") != "M5A":
         raise m5a.Refused(f"{label} must be an integrated-rtl M5A record")
@@ -88,9 +102,19 @@ def _event_errors(event: dict, label: str) -> dict[str, dict[str, float]]:
     """Extract independently thresholdable values for one note/wave event."""
     identity = f"{label}:{event.get('wave')}/{event.get('midi')}"
     try:
+        recorded_excess = event["foldback_db"]["excess_over_reference_db"]
+        if isinstance(recorded_excess, bool) or not isinstance(recorded_excess, (int, float)):
+            raise m5a.Refused(f"{identity} foldback excess must be a JSON number")
+        excess = float(recorded_excess)
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise m5a.Refused(f"{identity} lacks a numeric foldback excess") from exc
+    if isinstance(recorded_excess, _NegativeUnderflow) or not 0 <= excess < math.inf:
+        raise m5a.Refused(f"{identity} foldback excess must be finite and nonnegative")
+
+    try:
         errors = {
             "Pitch": abs(float(event["pitch_cents_from_midi"]["model_minus_reference"])),
-            "Foldback energy": max(0.0, float(event["foldback_db"]["excess_over_reference_db"])),
+            "Foldback energy": excess,
             "Envelope attack": abs(float(event["envelope_ms"]["attack_model"]
                                           - event["envelope_ms"]["attack_reference"])),
             "Envelope release": abs(float(event["envelope_ms"]["release_model"]
@@ -195,8 +219,8 @@ def compare_records(baseline: dict, candidate: dict) -> dict:
 
 def compare_files(baseline_path: pathlib.Path, candidate_path: pathlib.Path) -> dict:
     try:
-        baseline = json.loads(baseline_path.read_text())
-        candidate = json.loads(candidate_path.read_text())
+        baseline = json.loads(baseline_path.read_text(), parse_float=_parse_score_float)
+        candidate = json.loads(candidate_path.read_text(), parse_float=_parse_score_float)
     except (OSError, json.JSONDecodeError) as exc:
         raise m5a.Refused(f"cannot load M5A score record: {exc}") from exc
     report = compare_records(baseline, candidate)

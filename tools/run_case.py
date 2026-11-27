@@ -3479,7 +3479,8 @@ def result_destination(dest: pathlib.Path, res: dict, *, prepare: bool = True) -
     So an anchor is kept and the model result is written beside it under
     `results/model-twin/`, with the swap announced. Neither is discarded, and
     `tools/compare_ensemble_candidate.py` is the tool that compares them.
-    Pass `prepare=False` to look up the path before writing a sibling WAV."""
+    Pass `prepare=False` to look up the path before placing an artefact beside
+    the record: a rendered WAV, or this runner's model filter curve."""
     if res.get("engine") == "integrated-rtl" or not dest.is_file():
         return dest
     try:
@@ -3520,22 +3521,25 @@ def stated_path(path: pathlib.Path) -> str:
 
 
 def artefact_directory(results_dir: pathlib.Path, *,
-                       model_wav_case: str | None = None) -> pathlib.Path:
+                       model_record_case: str | None = None) -> pathlib.Path:
     """Choose where to write a filter response curve or a rendered WAV.
 
     A run that lands on the board keeps the established directory under
     `build/scorecard`, because that is the path the published records name
-    (`provenance.artefacts`). Off the board, a drum or ensemble WAV follows
-    its model record into `model-twin/` when an RTL anchor occupies the
-    requested JSON path. Filter curves use the requested results directory.
+    (`provenance.artefacts`). Off the board, a drum or ensemble WAV and this
+    runner's model filter curve follow their model record into `model-twin/`
+    when an RTL anchor occupies the requested JSON path; `model_record_case`
+    names the case whose record the artefact is written beside. An artefact
+    whose record another CLI writes straight into the requested directory --
+    the RTL scorer's curve -- states no case, and stays there.
 
     Both CLIs (`main` here and `tools/score_f1_rtl.py` for the RTL curve)
     refuse an injected run whose requested directory is `AUDIO_OUT`, where
     the run could overwrite a board artefact."""
     if results_dir.resolve() == RESULTS.resolve():
         return AUDIO_OUT
-    if model_wav_case is not None:
-        record = results_dir / f"{model_wav_case}.json"
+    if model_record_case is not None:
+        record = results_dir / f"{model_record_case}.json"
         return result_destination(record, {"engine": ENGINE}, prepare=False).parent
     return results_dir
 
@@ -3549,8 +3553,19 @@ def response_destination(results_dir: pathlib.Path, case_id: str,
     Until #1412 the writer took a file-name SUFFIX and chose the directory
     itself, so every run of an engine wrote one shared file: an injected
     control given a `--results` of its own still replaced the clean board
-    curve, and the control's record named the clean run's curve as its own."""
-    return artefact_directory(results_dir) / f"{case_id}-ours-response{tag}.json"
+    curve, and the control's record named the clean run's curve as its own.
+
+    Off the board this runner's model curve follows its record (#1450): when
+    an RTL anchor in the requested directory sends the record to
+    `model-twin/`, the curve is written there too. Until then the curve alone
+    stayed in the requested directory, so copying `model-twin/` carried the F1
+    score without the response it was read from. The RTL scorer's curve
+    (a `tag`, `tools/score_f1_rtl.py`) does not follow: that CLI writes its
+    record straight into the requested directory, and its curve belongs
+    beside it."""
+    model_record = None if tag else case_id
+    return artefact_directory(results_dir, model_record_case=model_record) \
+        / f"{case_id}-ours-response{tag}.json"
 
 
 def wav_destination(results_dir: pathlib.Path | None, case_id: str,
@@ -3568,7 +3583,7 @@ def wav_destination(results_dir: pathlib.Path | None, case_id: str,
     direct caller, `tools/clap_d12a_probe.py`, which takes the clap's numbers
     alone and writes no record. It gets the established shared path, as
     `run_filter_case` gives its curve."""
-    directory = artefact_directory(results_dir or RESULTS, model_wav_case=case_id)
+    directory = artefact_directory(results_dir or RESULTS, model_record_case=case_id)
     return directory / f"{case_id}{suffix}"
 
 
@@ -4016,7 +4031,7 @@ def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
         if kind == "ensemble":
             return run_ensemble_case(case, keep_audio, results_dir=record_dir)
         if kind == "filter":
-            dest = response_destination(record_dir, cid) if record_dir else None
+            dest = response_destination(record_dir, cid) if keep_audio and record_dir else None
             return run_filter_case(case, inject, keep_audio, response_dest=dest)
         if kind == "mono":
             control_audio = (ROOT / f"build/scorecard/{cid}-model-control-{inject}.wav"
