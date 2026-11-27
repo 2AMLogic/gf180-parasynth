@@ -102,17 +102,24 @@ def trajectory(x: np.ndarray, sr: int, n_win: int = N_WIN, edges=None):
 def decay_rate_db_per_100ms(row: np.ndarray, ms: np.ndarray):
     """Slope of one band's dB trajectory over the windows where it is alive.
 
-    REFUSES -- returns None -- when fewer than MIN_LIVE_WINDOWS windows sit
-    within LIVE_DB of the band's own peak. A slope fitted through the floor
-    is the floor's slope; `docs/verification-rules.md` exists about exactly
-    this, and PR #132's bass drum was passing on one."""
+    REFUSES -- returns None -- when fewer than MIN_LIVE_WINDOWS windows sit at
+    or after the band's peak, within LIVE_DB of it, AND strictly above
+    FLOOR_DB. A slope fitted through the floor is the floor's slope;
+    `docs/verification-rules.md` exists about exactly this, and PR #132's
+    bass drum was passing on one. The clamp term matters as soon as the peak
+    is within LIVE_DB of the clamp: a clamped cell equals FLOOR_DB, so the
+    range test alone admits every stopped window (#1565).
+
+    The clamp term is exact for ONE recording. `compare()` averages several
+    in dB before fitting, and the average of a sounding cell and a clamped
+    one is above the clamp while being half floor -- nothing here can see
+    that; `test_an_averaged_cell_can_still_carry_the_floor` pins how it
+    reads."""
     pk = float(row.max())
     if pk <= FLOOR_DB + 3.0:
         return None                 # the band is pinned to the floor: no evidence
-    live = row >= pk - LIVE_DB
-    if int(live.sum()) < MIN_LIVE_WINDOWS:
-        return None
-    i = np.where(live)[0]
+    ok = (row >= pk - LIVE_DB) & (row > FLOOR_DB)
+    i = np.where(ok)[0]
     i = i[i >= int(np.argmax(row))]
     if len(i) < MIN_LIVE_WINDOWS:
         return None
@@ -396,6 +403,87 @@ def test_a_decay_rate_is_refused_when_the_band_is_not_alive():
     k = int(np.argmin(np.abs(cent - 9000.0)))
     assert M[k].max() <= FLOOR_DB + 1e-6
     assert decay_rate_db_per_100ms(M[k], ms) is None
+
+
+HALVING_DB_PER_100MS = 20 * np.log10(0.5) * 100 / 30     # -20.07: amplitude halves every window
+
+
+def _partial_over_a_body(per_window):
+    """A continuous 400 Hz body under a 3.2 kHz partial whose amplitude in
+    window w is per_window[w] times the body's. 1440 samples at 48 kHz is
+    30 ms and a whole number of cycles of both tones, so no window edge
+    cuts a cycle and neither tone leaks into the other's band. Returns the
+    partial's band and the window centres."""
+    sr = 48_000
+    phase = 2 * np.pi * np.arange(1440) / sr
+    body, partial = np.sin(400 * phase), np.sin(3200 * phase)
+    clip = np.concatenate([body + float(a) * partial for a in per_window])
+    M, _, ms = trajectory(clip, sr, edges=[0, 2000, sr / 2 + 1])
+    return M[1], ms
+
+
+def _halving_partial(amplitude, sounding):
+    return [amplitude * 0.5 ** w if w < sounding else 0.0 for w in range(N_WIN)]
+
+
+def test_a_decay_fit_excludes_windows_clamped_to_the_floor():
+    """#1565: the live mask was `row >= peak - LIVE_DB`, and once the peak
+    sits within LIVE_DB of the -75 dB clamp every CLAMPED window satisfies
+    it too. The partial halves every 30 ms and then stops, so the answer is
+    HALVING_DB_PER_100MS by construction. At 0.04 of the body its peak
+    clears the clamp by more than LIVE_DB and the fit was always right; at
+    0.01 the peak is 26 dB above the clamp, the stopped windows entered the
+    fit, and the band read -12.83 dB per 100 ms -- too slow, after it had
+    stopped."""
+    for amplitude in (0.04, 0.01):
+        band, ms = _partial_over_a_body(_halving_partial(amplitude, 3))
+        assert np.all(band[:3] > FLOOR_DB), (amplitude, band)
+        assert np.all(band[3:] == FLOOR_DB), (amplitude, band)
+        slope = decay_rate_db_per_100ms(band, ms)
+        assert slope is not None, (amplitude, band)
+        assert abs(slope - HALVING_DB_PER_100MS) < 0.01, (amplitude, slope, HALVING_DB_PER_100MS)
+
+
+def test_a_decay_fit_refuses_two_sounding_windows_near_the_floor():
+    """#1565, the refusal half: two sounding windows are fewer than
+    MIN_LIVE_WINDOWS, so the answer is None. On main the clamped windows
+    counted as live and the fit ran anyway, at -11.17 dB per 100 ms."""
+    band, ms = _partial_over_a_body(_halving_partial(0.01, 2))
+    assert np.all(band[:2] > FLOOR_DB) and np.all(band[2:] == FLOOR_DB), band
+    assert decay_rate_db_per_100ms(band, ms) is None, band
+
+
+def test_the_post_peak_minimum_survives_pre_peak_windows():
+    """Selecting the eligible windows once must not let windows from BEFORE
+    the peak count toward MIN_LIVE_WINDOWS: the fit is a decay, and here
+    three windows qualify by rising 6 dB apiece up to a peak at window 3,
+    with only two after it. Counting all five fits the fall from the peak
+    through two points; the answer must stay a refusal."""
+    band, ms = _partial_over_a_body(
+        [0.04 * a for a in (0.125, 0.25, 0.5, 1.0, 0.5)] + [0.0] * (N_WIN - 5))
+    assert int(np.argmax(band)) == 3, band
+    assert np.all(band[:5] > FLOOR_DB) and np.all(band[5:] == FLOOR_DB), band
+    assert int((band >= band.max() - LIVE_DB).sum()) >= MIN_LIVE_WINDOWS, band
+    assert decay_rate_db_per_100ms(band, ms) is None, band
+
+
+def test_an_averaged_cell_can_still_carry_the_floor():
+    """The clamp guard's stated blind spot (#1565), pinned so that it stays
+    bounded and visible rather than rediscovered. `compare()` averages
+    several recordings in dB before fitting; the average of a sounding cell
+    and a clamped one is above the clamp while being half floor, so every
+    averaged cell here passes the guard and the fit reads HALF the decay.
+    The single-recording controls above establish the exact-floor case
+    only. When the averaging path is fixed this must become the refusal,
+    not be deleted."""
+    one, ms = _partial_over_a_body(_halving_partial(0.01, 3))
+    silent, _ = _partial_over_a_body([0.0] * N_WIN)
+    assert abs(decay_rate_db_per_100ms(one, ms) - HALVING_DB_PER_100MS) < 0.01
+    assert decay_rate_db_per_100ms(silent, ms) is None
+    averaged = (one + silent) / 2
+    slope = decay_rate_db_per_100ms(averaged, ms)
+    assert slope is not None, averaged
+    assert abs(slope - HALVING_DB_PER_100MS / 2) < 0.01, (slope, HALVING_DB_PER_100MS / 2)
 
 
 def test_the_named_band_and_window_are_where_the_difference_is():
