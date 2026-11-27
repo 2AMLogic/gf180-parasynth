@@ -28,12 +28,26 @@ mutants red`, exit 0, with no test executed -- and a guard with no input that
 defeats it is rule 8's failure.  It stays fast (both cases 0.8 s measured)
 because the refusal comes before the 12 mutant runs; the scratch copytree is
 the bulk of what remains.
+
+Issue #1463 adds a second exception.  The script decided each verdict from
+pytest's exit status alone, so a focused run that exited 1 for ANY reason --
+an unrelated test, another assertion in the right test, a setup error, a run
+that left no report -- was counted RED (#1400's shape, found in #1401's class
+search).  Two CLI tests stage a tree the script takes for the
+repository and give each of those pathologies its own mutant, so one run
+(~4 s) holds all of them beside the summary that must rank them: every
+red refused exits 2; a clean survivor is printed SURVIVED and exits 1 over
+any refusal.  They execute the STAGED script -- never this checkout's, whose
+ROOT is the real tree and would run the real suite instead of the fixture.
+A third runs the genuine suite with a diagnostic-only failure injected into
+the negative-spread case. Only the invocation with readings can earn its RED.
 """
 from __future__ import annotations
 
 import ast
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -114,3 +128,256 @@ def test_script_refuses_when_the_baseline_cannot_be_trusted(stub_exit):
         f"the refusal must come before any verdict, got:\n{r.stdout}")
     assert "mutants red" not in r.stdout, (
         f"no mutant verdict may be printed when nothing ran:\n{r.stdout}")
+
+
+# ---- issue #1463: what a red may be credited to, through the CLI ------------
+#
+# `red = r.returncode == 1` credited any focused exit 1.  The fixtures below
+# stage a tree the script takes for the repository -- itself, the three sources
+# it mutates with a pristine `.clean` copy beside each, the shared verdict, and
+# a suite at TEST with one test per `-k` selection -- and give each pathology
+# its own mutant, so one run holds all of them and the summary is checked with
+# them present.  The default test below is red under its mutants at an
+# assertion no mutant records; a pathology replaces it for one selection.
+
+#: The fixture suite's preamble: it can tell a mutant when it sees one.
+READS_SOURCES = (
+    "import pathlib\n"
+    "import pytest\n"
+    "HERE = pathlib.Path('tools')\n"
+    "SOURCES = ('bd_pitch_predeclaration.py', 'bd_glide_phase_sweep.py', 'finite_number.py')\n"
+    "def _mutated():\n"
+    "    return [s for s in SOURCES\n"
+    "            if (HERE / s).read_bytes() != (HERE / s).with_suffix('.clean').read_bytes()]\n"
+    "\n\n")
+
+_UNATTRIBUTED = {k: f"def test_{k}():\n"
+                    "    assert not _mutated(), 'a different assertion in the right test'\n"
+                 for k in m.SELECTIONS}
+
+#: The recorded statement, passing; a different assertion in the same test
+#: goes red under the mutant.
+_WRONG_ASSERTION = '''def test_satisfiable_at_equality():
+    at = {"satisfiable": True}
+    assert at["satisfiable"] is True, "pass is improvement >= minimum: equality satisfies it"
+    assert not _mutated(), "a different assertion in the recorded test"
+'''
+
+#: Red under the mutant, in a test no mutant records.
+_UNRELATED = '''def test_derivation_unrelated_to_every_recorded_name():
+    assert not _mutated(), "an unrelated test went red"
+'''
+
+#: Green whatever is injected, except that its setup breaks under a mutant.
+_SETUP_ERROR = '''@pytest.fixture
+def apparatus():
+    if _mutated():
+        raise RuntimeError("the apparatus broke under injection")
+
+def test_lost_tone_holdout_refuses(apparatus):
+    assert True
+'''
+
+#: Green whatever is injected: the clean survivor.
+_SURVIVOR = '''def test_control_answering_knob0_reading_is_excluded():
+    got, rd, D00 = {"measured": []}, {}, ()
+    assert sorted(got["measured"]) == sorted(set(rd) - set(D00)), got["measured"]
+'''
+
+#: Prepended to the staged reporter: under the one mutant that edits the sweep
+#: file the process dies without writing its report.
+_NO_REPORT = (
+    "import pathlib\n"
+    "import sys\n"
+    "if (pathlib.Path('tools/bd_glide_phase_sweep.py').read_bytes()\n"
+    "        != pathlib.Path('tools/bd_glide_phase_sweep.clean').read_bytes()):\n"
+    "    sys.exit(1)\n")
+
+
+def _stage(tmp, no_report=False, **pathologies):
+    assert set(pathologies) <= set(m.SELECTIONS), (
+        f"no mutant is selected by {sorted(set(pathologies) - set(m.SELECTIONS))}")
+    suite = READS_SOURCES + "\n\n".join({**_UNATTRIBUTED, **pathologies}[k] for k in m.SELECTIONS)
+    (tmp / m.TEST).parent.mkdir(parents=True)
+    (tmp / m.TEST).write_text(suite)
+    for rel in (pathlib.Path("tools", SCRIPT.name), *map(pathlib.Path, m.FILES),
+                pathlib.Path("tools/probes/holdout_injected_controls.py"),
+                pathlib.Path("tools/probes/pytest_failure_sites.py")):
+        shutil.copy(SCRIPT if rel.name == SCRIPT.name else ROOT / rel, _mkdir(tmp, rel))
+        if no_report and rel.name == "pytest_failure_sites.py":
+            staged = tmp / rel
+            head, sep, tail = staged.read_text().partition("from __future__ import annotations\n")
+            staged.write_text(head + sep + _NO_REPORT + tail)
+    for rel in m.FILES:
+        shutil.copy(ROOT / rel, _mkdir(tmp, pathlib.Path(rel).with_suffix(".clean")))
+
+
+def _mkdir(tmp, rel):
+    (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+    return tmp / rel
+
+
+def _run(tree):
+    """Run the CLI from the tree containing the suite we want to exercise."""
+    r = subprocess.run([sys.executable, str(tree / "tools" / SCRIPT.name)],
+                       cwd=tree, capture_output=True, text=True)
+    return r.returncode, r.stdout + r.stderr
+
+
+def _verdict(out, name):
+    """The text of `name`'s one line after the name: the verdict and reason."""
+    hits = [ln for ln in out.splitlines() if ln.startswith(name)]
+    assert len(hits) == 1, out
+    return hits[0][len(name):].strip()
+
+
+def _staged_tree_untouched(tmp, before):
+    assert all((tmp / rel).read_bytes() == src for rel, src in before.items())
+
+
+def test_cli_refuses_every_red_it_cannot_attribute(tmp_path):
+    """The issue's reproduction through the CLI: on `origin/main` a fixture
+    whose every test compared the sources with their pristine copies was
+    credited `all 12 mutants red`, exit 0, having exercised no guard.  Each
+    pathology gets its own mutant here -- a different assertion in the
+    recorded test, a red outside the recorded names, a setup error, and a run
+    that left no report -- and none may earn credit on its own."""
+    _stage(tmp_path, no_report=True, equality=_WRONG_ASSERTION, derivation=_UNRELATED,
+           tone_holdout=_SETUP_ERROR)
+    before = {rel: (tmp_path / rel).read_bytes() for rel in m.FILES}
+    code, out = _run(tmp_path)
+    assert code == 2, out
+    for name in NAMES:
+        assert _verdict(out, name).startswith("REFUSED"), out
+    assert "SURVIVED" not in out and "mutants red" not in out
+    line = _verdict(out, "strict-at-equality")
+    assert "no intended assertion failed" in line and "test_satisfiable_at_equality" in line, out
+    line = _verdict(out, "min-count-derivation-unchecked")
+    assert "no intended assertion failed" in line, out
+    assert "test_derivation_unrelated_to_every_recorded_name" in line, out
+    assert "test_control_min_measured_lowered_below_its_derivation_is_caught" in line, out
+    assert "no call failure was recorded" in _verdict(out, "tone-holdout-removed"), out
+    assert "setup:" in out
+    assert "without a failure report" in _verdict(out, "coarse-5hz-pitch-grid"), out
+    _staged_tree_untouched(tmp_path, before)
+
+
+@pytest.mark.parametrize("addopts", ["", "-q"], ids=["default", "quiet"])
+def test_cli_reports_a_clean_survivor_apart_from_refusals(tmp_path, monkeypatch, addopts):
+    """The distinct case: a test that executes, completes and stays green
+    under the mutant is a survivor, printed as such and exiting 1 -- also
+    when other mutants refused, because a survivor is a finding about the
+    controls and a refusal is a finding about the apparatus."""
+    monkeypatch.setenv("PYTEST_ADDOPTS", addopts)
+    _stage(tmp_path, knob0=_SURVIVOR)
+    before = {rel: (tmp_path / rel).read_bytes() for rel in m.FILES}
+    code, out = _run(tmp_path)
+    assert code == 1, out
+    baselines = [line.split() for line in out.splitlines() if line.startswith("baseline -k ")]
+    assert [(fields[2], fields[3]) for fields in baselines] == [(k, "1") for k in m.SELECTIONS]
+    assert _verdict(out, "unqualified-knob-admitted").startswith("SURVIVED"), out
+    for name in NAMES:
+        if name != "unqualified-knob-admitted":
+            assert _verdict(out, name).startswith("REFUSED"), out
+    assert "mutants red" not in out
+    _staged_tree_untouched(tmp_path, before)
+
+
+def test_cli_names_the_skipped_baseline_parameter_and_counts_only_passes(tmp_path):
+    # Both cases are collected. Only the second can catch the boolean guard.
+    suite = """@pytest.mark.parametrize("case", [
+    pytest.param("first", id="True-100", marks=pytest.mark.skip(reason="unavailable")),
+    pytest.param("second", id="10-True"),
+])
+def test_cli_refuses_invalid_baseline_numbers(case):
+    readings_code, readings_out = (0, "") if "finite_number.py" in _mutated() else (2, "REFUSED")
+    assert readings_code == 2 and "REFUSED" in readings_out, readings_out
+"""
+    _stage(tmp_path, invalid_baseline_numbers=suite)
+    code, out = _run(tmp_path)
+    assert _verdict(out, "bool-accepted-as-number").startswith("RED -- 1 test(s) caught it"), out
+    assert code == 1, out  # the other two mutants sharing this selection survive
+    prefix = "baseline -k invalid_baseline_numbers"
+    line, = (line for line in out.splitlines() if line.startswith(prefix))
+    assert line.removeprefix(prefix).split()[:3] == ["1", "test(s)", "green"], out
+    assert "skipped: test_cli_refuses_invalid_baseline_numbers[True-100]" in out, out
+
+
+def test_cli_refuses_negative_spread_when_only_the_diagnostic_fails(tmp_path, monkeypatch):
+    """Both invocations refuse. Only the diagnostic loses its refusal message."""
+    guard = m.MUTANTS["negative-spread"][1]
+    (tmp_path / "diagnostic_only_failure.py").write_text(f'''
+from pathlib import Path
+import pytest
+
+@pytest.fixture(autouse=True)
+def diagnostic_only_failure(request, monkeypatch):
+    if request.node.name != "test_cli_refuses_invalid_baseline_numbers[-5-100]":
+        return
+    if {guard!r} in Path(request.module.bp.__file__).read_text():
+        return
+
+    def refuse(tmp_path, baseline, readings, capsys):
+        return 2, "diagnostic output lost" if readings is None else "REFUSED"
+
+    monkeypatch.setattr(request.module, "_cli", refuse)
+''')
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path), prepend=os.pathsep)
+    monkeypatch.setenv("PYTEST_PLUGINS", "diagnostic_only_failure", prepend=",")
+    code, out = _run(ROOT)
+    assert code == 2, out
+    line = _verdict(out, "negative-spread")
+    assert line.startswith("REFUSED -- no intended assertion failed"), out
+    assert "diagnostic output lost" in line, out
+    for name in NAMES:
+        if name != "negative-spread":
+            assert _verdict(out, name).startswith("RED --"), out
+    assert "mutants red" not in out, out
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_expected_sites_identify_one_statement_in_the_real_test(name):
+    """The fast tier for EXPECTED: every recorded test function exists in TEST
+    and its recorded statement matches exactly one line in it, by the same rule
+    the reporter matches statements with.  Only `make controls` proves the
+    statement is the one that fails; this is the staleness check."""
+    src = (ROOT / m.TEST).read_text()
+    functions = {n.name: n for n in ast.parse(src).body if isinstance(n, ast.FunctionDef)}
+    lines = src.splitlines()
+    assert m.EXPECTED.get(name), f"mutant {name} records no site, so its red cannot be credited"
+    for test, site in m.EXPECTED[name].items():
+        fn = functions[test.partition("[")[0]]
+        body = [ln.strip() for ln in lines[fn.lineno - 1:fn.end_lineno]]
+        matches = [ln for ln in body if ln == site.statement or ln.startswith(site.statement + ",")]
+        assert len(matches) == 1, (
+            f"{name}: {test} has {len(matches)} matches for {site.statement!r}; expected one")
+
+
+_OUTCOME = {"red": "fired", "survived": "no-fire", "refused": "refused"}
+
+
+@pytest.mark.parametrize("outcomes, code, all_red", [
+    (["red"] * 12, 0, True),
+    (["red"] * 11 + ["survived"], 1, False),
+    (["red"] * 11 + ["refused"], 2, False),
+    (["survived"] + ["refused"] * 11, 1, False),
+    (["survived", "refused"] + ["red"] * 10, 1, False),
+    (["refused"] * 12, 2, False),
+    (["survived"] * 12, 1, False),
+])
+def test_only_twelve_attributed_reds_print_the_all_red_summary(capsys, outcomes, code, all_red):
+    """The aggregate convention the sound and holdout probes settled on: 0
+    only when every mutant is red at a recorded assertion, 1 when any
+    survived (a mix included), otherwise 2 when any refused."""
+    results = {name: m.hic.Result(_OUTCOME[o], [next(iter(m.EXPECTED[name]))] if o == "red" else [],
+                                  "why")
+               for name, o in zip(NAMES, outcomes)}
+    assert m.report(results) == code
+    out = capsys.readouterr().out
+    assert ("all 12 mutants red" in out) is all_red, out
+    assert out.count(" RED -- ") == outcomes.count("red")
+    assert out.count(" SURVIVED -- ") == outcomes.count("survived")
+    assert out.count(" REFUSED -- ") == outcomes.count("refused")
+    # The evidence a reader checks: every credited test and its recorded site.
+    for name, o in zip(NAMES, outcomes):
+        assert (f"    {next(iter(m.EXPECTED[name]))}" in out) is (o == "red"), out

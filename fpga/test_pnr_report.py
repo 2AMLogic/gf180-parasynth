@@ -114,6 +114,20 @@ def test_resource_exhaustion_is_does_not_fit():
     assert v.state == pr.NOFIT and "no BELs remaining" in v.errors[0]
 
 
+@pytest.mark.parametrize("nextpnr,expected_exit,diagnostic", [
+    pytest.param({}, 2, "REFUSED: nextpnr exit status not recorded", id="missing-returncode"),
+    pytest.param({"returncode": 255}, 0, "DOES-NOT-FIT: nextpnr exited 255 with a diagnosed fit error",
+                 id="recorded-255"),
+])
+def test_headroom_report_fit_error_requires_recorded_returncode(tmp_path, nextpnr, expected_exit, diagnostic):
+    (tmp_path / "ecp5hr_pnr.log").write_text(FIT_LOG)
+    (tmp_path / "ecp5hr_pnr.status.json").write_text(json.dumps({"nextpnr": nextpnr, "after": []}))
+    result = subprocess.run([sys.executable, str(FPGA / "scripts/pnr_report.py"), "report", "ecp5hr",
+                             "--build", str(tmp_path)], capture_output=True, text=True, check=False)
+    assert result.returncode == expected_exit, result.stderr
+    assert diagnostic in result.stderr
+
+
 # ------------------------------------------------------------ injected bugs
 @pytest.mark.parametrize("name,log,marker", [
     ("empty", "", "empty"),

@@ -171,19 +171,36 @@ by label prefix and note together (`m1a/phrase0/` with 36, `m1a/osc1_open/`
 with 36 and `m1a/osc2_open/` with 48). Each prefix identifies one WAV that
 the M1A capture script wrote from a single render.
 [M1A capture script](https://github.com/2AMLogic/gf180-parasynth/blob/91123a05807213ad767f9d0fca80a2720b13feae/tools/measure_mono_m1a_reference.py#L144-L169)
+<!-- claim: grep='startswith\("m1a/phrase0/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
+<!-- claim: grep='startswith\("m1a/osc1_open/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
+<!-- claim: grep='startswith\("m1a/osc2_open/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
+
+With the frozen WAVs verified, both MIDI-36 pairs return `TOO_FEW_PERIODS`
+and the oscillator-2 MIDI-48 pair reports `STABLE` with a span of about
+0.01018 cents.
+<!-- claim: test=tools/test_measure_osc_drift_reference.py::test_m1a_pairs_keep_their_own_outcomes -->
+
+The selectors also receive each refused window's label and note. Flipping one
+bit in the oscillator-2 WAV makes all three windows report `CLIP_HASH`. The
+MIDI-48 pair still identifies `n0-midi48` and `n2-midi48` and returns
+`REFUSED` without a span. The intervening `n1-midi55` has a different note.
+<!-- claim: test=tools/test_measure_osc_drift_reference.py::test_altered_osc2_wav_refuses_each_window_and_the_pair[mismatch] -->
 
 The fourth pair, `m5a-midi84-saw-vs-pulse`, selects every report with the
-`m5a/` prefix and note 84. The M5A picker takes every window from the
-manifest's one WAV, `m5a-miniv3-raw.wav`. Its timeline has two note-84
-events, one in the saw segment and one in the pulse segment.
+`m5a/` prefix and note 84.
+<!-- claim: grep='r\["label"\]\.startswith\("m5a/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py note="the fourth pair's predicate reads the m5a/ label prefix and the note, so no M1A report can join it" -->
+
+The M5A picker takes every window from the manifest's one WAV,
+`m5a-miniv3-raw.wav`. Its timeline has two note-84 events, one in the saw
+segment and one in the pulse segment.
 
 The M5A capture script created a fresh Mini V3 instance for each take, then
 joined the saw take, a gap of silence and the pulse take into that WAV.
 The driver assigns capture identity only when the manifest names the reviewed
 producer commit and records the SHA-256 of that producer file. A missing or
-mismatched pin yields `CAPTURE_UNKNOWN`. With the pins verified, the M5A
-pair returns `INDEPENDENT_CAPTURES` and reports the pitch difference only
-as a comparison between takes (#1433).
+mismatched pin yields `CAPTURE_UNKNOWN`. With the producer pin and WAV digest
+verified, the M5A pair returns `INDEPENDENT_CAPTURES` and reports the pitch
+difference only as a comparison between takes (#1433).
 [Rig creation](https://github.com/2AMLogic/gf180-parasynth/blob/899e86d68cf37bacf79188bce142b42ea2d13564/tools/measure_mono_m5a_reference.py#L152-L167) ·
 [WAV assembly](https://github.com/2AMLogic/gf180-parasynth/blob/899e86d68cf37bacf79188bce142b42ea2d13564/tools/measure_mono_m5a_reference.py#L418-L449)
 
@@ -192,10 +209,6 @@ excludes it. Any other caller of `across_note_drift`, including one passing
 several `--wav` files to the module's own command, must still establish
 render continuity to compare observations of one running oscillator. The
 comparison leaves pitch between the observed windows unmeasured.
-<!-- claim: grep='startswith\("m1a/phrase0/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
-<!-- claim: grep='startswith\("m1a/osc1_open/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
-<!-- claim: grep='startswith\("m1a/osc2_open/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
-<!-- claim: grep='r\["label"\]\.startswith\("m5a/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py note="the fourth pair's predicate reads the m5a/ label prefix and the note, so no M1A report can join it" -->
 <!-- claim: test=tools/test_measure_osc_drift_reference.py::test_m5a_saw_and_pulse_takes_refuse_as_a_drift_measurement -->
 <!-- claim: grep='fn = man\["audio"\]\["file"\]' in=tools/measure_osc_drift_reference.py note="the M5A picker reads one audio file for every window" -->
 <!-- claim: commit=014fdbc6 covers=docs/scorecard/mono-m5a-miniv3/manifest.json note="the two note-84 events above were read from this manifest at this commit; a later commit to it makes the claim STALE so the count is re-derived with _windows_m5a" -->

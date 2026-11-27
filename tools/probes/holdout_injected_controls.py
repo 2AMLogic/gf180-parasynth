@@ -73,7 +73,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import NamedTuple
+from typing import NamedTuple, Sequence
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
@@ -180,14 +180,23 @@ def _copy(parent: pathlib.Path) -> pathlib.Path:
     return work
 
 
-def run_suite(work: pathlib.Path, suite: str, *,
-              python: str = sys.executable) -> tuple[int, SuiteReport | None, str]:
-    """Run one pytest suite and record its outcomes, phase errors, and failure sites."""
+def run_suite(work: pathlib.Path, suite: str, targets: Sequence[str] = (), *,
+              python: str = sys.executable,
+              pytest_options: Sequence[str] = ()) -> tuple[int, SuiteReport | None, str]:
+    """Run one pytest suite and record its outcomes, phase errors, and failure sites.
+
+    `suite` is the identity every recorded node ID is labelled against. With
+    `targets` empty the whole suite is collected; otherwise exactly those node
+    IDs are, so a focused run deselects nothing (`_zero_exit_problem` refuses
+    any deselection) and `suite` still decides what counts as in-suite. A caller
+    can request collection with `pytest_options` and read the selected IDs from
+    the returned report."""
     runner = pathlib.Path(__file__).with_name("pytest_failure_sites.py")
     with tempfile.TemporaryDirectory() as tmp:
         report = pathlib.Path(tmp) / "report.json"
-        out = subprocess.run([python, str(runner), suite, str(report)], cwd=work,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        out = subprocess.run([python, str(runner), suite, str(report),
+                              *(targets or [suite]), *pytest_options],
+                             cwd=work, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         try:
             data = json.loads(report.read_text())
             failures = {name: Failure(*site) for name, site in data["failures"].items()}
@@ -290,9 +299,10 @@ def run(name: str, baseline: SuiteReport) -> Result:
         return verdict(rc, report, EXPECTED.get(name, {}), suite=SUITE, baseline=baseline)
 
 
-def run_baseline(work: pathlib.Path, suite: str, *, python: str = sys.executable) -> Baseline:
-    """Run the unmutated suite and require exit 0 and a clean, executed run."""
-    rc, report, stdout = run_suite(work, suite, python=python)
+def run_baseline(work: pathlib.Path, suite: str, targets: Sequence[str] = (), *,
+                 python: str = sys.executable) -> Baseline:
+    """Run the unmutated suite. Both probes require exit 0 and a clean, executed run."""
+    rc, report, stdout = run_suite(work, suite, targets, python=python)
     if report is None:
         what = f"pytest exited {rc} on the UNMUTATED tree without a failure report"
     elif report.failures:

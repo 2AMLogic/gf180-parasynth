@@ -30,10 +30,9 @@ green baseline, one a completed run on a CRLF target.
 
 Issue #1401 is the same defect one file over, in the FPGA record, which
 printed `KILLED` for fourteen collection errors. Its fixtures follow the sound
-ones. The current suite misses the missing-return-code mutant (#1474).
-Under #1401 its green gets EXPECTED SURVIVOR. A red under it is REFUSED
-because the record has no assertion that could attribute it. The
-FPGA record is imported as a module for its `M` and `EXPECTED`; before #1401
+ones. The headroom CLI test (#1474) supplies the assertion for the
+missing-return-code mutant. The FPGA record is imported as a module for
+its `M` and `EXPECTED`; before #1401
 that import ran the whole mutation loop against the live tree.
 """
 import functools
@@ -690,6 +689,7 @@ FPGA_UNRELATED = (_FPGA_READS
 #: assertion recorded for the Fmax mutant -- and at an assertion no other
 #: mutant has recorded.
 _FMAX = "new: render Fmax on unrouted reports"
+_MISSING_RC = "J-equivalent: disable rc is None"
 FPGA_ATTRIBUTABLE = (_FPGA_READS
                      + "def test_refused_report_does_not_label_an_fmax_as_post_route_result():\n"
                        "    text = 'suppressed' if SRC == PRISTINE else 'post-route RESULT'\n"
@@ -767,10 +767,42 @@ def _fpga_uncollectable_under(mutant, body):
 def _verdict_line(out, name):
     """The record's own verdict line for `name`, not a summary that lists it."""
     hits = [ln for ln in out.splitlines()
-            if ln.startswith(("KILLED", "SURVIVED", "EXPECTED SURVIVOR", "REFUSED"))
+            if ln.startswith(("KILLED", "SURVIVED", "REFUSED"))
             and name in ln]
     assert len(hits) == 1, out
     return hits[0]
+
+
+def _credited_ids(out, name):
+    """Test IDs credited under `name`'s own verdict header: the indented,
+    non-parenthesised lines up to the next unindented line (the next verdict
+    header or the summary). A search of the whole output lets a mutant that
+    shares IDs with another borrow its credits."""
+    _verdict_line(out, name)
+    lines = out.splitlines()
+    start = next(i for i, ln in enumerate(lines)
+                 if ln.startswith(("KILLED", "SURVIVED", "EXPECTED SURVIVOR", "REFUSED"))
+                 and name in ln)
+    ids = []
+    for ln in lines[start + 1:]:
+        if not ln.startswith(" "):
+            break
+        item = ln.strip()
+        if item and not item.startswith("("):
+            ids.append(item)
+    return ids
+
+
+def test_credited_ids_are_read_from_the_mutants_own_group():
+    """Control: the first group lost both IDs while the second keeps them."""
+    out = ("KILLED   A\n"
+           "KILLED   B\n"
+           "    t1\n"
+           "    t2[x-y]\n"
+           "    (note: diagnostic)\n"
+           "2 mutant(s) killed\n")
+    assert _credited_ids(out, "A") == []
+    assert _credited_ids(out, "B") == ["t1", "t2[x-y]"]
 
 
 def _survivors(out):
@@ -834,10 +866,6 @@ def test_fpga_mutant_failure_outside_the_recorded_names_refuses(tmp_path):
         assert _verdict_line(out, mutant).startswith("REFUSED"), out
     assert "test_unrelated_to_every_recorded_name" in out       # parsed, named
     for mutant, names in _fpga_record().EXPECTED.items():
-        if mutant == _fpga_record().EXPECTED_SURVIVOR:
-            # Nothing is recorded for it, so its red cannot be attributed.
-            assert "no expected assertions are recorded" in _verdict_line(out, mutant), out
-            continue
         for name in names:
             assert name in out, (mutant, name)                  # expected, named
     assert target.read_bytes() == before
@@ -900,9 +928,8 @@ def test_fpga_mutant_search_text_gone_refuses_before_anything_runs(tmp_path):
 
 def test_fpga_intended_assertion_gets_kill_credit_and_the_rest_refuse(tmp_path):
     """Attribution must not refuse everything. The one mutant with the failing
-    test recorded is KILLED and names it. For the other twelve the same red is
-    outside their record and is REFUSED, as is the expected survivor's red:
-    kills alongside refusals, nothing survived, so exit 2."""
+    test recorded is KILLED and names it. The other mutants refuse the same
+    red because it falls outside their records. The run exits 2."""
     script, target = stage_fpga(tmp_path, FPGA_ATTRIBUTABLE)
     before = target.read_bytes()
     result = run(script, tmp_path)
@@ -930,15 +957,15 @@ def test_fpga_survivor_outranks_a_refusal_exits_one(tmp_path):
     result = run(script, tmp_path)
     out = result.stdout + result.stderr
     assert result.returncode == 1, out
-    assert len(_survivors(out)) == len(_fpga_record().M) - 2, out
+    assert len(_survivors(out)) == len(_fpga_record().M) - 1, out
     assert _verdict_line(out, _FMAX).startswith("REFUSED"), out
-    assert "UNEXPECTED SURVIVORS (12)" in out and "1 refused" in out, out
+    assert "UNEXPECTED SURVIVORS (13)" in out and "1 refused" in out, out
     _no_fpga_kill_credit(out)
     assert target.read_bytes() == before
 
 
 def test_fpga_crlf_checkout_exercises_all_mutants_and_restores_bytes(tmp_path):
-    """Each mutant runs with CRLF, including the expected survivor."""
+    """Each mutant runs with CRLF, and the insensitive suite reports them all."""
     script, target = stage_fpga(tmp_path, r"""
 import hashlib
 from pathlib import Path
@@ -954,34 +981,31 @@ def test_distinct_crlf_source():
     result = run(script, tmp_path)
     out = result.stdout + result.stderr
     assert result.returncode == 1, out
-    assert len(_survivors(out)) == len(_fpga_record().M) - 1, out
-    assert _verdict_line(out, _fpga_record().EXPECTED_SURVIVOR).startswith("EXPECTED SURVIVOR"), out
-    assert _fpga_record().EXPECTED_SURVIVOR not in _line(out, "UNEXPECTED SURVIVORS")
+    assert len(_survivors(out)) == len(_fpga_record().M), out
+    assert _verdict_line(out, _MISSING_RC).startswith("SURVIVED"), out
+    assert _MISSING_RC in _line(out, "UNEXPECTED SURVIVORS")
     _no_fpga_kill_credit(out)
     assert target.read_bytes() == before
 
 
-def test_fpga_expected_survivor_unattributed_red_refuses(tmp_path):
-    """The other half of the expected-survivor policy: a red under it is not a kill,
-    because nothing is recorded that could attribute it. It is REFUSED, the
-    red test is named as having earned no credit, and the thirteen survivors
-    still outrank it."""
-    (old, _new), = _fpga_record().M[_fpga_record().EXPECTED_SURVIVOR]
+def test_fpga_missing_returncode_wrong_assertion_refuses(tmp_path):
+    """An unrelated assertion in the recorded CLI case earns no kill credit."""
+    (old, _new), = _fpga_record().M[_MISSING_RC]
     suite = (_FPGA_READS
-             + f"if {old!r} not in TEXT:\n"
-               "    def test_red_only_under_the_expected_survivor():\n"
-               "        assert 0\n"
-             + INSENSITIVE)
+             + "import pytest\n"
+               "@pytest.mark.parametrize('case', [0], ids=['missing-returncode'])\n"
+               "def test_headroom_report_fit_error_requires_recorded_returncode(case):\n"
+               f"    assert {old!r} in TEXT\n")
     script, target = stage_fpga(tmp_path, suite, crlf=True)
     before = target.read_bytes()
     result = run(script, tmp_path)
     out = result.stdout + result.stderr
     assert result.returncode == 1, out           # thirteen others survived; both named
-    line = _verdict_line(out, _fpga_record().EXPECTED_SURVIVOR)
+    line = _verdict_line(out, _MISSING_RC)
     assert line.startswith("REFUSED"), out
-    assert "no expected assertions are recorded" in line
-    assert "    (failed, no credit: test_red_only_under_the_expected_survivor)" \
-        in out.splitlines(), out
+    assert "no intended assertion failed" in line, out
+    case = "test_headroom_report_fit_error_requires_recorded_returncode[missing-returncode]"
+    assert f"    (failed, no credit: {case})" in out.splitlines(), out
     assert "UNEXPECTED SURVIVORS (13)" in out and "1 refused" in out, out
     _no_fpga_kill_credit(out)
     assert target.read_bytes() == before
@@ -995,7 +1019,6 @@ def test_every_fpga_mutant_has_recorded_names_that_the_real_suite_collects():
     collecting that suite rather than running it."""
     fpga = _fpga_record()
     assert set(fpga.EXPECTED) == set(fpga.M)
-    assert fpga.EXPECTED[fpga.EXPECTED_SURVIVOR] == {}
     collected = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider",
          fpga.SUITE], cwd=REPO, capture_output=True, text=True)
@@ -1004,8 +1027,6 @@ def test_every_fpga_mutant_has_recorded_names_that_the_real_suite_collects():
     assert ids, collected.stdout + collected.stderr
     lines = [ln.strip() for ln in (REPO / fpga.SUITE).read_text().splitlines()]
     for mutant, names in fpga.EXPECTED.items():
-        if mutant == fpga.EXPECTED_SURVIVOR:
-            continue
         assert names, mutant
         for name, site in names.items():
             assert name in ids, (mutant, name)
@@ -1026,9 +1047,8 @@ def stage_real_fpga(tmp_path):
 
 
 @pytest.mark.skipif(shutil.which("make") is None, reason="make not installed")
-def test_fpga_real_suite_kills_thirteen_and_reports_one_expected_survivor(tmp_path):
-    """The real suite kills thirteen mutants at recorded assertions and misses
-    the missing-return-code mutant. This combination exits 0."""
+def test_fpga_real_suite_kills_all_mutants_at_recorded_assertions(tmp_path):
+    """The real suite catches every mutant and restores the reporter."""
     fpga = _fpga_record()
     script, target = stage_real_fpga(tmp_path)
     before = target.read_bytes()
@@ -1038,11 +1058,10 @@ def test_fpga_real_suite_kills_thirteen_and_reports_one_expected_survivor(tmp_pa
     assert target.read_bytes() == before
     # By line, not by substring: a mutant is named "allow-no-fit accepts REFUSED".
     assert not _refusals(out) and not _survivors(out), out
-    assert f"{len(fpga.M) - 1} mutant(s) killed, 1 expected survivor" in out, out
+    assert f"{len(fpga.M)} mutant(s) killed." in out, out
     for mutant, names in fpga.EXPECTED.items():
-        if mutant == fpga.EXPECTED_SURVIVOR:
-            assert _verdict_line(out, mutant).startswith("EXPECTED SURVIVOR"), out
-            continue
         assert _verdict_line(out, mutant).startswith("KILLED"), out
-        for name in names:
-            assert f"    {name}" in out.splitlines(), (mutant, name)
+        credited = _credited_ids(out, mutant)
+        assert sorted(credited) == sorted(names), (
+            mutant, "missing", sorted(set(names) - set(credited)),
+            "unexpected", sorted(set(credited) - set(names)))

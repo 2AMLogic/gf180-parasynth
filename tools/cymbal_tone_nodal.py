@@ -382,7 +382,9 @@ def choose(band, cfg, *, anchor=ANCHOR) -> dict:
     if best is None:
         raise Refused(f"{band}: no enumerated realisation at all ({rejected} rejected)")
     got = best[1]
-    if got["worst_db"] > SHAPE_BOUND_DB:
+    # best[0][0] is the full-precision `worst > SHAPE_BOUND_DB` verdict; the
+    # recorded worst_db is rounded to 3 dp and would accept 3.0004 as 3.0.
+    if best[0][0]:
         raise Refused(f"{band}: the best realisation the bank can hold is "
                       f"{got['worst_db']:.2f} dB, outside the {SHAPE_BOUND_DB} dB bound")
     return got
@@ -401,10 +403,13 @@ def rev3_realisation(band, cfg) -> dict:
     errs = {c: shape_error_db(band, alpha_of(c, cfg), poles, dcz, cfg) for c in CODES}
     fig = {c: shape_error_db(band, alpha_of(c, cfg), poles, dcz, cfg,
                              target=fig9_target_db(band, tr.THIRDS, cfg)) for c in CODES}
+    worst_nodal = max(errs.values())
     return {"band": band, "poles": [round(p, 1) for p in poles], "dc_zeros": dcz,
-            "worst_nodal_db": round(max(errs.values()), 3),
+            "worst_nodal_db": round(worst_nodal, 3),
+            "worst_nodal_db_raw": worst_nodal,
             "worst_fig9_db": round(max(fig.values()), 3),
-            "per_tone_nodal_db": {c: round(errs[c], 3) for c in CODES}}
+            "per_tone_nodal_db": {c: round(errs[c], 3) for c in CODES},
+            "per_tone_nodal_db_raw": dict(errs)}
 
 
 # ---------------------------------------------------------------------------
@@ -495,7 +500,7 @@ def properties(cfg=None) -> dict:
 
     # 3. revision 3's low band is outside the bound at every TONE position.
     r3 = {b: rev3_realisation(b, cfg) for b in BANDS}
-    worst_low = min(r3["low"]["per_tone_nodal_db"].values())
+    worst_low = min(r3["low"]["per_tone_nodal_db_raw"].values())
     out["rev3-low-out-of-bound"] = {
         "value_db": round(worst_low, 3), "bound_db": SHAPE_BOUND_DB,
         "ok": worst_low > SHAPE_BOUND_DB,
@@ -662,7 +667,7 @@ def report(cfg=None) -> list[str]:
         r = rev3_realisation(b, cfg)
         out.append(f"  {b:6s} {str(r['poles']):22s} {r['dc_zeros']:5d} "
                    f"{r['worst_fig9_db']:12.2f} {r['worst_nodal_db']:10.2f}"
-                   + ("   <-- OUTSIDE BOUND" if r["worst_nodal_db"] > SHAPE_BOUND_DB else ""))
+                   + ("   <-- OUTSIDE BOUND" if r["worst_nodal_db_raw"] > SHAPE_BOUND_DB else ""))
     out.append("")
     try:
         ch = chosen(cfg)
@@ -707,7 +712,8 @@ def record(cfg=None) -> dict:
             "bounds": {"shape_db": SHAPE_BOUND_DB, "cross_db": CROSS_BOUND_DB,
                        "pole_hz": POLE_TOL_HZ, "track_db": TRACK_TOL_DB,
                        "span_db": SPAN_MIN_DB},
-            "rev3": {b: rev3_realisation(b, cfg) for b in BANDS},
+            "rev3": {b: {k: v for k, v in rev3_realisation(b, cfg).items()
+                         if not k.endswith("_raw")} for b in BANDS},
             "chosen": ch, "budget": bud,
             "tone_gain_db": tone_gain_db(cfg),
             "properties": properties(cfg), "check_ok": ok, "check": lines}

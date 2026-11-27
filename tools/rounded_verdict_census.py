@@ -61,8 +61,12 @@ compared against a threshold is counted as a field comparison.  It pairs only
 with a same-named rounded store in another module, so it usually inflates the
 `ordered-field-compares` total and adds no block.
 
-Scanned: Python under `tools/` and `model/`, recursively, with test modules
-(`test_*.py`, `*_test.py` -- the pytest.ini patterns) left out.
+The census walks `tools/` and `model/` recursively. Each symlinked subdirectory
+encountered beneath either scan root is skipped and counted in `dirs-skipped`.
+Within the directories it visits, it scans .py files except those whose
+basenames match `test_*.py` or `*_test.py`. A module such as
+`tools/probes/excitation_energy.py` is scanned even though pytest also
+collects it. An export of the two scan roots is sufficient.
 
 SEARCH BOUNDARY -- what a clean run does NOT say.  Each item below is asserted
 blind by `tools/test_rounded_verdict_census.py`, so widening the detector turns
@@ -84,16 +88,14 @@ that test red until this list is rewritten to match:
     outside `tools/` and `model/` (`fpga/`, `pnr/`, `rtl-sketch/`, `spec/`).
 
 PRECONDITIONS, ASSERTED AT THE POINT OF USE.  REFUSED (exit 2) WHEN UNMET.
-A census is a statement about a whole tree, so a partial one must not read as
-a clean one:
+A successful report covers the files in the scan scope defined above.
 
   * the root exists and is a directory;
-  * it holds BOTH `tools/` and `model/`.  A pair needs a producer and a
-    consumer, and half a tree cannot hold one;
-  * at least one non-test Python file was scanned.  An empty report looks
+  * it holds both scan roots, `tools/` and `model/`;
+  * at least one Python file in scope was scanned.  An empty report looks
     exactly like a clean one;
-  * every directory in scope can be listed and every scanned file parses.
-    A traversal or read error names the path and withholds the report.
+  * every directory visited can be listed and every file in scope can be
+    read and parsed. A failure names the path and withholds the report.
 
 An unexpected exception is an execution error (exit 1, traceback), never a
 refusal.
@@ -284,7 +286,8 @@ def _refuse_walk_error(exc: OSError) -> None:
 
 def census(root: pathlib.Path | str) -> dict:
     """Stores, ordered field comparisons and their cross-module name matches
-    under `root`.  REFUSES rather than returning a partial census."""
+    within the documented scan scope under `root`. Raises Refused if a scan
+    precondition fails."""
     root = pathlib.Path(root)
     try:
         if not root.exists():
@@ -299,8 +302,10 @@ def census(root: pathlib.Path | str) -> dict:
                       "partial: a pair needs a producer and a consumer, and half a tree "
                       "cannot hold one")
     files, test_files = [], 0
+    dirs_skipped = 0
     for d in SCAN_DIRS:
-        for directory, _, names in os.walk(root / d, onerror=_refuse_walk_error):
+        for directory, dirnames, names in os.walk(root / d, onerror=_refuse_walk_error):
+            dirs_skipped += sum(os.path.islink(os.path.join(directory, name)) for name in dirnames)
             for name in names:
                 if not name.endswith(".py"):
                     continue
@@ -318,7 +323,7 @@ def census(root: pathlib.Path | str) -> dict:
         rel, tree = _parse(path, root)
         stores.extend(_stores(tree, rel))
         compares.extend(_compares(tree, rel))
-    return {"root": str(root), "files": len(files), "test_files": test_files,
+    return {"root": str(root), "files": len(files), "test_files": test_files, "dirs_skipped": dirs_skipped,
             "stores": sorted(stores, key=_order), "compares": sorted(compares, key=_order),
             "candidates": _pairs(stores, compares)}
 
@@ -332,7 +337,7 @@ def report(result: dict) -> None:
     to whatever `sys.stdout` is at the call, never to a stream bound at
     import."""
     print(f"root={result['root']}  files={result['files']}  "
-          f"test-files-skipped={result['test_files']}  "
+          f"test-files-skipped={result['test_files']}  dirs-skipped={result['dirs_skipped']}  "
           f"rounded-stores={len(result['stores'])}  "
           f"ordered-field-compares={len(result['compares'])}  "
           f"cross-module-pairs={len(result['candidates'])}")

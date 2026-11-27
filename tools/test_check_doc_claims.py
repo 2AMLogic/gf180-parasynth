@@ -1002,3 +1002,59 @@ def test_failure_modes_carries_markers_and_they_all_hold():
     assert len(claims) >= 10, "the status list lost its markers"
     bad = [(c.where, c.status, c.detail) for c in claims if c.status != cdc.OK]
     assert not bad, bad
+
+
+# --------------------------------------------------------------------------
+# scope-control probe restoration (#1518): exact entry bytes survive injection
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("entry_bytes", [
+    pytest.param(b"one\ntwo\n", id="LF"),
+    pytest.param(b"one\r\ntwo\r\n", id="CRLF"),
+])
+def test_scope_control_probe_restores_exact_document_bytes(tmp_path, entry_bytes):
+    """Issue #1518: `tools/probes/check_doc_claims_scope_control.py` saved its
+    target document with `read_text()`, which folds CRLF to LF, so `finally`
+    rewrote a 10-byte CRLF README as 8-byte LF after running both checker arms.
+    Assert both STALE findings and the expected REFUSED exit first so an early
+    exit cannot satisfy the final byte comparison."""
+    import subprocess
+
+    probe_rel = pathlib.Path("tools/probes/check_doc_claims_scope_control.py")
+    checker_rel = pathlib.Path("tools/check_doc_claims.py")
+    for rel in (probe_rel, checker_rel):
+        dst = tmp_path / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / rel, dst)
+    (tmp_path / "Makefile").write_bytes(b"all:\n")
+    readme = tmp_path / "pnr" / "orfs" / "README.md"
+    readme.parent.mkdir(parents=True, exist_ok=True)
+    readme.write_bytes(b"one\ntwo\n")
+
+    for cmd in (
+        ["git", "init", "-q", "-b", "main"],
+        ["git", "config", "user.email", "control@example.com"],
+        ["git", "config", "user.name", "control"],
+        ["git", "config", "commit.gpgsign", "false"],
+        ["git", "config", "core.autocrlf", "false"],
+        ["git", "add", "."],
+        ["git", "commit", "-qm", "fixture"],
+    ):
+        subprocess.run(cmd, cwd=tmp_path, check=True, capture_output=True)
+
+    readme.write_bytes(entry_bytes)
+    r = subprocess.run(
+        [sys.executable, str(tmp_path / probe_rel), "--before", "HEAD"],
+        cwd=tmp_path, capture_output=True, text=True, check=False,
+    )
+    out = r.stdout + r.stderr
+
+    assert r.returncode == 2, out
+    assert "--- before (HEAD," in out and "--- after (working tree," in out, out
+    assert out.count(", exit 1) ---") == 2, out
+    assert out.count("STALE   pnr/orfs/README.md:6") == 2, out
+    assert (
+        "REFUSED: the 'before' arm was already red (exit 1) with the defect injected"
+        in out
+    ), out
+    assert readme.read_bytes() == entry_bytes
