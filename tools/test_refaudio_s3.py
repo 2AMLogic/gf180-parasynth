@@ -202,13 +202,33 @@ def test_the_loop_reader_reads_what_the_lister_wrote(env, monkeypatch):
                                       "BD 4x4 Zeta 808 Loops 128.wav"]
 
 
+@pytest.mark.parametrize("write", [False, True], ids=["stdout", "write"])
+def test_member_list_cli_missing_route_leaves_inventory_intact(monkeypatch, tmp_path, write):
+    monkeypatch.delenv("REFAUDIO_S3", raising=False)
+    cmd = [sys.executable, ml.__file__, ARCH, FOLDER]
+    if write:
+        inventory = tmp_path / "inventory.txt"
+        previous = b"# Previous inventory\r\noriginal.wav\r\n"
+        inventory.write_bytes(previous)
+        cmd.extend(["--write", str(inventory)])
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "REFUSED" in result.stderr and "REFAUDIO_S3 is not set" in result.stderr
+    if write:
+        assert inventory.read_bytes() == previous
+
+
 def test_member_list_refuses_a_folder_with_no_wav(env, monkeypatch, capsys):
     """An empty inventory must never be written: the reader would refuse it,
     and a reader that did not would read whatever was on disk."""
     _fake_aws(monkeypatch, _folder_zip())
     out = env / "inventory.txt"
     assert ml.main([ARCH, "808 Loops From Mars/WAV/03. Bass Drum", "--write", str(out)]) == ml.REFUSED
-    assert "holds no WAV" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "holds no WAV" in captured.err
     assert not out.exists()
 
 
@@ -216,7 +236,9 @@ def test_member_list_refuses_a_hash_mismatch_before_reading_a_name(env, monkeypa
     _fake_aws(monkeypatch, _folder_zip(), want_sha="0" * 64)
     out = env / "inventory.txt"
     assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.REFUSED
-    assert "not the archive the catalogue describes" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "not the archive the catalogue describes" in captured.err
     assert not out.exists()
     assert not (s3.ARCHIVES / ARCH).exists()
 
@@ -228,9 +250,20 @@ def test_member_list_refuses_without_a_route_or_for_an_unknown_archive(monkeypat
     assert ml.main(["nope.zip", FOLDER]) == ml.REFUSED
 
 
-def test_member_list_transfer_failure_is_FAIL_not_refused(env, monkeypatch):
+def test_member_list_transfer_failure_is_FAIL_not_refused(env, monkeypatch, capsys):
     _fake_aws(monkeypatch, b"", rc=1)
     assert ml.main([ARCH, FOLDER]) == ml.FAIL
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "FAIL" in captured.err and "AccessDenied" in captured.err
+
+
+def test_member_list_reports_an_invalid_zip_on_stderr(env, monkeypatch, capsys):
+    _fake_aws(monkeypatch, b"not a zip")
+    assert ml.main([ARCH, FOLDER]) == ml.FAIL
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "FAIL" in captured.err and "does not open as a zip" in captured.err
 
 
 def test_member_list_refuses_a_name_that_cannot_be_listed_one_per_line(env, monkeypatch, capsys):
@@ -242,7 +275,9 @@ def test_member_list_refuses_a_name_that_cannot_be_listed_one_per_line(env, monk
     _fake_aws(monkeypatch, b.getvalue())
     out = env / "inventory.txt"
     assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.REFUSED
-    assert "line break" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "line break" in captured.err
     assert not out.exists()
 
 
@@ -276,8 +311,9 @@ def test_duplicate_zip_members_leave_the_previous_inventory_readable(env, monkey
         blob = _zip_of("same.wav", "other.wav", "same.wav")
     _fake_aws(monkeypatch, blob)
     assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.REFUSED
-    text = capsys.readouterr().out
-    assert "REFUSED" in text and "same.wav" in text and FOLDER in text
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "REFUSED" in captured.err and "same.wav" in captured.err and FOLDER in captured.err
     assert out.read_bytes() == previous
     assert mr.expected_loops(out) == ["original.wav"]
 
@@ -292,5 +328,7 @@ def test_a_name_the_reader_would_drop_or_split_is_refused_before_writing(
     _fake_aws(monkeypatch, _zip_of("normal.wav", bad))
     out = env / "inventory.txt"
     assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.REFUSED
-    assert "REFUSED" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "REFUSED" in captured.err
     assert not out.exists()
