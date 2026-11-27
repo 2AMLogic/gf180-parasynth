@@ -107,6 +107,12 @@ class LevelBindingError(CaptureIdentityError):
     """A recording's level disagrees with the frozen clip for its condition."""
 
 
+class FrozenReferenceUnavailable(Refused):
+    """The frozen Surge clip the level anchor binds to cannot be read (cache
+    absent or altered). refprofile.Refused is a sibling class, not a parent,
+    so it is re-raised here in this module's vocabulary."""
+
+
 class ProjectionError(Refused):
     """The capture cannot supply the stepped-tone response curve."""
 
@@ -487,8 +493,12 @@ def capture_curve(cond: str, amp: float, take: int, manifest=None, inject="") ->
 
 @cache
 def _frozen_low_db(cond: str) -> float:
-    prof = rp.load_profile()
-    y, _, meta = rp.load_clip(CONDITIONS[cond][1], prof)
+    try:
+        prof = rp.load_profile()
+        y, _, meta = rp.load_clip(CONDITIONS[cond][1], prof)
+    except rp.Refused as e:
+        raise FrozenReferenceUnavailable(
+            f"cannot anchor the level of {cond}: {e}") from e
     parts = [(int(a), int(b), float(f)) for a, b, f in meta["parts"]]
     return _projected_low_db(y, parts, float(meta["amp"]))
 
@@ -534,7 +544,7 @@ def verify() -> int:
         except LevelBindingError as e:
             unanchored.append(e)
             verified_or_anchored[key] = meta     # reported after the cell-sharing check, which names the cause
-        except (CaptureIdentityError, ProjectionError) as e:
+        except (CaptureIdentityError, ProjectionError, FrozenReferenceUnavailable) as e:
             print(f"REFUSED  {e}")
             return REFUSED
         except Refused as e:

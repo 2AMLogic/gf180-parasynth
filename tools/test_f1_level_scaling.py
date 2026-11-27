@@ -532,3 +532,19 @@ def test_missing_clip_field_refuses_instead_of_raising(monkeypatch, capsys, fiel
     assert "REFUSED" in capsys.readouterr().out
     with pytest.raises(cap.Refused):
         fls.surge_side(manifest)
+
+
+def test_absent_frozen_cache_refuses_through_main_instead_of_raising(monkeypatch, capsys):
+    """refprofile.Refused is a sibling of cap.Refused, so an absent frozen
+    cache used to escape verify()/main() as a traceback. Control: simulate the
+    absent cache (independent of the host's cache state)."""
+    def absent(*a, **k):
+        raise cap.rp.Refused("the frozen reference audio is not in the cache")
+    cap._frozen_low_db.cache_clear()
+    monkeypatch.setattr(cap.rp, "load_clip", absent)
+    try:
+        assert cap.main([]) == cap.REFUSED
+    finally:
+        cap._frozen_low_db.cache_clear()
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "not in the cache" in out
