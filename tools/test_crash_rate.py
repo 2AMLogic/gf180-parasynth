@@ -19,6 +19,8 @@ which nothing executed must REFUSE rather than report zero.
 from __future__ import annotations
 import json, os, pathlib, signal, sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import crash_rate as cr
 
@@ -105,6 +107,24 @@ def test_never_runs():
     assert rep["summary"]["runs_that_exercised_the_target"] == 0
     assert rep["summary"]["crash_rate"] is None, \
         "a rate over an empty denominator is a fabricated number"
+
+
+@pytest.mark.parametrize("runs", [0, -1])
+def test_a_zero_or_negative_run_count_refuses_instead_of_raising(runs, capsys):
+    """The empty batch. `--runs 0` used to reach the summary and index
+    `sorted(...)[len(runs) // 2]` on an empty list: exit 1 -- this tool's "a run
+    crashed" code -- with a traceback where the answer belonged, and the
+    `exercised == 0` guard below it never ran. An invalid count is a
+    precondition failure, so it must REFUSE and name the count itself; a
+    refusal about some other precondition must not satisfy this."""
+    rc = cr.main(["--runs", str(runs)])
+    out, err = capsys.readouterr()
+    assert rc == 2, "an invalid batch size must REFUSE, not raise or exit as a crash"
+    assert "REFUSED" in err and "--runs" in err, err
+    assert "at least 1" in err, "the refusal must state the minimum"
+    assert f"got {runs}" in err, "the refusal must name the offending count"
+    assert "Traceback" not in err, err
+    assert "crash rate" not in out, out
 
 
 def test_a_failing_test_is_a_result_not_a_crash(tmp_path):

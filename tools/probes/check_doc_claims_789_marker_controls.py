@@ -56,6 +56,11 @@ file the claim no longer reads -- a divergence that measured, before the
 fix, as a misattributed `FAIL  README T1 count marker goes red on a wrong
 count: exit=0` with rc=1 (baseline green, injection target present, the
 injected line pre-satisfied in the file the claim actually grepped).
+
+#1519: `README.md` and `docs/milestones.md` are snapshotted with `read_bytes()`
+and restored with `write_bytes()` inside each injection's `finally` block:
+`read_text()` folds CRLF to LF on read, so restoring the decoded text rewrote
+CRLF working copies as LF.
 """
 from __future__ import annotations
 
@@ -253,7 +258,9 @@ def main() -> int:
         print(f"REFUSED: {inj} already exists; refusing to overwrite", file=sys.stderr)
         return 2
     readme = ROOT / "README.md"
-    orig_readme = readme.read_text(encoding="utf-8")
+    orig_readme_bytes = readme.read_bytes()
+    orig_readme = (orig_readme_bytes.decode("utf-8")
+                   .replace("\r\n", "\n").replace("\r", "\n"))
     staged_readme = inject_or_refuse(
         orig_readme, 'grep="^T1: 2/11 items met$"', 'grep="^T1: 3/11 items met$"',
         "the README T1 count control")
@@ -267,7 +274,9 @@ def main() -> int:
                          "the README T1 count control"):
         return 2
     ms = ROOT / "docs/milestones.md"
-    orig_ms = ms.read_text(encoding="utf-8")
+    orig_ms_bytes = ms.read_bytes()
+    orig_ms = (orig_ms_bytes.decode("utf-8")
+               .replace("\r\n", "\n").replace("\r", "\n"))
     # The find string is the claim's ANCHORED form (#959): the unanchored
     # `^module drum_kit` also matched the state this control injects, so the
     # checker refused for non-uniqueness before the already-satisfied guard
@@ -317,7 +326,7 @@ def main() -> int:
         readme.write_text(staged_readme, encoding="utf-8")
         results.append(expect_red(py, "README T1 count marker goes red on a wrong count", "3/11"))
     finally:
-        readme.write_text(orig_readme, encoding="utf-8")
+        readme.write_bytes(orig_readme_bytes)
 
     # 3. A milestone-3 marker whose cited evidence is absent must go red, not
     #    quietly pass.
@@ -326,7 +335,7 @@ def main() -> int:
         results.append(expect_red(py, "milestone-3 marker goes red when its evidence is absent",
                                   "drum_kit_NOT_IN_TREE"))
     finally:
-        ms.write_text(orig_ms, encoding="utf-8")
+        ms.write_bytes(orig_ms_bytes)
 
     # 4. And the tree is green again: a control that leaves the tree red has
     #    reported a finding about its own mess.

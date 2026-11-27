@@ -2373,39 +2373,83 @@ def print_matrix(verdicts, kinds):
 
 
 def cmd_check(args) -> int:
-    kinds = args.kind or list(ef.FAMILIES)
+    kinds = list(dict.fromkeys(args.kind or ef.FAMILIES))
     fixtures = ef.catalogue(kinds)
     print("=" * 78)
     print("estimator ground truth: audio_measure against synthetic fixtures")
     print("=" * 78)
-    print(f"  {len(fixtures)} fixtures over {len(kinds)} families, "
+    family_noun = "family" if len(kinds) == 1 else "families"
+    print(f"  {len(fixtures)} fixtures over {len(kinds)} {family_noun}, "
           f"{len(SPECS)} estimator checks")
 
     print("\n" + "-" * 78)
     print("0. Axis coverage of the fixture catalogue")
     print("-" * 78)
+    axis_rows = list(ef.axis_coverage(fixtures))
+    axis_swept = 0
+    axis_not_applicable = 0
     axis_bad = []
-    for kind, axis, n, spread, ok, note in ef.axis_coverage(fixtures):
+    for kind, axis, n, spread, ok, note in axis_rows:
+        note_text = "" if note is None else str(note)
         if not ok:
             axis_bad.append(f"{kind}/{axis}: {n} values, spread {spread:g}")
-        if note.startswith("NOT APPLICABLE"):
-            print(f"  SKIP {kind:22s} {axis:10s} {note}")
-    print(f"  {len(ef.AXES)} axes x {len(kinds)} families: "
-          f"{'all swept' if not axis_bad else str(len(axis_bad)) + ' NOT swept'}")
+            detail = f"{n} values, spread {spread:g}"
+            if note_text:
+                detail = f"{detail} ({note_text})"
+            print(f"  FAIL {kind:22s} {axis:10s} {detail}")
+        elif note_text.startswith("NOT APPLICABLE"):
+            axis_not_applicable += 1
+            print(f"  SKIP {kind:22s} {axis:10s} {note_text}")
+        else:
+            axis_swept += 1
+    pair_noun = "pair" if len(axis_rows) == 1 else "pairs"
+    print(f"  {len(axis_rows)} family/axis {pair_noun} observed: "
+          f"{axis_swept} swept, {axis_not_applicable} not applicable, "
+          f"{len(axis_bad)} failed")
+    print(f"  declarations: {len(ef.AXES)} axes x {len(ef.FAMILIES)} families "
+          f"({len(ef.AXES) * len(ef.FAMILIES)} declared pairs)")
 
     print("\n" + "-" * 78)
     print("1. Inventory: every public callable in audio_measure is declared")
     print("-" * 78)
+    inv_rows = list(inventory())
+    inv_specs = 0
+    inv_not_fx = 0
+    inv_types = 0
+    inv_undeclared = 0
     inv_bad = []
-    for n, where, why, ok in inventory():
-        if not ok:
+    for n, where, why, ok in inv_rows:
+        where_text = "" if where is None else str(where).strip()
+        why_text = "" if why is None else str(why)
+        valid_entry = (bool(ok) and where_text != "UNDECLARED"
+                       and bool(where_text) and bool(why_text.strip()))
+        if not valid_entry:
             inv_bad.append(n)
-            print(f"  FAIL {n:30s} {why}")
-    print(f"  {len(public_callables())} public callables; "
-          f"{len({s.extra.get('target', s.name) for s in SPECS})} fixture-checked, "
-          f"{len(NOT_FIXTURE_CHECKED)} declared not fixture-checkable, "
-          f"{len(NOT_CALLABLE_ESTIMATORS)} dataclasses/exceptions, "
-          f"{len(inv_bad)} UNDECLARED")
+            if where_text == "UNDECLARED":
+                inv_undeclared += 1
+            print(f"  FAIL {n:30s} {why_text}")
+        elif where_text == "SPECS":
+            inv_specs += 1
+        elif where_text == "dataclass/exception":
+            inv_types += 1
+        else:
+            inv_not_fx += 1
+    inv_classified = inv_specs + inv_not_fx + inv_types
+    declared_specs = len({s.extra.get("target", s.name) for s in SPECS})
+    row_noun = "row" if len(inv_rows) == 1 else "rows"
+    call_noun = "callable" if inv_classified == 1 else "callables"
+    type_noun = ("dataclass/exception" if inv_types == 1
+                 else "dataclasses/exceptions")
+    print(f"  {len(inv_rows)} inventory {row_noun} observed: "
+          f"{inv_classified} {call_noun} classified "
+          f"({inv_specs} assigned to SPECS fixtures, "
+          f"{inv_not_fx} declared not fixture-checkable, "
+          f"{inv_types} {type_noun}), "
+          f"{len(inv_bad)} failed ({inv_undeclared} UNDECLARED)")
+    print(f"  declarations: {len(public_callables())} public callables in "
+          f"audio_measure ({declared_specs} SPECS targets, "
+          f"{len(NOT_FIXTURE_CHECKED)} NOT_FIXTURE_CHECKED, "
+          f"{len(NOT_CALLABLE_ESTIMATORS)} NOT_CALLABLE_ESTIMATORS)")
 
     print("\n" + "-" * 78)
     print("2. Closed-form conversions (no signal, so no fixture)")
