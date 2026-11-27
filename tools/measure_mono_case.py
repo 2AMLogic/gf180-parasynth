@@ -69,8 +69,17 @@ def _assert_full_scale(name: str, x: np.ndarray) -> None:
     Same convention as ``manifest._write_wav16``: clipping is ``|x| > 1.0`` on
     the float input, so exactly +/-1.0 is permitted.  Without this the writer
     hard-clips and the saved WAV no longer replays the words that were scored.
+
+    Finiteness is asserted here rather than inherited from ``_measure``: a NaN
+    makes every ``|x| > 1.0`` comparison False, so the over-range count alone
+    lets one through (#134).
     """
     a = np.asarray(x, dtype=np.float64)
+    bad = int(np.count_nonzero(~np.isfinite(a)))
+    if bad:
+        raise Refused(
+            f"{name} signal is non-finite: {bad} of {a.size} samples are NaN or inf; "
+            f"the retained 16-bit WAV cannot replay them")
     over = int(np.count_nonzero(np.abs(a) > 1.0))
     if over:
         raise Refused(
