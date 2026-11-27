@@ -635,7 +635,7 @@ def _select_without_refusing(results_dir, case_id, suffix, **_):
     """`wav_destination` as #1414 shipped it: the path, and no refusal. Takes
     what the writers pass today, `injected` included, and answers none of it."""
     return rc.artefact_directory(results_dir or rc.RESULTS,
-                                 model_wav_case=case_id) / f"{case_id}{suffix}"
+                                 model_record_case=case_id) / f"{case_id}{suffix}"
 
 
 def _clean_collision(board, monkeypatch, capsys, case_id: str, wav: str) -> dict[str, list[str]]:

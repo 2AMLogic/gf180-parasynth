@@ -3501,8 +3501,10 @@ def result_destination(dest: pathlib.Path, res: dict, *, prepare: bool = True) -
     So an anchor is kept and the model result is written beside it under
     `results/model-twin/`, with the swap announced. Neither is discarded, and
     `tools/compare_ensemble_candidate.py` is the tool that compares them.
-    During WAV preflight, prepare=False selects the same path without
-    creating the directory or announcing a JSON write."""
+    Pass `prepare=False` to look up the path before placing an artefact beside
+    the record: a rendered WAV, or this runner's model filter curve. During WAV
+    preflight it selects the same path without creating the directory or
+    announcing a JSON write."""
     if res.get("engine") == "integrated-rtl" or not dest.is_file():
         return dest
     try:
@@ -3550,24 +3552,25 @@ def on_board(results_dir: pathlib.Path) -> bool:
 
 
 def artefact_directory(results_dir: pathlib.Path, *,
-                       model_wav_case: str | None = None) -> pathlib.Path:
+                       model_record_case: str | None = None) -> pathlib.Path:
     """Choose where to write a filter response curve or a rendered WAV.
 
     A run that lands on the board keeps the established directory under
     `build/scorecard`, because that is the path the published records name
-    (`provenance.artefacts`). Off the board, a drum or ensemble WAV follows
-    its model record into `model-twin/` when an RTL anchor occupies the
-    requested JSON path (`model_wav_destination` applies the same rule for
-    mono cases through `on_board`, since M1A publishes in a directory of its
-    own). Filter curves use the requested results directory.
+    (`provenance.artefacts`). Off the board, a drum or ensemble WAV and this
+    runner's model filter curve follow their model record into `model-twin/`
+    when an RTL anchor occupies the requested JSON path; `model_record_case`
+    names the case whose record the artefact is written beside. An artefact
+    whose record another CLI writes straight into the requested directory --
+    the RTL scorer's curve -- states no case, and stays there.
 
     Both CLIs (`main` here and `tools/score_f1_rtl.py` for the RTL curve)
     refuse an injected run whose requested directory is `AUDIO_OUT`, where
     the run could overwrite a board artefact."""
     if on_board(results_dir):
         return AUDIO_OUT
-    if model_wav_case is not None:
-        record = results_dir / f"{model_wav_case}.json"
+    if model_record_case is not None:
+        record = results_dir / f"{model_record_case}.json"
         return result_destination(record, {"engine": ENGINE}, prepare=False).parent
     return results_dir
 
@@ -3583,6 +3586,15 @@ def response_destination(results_dir: pathlib.Path, case_id: str,
     control given a `--results` of its own still replaced the clean board
     curve, and the control's record named the clean run's curve as its own.
 
+    Off the board this runner's model curve follows its record (#1450): when
+    an RTL anchor in the requested directory sends the record to
+    `model-twin/`, the curve is written there too. Until then the curve alone
+    stayed in the requested directory, so copying `model-twin/` carried the F1
+    score without the response it was read from. The RTL scorer's curve
+    (a `tag`, `tools/score_f1_rtl.py`) does not follow: that CLI writes its
+    record straight into the requested directory, and its curve belongs
+    beside it.
+
     Off the board, a destination that IS the board's own curve for this case
     is refused rather than returned (#1430). `--results build/scorecard` is
     not the board, so "beside the record" names the published curve itself,
@@ -3592,7 +3604,8 @@ def response_destination(results_dir: pathlib.Path, case_id: str,
     is asked of that directory: wherever the curve is finally written, the
     check has looked at the same place."""
     name = f"{case_id}-ours-response{tag}.json"
-    directory = artefact_directory(results_dir)
+    model_record = None if tag else case_id
+    directory = artefact_directory(results_dir, model_record_case=model_record)
     if not on_board(results_dir):
         _refuse_published(directory.absolute(), AUDIO_OUT / name, case_id,
                           own="response curve", kind="response curve")
@@ -3624,7 +3637,7 @@ def wav_destination(results_dir: pathlib.Path | None, case_id: str,
     alone and writes no record. It gets the established shared path, as
     `run_filter_case` gives its curve."""
     filename = f"{case_id}{suffix}"
-    directory = artefact_directory(results_dir or RESULTS, model_wav_case=case_id)
+    directory = artefact_directory(results_dir or RESULTS, model_record_case=case_id)
     candidate = directory / filename
     published = AUDIO_OUT / filename
     if injected and _names_one_file(candidate, published):

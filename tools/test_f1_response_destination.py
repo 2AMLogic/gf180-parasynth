@@ -43,6 +43,12 @@ differently -- against the working directory, and against the checkout -- so
 the bench gives each its own relative spelling rather than one that would
 send the RTL scorer into the real `build/scorecard`.
 
+THE SEEDED ROWS OF #1450 ARE NOT DOUBLED. `docs/scorecard/results/F1A.json` is
+copied byte for byte into the requested directory: the one filter case
+anchored on the integrated RTL, and so the only input that sends a model run's
+record to `model-twin/`. Where that record and its curve are then written is
+the shipped code.
+
 WHAT A PASSING RUN HERE DOES NOT ESTABLISH. Any acoustic property of the
 filter, or that the real RTL curve equals the model's. `tools/
 test_score_f1_rtl.py` covers the scorer's comparison logic and `make verify`
@@ -179,6 +185,23 @@ def _curve_named_by(record):
 
 def _gains(curve_bytes):
     return json.loads(curve_bytes)["ours_gain_db"]
+
+
+def _published_f1a_anchor() -> bytes:
+    """The published F1A record: the one filter case anchored on the
+    integrated RTL. Real bytes, not a double -- the redirection is decided by
+    the `engine` it states."""
+    anchor = (rc.ROOT / "docs" / "scorecard" / "results" / "F1A.json").read_bytes()
+    assert json.loads(anchor)["engine"] == rtlpath.ENGINE
+    return anchor
+
+
+def _files_under(directory: pathlib.Path) -> list[str]:
+    """Every file below `directory`, whether or not the directory exists yet."""
+    if not directory.exists():
+        return []
+    return sorted(p.relative_to(directory).as_posix()
+                  for p in directory.rglob("*") if p.is_file())
 
 
 def test_an_injected_rtl_control_leaves_the_clean_board_curve_and_record_untouched(
@@ -412,8 +435,13 @@ def test_every_published_f1_row_names_the_curve_a_default_run_of_its_engine_writ
 
 def test_the_response_destination_is_the_shared_path_on_the_board_and_beside_the_results_off_it(
         tmp_path):
-    """The rule both callers resolve through, pinned apart from any run."""
+    """The rule both callers resolve through, pinned apart from any run.
+
+    The board's own decision comes first, and the board holds an RTL anchor
+    for F1A: the model curve stays at its published place there rather than
+    following the model record into `results/model-twin/`."""
     board, shared = rc.RESULTS, rc.AUDIO_OUT
+    assert json.loads((board / "F1A.json").read_text())["engine"] == rtlpath.ENGINE
     assert rc.response_destination(board, "F1A", "-rtl") == shared / RTL_CURVE
     assert rc.response_destination(board, "F1A") == shared / MODEL_CURVE
     # the board reached by another spelling is still the board
@@ -430,6 +458,20 @@ def test_the_response_destination_is_the_shared_path_on_the_board_and_beside_the
         rc.response_destination(shared, "F1A", "-rtl")
     with pytest.raises(rc.Refused, match=REFUSAL):
         rc.response_destination(shared, "F1B")
+    # off the board over an RTL anchor for the case, this runner's model curve
+    # follows the record the anchor redirects into `model-twin/` (#1450) ...
+    seeded = tmp_path / "seeded"
+    seeded.mkdir()
+    (seeded / "F1A.json").write_bytes(_published_f1a_anchor())
+    twin = seeded / "model-twin"
+    assert rc.response_destination(seeded, "F1A") == twin / MODEL_CURVE
+    # ... by a lookup alone. Creating the twin directory and announcing the
+    # redirection belong to the record writer (`result_destination`).
+    assert not twin.exists()
+    assert _files_under(seeded) == ["F1A.json"]
+    # The RTL scorer's curve does not follow: `tools/score_f1_rtl.py` writes
+    # its record straight into the requested directory, whatever is there.
+    assert rc.response_destination(seeded, "F1A", "-rtl") == seeded / RTL_CURVE
 
 
 def test_a_stated_path_is_relative_inside_the_checkout_and_absolute_outside(tmp_path):
@@ -455,12 +497,12 @@ _CLIS = {
 }
 
 
-def _clean_run_into(cli, monkeypatch, results):
+def _clean_run_into(cli, monkeypatch, results, *extra):
     """One clean F1A through the named CLI, its curve written into `results`.
     Returns the CLI's exit status."""
     module, paths, cls, double, argv, _ = _CLIS[cli]
     monkeypatch.setattr(paths, cls, double)
-    return module.main([*argv, "--results", str(results)])
+    return module.main([*argv, "--results", str(results), *extra])
 
 
 @pytest.mark.parametrize("cli, where", [(cli, where) for cli in _CLIS
@@ -806,3 +848,200 @@ def test_a_comparison_without_the_inode_leg_is_a_control_that_stays_red(
     assert {label: tuple(violated) for label, violated in seen.items()} \
         == _readings({HARD_LINK: THROUGH_A_LINK})
     assert seen[HARD_LINK] == list(THROUGH_A_LINK)
+
+
+# --- a model curve beside its model record, anchor or no anchor (#1450) -------
+#
+# `result_destination` keeps an integrated-rtl anchor and writes a model result
+# beside it under `model-twin/`. The drum and ensemble WAVs follow their record
+# there (#1414); until #1450 the filter curve alone stayed in the requested
+# directory, so a reader who copied `model-twin/` got the F1 score without the
+# response it was read from.
+
+#: The two off-board rows: whether the requested directory starts out holding
+#: the published RTL record, and where this run's record and curve are then
+#: written, relative to that directory.
+OFF_BOARD = [pytest.param(True, "model-twin", id="rtl-anchor-seeded"),
+             pytest.param(False, ".", id="empty")]
+
+
+def _model_run_over(monkeypatch, scratch: pathlib.Path, *, seeded: bool,
+                    no_audio: bool = False) -> dict:
+    """One clean F1A through `tools/run_case.py` into `scratch`, an off-board
+    directory holding the published RTL record when `seeded`. Returns what the
+    run left: its record, where that record is, and the curve the record names.
+
+    Every assertion here is one a SPLIT run satisfies as well: the run
+    completes, the record is a measurement, and the curve it names opens and
+    holds this run's gains wherever it went. That is what makes this the bench
+    the regression control below turns red, and red on ONE assertion -- the
+    record's and the curve's directories are compared by
+    `_assert_beside_its_record`, never here."""
+    assert not scratch.is_relative_to(rc.ROOT)
+    scratch.mkdir(parents=True, exist_ok=True)
+    if seeded:
+        (scratch / "F1A.json").write_bytes(_published_f1a_anchor())
+    assert _files_under(scratch) in ([], ["F1A.json"])    # no curve of anyone's
+
+    extra = ["--no-audio"] if no_audio else []
+    assert _clean_run_into("model", monkeypatch, scratch, *extra) == 0
+
+    # the record this run wrote, found by what it is rather than by where the
+    # rule under test is about to say it goes
+    written = [p for p in scratch.rglob("F1A.json")
+               if json.loads(p.read_text())["engine"] == rc.ENGINE]
+    assert len(written) == 1, written
+    record_path = written[0]
+    record = json.loads(record_path.read_text())
+    assert "INJECTED_CONTROL" not in record and "traceback" not in record
+    assert not record.get("note", "").startswith("REFUSED")
+    assert record["metrics"] and all(m["valid"] for m in record["metrics"].values())
+    stated = record["provenance"]["artefacts"]["ours"]
+    if no_audio:
+        return {"record": record, "record_path": record_path, "stated": stated,
+                "curve_path": None, "curve": None}
+    # the gain data this invocation wrote: the double's closed form at the
+    # case's commanded cutoff, read back through the record's own provenance
+    curve = _curve_named_by(record)
+    assert json.loads(curve)["engine"] == rc.ENGINE
+    assert _gains(curve) == _four_pole_db(GRID, rc.filter_spec("F1A")["cut_hz"]).tolist()
+    return {"record": record, "record_path": record_path, "stated": stated,
+            "curve_path": pathlib.Path(stated), "curve": curve}
+
+
+def _assert_beside_its_record(obs: dict) -> None:
+    """The ownership rule, and the one assertion a split run fails."""
+    assert obs["curve_path"].parent == obs["record_path"].parent, (
+        f"the curve {obs['curve_path']} is not beside the record that names it, "
+        f"{obs['record_path']}: copying the record's directory leaves it behind")
+
+
+@pytest.mark.parametrize("seeded, where", OFF_BOARD)
+def test_a_fixed_model_curve_is_written_beside_its_record_off_the_board(
+        board, monkeypatch, tmp_path, capsys, seeded, where):
+    """Both rows through the fixed-model CLI. Seeded, `write_result` sends the
+    model record to `model-twin/` and the curve goes with it; unseeded, both
+    are written straight into the requested directory, as before."""
+    obs = _model_run_over(monkeypatch, tmp_path / "results", seeded=seeded)
+    home = tmp_path / "results" / where
+
+    assert obs["record_path"] == home / "F1A.json"
+    _assert_beside_its_record(obs)
+    assert obs["curve_path"] == home / MODEL_CURVE
+    assert obs["stated"] == str(obs["curve_path"])
+    assert obs["record"]["audio"].endswith(f"ours {obs['stated']}")
+    if seeded:
+        # the seeded record is byte for byte what it was, and nothing new went
+        # into its directory: the twin holds the pair and only the pair
+        assert (home.parent / "F1A.json").read_bytes() == _published_f1a_anchor()
+        assert _files_under(home.parent) == ["F1A.json", "model-twin/F1A-ours-response.json",
+                                             "model-twin/F1A.json"]
+        # the record writer announced the redirection, where it made the twin
+        said = capsys.readouterr().out
+        assert "F1A.json holds an integrated-rtl measurement" in said
+        assert "model-twin/F1A.json rather than replacing it" in said
+    else:
+        assert _files_under(home) == [MODEL_CURVE, "F1A.json"]
+        assert "rather than replacing it" not in capsys.readouterr().out
+
+
+def test_no_audio_seeds_no_curve_and_the_record_still_follows_the_anchor(
+        board, monkeypatch, tmp_path):
+    """`--no-audio` on the seeded row: the record follows the anchor and says
+    it wrote no curve, and none is written in either directory."""
+    scratch = tmp_path / "results"
+    obs = _model_run_over(monkeypatch, scratch, seeded=True, no_audio=True)
+
+    assert obs["record_path"] == scratch / "model-twin" / "F1A.json"
+    assert obs["stated"] == NO_AUDIO
+    assert _files_under(scratch) == ["F1A.json", "model-twin/F1A.json"]
+    assert (scratch / "F1A.json").read_bytes() == _published_f1a_anchor()
+
+
+def test_dry_run_without_audio_can_measure_over_a_damaged_record(
+        board, monkeypatch, tmp_path):
+    seed = tmp_path / "F1A.json"
+    seed.write_bytes(b"{damaged")
+
+    assert _clean_run_into("model", monkeypatch, tmp_path, "--dry-run", "--no-audio") == 0
+
+    assert seed.read_bytes() == b"{damaged"
+    assert _files_under(tmp_path) == ["F1A.json"]
+    assert _files_under(board["shared"]) == []
+
+
+def test_a_corrupt_seeded_record_refuses_before_any_curve_is_written(
+        board, monkeypatch, tmp_path, capsys):
+    """A damaged file at the record's path may BE an anchor, so no model
+    result may overwrite it (#610). The curve's destination is now decided by
+    the record's own lookup, so that refusal comes before the curve is
+    written; before #1450 the curve was written first and the run then died
+    in `write_result`."""
+    scratch = tmp_path / "results"
+    scratch.mkdir()
+    (scratch / "F1A.json").write_text("{not json")
+
+    # `main` asks the destination before anything runs (#1430), so the refusal
+    # is its exit 2 with the reason on stderr, not an exception to the caller
+    assert _clean_run_into("model", monkeypatch, scratch) == 2
+    assert "unreadable" in capsys.readouterr().err
+
+    assert (scratch / "F1A.json").read_text() == "{not json"
+    assert _files_under(scratch) == ["F1A.json"]
+
+
+def test_the_requested_directory_curve_is_a_control_that_stays_red(
+        board, monkeypatch, tmp_path):
+    """The defect as it shipped, kept where the verdict is issued (#1450): a
+    curve placed in the requested directory whatever happened to its record.
+    Reinstated as the selection itself, on the seeded row, it must redden the
+    bench on the rule's assertion and on nothing before it -- which is why it
+    shipped. Of what the bench checks,
+
+    =======================================  ====================================
+    property                                 under the requested-directory curve
+    =======================================  ====================================
+    the run completes                       BLIND
+    the record is a measurement             BLIND  it followed the anchor, as now
+    the record names a readable curve       BLIND  it named one a directory up
+    the curve holds this run's gains        BLIND  they were written, just there
+    the curve is beside its record          MOVED
+    =======================================  ====================================
+    """
+    monkeypatch.setattr(rc, "response_destination",
+                        lambda results_dir, case_id, tag="":
+                        results_dir / f"{case_id}-ours-response{tag}.json")
+    scratch = tmp_path / "results"
+
+    obs = _model_run_over(monkeypatch, scratch, seeded=True)   # the BLIND rows
+    with pytest.raises(AssertionError, match="not beside the record that names it"):
+        _assert_beside_its_record(obs)                        # the MOVED one
+    # the split itself, so the red is seen to be the split and not a bench that
+    # could not run
+    assert obs["record_path"] == scratch / "model-twin" / "F1A.json"
+    assert obs["curve_path"] == scratch / MODEL_CURVE
+    assert _files_under(scratch) == ["F1A-ours-response.json", "F1A.json",
+                                     "model-twin/F1A.json"]
+
+
+def test_the_rtl_scorers_curve_stays_beside_its_record_even_over_an_rtl_record(
+        board, monkeypatch, tmp_path):
+    """The input that defeats "every curve follows its record into
+    `model-twin/`", which is the obvious way to repair the model curve: the
+    RTL scorer, run again into a directory that already holds an RTL record
+    for the case. `tools/score_f1_rtl.py` writes its record straight into the
+    requested directory -- an anchor may replace an anchor -- so a lookup
+    through `result_destination` would send the curve alone into a twin
+    directory. That is the split of #1450 manufactured for the RTL engine."""
+    monkeypatch.setattr(rtlpath, "RtlFilterChainPath", _rtl_double())
+    scratch = tmp_path / "results"
+    scratch.mkdir()
+    (scratch / "F1A.json").write_bytes(_published_f1a_anchor())
+
+    assert _clean_run_into("rtl", monkeypatch, scratch) == 0
+
+    record = json.loads((scratch / "F1A.json").read_text())
+    assert record["engine"] == rtlpath.ENGINE
+    assert pathlib.Path(record["provenance"]["artefacts"]["ours"]) == scratch / RTL_CURVE
+    assert len(_gains(_curve_named_by(record))) == len(GRID)
+    assert _files_under(scratch) == [RTL_CURVE, "F1A.json"]
