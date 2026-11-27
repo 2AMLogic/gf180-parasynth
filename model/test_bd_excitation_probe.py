@@ -291,3 +291,26 @@ def test_the_cli_refuses_the_range_before_printing_it_or_the_verdict(tmp_path, c
     assert "REFUSED" in out and "bd8/BD0025.WAV" in out
     assert "machine, min over" not in out
     assert "VERDICT" not in out
+
+
+@pytest.mark.parametrize("kind", ["absent", "directory"])
+def test_the_cli_refuses_an_anchor_that_is_not_a_regular_file(tmp_path, capsys, monkeypatch, kind):
+    """Through the CLI with the real `check_preconditions`: the anchor
+    `bd8/BD5050.WAV` is checked as a regular file before it is opened. A
+    directory at that path used to slip past `os.path.exists` and raise
+    `IsADirectoryError` before `reference_range`'s inventory check ran."""
+    _make_corpus(tmp_path, ("BD",))
+    anchor = tmp_path / "bd8" / "BD5050.WAV"
+    anchor.unlink()
+    if kind == "directory":
+        anchor.mkdir()
+
+    def past_the_anchor(*args, **kwargs):
+        raise AssertionError("the report ran on past the anchor it had to refuse")
+    monkeypatch.setattr(bx, "render", past_the_anchor)
+    assert bx.main(["--refs", str(tmp_path)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "bd8/BD5050.WAV" in out
+    assert "THE MACHINE'S OWN RANGE" not in out
+    assert "machine, min over" not in out
+    assert "VERDICT" not in out

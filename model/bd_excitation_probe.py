@@ -140,8 +140,9 @@ def first4(x: np.ndarray, sr: int) -> list:
 
 def reference_row(refs: str) -> tuple:
     path = os.path.join(refs, REF_BD)
-    if not os.path.exists(path):
-        raise Refused(f"no reference bass drum at {path}; clone sounds-tr808-fischer")
+    if not os.path.isfile(path):
+        raise Refused(f"reference bass drum absent or not a regular file at {path}; "
+                      "clone sounds-tr808-fischer")
     sr, x = df.read_wav(path)
     return first4(x, sr), sr
 
