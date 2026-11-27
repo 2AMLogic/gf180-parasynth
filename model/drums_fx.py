@@ -2089,7 +2089,7 @@ def _kit_poles(kit: list, mode: int) -> list:
 
 
 def hit_writes(hits, kit: list = None, start_frame: int = 0, coef_seq: bool = True) -> list:
-    """hits: (frame, stop, accent 0..2.0). Each hit writes its stop's accent
+    """Consume (frame, stop, accent 0..2.0) hits once. Each hit writes its stop's accent
     and raises the stop bit in that frame; the bit is dropped in the next
     frame so the next hit is an edge again. Two hits of one stop in
     consecutive frames cannot both fire (no 0->1 between them) -- a host
@@ -2107,14 +2107,14 @@ def hit_writes(hits, kit: list = None, start_frame: int = 0, coef_seq: bool = Tr
     kit = kit or []
     w = [(start_frame, a, v) for a, v in kit]
     by_frame = {}
+    tom_mode = {LT: M_LT, MT: M_MT, HT: M_HT}
     for f, s, a in hits:
-        by_frame.setdefault(int(f), []).append((int(s), float(a)))
-    if coef_seq:
-        tom_mode = {LT: M_LT, MT: M_MT, HT: M_HT}
-        for f, s_, a_ in hits:
-            if s_ == BD:
-                w += bd_attack_writes(int(f), _kit_poles(kit, M_BD))
-            elif s_ in tom_mode:
+        f = int(f)
+        by_frame.setdefault(f, []).append((int(s), float(a)))
+        if coef_seq:
+            if s == BD:
+                w += bd_attack_writes(f, _kit_poles(kit, M_BD))
+            elif s in tom_mode:
                 # Read the tuning OUT of the image rather than assuming the
                 # kit's: the congas are the same circuit at a different f0 and
                 # Q (reference 4 SW8), and they share the diode mechanism, so
@@ -2122,12 +2122,12 @@ def hit_writes(hits, kit: list = None, start_frame: int = 0, coef_seq: bool = Tr
                 # wrong place -- and would silently overwrite a host that had
                 # retuned a tom, which is the fault `bd_attack_writes` already
                 # had to be fixed for.
-                m = tom_mode[s_]
+                m = tom_mode[s]
                 poles = _kit_poles(kit, m)
                 if poles is None:
                     continue
                 f0, q = poles_from_regs(poles[0], poles[1])
-                w += tom_pitch_drop_writes(int(f), m, f0, q, _kit_amp(kit, m), a_)
+                w += tom_pitch_drop_writes(f, m, f0, q, _kit_amp(kit, m), a)
     mask = 0
     events = {}
     for f in sorted(by_frame):
