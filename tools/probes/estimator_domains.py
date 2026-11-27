@@ -15,6 +15,17 @@ the domain declarations encode is produced here, from closed-form signals whose
 answer is known before the measurement is made, and the script exits non-zero
 when a bound it measured stops holding.
 
+THE VERDICT COUNTS (#1458)
+--------------------------
+Exit statuses follow the runner's convention (0 pass / 1 mismatch / 2 no
+evidence, `tools/exit_contract.py`). The verdict line is `N of T checks
+passed`, counted per call to `check` for THIS invocation. A run that records
+no check at all is exit 2 / NO VERDICT naming that none was executed: an
+empty tally is not a pass. Section 7's corpus notice, and any measurement
+printed without a `check()`, is information and is never counted as one.
+`tools/run_all.py` reports exit 0 as PASS without scraping output, which is
+why an empty run could not be allowed to keep it.
+
 It is deliberately the same shape as `tools/probes/verify_109_claims.py` --
 the same `_damped`/`_two_tone` synthesis, the same `check()` -- because that is
 the file #115's own Implementation Guidance names as the template.
@@ -57,11 +68,19 @@ import estimator_fixtures as ef                                       # noqa: E4
 
 SR = 48000
 fails: list[str] = []
+#: recorded by THIS invocation, and of those how many held (#1458); the
+#: verdict reads both, and `main()` resets them on every invocation
+n_checks = 0
+n_ok = 0
 
 
 def check(ok: bool, what: str):
+    global n_checks, n_ok
+    n_checks += 1
     print(f"      {'OK  ' if ok else 'FAIL'}  {what}")
-    if not ok:
+    if ok:
+        n_ok += 1
+    else:
         fails.append(what)
 
 
@@ -445,6 +464,13 @@ def report_corpus_absence():
 
 
 def main() -> int:
+    # The verdict is this invocation's alone (#1458): a tally or a failure
+    # left by an earlier `main()`, or by a `check()` called outside one, is
+    # not this run's and must not be reported as it.
+    global n_checks, n_ok
+    fails.clear()
+    n_checks = 0
+    n_ok = 0
     measure_band_pair_stationary()
     measure_band_pair_decay()
     measure_band_pair_edge()
@@ -454,11 +480,19 @@ def main() -> int:
     report_corpus_absence()
     print("\n" + "=" * 78)
     if fails:
-        print(f"{len(fails)} check(s) FAILED:")
+        print(f"{n_ok} of {n_checks} checks passed; {len(fails)} check(s) FAILED:")
         for f in fails:
             print(f"  - {f}")
         return 1
-    print("All checks passed.")
+    if n_checks == 0:
+        # Nothing failed because nothing ran. The corpus notice above is a
+        # report, not a check, and cannot stand in for one.
+        print("      No domain assertion was recorded this run. An empty tally is")
+        print("      not a pass: section 7's notice is information, not a check.")
+        print(f"{n_ok} of {n_checks} checks passed "
+              f"-- NO VERDICT (NO CHECK EXECUTED)")
+        return 2
+    print(f"{n_ok} of {n_checks} checks passed.")
     return 0
 
 
