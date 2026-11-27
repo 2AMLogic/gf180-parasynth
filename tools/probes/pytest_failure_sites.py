@@ -100,11 +100,13 @@ class FailureSites:
 
 
 if __name__ == "__main__":
-    suite, destination = sys.argv[1:]
+    suite, destination, *targets = sys.argv[1:]
     # Preserve the import path of the probes' usual `python -m pytest` call.
     sys.path.insert(0, str(Path.cwd()))
     sites = FailureSites(suite)
-    rc = pytest.main([suite, "-q", "--rootdir=.", "--no-header", "--tb=no",
+    # Explicit node IDs collect exactly the focused set and deselect nothing;
+    # `suite` is kept as the identity the labels are taken from.
+    rc = pytest.main([*(targets or [suite]), "-q", "--rootdir=.", "--no-header", "--tb=no",
                       "-p", "no:cacheprovider"], plugins=[sites])
     Path(destination).write_text(json.dumps(sites.report()))
     sys.exit(rc)
