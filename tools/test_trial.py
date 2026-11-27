@@ -735,6 +735,32 @@ def test_compare_same_inputs_agree_and_a_moved_number_disagrees(repo):
 
 
 # ---- the registry itself ----------------------------------------------------
+@pytest.mark.parametrize("args", [("list",), ("run", "T-PLAY-DIGITAL")])
+@pytest.mark.parametrize(
+    "contents,reason",
+    [
+        ('{"trials":', "invalid JSON"),
+        ("{}", "missing 'trials'"),
+    ],
+)
+def test_cli_refuses_malformed_registry(repo, trial_cli, args, contents, reason):
+    registry = repo.root / "docs/trials.json"
+    shutil.copyfile(REAL_ROOT / "docs/trials.json", registry)
+    shutil.copyfile(REAL_ROOT / "docs/dag.json", repo.root / "docs/dag.json")
+    listed = trial_cli("list")
+    assert listed.returncode == 0, listed.stdout
+    assert any(
+        line.startswith("T-PLAY-DIGITAL ") for line in listed.stdout.splitlines()
+    )
+
+    registry.write_text(contents)
+    result = trial_cli(*args)
+    assert result.returncode == 2, result.stdout
+    (line,) = result.stdout.splitlines()
+    assert line.startswith(f"REFUSED: {registry}: {reason}")
+    assert not list(repo.root.rglob("receipt.json"))
+
+
 @pytest.mark.parametrize(
     "args,reason",
     [

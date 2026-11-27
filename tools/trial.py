@@ -144,13 +144,20 @@ def _walk_keys(obj, where=""):
 def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -> dict:
     """Parse and check the registry against docs/dag.json. Structural errors are
     raised: a malformed registry is a defect in the repository, not a verdict."""
-    reg = json.loads(pathlib.Path(path).read_text())
+    try:
+        reg = json.loads(pathlib.Path(path).read_text())
+    except json.JSONDecodeError as exc:
+        raise RegistryError(f"{path}: invalid JSON: {exc}") from exc
+    try:
+        trials = reg["trials"]
+    except KeyError as exc:
+        raise RegistryError(f"{path}: missing 'trials' key") from exc
     dag = json.loads(pathlib.Path(dag_path).read_text())["nodes"]
-    for where, key in _walk_keys(reg.get("trials", {})):
+    for where, key in _walk_keys(trials):
         if key in FORBIDDEN_KEYS:
             raise RegistryError(f"{path}: {where} -- trials.json references checkers and DAG "
                                 f"nodes; it must not carry {key!r}")
-    for tid, t in reg["trials"].items():
+    for tid, t in trials.items():
         for key in ("question", "criterion_version", "scope", "dag_nodes", "modes"):
             if key not in t:
                 raise RegistryError(f"{tid}: missing {key!r}")
