@@ -200,6 +200,30 @@ def test_every_band_is_inside_the_bound_and_revision_2_was_not(figs):
         assert rev2 > ct.SHAPE_BOUND_DB, (band, rev2)
 
 
+@pytest.mark.parametrize("lp_hz, expected_db, passes", [
+    (3650.923, 2.999, True), (3659.446, 3.004, False),
+])
+def test_shape_bound_uses_the_active_range_maximum(figs, lp_hz, expected_db, passes):
+    fig9, poles, corner = figs
+    hp_hz = poles["low"][0]
+    poles = {**poles, "low": (hp_hz, lp_hz)}
+
+    # The low realisation is flat. Derive its error independently from the
+    # three analog RC magnitudes, removing the active-band weighted mean.
+    chain = ct.band_chain_db("low", ct.THIRDS)
+    active = chain >= chain.max() - ct.ACTIVE_DB
+    f = ct.THIRDS[active]
+    db = 20 * np.log10(f**2 / np.sqrt(
+        (f**2 + hp_hz**2) * (f**2 + lp_hz**2) * (f**2 + corner**2)))
+    peak = max(abs(db - np.average(db, weights=10**(chain[active] / 10))))
+    assert peak == pytest.approx(expected_db, abs=1e-6)
+
+    assert ct.shape_error("low", poles, corner)["shape_max_db"] == 3.00
+    _, lines = ct.check(poles, corner, fig9)
+    status, = [line.split()[0] for line in lines if "shape-bound" in line.split()[1:2]]
+    assert status == ("PASS" if passes else "FAIL")
+
+
 def test_the_active_range_excludes_where_the_band_has_no_energy(figs):
     """The decay band is 65 dB down at 1 kHz, so its 5.5 dB deviation there
     cannot reach the residual and must not be counted."""

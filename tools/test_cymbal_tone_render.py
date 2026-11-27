@@ -9,6 +9,7 @@ was "a verdict function that reported a match from two rows twelve dB apart".
 """
 from __future__ import annotations
 
+import json
 import math
 import pathlib
 import sys
@@ -231,6 +232,91 @@ def test_the_verdict_reports_every_one_of_the_25_settings():
     n_dev = sum(1 for c in v["columns"].values() for s in c["split"].values()
                 if s == "development")
     assert n_dev == len(cb.DEVELOPMENT) == 9
+
+
+def _bands(hml=-1.0, h_ms=500.0, ln_ms=500.0):
+    return {"H_minus_L_db": hml, "H": {"edt10_ms": h_ms}, "Ln": {"edt10_ms": ln_ms}}
+
+
+def _boundary_verdict(monkeypatch, tmp_path, candidate, reference):
+    # Plant measurements before either producer anchors or rounds. Only the
+    # intersection of TONE 10 and DECAY 25 can miss the tracking bounds.
+    anchor = _bands()
+    other_column = _bands(hml=candidate["H_minus_L_db"], h_ms=600.0)
+    fischer = {}
+    for dec in tre.CODES:
+        for tone in tre.CODES:
+            row = reference if dec == "25" else other_column
+            fischer[f"CY{tone}{dec}"] = row if tone == "10" else anchor
+    path = tmp_path / "fischer.json"
+    path.write_text(json.dumps(fischer))
+    refs = tre.fischer_curves(path)
+
+    monkeypatch.setattr(tre, "kit_at", lambda levels, code: (code, {}))
+    monkeypatch.setattr(tre, "render_r4", lambda code: (code, 48000))
+    monkeypatch.setattr(rc, "prepare", lambda code, sr, *, side: code)
+    monkeypatch.setattr(cb, "measure", lambda code, sr: candidate if code == "10" else anchor)
+    ours = tre.measure_render({})
+    return ours, tre.verdict(ours, refs)
+
+
+@pytest.mark.parametrize("input_db, measured_db, delta, passes", [
+    (3.0014, 3.001, 3.000, True), (3.0016, 3.002, 3.001, False),
+])
+def test_h_minus_l_boundary_on_the_frozen_measurement_grid(
+        monkeypatch, tmp_path, input_db, measured_db, delta, passes):
+    # Give the actual instrument known H and L energies at its filter outputs.
+    # H-L and the anchor differences are all on the 0.001 dB grid.
+    def measure_hml(db):
+        def band_signal(y, sr, lo, hi):
+            gain_db = {cb.TOTAL: 0, cb.BANDS["H"]: db - 10}.get((lo, hi), -10)
+            return np.array([10**(gain_db / 20)])
+        with monkeypatch.context() as patch:
+            patch.setattr(cb, "_bp", band_signal)
+            patch.setattr(cb, "band_decay", lambda x, sr: {"edt10_ms": 500.0})
+            return cb.measure([1.0], 48000)
+
+    candidate, reference = measure_hml(input_db), measure_hml(0.001)
+    assert candidate["H_minus_L_db"] == measured_db
+    assert reference["H_minus_L_db"] == 0.001
+    ours, verdict = _boundary_verdict(monkeypatch, tmp_path, candidate, reference)
+    assert ours["h_minus_l_anchored_db"]["10"] == round(measured_db + 1, 3)
+    col = verdict["columns"]["25"]
+    assert col["h_minus_l_anchored_delta_db"]["10"] == delta
+    assert col["h_minus_l_ok"] is passes
+    assert all(v["h_minus_l_ok"] for d, v in verdict["columns"].items() if d != "25")
+    assert verdict["properties"]["h-minus-l-tracks-808"]["ok"] is passes
+
+
+@pytest.mark.parametrize("candidate_ms, fischer_ms, passes", [
+    (525.0, 350.0, True),      # exactly +50%, including after division by the anchors
+    (750.02, 500.0, False),    # candidate ratio rounds to 1.5000
+    (750.0, 499.98, False),    # reference ratio rounds to 1.0000
+    (825.10, 550.05, False),   # even the exact ratios give an error displayed as 0.5000
+])
+def test_h_edt10_boundary_before_both_ratio_roundings(
+        monkeypatch, tmp_path, candidate_ms, fischer_ms, passes):
+    # Times the instrument can return at the candidate and recording sample rates.
+    for ms, sr in ((candidate_ms, 48000), (fischer_ms, 44100)):
+        assert round(round(ms * sr / 1000) * 1000 / sr, 2) == ms
+    _, verdict = _boundary_verdict(monkeypatch, tmp_path, _bands(h_ms=candidate_ms),
+                                   _bands(h_ms=fischer_ms))
+    col = verdict["columns"]["25"]
+    assert col["h_edt10_ok"] is passes
+    assert all(v["h_edt10_ok"] for d, v in verdict["columns"].items() if d != "25")
+    assert verdict["properties"]["h-edt-tracks-808"]["ok"] is passes
+
+
+@pytest.mark.parametrize("ms, displayed, passes", [
+    (750.0, 1.5, True), (750.02, 1.5, False), (250.0, 0.5, True), (249.98, 0.5, False),
+])
+def test_ln_edt10_invariance_boundary_before_ratio_rounding(monkeypatch, tmp_path, ms,
+                                                           displayed, passes):
+    assert round(round(ms * 48) / 48, 2) == ms
+    ours, verdict = _boundary_verdict(monkeypatch, tmp_path, _bands(ln_ms=ms), _bands())
+    prop = verdict["properties"]["ln-edt-tone-invariant"]
+    assert ours["ln_edt10_ratio"]["10"] == prop["value"]["10"] == displayed
+    assert prop["ok"] is passes
 
 
 def test_the_bounds_are_step_9s_bounds_unchanged():
