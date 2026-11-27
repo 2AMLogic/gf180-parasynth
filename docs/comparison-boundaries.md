@@ -179,17 +179,19 @@ events, one in the saw segment and one in the pulse segment.
 
 The M5A capture script created a fresh Mini V3 instance for each take, then
 joined the saw take, a gap of silence and the pulse take into that WAV.
-Those are two captures, not one render, and the driver now says so (#1433).
-Each window records the render it came from, a pair that spans two captures
-is REFUSED with `INDEPENDENT_CAPTURES` and no span, and the pitch difference
-between the takes is reported only as a between-capture comparison.
+The driver assigns capture identity only when the manifest names the reviewed
+producer commit and records the SHA-256 of that producer file. A missing or
+mismatched pin yields `CAPTURE_UNKNOWN`. With the pins verified, the M5A
+pair returns `INDEPENDENT_CAPTURES` and reports the pitch difference only
+as a comparison between takes (#1433).
 [Rig creation](https://github.com/2AMLogic/gf180-parasynth/blob/899e86d68cf37bacf79188bce142b42ea2d13564/tools/measure_mono_m5a_reference.py#L152-L167) ·
 [WAV assembly](https://github.com/2AMLogic/gf180-parasynth/blob/899e86d68cf37bacf79188bce142b42ea2d13564/tools/measure_mono_m5a_reference.py#L418-L449)
 
 An M1A window cannot join that pair, whatever its note, because the prefix
 excludes it. Any other caller of `across_note_drift`, including one passing
 several `--wav` files to the module's own command, must still establish
-render continuity before interpreting a span as elapsed drift.
+render continuity to compare observations of one running oscillator. The
+comparison leaves pitch between the observed windows unmeasured.
 <!-- claim: grep='startswith\("m1a/phrase0/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
 <!-- claim: grep='startswith\("m1a/osc1_open/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
 <!-- claim: grep='startswith\("m1a/osc2_open/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->

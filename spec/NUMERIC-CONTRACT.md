@@ -2304,13 +2304,14 @@ record that extends this document; none may be resolved by picking a reading.
     What the rev-11 text asked — "whether to model drift anyway … is a musical
     decision and one constant" — turned out to be the right framing for a
     reason that had to be measured to be known. **The references cannot supply
-    the amount.** Every single-oscillator window in the frozen Mini V3 set
-    wanders by 0.001–0.024 cents rms over its 0.6 s hold, and two notes of the
-    same pitch 4.0 s apart inside one render differ by 0.0102 cents: 30–100×
-    below anything a player could hear, so the frozen references *bound* drift
-    rather than measure it
-    (`docs/scorecard/mono-osc-drift/reference-drift-v1.json`;
-    Surge XT and Diva are REFUSED there, with the missing precondition named).
+    the amount.** In the frozen Mini V3 set, pitch variation measured
+    0.001–0.024 cents rms within the usable isolated-oscillator windows.
+    The MIDI gates last 0.6 s. In one M1A render, isolated oscillator 2 at
+    MIDI 48 measured 0.0102 cents higher in the second window (4.106–4.713 s)
+    than in the first (0.107–0.712 s). Pitch between them is unobserved.
+    `docs/scorecard/mono-osc-drift/reference-drift-v1.json` records both
+    MIDI-36 pairs as `TOO_FEW_PERIODS` and names the missing evidence for
+    Surge XT and Diva.
     The saw and pulse takes of one M5A note, 0.0011 cents apart, are two
     independent captures and bound nothing (#1433, DR 0019 Corrections).
     The target range is therefore 0.8–4.0 cents rms per oscillator as a
@@ -2563,9 +2564,9 @@ record that extends this document; none may be resolved by picking a reading.
 
   **Measured, and one of the numbers was wrong before it was right.** The
   references were measured FIRST and did not give the answer expected: the
-  frozen Mini V3 set's isolated oscillators wander by 0.001–0.024 cents rms,
-  30–100× below audibility, so they bound drift rather than supply it and the
-  amount is a musical decision (17.18). The end-to-end cents check first
+  frozen Mini V3 set measures 0.001–0.024 cents rms within its usable
+  isolated-oscillator windows. The amount is a musical decision (17.18).
+  The end-to-end cents check first
   compared a pitch probe's reading against the *commanded* rms and read 0.601×
   at three depths — which looks like a 40 % error in the mechanism and is not
   one: over ten correlation times a bounded walk's own mean is not zero, and a

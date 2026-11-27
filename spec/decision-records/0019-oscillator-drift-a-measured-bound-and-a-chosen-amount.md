@@ -27,14 +27,12 @@ Surge XT, Arturia Mini V3 and u-he Diva before implementing anything. Measured
 from the frozen, hash-bound renders already in `docs/scorecard/` (this host has
 neither `dawdreamer` nor the VST3 bundles, so nothing was re-rendered):
 
-- **Mini V3**: every isolated-oscillator window wanders by **0.001–0.024 cents
-  rms** over its 0.6 s hold, and two notes of the same pitch **inside one
-  render** (M1A's isolated oscillator 2 at MIDI 48, 4.0 s apart) differ by
-  **0.0102 cents**. The three renders of the same patch are byte-identical.
-  That is 30–100× below anything a player hears: Mini V3's instability is
-  off, or absent, at these settings. The references therefore **bound**
-  drift rather than measure it. A second across-note figure used to stand
-  here and was not one; see Corrections.
+- **Mini V3** showed **0.001–0.024 cents rms** of pitch variation in its
+  usable isolated-oscillator windows. In one M1A render, two pitch estimates
+  for isolated oscillator 2 at MIDI 48 differed by **0.0102 cents**. The
+  notes began 4.0 s apart. The three M1A phrase repeats are byte-identical.
+  These observations supply no audible drift amount for the instrument.
+  See Corrections for the windows used and the withdrawn M5A comparison.
 - **Surge XT**: `REFUSED` — all sixteen frozen Surge clips drive the *filter*
   from our own stepped tone through Audio In; Surge's oscillators appear in none
   of them.
@@ -214,21 +212,18 @@ assumed it. `tools/measure_osc_drift_reference.py` now records the render
 each window came from and refuses a pair that spans two with
 `INDEPENDENT_CAPTURES`, carrying no stability class and no bound for it.
 
-What the frozen set does show, so that the withdrawal is read as neither more
-nor less than it is:
+The frozen recordings support three observations.
 
-- **0.001–0.024 cents rms** is wander inside one held window of about 0.6 s.
-  It stands unchanged.
-- The longest span **inside one render** with two observations of the same
-  pitch is **4.0 s**: M1A's isolated oscillator 2, 0.0102 cents apart. The M1A
-  producer queues the whole phrase before one render call, so its three pairs
-  are measurements, and they keep their own outcomes.
-- **0.0011 cents** between the M5A saw and pulse takes is kept only as a
-  between-capture comparison: how closely two independent takes of one note
-  agree. It is not drift and not a bound on drift, and it is not comparable
-  to the per-window rms, which measures wander over time inside one capture.
+- **0.001–0.024 cents rms** is the range of pitch variation measured within
+  the usable isolated-oscillator windows. The MIDI gates last 0.6 s. The
+  four M5A analysis windows include part of the release and last
+  0.7198–0.7232 s.
+- In one M1A render, isolated oscillator 2 at MIDI 48 measured **0.0102
+  cents higher** in the second window (4.106–4.713 s) than in the first
+  (0.107–0.712 s). Pitch excursions between those windows are unmeasured.
+  Both MIDI-36 pairs returned `TOO_FEW_PERIODS`.
+- **0.0011 cents** is the pitch difference between the independent M5A
+  saw and pulse takes of MIDI 84.
 
-The decision does not move. Its amount was never taken from the withdrawn
-figure (point 5 calls it a musical decision), and the reason the references
-bound drift rather than supplying it is the per-window rms. What moves is how
-long a span the bound covers: 4.0 s, not 13.6 s.
+Point 5 gives the musical basis for the chosen drift range. The frozen
+recordings constrain pitch variation only where it was observed.

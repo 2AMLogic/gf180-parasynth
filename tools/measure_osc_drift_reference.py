@@ -30,22 +30,20 @@ clip that is absent or does not hash is REFUSED for that reason, never skipped.
 
 WHAT THE FROZEN MATERIAL CAN SUPPORT, AND WHAT IT CANNOT
 --------------------------------------------------------
-These renders were frozen for attack, release and spectrum cases, not for
-drift: the longest held note in any of them is 0.6 s of gate plus its release.
+These renders were frozen for attack, release and spectrum cases. Each MIDI
+gate lasts 0.6 s. The analysis window can extend into the release.
 `model/osc_drift_probe.py` needs seconds of held tone to call a wander
 aperiodic, so several of these windows come back REFUSED with their own code.
 That is the measurement, not a failure of it -- and the across-note reading
 below is what the short notes still support.
 
-  across-note: two notes of the SAME commanded pitch inside ONE render differ
-  in f0 by exactly the drift accumulated between them; a precise f0 in each
-  is all a pair needs. M1A plays MIDI 36 at 0.1 s and again at 4.1 s in
-  one render, so its pairs measure that. M5A's one WAV does not: its saw and
-  pulse segments are two takes, each rendered by a fresh plugin instance and
-  joined afterwards with inserted silence. Nothing ran between the two MIDI-84
-  notes, so that pair is REFUSED as a drift measurement (#1433), and the pitch
-  difference between the takes is quoted only as a comparison between two
-  captures.
+  M1A's isolated oscillator 2 gives two usable MIDI-48 pitch estimates in
+  one render. The second is 0.0102 cents higher than the first. The note
+  onsets are 4.0 s apart, and pitch between the windows is unobserved.
+  Both MIDI-36 pairs refuse with TOO_FEW_PERIODS. M5A's saw and pulse
+  segments come from fresh plugin instances and were joined afterwards
+  with inserted silence. The two MIDI-84 estimates therefore describe a
+  pitch difference between independent captures (#1433).
 """
 from __future__ import annotations
 
@@ -78,10 +76,14 @@ INDEPENDENT_CAPTURES = "INDEPENDENT_CAPTURES"
 CAPTURE_UNKNOWN = "CAPTURE_UNKNOWN"
 
 CAPTURE_HISTORY = {
-    "mono-m1a-miniv3": ("provenance",
-                         "91123a05807213ad767f9d0fca80a2720b13feae"),
-    "mono-m5a-miniv3": ("source",
-                         "899e86d68cf37bacf79188bce142b42ea2d13564"),
+    "mono-m1a-miniv3": (
+        "provenance", "91123a05807213ad767f9d0fca80a2720b13feae",
+        "tools/measure_mono_m1a_reference.py",
+        "fa5cb56d7a941d715bdecc9ad4126343962641d0b02fc3e71ad4aecbd5bebfdc"),
+    "mono-m5a-miniv3": (
+        "source", "899e86d68cf37bacf79188bce142b42ea2d13564",
+        "tools/measure_mono_m5a_reference.py",
+        "8ea0aa3705d907aa6b6260ee5bb611e48b32e7b9e6ebdd97ecca9f5b117e0e9a"),
 }
 
 
@@ -198,20 +200,18 @@ def _windows_m5a(man: dict) -> list:
 
 
 def _pinned(case: str, man: dict) -> bool:
-    """True when `man` names the producer whose capture history is known.
+    """Assign capture identity only for the reviewed producer at its commit.
 
-    `CAPTURE_HISTORY[case]` is the manifest key that names the producer's
-    commit, and the commit at which that producer was read: at both, its hash
-    matched the manifest's. There M1A renders a whole file in one call
-    (`_windows_m1a`) and M5A a whole segment in one instance (`_windows_m5a`).
-
-    Which render a window comes from is a property of the PRODUCER, and it is
-    known only there. A manifest cut at any other commit, or naming no
-    commit, lends no captures: its windows stay measurable and its pairs
-    refuse, because a capture structure inherited from a producer nobody read
-    is the assumption this module made about M5A until #1433."""
-    where, commit = CAPTURE_HISTORY[case]
-    return (man.get(where) or {}).get("commit") == commit
+    Each expected digest is the SHA-256 of `git show <commit>:<path>`.
+    These producers render one file per take for M1A and one segment per
+    take for M5A. Individual windows can be measured without this history.
+    """
+    section, commit, path, digest = CAPTURE_HISTORY[case]
+    source = man.get(section)
+    if not isinstance(source, dict) or source.get("commit") != commit:
+        return False
+    files = source.get("files_sha256")
+    return isinstance(files, dict) and files.get(path) == digest
 
 
 def _across_pair(wins) -> dict:
@@ -300,7 +300,7 @@ def measure_miniv3() -> dict:
             if pinned:
                 r["capture"] = capture
             reports.append(r)
-    # across-note pairs: elapsed drift only inside one capture
+    # Compare the observed pitches within each render.
     across = {}
     for name, sel in (("m1a-midi36-4.0s-apart",
                        lambda r: r["label"].startswith("m1a/phrase0/")
@@ -368,7 +368,7 @@ def main(argv=None) -> int:
                      f"f0 {r['f0_offset_cents']:+7.4f} c  "
                      f"ripple {r['env_ripple_db']:5.2f} dB")
         print(line)
-    print("   -- across-note pairs: elapsed drift only inside one capture")
+    print("   -- across-note pairs (pitch estimates from the observed windows)")
     for name, ac in mv["across_note"].items():
         if ac["verdict"] == odp.REFUSED:
             print(f"      {name:<34} REFUSED {ac['refusal']} "

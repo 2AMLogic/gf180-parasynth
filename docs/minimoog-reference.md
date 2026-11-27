@@ -196,8 +196,8 @@ is the duty cycle** — contract 6.11 and DR 0019. One register, `DRIFT`, drives
 three independent bounded random walks on the three phase increments; the
 default is 0 and 0 is bit-identical to no drift path at all. It was worth
 measuring the references before choosing the amount, because they do not supply
-one: every isolated-oscillator window in the frozen Mini V3 set wanders by
-0.001–0.024 cents rms, 30–100× below audibility, so they bound drift instead
+one. Within the usable isolated-oscillator windows of the frozen Mini V3
+set, pitch variation measured 0.001–0.024 cents rms
 (`docs/scorecard/mono-osc-drift/reference-drift-v1.json`). The target is
 0.8–4.0 cents rms per oscillator as a musical decision, a range because SM 2.3's
 oscillator boards differ by serial range. The **duty cycle** is not drifted: a

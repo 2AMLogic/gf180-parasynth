@@ -13,6 +13,7 @@ import json
 import math
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +45,12 @@ def measured():
     return mod.measure_miniv3()
 
 
+@pytest.fixture
+def published_pairs():
+    path = Path(ROOT) / "docs/scorecard/mono-osc-drift/reference-drift-v1.json"
+    return json.loads(path.read_text())["miniv3"]["across_note"]
+
+
 def _by(measured, prefix):
     return [r for r in measured["reports"] if r["label"].startswith(prefix)]
 
@@ -59,9 +66,9 @@ def _first_difference(a, b, path="", rel_tol=0.0):
     """Where `a` and `b` first differ, or None when they do not. A NaN counts
     as the same NaN and nothing else is forgiven: `==` on two reports holding
     `repeat_r: NaN` is False, and a comparison that is False for identical
-    input proves nothing either way (#134). `rel_tol` forgives a relative
-    difference in floats, for a file written on another machine, and in
-    nothing else."""
+    input proves nothing either way (#134). For finite floats from different
+    machines, `rel_tol` is the relative tolerance and the absolute tolerance
+    near zero."""
     if isinstance(a, dict) and isinstance(b, dict):
         if a.keys() != b.keys():
             return f"{path}: keys {sorted(a.keys() ^ b.keys())}"
@@ -81,7 +88,7 @@ def _first_difference(a, b, path="", rel_tol=0.0):
     if isinstance(a, float) and isinstance(b, float):
         if math.isnan(a) and math.isnan(b):
             return None
-        if a != b and abs(a - b) <= rel_tol * max(1.0, abs(a), abs(b)):
+        if math.isclose(a, b, rel_tol=rel_tol, abs_tol=rel_tol):
             return None
     return None if a == b else f"{path}: {a!r} vs {b!r}"
 
@@ -141,10 +148,8 @@ def test_m1a_octave_control_offset_matches_the_manifest(measured):
 
 @needs_frozen
 def test_isolated_reference_oscillators_show_no_musical_drift(measured):
-    """THE reference finding. Every single-oscillator window in the frozen set
-    wanders by under 0.05 cents rms -- 30x below the smallest drift this issue
-    would consider audible. The references as frozen do not supply a drift
-    magnitude; they bound it."""
+    """Each usable single-oscillator window in the frozen set measures less
+    than 0.05 cents rms of pitch variation."""
     got = [r for r in measured["reports"]
            if ("osc1_open" in r["label"] or "osc2_open" in r["label"]
                or r["label"].startswith("m5a/"))
@@ -219,8 +224,8 @@ def test_control_the_former_note_only_comparison_is_reported_as_drift(measured):
 def test_m1a_pairs_keep_their_own_outcomes(measured):
     """The three M1A pairs have their own provenance: the M1A producer queues
     the whole phrase before one render call, so each pair sits inside one
-    render and stays a measurement, with the outcome the current driver gives
-    it. Two refuse on a window that is too short to measure; one is STABLE."""
+    render. Both MIDI-36 pairs refuse on a window that is too short. Only
+    the isolated MIDI-48 pair yields a pitch difference."""
     across = measured["across_note"]
     for name in M1A_MIDI36_PAIRS:
         assert across[name]["verdict"] == odp.REFUSED, across[name]
@@ -291,8 +296,8 @@ def test_every_across_note_pair_accounts_for_all_of_its_windows(measured):
 
 
 @needs_frozen
-def test_the_console_the_json_file_and_the_published_result_agree(measured, tmp_path,
-                                                                   capsys):
+def test_the_console_the_json_file_and_the_published_result_agree(
+        measured, published_pairs, tmp_path, capsys):
     """Three places a reader meets this pair, and one thing said. The console
     line and the `--json` file must carry what `measure_miniv3` worked out,
     and so must the published `reference-drift-v1.json`: a report corrected in
@@ -311,13 +316,21 @@ def test_the_console_the_json_file_and_the_published_result_agree(measured, tmp_
     on_disk = json.load(open(out))["miniv3"]
     assert _first_difference(on_disk, measured) is None, \
         _first_difference(on_disk, measured)
-    published = json.load(open(os.path.join(
-        ROOT, "docs", "scorecard", "mono-osc-drift", "reference-drift-v1.json")))
-    _assert_refused_for_independent_captures(
-        published["miniv3"]["across_note"][SAW_PULSE])
-    written, live = published["miniv3"]["across_note"], measured["across_note"]
-    assert _first_difference(written, live, rel_tol=1e-9) is None, \
-        _first_difference(written, live, rel_tol=1e-9)
+    _assert_refused_for_independent_captures(published_pairs[SAW_PULSE])
+    _assert_published_pairs_agree(published_pairs, measured)
+
+
+def _assert_published_pairs_agree(published_pairs, measured):
+    difference = _first_difference(published_pairs, measured["across_note"], rel_tol=1e-9)
+    assert difference is None, difference
+
+
+@needs_frozen
+def test_publication_check_rejects_infinite_between_capture_pitch(published_pairs, measured):
+    _assert_published_pairs_agree(published_pairs, measured)
+    published_pairs[SAW_PULSE]["between_captures"]["f0_cents_vs_first"][1] = math.inf
+    with pytest.raises(AssertionError, match=r"between_captures/f0_cents_vs_first\[1\]"):
+        _assert_published_pairs_agree(published_pairs, measured)
 
 
 @needs_frozen
@@ -348,26 +361,39 @@ def test_every_window_names_the_render_it_came_from(measured):
 
 
 @needs_frozen
-def test_control_without_the_producer_pin_no_pair_will_call_itself_drift(monkeypatch):
-    """CONTROL. Which render a window came from is a property of the PRODUCER,
-    read at the commit each manifest pins. Withdraw the pin and the driver
-    knows nothing about capture structure, so every pair must refuse rather
-    than inherit it -- including the one pair that is a measurement when
-    pinned. The windows themselves are untouched: the pin gates the pairs and
-    nothing else. This test never touches the module-scoped `measured`
-    fixture, so a patched run cannot be cached under it."""
-    with_pin = mod.measure_miniv3()
-    monkeypatch.setattr(mod, "_pinned", lambda case, man: False)
+@pytest.mark.parametrize("digest", [None, "0" * 64], ids=["missing", "mismatched"])
+def test_control_without_the_producer_pin_no_pair_will_call_itself_drift(
+        digest, measured, tmp_path, monkeypatch):
+    """Keep the original commits and audio. Change only the producer digest."""
+    for case, section, producer in [
+        (M1A, "provenance", "tools/measure_mono_m1a_reference.py"),
+        (M5A, "source", "tools/measure_mono_m5a_reference.py"),
+    ]:
+        source = Path(case)
+        dest = tmp_path / source.name
+        dest.mkdir()
+        for wav in source.glob("*.wav"):
+            (dest / wav.name).symlink_to(wav)
+        man = json.loads((source / "manifest.json").read_text())
+        hashes = man[section]["files_sha256"]
+        if digest is None:
+            del hashes[producer]
+        else:
+            hashes[producer] = digest
+        (dest / "manifest.json").write_text(json.dumps(man))
+
+    monkeypatch.setattr(mod, "SCOREBOARD", tmp_path)
     without = mod.measure_miniv3()
-    stripped = [{k: v for k, v in r.items() if k != "capture"} for r in with_pin["reports"]]
+    assert {name: ac.get("refusal") for name, ac in without["across_note"].items()} == {
+        name: mod.CAPTURE_UNKNOWN for name in measured["across_note"]}
+    stripped = [{k: v for k, v in r.items() if k != "capture"} for r in measured["reports"]]
     assert _first_difference(stripped, without["reports"]) is None, \
         _first_difference(stripped, without["reports"])
     assert all("capture" not in r for r in without["reports"])
     for name, ac in without["across_note"].items():
         assert ac["verdict"] == odp.REFUSED, (name, ac)
-        assert ac["refusal"] == mod.CAPTURE_UNKNOWN, (name, ac)
         assert not (set(ac) & set(DRIFT_BOUND)), (name, ac)
-    assert with_pin["across_note"][M1A_OSC2_PAIR]["verdict"] == odp.STABLE
+    assert measured["across_note"][M1A_OSC2_PAIR]["verdict"] == odp.STABLE
 
 
 def test_the_comparison_the_pin_control_relies_on_still_sees_a_difference():
@@ -454,6 +480,9 @@ def test_each_frozen_manifest_still_pins_the_producer_its_capture_history_came_f
                                       "manifest.json")))
     assert man[where]["commit"] == commit, (case, man[where]["commit"])
     assert mod._pinned(case, man), case
+    assert not mod._pinned(case, {where: None})
+    assert not mod._pinned(case, {where: {"commit": commit}})
+    assert not mod._pinned(case, {where: {"commit": commit, "files_sha256": []}})
     man[where]["commit"] = "0" * 40
     assert not mod._pinned(case, man), case
     del man[where]["commit"]
