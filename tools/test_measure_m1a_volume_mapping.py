@@ -1,5 +1,9 @@
 """Qualify the octave-detune measurement with independently defined signals."""
+import json
 import math
+import shutil
+import tempfile
+from pathlib import Path
 import numpy as np
 import pytest
 from scipy.io import wavfile
@@ -36,3 +40,35 @@ def test_interference_power_known_constructive_and_destructive_signals(phase):
     assert measured["sum_power"] == pytest.approx(expected, abs=1e-10)
     assert measured["coherent_vs_incoherent_db"] == pytest.approx(10 * math.log10(expected / (1 + .8**2)), abs=1e-9)
     assert measured["linearity_residual"] < 1e-12
+
+
+def test_report_embeds_the_v3_attack_qualification_not_the_retired_v2_one(monkeypatch):
+    """_run() used to close its report with reference.qualify_envelope_basis(),
+    running and embedding the retired v2 fit (#1423). The three renders are
+    replaced by the committed baseline audio and the three compare_audio calls
+    by the committed candidate measurement, so the run reaches the
+    qualification without a render; which qualification the report embeds is
+    the property under test."""
+    def retired(*args, **kwargs):
+        raise AssertionError("the volume-mapping report ran the retired v2 attack qualification")
+    monkeypatch.setattr(probe.bass.reference, "qualify_attack_basis", retired)
+    monkeypatch.setattr(probe.bass.reference, "attack_fit", retired)
+    sr, pcm = wavfile.read(probe.OUT / "baseline.wav")
+    assert sr == probe.SR
+    measured = json.loads((probe.OUT / "volume-minus4db.json").read_text())["measurements"]
+    # _run() records its audio relative to the repository root, so the report
+    # directory must be inside it; build/ is gitignored
+    (probe.ROOT / "build").mkdir(exist_ok=True)
+    out = Path(tempfile.mkdtemp(prefix="test-volume-mapping-", dir=probe.ROOT / "build"))
+    monkeypatch.setattr(probe, "OUT", out)
+    monkeypatch.setattr(probe.bass.lead.vf, "render_mono_fx", lambda *args: pcm)
+    monkeypatch.setattr(probe.bass, "compare_audio", lambda ours, reference: measured)
+    try:
+        assert probe._run() == 0
+        report = json.loads((out / "report.json").read_text())
+    finally:
+        shutil.rmtree(out)
+    attack = report["envelope_qualification"]["attack"]
+    assert attack["estimator"] == "attack_fit_v3"
+    assert attack["cases"] == 1898
+    assert attack["domain"] == probe.bass.qualified_attack_domain()

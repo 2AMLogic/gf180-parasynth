@@ -34,16 +34,59 @@ noise is 18.5 % of its energy, measured exactly.
 The reference set is CC0-1.0 and committed nowhere; see `drum_verify.py`'s
 header for its provenance. Knob positions are encoded in the filename on a
 0..10 dial at 00 / 25 / 50 / 75 / 10, tone or tuning before decay or snappy.
+Every reader takes the 25 files that dial implies, by name, and refuses its own
+law when one is absent (#1420): a glob sees only what is on disk, so a missing
+take used to narrow a range or shift a mean with nothing recording the loss.
 """
 from __future__ import annotations
-import argparse, glob, math, os, sys, wave
+import argparse, math, os, sys, wave
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 import numpy as np
+import pathlib  # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
 
 # Knob position encoded by each two-character field of a reference filename.
 KNOB = {"00": 0.0, "25": 2.5, "50": 5.0, "75": 7.5, "10": 10.0}
+
+
+class Refused(refusal.Refused, RuntimeError):
+    """A stated missing precondition of the reference report. Not a result,
+    and not a fail.
+
+    `missing` holds the relative paths of the expected takes that are absent or
+    are not regular files, in sorted filename order."""
+
+    def __init__(self, missing):
+        self.missing = list(missing)
+        super().__init__("expected reference takes absent or not files: "
+                         + ", ".join(self.missing))
+
+
+def reference_takes(refdir: str, voice: str) -> list[str]:
+    """The 25 takes of `voice` the knob dial encodes -- both filename fields at
+    every position of `KNOB` -- under `refdir`, in sorted filename order: the
+    order the readers' sorted globs produced, which the report's row order and
+    its means rest on. Raises `Refused`, naming every one that is absent or is
+    not a regular file.
+
+    A glob cannot stand in for this. A take missing from disk is invisible to a
+    scan of what is on disk, so a partial corpus narrowed a range or shifted a
+    mean while the report still read as complete (#1420) -- the shape #1309 and
+    #1334 repaired in the conga readers. Presence is all it establishes: a file
+    of the right name holding the wrong audio is read as that take.
+    """
+    rels = sorted(f"{voice.lower()}8/{voice}{k1}{k2}.WAV" for k1 in KNOB for k2 in KNOB)
+    paths = [os.path.join(refdir, r) for r in rels]
+    gone = [r for r, p in zip(rels, paths) if not os.path.isfile(p)]
+    if gone:
+        raise Refused(gone)
+    return paths
+
 
 # Search bands for each voice's damped modes, and the analysis window.
 # A mode is a bridged-T ring; anything decaying faster than MODE_TAU_MIN is the
@@ -229,14 +272,14 @@ def knob_curve(refdir: str, voice: str, win_s: float = 0.25) -> dict:
     amplitude ratio, its sd)`. The amplitude ratio is sqrt(s/(1-s)): it is the
     quantity a level control moves linearly in dB, and it is what a target
     must be read off, because a share saturates at 1 and a knob does not.
+
+    Raises `Refused`, naming them, when any of the voice's 25 expected takes is
+    absent: each law row is a mean over the five takes of its column, and a
+    missing take would shift it with nothing recording the loss.
     """
     bands = VOICE_MODES[voice]
     share, mods = {}, {}
-    pat = os.path.join(refdir, voice.lower() + "8", voice + "????.WAV")
-    files = sorted(glob.glob(pat)) or sorted(glob.glob(pat.upper()))
-    if not files:
-        raise FileNotFoundError(pat)
-    for p in files:
+    for p in reference_takes(refdir, voice):
         stem = os.path.basename(p)[len(voice):len(voice) + 4]
         k1, k2 = KNOB[stem[:2]], KNOB[stem[2:]]
         sr, x = read_wav(p)
@@ -249,6 +292,25 @@ def knob_curve(refdir: str, voice: str, win_s: float = 0.25) -> dict:
         ratio = np.sqrt(s / np.maximum(1 - s, 1e-12))
         law[k2] = (float(s.mean()), float(ratio.mean()), float(ratio.std()))
     return dict(share=share, law=law, modes=mods)
+
+
+def bd_decay_law(refdir: str) -> dict:
+    """The bass drum's DECAY law: the body mode's f0 and tau at every DECAY
+    position, `hz[k2]` and `taus[k2]` holding one fitted value per TUNING take
+    in filename order. `main` prints their means and sds, five takes per row.
+
+    The body mode is fitted from 20 ms after onset over a 0.30 s window. Raises
+    `Refused`, naming them, when any of the 25 expected takes is absent.
+    """
+    taus, hz = {}, {}
+    for p in reference_takes(refdir, "BD"):
+        stem = os.path.basename(p)[2:6]
+        sr, x = read_wav(p)
+        seg = trim_onset(x, sr)[int(0.020 * sr):]
+        r = noise_share(seg, sr, VOICE_MODES["BD"], win_s=0.30)
+        hz.setdefault(KNOB[stem[2:]], []).append(r["modes"][0]["hz"])
+        taus.setdefault(KNOB[stem[2:]], []).append(r["modes"][0]["tau_ms"])
+    return dict(hz=hz, taus=taus)
 
 
 def knob_position(ratio: float, law: dict) -> float:
@@ -362,9 +424,13 @@ def main(argv=None) -> int:
         if not a.refs:
             return 0
 
+    try:
+        c = knob_curve(a.refs, "SD")
+    except Refused as e:
+        print(f"REFUSED: {e}")
+        return 2
     print()
     print("SD -- the SNAPPY law, noise share by damped-mode subtraction, 250 ms window")
-    c = knob_curve(a.refs, "SD")
     print("  SNAPPY   noise share        noise/tone amplitude")
     for k in sorted(c["law"]):
         s, r, sd = c["law"][k]
@@ -379,16 +445,14 @@ def main(argv=None) -> int:
         r = noise_share(x, sr, VOICE_MODES["SD"])
         print(f"   {stem}: " + "  ".join(f"{v:6.2f}" for v in band_shares(r["residual"], sr, edges)))
 
+    try:
+        dec = bd_decay_law(a.refs)
+    except Refused as e:
+        print(f"REFUSED: {e}")
+        return 2
+    hz, taus = dec["hz"], dec["taus"]
     print()
     print("BD -- the DECAY law: tau of the body mode, mean over the five TUNING positions")
-    taus, hz = {}, {}
-    for p in sorted(glob.glob(os.path.join(a.refs, "bd8", "BD????.WAV"))):
-        stem = os.path.basename(p)[2:6]
-        sr, x = read_wav(p)
-        seg = trim_onset(x, sr)[int(0.020 * sr):]
-        r = noise_share(seg, sr, VOICE_MODES["BD"], win_s=0.30)
-        hz.setdefault(KNOB[stem[2:]], []).append(r["modes"][0]["hz"])
-        taus.setdefault(KNOB[stem[2:]], []).append(r["modes"][0]["tau_ms"])
     print("  DECAY    f0 (Hz)            mode tau (ms)")
     for k in sorted(hz):
         print(f"  {k:5.1f}   {np.mean(hz[k]):7.2f} +-{np.std(hz[k]):5.2f}   {np.mean(taus[k]):8.1f} +-{np.std(taus[k]):6.1f}")
