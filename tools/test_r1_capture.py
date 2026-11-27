@@ -439,14 +439,16 @@ def test_the_trial_interpreter_refuses_a_record_of_the_other_image(tmp_path):
     import trial
     from trial import interpret_physical_capture_record as interp
     run = {"rc": 0}
-    out = _analysis(tmp_path, image_id="r0")
-    res = interp({"fixtures": [], "image_id": "r1"}, run, out, "required")
+    fixtures = list(rc.REQUIRED_COMMANDS)
+    takes = [{"command_id": c} for c in (*rc.REQUIRED_COMMANDS, "demo")]
+    out = _analysis(tmp_path, image_id="r0", takes=takes)
+    res = interp({"fixtures": fixtures, "image_id": "r1"}, run, out, "required")
     assert res["verdict"] == trial.NO_VERDICT and "image" in res["reasons"][0]
-    out = _analysis(tmp_path)                                  # no image_id at all
-    res = interp({"fixtures": [], "image_id": "r1"}, run, out, "required")
-    assert res["verdict"] == trial.NO_VERDICT
-    out = _analysis(tmp_path, image_id="r1", takes=[{"command_id": "demo"}] * 2)
-    res = interp({"fixtures": ["demo"], "image_id": "r1"}, run, out, "required")
+    out = _analysis(tmp_path, takes=takes)                     # no image_id at all
+    res = interp({"fixtures": fixtures, "image_id": "r1"}, run, out, "required")
+    assert res["verdict"] == trial.NO_VERDICT and "image" in res["reasons"][0]
+    out = _analysis(tmp_path, image_id="r1", takes=takes)
+    res = interp({"fixtures": fixtures, "image_id": "r1"}, run, out, "required")
     assert res["verdict"] == trial.PASS, res["reasons"]
 
 

@@ -14,8 +14,13 @@ on a command string:
     "@after=ID     <mutant command>"  runs only when baseline ID exited 0
 
 A group is one clean invocation: one stimulus, signal-path configuration and
-simulator. Equivalent mutants share it. A command with no prefix is run exactly
-as run_all would run it.
+simulator. Equivalent mutants share it. In all three roles, start the control
+with a literal command name (possibly quoted), optionally preceded by comments,
+continuations and literal environment assignments. A standalone assignment
+such as RESULT="$(test 1 = 0)" runs the named check and returns its status. The
+remaining arguments and shell operators are interpreted by /bin/sh. For a
+script starting with a compound statement, redirection or computed executable
+name, invoke the script by its path. Its own checks are its responsibility.
 
 WHAT YOU GET, in the report (--json, same entry shape as run_all plus `role`,
 `baseline`, `skipped`):
@@ -29,7 +34,8 @@ WHAT YOU GET, in the report (--json, same entry shape as run_all plus `role`,
     PASS from a previous invocation cannot survive a run that fails or is
     killed.
 
-REFUSED (exit 2, nothing run): a malformed prefix, an `@after` naming no
+REFUSED (exit 2, nothing run, prior report removed): an empty command,
+a malformed prefix, an `@after` naming no
 baseline, a baseline nothing depends on, a duplicate baseline id, a baseline
 whose own command carries an injection / expect-failure flag (a baseline that
 is itself a mutant proves nothing -- the input that defeats this guard), or a
@@ -40,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures as cf
+from pathlib import Path
 import re
 import shlex
 import sys
@@ -58,6 +65,30 @@ MUTANT_FLAGS = ("--inject", "--inject-clamp", "--expect-fail", "--expect-mismatc
                 "--f1cal-fault", "--rtl", "--compare-only")
 _DEFINE_INJECT = re.compile(r"(?:^|\s)(?:--define\s+|-D)INJECT_BUG")
 _PREFIX = re.compile(r"^@(baseline|after)=([A-Za-z0-9_.-]+)\s+(.*)$", re.S)
+
+_TRIVIA = re.compile(r"(?:[ \t\n]|\\\n|\#[^\n]*)*")
+_IDENT = r"[a-zA-Z_][a-zA-Z_0-9]*"
+# Skip only complete, literal assignment values. Whitespace inside an expansion
+# such as A=${x:- some text} cannot establish a new command position.
+_LITERAL_PART = r"""(?:[^ \t\n;&|()<>'"$`\\]|\\[\s\S]|'[^']*'|"(?:[^"$`\\]|\\[\s\S])*")"""
+_ASSIGNMENT = re.compile(rf"{_IDENT}={_LITERAL_PART}*(?=[ \t\n]|$)")
+_CAPTURE = re.compile(rf'{_IDENT}="?\$\((?!\()')
+_COMMAND_NAME = re.compile(r"""(?:[A-Za-z0-9_./:@%+-]+|\[|'[^']+'|"[^"$`\\]+")(?=$|[ \t\n;&|()<>])""")
+_RESERVED = set("if then else elif fi do done case esac while until for in function select time coproc".split())
+
+
+def _has_command(cmd: str) -> bool:
+    """Require an unconditional invocation at the start, before shell execution."""
+    pos = _TRIVIA.match(cmd).end()
+    while prefix := _CAPTURE.match(cmd, pos) or _ASSIGNMENT.match(cmd, pos):
+        pos = _TRIVIA.match(cmd, prefix.end()).end()
+    name = _COMMAND_NAME.match(cmd, pos)
+    if not name or name[0] in _RESERVED:
+        return False
+    if name[0].isdigit() and cmd.startswith(("<", ">"), name.end()):
+        return False  # 2>log redirects a descriptor without running a command
+    # Declaring a function does not execute its body.
+    return not cmd.startswith("(", _TRIVIA.match(cmd, name.end()).end())
 
 
 class Refused(refusal.Refused, Exception):
@@ -94,8 +125,13 @@ def _outdir(cmd: str):
 
 
 def validate(specs: list[dict]) -> None:
+    if not specs:
+        raise Refused("no control commands supplied")
     baselines: dict[str, dict] = {}
     for s in specs:
+        if not _has_command(s["cmd"]):
+            raise Refused(f"empty command for {s['role']} control or unsupported shell prefix "
+                          f"(expected a literal command name): {s['cmd']!r}")
         if s["role"] == "baseline":
             if s["group"] in baselines:
                 raise Refused(f"duplicate baseline id {s['group']!r}")
@@ -194,7 +230,7 @@ def run_specs(specs: list[dict], *, timeout=None, jobs=None, serial=False,
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmds", nargs="+")
+    ap.add_argument("cmds", nargs="*")
     ap.add_argument("--serial", action="store_true")
     ap.add_argument("--jobs", type=int, default=None)
     ap.add_argument("--timeout", type=float, default=None)
@@ -204,7 +240,9 @@ def main(argv=None) -> int:
     try:
         specs = parse(a.cmds)
         validate(specs)
-    except Refused as exc:
+    except (Refused, ValueError) as exc:
+        if a.json:
+            Path(a.json).unlink(missing_ok=True)
         print(f"REFUSED: {exc}")
         return REFUSED
 

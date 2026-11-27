@@ -387,6 +387,11 @@ def test_a_pin_check_that_itself_raises_is_a_refusal_not_a_pass():
     assert rq.check_pins(boom, n_pins=3).outcome == rq.REFUSED
 
 
+@pytest.mark.parametrize("count", [True, 0.5, -1])
+def test_pin_count_must_be_a_positive_integer(count):
+    assert rq.check_pins(lambda: [], n_pins=count).outcome == rq.REFUSED
+
+
 # ===========================================================================
 # 2. the verdict, and that an empty battery is not a pass
 # ===========================================================================
@@ -672,6 +677,38 @@ def _fake_rig(*, cutoff="normal", transposes=True, adapters=True,
     return Fake
 
 
+@pytest.mark.parametrize("pins", [(), ((0, None, None, None),)])
+def test_plugin_cannot_claim_held_pins_from_an_empty_table(pins):
+    with pytest.raises(RuntimeError, match="no pinned"):
+        _fake_rig(adapters=False, pins=pins)()
+
+
+def test_declared_pins_without_a_reader_do_not_qualify():
+    rig = _SynthRig()
+    q = rq.qualify_voice(rig="synth", host="none", render_note=rig.render_note,
+                         render_cutoff=rig.render_cutoff, note_hz=note_hz, note=NOTE,
+                         expect_wave="saw", n_pins=1)
+    assert q.verdict == rq.REFUSED
+    assert "pin" in q.checks[0].why
+
+
+def test_pin_reader_requires_a_count_but_the_audio_only_battery_does_not():
+    rig = _SynthRig()
+    args = dict(rig="synth", host="none", render_note=rig.render_note,
+                render_cutoff=rig.render_cutoff, note_hz=note_hz, note=NOTE, expect_wave="saw")
+    assert rq.qualify_voice(**args).qualified
+    result = rq.qualify_voice(**args, check_pins_fn=lambda: [])
+    assert result.verdict == rq.REFUSED
+    assert result.checks[0].name == "pins"
+
+
+def test_plugin_reports_only_pins_with_an_expectation():
+    rig = _fake_rig(pins=(*_DEFAULT_PINS, (1, None, None, None)))
+    check = rig().qualification.checks[0]
+    assert check.outcome == rq.PASS
+    assert check.detail["n_pins"] == 1
+
+
 def test_wiring_a_connected_rig_qualifies_and_carries_the_battery():
     cls = _fake_rig()
     rig = cls()
@@ -696,8 +733,9 @@ def test_wiring_a_dead_pitch_command_refuses_construction():
     assert "pins: " not in str(e.value)
 
 
-def test_wiring_empty_pins_cannot_qualify():
-    cls = _fake_rig(pins=())
+@pytest.mark.parametrize("pins", [(), ((0, None, None, None),)])
+def test_wiring_empty_pins_cannot_qualify(pins):
+    cls = _fake_rig(pins=pins)
     with pytest.raises(rq.RigRefusal, match="pins") as e:
         cls()
     by = {c.name: c for c in e.value.qualification.checks}

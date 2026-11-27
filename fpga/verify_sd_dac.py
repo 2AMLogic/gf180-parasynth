@@ -82,6 +82,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -244,9 +245,17 @@ def measure(stream, samples) -> dict:
 def verdict(case: str, m: dict) -> bool:
     key, op, bound = BOUNDS[case]
     v = m[key]
-    if key == "noise_dbfs" and m["exact_zero_error"]:
-        return True
-    return bool(v is not None and (v >= bound if op == ">=" else v <= bound))
+    if key == "noise_dbfs":
+        exact = m["exact_zero_error"]
+        if not isinstance(exact, bool):
+            return False
+        if exact:
+            return v is None  # compare() cannot express zero power in dB
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return False
+    if isinstance(v, float) and not math.isfinite(v):
+        return False
+    return bool(v >= bound if op == ">=" else v <= bound)
 
 
 def sha(p: Path) -> str:

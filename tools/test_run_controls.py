@@ -118,9 +118,72 @@ def test_report_is_pending_before_anything_finishes(tmp_path):
     assert seen[0] == ["PENDING"]
 
 
+@pytest.mark.parametrize("cmd", ["   ", "# only a comment", "@after=a # disabled"])
+def test_empty_shell_command_cannot_supply_a_control(tmp_path, cmd, capsys):
+    cmds = [f"@baseline=a {sh(0)}", cmd] if cmd.startswith("@after") else [cmd]
+    code, report = run(tmp_path, cmds)
+    assert code == 2
+    assert "empty command" in capsys.readouterr().out
+    assert report is None
+
+
 def test_plain_commands_behave_as_run_all(tmp_path):
     rc, rep = run(tmp_path, [sh(0), sh(1)])
     assert rc == 1 and [r["state"] for r in rep] == ["PASS", "FAIL"]
+
+
+@pytest.mark.parametrize("cmd", ["\\\n# disabled", "CONTROL_CASE=",
+                                 "A='value with spaces'; B=x # no control", "> /dev/null",
+                                 "${OPTIONAL_CHECK:-}", "<<'END'\nignored\nEND"])
+@pytest.mark.parametrize("role", ["plain", "baseline", "mutant"])
+def test_shell_syntax_without_a_command_is_refused(tmp_path, capsys, monkeypatch, cmd, role):
+    monkeypatch.delenv("OPTIONAL_CHECK", raising=False)
+    commands = {"plain": [cmd], "baseline": [f"@baseline=a {cmd}", "@after=a true"],
+                "mutant": ["@baseline=a exit 0", f"@after=a {cmd}"]}
+    rc, report = run(tmp_path, commands[role])
+    assert rc == 2 and report is None
+    assert f"empty command for {role}" in capsys.readouterr().out
+
+
+def test_shell_assignment_and_continuation_can_prefix_a_real_command(tmp_path):
+    cmd = "# comment ending in a backslash \\\nCONTROL_CASE='a # b' \\\nsh -c 'test \"$CONTROL_CASE\" = \"a # b\"'"
+    rc, report = run(tmp_path, [cmd])
+    assert rc == 0 and report[0]["state"] == "PASS"
+
+
+def test_assignment_substitution_runs_its_check_and_preserves_its_status(tmp_path):
+    marker = tmp_path / "checked"
+    cmd = f'RESULT="$(touch {shlex.quote(str(marker))} && test 1 = 0)"'
+    rc, report = run(tmp_path, ["@baseline=g exit 0", f"@after=g {cmd}"])
+    assert marker.exists()
+    assert rc == 1 and report[1]["state"] == "FAIL" and report[1]["rc"] == 1
+
+
+@pytest.mark.parametrize("cmd", [
+    "2>/dev/null", "check() { touch unused; }", "for i in; do true; done",
+    'RESULT="$(${OPTIONAL_CHECK:-})"', "RESULT=${OPTIONAL_CHECK:- no command}",
+    "RESULT='$(test 1 = 0)'",
+])
+def test_shell_declarations_and_data_are_not_invocations(tmp_path, monkeypatch, cmd):
+    monkeypatch.delenv("OPTIONAL_CHECK", raising=False)
+    assert run(tmp_path, [cmd]) == (2, None)
+
+
+def test_a_named_command_can_read_a_heredoc(tmp_path):
+    rc, report = run(tmp_path, ["cat <<'END'\ncontrol data\nEND"])
+    assert rc == 0 and report[0]["out"].strip() == "control data"
+
+
+@pytest.mark.parametrize("cmd", ["# disabled", "@bogus=x true"])
+def test_a_refusal_invalidates_an_existing_report(tmp_path, cmd):
+    assert run(tmp_path, ["true"])[1][0]["state"] == "PASS"
+    rc, report = run(tmp_path, [cmd])
+    assert rc == 2 and report is None
+
+
+def test_no_control_arguments_invalidate_an_existing_report(tmp_path):
+    assert run(tmp_path, ["true"])[1][0]["state"] == "PASS"
+    assert run(tmp_path, []) == (2, None)
 
 
 @pytest.mark.parametrize("cmds", [
@@ -147,7 +210,7 @@ def _entries():
     for ln in recipe.split("\n"):
         m = re.search(r'"(.*?)"', ln)
         if m:
-            out.append(m.group(1))
+            out.append(m.group(1).replace("$(PY)", PY))  # make expands PY before the CLI sees it
     return out
 
 

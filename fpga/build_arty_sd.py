@@ -72,15 +72,25 @@ def validate_sd_verification(path: Path) -> dict:
         raise ValueError("missing or unreadable no-DAC verification: " + str(path)) from exc
     if record.get("state") != "PASS":
         raise ValueError("no-DAC verification is not a PASS")
-    if not all(c.get("caught") for c in record.get("controls", {}).values()) \
-            or set(record.get("controls", {})) != set(vsd.CONTROLS):
+    controls = record.get("controls")
+    if (not isinstance(controls, dict) or controls.keys() != vsd.CONTROLS.keys()
+            or not all(isinstance(c, dict) and c.get("caught") is True for c in controls.values())):
         raise ValueError("no-DAC verification did not catch every control")
     for p in vsd.SOURCES:
         key = str(p.relative_to(ROOT))
         if record.get("source_sha256", {}).get(key) != build.sha(p):
             raise ValueError("no-DAC verification source differs: " + key)
+    clean = record.get("clean")
+    for case in vsd.BOUNDS:
+        row = clean.get(case) if isinstance(clean, dict) else None
+        try:
+            passes = isinstance(row, dict) and row.get("pass") is True and vsd.verdict(case, row)
+        except (KeyError, TypeError):
+            passes = False
+        if not passes:
+            raise ValueError(f"missing or unsuccessful clean comparison for {case}")
     return {"record_sha256": build.sha(path),
-            "snr_db": {k: v.get("snr_db") for k, v in record["clean"].items()}}
+            "snr_db": {case: clean[case].get("snr_db") for case in vsd.BOUNDS}}
 
 
 def _listed_ports(timing: str, marker: str, count: int) -> list:
