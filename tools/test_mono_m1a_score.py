@@ -155,3 +155,102 @@ def test_in_domain_fits_still_grade():
     ok = {"attack_10_90_ms": 4.0, "explained_ratio": 0.99, "search_boundary": None}
     assert bass.attack_fit_qualified(ok) is None
     assert bass.attack_fit_qualified({**ok, "attack_10_90_ms": 8.0})
+
+
+# --- the qualification the v3 record embeds -----------------------------------
+# The attack is graded inside attack_fit_v3's known-answer domain, yet run()
+# also called reference.qualify_envelope_basis(), whose `attack` entry runs
+# the RETIRED v2 fit 56 times and stamps its "<1 ms known-signal error" into a
+# record whose diagnostics.wrong_then_right.attack_v3 refutes that claim (#1423).
+
+#: Everything but `attack` in reference.qualify_envelope_basis(), as the frozen
+#: module published it in docs/scorecard/results/M1A.json at 283b3a43. The
+#: scorer carries a port of that release half (its digest-pinned module cannot
+#: supply it without the v2 fit) and is held to these rows exactly.
+FROZEN_RELEASE = {
+    "known_release_ms": 230.25850929940458,
+    "spectral_window_s": .25,
+    "lead_window": {"window_ms": 5.0,
+                    "release_ms": [201.8125, 229.02083333333334, 207.16666666666666],
+                    "max_error_ms": 28.44600929940458},
+    "bass_window": {"window_ms": 40.0,
+                    "release_ms": [233.5625, 231.1875, 232.25],
+                    "max_error_ms": 3.3039907005954205},
+    "scope": "40 ms RMS window qualified for release ONLY; attack is measured by "
+             "the waveform-domain fit, not by any RMS window",
+    "initial_failures": "100 ms spectral window refused below 12 periods; 5 ms envelope "
+                        "window failed known release; early h4 window could not resolve "
+                        "the short filter transient",
+}
+
+
+def _forbid_retired_v2(monkeypatch):
+    def retired(*args, **kwargs):
+        raise AssertionError("the v3 scorer ran the retired v2 attack qualification")
+    monkeypatch.setattr(bass.reference, "qualify_attack_basis", retired)
+    monkeypatch.setattr(bass.reference, "attack_fit", retired)
+
+
+def _assert_v3_attack_summary(attack):
+    report = json.loads((bass.QUALIFICATION / "qualification.json").read_text())
+    suite = json.loads((bass.QUALIFICATION / "suite-v3.json").read_text())
+    assert attack["estimator"] == "attack_fit_v3"
+    assert attack["schema"] == report["schema"]
+    assert attack["bound_ms"] == report["bound_ms"]
+    assert attack["cases"] == len(suite["rows"]) == 1898
+    assert attack["search_boundary_hits"] == report["v3"]["search_boundary_hits"]
+    assert attack["domain"] == bass.qualified_attack_domain() == report["v3"]["domain"]
+    assert "observations" not in attack
+    assert attack["qualification_path"] == ("docs/scorecard/mono-m1a-miniv3/"
+                                            "attack-qualification/qualification.json")
+
+
+def test_qualification_is_the_release_basis_and_the_v3_attack_domain(monkeypatch):
+    _forbid_retired_v2(monkeypatch)
+    qualification = bass.qualify_envelope_basis()
+    for key, frozen in FROZEN_RELEASE.items():
+        assert qualification[key] == frozen, key
+    # the 40 ms window measures the known release; the 5 ms lead window cannot
+    assert qualification["bass_window"]["max_error_ms"] < 10
+    assert qualification["lead_window"]["max_error_ms"] > 10
+    _assert_v3_attack_summary(qualification["attack"])
+
+
+def test_run_records_the_v3_qualification_without_running_the_retired_v2_fit(monkeypatch):
+    _forbid_retired_v2(monkeypatch)
+    pcm = np.asarray(signal() * 32768, dtype=np.int16)
+    monkeypatch.setattr(bass.lead.vf, "render_mono_fx", lambda *args: pcm)
+    case = next(c for c in run_case.load_cases() if c["case_id"] == "M1A")
+    record = bass.run(case, keep_audio=False)
+    assert record["analysis_version"] == "m1a-envelope-score-v3"
+    qualification = record["diagnostics"]["qualification"]
+    assert qualification == bass.qualify_envelope_basis()
+    _assert_v3_attack_summary(qualification["attack"])
+
+
+@pytest.mark.parametrize("lying_window",
+                         [bass.reference.ENVELOPE_WINDOW_MS, 5.0], ids=["bass", "lead"])
+def test_control_release_qualification_refuses_a_window_that_lies(monkeypatch, lying_window):
+    """Each half of the gate, shown able to go red. A 40 ms window that reads
+    what the 5 ms one does cannot measure release; a 5 ms window that reads
+    what the 40 ms one does is a control that no longer fails. The other
+    window is left honest, so the refusal can only come from the lying one."""
+    real = bass.lead.am.rms_envelope
+    other = 5.0 if lying_window == bass.reference.ENVELOPE_WINDOW_MS else bass.reference.ENVELOPE_WINDOW_MS
+    asked = []
+
+    def lying(audio, ms, sr):
+        asked.append(ms)
+        return real(audio, ms=other if ms == lying_window else ms, sr=sr)
+
+    monkeypatch.setattr(bass.lead.am, "rms_envelope", lying)
+    with pytest.raises(bass.Refused, match="qualification or wrong-window control failed"):
+        bass.qualify_envelope_basis()
+    assert asked == [5.0, bass.reference.ENVELOPE_WINDOW_MS]
+
+
+def test_qualification_refuses_a_stale_attack_suite(monkeypatch):
+    real = bass.sha
+    monkeypatch.setattr(bass, "sha", lambda p: "0" * 64 if str(p).endswith("attack_fit_v3.py") else real(p))
+    with pytest.raises(bass.Refused, match="stale"):
+        bass.qualify_envelope_basis()

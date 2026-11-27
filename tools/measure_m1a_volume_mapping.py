@@ -124,7 +124,7 @@ def _run() -> int:
               "oscillator_mapping": mapping, "runs": rows,
               "volume_acceptance": {"lost_harmonic_passes": lost, "gain_errors_db": gains,
                                     "existing_property_passes_preserved": True},
-              "envelope_qualification": bass.reference.qualify_envelope_basis(),
+              "envelope_qualification": bass.qualify_envelope_basis(),
               "corroboration": {"Model D cross-check": {"state": "not measured", "required_for_M1A": False}},
               "scope": "volume challenger accepted as component improvement; detune run diagnostic only; no filter redesign or threshold changes"}
     write_json(OUT / "report.json", report)
