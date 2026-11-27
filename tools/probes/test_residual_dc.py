@@ -745,6 +745,13 @@ def test_floor_and_round_match_hand_arithmetic_on_every_named_accumulator_class(
         assert R.REAL_FLOOR.exact(np.int64(acc)) == ex, (acc, "round")
 
 
+@pytest.mark.parametrize("operation", ["floor_out", "rint_out"])
+def test_oracle_comparison_rejects_empty_output(monkeypatch, operation):
+    monkeypatch.setattr(R, operation, lambda _: np.array([], dtype=np.int64))
+    with pytest.raises(AssertionError, match="4096 accumulators"):
+        test_floor_and_round_match_an_independent_reference_on_random_accumulators()
+
+
 def test_floor_and_round_match_an_independent_reference_on_random_accumulators():
     """The sweep the hand table cannot be: 4096 accumulators across the whole
     RTL tacc range, against divmod-floor and CPython Fraction rounding."""
@@ -1156,6 +1163,24 @@ def test_an_all_refused_output_floor_exits_2_not_0(monkeypatch):
 
 
 # --- the matrix tests' population (#1469) ---------------------------------
+
+@pytest.mark.parametrize("population", ["mutants", "properties", "both"])
+def test_controls_cli_refuses_empty_population(monkeypatch, capsys, population):
+    if population in ("mutants", "both"):
+        monkeypatch.setattr(R, "MUTANTS", ())
+    if population in ("properties", "both"):
+        monkeypatch.setattr(R, "PROPERTIES", ())
+    assert R.main(["--controls"]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("population", ["FLOOR_MUTANTS", "FLOOR_PROPERTIES"])
+def test_floor_report_refuses_empty_control_population(monkeypatch, tmp_path, capsys, population):
+    monkeypatch.setattr(R, population, ())
+    recs = json.loads(QUAL.read_text())["records"]
+    assert R.main(["--floor-verdict", *_write(tmp_path, *recs)]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+
 
 def test_matrix_tests_fail_on_an_empty_matrix(monkeypatch, tmp_path):
     """Both matrix pairs (`controls_matrix` and `floor_controls_matrix`) loop

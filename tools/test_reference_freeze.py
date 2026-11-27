@@ -172,6 +172,21 @@ def test_a_manifest_omitting_frozen_files_or_canon_is_refused(tmp_path):
     assert cf.check(ROOT, partial_dirs) == cf.REFUSED
 
 
+def test_documentation_only_tree_cannot_stand_in_for_frozen_records(tmp_path, capsys):
+    docs = set(cf.FREEZE_DOCS)
+    for directory in rs.SUITE_RECORDS[rs.SUITE_V3_FROZEN]:
+        docs.add(str(sorted((ROOT / directory).glob("*.md"))[0].relative_to(ROOT)))
+    for path in docs | {cf.CORPUS_MANIFEST}:
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / path, tmp_path / path)
+    lines = [line for line in MANIFEST.read_text().splitlines()
+             if line.startswith("canon  ") or line.split("  ")[2] in docs]
+    manifest = tmp_path / MANIFEST.name
+    manifest.write_text("\n".join(lines) + "\n")
+    assert cf.main(["--root", str(tmp_path), "--freeze-manifest", str(manifest)]) == cf.REFUSED
+    assert "incomplete" in capsys.readouterr().out
+
+
 def test_the_canonical_v3_suite_declaration_is_frozen_not_the_whole_corpus():
     # The V4 entry next to it must stay editable (renders will land), so the
     # canon hash covers ONLY the frozen suite's own declaration.

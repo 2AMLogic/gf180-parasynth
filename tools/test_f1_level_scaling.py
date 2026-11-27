@@ -240,6 +240,22 @@ def test_verify_with_a_partial_capture_manifest_refuses(monkeypatch, capsys):
     assert "REFUSED" in out and "0 failed" not in out
 
 
+@pytest.mark.parametrize("field", ["clone", "condition", "cut_hz", "amp", "take"])
+def test_verify_binds_capture_metadata_to_each_key(monkeypatch, capsys, field):
+    manifest = cap.load_manifest()
+    clips = manifest["clips"]
+    entry = clips[cap.clip_key("open20k", 0.25, 1)]
+    if field == "clone":
+        manifest["clips"] = dict.fromkeys(clips, entry)
+    elif field in ("cut_hz", "amp"):
+        entry["commanded"][field] = 0
+    else:
+        entry[field] = None
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.verify() == cap.REFUSED
+    assert "identity" in capsys.readouterr().out
+
+
 def test_verify_with_a_corrupted_clip_fails(monkeypatch, capsys):
     import copy
     bad_m = copy.deepcopy(cap.load_manifest())

@@ -413,6 +413,14 @@ def test_the_slope_control_is_the_original_short_record_mutant():
     assert pd.INJECTIONS["SINGLE_WINDOW_SLOPE"].targets == ("noise/psd_slope",)
 
 
+@pytest.mark.parametrize("count", [0, -1])
+def test_threshold_comparison_rejects_truncated_scaled_cases(monkeypatch, count):
+    scaled = pd.scaled_cases(100.0)[:count]
+    monkeypatch.setattr(pd, "scaled_cases", lambda _: scaled)
+    with pytest.raises(AssertionError, match="scaled cases"):
+        test_the_sweep_only_moves_the_thresholds_that_depend_on_safety()
+
+
 def test_the_sweep_only_moves_the_thresholds_that_depend_on_safety():
     """A resolution floor is not SAFETY x anything. If the sweep scaled one, it
     would be reporting a sensitivity to a parameter the row does not have."""

@@ -9,6 +9,7 @@ and the probe printed `every stated invariant holds` with exit 0.
     python3 -m pytest tools/probes/test_filter_corner_recalibration.py -q
 """
 import importlib.util
+import json
 import pathlib
 
 import pytest
@@ -57,6 +58,29 @@ def test_results_file_holding_no_usable_curves_refuses(
     assert rc == 2
     assert "every stated invariant holds" not in out
     assert "REFUSED" in out
+    assert "get worse" not in out
+
+
+@pytest.mark.parametrize("subset", ["one-device", "duplicate-cutoff", "wrong-device"])
+def test_trend_needs_each_device_across_the_measured_range(
+        mod, tmp_path, monkeypatch, capsys, subset):
+    data = json.loads(mod.RESULTS.read_text())
+    diva = data["response-diva"]
+    if subset == "one-device":
+        data = {"response-diva": [r for r in diva if r["cut_hz"] in (400, 800)]}
+    elif subset == "duplicate-cutoff":
+        diva[-1] = diva[-2]
+    else:
+        diva[-1]["device"] = "miniv3"
+    results = tmp_path / "results.json"
+    results.write_text(json.dumps(data))
+    monkeypatch.setattr(mod, "RESULTS", results)
+    monkeypatch.setattr(mod, "ours", lambda: None)
+    monkeypatch.setattr(mod, "reference_side", lambda: None)
+    assert mod.main() == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "get worse" not in out
+    assert not mod.checked
 
 
 def test_populated_results_still_checks_and_holds(mod, capsys):

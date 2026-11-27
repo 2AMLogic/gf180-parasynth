@@ -135,6 +135,7 @@ def test_the_post_run_digest_check_still_refuses_in_local_mode(monkeypatch, tmp_
 @pytest.mark.parametrize("manifest_body", [
     "",                                                    # zero-byte manifest (#1469)
     "not-a-valid-sha256-line\n",                           # malformed line
+    "0" * 64 + "  unexpected.txt\n",
     "ONLY_ROUTED",                                         # Rule 8: non-empty, omits dsp_cells_dump.txt
 ])
 def test_empty_or_partial_box_manifest_refuses_even_when_dcp_header_matches(

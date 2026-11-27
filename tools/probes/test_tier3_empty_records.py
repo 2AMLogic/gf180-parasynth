@@ -82,12 +82,31 @@ def test_egtc_partial_empty_or_unanswered_population_refuses(
     assert "REFUSED" in out and "controls: PASS" not in out
 
 
+def test_egtc_measured_clean_failure_takes_precedence(monkeypatch, capsys):
+    monkeypatch.setattr(egtc, "control_fixtures", lambda: [_one_sine_fixture()])
+    monkeypatch.setattr(egt, "SPECS", [next(s for s in egt.SPECS if s.name == "rms")])
+    monkeypatch.setattr(am, "rms", lambda x: 0.0)
+    assert egt.main(["controls"]) == 1
+    out = capsys.readouterr().out
+    assert "FAIL clean run" in out and "nothing was measured" not in out
+
+
 def test_egtc_populated_good_and_bad_cases_via_caller(monkeypatch, capsys):
     fx = _one_sine_fixture()
     rms_spec = next(s for s in egt.SPECS if s.name == "rms")
     monkeypatch.setattr(egtc, "control_fixtures", lambda: [fx])
     monkeypatch.setattr(egt, "SPECS", [rms_spec])
 
+    # Keep the individual verdicts from the same run that grades the mutant.
+    verdicts = []
+    run = egt.run
+
+    def record_run(*args, **kwargs):
+        rows = run(*args, **kwargs)
+        verdicts.extend(rows)
+        return rows
+
+    monkeypatch.setattr(egt, "run", record_run)
     # Populated good case: mutant doubles rms -> caught, stubs redden rms -> exit 0
     monkeypatch.setattr(egtc, "MUTANTS", [
         ("rms x2", "rms", lambda: (lambda x: 2.0 * am.rms(x)), ("rms", "damped_sine")),
@@ -95,12 +114,23 @@ def test_egtc_populated_good_and_bad_cases_via_caller(monkeypatch, capsys):
     assert egt.main(["controls"]) == 0
     assert "controls: PASS" in capsys.readouterr().out
 
+    assert any(v.status == egt.FAIL and v.detail == "got 0.707107 want 0.353553 (+100.00 %)"
+               for v in verdicts)
+
     # Populated bad case: no-op mutant leaves rms intact -> NOT-CAUGHT -> exit 1
     monkeypatch.setattr(egtc, "MUTANTS", [
         ("rms noop", "rms", lambda: am.rms, ("rms", "damped_sine")),
     ])
     assert egt.main(["controls"]) == 1
     assert "controls: FAIL" in capsys.readouterr().out
+
+
+    # Reinstate the recursive replacement that used to earn credit for a crash.
+    monkeypatch.setattr(egtc, "MUTANTS", [
+        ("recursive rms", "rms", lambda: (lambda x: am.rms(x)), ("rms", "damped_sine")),
+    ])
+    assert egt.main(["controls"]) == 1
+    assert "NOT-CAUGHT" in capsys.readouterr().out
 
 
 # ===========================================================================
@@ -131,6 +161,16 @@ def test_census_reconciles_against_known_tier3_set():
     # fixed anyway) plus refaudio_member_list.py (#1484) must be accounted for.
     assert "tools/refaudio_member_list.py" in non_gated
     assert "tools/check_reference_freeze.py" in non_gated
+
+
+def test_two_tools_cannot_satisfy_the_census(monkeypatch, tmp_path):
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "Makefile").touch()
+    for name in ("refaudio_member_list.py", "check_reference_freeze.py"):
+        (tmp_path / "tools" / name).write_text("if bad: pass\\n")
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    with pytest.raises(AssertionError, match="disposition table"):
+        test_census_reconciles_against_known_tier3_set()
 
 
 def test_unreachable_refusals_and_constant_populations_hold(tmp_path, monkeypatch, capsys):
