@@ -256,6 +256,125 @@ def test_the_fixed_model_runner_keeps_an_off_board_curve_with_its_results(
     assert (board["shared"] / MODEL_CURVE).read_bytes() == clean_curve
 
 
+def _relative_candidate(board):
+    """The fixture's isolated directory as a caller spells it on the command
+    line: relative, so the working directory decides where it lands (#1415)."""
+    return (board["base"] / "candidate").relative_to(rc.ROOT)
+
+
+def test_a_relative_results_directory_inside_the_checkout_states_its_curve_relative_to_it(
+        board, monkeypatch):
+    """#1415, run from the checkout: a relative `--results` is a directory
+    inside it, so `stated_path`'s contract states its curve relative to the
+    checkout -- as the RTL scorer states its own -- and the record travels
+    with the checkout. Checked on the LITERAL string: resolved before
+    comparing, the absolute spelling that was the defect passes."""
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(rc.ROOT)
+    relative = _relative_candidate(board)
+    inside = rc.ROOT / relative
+    # the premise of "inside" -- no symlink on the way -- and that nothing
+    # wrote there before this run, so what is there afterwards is this run's
+    assert inside.resolve() == inside
+    assert not inside.exists()
+
+    assert rc.main(["F1A", "--results", str(relative)]) == 0
+    record = json.loads((inside / "F1A.json").read_text())
+    stated = record["provenance"]["artefacts"]["ours"]
+    assert stated == str(relative / MODEL_CURVE)
+    assert record["audio"].endswith(f"ours {stated}")
+    # the name opens, relative to the checkout, onto the curve written beside
+    # the record: the directory's other file, carrying the record's engine,
+    # profile and cutoff
+    assert sorted(p.name for p in inside.iterdir()) == [MODEL_CURVE, "F1A.json"]
+    curve, config = json.loads(_curve_named_by(record)), record["provenance"]["config"]
+    assert (curve["engine"], curve["engine_profile"], curve["cut_hz"]) == (
+        record["engine"], config["engine_profile"], config["cut_hz"])
+
+    # a later run into the same directory leaves the same name on its own
+    # record, with its OWN curve under it: the name follows the record's run,
+    # not whichever file was there first
+    clean_curve = _curve_named_by(record)
+    assert rc.main(["F1A", "--inject", "REF_CORNER_2X", "--results", str(relative)]) == 1
+    control = json.loads((inside / "F1A.json").read_text())
+    assert control["INJECTED_CONTROL"] == "REF_CORNER_2X"
+    assert control["provenance"]["artefacts"]["ours"] == stated
+    assert _curve_named_by(control) != clean_curve
+
+
+def test_a_relative_results_directory_outside_the_checkout_stays_with_its_caller(
+        board, monkeypatch, tmp_path):
+    """#1415, from a working directory outside the checkout -- and the input
+    that defeats the obvious fix. `ROOT / outdir` is the RTL scorer's rule and
+    was this issue's first suggestion; applied to this CLI it would move
+    another caller's files into a checkout they are not standing in. The same
+    relative spelling puts BOTH files under the working directory, as before,
+    and the record then names its curve absolutely."""
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(tmp_path)
+    assert not tmp_path.is_relative_to(rc.ROOT)
+    relative = _relative_candidate(board)
+
+    assert rc.main(["F1A", "--results", str(relative)]) == 0
+    there = tmp_path / relative
+    assert sorted(p.name for p in there.iterdir()) == [MODEL_CURVE, "F1A.json"]
+    record = json.loads((there / "F1A.json").read_text())
+    stated = record["provenance"]["artefacts"]["ours"]
+    assert pathlib.Path(stated).is_absolute()
+    assert stated == str(there / MODEL_CURVE)
+    assert len(_gains(_curve_named_by(record))) == len(GRID)
+    # and nothing of the run reached the checkout under the same spelling
+    assert not (board["base"] / "candidate").exists()
+
+
+def test_relative_results_cannot_traverse_a_regular_file(board, monkeypatch, tmp_path):
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text("existing receipt")
+
+    with pytest.raises(NotADirectoryError):
+        rc.main(["F1A", "--results", "receipt.json/../candidate"])
+    assert receipt.read_text() == "existing receipt"
+    assert not (tmp_path / "candidate").exists()
+
+
+def test_relative_results_cannot_create_a_dangling_directory_target(board, monkeypatch, tmp_path):
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(tmp_path)
+    candidate = tmp_path / "candidate"
+    candidate.symlink_to("missing-volume/results", target_is_directory=True)
+
+    with pytest.raises(FileExistsError):
+        rc.main(["F1A", "--results", "candidate"])
+    assert candidate.readlink() == pathlib.Path("missing-volume/results")
+    assert not (tmp_path / "missing-volume").exists()
+
+
+def test_relative_results_record_keeps_the_written_curve_after_retargeting_its_symlink(
+        board, monkeypatch, tmp_path):
+    monkeypatch.setattr(fp, "SelectedFilterPath", _CurveDouble)
+    monkeypatch.chdir(tmp_path)
+    assert not tmp_path.is_relative_to(rc.ROOT)
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    original = candidate / "curve-v1.json"
+    original.write_text("{}")
+    replacement = candidate / "curve-v2.json"
+    replacement.write_text("{}")
+    link = candidate / MODEL_CURVE
+    link.symlink_to(original.name)
+
+    assert rc.main(["F1A", "--results", "candidate"]) == 0
+    record = json.loads((candidate / "F1A.json").read_text())
+    measured = original.read_bytes()
+    assert len(_gains(measured)) == len(GRID)
+    link.unlink()
+    link.symlink_to(replacement.name)
+    assert _curve_named_by(record) == measured
+    assert record["provenance"]["artefacts"]["ours"] == str(original)
+
+
 def test_every_published_f1_row_names_the_curve_a_default_run_of_its_engine_writes():
     """The clean board path is not moved by the off-board rule: each published
     F1 row names the file a default run of its own engine writes."""
@@ -295,3 +414,66 @@ def test_a_stated_path_is_relative_inside_the_checkout_and_absolute_outside(tmp_
     # stated where it actually went, not relative to a cwd nobody kept
     assert rc.stated_path(pathlib.Path("elsewhere/x.json")) \
         == str(pathlib.Path("elsewhere/x.json").resolve())
+
+
+#: Each CLI that reaches the F1 curve writer, as (its `main`, the module and
+#: class it builds its filter path from, the double for that class, the
+#: arguments of a clean F1A, the file name its curve is written under).
+_CLIS = {
+    "model": (rc, fp, "SelectedFilterPath", _CurveDouble, ["F1A"], MODEL_CURVE),
+    "rtl": (score, rtlpath, "RtlFilterChainPath", _rtl_double(), ["--case", "F1A"],
+            RTL_CURVE),
+}
+
+
+def _clean_run_into(cli, monkeypatch, results):
+    """One clean F1A through the named CLI, its curve written into `results`.
+    Returns the CLI's exit status."""
+    module, paths, cls, double, argv, _ = _CLIS[cli]
+    monkeypatch.setattr(paths, cls, double)
+    return module.main([*argv, "--results", str(results)])
+
+
+@pytest.mark.parametrize("cli, where", [(cli, where) for cli in _CLIS
+                                        for where in ("outside", "inside")])
+def test_an_absolute_results_directory_records_the_target_of_the_curve_filename_symlink(
+        board, monkeypatch, tmp_path, cli, where):
+    """#1435: the absolute spelling of #1415's retargeting control, through
+    both CLIs that reach the F1 curve writer. A symlink AT the curve filename
+    receives the write, and the record states that link by its own name -- so
+    once the link is retargeted, the name opens the replacement's `{}` and no
+    longer the measured curve. The record must name the file the write landed
+    in: relative to the checkout when that file is inside it, absolute when it
+    is not.
+
+    An absolute `--results` is the board's own default (`ROOT / "build" /
+    "scorecard"`), and the RTL scorer's rule for every spelling, so it is the
+    spelling the published rows are written under. Checked on the LITERAL
+    strings of both fields that carry the path.
+
+    What a pass does not establish: that the named file's BYTES are pinned. A
+    link moved between the write and the resolution, or the target itself
+    replaced afterwards, is not guarded against."""
+    candidate = (tmp_path if where == "outside" else board["base"]) / "candidate"
+    candidate.mkdir()
+    # the premise of each spelling -- and that no symlink sits on the way to
+    # the directory, so only the filename's own link is under test
+    assert candidate.is_absolute()
+    assert candidate.is_relative_to(rc.ROOT) == (where == "inside")
+    assert candidate.resolve() == candidate
+    original, replacement = candidate / "curve-v1.json", candidate / "curve-v2.json"
+    original.write_text("{}")
+    replacement.write_text("{}")
+    link = candidate / _CLIS[cli][5]
+    link.symlink_to(original.name)
+
+    assert _clean_run_into(cli, monkeypatch, candidate) == 0
+    record = json.loads((candidate / "F1A.json").read_text())
+    measured = original.read_bytes()
+    assert len(_gains(measured)) == len(GRID)        # the first target received the write
+    link.unlink()
+    link.symlink_to(replacement.name)
+    assert _curve_named_by(record) == measured, "the record follows the retargeted symlink"
+    stated = str(original.relative_to(rc.ROOT) if where == "inside" else original)
+    assert record["provenance"]["artefacts"]["ours"] == stated
+    assert record["audio"].endswith(f"ours {stated}")
