@@ -118,7 +118,7 @@ def sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def _clip(case: str, name: str, want_sha: str | None) -> tuple:
+def _clip(case: str, name: str, want_sha: str | None) -> tuple | dict:
     """(sr, x) for a frozen clip, or a refusal dict. The hash is a
     PRECONDITION: audio that is not the audio the manifest describes is not the
     reference, and measuring it would produce a number nobody can reproduce."""
@@ -126,11 +126,19 @@ def _clip(case: str, name: str, want_sha: str | None) -> tuple:
     if not os.path.exists(path):
         return {"verdict": odp.REFUSED, "refusal": "CLIP_ABSENT",
                 "refusal_detail": path}
-    if want_sha:
-        got = sha256(path)
-        if got != want_sha:
-            return {"verdict": odp.REFUSED, "refusal": "CLIP_HASH",
-                    "refusal_detail": f"{name}: {got[:12]} != {want_sha[:12]}"}
+    if not want_sha:
+        return {
+            "verdict": odp.REFUSED,
+            "refusal": "CLIP_HASH",
+            "refusal_detail": f"{name}: missing WAV SHA-256 in manifest",
+        }
+    got = sha256(path)
+    if got != want_sha:
+        return {
+            "verdict": odp.REFUSED,
+            "refusal": "CLIP_HASH",
+            "refusal_detail": f"{name}: {got[:12]} != {want_sha[:12]}",
+        }
     sr, x = odp.read_wav(path)
     return sr, x
 
@@ -146,10 +154,10 @@ def _windows_m1a(man: dict) -> list:
     nominal. It is left in the record because a cross-check that has never
     caught anything is not known to work."""
     out = []
-    files = [(r["file"], r["sha256"], f"phrase{i}")
+    files = [(r["file"], r.get("sha256"), f"phrase{i}")
              for i, r in enumerate(man["renders"])]
     for key, c in man.get("controls", {}).items():
-        files.append((c["file"], c["sha256"], key))
+        files.append((c["file"], c.get("sha256"), key))
     for fn, sha, kind in files:
         semis = 12 if kind == "osc2_open" else 0
         for i, ev in enumerate(man["events"]):
@@ -162,7 +170,7 @@ def _windows_m1a(man: dict) -> list:
 
 def _windows_m5a(man: dict) -> list:
     fn = man["audio"]["file"]
-    sha = man["audio"]["sha256"]
+    sha = man["audio"].get("sha256")
     out = []
     for s, seg in enumerate(man["timeline"]["segments"]):
         off = seg["offset_samples"] / man["host"]["sample_rate_hz"]
@@ -187,12 +195,14 @@ def measure_miniv3() -> dict:
             continue
         man = json.load(open(mpath))
         for fn, sha, label, note, t0, t1 in picker(man):
-            key = (case, fn)
+            if not isinstance(sha, str):
+                sha = None
+            key = (case, fn, sha)
             if key not in cache:
                 cache[key] = _clip(case, fn, sha)
             got = cache[key]
             if isinstance(got, dict):
-                reports.append(dict(got, label=label))
+                reports.append(dict(got, label=label, note=note))
                 continue
             sr, x = got
             seg = x[max(0, int(t0 * sr)):min(len(x), int(t1 * sr))]

@@ -9,10 +9,13 @@ own model (CLAUDE.md), which is exactly what these two avoid.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
+import shutil
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -35,6 +38,17 @@ needs_frozen = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def measured():
     return mod.measure_miniv3()
+
+
+@pytest.fixture
+def scorecard(tmp_path, monkeypatch):
+    for source in (Path(M1A), Path(M5A)):
+        case = tmp_path / source.name
+        case.mkdir()
+        for path in (source / "manifest.json", *source.glob("*.wav")):
+            shutil.copyfile(path, case / path.name)
+    monkeypatch.setattr(mod, "SCOREBOARD", tmp_path)
+    return tmp_path
 
 
 def _by(measured, prefix):
@@ -117,7 +131,8 @@ def test_across_note_baselines_bound_long_term_drift(measured):
     assert ac["verdict"] == odp.STABLE, ac
     assert ac["span_cents"] < 0.02, ac
     ac = measured["across_note"]["m1a-osc2-midi48-4.0s-apart"]
-    assert ac["span_cents"] < 0.05, ac
+    assert ac["verdict"] == odp.STABLE, ac
+    assert ac["span_cents"] == pytest.approx(0.01018, abs=0.00001), ac
 
 
 @needs_frozen
@@ -161,3 +176,73 @@ def test_a_tampered_hash_refuses_rather_than_measuring(tmp_path):
     assert isinstance(got, dict) and got["refusal"] == "CLIP_HASH", got
     got = mod._clip("mono-m1a-miniv3", "not-a-file.wav", None)
     assert isinstance(got, dict) and got["refusal"] == "CLIP_ABSENT", got
+
+
+def _assert_clip_hash_refusals(report, prefix, suffixes):
+    rows = _by(report, prefix)
+    assert [r["label"] for r in rows] == [prefix + suffix for suffix in suffixes]
+    for row in rows:
+        assert row["verdict"] == odp.REFUSED, row
+        assert row["refusal"] == "CLIP_HASH", row
+
+
+@needs_frozen
+@pytest.mark.parametrize(
+    "digest",
+    ["original", None, "", "omitted", []],
+    ids=["mismatch", "null", "empty", "omitted", "non-string"],
+)
+def test_altered_osc2_wav_refuses_each_window_and_the_pair(scorecard, digest):
+    case = scorecard / "mono-m1a-miniv3"
+    manifest = case / "manifest.json"
+    man = json.loads(manifest.read_text())
+    entry = man["controls"]["osc2_open"]
+    wav = case / entry["file"]
+    data = bytearray(wav.read_bytes())
+    assert hashlib.sha256(data).hexdigest() == entry["sha256"]
+    data[-4] ^= 1
+    wav.write_bytes(data)
+    if digest == "omitted":
+        del entry["sha256"]
+    elif digest != "original":
+        entry["sha256"] = digest
+    manifest.write_text(json.dumps(man))
+
+    report = mod.measure_miniv3()
+    _assert_clip_hash_refusals(
+        report, "m1a/osc2_open/", ["n0-midi48", "n1-midi55", "n2-midi48"]
+    )
+    pair = report["across_note"]["m1a-osc2-midi48-4.0s-apart"]
+    assert pair["verdict"] == odp.REFUSED, pair
+    assert pair["labels"] == ["m1a/osc2_open/n0-midi48", "m1a/osc2_open/n2-midi48"]
+    assert "span_cents" not in pair
+    assert any("drift_rms_cents" in r for r in _by(report, "m1a/osc1_open/"))
+
+
+@needs_frozen
+def test_each_render_and_m5a_audio_need_their_own_digest(scorecard):
+    m1a = scorecard / "mono-m1a-miniv3" / "manifest.json"
+    man = json.loads(m1a.read_text())
+    man["renders"][1]["file"] = man["renders"][0]["file"]
+    del man["renders"][1]["sha256"]
+    m1a.write_text(json.dumps(man))
+    m5a = scorecard / "mono-m5a-miniv3" / "manifest.json"
+    man = json.loads(m5a.read_text())
+    del man["audio"]["sha256"]
+    m5a.write_text(json.dumps(man))
+
+    report = mod.measure_miniv3()
+    assert any("drift_rms_cents" in r for r in _by(report, "m1a/phrase0/"))
+    _assert_clip_hash_refusals(
+        report, "m1a/phrase1/", ["n0-midi36", "n1-midi43", "n2-midi36"]
+    )
+    _assert_clip_hash_refusals(
+        report,
+        "m5a/",
+        [
+            "seg0-saw/n0-midi84",
+            "seg0-saw/n1-midi96",
+            "seg1-pulse/n0-midi84",
+            "seg1-pulse/n1-midi96",
+        ],
+    )
