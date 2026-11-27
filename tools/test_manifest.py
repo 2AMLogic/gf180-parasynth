@@ -20,10 +20,12 @@ Two things this suite exists to prove, beyond "the code runs":
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 import math
 import os
 import pathlib
+import shlex
 import subprocess
 
 import numpy as np
@@ -40,7 +42,136 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 # =============================================================================
 # The gate on this suite's own wiring
 # =============================================================================
-def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
+#: The job that owns this suite's CI path. #812 (operator option a) moved
+#: that ownership here from a literal enumeration in `make verify-fast`:
+#: m5a-fast is the sound gate, the duplicated tools/ load had twice taken it
+#: to NO-VERDICT at its 600 s per-command cap, and this job already collects
+#: `tools/` wholesale under the same change guard. Its own rungs.yml comment
+#: states the contract this suite now depends on: "No deselects."
+TOOLS_JOB = "tools"
+
+#: This suite, as the wholesale run must collect it.
+SUITE = "tools/test_manifest.py"
+
+#: pytest options that narrow a directory collection, mapped to how they are
+#: spelled on a command line (both `--opt value` and `--opt=value`).
+_NARROWING_OPTIONS = ("--ignore", "--ignore-glob", "--deselect")
+
+
+def _pytest_arglists(run_text: str) -> list[list[str]]:
+    """The argument lists of every pytest invocation in one `run:` string,
+    shell-tokenised per line and cut at shell separators.
+
+    Only an interpreter spelling counts (`pytest ...` at a command start or
+    after `-m`), so a package list (`pip install ... pytest ...`) is not an
+    invocation. A line that does not tokenise is skipped rather than guessed
+    at; the caller decides whether what remains collects the suite.
+    """
+    out: list[list[str]] = []
+    for line in run_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            toks = shlex.split(line)
+        except ValueError:
+            continue
+        for i, tok in enumerate(toks):
+            if tok != "pytest" or (i > 0 and toks[i - 1] != "-m"):
+                continue
+            args: list[str] = []
+            for tail in toks[i + 1:]:
+                if tail in ("&&", "||", ";", "|", ">", ">>"):
+                    break
+                args.append(tail)
+            out.append(args)
+    return out
+
+
+def _ignores_this_suite(option: str, value: str) -> bool:
+    """Whether one `--ignore`/`--ignore-glob`/`--deselect` value excludes
+    this suite from a `tools/` collection. Ancestors count: ignoring `tools`
+    or the tree root removes the suite with everything else in the
+    directory. `--deselect` counts only on this suite's own node ids -- the
+    wholesale run's contract is that it deselects nothing at all."""
+    v = value.strip().rstrip("/")
+    while v.startswith("./"):
+        v = v[2:]
+    if option == "--deselect":
+        return v.startswith(SUITE + "::")
+    if option == "--ignore-glob":
+        return (fnmatch.fnmatch(SUITE, value.strip())
+                or fnmatch.fnmatch("tools", value.strip()))
+    return v in ("", ".", "tools", SUITE)
+
+
+def _suite_missing_from_tools_job(workflow) -> str | None:
+    """Why the `tools` job's pytest run would NOT collect this suite, or
+    `None` when it would.
+
+    Two levels, because "the command text is still there" is not "the suite
+    still runs" -- #812's own control shape, a narrowing that keeps the
+    original text. The job must run a pytest whose POSITIONAL arguments
+    collect `tools/` wholesale (the directory, not a hand-picked file list),
+    and no option may narrow that collection away from this suite:
+    `--ignore` on the suite or its directory, any `--deselect` of this
+    suite's node ids, `--collect-only`, and `-k` -- whose effect on this
+    suite cannot be decided statically, so it is reported rather than
+    trusted (rungs.yml: "No deselects.").
+    """
+    jobs = (workflow or {}).get("jobs") or {}
+    job = jobs.get(TOOLS_JOB)
+    if job is None:
+        return f"no job named {TOOLS_JOB!r} in rungs.yml"
+    steps = [s for s in (job.get("steps") or []) if isinstance(s, dict)]
+    arglists = [a for s in steps for a in _pytest_arglists(str(s.get("run", "")))]
+    if not arglists:
+        return f"no step in job {TOOLS_JOB!r} invokes pytest"
+    for args in arglists:
+        positionals: list[str] = []
+        problems: list[str] = []
+        i = 0
+        while i < len(args):
+            arg = args[i]
+            if arg in _NARROWING_OPTIONS:
+                value = args[i + 1] if i + 1 < len(args) else ""
+                if _ignores_this_suite(arg, value):
+                    problems.append(f"{arg} {value} excludes this suite")
+                i += 2
+                continue
+            if arg.startswith(tuple(f"{opt}=" for opt in _NARROWING_OPTIONS)):
+                opt, _, value = arg.partition("=")
+                if _ignores_this_suite(opt, value):
+                    problems.append(f"{opt} {value} excludes this suite")
+                i += 1
+                continue
+            if arg == "-k" or arg.startswith("-k"):
+                problems.append(
+                    f"-k is present ({' '.join(args)}): its effect on {SUITE} "
+                    "cannot be decided statically, and the wholesale run's "
+                    "contract is that it selects nothing")
+                i += 2 if arg == "-k" else 1
+                continue
+            if arg in ("--collect-only", "--co"):
+                problems.append("--collect-only collects and runs no test")
+                i += 1
+                continue
+            if arg.startswith("-"):
+                i += 1
+                continue
+            positionals.append(arg)
+            i += 1
+        wholesale = {p.strip("./").rstrip("/") for p in positionals}
+        if "tools" not in wholesale and SUITE not in positionals:
+            continue          # not a collection that could reach this suite
+        if problems:
+            return "; ".join(problems)
+        return None           # a covering, unnarrowed invocation: the suite runs
+    return (f"no pytest invocation in job {TOOLS_JOB!r} collects tools/ "
+            "wholesale (a positional `tools/`, not a hand-picked file list)")
+
+
+def test_this_suite_runs_in_a_ci_job_that_collects_tools_wholesale():
     """"Check that the thing you are testing is the thing that ships"
     (CLAUDE.md), applied to this suite itself.
 
@@ -49,22 +180,86 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
     workflow invokes either target -- so these tests and the injected-bug T20
     control below shipped without ever executing in CI. `rungs.yml`'s own
     comment states the rule: a gate nothing invokes fails exactly the same way
-    as one that passes. This test fails if that wiring is ever removed.
+    as one that passes. The repair was to enumerate the suite in `make
+    verify-fast`, the target rungs.yml's m5a-fast job runs; #812 then moved
+    the suite's CI ownership to the `tools` job's wholesale directory run,
+    with the operator's approval (option a: the 37 tools/ files left the
+    fast recipe, which the duplicated load had twice taken to NO-VERDICT at
+    its 600 s per-command cap). This test fails if the wiring that now
+    ships -- the wholesale run that must collect this suite, and the
+    standalone injector command that must stay in the fast target -- is
+    ever removed or narrowed.
     """
     recipe = makefile_recipe("verify-fast")
-    assert "tools/test_manifest.py" in recipe, (
-        "tools/test_manifest.py must be enumerated in `make verify-fast`, which "
-        "is the target rungs.yml's m5a-fast job runs; the broad `pytest tools/` "
-        "in `make verify` is invoked by no workflow")
     assert "tools/inject_manifest_defects.py" in recipe, (
-        "the injected-defect controls have the same problem as the suite did if "
-        "they live only in `make controls`, which no workflow invokes either")
+        "the injected-defect controls have the same problem as the suite did "
+        "if they live only in `make controls`, which no workflow invokes "
+        "either -- their standalone command belongs in `make verify-fast`")
     workflow = yaml.safe_load((ROOT / ".github/workflows/rungs.yml").read_text())
     blocks, reason = cw.step_would_block_pull_request(workflow, "m5a-fast", "verify-fast")
     assert blocks, (
         "rungs.yml's m5a-fast job no longer runs `make verify-fast` in a way "
-        f"that can block a pull request -- this suite's only CI path is "
-        f"gone or neutered: {reason}")
+        f"that can block a pull request -- the injected-defect controls' "
+        f"only fast path is gone or neutered: {reason}")
+    blocks, reason = cw.step_would_block_pull_request(workflow, TOOLS_JOB, "pytest tools")
+    assert blocks, (
+        f"rungs.yml's {TOOLS_JOB} job no longer runs the wholesale "
+        f"`pytest tools/` in a way that can block a pull request -- this "
+        f"suite's only CI path is gone or neutered: {reason}")
+    missing = _suite_missing_from_tools_job(workflow)
+    assert missing is None, (
+        f"this suite's CI owner is the {TOOLS_JOB} job's wholesale directory "
+        f"run, and that run no longer collects it: {missing}")
+
+
+def _tools_job_run_step(workflow):
+    """The one step of the live `tools` job that runs the wholesale pytest."""
+    steps = workflow["jobs"][TOOLS_JOB]["steps"]
+    hits = [s for s in steps if isinstance(s, dict)
+            and "pytest tools" in str(s.get("run", ""))]
+    assert len(hits) == 1, "the wholesale run step moved; update this control"
+    return hits[0]
+
+
+@pytest.mark.parametrize("run, expect", [
+    ("python -m pytest tools/ -q", None),
+    ("python -m pytest tools -q", None),
+    ("python -m pytest tools/ -q --ignore=tools/test_manifest.py", "--ignore"),
+    ("python -m pytest tools/ -q --ignore tools/test_manifest.py", "--ignore"),
+    ("python -m pytest tools/ -q --ignore tools", "--ignore"),
+    ("python -m pytest tools/ -q --ignore=.", "--ignore"),
+    ("python -m pytest tools/ -q --ignore=./tools", "--ignore"),
+    ("python -m pytest tools/ -q --ignore-glob=tools/test_manifest.py", "--ignore"),
+    ("python -m pytest tools/ -q --ignore-glob 'tools/*'", "--ignore"),
+    ("python -m pytest tools/ -q --deselect tools/test_manifest.py::test_hash_is_reproducible_across_calls_for_the_same_config", "--deselect"),
+    ("python -m pytest tools/ -q -k 'not slow'", "-k"),
+    ("python -m pytest tools/ -q --collect-only", "--collect-only"),
+    ("python -m pytest tools/test_run_all.py -q", "wholesale"),
+])
+def test_the_wiring_check_decides_each_narrowing(run, expect):
+    """Every defeat of "the suite runs there" that keeps the job, the step,
+    and even the original command text intact. The blocking half of the
+    wiring test above is blind to all of them -- the substring still
+    matches -- so this pins the half that parses the invocation: which of
+    these narrowings the `tools` job's run must never carry, and that the
+    two clean spellings of an unnarrowed directory run are accepted.
+
+    The `--ignore` row is #812's own control shape (the injected defect in
+    `tools/inject_manifest_defects.py` stages exactly it against the real
+    workflow); the others are the same class: space-form options, ancestor
+    directories, globs, deselects, a `-k` whose effect on this suite is
+    statically undecidable, a collection that runs nothing, and a hand list
+    that simply no longer names this suite.
+    """
+    workflow = yaml.safe_load((ROOT / ".github/workflows/rungs.yml").read_text())
+    _tools_job_run_step(workflow)["run"] = run
+    missing = _suite_missing_from_tools_job(workflow)
+    if expect is None:
+        assert missing is None, missing
+    else:
+        assert missing is not None, (
+            f"the wiring check accepted a narrowed run: {run!r}")
+        assert expect in missing, (missing, run)
 
 
 def test_makefile_recipe_returns_only_live_lines(tmp_path):
