@@ -288,3 +288,18 @@ def test_the_bench_prints_each_record_at_one_site_only(record):
     root = pathlib.Path(__file__).resolve().parents[1]
     source = (root / "rtl-sketch/verify_synth_top.py").read_text()
     assert len(re.findall(r'print\(f"' + re.escape(record), source)) == 1, record
+
+
+def test_the_two_committed_two_run_job_reports_are_refused():
+    """Real board output, and the shape #1562 was filed from: two JSON job
+    reports each hold two passing runs of the bench, and both used to clear
+    the gate. They are job reports rather than scorer inputs, but they are the
+    only two-run captures the repository holds."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    for rel in ("docs/scorecard/m5-artifacts-333/probe/b3.json",
+                "docs/scorecard/mono-pulse-2x/rtl/ci-phrases.json"):
+        text = (root / rel).read_text()
+        with pytest.raises(ValueError) as caught:
+            gate.validate_clean_pass(text)
+        assert str(caught.value) == TWO_RUNS, rel
+        assert set(gate.record_counts(text).values()) == {2}, rel
