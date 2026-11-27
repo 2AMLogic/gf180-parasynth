@@ -881,7 +881,11 @@ def main(argv=None) -> int:
         if problems:
             print("A bound that moved without a reason is how a test goes green "
                   "without the model improving.")
-        return 1 if problems else 0
+            return 1
+        if not LOCKS:
+            print("REFUSED: no locks to check")
+            return 2
+        return 0
     if a.changed:
         return cmd_changed(a.changed)
     if a.inject:

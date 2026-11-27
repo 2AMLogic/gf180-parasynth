@@ -16,9 +16,9 @@ WHAT A RATE COSTS TO GET WRONG. Three ways a loop like this reports a crash rate
 that is not one, all of them guarded here:
 
   - **Counting text.** A run that prints "Segmentation fault" and exits 0 is not
-    a crash and a run that segfaults silently is. Only `os.wait4`'s status is
-    read; stderr is recorded for the report and never for the verdict. This is
-    `tools/run_all.py`'s rule, for the same reason.
+    a crash and a target that segfaults silently is. The signal comes from
+    `os.wait4`. A separate progress record shows whether execution entered the
+    target callable's body. Stderr is recorded for diagnostics.
   - **Flattening "did not run" into "did not crash."** A target that does not
     exist, a missing numpy, an import error -- all exit non-zero without ever
     reaching the code under test, and averaged into a denominator they look
@@ -121,14 +121,14 @@ def preconditions(target: str) -> list[str]:
     return bad
 
 
-def classify(status: int) -> tuple[str, int | None, int | None]:
-    """(verdict, exit code, signal) from a raw wait status. Read the STATUS,
-    never the output: a run that prints 'Segmentation fault' and exits 0 did
-    not crash, and one that faults silently did."""
+def classify(status: int, progress: list[str]) -> tuple[str, int | None, int | None]:
+    """Interpret the raw wait status using the pytest child's call evidence."""
     if os.WIFSIGNALED(status):
         sig = os.WTERMSIG(status)
-        return (CRASH if sig in CRASH_SIGNALS else ERROR), None, sig
+        return (CRASH if sig in CRASH_SIGNALS and "started" in progress else ERROR), None, sig
     code = os.WEXITSTATUS(status)
+    if "completed" not in progress:
+        return ERROR, code, None
     if code == 0:
         return PASS, code, None
     if code == 1:
@@ -160,17 +160,21 @@ def classify(status: int) -> tuple[str, int | None, int | None]:
 #
 # Units: ru_maxrss is kilobytes on Linux and BYTES on macOS; normalised to kB.
 _LAUNCHER = r"""
-import json, os, sys
+import json, os, sys, tempfile
 fd, argv = int(sys.argv[1]), sys.argv[2:]
+progress = tempfile.TemporaryFile()
 pid = os.fork()
 if pid == 0:
     os.close(fd)
     try:
-        os.execv(argv[0], argv)
+        os.set_inheritable(progress.fileno(), True)
+        os.execv(argv[0], [*argv, str(progress.fileno())])
     finally:
         os._exit(127)
 _, status, ru = os.wait4(pid, 0)
-os.write(fd, json.dumps({"status": status, "maxrss": ru.ru_maxrss,
+progress.seek(0)
+os.write(fd, json.dumps({"status": status, "progress": progress.read().decode().splitlines(),
+                         "maxrss": ru.ru_maxrss,
                          "minflt": ru.ru_minflt, "majflt": ru.ru_majflt}).encode())
 os.close(fd)
 """
@@ -184,8 +188,8 @@ def run_once(target: str, extra_env: dict, timeout: float) -> dict:
     wait status, forwarded unaltered."""
     env = dict(os.environ, **extra_env)
     env.setdefault("PYTHONFAULTHANDLER", "1")   # the traceback we would need next time
-    cmd = [sys.executable, "-X", "faulthandler", "-m", "pytest", target,
-           "-q", "-p", "no:cacheprovider", "--no-header"]
+    child = pathlib.Path(__file__).resolve().with_name("_crash_rate_pytest.py")
+    cmd = [sys.executable, "-X", "faulthandler", str(child), target]
     t0 = time.monotonic()
     rfd, wfd = os.pipe()
     try:
@@ -205,7 +209,7 @@ def run_once(target: str, extra_env: dict, timeout: float) -> dict:
         if not raw:
             raise RuntimeError(f"launcher exited {p.returncode} without a report")
         rep = json.loads(raw)
-        verdict, code, sig = classify(rep["status"])
+        verdict, code, sig = classify(rep["status"], rep["progress"])
         rss = rep["maxrss"] // _MAXRSS_TO_KB
         minflt, majflt = rep["minflt"], rep["majflt"]
     except Exception as exc:                                  # pragma: no cover
@@ -257,10 +261,29 @@ print(json.dumps({"threads_before_import": before,
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
+def batch_report(target, requested_runs, runs, env, json_path):
+    counts = {v: sum(1 for r in runs if r["verdict"] == v)
+              for v in (PASS, TESTFAIL, CRASH, ERROR, TIMEOUT)}
+    exercised = counts[PASS] + counts[TESTFAIL] + counts[CRASH]
+    peak = max((r["peak_rss_kb"] for r in runs), default=0)
+    summary = {
+        "target": target, "runs": requested_runs, "counts": counts,
+        "runs_that_exercised_the_target": exercised,
+        "crash_rate": (None if exercised == 0 else counts[CRASH] / exercised),
+        "peak_rss_kb": peak,
+        "median_seconds": sorted(r["seconds"] for r in runs)[len(runs) // 2] if runs else None,
+    }
+    report = {"environment": env, "summary": summary, "runs": runs}
+    if json_path:
+        pathlib.Path(json_path).write_text(json.dumps(report, indent=2) + "\n")
+    return summary
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--target", default=DEFAULT_TARGET, help="pytest node id or file")
+    ap.add_argument("--target", default=DEFAULT_TARGET,
+                    help="pytest node id or path; extra selections in pytest options are refused")
     ap.add_argument("--runs", type=int, default=20)
     ap.add_argument("--timeout", type=float, default=600.0, help="seconds per run")
     ap.add_argument("--env", action="append", default=[], metavar="K=V",
@@ -287,6 +310,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2 if "refused" in report["probe"] else 0
 
     if a.runs < 1:
+        if a.json:
+            batch_report(a.target, a.runs, [], env, a.json)
         print(f"REFUSED: --runs must be at least 1, got {a.runs}. A batch that "
               "ran nothing has no crash rate to report. This is NOT 'zero "
               "crashes'.", file=sys.stderr)
@@ -317,21 +342,10 @@ def main(argv: list[str] | None = None) -> int:
             for line in r["tail"].splitlines():
                 print(f"        | {line}")
 
-    counts = {v: sum(1 for r in runs if r["verdict"] == v)
-              for v in (PASS, TESTFAIL, CRASH, ERROR, TIMEOUT)}
-    exercised = counts[PASS] + counts[TESTFAIL] + counts[CRASH]
-    peak = max((r["peak_rss_kb"] for r in runs), default=0)
-    summary = {
-        "target": a.target, "runs": a.runs, "counts": counts,
-        "runs_that_exercised_the_target": exercised,
-        "crash_rate": (None if exercised == 0 else counts[CRASH] / exercised),
-        "peak_rss_kb": peak,
-        "median_seconds": sorted(r["seconds"] for r in runs)[len(runs) // 2],
-    }
-    report = {"environment": env, "summary": summary, "runs": runs}
-    if a.json:
-        pathlib.Path(a.json).write_text(json.dumps(report, indent=2) + "\n")
-
+    summary = batch_report(a.target, a.runs, runs, env, a.json)
+    counts = summary["counts"]
+    exercised = summary["runs_that_exercised_the_target"]
+    peak = summary["peak_rss_kb"]
     print("\n" + "-" * 68)
     for k, v in counts.items():
         print(f"  {k:<10} {v}")

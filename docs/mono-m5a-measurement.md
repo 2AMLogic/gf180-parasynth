@@ -68,4 +68,8 @@ compares the saw oscillator component only.
 The JSON report and all three WAV hashes are produced by
 [`tools/measure_mono_case.py`](../tools/measure_mono_case.py). A missing or
 unusable plugin, silent/non-finite output, wrong fundamental, or estimator
-refusal returns `REFUSED` and writes no measurement numbers.
+refusal returns `REFUSED` and writes no measurement numbers. So does a
+retained signal beyond full scale (`|x| > 1.0`; exact +/-1 is permitted): all
+three signals are checked before the first WAV is written, so an over-range
+reference is refused by name instead of being hard-clipped into a WAV that no
+longer replays the scored audio (#1552).

@@ -53,6 +53,31 @@ def _sha256(path: pathlib.Path) -> str:
     return h.hexdigest()
 
 
+def _assert_full_scale(name: str, x: np.ndarray) -> None:
+    """REFUSE a retained-evidence signal that does not fit the 16-bit WAV.
+
+    Same convention as ``manifest._write_wav16``: clipping is ``|x| > 1.0`` on
+    the float input, so exactly +/-1.0 is permitted.  Without this the writer
+    hard-clips and the saved WAV no longer replays the words that were scored.
+
+    Finiteness is asserted here rather than inherited from ``_measure``: a NaN
+    makes every ``|x| > 1.0`` comparison False, so the over-range count alone
+    lets one through (#134).
+    """
+    a = np.asarray(x, dtype=np.float64)
+    bad = int(np.count_nonzero(~np.isfinite(a)))
+    if bad:
+        raise Refused(
+            f"{name} signal is non-finite: {bad} of {a.size} samples are NaN or inf; "
+            f"the retained 16-bit WAV cannot replay them")
+    over = int(np.count_nonzero(np.abs(a) > 1.0))
+    if over:
+        raise Refused(
+            f"{name} signal exceeds full scale: {over} of {a.size} samples have "
+            f"|x| > 1.0 (peak {float(np.max(np.abs(a))):.6g}); the retained 16-bit "
+            f"WAV would hard-clip them and no longer replay the scored audio")
+
+
 def _apparatus() -> dict:
     """Assert the external instrument and its qualified setup are usable."""
     if not pathlib.Path(rr.PATH_SURGE).exists():
@@ -121,6 +146,8 @@ def run(out: pathlib.Path) -> tuple[int, dict]:
         baseline_m = _measure(dut_raw, vf.note_hz(NOTE))
         dut_m = _measure(dut, vf.note_hz(NOTE))
         dut_2x_m = _measure(dut_2x, vf.note_hz(NOTE))
+        for name, sig in (("reference", ref), ("dut", dut), ("dut_2x", dut_2x)):
+            _assert_full_scale(name, sig)
         out.mkdir(parents=True, exist_ok=True)
         ref_wav, dut_wav = out / "reference-surge.wav", out / "dut-polyblep.wav"
         dut_2x_wav = out / "dut-2x-decimated.wav"

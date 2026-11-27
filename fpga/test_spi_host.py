@@ -413,3 +413,22 @@ def test_live_queue_can_accept_more_events_after_a_drain():
     second = live.schedule(BENCH)
     assert len(second) > len(first)
     assert len([p for p in second if p.w.tag == "gate"]) == 2
+
+
+# ---- an unknown KeyHost op must not silently shorten the write stream --------
+class _StubKeyHost:
+    """A KeyHost that emits one op MusicHost.keys has no branch for."""
+    def writes(self, events, regs, first_from_reset=True):
+        return [(0, "BOGUS", 1)]
+
+
+def test_keys_rejects_an_unhandled_keyhost_op():
+    host = sh.MusicHost(keyhost=_StubKeyHost())
+    with pytest.raises(ValueError, match="unexpected KeyHost op 'BOGUS'"):
+        host.keys([(0, "on", 45)])
+
+
+def test_live_keys_rejects_an_unhandled_keyhost_op():
+    host = sh.LiveMusicHost(keyhost=_StubKeyHost())
+    with pytest.raises(ValueError, match="unexpected KeyHost op 'BOGUS'"):
+        host.keys([(0, "on", 45)])

@@ -179,6 +179,16 @@ def test_injected_cancellation_turns_the_gate_red(tmp_path):
     assert main(["--offline", str(snap), "--require-clean", "--window", "4"]) == 1
 
 
+@pytest.mark.parametrize("window", ["0", "-1"])
+def test_nonpositive_window_cannot_hide_a_cancellation(tmp_path, capsys, window):
+    snap = _snapshot(tmp_path, _records([("cancelled", "GitHub Actions 1", 550)]))
+    args = ["--offline", str(snap), "--require-clean", "--window"]
+    assert main([*args, "1"]) == 1
+    capsys.readouterr()
+    assert main([*args, window]) == 2
+    assert "positive" in capsys.readouterr().err
+
+
 def test_a_window_too_short_to_fill_is_refused_not_passed(tmp_path, capsys):
     """The failure mode this file exists for: a short window must never read
     as a clean one. REFUSED (2) is distinct from both pass (0) and fail (1)."""

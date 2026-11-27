@@ -243,6 +243,8 @@ def validate_part(case_id: str, part: str, report_text: str, wav_path: pathlib.P
         raise Refused(f"{part}: the WAV holds {len(samples)} samples, the report decoded "
                       f"{periods.group(1)} periods")
     case_frames = int(schedule["case_frames"])
+    if case_frames <= 0:
+        raise Refused(f"{part}: no case frames to score (case_frames={case_frames})")
     if len(samples) < case_frames:
         raise Refused(f"{part}: the run is {case_frames - len(samples)} frame(s) short of "
                       f"{case_id}'s {case_frames}-frame phrase")

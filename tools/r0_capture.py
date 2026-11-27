@@ -67,6 +67,7 @@ from scipy.signal import correlate
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
+import capture_commands                                       # noqa: E402
 import r0_reference as rr                                     # noqa: E402
 import refusal
 
@@ -154,7 +155,7 @@ END_GUARD_S = 0.1     # not scored: the last 0.1 s of each reference (see analys
 PEAK_TIE = 0.97       # correlation peaks this close to the best are ties
 ENV_LP_HZ = 100.0     # the alignment envelope: x^2, zero-phase low-pass, sqrt
 TONE_COMMANDS = {"held-m5a-saw", "held-m5a-pulse"}     # single-oscillator presets
-REQUIRED_COMMANDS = ("silence", "held-m5a-saw", "held-default", "bar808-full", "demo")
+REQUIRED_COMMANDS = capture_commands.REQUIRED_COMMANDS
 PROPERTIES = ("routing", "silence", "clipping", "pitch", "clock", "timing", "gain",
               "noise", "dropout", "stuck", "residual", "repeat", "channel-identity")
 

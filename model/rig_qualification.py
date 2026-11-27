@@ -552,15 +552,15 @@ def check_pins(check_pins_fn, *, n_pins: int | None = None, name="pins") -> Chec
     sound-changing controls that are not the thing under test, so an empty pin
     table means nobody has written them down yet -- and an empty check that
     reports success is the exact shape of a false green."""
-    det = {}
-    if n_pins is not None:
-        det["n_pins"] = int(n_pins)
-        if int(n_pins) == 0:
-            return Check(name, REFUSED,
-                         "the rig pins no parameters, so there is nothing to hold: "
-                         "a rig that cannot prove its own settings has no verdict", det)
+    if isinstance(n_pins, bool) or not isinstance(n_pins, (int, np.integer)):
+        return Check(name, REFUSED, "the pin reader needs a count of checked settings", {})
+    det = {"n_pins": int(n_pins)}
+    if n_pins <= 0:
+        return Check(name, REFUSED, "no pinned settings to qualify", det)
+    if check_pins_fn is None:
+        return Check(name, REFUSED, "no pin readback function was supplied", det)
     try:
-        bad = list(check_pins_fn() or ())
+        bad = list(check_pins_fn())
     except Exception as e:                                          # pragma: no cover
         return Check(name, REFUSED, f"the pin check itself failed: "
                                     f"{type(e).__name__}: {e}", det)
@@ -568,7 +568,7 @@ def check_pins(check_pins_fn, *, n_pins: int | None = None, name="pins") -> Chec
     if bad:
         return Check(name, FAIL,
                      f"{len(bad)} pinned setting(s) did not hold: {bad}", det)
-    return Check(name, PASS, f"{det.get('n_pins', '?')} pinned settings held", det)
+    return Check(name, PASS, f"{n_pins} pinned settings held", det)
 
 
 # ===========================================================================
@@ -609,7 +609,7 @@ def qualify_voice(*, rig: str, host: str, render_note, render_cutoff, note_hz,
     steady = steady or (lambda y: y)
     checks = []
     if check_pins_fn is not None or n_pins is not None:
-        checks.append(check_pins(check_pins_fn or (lambda: []), n_pins=n_pins))
+        checks.append(check_pins(check_pins_fn, n_pins=n_pins))
 
     y = np.asarray(render_note(int(note)), dtype=np.float64).ravel()
     checks.append(check_sounding(y))

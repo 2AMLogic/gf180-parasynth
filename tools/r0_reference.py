@@ -62,10 +62,11 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 for _p in ("fpga", "model", "rtl-sketch", "audition", "tools", "fpga/release"):
     sys.path.insert(0, str(ROOT / _p))
+import capture_commands
 import refusal
 
-MANIFEST = ROOT / "fpga" / "release" / "baseline-2025.1.json"
-R1_MANIFEST = ROOT / "fpga" / "release" / "r1-2025.1.json"
+MANIFEST = capture_commands.MANIFESTS["r0"]
+R1_MANIFEST = capture_commands.MANIFESTS["r1"]
 SR = 48000
 SCHEMA = "r0-reference/1"
 # The two images this tool renders and checks. Everything that names one image
@@ -78,8 +79,6 @@ IMAGES = {
     "r1": {"label": "R1", "manifest": R1_MANIFEST, "ref_schema": "r1-reference/1",
            "refdir": ROOT / "fpga" / "release" / "evidence" / "r1-reference"},
 }
-R0_MANIFEST_SCHEMA = "gf180-parasynth release manifest v1"
-R1_MANIFEST_SCHEMA = "gf180-parasynth R1 release manifest v1"
 R1_RUN_IDENTITIES = ROOT / "fpga" / "reports" / "r1-candidate" / "rtl-run-identities"
 # R1's RTL evidence replayed each command's bytes; the identity of that replay
 # (its `stimulus` digest) is what a rolling fixture's replay is bound to.
@@ -116,27 +115,9 @@ def load_manifest(path=MANIFEST) -> dict:
     out. An unrecognised schema REFUSES: the image is stated by the manifest,
     never inferred from the path it was loaded from."""
     try:
-        raw = json.loads(pathlib.Path(path).read_text())
-    except (OSError, ValueError) as exc:
-        raise Refused(f"release manifest {path} unreadable: {exc}")
-    schema = raw.get("schema")
-    if schema == R1_MANIFEST_SCHEMA:
-        iid = "r1"
-        cmds = {k: v for k, v in ((raw.get("host") or {}).get("commands") or {}).items()
-                if isinstance(v, dict) and v.get("cmds_sha256")}
-        out = dict(raw, commands=cmds)
-    elif schema == R0_MANIFEST_SCHEMA:
-        iid = "r0"
-        out = dict(raw)
-    else:
-        raise Refused(f"release manifest {path}: schema {schema!r} is neither R0's nor R1's "
-                      "(no image can be bound)")
-    if not out.get("commands") or "image" not in out:
-        raise Refused(f"release manifest {path}: no image or no command with pinned bytes")
-    out["image_id"] = iid
-    out["label"] = IMAGES[iid]["label"]
-    out["manifest_sha256"] = sha256_file(path)
-    return out
+        return capture_commands.load_manifest(path)
+    except ValueError as exc:
+        raise Refused(str(exc)) from exc
 
 
 def cli_argv(command: str) -> list:
