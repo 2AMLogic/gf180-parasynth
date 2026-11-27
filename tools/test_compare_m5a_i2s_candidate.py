@@ -1,4 +1,5 @@
 import copy
+import json
 
 import pytest
 
@@ -34,6 +35,63 @@ def _event(wave, midi, *, alias, harmonic=-2.0):
             "envelope_ms": {"attack_model": 8.0, "attack_reference": 7.0,
                             "release_model": 1200.0, "release_reference": 1201.0},
             "gain_dbfs": {"model": -19.0, "reference": -19.2}}
+
+
+@pytest.fixture
+def scored_records():
+    path = compare.ROOT / "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.json"
+    baseline = json.loads(path.read_text())
+    return baseline, copy.deepcopy(baseline)
+
+
+@pytest.mark.parametrize("side", ["baseline", "candidate"])
+@pytest.mark.parametrize("excess", [
+    "0_0", "-1e-400", "NaN", "Infinity", "-Infinity", False, None,
+    -1, float("nan"), float("inf"), pytest.param(10**400, id="overflow"),
+])
+def test_refuses_damaged_per_note_foldback(scored_records, side, excess):
+    baseline, candidate = scored_records
+    record = baseline if side == "baseline" else candidate
+    record["diagnostics"]["events"][0]["foldback_db"]["excess_over_reference_db"] = excess
+    with pytest.raises(m5a.Refused, match=rf"{side}:saw/84.*foldback"):
+        compare.compare_records(baseline, candidate)
+
+
+@pytest.mark.parametrize("side", ["baseline", "candidate"])
+@pytest.mark.parametrize("token", ["-1e-400", "0.0", "-0.0", "-0e-400"])
+def test_foldback_at_zero_from_json(scored_records, tmp_path, side, token):
+    original, modified = scored_records
+    original_path = tmp_path / "original.json"
+    original_path.write_text(json.dumps(original))
+    modified["diagnostics"]["events"][0]["foldback_db"]["excess_over_reference_db"] = "TOKEN"
+    modified_path = tmp_path / "modified.json"
+    modified_path.write_text(json.dumps(modified).replace('"TOKEN"', token))
+    paths = (modified_path, original_path) if side == "baseline" else (original_path, modified_path)
+
+    if token == "-1e-400":
+        with pytest.raises(m5a.Refused, match=rf"{side}:saw/84.*foldback"):
+            compare.compare_files(*paths)
+    else:
+        report = compare.compare_files(*paths)
+        passes = report["comparison"]["preserved_per_note_passes"]
+        [foldback] = [row for row in passes if (row["wave"], row["midi"], row["property"])
+                      == ("saw", 84, "Foldback energy")]
+        assert foldback[f"{side}_error"] == 0.0
+
+
+@pytest.mark.parametrize("excess, category", [
+    (1.9171, "preserved_per_note_passes"),
+    (0.0, "preserved_per_note_passes"),
+    (3, "preserved_per_note_passes"),
+    (3.0, "preserved_per_note_passes"),
+    (3.01, "lost_per_note_passes"),
+])
+def test_reports_recorded_saw_foldback(scored_records, excess, category):
+    baseline, candidate = scored_records
+    candidate["diagnostics"]["events"][0]["foldback_db"]["excess_over_reference_db"] = excess
+    report = compare.compare_records(baseline, candidate)["comparison"]
+    assert {"wave": "saw", "midi": 84, "property": "Foldback energy",
+            "baseline_error": 1.9171, "candidate_error": excess, "limit": 3.0} in report[category]
 
 
 def test_reports_full_integrated_property_vector_and_acceptance():
