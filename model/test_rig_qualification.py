@@ -479,6 +479,38 @@ class _SynthRig:
             expect_wave="saw", cutoff_knobs=(0.3, 0.5, 0.7, 0.9))
 
 
+@pytest.mark.parametrize(("reader", "expected"), [
+    pytest.param(lambda: [], rq.PASS, id="pins-held"),
+    pytest.param(lambda: [(265, "NAME", "Unison Voices", "High Cut")],
+                 rq.FAIL, id="pin-mismatch"),
+    pytest.param(None, rq.REFUSED, id="no-reader"),
+    pytest.param(lambda: None, rq.REFUSED, id="no-readback-result"),
+])
+def test_declared_voice_pins_require_a_readback_result(reader, expected):
+    rig = _SynthRig()
+    rig.check_pins = reader
+    qualification = rig.qualify()
+    pin_check, = (check for check in qualification.checks if check.name == "pins")
+    assert all(check.ok for check in qualification.checks if check.name != "pins")
+    assert pin_check.outcome == expected, pin_check.why
+    assert qualification.verdict == ("qualified" if expected == rq.PASS else expected)
+
+
+def test_a_rig_that_declares_no_pins_runs_the_battery_with_no_pins_check():
+    """The audio-only path, and it must survive #1354's tightening: a rig
+    whose pin arguments are BOTH omitted is not asked for a readback it never
+    claimed to have -- the battery runs with no pins check at all rather than
+    a refused one. `reference_rigs._Plugin.qualify` takes this path; its pins
+    are held by its own `check_pins` call, ahead of the battery."""
+    rig = _SynthRig()
+    qualification = rq.qualify_voice(
+        rig="synth", host="none", render_note=rig.render_note,
+        render_cutoff=rig.render_cutoff, note_hz=note_hz, note=NOTE,
+        expect_wave="saw", cutoff_knobs=(0.3, 0.5, 0.7, 0.9))
+    assert "pins" not in {check.name for check in qualification.checks}
+    assert qualification.verdict == "qualified"
+
+
 #: (label, rig kwargs, the checks that must NOT pass). Every other check in
 #: the battery must PASS -- that half is the discrimination and it is asserted.
 DEFECTS = [
