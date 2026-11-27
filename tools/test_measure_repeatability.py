@@ -10,6 +10,7 @@ are tested against signals whose answer is constructed, not observed.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import shutil
@@ -22,6 +23,185 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import measure_repeatability as mr                                 # noqa: E402
 
 SR = 44100
+
+
+@pytest.fixture
+def indexed_hits(tmp_path, monkeypatch):
+    """Make empty entries from the two pack indexes. Tests supply the audio."""
+    folders = {}
+    packs = (
+        ("808-from-mars", "CURRENT", ("Digital/A", "Digital/B")),
+        ("808_from_mars_legacy", "LEGACY", ("1. Digital/1. No Accent",)),
+    )
+    for archive, attr, subfolders in packs:
+        root = getattr(mr, attr).relative_to(mr.CACHE / archive)
+        monkeypatch.setattr(mr, attr, tmp_path / archive / root)
+        index = mr.REPO / "refaudio" / "index" / f"{archive}.tsv"
+        paths = [pathlib.Path(line.split("\t")[0]) for line in index.read_text().splitlines()[1:]]
+        for folder in subfolders:
+            members = [p for p in paths if p.parent == root / folder]
+            assert len(members) == 36
+            dest = tmp_path / archive / root / folder
+            dest.mkdir(parents=True)
+            for p in members:
+                (dest / p.name).touch()
+            folders[folder] = dest
+    return folders
+
+
+LEGACY_FOLDER = "1. Digital/1. No Accent"
+LEGACY_F06 = "BD_Clean_NoAcc_F_808_06.wav"
+CURRENT_B_F06 = "BD B 808 Decay F 06.wav"
+
+
+def unexpected_load(path):
+    pytest.fail(f"opened {path.name} before checking all required filenames")
+
+
+@pytest.mark.parametrize(
+    ("modes", "folder", "name", "stand_in"),
+    [
+        (["--audit"], "Digital/B", CURRENT_B_F06, "BD B 808 Decay F 07.wav"),
+        (["--measure"], LEGACY_FOLDER, LEGACY_F06, "BD_Clean_NoAcc_F_808_07.wav"),
+        (["--measure"], "Digital/A", "BD A 808 Decay F 06.wav", None),
+        (["--audit", "--self-test"], "Digital/B", CURRENT_B_F06, "BD A 808 Decay F 06.wav"),
+        (["--audit", "--measure"], LEGACY_FOLDER, LEGACY_F06, "BD_Clean_Acc_F_808_06.wav"),
+        (["--all"], LEGACY_FOLDER, LEGACY_F06, None),
+        ([], LEGACY_FOLDER, LEGACY_F06, None),
+    ],
+)
+def test_missing_indexed_hit_refuses_before_audio_or_output(
+    indexed_hits, tmp_path, monkeypatch, capsys, modes, folder, name, stand_in
+):
+    member = indexed_hits[folder] / name
+    if stand_in:
+        member.rename(member.with_name(stand_in))
+    else:
+        member.unlink()
+    monkeypatch.setattr(mr, "load", unexpected_load)
+    dest = tmp_path / "results.json"
+    for previous in (None, b'{"previous": true}\n'):
+        if previous is not None:
+            dest.write_bytes(previous)
+        assert mr.main([*modes, "--json", str(dest)]) == 2
+        output = capsys.readouterr().out
+        assert "REFUSED" in output and folder in output
+        assert name in output
+        assert not re.search(r"\d\.\d", output), output
+        assert (dest.read_bytes() if dest.exists() else None) == previous
+
+
+@pytest.mark.parametrize(
+    ("reader", "folder", "name"),
+    [
+        (mr.audit, "Digital/B", CURRENT_B_F06),
+        (mr.cross_session, LEGACY_FOLDER, LEGACY_F06),
+        (mr.cross_session, "Digital/A", "BD A 808 Decay F 06.wav"),
+        (mr.self_test, "Digital/A", "BD A 808 Decay F 03.wav"),
+        (mr.f0_knob_attribution, LEGACY_FOLDER, "BD_Clean_NoAcc_A_808_01.wav"),
+    ],
+)
+def test_direct_reader_refuses_a_later_indexed_hit(indexed_hits, monkeypatch, reader, folder, name):
+    (indexed_hits[folder] / name).unlink()
+    monkeypatch.setattr(mr, "load", unexpected_load)
+    with pytest.raises(mr.Refused) as caught:
+        reader()
+    assert folder in str(caught.value)
+    assert name in str(caught.value)
+
+
+def test_restored_indexed_hit_preserves_audit_finding(indexed_hits, tmp_path, monkeypatch, capsys):
+    member = indexed_hits["Digital/B"] / CURRENT_B_F06
+    stand_in = member.with_name("BD A 808 Decay F 06.wav")
+    member.rename(stand_in)
+    monkeypatch.setattr(mr, "load", unexpected_load)
+    assert mr.main(["--audit"]) == 2
+    assert "Digital/B" in capsys.readouterr().out
+    stand_in.rename(member)
+    for path in indexed_hits[LEGACY_FOLDER].iterdir():
+        path.unlink()  # Audit only uses the current pack.
+    loaded = []
+
+    def load(path):
+        loaded.append(path)
+        tone = int(path.stem[-2:])
+        return mr.synthetic_bd(SR, seconds=0.12, click=0.05 * tone), SR
+
+    monkeypatch.setattr(mr, "load", load)
+    dest = tmp_path / "audit.json"
+    assert mr.main(["--audit", "--json", str(dest)]) == 2
+    assert "the trailing 01..06 is the TONE" in capsys.readouterr().out
+    audit = json.loads(dest.read_text())["audit"]
+    assert audit["is_repeats"] is False and audit["groups_total"] == 12
+    assert loaded == sorted(
+        p for a in ("Digital/A", "Digital/B") for p in indexed_hits[a].iterdir()
+    )
+
+
+@pytest.mark.parametrize("reader", [mr.self_test, mr.f0_knob_attribution, mr.cross_session])
+def test_reader_accepts_only_its_own_indexed_inputs(indexed_hits, monkeypatch, reader):
+    current = indexed_hits["Digital/A"]
+    legacy = indexed_hits[LEGACY_FOLDER]
+    if reader is mr.self_test:
+        required = set(current.glob("* 03.wav"))
+    elif reader is mr.f0_knob_attribution:
+        required = {current / f"BD A 808 Decay {d} 01.wav" for d in "AB"}
+        required.add(legacy / "BD_Clean_NoAcc_A_808_01.wav")
+    else:
+        required = set(current.iterdir()) | set(legacy.iterdir())
+    for folder in indexed_hits.values():
+        for path in set(folder.iterdir()) - required:
+            path.unlink()
+
+    def load(path):
+        assert path in required and path.is_file()
+        if reader is mr.cross_session:
+            return mr.synthetic_bd(SR, seconds=0.05, f0=60 if path.parent == legacy else 50), SR
+        return mr.synthetic_bd(
+            SR, tau=0.25 if "Decay B" in path.name else 0.20, f0=55 if path.parent == legacy else 50
+        ), SR
+
+    monkeypatch.setattr(mr, "load", load)
+    result = reader()
+    if reader is mr.self_test:
+        assert result[0] and len(result[1]["t20_truncation_sensitivity_pct"]) == 6
+    elif reader is mr.f0_knob_attribution:
+        assert result["f0_difference_hz"] == pytest.approx(5, abs=0.1)
+    else:
+        assert result["cross_correlation"] < 0.9999
+
+
+def test_measure_scores_the_restored_legacy_grid(indexed_hits, tmp_path, monkeypatch, capsys):
+    legacy = indexed_hits[LEGACY_FOLDER]
+    member = legacy / LEGACY_F06
+    wrong = member.with_name("BD_Clean_Acc_F_808_06.wav")
+    member.rename(wrong)
+    dest = tmp_path / "measure.json"
+    args = ["--measure", "--json", str(dest)]
+    monkeypatch.setattr(mr, "load", unexpected_load)
+    assert mr.main(args) == 2
+    assert member.name in capsys.readouterr().out
+    wrong.rename(member)
+
+    def load(path):
+        assert path.is_file()
+        # A short end stop keeps the full cross-correlation cheap. Give the
+        # self-test's 400 ms truncation control a long, still-sounding E/03.
+        tau = 0.03 if "Decay B" in path.name else 0.02
+        if path.name == "BD A 808 Decay E 03.wav":
+            tau = 0.20
+        return mr.synthetic_bd(
+            SR, seconds=10 * tau, tau=tau, f0=55 if path.parent == legacy else 50
+        ), SR
+
+    monkeypatch.setattr(mr, "load", load)
+    assert mr.main(args) == 0
+    result = json.loads(dest.read_text())
+    for accent in ("accent A", "accent B"):
+        assert result["knob_travel"][accent]["Pitch trajectory"]["n"] == 36
+    attribution = result["session_to_session"]["f0_attribution"]
+    assert attribution["f0_difference_hz"] == pytest.approx(5, abs=0.1)
+    assert result["verdicts"]
 
 
 # ---------------------------------------------------------------------------
