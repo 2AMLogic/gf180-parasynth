@@ -88,7 +88,7 @@ WRAPPER = ROOT / "fpga/rtl/arty_a7_top.v"
 STUB = ROOT / "fpga/stubs/arty_a7_uart_stub.v"
 BRIDGE = ROOT / "rtl-sketch/uart_bridge.v"
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
-EXIT_CODE = {"PASS": PASS, "FAIL": FAIL, "REFUSED": REFUSED}
+EXIT_CODE = {"PASS": PASS, "FAIL": FAIL, "REFUSED": REFUSED, "NO VERDICT": REFUSED}
 VERDICTS = ("PASS", "FAIL")
 
 
@@ -1056,6 +1056,7 @@ def _main(a) -> int:
     if a.start_red:
         wrapper = a.rtl or STUB
         print(f"verify_uart_bridge: START RED against {wrapper}")
+        (outdir / "start-red" / "verification.json").unlink(missing_ok=True)
         run = simulate("held", None, outdir / "start-red", rtl_wrapper=wrapper,
                        uart_hier=False)
         if run is None:
@@ -1077,6 +1078,7 @@ def _main(a) -> int:
 
     if a.replay:
         name = a.replay_name or "replay"
+        (outdir / name / "verification.json").unlink(missing_ok=True)
         run = simulate_replay(str(a.replay), outdir / name)
         if run is None:
             return 2
@@ -1088,6 +1090,7 @@ def _main(a) -> int:
         rec["truncation_control"] = truncation_control(run)
         if comp.get("i2s_incomplete") or not rec["truncation_control"]["caught"]:
             rec["state"] = "NO VERDICT"
+            rec["exit_code"] = EXIT_CODE["NO VERDICT"]
         (outdir / name / "verification.json").write_text(
             json.dumps(rec, indent=2) + "\n")
         print(f"verify_uart_bridge[{name}]: {rec['state']} -- "
@@ -1117,6 +1120,7 @@ def _main(a) -> int:
 
     def do(job):
         sc, inject, name = job
+        (outdir / name / "verification.json").unlink(missing_ok=True)
         run = simulate(sc, inject, outdir / name)
         if run is None:
             return name, None, False, {}

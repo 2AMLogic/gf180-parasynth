@@ -166,6 +166,20 @@ def test_arty_child_that_times_out_refuses_the_suite(monkeypatch, tmp_path):
         "controls_caught": {"ARTY_MOSI_ZERO": False, "ARTY_SDATA_ZERO": False}}
 
 
+def test_arty_refused_retry_invalidates_prior_pass_record(monkeypatch, tmp_path):
+    """A PASS followed by a child that dies before writing its record in the
+    same outdir must not leave the prior PASS verification.json on disk."""
+    passed = {None: (CLEAN, 0), "ARTY_MOSI_ZERO": (MOSI_CAUGHT, 1),
+              "ARTY_SDATA_ZERO": (SDATA_CAUGHT, 1)}
+    assert _arty(monkeypatch, tmp_path, passed) == 0
+    assert json.loads((tmp_path / "clean" / "verification.json").read_text())["state"] == "PASS"
+    crashed = {None: "crash", "ARTY_MOSI_ZERO": (MOSI_CAUGHT, 1),
+               "ARTY_SDATA_ZERO": (SDATA_CAUGHT, 1)}
+    assert _arty(monkeypatch, tmp_path, crashed) == 2
+    assert _controls(tmp_path)["state"] == "REFUSED"
+    assert not (tmp_path / "clean" / "verification.json").exists()
+
+
 # ---- fpga/verify_pads_top.py ----------------------------------------------
 
 def _pads(monkeypatch, outdir: Path, outcomes) -> int:
@@ -223,10 +237,11 @@ def test_pads_summary_state_exit_and_records(monkeypatch, tmp_path, outcomes, ru
     (None, True, ("PASS", 0)),
     (None, False, ("FAIL", 1)),
     ("REFUSED", False, ("REFUSED", 2)),
+    ("NO VERDICT", False, ("NO VERDICT", 2)),
 ])
 def test_pads_record_exit_code_follows_its_resolved_state(tmp_path, state, ok, expected):
-    """A precondition refusal resolves the record to REFUSED; its exit_code
-    must say so too, as the kit-hash refusal record beside it already does."""
+    """A precondition refusal or NO VERDICT resolves the record to that state;
+    its exit_code must be 2, as the kit-hash refusal record beside it already does."""
     run = {"srcs": [], "inject": None, "scenario": "phases", "outdir": tmp_path}
     rec = vp.record_for(run, {}, ok, state)
     assert (rec["state"], rec["exit_code"]) == expected
@@ -238,6 +253,22 @@ def test_pads_precondition_refusal_leaves_a_record_that_exits_two(monkeypatch, t
     _pads(monkeypatch, tmp_path, _pads_runs(phases="precondition"))
     rec = json.loads((tmp_path / "phases" / "verification.json").read_text())
     assert (rec["state"], rec["exit_code"]) == ("REFUSED", 2)
+
+
+def test_pads_refused_retry_invalidates_prior_pass_records(monkeypatch, tmp_path):
+    """A PASS followed by an unavailable simulator in the same outdir must not
+    leave the prior PASS verification.json files on disk."""
+    assert _pads(monkeypatch, tmp_path, _pads_runs()) == 0
+    for sc in PADS_ALL:
+        rec = json.loads((tmp_path / sc / "verification.json").read_text())
+        assert (rec["state"], rec["exit_code"]) == ("PASS", 0)
+    none_outcomes = _pads_runs(phases="none", switch="none", reset="none")
+    assert _pads(monkeypatch, tmp_path, none_outcomes) == 2
+    assert _controls(tmp_path) == {
+        "state": "REFUSED",
+        "runs": {sc: "NO VERDICT" for sc in PADS_ALL},
+    }
+    _assert_records_agree(tmp_path, {sc: "NO VERDICT" for sc in PADS_ALL}, none_outcomes)
 
 
 # ---- fpga/verify_uart_bridge.py -------------------------------------------
@@ -302,3 +333,54 @@ def test_uart_record_ships_the_whole_comparison(tmp_path):
     rec = vub.record_for({"outdir": tmp_path, "inject": None, "scenario": "held"}, comp, True)
     assert rec["comparison"] is comp
     assert (rec["state"], rec["exit_code"]) == ("PASS", 0)
+
+
+def test_uart_refused_retry_invalidates_prior_pass_records(monkeypatch, tmp_path):
+    """A PASS followed by an unavailable simulator in the same outdir must not
+    leave the prior PASS verification.json files on disk."""
+    assert _uart(monkeypatch, tmp_path, _uart_runs()) == 0
+    for sc in vub.SCENARIOS:
+        rec = json.loads((tmp_path / sc / "verification.json").read_text())
+        assert (rec["state"], rec["exit_code"]) == ("PASS", 0)
+    none_outcomes = _uart_runs(**{sc: "none" for sc in vub.SCENARIOS})
+    none_states = _uart_states(**{sc: "REFUSED" for sc in vub.SCENARIOS})
+    assert _uart(monkeypatch, tmp_path, none_outcomes) == 2
+    assert _controls(tmp_path) == {"state": "REFUSED", "runs": none_states}
+    _assert_records_agree(tmp_path, none_states, none_outcomes)
+
+
+def test_uart_single_run_refused_retry_invalidates_prior_records(monkeypatch, tmp_path):
+    """--start-red and --replay also return early when simulation is unavailable
+    and must clear any prior verification.json in that run directory."""
+    start_red_rec = tmp_path / "start-red" / "verification.json"
+    start_red_rec.parent.mkdir(parents=True, exist_ok=True)
+    start_red_rec.write_text(json.dumps({"state": "FAIL", "exit_code": 1}))
+    monkeypatch.setattr(vub, "simulate", lambda *_a, **_kw: None)
+    assert vub.main(["--outdir", str(tmp_path), "--start-red"]) == 2
+    assert not start_red_rec.exists()
+
+    replay_rec = tmp_path / "phrase" / "verification.json"
+    replay_rec.parent.mkdir(parents=True, exist_ok=True)
+    replay_rec.write_text(json.dumps({"state": "PASS", "exit_code": 0}))
+    monkeypatch.setattr(vub, "simulate_replay", lambda *_a, **_kw: None)
+    assert vub.main(["--outdir", str(tmp_path), "--replay", str(tmp_path / "cap"),
+                     "--replay-name", "phrase"]) == 2
+    assert not replay_rec.exists()
+
+
+def test_uart_replay_no_verdict_sets_exit_code_two(monkeypatch, tmp_path):
+    """When --replay marks verification.json NO VERDICT and exits 2, the
+    recorded exit_code must also be 2."""
+    def fake_replay(_prefix, path):
+        Path(path).mkdir(parents=True, exist_ok=True)
+        (Path(path) / "transcript.txt").write_text("")
+        return {"outdir": Path(path), "inject": None, "scenario": "replay"}
+
+    monkeypatch.setattr(vub, "simulate_replay", fake_replay)
+    monkeypatch.setattr(vub, "analyze", lambda _run: (
+        True, {"periods": 10, "periods_required": 900, "i2s_incomplete": True}, []))
+    monkeypatch.setattr(vub, "truncation_control", lambda _run: {"caught": True})
+    assert vub.main(["--outdir", str(tmp_path), "--replay", str(tmp_path / "cap"),
+                     "--replay-name", "phrase"]) == 2
+    rec = json.loads((tmp_path / "phrase" / "verification.json").read_text())
+    assert (rec["state"], rec["exit_code"]) == ("NO VERDICT", 2)

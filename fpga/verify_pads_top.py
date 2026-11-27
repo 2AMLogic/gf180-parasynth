@@ -89,7 +89,7 @@ STUB = ROOT / "fpga/stubs/arty_a7_pads_stub.v"
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
 CPF = pr.CYC_PER_FRAME
 GUARD_CYCLES = pr.GUARD_BITS * pr.DIV
-EXIT_CODE = {"PASS": PASS, "FAIL": FAIL, "REFUSED": REFUSED}
+EXIT_CODE = {"PASS": PASS, "FAIL": FAIL, "REFUSED": REFUSED, "NO VERDICT": REFUSED}
 VERDICTS = ("PASS", "FAIL")
 
 INJECTS = ("PADS_DEBOUNCE_DOUBLE", "PADS_TRIG_STUCK", "PADS_SRC_STUCK", "PADS_KIT_HASH")
@@ -587,6 +587,7 @@ def kit_hash_gate(rom: Path) -> tuple:
 
 def run_one(scenario, inject, outdir, *, wrapper=WRAPPER):
     outdir = Path(outdir)
+    (outdir / "verification.json").unlink(missing_ok=True)
     rom = ROM
     if inject == "PADS_KIT_HASH":
         outdir.mkdir(parents=True, exist_ok=True)
