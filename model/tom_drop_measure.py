@@ -25,6 +25,7 @@ amplitude-dependent nonlinearity. The accent-A rows are therefore this
 measurement's empirical artefact floor -- not a synthetic one.
 """
 from __future__ import annotations
+import csv
 import argparse, hashlib, json, pathlib, subprocess, sys
 import numpy as np
 
@@ -76,6 +77,17 @@ def group_rel(folder: str, accent: str) -> str:
     return f"{folder}/Clean/Digital/{accent}"
 
 
+def read_index() -> dict | None:
+    """`rl.indexed_sizes(ARCHIVE)`, with a file that cannot be read as an
+    index REFUSED rather than raised (#1427): an unreadable inventory is an
+    unavailable one, and an unavailable one is exit 2, never a traceback."""
+    try:
+        return rl.indexed_sizes(ARCHIVE)
+    except (OSError, UnicodeError, KeyError, ValueError, csv.Error) as why:
+        raise Refused(f"{INDEX} cannot be read ({type(why).__name__}: {why}): nothing "
+                      "committed says which recordings a group holds") from why
+
+
 def indexed_members(folder: str, accent: str, index: dict | None = None) -> list[str]:
     """The WAVs one group holds, by name, from the committed index -- sorted
     -- or REFUSED when the index cannot say.
@@ -85,7 +97,7 @@ def indexed_members(folder: str, accent: str, index: dict | None = None) -> list
     Only the group's own immediate `.wav` members are taken: nothing from a
     sub-folder, nothing of another extension."""
     if index is None:
-        index = rl.indexed_sizes(ARCHIVE)
+        index = read_index()
     if index is None:
         raise Refused(f"{INDEX} is missing: nothing committed says which recordings "
                       "a group holds")
@@ -134,7 +146,7 @@ def require_inventory(groups) -> None:
     `main` calls this before anything is measured (#1427), so no row, no pooled
     figure and no `--json` is produced over a partial cache. `groups` are the
     command's own: the congas only under `--congas`."""
-    index = rl.indexed_sizes(ARCHIVE)
+    index = read_index()
     lines = []
     for vid, folder, _stem in groups:
         for acc in accents_of(vid):

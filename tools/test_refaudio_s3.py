@@ -159,12 +159,13 @@ def test_member_list_lists_the_folders_immediate_wavs_and_nothing_else(env, monk
     """Sorted, and only the folder's own WAVs: not a sub-folder's, not the
     sibling folder that begins with the same name, not another extension, not
     a resource fork. No audio is extracted and the archive is not kept."""
-    _fake_aws(monkeypatch, _folder_zip())
+    blob = _folder_zip()
+    _fake_aws(monkeypatch, blob)
     assert ml.main([ARCH, FOLDER]) == ml.LISTED
     out = capsys.readouterr().out
     assert _names(out) == ["BD 4x4 Alpha 808 Loops 120.wav", "BD 4x4 Zeta 808 Loops 128.wav"]
     head = [ln for ln in out.splitlines() if ln.startswith("#")]
-    assert f"# archive_sha256 {hashlib.sha256(_folder_zip()).hexdigest()}" in head
+    assert f"# archive_sha256 {hashlib.sha256(blob).hexdigest()}" in head
     assert any("tools/refaudio_member_list.py " in ln and FOLDER in ln for ln in head), head
     assert any("tools/refaudio_s3.py --prefix " in ln and f"{FOLDER}/" in ln
                and "REFAUDIO_S3=s3://bucket/prefix" in ln for ln in head), head
@@ -242,4 +243,37 @@ def test_member_list_refuses_a_name_that_cannot_be_listed_one_per_line(env, monk
     out = env / "inventory.txt"
     assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.REFUSED
     assert "line break" in capsys.readouterr().out
+    assert not out.exists()
+
+
+def _zip_of(*members: str) -> bytes:
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        for m in members:
+            z.writestr(FOLDER + "/" + m, b"x")
+    return b.getvalue()
+
+
+def test_every_name_the_lister_accepts_is_read_back_unchanged(env, monkeypatch):
+    """Round trip over awkward-but-representable names: spaces, a '#' that is
+    not first, a leading space, a tab, non-ASCII. Writer and reader must agree."""
+    import measure_repeatability as mr
+    names = ["a #1.wav", " lead.wav", "tab\there.wav", "caf\u00e9.wav", "normal.wav"]
+    _fake_aws(monkeypatch, _zip_of(*names))
+    out = env / "inventory.txt"
+    assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.LISTED
+    assert mr.expected_loops(out) == sorted(names)
+
+
+@pytest.mark.parametrize("bad", ["#2.wav", "a\x85b.wav", "a\u2028b.wav", "a\x0bb.wav",
+                                 "a\x1cb.wav", "a\rb.wav"])
+def test_a_name_the_reader_would_drop_or_split_is_refused_before_writing(
+        env, monkeypatch, capsys, bad):
+    """The reader treats a leading '#' as a comment and splits on every
+    `str.splitlines` boundary, not just CR/LF: such a name would be dropped or
+    become two members while the lister reported success."""
+    _fake_aws(monkeypatch, _zip_of("normal.wav", bad))
+    out = env / "inventory.txt"
+    assert ml.main([ARCH, FOLDER, "--write", str(out)]) == ml.REFUSED
+    assert "REFUSED" in capsys.readouterr().out
     assert not out.exists()

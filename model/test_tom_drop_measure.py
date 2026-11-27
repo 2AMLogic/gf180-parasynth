@@ -229,6 +229,25 @@ def test_the_cli_refuses_before_anything_is_measured_and_leaves_the_json_intact(
         assert out.read_text(encoding="utf-8") == previous
 
 
+def test_the_cli_refuses_an_unreadable_index_and_leaves_the_json_intact(
+        root, tmp_path, monkeypatch, capsys):
+    """A permission error reading the index is an unavailable inventory: a
+    named REFUSED and exit 2, not a PermissionError traceback (#1427)."""
+    _cache(root, tm.VOICES)
+    monkeypatch.setattr(tm, "CACHE", root)
+
+    def unreadable(archive):
+        raise PermissionError(13, "Permission denied", str(tm.INDEX))
+    monkeypatch.setattr(rl, "indexed_sizes", unreadable)
+    out = tmp_path / "result.json"
+    previous = '{"sentinel": "the previous run"}'
+    out.write_text(previous, encoding="utf-8")
+    assert tm.main(["--json", str(out)]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "808-from-mars.tsv" in text and "Permission denied" in text
+    assert out.read_text(encoding="utf-8") == previous
+
+
 def test_the_cli_names_every_absent_take_in_every_requested_group(root, monkeypatch, capsys):
     _cache(root, tm.VOICES)
     monkeypatch.setattr(tm, "CACHE", root)

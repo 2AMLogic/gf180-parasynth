@@ -298,8 +298,10 @@ The 27 file names those metrics were taken from are committed as
 archive (#1427). `--loops` takes its loops by name from that list and REFUSES
 (exit 2, naming the WAVs that are absent) when the folder holds only some of
 them, so a rerun over a partly fetched cache cannot report a spread over fewer
-loops as the take-to-take floor. A refusal leaves a pre-existing `--json`
-result untouched.
+loops as the take-to-take floor. An inventory refusal (a missing, unreadable
+or incomplete inventory or folder) leaves a pre-existing `--json` result
+untouched; a refusal from the audit itself (e.g. every loop excluded) still
+replaces `take_to_take` with the refusal record, as before this change.
 
 **Audit (passed — not REFUSED).** 27 loops in `4x4/`. The audit does not trust
 the folder name: onsets are detected and counted, and a loop is admitted only if

@@ -1057,8 +1057,14 @@ def expected_loops(path: pathlib.Path | None = None) -> list[str]:
     if not path.is_file():
         raise Refused(f"the loop inventory {path} is missing: nothing committed says "
                       "which WAVs the 4x4 folder holds")
-    names = [ln for ln in path.read_text(encoding="utf-8").splitlines()
-             if ln.strip() and not ln.startswith("#")]
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as why:
+        # An inventory that cannot be read cannot say which WAVs the folder
+        # holds: the same REFUSED as a missing one, never a traceback (#1427).
+        raise Refused(f"the loop inventory {path} cannot be read ({why}): nothing "
+                      "committed can say which WAVs the 4x4 folder holds") from why
+    names = [ln for ln in text.splitlines() if ln.strip() and not ln.startswith("#")]
     if not names:
         raise Refused(f"the loop inventory {path} lists no WAV: an empty inventory "
                       "cannot stand for the 4x4 folder")
@@ -1081,9 +1087,20 @@ def loop_files() -> list[pathlib.Path]:
     if not LOOPS_DIR.is_dir():
         raise Refused(hint)
     paths = sorted(LOOPS_DIR / n for n in expected_loops())
-    if not any(p.is_file() for p in paths):
-        raise Refused(hint)
     gone = [p.name for p in paths if not p.is_file()]
+    if len(gone) == len(paths):
+        try:
+            others = sorted(q.name for q in LOOPS_DIR.iterdir())
+        except OSError as why:
+            raise Refused(f"the 4x4 loop folder {LOOPS_DIR} cannot be listed ({why})") from why
+        if not others:
+            raise Refused(hint)
+        # Something is there and none of it is a loop the inventory names: an
+        # all-substituted folder, not a never-fetched one. Name what is absent.
+        raise Refused(f"the 4x4 bass-drum loops in refaudio/cache are incomplete: all "
+                      f"{len(paths)} WAVs in {LOOPS_INVENTORY.name} are absent (the folder "
+                      f"holds {len(others)} other file(s)) -- " + ", ".join(gone)
+                      + f"\n         {hint}")
     if gone:
         raise Refused(f"the 4x4 bass-drum loops in refaudio/cache are incomplete: "
                       f"{len(gone)} of the {len(paths)} WAVs in {LOOPS_INVENTORY.name} "

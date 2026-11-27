@@ -64,6 +64,19 @@ def immediate_wavs(names, folder: str) -> list[str]:
                   and n.lower().endswith(".wav"))
 
 
+def unrepresentable(names: list[str]) -> list[str]:
+    """Names the reader (`expected_loops`) would not return as written: it
+    splits on everything `str.splitlines` does (not just CR/LF) and takes a
+    line starting with `#` for a comment."""
+    def ok(n: str) -> bool:
+        try:
+            n.encode("utf-8")
+        except UnicodeError:
+            return False
+        return n.splitlines() == [n] and not n.startswith("#")
+    return [n for n in names if not ok(n)]
+
+
 def inventory(archive: str, sha: str, folder: str, names: list[str], root: str,
               profile: str, wrote: str | None) -> str:
     """The inventory file's text: its header, then one member name per line."""
@@ -116,9 +129,12 @@ def main(argv: list[str]) -> int:
         print(f"REFUSED  {args.folder!r} holds no WAV in {args.archive}: an empty "
               "inventory would leave a reader to enumerate whatever is on disk")
         return REFUSED
-    if any(c in n for n in names for c in "\r\n"):
-        print(f"REFUSED  a member name under {args.folder!r} holds a line break: the "
-              "inventory is one name per line")
+    bad = unrepresentable(names)
+    if bad:
+        print(f"REFUSED  {len(bad)} member name(s) under {args.folder!r} cannot be read "
+              "back from a one-name-per-line inventory (a line break of any kind, a "
+              "leading '#', or text UTF-8 cannot hold), so the reader would drop or split "
+              "them: " + ", ".join(repr(n) for n in bad))
         return REFUSED
     text = inventory(args.archive, rec["archive_sha256"], args.folder, names, root,
                      os.environ.get("REFAUDIO_S3_PROFILE", ""),

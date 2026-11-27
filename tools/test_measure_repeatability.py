@@ -600,3 +600,42 @@ def test_the_report_prints_a_metric_whose_take_to_take_is_exactly_zero(tmp_path,
     assert "inf" in row, row
     got = json.loads(out.read_text(encoding="utf-8"))["take_to_take"]
     assert got["outcome"] == "MEASURED" and got["compare"]["attack"]["tolerance_over_take"] is None
+
+
+def test_the_loops_cli_names_every_loop_when_the_whole_folder_is_substituted(
+        tmp_path, monkeypatch, capsys):
+    """27 other WAVs in an existing folder: the count is right and not one name
+    is. The refusal names what is absent AND keeps the fetch hint (#1427)."""
+    names = mr.expected_loops()
+    d = _placeholders(tmp_path / "4x4", [f"other {i}.wav" for i in range(len(names))])
+    monkeypatch.setattr(mr, "LOOPS_DIR", d)
+    monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
+    assert mr.main(["--loops"]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "refaudio_s3.py" in text
+    assert all(n in text for n in names) and "other 0.wav" not in text
+
+
+def _unreadable(monkeypatch, target):
+    real = pathlib.Path.read_text
+
+    def read_text(self, *a, **k):
+        if self == target:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real(self, *a, **k)
+    monkeypatch.setattr(pathlib.Path, "read_text", read_text)
+
+
+def test_the_loops_cli_refuses_an_unreadable_inventory_and_keeps_the_json(
+        tmp_path, monkeypatch, capsys):
+    d = _placeholders(tmp_path / "4x4", mr.expected_loops())
+    monkeypatch.setattr(mr, "LOOPS_DIR", d)
+    monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
+    out = tmp_path / "result.json"
+    previous = '{"take_to_take": "the previous run"}'
+    out.write_text(previous, encoding="utf-8")
+    _unreadable(monkeypatch, mr.LOOPS_INVENTORY)
+    assert mr.main(["--loops", "--json", str(out)]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and mr.LOOPS_INVENTORY.name in text and "Permission denied" in text
+    assert out.read_text(encoding="utf-8") == previous
