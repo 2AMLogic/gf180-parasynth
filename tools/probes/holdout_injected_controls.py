@@ -174,12 +174,13 @@ def _copy(parent: pathlib.Path) -> pathlib.Path:
     return work
 
 
-def run_suite(work: pathlib.Path, suite: str) -> tuple[int, SuiteReport | None, str]:
+def run_suite(work: pathlib.Path, suite: str, *,
+              python: str = sys.executable) -> tuple[int, SuiteReport | None, str]:
     """Run one pytest suite and record its outcomes, phase errors, and failure sites."""
     runner = pathlib.Path(__file__).with_name("pytest_failure_sites.py")
     with tempfile.TemporaryDirectory() as tmp:
         report = pathlib.Path(tmp) / "report.json"
-        out = subprocess.run([sys.executable, str(runner), suite, str(report)], cwd=work,
+        out = subprocess.run([python, str(runner), suite, str(report)], cwd=work,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         try:
             data = json.loads(report.read_text())
@@ -283,9 +284,9 @@ def run(name: str, baseline: SuiteReport) -> Result:
         return verdict(rc, report, EXPECTED.get(name, {}), suite=SUITE, baseline=baseline)
 
 
-def run_baseline(work: pathlib.Path, suite: str) -> Baseline:
-    """Run the unmutated suite. Both probes require exit 0 and a clean, executed run."""
-    rc, report, stdout = run_suite(work, suite)
+def run_baseline(work: pathlib.Path, suite: str, *, python: str = sys.executable) -> Baseline:
+    """Run the unmutated suite and require exit 0 and a clean, executed run."""
+    rc, report, stdout = run_suite(work, suite, python=python)
     if report is None:
         what = f"pytest exited {rc} on the UNMUTATED tree without a failure report"
     elif report.failures:

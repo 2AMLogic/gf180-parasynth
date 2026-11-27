@@ -3,14 +3,14 @@
 Applies each mutant in turn, runs fpga/test_pnr_report.py, restores the file,
 and prints KILLED / SURVIVED / REFUSED per mutant. Usage:
 
-    python fpga/testdata/mutate_pnr_report.py
+    python fpga/testdata/mutate_pnr_report.py [--python PY]
 
-The suite runs under the interpreter that runs this script. "J-" names are the
-Judge's mutants from PR #594. "J-equivalent: disable rc is None" is a known
-EQUIVALENT mutant -- `classify` still REFUSES a missing status through the
-earlier `status is None` path -- and is the one EXPECTED SURVIVOR: a green
-suite under it is not a hole, and a red one is REFUSED because nothing is
-recorded that could attribute it.
+The baseline and mutants use PY, defaulting to this script's interpreter.
+"J-" names are the Judge's mutants from PR #594. The current suite is
+expected to miss "J-equivalent: disable rc is None". A diagnosed no-fit log
+with a missing return code distinguishes this mutant from the original
+(#1474). A green suite counts as EXPECTED SURVIVOR under #1401. A red is
+REFUSED because the record has no assertion to attribute it to.
 
 A red is a kill only if it is the recorded tests' red (issue #1401,
 docs/verification-rules.md 5). Until then this record read ANY nonzero pytest
@@ -23,13 +23,13 @@ with this suite and `EXPECTED`, the test and assertion that caught it:
   * KILLED    pytest exited 1 and a recorded assertion failed, in a test that
               passed on the baseline. The matching test ID is printed.
   * SURVIVED  pytest stayed green with the mutation in place: a hole in the
-              suite. For the equivalent mutant only, an EXPECTED SURVIVOR.
+              suite. The missing-return-code mutant is the EXPECTED SURVIVOR.
   * REFUSED   anything else, with no kill credit: a collection error, an
               ERROR-only run, a red outside the recorded tests or at another
               assertion, a recorded check that did not pass in both runs, a
               search text that no longer matches exactly once.
 
-Exit 0 when every other mutant was killed and the equivalent one survived; 1
+Exit 0 when every other mutant was killed and the expected one survived; 1
 when any other mutant survived (a mix with refusals included, both named); 2
 when nothing survived but something refused, and for a red baseline
 (issue #1130), before any mutant runs.
@@ -49,7 +49,9 @@ and still names the eight kills that never needed the rig.
 """
 from __future__ import annotations
 
+import argparse
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -64,12 +66,13 @@ UNLINK = '''    for name in (*TARGETS[a.target]["stale"], log_p.name, st_p.name,
         (build / name).unlink(missing_ok=True)
     log_p.write_text("")
 '''
+EXPECTED_SURVIVOR = "J-equivalent: disable rc is None"
 M = {
  "J-survivor: remove unlink loop + log truncation": [(UNLINK, "")],
  "remove unlink loop only (keep truncation)": [(UNLINK, '    log_p.write_text("")\n')],
  "J-survivor: disable evaluate bitstream check": [("if not (bit_p.is_file() and bit_p.stat().st_size > 0):", "if False:")],
  "J-survivor: disable util[0] > r order check": [("if util and util[0] > r:", "if False:")],
- "J-equivalent: disable rc is None": [('if rc is None:\n', 'if False:\n')],
+ EXPECTED_SURVIVOR: [('if rc is None:\n', 'if False:\n')],
  "always write --out": [("if v.state == ROUTED or (v.state == NOFIT and a.allow_no_fit):\n        Path(a.out)", "if True:\n        Path(a.out)")],
  "ignore error lines at rc 0": [("    if errors:\n        return Verdict(REFUSED", "    if False:\n        return Verdict(REFUSED")],
  "missing status treated as OK": [("    if status is None:\n        return", "    if status is None:\n        status = {'nextpnr': {'returncode': 0}, 'after': []}\n    if False:\n        return")],
@@ -80,7 +83,6 @@ M = {
  "non-zero rc treated as no-fit": [("return Verdict(REFUSED, why + [f\"nextpnr exited {rc} without", "return Verdict(NOFIT, why + [f\"nextpnr exited {rc} without")],
  "new: render Fmax on unrouted reports": [("if mf and verdict.state != ROUTED:", "if False:")],
 }
-EQUIVALENT = "J-equivalent: disable rc is None"
 
 # The test and the failed assertion that caught each mutant on the real suite,
 # read from pytest's own report on 2026-11-27 (`267955a3`, Python 3.12.3,
@@ -109,7 +111,7 @@ EXPECTED = {
     "J-survivor: disable util[0] > r order check": {
         "test_utilisation_only_after_route_marker_is_refused_for_order": _REFUSED,
     },
-    EQUIVALENT: {},
+    EXPECTED_SURVIVOR: {},
     "always write --out": {
         "test_make_ecp5_failed_packer_fails_and_keeps_report": hic.Site(_KEPT),
         "test_make_ecp5_missing_tool_fails_and_keeps_report": hic.Site(_KEPT),
@@ -156,14 +158,25 @@ def _mutated(original: str, subs) -> str | None:
     """The source with each substitution applied, or None if a search text
     is not present exactly once: the file has moved under the record."""
     s = original
-    for a, b in subs:
-        if s.count(a) != 1:
+    for old, new in subs:
+        # Match literal source on either checkout line ending. Only bytes at
+        # the mutation site may change while the suite is running.
+        pattern = r"\r?\n".join(re.escape(line) for line in old.split("\n"))
+        matches = list(re.finditer(pattern, s))
+        if len(matches) != 1:
             return None
-        s = s.replace(a, b)
+        match, = matches
+        if "\r\n" in match.group():
+            new = new.replace("\n", "\r\n")
+        s = s[:match.start()] + new + s[match.end():]
     return s
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Run the FPGA reporter mutation record.")
+    parser.add_argument("--python", metavar="PY", default=sys.executable,
+                        help="interpreter for the baseline and mutant suites")
+    args = parser.parse_args()
     original = TARGET.read_bytes()
     text = original.decode()
 
@@ -179,7 +192,7 @@ def main() -> int:
 
     # A suite red for its own reason would "kill" every mutant
     # (verification rule 5). REFUSE (exit 2) unless it is green unmutated.
-    base = hic.run_baseline(ROOT, SUITE)
+    base = hic.run_baseline(ROOT, SUITE, python=args.python)
     if base.report is None:
         print(f"REFUSED -- baseline `pytest {SUITE}`: {base.reason}. No mutant was run.")
         print(base.tail.rstrip())
@@ -187,9 +200,9 @@ def main() -> int:
 
     survivors, refused, expected = [], 0, []
     for name, subs in M.items():
-        TARGET.write_bytes(_mutated(text, subs).encode())
         try:
-            rc, report, _ = hic.run_suite(ROOT, SUITE)
+            TARGET.write_bytes(_mutated(text, subs).encode())
+            rc, report, _ = hic.run_suite(ROOT, SUITE, python=args.python)
         finally:
             TARGET.write_bytes(original)
         res = hic.verdict(rc, report, EXPECTED[name], suite=SUITE, baseline=base.report)
@@ -199,7 +212,7 @@ def main() -> int:
             if res.failed:
                 print(f"    (failed, no credit: {', '.join(res.failed)})")
         elif res.outcome == hic.NO_FIRE:
-            if name == EQUIVALENT:
+            if name == EXPECTED_SURVIVOR:
                 expected.append(name)
                 print(f"{'EXPECTED SURVIVOR':17s}  {name}")
             else:

@@ -22,9 +22,9 @@ finding about the tree and outranks a refusal, so it exits 1.
 
 Issue #1401 is the same defect one file over, in the FPGA record, which
 printed `KILLED` for fourteen collection errors. Its fixtures follow the sound
-ones, with two differences its `J-equivalent` policy forces: a green suite
-under the equivalent mutant is an EXPECTED SURVIVOR, never a hole, and a red
-under it is REFUSED because nothing is recorded that could attribute it. The
+ones. The current suite misses the missing-return-code mutant (#1474).
+Under #1401 its green gets EXPECTED SURVIVOR. A red under it is REFUSED
+because the record has no assertion that could attribute it. The
 FPGA record is imported as a module for its `M` and `EXPECTED`; before #1401
 that import ran the whole mutation loop against the live tree.
 """
@@ -534,6 +534,7 @@ def _fpga_record():
 _FPGA_READS = ("import pathlib\n"
                "HERE = pathlib.Path(__file__).resolve().parent\n"
                "SRC = (HERE / 'scripts' / 'pnr_report.py').read_bytes()\n"
+               "TEXT = SRC.decode().replace('\\r\\n', '\\n')\n"
                "PRISTINE = (HERE / 'scripts' / 'pnr_report.original').read_bytes()\n")
 
 #: The issue's reproduction, verbatim: collects, and runs its one test, on the
@@ -572,12 +573,61 @@ FPGA_ATTRIBUTABLE = (_FPGA_READS
                        "    assert \"post-route RESULT\" not in text and \"ESTIMATE:\" not in text\n")
 
 
-def stage_fpga(tmp, suite_src):
+def stage_fpga(tmp, suite_src, *, crlf=False):
     """`stage()` for the FPGA record, plus the pristine copy its fixtures
     compare the mutated target against."""
     script, target = stage(tmp, "fpga", suite_src)
+    if crlf:
+        target.write_bytes(target.read_text().replace("\n", "\r\n").encode())
     target.with_suffix(".original").write_bytes(target.read_bytes())
     return script, target
+
+
+def test_fpga_partial_mutant_write_restores_original(tmp_path, monkeypatch):
+    script, target = stage_fpga(tmp_path,
+                                "from pathlib import Path\n"
+                                "def test_baseline():\n"
+                                "    Path('baseline-executed').touch()\n")
+    original = target.read_bytes()
+    write_bytes = Path.write_bytes
+
+    def partial_write(path, data):
+        if path == target and data != original:
+            write_bytes(path, data[:64])
+            raise OSError("injected partial mutant write")
+        return write_bytes(path, data)
+
+    record = _fpga_record()
+    monkeypatch.setattr(record, "ROOT", tmp_path)
+    monkeypatch.setattr(record, "TARGET", target)
+    monkeypatch.setattr(sys, "argv", [str(script)])
+    monkeypatch.setattr(Path, "write_bytes", partial_write)
+    with pytest.raises(OSError, match="injected partial mutant write"):
+        record.main()
+    assert (tmp_path / "baseline-executed").is_file()
+    assert target.read_bytes() == original
+
+
+def test_fpga_python_option_runs_baseline_and_every_mutant(tmp_path):
+    script, target = stage_fpga(tmp_path, """
+import sys
+def test_interpreter():
+    with open('interpreters', 'a') as log:
+        print(sys.executable, file=log)
+""")
+    original = target.read_bytes()
+    # A second path to this installation keeps pytest available while making
+    # the requested executable distinguishable inside each suite process.
+    executable = Path(sys.executable)
+    selected = tmp_path / "selected"
+    selected.symlink_to(executable.parent.parent, target_is_directory=True)
+    requested = selected / executable.parent.name / executable.name
+    result = subprocess.run([sys.executable, str(script), "--python", str(requested)],
+                            cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 1, result.stdout + result.stderr   # insensitive suite
+    assert (tmp_path / "interpreters").read_text().splitlines() == (
+        [str(requested)] * (1 + len(_fpga_record().M)))
+    assert target.read_bytes() == original
 
 
 def _fpga_uncollectable_under(mutant, body):
@@ -586,7 +636,7 @@ def _fpga_uncollectable_under(mutant, body):
     whatever `body` makes of the rest."""
     (old, _new), = _fpga_record().M[mutant]
     return (_FPGA_READS
-            + f"if {old.encode()!r} not in SRC:\n"
+            + f"if {old!r} not in TEXT:\n"
               "    raise ImportError('uncollectable under this mutant only')\n"
             + body)
 
@@ -661,7 +711,7 @@ def test_fpga_mutant_failure_outside_the_recorded_names_refuses(tmp_path):
         assert _verdict_line(out, mutant).startswith("REFUSED"), out
     assert "test_unrelated_to_every_recorded_name" in out       # parsed, named
     for mutant, names in _fpga_record().EXPECTED.items():
-        if mutant == _fpga_record().EQUIVALENT:
+        if mutant == _fpga_record().EXPECTED_SURVIVOR:
             # Nothing is recorded for it, so its red cannot be attributed.
             assert "no expected assertions are recorded" in _verdict_line(out, mutant), out
             continue
@@ -728,7 +778,7 @@ def test_fpga_mutant_search_text_gone_refuses_before_anything_runs(tmp_path):
 def test_fpga_intended_assertion_gets_kill_credit_and_the_rest_refuse(tmp_path):
     """Attribution must not refuse everything. The one mutant with the failing
     test recorded is KILLED and names it. For the other twelve the same red is
-    outside their record and is REFUSED, and so is the equivalent mutant's:
+    outside their record and is REFUSED, as is the expected survivor's red:
     kills alongside refusals, nothing survived, so exit 2."""
     script, target = stage_fpga(tmp_path, FPGA_ATTRIBUTABLE)
     before = target.read_bytes()
@@ -764,41 +814,50 @@ def test_fpga_survivor_outranks_a_refusal_exits_one(tmp_path):
     assert target.read_bytes() == before
 
 
-def test_fpga_equivalent_mutant_green_is_an_expected_survivor(tmp_path):
-    """A suite too insensitive to notice any mutant: thirteen holes, exit 1
-    -- and the equivalent mutant is not among them."""
-    script, target = stage_fpga(tmp_path, INSENSITIVE)
+def test_fpga_crlf_checkout_exercises_all_mutants_and_restores_bytes(tmp_path):
+    """Each mutant runs with CRLF, including the expected survivor."""
+    script, target = stage_fpga(tmp_path, r"""
+import hashlib
+from pathlib import Path
+
+def test_distinct_crlf_source():
+    source = (Path(__file__).parent / 'scripts/pnr_report.py').read_bytes()
+    assert b'\r\n' in source
+    assert b'\n' not in source.replace(b'\r\n', b'')
+    # A no-op injection would present bytes already seen by the suite.
+    Path(hashlib.sha256(source).hexdigest()).touch(exist_ok=False)
+""", crlf=True)
     before = target.read_bytes()
     result = run(script, tmp_path)
     out = result.stdout + result.stderr
     assert result.returncode == 1, out
     assert len(_survivors(out)) == len(_fpga_record().M) - 1, out
-    assert _verdict_line(out, _fpga_record().EQUIVALENT).startswith("EXPECTED SURVIVOR"), out
-    assert _fpga_record().EQUIVALENT not in _line(out, "UNEXPECTED SURVIVORS")
+    assert _verdict_line(out, _fpga_record().EXPECTED_SURVIVOR).startswith("EXPECTED SURVIVOR"), out
+    assert _fpga_record().EXPECTED_SURVIVOR not in _line(out, "UNEXPECTED SURVIVORS")
     _no_fpga_kill_credit(out)
     assert target.read_bytes() == before
 
 
-def test_fpga_equivalent_mutant_unattributed_red_refuses(tmp_path):
-    """The other half of the equivalent policy: a red under it is not a kill,
+def test_fpga_expected_survivor_unattributed_red_refuses(tmp_path):
+    """The other half of the expected-survivor policy: a red under it is not a kill,
     because nothing is recorded that could attribute it. It is REFUSED, the
     red test is named as having earned no credit, and the thirteen survivors
     still outrank it."""
-    (old, _new), = _fpga_record().M[_fpga_record().EQUIVALENT]
+    (old, _new), = _fpga_record().M[_fpga_record().EXPECTED_SURVIVOR]
     suite = (_FPGA_READS
-             + f"if {old.encode()!r} not in SRC:\n"
-               "    def test_red_only_under_the_equivalent_mutant():\n"
+             + f"if {old!r} not in TEXT:\n"
+               "    def test_red_only_under_the_expected_survivor():\n"
                "        assert 0\n"
              + INSENSITIVE)
-    script, target = stage_fpga(tmp_path, suite)
+    script, target = stage_fpga(tmp_path, suite, crlf=True)
     before = target.read_bytes()
     result = run(script, tmp_path)
     out = result.stdout + result.stderr
     assert result.returncode == 1, out           # thirteen others survived; both named
-    line = _verdict_line(out, _fpga_record().EQUIVALENT)
+    line = _verdict_line(out, _fpga_record().EXPECTED_SURVIVOR)
     assert line.startswith("REFUSED"), out
     assert "no expected assertions are recorded" in line
-    assert "    (failed, no credit: test_red_only_under_the_equivalent_mutant)" \
+    assert "    (failed, no credit: test_red_only_under_the_expected_survivor)" \
         in out.splitlines(), out
     assert "UNEXPECTED SURVIVORS (13)" in out and "1 refused" in out, out
     _no_fpga_kill_credit(out)
@@ -813,7 +872,7 @@ def test_every_fpga_mutant_has_recorded_names_that_the_real_suite_collects():
     collecting that suite rather than running it."""
     fpga = _fpga_record()
     assert set(fpga.EXPECTED) == set(fpga.M)
-    assert fpga.EXPECTED[fpga.EQUIVALENT] == {}
+    assert fpga.EXPECTED[fpga.EXPECTED_SURVIVOR] == {}
     collected = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider",
          fpga.SUITE], cwd=REPO, capture_output=True, text=True)
@@ -822,7 +881,7 @@ def test_every_fpga_mutant_has_recorded_names_that_the_real_suite_collects():
     assert ids, collected.stdout + collected.stderr
     lines = [ln.strip() for ln in (REPO / fpga.SUITE).read_text().splitlines()]
     for mutant, names in fpga.EXPECTED.items():
-        if mutant == fpga.EQUIVALENT:
+        if mutant == fpga.EXPECTED_SURVIVOR:
             continue
         assert names, mutant
         for name, site in names.items():
@@ -844,10 +903,9 @@ def stage_real_fpga(tmp_path):
 
 
 @pytest.mark.skipif(shutil.which("make") is None, reason="make not installed")
-def test_fpga_real_suite_kills_thirteen_and_expects_the_equivalent_survivor(tmp_path):
-    """The healthy case on the real suite: each of the thirteen non-equivalent
-    mutants is killed by a recorded test, the equivalent one is the expected
-    survivor, and the record exits 0."""
+def test_fpga_real_suite_kills_thirteen_and_reports_one_expected_survivor(tmp_path):
+    """The real suite kills thirteen mutants at recorded assertions and misses
+    the missing-return-code mutant. This combination exits 0."""
     fpga = _fpga_record()
     script, target = stage_real_fpga(tmp_path)
     before = target.read_bytes()
@@ -859,7 +917,7 @@ def test_fpga_real_suite_kills_thirteen_and_expects_the_equivalent_survivor(tmp_
     assert not _refusals(out) and not _survivors(out), out
     assert f"{len(fpga.M) - 1} mutant(s) killed, 1 expected survivor" in out, out
     for mutant, names in fpga.EXPECTED.items():
-        if mutant == fpga.EQUIVALENT:
+        if mutant == fpga.EXPECTED_SURVIVOR:
             assert _verdict_line(out, mutant).startswith("EXPECTED SURVIVOR"), out
             continue
         assert _verdict_line(out, mutant).startswith("KILLED"), out
