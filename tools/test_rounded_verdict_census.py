@@ -22,7 +22,9 @@ nothing at all would otherwise pass every "not reported" assertion.
 """
 from __future__ import annotations
 
+import errno
 import io
+import os
 import pathlib
 import subprocess
 import sys
@@ -205,9 +207,9 @@ def test_a_block_prints_each_site_once_however_many_pairs_it_holds(tmp_path, cap
     assert census_mod.main([str(root)]) == exit_contract.PASS
     out = capsys.readouterr().out
     assert "cross-module-pairs=4" in out
-    assert out.count("model/measure_harness.py:2 ") == 1
-    assert out.count("tools/measure_conga_body_spread.py:2 ") == 1
-    assert len([line for line in out.splitlines() if ":2  " in line]) == 4
+    assert out.count("model/measure_harness.py:2:") == 1
+    assert out.count("tools/measure_conga_body_spread.py:2:") == 1
+    assert len([line for line in out.splitlines() if ":2:" in line]) == 4
 
 
 def test_forwarding_the_harness_verdict_removes_the_pair_and_keeps_the_rest(tmp_path):
@@ -219,6 +221,30 @@ def test_forwarding_the_harness_verdict_removes_the_pair_and_keeps_the_rest(tmp_
     result = census_mod.census(root)
     assert not [p for p in pairs(result) if p[0] == "best_correlation"]
     assert seen(result, "stores") == {(PRODUCER, line_of(root, PRODUCER, STORE), "keyword")}
+
+
+@pytest.mark.parametrize("comparison, locations", [
+    ('(previous["score"]\n     < current["score"])', [(2, 13), (3, 8)]),
+    ('previous["score"] < previous["score"]', [(2, 12), (2, 32)]),
+])
+def test_each_operand_has_its_own_reported_site(tmp_path, capsys, comparison, locations):
+    root = write_tree(tmp_path, producer='dict(score=round(x, 4))\n',
+                      consumer=consumer_with(comparison))
+    assert census_mod.main([str(root)]) == exit_contract.PASS
+    out = capsys.readouterr().out
+    assert "score  cross-module-pairs=2" in out
+    for line, column in locations:
+        assert f"{CONSUMER}:{line}:{column} " in out
+
+
+def test_identical_stores_on_one_line_are_distinct_sites(tmp_path, capsys):
+    root = write_tree(tmp_path, producer='a(score=round(x)); b(score=round(x))\n',
+                      consumer=consumer_with('r["score"] > 0'))
+    assert census_mod.main([str(root)]) == exit_contract.PASS
+    out = capsys.readouterr().out
+    assert "score  cross-module-pairs=2" in out
+    for column in (3, 22):
+        assert f"{PRODUCER}:1:{column} " in out
 
 
 @pytest.mark.parametrize("label, store", [
@@ -421,6 +447,49 @@ def test_a_scanned_tree_with_no_pairs_is_a_clean_census_not_a_refusal(tmp_path, 
     assert "REFUSED" not in out
 
 
+def test_unreadable_subtree_refuses_the_entire_census(tmp_path, capsys, monkeypatch):
+    root = write_tree(tmp_path)
+    nested = root / "tools" / "nested"
+    nested.mkdir()
+    (root / CONSUMER).rename(nested / "consumer.py")
+    assert census_mod.main([str(root)]) == exit_contract.PASS
+    assert "best_correlation  cross-module-pairs=1" in capsys.readouterr().out
+
+    # Inject the same scandir error as chmod 000, even on privileged workers.
+    scandir = os.scandir
+
+    def deny_nested(path):
+        if pathlib.Path(path) == nested:
+            raise PermissionError(errno.EACCES, "Permission denied", str(nested))
+        return scandir(path)
+
+    monkeypatch.setattr(os, "scandir", deny_nested)
+    assert census_mod.main([str(root)]) == exit_contract.REFUSED
+    captured = capsys.readouterr()
+    assert "REFUSED" in captured.err and str(nested) in captured.err
+    assert captured.out == ""
+
+
+@pytest.mark.parametrize("blocked", [".", "tools/nested"])
+def test_cli_refuses_a_permission_denied_source_directory(tmp_path, blocked):
+    root = write_tree(tmp_path)
+    nested = root / "tools" / "nested"
+    nested.mkdir()
+    (root / CONSUMER).rename(nested / "consumer.py")
+    directory = root / blocked
+    directory.chmod(0)
+    try:
+        if os.access(directory, os.X_OK):
+            pytest.skip("the test account can traverse a mode-000 directory")
+        run = subprocess.run([sys.executable, "-I", str(TOOLS / "rounded_verdict_census.py"),
+                              str(root)], capture_output=True, text=True)
+    finally:
+        directory.chmod(0o700)
+    assert run.returncode == exit_contract.REFUSED
+    assert "REFUSED" in run.stderr and str(directory) in run.stderr
+    assert run.stdout == ""
+
+
 def test_the_process_exits_the_declared_status_in_isolation(tmp_path):
     """Through the shipped CLI under `python -I`: the census READS a tree and
     imports nothing from it, so an exported revision needs no environment."""
@@ -445,13 +514,32 @@ COMPARE_SITE = ("tools/measure_conga_body_spread.py", 503)
 def _export(revision: str, dest: pathlib.Path) -> bool:
     """`git archive --format=tar <revision> tools model` into `dest`. False
     when the revision is not in this clone."""
-    archive = subprocess.run(["git", "archive", "--format=tar", revision, "tools", "model"],
-                             cwd=REPO, capture_output=True, check=False)
-    if archive.returncode != 0:
+    probe = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{revision}^{{commit}}"],
+                           cwd=REPO, stdout=subprocess.DEVNULL)
+    if probe.returncode == 1:
         return False
+    probe.check_returncode()
+    archive = subprocess.run(["git", "archive", "--format=tar", revision, "tools", "model"],
+                             cwd=REPO, stdout=subprocess.PIPE, check=True)
     with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
         tar.extractall(dest, filter="data")
     return True
+
+
+def test_archive_failure_for_available_commit_keeps_gits_error(tmp_path, monkeypatch, capfd):
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "tar.umask")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "invalid")
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        _export("HEAD", tmp_path)
+    assert error.value.cmd[1] == "archive"
+    assert "tar.umask" in capfd.readouterr().err
+
+
+def test_unavailable_historical_commit_can_still_be_skipped(tmp_path, monkeypatch):
+    subprocess.run(["git", "init", "--bare", "--quiet", str(tmp_path)], check=True)
+    monkeypatch.setenv("GIT_DIR", str(tmp_path))
+    assert _export(DEFECT, tmp_path / "export") is False
 
 
 @pytest.mark.parametrize("revision, pair_present", [

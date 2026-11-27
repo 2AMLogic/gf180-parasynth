@@ -37,8 +37,9 @@ reading belongs to whoever runs it.  The exit status therefore says nothing
 about the pairs: 0 with them and 0 without.  A zero-candidate gate is out of
 scope (#1434).
 
-The report prints one block per field name -- its store sites, then its
-comparison sites, each once.  `census()` returns the pairs themselves.
+The report prints one block per field name with each store and comparison
+operand at its file, line and 1-based UTF-8 byte column.  `census()` returns
+the pairs themselves.
 
 WHAT IT MATCHES.  A STORE site binds a field name to the result of `round(...)`:
 
@@ -91,8 +92,8 @@ a clean one:
     consumer, and half a tree cannot hold one;
   * at least one non-test Python file was scanned.  An empty report looks
     exactly like a clean one;
-  * every scanned file parses.  One that does not is a part of the tree that
-    was not read: it is named, and nothing is reported.
+  * every directory in scope can be listed and every scanned file parses.
+    A traversal or read error names the path and withholds the report.
 
 An unexpected exception is an execution error (exit 1, traceback), never a
 refusal.
@@ -141,6 +142,7 @@ from __future__ import annotations
 import argparse
 import ast
 import collections
+import os
 import pathlib
 import sys
 from typing import NamedTuple
@@ -162,6 +164,7 @@ class Site(NamedTuple):
     field: str
     file: str
     line: int
+    column: int
     form: str
     text: str
 
@@ -216,20 +219,20 @@ def _stores(tree: ast.AST, rel: str) -> list[Site]:
         if isinstance(node, ast.Call):
             for kw in node.keywords:
                 if kw.arg is not None and _is_round(kw.value):
-                    sites.append(Site(kw.arg, rel, kw.lineno, "keyword",
+                    sites.append(Site(kw.arg, rel, kw.lineno, kw.col_offset + 1, "keyword",
                                       f"{kw.arg}={ast.unparse(kw.value)}"))
         elif isinstance(node, ast.Dict):
             for k, v in zip(node.keys, node.values):
                 name = _key(k)
                 if name is not None and _is_round(v):
-                    sites.append(Site(name, rel, k.lineno, "dict-key",
+                    sites.append(Site(name, rel, k.lineno, k.col_offset + 1, "dict-key",
                                       f"{ast.unparse(k)}: {ast.unparse(v)}"))
         elif isinstance(node, (ast.Assign, ast.AnnAssign)) and _is_round(node.value):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for target in targets:
                 slot = _slot(target)
                 if slot is not None:
-                    sites.append(Site(slot[0], rel, target.lineno, slot[1],
+                    sites.append(Site(slot[0], rel, target.lineno, target.col_offset + 1, slot[1],
                                       f"{ast.unparse(target)} = {ast.unparse(node.value)}"))
     return sites
 
@@ -246,7 +249,8 @@ def _compares(tree: ast.AST, rel: str) -> list[Site]:
                 continue
             read = _read(operand)
             if read is not None:
-                sites.append(Site(read[0], rel, node.lineno, read[1], ast.unparse(node)))
+                sites.append(Site(read[0], rel, operand.lineno, operand.col_offset + 1,
+                                  read[1], ast.unparse(node)))
     return sites
 
 
@@ -267,42 +271,50 @@ def _pairs(stores: list[Site], compares: list[Site]) -> list[Candidate]:
         by_field[site.field].append(site)
     found = {Candidate(store, compared) for store in stores
              for compared in by_field[store.field] if compared.file != store.file}
-    return sorted(found, key=lambda c: (c.stored.field, c.compared.file, c.compared.line,
-                                        c.compared.form, c.stored.file, c.stored.line))
+    return sorted(found, key=lambda c: (c.stored.field, _order(c.compared), _order(c.stored)))
 
 
-def _order(site: Site) -> tuple[str, int, str, str]:
-    """File, then line: the order a reader meets the sites in."""
-    return (site.file, site.line, site.field, site.form)
+def _order(site: Site) -> tuple[str, int, int]:
+    return (site.file, site.line, site.column)
+
+
+def _refuse_walk_error(exc: OSError) -> None:
+    raise Refused(f"could not list source directory: {exc}") from exc
 
 
 def census(root: pathlib.Path | str) -> dict:
     """Stores, ordered field comparisons and their cross-module name matches
     under `root`.  REFUSES rather than returning a partial census."""
     root = pathlib.Path(root)
-    if not root.exists():
-        raise Refused(f"{root} does not exist; no census was taken")
-    if not root.is_dir():
-        raise Refused(f"{root} is not a directory; no census was taken")
-    missing = [f"{d}/" for d in SCAN_DIRS if not (root / d).is_dir()]
+    try:
+        if not root.exists():
+            raise Refused(f"{root} does not exist; no census was taken")
+        if not root.is_dir():
+            raise Refused(f"{root} is not a directory; no census was taken")
+        missing = [f"{d}/" for d in SCAN_DIRS if not (root / d).is_dir()]
+    except OSError as exc:
+        raise Refused(f"could not inspect source directory: {exc}") from exc
     if missing:
         raise Refused(f"{root} has no {' and no '.join(missing)} directory, so the tree is "
                       "partial: a pair needs a producer and a consumer, and half a tree "
                       "cannot hold one")
     files, test_files = [], 0
     for d in SCAN_DIRS:
-        for path in sorted((root / d).rglob("*.py")):
-            if path.name.startswith("test_") or path.name.endswith("_test.py"):
-                test_files += 1
-            else:
-                files.append(path)
+        for directory, _, names in os.walk(root / d, onerror=_refuse_walk_error):
+            for name in names:
+                if not name.endswith(".py"):
+                    continue
+                if name.startswith("test_") or name.endswith("_test.py"):
+                    test_files += 1
+                else:
+                    files.append(pathlib.Path(directory) / name)
     if not files:
         raise Refused(f"{root}: scanned 0 non-test Python files under "
                       f"{' and '.join(SCAN_DIRS)} ({test_files} test files skipped). An "
                       "empty report would read as a clean census")
     stores: list[Site] = []
     compares: list[Site] = []
-    for path in files:
+    for path in sorted(files):
         rel, tree = _parse(path, root)
         stores.extend(_stores(tree, rel))
         compares.extend(_compares(tree, rel))
@@ -337,7 +349,8 @@ def report(result: dict) -> None:
         print(f"{field}  cross-module-pairs={counts[field]}")
         for role, sites in (("stored", stored_in[field]), ("compared", compared_in[field])):
             for site in sorted(sites, key=_order):
-                print(f"    {role:<8} [{site.form:<9}] {site.file}:{site.line}  {site.text}")
+                print(f"    {role:<8} [{site.form:<9}] "
+                      f"{site.file}:{site.line}:{site.column}  {site.text}")
     print("a block is a NAME shared by a rounded store and an ordered comparison. A pair is one "
           "of each in DIFFERENT modules: a candidate to read, not a finding")
 
