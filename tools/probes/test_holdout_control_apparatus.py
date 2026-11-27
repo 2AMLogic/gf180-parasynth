@@ -1,5 +1,5 @@
 """Controls for the apparatus of tools/probes/holdout_injected_controls.py
-(issues #1118 and #1124).
+(issues #1118 and #1124, and the shared verdict's suite, #1400).
 
 The probe measures whether injected defects turn `tools/test_holdout.py` red,
 so the probe itself is the apparatus. Each case builds a throwaway tree (the
@@ -54,6 +54,28 @@ BOOM = ("import pytest\n\n\n"
         "def boom():\n"
         "    raise RuntimeError('apparatus control')\n")
 
+FAIL_THEN_EXIT = ("import pytest\n\n\ndef test_a():\n    assert 0\n\n\n"
+                  "def test_b():\n    pytest.exit('stop', returncode={status})\n")
+
+SETUP_ERR_THEN_EXIT_ZERO = (
+    "import pytest\n\n\n"
+    "@pytest.fixture\n"
+    "def broken():\n"
+    "    raise RuntimeError('apparatus unavailable')\n\n\n"
+    "def test_a(broken):\n    assert 1\n\n\n"
+    "def test_b():\n    pytest.exit('stop', returncode=0)\n"
+)
+
+TEARDOWN_ERR_THEN_EXIT_ZERO = (
+    "import pytest\n\n\n"
+    "@pytest.fixture\n"
+    "def broken():\n"
+    "    yield\n"
+    "    raise RuntimeError('teardown failed')\n\n\n"
+    "def test_a(broken):\n    assert 1\n\n\n"
+    "def test_b():\n    pytest.exit('stop', returncode=0)\n"
+)
+
 #: Every way a `tools/test_holdout.py` cannot go green, with the pytest status
 #: each one produces: (file text or None to leave it out, conftest, status).
 BROKEN = {
@@ -64,9 +86,10 @@ BROKEN = {
     # A failing test AND pytest.exit(returncode=2): rc 2 WITH a parsed FAILED
     # line, so the baseline's `if failed:` branch must name 2, not a literal 1
     # (#1128).
-    "failed_then_exit": ("import pytest\n\n\ndef test_a():\n    assert 0\n\n\n"
-                         "def test_b():\n    pytest.exit('stop', returncode=2)\n",
-                         None, 2),
+    "failed_then_exit": (FAIL_THEN_EXIT.format(status=2), None, 2),
+    "failed_then_exit_zero": (FAIL_THEN_EXIT.format(status=0), None, 0),
+    "setup_error_then_exit_zero": (SETUP_ERR_THEN_EXIT_ZERO, None, 0),
+    "teardown_error_then_exit_zero": (TEARDOWN_ERR_THEN_EXIT_ZERO, None, 0),
 }
 
 
@@ -111,8 +134,11 @@ def _synthetic_expected(monkeypatch, **override) -> None:
     """Repoint `EXPECTED` at the names `_green_then_red()` produces (the real
     names belong to the real suite, which this tree does not carry); `override`
     replaces one control's set."""
-    exp = {n: frozenset({f"test_{n.lower()}_site_is_present"}) for n in hic.INJECTS}
-    exp.update({k: frozenset(v) for k, v in override.items()})
+    exp = {}
+    for control, (_, pattern, _) in hic.INJECTS.items():
+        site = hic.Site(f"assert re.search({pattern!r}, src)")
+        names = override.get(control, {f"test_{control.lower()}_site_is_present"})
+        exp[control] = {name: site for name in names}
     monkeypatch.setattr(hic, "EXPECTED", exp)
 
 
@@ -171,9 +197,22 @@ def test_run_alone_still_maps_a_broken_suite_status_to_a_refusal(
     what breaks the suite reaches `run()` with a green baseline behind it."""
     test_holdout, conftest, status = BROKEN[shape]
     monkeypatch.setattr(hic, "ROOT", _tree(tmp_path, test_holdout, conftest))
-    res = hic.run("GATE_OFF")
+    res = hic.run("GATE_OFF", hic.SuiteReport({}, {"test_a": "passed"}))
     assert res.outcome == hic.REFUSED
     assert f"pytest exited {status}" in res.reason
+
+
+def test_run_names_its_own_suite_when_no_failed_line_parses(monkeypatch, tmp_path):
+    """The suite became an argument of `verdict()` when the sound probe began
+    sharing it (#1400), so this probe hands it its own at the call site. That
+    is a literal again, and a wrong one is invisible in every case above: the
+    reason is the only place a refusal is spoken, and it would name a file
+    this probe never ran."""
+    test_holdout, conftest, _status = BROKEN["error_only"]
+    monkeypatch.setattr(hic, "ROOT", _tree(tmp_path, test_holdout, conftest))
+    res = hic.run("GATE_OFF", hic.SuiteReport({}, {"test_a": "passed"}))
+    assert res.outcome == hic.REFUSED
+    assert "no call failure was recorded for tools/test_holdout.py" in res.reason
 
 
 def test_a_missing_injection_point_keeps_its_own_distinct_refusal(
@@ -237,6 +276,20 @@ def test_a_renamed_expected_test_is_refused_not_silently_passed(
     assert rc == 2 and "every control fired" not in out, out
 
 
+def test_wrong_assertion_in_expected_holdout_test_is_refused(
+        monkeypatch, tmp_path, capsys):
+    _synthetic_expected(monkeypatch)
+    suite = _green_then_red().replace(
+        "def test_gate_off_site_is_present():",
+        "def test_gate_off_site_is_present():\n"
+        "    assert 'if False and is_holdout(case):' not in "
+        "pathlib.Path('tools/run_case.py').read_text(), 'apparatus failed'")
+    rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, test_holdout=suite))
+    assert rc == 2, out
+    assert "GATE_OFF: REFUSED" in out and "apparatus failed" in out
+    assert out.count("red, 1 test(s) caught it") == 2
+
+
 def test_an_empty_expected_set_is_refused(monkeypatch, tmp_path, capsys):
     _synthetic_expected(monkeypatch, CLEAN_OFF=set())
     rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, _green_then_red()))
@@ -248,23 +301,74 @@ def test_a_superset_of_the_expected_set_still_fires_and_names_the_extras(
         monkeypatch, tmp_path, capsys):
     """Overlap is enough: an added test, or a recorded name that no longer
     exists beside one that does, must not turn the probe noisy."""
-    monkeypatch.setattr(hic, "EXPECTED", {
-        "GATE_OFF": frozenset({"test_gate_off_site_is_present", "test_gone"}),
-        "CLEAN_OFF": frozenset({"test_clean_off_site_is_present"}),
-        "STALE_OFF": frozenset({"test_stale_off_site_is_present"}),
-    })
+    _synthetic_expected(monkeypatch, GATE_OFF={"test_gate_off_site_is_present", "test_gone"})
     rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, _green_then_red()))
     assert rc == 0, out
     assert "every control fired" in out
 
 
-def test_run_names_extra_failures_as_information_only(monkeypatch, capsys):
-    monkeypatch.setattr(hic, "EXPECTED", {"X": frozenset({"test_a"})})
-    monkeypatch.setattr(hic, "INJECTS", {"X": ("f", "", "")})
-    monkeypatch.setattr(hic, "baseline",
-                        lambda: hic.Result(hic.NO_FIRE, [], "green"))
-    monkeypatch.setattr(hic, "run",
-                        lambda n: hic.Result(hic.FIRED, ["test_a", "test_b"], "x"))
-    assert hic.main() == 0
-    out = capsys.readouterr().out
-    assert "information only: test_b" in out
+def test_run_names_extra_failures_as_information_only(monkeypatch, tmp_path, capsys):
+    _synthetic_expected(monkeypatch)
+    suite = _green_then_red() + (
+        "\ndef test_extra():\n"
+        "    assert 'if False and is_holdout(case):' not in "
+        "pathlib.Path('tools/run_case.py').read_text()\n")
+    rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, test_holdout=suite))
+    assert rc == 0, out
+    assert "GATE_OFF: red, 1 test(s) caught it" in out
+    assert "information only: test_extra" in out
+
+
+def test_collect_only_refuses_baseline_and_mutant_while_executed_passing_suite_is_no_fire(
+        monkeypatch, tmp_path, capsys):
+    """PYTEST_ADDOPTS=--collect-only collects tests and exits 0 without running
+    any; both baseline and mutant verdict must REFUSE instead of reporting
+    no-fire, while an executed passing suite still reports NO_FIRE / exit 1."""
+    root = _tree(tmp_path, test_holdout="def test_insensitive():\n    assert 1\n")
+    monkeypatch.setattr(hic, "ROOT", root)
+    monkeypatch.setenv("PYTEST_ADDOPTS", "--collect-only")
+    rc, out = _probe(monkeypatch, capsys, root)
+    assert rc == 2, out
+    assert "executed no tests" in out
+    assert "CONTROL DID NOT FIRE" not in out
+    _assert_no_control_ran(out)
+
+    res = hic.run("GATE_OFF", hic.SuiteReport({}, {"test_a": "passed"}))
+    assert res.outcome == hic.REFUSED
+    assert "pytest exited 0" in res.reason and "executed no tests" in res.reason
+
+    # Without --collect-only, the same passing suite genuinely executes and
+    # produces NO_FIRE (survivor).
+    monkeypatch.delenv("PYTEST_ADDOPTS")
+    base = hic.baseline()
+    assert base.report is not None
+    res_exec = hic.run("GATE_OFF", base.report)
+    assert res_exec.outcome == hic.NO_FIRE
+    rc_exec, out_exec = _probe(monkeypatch, capsys, root)
+    assert rc_exec == 1, out_exec
+    assert "CONTROL DID NOT FIRE" in out_exec
+
+
+def test_only_baseline_passes_earn_credit_alongside_skips(monkeypatch, tmp_path, capsys):
+    gate = "test_gate_off_site_is_present"
+    extra = "test_gate_off_skipped_on_baseline"
+    _synthetic_expected(monkeypatch, GATE_OFF={gate, extra})
+    # Both tests fail at the same assertion under GATE_OFF. Only one ran cleanly.
+    rel, pattern, _ = hic.INJECTS["GATE_OFF"]
+    suite = _green_then_red() + f"""
+import pytest
+
+def {extra}():
+    src = pathlib.Path({rel!r}).read_text()
+    if 'if False and is_holdout(case):' not in src:
+        pytest.skip('baseline apparatus unavailable')
+    assert re.search({pattern!r}, src)
+
+def test_unrelated():
+    pytest.skip('unavailable')
+"""
+    rc, out = _probe(monkeypatch, capsys, _tree(tmp_path, test_holdout=suite))
+    assert rc == 0, out
+    assert "GATE_OFF: red, 1 test(s) caught it" in out, out
+    assert f"    {gate}" in out.splitlines()
+    assert f"other failures, information only: {extra}" in out
