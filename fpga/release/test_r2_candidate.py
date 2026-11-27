@@ -110,3 +110,40 @@ def test_the_freeze_is_an_ancestor_commit_in_this_clone():
     r = subprocess.run(["git", "-C", str(r2.ROOT), "cat-file", "-t", r2_release.R2_FROZEN_AT],
                        capture_output=True, text=True)
     assert r.stdout.strip() == "commit"
+
+
+def test_an_explicit_commit_is_read_in_place_of_the_module_freeze(monkeypatch):
+    """rtl(commit), _frozen_paths(commit) and _frozen_blob(rel, commit) list and
+    hash at the commit they are given; R2_FROZEN_AT is only the default."""
+    import r2_release
+    freeze = r2_release.R2_FROZEN_AT
+    at_freeze, paths_at_freeze = r2.rtl(freeze), r2._frozen_paths(freeze)
+    assert at_freeze == r2.rtl() and paths_at_freeze == r2._frozen_paths()
+    monkeypatch.setattr(r2_release, "R2_FROZEN_AT", "0" * 40)
+    assert r2.rtl(freeze) == at_freeze
+    assert r2._frozen_paths(freeze) == paths_at_freeze
+    with pytest.raises(r2.Refused, match="shallow clone"):
+        r2.rtl()
+
+
+def test_an_empty_freeze_is_refused_by_name_not_read_from_the_index(monkeypatch):
+    """`git show :path` -- what an empty commit string builds -- reads the INDEX,
+    the working tree's staged bytes, and returns them without a word. With no
+    freeze there is nothing frozen to read: refuse, by name."""
+    import r2_release
+    monkeypatch.setattr(r2_release, "R2_FROZEN_AT", "")
+    for read in (lambda: r2._frozen_blob("rtl-sketch/voice_dp.v", ""),
+                 lambda: r2._frozen_blob("rtl-sketch/voice_dp.v"),
+                 lambda: r2._frozen_paths(""),
+                 lambda: r2._frozen_paths(),
+                 lambda: r2.rtl()):
+        with pytest.raises(r2.Refused, match="R2_FROZEN_AT is not set"):
+            read()
+    assert r2.check() == ("REFUSED", "R2_FROZEN_AT is not set: no R2 image has been built")
+
+
+def test_a_fresh_derivation_is_the_committed_record_byte_for_byte():
+    """What --write emits is the committed file, key order included. check()
+    compares values; this compares the bytes."""
+    fresh = (json.dumps(r2.build(), indent=1) + "\n").encode()
+    assert fresh == r2.RECORD.read_bytes()
