@@ -111,6 +111,52 @@ def test_shared_encoder_round_trips_every_int16_word(tmp_path):
     assert not hasattr(m, "_write_wav"), "private duplicate encoder must stay removed"
 
 
+def test_the_32767_writer_is_a_control_that_stays_red(tmp_path, monkeypatch):
+    """The defect as it shipped (#1547), kept where the verdict is issued: the
+    writer scaled by 32767 while run() divided by 32768, so the run still
+    reports VALID beside WAVs that no longer replay the scored words."""
+    import manifest as mf
+
+    def _x32767(path, x, sr):
+        y = np.clip(np.round(np.asarray(x, dtype=float) * 32767.0), -32768, 32767)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(path), "wb") as out:
+            out.setnchannels(1)
+            out.setsampwidth(2)
+            out.setframerate(sr)
+            out.writeframes(y.astype("<i2").tobytes())
+        return {"peak": 0.0, "clipped_samples": 0}
+
+    n = int(m.SECONDS * m.SR)
+    inc = vf.phase_inc(vf.note_hz(m.NOTE))
+    ref_words = np.asarray(vf.OscFx(m.WAVE, smooth=False).render(n, inc))
+    monkeypatch.setattr(m, "_apparatus", lambda: {"rig": None, "reference": ref_words / 32768.0})
+    monkeypatch.setattr(mf, "_write_wav16", _x32767)
+    code, report = m.run(tmp_path)
+    assert (code, report["status"]) == (0, "VALID")
+    words_by_name = {
+        "dut-polyblep.wav": np.asarray(vf.OscFx(m.WAVE, smooth=True).render(n, inc)),
+        "dut-2x-decimated.wav": np.asarray(os2.render_saw(n, inc)),
+        "reference-surge.wav": ref_words,
+    }
+    expect = {
+        "dut-polyblep.wav": 15883,
+        "dut-2x-decimated.wav": 13275,
+        "reference-surge.wav": 16354,
+    }
+    for name, changed in expect.items():
+        d = np.abs(
+            _decode(tmp_path / name).astype(np.int64)
+            - words_by_name[name].astype(np.int16).astype(np.int64)
+        )
+        assert (int(np.count_nonzero(d)), int(d.max())) == (changed, 1), name
+
+    all_words = np.arange(-32768, 32768, dtype=np.int64)
+    _x32767(tmp_path / "all-32767.wav", all_words / 32768.0, m.SR)
+    all_delta = np.abs(_decode(tmp_path / "all-32767.wav").astype(np.int64) - all_words)
+    assert (int(np.count_nonzero(all_delta)), int(all_delta.max())) == (32767, 1)
+
+
 def _run_with_reference(monkeypatch, tmp_path, ref):
     monkeypatch.setattr(m, "_apparatus", lambda: {"rig": None, "reference": ref})
     return m.run(tmp_path / "out")
