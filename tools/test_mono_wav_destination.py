@@ -416,25 +416,33 @@ def test_off_board_rtl_anchor_keeps_the_model_wav_with_its_twin(
     assert published.read_bytes() == before
 
 
+@pytest.mark.parametrize("link_kind", ["symlink", "hardlink"])
 @pytest.mark.parametrize("through_missing_parent", [False, True], ids=["direct", "missing-parent"])
 def test_collision_in_model_twin_refuses_before_render(
-        board, monkeypatch, tmp_path, capsys, through_missing_parent):
+        board, monkeypatch, tmp_path, capsys, through_missing_parent, link_kind):
     published = board["m1a"] / "m1a-model.wav"
     before = _seed(published)
-    anchor = tmp_path / "M1A.json"
+    # A hard link must share the published WAV's filesystem.
+    trial_dir = (board["base"] if link_kind == "hardlink" else tmp_path) / "trial"
+    trial_dir.mkdir()
+    anchor = trial_dir / "M1A.json"
     anchor_bytes = b'{"case_id":"M1A","engine":"integrated-rtl"}'
     anchor.write_bytes(anchor_bytes)
-    twin = tmp_path / "model-twin"
-    twin.symlink_to(published.parent, target_is_directory=True)
-    trial = tmp_path / "missing" / ".." if through_missing_parent else tmp_path
+    twin = trial_dir / "model-twin"
+    if link_kind == "symlink":
+        twin.symlink_to(published.parent, target_is_directory=True)
+    else:
+        twin.mkdir()
+        (twin / published.name).hardlink_to(published)
+    trial = trial_dir / "missing" / ".." if through_missing_parent else trial_dir
     assert _cli(board, monkeypatch, "M1A", "--results", str(trial)) == 2
     err = capsys.readouterr().err
-    assert REFUSAL in err and str(trial / twin.name / published.name) in err
+    assert REFUSAL in err and rc.stated_path(trial / twin.name / published.name) in err
     assert board["renders"] == 0
     assert anchor.read_bytes() == anchor_bytes
     assert published.read_bytes() == before
     assert not (twin / anchor.name).exists()
-    assert not (tmp_path / "missing").exists()
+    assert not (trial_dir / "missing").exists()
 
 
 @pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)

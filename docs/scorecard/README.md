@@ -254,8 +254,9 @@ a filter, drum or ensemble case, into `build/scorecard/`, where the board's
 response curves and rendered WAVs live. A filter control writes its curve
 beside its JSON, and a drum or ensemble control its WAV -- in `model-twin/`
 too when the requested directory already holds an RTL anchor for that case
-(#1412, #1414, #1450). A control's output is not evidence about the
-instrument.
+(#1412, #1414, #1450). If a drum or ensemble WAV path refers to the
+case's published recording through a symlink or hard link, the control exits
+2 before rendering. A control's output is not evidence about the instrument.
 
 A clean mono run keeps the published WAV path on the board. With an off-board
 `--results`, it writes the WAV beside its model JSON. If the directory already

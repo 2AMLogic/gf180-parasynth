@@ -732,6 +732,35 @@ def test_a_clean_run_cannot_put_its_curve_on_the_published_path(
 
 
 @pytest.mark.parametrize("engine,case_id,curve", PUBLISHED)
+def test_a_missing_component_before_dotdot_cannot_hide_a_published_curve(
+        board, monkeypatch, capsys, engine, case_id, curve):
+    trial = board["base"] / "trial"
+    trial.mkdir()
+    record = trial / f"{case_id}.json"
+    anchor = b'{"engine":"integrated-rtl"}'
+    record.write_bytes(anchor)
+    directory = trial
+    if engine == "model":
+        directory = trial / "model-twin"
+        directory.mkdir()
+    published = board["shared"] / curve
+    before = _seed(published)
+    (directory / curve).hardlink_to(published)
+    spelling = trial / "missing" / ".."
+    _double(board, monkeypatch, engine)
+
+    status = _cli(engine, "--results", str(spelling))
+    err = capsys.readouterr().err
+    assert published.read_bytes() == before
+    assert record.read_bytes() == anchor
+    assert status == 2 and REFUSAL in err and case_id in err
+    candidate = spelling / directory.relative_to(trial) / curve
+    assert f"at {rc.stated_path(candidate)}," in err
+    assert (board["runs"], board["base_checks"]) == (0, 0)
+    assert not (trial / "missing").exists()
+
+
+@pytest.mark.parametrize("engine,case_id,curve", PUBLISHED)
 def test_the_published_curve_is_protected_before_it_exists(
         board, monkeypatch, capsys, engine, case_id, curve):
     """A published curve nobody has measured yet is still the published path: a

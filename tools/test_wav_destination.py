@@ -718,7 +718,9 @@ def test_the_published_wav_is_protected_before_it_exists(
     assert [p.name for p in dangling.iterdir()] == [wav] and (dangling / wav).is_symlink()
 
 
-def test_the_model_twin_directory_cannot_be_the_published_one(board, capsys, tmp_path):
+@pytest.mark.parametrize("through_missing_parent", [False, True], ids=["direct", "missing-parent"])
+def test_the_model_twin_directory_cannot_be_the_published_one(
+        board, capsys, tmp_path, through_missing_parent):
     """#1414 sends an off-board WAV into `model-twin/` when an RTL anchor holds
     the requested JSON path. That directory aliased to the published one is the
     same collision one level down, and is refused on the file it resolves to."""
@@ -728,9 +730,11 @@ def test_the_model_twin_directory_cannot_be_the_published_one(board, capsys, tmp
     anchor.write_text(json.dumps({"case_id": "D12A", "engine": "integrated-rtl"}))
     (tmp_path / "model-twin").symlink_to(board["shared"], target_is_directory=True)
     capsys.readouterr()
-    assert _cli(board, "D12A", "--results", str(tmp_path)) == 2
+    trial = tmp_path / "missing" / ".." if through_missing_parent else tmp_path
+    assert _cli(board, "D12A", "--results", str(trial)) == 2
     err = capsys.readouterr().err
-    assert REFUSAL in err and str(tmp_path / "model-twin" / "D12A-ours.wav") in err, err
+    assert REFUSAL in err and str(trial / "model-twin" / "D12A-ours.wav") in err, err
+    assert not (tmp_path / "missing").exists()
     assert board["renders"].calls == 0
     assert published.read_bytes() == before
     assert [p.name for p in board["shared"].iterdir()] == ["D12A-ours.wav"]

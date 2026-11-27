@@ -3501,10 +3501,8 @@ def result_destination(dest: pathlib.Path, res: dict, *, prepare: bool = True) -
     So an anchor is kept and the model result is written beside it under
     `results/model-twin/`, with the swap announced. Neither is discarded, and
     `tools/compare_ensemble_candidate.py` is the tool that compares them.
-    Pass `prepare=False` to look up the path before placing an artefact beside
-    the record: a rendered WAV, or this runner's model filter curve. During WAV
-    preflight it selects the same path without creating the directory or
-    announcing a JSON write."""
+    Pass `prepare=False` to locate the record before writing a WAV or filter
+    curve beside it. The lookup skips directory creation and the write announcement."""
     if res.get("engine") == "integrated-rtl" or not dest.is_file():
         return dest
     try:
@@ -3563,6 +3561,8 @@ def artefact_directory(results_dir: pathlib.Path, *,
     names the case whose record the artefact is written beside. An artefact
     whose record another CLI writes straight into the requested directory --
     the RTL scorer's curve -- states no case, and stays there.
+    Mono cases use `model_wav_destination` because M1A publishes its WAV
+    beside its frozen reference.
 
     Both CLIs (`main` here and `tools/score_f1_rtl.py` for the RTL curve)
     refuse an injected run whose requested directory is `AUDIO_OUT`, where
@@ -3570,8 +3570,12 @@ def artefact_directory(results_dir: pathlib.Path, *,
     if on_board(results_dir):
         return AUDIO_OUT
     if model_record_case is not None:
-        record = results_dir / f"{model_record_case}.json"
-        return result_destination(record, {"engine": ENGINE}, prepare=False).parent
+        # An RTL anchor can already exist beyond a not-yet-created "missing/..".
+        # Look it up in the eventual directory, keeping --results as spelled.
+        directory = results_dir.resolve()
+        record = result_destination(directory / f"{model_record_case}.json",
+                                    {"engine": ENGINE}, prepare=False)
+        return results_dir / record.parent.relative_to(directory)
     return results_dir
 
 
@@ -3674,7 +3678,9 @@ def _names_one_file(candidate: pathlib.Path, published: pathlib.Path) -> bool:
     symlinks, `.` and `..` are resolved -- or, both existing, the same inode,
     which is what a hard link is and no path comparison can see. Two paths of
     which one does not exist are not one file."""
-    if candidate.resolve() == published.resolve():
+    candidate = candidate.resolve()
+    published = published.resolve()
+    if candidate == published:
         return True
     if not (candidate.exists() and published.exists()):
         return False
@@ -3731,18 +3737,9 @@ def model_wav_destination(results_dir: pathlib.Path, kind: str, case_id: str, *,
         return None
     if on_board(results_dir):
         return published
-    # main creates --results before measuring. Inspect its eventual directory
-    # even if a component before ".." does not exist yet during preflight.
-    directory = results_dir.resolve()
-    record = result_destination(directory / f"{case_id}.json", {"engine": ENGINE},
-                                prepare=False)
-    dest = record.parent.resolve() / published.name
-    if _names_one_file(dest, published):
-        # Keep symlink/.. in this spelling: collapsing it lexically can name
-        # a different file from the one the filesystem actually reached.
-        _refuse_published(results_dir.absolute() / record.parent.relative_to(directory),
-                          published, case_id, own="model WAV", kind="WAV")
-    return dest
+    directory = artefact_directory(results_dir, model_record_case=case_id)
+    _refuse_published(directory.absolute(), published, case_id, own="model WAV", kind="WAV")
+    return directory.resolve() / published.name
 
 
 def artefact_destination(results_dir: pathlib.Path, kind: str, case_id: str, *,
