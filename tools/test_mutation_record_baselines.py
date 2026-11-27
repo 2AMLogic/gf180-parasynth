@@ -37,6 +37,7 @@ that import ran the whole mutation loop against the live tree.
 """
 import functools
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -850,6 +851,9 @@ def _is_verdict_header(line, name):
     for prefix in _VERDICT_PREFIXES:
         if line.startswith(prefix) and line[len(prefix):].startswith(" "):
             tail = line[len(prefix):].lstrip(" ")
+            if prefix == "RED (good)":
+                match = re.fullmatch(r"(.+): [0-9]+ test\(s\) caught it", tail)
+                return match is not None and match[1] == name
             rem = tail[len(name):]
             return tail.startswith(name) and (not rem or rem.startswith((": ", " -- ")))
     return False
@@ -895,12 +899,17 @@ def test_credited_ids_are_read_from_the_mutants_own_group():
            "2 mutant(s) killed\n")
     assert _credited_ids(out, "A") == []
     assert _credited_ids(out, "B") == ["t1", "t2[x-y]"]
-    # Rule-8 control: a missing mutant whose name is a prefix of another
-    # mutant's name must not match the longer mutant's header.
-    prefix_only = "RED (good)   AB: 1 test(s) caught it\n    t1\n"
-    assert _credited_ids(prefix_only, "AB") == ["t1"]
+
+
+@pytest.mark.parametrize("long_name", ["AB", "A -- variant", "A: variant"])
+def test_sound_credit_requires_the_complete_mutant_name(long_name):
+    longer_group = f"RED (good)   {long_name}: 1 test(s) caught it\n    test_long\n"
+    assert _credited_ids(longer_group, long_name) == ["test_long"]
     with pytest.raises(AssertionError):
-        _credited_ids(prefix_only, "A")
+        _credited_ids(longer_group, "A")
+
+    both = "RED (good)   A: 1 test(s) caught it\n    test_short\n" + longer_group
+    _assert_sound_credits(both, {"A": ["test_short"], long_name: ["test_long"]})
 
 
 def _survivors(out):
