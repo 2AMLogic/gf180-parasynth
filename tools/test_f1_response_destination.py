@@ -114,6 +114,8 @@ def _rtl_double():
     the control is a measured, failing record rather than a refusal."""
 
     class _RtlDouble(_CurveDouble):
+        engine = rtlpath.ENGINE          # the path declares its own identity (#1492)
+
         def __init__(self, inject=None, timeout_s=None):
             super().__init__()
             self.cutoff_scale = 2.0 if inject else 1.0

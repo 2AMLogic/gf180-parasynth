@@ -2588,7 +2588,7 @@ def _legacy_reads(ref_f, cut, res, amp, open_f, open_hz):
 
 
 def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
-                    engine_path=None, engine: str | None = None,
+                    engine_path=None,
                     response_dest: pathlib.Path | None = None) -> dict:
     """One F1 case, scored against its frozen Surge clip.
 
@@ -2599,8 +2599,11 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
     it exists so the RTL reading and the `fixed-model` reading it is compared
     with come out of the SAME estimators, references and tolerance policy. A
     second copy of this function would have been free to drift from its twin.
-    `engine` names what produced the numbers and lands on the record; a caller
-    that swaps the path and forgets the label is refused below.
+    The record's engine is the PATH's own `engine` attribute (the fixed model's
+    path declares `fixed-model`, the RTL chain `integrated-rtl`); there is no
+    second, independently selectable label to disagree with it (#1492). A
+    substituted path that declares none, or declares the fixed model's, is
+    refused below.
 
     `response_dest` is the file the response curve is written to, resolved by
     the caller from where the record goes (`response_destination`); both CLIs
@@ -2611,13 +2614,14 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
     # Asserted before anything is loaded or rendered, so a caller that swaps the
     # engine and forgets to say so cannot spend twenty minutes of simulation
     # producing a record labelled with the wrong engine.
-    if engine_path is not None and (engine or ENGINE) == ENGINE:
+    declared = ENGINE if engine_path is None else getattr(engine_path, "engine", None)
+    if engine_path is not None and (not declared or declared == ENGINE):
         raise Refused(f"a substituted filter path must name its engine; this one would "
-                      f"have been recorded as {ENGINE!r}")
+                      f"have been recorded as {declared or ENGINE!r}")
     if engine_path is not None and inject:
         raise Refused("a substituted filter path and a reference-side injection cannot be "
                       "combined: the control would not say which side moved")
-    record_engine = engine or ENGINE
+    record_engine = declared
     cid = case["case_id"]
     spec = filter_spec(cid)
     required = [m.strip() for m in case["required_measurements"].split(";") if m.strip()]

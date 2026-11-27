@@ -182,7 +182,7 @@ def main(argv=None) -> int:
         print(f"score_f1_rtl: {a.case} on {rtlpath.ENGINE} "
               f"({path.tools['iverilog']}); this runs two RTL curves")
         record = rc.run_filter_case(case, "", keep_audio=not a.no_audio,
-                                    engine_path=path, engine=rtlpath.ENGINE,
+                                    engine_path=path,
                                     response_dest=response_dest)
     except (rtlpath.Refused, rc.Refused) as exc:
         print(f"score_f1_rtl: REFUSED -- {exc}", file=sys.stderr)
