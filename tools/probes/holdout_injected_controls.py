@@ -33,9 +33,10 @@ Each injection is deleted in a COPY of the worktree, never in place: a control
 that can leave the tree broken behind it is a control nobody runs twice.
 
 pytest's own process exit status is NOT this probe's outcome (issue #1118):
-`run()` maps it -- 1 with an attributed failure is FIRED and 0 with an empty
-failure report is NO_FIRE. A contradictory status or a run that could establish
-neither outcome is REFUSED naming the status. A deleted
+`run()` maps it -- 1 with an attributed failure is FIRED and 0 after a clean,
+executed, completed suite run with no phase errors is NO_FIRE. A contradictory
+status, non-execution (e.g. `--collect-only`), phase errors, or a run that
+could establish neither outcome is REFUSED naming the status. A deleted
 `tools/test_holdout.py` used to exit 4 in all three copies and print
 "every control fired" -- a false green over the exact drift this probe exists
 to surface.
@@ -106,6 +107,16 @@ class Failure(NamedTuple):
         return at_site and site.exception in (self.exception, self.reason)
 
 
+class SuiteReport(NamedTuple):
+    failures: dict[str, Failure]
+    errors: tuple[str, ...] = ()
+    collected: int = 0
+    executed: int = 0
+    passed: int = 0
+    completed: int = 0
+    deselected: int = 0
+
+
 INJECTS = {
     "GATE_OFF": ("tools/run_case.py",
                  r"    if is_holdout\(case\):",
@@ -152,46 +163,78 @@ def _copy(parent: pathlib.Path) -> pathlib.Path:
     return work
 
 
-def run_suite(work: pathlib.Path, suite: str) -> tuple[int, dict[str, Failure] | None, str]:
-    """Pair each pytest call failure with its own traceback and diagnostic."""
+def run_suite(work: pathlib.Path, suite: str) -> tuple[int, SuiteReport | None, str]:
+    """Run one pytest suite and record its outcomes, phase errors, and failure sites."""
     runner = pathlib.Path(__file__).with_name("pytest_failure_sites.py")
     with tempfile.TemporaryDirectory() as tmp:
-        report = pathlib.Path(tmp) / "failures.json"
+        report = pathlib.Path(tmp) / "report.json"
         out = subprocess.run([sys.executable, str(runner), suite, str(report)], cwd=work,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         try:
-            failures = json.loads(report.read_text())
-        except (OSError, json.JSONDecodeError):
+            data = json.loads(report.read_text())
+            failures = {name: Failure(*site) for name, site in data["failures"].items()}
+            suite_report = SuiteReport(
+                failures=failures,
+                errors=tuple(data["errors"]),
+                collected=int(data["collected"]),
+                executed=int(data["executed"]),
+                passed=int(data["passed"]),
+                completed=int(data["completed"]),
+                deselected=int(data["deselected"]),
+            )
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
             return out.returncode, None, out.stdout
-    return out.returncode, {name: Failure(*data) for name, data in failures.items()}, out.stdout
+    return out.returncode, suite_report, out.stdout
 
 
-def verdict(rc: int, failed: dict[str, Failure] | None,
+def _zero_exit_problem(report: SuiteReport, suite: str) -> str | None:
+    """Return why an exit-0 report cannot establish a clean run, or None."""
+    if report.failures:
+        names = sorted(report.failures)
+        return f"recorded failures in {suite}: " + ", ".join(names)
+    if report.errors:
+        return f"phase error(s) in {suite}: " + ", ".join(report.errors)
+    if report.collected == 0:
+        return f"collected no tests for {suite}"
+    if report.deselected > 0:
+        return f"{report.deselected} test(s) deselected in {suite}"
+    if report.executed == 0:
+        return f"executed no tests for {suite} ({report.collected} collected)"
+    if report.passed == 0:
+        return f"no test passed in {suite}"
+    if report.completed < report.collected:
+        return (f"only {report.completed}/{report.collected} collected test(s) "
+                f"completed in {suite}")
+    return None
+
+
+def verdict(rc: int, report: SuiteReport | None,
             expected: dict[str, Site], *, suite: str) -> Result:
     """Credit only recorded assertions that actually failed under the mutant."""
-    if failed is None:
+    if report is None:
         return Result(REFUSED, [], f"pytest exited {rc} without a failure report for {suite}")
     if rc == 0:
-        if failed:
-            names = sorted(failed)
-            return Result(REFUSED, names, f"pytest exited 0 with recorded failures in {suite}: "
-                          + ", ".join(names))
+        problem = _zero_exit_problem(report, suite)
+        if problem is not None:
+            return Result(REFUSED, sorted(report.failures), f"pytest exited 0: {problem}")
         return Result(NO_FIRE, [], "pytest stayed green")
-    if rc == 1 and failed:
-        names = sorted(failed)
+    if rc == 1 and report.failures:
+        names = sorted(report.failures)
         if not expected:
             return Result(REFUSED, names, "no expected assertions are recorded for this control, "
                           "so its red cannot be attributed to the injection")
-        caught = sorted(name for name in expected.keys() & failed.keys()
-                        if failed[name].matches(expected[name]))
+        caught = sorted(name for name in expected.keys() & report.failures.keys()
+                        if report.failures[name].matches(expected[name]))
         if caught:
             return Result(FIRED, caught, "pytest exited 1",
-                          other=tuple(sorted(failed.keys() - set(caught))))
-        details = ", ".join(f"{name} ({failed[name].reason})" for name in names)
+                          other=tuple(sorted(report.failures.keys() - set(caught))))
+        details = ", ".join(f"{name} ({report.failures[name].reason})" for name in names)
         return Result(REFUSED, names, f"no intended assertion failed: expected {sorted(expected)}, "
                       f"observed {details}")
     if rc == 1:
-        return Result(REFUSED, [], f"pytest exited 1 but no call failure was recorded for {suite}")
+        suffix = f" ({', '.join(report.errors)})" if report.errors else ""
+        return Result(REFUSED, [],
+                      f"pytest exited 1 but no call failure was recorded for {suite}{suffix}")
     return Result(REFUSED, [], f"pytest exited {rc}; nothing was measured")
 
 
@@ -210,26 +253,33 @@ def run(name: str) -> Result:
                           f"control cannot fire and must be repaired, not "
                           f"skipped")
         target.write_text(new)
-        rc, failed, _stdout = run_suite(work, SUITE)
-        return verdict(rc, failed, EXPECTED.get(name, {}), suite=SUITE)
+        rc, report, _stdout = run_suite(work, SUITE)
+        return verdict(rc, report, EXPECTED.get(name, {}), suite=SUITE)
 
 
 def run_baseline(work: pathlib.Path, suite: str) -> Result:
-    """Run the unmutated suite. Both probes require exit 0 and an empty failure report."""
-    rc, failed, stdout = run_suite(work, suite)
-    if failed is None:
+    """Run the unmutated suite. Both probes require exit 0 and a clean, executed run."""
+    rc, report, stdout = run_suite(work, suite)
+    if report is None:
         what = f"pytest exited {rc} on the UNMUTATED tree without a failure report"
-    elif failed:
-        what = (f"pytest exited {rc} on the UNMUTATED tree, {len(failed)} test(s) red "
-                f"before any injection ({', '.join(failed)})")
+    elif report.failures:
+        names = sorted(report.failures)
+        what = (f"pytest exited {rc} on the UNMUTATED tree, {len(names)} test(s) red "
+                f"before any injection ({', '.join(names)})")
     elif rc == 0:
-        return Result(NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
+        problem = _zero_exit_problem(report, suite)
+        if problem is None:
+            return Result(NO_FIRE, [], "pytest stayed green on the UNMUTATED tree")
+        what = f"pytest exited 0 on the UNMUTATED tree: {problem}"
+    elif report.errors:
+        what = (f"pytest exited {rc} on the UNMUTATED tree with phase error(s) in {suite}: "
+                + ", ".join(report.errors))
     elif rc == 1:
         what = f"pytest exited 1 on the UNMUTATED tree with no call failure recorded for {suite}"
     else:
         what = f"pytest exited {rc} on the UNMUTATED tree"
-    return Result(REFUSED, sorted(failed or {}), f"{what} -- no control's red can mean anything",
-                  stdout[-TAIL:])
+    return Result(REFUSED, sorted(report.failures if report else {}),
+                  f"{what} -- no control's red can mean anything", stdout[-TAIL:])
 
 
 def baseline() -> Result:

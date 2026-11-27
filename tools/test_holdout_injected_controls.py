@@ -138,7 +138,7 @@ def test_verdict_names_the_suite_that_ran_when_no_failed_line_parses():
     # sound probe began sharing the decision, and the literal was this
     # probe's own suite: reused unchanged, the sound probe would have refused
     # naming a file it never ran.
-    res = hic.verdict(1, {}, {"test_a": hic.Site("assert ok")}, suite="model/other.py")
+    res = hic.verdict(1, hic.SuiteReport({}), {"test_a": hic.Site("assert ok")}, suite="model/other.py")
     assert res.outcome == hic.REFUSED
     assert "no call failure was recorded for model/other.py" in res.reason
     assert "tools/test_holdout.py" not in res.reason
@@ -149,7 +149,7 @@ def test_verdict_refuses_to_guess_the_suite():
     # defeats the case above (docs/verification-rules.md rule 8), and it must
     # fail here rather than refuse against the wrong file's name.
     with pytest.raises(TypeError):
-        hic.verdict(1, {}, {"test_a": hic.Site("assert ok")})
+        hic.verdict(1, hic.SuiteReport({}), {"test_a": hic.Site("assert ok")})
 
 
 def test_an_exception_while_evaluating_the_expected_assertion_refuses(tmp_path):
@@ -164,9 +164,9 @@ def test_an_exception_while_evaluating_the_expected_assertion_refuses(tmp_path):
         "    assert {}['unrelated']\n")
     expected = {"test_helper": hic.Site("assert broken()"),
                 "test_key": hic.Site("assert {}['unrelated']", "KeyError: 'holdout'")}
-    rc, failed, _ = hic.run_suite(tmp_path, suite)
-    assert rc == 1 and set(failed) == set(expected)
-    res = hic.verdict(rc, failed, expected, suite=suite)
+    rc, report, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 1 and report is not None and set(report.failures) == set(expected)
+    res = hic.verdict(rc, report, expected, suite=suite)
     assert res.outcome == hic.REFUSED
     assert "helper failed" in res.reason and "KeyError: 'unrelated'" in res.reason
 
@@ -174,8 +174,72 @@ def test_an_exception_while_evaluating_the_expected_assertion_refuses(tmp_path):
 def test_zero_exit_without_a_completed_pytest_report_refuses(tmp_path):
     suite = "test_example.py"
     (tmp_path / suite).write_text("import os\ndef test_exit():\n    os._exit(0)\n")
-    rc, failed, _ = hic.run_suite(tmp_path, suite)
+    rc, report, _ = hic.run_suite(tmp_path, suite)
     assert rc == 0
-    res = hic.verdict(rc, failed, {}, suite=suite)
+    res = hic.verdict(rc, report, {}, suite=suite)
     assert res.outcome == hic.REFUSED
     assert "without a failure report" in res.reason
+
+
+@pytest.mark.parametrize("kind,src,expected_substr", [
+    ("setup_error_exit_zero",
+     "import pytest\n"
+     "@pytest.fixture\ndef broken():\n    raise RuntimeError('setup boom')\n"
+     "def test_a(broken):\n    assert 1\n"
+     "def test_b():\n    pytest.exit('stop', returncode=0)\n",
+     "setup: test_a"),
+    ("teardown_error_exit_zero",
+     "import pytest\n"
+     "@pytest.fixture\ndef broken():\n    yield\n    raise RuntimeError('teardown boom')\n"
+     "def test_a(broken):\n    assert 1\n"
+     "def test_b():\n    pytest.exit('stop', returncode=0)\n",
+     "teardown: test_a"),
+    ("early_exit_zero_incomplete",
+     "import pytest\n"
+     "def test_a():\n    assert 1\n"
+     "def test_b():\n    pytest.exit('early', returncode=0)\n"
+     "def test_c():\n    assert 0\n",
+     "1/3 collected test(s) completed"),
+    ("all_skipped_in_setup",
+     "import pytest\n"
+     "@pytest.mark.skip('no apparatus')\ndef test_a():\n    assert 1\n",
+     "executed no tests"),
+    ("all_skipped_in_call",
+     "import pytest\n"
+     "def test_a():\n    pytest.skip('no apparatus')\n",
+     "no test passed"),
+    ("strict_xpass_exit_zero",
+     "import pytest\n"
+     "@pytest.mark.xfail(strict=True)\ndef test_a():\n    assert 1\n"
+     "def test_b():\n    pytest.exit('stop', returncode=0)\n",
+     "test_a"),
+])
+def test_zero_exit_with_incomplete_or_errored_run_refuses(tmp_path, kind, src, expected_substr):
+    suite = f"test_{kind}.py"
+    (tmp_path / suite).write_text(src)
+    rc, report, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 0
+    res = hic.verdict(rc, report, {}, suite=suite)
+    assert res.outcome == hic.REFUSED, res
+    assert expected_substr in res.reason, res
+    base = hic.run_baseline(tmp_path, suite)
+    assert base.outcome == hic.REFUSED, base
+    assert expected_substr in base.reason, base
+
+
+def test_collect_only_refuses_while_executed_passing_suite_is_no_fire(tmp_path, monkeypatch):
+    suite = "test_example.py"
+    (tmp_path / suite).write_text("def test_pass():\n    assert 1\n")
+    monkeypatch.setenv("PYTEST_ADDOPTS", "--collect-only")
+    rc, report, _ = hic.run_suite(tmp_path, suite)
+    assert rc == 0 and report is not None and report.collected == 1 and report.executed == 0
+    res = hic.verdict(rc, report, {}, suite=suite)
+    assert res.outcome == hic.REFUSED and "executed no tests" in res.reason
+    base = hic.run_baseline(tmp_path, suite)
+    assert base.outcome == hic.REFUSED and "executed no tests" in base.reason
+
+    monkeypatch.delenv("PYTEST_ADDOPTS")
+    rc2, report2, _ = hic.run_suite(tmp_path, suite)
+    assert rc2 == 0 and report2 is not None and report2.executed == 1 and report2.passed == 1
+    assert hic.verdict(rc2, report2, {}, suite=suite).outcome == hic.NO_FIRE
+    assert hic.run_baseline(tmp_path, suite).outcome == hic.NO_FIRE

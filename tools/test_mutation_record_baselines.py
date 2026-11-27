@@ -20,6 +20,7 @@ The healthy case runs the real sound suite against each production mutant,
 and a mix follows the holdout probe's precedence (#1113): a survivor is a
 finding about the tree and outranks a refusal, so it exits 1.
 """
+import os
 import shutil
 import subprocess
 import sys
@@ -56,8 +57,8 @@ def stage(tmp, key, suite_src):
     return tmp / script, tmp / target
 
 
-def run(script, tmp):
-    return subprocess.run([sys.executable, str(script)], cwd=tmp,
+def run(script, tmp, env=None):
+    return subprocess.run([sys.executable, str(script)], cwd=tmp, env=env,
                           capture_output=True, text=True)
 
 
@@ -188,6 +189,63 @@ def test_stop_after_results():
     assert "REFUSED" in out and "baseline" in out and "3 failed" in out, out
     _no_kill_credit(out)
     assert not (tmp_path / "mutant-executed").exists()
+    assert target.read_bytes() == before
+
+
+def test_sound_baseline_with_setup_errors_and_zero_exit_stops_before_mutation(tmp_path):
+    """Reproduce the review control: setup errors on the unmutated baseline
+    followed by `pytest.exit(..., returncode=0)` must REFUSE before any mutant
+    runs, never pass the baseline and award all three kills."""
+    suite = READS_TARGET + """
+import pytest
+
+@pytest.fixture
+def apparatus():
+    if SRC == PRISTINE:
+        raise RuntimeError('apparatus unavailable')
+
+def test_the_moving_average_injection_ripples_at_the_carrier_it_cannot_resolve(apparatus):
+    clean_db = broken_db = 0
+    assert broken_db > clean_db + 3.0
+
+def test_the_centroid_injection_switches_which_field_the_brightness_property_reads(apparatus):
+    power = amplitude = 1
+    assert amplitude > 2.0 * power
+
+def test_the_lock_changelog_agrees_with_the_live_table(apparatus):
+    problems = ['broken baseline']
+    assert problems == []
+
+def test_stop_after_results():
+    if SRC == PRISTINE:
+        pytest.exit('end of baseline', returncode=0)
+    pathlib.Path('mutant-executed').touch()
+"""
+    script, target = stage_sound(tmp_path, suite)
+    before = target.read_bytes()
+    result = run(script, tmp_path)
+    out = result.stdout + result.stderr
+    assert result.returncode == 2, out
+    assert "REFUSED" in out and "baseline" in out and "phase error" in out, out
+    assert "setup:" in out and "3 errors" in out, out
+    _no_kill_credit(out)
+    assert not (tmp_path / "mutant-executed").exists()
+    assert target.read_bytes() == before
+
+
+def test_sound_collect_only_refuses_instead_of_reporting_survivors(tmp_path):
+    """PYTEST_ADDOPTS=--collect-only collects the unmodified sound suite without
+    executing any test; the probe must REFUSE (exit 2) before mutating, never
+    report survivors (exit 1)."""
+    script, target = stage_real_sound(tmp_path)
+    before = target.read_bytes()
+    env = dict(os.environ, PYTEST_ADDOPTS="--collect-only")
+    result = run(script, tmp_path, env=env)
+    out = result.stdout + result.stderr
+    assert result.returncode == 2, out
+    assert "REFUSED" in out and "baseline" in out and "executed no tests" in out, out
+    assert "SURVIVED" not in out
+    _no_kill_credit(out)
     assert target.read_bytes() == before
 
 
@@ -343,6 +401,37 @@ def test_stop_after_centroid_results():
         assert "pytest exited 0" in refused, out
         assert "test_the_centroid_injection_switches_which_field_the_brightness_property_reads" in refused
     assert "SURVIVED" not in out and "mutants killed" not in out
+    assert target.read_bytes() == before
+
+
+def test_sound_mutant_setup_error_and_zero_exit_refuses(tmp_path):
+    """After a clean baseline, a mutant that hits a setup error and exits 0
+    with zero call failures must REFUSE rather than report SURVIVED."""
+    suite = READS_TARGET + """
+import pytest
+
+@pytest.fixture
+def apparatus():
+    if SRC != PRISTINE:
+        raise RuntimeError('apparatus unavailable')
+
+def test_a(apparatus):
+    assert 1
+
+def test_stop():
+    if SRC != PRISTINE:
+        pytest.exit('end of mutant', returncode=0)
+"""
+    script, target = stage_sound(tmp_path, suite)
+    before = target.read_bytes()
+    result = run(script, tmp_path)
+    out = result.stdout + result.stderr
+    assert result.returncode == 2, out
+    assert "SURVIVED" not in out
+    _no_kill_credit(out)
+    for mutant in sound.MUTANTS:
+        line = _line(out, mutant)
+        assert line.startswith("REFUSED") and "phase error" in line and "setup: test_a" in line, out
     assert target.read_bytes() == before
 
 

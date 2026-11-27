@@ -57,6 +57,25 @@ BOOM = ("import pytest\n\n\n"
 FAIL_THEN_EXIT = ("import pytest\n\n\ndef test_a():\n    assert 0\n\n\n"
                   "def test_b():\n    pytest.exit('stop', returncode={status})\n")
 
+SETUP_ERR_THEN_EXIT_ZERO = (
+    "import pytest\n\n\n"
+    "@pytest.fixture\n"
+    "def broken():\n"
+    "    raise RuntimeError('apparatus unavailable')\n\n\n"
+    "def test_a(broken):\n    assert 1\n\n\n"
+    "def test_b():\n    pytest.exit('stop', returncode=0)\n"
+)
+
+TEARDOWN_ERR_THEN_EXIT_ZERO = (
+    "import pytest\n\n\n"
+    "@pytest.fixture\n"
+    "def broken():\n"
+    "    yield\n"
+    "    raise RuntimeError('teardown failed')\n\n\n"
+    "def test_a(broken):\n    assert 1\n\n\n"
+    "def test_b():\n    pytest.exit('stop', returncode=0)\n"
+)
+
 #: Every way a `tools/test_holdout.py` cannot go green, with the pytest status
 #: each one produces: (file text or None to leave it out, conftest, status).
 BROKEN = {
@@ -69,6 +88,8 @@ BROKEN = {
     # (#1128).
     "failed_then_exit": (FAIL_THEN_EXIT.format(status=2), None, 2),
     "failed_then_exit_zero": (FAIL_THEN_EXIT.format(status=0), None, 0),
+    "setup_error_then_exit_zero": (SETUP_ERR_THEN_EXIT_ZERO, None, 0),
+    "teardown_error_then_exit_zero": (TEARDOWN_ERR_THEN_EXIT_ZERO, None, 0),
 }
 
 
@@ -296,3 +317,31 @@ def test_run_names_extra_failures_as_information_only(monkeypatch, tmp_path, cap
     assert rc == 0, out
     assert "GATE_OFF: red, 1 test(s) caught it" in out
     assert "information only: test_extra" in out
+
+
+def test_collect_only_refuses_baseline_and_mutant_while_executed_passing_suite_is_no_fire(
+        monkeypatch, tmp_path, capsys):
+    """PYTEST_ADDOPTS=--collect-only collects tests and exits 0 without running
+    any; both baseline and mutant verdict must REFUSE instead of reporting
+    no-fire, while an executed passing suite still reports NO_FIRE / exit 1."""
+    root = _tree(tmp_path, test_holdout="def test_insensitive():\n    assert 1\n")
+    monkeypatch.setattr(hic, "ROOT", root)
+    monkeypatch.setenv("PYTEST_ADDOPTS", "--collect-only")
+    rc, out = _probe(monkeypatch, capsys, root)
+    assert rc == 2, out
+    assert "executed no tests" in out
+    assert "CONTROL DID NOT FIRE" not in out
+    _assert_no_control_ran(out)
+
+    res = hic.run("GATE_OFF")
+    assert res.outcome == hic.REFUSED
+    assert "pytest exited 0" in res.reason and "executed no tests" in res.reason
+
+    # Without --collect-only, the same passing suite genuinely executes and
+    # produces NO_FIRE (survivor).
+    monkeypatch.delenv("PYTEST_ADDOPTS")
+    res_exec = hic.run("GATE_OFF")
+    assert res_exec.outcome == hic.NO_FIRE
+    rc_exec, out_exec = _probe(monkeypatch, capsys, root)
+    assert rc_exec == 1, out_exec
+    assert "CONTROL DID NOT FIRE" in out_exec

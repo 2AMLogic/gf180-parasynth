@@ -44,12 +44,15 @@ here. `verdict()` in `tools/probes/holdout_injected_controls.py` is imported
 and applied to each mutant, with this probe's suite and recorded names kept
 local:
 
-  * exit 0 with an empty failure report is NO_FIRE -- the suite stayed green
-    with the injection neutered, so that mutant SURVIVED and is a hole in the test;
+  * exit 0 after a clean, completed, executed suite run is NO_FIRE -- the suite
+    stayed green with the injection neutered, so that mutant SURVIVED and is a
+    hole in the test;
   * exit 1 with a failure at a recorded assertion in its test is FIRED;
   * everything else is REFUSED, with no kill credit: a collection error (2),
-    the path gone (4), nothing collected (5), an ERROR-only run, or a red
-    at an apparatus check or outside the recorded tests (#1136).
+    the path gone (4), nothing collected (5), zero tests executed (e.g.
+    `--collect-only`), any phase error (setup/teardown/collection), an
+    ERROR-only run, or a red at an apparatus check or outside the recorded
+    tests (#1136).
 
 `EXPECTED` holds the test and assertion that caught each mutant on the real suite.
 Overlap is enough: a superset still fires and its extras are printed as
@@ -143,10 +146,10 @@ def main(argv=None) -> int:
     for name, (old, new) in MUTANTS.items():
         TARGET.write_text(original.replace(old, new, 1))
         try:
-            rc, failed, _ = hic.run_suite(ROOT, TESTS)
+            rc, report, _ = hic.run_suite(ROOT, TESTS)
         finally:
             TARGET.write_text(original)
-        res = hic.verdict(rc, failed, EXPECTED.get(name, {}), suite=TESTS)
+        res = hic.verdict(rc, report, EXPECTED.get(name, {}), suite=TESTS)
         if res.outcome == hic.REFUSED:
             refused += 1
             print(f"{'REFUSED':24s}  {name}: {res.reason}")
