@@ -907,6 +907,9 @@ def test_the_naive_exit_code_rule_would_certify_each_of_these(repo, monkeypatch,
 
 
 # ---- T-LIVE-MIDI's interpreter (fpga/verify_live_midi.py's record) -----------
+LIVE_MIDI_ARCHIVE = REAL_ROOT / "fpga/reports/live-midi/full-kit-298/verification-rtl.json"
+
+
 def _lm_record(tmp_path, **over):
     lat = {"n": 905, "p50_ms": 16.0, "p95_ms": 16.7, "p99_ms": 17.0, "max_ms": 17.0}
     rec = {"verdict": "PASS",
@@ -949,16 +952,18 @@ def test_live_midi_interpreter_requires_rtl_replay_declaration(tmp_path, declara
     assert any("RTL replay fixtures" in reason for reason in result["reasons"])
 
 
-@pytest.mark.parametrize("spec", [{}, {"id": "session-rlt"}], ids=["missing", "unknown"])
+@pytest.mark.parametrize("spec", [{}, {"id": "session-rlt"}, {"id": "candidate:"}],
+                         ids=["missing", "unknown", "unnamed-candidate"])
 def test_live_midi_host_evidence_requires_a_session_id(tmp_path, spec):
     result = trial.interpret_live_midi_record(spec, {"rc": 0}, _lm_record(tmp_path), "required")
     assert result["verdict"] == trial.NO_VERDICT
     assert any("session ID" in reason for reason in result["reasons"])
 
 
-def test_live_midi_control_is_caught_only_with_its_exit_zero(tmp_path):
+def test_live_midi_named_control_and_candidate(tmp_path):
     spec = {"interpret": "live_midi_record"}
-    rec = {"verdict": "FAIL", "control": {"control": "X", "caught": True, "verdict": "FAIL"}}
+    control = json.loads(LIVE_MIDI_ARCHIVE.read_text())["controls"]["DROP_NOTE_OFF"]
+    rec = {"verdict": control["verdict"], "control": control}
     (tmp_path / "verification.json").write_text(json.dumps(rec))
     assert trial.interpret_live_midi_record(spec, {"rc": 0}, tmp_path, "control")["caught"]
     assert not trial.interpret_live_midi_record(spec, {"rc": 1}, tmp_path, "control")["caught"]
@@ -974,8 +979,7 @@ def _live_midi_registry(repo, mode, *, replays=False, declaration=None, session_
     """Keep the shipped session arguments, host evidence and caught control fixed."""
     modes = json.loads(trial.REGISTRY.read_text())["trials"]["T-LIVE-MIDI"]["modes"]
     session, = modes[session_mode or mode]["required"]
-    archive = REAL_ROOT / "fpga/reports/live-midi/full-kit-298/verification-rtl.json"
-    record = json.loads(archive.read_text())
+    record = json.loads(LIVE_MIDI_ARCHIVE.read_text())
     if not replays:
         record["rtl"] = {}
     if declaration is None:
@@ -1036,7 +1040,9 @@ def test_live_midi_old_rtl_pass_requires_replay_fixtures(
     rc = trial.main(["check-receipt", str(run_dir / "receipt.json"), "--require", trial.PASS])
     out = capsys.readouterr().out
     assert rc == 1, out
-    assert out.count("REJECTED:") == 1, out
+    # Both membership and re-derivation reject the malformed RTL declaration.
+    # A sim receipt in the RTL population fails membership alone.
+    assert out.count("REJECTED:") == (2 if session_mode == "rtl" else 1), out
     assert "REJECTED: T-LIVE-MIDI/rtl" in out and "session-rtl" in out
     assert reason in out and "RTL replay" in out
 
