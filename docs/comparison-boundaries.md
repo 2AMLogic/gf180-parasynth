@@ -41,7 +41,7 @@ it as unknown, not as a no.
 
 | site | preparation path | paired? | tag |
 |---|---|---|---|
-| `tools/run_case.py:3624` `drum_measurements` (`ref_y = prepare(…)`, `ours_y = prepare(…)`) | `run_case.prepare` on both sides | yes: every #282 drum case, and `tools/score_drum_i2s.py:177` through it | **asserts** (this slice: `preparation_contract.check_prepared_pair`, before any metric). It also **records** per-side `lead_report` in `windowing` |
+| `tools/run_case.py:3624` `drum_measurements` (`ref_y = prepare(…)`, `ours_y = prepare(…)`) | `run_case.prepare` on both sides | yes: every #282 drum case, and `tools/score_drum_i2s.py:171` through it | **asserts** (this slice: `preparation_contract.check_prepared_pair`, before any metric). It also **records** per-side `lead_report` in `windowing` |
 | `tools/perceptual_gate.py:221` `condition` | its own path: resample to 48 kHz, AC-couple, align, level | yes (gate compares ours vs reference) | **neither** |
 | `model/test_discrimination.py:319` `condition` | its own path: onset-align, cut, DC, high-pass, normalise | yes (real vs ours clips) | **neither** at the production call sites. The helper `assert_same_preparation` (`:299`) is called only by a test (`:1885`), and it compares `dur_ms`, which legitimately differs between sounds. **Superseded** for the drum pair by `tools/preparation_contract.py` and left as-is (not widened) |
 | `model/condition_boundary.py:126` | `test_discrimination.condition` | yes | **records only** (`_prep` = `preparation_state`, and the median lead per side at `:219-221`) |
