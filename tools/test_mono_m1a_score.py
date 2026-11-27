@@ -2,23 +2,52 @@ import json
 import numpy as np
 import pytest
 from scipy.io import wavfile
+import check_m1a_selection as selection
 import mono_m1a_score as bass
 import run_case
+import scorecard
 
 
-def signal(cents=0):
+def signal(cents=0, *, low_note_ramp=240, low_note_power=1):
     t = np.arange(round(bass.reference.SECONDS * bass.SR)) / bass.SR
     audio = np.zeros_like(t)
     for event in bass.reference.EVENTS:
         dt = t - event["on_s"]
-        env = np.clip(dt / .005, 0, 1)   # 10-90 = 4 ms, inside the v3 domain
+        # The middle note keeps its 4 ms 10-90 attack as a pass control.
+        span, power = (low_note_ramp, low_note_power) if event["note"] == 36 else (240, 1)
+        env = np.clip(dt * bass.SR / span, 0, 1) ** power
         off = dt >= event["gate_s"]
         env[off] = np.exp(-(dt[off] - event["gate_s"]) / .05)
         hz = 440 * 2 ** ((event["note"] - 69 + cents / 100) / 12)
-        audio += .1 * env * (np.sin(2 * np.pi * hz * t)
-                             + .2 * np.sin(4 * np.pi * hz * t)
-                             + .1 * np.sin(6 * np.pi * hz * t))
+        phase = 2 * np.pi * hz * t
+        audio += .1 * env * (np.sin(phase) + .2 * np.sin(2 * phase) + .1 * np.sin(3 * phase))
     return audio
+
+
+@pytest.mark.parametrize(("span", "expected"), [(347, "fail"), (348, "fail"), (346, "pass")])
+def test_qualified_attack_grade_survives_score_serialization(span, expected, capsys):
+    measured = bass.compare_audio(signal(low_note_ramp=span),
+                                  signal(low_note_ramp=75, low_note_power=3))
+    metrics = bass.required_metrics(measured)
+    measured, metrics = json.loads(json.dumps([measured, metrics]))
+    attack = measured["properties"]["Envelope attack"]
+    release = measured["properties"]["Envelope release"]
+    assert attack["valid"] and release["valid"] and metrics["envelope"]["valid"]
+    assert abs(release["error"]) <= release["tolerance"]
+    assert [e["attack_state"] for e in measured["events"]] == [expected, "pass", expected]
+    timings = [e["attack_10_90_ms"] for e in measured["events"]]
+    worst = max((t["model"] - t["reference"] for t in timings), key=abs)
+    if span == 347:  # The five-decimal store used to turn this miss into a pass.
+        assert worst > 5 and round(worst, 5) == 5
+    passed = expected == "pass"
+    assert ("Envelope attack" in selection._passes(measured)) == passed
+    distance = scorecard.metric_distance(metrics["envelope"])
+    assert (distance <= 1) == passed
+    assert attack["error"] == worst
+    assert distance == max(abs(worst) / 5, abs(release["error"]) / release["tolerance"])
+    selection.print_properties(measured)
+    line = next(s for s in capsys.readouterr().out.splitlines() if s.strip().startswith("Envelope attack "))
+    assert line.split()[-1] == expected
 
 
 def test_known_bass_and_pitch_mutation():
@@ -155,6 +184,16 @@ def test_in_domain_fits_still_grade():
     ok = {"attack_10_90_ms": 4.0, "explained_ratio": 0.99, "search_boundary": None}
     assert bass.attack_fit_qualified(ok) is None
     assert bass.attack_fit_qualified({**ok, "attack_10_90_ms": 8.0})
+
+
+def test_exact_negative_five_ms_attack_still_passes(monkeypatch):
+    _patched_fits(monkeypatch, "model", attack_10_90_ms=.75)
+    _patched_fits(monkeypatch, "reference", attack_10_90_ms=5.75)
+    measured = bass.compare_audio(signal(), signal())
+    assert [e["attack_state"] for e in measured["events"]] == ["pass"] * 3
+    assert measured["properties"]["Envelope attack"]["error"] == -5.0
+    assert "Envelope attack" in selection._passes(measured)
+    assert scorecard.metric_distance(bass.required_metrics(measured)["envelope"]) == 1.0
 
 
 # --- the qualification the v3 record embeds -----------------------------------

@@ -51,6 +51,19 @@ tracked WAV for exactly that reason. Each published path is seeded with a
 16-sample WAV first, so "the published WAV is byte-identical" can be read
 without knowing what the model sounds like.
 
+THE BASELINE AND `--no-audio` (#1430). `main` measures an `--expect` control's
+clean baseline with `keep_audio=False` and no results directory, so the M5
+writer took its own path -- and wrote to it whatever `keep_audio` said, because
+`mono_m5a_score.measure` had no such switch. The `make controls` line for M5B
+therefore left `build/scorecard/M5B-model.wav` present when it was absent
+before: a clean render of the working tree's model, on the path `results/M5B.json`
+names, with no record anywhere saying it was written. The writer now takes the
+switch (`keep_audio`), the baseline writes no WAV, and a `--no-audio` run
+states on its record that the WAV was not written. For those tests the
+writer's own path is moved into the isolated board (`writers_own_path`),
+because that is the path the baseline, and the control that reinstates the
+old writer, write to.
+
 WHAT A PASSING RUN HERE DOES NOT ESTABLISH. Any acoustic property of either
 case: no test here reads a verdict, and `fail` from the model is as good as
 `pass` provided the run reached its writers. That a run DID reach them is
@@ -71,12 +84,26 @@ import pytest
 from scipy.io import wavfile
 
 import mono_m1a_score as bass
+import mono_m5a_score as m5a
 import run_case as rc
+from test_wav_destination import (
+    _assert_default_wav,
+    _check_live_model_wavs,
+    _copy_published_results,
+)
 
 SR = 48000
 INJECT = "MONO_PITCH_UP_25_CENTS"             # the one control both mono families take
 REFUSAL = "would put this run's model WAV"     # what separates this refusal from any other
 REAL_RENDER = bass.lead.vf.render_mono_fx      # as imported, before any test doubles it
+NO_AUDIO = "not written (--no-audio)"          # how a record states an omitted artefact
+TAGGED = f"M5B-model-control-{INJECT}.wav"     # an M5B control's WAV, as it has always been named
+#: Where the M5 writer's own path is published, as imported: the premise of
+#: #1430's second item, which `writers_own_path` asserts before moving it.
+REAL_SHARED = rc.AUDIO_OUT
+#: `render_mono_fx` renders one phrase segment per call, so this is how many
+#: calls the fixture's counter sees in one M5B measurement.
+SEGMENTS = len(json.loads(m5a.MANIFESTS["M5B"].read_text())["timeline"]["segments"])
 
 #: The two mono writers as `run_case.main` reaches each: the case, its plan
 #: (`plan_for`), where the fixture keeps that family's published directory, the
@@ -170,6 +197,41 @@ def board(monkeypatch, tmp_path):
                 raise AssertionError(
                     f"this test rewrote the published WAV {rc.stated_path(path)} "
                     f"(restored): the fixture's redirection did not hold")
+
+
+@pytest.fixture
+def writers_own_path(board, monkeypatch) -> pathlib.Path:
+    """The path `mono_m5a_score.measure` takes when it is told none, moved into
+    the isolated board. It is `build/scorecard/<case>-model.wav` under the
+    writer's own `ROOT` -- the published M5 WAV, asserted before it is moved,
+    because that is what makes #1430's second item a published-artefact write.
+    The control baseline and a caller that states no destination reach the
+    writer this way; relocating it keeps those writes, and the control that
+    reinstates the old writer, off the real published path."""
+    assert m5a.ROOT / "build" / "scorecard" == REAL_SHARED
+    board["shared"].mkdir(exist_ok=True)    # the published directory is there;
+    own = board["base"] / "root"            # its WAV is what a test adds or not
+    (own / "build").mkdir(parents=True)
+    (own / "build" / "scorecard").symlink_to(board["shared"])
+    monkeypatch.setattr(m5a, "ROOT", own)
+    return board["shared"] / "M5B-model.wav"
+
+
+@pytest.fixture(scope="session")
+def m5b_with_audio(tmp_path_factory) -> dict:
+    """One real, audio-enabled M5B run through the CLI into a directory of its
+    own: what a run without audio must be shown to compute. Its WAV lands
+    beside its record, so no published place is involved."""
+    out = tmp_path_factory.mktemp("m5b-with-audio")
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(rc, "BASE_STATE", rc.BASE_STATE)
+        patched.setattr(rc, "base_check",
+                        lambda allow_stale=False: {"checked": False, "why": "a test double"})
+        rc.main(["M5B", "--results", str(out)])
+    record = json.loads((out / "M5B.json").read_text())
+    assert _measured(record), record.get("note")
+    assert record["provenance"]["artefacts"]["ours"] == str(out / "M5B-model.wav")
+    return record
 
 
 def _cli(board, monkeypatch, case_id: str, *argv) -> int:
@@ -359,25 +421,33 @@ def test_off_board_rtl_anchor_keeps_the_model_wav_with_its_twin(
     assert published.read_bytes() == before
 
 
+@pytest.mark.parametrize("link_kind", ["symlink", "hardlink"])
 @pytest.mark.parametrize("through_missing_parent", [False, True], ids=["direct", "missing-parent"])
 def test_collision_in_model_twin_refuses_before_render(
-        board, monkeypatch, tmp_path, capsys, through_missing_parent):
+        board, monkeypatch, tmp_path, capsys, through_missing_parent, link_kind):
     published = board["m1a"] / "m1a-model.wav"
     before = _seed(published)
-    anchor = tmp_path / "M1A.json"
+    # A hard link must share the published WAV's filesystem.
+    trial_dir = (board["base"] if link_kind == "hardlink" else tmp_path) / "trial"
+    trial_dir.mkdir()
+    anchor = trial_dir / "M1A.json"
     anchor_bytes = b'{"case_id":"M1A","engine":"integrated-rtl"}'
     anchor.write_bytes(anchor_bytes)
-    twin = tmp_path / "model-twin"
-    twin.symlink_to(published.parent, target_is_directory=True)
-    trial = tmp_path / "missing" / ".." if through_missing_parent else tmp_path
+    twin = trial_dir / "model-twin"
+    if link_kind == "symlink":
+        twin.symlink_to(published.parent, target_is_directory=True)
+    else:
+        twin.mkdir()
+        (twin / published.name).hardlink_to(published)
+    trial = trial_dir / "missing" / ".." if through_missing_parent else trial_dir
     assert _cli(board, monkeypatch, "M1A", "--results", str(trial)) == 2
     err = capsys.readouterr().err
-    assert REFUSAL in err and str(trial / twin.name / published.name) in err
+    assert REFUSAL in err and rc.stated_path(trial / twin.name / published.name) in err
     assert board["renders"] == 0
     assert anchor.read_bytes() == anchor_bytes
     assert published.read_bytes() == before
     assert not (twin / anchor.name).exists()
-    assert not (tmp_path / "missing").exists()
+    assert not (trial_dir / "missing").exists()
 
 
 @pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
@@ -443,19 +513,162 @@ def test_m1a_without_audio_writes_no_wav_even_into_its_published_directory(
         == sorted(["M1A.json", "m1a-model.wav"])
 
 
-def test_no_audio_is_not_a_licence_for_the_mono_family(board, monkeypatch, capsys):
-    """M5's measurement writes its model WAV whatever `--no-audio` says -- its
-    `measure` has no such switch, which is its own matter and not this issue's.
-    So for M5B the flag does not make the published directory safe: a run that
-    will write there is refused with it or without it, before anything renders."""
-    published = board["shared"] / "M5B-model.wav"
+def test_m5_without_audio_writes_no_wav_even_into_its_published_directory(
+        board, monkeypatch, capsys, writers_own_path, m5b_with_audio):
+    """`--no-audio` now means for M5 what it has meant for every other family
+    (#1430, AC 3), and it is what makes a colliding `--results` harmless: with
+    no WAV to write there is nothing the refusal protects, so the run proceeds
+    and only its record lands there, stating that the WAV was not written.
+
+    The same metrics and the same score, against a real audio-enabled run of
+    this tree (`m5b_with_audio`) rather than against itself."""
+    published = writers_own_path
     before = _seed(published)
     capsys.readouterr()
-    code = _cli(board, monkeypatch, "M5B", "--no-audio", "--results", str(published.parent))
-    err = capsys.readouterr().err
-    assert code == 2 and REFUSAL in err, err
-    assert board["renders"] == 0
+    _cli(board, monkeypatch, "M5B", "--no-audio", "--results", str(published.parent))
+    assert REFUSAL not in capsys.readouterr().err
+    record = json.loads((published.parent / "M5B.json").read_text())
+    assert _measured(record), record.get("note")
+    assert board["renders"] == SEGMENTS             # one measurement was made
+    assert record["provenance"]["artefacts"]["ours"] == NO_AUDIO
+    assert record["audio"] == NO_AUDIO
     assert published.read_bytes() == before
+    assert sorted(p.name for p in published.parent.iterdir()) \
+        == sorted(["M5B.json", "M5B-model.wav"])
+
+    loud = m5b_with_audio
+    assert loud["provenance"]["artefacts"]["ours"] != NO_AUDIO
+    assert record["metrics"] == loud["metrics"]
+    assert record["provenance"]["outcome_code"] == loud["provenance"]["outcome_code"]
+    case = next(c for c in rc.load_cases() if c["case_id"] == "M5B")
+    assert rc.verdict_of(case, record)[:2] == rc.verdict_of(case, loud)[:2]
+
+
+def test_the_control_without_audio_writes_no_wav_on_either_leg(
+        board, monkeypatch, capsys, tmp_path, writers_own_path):
+    """Explicit `--no-audio` with an injected run, as the `make controls` line
+    would spell it (AC 4): the baseline and the control both reach the writer,
+    the control still fires and is still labelled, and neither leg leaves a
+    WAV -- not the published one, and not the injection-tagged one."""
+    published = writers_own_path
+    assert not published.exists()
+    control = tmp_path / "control"
+    capsys.readouterr()
+    code = _cli(board, monkeypatch, "M5B", "--inject", INJECT, "--no-audio",
+                "--results", str(control), "--expect", "changed")
+    out = capsys.readouterr().out
+    assert code == 0 and "control fired" in out, out
+    record = json.loads((control / "M5B.json").read_text())
+    assert _measured(record), record.get("note")
+    assert record["INJECTED_CONTROL"] == INJECT
+    assert record["provenance"]["artefacts"]["ours"] == NO_AUDIO
+    assert board["renders"] == 2 * SEGMENTS       # two measurements, no WAV
+    assert list(board["shared"].iterdir()) == []
+    assert [p.name for p in control.iterdir()] == ["M5B.json"]
+
+
+@pytest.mark.parametrize("published_wav", ["absent", "a sentinel"])
+def test_the_control_baseline_writes_neither_a_record_nor_a_model_wav(
+        board, monkeypatch, capsys, tmp_path, writers_own_path, published_wav):
+    """The `make controls` line for M5B, exactly as the Makefile spells it
+    (#1430, AC 4). Its clean baseline measures the case with no results
+    directory and `keep_audio=False`; until #1430 the M5 writer ignored the
+    latter and wrote the published WAV. The issue saw it leave that WAV present
+    when it was absent before, so both states are checked: absent, and a
+    sentinel. The control itself is unchanged: it fires, its result is
+    labelled, and with audio enabled its WAV keeps the injection-tagged name."""
+    published = writers_own_path
+    before = None if published_wav == "absent" else _seed(published)
+    assert published.exists() == (before is not None)
+    ledger = rc.holdout.LEDGER
+    ledger_before = ledger.read_bytes() if ledger.exists() else None
+    control = tmp_path / "control"
+    tagged = board["shared"] / TAGGED
+
+    capsys.readouterr()
+    code = _cli(board, monkeypatch, "M5B", "--inject", INJECT,
+                "--results", str(control), "--expect", "changed")
+    out = capsys.readouterr().out
+    assert code == 0 and "control fired" in out, out
+    record = json.loads((control / "M5B.json").read_text())
+    assert _measured(record), record.get("note")
+    assert record["INJECTED_CONTROL"] == INJECT
+    # the baseline still measured the case -- two measurements of a
+    # `SEGMENTS`-segment phrase: baseline, then control -- and consumed no
+    # holdout reading
+    assert board["renders"] == 2 * SEGMENTS
+    assert "ledger_read" not in record.get("holdout", {})
+    assert (ledger.read_bytes() if ledger.exists() else None) == ledger_before
+    # (stated by where it is: this fixture moves the writer's ROOT, so a WAV
+    # routed by `run_case` is stated absolutely here; the relative spelling is
+    # `test_an_injected_control_keeps_its_tagged_wav`'s to check)
+    assert _resolved(record["provenance"]["artefacts"]["ours"]) == tagged
+    assert _is_render(tagged)
+    assert [p.name for p in control.iterdir()] == ["M5B.json"]
+    # absent before, absent after; a sentinel before, the same sentinel after
+    assert (published.read_bytes() if published.exists() else None) == before
+    assert sorted(p.name for p in published.parent.iterdir()) == sorted(
+        [TAGGED] + ([published.name] if before is not None else []))
+
+
+#: What the no-WAV bench checks, in the order it checks them, and what a
+#: violation is called.
+QUIET_RUN = "`--no-audio` into the published directory left the published WAV byte-identical"
+STATED = "a `--no-audio` record states that its WAV was not written"
+BASELINE = "the control's baseline left the published WAV byte-identical"
+SILENT = (QUIET_RUN, STATED, BASELINE)
+
+
+def _no_wav_bench(board, monkeypatch, capsys, tmp_path, published) -> list[str]:
+    """Two invocations that write no WAV once the writer honours `keep_audio`:
+    `--no-audio` into the published directory, then the `make controls` line,
+    whose baseline reaches the writer with no destination. Returns the
+    properties of `SILENT` that were violated."""
+    before = _seed(published)
+    violated = []
+    capsys.readouterr()
+    _cli(board, monkeypatch, "M5B", "--no-audio", "--results", str(published.parent))
+    record_path = published.parent / "M5B.json"
+    record = json.loads(record_path.read_text()) if record_path.is_file() else {}
+    if published.read_bytes() != before:
+        violated.append(QUIET_RUN)
+    if record.get("provenance", {}).get("artefacts", {}).get("ours") != NO_AUDIO:
+        violated.append(STATED)
+    _seed(published)
+    capsys.readouterr()
+    _cli(board, monkeypatch, "M5B", "--inject", INJECT,
+         "--results", str(tmp_path / "control"), "--expect", "changed")
+    if published.read_bytes() != before:
+        violated.append(BASELINE)
+    return violated
+
+
+def test_the_unconditional_m5_write_is_a_control_that_stays_red(
+        board, monkeypatch, capsys, tmp_path, writers_own_path):
+    """The defect as #1430 found it in the M5 writer, kept where the verdict is
+    issued: `measure` writes its WAV whatever `keep_audio` says. The bench is
+    the two green invocations above, put through the same fixture; under this
+    writer every property it reads must move.
+
+        =====================================================  =====================
+        property                                              unconditional writer
+        =====================================================  =====================
+        `--no-audio` left the published WAV byte-identical   MOVED   it is replaced
+        a `--no-audio` record says the WAV was not written   MOVED   it names the WAV
+        the baseline left the published WAV byte-identical   MOVED   it is replaced
+        =====================================================  =====================
+
+    No property is blind to this control. The record is read as well as the
+    filesystem because the two can fail apart: a writer that skips the WAV and
+    still names one moves only the second row, and only the record sees it."""
+    published = writers_own_path
+    real = m5a.measure
+
+    def unconditional(**kwargs):
+        return real(**{**kwargs, "keep_audio": True})
+
+    monkeypatch.setattr(m5a, "measure", unconditional)
+    assert _no_wav_bench(board, monkeypatch, capsys, tmp_path, published) == list(SILENT)
 
 
 @pytest.mark.parametrize("cid,kind,key,name,tagged", WRITERS)
@@ -532,39 +745,54 @@ def test_the_model_wav_destination_is_the_published_path_on_the_board_and_beside
         == m1a.parent.resolve() / "M5B-model.wav"
     # an M1A run that writes no WAV has no destination to collide
     assert rc.model_wav_destination(m1a.parent, "mono-bass", "M1A", keep_audio=False) is None
+    # ...and since #1430 neither has an M5 run: its writer has the switch too
+    assert rc.model_wav_destination(rc.AUDIO_OUT, "mono", "M5B", keep_audio=False) is None
 
 
 def _check_published_mono_wavs():
-    """The live rows and the archived M5 model rows each carry their own path."""
+    _check_live_model_wavs(rc.MODEL_WAV_KINDS, {"M1A", "M5B"})
     repro = rc.RESULTS.parent / "m5-artifacts-333/repro"
-    for cid, path in (("M1A", rc.RESULTS / "M1A.json"), ("M5B", rc.RESULTS / "M5B.json"),
-                      ("M5A", repro / "model-M5A.json"), ("M5B", repro / "model-M5B.json")):
-        record = json.loads(path.read_text())
-        assert record["case_id"] == cid
-        assert record["engine"] == rc.ENGINE, cid
-        expected = rc.stated_path(rc.model_wav_destination(rc.RESULTS, rc.plan_for(cid), cid))
-        assert record["audio"] == record["provenance"]["artefacts"]["ours"] == expected, cid
+    for cid in ("M5A", "M5B"):
+        path = repro / f"model-{cid}.json"
+        _assert_default_wav(path, json.loads(path.read_text()), cid, rc.plan_for(cid))
 
 
 def test_every_published_mono_record_names_the_wav_a_default_run_writes():
     _check_published_mono_wavs()
 
 
-def test_archived_m5b_cannot_mask_a_renamed_live_wav(tmp_path, monkeypatch):
-    results = tmp_path / "results"
-    results.mkdir()
-    for cid in ("M1A", "M5B"):
-        shutil.copyfile(rc.RESULTS / f"{cid}.json", results / f"{cid}.json")
-    archive = "m5-artifacts-333"
-    (tmp_path / archive).symlink_to(rc.RESULTS.parent / archive, target_is_directory=True)
-    monkeypatch.setattr(rc, "RESULTS", results)
+@pytest.mark.parametrize("damage", ["renamed", "missing"])
+def test_archived_m5b_cannot_mask_a_renamed_live_wav(tmp_path, monkeypatch, damage):
+    results = _copy_published_results(tmp_path, monkeypatch, "m5-artifacts-333")
     _check_published_mono_wavs()
 
     live = results / "M5B.json"
-    row = json.loads(live.read_text())
-    row["audio"] = row["provenance"]["artefacts"]["ours"] = "build/scorecard/M5B-renamed.wav"
-    live.write_text(json.dumps(row))
+    if damage == "missing":
+        live.unlink()
+    else:
+        row = json.loads(live.read_text())
+        row["audio"] = row["provenance"]["artefacts"]["ours"] = "build/scorecard/M5B-renamed.wav"
+        live.write_text(json.dumps(row))
     with pytest.raises(AssertionError, match="M5B"):
+        _check_published_mono_wavs()
+
+
+@pytest.mark.parametrize("renamed", ["audio", "ours", "both"])
+def test_new_live_mono_render_checks_both_paths(tmp_path, monkeypatch, renamed):
+    results = _copy_published_results(tmp_path, monkeypatch, "m5-artifacts-333")
+    archive = tmp_path / "m5-artifacts-333/repro/model-M5A.json"
+    live = results / "M5A.json"
+    shutil.copyfile(archive, live)
+    _check_published_mono_wavs()
+
+    row = json.loads(live.read_text())
+    wrong = "build/scorecard/M5A-renamed"
+    if renamed in ("audio", "both"):
+        row["audio"] = wrong
+    if renamed in ("ours", "both"):
+        row["provenance"]["artefacts"]["ours"] = wrong
+    live.write_text(json.dumps(row))
+    with pytest.raises(AssertionError, match=live.name):
         _check_published_mono_wavs()
 
 

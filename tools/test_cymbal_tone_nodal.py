@@ -204,6 +204,21 @@ def test_choose_refuses_when_nothing_the_bank_can_hold_clears_the_bound():
         tn.chosen(tn.config(defect="NO_LEVEL_STAGE"))
 
 
+@pytest.mark.parametrize("err_db, refused", [(2.9996, False), (3.0, False),
+                                             (3.0004, True), (3.0006, True)])
+def test_choose_decides_refusal_at_full_precision_not_on_the_rounded_figure(
+        monkeypatch, err_db, refused):
+    """3.0004 dB is outside a 3.0 dB bound but records as round(.., 3) == 3.0,
+    which a `> SHAPE_BOUND_DB` check on the record accepts. The refusal must come
+    from the full-precision verdict in the winning key."""
+    monkeypatch.setattr(tn, "shape_error_db", lambda *a, **k: err_db)
+    if refused:
+        with pytest.raises(tn.Refused):
+            tn.choose("low", tn.config())
+    else:
+        assert tn.choose("low", tn.config())["worst_db"] == pytest.approx(err_db, abs=1e-3)
+
+
 # ---------------------------------------------------------------------------
 # the budget, and the register map that bounds it
 # ---------------------------------------------------------------------------

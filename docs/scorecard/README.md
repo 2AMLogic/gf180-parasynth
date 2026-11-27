@@ -73,7 +73,8 @@ claim than `M5A`'s: it covers the filter path, not the pin-to-pin chip.
 both modules, so the claim cannot outlive the RTL it was made about.
 
 **The RTL reading and its `fixed-model` twin come from the same scorer.**
-`run_case.run_filter_case` takes the filter path as an argument, so both engines
+`run_case.run_filter_case` takes the filter path as an argument, and the record's
+engine label is that path's own `engine` (there is no separate label argument, #1492), so both engines
 meet the same estimators, the same frozen Surge clips and the same tolerance
 policy; a second scoring path would have left a difference between engines
 indistinguishable from a difference between scorers. Both readings stay on the
@@ -263,6 +264,16 @@ A clean mono run keeps the published WAV path on the board. With an off-board
 holds an integrated-RTL record for that case, both model files go into
 `model-twin/` and the RTL record stays in place. If the selected WAV path
 would overwrite the published WAV, the run exits 2 before measuring (#1422).
+
+The same holds for a clean drum, ensemble or filter run (#1430), in
+`tools/run_case.py` and in `tools/score_f1_rtl.py`: off the board the WAV or
+the curve goes beside its record, and a `--results` whose file *is* the
+published one — `build/scorecard` itself, a symlink to it, a link to the file —
+exits 2 before anything runs, naming the case, the destination and the
+published file. `--no-audio` is asked nothing, because it writes nothing: it
+now covers the mono cases too, whose record then says the model WAV was not
+written. That is what keeps an `--expect` control's clean baseline — measured
+without audio — from writing the published M5 WAV.
 
 Three more cover the frozen profile, and the last is the one that makes
 "frozen" mean anything:

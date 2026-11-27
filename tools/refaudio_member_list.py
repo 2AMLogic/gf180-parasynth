@@ -18,12 +18,12 @@ preconditions and hash check -- the whole file must hash to the SHA-256 in
 catalogued archive's, not a look-alike's. No audio is extracted. The archive
 is deleted afterwards unless `--keep-archive`.
 
-WHAT IT PRINTS. The inventory file, on stdout or at `--write`: `#` comment
-lines recording the archive, its SHA-256, the folder and the two commands --
-this one, to regenerate the file, and the `refaudio_s3.py --prefix` one, to
-fetch the members -- then one member name per line, sorted. Nothing else goes
-to stdout (`--write` reports on stderr), so `> file` is the whole workflow and
-a regenerated file diffs clean against the committed one.
+WHAT IT PRINTS. By default stdout carries the inventory. Its `#` comment lines
+record the archive, its SHA-256, the folder and the commands to regenerate the
+inventory and fetch the members. Sorted member names follow, one per line.
+Diagnostics go to stderr. Use `--write PATH` to replace an existing inventory
+after the archive and member checks pass. Shell redirection (`> PATH`) truncates
+the destination before the generator can check its preconditions.
 `tools/measure_repeatability.py` reads this format (`expected_loops`).
 
 THREE OUTCOMES, the same contract as the fetch tools:
@@ -111,36 +111,37 @@ def main(argv: list[str]) -> int:
         root, rec = s3.preconditions(args.archive)
         z = s3.download(root, args.archive, rec)
     except Refused as why:
-        print(f"REFUSED  {why}")
+        print(f"REFUSED  {why}", file=sys.stderr)
         return REFUSED
     except (RuntimeError, subprocess.TimeoutExpired) as why:
-        print(f"FAIL     {why}")
+        print(f"FAIL     {why}", file=sys.stderr)
         return FAIL
     try:
         try:
             with zipfile.ZipFile(z) as zf:
                 names = immediate_wavs(zf.namelist(), args.folder)
         except zipfile.BadZipFile as why:
-            print(f"FAIL     {args.archive} hashed right but does not open as a zip: {why}")
+            print(f"FAIL     {args.archive} hashed right but does not open as a zip: {why}",
+                  file=sys.stderr)
             return FAIL
     finally:
         if not args.keep_archive:
             z.unlink(missing_ok=True)
     if not names:
         print(f"REFUSED  {args.folder!r} holds no WAV in {args.archive}: an empty "
-              "inventory would leave a reader to enumerate whatever is on disk")
+              "inventory would leave a reader to enumerate whatever is on disk", file=sys.stderr)
         return REFUSED
     duplicates = [name for name, count in Counter(names).items() if count > 1]
     if duplicates:
         print(f"REFUSED  duplicate WAV members under {args.folder!r} in {args.archive}: "
-              + ", ".join(repr(n) for n in duplicates))
+              + ", ".join(repr(n) for n in duplicates), file=sys.stderr)
         return REFUSED
     bad = unrepresentable(names)
     if bad:
         print(f"REFUSED  {len(bad)} member name(s) under {args.folder!r} cannot be read "
               "back from a one-name-per-line inventory (a line break of any kind, a "
               "leading '#', or text UTF-8 cannot hold), so the reader would drop or split "
-              "them: " + ", ".join(repr(n) for n in bad))
+              "them: " + ", ".join(repr(n) for n in bad), file=sys.stderr)
         return REFUSED
     text = inventory(args.archive, rec["archive_sha256"], args.folder, names, root,
                      os.environ.get("REFAUDIO_S3_PROFILE", ""),

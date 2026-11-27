@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Run the Arty clean smoke and independent pin mutations, retaining each result."""
+"""Run the Arty clean smoke and independent pin mutations, retaining each result.
+
+Exit: 0 the clean run passes and every mutation is caught for its reason, 1
+when a run that executed disagreed, 2 when any child refused or did not run
+(no verdict) -- controls.json then names those children under "refused".
+"""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -10,6 +15,13 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+_REFUSAL_TOOLS = str(ROOT / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+from exit_contract import FAIL, PASS, REFUSED  # noqa: E402
+
+EXIT_CODE = {"PASS": PASS, "FAIL": FAIL, "REFUSED": REFUSED}
+VERDICTS = ("PASS", "FAIL")
 
 
 def caught(record, mutation):
@@ -60,14 +72,18 @@ def main():
     with ThreadPoolExecutor(max_workers=3) as pool:
         records = dict(pool.map(run, [None, "ARTY_MOSI_ZERO", "ARTY_SDATA_ZERO"]))
     clean = records["clean"]
-    baseline = clean.get("state") == "PASS" and clean.get("exit_code") == 0
+    baseline = clean.get("state") == "PASS" and clean.get("exit_code") == PASS
     controls = {name: baseline and caught(records[name], name)
                 for name in ("ARTY_MOSI_ZERO", "ARTY_SDATA_ZERO")}
-    result = {"state": "PASS" if baseline and all(controls.values()) else "FAIL",
-              "clean_passed": baseline, "controls_caught": controls}
+    refused = [name for name, rec in records.items() if rec.get("state") not in VERDICTS]
+    state = ("REFUSED" if refused
+             else "PASS" if baseline and all(controls.values()) else "FAIL")
+    result = {"state": state, "clean_passed": baseline, "controls_caught": controls}
+    if refused:
+        result["refused"] = refused
     (directory / "controls.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)
-    return 0 if result["state"] == "PASS" else 1
+    return EXIT_CODE[state]
 
 
 if __name__ == "__main__":

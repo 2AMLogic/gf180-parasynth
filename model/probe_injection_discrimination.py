@@ -73,6 +73,12 @@ the holdout probe: a mix exits 1 and names both. Exit 2 is REFUSED when a
 mutant's search text no longer matches (the probe is measuring a file that has
 moved under it), when the unmutated suite is red (issue #1130), or when any
 mutant refused and none survived -- the honest answer in each case, not a green.
+
+The target is restored from the bytes read at entry, not from the text the
+mutants are matched against: `read_text()` folds CRLF to LF, and restoring
+that rewrites a CRLF source as LF. Each mutant's write sits inside the
+restoration guard, so a write that fails part-way cannot leave the reporter
+truncated; the error propagates and no verdict is given (issue #1480).
 """
 from __future__ import annotations
 
@@ -126,7 +132,8 @@ EXPECTED = {
 
 
 def main(argv=None) -> int:
-    original = TARGET.read_text()
+    original_bytes = TARGET.read_bytes()
+    original = original_bytes.decode().replace("\r\n", "\n").replace("\r", "\n")
 
     missing = [name for name, (old, _) in MUTANTS.items() if old not in original]
     if missing:
@@ -145,11 +152,11 @@ def main(argv=None) -> int:
     survivors = []
     refused = 0    # nothing was measured for that mutant: the apparatus, not the tree
     for name, (old, new) in MUTANTS.items():
-        TARGET.write_text(original.replace(old, new, 1))
         try:
+            TARGET.write_text(original.replace(old, new, 1))
             rc, report, _ = hic.run_suite(ROOT, TESTS)
         finally:
-            TARGET.write_text(original)
+            TARGET.write_bytes(original_bytes)
         res = hic.verdict(rc, report, EXPECTED.get(name, {}), suite=TESTS, baseline=base.report)
         if res.outcome == hic.REFUSED:
             refused += 1
