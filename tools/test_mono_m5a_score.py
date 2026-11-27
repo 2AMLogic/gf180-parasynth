@@ -163,6 +163,20 @@ def test_m5b_model_score_covers_both_waveforms_and_notes(tmp_path):
     assert [(event["wave"], event["midi"]) for event in measured["event_diagnostics"]] == [
         ("saw", 72), ("saw", 84), ("pulse", 72), ("pulse", 84)]
 
+    import numpy as np
+    from scipy.io import wavfile
+
+    timeline = json.loads(score.MANIFESTS["M5B"].read_text())["timeline"]
+    saw, pulse = timeline["segments"]
+    written_sr, written = wavfile.read(tmp_path / "m5b-model.wav")
+    assert written_sr == score.SR
+    assert written.dtype == np.int16
+    assert len(written) == pulse["offset_samples"] + pulse["samples"]
+    assert measured["duration_s"] == pytest.approx(len(written) / score.SR)
+    assert not np.any(written[saw["samples"]:pulse["offset_samples"]])
+    assert np.any(written[:saw["samples"]])
+    assert np.any(written[pulse["offset_samples"]:])
+
 
 def test_shared_mono_engine_profiles_name_effective_wave_and_every_filter_flag():
     selected = score.engine_configuration("selected")
@@ -312,3 +326,37 @@ def test_supplied_i2s_audio_is_scored_without_rendering_the_software_voice(monke
     # Reproduce the committed scored WAV after the scorer's timeline trim.
     expected_audio = score.ROOT / expected["audio"]
     assert hashlib.sha256(output.read_bytes()).hexdigest() == hashlib.sha256(expected_audio.read_bytes()).hexdigest()
+
+
+def test_supplied_i2s_listening_wav_keeps_the_captured_gap_between_segments(monkeypatch, tmp_path):
+    import numpy as np
+    from scipy.io import wavfile
+
+    manifest = json.loads(score.MANIFEST.read_text())
+    record = json.loads((score.ROOT / "docs/scorecard/results/M5A.json").read_text())
+    capture = score.MANIFEST.parent / "saw-cutoff-20khz-i2s.wav"
+    assert hashlib.sha256(capture.read_bytes()).hexdigest() == record["diagnostics"]["decoded_i2s_sha256"]
+    sr, clean = wavfile.read(capture)
+    phrase = int(manifest["audio"]["samples"])
+    first, second = manifest["timeline"]["segments"]
+    start = first["offset_samples"] + first["samples"]
+    stop = second["offset_samples"]
+    assert stop - start == round(sr * manifest["timeline"]["segment_silence_s"]) >= 48
+    assert not np.any(clean[start:stop])
+    assert len(clean) == phrase + 21
+
+    marked = clean.copy()
+    marked[start:start + 48] = 16384
+    candidate, output = tmp_path / "candidate.wav", tmp_path / "scored.wav"
+    wavfile.write(candidate, sr, marked)
+
+    def unexpected_render(*_args, **_kwargs):
+        pytest.fail("supplied I2S audio must not render the software voice")
+
+    monkeypatch.setattr(score.vf, "render_mono_fx", unexpected_render)
+    measured = score.measure(candidate_wav=candidate, output_path=output)
+    assert measured["candidate_i2s_sha256"] == hashlib.sha256(candidate.read_bytes()).hexdigest()
+    scored_sr, scored = wavfile.read(output)
+    assert scored_sr == sr
+    np.testing.assert_array_equal(scored[start:stop], marked[start:stop])
+    np.testing.assert_array_equal(scored, marked[:phrase])
