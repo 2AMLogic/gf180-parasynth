@@ -49,11 +49,11 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **3574 commits over 1681 hours.**
+Measured from git, not remembered. **3578 commits over 1682 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 4685 | 2.8 |
+| tests | 4686 | 2.8 |
 | injected controls | 451 | 0.3 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,003 | 7 |
