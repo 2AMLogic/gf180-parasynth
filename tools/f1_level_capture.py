@@ -96,6 +96,10 @@ class CaptureIdentityError(Refused):
     """The manifest cannot establish which capture the bytes belong to."""
 
 
+class ProjectionError(Refused):
+    """The capture cannot supply the stepped-tone response curve."""
+
+
 def amp_tag(amp: float) -> str:
     return f"a{amp:.4f}"
 
@@ -366,19 +370,21 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
     if problems:
         raise Refused(f"{key}: decoded audio disagrees with its capture evidence: "
                       + "; ".join(problems))
+    _validate_windows(meta, len(y), key)
     return y, meta
 
 
 def _evidence_problems(y: np.ndarray, meta: dict) -> list[str]:
     """The decoded audio must be a non-empty, finite, audible population whose
-    measured peak and rms are the ones recorded for THIS condition and level,
-    and which covers every projection window. Two equal zero counts, or one
-    take's bytes filed under another key, satisfy a hash and a frame count;
-    neither satisfies these (#1469)."""
+    measured peak and rms are the ones recorded for THIS condition and level.
+    Two equal zero counts, or one take's bytes filed under another key, can
+    satisfy a hash and a frame count (#1469)."""
     out: list[str] = []
     if type(meta.get("frames")) is not int or meta["frames"] <= 0 or len(y) <= 0:
         return [f"no positive sample population ({len(y)} decoded, "
                 f"{meta.get('frames')!r} recorded)"]
+    if y.ndim != 1:
+        return ["expected mono audio for tone projection"]
     if not np.all(np.isfinite(y)):
         return ["non-finite samples"]
     peak = float(np.abs(y).max())
@@ -390,21 +396,40 @@ def _evidence_problems(y: np.ndarray, meta: dict) -> list[str]:
         if (type(want) not in (int, float) or not math.isfinite(want)
                 or abs(got - want) > 1e-4 * max(abs(want), 1e-9) + 1e-9):
             out.append(f"{name} {got:.9g} vs recorded {want!r}")
-    try:
-        end = max(int(b) for _a, b, _f in meta["parts"])
-    except (KeyError, TypeError, ValueError):
-        return out + ["no usable projection windows"]
-    if end > len(y):
-        out.append(f"projection windows run to {end}, past the {len(y)} decoded frames")
     return out
+
+
+def _validate_windows(meta: dict, frames: int, key: str) -> None:
+    parts, freqs = meta.get("parts"), meta.get("freqs_hz")
+    grid = rp._freqs()
+    if (not isinstance(parts, list) or not isinstance(freqs, list)
+            or len(parts) != len(grid) or len(freqs) != len(grid)):
+        raise ProjectionError(f"{key}: expected one projection window per tone "
+                              f"on the {len(grid)}-tone grid")
+    for i, (part, hz, expected) in enumerate(zip(parts, freqs, grid)):
+        if not isinstance(part, list) or len(part) != 3:
+            raise ProjectionError(f"{key}: malformed projection window {i}")
+        start, length, freq = part
+        if (type(start) is not int or type(length) is not int
+                or start < 0 or length <= 0 or start + length > frames):
+            raise ProjectionError(f"{key}: projection window {i} has start {start!r} "
+                                  f"and length {length!r} for {frames} decoded frames")
+        if (type(freq) not in (int, float) or not 0 < freq < rp.SR / 2
+                or freq != hz or not math.isclose(freq, expected)):
+            raise ProjectionError(f"{key}: projection window {i} does not match "
+                                  f"the {expected:g} Hz tone")
 
 
 def capture_curve(cond: str, amp: float, take: int, manifest=None, inject="") -> tuple:
     """(freqs, gain_db) of one capture, by the frozen reference's projection."""
+    import audio_measure as am
     import reference_rigs as rr
     y, meta = load_capture(cond, amp, take, manifest, inject)
-    parts = [(int(a), int(b), float(f)) for a, b, f in meta["parts"]]
-    g = rr.SurgeRig.tone_project(y, parts, amp, clip_key(cond, amp, take))
+    key = clip_key(cond, amp, take)
+    try:
+        g = rr.SurgeRig.tone_project(y, meta["parts"], amp, key)
+    except am.InsufficientEvidence as e:
+        raise ProjectionError(f"{key}: unusable projection window: {e}") from e
     return np.asarray(meta["freqs_hz"], dtype=np.float64), np.asarray(g, dtype=np.float64)
 
 
@@ -431,9 +456,9 @@ def verify() -> int:
     for key, meta in sorted(m["clips"].items()):
         cond, tag, take = key.split("/")
         try:
-            load_capture(cond, float(tag[1:]), int(take[4:]), m)
+            capture_curve(cond, float(tag[1:]), int(take[4:]), m)
             print(f"ok       {key}  {meta['sha256'][:12]}")
-        except CaptureIdentityError as e:
+        except (CaptureIdentityError, ProjectionError) as e:
             print(f"REFUSED  {e}")
             return REFUSED
         except Refused as e:

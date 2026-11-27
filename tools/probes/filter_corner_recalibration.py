@@ -149,15 +149,16 @@ def reference_side():
 # ===========================================================================
 def _usable_curve(r: dict) -> bool:
     """True only when `freqs` and `gain_db` are equal-length non-empty numeric
-    lists and `cut_hz` is a finite real number. A JSON null or a wrong type in
-    any of them is an unusable grid point (refusal), never a TypeError."""
+    lists with positive frequencies and a positive finite cutoff. A JSON null
+    or a wrong type in any of them is an unusable grid point."""
     def nums(v):
         return (isinstance(v, list) and len(v) > 0
                 and all(type(x) in (int, float) and math.isfinite(x) for x in v))
     cut = r.get("cut_hz")
     return (nums(r.get("freqs")) and nums(r.get("gain_db"))
             and len(r["freqs"]) == len(r["gain_db"])
-            and type(cut) in (int, float) and math.isfinite(cut))
+            and all(f > 0 for f in r["freqs"])
+            and type(cut) in (int, float) and math.isfinite(cut) and cut > 0)
 
 
 def real_curves():

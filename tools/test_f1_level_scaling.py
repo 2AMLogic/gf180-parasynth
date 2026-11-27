@@ -335,3 +335,60 @@ def test_verify_still_accepts_legitimate_byte_sharing_between_repeated_takes(cap
     a0.2500 takes above carry the same digest) and must keep verifying 24/24."""
     assert cap.verify() == cap.OK
     assert "24 verified, 0 failed" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("defect", ["at-eof", "overrun", "negative-start", "zero-length",
+                                    "fractional-start", "one-sample", "missing-tone", "wrong-hz"])
+def test_verify_requires_usable_projection_windows(monkeypatch, capsys, defect):
+    manifest = cap.load_manifest()
+    key = cap.clip_key("open20k", 0.25, 1)
+    clip = manifest["clips"][key]
+    parts = clip["parts"]
+    last = parts[-1]
+    if defect == "at-eof":
+        for part in parts:
+            part[0] = clip["frames"]
+    elif defect == "overrun":
+        last[0] = clip["frames"] - last[1] + 1
+    elif defect == "negative-start":
+        last[0] = -1
+    elif defect == "zero-length":
+        last[1] = 0
+    elif defect == "fractional-start":
+        last[0] += 0.5
+    elif defect == "one-sample":
+        last[1] = 1
+    elif defect == "wrong-hz":
+        last[2] = clip["freqs_hz"][-1] = parts[0][2]
+    else:
+        parts.pop()
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.main([]) == cap.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and key in out and "projection" in out
+    assert "24 verified" not in out
+
+
+def test_capture_curve_accepts_a_window_ending_exactly_at_eof():
+    manifest = cap.load_manifest()
+    clip = manifest["clips"][cap.clip_key("open20k", 0.25, 1)]
+    last = clip["parts"][-1]
+    last[1] = clip["frames"] - last[0]
+    freqs, gains = cap.capture_curve("open20k", 0.25, 1, manifest)
+    assert len(gains) == len(freqs) == len(clip["freqs_hz"])
+    assert np.isfinite(gains).all()
+
+
+def test_stereo_audio_with_mono_peak_and_rms_cannot_verify(monkeypatch, tmp_path, capsys):
+    import io
+    from scipy.io import wavfile
+
+    def stereo(_name, raw):
+        sr, y = wavfile.read(io.BytesIO(raw))
+        buf = io.BytesIO()
+        wavfile.write(buf, sr, np.column_stack((y, y)))
+        return buf.getvalue()
+
+    rc = _verify_with(monkeypatch, tmp_path, lambda m: None, stereo)
+    out = capsys.readouterr().out
+    assert rc == cap.FAIL and "expected mono audio" in out and "0 verified, 24 failed" in out

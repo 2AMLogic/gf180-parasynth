@@ -99,6 +99,24 @@ def test_a_null_required_field_refuses_instead_of_raising(mod, tmp_path, monkeyp
     assert "REFUSED" in out and "get worse" not in out
 
 
+@pytest.mark.parametrize(("field", "value"), [("cut_hz", 0), ("cut_hz", -400), ("freqs", 0)])
+def test_nonpositive_frequency_refuses_before_estimating_a_corner(
+        mod, tmp_path, monkeypatch, capsys, field, value):
+    data = json.loads(mod.RESULTS.read_text())
+    row = next(r for r in data["response-diva"] if r["cut_hz"] == 400)
+    if field == "freqs":
+        row[field][0] = value
+    else:
+        row[field] = value
+    results = tmp_path / "results.json"
+    results.write_text(json.dumps(data))
+    monkeypatch.setattr(mod, "RESULTS", results)
+    assert mod.main() == 2
+    out = capsys.readouterr().out
+    assert "missing or misidentified response curve" in out
+    assert "REFUSED" in out and not mod.checked and "get worse" not in out
+
+
 def test_populated_results_still_checks_and_holds(mod, capsys):
     # the good case: the committed fixture drives exactly the two checks
     rc = mod.main()

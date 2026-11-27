@@ -9,6 +9,7 @@ fails. Only the transport argv may differ (ssh/scp vs bash/cp).
 """
 import hashlib
 import importlib.util
+import re
 import shutil
 import subprocess
 import sys
@@ -172,13 +173,54 @@ def test_header_only_dump_with_a_complete_manifest_refuses(monkeypatch, tmp_path
     assert "REFUSED" in out and "cell sections absent" in out and "extraction OK" not in out
 
 
-def test_dump_cell_problems_accepts_the_complete_dump_and_names_each_defect():
-    ok = "==== CELL a ====\nx\n==== END CELL a ====\n==== CELL b ====\n==== END CELL b ====\n"
-    assert dx.dump_cell_problems(ok, ["a", "b"]) == []
-    assert dx.dump_cell_problems(ok, ["a", "b", "c"])          # one absent
-    assert dx.dump_cell_problems(ok, ["a"])                    # one unrequested
-    assert dx.dump_cell_problems(ok, [])                       # nothing derived
-    assert dx.dump_cell_problems(ok.replace("==== END CELL b ====\n", ""), ["a", "b"])
+@pytest.mark.parametrize(("defect", "reason"), [
+    ("empty-sections", "no OPMODE pins"),
+    ("last-sibling-without-site", "missing mandatory properties"),
+    ("unindexed-opmode", "OPMODE pin"),
+    ("invalid-pin-name", "pin name"),
+    ("swapped-end-markers", "END CELL"),
+])
+def test_digest_correct_sections_require_parsed_cell_evidence(
+        monkeypatch, tmp_path, box, capsys, defect, reason):
+    path = box / "dsp_cells_dump.txt"
+    dump = path.read_text()
+    if defect == "empty-sections":
+        lines = dump.splitlines()
+        markers = [line for line in lines if line.startswith(("==== CELL ", "==== END CELL "))]
+        assert len(markers) == 38
+        dump = "\n".join(lines[:2] + markers) + "\n"
+    elif defect == "last-sibling-without-site":
+        head, section = dump.rsplit("==== CELL ", 1)
+        section, n = re.subn(r"^SITE = .+\n", "", section, flags=re.M)
+        assert n == 1
+        dump = head + "==== CELL " + section
+    elif defect == "swapped-end-markers":
+        names = re.findall(r"^==== END CELL (\S+) ====$", dump, re.M)
+        first, second = names[:2]
+        swapped = {first: second, second: first}
+        dump = re.sub(r"^==== END CELL (\S+) ====$",
+                      lambda m: f"==== END CELL {swapped.get(m[1], m[1])} ====",
+                      dump, flags=re.M)
+    else:
+        assert "PIN OPMODE[0] dir=" in dump
+        pin = "OPMODE" if defect == "unindexed-opmode" else "[0]"
+        dump = dump.replace("PIN OPMODE[0] dir=", f"PIN {pin} dir=", 1)
+    path.write_text(dump)
+    (box / "MANIFEST.sha256").write_text("".join(
+        f"{_sha((box / n).read_bytes())}  {n}\n" for n in dx.MANIFEST_FILES))
+    rc, _calls, _ev = _run(monkeypatch, tmp_path, box, "local")
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "REFUSED" in out and reason in out and "extraction OK" not in out
+
+
+def test_dump_cell_problems_names_the_missing_or_unexpected_section():
+    dump = "==== CELL a ====\n==== END CELL a ====\n==== CELL b ====\n==== END CELL b ====\n"
+    assert "cell sections absent" in dx.dump_cell_problems(dump, ["a", "b", "c"])[0]
+    assert "unrequested cell sections" in dx.dump_cell_problems(dump, ["a"])[0]
+    assert "no target cells" in dx.dump_cell_problems(dump, [])[0]
+    assert "missing END CELL" in dx.dump_cell_problems(dump.removesuffix("==== END CELL b ====\n"),
+                                                       ["a", "b"])[0]
 
 
 def test_phase3_manifest_command_does_not_mask_sha256sum_failure(monkeypatch, tmp_path, box):
