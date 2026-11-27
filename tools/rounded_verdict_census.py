@@ -259,7 +259,7 @@ def _parse(path: pathlib.Path, root: pathlib.Path) -> tuple[str, ast.Module]:
     part of the tree that was not read, so it is refused by name."""
     rel = path.relative_to(root).as_posix()
     try:
-        return rel, ast.parse(path.read_text(encoding="utf-8"), filename=rel)
+        return rel, ast.parse(path.read_bytes(), filename=rel)
     except (OSError, SyntaxError, ValueError) as exc:
         raise Refused(f"could not read {rel}: {exc}. Nothing is reported: a census "
                       "over the files that happened to parse would under-report it") from exc

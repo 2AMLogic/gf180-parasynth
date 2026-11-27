@@ -151,7 +151,7 @@ def _load(path: pathlib.Path) -> types.ModuleType:
     the way the real one does: `mh.MATCH_THRESHOLD`, attribute access."""
     module = types.ModuleType(path.stem)
     module.__file__ = str(path)
-    exec(compile(path.read_text(), str(path), "exec"), module.__dict__)
+    exec(compile(path.read_bytes(), str(path), "exec"), module.__dict__)
     return module
 
 
@@ -487,6 +487,39 @@ def test_cli_refuses_a_permission_denied_source_directory(tmp_path, blocked):
         directory.chmod(0o700)
     assert run.returncode == exit_contract.REFUSED
     assert "REFUSED" in run.stderr and str(directory) in run.stderr
+    assert run.stdout == ""
+
+
+@pytest.mark.parametrize("encoding, header", [
+    ("latin-1", "# coding: latin-1\n"),
+    ("utf-8-sig", ""),
+])
+def test_cli_pairs_fields_using_python_source_encoding(tmp_path, encoding, header):
+    # In Latin-1 the bytes C2 B5 spell two characters. Forced UTF-8 reads one.
+    field = "\u00c2\u00b5"
+    consumer = r'def decide(row): return row["\u00c2\u00b5"] > 0'
+    root = write_tree(tmp_path, producer=None, consumer=consumer)
+    producer = header + f'row = {{"{field}": round(1.2)}}\n'
+    (root / PRODUCER).write_bytes(producer.encode(encoding))
+    assert _load(root / CONSUMER).decide(_load(root / PRODUCER).row)
+
+    run = subprocess.run([sys.executable, "-I", str(TOOLS / "rounded_verdict_census.py"),
+                          str(root)], capture_output=True, text=True)
+    assert (run.returncode, run.stderr) == (exit_contract.PASS, "")
+    assert f"{field}  cross-module-pairs=1" in run.stdout.splitlines()
+
+
+def test_cli_refuses_unknown_python_source_encoding(tmp_path):
+    root = write_tree(tmp_path)
+    source = root / PRODUCER
+    source.write_bytes(b"# coding: no-such-codec\n" + source.read_bytes())
+    with pytest.raises(SyntaxError, match="no-such-codec"):
+        _load(source)
+
+    run = subprocess.run([sys.executable, "-I", str(TOOLS / "rounded_verdict_census.py"),
+                          str(root)], capture_output=True, text=True)
+    assert run.returncode == exit_contract.REFUSED
+    assert "REFUSED" in run.stderr and PRODUCER in run.stderr and "no-such-codec" in run.stderr
     assert run.stdout == ""
 
 
