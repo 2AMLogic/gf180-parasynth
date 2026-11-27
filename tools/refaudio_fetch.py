@@ -28,8 +28,9 @@ result is a FAIL, a partial file never survives, and a size that disagrees with
 the index is a FAIL -- the file on disk must be the file the index describes.
 """
 from __future__ import annotations
-import csv, json, os, pathlib, shlex, subprocess, sys
+import json, os, pathlib, shlex, subprocess, sys
 import refusal
+import refaudio_local as rl
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 REFAUDIO = REPO / "refaudio"
@@ -47,11 +48,7 @@ def known_archives() -> set[str]:
 
 def indexed_sizes(archive: str) -> dict[str, int] | None:
     """member path -> bytes, or None when this pack has no committed index."""
-    tsv = REFAUDIO / "index" / (archive[:-4] + ".tsv")
-    if not tsv.exists():
-        return None
-    with tsv.open(encoding="utf-8", newline="") as fh:
-        return {r["path"]: int(r["bytes"]) for r in csv.DictReader(fh, delimiter="\t")}
+    return rl.read_indexed_sizes(REFAUDIO / "index" / (archive[:-4] + ".tsv"))
 
 
 def preconditions(archive: str, members: list[str]) -> tuple[str, str]:

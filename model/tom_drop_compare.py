@@ -41,6 +41,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import refaudio_local as rl  # noqa: E402
 
 REPO = HERE.parent
 CACHE = REPO / "refaudio" / "cache" / "808-from-mars"
@@ -65,10 +66,18 @@ class Refused(refusal.Refused, Exception):
 # --------------------------------------------------------- preconditions ----
 
 def indexed_sizes() -> dict:
-    if not INDEX.exists():
+    """`rl.read_indexed_sizes(INDEX)`, with an index that is missing or cannot
+    be read REFUSED rather than raised, as `model/tom_drop_measure.py` reads
+    it (#1551): a file that does not vouch for the audio is exit 2, never a
+    traceback, and never a size for the empty path."""
+    try:
+        sizes = rl.read_indexed_sizes(INDEX)
+    except (OSError, UnicodeError, KeyError, ValueError, csv.Error) as why:
+        raise Refused(f"{INDEX} cannot be read ({type(why).__name__}: {why}): nothing "
+                      "vouches for the audio") from why
+    if sizes is None:
         raise Refused(f"{INDEX} is missing: nothing vouches for the audio")
-    with INDEX.open(encoding="utf-8", newline="") as fh:
-        return {r["path"]: int(r["bytes"]) for r in csv.DictReader(fh, delimiter="\t")}
+    return sizes
 
 
 def member(voice: str, accent: str, tuning: int) -> str:
