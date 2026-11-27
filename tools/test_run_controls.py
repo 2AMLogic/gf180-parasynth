@@ -118,6 +118,15 @@ def test_report_is_pending_before_anything_finishes(tmp_path):
     assert seen[0] == ["PENDING"]
 
 
+@pytest.mark.parametrize("cmd", ["   ", "# only a comment", "@after=a # disabled"])
+def test_empty_shell_command_cannot_supply_a_control(tmp_path, cmd, capsys):
+    cmds = [f"@baseline=a {sh(0)}", cmd] if cmd.startswith("@after") else [cmd]
+    code, report = run(tmp_path, cmds)
+    assert code == 2
+    assert "empty command" in capsys.readouterr().out
+    assert report is None
+
+
 def test_plain_commands_behave_as_run_all(tmp_path):
     rc, rep = run(tmp_path, [sh(0), sh(1)])
     assert rc == 1 and [r["state"] for r in rep] == ["PASS", "FAIL"]

@@ -618,6 +618,9 @@ import reference_rigs as rr                                         # noqa: E402
 
 
 class _Stub:
+    def get_parameter_name(self, idx):
+        return "Gain" if idx == 0 else None
+
     def __getattr__(self, _name):
         return lambda *a, **k: None
 
@@ -627,6 +630,7 @@ def _fake_rig(*, cutoff="normal", transposes=True, adapters=True):
 
     class Fake(rr._Plugin):
         name = "fake"
+        PINS = ((0, None, "Gain", None),)
         have_input = False
         setups = 0
 
@@ -646,6 +650,22 @@ def _fake_rig(*, cutoff="normal", transposes=True, adapters=True):
                 return synth.render_cutoff(knob)
 
     return Fake
+
+
+def test_plugin_cannot_claim_held_pins_from_an_empty_table():
+    rig = _fake_rig()
+    rig.PINS = ()
+    with pytest.raises(RuntimeError, match="no pinned"):
+        rig()
+
+
+def test_declared_pins_without_a_reader_do_not_qualify():
+    rig = _SynthRig()
+    q = rq.qualify_voice(rig="synth", host="none", render_note=rig.render_note,
+                         render_cutoff=rig.render_cutoff, note_hz=note_hz, note=NOTE,
+                         expect_wave="saw", n_pins=1)
+    assert q.verdict == rq.REFUSED
+    assert "pin" in q.checks[0].why
 
 
 def test_wiring_a_connected_rig_qualifies_and_carries_the_battery():

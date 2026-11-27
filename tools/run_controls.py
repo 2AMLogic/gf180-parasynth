@@ -96,6 +96,9 @@ def _outdir(cmd: str):
 def validate(specs: list[dict]) -> None:
     baselines: dict[str, dict] = {}
     for s in specs:
+        if not any(line.strip() and not line.lstrip().startswith("#")
+                   for line in s["cmd"].split("\n")):
+            raise Refused(f"empty command for {s['role']} control")
         if s["role"] == "baseline":
             if s["group"] in baselines:
                 raise Refused(f"duplicate baseline id {s['group']!r}")

@@ -280,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     try:
+        if args.require_clean and args.window <= 0:
+            raise Refusal("--window must be positive to score any jobs")
         if args.offline:
             raw = json.loads(args.offline.read_text())
             records = [JobRecord(**r) for r in raw]

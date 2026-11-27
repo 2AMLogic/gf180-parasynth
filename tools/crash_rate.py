@@ -177,6 +177,21 @@ os.close(fd)
 _MAXRSS_TO_KB = 1024 if sys.platform == "darwin" else 1
 
 
+class TargetCalls:
+    """Make a pytest process that completed no test calls return its no-tests status."""
+
+    def __init__(self):
+        self.completed = 0
+
+    def pytest_runtest_logreport(self, report):
+        if report.when == "call" and not report.skipped:
+            self.completed += 1
+
+    def pytest_sessionfinish(self, session, exitstatus):
+        if exitstatus in (0, 1) and not self.completed:
+            session.exitstatus = 5  # pytest.ExitCode.NO_TESTS_COLLECTED
+
+
 def run_once(target: str, extra_env: dict, timeout: float) -> dict:
     """One child, its own rusage, measured through a small launcher so the
     peak-RSS column is THIS run's peak and not the harness's own size (see
@@ -184,7 +199,9 @@ def run_once(target: str, extra_env: dict, timeout: float) -> dict:
     wait status, forwarded unaltered."""
     env = dict(os.environ, **extra_env)
     env.setdefault("PYTHONFAULTHANDLER", "1")   # the traceback we would need next time
-    cmd = [sys.executable, "-X", "faulthandler", "-m", "pytest", target,
+    invoke = ("import sys, pytest; from tools.crash_rate import TargetCalls; "
+              "sys.exit(pytest.main(sys.argv[1:], plugins=[TargetCalls()]))")
+    cmd = [sys.executable, "-X", "faulthandler", "-c", invoke, target,
            "-q", "-p", "no:cacheprovider", "--no-header"]
     t0 = time.monotonic()
     rfd, wfd = os.pipe()
@@ -320,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         "runs_that_exercised_the_target": exercised,
         "crash_rate": (None if exercised == 0 else counts[CRASH] / exercised),
         "peak_rss_kb": peak,
-        "median_seconds": sorted(r["seconds"] for r in runs)[len(runs) // 2],
+        "median_seconds": sorted(r["seconds"] for r in runs)[len(runs) // 2] if runs else None,
     }
     report = {"environment": env, "summary": summary, "runs": runs}
     if a.json:

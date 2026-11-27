@@ -107,6 +107,29 @@ def test_never_runs():
         "a rate over an empty denominator is a fabricated number"
 
 
+def test_zero_requested_runs_have_no_rate_or_median(tmp_path):
+    target = _write(tmp_path, "test_one.py", "def test_one(): pass")
+    out = tmp_path / "r.json"
+    assert cr.main(["--target", target, "--runs", "0", "--json", str(out)]) == 2
+    summary = json.loads(out.read_text())["summary"]
+    assert summary["runs_that_exercised_the_target"] == 0
+    assert summary["crash_rate"] is None and summary["median_seconds"] is None
+
+
+def test_a_skipped_target_does_not_supply_a_crash_rate(tmp_path):
+    target = _write(tmp_path, "test_skip.py", """
+import pytest
+@pytest.mark.skip(reason="no device attached")
+def test_device():
+    assert False
+""")
+    out = tmp_path / "r.json"
+    assert cr.main(["--target", target, "--runs", "1", "--json", str(out)]) == 2
+    summary = json.loads(out.read_text())["summary"]
+    assert summary["runs_that_exercised_the_target"] == 0
+    assert summary["crash_rate"] is None
+
+
 def test_a_failing_test_is_a_result_not_a_crash(tmp_path):
     target = _write(tmp_path, "test_red.py", """
 def test_red():

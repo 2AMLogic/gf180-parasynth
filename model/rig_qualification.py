@@ -555,12 +555,14 @@ def check_pins(check_pins_fn, *, n_pins: int | None = None, name="pins") -> Chec
     det = {}
     if n_pins is not None:
         det["n_pins"] = int(n_pins)
-        if int(n_pins) == 0:
+        if n_pins <= 0:
             return Check(name, REFUSED,
                          "the rig pins no parameters, so there is nothing to hold: "
                          "a rig that cannot prove its own settings has no verdict", det)
+    if check_pins_fn is None:
+        return Check(name, REFUSED, "no pin readback function was supplied", det)
     try:
-        bad = list(check_pins_fn() or ())
+        bad = list(check_pins_fn())
     except Exception as e:                                          # pragma: no cover
         return Check(name, REFUSED, f"the pin check itself failed: "
                                     f"{type(e).__name__}: {e}", det)
@@ -609,7 +611,7 @@ def qualify_voice(*, rig: str, host: str, render_note, render_cutoff, note_hz,
     steady = steady or (lambda y: y)
     checks = []
     if check_pins_fn is not None or n_pins is not None:
-        checks.append(check_pins(check_pins_fn or (lambda: []), n_pins=n_pins))
+        checks.append(check_pins(check_pins_fn, n_pins=n_pins))
 
     y = np.asarray(render_note(int(note)), dtype=np.float64).ravel()
     checks.append(check_sounding(y))

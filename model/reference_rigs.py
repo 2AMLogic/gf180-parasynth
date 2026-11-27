@@ -430,6 +430,8 @@ class _Plugin:
             self.pb.set_data(np.zeros((2, int(0.05 * SR)), dtype=np.float32))
         self.p.clear_midi()
         self.eng.render(0.05)
+        if not self.PINS:
+            raise RuntimeError(f"{self.name}: no pinned settings to qualify")
         bad = self.check_pins()
         if bad:
             raise RuntimeError(f"{self.name}: pinned settings did not hold: {bad}")

@@ -129,6 +129,19 @@ def test_accepts_a_complete_passing_run(tmp_path):
     assert got["worst_latency_frames"] == 3
 
 
+@pytest.mark.parametrize("periods", [0, 1])
+def test_refuses_a_bound_schedule_selecting_no_audio(tmp_path, periods, monkeypatch, capsys):
+    paths, report, *_ = _part_files(tmp_path, "mix", samples=np.zeros(periods),
+                                    schedule=_schedule("mix", case_frames=0))
+    with pytest.raises(score.Refused, match="no case frames"):
+        score.validate_part("E1A", "mix", report, paths["wav"], paths["schedule"])
+    # The stand-in leaves the supplied report on disk, just as the RTL run would.
+    monkeypatch.setattr(score, "run_part",
+                        lambda case, part, outdir, **kw: {"part": part, "status": 0})
+    assert score.main(["--outdir", str(tmp_path), "--jobs", "1"]) == 2
+    assert "REFUSED -- mix: no case frames" in capsys.readouterr().out
+
+
 def test_refuses_a_mutation_run(tmp_path):
     paths, text, *_ = _part_files(
         tmp_path, "mix",

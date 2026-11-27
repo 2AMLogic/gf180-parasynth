@@ -303,6 +303,13 @@ def test_the_changelog_records_the_commits_that_actually_moved_the_locks():
         "nothing was pinned before 28dfd55, so every entry there is a first lock")
 
 
+def test_empty_lock_table_and_empty_history_check_nothing(monkeypatch, capsys):
+    monkeypatch.setattr(sr, "LOCKS", {})
+    monkeypatch.setattr(sr, "LOCK_CHANGELOG", [{"locks": {}}])
+    assert sr.main(["--check-locks"]) == 2
+    assert "no locks" in capsys.readouterr().out
+
+
 def test_check_locks_exits_nonzero_when_the_record_disagrees(monkeypatch):
     assert sr.main(["--check-locks"]) == 0
     monkeypatch.setitem(sr.LOCKS, ("SD", "T20"), 1.0)
