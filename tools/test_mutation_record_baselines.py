@@ -19,6 +19,14 @@ names (#1136). A silent snare fails an apparatus check in the expected test.
 The healthy case runs the real sound suite against each production mutant,
 and a mix follows the holdout probe's precedence (#1113): a survivor is a
 finding about the tree and outranks a refusal, so it exits 1.
+
+Issue #1480 is what the sound probe leaves behind. It edits its target in
+place, and its first mutant write sat outside the guard that restores the
+file: a write that failed part-way left the reporter at its first 64 bytes,
+and a run that completed restored a CRLF source as LF, because the original
+was saved with `read_text()`. The two restoration cases drive the staged
+probe and compare bytes: one with a partial first write injected after the
+green baseline, one a completed run on a CRLF target.
 """
 import os
 import shutil
@@ -502,3 +510,106 @@ def test_every_sound_mutant_has_recorded_names_that_exist_in_the_real_suite():
         assert names, mutant
         for name in names:
             assert f"def {name}(" in suite, (mutant, name)
+
+
+# ---- issue #1480: the probe leaves the target as it found it ----------------
+
+#: Green on the unmutated target, and leaves a marker naming which run it was:
+#: the baseline's, or a mutant's.
+RUN_MARKER = (READS_TARGET
+              + "def test_green_on_pristine():\n"
+              "    pathlib.Path('baseline-executed' if SRC == PRISTINE else 'mutant-executed').touch()\n"
+              "    assert 1\n")
+
+#: Runs the staged probe in-process with `Path.write_text` on its target
+#: replaced: once the baseline's marker exists, the first write puts 64
+#: characters on disk, records what it left, and raises `OSError`. Every later
+#: write succeeds. An `OSError` leaving `main()` is reported as exit 4.
+PARTIAL_WRITE_LAUNCHER = """
+import pathlib
+import sys
+
+root, record = map(pathlib.Path, sys.argv[1:3])
+target = (root / "model" / "sound_report.py").resolve()
+sys.path.insert(0, str(root / "model"))
+import probe_injection_discrimination as probe
+
+real_write_text = pathlib.Path.write_text
+armed = True
+
+
+def write_text(self, data, *args, **kwargs):
+    global armed
+    if armed and self == target and (root / "baseline-executed").exists():
+        armed = False
+        real_write_text(self, data[:64])
+        record.write_bytes(target.read_bytes())
+        raise OSError("injected partial write")
+    return real_write_text(self, data, *args, **kwargs)
+
+
+pathlib.Path.write_text = write_text
+try:
+    code = probe.main()
+except OSError as exc:
+    print(f"OSError left main(): {exc}")
+    raise SystemExit(4)
+raise SystemExit(code)
+"""
+
+
+def _with_line_ending(target, line_ending):
+    """Rewrite the staged target and its pristine copy with `line_ending`
+    (`LF` leaves both alone) and return the target's bytes."""
+    before = target.read_bytes()
+    if line_ending == "CRLF":
+        assert b"\r" not in before
+        before = before.replace(b"\n", b"\r\n")
+        target.write_bytes(before)
+        target.with_suffix(".original").write_bytes(before)
+    assert (b"\r\n" in before) == (line_ending == "CRLF"), line_ending
+    return before
+
+
+@pytest.mark.parametrize("line_ending", ["LF", "CRLF"])
+def test_sound_partial_first_mutant_write_restores_the_exact_bytes(tmp_path, line_ending):
+    """The issue's reproduction, as it ran on `origin/main` @ `d5bac16a`: the
+    first mutant's write sat outside the guard, so a write that put 64
+    characters on disk and raised left the reporter at 64 bytes. The error
+    must still reach the caller before any mutant suite runs or gets a
+    verdict, and the file must be byte for byte what it was at entry."""
+    _, target = stage_sound(tmp_path, RUN_MARKER)
+    before = _with_line_ending(target, line_ending)
+    launcher = tmp_path / "partial_write.py"
+    launcher.write_text(PARTIAL_WRITE_LAUNCHER)
+    record = tmp_path / "partial-write.bin"
+    result = subprocess.run([sys.executable, str(launcher), str(tmp_path), str(record)],
+                            cwd=tmp_path, capture_output=True, text=True)
+    out = result.stdout + result.stderr
+
+    assert (tmp_path / "baseline-executed").exists()
+    assert record.exists(), out                              # the fault fired
+    left = record.read_bytes()
+    assert len(left) == 64, out                              # and wrote the prefix
+    assert left == before.replace(b"\r\n", b"\n")[:64]
+    assert result.returncode == 4, out                       # and its error propagated
+    assert "OSError left main(): injected partial write" in out, out
+    assert not (tmp_path / "mutant-executed").exists()       # before a mutant suite ran
+    _no_kill_credit(out)
+    assert "SURVIVED" not in out and "REFUSED" not in out     # or got a verdict
+    assert target.read_bytes() == before
+
+
+def test_sound_completed_run_leaves_a_crlf_target_as_it_found_it(tmp_path):
+    """The other failure in #1480, on a run that completes: the probe saved
+    its original with `read_text()`, which folds CRLF to LF, so restoring it
+    rewrote a CRLF reporter as LF. A repair that only moves the write inside
+    the guard still fails here. Verdicts and exit are the existing ones."""
+    script, target = stage_sound(tmp_path, INSENSITIVE)
+    before = _with_line_ending(target, "CRLF")
+    result = run(script, tmp_path)
+    out = result.stdout + result.stderr
+    assert result.returncode == 1, out
+    assert out.count("SURVIVED") == len(sound.MUTANTS), out
+    _no_kill_credit(out)
+    assert target.read_bytes() == before
