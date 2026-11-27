@@ -68,6 +68,7 @@ import numpy as np
 import run_case as rc
 import scorecard
 import verify_synth_top as vst
+import i2s_transcript
 import refusal
 
 SR = 48000
@@ -78,7 +79,8 @@ CONTROL_INJECT = "DRUM_BUS_STALE"
 #: Sources whose content decides what this number means. Hashed onto the record
 #: so a later reader can tell a stale anchor from a current one.
 MEASUREMENT_SOURCES = (
-    "tools/score_ensemble_i2s.py", "tools/compare_ensemble_candidate.py",
+    "tools/score_ensemble_i2s.py", "tools/i2s_transcript.py",
+    "tools/compare_ensemble_candidate.py",
     "tools/run_case.py", "tools/scorecard.py", "model/audio_measure.py",
     "model/drums_fx.py", "model/voice_fx.py", "model/synth_top_model.py",
     "audition/patches.py",
@@ -200,8 +202,7 @@ def validate_part(case_id: str, part: str, report_text: str, wav_path: pathlib.P
                   schedule_path: pathlib.Path) -> dict:
     """The preconditions of using this part as evidence, asserted at the point
     of use. Raises Refused with the reason; never returns a partial verdict."""
-    if "INJECT_BUG_" in report_text:
-        raise Refused(f"{part}: a mutation run cannot provide sound evidence")
+    i2s_transcript.refuse_mutation(report_text, refuse=Refused, prefix=f"{part}: ")
     required = (
         f"ENSEMBLE {case_id} part {part}:",
         f"{case_id} ensemble part {part} verified from SPI pins through the COMBINED "
@@ -211,13 +212,8 @@ def validate_part(case_id: str, part: str, report_text: str, wav_path: pathlib.P
     missing = [token for token in required if token not in report_text]
     if missing:
         raise Refused(f"{part}: the report is not a passing complete ensemble run")
-    for bad in ("REFUSED", "FAIL --", "NO-VERDICT"):
-        if bad in report_text:
-            raise Refused(f"{part}: the report contains {bad}")
-    simulator = next((name for name in ("verilator", "iverilog")
-                      if f"simulator backend {name}" in report_text), None)
-    if simulator is None:
-        raise Refused(f"{part}: the report omits the simulator backend")
+    simulator = i2s_transcript.validate_clean_pass(report_text, refuse=Refused,
+                                                   prefix=f"{part}: ")
     gains = _GAINS_RE.search(report_text)
     if not gains:
         raise Refused(f"{part}: the report omits the three bus gain words")
