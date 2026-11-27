@@ -204,3 +204,23 @@ def test_rule_refuses_selection_when_words_equal_the_baseline():
 def test_rule_rejects_an_insufficient_corner_gain():
     ev = fls.evaluate(_fake_table(-14.0))
     assert not ev["verdicts"]["half"]["checks"]["3_corner"] and ev["selection"] is None
+
+
+# --- f1_level_capture.verify() and the empty record (#1469) ----------------
+
+def test_verify_with_no_capture_in_the_manifest_refuses(monkeypatch, capsys):
+    """An empty `clips` dict ran the loop zero times, so `bad` stayed 0 and
+    verify() printed `0 verified, 0 failed` with OK."""
+    monkeypatch.setattr(cap, "load_manifest", lambda: {"clips": {}})
+    rc = cap.verify()
+    out = capsys.readouterr().out
+    assert rc == cap.REFUSED
+    assert "REFUSED" in out and "0 verified" not in out
+
+
+def test_verify_on_the_committed_captures_counts_what_it_verified(capsys):
+    n = len(cap.load_manifest()["clips"])
+    assert n > 0
+    rc = cap.verify()
+    assert rc == cap.OK
+    assert f"{n} verified, 0 failed" in capsys.readouterr().out

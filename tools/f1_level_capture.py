@@ -369,6 +369,10 @@ def verify() -> int:
     except Refused as e:
         print(f"REFUSED  {e}")
         return REFUSED
+    if not m.get("clips"):
+        print(f"REFUSED  the capture manifest {MANIFEST.relative_to(ROOT)} lists no "
+              "clip, so there is nothing to verify and no verdict")
+        return REFUSED
     bad = 0
     for key, meta in sorted(m["clips"].items()):
         cond, tag, take = key.split("/")
