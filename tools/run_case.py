@@ -2593,7 +2593,7 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
     """One F1 case, scored against its frozen Surge clip.
 
     `engine_path` replaces the model filter path with any object offering
-    `SelectedFilterPath`'s interface (`curve`, `record`, `probe_profile`,
+    `SelectedFilterPath`'s interface (`engine`, `curve`, `record`, `probe_profile`,
     `calibration`, `match`, `path_version`). That is how a case is anchored on
     another engine -- `tools/score_f1_rtl.py` passes the RTL filter chain -- and
     it exists so the RTL reading and the `fixed-model` reading it is compared
@@ -2614,14 +2614,14 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
     # Asserted before anything is loaded or rendered, so a caller that swaps the
     # engine and forgets to say so cannot spend twenty minutes of simulation
     # producing a record labelled with the wrong engine.
-    declared = ENGINE if engine_path is None else getattr(engine_path, "engine", None)
-    if engine_path is not None and (not declared or declared == ENGINE):
-        raise Refused(f"a substituted filter path must name its engine; this one would "
-                      f"have been recorded as {declared or ENGINE!r}")
-    if engine_path is not None and inject:
-        raise Refused("a substituted filter path and a reference-side injection cannot be "
-                      "combined: the control would not say which side moved")
-    record_engine = declared
+    if engine_path is not None:
+        record_engine = getattr(engine_path, "engine", None)
+        if not isinstance(record_engine, str) or record_engine.strip() in ("", ENGINE):
+            raise Refused(f"a substituted filter path must name its engine with a nonblank "
+                          f"string distinct from {ENGINE!r}, got {record_engine!r}")
+        if inject:
+            raise Refused("a substituted filter path and a reference-side injection cannot be "
+                          "combined: the control would not say which side moved")
     cid = case["case_id"]
     spec = filter_spec(cid)
     required = [m.strip() for m in case["required_measurements"].split(";") if m.strip()]
@@ -2638,8 +2638,11 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
         raise Refused("the cutoff clip and the wide-open clip do not share one probe grid")
     import f1_filter_path as fp
     try:
-        path = engine_path if engine_path is not None else fp.SelectedFilterPath(
-            substitute_profile="legacy" if inject == "F1_LEGACY_SUBSTITUTE" else None)
+        path = engine_path
+        if path is None:
+            path = fp.SelectedFilterPath(
+                substitute_profile="legacy" if inject == "F1_LEGACY_SUBSTITUTE" else None)
+            record_engine = path.engine
         ours_g, ours_info = path.curve(dut_f, cut, spec["res_ours"], amp)
         ours_open_g, ours_open_info = path.curve(open_f, spec["open_hz"], spec["res_ours"], amp)
     except fp.Refused as e:

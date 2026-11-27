@@ -89,6 +89,7 @@ class _CurveDouble:
     in, and moves the corner by that factor."""
 
     render_label = "a closed-form stepped-tone curve (test double)"
+    engine = fp.SelectedFilterPath.engine
     path_version = "test-double-v0"
     tools = {"iverilog": "test double -- no RTL ran"}
     cutoff_scale = 1.0
