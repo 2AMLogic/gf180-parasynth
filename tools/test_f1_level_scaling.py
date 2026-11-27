@@ -483,10 +483,10 @@ def test_stereo_audio_with_mono_peak_and_rms_cannot_verify(monkeypatch, tmp_path
 _EVIDENCE_FIELDS = ("sha256", "archive_member", "frames", "peak", "rms", "bytes", "parts", "freqs_hz")
 
 
-def _swap_levels(manifest, cond="cut250", lo=0.0625, hi=0.125):
+def _swap_cells(manifest, first, second):
     clips = manifest["clips"]
     for take in cap.TAKES:
-        a, b = clips[cap.clip_key(cond, lo, take)], clips[cap.clip_key(cond, hi, take)]
+        a, b = clips[cap.clip_key(*first, take)], clips[cap.clip_key(*second, take)]
         for f in _EVIDENCE_FIELDS:
             a[f], b[f] = b[f], a[f]
 
@@ -496,7 +496,7 @@ def test_complete_level_swap_refuses_in_both_readers(monkeypatch, capsys):
     still distinct and each key keeps its own condition/settings/take, so only
     the frozen-clip anchor can see it (the gain moved by 6.02 dB)."""
     manifest = cap.load_manifest()
-    _swap_levels(manifest)
+    _swap_cells(manifest, ("cut250", 0.0625), ("cut250", 0.125))
     assert len({m["sha256"] for m in manifest["clips"].values()}) == 12
     monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
     assert cap.main([]) == cap.REFUSED
@@ -504,6 +504,25 @@ def test_complete_level_swap_refuses_in_both_readers(monkeypatch, capsys):
     assert "not made at that level" in out and " verified," not in out
     with pytest.raises(cap.LevelBindingError, match="not made at that level"):
         fls.surge_side(manifest)
+
+
+@pytest.mark.parametrize("first,second,amp", [
+    ("cut250", "cut1000", 0.25),     # the swap that exchanged the F1A and F1B corners
+    ("cut4000", "open20k", 0.0625),  # the closest pair of frozen response curves
+])
+@pytest.mark.parametrize("reader", ["verify", "surge_side"])
+def test_complete_condition_swap_refuses(monkeypatch, capsys, first, second, amp, reader):
+    manifest = cap.load_manifest()
+    _swap_cells(manifest, (first, amp), (second, amp))
+    assert len({m["sha256"] for m in manifest["clips"].values()}) == 12
+    if reader == "verify":
+        monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+        assert cap.main([]) == cap.REFUSED
+        out = capsys.readouterr().out
+        assert "cutoff response" in out and " verified," not in out
+    else:
+        with pytest.raises(cap.CaptureIdentityError, match="cutoff response"):
+            fls.surge_side(manifest)
 
 
 def test_level_anchor_accepts_the_committed_captures():
