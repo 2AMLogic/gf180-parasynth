@@ -21,7 +21,34 @@ def test_empty_input_is_refused_not_held():
         ap.ladder_substeps(np.array([], dtype=np.int16), 2)
 
 
+def test_nonpositive_oversample_is_refused():
+    # Rule 8: non-empty x_q15 with os_ <= 0 makes np.repeat(..., 0) empty.
+    x = np.array([1000, -1000], dtype=np.int16)
+    with pytest.raises(am.InsufficientEvidence, match="oversample"):
+        ap.ladder_substeps(x, 0)
+
+
 def test_populated_input_still_holds():
     x = np.array([1000, -1000, 2000, -2000, 500, -500, 3000, -3000], dtype=np.int16)
     sub, ref, g = ap.ladder_substeps(x, 2)
     assert len(sub) == 2 * len(ref) == 16 and len(ref) == 8
+
+
+def test_populated_divergent_substep_is_refused(monkeypatch):
+    x = np.array([1000, -1000, 2000, -2000], dtype=np.int16)
+    real_ladder = ap.fixed.LadderFx
+
+    class SkewedLadder(real_ladder):
+        def __init__(self, **cfg):
+            self._skew_os = cfg.get("oversample")
+            super().__init__(**cfg)
+
+        def process(self, *args, **kwargs):
+            out = np.asarray(super().process(*args, **kwargs)).copy()
+            if self._skew_os == 2:
+                out[0] ^= 1
+            return out
+
+    monkeypatch.setattr(ap.fixed, "LadderFx", SkewedLadder)
+    with pytest.raises(am.InsufficientEvidence, match="samples differ"):
+        ap.ladder_substeps(x, 2)

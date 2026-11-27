@@ -680,7 +680,9 @@ def test_floor_property_holds_on_the_real_probe(name, prop):
 def test_every_floor_mutant_turns_something_red():
     rows = R.floor_controls_matrix()
     clean = rows.pop("(clean)")
+    assert clean, "floor_controls_matrix() evaluated no property in the clean row"
     assert all(v == "ok" for v in clean.values()), clean
+    assert rows, "floor_controls_matrix() returned no defect row: nothing to turn red"
     for defect, row in rows.items():
         assert "MOVED" in row.values(), f"{defect} is invisible to every property: {row}"
 
@@ -693,6 +695,7 @@ def test_each_floor_property_moves_at_least_one_defect():
     holds it directly."""
     rows = R.floor_controls_matrix()
     rows.pop("(clean)")
+    assert rows, "floor_controls_matrix() returned no defect row: every property would read as dead"
     dead = [n for n, _ in R.FLOOR_PROPERTIES if all(r[n] != "MOVED" for r in rows.values())]
     assert set(dead) <= {"no-bias-possible"}, dead
 
@@ -901,6 +904,7 @@ def test_the_committed_records_pass_the_arithmetic_gate():
     """Run the stricter gate against the current state before committing it:
     every committed OK row must reconcile, or the gate is unsatisfiable."""
     q = json.loads(QUAL.read_text())
+    assert q["records"], "qualification JSON holds no records"
     for r in q["records"]:
         assert R.floor_row_problems(r["rows"]) == [], r["condition"]
 
@@ -1153,10 +1157,34 @@ def test_an_all_refused_output_floor_exits_2_not_0(monkeypatch):
 
 # --- the matrix tests' population (#1469) ---------------------------------
 
-def test_matrix_tests_fail_on_an_empty_matrix(monkeypatch):
-    """`test_every_injected_defect_turns_something_red` loops over the defect
-    rows and `all()`s the clean row. Handed `{"(clean)": {}}` it passed
-    without asserting anything: an empty record read as a green control."""
+def test_matrix_tests_fail_on_an_empty_matrix(monkeypatch, tmp_path):
+    """Both matrix pairs (`controls_matrix` and `floor_controls_matrix`) loop
+    over defect rows and `all()` the clean row, and
+    `test_the_committed_records_pass_the_arithmetic_gate` loops over
+    `q['records']`. Handed empty populations they passed without asserting
+    anything: an empty record read as a green control."""
     monkeypatch.setattr(R, "controls_matrix", lambda: {"(clean)": {}})
     with pytest.raises(AssertionError):
         test_every_injected_defect_turns_something_red()
+    with pytest.raises(AssertionError):
+        test_each_property_catches_at_least_one_defect()
+
+    monkeypatch.setattr(R, "controls_matrix", lambda: {"(clean)": {"p": "ok"}})
+    with pytest.raises(AssertionError):
+        test_every_injected_defect_turns_something_red()
+
+    monkeypatch.setattr(R, "floor_controls_matrix", lambda: {"(clean)": {}})
+    with pytest.raises(AssertionError):
+        test_every_floor_mutant_turns_something_red()
+    with pytest.raises(AssertionError):
+        test_each_floor_property_moves_at_least_one_defect()
+
+    monkeypatch.setattr(R, "floor_controls_matrix", lambda: {"(clean)": {"p": "ok"}})
+    with pytest.raises(AssertionError):
+        test_every_floor_mutant_turns_something_red()
+
+    empty_qual = tmp_path / "empty-qual.json"
+    empty_qual.write_text('{"records": []}')
+    monkeypatch.setattr(sys.modules[__name__], "QUAL", empty_qual)
+    with pytest.raises(AssertionError):
+        test_the_committed_records_pass_the_arithmetic_gate()

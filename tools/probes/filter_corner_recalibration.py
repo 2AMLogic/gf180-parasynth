@@ -211,6 +211,9 @@ def real_curves():
     print("   our cutoff mapping. On one side of the comparison the correction is")
     print("   nearly twice the effect being explained. Whether it cancels against")
     print("   the reference side is exactly what section 2 cannot measure here.")
+    if not trends:
+        print(f"   {RESULTS} holds no usable response curves")
+        return
     check(all(abs(o - n) < 0.02 for o, n in trends.values()),
           "over 400 Hz-6.4 kHz the repair moves no device's droop by more than "
           "2 points: up there the instrument is not the explanation, either way")

@@ -248,3 +248,9 @@ def test_main_with_an_empty_controls_table_refuses_instead_of_printing_ok(capsys
     assert calls == []
     assert "OK -- all held" not in out
     assert "REFUSED" in out and "no control" in out
+
+
+def test_list_with_an_empty_controls_table_stays_exit_zero():
+    # `--list` is an inventory, not a verdict: it must stay exit 0.
+    assert cdl.main("doc", {}, lambda name: None, show=str,
+                    ok_message="OK", argv=["--list"]) == 0

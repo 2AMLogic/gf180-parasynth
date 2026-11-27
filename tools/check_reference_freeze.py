@@ -121,6 +121,17 @@ def manifest_entries(path: pathlib.Path) -> list[tuple[str, str, str]]:
     if not entries:
         raise Refused(f"freeze manifest is empty: {path} -- it covers nothing, "
                       f"so there is no freeze to check")
+    file_subjects = {s for k, _d, s in entries if k == "file"}
+    canon_subjects = {s for k, _d, s in entries if k == "canon"}
+    missing_canon = [k for k in FREEZE_CANON_KEYS if k not in canon_subjects]
+    missing_docs = [d for d in FREEZE_DOCS if d not in file_subjects]
+    empty_dirs = [d for d in rs.SUITE_RECORDS[rs.SUITE_V3_FROZEN]
+                  if not any(s == d or s.startswith(d.rstrip("/") + "/")
+                             for s in file_subjects)]
+    if missing_canon or missing_docs or empty_dirs:
+        raise Refused(
+            f"freeze manifest is incomplete: {path} (missing canon={missing_canon}, "
+            f"docs={missing_docs}, frozen dirs with 0 files={empty_dirs})")
     return entries
 
 

@@ -142,6 +142,36 @@ def test_a_whitespace_only_freeze_manifest_is_refused(frozen_scope_copy):
     assert cf.check(frozen_scope_copy, p) == cf.REFUSED
 
 
+def test_a_manifest_omitting_frozen_files_or_canon_is_refused(tmp_path):
+    # Rule 8 defeating input for `if not entries:`: a manifest carrying ONLY
+    # the `canon` line over a tree with no frozen directories satisfied
+    # `if not entries:`, saw `grew == []` (missing dirs have no files), and
+    # printed `PASS  1 frozen entries hold (0 files, 1 canonical)` with 0
+    # frozen files checked. Likewise, dropping the canon key or any frozen
+    # suite directory / doc must refuse rather than certify a partial scope.
+    root = tmp_path / "canon-only-root"
+    (root / cf.CORPUS_MANIFEST).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / cf.CORPUS_MANIFEST, root / cf.CORPUS_MANIFEST)
+    canon_lines = [ln for ln in MANIFEST.read_text().splitlines()
+                   if ln.startswith("canon  ")]
+    assert len(canon_lines) == 1
+    canon_only = tmp_path / "canon-only.sha256"
+    canon_only.write_text(canon_lines[0] + "\n")
+    assert cf.check(root, canon_only) == cf.REFUSED
+
+    file_only_lines = [ln for ln in MANIFEST.read_text().splitlines()
+                       if ln.startswith("file  ")]
+    file_only = tmp_path / "file-only.sha256"
+    file_only.write_text("\n".join(file_only_lines) + "\n")
+    assert cf.check(ROOT, file_only) == cf.REFUSED
+
+    drop_m5b = [ln for ln in MANIFEST.read_text().splitlines()
+                if "docs/scorecard/mono-m5b-miniv3/" not in ln]
+    partial_dirs = tmp_path / "no-m5b.sha256"
+    partial_dirs.write_text("\n".join(drop_m5b) + "\n")
+    assert cf.check(ROOT, partial_dirs) == cf.REFUSED
+
+
 def test_the_canonical_v3_suite_declaration_is_frozen_not_the_whole_corpus():
     # The V4 entry next to it must stay editable (renders will land), so the
     # canon hash covers ONLY the frozen suite's own declaration.

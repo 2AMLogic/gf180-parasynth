@@ -825,6 +825,11 @@ def injected(fixtures, clean) -> list:
 
 def cmd_controls(args=None) -> int:
     fixtures = control_fixtures()
+    if not fixtures or not MUTANTS:
+        print(f"REFUSED: estimator ground-truth controls need non-empty fixtures "
+              f"({len(fixtures)}) and non-empty MUTANTS ({len(MUTANTS)}); "
+              f"nothing was measured.")
+        return 2
     print("=" * 78)
     print("estimator ground truth: CONTROLS (start red, then named mutants)")
     print("=" * 78)
@@ -834,6 +839,10 @@ def cmd_controls(args=None) -> int:
     clean = _run(fixtures)
     answered = sorted(k for k, s in clean.items() if _answered(s))
     red = sorted(k for k, s in clean.items() if _any_red(s))
+    if not answered:
+        print("REFUSED: clean run answered 0 (estimator, family) pairs -- "
+              "nothing was measured, so neither stubs nor mutants can be graded.")
+        return 2
     print(f"  clean run: {len(answered)} (estimator, family) pairs answered, "
           f"{len(red)} red")
     bad = 0

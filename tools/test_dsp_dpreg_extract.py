@@ -130,3 +130,41 @@ def test_the_post_run_digest_check_still_refuses_in_local_mode(monkeypatch, tmp_
     (box / "dsp_cells_dump.txt").write_text("tampered after the manifest\n")
     rc, _calls, _ev = _run(monkeypatch, tmp_path, box, "local")
     assert rc == 1
+
+
+@pytest.mark.parametrize("manifest_body", [
+    "",                                                    # zero-byte manifest (#1469)
+    "not-a-valid-sha256-line\n",                           # malformed line
+    "ONLY_ROUTED",                                         # Rule 8: non-empty, omits dsp_cells_dump.txt
+])
+def test_empty_or_partial_box_manifest_refuses_even_when_dcp_header_matches(
+        monkeypatch, tmp_path, box, capsys, manifest_body):
+    """#1469: phase 4 derived OK from `bad == []` over `MANIFEST.sha256` lines.
+    With an empty or partial manifest and a tampered dump (preserving line 2's
+    `DCP ...`), zero dump hashes were checked and `main` exited 0 ('extraction OK')."""
+    orig_lines = (box / "dsp_cells_dump.txt").read_text().splitlines()
+    (box / "dsp_cells_dump.txt").write_text(
+        "\n".join(orig_lines[:2] + ["TAMPERED BODY"]) + "\n")
+    if manifest_body == "ONLY_ROUTED":
+        h = _sha((box / "routed_dcp.sha256").read_bytes())
+        (box / "MANIFEST.sha256").write_text(f"{h}  routed_dcp.sha256\n")
+    else:
+        (box / "MANIFEST.sha256").write_text(manifest_body)
+    rc, _calls, _ev = _run(monkeypatch, tmp_path, box, "local")
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "REFUSED" in out and "extraction OK" not in out
+
+
+def test_phase3_manifest_command_does_not_mask_sha256sum_failure(monkeypatch, tmp_path, box):
+    """Phase 3 ended `&& grep -c '^ERROR' vivado_extract.log || true` unparenthesised,
+    so a failed `sha256sum` after `> MANIFEST.sha256` truncated the manifest to
+    zero bytes still exited 0 under `bash -c`."""
+    _rc, calls, _ev = _run(monkeypatch, tmp_path, box, "local")
+    phase3_cmd = next(c[0][-1] for c in calls if "MANIFEST.sha256" in c[0][-1] and c[0][0] == "bash")
+    work = tmp_path / "phase3-shell"
+    work.mkdir()
+    # Missing MANIFEST_FILES makes sha256sum fail after `> MANIFEST.sha256` truncates it:
+    rewritten = phase3_cmd.replace(f"cd {REMOTE}", f"cd {work}")
+    r = subprocess.run(["bash", "-c", rewritten], capture_output=True, text=True)
+    assert r.returncode != 0, f"sha256sum failure was masked (rc=0): {rewritten}"

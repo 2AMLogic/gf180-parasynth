@@ -76,12 +76,34 @@ def test_empty_manifest_refuses_instead_of_verifying_nothing(tmp_path):
 
 
 def test_populated_manifest_passes_and_still_names_a_mismatch(tmp_path):
-    # the good case beside the refusal: one file, its true digest, accepted
+    # the good case beside the refusal: cp8/CP.WAV covered by its true digest
     import hashlib
     (tmp_path / "cp8").mkdir()
     (tmp_path / "cp8" / "CP.WAV").write_bytes(b"cp")
-    (tmp_path / "a.wav").write_bytes(b"abc")
     m = tmp_path / "m.sha256"
-    m.write_text(hashlib.sha256(b"abc").hexdigest() + "  ./a.wav\n")
+    m.write_text(hashlib.sha256(b"cp").hexdigest() + "  ./cp8/CP.WAV\n")
     got = cp.verify_manifest(tmp_path, m)
     assert got["files_checked"] == 1 and got["files_mismatched"] == 0
+
+
+def test_manifest_not_covering_cp_wav_refuses(tmp_path):
+    # Rule 8 defeating input for `if not rows:`: a non-empty manifest that
+    # hashes only a bystander file leaves cp8/CP.WAV -- the file the probe
+    # actually measures -- unverified.
+    import hashlib
+    (tmp_path / "cp8").mkdir()
+    (tmp_path / "cp8" / "CP.WAV").write_bytes(b"unverified-cp")
+    (tmp_path / "other.txt").write_bytes(b"abc")
+    m = tmp_path / "m.sha256"
+    m.write_text(hashlib.sha256(b"abc").hexdigest() + "  ./other.txt\n")
+    with pytest.raises(cp.Refused, match="CP.WAV"):
+        cp.verify_manifest(tmp_path, m)
+
+
+def test_malformed_manifest_line_refuses(tmp_path):
+    (tmp_path / "cp8").mkdir()
+    (tmp_path / "cp8" / "CP.WAV").write_bytes(b"cp")
+    m = tmp_path / "m.sha256"
+    m.write_text("not-a-digest-and-path-line\n")
+    with pytest.raises(cp.Refused, match="malformed"):
+        cp.verify_manifest(tmp_path, m)

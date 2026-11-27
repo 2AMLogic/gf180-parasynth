@@ -40,6 +40,25 @@ def test_missing_results_file_refuses_instead_of_declaring_every_invariant_holds
     assert "REFUSED" in out and "no invariant" in out
 
 
+@pytest.mark.parametrize("payload", ["{}", '{"response-empty": []}'])
+def test_results_file_holding_no_usable_curves_refuses(
+        mod, tmp_path, monkeypatch, capsys, payload):
+    # Rule 8 defeating input for a missing-file-only guard: when RESULTS exists
+    # and holds zero usable response curves, `trends` is `{}` and `real_curves`
+    # previously ran `check(all([]))` (vacuous OK) and `check(any([]))` (FAIL),
+    # exiting 1 instead of 2 REFUSED.
+    empty = tmp_path / "empty-results.json"
+    empty.write_text(payload)
+    monkeypatch.setattr(mod, "RESULTS", empty)
+    monkeypatch.setattr(mod, "ours", lambda: None)
+    monkeypatch.setattr(mod, "reference_side", lambda: None)
+    rc = mod.main()
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "every stated invariant holds" not in out
+    assert "REFUSED" in out
+
+
 def test_populated_results_still_checks_and_holds(mod, capsys):
     # the good case: the committed fixture drives exactly the two checks
     rc = mod.main()

@@ -224,3 +224,30 @@ def test_verify_on_the_committed_captures_counts_what_it_verified(capsys):
     rc = cap.verify()
     assert rc == cap.OK
     assert f"{n} verified, 0 failed" in capsys.readouterr().out
+
+
+def test_verify_with_a_partial_capture_manifest_refuses(monkeypatch, capsys):
+    # Rule 8 defeating input for `if not m.get("clips"):`: keeping one of the
+    # 24 declared (CONDITIONS x AMPS x TAKES) clips satisfied `bool(clips)` and
+    # certified `1 verified, 0 failed` while 23 captures were absent.
+    real = cap.load_manifest()
+    first_key = sorted(real["clips"])[0]
+    partial = {**real, "clips": {first_key: real["clips"][first_key]}}
+    monkeypatch.setattr(cap, "load_manifest", lambda: partial)
+    rc = cap.verify()
+    out = capsys.readouterr().out
+    assert rc == cap.REFUSED
+    assert "REFUSED" in out and "0 failed" not in out
+
+
+def test_verify_with_a_corrupted_clip_fails(monkeypatch, capsys):
+    import copy
+    bad_m = copy.deepcopy(cap.load_manifest())
+    first_key = sorted(bad_m["clips"])[0]
+    sha = bad_m["clips"][first_key]["sha256"]
+    bad_m["clips"][first_key]["sha256"] = ("0" if sha[0] != "0" else "1") + sha[1:]
+    monkeypatch.setattr(cap, "load_manifest", lambda: bad_m)
+    rc = cap.verify()
+    out = capsys.readouterr().out
+    assert rc == cap.FAIL
+    assert "FAIL" in out and "1 failed" in out

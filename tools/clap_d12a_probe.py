@@ -113,18 +113,30 @@ def _sha256(path: pathlib.Path) -> str:
 def verify_manifest(refdir: pathlib.Path, manifest: pathlib.Path) -> dict:
     if not manifest.exists():
         raise Refused(f"reference manifest missing: {manifest}")
-    rows = [ln.split(None, 1) for ln in manifest.read_text().splitlines() if ln.strip()]
-    if not rows:
+    raw_lines = [ln for ln in manifest.read_text().splitlines() if ln.strip()]
+    if not raw_lines:
         raise Refused(f"reference manifest is empty: {manifest} -- no reference "
                       f"file was hashed, so the reference is unverified")
+    rows = []
+    for n, ln in enumerate(raw_lines, 1):
+        parts = ln.split(None, 1)
+        if len(parts) != 2:
+            raise Refused(f"reference manifest line {n} is malformed: {ln!r}")
+        rows.append((parts[0], parts[1].strip()))
     bad = []
+    covered = set()
     for digest, rel in rows:
-        p = refdir / rel.strip()
+        p = refdir / rel
+        covered.add(p.resolve())
         if not p.exists() or _sha256(p) != digest:
-            bad.append(rel.strip())
+            bad.append(rel)
     if bad:
         raise Refused(f"{len(bad)} of {len(rows)} reference files differ from {manifest.name}: "
                       f"{bad[:5]}")
+    cp_wav = (refdir / "cp8" / "CP.WAV").resolve()
+    if cp_wav not in covered:
+        raise Refused(f"reference manifest {manifest.name} does not cover cp8/CP.WAV -- "
+                      f"the clap reference is unverified")
     head = subprocess.run(["git", "-C", str(refdir), "rev-parse", "HEAD"],
                           capture_output=True, text=True)
     return {"refdir": str(refdir), "manifest": str(manifest), "files_checked": len(rows),

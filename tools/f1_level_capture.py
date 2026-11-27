@@ -369,9 +369,18 @@ def verify() -> int:
     except Refused as e:
         print(f"REFUSED  {e}")
         return REFUSED
-    if not m.get("clips"):
+    expected = {clip_key(c, a, t) for c in CONDITIONS for a in AMPS for t in TAKES}
+    clips = m.get("clips")
+    if not isinstance(clips, dict) or not clips:
         print(f"REFUSED  the capture manifest {MANIFEST.relative_to(ROOT)} lists no "
               "clip, so there is nothing to verify and no verdict")
+        return REFUSED
+    if set(clips) != expected:
+        missing = sorted(expected - set(clips))
+        extra = sorted(set(clips) - expected)
+        print(f"REFUSED  the capture manifest {MANIFEST.relative_to(ROOT)} covers "
+              f"{len(clips)}/{len(expected)} expected clips (missing {missing[:4]}, "
+              f"unexpected {extra[:4]}), so the capture set is incomplete")
         return REFUSED
     bad = 0
     for key, meta in sorted(m["clips"].items()):

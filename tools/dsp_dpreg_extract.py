@@ -483,7 +483,7 @@ def main(argv=None):
     r = sh(on_box(a.box,
                   f"cd {a.remote_dir} && sha256sum {' '.join(MANIFEST_FILES)} "
                   "> MANIFEST.sha256 && cat MANIFEST.sha256 && "
-                  "grep -c '^ERROR' vivado_extract.log || true"))
+                  "(grep -c '^ERROR' vivado_extract.log || true)"))
     if r.returncode != 0:
         print("REFUSED: manifest failed")
         return 1
@@ -495,10 +495,21 @@ def main(argv=None):
             return 1
 
     # ---- phase 4: verify locally against the box manifest ----
+    manifest_lines = [ln for ln in (evidence / "MANIFEST.sha256").read_text().splitlines()
+                      if ln.strip()]
+    if not manifest_lines:
+        print("REFUSED: box manifest MANIFEST.sha256 is empty; no pulled file was verified")
+        return 2
     bad = []
-    for line in (evidence / "MANIFEST.sha256").read_text().splitlines():
-        h, name = line.split(None, 1)
+    checked = []
+    for line in manifest_lines:
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            print(f"REFUSED: malformed MANIFEST.sha256 line: {line!r}")
+            return 2
+        h, name = parts
         name = name.strip().lstrip("*")
+        checked.append(name)
         local = evidence / name
         got = hashlib.sha256(local.read_bytes()).hexdigest()
         status = "OK" if got == h else "MISMATCH"
@@ -508,6 +519,9 @@ def main(argv=None):
     if bad:
         print(f"REFUSED: local copies differ from box manifest: {bad}")
         return 1
+    if len(checked) != len(MANIFEST_FILES) or set(checked) != set(MANIFEST_FILES):
+        print(f"REFUSED: box manifest covers {checked}, expected {list(MANIFEST_FILES)}")
+        return 2
     # and the drc.rpt the targets were derived from is the box's bytes
     box_hash = next((l.split()[0]
                      for l in (evidence / "drc_rpt.sha256").read_text().splitlines()
