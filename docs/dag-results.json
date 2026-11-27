@@ -52,7 +52,7 @@
   "M3": {
     "detail": "docs/reference-compare-results.json carries no passed/ok/success/green key -- no verdict to read",
     "passed": false,
-    "sha": "39c91caef87bf3b8410542ec5626b987be613141"
+    "sha": "80b2690990669f3938f37f930577002a7afb0103"
   },
   "S1": {
     "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/verdict.json passed=True",

@@ -1099,7 +1099,38 @@ class MiniV3Rig(_Plugin):
         return y[pre:pre + n]
 
 
-class DivaRig(_Plugin):
+class _NoiseResponseRig(_Plugin):
+    """Measure the ladder against its own noise source with the filter wide open."""
+
+    def noise_curve(self, freqs, cut, res, seconds=4.0, level=1.0):
+        filtered = self.noise_render(cut, res, seconds, level)
+        f, power = _welch(filtered, "filtered capture")
+        key = (seconds, level)
+        cached = getattr(self, "_wide_open_cache", None)
+        reusing_reference = cached is not None and cached[0] == key
+        if reusing_reference:
+            reference_power = cached[1]
+        else:
+            reference = self.noise_render(1.0, 0.0, seconds, level)
+            _, reference_power = _welch(reference, "wide-open reference")
+
+        gains = []
+        for band in _smoothing_bands(f, freqs):
+            denominator = reference_power[band]
+            if np.any(denominator == 0):
+                if reusing_reference:
+                    self._wide_open_cache = None  # retry this grid with a fresh capture
+                raise am.InsufficientEvidence("wide-open reference is silent in a requested Welch bin")
+            # Floor each relative gain before averaging in dB. An absolute
+            # power floor would change the result when both captures scale.
+            with np.errstate(divide="ignore"):
+                gain_db = 10 * (np.log10(power[band]) - np.log10(denominator))
+            gains.append(np.mean(np.maximum(gain_db, -300.0)))
+        self._wide_open_cache = (key, reference_power)
+        return np.array(gains)
+
+
+class DivaRig(_NoiseResponseRig):
     """u-he Diva, VCF model "Ladder" in 24 dB mode. Diva has NO audio input,
     so the source is its own white-noise generator, gated off after the first
     30 ms for the free-ring measurement and held on for the response
@@ -1230,29 +1261,6 @@ class DivaRig(_Plugin):
         return self.FREQ_ANCHOR_HZ * 2.0 ** ((30.0 + 120.0 * knob
                                               - self.FREQ_ANCHOR_VALUE) / 12.0)
 
-    def noise_curve(self, freqs, cut, res, seconds=4.0, level=1.0):
-        """Transfer by noise excitation: the filter's own white noise through
-        the ladder at (cut, res), divided by the SAME source through the ladder
-        wide open. The ratio removes the source spectrum and the output path;
-        what is left is the filter, at a stated drive.
-
-        Diva has no audio input, so this is the only way to measure it. The
-        method's agreement with the stepped tone is checked on Surge, where
-        both are possible (`--stage validate`); it is not assumed."""
-        num = self.noise_render(cut, res, seconds, level)
-        den = self._wide_open(seconds, level)
-        fn, pn = _welch(num)
-        _, pd = _welch(den)
-        g = 10 * np.log10(np.maximum(pn, 1e-30) / np.maximum(pd, 1e-30))
-        return _smooth_log(fn, g, freqs)
-
-    def _wide_open(self, seconds=4.0, level=1.0):
-        key = (round(seconds, 3), round(level, 6))
-        if getattr(self, "_wo_key", None) != key:
-            self._wo = self.noise_render(1.0, 0.0, seconds, level)
-            self._wo_key = key
-        return self._wo
-
     def drive_tone(self, f, cut, res, amp):
         raise NotImplementedError(
             "Diva has 0 audio input channels, so no known signal can be put into its "
@@ -1297,25 +1305,24 @@ def _knob(cache, dev, name, hz):
     return cache[key]
 
 
-def _welch(x, nfft=8192):
+def _welch(x, what, nfft=8192):
     """Power spectrum, Hann windows, 50 % overlap, averaged. `len(x)/nfft*2`
     segments, so the per-bin standard error is 1/sqrt(that) -- about 0.9 dB
     for a 4 s record, taken down under 0.2 dB by the 1/12-octave smoothing
-    `_smooth_log` applies after."""
-    x = np.asarray(x, dtype=np.float64)
+    applied to the resulting gain curve."""
+    x = am.require_finite(np.asarray(x, dtype=np.float64), what)
     w = np.hanning(nfft)
     step = nfft // 2
     segs = [np.abs(np.fft.rfft(x[i:i + nfft] * w)) ** 2
             for i in range(0, len(x) - nfft + 1, step)]
     if not segs:
-        raise ValueError("record shorter than one FFT window")
-    return np.fft.rfftfreq(nfft, 1.0 / SR), np.mean(segs, axis=0)
+        raise am.InsufficientEvidence(f"{what} is shorter than one FFT window")
+    power = am.require_finite(np.mean(segs, axis=0), f"{what} Welch power")
+    return np.fft.rfftfreq(nfft, 1.0 / SR), power
 
 
-def _smooth_log(f, g_db, at, frac: float = 1 / 12.0):
-    """Average a dB curve over a fractional-octave band at each requested
-    frequency. In dB (the quantity being compared), and the band is stated."""
-    out = []
+def _smoothing_bands(f, at, frac: float = 1 / 12.0):
+    """Select a fractional-octave band, falling back to neighboring FFT bins."""
     for fc in at:
         lo, hi = fc * 2 ** (-frac / 2), fc * 2 ** (frac / 2)
         sel = (f >= lo) & (f <= hi)
@@ -1323,14 +1330,13 @@ def _smooth_log(f, g_db, at, frac: float = 1 / 12.0):
             i = int(np.argmin(np.abs(f - fc)))
             sel = np.zeros(len(f), bool)
             sel[max(0, i - 1):i + 2] = True
-        out.append(float(np.mean(g_db[sel])))
-    return np.array(out)
+        yield sel
 
 
 PATH_MODELD = f"{VST3}/Model D.vst3"
 
 
-class ModelDRig(_Plugin):
+class ModelDRig(_NoiseResponseRig):
     """**Moog's own Minimoog Model D.** Not another third-party interpretation:
     written by the people with the schematics, with the brand's name on it.
 
@@ -1433,21 +1439,6 @@ class ModelDRig(_Plugin):
         y = self.render(np.zeros(1), seconds)
         self.set(self.I['noise_on'], 0.0)
         return y[int(0.35 * SR):]
-
-    def noise_curve(self, freqs, cut, res, seconds=4.0, level=1.0):
-        num = self.noise_render(cut, res, seconds, level)
-        den = self._wide_open(seconds, level)
-        fn, pn = _welch(num)
-        _, pd = _welch(den)
-        g = 10 * np.log10(np.maximum(pn, 1e-30) / np.maximum(pd, 1e-30))
-        return _smooth_log(fn, g, freqs)
-
-    def _wide_open(self, seconds=4.0, level=1.0):
-        key = (round(seconds, 3), round(level, 6))
-        if getattr(self, "_wo_key", None) != key:
-            self._wo = self.noise_render(1.0, 0.0, seconds, level)
-            self._wo_key = key
-        return self._wo
 
     def drive_tone(self, f, cut, res, amp):
         raise NotImplementedError(
