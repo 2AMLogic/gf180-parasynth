@@ -579,17 +579,138 @@ def test_refused_baseline_claims_also_refuse(scratch):
     assert _snapshot(scratch) == before, "refusal path changed the tree"
 
 
-def test_clean_tree_still_runs_the_four_controls(scratch):
-    """AC 1: on a clean tree the probe is unchanged -- rc=0, four PASS, and
-    the tree is exactly as the probe found it. The archive copy is clean by
-    construction, so this runs whatever the live checkout's WIP is."""
+def _stage_doc_line_endings(scratch: pathlib.Path,
+                            line_ending: str) -> dict[str, bytes]:
+    """Rewrite both target documents in `scratch` with exact LF or CRLF bytes."""
+    newline = {"LF": b"\n", "CRLF": b"\r\n"}[line_ending]
+    staged_docs: dict[str, bytes] = {}
+    for rel in ("README.md", "docs/milestones.md"):
+        doc = scratch / rel
+        lf = doc.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        assert b"\n" in lf, f"expected newline in {rel}"
+        raw = lf if newline == b"\n" else lf.replace(b"\n", b"\r\n")
+        doc.write_bytes(raw)
+        staged_docs[rel] = raw
+    return staged_docs
+
+
+def _assert_clean_run(scratch: pathlib.Path,
+                      line_ending: str) -> dict[str, bytes]:
+    staged_docs = _stage_doc_line_endings(scratch, line_ending)
     before = _snapshot(scratch)
     p = _run_probe(scratch)
     blob = p.stdout + p.stderr
     assert p.returncode == 0, blob
     assert blob.count("PASS ") == 4, blob
     assert "FAIL " not in blob, blob
-    assert _snapshot(scratch) == before, "clean run left the tree changed"
+    for expected in (
+        "PASS  absent= catches a re-introduced instantiation: exit=1",
+        "PASS  README T1 count marker goes red on a wrong count: exit=1",
+        "PASS  milestone-3 marker goes red when its evidence is absent: exit=1",
+        "PASS  reverted tree is green again: exit=0",
+        "0 stale, 0 refused",
+    ):
+        assert expected in blob, blob
+    for pattern in (
+        r"^\s*STALE\s+docs/milestones\.md:\d+\s+.*drum_section_placeholder"
+        r".*fpga/rtl/_ctl789_inject\.v:2",
+        r"^\s*STALE\s+README\.md:\d+\s+.*\^T1: 3/11 items met\$"
+        r".*manifests/verdict\.txt",
+        r"^\s*STALE\s+docs/milestones\.md:\d+\s+.*\^module drum_kit_NOT_IN_TREE"
+        r".*rtl-sketch/drum_kit\.v",
+    ):
+        assert re.search(pattern, blob, re.MULTILINE), (
+            f"missing expected STALE finding ({pattern}):\n{blob}")
+    after = _snapshot(scratch)
+    changed = sorted(k for k in before.keys() | after.keys()
+                     if before.get(k) != after.get(k))
+    assert not changed, f"clean run changed working files: {changed}"
+    for rel, raw in staged_docs.items():
+        assert (scratch / rel).read_bytes() == raw
+    return staged_docs
+
+
+@pytest.mark.parametrize("line_ending", ["LF", "CRLF"])
+def test_clean_tree_still_runs_the_four_controls(scratch, line_ending):
+    """AC 1 & #1519: on LF and CRLF trees the probe exercises all four controls
+    (rc=0, four PASS, three expected STALE findings, final clean check) and
+    leaves every working file byte-for-byte as it found it. The archive copy is
+    clean by construction, so this runs whatever the live checkout's WIP is."""
+    _assert_clean_run(scratch, line_ending)
+
+
+TEXT_RESTORE_MUTANTS = [
+    ("README.md",
+     "readme.write_bytes(orig_readme_bytes)",
+     'readme.write_text(orig_readme, encoding="utf-8")'),
+    ("docs/milestones.md",
+     "ms.write_bytes(orig_ms_bytes)",
+     'ms.write_text(orig_ms, encoding="utf-8")'),
+]
+
+
+@pytest.mark.parametrize("rel,fixed,legacy", TEXT_RESTORE_MUTANTS,
+                         ids=[m[0] for m in TEXT_RESTORE_MUTANTS])
+def test_text_round_trip_restore_is_caught_for_each_crlf_document(
+        scratch, rel, fixed, legacy):
+    """#1519 negative control (docs/verification-rules.md rule 5): reinstating
+    the pre-fix text round-trip restore for either target document still passes
+    the LF run (all four controls run and exit 0) and makes the CRLF regression
+    fail naming that specific path."""
+    probe = scratch / PROBE_REL
+    src = probe.read_text(encoding="utf-8")
+    assert src.count(fixed) == 1, f"expected unique {fixed!r} in {PROBE_REL}"
+    probe.write_text(src.replace(fixed, legacy, 1), encoding="utf-8")
+
+    _assert_clean_run(scratch, "LF")
+    other = "docs/milestones.md" if rel == "README.md" else "README.md"
+    crlf_other = (scratch / other).read_bytes().replace(b"\n", b"\r\n")
+    crlf_rel = (scratch / rel).read_bytes().replace(b"\n", b"\r\n")
+    with pytest.raises(AssertionError) as exc:
+        _assert_clean_run(scratch, "CRLF")
+    assert (str(exc.value).splitlines()[0]
+            == f"clean run changed working files: [{rel!r}]")
+    assert (scratch / rel).read_bytes() == crlf_rel.replace(b"\r\n", b"\n")
+    assert (scratch / other).read_bytes() == crlf_other
+
+
+@pytest.mark.parametrize("doc_rel,fail_needle", [
+    ("README.md", "3/11"),
+    ("docs/milestones.md", "drum_kit_NOT_IN_TREE"),
+], ids=["README.md", "docs/milestones.md"])
+def test_checker_exception_during_injection_still_restores_exact_bytes(
+        scratch, doc_rel, fail_needle):
+    """#1519 AC 1: each restoration stays inside its `finally` block so an
+    exception raised while the checker evaluates a staged injection still
+    restores the exact CRLF entry bytes of both documents."""
+    staged_docs = _stage_doc_line_endings(scratch, "CRLF")
+    before = _snapshot(scratch)
+    launcher = (
+        "import hashlib, pathlib, sys\n"
+        "sys.dont_write_bytecode = True\n"
+        f"sys.path.insert(0, {str(scratch / PROBE_REL.parent)!r})\n"
+        "import check_doc_claims_789_marker_controls as probe\n"
+        "real = probe.expect_red\n"
+        "def boom(py, name, needle):\n"
+        f"    if needle == {fail_needle!r}:\n"
+        f"        cur = hashlib.sha256((probe.ROOT / {doc_rel!r}).read_bytes()).hexdigest()\n"
+        f"        assert cur != {before[doc_rel]!r}, 'injection was not live on disk'\n"
+        "        raise RuntimeError(f'injected checker failure on {needle}')\n"
+        "    return real(py, name, needle)\n"
+        "probe.expect_red = boom\n"
+        "raise SystemExit(probe.main())\n"
+    )
+    p = subprocess.run([sys.executable, "-B", "-c", launcher], cwd=scratch,
+                       capture_output=True, text=True)
+    blob = p.stdout + p.stderr
+    assert p.returncode != 0, blob
+    assert f"RuntimeError: injected checker failure on {fail_needle}" in blob, blob
+    after = _snapshot(scratch)
+    changed = sorted(k for k in before.keys() | after.keys()
+                     if before.get(k) != after.get(k))
+    assert not changed, f"exception path changed working files: {changed}"
+    for rel, raw in staged_docs.items():
+        assert (scratch / rel).read_bytes() == raw
 
 
 def test_missing_interpreter_still_refuses_before_anything_else():
