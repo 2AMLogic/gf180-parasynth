@@ -131,18 +131,42 @@ def test_midi_session_r1_known_state_is_the_frozen_target():
     ALSO the tree's: contract revision 15 (#388) moved two rimshot writes, and
     the session is asserted against R1's own `check_init` -- the frozen target
     -- rather than against `tree`, which is free to move and did."""
-    class _Nul:
-        timeout = 0
-        def write(self, b): return len(b)
-        def read(self, n=1): return b""
-        def flush(self): pass
-    s_r1 = ms.MidiSession(_Nul(), image="r1").init_writes()
+    s_r1 = ms.MidiSession(object(), image="r1").init_writes()
     assert r1c.check_init(s_r1, kit_expected=True) == []
-    s_tree = ms.MidiSession(_Nul(), image="tree").init_writes()
+    s_tree = ms.MidiSession(object(), image="tree").init_writes()
     assert s_r1 != s_tree, "revision 15 moved the tree's rimshot; r1 must not follow"
     moved = {a for (_, _, a, v), (_, _, _, w) in zip(s_r1, s_tree) if v != w}
     assert moved == {dx.A_PATH + dx.P_RS1X,
                      dx.A_ENV + dx.E_RSG * dx.ENV_STRIDE + 1}, sorted(hex(a) for a in moved)
+
+
+def test_control_an_abort_written_while_constructing_is_rejected_by_the_offline_endpoint(
+        monkeypatch):
+    """#1355: an offline session must not be able to write at all. The four
+    offline constructions used to hand the session a null port that accepted
+    every write, so an ABORT a broken constructor sent before start()'s idle
+    check (`midi_session.py`) was silently swallowed and every frozen-target
+    check still passed."""
+    original = ms.MidiSession.__init__
+
+    def early_abort(self, *args, **kwargs):
+        original(self, *args, **kwargs)
+        self.ser.write(uh.pkt_abort())
+
+    monkeypatch.setattr(ms.MidiSession, "__init__", early_abort)
+    import test_named_r2
+
+    checks = (
+        ("release candidate frozen target", r1c.live_midi_init),
+        ("r1 frozen target", test_midi_session_r1_known_state_is_the_frozen_target),
+        ("r2 init_writes equals r1", test_named_r2.test_midi_session_r2_known_state_equals_r1s),
+        ("r2 alternates like r1", test_named_r2.test_midi_session_r2_plays_the_alternates_like_r1),
+    )
+    for name, fn in checks:
+        with pytest.raises(AttributeError) as raised:
+            fn()
+        assert raised.value.name == "write", (name, raised.value)
+        assert type(raised.value.obj) is object, (name, raised.value)
 
 
 def _tampered_kit(tmp_path, monkeypatch):
