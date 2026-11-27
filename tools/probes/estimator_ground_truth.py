@@ -2373,12 +2373,13 @@ def print_matrix(verdicts, kinds):
 
 
 def cmd_check(args) -> int:
-    kinds = args.kind or list(ef.FAMILIES)
+    kinds = list(dict.fromkeys(args.kind or ef.FAMILIES))
     fixtures = ef.catalogue(kinds)
     print("=" * 78)
     print("estimator ground truth: audio_measure against synthetic fixtures")
     print("=" * 78)
-    print(f"  {len(fixtures)} fixtures over {len(kinds)} families, "
+    family_noun = "family" if len(kinds) == 1 else "families"
+    print(f"  {len(fixtures)} fixtures over {len(kinds)} {family_noun}, "
           f"{len(SPECS)} estimator checks")
 
     print("\n" + "-" * 78)
@@ -2405,8 +2406,8 @@ def cmd_check(args) -> int:
     print(f"  {len(axis_rows)} family/axis {pair_noun} observed: "
           f"{axis_swept} swept, {axis_not_applicable} not applicable, "
           f"{len(axis_bad)} failed")
-    print(f"  declarations: {len(ef.AXES)} axes x {len(kinds)} families "
-          f"({len(ef.AXES) * len(kinds)} declared pairs)")
+    print(f"  declarations: {len(ef.AXES)} axes x {len(ef.FAMILIES)} families "
+          f"({len(ef.AXES) * len(ef.FAMILIES)} declared pairs)")
 
     print("\n" + "-" * 78)
     print("1. Inventory: every public callable in audio_measure is declared")

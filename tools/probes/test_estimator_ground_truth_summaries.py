@@ -305,6 +305,33 @@ def test_real_cli_run_distinguishes_swept_and_exempt_pairs_on_shipped_catalogue(
     ), sec1
 
 
+def test_repeated_kind_filter_preserves_catalogue_declarations():
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(GROUND_TRUTH),
+            "check",
+            "--estimator",
+            "rms",
+            "--kind",
+            "damped_sine",
+            "--kind",
+            "damped_sine",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    # Coverage still evaluates the full catalogue against the filtered fixtures.
+    assert proc.returncode == 1, proc.stderr
+    sec0 = _section(proc.stdout, 0)
+    assert "35 family/axis pairs observed: 5 swept, 2 not applicable, 28 failed" in sec0
+    assert "declarations: 5 axes x 7 families (35 declared pairs)" in sec0
+    assert " fixtures over 1 family," in proc.stdout.split("0. Axis coverage")[0]
+    assert _section(proc.stdout, 3).splitlines()[0].split() == ["damped_sine"]
+
+
 def test_inventory_summary_counts_observed_rows_without_claiming_fixture_checks(
     gt, capsys
 ):
