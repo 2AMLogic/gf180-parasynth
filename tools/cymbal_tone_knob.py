@@ -116,6 +116,7 @@ import cymbal_tone_realisation as tr        # noqa: E402
 import tone_stage_schematic as ts           # noqa: E402
 import audio_measure as am                  # noqa: E402
 import refusal
+from exit_contract import REFUSED
 
 FISCHER_JSON = ROOT / "docs" / "scorecard" / "cymbal-369" / "fischer.json"
 
@@ -429,6 +430,14 @@ def _anchored(y: np.ndarray) -> np.ndarray:
     return y - y[..., CODES.index(ANCHOR_TONE), None]
 
 
+def _worst_per_balance(residuals: np.ndarray) -> np.ndarray:
+    """Each balance needs a finite worst residual before it can be classified."""
+    worst = np.max(np.abs(residuals), axis=(1, 2))
+    if not np.isfinite(worst).all():
+        raise Refused("non-finite H - L residual in the balance grid")
+    return worst
+
+
 def fit_balance(g: dict, measured: dict, *, grid=None) -> dict:
     """The ONE balance, shared by every DECAY column, that minimises the worst
     |residual| in H - L referred to the anchor TONE.
@@ -450,7 +459,7 @@ def fit_balance(g: dict, measured: dict, *, grid=None) -> dict:
                       + (f" and {len(missing) - 5} more" if len(missing) > 5 else ""))
     obs = np.array([_anchored(np.array([measured[c][t] for t in CODES])) for c in cols])
     resid = pred[:, None, :] - obs[None, :, :]                 # (n_w, n_col, 5)
-    worst = np.max(np.abs(resid), axis=(1, 2))
+    worst = _worst_per_balance(resid)
     i = int(np.argmin(worst))
     return {
         "worst_db": round(float(worst[i]), 3),
@@ -483,7 +492,7 @@ def balance_region(g: dict, measured: dict, *, bound=BOUND_DB, grid=None) -> dic
     pred = _anchored(predicted_hml(g, w))
     cols = sorted(measured, key=lambda c: FRAC[c])
     obs = np.array([_anchored(np.array([measured[c][t] for t in CODES])) for c in cols])
-    worst = np.max(np.abs(pred[:, None, :] - obs[None, :, :]), axis=(1, 2))
+    worst = _worst_per_balance(pred[:, None, :] - obs[None, :, :])
     ok = w[worst <= bound]
     if not len(ok):
         raise Refused(f"no balance in the swept grid reaches {bound} dB "
@@ -570,6 +579,8 @@ def from_artifact(path: pathlib.Path | None = None) -> dict:
             if key not in blob or blob[key].get("H_minus_L_db") is None:
                 raise Refused(f"{p} carries no H_minus_L_db for {key}")
             row[t] = float(blob[key]["H_minus_L_db"])
+            if not math.isfinite(row[t]):
+                raise Refused(f"{p} carries a non-finite H_minus_L_db for {key}")
         out[d] = row
     return out
 
@@ -1034,7 +1045,14 @@ def main(argv=None) -> int:
                     help="the two corpus-gated controls must be DECIDED, not NO VERDICT; "
                          "for the gate that has the WAVs (make reference-integration)")
     a = ap.parse_args(argv)
+    try:
+        return _report(a)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return REFUSED
 
+
+def _report(a) -> int:
     assert BOUND_DB == tr.SHAPE_BOUND_DB, (BOUND_DB, tr.SHAPE_BOUND_DB)
     assert FLOOR_MARGIN_DB == cb.TRUNC_MARGIN_DB, (FLOOR_MARGIN_DB, cb.TRUNC_MARGIN_DB)
 

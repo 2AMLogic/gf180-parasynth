@@ -449,6 +449,28 @@ def test_from_artifact_refuses_an_absent_file(tmp_path):
         tk.from_artifact(tmp_path / "nope.json")
 
 
+def test_check_refuses_a_nonfinite_artifact_measurement(tmp_path, monkeypatch, capsys):
+    blob = json.loads(tk.FISCHER_JSON.read_text())
+    blob["CY1010"]["H_minus_L_db"] = math.nan
+    artifact = tmp_path / "fischer.json"
+    artifact.write_text(json.dumps(blob))
+    monkeypatch.setattr(tk, "FISCHER_JSON", artifact)
+
+    status = tk.main(["--check", "--refs", str(tmp_path)])
+    report = capsys.readouterr()
+    for name in ("orientation-decisive", "tone-load-bearing", "low-band-rail"):
+        assert name not in report.out
+    assert status == 2
+    assert "REFUSED:" in report.err and "CY1010" in report.err and "non-finite" in report.err
+
+
+@pytest.mark.parametrize("evaluate", [tk.fit_balance, tk.balance_region])
+def test_one_finite_balance_cannot_hide_a_nonfinite_residual(evaluate):
+    meas = _synthetic("linear", (0.0, 0.0))
+    with pytest.raises(tk.Refused, match="non-finite.*residual"):
+        evaluate(tk.gain_table(), meas, grid=[0.0, math.nan])
+
+
 def test_fit_balance_refuses_rather_than_dropping_a_refused_setting():
     """A window that refused one setting must not quietly become a 24-setting
     answer: the whole claim is "all 25"."""
