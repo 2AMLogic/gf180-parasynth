@@ -368,6 +368,81 @@ def stage_real_sound(tmp_path):
     return script, target
 
 
+def _assert_sound_credits(out, expected):
+    """Assert each sound mutant has its own `RED (good)` header and its own
+    complete group of credited test IDs."""
+    for mutant, names in expected.items():
+        assert _verdict_line(out, mutant).startswith("RED (good)"), out
+        credited = _credited_ids(out, mutant)
+        assert sorted(credited) == sorted(names), (
+            mutant, "missing", sorted(set(names) - set(credited)),
+            "unexpected", sorted(set(credited) - set(names)))
+
+
+def test_sound_shared_id_credit_is_checked_per_mutant_group():
+    """Injected control (#1503): two sound mutants share `test_shared`, and the
+    first mutant's credit line is suppressed while both headers, the summary,
+    and the second mutant's credit stay intact. Whole-output search passes by
+    borrowing the second mutant's line; per-group attribution must fail naming
+    the first mutant and `test_shared` while the second keeps its credit."""
+    first, second = list(sound.MUTANTS)[:2]
+    expected = {
+        first: {"test_shared": None},
+        second: {"test_shared": None},
+    }
+    clean = (
+        f"{'RED (good)':24s}  {first}: 1 test(s) caught it\n"
+        "    test_shared\n"
+        f"{'RED (good)':24s}  {second}: 1 test(s) caught it\n"
+        "    test_shared\n"
+        "\nall 2 mutants killed.\n"
+    )
+    _assert_sound_credits(clean, expected)
+
+    missing_first = clean.replace("    test_shared\n", "", 1)
+    assert missing_first.count("RED (good)") == 2
+    assert "all 2 mutants killed." in missing_first
+    assert all(f"    {name}" in missing_first.splitlines()
+               for names in expected.values() for name in names)
+    with pytest.raises(AssertionError) as exc:
+        _assert_sound_credits(missing_first, expected)
+    msg = str(exc.value)
+    assert first in msg and "missing" in msg and "test_shared" in msg
+    assert second not in msg
+    assert _credited_ids(missing_first, second) == ["test_shared"]
+
+    # Order-independent within a group, but rejects duplicates and group swaps.
+    multi_expected = {
+        first: {"t_a": None, "t_b": None},
+        second: {"t_c": None},
+    }
+    reordered = (
+        f"{'RED (good)':24s}  {first}: 2 test(s) caught it\n"
+        "    t_b\n"
+        "    t_a\n"
+        f"{'RED (good)':24s}  {second}: 1 test(s) caught it\n"
+        "    t_c\n"
+    )
+    _assert_sound_credits(reordered, multi_expected)
+
+    duplicated = reordered.replace("    t_c\n", "    t_c\n    t_c\n")
+    with pytest.raises(AssertionError) as dup_exc:
+        _assert_sound_credits(duplicated, multi_expected)
+    assert second in str(dup_exc.value)
+
+    swapped = (
+        f"{'RED (good)':24s}  {first}: 1 test(s) caught it\n"
+        "    t_c\n"
+        f"{'RED (good)':24s}  {second}: 2 test(s) caught it\n"
+        "    t_a\n"
+        "    t_b\n"
+    )
+    with pytest.raises(AssertionError) as swap_exc:
+        _assert_sound_credits(swapped, multi_expected)
+    swap_msg = str(swap_exc.value)
+    assert first in swap_msg and "t_a" in swap_msg and "t_c" in swap_msg
+
+
 def test_sound_intended_assertions_still_get_kill_credit(tmp_path):
     """The other half: attribution must not refuse everything. With the real
     mutant sites and the real recorded names, each mutant is killed, the tests
@@ -380,9 +455,7 @@ def test_sound_intended_assertions_still_get_kill_credit(tmp_path):
     assert f"all {len(sound.MUTANTS)} mutants killed." in out
     assert out.count("RED (good)") == len(sound.MUTANTS)
     assert "REFUSED" not in out and "SURVIVED" not in out
-    for names in sound.EXPECTED.values():
-        for name in names:
-            assert f"    {name}" in out.splitlines(), out
+    _assert_sound_credits(out, sound.EXPECTED)
     assert target.read_bytes() == before
 
 
@@ -764,13 +837,36 @@ def _fpga_uncollectable_under(mutant, body):
             + body)
 
 
+_VERDICT_PREFIXES = (
+    "KILLED",
+    "RED (good)",
+    "SURVIVED -- NOT COVERED",
+    "SURVIVED",
+    "REFUSED",
+)
+
+
+def _is_verdict_header(line, name):
+    for prefix in _VERDICT_PREFIXES:
+        if line.startswith(prefix) and line[len(prefix):].startswith(" "):
+            tail = line[len(prefix):].lstrip(" ")
+            rem = tail[len(name):]
+            return tail.startswith(name) and (not rem or rem.startswith((": ", " -- ")))
+    return False
+
+
+def _verdict_header(out, name):
+    """`(lines, index)` for `name`'s unique verdict header, not a summary line."""
+    lines = out.splitlines()
+    hits = [i for i, ln in enumerate(lines) if _is_verdict_header(ln, name)]
+    assert len(hits) == 1, out
+    return lines, hits[0]
+
+
 def _verdict_line(out, name):
     """The record's own verdict line for `name`, not a summary that lists it."""
-    hits = [ln for ln in out.splitlines()
-            if ln.startswith(("KILLED", "SURVIVED", "REFUSED"))
-            and name in ln]
-    assert len(hits) == 1, out
-    return hits[0]
+    lines, index = _verdict_header(out, name)
+    return lines[index]
 
 
 def _credited_ids(out, name):
@@ -778,11 +874,7 @@ def _credited_ids(out, name):
     non-parenthesised lines up to the next unindented line (the next verdict
     header or the summary). A search of the whole output lets a mutant that
     shares IDs with another borrow its credits."""
-    _verdict_line(out, name)
-    lines = out.splitlines()
-    start = next(i for i, ln in enumerate(lines)
-                 if ln.startswith(("KILLED", "SURVIVED", "EXPECTED SURVIVOR", "REFUSED"))
-                 and name in ln)
+    lines, start = _verdict_header(out, name)
     ids = []
     for ln in lines[start + 1:]:
         if not ln.startswith(" "):
@@ -803,6 +895,12 @@ def test_credited_ids_are_read_from_the_mutants_own_group():
            "2 mutant(s) killed\n")
     assert _credited_ids(out, "A") == []
     assert _credited_ids(out, "B") == ["t1", "t2[x-y]"]
+    # Rule-8 control: a missing mutant whose name is a prefix of another
+    # mutant's name must not match the longer mutant's header.
+    prefix_only = "RED (good)   AB: 1 test(s) caught it\n    t1\n"
+    assert _credited_ids(prefix_only, "AB") == ["t1"]
+    with pytest.raises(AssertionError):
+        _credited_ids(prefix_only, "A")
 
 
 def _survivors(out):
