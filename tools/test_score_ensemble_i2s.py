@@ -136,6 +136,7 @@ def test_refuses_a_bound_schedule_selecting_no_audio(tmp_path, periods, monkeypa
     with pytest.raises(score.Refused, match="no case frames"):
         score.validate_part("E1A", "mix", report, paths["wav"], paths["schedule"])
     # The stand-in leaves the supplied report on disk, just as the RTL run would.
+    monkeypatch.setattr(score, "ROOT", tmp_path)
     monkeypatch.setattr(score, "run_part",
                         lambda case, part, outdir, **kw: {"part": part, "status": 0})
     assert score.main(["--outdir", str(tmp_path), "--jobs", "1"]) == 2

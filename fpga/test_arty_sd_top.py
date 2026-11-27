@@ -2,6 +2,7 @@
 
 The modulator's own numbers (in-band SNR, its controls) are fpga/verify_sd_dac.py,
 run by `make verify`; this file covers what that bench does not: the wrapper."""
+import json
 import re
 import shutil
 import subprocess
@@ -47,6 +48,26 @@ def test_prepared_script_reads_both_constraint_files_in_order(tmp_path):
     assert xdcs == [str(build.XDC), str(sd.SD_XDC)]
     assert "synth_design -top arty_a7_sd_top " in text
     assert "SIM_NO_MMCM=0" in text
+
+
+@pytest.mark.parametrize("empty", [{}, {"unrelated": {"pass": True}},
+                                   {case: {} for case in vsd.BOUNDS}])
+def test_empty_clean_dac_measurements_cannot_prepare_an_image(tmp_path, monkeypatch, capsys, empty):
+    # Isolate the no-DAC receipt. The independent UART verification has its own gate.
+    monkeypatch.setattr(build, "validate_verification", lambda *args: {"periods": 1})
+    path = tmp_path / "verification.json"
+    args = ["--sd-verification", str(path), "--prepare-only", "--out", str(tmp_path / "build")]
+    record = {"state": "PASS", "controls": {name: {"caught": True} for name in vsd.CONTROLS},
+              "source_sha256": {str(p.relative_to(ROOT)): build.sha(p) for p in vsd.SOURCES},
+              "clean": {name: {"snr_db": 100, "noise_dbfs": -120,
+                               "exact_zero_error": False, "pass": True} for name in vsd.BOUNDS}}
+    path.write_text(json.dumps(record))
+    assert sd.main(args) == 0
+    capsys.readouterr()
+    record["clean"] = empty
+    path.write_text(json.dumps(record))
+    assert sd.main(args) == 2
+    assert "clean comparison" in capsys.readouterr().out
 
 
 def test_sd_xdc_dispositions_exactly_the_pdm_ports():

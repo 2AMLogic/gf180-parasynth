@@ -2538,6 +2538,11 @@ def _run_script(args: list[str], timeout: int = 600) -> "subprocess.CompletedPro
                           capture_output=True, text=True, timeout=timeout)
 
 
+def test_list_reports_an_empty_selection_without_scoring_it(capsys):
+    assert rc.main(["--list", "--family", "absent family"]) == 0
+    assert "0 cases" in capsys.readouterr().out
+
+
 def test_run_case_module_body_survives_executing_twice_in_one_process():
     """The mechanism, in ~2 s: load `run_case.py` a second time under a second
     module name, which is what `__main__` + `import run_case` amounts to. Both

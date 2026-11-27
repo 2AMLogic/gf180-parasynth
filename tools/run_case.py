@@ -4348,6 +4348,9 @@ def control_outcome(expect: str, inject: str, case_ids: list[str],
 
 
 def cmd_list(cases: list[dict]) -> int:
+    if not cases:
+        print("0 cases match the selection")
+        return 0
     print(f"{'case':<7}{'family':<10}{'batch':<14}{'plan':<11}reason / reference")
     print("-" * 100)
     counts = {}
