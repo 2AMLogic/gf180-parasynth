@@ -22,8 +22,8 @@ measurement, the verdict, the WAV writer (`write_wav16`), the record writer
 things are doubled, because this file is about file ownership and not about a
 drum:
 
-  * the Fischer reference is a synthetic corpus directory holding the one
-    int16 PCM file the clap maps to. The real `load_reference` reads it, with
+  * the Fischer reference is a synthetic corpus directory holding int16 PCM
+    for the clap and snare. The real `load_reference` reads it, with
     its own guards, and the real `REF_F0_20PCT` stretch is what moves it;
   * our render (`render_drum_solo`, `render_ensemble`) is a signal the test
     tags per invocation;
@@ -118,7 +118,7 @@ def _ensemble(freq_hz: float, patch_name: str, sr: int = SR, seconds: float = 6.
 
 def _rendered(case_id: str, hz: float) -> np.ndarray:
     """The 16-bit samples the double hands `run_case` for a case at tag `hz`."""
-    if case_id == "D12A":
+    if case_id in ("D12A", "D02A"):
         return _strike_pcm(hz)
     return _ensemble(hz, "")["mix"].astype("<i2")
 
@@ -133,7 +133,7 @@ class _Renders:
 
     def drum(self, sound: str, accent: float = 1.0, inject: str | None = None,
              hit_frame: int | None = None, frames: int | None = None) -> tuple:
-        assert sound == "CP", "this double renders the clap alone"
+        assert sound in ("CP", "SD")
         return _strike_pcm(self.hz) / 32768.0, SR
 
     def ensemble(self, patch_name: str, dense: bool, seconds: float = 6.0,
@@ -168,11 +168,11 @@ def board(monkeypatch, tmp_path):
     monkeypatch.setattr(rc, "render_drum_solo", renders.drum)
     monkeypatch.setattr(rc, "render_ensemble", renders.ensemble)
     places["renders"] = renders
-    # the reference the real loader reads for the clap: the clean run's own
-    # render, so that run measures a distance of zero and nothing refuses
-    clap = places["corpus"] / rc.REF_MAIN["CP"][0]
-    clap.parent.mkdir(parents=True)
-    wavfile.write(str(clap), SR, _strike_pcm(FIRST))
+    # Give the real loader the same strike as the clean drum render.
+    for sound in ("CP", "SD"):
+        reference = places["corpus"] / rc.REF_MAIN[sound][0]
+        reference.parent.mkdir(parents=True, exist_ok=True)
+        wavfile.write(str(reference), SR, _strike_pcm(FIRST))
     # the premise of everything below: a rewrite IS visible in the bytes
     assert not np.array_equal(_rendered("D12A", FIRST), _rendered("D12A", SECOND))
     assert not np.array_equal(_rendered("E1A", FIRST), _rendered("E1A", SECOND))
@@ -290,6 +290,38 @@ def test_an_injected_control_leaves_the_clean_board_wav_and_record_untouched(
         # this run a control is the directory it was given
         assert "INJECTED_CONTROL" not in control
         assert control["audio"] == obs["stated"]
+
+
+@pytest.mark.parametrize("case_id,wav,key", [
+    pytest.param("D02A", "D02A-ours.wav", "ours", id="snare"),
+    pytest.param("E1A", "E1A-mix.wav", "mix", id="ensemble"),
+])
+def test_model_wav_follows_its_json_when_an_rtl_anchor_is_present(
+        board, tmp_path, case_id, wav, key):
+    anchor = (rc.ROOT / "docs" / "scorecard" / "results" / f"{case_id}.json").read_bytes()
+    assert json.loads(anchor)["engine"] == "integrated-rtl"
+    scratch = tmp_path / "results"
+    assert not scratch.is_relative_to(rc.ROOT)
+
+    injected = ("--inject", "REF_F0_20PCT", "--results", str(scratch))
+    for dest, wav_dir, hz, args in (
+        (board["board"], board["shared"], FIRST, ()),
+        (scratch, scratch / "model-twin", SECOND, injected),
+    ):
+        dest.mkdir()
+        anchor_path = dest / f"{case_id}.json"
+        anchor_path.write_bytes(anchor)
+        board["renders"].hz = hz
+        _cli(board, case_id, *args)
+
+        assert anchor_path.read_bytes() == anchor
+        twin = dest / "model-twin" / anchor_path.name
+        record = json.loads(twin.read_bytes())
+        assert _measured(record) and record["engine"] == "fixed-model"
+        named = _resolved(record["provenance"]["artefacts"][key])
+        assert named == wav_dir / wav
+        np.testing.assert_array_equal(_pcm(named), _rendered(case_id, hz))
+        assert not (dest / wav).exists()
 
 
 @pytest.mark.parametrize("case_id,wav,key", WRITERS)

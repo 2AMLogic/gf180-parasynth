@@ -3463,7 +3463,7 @@ RUBRIC_CHANGE = "rubric change (measurement-version change), not a sound change"
 MODEL_TWIN_DIR = "model-twin"
 
 
-def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
+def result_destination(dest: pathlib.Path, res: dict, *, prepare: bool = True) -> pathlib.Path:
     """Where this result may be written, which is not always where it was asked
     to go.
 
@@ -3478,7 +3478,8 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
 
     So an anchor is kept and the model result is written beside it under
     `results/model-twin/`, with the swap announced. Neither is discarded, and
-    `tools/compare_ensemble_candidate.py` is the tool that compares them."""
+    `tools/compare_ensemble_candidate.py` is the tool that compares them.
+    Pass `prepare=False` to look up the path before writing a sibling WAV."""
     if res.get("engine") == "integrated-rtl" or not dest.is_file():
         return dest
     try:
@@ -3497,6 +3498,8 @@ def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
     if held.get("engine") != "integrated-rtl":
         return dest
     twin = dest.parent / MODEL_TWIN_DIR / dest.name
+    if not prepare:
+        return twin
     twin.parent.mkdir(parents=True, exist_ok=True)
     print(f"{dest.stem}: {dest.name} holds an integrated-rtl measurement "
           f"({held.get('source_commit', '?')}); this {res.get('engine')} result is written to "
@@ -3516,25 +3519,25 @@ def stated_path(path: pathlib.Path) -> str:
     return str(path if path.is_absolute() else path.resolve())
 
 
-def artefact_directory(results_dir: pathlib.Path) -> pathlib.Path:
-    """The directory a run's artefacts are written to, decided from where the
-    run's RECORD goes rather than independently of it. One decision, shared by
-    the filter writers' response curve (`response_destination`) and by the
-    drum and ensemble writers' WAV (`wav_destination`), so no writer can place
-    its file by a rule of its own.
+def artefact_directory(results_dir: pathlib.Path, *,
+                       model_wav_case: str | None = None) -> pathlib.Path:
+    """Choose where to write a filter response curve or a rendered WAV.
 
     A run that lands on the board keeps the established directory under
     `build/scorecard`, because that is the path the published records name
-    (`provenance.artefacts`). Any other results directory gets its artefacts
-    beside its record, including one outside the checkout, which the record
-    then states absolutely (`stated_path`).
+    (`provenance.artefacts`). Off the board, a drum or ensemble WAV follows
+    its model record into `model-twin/` when an RTL anchor occupies the
+    requested JSON path. Filter curves use the requested results directory.
 
-    This only selects a directory. A results directory equal to `AUDIO_OUT`
-    yields the shared directory, which is why both CLIs (`main` here,
-    `tools/score_f1_rtl.py` for the RTL curve) refuse that directory to an
-    injected run."""
-    on_board = results_dir.resolve() == RESULTS.resolve()
-    return AUDIO_OUT if on_board else results_dir
+    Both CLIs (`main` here and `tools/score_f1_rtl.py` for the RTL curve)
+    refuse an injected run whose requested directory is `AUDIO_OUT`, where
+    the run could overwrite a board artefact."""
+    if results_dir.resolve() == RESULTS.resolve():
+        return AUDIO_OUT
+    if model_wav_case is not None:
+        record = results_dir / f"{model_wav_case}.json"
+        return result_destination(record, {"engine": ENGINE}, prepare=False).parent
+    return results_dir
 
 
 def response_destination(results_dir: pathlib.Path, case_id: str,
@@ -3565,7 +3568,7 @@ def wav_destination(results_dir: pathlib.Path | None, case_id: str,
     direct caller, `tools/clap_d12a_probe.py`, which takes the clap's numbers
     alone and writes no record. It gets the established shared path, as
     `run_filter_case` gives its curve."""
-    directory = AUDIO_OUT if results_dir is None else artefact_directory(results_dir)
+    directory = artefact_directory(results_dir or RESULTS, model_wav_case=case_id)
     return directory / f"{case_id}{suffix}"
 
 

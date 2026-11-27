@@ -251,9 +251,11 @@ case must come back **fail**. The second points the reference at a file that is
 not there: it must come back **no verdict**, with the reason on the record and
 no `error` key at all. `--inject` refuses to write into `results/` — and, for
 a filter, drum or ensemble case, into `build/scorecard/`, where the board's
-response curves and rendered WAVs live; the control's curve or WAV goes beside
-its own `--results` (#1412, #1414). A control's output is not evidence about
-the instrument.
+response curves and rendered WAVs live. A filter control writes its curve in
+its requested results directory (#1412). A drum or ensemble control writes
+its WAV beside its JSON, including in `model-twin/` when the requested
+directory already holds an RTL anchor for that case (#1414). A control's
+output is not evidence about the instrument.
 
 Three more cover the frozen profile, and the last is the one that makes
 "frozen" mean anything:
