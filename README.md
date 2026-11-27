@@ -49,11 +49,11 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **3798 commits over 1695 hours.**
+Measured from git, not remembered. **3805 commits over 1697 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 5022 | 3.0 |
+| tests | 5026 | 3.0 |
 | injected controls | 472 | 0.3 |
 | bit-exact verifiers | 9 | — |
 | lines of RTL | 11,003 | 6 |
@@ -411,7 +411,12 @@ the fixed 0.9. At the reference volume nothing clips and `growl-bass` measures
 the cutoff-coefficient ROM in front of the ladder. Three things were measured
 before the widths above were chosen (`model/voice_fx_sweep.py`).
 
-**Aliasing.** Inharmonic energy of a sawtooth, same measurement as DR 0001:
+**Aliasing (historical Hann measurements).** The table records the sawtooth's
+inharmonic energy over 0.5 s using DR 0001's Hann window. To reproduce it,
+run `python model/voice_fx_sweep.py` at [revision `ae87d15c`](https://github.com/2AMLogic/gf180-parasynth/blob/ae87d15c9d66e88fe6af24f633d4742a0bb6f9f3/model/voice_fx_sweep.py).
+The current sweep uses a Blackman-Harris window and prints `REFUSED` with the
+reason when a reading falls outside the estimator's domain. At note 28 the
+harmonic guards cover 53.4% of the spectrum, above the 50% limit.
 
 | note | f0 | naive | float PolyBLEP | fixed PolyBLEP |
 |---:|---:|---:|---:|---:|
@@ -421,8 +426,8 @@ before the widths above were chosen (`model/voice_fx_sweep.py`).
 | 88 | 1319 Hz | −14.8 dB | −31.0 dB | −31.0 dB |
 | 100 | 2637 Hz | −11.9 dB | −28.5 dB | −28.5 dB |
 
-Fixed point loses nothing. The surprise is *why* the reciprocal width does not
-matter for this number: a reciprocal error is constant for a held note, so the
+The historical float and fixed readings agree to the precision shown. A
+reciprocal error is constant for a held note, so the
 waveform error it causes is periodic with f0 and lands on the harmonics — it is
 invisible to an aliasing measure even at 4 bits. The 16-bit width is set by a
 different requirement, tracking the float PolyBLEP inside the Q1.15 LSB (71 LSB

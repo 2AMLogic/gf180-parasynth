@@ -88,7 +88,7 @@ OUT_BASE = ROOT / "build" / "trials"
 # re-derived from evidence rather than read back from the receipt. /1 receipts
 # cannot be re-derived and are refused.
 RECEIPT_SCHEMA = "trial-receipt/2"
-# The keys of a child's spec that its interpreter reads; recorded in the receipt.
+# Interpreter-specific fields in the receipt. The child ID is recorded separately.
 INTERPRETER_KEYS = ("interpret", "token_prefix", "fixtures", "rtl_reuse", "image_id")
 REUSE_FLAG = "--reuse-rtl-if-identical"
 
@@ -511,6 +511,14 @@ def interpret_live_midi_record(spec, run, out, role):
                        [f"{c.get('control')}: must move {c.get('must_move')}; "
                         f"{'caught' if caught else 'NOT caught'} (exit {run['rc']})"],
                        metrics={"matrix": matrix}, caught=caught)
+    child_id = spec.get("id")
+    if child_id not in ("session-sim", "session-rtl"):
+        # _children names controls run as required children "candidate:<control>".
+        prefix, _, control = str(child_id).partition(":")
+        if prefix != "candidate" or not control.strip():
+            return _result(NO_VERDICT, [f"missing or unknown live MIDI session ID: {child_id!r}"])
+    if child_id == "session-rtl" and not _valid_replay_fixtures(spec.get("fixtures")):
+        return _result(NO_VERDICT, ["session-rtl must declare non-empty RTL replay fixtures"])
     verdict = rec.get("verdict")
     if run["rc"] != {"PASS": 0, "FAIL": 1}.get(verdict, 2):
         return _result(NO_VERDICT, [f"exit status {run['rc']} disagrees with the record's "
@@ -1045,7 +1053,7 @@ def _rederive(entry: dict, run_dir: pathlib.Path, cancelled: bool) -> tuple[dict
     spec = entry.get("interpreter")
     if not isinstance(spec, dict) or spec.get("interpret") not in INTERPRETERS:
         return None, "no known interpreter recorded, so its verdict cannot be re-derived"
-    spec = dict(spec)
+    spec = dict(spec, id=entry.get("id"))
     if asked_for_reuse(entry):
         spec["rtl_reuse"] = "report"
     ex = entry.get("execution") or {}
