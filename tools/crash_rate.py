@@ -286,6 +286,12 @@ def main(argv: list[str] | None = None) -> int:
             pathlib.Path(a.json).write_text(json.dumps(report, indent=2) + "\n")
         return 2 if "refused" in report["probe"] else 0
 
+    if a.runs < 1:
+        print(f"REFUSED: --runs must be at least 1, got {a.runs}. A batch that "
+              "ran nothing has no crash rate to report. This is NOT 'zero "
+              "crashes'.", file=sys.stderr)
+        return 2
+
     bad = preconditions(a.target)
     if bad:
         print("REFUSED: preconditions failed, no crash rate can be reported:",

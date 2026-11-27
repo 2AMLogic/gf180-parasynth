@@ -348,6 +348,25 @@ def test_a_good_pair_of_steps_exits_zero(tmp_path):
     assert run_klt.verdict_exit_code(steps) == run_klt.EXIT_OK
 
 
+def test_zero_steps_is_no_verdict_while_completed_failed_and_timeout_retain_outcomes(tmp_path):
+    ok_step = run_klt.run_step(
+        "synthesize", ["klt", "synthesize"], tmp_path / "ok.json", 60.0,
+        popen=_popen(returncode=0, stdout=b'{"status": "ok"}'),
+    )
+    bad_step = run_klt.run_step(
+        "synthesize", ["klt", "synthesize"], tmp_path / "bad.json", 60.0,
+        popen=_popen(returncode=1, stdout=b"{}", stderr=b"err\n"),
+    )
+    timeout_step = run_klt.run_step(
+        "place-and-route", ["klt", "place-and-route"], tmp_path / "to.json", 60.0,
+        popen=_popen(timeout=True), container_reaper=_no_containers, grace_s=0.0,
+    )
+    assert run_klt.verdict_exit_code([]) == run_klt.EXIT_NO_VERDICT
+    assert run_klt.verdict_exit_code([ok_step]) == run_klt.EXIT_OK
+    assert run_klt.verdict_exit_code([bad_step]) == run_klt.EXIT_FAILED
+    assert run_klt.verdict_exit_code([timeout_step]) == run_klt.EXIT_NO_VERDICT
+
+
 # --------------------------------------------------------------- the record
 
 def test_the_run_log_records_every_step_exit_status(tmp_path):

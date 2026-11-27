@@ -658,7 +658,8 @@ def _exit_name(code: int) -> str:
 
 def verdict_exit_code(steps: list[StepResult]) -> int:
     """Map step outcomes onto this driver's exit code."""
-    if any(step.timed_out for step in steps):
+    steps = list(steps)
+    if not steps or any(step.timed_out for step in steps):
         return EXIT_NO_VERDICT
     if all(step.ok for step in steps):
         return EXIT_OK
