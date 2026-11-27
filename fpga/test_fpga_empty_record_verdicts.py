@@ -83,7 +83,7 @@ def test_verify_fixture_zero_compared_i2s_periods_is_no_verdict(
     code = vf.main(["--outdir", str(tmp_path)])
     out = capsys.readouterr().out
     assert code == NO_VERDICT, out
-    assert "NO VERDICT" in out, out
+    assert f"first index {period}" in out, out
     assert "verify_fixture: PASS" not in out, out
 
 
@@ -102,25 +102,24 @@ def test_verify_fixture_non_positive_frames_refuses_before_simulating(
 
 def test_verify_fixture_rule8_real_match_passes_and_core_mismatch_fails(
         tmp_path, monkeypatch, capsys):
-    """Rule 8: matching periods inside `0..n-1` stay exit 0; a core mismatch
-    even with 0 compared I2S periods stays exit 1."""
+    """Rule 8: a complete matching capture passes; an in-window core mismatch fails."""
     _, truth, n_fix = _fake_fixture_out(tmp_path, [])
     last = max(p.land for p in truth)
     n = max(n_fix, last + 600)
     m = stm.SynthTopModel().run(sh.model_writes(truth), n)
     exp_i2s, exp_s = m["i2s"], m["sample"]
 
-    i2s_ok = [f"{p} {int(exp_i2s[p])} {int(exp_i2s[p])} 32 32" for p in range(5)]
+    i2s_ok = [f"{p} {int(exp_i2s[p])} {int(exp_i2s[p])} 32 32" for p in range(n)]
     samp_ok = [f"{p} {int(exp_s[p])}" for p in range(5)]
     fake_ok, _, _ = _fake_fixture_out(tmp_path, i2s_ok, samp_ok + [f"{-n} 123"])
     monkeypatch.setattr(vst, "simulate", lambda *a, **kw: fake_ok)
     code = vf.main(["--outdir", str(tmp_path)])
     out = capsys.readouterr().out
     assert code == PASS, out
-    assert "PASS -- 5 I2S periods" in out, out
+    assert f"PASS -- {n} I2S periods" in out, out
 
     bad_s = int(exp_s[0]) ^ 1
-    fake_bad, _, _ = _fake_fixture_out(tmp_path, ["999999 0 0 32 32"], [f"0 {bad_s}"])
+    fake_bad, _, _ = _fake_fixture_out(tmp_path, i2s_ok, [f"0 {bad_s}"])
     monkeypatch.setattr(vst, "simulate", lambda *a, **kw: fake_bad)
     code_bad = vf.main(["--outdir", str(tmp_path)])
     capsys.readouterr()
@@ -205,64 +204,38 @@ def test_verify_uart_bridge_main_zero_write_scenario_exits_no_verdict(
     assert (child["state"], child["exit_code"]) == ("NO VERDICT", 2)
 
 
-def test_verify_uart_bridge_rule8_pass_and_fail_runs_keep_their_exits(
-        tmp_path, monkeypatch, capsys):
-    """Rule 8: a real PASS run stays exit 0, and a real FAIL run (even with 0
-    required periods, e.g. `busy_at_tick == 1`) stays exit 1."""
-    sub = tmp_path / "phrase"
-    sub.mkdir()
-    run = _empty_uart_run(sub, planned=[[]],
-                          extra_report=["SEG 0 origin_tcc 0 periods 0 strobes 0"])
-    (sub / "transcript.txt").write_text("\n".join(run["report"]) + "\n")
-    monkeypatch.setattr(vub, "simulate", lambda sc, inj, outdir, **kw: run)
-
-    # Mock analyze returning a genuine PASS
-    monkeypatch.setattr(vub, "analyze", lambda r: (True, {"periods": 10, "periods_required": 10,
-                                                          "i2s_incomplete": False}, []))
-    code_ok = vub.main(["--scenario", "phrase", "--outdir", str(tmp_path)])
-    capsys.readouterr()
-    assert code_ok == PASS
-    assert json.loads((tmp_path / "controls.json").read_text())["state"] == "PASS"
-
-    # Real FAIL: busy_at_tick == 1 with 0 required periods -> failure outranks no verdict
-    run_fail = dict(run, report=[
-        "SEG 0 origin_tcc 0 periods 0 strobes 0",
-        "writes drained 0, spi+uart slot collisions 0",
-        "sample strobed in 10 frames, MISSING in 0, worst strobe cycle 100 of 256",
-        "busy at a tick: 1; core overrun 0; link overflow 0",
-        "TX bytes captured 0",
-    ])
-    monkeypatch.setattr(vub, "simulate", lambda sc, inj, outdir, **kw: run_fail)
-    monkeypatch.undo()  # restore real analyze
-    monkeypatch.setattr(vub, "simulate", lambda sc, inj, outdir, **kw: run_fail)
-    code_fail = vub.main(["--scenario", "phrase", "--outdir", str(tmp_path)])
-    capsys.readouterr()
-    assert code_fail == FAIL
-
-
 @pytest.mark.parametrize("scenario, defect, state, code, diagnostic", [
     ("phrase", "missing-audio", "NO VERDICT", 2, "0 of 634 required I2S periods decoded"),
-    ("phrase", "strobe", "FAIL", 1, "worst_strobe_cycle"),
+    ("phrase", "complete", "PASS", 0, "634 periods"),
+    ("phrase", "busy", "FAIL", 1, "busy_at_tick"),
+    ("phrase", "strobe", "FAIL", 1, "worst strobe cycle 256 outside 1..255"),
+    ("noff-full", None, "NO VERDICT", 2, "gate-off"),
     ("overflow", None, "FAIL", 1, "expected 6 ERR(event-queue overflow), got 0"),
     ("held", None, "NO VERDICT", 2, "release"),
     ("reset-mid", None, "NO VERDICT", 2, "reset"),
 ])
-def test_uart_empty_capture_verdict(tmp_path, monkeypatch, capsys, scenario, defect,
-                                    state, code, diagnostic):
+def test_uart_capture_verdict(tmp_path, monkeypatch, capsys, scenario, defect,
+                              state, code, diagnostic):
     def simulate(sc, inject, path):
         path.mkdir()
         run = _empty_uart_run(path, planned=[[]], scenario=sc,
                               extra_report=["SEG 0 origin_tcc 0 periods 0 strobes 0"])
-        if defect == "missing-audio":
+        if defect in ("missing-audio", "complete"):
             body = [("write", 0, 0, 0, 0)]
             rows = vub.uh.plan(body)
             frame = rows[0].apply_frame
-            run.update(bodies=[body], planned=[rows], model_tail=634 - frame)
+            run.update(bodies=[body], planned=[rows])
             (path / "wrs.txt").write_text(f"{frame} 0 0 0 0 {frame}\n")
             (path / "txd.txt").write_text(f"{frame} {vub.uh.RSP_ACK}\n{frame} 0\n")
             run["files"].update(wrs=path / "wrs.txt", txd=path / "txd.txt")
             run["report"][1] = "writes drained 1, spi+uart slot collisions 0"
             run["report"][-1] = "TX bytes captured 2"
+            if defect == "complete":
+                wire = path / "i2s.txt"
+                wire.write_text("".join(f"{p} 0 0 32 32\n" for p in range(634)))
+                run["files"]["i2s"] = wire
+        elif defect == "busy":
+            run["report"][3] = "busy at a tick: 1; core overrun 0; link overflow 0"
         elif defect == "strobe":
             run["report"][2] = run["report"][2].replace("cycle 100", "cycle 256")
         (path / "transcript.txt").write_text("\n".join(run["report"]))
@@ -274,8 +247,8 @@ def test_uart_empty_capture_verdict(tmp_path, monkeypatch, capsys, scenario, def
     child = json.loads((tmp_path / scenario / "verification.json").read_text())
     assert rc == code, output
     assert (child["state"], child["exit_code"]) == (state, code)
-    if defect == "strobe":
-        assert child["comparison"][diagnostic] == 256
+    if defect == "busy":
+        assert child["comparison"][diagnostic] == 1
     else:
         assert diagnostic in output
     assert json.loads((tmp_path / "controls.json").read_text()) == {
@@ -300,3 +273,37 @@ def test_uart_injection_without_comparison_propagates_refusal(tmp_path, monkeypa
     rc = vub.main(["--inject", "UART_NO_CHECKSUM", "--outdir", str(tmp_path)])
     child = json.loads((tmp_path / "drop-byte-inject-UART_NO_CHECKSUM/verification.json").read_text())
     assert (rc, child["state"], child["exit_code"]) == (2, "NO VERDICT", 2)
+
+
+@pytest.mark.parametrize("mode, subdir", [("--start-red", "start-red"), ("--replay", "replay")])
+def test_uart_empty_capture_cannot_confirm_a_control(tmp_path, monkeypatch, mode, subdir):
+    def simulate(sc, inject, path, **kwargs):
+        path.mkdir()
+        run = _empty_uart_run(path, planned=[[]], scenario=sc,
+                              extra_report=["SEG 0 origin_tcc 0 periods 0 strobes 0"])
+        (path / "transcript.txt").write_text("\n".join(run["report"]))
+        return run
+
+    if mode == "--replay":
+        monkeypatch.setattr(vub, "simulate_replay",
+                            lambda prefix, path: simulate("replay", None, path))
+        args = [mode, "capture"]
+    else:
+        monkeypatch.setattr(vub, "simulate", simulate)
+        args = [mode]
+    code = vub.main([*args, "--outdir", str(tmp_path)])
+    rec = json.loads((tmp_path / subdir / "verification.json").read_text())
+    assert (code, rec["state"], rec["exit_code"]) == (2, "NO VERDICT", 2)
+    if mode == "--replay":
+        assert rec["truncation_control"] == {"caught": False, "reason": "baseline NO VERDICT"}
+
+
+@pytest.mark.parametrize("rows", ["", "0 0 0 32 32\n"])
+def test_unchanged_uart_capture_cannot_count_as_a_truncation(tmp_path, rows):
+    run = _empty_uart_run(tmp_path, planned=[])
+    path = tmp_path / "i2s.txt"
+    path.write_text(rows)
+    run["files"]["i2s"] = path
+    control = vub.truncation_control(run)
+    assert control["caught"] is False
+    assert control["kept_rows"] == control["of_rows"] == len(rows.splitlines())

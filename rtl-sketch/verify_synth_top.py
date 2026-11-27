@@ -1603,7 +1603,11 @@ def main(argv=None) -> int:
     first = None
     for r in i2s[:nper]:
         p, left, right, nbl, nbr = (int(r[0]), int(r[1]), int(r[2]), int(r[3]), int(r[4]))
-        if p >= n: break
+        if p < 0:
+            print(f"verify_synth_top: NO VERDICT -- negative I2S period {p} in the wire capture")
+            return 2
+        if p >= n:
+            break
         compared += 1
         if nbl != 32 or nbr != 32:
             width += 1
@@ -1660,9 +1664,9 @@ def main(argv=None) -> int:
         print(f"verify_synth_top: decoded I2S WAV sha256 {wav_sha256}")
     # the DUT's own stream, as a DIAGNOSTIC only
     sm = rows(out["samp"])
-    core_bad = sum(1 for r in sm if int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))
+    core_bad = sum(1 for r in sm if 0 <= int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))
     core_first = next(((int(r[0]), int(exp_s[int(r[0])]), int(r[1])) for r in sm
-                       if int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])])), None)
+                       if 0 <= int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])])), None)
     peak = int(np.abs(exp_s).max())
     clipped = int(np.sum(np.abs(exp_s) == 32767) + np.sum(exp_s == -32768))
     print(f"verify_synth_top: model peak |sample| {peak} of 32768 ({clipped} frames at the rail); "

@@ -284,13 +284,12 @@ def _uart(monkeypatch, outdir: Path, outcomes) -> int:
         (Path(path) / "transcript.txt").write_text("")
         return {"outdir": path, "inject": inject, "scenario": scenario}
 
-    def analyze(run):
-        if outcomes[run["scenario"]] == "empty":
-            return False, {"periods_required": 0, "i2s_incomplete": True}, []
-        return outcomes[run["scenario"]] == "pass", {}, []
+    def analyze_verdict(run):
+        state = {"empty": "NO VERDICT", "pass": "PASS", "fail": "FAIL"}[outcomes[run["scenario"]]]
+        return state, {}, []
 
     monkeypatch.setattr(vub, "simulate", simulate)
-    monkeypatch.setattr(vub, "analyze", analyze)
+    monkeypatch.setattr(vub, "analyze_verdict", analyze_verdict)
     return vub.main(["--outdir", str(outdir), "--scenario", "all", "--jobs", "1"])
 
 
@@ -334,7 +333,7 @@ def test_uart_record_ships_the_whole_comparison(tmp_path):
     that a narrowed copy would have to anticipate one key at a time."""
     (tmp_path / "transcript.txt").write_text("")
     comp = {"periods": 900, "writes_sent": 5, "periods_required": 900}
-    rec = vub.record_for({"outdir": tmp_path, "inject": None, "scenario": "held"}, comp, True)
+    rec = vub.record_for({"outdir": tmp_path, "inject": None, "scenario": "held"}, comp, "PASS")
     assert rec["comparison"] is comp
     assert (rec["state"], rec["exit_code"]) == ("PASS", 0)
 
@@ -381,8 +380,8 @@ def test_uart_replay_no_verdict_sets_exit_code_two(monkeypatch, tmp_path):
         return {"outdir": Path(path), "inject": None, "scenario": "replay"}
 
     monkeypatch.setattr(vub, "simulate_replay", fake_replay)
-    monkeypatch.setattr(vub, "analyze", lambda _run: (
-        True, {"periods": 10, "periods_required": 900, "i2s_incomplete": True}, []))
+    monkeypatch.setattr(vub, "analyze_verdict", lambda _run: (
+        "NO VERDICT", {"periods": 10, "periods_required": 900, "i2s_incomplete": True}, []))
     monkeypatch.setattr(vub, "truncation_control", lambda _run: {"caught": True})
     assert vub.main(["--outdir", str(tmp_path), "--replay", str(tmp_path / "cap"),
                      "--replay-name", "phrase"]) == 2

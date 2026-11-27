@@ -331,13 +331,10 @@ def _run(a) -> int:
 
     # ---- the comparison: the WIRE against the MODEL, no tolerance ------------
     nper = min(len(i2s), n)
-    mism = swap = width = compared = 0
+    mism = swap = width = 0
     first = None
-    for r in i2s[:nper]:
-        p_, left, right, nbl, nbr = (int(r[0]), int(r[1]), int(r[2]), int(r[3]), int(r[4]))
-        if p_ >= n:
-            break
-        compared += 1
+    # Completeness above proves the first nper indices are exactly 0..nper-1.
+    for p_, left, right, nbl, nbr in i2s[:nper]:
         if nbl != 32 or nbr != 32:
             width += 1
         e = int(exp_i2s[p_])
@@ -348,19 +345,13 @@ def _run(a) -> int:
         if right != left:
             swap += 1
     sm = vst.rows(out["samp"])
-    core_bad = sum(1 for r in sm if int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))
-    LAST.update(periods=nper, periods_compared=compared,
+    core_bad = sum(1 for r in sm if 0 <= int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))
+    LAST.update(periods=nper, periods_compared=nper,
                 wire_mismatch=mism, swap=swap, width=width, core_bad=core_bad)
 
     if mism == 0 and swap == 0 and width == 0 and core_bad == 0:
-        if compared == 0:
-            # #1466: `i2s` was non-empty, but every row fell outside `0..n-1`
-            # (`if p_ >= n: break`), so zero periods were actually compared.
-            print(f"verify_fixture: NO VERDICT -- 0 of {nper} decoded I2S period(s) fell inside "
-                  f"the modelled 0..{n - 1} window: nothing was compared against the model")
-            return 2
-        print(f"verify_fixture: PASS -- {compared} I2S periods "
-              f"({compared / sh.SR * 1000:.0f} ms of audio) decoded from the wire, every one "
+        print(f"verify_fixture: PASS -- {nper} I2S periods "
+              f"({nper / sh.SR * 1000:.0f} ms of audio) decoded from the wire, every one "
               f"identical to the model. A musical fixture entered through the production "
               f"control path -- {len(sent)} 48-bit transactions, "
               f"{cover['bd_hot'] // 2} attack window(s) and "
