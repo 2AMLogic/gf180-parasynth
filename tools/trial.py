@@ -641,8 +641,12 @@ def interpret_physical_capture_record(spec, run, out, role):
         if decl_problem := _physical_fixture_problem(raw_fixtures):
             return _result(NO_VERDICT, [decl_problem], metrics=metrics, caught=nv_caught, **cov)
     gaps = [f"no take of {c}" for c in need if not isinstance(c, str) or not have.get(c)]
-    if not any(v >= 2 for k, v in have.items() if k != "silence"):
-        gaps.append("no repeat take")
+    # a repeat counts only for a declared sounding command: two takes of an
+    # undeclared or unknown id are not a repeat (#1540 review)
+    eligible = {c for c in [*need, *capture_commands.REQUIRED_COMMANDS]
+                if isinstance(c, str) and c.strip() and c != "silence"}
+    if not any(have.get(c, 0) >= 2 for c in eligible):
+        gaps.append("no repeat take of a declared sounding command")
     if verdict == "PASS" and gaps:
         return _result(NO_VERDICT, ["coverage incomplete -- " + g for g in gaps],
                        metrics=metrics, caught=nv_caught, **cov)
@@ -1256,7 +1260,7 @@ def check_receipt(path: pathlib.Path, root: pathlib.Path = ROOT
                             "children record")
     for key, want_control in (("children", False), ("controls", True)):
         for c in rec.get(key, []):
-            if (c.get("role") == "control") != want_control:
+            if c.get("role") != ("control" if want_control else "required"):
                 problems.append(f"{c.get('id')}: role {c.get('role')!r} is listed under {key}")
                 continue
             got, why = _rederive(c, run_dir, cancelled=status == "cancelled")

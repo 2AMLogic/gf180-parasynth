@@ -1817,3 +1817,44 @@ def test_fixture_free_wrong_kit_control_works_as_control_and_as_candidate(repo):
     assert rec2["children"][0]["verdict"] == trial.NO_VERDICT
     assert any("rtl replay" in r.lower() or "fixtures" in r.lower()
                for r in rec2["children"][0]["reasons"])
+
+
+@pytest.mark.parametrize("image_id", ["r0", "r1"])
+@pytest.mark.parametrize("repeated", ["   ", "not-a-real-command"])
+def test_physical_repeat_of_an_unidentified_take_is_not_a_repeat(tmp_path, image_id, repeated):
+    """#1540 review: two takes of a blank or unknown command id are not a
+    sounding repeat, fresh or re-derived."""
+    spec = _physical_child_spec(image_id, {"fixtures": PHYS_FIXTURES})
+    cdir = _write_analysis(
+        tmp_path / "unknown-repeat",
+        _capture_rec("PASS", commands=PHYS_FIXTURES + [repeated, repeated], image_id=image_id),
+    )
+    run = {"state": "PASS", "rc": 0, "secs": 0.1, "out": ""}
+    fresh = trial.judge_child(spec, run, cdir, "required")
+    assert fresh == _rederive_physical(spec, tmp_path, cdir, rc=0)
+    assert fresh["verdict"] == trial.NO_VERDICT
+    assert any("no repeat take" in r for r in fresh["reasons"]), fresh["reasons"]
+
+
+@pytest.mark.parametrize("image_id", ["r0", "r1"])
+@pytest.mark.parametrize("bad_role", ["delete", "unknown"])
+def test_physical_receipt_with_malformed_child_role_is_rejected(repo, image_id, bad_role):
+    """#1540 review: a resealed receipt whose required child lost or garbled its
+    role must not skip the fixture check on re-derivation."""
+    rec = _capture_rec("PASS", commands=["demo", "demo"], image_id=image_id)
+    repo.child({"rc": 0, "files": {"analysis.json": rec}},
+               interpret="physical_capture_record", image_id=image_id)
+    repo.child({"rc": 0, "files": {"controls.json": _controls_rec()}},
+               interpret="capture_controls_record", role="control")
+    run_dir, receipt = repo.run()
+    forged = copy.deepcopy(receipt)
+    forged["verdict"] = trial.PASS
+    forged["verdict_reasons"] = []
+    forged["children"][0]["verdict"] = trial.PASS
+    forged["children"][0]["reasons"] = []
+    if bad_role == "delete":
+        del forged["children"][0]["role"]
+    else:
+        forged["children"][0]["role"] = "unknown"
+    ok, problems, _ = _forge(run_dir / "receipt.json", forged)
+    assert not ok, problems
