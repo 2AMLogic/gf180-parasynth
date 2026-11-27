@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m5a_score as m5a
 import scorecard
+import i2s_transcript
 import run_case
 import voice_fx as vf
 
@@ -34,18 +35,15 @@ def validate_integration_report(report_text: str, wav_sha256: str, *,
                                saw_volume_correction_db: float | None = None) -> dict:
     if case_id not in m5a.MANIFESTS:
         raise ValueError("unsupported Mono case")
-    if "INJECT_BUG_" in report_text:
-        raise ValueError("mutation runs cannot provide sound evidence")
+    i2s_transcript.refuse_mutation(report_text)
     required = (
         f"{case_id} path verified from SPI pins through the production voice and I2S pins",
         "selected 2x saw + causal 2x filter candidate",
         "phrase and complete release",
-        "PASS --",
     )
     if any(token not in report_text for token in required) or "smoke" in report_text:
         raise ValueError("report is not a passing full filter-candidate I2S run")
-    if f"decoded I2S WAV sha256 {wav_sha256}" not in report_text:
-        raise ValueError("report does not bind the decoded I2S WAV hash")
+    simulator = i2s_transcript.validate_clean_pass(report_text, wav_sha256=wav_sha256)
     match = re.search(
         rf"{case_id} controls: pulse=(\w+);(?: effective pulse=(\w+) "
         r"\((\d+(?:\.\d+)?)% duty\);)? saw cutoff=(\d+) Hz; "
@@ -53,7 +51,8 @@ def validate_integration_report(report_text: str, wav_sha256: str, *,
     if not match:
         raise ValueError("report omits the M5A sound controls")
     controls = {"pulse_shape": match.group(1), "saw_cutoff_hz": int(match.group(4)),
-                "saw_volume_correction_db": float(match.group(5))}
+                "saw_volume_correction_db": float(match.group(5)),
+                "simulator": simulator}
     define_line = next((line for line in report_text.splitlines()
                         if "compile defines:" in line), "")
     if "VOICE_FILTER_2X" not in define_line:
@@ -116,11 +115,7 @@ def main(argv=None) -> int:
     except ValueError as exc:
         print(f"score_m5a_i2s: REFUSED -- {exc}")
         return 2
-    simulator = next((name for name in ("verilator", "iverilog")
-                      if f"simulator backend {name}" in report_text), None)
-    if simulator is None:
-        print("score_m5a_i2s: REFUSED -- report omits the simulator backend")
-        return 2
+    simulator = controls["simulator"]
 
     out = pathlib.Path(a.out)
     if not out.is_absolute():
