@@ -289,6 +289,40 @@ def test_a_broken_superposition_gates_the_requirement():
     assert not tre.superposition_check(shares, measured)["ok"]
 
 
+@pytest.mark.parametrize("address", [
+    pytest.param(dx.A_ENV + dx.E_CH * dx.ENV_STRIDE, id="closed-hat-envelope"),
+    pytest.param(dx.A_PATH + dx.P_CPOUT, id="clap-output-path"),
+    pytest.param(dx.A_MODE + dx.M_HATBP * dx.MODE_STRIDE, id="shared-hat-mode"),
+])
+def test_candidate_preservation_reports_a_changed_register_at_its_tone(monkeypatch, address):
+    import json
+
+    levels = json.loads(RECORD.read_text())["levels"]["anchor_level"]
+    tone = "75"
+    base = cc.remap_kit(dx.kit_with_sounds("CY"))
+    owned = tre.cy_owned_addresses()
+    clean_kit = tre.kit_at
+    assert address in base and address not in owned
+    for code in tre.CODES:
+        image = dict(clean_kit(levels, code)[0])
+        assert {a for a in base.keys() | image.keys()
+                if a not in owned and base.get(a) != image.get(a)} == set()
+    expected = {code: {"n_changed_outside_cy": 0, "stray": []} for code in tre.CODES}
+    assert tre.preservation_addresses(levels) == expected
+
+    def changed_kit(levels, code):
+        writes, detail = clean_kit(levels, code)
+        image = dict(writes)
+        if code == tone:
+            image[address] ^= 1
+            assert image[address] != base[address]
+        return sorted(image.items()), detail
+
+    monkeypatch.setattr(tre, "kit_at", changed_kit)
+    expected[tone] = {"n_changed_outside_cy": 1, "stray": [f"0x{address:02X}"]}
+    assert tre.preservation_addresses(levels) == expected
+
+
 def test_cy_owned_addresses_excludes_every_shared_register():
     """The hats share the 7.1 kHz band-pass (M_HATBP) and, in the shipped kit,
     the closed hat's own high-pass carries the cymbal's short band. Neither may
