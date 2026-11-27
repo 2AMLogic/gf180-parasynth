@@ -225,6 +225,7 @@ def reads(freqs, g, cut, open_plateau) -> dict:
 def surge_side(manifest) -> dict:
     """Surge's reads at each level from the captures. Takes must be
     bit-identical (asserted); take 1 is read."""
+    cap.require_distinct_capture_cells(manifest["clips"])
     out = {}
     for amp in AMPS:
         for cond in list(CASES.values()) + [OPEN]:

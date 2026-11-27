@@ -109,6 +109,17 @@ def clip_key(cond: str, amp: float, take: int) -> str:
     return f"{cond}/{amp_tag(amp)}/take{take}"
 
 
+def require_distinct_capture_cells(clips: dict) -> None:
+    """A recording may repeat across takes of one condition and amplitude."""
+    cell_by_digest = {}
+    for key, meta in clips.items():
+        cell = key.rsplit("/", 1)[0]
+        digest = meta["sha256"]
+        owner = cell_by_digest.setdefault(digest, cell)
+        if owner != cell:
+            raise CaptureIdentityError(f"{digest[:12]} shared across capture cells {owner} and {cell}")
+
+
 def _sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
@@ -269,6 +280,7 @@ def capture(work: pathlib.Path) -> dict:
             blobs.setdefault(c["sha256"], b)
             clips[clip_key(cond, amp, take)] = {**c, "condition": cond, "take": take,
                                                 "archive_member": c["sha256"][:16] + ".wav"}
+    require_distinct_capture_cells(clips)
     # take-to-take
     t2t = {}
     for cond in CONDITIONS:
@@ -387,10 +399,7 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
 
 
 def _evidence_problems(y: np.ndarray, meta: dict) -> list[str]:
-    """The decoded audio must be a non-empty, finite, audible population whose
-    measured peak and rms are the ones recorded for THIS condition and level.
-    Two equal zero counts, or one take's bytes filed under another key, can
-    satisfy a hash and a frame count (#1469)."""
+    """Check the decoded samples against the peak and RMS recorded for this clip."""
     out: list[str] = []
     if type(meta.get("frames")) is not int or meta["frames"] <= 0 or len(y) <= 0:
         return [f"no positive sample population ({len(y)} decoded, "
@@ -477,19 +486,26 @@ def verify() -> int:
               f"{len(clips)}/{len(expected)} expected clips (missing {missing[:4]}, "
               f"unexpected {extra[:4]}), so the capture set is incomplete")
         return REFUSED
-    bad = 0
-    for key, meta in sorted(m["clips"].items()):
+    verified = {}
+    for key, meta in sorted(clips.items()):
         cond, tag, take = key.split("/")
         try:
             capture_curve(cond, float(tag[1:]), int(take[4:]), m)
-            print(f"ok       {key}  {meta['sha256'][:12]}")
+            verified[key] = meta
         except (CaptureIdentityError, ProjectionError) as e:
             print(f"REFUSED  {e}")
             return REFUSED
         except Refused as e:
-            bad += 1
             print(f"FAIL     {e}")
-    print(f"{len(m['clips']) - bad} verified, {bad} failed")
+    try:
+        require_distinct_capture_cells(verified)
+    except CaptureIdentityError as e:
+        print(f"REFUSED  {e}")
+        return REFUSED
+    for key, meta in verified.items():
+        print(f"ok       {key}  {meta['sha256'][:12]}")
+    bad = len(clips) - len(verified)
+    print(f"{len(verified)} verified, {bad} failed")
     return FAIL if bad else OK
 
 

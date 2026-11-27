@@ -352,6 +352,49 @@ def test_verify_still_accepts_legitimate_byte_sharing_between_repeated_takes(cap
     assert "24 verified, 0 failed" in capsys.readouterr().out
 
 
+def _copy_capture_evidence(clips, source, destination):
+    # Leave the recipient's condition, take and commanded settings intact.
+    for field in ("sha256", "archive_member", "frames", "peak", "rms", "bytes", "parts", "freqs_hz"):
+        clips[destination][field] = clips[source][field]
+
+
+@pytest.mark.parametrize("replay", ["all", "same-cutoff", "same-amplitude",
+                                    "swap-second-takes", "one-bad-hash"])
+def test_verify_refuses_audio_shared_across_capture_cells(monkeypatch, capsys, replay):
+    manifest = cap.load_manifest()
+    clips = manifest["clips"]
+    source = cap.clip_key("open20k", 0.25, 1)
+    if replay in ("all", "one-bad-hash"):
+        for key in clips:
+            _copy_capture_evidence(clips, source, key)
+        if replay == "one-bad-hash":
+            clips[cap.clip_key("cut250", 0.125, 2)]["sha256"] = "0" * 64
+    elif replay == "swap-second-takes":
+        # All 12 original digests remain present, but two cells each borrow a take.
+        other = cap.clip_key("cut250", 0.125, 1)
+        _copy_capture_evidence(clips, source, cap.clip_key("cut250", 0.125, 2))
+        _copy_capture_evidence(clips, other, cap.clip_key("open20k", 0.25, 2))
+        assert len({meta["sha256"] for meta in clips.values()}) == 12
+    else:
+        cond, amp = ("open20k", 0.125) if replay == "same-cutoff" else ("cut250", 0.25)
+        for take in cap.TAKES:
+            _copy_capture_evidence(clips, source, cap.clip_key(cond, amp, take))
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.main([]) == cap.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "shared across capture cells" in out
+    assert " verified," not in out
+
+
+def test_surge_side_refuses_one_recording_for_all_levels():
+    manifest = cap.load_manifest()
+    clips = manifest["clips"]
+    for key in clips:
+        _copy_capture_evidence(clips, cap.clip_key("open20k", 0.25, 1), key)
+    with pytest.raises(cap.Refused, match="shared across capture cells"):
+        fls.surge_side(manifest)
+
+
 @pytest.mark.parametrize("defect", ["at-eof", "overrun", "negative-start", "zero-length",
                                     "fractional-start", "one-sample", "missing-tone", "wrong-hz",
                                     "repeated-window", "shifted-step", "includes-tail"])
