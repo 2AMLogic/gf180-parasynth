@@ -30,18 +30,20 @@ clip that is absent or does not hash is REFUSED for that reason, never skipped.
 
 WHAT THE FROZEN MATERIAL CAN SUPPORT, AND WHAT IT CANNOT
 --------------------------------------------------------
-These renders were frozen for attack, release and spectrum cases, not for
-drift: the longest held note in any of them is 0.6 s of gate plus its release.
+These renders were frozen for attack, release and spectrum cases. Each MIDI
+gate lasts 0.6 s. The analysis window can extend into the release.
 `model/osc_drift_probe.py` needs seconds of held tone to call a wander
 aperiodic, so several of these windows come back REFUSED with their own code.
 That is the measurement, not a failure of it -- and the across-note reading
 below is what the short notes still support.
 
-  across-note: two instances of the SAME commanded note, seconds apart in one
-  continuous render, differ in f0 by exactly the drift accumulated between
-  them. M1A plays MIDI 36 at 0.1 s and again at 4.1 s; M5A plays MIDI 84 in
-  both of its segments, 13.6 s apart. Those baselines need no long window, only
-  a precise f0 in each, and the probe's floor bounds it.
+  M1A's isolated oscillator 2 gives two usable MIDI-48 pitch estimates in
+  one render. The second is 0.0102 cents higher than the first. The note
+  onsets are 4.0 s apart, and pitch between the windows is unobserved.
+  Both MIDI-36 pairs refuse with TOO_FEW_PERIODS. M5A's saw and pulse
+  segments come from fresh plugin instances and were joined afterwards
+  with inserted silence. The two MIDI-84 estimates therefore describe a
+  pitch difference between independent captures (#1433).
 """
 from __future__ import annotations
 
@@ -69,6 +71,20 @@ TAIL_S = 1.2        # how far past GATE OFF to look for usable held tone. A
 TRIM_DB = 1.5       # the held part is where the envelope is within this of its
                     # 90th percentile. Attack, decay and silence are all
                     # excluded by the same rule, measured per window.
+
+INDEPENDENT_CAPTURES = "INDEPENDENT_CAPTURES"
+CAPTURE_UNKNOWN = "CAPTURE_UNKNOWN"
+
+CAPTURE_HISTORY = {
+    "mono-m1a-miniv3": (
+        "provenance", "91123a05807213ad767f9d0fca80a2720b13feae",
+        "tools/measure_mono_m1a_reference.py",
+        "fa5cb56d7a941d715bdecc9ad4126343962641d0b02fc3e71ad4aecbd5bebfdc"),
+    "mono-m5a-miniv3": (
+        "source", "899e86d68cf37bacf79188bce142b42ea2d13564",
+        "tools/measure_mono_m5a_reference.py",
+        "8ea0aa3705d907aa6b6260ee5bb611e48b32e7b9e6ebdd97ecca9f5b117e0e9a"),
+}
 
 
 def held_window(x, sr: int, f0: float, trim_db: float = TRIM_DB):
@@ -144,8 +160,11 @@ def _clip(case: str, name: str, want_sha: str | None) -> tuple | dict:
 
 
 def _windows_m1a(man: dict) -> list:
-    """(file, sha, label, semitone_offset, note, t0, t1) for the M1A phrase and
+    """(file, sha, label, note, t0, t1, capture) for the M1A phrase and
     its single-oscillator isolation controls, from the manifest's own timeline.
+
+    A capture is one render, and in M1A that is one file: every file, the
+    three phrase repeats and both controls, comes from one `render()` call.
 
     `osc2_open` isolates the OCTAVE saw, so its declared f0 is the note + 12.
     Declaring the bare note instead was this tool's own first error, and the
@@ -164,11 +183,17 @@ def _windows_m1a(man: dict) -> list:
             t0 = ev["on_s"]
             t1 = t0 + ev["gate_s"] + TAIL_S
             out.append((fn, sha, f"m1a/{kind}/n{i}-midi{ev['note'] + semis}",
-                        ev["note"] + semis, t0, t1))
+                        ev["note"] + semis, t0, t1, fn))
     return out
 
 
 def _windows_m5a(man: dict) -> list:
+    """The same for M5A, where a capture is one SEGMENT of the single WAV.
+
+    That WAV is not one render. The producer its manifest pins built a fresh
+    Mini V3 instance for every take and then concatenated the saw take, a gap
+    of inserted silence and the pulse take, so no oscillator ran between a
+    window of one segment and a window of the other."""
     fn = man["audio"]["file"]
     sha = man["audio"].get("sha256")
     out = []
@@ -178,7 +203,75 @@ def _windows_m5a(man: dict) -> list:
             t0 = off + ev["on_s"]
             t1 = t0 + ev["gate_s"] + TAIL_S
             out.append((fn, sha, f"m5a/seg{s}-{seg['wave']}/n{i}-midi{ev['note']}",
-                        ev["note"], t0, t1))
+                        ev["note"], t0, t1, f"{fn}#seg{s}"))
+    return out
+
+
+def _pinned(case: str, man: dict) -> bool:
+    """Assign capture identity only for the reviewed producer at its commit.
+
+    Each expected digest is the SHA-256 of `git show <commit>:<path>`.
+    These producers render one file per take for M1A and one segment per
+    take for M5A. Individual windows can be measured without this history.
+    """
+    section, commit, path, digest = CAPTURE_HISTORY[case]
+    source = man.get(section)
+    if not isinstance(source, dict) or source.get("commit") != commit:
+        return False
+    files = source.get("files_sha256")
+    return isinstance(files, dict) and files.get(path) == digest
+
+
+def _across_pair(wins) -> dict:
+    """One across-note pair, gated on the one thing the probe cannot see.
+
+    `odp.across_note_drift` compares pitches. Whether its windows come from
+    ONE render "is in none of the reports and is the caller's to establish",
+    and this is where it is established: every window names its `capture`.
+
+    Inside one capture the probe's answer stands as given. Across two it is
+    REFUSED with no stability class and no bound, because two takes from
+    separate renders have nothing running between them and their pitch
+    difference is not drift over any elapsed time. The probe is still asked
+    there, only to reuse its per-window checks: when it accepts both windows
+    the difference is quoted as a between-capture comparison, and as nothing
+    else. A window that names no capture cannot be shown to share one with
+    anything and refuses too -- two missing captures match each other exactly
+    as two NaNs do (#134).
+
+    What this trusts is the capture a window names. A label that is wrong is
+    wrong all the way through and nothing here can tell; the label is bounded
+    rather than checked, being written only for a manifest that passes
+    `_pinned`."""
+    wins = list(wins)
+    caps = [r.get("capture") for r in wins]
+    labels = [r.get("label", "") for r in wins]
+    if len(wins) >= 2 and None in caps:
+        i = caps.index(None)
+        return {"verdict": odp.REFUSED, "refusal": CAPTURE_UNKNOWN,
+                "n_windows": len(wins), "labels": labels,
+                "window_without_capture": i,
+                "refusal_detail": f"window {i} of {len(wins)} ({labels[i]}) "
+                                  f"names no capture, so it cannot be shown to "
+                                  f"share a render with any other window"}
+    if len(set(caps)) > 1:
+        got = odp.across_note_drift(wins)
+        out = {"verdict": odp.REFUSED, "refusal": INDEPENDENT_CAPTURES,
+               "n_windows": len(wins), "labels": labels, "captures": caps,
+               "refusal_detail": "; ".join(
+                   f"{label} is from capture {cap}"
+                   for label, cap in zip(labels, caps))
+               + ". Separate renders: nothing ran between them, so their "
+                 "pitch difference is not drift over any elapsed time"}
+        if got["verdict"] != odp.REFUSED:
+            out["between_captures"] = {
+                "f0_cents_vs_first": got["cents_vs_first"],
+                "scope": "pitch of each take against the first. A comparison "
+                         "between captures: not drift, and no bound on drift"}
+        return out
+    out = odp.across_note_drift(wins)
+    if None not in caps:
+        out["captures"] = caps
     return out
 
 
@@ -194,7 +287,8 @@ def measure_miniv3() -> dict:
                             "refusal_detail": mpath})
             continue
         man = json.load(open(mpath))
-        for fn, sha, label, note, t0, t1 in picker(man):
+        pinned = _pinned(case, man)
+        for fn, sha, label, note, t0, t1, capture in picker(man):
             if not isinstance(sha, str):
                 sha = None
             key = (case, fn, sha)
@@ -213,8 +307,10 @@ def measure_miniv3() -> dict:
             r["note"] = note
             r["window_s"] = [t0, t1]
             r["held_s"] = [t0 + i0 / sr, t0 + i1 / sr]
+            if pinned:
+                r["capture"] = capture
             reports.append(r)
-    # the across-note baselines: same commanded note, seconds apart
+    # Compare the observed pitches within each render.
     across = {}
     for name, sel in (("m1a-midi36-4.0s-apart",
                        lambda r: r["label"].startswith("m1a/phrase0/")
@@ -225,9 +321,10 @@ def measure_miniv3() -> dict:
                       ("m1a-osc2-midi48-4.0s-apart",
                        lambda r: r["label"].startswith("m1a/osc2_open/")
                        and r.get("note") == 48),
-                      ("m5a-midi84-13.6s-apart",
-                       lambda r: r.get("note") == 84)):
-        across[name] = odp.across_note_drift([r for r in reports if sel(r)])
+                      ("m5a-midi84-saw-vs-pulse",
+                       lambda r: r["label"].startswith("m5a/")
+                        and r.get("note") == 84)):
+        across[name] = _across_pair([r for r in reports if sel(r)])
     return {"reference": "Arturia Mini V3 3.12.0.3422 (frozen renders)",
             "reports": reports, "across_note": across}
 
@@ -281,11 +378,17 @@ def main(argv=None) -> int:
                      f"f0 {r['f0_offset_cents']:+7.4f} c  "
                      f"ripple {r['env_ripple_db']:5.2f} dB")
         print(line)
-    print("   -- across-note baselines (same commanded note, seconds apart)")
+    print("   -- across-note pairs (pitch estimates from the observed windows)")
     for name, ac in mv["across_note"].items():
         if ac["verdict"] == odp.REFUSED:
             print(f"      {name:<34} REFUSED {ac['refusal']} "
                   f"{ac.get('refusal_detail', '')}")
+            taken = ac.get("between_captures")
+            if taken:
+                first, *rest = zip(ac["labels"], taken["f0_cents_vs_first"])
+                print("         between the two captures, and not drift: "
+                      + "; ".join(f"{label} {dev:+.4f} c against {first[0]}"
+                                  for label, dev in rest))
         else:
             print(f"      {name:<34} {ac['verdict']:<9} span "
                   f"{ac['span_cents']:.4f} c over {ac['n_windows']} windows, "
