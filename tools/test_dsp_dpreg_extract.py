@@ -157,6 +157,30 @@ def test_empty_or_partial_box_manifest_refuses_even_when_dcp_header_matches(
     assert "REFUSED" in out and "extraction OK" not in out
 
 
+def test_header_only_dump_with_a_complete_manifest_refuses(monkeypatch, tmp_path, box, capsys):
+    """#1469 review: keep the first two lines (incl. the correct DCP line) of
+    dsp_cells_dump.txt and regenerate every digest. The manifest is complete and
+    the digests match, yet no cell section was returned: it printed `cells
+    dumped : 0` then `extraction OK` and exited 0."""
+    lines = (box / "dsp_cells_dump.txt").read_text().splitlines()
+    (box / "dsp_cells_dump.txt").write_text("\n".join(lines[:2]) + "\n")
+    (box / "MANIFEST.sha256").write_text("".join(
+        f"{_sha((box / n).read_bytes())}  {n}\n" for n in dx.MANIFEST_FILES))
+    rc, _calls, _ev = _run(monkeypatch, tmp_path, box, "local")
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "REFUSED" in out and "cell sections absent" in out and "extraction OK" not in out
+
+
+def test_dump_cell_problems_accepts_the_complete_dump_and_names_each_defect():
+    ok = "==== CELL a ====\nx\n==== END CELL a ====\n==== CELL b ====\n==== END CELL b ====\n"
+    assert dx.dump_cell_problems(ok, ["a", "b"]) == []
+    assert dx.dump_cell_problems(ok, ["a", "b", "c"])          # one absent
+    assert dx.dump_cell_problems(ok, ["a"])                    # one unrequested
+    assert dx.dump_cell_problems(ok, [])                       # nothing derived
+    assert dx.dump_cell_problems(ok.replace("==== END CELL b ====\n", ""), ["a", "b"])
+
+
 def test_phase3_manifest_command_does_not_mask_sha256sum_failure(monkeypatch, tmp_path, box):
     """Phase 3 ended `&& grep -c '^ERROR' vivado_extract.log || true` unparenthesised,
     so a failed `sha256sum` after `> MANIFEST.sha256` truncated the manifest to

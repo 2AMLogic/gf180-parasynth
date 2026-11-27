@@ -147,6 +147,19 @@ def reference_side():
 # ===========================================================================
 # 3. What the repair does to REAL measured curves, and to a trend across them
 # ===========================================================================
+def _usable_curve(r: dict) -> bool:
+    """True only when `freqs` and `gain_db` are equal-length non-empty numeric
+    lists and `cut_hz` is a finite real number. A JSON null or a wrong type in
+    any of them is an unusable grid point (refusal), never a TypeError."""
+    def nums(v):
+        return (isinstance(v, list) and len(v) > 0
+                and all(type(x) in (int, float) and math.isfinite(x) for x in v))
+    cut = r.get("cut_hz")
+    return (nums(r.get("freqs")) and nums(r.get("gain_db"))
+            and len(r["freqs"]) == len(r["gain_db"])
+            and type(cut) in (int, float) and math.isfinite(cut))
+
+
 def real_curves():
     print("\n" + "=" * 78)
     print("3. The repair on measured response curves (#146's question)")
@@ -170,8 +183,8 @@ def real_curves():
             return
         ratios = {}
         for r in rows:
-            if (not isinstance(r, dict) or r.get("device") != device or "cut_hz" not in r
-                    or not r.get("freqs") or len(r["freqs"]) != len(r.get("gain_db", []))):
+            if (not isinstance(r, dict) or r.get("device") != device
+                    or not _usable_curve(r)):
                 print(f"   {device}: missing or misidentified response curve")
                 return
             f = np.asarray(r["freqs"], float)

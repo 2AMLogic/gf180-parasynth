@@ -345,6 +345,31 @@ def recheck_script(dcp, dcp_sha256):
     )
 
 
+def dump_cell_problems(dump, cells):
+    """Why the pulled dump cannot stand for the cells derived from the DRC:
+    every target cell must open exactly one `==== CELL <name> ====` section
+    and close it with `==== END CELL <name> ====`, and no unrequested cell may
+    appear. A digest-correct header-only dump has none of these (#1469)."""
+    want = list(cells)
+    if not want:
+        return ["the DRC yielded no target cells, so nothing could be verified"]
+    opened = re.findall(r"^==== CELL (\S+) ====\s*$", dump, re.M)
+    closed = re.findall(r"^==== END CELL (\S+) ====\s*$", dump, re.M)
+    out = []
+    missing = sorted(set(want) - set(opened))
+    if missing:
+        out.append(f"{len(missing)} of {len(set(want))} cell sections absent, e.g. {missing[:3]}")
+    extra = sorted(set(opened) - set(want))
+    if extra:
+        out.append(f"unrequested cell sections {extra[:3]}")
+    dup = sorted({c for c in opened if opened.count(c) > 1})
+    if dup:
+        out.append(f"duplicated cell sections {dup[:3]}")
+    if sorted(opened) != sorted(closed):
+        out.append("cell sections are not each closed by an END marker")
+    return out
+
+
 def verify_dcp_binding(evidence, dcp, dcp_sha256):
     """The pulled evidence names, by digest, the checkpoint asserted, and
     the dump opened that same path. Returns the digest; REFUSED otherwise."""
@@ -537,6 +562,11 @@ def main(argv=None):
 
     dump = (evidence / "dsp_cells_dump.txt").read_text()
     print(f"cells dumped      : {dump.count('==== CELL ')}")
+    problems = dump_cell_problems(dump, cells)
+    if problems:
+        print("REFUSED: dsp_cells_dump.txt does not cover the cells derived from "
+              "the DRC: " + "; ".join(problems))
+        return 2
     print(f"missing instances : {dump.count('MISSING ')}")
     print(f"extraction OK, evidence in {evidence}")
     return 0

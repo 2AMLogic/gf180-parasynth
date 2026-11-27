@@ -267,3 +267,71 @@ def test_verify_with_a_corrupted_clip_fails(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc == cap.FAIL
     assert "FAIL" in out and "1 failed" in out
+
+
+def _verify_with(monkeypatch, tmp_path, mutate_entry, rewrite_wav=None):
+    """verify() on a manifest copy whose archive may be swapped for one with
+    hash-correct, deliberately wrong audio (#1469 review: zero frames, or one
+    take's bytes under every key)."""
+    import copy
+    import hashlib
+    import io
+    import zipfile
+    m = copy.deepcopy(cap.load_manifest())
+    if rewrite_wav is not None:
+        zin = zipfile.ZipFile(cap.ARCHIVE)
+        out = tmp_path / "arch.zip"
+        with zipfile.ZipFile(out, "w") as z:
+            for n in zin.namelist():
+                z.writestr(n, rewrite_wav(n, zin.read(n)))
+        monkeypatch.setattr(cap, "ARCHIVE", out)
+        with zipfile.ZipFile(out) as z:
+            for meta in m["clips"].values():
+                meta["sha256"] = hashlib.sha256(z.read(meta["archive_member"])).hexdigest()
+    mutate_entry(m)
+    monkeypatch.setattr(cap, "load_manifest", lambda: m)
+    return cap.verify()
+
+
+def test_verify_refuses_hash_correct_zero_frame_audio(monkeypatch, tmp_path, capsys):
+    """A 48 kHz WAV with no frames, recorded frames=0, digests updated: the
+    frame check compared 0 == 0 and printed `24 verified`."""
+    import io
+    from scipy.io import wavfile
+
+    def empty(_n, _b):
+        buf = io.BytesIO()
+        wavfile.write(buf, cap.rp.SR, np.zeros(0, dtype=np.float32))
+        return buf.getvalue()
+
+    def zero_frames(m):
+        for meta in m["clips"].values():
+            meta["frames"] = 0
+
+    rc = _verify_with(monkeypatch, tmp_path, zero_frames, empty)
+    out = capsys.readouterr().out
+    assert rc == cap.FAIL and "verified, 24 failed" in out and "24 verified" not in out
+
+
+def test_verify_refuses_one_takes_bytes_filed_under_every_condition(monkeypatch, capsys):
+    """Copy only sha256 + archive_member of one clip to all 24 entries: hash and
+    frame count agree, but the decoded peak/rms are another condition's."""
+    manifest = cap.load_manifest()
+    src = manifest["clips"][cap.clip_key("open20k", 0.25, 1)]
+
+    def clone_bytes(m):
+        for meta in m["clips"].values():
+            meta["sha256"], meta["archive_member"] = src["sha256"], src["archive_member"]
+            meta["frames"] = src["frames"]
+
+    rc = _verify_with(monkeypatch, None, clone_bytes)
+    out = capsys.readouterr().out
+    assert rc == cap.FAIL and "disagrees with its capture evidence" in out
+    assert "24 verified" not in out
+
+
+def test_verify_still_accepts_legitimate_byte_sharing_between_repeated_takes(capsys):
+    """Control: the unmodified archive shares bytes between takes (the two
+    a0.2500 takes above carry the same digest) and must keep verifying 24/24."""
+    assert cap.verify() == cap.OK
+    assert "24 verified, 0 failed" in capsys.readouterr().out

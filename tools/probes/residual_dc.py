@@ -1091,6 +1091,8 @@ def floor_row_problems(rows):
     (`floor_arithmetic_problems`); a REFUSED row carries a reason."""
     if not isinstance(rows, list):
         return [f"rows is not a list: {type(rows).__name__}"]
+    if not rows:
+        return ["rows is empty: a record with no voice measured cannot reach an ending"]
     out, voices = [], []
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
@@ -1652,6 +1654,8 @@ def row_problems(rows):
     magnitude cannot reach an ending (subject_verdict stops at the refusal)."""
     if not isinstance(rows, list):
         return [f"rows is not a list: {type(rows).__name__}"]
+    if not rows:
+        return ["rows is empty: a record with no voice measured cannot reach an ending"]
     out = []
     voices = []
     for i, row in enumerate(rows):

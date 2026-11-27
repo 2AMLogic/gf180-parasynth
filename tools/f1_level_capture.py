@@ -361,7 +361,42 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
     sr, y = wavfile.read(io.BytesIO(b))
     if sr != rp.SR or len(y) != meta["frames"]:
         raise Refused(f"{key}: sr {sr} / {len(y)} frames, manifest says {rp.SR} / {meta['frames']}")
-    return np.asarray(y, dtype=np.float64), meta
+    y = np.asarray(y, dtype=np.float64)
+    problems = _evidence_problems(y, meta)
+    if problems:
+        raise Refused(f"{key}: decoded audio disagrees with its capture evidence: "
+                      + "; ".join(problems))
+    return y, meta
+
+
+def _evidence_problems(y: np.ndarray, meta: dict) -> list[str]:
+    """The decoded audio must be a non-empty, finite, audible population whose
+    measured peak and rms are the ones recorded for THIS condition and level,
+    and which covers every projection window. Two equal zero counts, or one
+    take's bytes filed under another key, satisfy a hash and a frame count;
+    neither satisfies these (#1469)."""
+    out: list[str] = []
+    if type(meta.get("frames")) is not int or meta["frames"] <= 0 or len(y) <= 0:
+        return [f"no positive sample population ({len(y)} decoded, "
+                f"{meta.get('frames')!r} recorded)"]
+    if not np.all(np.isfinite(y)):
+        return ["non-finite samples"]
+    peak = float(np.abs(y).max())
+    rms = float(np.sqrt(np.mean(np.square(y))))
+    if peak <= 1e-9:
+        out.append("silent")
+    for name, got in (("peak", peak), ("rms", rms)):
+        want = meta.get(name)
+        if (type(want) not in (int, float) or not math.isfinite(want)
+                or abs(got - want) > 1e-4 * max(abs(want), 1e-9) + 1e-9):
+            out.append(f"{name} {got:.9g} vs recorded {want!r}")
+    try:
+        end = max(int(b) for _a, b, _f in meta["parts"])
+    except (KeyError, TypeError, ValueError):
+        return out + ["no usable projection windows"]
+    if end > len(y):
+        out.append(f"projection windows run to {end}, past the {len(y)} decoded frames")
+    return out
 
 
 def capture_curve(cond: str, amp: float, take: int, manifest=None, inject="") -> tuple:

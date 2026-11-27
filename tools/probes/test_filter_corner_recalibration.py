@@ -85,6 +85,20 @@ def test_trend_needs_each_device_across_the_measured_range(
     assert not mod.checked
 
 
+@pytest.mark.parametrize("field", ["device", "freqs", "gain_db", "cut_hz"])
+def test_a_null_required_field_refuses_instead_of_raising(mod, tmp_path, monkeypatch, capsys, field):
+    """#1469 review: JSON null for gain_db / cut_hz hit len(None) / float(None)
+    and raised TypeError instead of the documented exit 2."""
+    data = json.loads(mod.RESULTS.read_text())
+    data["response-diva"][0][field] = None
+    results = tmp_path / "results.json"
+    results.write_text(json.dumps(data))
+    monkeypatch.setattr(mod, "RESULTS", results)
+    assert mod.main() == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "get worse" not in out
+
+
 def test_populated_results_still_checks_and_holds(mod, capsys):
     # the good case: the committed fixture drives exactly the two checks
     rc = mod.main()

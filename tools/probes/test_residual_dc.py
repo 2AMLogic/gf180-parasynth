@@ -1122,7 +1122,7 @@ def test_floor_verdict_cli_produces_each_voices_ending(tmp_path, capsys):
     (lambda: [_frec("dev", []), _frec("confirm", [], commit="b" * 40)], "different commits"),
     (lambda: [_frec("dev", []), _frec("confirm", [], limits=dict(R._jsonable(R.declared_limits()), S_OFFSET_MIN=7.0))],
      "limits differ"),
-    (lambda: [_frec("dev", [_frow("CH")]), _frec("confirm", [])], "no row"),
+    (lambda: [_frec("dev", [_frow("CH")]), _frec("confirm", [_frow("RS")])], "no row"),
 ], ids=["same-condition-twice", "dirty", "mixed-commits", "revisited-limits", "confirm-missing"])
 def test_floor_verdict_refuses_or_hedges_records_it_cannot_combine(tmp_path, capsys, make, why):
     assert R.main(["--floor-verdict", *_write(tmp_path, *make())]) in (0, 2)
@@ -1211,3 +1211,33 @@ def test_matrix_tests_fail_on_an_empty_matrix(monkeypatch, tmp_path):
     monkeypatch.setattr(sys.modules[__name__], "QUAL", empty_qual)
     with pytest.raises(AssertionError, match="qualification JSON holds no records"):
         test_the_committed_records_pass_the_arithmetic_gate()
+
+
+# --- two correctly named conditions with ZERO voice rows (#1469 review) -----
+
+def test_floor_verdicts_refuses_both_conditions_with_no_voice_rows():
+    recs = _qual_with(lambda r: r.update(rows=[]))["records"]
+    status, ends, why = R.floor_verdicts(recs)
+    assert status == "REFUSED" and ends == {} and any("empty" in w for w in why), why
+    with pytest.raises(R.Refused):
+        R.floor_summary(recs)
+
+
+def test_verdicts_refuses_both_conditions_with_no_voice_rows():
+    status, ends, why = R.verdicts([_rec("dev", []), _rec("confirm", [])])
+    assert status == "REFUSED" and ends == {} and any("empty" in w for w in why), why
+
+
+def test_refresh_endings_refuses_empty_records_and_leaves_the_report_alone(tmp_path, capsys):
+    q = _qual_with(lambda r: r.update(rows=[]))
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(q))
+    before = p.read_text()
+    assert R.main(["--refresh-endings", str(p)]) == 2
+    assert p.read_text() == before and "REFUSED" in capsys.readouterr().out
+
+
+def test_nonempty_committed_records_are_still_accepted():
+    # control against an unsatisfiable gate: the committed state must pass
+    q = json.loads(QUAL.read_text())
+    assert R.floor_verdicts(q["records"])[0] == "OK"
