@@ -572,16 +572,28 @@ raise SystemExit(code)
 
 
 def _with_line_ending(target, line_ending):
-    """Rewrite the staged target and its pristine copy with `line_ending`
-    (`LF` leaves both alone) and return the target's bytes."""
-    before = target.read_bytes()
-    if line_ending == "CRLF":
-        assert b"\r" not in before
-        before = before.replace(b"\n", b"\r\n")
-        target.write_bytes(before)
-        target.with_suffix(".original").write_bytes(before)
-    assert (b"\r\n" in before) == (line_ending == "CRLF"), line_ending
-    return before
+    """Stage identical target and pristine bytes in the requested newline format."""
+    source = target.read_bytes().replace(b"\r\n", b"\n")
+    assert b"\n" in source
+    newline = {"LF": b"\n", "CRLF": b"\r\n"}[line_ending]
+    staged = source.replace(b"\n", newline)
+    target.write_bytes(staged)
+    target.with_suffix(".original").write_bytes(staged)
+    return staged
+
+
+@pytest.mark.parametrize("line_ending, expected", [
+    ("LF", b"first\nsecond\n"),
+    ("CRLF", b"first\r\nsecond\r\n"),
+], ids=["LF", "CRLF"])
+def test_with_line_ending_stages_both_files_from_a_crlf_checkout(tmp_path, line_ending, expected):
+    target = tmp_path / "sound_report.py"
+    target.write_bytes(b"first\r\nsecond\r\n")
+    pristine = target.with_suffix(".original")
+    pristine.write_bytes(target.read_bytes())
+
+    assert _with_line_ending(target, line_ending) == expected
+    assert target.read_bytes() == pristine.read_bytes() == expected
 
 
 @pytest.mark.parametrize("line_ending", ["LF", "CRLF"])
