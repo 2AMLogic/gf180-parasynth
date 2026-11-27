@@ -208,19 +208,21 @@ def tcl_route_checks(report_path: str, exceptions_path: str) -> str:
 
 
 _FALSE = re.compile(r"^\s*set_false_path\s+(.*?)\s*$")
+_ENDPOINT = r"\[get_\w+\s+(?:-\w+\s+)*\{[^}]*\}\]|\[[^\]]*\]"
 
 
 def expected_exceptions(xdc_text: str) -> list:
     """[(from, to)] of the XDC's set_false_path lines, as report_exceptions
-    prints them ('*' where an end is not given)."""
+    prints them ('*' where an end is not given). Both ends parse with one
+    pattern: a braced name such as `{btn[0]}` holds a `]` of its own."""
     out = []
     for line in xdc_text.splitlines():
         m = _FALSE.match(line.split("#", 1)[0])
         if not m:
             continue
         args = m.group(1)
-        frm = re.search(r"-from\s+(\[[^\]]*\])", args)
-        to = re.search(r"-to\s+(\[get_\w+\s+(?:-\w+\s+)*\{[^}]*\}\]|\[[^\]]*\])", args)
+        frm = re.search(r"-from\s+(" + _ENDPOINT + ")", args)
+        to = re.search(r"-to\s+(" + _ENDPOINT + ")", args)
         out.append((frm.group(1) if frm else "*", to.group(1) if to else "*"))
     if re.search(r"set_(multicycle_path|max_delay|min_delay|clock_groups|disable_timing)",
                  xdc_text):

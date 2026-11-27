@@ -24,15 +24,19 @@ After route, Tcl in the build itself exits 3 unless:
     that flop feeds exactly one flop, both carry ASYNC_REG, and every timing
     path from the port is a False Path (pads_inputs.rpt).
 
-The verdict is read from timing.rpt: PASS only with WNS >= 0, WHS >= 0 and
-zero failing setup, hold and pulse-width endpoints. Anything else is FAIL.
+The verdict is read from those reports against the XDC the build compiled (its
+inputs/ snapshot, never the live tree), with the release publisher's checkers
+(fpga/publish_arty.inspect_reports, fpga/xdc_bindings.check_report and
+check_route). PASS only with every constraint bound and effective, exactly the
+XDC's false paths in the design, WNS/WHS/WPWS >= 0 with zero failing endpoints,
+a complete check_timing, the 12.288 MHz core clock, no resource overflow and no
+DRC error or critical warning. Anything else is FAIL.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import re
 import shutil
 import signal
 import subprocess
@@ -47,6 +51,7 @@ for _p in ("fpga", "model", "rtl-sketch"):
 
 import build_arty                                   # noqa: E402
 import pads_rom as pr                               # noqa: E402
+import publish_arty as publish                      # noqa: E402
 import xdc_bindings as xb                           # noqa: E402
 
 CONFIG = build_arty.CONFIG
@@ -159,45 +164,6 @@ def validate_verification(directory: Path, paths: list) -> dict:
 
 
 # ---- the verdict after Vivado ---------------------------------------------------------
-_SUMMARY_NAMES = ("wns_ns", "tns_ns", "setup_failing", "setup_endpoints", "whs_ns", "ths_ns",
-                  "hold_failing", "hold_endpoints", "wpws_ns", "tpws_ns", "pulse_failing",
-                  "pulse_endpoints")
-
-
-def timing_summary(text: str, design: str = TOP) -> dict:
-    """The Design Timing Summary row of a routed timing.rpt (ValueError if the
-    report is not the routed `design` or the table is not the expected shape)."""
-    if not re.search(r"\| Design\s*: " + re.escape(design) + r"\s*$", text, re.MULTILINE):
-        raise ValueError(f"timing report is not for {design}")
-    if not re.search(r"\| Design State\s*: (Fully )?Routed\s*$", text, re.MULTILINE):
-        raise ValueError("timing report is not of a routed design")
-    try:
-        section = text.split("| Design Timing Summary", 1)[1].split("| Clock Summary", 1)[0]
-    except IndexError as exc:
-        raise ValueError("timing report has no Design Timing Summary") from exc
-    rows = [s.split() for s in section.splitlines() if re.match(r"^\s*[-+]?\d+\.\d+\s", s)]
-    if len(rows) != 1 or len(rows[0]) != len(_SUMMARY_NAMES):
-        raise ValueError("unexpected timing summary shape")
-    return dict(zip(_SUMMARY_NAMES, map(float, rows[0])))
-
-
-def timing_verdict(m: dict) -> tuple:
-    """(ok, reasons): WNS >= 0, WHS >= 0, zero failing endpoints of each kind,
-    and something was actually timed."""
-    why = []
-    if m["wns_ns"] < 0:
-        why.append(f"WNS {m['wns_ns']} ns")
-    if m["whs_ns"] < 0:
-        why.append(f"WHS {m['whs_ns']} ns")
-    for k in ("setup_failing", "hold_failing", "pulse_failing"):
-        if m[k] != 0:
-            why.append(f"{int(m[k])} {k.replace('_', ' ')} endpoint(s)")
-    for k in ("setup_endpoints", "hold_endpoints"):
-        if m[k] <= 0:
-            why.append(f"no {k.split('_')[0]} endpoints were timed")
-    return not why, why
-
-
 def pads_inputs_report(text: str) -> list:
     """Problems in pads_inputs.rpt (empty = all six inputs dispositioned)."""
     got, end = {}, None
@@ -295,13 +261,14 @@ def main(argv=None):
                       "(exit 3 = a constraint or pads-input check refused; see runner.log)")
         save()
         return 1
-    problems = xb.check_report((directory / xb.REPORT).read_text(), XDC.read_text())
+    xdc_text = snapshots[n].read_text()
+    problems = xb.check_report((directory / xb.REPORT).read_text(), xdc_text)
+    problems += xb.check_route((directory / xb.REPORT).read_text(),
+                               (directory / xb.EXCEPTIONS).read_text(), xdc_text)
     problems += pads_inputs_report((directory / PADS_REPORT).read_text())
     try:
-        metrics = timing_summary((directory / "timing.rpt").read_text())
-        ok_t, why = timing_verdict(metrics)
-        report["timing"] = metrics
-        problems += why
+        summary = publish.inspect_reports(directory, design=TOP)
+        report["timing"] = summary["timing"]
     except ValueError as exc:
         problems.append(str(exc))
     report["problems"] = problems
