@@ -44,7 +44,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest
-      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - run: python3 tools/ci_apt_install.py iverilog
 
       # The committed roadmap is judged BEFORE anything rewrites it (#906).
       # `--run --slow` below regenerates README.md, and the strict check after
@@ -121,7 +121,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest
-      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - run: python3 tools/ci_apt_install.py iverilog
 
       - name: the control link -- the exact defect that shipped
         run: |

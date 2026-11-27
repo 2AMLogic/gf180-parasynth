@@ -59,7 +59,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install numpy scipy pytest
-      - run: sudo apt-get update && sudo apt-get install -y iverilog autoconf flex libfl-dev bison help2man
+      - run: python3 tools/ci_apt_install.py iverilog autoconf flex libfl-dev bison help2man
       - uses: actions/cache@v4
         with:
           path: .tools/verilator-5.052
@@ -126,7 +126,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
-      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - run: python3 tools/ci_apt_install.py iverilog
       - name: focused sound and selected-path gate
         run: make verify-fast
 
@@ -568,7 +568,7 @@ jobs:
       # test_score_f1_rtl, test_trial). sympy is deliberately NOT installed:
       # test_tone_stage_schematic's sympy witness is meant to be a VISIBLE skip
       # beside two numpy-only witnesses of the same fact that do run.
-      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - run: python3 tools/ci_apt_install.py iverilog
       # Not set here, on purpose: GF180_TR808_REFS. The corpus is ~30 MB and is
       # not in the repo, so the tests that need the WAVs skip visibly and the
       # corpus-gated controls report NO VERDICT. `make reference-integration`
@@ -781,7 +781,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest
-      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - run: python3 tools/ci_apt_install.py iverilog
       - name: F1 -- ladder bit-exact
         run: python rtl-sketch/verify_ladder.py
       - name: M1 -- selected 2x Moog voice bit-exact (quick set)
@@ -833,7 +833,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest
-      - run: sudo apt-get update && sudo apt-get install -y iverilog verilator
+      - run: python3 tools/ci_apt_install.py iverilog verilator
       - name: M1 -- one Moog voice bit-exact (full)
         run: python rtl-sketch/verify_voice.py --set full
       - name: D -- the eight-stop drum kit bit-exact
@@ -871,7 +871,7 @@ jobs:
       # into a skipped phrase run. An earlier red step with identity green
       # still runs the phrases: !cancelled() keeps #1133's reachability.
       - if: ${{ !cancelled() }}
-        run: sudo apt-get install -y autoconf flex libfl-dev bison help2man
+        run: python3 tools/ci_apt_install.py autoconf flex libfl-dev bison help2man
       - if: ${{ !cancelled() }}
         uses: actions/cache@v4
         with:

@@ -17,7 +17,7 @@
         "role": "hygiene",
         "path": ".github/workflows/arty.yml",
         "passed": true,
-        "content_hash": "sha256:1d2799f201a64da3ba89d0be0fcc3f7a697675357b133396fa4fab17ccd27bc6"
+        "content_hash": "sha256:9d2fda5a0dee75f1098c0c18840fbfaa09a78abf2f6495cb6768b4fc2f179676"
       },
       {
         "check": "present",
@@ -52,7 +52,7 @@
         "role": "hygiene",
         "path": ".github/workflows/nightly.yml",
         "passed": true,
-        "content_hash": "sha256:3d4cfe65d60391f5f01ca6c0231dd51849593facce5861b5695c1a9f14b1ff36"
+        "content_hash": "sha256:460e220be40f335ec76965a81b262d03d063ec15e2ee31086f5766ce49d2dd66"
       },
       {
         "check": "present",
@@ -66,7 +66,7 @@
         "role": "hygiene",
         "path": ".github/workflows/rungs.yml",
         "passed": true,
-        "content_hash": "sha256:e47c626493be80059d8a82d928b5f8ffcda4fcd1c4031f4d6afd7efe8bc4380f"
+        "content_hash": "sha256:5750039c5b7a880de92bc11b7776314038e5ce50f734ea33b962e3a403f5670a"
       },
       {
         "check": "present",
