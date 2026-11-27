@@ -371,3 +371,87 @@ def test_extractor_will_not_overwrite_a_different_local_drc(tmp_path):
     new.parent.mkdir()
     xmod.write_fetched_drc(new, "x\n")
     assert new.read_text() == "x\n"
+
+
+SAME_INSTANCE_TWICE = DRC_SNIPPET.replace(
+    "u_synth/u_voice/b/p_1_out with", "u_synth/u_voice/a/prod0__0 with")
+NO_SUMMARY_ROW = "\n".join(l for l in DRC_SNIPPET.splitlines()
+                           if "| DPREG-4 |" not in l) + "\n"
+
+
+def test_extractor_refuses_a_drc_that_flags_the_same_instance_twice():
+    with pytest.raises(SystemExit, match=r"REFUSED: .*same instance twice"):
+        xmod.flagged_from_drc(SAME_INSTANCE_TWICE)
+
+
+def test_extractor_keeps_two_distinct_instances_in_report_order():
+    assert xmod.flagged_from_drc(DRC_SNIPPET) == [
+        "u_synth/u_voice/a/prod0__0", "u_synth/u_voice/b/p_1_out"]
+
+
+@pytest.mark.parametrize("drc,why", [
+    (DRC_SNIPPET.replace("| 2      |", "| 13     |"), "summary says"),
+    (DRC_SNIPPET.replace("DPREG-4#2", "DPREG-4#3"), "not contiguous"),
+    (NO_SUMMARY_ROW, "no DPREG-4 summary-table row"),
+    (DRC_SNIPPET.replace("DPREG-4#", "DPREG-9#"),
+     "no DPREG-4 violations parsed"),
+    (SAME_INSTANCE_TWICE, "same instance twice"),
+])
+def test_extractor_refuses_exactly_what_the_analyser_refuses(drc, why):
+    with pytest.raises(mod.Refused, match=why) as analyser:
+        mod.parse_drc_targets(drc)
+    with pytest.raises(SystemExit) as extractor:
+        xmod.flagged_from_drc(drc)
+    assert str(extractor.value) == f"REFUSED: {analyser.value}"
+
+
+def test_extractor_targets_come_from_the_canonical_parser(monkeypatch):
+    seen = []
+
+    def parse(drc_text):
+        seen.append(drc_text)
+        return ["stub/a", "stub/b"]
+
+    monkeypatch.setattr(mod, "parse_drc_targets", parse)
+    assert xmod.flagged_from_drc("any drc bytes") == ["stub/a", "stub/b"]
+    assert seen == ["any drc bytes"]
+
+
+def test_extractor_refusal_is_the_analysers_reason(monkeypatch):
+    def refuse(drc_text):
+        raise mod.Refused("stub reason")
+
+    monkeypatch.setattr(mod, "parse_drc_targets", refuse)
+    with pytest.raises(SystemExit) as exc:
+        xmod.flagged_from_drc("any drc bytes")
+    assert str(exc.value) == "REFUSED: stub reason"
+
+
+BY_PATH_LOADER = r"""
+import importlib.util, sys
+for sibling in ("refusal", "dsp_dpreg_analyse"):
+    assert importlib.util.find_spec(sibling) is None, sibling
+spec = importlib.util.spec_from_file_location("dsp_dpreg_extract", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+try:
+    mod.flagged_from_drc(sys.stdin.read())
+except SystemExit as exc:
+    print(exc)
+    sys.exit(0)
+sys.exit(3)
+"""
+
+
+def test_extractor_loads_by_path_with_tools_off_sys_path(tmp_path):
+    """Loaded by path from outside tools/ (#1557's import note): the analyser's
+    sibling `refusal` import must resolve from the extractor's own
+    directory."""
+    r = subprocess.run([sys.executable, "-I", "-c", BY_PATH_LOADER,
+                        str(HERE / "dsp_dpreg_extract.py")],
+                       input=SAME_INSTANCE_TWICE, text=True,
+                       capture_output=True, cwd=tmp_path, timeout=120,
+                       check=False)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.strip() == (
+        "REFUSED: drc.rpt flags the same instance twice")
