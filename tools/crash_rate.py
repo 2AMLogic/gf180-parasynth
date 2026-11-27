@@ -17,8 +17,8 @@ that is not one, all of them guarded here:
 
   - **Counting text.** A run that prints "Segmentation fault" and exits 0 is not
     a crash and a target that segfaults silently is. The signal comes from
-    `os.wait4`. A separate progress record shows whether the target reached
-    pytest's call phase. Stderr is recorded for diagnostics.
+    `os.wait4`. A separate progress record shows whether execution entered the
+    target callable's body. Stderr is recorded for diagnostics.
   - **Flattening "did not run" into "did not crash."** A target that does not
     exist, a missing numpy, an import error -- all exit non-zero without ever
     reaching the code under test, and averaged into a denominator they look

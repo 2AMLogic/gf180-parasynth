@@ -235,40 +235,92 @@ def test_disabled():
         assert summary["crash_rate"] == (0 if ran else None)
 
 
-def test_a_body_that_never_started_is_not_an_exercised_run(tmp_path):
+@pytest.mark.parametrize("test, expected_rc, expected_verdict, ran", [
+    ("test_fixture", 0, cr.PASS, True),
+    ("test_posonly", 2, cr.ERROR, False),
+    ("test_posonly_xfail", 2, cr.ERROR, False),
+    ("test_asyncgen", 2, cr.ERROR, False),
+    ("test_coroutine", 2, cr.ERROR, False),
+    ("test_bad_patch", 2, cr.ERROR, False),
+    ("test_bad_partial", 2, cr.ERROR, False),
+    ("Case::test_measure", 2, cr.ERROR, False),
+    ("OkCase::test_measure", 0, cr.PASS, True),
+    ("test_failed_assertion", 0, cr.TESTFAIL, True),
+    ("test_sync", 0, cr.PASS, True),
+])
+def test_a_body_that_never_started_is_not_an_exercised_run(
+    tmp_path, test, expected_rc, expected_verdict, ran,
+):
     marker = tmp_path / "entered"
     target = _write(tmp_path, "test_empty.py", f"""
+import functools
 import pathlib
 import unittest
+from unittest import mock
 import pytest
+
+M = pathlib.Path({str(marker)!r})
+
+def test_fixture(tmp_path):
+    assert tmp_path.is_dir()
+    M.touch()
+
+def test_posonly(tmp_path, /):
+    M.touch()
+
+@pytest.mark.xfail(strict=True)
+def test_posonly_xfail(tmp_path, /):
+    M.touch()
+
+@pytest.mark.xfail(strict=True)
+async def test_asyncgen():
+    M.touch()
+    yield
+
+@pytest.mark.xfail(strict=True)
+async def test_coroutine():
+    M.touch()
+    assert False
+
+@pytest.mark.xfail(strict=True)
+@mock.patch("no_such_module_1506.attr")
+def test_bad_patch(_m):
+    M.touch()
+
+def _posonly_helper(x, /):
+    M.touch()
+
+test_bad_partial = functools.partial(_posonly_helper)
 
 class Case(unittest.TestCase):
     def setUp(self):
         raise RuntimeError("setup fails before the method")
     def test_measure(self):
-        pathlib.Path({str(marker)!r}).touch()
+        M.touch()
 
-@pytest.mark.xfail(strict=True)
-async def test_coroutine():
-    pathlib.Path({str(marker)!r}).touch()
+class OkCase(unittest.TestCase):
+    def test_measure(self):
+        M.touch()
+
+def test_failed_assertion():
+    M.touch()
     assert False
 
 @pytest.mark.xfail(strict=True)
 def test_sync():
-    pathlib.Path({str(marker)!r}).touch()
+    M.touch()
     assert False
 """)
     out = tmp_path / "report.json"
-    for test, expected_rc, ran in [("Case::test_measure", 2, False),
-                                   ("test_coroutine", 2, False),
-                                   ("test_sync", 0, True)]:
-        marker.unlink(missing_ok=True)
-        rc = cr.main(["--target", f"{target}::{test}", "--runs", "1", "--json", str(out)])
-        assert marker.exists() is ran, test
-        assert rc == expected_rc, test
-        summary = json.loads(out.read_text())["summary"]
-        assert summary["runs_that_exercised_the_target"] == int(ran), test
-        assert summary["crash_rate"] == (0 if ran else None), test
+    marker.unlink(missing_ok=True)
+    rc = cr.main(["--target", f"{target}::{test}", "--runs", "1", "--json", str(out)])
+    assert marker.exists() is ran, test
+    assert rc == expected_rc, test
+    report = json.loads(out.read_text())
+    assert report["runs"][0]["verdict"] == expected_verdict, test
+    summary = report["summary"]
+    assert summary["runs_that_exercised_the_target"] == int(ran), test
+    assert summary["crash_rate"] == (0.0 if ran else None), test
 
 
 @pytest.mark.parametrize("option", ["--fixtures", "--fixtures-per-test"])
