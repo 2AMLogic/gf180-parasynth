@@ -35,7 +35,7 @@ test.
 
 WHY THE TWO INVOCATIONS ARE MADE TO SOUND DIFFERENT. In a real run the drum
 control moves the REFERENCE and leaves our render alone, and the ensemble
-runner is told nothing about an injection, so two runs of a case write the
+render is the same for an injected run, so two runs of a case write the
 same bytes. A shared-path rewrite is then invisible in the board WAV -- it is
 replaced with itself -- and comparing the clean WAV alone reports an intact
 board. So the second invocation of each case renders a different signal, and
@@ -286,7 +286,7 @@ def test_an_injected_control_leaves_the_clean_board_wav_and_record_untouched(
             != clean["windowing"]["reference"]["onset_index"]
         assert control["audio"] == f"reference {rc.REF_MAIN['CP'][0]}; ours {obs['stated']}"
     else:
-        # the ensemble runner is told nothing about an injection; what makes
+        # the ensemble measurement is identical for an injection; what makes
         # this run a control is the directory it was given
         assert "INJECTED_CONTROL" not in control
         assert control["audio"] == obs["stated"]
@@ -345,7 +345,7 @@ def test_the_shared_path_writer_is_a_control_that_stays_red(
     is known to be the control's own: content alone cannot tell whose file
     it is when the overwrite succeeded."""
     monkeypatch.setattr(rc, "wav_destination",
-                        lambda results_dir, case_id, suffix: rc.AUDIO_OUT / f"{case_id}{suffix}")
+                        lambda results_dir, case_id, suffix, **kw: rc.AUDIO_OUT / f"{case_id}{suffix}")
     obs = _control_beside_its_record(board, tmp_path / "scratch", case_id, wav, key)
     assert obs["violated"] == [CLEAN_WAV, OWN_WAV]
     assert [p for p in PROPERTIES if p not in obs["violated"]] == [CLEAN_RECORD, OWN_PCM]
@@ -395,6 +395,60 @@ def test_a_control_cannot_adopt_the_shared_wav_directory_as_its_results(
 
 
 @pytest.mark.parametrize("case_id,wav,key", WRITERS)
+def test_injected_wav_alias_refused_before_overwriting_the_clean_recording(
+        board, capsys, case_id, wav, key):
+    trial = board["base"] / "trial"  # same filesystem as the published WAV for hardlink_to()
+    trial.mkdir()
+    trial_record = trial / f"{case_id}.json"
+    board_record = board["board"] / trial_record.name
+    if case_id == "E1A":
+        anchor = (rc.ROOT / "docs/scorecard/results/E1A.json").read_bytes()
+        assert json.loads(anchor)["engine"] == "integrated-rtl"
+        board_record.parent.mkdir()
+        board_record.write_bytes(anchor)
+        trial_record.write_bytes(anchor)
+        model_record = board_record.parent / "model-twin" / board_record.name
+    else:
+        model_record = board_record
+
+    _cli(board, case_id)
+    clean_record = model_record.read_bytes()
+    clean = json.loads(clean_record)
+    assert _measured(clean)
+    published = _resolved(clean["provenance"]["artefacts"][key])
+    assert published == board["shared"] / wav
+    np.testing.assert_array_equal(_pcm(published), _rendered(case_id, FIRST))
+    clean_wav = published.read_bytes()
+
+    if case_id == "E1A":
+        (trial / "model-twin").symlink_to(board["shared"], target_is_directory=True)
+        candidate = trial / "model-twin" / wav
+    else:
+        candidate = trial / wav
+        candidate.hardlink_to(published)
+    assert candidate.samefile(published)
+    board["renders"].hz = SECOND
+
+    capsys.readouterr()
+    status = _cli(board, case_id, "--inject", "REF_F0_20PCT", "--results", str(trial))
+    assert published.read_bytes() == clean_wav, "the injected render overwrote the clean WAV"
+    assert status == 2
+    err = capsys.readouterr().err
+    assert "--inject" in err and rc.stated_path(published) in err
+    assert rc.stated_path(candidate) in err
+    assert model_record.read_bytes() == clean_record
+    assert not (candidate.parent / trial_record.name).exists()
+    if case_id == "E1A":
+        assert board_record.read_bytes() == trial_record.read_bytes() == anchor
+
+    # Imported callers reach the writers without the CLI's batch preflight.
+    case = next(c for c in rc.load_cases() if c["case_id"] == case_id)
+    measured = rc.run_case(case, board["corpus"], "REF_F0_20PCT", results_dir=str(trial))
+    assert measured["note"].startswith(f"REFUSED: {case_id}: --inject")
+    assert published.read_bytes() == clean_wav
+
+
+@pytest.mark.parametrize("case_id,wav,key", WRITERS)
 def test_no_audio_still_writes_no_wav(board, tmp_path, case_id, wav, key):
     """`--no-audio` is preserved: no WAV, anywhere, and the record says so."""
     _cli(board, case_id)
@@ -431,25 +485,23 @@ def test_a_caller_that_states_no_results_directory_gets_the_shared_path(board):
 
 
 def test_every_published_fixed_model_record_names_the_wav_a_default_run_writes():
-    """The clean board path is not moved by the off-board rule: every published
-    `fixed-model` record that names a rendered WAV names the file a default run
-    of its own runner still writes. D12A's is the compatibility check the
-    issue names; the rest are what the same search finds today."""
-    seen = {}
-    for path in sorted((rc.ROOT / "docs" / "scorecard").rglob("*.json")):
+    """Check the live audio-bearing rows. E1A publishes its fixed-model twin
+    alongside its RTL capture, so name that model record explicitly."""
+    records = [
+        (rc.RESULTS / "D12A.json", "D12A", "ours", "-ours.wav"),
+        (rc.RESULTS / "E1B.json", "E1B", "mix", "-mix.wav"),
+        (rc.RESULTS / "E2A.json", "E2A", "mix", "-mix.wav"),
+        (rc.RESULTS.parent / "ensemble-e1a/rtl/E1A-fixed-model-twin.json",
+         "E1A", "mix", "-mix.wav"),
+    ]
+    toms = rc.RESULTS.parent / "tom-body-334/results"
+    for cid in ("D03A", "D04A", "D05A", "D06A", "D07A", "D08A"):
+        records.append((toms / f"{cid}.json", cid, "ours", "-ours.wav"))
+    for path, cid, key, suffix in records:
         record = json.loads(path.read_text())
-        if not isinstance(record, dict):
-            continue
-        artefacts = (record.get("provenance") or {}).get("artefacts")
-        for key, suffix in (("ours", "-ours.wav"), ("mix", "-mix.wav")):
-            if isinstance(artefacts, dict) and str(artefacts.get(key, "")).endswith(suffix):
-                seen[(record["case_id"], key)] = (record["engine"], artefacts[key])
-    assert {"D12A", "E1A"} <= {cid for cid, _ in seen}, sorted(seen)
-    for (cid, key), (engine, stated) in sorted(seen.items()):
-        suffix = "-ours.wav" if key == "ours" else "-mix.wav"
-        assert engine == rc.ENGINE, (cid, engine)
-        assert rc.plan_for(cid) == ("drum" if key == "ours" else "ensemble"), cid
-        assert stated == str(rc.wav_destination(rc.RESULTS, cid, suffix).relative_to(rc.ROOT)), cid
+        assert record["case_id"] == cid and record["engine"] == rc.ENGINE, path
+        expected = rc.stated_path(rc.wav_destination(rc.RESULTS, cid, suffix))
+        assert record["provenance"]["artefacts"][key] == expected, cid
 
 
 def test_the_wav_destination_is_the_shared_path_on_the_board_and_beside_the_results_off_it(
