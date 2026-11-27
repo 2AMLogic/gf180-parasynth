@@ -1,6 +1,6 @@
 # 0019: Oscillator drift — the references bound it, so the amount is a chosen range
 
-- **Status**: proposed
+- **Status**: proposed — **one across-note drift bound withdrawn, see Corrections (#1433)**
 - **Date**: 2026-09-26
 - **Decided by**: block agent, from the reference measurement in
   `docs/scorecard/mono-osc-drift/reference-drift-v1.json`, the retracted
@@ -27,12 +27,12 @@ Surge XT, Arturia Mini V3 and u-he Diva before implementing anything. Measured
 from the frozen, hash-bound renders already in `docs/scorecard/` (this host has
 neither `dawdreamer` nor the VST3 bundles, so nothing was re-rendered):
 
-- **Mini V3**: every isolated-oscillator window wanders by **0.001–0.024 cents
-  rms**, and the same commanded note 13.6 s apart in one continuous render
-  differs by **0.0011 cents**. The three renders of the same patch are
-  byte-identical. That is 30–100× below anything a player hears: Mini V3's
-  instability is off, or absent, at these settings. The references therefore
-  **bound** drift rather than measure it.
+- **Mini V3** showed **0.001–0.024 cents rms** of pitch variation in its
+  usable isolated-oscillator windows. In one M1A render, two pitch estimates
+  for isolated oscillator 2 at MIDI 48 differed by **0.0102 cents**. The
+  notes began 4.0 s apart. The three M1A phrase repeats are byte-identical.
+  These observations supply no audible drift amount for the instrument.
+  See Corrections for the windows used and the withdrawn M5A comparison.
 - **Surge XT**: `REFUSED` — all sixteen frozen Surge clips drive the *filter*
   from our own stepped tone through Audio In; Surge's oscillators appear in none
   of them.
@@ -192,3 +192,46 @@ oscillator drift: closing that needs either a Surge XT / Diva render of a
 *sustained oscillator* with instability enabled, or the hardware session
 `docs/target.md` specifies. Until then 0.8–4.0 cents is a choice this record
 owns, and the reference JSON records the bound that constrains it.
+
+## Corrections (2026-11-27, #1433)
+
+**The across-note drift bound this record quoted is withdrawn and must not be
+cited.** The Mini V3 bullet read "the same commanded note 13.6 s apart in one
+continuous render differs by 0.0011 cents". The pair behind it,
+`m5a/seg0-saw/n0-midi84` and `m5a/seg1-pulse/n0-midi84`, is not one render.
+The M5A producer its manifest pins (`899e86d6`) built a fresh plugin instance
+for every take and then concatenated the saw take, 9,600 samples of zeros and
+the pulse take. Nothing ran between the two observations, so their difference
+bounds drift over no elapsed time at all.
+
+Nothing caught it because every check the comparison makes was satisfied:
+same note, same sample rate, one hash-bound WAV, and two windows each holding
+a measurable tone. Whether windows come from one render is the caller's to
+establish (`model/osc_drift_probe.py`, `across_note_drift`), and the caller
+assumed it. `tools/measure_osc_drift_reference.py` now records the render
+each window came from and refuses a pair that spans two with
+`INDEPENDENT_CAPTURES`, carrying no stability class and no bound for it.
+
+The frozen recordings support three observations.
+
+- **0.001–0.024 cents rms** is the range of pitch variation measured within
+  the usable isolated-oscillator windows. The MIDI gates last 0.6 s. The
+  four M5A analysis windows include part of the release and last
+  0.7198–0.7232 s.
+- In one M1A render, isolated oscillator 2 at MIDI 48 measured **0.0102
+  cents higher** in the second window (4.106–4.713 s) than in the first
+  (0.107–0.712 s). Pitch excursions between those windows are unmeasured.
+  Both MIDI-36 pairs returned `TOO_FEW_PERIODS`.
+- **0.0011 cents** is the pitch difference between the independent M5A
+  saw and pulse takes of MIDI 84.
+
+Point 5 gives the musical basis for the chosen drift range. The frozen
+recordings constrain pitch variation only where it was observed.
+
+`docs/minimoog-reference.md` (under W3a, citing contract 6.11 and this record)
+retains its earlier summary wording ("every isolated-oscillator window in the
+frozen Mini V3 set wanders by 0.001–0.024 cents rms, 30–100× below audibility,
+so they bound drift instead") because that document is hash-frozen under
+`docs/scorecard/reference-suite-freeze.sha256` (#1050) and is not edited in
+place. Read the scoped statement above and in `spec/NUMERIC-CONTRACT.md` item
+18 instead.

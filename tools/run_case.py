@@ -98,10 +98,20 @@ that are easy to get wrong are injectable and are checked in
 `--inject` refuses to write into `docs/scorecard/results`, and into
 `build/scorecard`, where the board's response curves and rendered WAVs live: a
 filter case's curve and a drum or ensemble case's WAV are written beside the
-record (`response_destination`, `wav_destination`), so a control given any
-other `--results` cannot replace a clean board's own (#1412, #1414). A
+record (`response_destination`, `wav_destination`). Drum and ensemble controls
+also refuse a final WAV path that refers to the case's published recording,
+including through a linked model-twin directory or a hard link (#1414). A
 control's output is not evidence about the instrument and must never be
 mistaken for it.
+
+A CLEAN run is the one those refusals cannot cover. Until #1422 both mono
+writers chose the published WAV themselves and were never told the results
+directory, so a run given a `--results` of its own still wrote the file the
+board's row names. A clean off-board run's model WAV now goes beside the JSON,
+including under model-twin/ when the case has an RTL anchor. A run whose WAV would be
+the published one -- `build/scorecard` for an M5 case, its own directory for
+M1A -- is refused before anything runs, with the case, the published WAV and
+the colliding destination on stderr.
 
 PROVENANCE, AND THE EXIT CODE
 -----------------------------
@@ -3479,7 +3489,8 @@ def result_destination(dest: pathlib.Path, res: dict, *, prepare: bool = True) -
     So an anchor is kept and the model result is written beside it under
     `results/model-twin/`, with the swap announced. Neither is discarded, and
     `tools/compare_ensemble_candidate.py` is the tool that compares them.
-    Pass `prepare=False` to look up the path before writing a sibling WAV."""
+    Pass `prepare=False` to locate the record before writing a WAV or filter
+    curve beside it. The lookup skips directory creation and the write announcement."""
     if res.get("engine") == "integrated-rtl" or not dest.is_file():
         return dest
     try:
@@ -3519,23 +3530,35 @@ def stated_path(path: pathlib.Path) -> str:
     return str(path if path.is_absolute() else path.resolve())
 
 
+def on_board(results_dir: pathlib.Path) -> bool:
+    """Whether `--results` is the published results directory, however it is
+    spelled. The one question every artefact's placement asks, asked here so
+    that no writer answers it by a comparison of its own."""
+    return results_dir.resolve() == RESULTS.resolve()
+
+
 def artefact_directory(results_dir: pathlib.Path, *,
-                       model_wav_case: str | None = None) -> pathlib.Path:
+                       model_record_case: str | None = None) -> pathlib.Path:
     """Choose where to write a filter response curve or a rendered WAV.
 
     A run that lands on the board keeps the established directory under
     `build/scorecard`, because that is the path the published records name
-    (`provenance.artefacts`). Off the board, a drum or ensemble WAV follows
-    its model record into `model-twin/` when an RTL anchor occupies the
-    requested JSON path. Filter curves use the requested results directory.
+    (`provenance.artefacts`). Off the board, a drum or ensemble WAV and this
+    runner's model filter curve follow their model record into `model-twin/`
+    when an RTL anchor occupies the requested JSON path; `model_record_case`
+    names the case whose record the artefact is written beside. An artefact
+    whose record another CLI writes straight into the requested directory --
+    the RTL scorer's curve -- states no case, and stays there.
+    Mono cases use `model_wav_destination` because M1A publishes its WAV
+    beside its frozen reference.
 
     Both CLIs (`main` here and `tools/score_f1_rtl.py` for the RTL curve)
     refuse an injected run whose requested directory is `AUDIO_OUT`, where
     the run could overwrite a board artefact."""
-    if results_dir.resolve() == RESULTS.resolve():
+    if on_board(results_dir):
         return AUDIO_OUT
-    if model_wav_case is not None:
-        record = results_dir / f"{model_wav_case}.json"
+    if model_record_case is not None:
+        record = results_dir / f"{model_record_case}.json"
         return result_destination(record, {"engine": ENGINE}, prepare=False).parent
     return results_dir
 
@@ -3549,12 +3572,26 @@ def response_destination(results_dir: pathlib.Path, case_id: str,
     Until #1412 the writer took a file-name SUFFIX and chose the directory
     itself, so every run of an engine wrote one shared file: an injected
     control given a `--results` of its own still replaced the clean board
-    curve, and the control's record named the clean run's curve as its own."""
-    return artefact_directory(results_dir) / f"{case_id}-ours-response{tag}.json"
+    curve, and the control's record named the clean run's curve as its own.
+
+    Off the board this runner's model curve follows its record (#1450): when
+    an RTL anchor in the requested directory sends the record to
+    `model-twin/`, the curve is written there too. Until then the curve alone
+    stayed in the requested directory, so copying `model-twin/` carried the F1
+    score without the response it was read from. The RTL scorer's curve
+    (a `tag`, `tools/score_f1_rtl.py`) does not follow: that CLI writes its
+    record straight into the requested directory, and its curve belongs
+    beside it."""
+    model_record = None if tag else case_id
+    return artefact_directory(results_dir, model_record_case=model_record) \
+        / f"{case_id}-ours-response{tag}.json"
+
+
+RENDERED_WAV_SUFFIX = {"drum": "-ours.wav", "ensemble": "-mix.wav"}
 
 
 def wav_destination(results_dir: pathlib.Path | None, case_id: str,
-                    suffix: str) -> pathlib.Path:
+                    suffix: str, *, injected: bool = False) -> pathlib.Path:
     """Where a rendered WAV is written: through `artefact_directory`, under the
     writer's own file name (`-ours.wav` for a drum case, `-mix.wav` for an
     ensemble case).
@@ -3568,8 +3605,93 @@ def wav_destination(results_dir: pathlib.Path | None, case_id: str,
     direct caller, `tools/clap_d12a_probe.py`, which takes the clap's numbers
     alone and writes no record. It gets the established shared path, as
     `run_filter_case` gives its curve."""
-    directory = artefact_directory(results_dir or RESULTS, model_wav_case=case_id)
-    return directory / f"{case_id}{suffix}"
+    directory = artefact_directory(results_dir or RESULTS, model_record_case=case_id)
+    filename = f"{case_id}{suffix}"
+    candidate = directory / filename
+    published = AUDIO_OUT / filename
+    if injected and _names_one_file(candidate, published):
+        raise Refused(f"{case_id}: --inject refuses to write {stated_path(candidate.absolute())}, "
+                      f"which is the published WAV {stated_path(published.resolve())}. "
+                      "Pass another --results.")
+    return candidate
+
+
+#: The plans whose case writes a model WAV that a published record names.
+MODEL_WAV_KINDS = ("mono", "mono-bass")
+
+
+def published_model_wav(kind: str, case_id: str) -> pathlib.Path:
+    """The model WAV a published record of a mono family case names in
+    `provenance.artefacts.ours`: under the shared directory for M5
+    (`results/M5B.json` names `build/scorecard/M5B-model.wav`), beside its
+    frozen reference for M1A (`results/M1A.json` names
+    `docs/scorecard/mono-m1a-miniv3/m1a-model.wav`). Two directories, which is
+    why the mono writers cannot take `wav_destination` as it stands."""
+    if kind == "mono":
+        return wav_destination(RESULTS, case_id, "-model.wav")
+    if kind == "mono-bass":
+        import mono_m1a_score
+        return mono_m1a_score.PUBLISHED_MODEL_WAV
+    raise Refused(f"a {kind} case has no model WAV")
+
+
+def _names_one_file(candidate: pathlib.Path, published: pathlib.Path) -> bool:
+    """Whether `candidate` and `published` are one file: the same path once
+    symlinks, `.` and `..` are resolved -- or, both existing, the same inode,
+    which is what a hard link is and no path comparison can see. Two paths of
+    which one does not exist are not one file."""
+    if candidate.resolve() == published.resolve():
+        return True
+    if not (candidate.exists() and published.exists()):
+        return False
+    return os.path.samefile(candidate, published)
+
+
+def model_wav_destination(results_dir: pathlib.Path, kind: str, case_id: str, *,
+                          keep_audio: bool = True) -> pathlib.Path | None:
+    """Where a CLEAN run's model WAV is written for a case of a mono family,
+    or `None` when the run writes none.
+
+    On the board it is the published WAV, so a default run keeps the path its
+    published record names. Anywhere else it is beside the selected model
+    record (under model-twin/ for an RTL anchor) under the same file name,
+    so a directory outside the checkout is stated
+    absolutely (`stated_path`) -- except when "beside the record" IS the
+    published WAV. `--results build/scorecard` (M5B) and `--results
+    docs/scorecard/mono-m1a-miniv3` (M1A) are legal spellings of exactly that:
+    the run would put its own render under the board row's name, and no
+    `--inject` refusal applies because nothing is injected. That destination
+    is refused, as the file it resolves to and not as the spelling given.
+
+    Until #1422 neither mono writer was told the results directory, so every
+    clean run wrote the published WAV whatever `--results` said.
+
+    An injected control's WAV is tagged with its injection and is not routed
+    here. `keep_audio` counts where the writer has it: M1A without audio
+    writes none, so no destination of its run can collide. M5's measurement
+    writes its WAV whatever `--no-audio` says, so for an M5 case the
+    destination is checked whatever the flag says."""
+    published = published_model_wav(kind, case_id)
+    if kind == "mono-bass" and not keep_audio:
+        return None
+    if on_board(results_dir):
+        return published
+    # main creates --results before measuring. Inspect its eventual directory
+    # even if a component before ".." does not exist yet during preflight.
+    directory = results_dir.resolve()
+    record = result_destination(directory / f"{case_id}.json", {"engine": ENGINE},
+                                prepare=False)
+    dest = record.parent.resolve() / published.name
+    if _names_one_file(dest, published):
+        # Keep symlink/.. in this spelling: collapsing it lexically can name
+        # a different file from the one the filesystem actually reached.
+        candidate = results_dir.absolute() / record.parent.relative_to(directory) / published.name
+        raise Refused(f"{case_id}: --results would put this run's model WAV at "
+                      f"{stated_path(candidate)}, which is the published WAV "
+                      f"{stated_path(published.resolve())} that "
+                      f"{stated_path(RESULTS / f'{case_id}.json')} names; "
+                      "pass another --results")
+    return dest
 
 
 def write_result(case: dict, dest: pathlib.Path, res: dict, *,
@@ -3792,7 +3914,8 @@ def run_drum_case(case: dict, refdir: pathlib.Path, inject: str, keep_audio: boo
     import drums_fx as dx
     audio_path, audio = "not written (--no-audio)", f"reference {rel}; ours not written"
     if keep_audio:
-        p = wav_destination(results_dir, case["case_id"], "-ours.wav")
+        p = wav_destination(results_dir, case["case_id"], RENDERED_WAV_SUFFIX["drum"],
+                            injected=bool(inject))
         write_wav16(p, ours_x, ours_sr)
         audio_path = stated_path(p)
         audio = f"reference {rel}; ours {audio_path}"
@@ -3835,7 +3958,7 @@ def run_drum_case(case: dict, refdir: pathlib.Path, inject: str, keep_audio: boo
 
 
 def run_ensemble_case(case: dict, keep_audio: bool, *,
-                      results_dir: pathlib.Path | None = None) -> dict:
+                      results_dir: pathlib.Path | None = None, injected: bool = False) -> dict:
     """One ensemble case: the final mix against its own stems and schedule.
 
     `results_dir` is where this run's record goes, and so where its WAV is
@@ -3890,7 +4013,8 @@ def run_ensemble_case(case: dict, keep_audio: bool, *,
 
     audio = "not written (--no-audio)"
     if keep_audio:
-        p = wav_destination(results_dir, case["case_id"], "-mix.wav")
+        p = wav_destination(results_dir, case["case_id"], RENDERED_WAV_SUFFIX["ensemble"],
+                            injected=injected)
         write_wav16(p, mix / 32768.0, sr)
         audio = stated_path(p)
 
@@ -3946,9 +4070,10 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
     impossible.
 
     `results_dir` is where this run's records go, and so where a filter case's
-    response curve and a drum or ensemble case's WAV are placed beside the
-    record (`response_destination`, `wav_destination`); a caller that leaves
-    it unstated gets the established board path for them."""
+    response curve, a drum or ensemble case's WAV and a mono case's model WAV
+    are placed beside the record (`response_destination`, `wav_destination`,
+    `model_wav_destination`); a caller that leaves it unstated gets the
+    established board path for them."""
     cid = case["case_id"]
     kind = plan_for(cid)
     if kind == "not-run":
@@ -4010,19 +4135,32 @@ def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
     try:
         if kind == "mono-bass":
             import mono_m1a_score
-            return mono_m1a_score.run(case, inject, keep_audio)
+            # An injected control's WAV keeps its injection-tagged name under the
+            # shared directory; a clean run's follows its record.
+            wav = None
+            if inject:
+                wav = AUDIO_OUT / f"M1A-{inject}-model.wav"
+            elif record_dir is not None:
+                wav = model_wav_destination(record_dir, kind, cid, keep_audio=keep_audio)
+            return mono_m1a_score.run(case, inject, keep_audio, wav_dest=wav)
         if kind == "drum":
             return run_drum_case(case, refdir, inject, keep_audio, results_dir=record_dir)
         if kind == "ensemble":
-            return run_ensemble_case(case, keep_audio, results_dir=record_dir)
+            return run_ensemble_case(case, keep_audio, results_dir=record_dir,
+                                     injected=bool(inject))
         if kind == "filter":
-            dest = response_destination(record_dir, cid) if record_dir else None
+            dest = response_destination(record_dir, cid) if keep_audio and record_dir else None
             return run_filter_case(case, inject, keep_audio, response_dest=dest)
         if kind == "mono":
-            control_audio = (ROOT / f"build/scorecard/{cid}-model-control-{inject}.wav"
-                             if inject else None)
+            if inject:
+                output_path = AUDIO_OUT / f"{cid}-model-control-{inject}.wav"
+            elif record_dir is not None:
+                output_path = model_wav_destination(record_dir, kind, cid)
+            else:
+                # a caller that states no results directory: the writer's own path
+                output_path = None
             measured = mono_m5a.measure(case_id=cid, engine="selected", inject=inject,
-                                         output_path=control_audio)
+                                         output_path=output_path)
             report_path = None
             smoke_sha = None
             if cid == "M5A":
@@ -4262,8 +4400,8 @@ def main(argv=None) -> int:
                     help=f"the Fischer TR-808 corpus (default {REFS_DEFAULT}, ${REFS_ENV})")
     ap.add_argument("--results", default=None,
                     help="where result JSON goes; off the board, a filter case's "
-                         "response curve and a drum or ensemble case's WAV go "
-                         "beside it")
+                         "response curve, a drum or ensemble case's WAV and a mono "
+                         "case's model WAV go beside it")
     ap.add_argument("--inject", default="",
                     choices=["", "REF_F0_20PCT", "REF_MISSING", "REF_CORNER_2X",
                              "MONO_PITCH_UP_25_CENTS", "CB_GATE_THE_SUM",
@@ -4329,6 +4467,19 @@ def main(argv=None) -> int:
         print(f"--inject refuses to write into {stated_path(AUDIO_OUT)}, where the "
               "board's response curves and rendered WAVs live; pass another --results",
               file=sys.stderr)
+        return 2
+    # Check every selected WAV before starting the batch. The final path can
+    # enter model-twin/ or be a hard link even in an ordinary results directory.
+    try:
+        for c in chosen:
+            cid = c["case_id"]
+            kind = plan_for(cid)
+            if a.inject and not a.no_audio and kind in RENDERED_WAV_SUFFIX:
+                wav_destination(outdir.resolve(), cid, RENDERED_WAV_SUFFIX[kind], injected=True)
+            elif not a.inject and kind in MODEL_WAV_KINDS:
+                model_wav_destination(outdir, kind, cid, keep_audio=not a.no_audio)
+    except Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
         return 2
 
     # The premise of the batch, asserted before any of it runs. A stale

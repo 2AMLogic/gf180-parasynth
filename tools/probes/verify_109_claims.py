@@ -32,7 +32,9 @@ decision recorded at Makefile:130-134, restated per check); with
 file, because a required gate does not pass by skipping (the `fischer_refs`
 policy, tools/test_run_case.py). A corpus root that exists while its
 recordings are missing, empty or unreadable is the same did-not-run state --
-never an uncaught traceback on exit 1 (#814).
+never an uncaught traceback on exit 1 (#814). A run that records no check at
+all -- nothing OK, FAILED or NOT RUN -- is exit 2 / NO VERDICT too, naming
+that no check was executed: an empty tally is not a pass (#1454).
 """
 from __future__ import annotations
 
@@ -309,6 +311,10 @@ def main() -> int:
     if no_verdict:
         print(f"{n_ok} of {total} checks passed; {len(not_run)} NOT RUN "
               f"-- NO VERDICT ({rc.REFS_REQUIRED_ENV}=1)")
+        return 2
+    if total == 0:
+        print(f"{n_ok} of {total} checks passed "
+              f"-- NO VERDICT (NO CHECK EXECUTED)")
         return 2
     if not_run:
         print(f"{n_ok} of {total} checks passed; {len(not_run)} NOT RUN "

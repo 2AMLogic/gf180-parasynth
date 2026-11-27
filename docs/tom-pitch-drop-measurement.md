@@ -222,6 +222,11 @@ reported `NO-DROP-ABOVE-FLOOR`, and saying so is the result.
     --json docs/tom-pitch-drop-results.json
   ```
 
+- The 165 members are taken **by name** from the index above (#1427). The
+  command REFUSES (exit 2, naming the group and the WAVs that are absent)
+  before it measures anything when a requested group holds only some of them,
+  so a rerun over a partly fetched cache cannot report a row over fewer than 11
+  tunings. Without `--congas` only the 99 tom takes are required.
 - Per-file results, refusal reasons and controls: `docs/tom-pitch-drop-results.json`.
 
 ### How the audio was reached, and the refusal that was honoured
