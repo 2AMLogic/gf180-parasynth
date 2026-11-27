@@ -2305,11 +2305,14 @@ record that extends this document; none may be resolved by picking a reading.
     decision and one constant" — turned out to be the right framing for a
     reason that had to be measured to be known. **The references cannot supply
     the amount.** Every single-oscillator window in the frozen Mini V3 set
-    wanders by 0.001–0.024 cents rms and the same commanded note 13.6 s apart
-    in one continuous render differs by 0.0011 cents: 30–100× below anything a
-    player could hear, so the frozen references *bound* drift rather than
-    measure it (`docs/scorecard/mono-osc-drift/reference-drift-v1.json`;
+    wanders by 0.001–0.024 cents rms over its 0.6 s hold, and two notes of the
+    same pitch 4.0 s apart inside one render differ by 0.0102 cents: 30–100×
+    below anything a player could hear, so the frozen references *bound* drift
+    rather than measure it
+    (`docs/scorecard/mono-osc-drift/reference-drift-v1.json`;
     Surge XT and Diva are REFUSED there, with the missing precondition named).
+    The saw and pulse takes of one M5A note, 0.0011 cents apart, are two
+    independent captures and bound nothing (#1433, DR 0019 Corrections).
     The target range is therefore 0.8–4.0 cents rms per oscillator as a
     **musical decision** (DR 0019), stated as a range because the service
     manual documents different oscillator boards per serial range, and the

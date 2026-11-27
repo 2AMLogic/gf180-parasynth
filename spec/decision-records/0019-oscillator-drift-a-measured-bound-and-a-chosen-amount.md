@@ -1,6 +1,6 @@
 # 0019: Oscillator drift — the references bound it, so the amount is a chosen range
 
-- **Status**: proposed
+- **Status**: proposed — **one across-note drift bound withdrawn, see Corrections (#1433)**
 - **Date**: 2026-09-26
 - **Decided by**: block agent, from the reference measurement in
   `docs/scorecard/mono-osc-drift/reference-drift-v1.json`, the retracted
@@ -28,11 +28,13 @@ from the frozen, hash-bound renders already in `docs/scorecard/` (this host has
 neither `dawdreamer` nor the VST3 bundles, so nothing was re-rendered):
 
 - **Mini V3**: every isolated-oscillator window wanders by **0.001–0.024 cents
-  rms**, and the same commanded note 13.6 s apart in one continuous render
-  differs by **0.0011 cents**. The three renders of the same patch are
-  byte-identical. That is 30–100× below anything a player hears: Mini V3's
-  instability is off, or absent, at these settings. The references therefore
-  **bound** drift rather than measure it.
+  rms** over its 0.6 s hold, and two notes of the same pitch **inside one
+  render** (M1A's isolated oscillator 2 at MIDI 48, 4.0 s apart) differ by
+  **0.0102 cents**. The three renders of the same patch are byte-identical.
+  That is 30–100× below anything a player hears: Mini V3's instability is
+  off, or absent, at these settings. The references therefore **bound**
+  drift rather than measure it. A second across-note figure used to stand
+  here and was not one; see Corrections.
 - **Surge XT**: `REFUSED` — all sixteen frozen Surge clips drive the *filter*
   from our own stepped tone through Audio In; Surge's oscillators appear in none
   of them.
@@ -192,3 +194,41 @@ oscillator drift: closing that needs either a Surge XT / Diva render of a
 *sustained oscillator* with instability enabled, or the hardware session
 `docs/target.md` specifies. Until then 0.8–4.0 cents is a choice this record
 owns, and the reference JSON records the bound that constrains it.
+
+## Corrections (2026-11-27, #1433)
+
+**The across-note drift bound this record quoted is withdrawn and must not be
+cited.** The Mini V3 bullet read "the same commanded note 13.6 s apart in one
+continuous render differs by 0.0011 cents". The pair behind it,
+`m5a/seg0-saw/n0-midi84` and `m5a/seg1-pulse/n0-midi84`, is not one render.
+The M5A producer its manifest pins (`899e86d6`) built a fresh plugin instance
+for every take and then concatenated the saw take, 9,600 samples of zeros and
+the pulse take. Nothing ran between the two observations, so their difference
+bounds drift over no elapsed time at all.
+
+Nothing caught it because every check the comparison makes was satisfied:
+same note, same sample rate, one hash-bound WAV, and two windows each holding
+a measurable tone. Whether windows come from one render is the caller's to
+establish (`model/osc_drift_probe.py`, `across_note_drift`), and the caller
+assumed it. `tools/measure_osc_drift_reference.py` now records the render
+each window came from and refuses a pair that spans two with
+`INDEPENDENT_CAPTURES`, carrying no stability class and no bound for it.
+
+What the frozen set does show, so that the withdrawal is read as neither more
+nor less than it is:
+
+- **0.001–0.024 cents rms** is wander inside one held window of about 0.6 s.
+  It stands unchanged.
+- The longest span **inside one render** with two observations of the same
+  pitch is **4.0 s**: M1A's isolated oscillator 2, 0.0102 cents apart. The M1A
+  producer queues the whole phrase before one render call, so its three pairs
+  are measurements, and they keep their own outcomes.
+- **0.0011 cents** between the M5A saw and pulse takes is kept only as a
+  between-capture comparison: how closely two independent takes of one note
+  agree. It is not drift and not a bound on drift, and it is not comparable
+  to the per-window rms, which measures wander over time inside one capture.
+
+The decision does not move. Its amount was never taken from the withdrawn
+figure (point 5 calls it a musical decision), and the reason the references
+bound drift rather than supplying it is the per-window rms. What moves is how
+long a span the bound covers: 4.0 s, not 13.6 s.
