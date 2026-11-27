@@ -1190,3 +1190,133 @@ def test_unresolvable_recorded_registry_is_unverifiable_never_valid(repo):
     assert not ok
     assert any(p.startswith("UNVERIFIABLE") for p in problems), problems
     assert not any("population" in p for p in problems), "unavailable is not forged"
+
+
+# ---- #1479: required rolling_record children must declare RTL replay fixtures ---
+def _empty_rtl_rolling_record():
+    return {"state": "PASS", "clean": {"a": {"ok": True}},
+            "controls": {"x": {"caught": True}}, "rtl": {}}
+
+
+def _build_prefix_empty_fixtures_pass_receipt(repo, fixtures_spec):
+    """Construct a properly hashed, population-consistent pre-fix PASS receipt
+    whose required rolling_record child has `fixtures_spec` (None => omitted,
+    [] => empty) and zero RTL replays. Membership passes so check_receipt is
+    forced to decide via interpreter re-derivation."""
+    repo.child({"rc": 0, "files": {"verification.json": _empty_rtl_rolling_record()}},
+               interpret="rolling_record", fixtures=["demo"])
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+
+    reg_path = repo.root / "docs/trials.json"
+    reg = json.loads(reg_path.read_text())
+    c_reg = reg["trials"]["T-X"]["modes"]["m"]["required"][0]
+    if fixtures_spec is None:
+        c_reg.pop("fixtures", None)
+    else:
+        c_reg["fixtures"] = fixtures_spec
+    reg_path.write_text(json.dumps(reg))
+
+    rec["identities"]["registry"]["sha256"] = trial.sha256_file(reg_path)
+    child = rec["children"][0]
+    if fixtures_spec is None:
+        child["interpreter"].pop("fixtures", None)
+    else:
+        child["interpreter"]["fixtures"] = fixtures_spec
+    child["verdict"] = trial.PASS
+    child["reasons"] = []
+    child["coverage"] = {"expected": {"rtl_fixtures": fixtures_spec or [], "i2s_periods": {}},
+                         "observed": {"i2s_periods": {}, "clean_host_cases": 1}}
+    rec["verdict"] = trial.PASS
+    rec["verdict_reasons"] = []
+    rec["coverage"]["with_valid_verdict"] = 1
+    rec["coverage"]["passing"] = 1
+
+    receipt_path = run_dir / "receipt.json"
+    receipt_path.write_text(json.dumps(trial.seal(rec)))
+    assert trial.membership_problems(rec, root=repo.root) == []
+    return receipt_path
+
+
+@pytest.mark.parametrize("fixtures_spec", [None, [], [""]])
+def test_load_registry_rejects_required_rolling_child_without_fixtures(repo, fixtures_spec):
+    extra = {} if fixtures_spec is None else {"fixtures": fixtures_spec}
+    repo.child({"rc": 0, "files": {"verification.json": _empty_rtl_rolling_record()}},
+               interpret="rolling_record", **extra)
+    reg_path = repo.registry()
+    with pytest.raises(trial.RegistryError, match=r"fixtures|RTL replay"):
+        trial.load_registry(reg_path, repo.root / "docs/dag.json")
+
+
+@pytest.mark.parametrize("fixtures_spec", [[], None])
+def test_check_receipt_rejects_prefix_pass_with_empty_rolling_fixtures(repo, fixtures_spec, capsys):
+    receipt_path = _build_prefix_empty_fixtures_pass_receipt(repo, fixtures_spec)
+    ok, problems, _ = trial.check_receipt(receipt_path, root=repo.root)
+    assert not ok, f"pre-fix PASS with fixtures={fixtures_spec!r} must be rejected"
+    joined = " ".join(problems).lower()
+    assert "no verdict" in joined
+    assert "rtl replay" in joined or "fixtures" in joined, problems
+
+    rc = trial.main(["check-receipt", str(receipt_path), "--require", trial.PASS])
+    out = capsys.readouterr().out
+    assert rc == 1, out
+    assert "REJECTED:" in out
+    assert "rtl replay" in out.lower() or "fixtures" in out.lower(), out
+
+
+def test_rolling_positive_control_with_complete_rtl_evidence_passes_check_receipt(repo, capsys):
+    repo.child({"rc": 0, "files": {"verification.json": _r1_rolling(
+        {"sender": "release", "target": "release"})}},
+        interpret="rolling_record", fixtures=["demo"])
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+    assert rec["verdict"] == trial.PASS, rec["verdict_reasons"]
+    receipt_path = run_dir / "receipt.json"
+    ok, problems, _ = trial.check_receipt(receipt_path, root=repo.root)
+    assert ok, problems
+    rc = trial.main(["check-receipt", str(receipt_path), "--require", trial.PASS])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "VALID:" in out
+
+
+def test_fixture_free_wrong_kit_control_works_as_control_and_as_candidate(repo):
+    """Fixture-free wrong-kit controls stay accepted by load_registry, keep
+    catching when run as controls, and preserve their intended host FAIL when
+    run via --as-candidate (while refusing to false-PASS if host passes)."""
+    repo.child({"rc": 0, "files": {"verification.json": _r1_rolling(
+        {"sender": "r1", "target": "r1"})}}, interpret="rolling_record",
+        fixtures=["demo"], image={"sender": "r1", "target": "r1"})
+    host_fail = {
+        "state": "FAIL",
+        "image": {"sender": "release", "target": "r1"},
+        "clean": {"demo@0": {"ok": False, "reasons": ["init_check: wrong kit"]}},
+        "controls": {},
+    }
+    cid = repo.child({"rc": 1, "files": {"verification.json": host_fail}},
+                     interpret="rolling_record", role="control",
+                     image={"sender": "release", "target": "r1"})
+    # load_registry accepts the fixture-free wrong-kit control
+    reg_path = repo.registry()
+    trial.load_registry(reg_path, repo.root / "docs/dag.json")
+
+    # running that fixture-free control as candidate preserves its intended host FAIL
+    run_dir, rec = repo.run(as_candidate=cid)
+    assert rec["verdict"] == trial.FAIL, rec["verdict_reasons"]
+    assert any("demo@0" in r for r in rec["children"][0]["reasons"])
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json", root=repo.root)
+    assert ok, problems
+
+    # if a fixture-free candidate somehow has all host cases pass, it cannot false-PASS
+    (repo.root / "second").mkdir()
+    repo2 = Repo(repo.root / "second")
+    repo2.child({"rc": 0, "files": {"verification.json": _r1_rolling(
+        {"sender": "r1", "target": "r1"})}}, interpret="rolling_record",
+        fixtures=["demo"], image={"sender": "r1", "target": "r1"})
+    cid2 = repo2.child({"rc": 0, "files": {"verification.json": _empty_rtl_rolling_record()}},
+                       interpret="rolling_record", role="control")
+    _, rec2 = repo2.run(as_candidate=cid2)
+    assert rec2["verdict"] == trial.NO_VERDICT, rec2["verdict_reasons"]
+    assert rec2["children"][0]["verdict"] == trial.NO_VERDICT
+    assert any("rtl replay" in r.lower() or "fixtures" in r.lower()
+               for r in rec2["children"][0]["reasons"])

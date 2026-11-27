@@ -141,6 +141,12 @@ def _walk_keys(obj, where=""):
             yield from _walk_keys(v, f"{where}[{i}]")
 
 
+def _valid_rolling_fixtures(fixtures) -> bool:
+    return (isinstance(fixtures, list)
+            and bool(fixtures)
+            and all(isinstance(fx, str) and bool(fx.strip()) for fx in fixtures))
+
+
 def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -> dict:
     """Parse and check the registry against docs/dag.json. Structural errors are
     raised: a malformed registry is a defect in the repository, not a verdict."""
@@ -167,6 +173,11 @@ def load_registry(path: pathlib.Path = REGISTRY, dag_path: pathlib.Path = DAG) -
                     if c["interpret"] not in INTERPRETERS:
                         raise RegistryError(f"{tid}/{mname}/{c['id']}: unknown interpreter "
                                             f"{c['interpret']!r}")
+                    if (role == "required" and c["interpret"] == "rolling_record"
+                            and not _valid_rolling_fixtures(c.get("fixtures"))):
+                        raise RegistryError(
+                            f"{tid}/{mname}/{c['id']}: required rolling_record child must declare "
+                            f"non-empty 'fixtures' for RTL replay coverage")
                     if c["id"] in ids:
                         raise RegistryError(f"{tid}/{mname}: duplicate child id {c['id']!r}")
                     ids.add(c["id"])
@@ -317,9 +328,12 @@ def interpret_rolling_record(spec, run, out, role):
     for name, c in (rec.get("controls") or {}).items():
         if not c.get("caught"):
             missed.append(f"host control {name} not caught")
+    fixtures = spec.get("fixtures")
+    has_fixtures = _valid_rolling_fixtures(fixtures)
+    fixture_list = fixtures if has_fixtures else []
     metrics = {}
     periods, required_p = {}, {}
-    for fx in spec.get("fixtures", []):
+    for fx in fixture_list:
         rr = (rec.get("rtl") or {}).get(fx)
         if rr is None:
             gaps.append(f"no RTL replay recorded for {fx}")
@@ -356,14 +370,17 @@ def interpret_rolling_record(spec, run, out, role):
             fails.append(f"RTL replay {fx}: {bad}")
         if not (rr.get("control") or {}).get("caught"):
             missed.append(f"RTL control due+1 for {fx} not caught")
-    reuse, rgaps = rtl_reuse_report(spec, rec.get("rtl"), spec.get("fixtures", []))
+    reuse, rgaps = rtl_reuse_report(spec, rec.get("rtl"), fixture_list)
     gaps += rgaps
     if reuse:
         metrics["rtl_reuse"] = reuse
-    cov = dict(expected={"rtl_fixtures": spec.get("fixtures", []), "i2s_periods": required_p},
+    cov = dict(expected={"rtl_fixtures": fixtures if isinstance(fixtures, list) else [],
+                         "i2s_periods": required_p},
                observed={"i2s_periods": periods, "clean_host_cases": len(clean)})
     if fails and not gaps:
         return _result(FAIL, fails + missed, metrics=metrics, **cov)
+    if not has_fixtures:
+        gaps.append("no RTL replay fixtures declared: zero RTL replays required")
     if gaps or missed:
         return _result(NO_VERDICT, gaps + missed + fails, metrics=metrics, **cov)
     if state != "PASS":
@@ -1192,10 +1209,11 @@ def check_receipt(path: pathlib.Path, root: pathlib.Path = ROOT
                 problems.append(f"{c.get('id')}: {why}")
                 continue
             if got["verdict"] != c.get("verdict") or got.get("caught") != c.get("caught"):
+                why_got = "; ".join(got.get("reasons") or [])
                 problems.append(
                     f"{c.get('id')}: the receipt says verdict {c.get('verdict')} caught "
                     f"{c.get('caught')}, but its evidence re-derives to {got['verdict']} caught "
-                    f"{got.get('caught')}")
+                    f"{got.get('caught')}" + (f" ({why_got})" if why_got else ""))
             # #313: the reuse status the receipt states is the one its evidence shows
             want_reuse = (got.get("metrics") or {}).get("rtl_reuse")
             if want_reuse != (c.get("metrics") or {}).get("rtl_reuse"):
