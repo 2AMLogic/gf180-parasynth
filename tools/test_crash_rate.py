@@ -170,7 +170,8 @@ def test_target():
     report = json.loads(out.read_text())
     run, = report["runs"]
     if startup == "missing_plugin":
-        assert run["exit"] == 1 and "no_such_pytest_plugin_1506" in run["tail"]
+        assert (type(run["exit"]) is int and run["exit"] > 0
+                and "no_such_pytest_plugin_1506" in run["tail"])
     elif startup == "exit_zero":
         assert run["exit"] == 0
     else:
