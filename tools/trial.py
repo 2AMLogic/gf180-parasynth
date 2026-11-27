@@ -608,7 +608,7 @@ def interpret_physical_capture_record(spec, run, out, role):
     workflow state and never a result (docs/trials.md rule 4). A PASS also
     needs the declared diagnostic set on disk: a required child must declare
     all five diagnostic commands, each declared command has a take, and some
-    non-silence command was taken twice."""
+    sounding playback command from the selected image's release was taken twice."""
     rec, err = _load_json(out / "analysis.json")
     nv_caught = False if role == "control" else None
     if rec is None:
@@ -645,20 +645,28 @@ def interpret_physical_capture_record(spec, run, out, role):
     if verdict == "REFUSED":
         return _result(NO_VERDICT, list(rec.get("reasons") or ["REFUSED"]), metrics=metrics,
                        caught=nv_caught, **cov)
-    if role == "required" and verdict == "PASS":
+    if verdict == "FAIL":
+        return _result(FAIL, list(rec.get("reasons") or []), metrics=metrics, caught=nv_caught, **cov)
+    if role == "required":
         if decl_problem := _physical_fixture_problem(raw_fixtures):
             return _result(NO_VERDICT, [decl_problem], metrics=metrics, caught=nv_caught, **cov)
+    # Before the image field was introduced, physical captures were R0.
+    image_id = rec.get("image_id", "r0")
+    if not isinstance(image_id, str) or image_id not in capture_commands.MANIFESTS:
+        return _result(NO_VERDICT, [f"no release manifest for image {image_id!r}"],
+                       metrics=metrics, caught=nv_caught, **cov)
+    try:
+        manifest = capture_commands.load_manifest(capture_commands.MANIFESTS[image_id],
+                                                  expected_image=image_id)
+    except ValueError as exc:
+        return _result(NO_VERDICT, [str(exc)], metrics=metrics, caught=nv_caught, **cov)
     gaps = [f"no take of {c}" for c in need if not isinstance(c, str) or not have.get(c)]
-    # a repeat counts only for a declared sounding command: two takes of an
-    # undeclared or unknown id are not a repeat (#1540 review)
-    eligible = {c for c in [*need, *capture_commands.REQUIRED_COMMANDS]
-                if isinstance(c, str) and c.strip() and c != "silence"}
-    if not any(have.get(c, 0) >= 2 for c in eligible):
-        gaps.append("no repeat take of a declared sounding command")
-    if verdict == "PASS" and gaps:
+    if not any(have.get(c, 0) >= 2 for c in manifest["commands"] if c != "silence"):
+        gaps.append(f"no repeat take of a released sounding command for {image_id}")
+    if gaps:
         return _result(NO_VERDICT, ["coverage incomplete -- " + g for g in gaps],
                        metrics=metrics, caught=nv_caught, **cov)
-    return _result(PASS if verdict == "PASS" else FAIL, list(rec.get("reasons") or []),
+    return _result(PASS, list(rec.get("reasons") or []),
                    metrics=metrics, caught=nv_caught, **cov)
 
 

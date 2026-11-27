@@ -1305,17 +1305,17 @@ def test_physical_valid_declaration_order_independent_and_extra_command(tmp_path
     assert fresh["verdict"] == trial.PASS and rederived == fresh
 
     # Additional declared command without a take -> NO VERDICT naming it.
-    spec_extra = _physical_child_spec(image_id, {"fixtures": PHYS_FIXTURES + ["run-m5a"]})
+    spec_extra = _physical_child_spec(image_id, {"fixtures": PHYS_FIXTURES + ["held-m5a-pulse"]})
     fresh_miss = trial.judge_child(spec_extra, run, cdir, "required")
     rederived_miss = _rederive_physical(spec_extra, tmp_path, cdir, rc=0)
     assert fresh_miss["verdict"] == trial.NO_VERDICT
-    assert any("no take of run-m5a" in r for r in fresh_miss["reasons"])
+    assert any("no take of held-m5a-pulse" in r for r in fresh_miss["reasons"])
     assert rederived_miss == fresh_miss
 
     # Additional declared command with a take -> PASS.
     cdir_extra = _write_analysis(
         tmp_path / "with-extra",
-        _capture_rec("PASS", commands=complete_takes + ["run-m5a"], image_id=image_id),
+        _capture_rec("PASS", commands=complete_takes + ["held-m5a-pulse"], image_id=image_id),
     )
     fresh_ok = trial.judge_child(spec_extra, run, cdir_extra, "required")
     rederived_ok = _rederive_physical(spec_extra, tmp_path, cdir_extra, rc=0)
@@ -1874,6 +1874,55 @@ def test_physical_repeat_of_an_unidentified_take_is_not_a_repeat(tmp_path, image
     assert fresh == _rederive_physical(spec, tmp_path, cdir, rc=0)
     assert fresh["verdict"] == trial.NO_VERDICT
     assert any("no repeat take" in r for r in fresh["reasons"]), fresh["reasons"]
+
+
+@pytest.mark.parametrize("image_id", ["r0", "r1"])
+@pytest.mark.parametrize(("repeated", "declare", "eligible_images"), [
+    ("held-m5a-pulse", False, {"r0", "r1"}),
+    ("not-a-real-command", True, set()),
+    ("phrase-m5a", True, {"r0"}),
+    ("run-m5a", True, {"r1"}),
+    ("live-midi", True, set()),  # R1 host command without pinned playback bytes
+])
+def test_physical_repeat_uses_image_release_in_run_and_receipt(
+    repo, image_id, repeated, declare, eligible_images
+):
+    fixtures = PHYS_FIXTURES + ([repeated] if declare else [])
+    rec = _capture_rec("PASS", commands=PHYS_FIXTURES + [repeated, repeated], image_id=image_id)
+    repo.child({"rc": 0, "files": {"analysis.json": rec}}, interpret="physical_capture_record",
+               image_id=image_id, fixtures=fixtures)
+    repo.child({"rc": 0, "files": {"controls.json": _controls_rec()}},
+               interpret="capture_controls_record", role="control")
+    run_dir, receipt = repo.run()
+    path = run_dir / "receipt.json"
+    child = receipt["children"][0]
+    expected = trial.PASS if image_id in eligible_images else trial.NO_VERDICT
+    assert receipt["controls"][0]["caught"]
+    assert child["verdict"] == receipt["verdict"] == expected, child["reasons"]
+    ok, problems, _ = trial.check_receipt(path)
+    assert ok, problems
+    if expected == trial.NO_VERDICT:
+        assert any("no repeat take" in r for r in child["reasons"])
+        # The old interpreter accepted this evidence when the repeated ID was declared.
+        child.update(verdict=trial.PASS, reasons=[])
+        receipt.update(verdict=trial.PASS, verdict_reasons=[])
+        ok, problems, _ = _forge(path, receipt)
+        assert not ok and any("no repeat take" in p for p in problems), problems
+
+
+@pytest.mark.parametrize(("manifest", "reason"), [
+    ("missing", "unreadable"),
+    ("r1", "declares r1, expected r0"),
+])
+def test_physical_pass_needs_a_readable_image_matched_release(tmp_path, monkeypatch, manifest, reason):
+    paths = trial.capture_commands.MANIFESTS
+    monkeypatch.setitem(paths, "r0", tmp_path / "missing.json" if manifest == "missing" else paths["r1"])
+    spec = _physical_child_spec("r0", {"fixtures": PHYS_FIXTURES})
+    out = _write_analysis(tmp_path / "capture", _capture_rec("PASS", image_id="r0"))
+    result = trial.judge_child(spec, {"state": "PASS", "rc": 0}, out, "required")
+    assert result["verdict"] == trial.NO_VERDICT
+    assert reason in result["reasons"][0]
+    assert result == _rederive_physical(spec, tmp_path, out, rc=0)
 
 
 @pytest.mark.parametrize("image_id", ["r0", "r1"])
