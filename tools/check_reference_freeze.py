@@ -162,7 +162,12 @@ def check(root: pathlib.Path, path: pathlib.Path) -> int:
     for kind, digest, subject in expected:
         actual: str
         if kind == "canon":
-            actual = _canonical_hash(_resolve(root, subject))
+            try:
+                declaration = _resolve(root, subject)
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                bad.append(f"{CORPUS_MANIFEST}: cannot resolve frozen {subject}: {e}")
+                continue
+            actual = _canonical_hash(declaration)
         else:
             f = root / subject
             if not f.exists():

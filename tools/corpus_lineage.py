@@ -354,8 +354,10 @@ def load(manifest: pathlib.Path = MANIFEST) -> dict:
         raise Refused(f"manifest missing: {manifest}")
     try:
         m = json.loads(manifest.read_text())
-    except json.JSONDecodeError as e:
-        raise Refused(f"{manifest.name} is not valid JSON: {e}") from e
+    except (OSError, ValueError) as e:
+        raise Refused(f"cannot read {manifest.name}: {e}") from e
+    if not isinstance(m, dict):
+        raise Refused(f"{manifest.name} must contain a JSON object")
     for key in ("schema", "groups", "assignment_rule", "targets", "packs", "unknown_marker"):
         if key not in m:
             raise Refused(f"{manifest.name} has no {key!r}")

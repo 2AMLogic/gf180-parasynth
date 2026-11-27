@@ -246,12 +246,19 @@ def validate_required_cell(name, cell):
         raise Refused(
             f"required cell {name}: OPMODE pins {idxs} != all seven bits "
             f"{sorted(OPMODE_BITS)}")
-    missing = [k for k in MANDATORY_PROPS
-               if not (cell["props"].get(k) or "").strip()]
+    for idx, net, driver in op:
+        if (net in ("", "-") or driver.strip() in ("", "-")
+                or driver.startswith("NO-DRIVER (") or driver.endswith(" (-)")):
+            raise Refused(f"required cell {name}: missing connectivity for OPMODE[{idx}] "
+                          f"(net={net!r}, driver={driver!r})")
+    missing = []
+    for k in MANDATORY_PROPS:
+        value = cell["props"].get(k, "").strip()
+        if not value or value.startswith("ERR:"):
+            missing.append(k)
     if missing:
         raise Refused(
-            f"required cell {name}: missing mandatory properties "
-            f"{missing}")
+            f"required cell {name}: missing mandatory properties or failed reads: {missing}")
 
 
 def analyse(name, cell):

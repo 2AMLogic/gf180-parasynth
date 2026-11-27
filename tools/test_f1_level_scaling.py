@@ -218,6 +218,21 @@ def test_verify_with_no_capture_in_the_manifest_refuses(monkeypatch, capsys):
     assert "REFUSED" in out and "0 verified" not in out
 
 
+@pytest.mark.parametrize("payload", [b"", b"null", b"\xff"])
+def test_unreadable_capture_manifest_refuses(tmp_path, monkeypatch, capsys, payload):
+    path = tmp_path / "manifest.json"
+    path.write_bytes(payload)
+    monkeypatch.setattr(cap, "MANIFEST", path)
+    assert cap.main([]) == cap.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and str(path) in out and "verified" not in out
+
+
+def test_explicit_empty_manifest_cannot_fall_back_to_the_archive():
+    with pytest.raises(cap.Refused, match="not a capture"):
+        cap.load_capture("open20k", 0.25, 1, {})
+
+
 def test_verify_on_the_committed_captures_counts_what_it_verified(capsys):
     n = len(cap.load_manifest()["clips"])
     assert n > 0
@@ -338,7 +353,8 @@ def test_verify_still_accepts_legitimate_byte_sharing_between_repeated_takes(cap
 
 
 @pytest.mark.parametrize("defect", ["at-eof", "overrun", "negative-start", "zero-length",
-                                    "fractional-start", "one-sample", "missing-tone", "wrong-hz"])
+                                    "fractional-start", "one-sample", "missing-tone", "wrong-hz",
+                                    "repeated-window", "shifted-step", "includes-tail"])
 def test_verify_requires_usable_projection_windows(monkeypatch, capsys, defect):
     manifest = cap.load_manifest()
     key = cap.clip_key("open20k", 0.25, 1)
@@ -358,6 +374,13 @@ def test_verify_requires_usable_projection_windows(monkeypatch, capsys, defect):
         last[0] += 0.5
     elif defect == "one-sample":
         last[1] = 1
+    elif defect == "repeated-window":
+        for part in parts:
+            part[:2] = parts[0][:2]
+    elif defect == "shifted-step":
+        last[0] -= 1
+    elif defect == "includes-tail":
+        last[1] = clip["frames"] - last[0]
     elif defect == "wrong-hz":
         last[2] = clip["freqs_hz"][-1] = parts[0][2]
     else:
@@ -369,14 +392,34 @@ def test_verify_requires_usable_projection_windows(monkeypatch, capsys, defect):
     assert "24 verified" not in out
 
 
-def test_capture_curve_accepts_a_window_ending_exactly_at_eof():
+def test_capture_curve_accepts_a_window_ending_exactly_at_eof(tmp_path, monkeypatch):
+    import hashlib
+    import io
+    import zipfile
+    from scipy.io import wavfile
+
     manifest = cap.load_manifest()
     clip = manifest["clips"][cap.clip_key("open20k", 0.25, 1)]
-    last = clip["parts"][-1]
-    last[1] = clip["frames"] - last[0]
-    freqs, gains = cap.capture_curve("open20k", 0.25, 1, manifest)
-    assert len(gains) == len(freqs) == len(clip["freqs_hz"])
-    assert np.isfinite(gains).all()
+    _, original = cap.capture_curve("open20k", 0.25, 1, manifest)
+    with zipfile.ZipFile(cap.ARCHIVE) as archive:
+        sr, audio = wavfile.read(io.BytesIO(archive.read(clip["archive_member"])))
+    end = sum(clip["parts"][-1][:2])
+    assert 0 < end < len(audio)
+    trimmed = audio[:end]
+    wav = io.BytesIO()
+    wavfile.write(wav, sr, trimmed)
+    digest = hashlib.sha256(wav.getvalue()).hexdigest()
+    clip.update(frames=end, sha256=digest, archive_member=digest[:16] + ".wav",
+                bytes=len(wav.getvalue()),
+                peak=float(np.max(np.abs(trimmed))),
+                rms=float(np.sqrt(np.mean(np.square(trimmed.astype(np.float64))))))
+    path = tmp_path / "trimmed.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(clip["archive_member"], wav.getvalue())
+    monkeypatch.setattr(cap, "ARCHIVE", path)
+    _, gains = cap.capture_curve("open20k", 0.25, 1, manifest)
+    assert len(gains) == 32 and np.isfinite(gains).all()
+    np.testing.assert_array_equal(gains, original)
 
 
 def test_stereo_audio_with_mono_peak_and_rms_cannot_verify(monkeypatch, tmp_path, capsys):

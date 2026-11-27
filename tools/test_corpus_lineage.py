@@ -757,6 +757,16 @@ def test_invalid_json_is_refused_rather_than_skipped(tmp_path):
         cl.load(p)
 
 
+@pytest.mark.parametrize("payload", [b"null", b"\xff"])
+def test_unreadable_lineage_object_refuses_at_cli(tmp_path, monkeypatch, capsys, payload):
+    path = tmp_path / "corpus.json"
+    path.write_bytes(payload)
+    monkeypatch.setattr(cl, "MANIFEST", path)
+    assert cl.main(["check"]) == 3
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and path.name in out
+
+
 def test_a_manifest_missing_a_top_level_key_is_refused(tree):
     m = tree.load()
     del m["assignment_rule"]

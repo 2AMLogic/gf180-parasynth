@@ -392,7 +392,12 @@ def known_answer() -> dict:
 # the diagnosis
 # ---------------------------------------------------------------------------
 def reproduce(refdir) -> tuple:
-    committed = json.loads(RECORD.read_text())
+    try:
+        committed = json.loads(RECORD.read_text())
+    except (OSError, ValueError) as e:
+        raise Refused(f"cannot read D12A record {RECORD}: {e}") from e
+    if not isinstance(committed, dict):
+        raise Refused(f"expected a JSON object in D12A record {RECORD}")
     res = rc.run_drum_case(dict(case_id="D12A", subject="Clap / anchor",
                                 required_measurements="Burst timing; burst/tail ratio; decay"),
                            refdir, "", keep_audio=False)

@@ -110,6 +110,15 @@ def test_a_missing_freeze_manifest_is_refused_not_failed(frozen_scope_copy):
     assert cf.check(frozen_scope_copy, frozen_scope_copy / MANIFEST.name) == cf.REFUSED
 
 
+@pytest.mark.parametrize("payload", [b"", b"null", b"{}"])
+def test_unreadable_frozen_declaration_breaks_verified_freeze(frozen_scope_copy, capsys, payload):
+    (frozen_scope_copy / cf.CORPUS_MANIFEST).write_bytes(payload)
+    assert cf.main(["--root", str(frozen_scope_copy), "--freeze-manifest",
+                    str(frozen_scope_copy / MANIFEST.name)]) == cf.FAIL
+    out = capsys.readouterr().out
+    assert "FAIL" in out and cf.FREEZE_CANON_KEYS[0] in out
+
+
 def test_a_malformed_freeze_manifest_is_refused(frozen_scope_copy):
     p = frozen_scope_copy / MANIFEST.name
     p.write_text("this line is not the format\n")

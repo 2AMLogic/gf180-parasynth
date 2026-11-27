@@ -165,10 +165,11 @@ def real_curves():
     print("\n" + "=" * 78)
     print("3. The repair on measured response curves (#146's question)")
     print("=" * 78)
-    if not RESULTS.exists():
-        print(f"   {RESULTS} is missing")
+    try:
+        data = json.loads(RESULTS.read_text())
+    except (OSError, ValueError) as e:
+        print(f"   cannot read {RESULTS}: {e}")
         return
-    data = json.loads(RESULTS.read_text())
     if not isinstance(data, dict):
         print(f"   {RESULTS} lacks device response sections")
         return

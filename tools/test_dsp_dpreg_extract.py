@@ -33,6 +33,11 @@ def _sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
+def _write_manifest(box):
+    (box / "MANIFEST.sha256").write_text("".join(
+        f"{_sha((box / n).read_bytes())}  {n}\n" for n in dx.MANIFEST_FILES))
+
+
 @pytest.fixture
 def box(tmp_path):
     """The box's session directory after a successful Vivado run: R1's evidence,
@@ -42,8 +47,7 @@ def box(tmp_path):
     shutil.copytree(PUB / "dsp-dpreg-evidence", d)
     drc = (PUB / "drc.rpt").read_bytes()
     (d / "drc_rpt.sha256").write_text(f"{_sha(drc)}  /box/arty/drc.rpt\n")
-    (d / "MANIFEST.sha256").write_text("".join(
-        f"{_sha((d / n).read_bytes())}  {n}\n" for n in dx.MANIFEST_FILES))
+    _write_manifest(d)
     return d
 
 
@@ -165,8 +169,7 @@ def test_header_only_dump_with_a_complete_manifest_refuses(monkeypatch, tmp_path
     dumped : 0` then `extraction OK` and exited 0."""
     lines = (box / "dsp_cells_dump.txt").read_text().splitlines()
     (box / "dsp_cells_dump.txt").write_text("\n".join(lines[:2]) + "\n")
-    (box / "MANIFEST.sha256").write_text("".join(
-        f"{_sha((box / n).read_bytes())}  {n}\n" for n in dx.MANIFEST_FILES))
+    _write_manifest(box)
     rc, _calls, _ev = _run(monkeypatch, tmp_path, box, "local")
     out = capsys.readouterr().out
     assert rc == 2
@@ -206,8 +209,7 @@ def test_digest_correct_sections_require_parsed_cell_evidence(
         pin = "OPMODE" if defect == "unindexed-opmode" else "[0]"
         dump = dump.replace("PIN OPMODE[0] dir=", f"PIN {pin} dir=", 1)
     path.write_text(dump)
-    (box / "MANIFEST.sha256").write_text("".join(
-        f"{_sha((box / n).read_bytes())}  {n}\n" for n in dx.MANIFEST_FILES))
+    _write_manifest(box)
     rc, _calls, _ev = _run(monkeypatch, tmp_path, box, "local")
     out = capsys.readouterr().out
     assert rc == 2
@@ -221,6 +223,61 @@ def test_dump_cell_problems_names_the_missing_or_unexpected_section():
     assert "no target cells" in dx.dump_cell_problems(dump, [])[0]
     assert "missing END CELL" in dx.dump_cell_problems(dump.removesuffix("==== END CELL b ====\n"),
                                                        ["a", "b"])[0]
+
+
+@pytest.mark.parametrize("connection", [
+    "independent", "net=- driver=-", "net= driver=",
+    "net=connected driver=-", "net=connected driver=NO-DRIVER (nettype=SIGNAL)",
+    "net=connected driver=driver/O (-)",
+])
+def test_opmode_feedback_requires_observed_connections(monkeypatch, tmp_path, box, capsys,
+                                                      connection):
+    path = box / "dsp_cells_dump.txt"
+    dump = path.read_text()
+    first = re.search(r"^==== CELL (\S+) ====$", dump, re.M)[1]
+    assert first.endswith("/prod0__0")
+    if connection == "independent":
+        bits, fields = [5], "net=independent driver=independent/O (LUT5)"
+    else:
+        bits, fields = [5, 4], connection
+    for bit in bits:
+        dump, n = re.subn(rf"^PIN OPMODE\[{bit}\] dir=IN .*",
+                          f"PIN OPMODE[{bit}] dir=IN {fields}", dump, count=1, flags=re.M)
+        assert n == 1
+    path.write_text(dump)
+    _write_manifest(box)
+    rc, _, evidence = _run(monkeypatch, tmp_path, box, "local")
+    out = capsys.readouterr().out
+    if connection == "independent":
+        assert rc == 0 and "extraction OK" in out
+        _, records, _ = dx.analyser.derive(evidence)
+        assert len(records) == 13
+        assert [r["name"] for r in records if r["p_feedback_reachable"]] == [first]
+    else:
+        assert rc == 2 and "REFUSED" in out and "extraction OK" not in out
+        assert "OPMODE" in out and first in out
+        with pytest.raises(dx.analyser.Refused, match="OPMODE"):
+            dx.analyser.derive(evidence)
+
+
+@pytest.mark.parametrize("props", [(p,) for p in dx.analyser.MANDATORY_PROPS]
+                         + [dx.analyser.MANDATORY_PROPS], ids="-".join)
+def test_failed_property_read_refuses_even_with_a_complete_manifest(
+        monkeypatch, tmp_path, box, capsys, props):
+    path = box / "dsp_cells_dump.txt"
+    dump = path.read_text()
+    for prop in props:
+        dump, n = re.subn(rf"^{prop} = .+$", f"{prop} = ERR:read failed", dump,
+                          count=1, flags=re.M)
+        assert n == 1
+    path.write_text(dump)
+    _write_manifest(box)
+    rc, _, evidence = _run(monkeypatch, tmp_path, box, "local")
+    out = capsys.readouterr().out
+    assert rc == 2 and "REFUSED" in out and "extraction OK" not in out
+    assert all(p in out for p in props)
+    with pytest.raises(dx.analyser.Refused, match=props[0]):
+        dx.analyser.derive(evidence)
 
 
 def test_phase3_manifest_command_does_not_mask_sha256sum_failure(monkeypatch, tmp_path, box):

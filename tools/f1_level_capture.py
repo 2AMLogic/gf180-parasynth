@@ -57,6 +57,7 @@ import pathlib
 import subprocess
 import sys
 import zipfile
+from functools import cache
 
 import numpy as np
 
@@ -110,6 +111,16 @@ def clip_key(cond: str, amp: float, take: int) -> str:
 
 def _sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
+
+
+def _read_capture_record(path: pathlib.Path) -> dict:
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, ValueError) as e:
+        raise Refused(f"cannot read capture record {path}: {e}") from e
+    if not isinstance(record, dict):
+        raise Refused(f"expected a JSON object in capture record {path}")
+    return record
 
 
 def frozen_rig() -> dict:
@@ -247,7 +258,7 @@ def capture(work: pathlib.Path) -> dict:
                                 "--take", str(take), "--out", str(d)], cwd=str(ROOT))
             if r.returncode != 0:
                 raise Refused(f"take {take} at amp {amp} did not complete (exit {r.returncode})")
-            takes[(amp, take)] = json.loads((d / "take.json").read_text())
+            takes[(amp, take)] = _read_capture_record(d / "take.json")
 
     prof = rp.load_profile()
     clips, blobs = {}, {}
@@ -330,9 +341,9 @@ def capture(work: pathlib.Path) -> dict:
 # reading: no plugin; every read hash-checked
 # ---------------------------------------------------------------------------
 def load_manifest() -> dict:
-    if not MANIFEST.exists() or not ARCHIVE.exists():
-        raise Refused(f"no level captures at {MANIFEST.relative_to(ROOT)}")
-    return json.loads(MANIFEST.read_text())
+    if not ARCHIVE.is_file():
+        raise Refused(f"missing level capture archive {ARCHIVE}")
+    return _read_capture_record(MANIFEST)
 
 
 def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
@@ -340,11 +351,12 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
     """(audio, clip meta). REFUSES if the archived bytes do not hash to the
     manifest's sha256 (`inject='TAMPERED'` moves the expected hash, for the
     control)."""
-    m = manifest or load_manifest()
+    m = load_manifest() if manifest is None else manifest
     key = clip_key(cond, amp, take)
-    if key not in m["clips"]:
+    clips = m.get("clips") if isinstance(m, dict) else None
+    if not isinstance(clips, dict) or key not in clips:
         raise Refused(f"{key} is not a capture in the manifest")
-    meta = m["clips"][key]
+    meta = clips[key]
     command = meta.get("commanded") if isinstance(meta, dict) else None
     if (not isinstance(command, dict) or cond not in CONDITIONS
             or meta.get("condition") != cond or meta.get("take") != take
@@ -399,6 +411,14 @@ def _evidence_problems(y: np.ndarray, meta: dict) -> list[str]:
     return out
 
 
+@cache
+def _projection_schedule(grid: tuple[float, ...]) -> tuple:
+    """Use the capture rig's stimulus, keeping only its windows across takes."""
+    import reference_rigs as rr
+    _, parts = rr.tone_train(grid, 1.0, rr.SurgeRig.TONE_SETTLE_S, rr.SurgeRig.TONE_WINDOW_S)
+    return tuple(parts)
+
+
 def _validate_windows(meta: dict, frames: int, key: str) -> None:
     parts, freqs = meta.get("parts"), meta.get("freqs_hz")
     grid = rp._freqs()
@@ -406,7 +426,9 @@ def _validate_windows(meta: dict, frames: int, key: str) -> None:
             or len(parts) != len(grid) or len(freqs) != len(grid)):
         raise ProjectionError(f"{key}: expected one projection window per tone "
                               f"on the {len(grid)}-tone grid")
-    for i, (part, hz, expected) in enumerate(zip(parts, freqs, grid)):
+    schedule = _projection_schedule(tuple(grid))
+    for i, (part, hz, step) in enumerate(zip(parts, freqs, schedule)):
+        start_want, length_want, expected = step
         if not isinstance(part, list) or len(part) != 3:
             raise ProjectionError(f"{key}: malformed projection window {i}")
         start, length, freq = part
@@ -418,6 +440,9 @@ def _validate_windows(meta: dict, frames: int, key: str) -> None:
                 or freq != hz or not math.isclose(freq, expected)):
             raise ProjectionError(f"{key}: projection window {i} does not match "
                                   f"the {expected:g} Hz tone")
+        if (start, length) != (start_want, length_want):
+            raise ProjectionError(f"{key}: projection window {i} for the {expected:g} Hz tone "
+                                  f"is {(start, length)}, stimulus requires {(start_want, length_want)}")
 
 
 def capture_curve(cond: str, amp: float, take: int, manifest=None, inject="") -> tuple:
@@ -442,13 +467,13 @@ def verify() -> int:
     expected = {clip_key(c, a, t) for c in CONDITIONS for a in AMPS for t in TAKES}
     clips = m.get("clips")
     if not isinstance(clips, dict) or not clips:
-        print(f"REFUSED  the capture manifest {MANIFEST.relative_to(ROOT)} lists no "
+        print(f"REFUSED  the capture manifest {MANIFEST} lists no "
               "clip, so there is nothing to verify and no verdict")
         return REFUSED
     if set(clips) != expected:
         missing = sorted(expected - set(clips))
         extra = sorted(set(clips) - expected)
-        print(f"REFUSED  the capture manifest {MANIFEST.relative_to(ROOT)} covers "
+        print(f"REFUSED  the capture manifest {MANIFEST} covers "
               f"{len(clips)}/{len(expected)} expected clips (missing {missing[:4]}, "
               f"unexpected {extra[:4]}), so the capture set is incomplete")
         return REFUSED

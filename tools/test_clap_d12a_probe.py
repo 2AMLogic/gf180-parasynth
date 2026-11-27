@@ -107,3 +107,15 @@ def test_malformed_manifest_line_refuses(tmp_path):
     m.write_text("not-a-digest-and-path-line\n")
     with pytest.raises(cp.Refused, match="malformed"):
         cp.verify_manifest(tmp_path, m)
+
+
+@pytest.mark.parametrize("payload", [b"", b"null"])
+def test_unreadable_d12a_record_refuses_before_rendering(tmp_path, monkeypatch, capsys, payload):
+    path = tmp_path / "D12A.json"
+    path.write_bytes(payload)
+    monkeypatch.setattr(cp, "RECORD", path)
+    monkeypatch.setattr(cp, "basis", lambda *_: {})
+    monkeypatch.setattr(rc, "run_drum_case", lambda *a, **kw: pytest.fail("record accepted"))
+    assert cp.main([]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and str(path) in out

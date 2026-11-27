@@ -45,7 +45,7 @@ def test_missing_results_file_refuses_instead_of_declaring_every_invariant_holds
     assert "REFUSED" in out and "no invariant" in out
 
 
-@pytest.mark.parametrize("payload", ["{}", '{"response-empty": []}'])
+@pytest.mark.parametrize("payload", ["{}", '{"response-empty": []}', 'null', ''])
 def test_results_file_holding_no_usable_curves_refuses(
         mod, tmp_path, monkeypatch, capsys, payload):
     # Rule 8 defeating input for a missing-file-only guard: when RESULTS exists
@@ -61,6 +61,7 @@ def test_results_file_holding_no_usable_curves_refuses(
     assert "every stated invariant holds" not in out
     assert "REFUSED" in out
     assert "get worse" not in out
+    assert not mod.checked
 
 
 @pytest.mark.parametrize("subset", ["one-device", "duplicate-cutoff", "wrong-device", "refused-corner"])
