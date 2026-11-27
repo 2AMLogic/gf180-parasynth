@@ -6,7 +6,10 @@
 
 Reads `refaudio/cache/808-from-mars/.../Clean/Digital/{A,B,C}/*.wav`, fetched by
 `tools/refaudio_local.py` (or `tools/refaudio_fetch.py`) and size-checked against
-`refaudio/index/808-from-mars.tsv`.
+`refaudio/index/808-from-mars.tsv`. The takes are then taken BY NAME from that
+index, for the groups the command asks for, and a group that lacks any of them
+is REFUSED (exit 2) before anything is measured (#1427): a partly fetched cache
+used to be read as the whole set.
 
 The pack's own notes define the folders: **A = No Accent, B = Accent, C = More
 Accent**, and 01..11 are eleven TUNING positions. Both halves of that are
@@ -22,6 +25,8 @@ amplitude-dependent nonlinearity. The accent-A rows are therefore this
 measurement's empirical artefact floor -- not a synthetic one.
 """
 from __future__ import annotations
+import csv
+import stat
 import argparse, hashlib, json, pathlib, subprocess, sys
 import numpy as np
 
@@ -32,6 +37,7 @@ if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import tom_pitch_probe as P
 import refusal
+import refaudio_local as rl
 
 
 class Refused(refusal.Refused, RuntimeError):
@@ -39,6 +45,8 @@ class Refused(refusal.Refused, RuntimeError):
 
 REPO = HERE.parent
 CACHE = REPO / "refaudio" / "cache" / "808-from-mars"
+ARCHIVE = "808-from-mars.zip"
+INDEX = REPO / "refaudio" / "index" / "808-from-mars.tsv"
 STEM = "808 From Mars/WAV/01. Individual Hits"
 VOICES = [("LT", "03. Low Tom", "Tom Low"), ("MT", "04. Mid Tom", "Tom Mid"),
           ("HT", "05. Hi Tom", "Tom Hi")]
@@ -54,10 +62,103 @@ ACCENTS = ["A", "B", "C"]
 # `model/tom_drop_docs.py` is what checks the CURRENT constant against prose.
 SHIPPED_RATIO, SHIPPED_MS, SHIPPED_K = 1.7, 60.0, 3.0
 
+FETCH_HINT = ("(fetch: REFAUDIO_LOCAL=<dir holding the pack zips> python tools/refaudio_local.py "
+              "--prefix 808-from-mars.zip '808 From Mars/WAV/01. Individual Hits/"
+              "<voice folder>/Clean/Digital/')")
+
+
+def accents_of(vid: str) -> list[str]:
+    """The accents the command reads of a voice: three of a tom, two of a conga."""
+    return ACCENTS if vid in ("LT", "MT", "HT") else ["A", "B"]
+
+
+def group_rel(folder: str, accent: str) -> str:
+    """One group of recordings, named from the pack root:
+    `<voice folder>/Clean/Digital/<accent>`."""
+    return f"{folder}/Clean/Digital/{accent}"
+
+
+def read_index() -> dict | None:
+    """`rl.indexed_sizes(ARCHIVE)`, with a file that cannot be read as an
+    index REFUSED rather than raised (#1427): an unreadable inventory is an
+    unavailable one, and an unavailable one is exit 2, never a traceback."""
+    try:
+        return rl.indexed_sizes(ARCHIVE)
+    except (OSError, UnicodeError, KeyError, ValueError, csv.Error) as why:
+        raise Refused(f"{INDEX} cannot be read ({type(why).__name__}: {why}): nothing "
+                      "committed says which recordings a group holds") from why
+
+
+def indexed_members(folder: str, accent: str, index: dict | None = None) -> list[str]:
+    """The WAVs one group holds, by name, from the committed index -- sorted
+    -- or REFUSED when the index cannot say.
+
+    `refaudio/index/808-from-mars.tsv` lists every file of the pack, so it says
+    which recordings a group is made of independently of what is in the cache.
+    Only the group's own immediate `.wav` members are taken: nothing from a
+    sub-folder, nothing of another extension."""
+    if index is None:
+        index = read_index()
+    if index is None:
+        raise Refused(f"{INDEX} is missing: nothing committed says which recordings "
+                      "a group holds")
+    d = f"{STEM}/{group_rel(folder, accent)}/"
+    names = sorted(p[len(d):] for p in index
+                   if p.startswith(d) and "/" not in p[len(d):] and p.lower().endswith(".wav"))
+    if not names:
+        raise Refused(f"the committed index lists no WAV under {group_rel(folder, accent)}")
+    return names
+
+
+def absent(folder: str, accent: str, names: list[str]) -> list[str]:
+    """The named recordings that are not regular files in the group's cache folder."""
+    d = CACHE / STEM / group_rel(folder, accent)
+    try:
+        return [n for n in names if not stat.S_ISREG(rl.inventory_path_mode(d / n))]
+    except OSError as why:
+        raise Refused(f"cannot inspect the tom cache folder {d} ({why})") from why
+
+
+def incomplete(folder: str, accent: str, gone: list[str]) -> str:
+    """The refusal for a group that lacks `gone`: the group, and every take."""
+    return (f"{group_rel(folder, accent)} is missing {len(gone)} of the WAVs "
+            f"{INDEX.name} lists for it: " + ", ".join(gone))
+
 
 def files_for(folder: str, stem: str, accent: str) -> list[pathlib.Path]:
-    d = CACHE / STEM / folder / "Clean" / "Digital" / accent
-    return sorted(d.glob("*.wav"))
+    """Every recording of `folder/Clean/Digital/<accent>`, by NAME from the
+    committed index and sorted -- or REFUSED, naming the group and each
+    recording that is not there.
+
+    A glob cannot stand in for this (#1427). It sees only what is on disk, so a
+    partly fetched cache shortened a row and moved its median while the header
+    still said "11 tunings", an empty folder read as "no files in the cache"
+    and the report went on, and a WAV of an unexpected name was measured as a
+    tuning. Presence is all this establishes: a file of the right name holding
+    other audio is read as that take."""
+    names = indexed_members(folder, accent)
+    gone = absent(folder, accent, names)
+    if gone:
+        raise Refused(incomplete(folder, accent, gone))
+    return [CACHE / STEM / group_rel(folder, accent) / n for n in names]
+
+
+def require_inventory(groups) -> None:
+    """REFUSED, naming every one, unless each requested group holds every
+    recording the index lists.
+
+    `main` calls this before anything is measured (#1427), so no row, no pooled
+    figure and no `--json` is produced over a partial cache. `groups` are the
+    command's own: the congas only under `--congas`."""
+    index = read_index()
+    lines = []
+    for vid, folder, _stem in groups:
+        for acc in accents_of(vid):
+            gone = absent(folder, acc, indexed_members(folder, acc, index))
+            if gone:
+                lines.append(incomplete(folder, acc, gone))
+    if lines:
+        raise Refused("\n".join([*lines, FETCH_HINT]))
 
 
 def run_voice(folder: str, stem: str, accent: str) -> list[dict]:
@@ -202,6 +303,13 @@ def main(argv: list[str]) -> int:
                     help="leading-silence and distinct-event controls on the RECORDINGS")
     a = ap.parse_args(argv)
 
+    groups = VOICES + (CONGAS if a.congas else [])
+    try:
+        require_inventory(groups)
+    except Refused as why:
+        print(f"REFUSED: {why}")
+        return 2
+
     prov = provenance()
     print(f"commit {prov['commit'][:12]}{'  DIRTY' if prov['dirty'] else '  clean'}"
           f"   archive {prov['archive']} sha256 {prov['archive_sha256'][:16]}...")
@@ -209,10 +317,9 @@ def main(argv: list[str]) -> int:
 
     out = {"provenance": prov, "shipped": {"ratio": SHIPPED_RATIO, "drop_ms": SHIPPED_MS,
                                            "k_exp": SHIPPED_K}, "voices": {}}
-    groups = VOICES + (CONGAS if a.congas else [])
     for vid, folder, stem in groups:
         out["voices"][vid] = {}
-        accents = ACCENTS if vid in ("LT", "MT", "HT") else ["A", "B"]
+        accents = accents_of(vid)
         print(f"=== {vid}  ({folder})")
         print("  acc  n  ref   settled Hz (11 tunings)   floor Hz   x1st period        "
               "x at onset (fit)        tau ms        shape   neigh dB")
