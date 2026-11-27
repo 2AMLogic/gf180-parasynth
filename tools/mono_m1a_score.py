@@ -121,9 +121,8 @@ QUALIFICATION = ROOT / "docs/scorecard/mono-m1a-miniv3/attack-qualification"
 ANALYSIS_VERSION = "m1a-envelope-score-v3"
 
 
-def qualified_attack_domain():
-    """The v3 qualified domain; REFUSES if the suite that produced it was not
-    run on the estimator and signal sources now in the tree."""
+def _qualified_attack_report():
+    """qualification.json, after the checks qualified_attack_domain() names."""
     try:
         suite = json.loads((QUALIFICATION / "suite-v3.json").read_text())
         report = json.loads((QUALIFICATION / "qualification.json").read_text())
@@ -135,7 +134,13 @@ def qualified_attack_domain():
     domain = report["v3"]["domain"]
     if not domain or any(r["max_abs_error_ms"] > report["bound_ms"] for r in domain):
         raise Refused("attack qualification has no row within its error bound")
-    return domain
+    return report
+
+
+def qualified_attack_domain():
+    """The v3 qualified domain; REFUSES if the suite that produced it was not
+    run on the estimator and signal sources now in the tree."""
+    return _qualified_attack_report()["v3"]["domain"]
 
 
 def attack_fit_qualified(fit, domain=None):
@@ -149,6 +154,60 @@ def attack_fit_qualified(fit, domain=None):
         return (f"10-90 {fit['attack_10_90_ms']:.3f} ms at explained ratio "
                 f"{fit['explained_ratio']:.3f} is outside every qualified row")
     return None
+
+
+def qualify_envelope_basis():
+    """What this analysis rests on: the release basis compare_audio() measures
+    with, and attack_fit_v3's known-answer qualification as committed.
+
+    reference.qualify_envelope_basis() cannot supply this. Its `attack` entry
+    runs and stamps the RETIRED v2 fit, and the module cannot be edited because
+    suite-v3.json pins its digest. So its release half -- a release with a
+    closed-form T20, read by the 40 ms RMS window, with the 5 ms lead window as
+    the control that must fail -- is carried here, and the attack entry
+    summarises qualification.json, whose sources qualified_attack_domain()
+    checks. The suite is not re-run."""
+    t = np.arange(round(reference.SECONDS * SR)) / SR
+    audio = np.zeros_like(t)
+    for event in reference.EVENTS:
+        dt = t - event["on_s"]
+        envelope = np.clip(dt / .03, 0, 1)
+        off = dt >= event["gate_s"]
+        envelope[off] = np.exp(-(dt[off] - event["gate_s"]) / .1)
+        hz = 440 * 2 ** ((event["note"] - 69) / 12)
+        audio += .1 * envelope * np.sin(2 * np.pi * hz * t)
+    expected = 100 * math.log(10)
+    rows = {}
+    for label, window in (("lead_window", 5.), ("bass_window", reference.ENVELOPE_WINDOW_MS)):
+        measured = lead.am.rms_envelope(audio, ms=window, sr=SR)
+        values = [reference.ref.envelope_timing(measured, SR, e["on_s"], e["on_s"] + e["gate_s"])["release_t20_ms"]
+                  for e in reference.EVENTS]
+        rows[label] = {"window_ms": window, "release_ms": values,
+                       "max_error_ms": max(abs(v - expected) for v in values)}
+    if rows["bass_window"]["max_error_ms"] >= 10 or rows["lead_window"]["max_error_ms"] <= 10:
+        raise Refused("bass envelope qualification or wrong-window control failed")
+    report = _qualified_attack_report()
+    v3 = report["v3"]
+    return {"known_release_ms": expected, **rows, "spectral_window_s": .25,
+            "scope": "40 ms RMS window qualified for release ONLY; attack is "
+                     "measured by the waveform-domain fit, not by any RMS window",
+            "attack": {"estimator": "attack_fit_v3",
+                       "schema": report["schema"],
+                       "bound_ms": report["bound_ms"],
+                       "cases": v3["cases"],
+                       "search_boundary_hits": v3["search_boundary_hits"],
+                       "domain": v3["domain"],
+                       "qualification_path": str((QUALIFICATION / "qualification.json").relative_to(ROOT)),
+                       "scope": "attack_fit_v3's committed known-answer qualification: "
+                                "`cases` synthesized attacks, `search_boundary_hits` of them "
+                                "fitted on the ramp search limit and never a measurement; each "
+                                "`domain` row is a region of 10-90 ms x explained ratio whose "
+                                "worst known error is within `bound_ms`. The attack property is "
+                                "graded only inside it. Not re-run here: refuses if any source "
+                                "the suite ran on has changed"},
+            "initial_failures": "100 ms spectral window refused below 12 periods; 5 ms envelope "
+                                "window failed known release; early h4 window could not resolve "
+                                "the short filter transient"}
 
 
 def invalid(reason, units="ms"):
@@ -324,7 +383,7 @@ def run(case, inject="", keep_audio=True, cached_record=None, wav_dest=None):
     if inject not in ("", "MONO_PITCH_UP_25_CENTS"):
         raise Refused(f"unsupported M1A mutation: {inject}")
     manifest, reference_pcm = load_reference()
-    qualification = reference.qualify_envelope_basis()
+    qualification = qualify_envelope_basis()
     patch = patch_for_reference(manifest)
     engine = lead.engine_configuration("selected")
     sequence = [(e["on_s"], e["note"] + (.25 if inject else 0), e["gate_s"],

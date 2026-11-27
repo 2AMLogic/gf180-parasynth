@@ -31,10 +31,17 @@ The four things these tests hold in place:
      gain it costs puts the decay inside the truncating biquad's deadband.
      Both halves are asserted, because the first half alone is exactly the
      "moved the number without being better" result issue #21 warns about.
+
+The machine's own RANGE is held to its inventory as well (#1420): it spans the
+25 bass-drum settings by name and refuses -- naming the path -- when one is
+absent, is a directory, or has been replaced by a file of another name, instead
+of reading whatever `bd8/BD*.WAV` happened to match.
 """
 from __future__ import annotations
+import glob
 import math
 import os
+import statistics
 import sys
 
 import numpy as np
@@ -45,8 +52,10 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import bd_excitation_probe as bx                                   # noqa: E402
+import drum_fit as df                                              # noqa: E402
 import drums_fx as dx                                              # noqa: E402
 from modal_fixed import RAW, BP                                    # noqa: E402
+from test_drum_fit import _make_corpus                             # noqa: E402
 
 # HARDWARE-MEASURED, 25 files, sounds-tr808-fischer @ 85fbecf. Percent of the
 # first 4 ms's energy per band of bd_excitation_probe.EDGES.
@@ -213,3 +222,95 @@ def test_the_target_is_reachable_by_shape_alone_so_the_mechanism_is_right():
     assert row[bx.LOW] < MACHINE["hi"][bx.LOW], row
     assert row[bx.TARGET] > 30.0, row
     assert row[2] > 30.0, row
+
+
+def test_the_range_spans_the_whole_set_on_a_complete_corpus_exactly_as_the_glob_read_it(tmp_path):
+    """Same 25 rows, in the same order, as the `bd8/BD*.WAV` glob produced
+    before #1420, and the same per-band summaries over them."""
+    _make_corpus(tmp_path, ("BD",))
+    old = []
+    for p in sorted(glob.glob(os.path.join(str(tmp_path), "bd8", "BD*.WAV"))):
+        sr, x = df.read_wav(p)
+        old.append((os.path.basename(p), bx.first4(x, sr)))
+    assert len(old) == 25
+    rng = bx.reference_range(str(tmp_path))
+    assert rng["rows"] == old
+    cols = list(zip(*[r for _, r in old]))
+    assert rng["lo"] == [min(c) for c in cols]
+    assert rng["hi"] == [max(c) for c in cols]
+    assert rng["median"] == [statistics.median(c) for c in cols]
+
+
+def test_the_range_names_an_absent_non_anchor_take(tmp_path):
+    """The anchor `check_preconditions` reads is still there, so only the
+    range's own inventory can see the loss. The glob saw 24 files and called
+    their spread the machine's own."""
+    _make_corpus(tmp_path, ("BD",))
+    (tmp_path / "bd8" / "BD0025.WAV").unlink()
+    assert (tmp_path / "bd8" / "BD5050.WAV").is_file()
+    with pytest.raises(df.Refused) as e:
+        bx.reference_range(str(tmp_path))
+    assert e.value.missing == ["bd8/BD0025.WAV"]
+
+
+def test_an_equal_count_substitute_does_not_stand_in_for_a_range_take(tmp_path):
+    """`BD9999.WAV` matches the range's old glob, which read it as a 25th
+    setting; the range was then over one wrong take and 24 right ones."""
+    _make_corpus(tmp_path, ("BD",))
+    (tmp_path / "bd8" / "BD0025.WAV").rename(tmp_path / "bd8" / "BD9999.WAV")
+    with pytest.raises(df.Refused) as e:
+        bx.reference_range(str(tmp_path))
+    assert e.value.missing == ["bd8/BD0025.WAV"]
+
+
+def test_the_range_needs_only_the_bass_drum_takes(tmp_path):
+    _make_corpus(tmp_path, ("BD",))
+    assert not (tmp_path / "sd8").exists()
+    assert len(bx.reference_range(str(tmp_path))["rows"]) == 25
+
+
+def test_the_cli_refuses_the_range_before_printing_it_or_the_verdict(tmp_path, capsys, monkeypatch):
+    """Through the CLI: `REFUSED`, the missing path, exit 2, and neither a
+    range row nor the VERDICT that reads `INSIDE` against it.
+
+    `check_preconditions` is stubbed because the published anchors it must
+    reproduce need the Fischer corpus, which no synthetic take can carry.
+    Everything from section 1 on is the real path, with `render` replaced by a
+    function that fails the test -- so a regression that lets the report run on
+    fails at once instead of after its four minutes."""
+    _make_corpus(tmp_path, ("BD",))
+    (tmp_path / "bd8" / "BD0025.WAV").unlink()
+
+    def past_the_range(*args, **kwargs):
+        raise AssertionError("the report ran on past the range it had to refuse")
+    monkeypatch.setattr(bx, "render", past_the_range)
+    monkeypatch.setattr(bx, "check_preconditions",
+                        lambda refs, verbose=True: dict(ref=[0.0] * 5, ours=[0.0] * 5, ref_sr=bx.SR))
+    assert bx.main(["--refs", str(tmp_path)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "bd8/BD0025.WAV" in out
+    assert "machine, min over" not in out
+    assert "VERDICT" not in out
+
+
+@pytest.mark.parametrize("kind", ["absent", "directory"])
+def test_the_cli_refuses_an_anchor_that_is_not_a_regular_file(tmp_path, capsys, monkeypatch, kind):
+    """Through the CLI with the real `check_preconditions`: the anchor
+    `bd8/BD5050.WAV` is checked as a regular file before it is opened. A
+    directory at that path used to slip past `os.path.exists` and raise
+    `IsADirectoryError` before `reference_range`'s inventory check ran."""
+    _make_corpus(tmp_path, ("BD",))
+    anchor = tmp_path / "bd8" / "BD5050.WAV"
+    anchor.unlink()
+    if kind == "directory":
+        anchor.mkdir()
+
+    def past_the_anchor(*args, **kwargs):
+        raise AssertionError("the report ran on past the anchor it had to refuse")
+    monkeypatch.setattr(bx, "render", past_the_anchor)
+    assert bx.main(["--refs", str(tmp_path)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "bd8/BD5050.WAV" in out
+    assert "THE MACHINE'S OWN RANGE" not in out
+    assert "machine, min over" not in out
+    assert "VERDICT" not in out
