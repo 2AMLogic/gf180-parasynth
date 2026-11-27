@@ -541,11 +541,17 @@ def test_control_predicted_refusals_not_the_unqualified_set_is_caught(record, pr
 @pytest.mark.parametrize("entry", [[100.0, 90.0, 95.0], "100", None, 100.0])
 def test_non_dict_reading_entry_refuses(record, entry):
     """A malformed entry REFUSES (no AttributeError) from primary_aggregate
-    called directly, not only through satisfiable."""
+    called directly, not only through satisfiable.  The refusal is asserted
+    here rather than left to `pytest.raises(bp.Refused)`: with the guard
+    removed the validator raises AttributeError from inside itself, which a
+    `raises(bp.Refused)` block lets escape unattributed (#1463)."""
     rd = _readings(record)
     rd[Q] = entry
-    with pytest.raises(bp.Refused, match="not an object"):
+    with pytest.raises(Exception) as e:
         bp.primary_aggregate(record, rd)
+    assert not isinstance(e.value, AttributeError), (
+        f"a {type(entry).__name__} entry crashed the validator instead of refusing: {e.value!r}")
+    assert isinstance(e.value, bp.Refused) and "not an object" in str(e.value)
 
 
 @pytest.mark.parametrize("readings", [[], "x", None])
