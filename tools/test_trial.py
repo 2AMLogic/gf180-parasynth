@@ -947,10 +947,10 @@ def test_live_midi_control_is_caught_only_with_its_exit_zero(tmp_path):
     assert not trial.interpret_live_midi_record(spec, {"rc": 1}, tmp_path, "control")["caught"]
 
 
-def _live_midi_registry(repo, mode, *, replays=False, declaration=None):
+def _live_midi_registry(repo, mode, *, replays=False, declaration=None, session_mode=None):
     """Keep the shipped session arguments, host evidence and caught control fixed."""
     modes = json.loads(trial.REGISTRY.read_text())["trials"]["T-LIVE-MIDI"]["modes"]
-    session, = modes[mode]["required"]
+    session, = modes[session_mode or mode]["required"]
     archive = REAL_ROOT / "fpga/reports/live-midi/full-kit-298/verification-rtl.json"
     record = json.loads(archive.read_text())
     if not replays:
@@ -978,21 +978,33 @@ def test_live_midi_rtl_registry_requires_replay_fixtures(repo, declaration):
         trial.load_registry(registry, repo.root / "docs/dag.json")
 
 
-@pytest.mark.parametrize("declaration", [{}, {"fixtures": []}], ids=["omitted", "empty"])
-def test_live_midi_old_rtl_pass_requires_replay_fixtures(repo, declaration, monkeypatch, capsys):
-    registry = _live_midi_registry(repo, "rtl", declaration=declaration)
+def test_live_midi_rtl_registry_rejects_sim_session(repo):
+    registry = _live_midi_registry(repo, "rtl", session_mode="sim")
+    with pytest.raises(trial.RegistryError, match="missing required child 'session-rtl'"):
+        trial.load_registry(registry, repo.root / "docs/dag.json")
+
+
+@pytest.mark.parametrize("session_mode, declaration, reason", [
+    pytest.param("rtl", {}, "must declare non-empty 'fixtures'", id="omitted"),
+    pytest.param("rtl", {"fixtures": []}, "must declare non-empty 'fixtures'", id="empty"),
+    pytest.param("sim", None, "missing required child 'session-rtl'", id="sim-session"),
+])
+def test_live_midi_old_rtl_pass_requires_replay_fixtures(
+        repo, session_mode, declaration, reason, monkeypatch, capsys):
+    registry = _live_midi_registry(repo, "rtl", session_mode=session_mode, declaration=declaration)
     # Reproduce the old writer, which accepted this declaration. The dispatcher
     # itself executes both checkers, hashes the artifacts and seals the PASS.
     with monkeypatch.context() as old:
         old.setattr(trial, "load_registry", lambda path, dag: json.loads(path.read_text()))
         run_dir, rec = _run_live_midi(repo, registry, "rtl")
     assert rec["verdict"] == trial.PASS and rec["controls"][0]["caught"]
+    assert rec["children"][0]["coverage"]["observed"]["i2s_periods"] == {}
     rc = trial.main(["check-receipt", str(run_dir / "receipt.json"), "--require", trial.PASS])
     out = capsys.readouterr().out
     assert rc == 1, out
     assert out.count("REJECTED:") == 1, out
-    assert "REJECTED: T-LIVE-MIDI/rtl/session-rtl:" in out
-    assert "fixtures" in out and "RTL replay" in out
+    assert "REJECTED: T-LIVE-MIDI/rtl" in out and "session-rtl" in out
+    assert reason in out and "RTL replay" in out
 
 
 @pytest.mark.parametrize("mode, replays, verdict", [

@@ -148,12 +148,14 @@ def _valid_replay_fixtures(fixtures) -> bool:
 
 
 def _live_midi_fixture_problem(tid, mode_name, mode) -> str | None:
-    if (tid, mode_name) == ("T-LIVE-MIDI", "rtl"):
-        for child in mode.get("required", []):
-            if child.get("id") == "session-rtl" and not _valid_replay_fixtures(
-                    child.get("fixtures")):
-                return (f"{tid}/{mode_name}/session-rtl: must declare non-empty 'fixtures' "
-                        "for RTL replay coverage")
+    if (tid, mode_name) != ("T-LIVE-MIDI", "rtl"):
+        return None
+    sessions = [c for c in mode.get("required", []) if c.get("id") == "session-rtl"]
+    if not sessions:
+        return f"{tid}/{mode_name}: missing required child 'session-rtl' for RTL replay coverage"
+    if any(not _valid_replay_fixtures(c.get("fixtures")) for c in sessions):
+        return (f"{tid}/{mode_name}/session-rtl: must declare non-empty 'fixtures' "
+                "for RTL replay coverage")
     return None
 
 
