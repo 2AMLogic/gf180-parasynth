@@ -435,7 +435,8 @@ def fit_balance(g: dict, measured: dict, *, grid=None) -> dict:
 
     Worst-case, not least-squares, and not averaged: #369's rules forbid an
     averaged score, and a balance that is 0.2 dB out on 24 settings and 6 dB out
-    on one has not reproduced the machine.
+    on one has not reproduced the machine. Use n_inside_bound for admission
+    at BOUND_DB. The reported worst_db is rounded for display.
     """
     grid = BALANCE_DB if grid is None else np.asarray(grid, dtype=float)
     dd, ss = np.meshgrid(grid, grid, indexing="ij")
@@ -526,7 +527,7 @@ def shape_audit(measured: dict, *, column=None, cfg=None) -> dict:
         m = {d: {t: float(v) for t, v in zip(CODES, y)} for d in CODES}
         f = fit_balance(g, m)
         out[name] = {"worst_db": f["worst_db"], "balance_db": f["balance_db"],
-                     "reachable": f["worst_db"] <= BOUND_DB,
+                     "reachable": f["n_inside_bound"] > 0,
                      "span_db": round(float(span), 3)}
     return out
 
@@ -803,7 +804,7 @@ def _alpha_law(g, measured) -> dict:
         f = fit_balance(g, measured)
     except Refused as exc:
         return {"value": None, "bound": BOUND_DB, "ok": None, "refused": str(exc)}
-    return {"value": f["worst_db"], "bound": BOUND_DB, "ok": f["worst_db"] <= BOUND_DB,
+    return {"value": f["worst_db"], "bound": BOUND_DB, "ok": f["n_inside_bound"] > 0,
             "balance_db": f["balance_db"],
             "n_settings": f["n_settings"],
             "min_measured_span_db": round(min(v["measured_span_db"]
@@ -843,7 +844,7 @@ def _alternative_fails(name, measured, cfg) -> dict:
     alt["tone_flat"] = (not cfg["tone_flat"]) if name == "no-tone-network" else cfg["tone_flat"]
     alt["source_flat"], alt["bands_shifted"] = cfg["source_flat"], cfg["bands_shifted"]
     f = fit_balance(gain_table(alt), measured)
-    return {"value": f["worst_db"], "bound": BOUND_DB, "ok": f["worst_db"] > BOUND_DB,
+    return {"value": f["worst_db"], "bound": BOUND_DB, "ok": f["n_inside_bound"] == 0,
             "margin_db": round(f["worst_db"] - BOUND_DB, 3)}
 
 
@@ -965,7 +966,7 @@ def verdict(*, refs=None, meas=None) -> dict:
         "decay": decay_readings(),
         "resolved": [], "not_resolved": [],
     }
-    if head["worst_db"] <= BOUND_DB:
+    if head["n_inside_bound"] > 0:
         res["resolved"].append(
             f"the tone network's wiper law reproduces the 808's H - L versus TONE at all "
             f"{head['n_settings']} settings to {head['worst_db']} dB worst case, against a "
@@ -978,11 +979,12 @@ def verdict(*, refs=None, meas=None) -> dict:
                        ("no-tone-network", "the tone network as the mechanism"),
                        ("low-on-top-rail", "the low band's rail (bottom, with Ht2)")):
         a = alts[name]
-        (res["resolved"] if a["worst_db"] > BOUND_DB else res["not_resolved"]).append(
+        excluded = a["n_inside_bound"] == 0
+        (res["resolved"] if excluded else res["not_resolved"]).append(
             f"{want}: the '{name}' alternative reads {a['worst_db']} dB "
-            f"({'outside' if a['worst_db'] > BOUND_DB else 'INSIDE'} the bound)")
+            f"({'outside' if excluded else 'INSIDE'} the bound)")
     sw = res["mapping_sweep"]
-    near = {m: v["worst_db"] for m, v in sw.items() if v["worst_db"] <= BOUND_DB}
+    near = {m: v["worst_db"] for m, v in sw.items() if v["n_inside_bound"] > 0}
     res["not_resolved"].append(
         "the exact shape of alpha(TONE): " + ", ".join(f"{m} {v}" for m, v in sorted(near.items(), key=lambda kv: kv[1]))
         + f" -- {len(near)} of {len(sw)} candidate mappings are inside the bound, so the linear "
@@ -1062,7 +1064,7 @@ def main(argv=None) -> int:
     print("\nstructural alternatives, each with the same two free numbers:")
     for name, alt in sorted(v["alternatives"].items(), key=lambda kv: -kv[1]["worst_db"]):
         print(f"  {name:18s} worst {alt['worst_db']:6.2f} dB  "
-              + ("FAILS the bound (so it is excluded)" if alt["worst_db"] > BOUND_DB
+              + ("FAILS the bound (so it is excluded)" if alt["n_inside_bound"] == 0
                  else "inside the bound (NOT excluded by this measurement)"))
     print("\nalpha(TONE) candidates swept:")
     for m, f in sorted(v["mapping_sweep"].items(), key=lambda kv: kv[1]["worst_db"]):

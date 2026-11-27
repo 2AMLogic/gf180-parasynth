@@ -118,7 +118,86 @@ def test_a_planted_INVERTED_law_is_rejected_by_the_linear_fit():
     numbers available."""
     meas = _synthetic("inverted", (10.0, 11.5))
     f = tk.fit_balance(tk.gain_table(mapping="linear"), meas)
-    assert f["worst_db"] > tk.BOUND_DB, f["worst_db"]
+    assert f["n_inside_bound"] == 0, f
+
+
+BOUNDARY_OFFSETS_DB = (3.0004, 3.0006, 2.9996)
+
+
+@pytest.mark.parametrize("offset_db", BOUNDARY_OFFSETS_DB)
+def test_shape_and_law_use_the_unrounded_residual(monkeypatch, offset_db):
+    monkeypatch.setattr(tk, "BALANCE_DB", np.array([0.0]))
+    g = tk.gain_table()
+    meas = _synthetic("linear", (0.0, 0.0), cols=[tk.ANCHOR_TONE])
+    meas[tk.ANCHOR_TONE][tk.CODES[-1]] += offset_db
+    inside = offset_db <= tk.BOUND_DB
+
+    fit = tk.fit_balance(g, meas)
+    assert fit["worst_db"] == round(offset_db, 3)
+    assert fit["n_inside_bound"] == int(inside)
+    if inside:
+        assert tk.balance_region(g, meas)["n_inside"] == 1
+    else:
+        with pytest.raises(tk.Refused, match="no balance"):
+            tk.balance_region(g, meas)
+        monkeypatch.setattr(tk, "from_artifact", lambda: meas)
+        with pytest.raises(tk.Refused, match="no balance"):
+            tk.verdict()
+    assert tk.shape_audit(meas)["machine"]["reachable"] is inside
+    assert tk._alpha_law(g, meas)["ok"] is inside
+
+
+@pytest.fixture(params=BOUNDARY_OFFSETS_DB)
+def flat_alternative_case(request, monkeypatch):
+    """Both the fixed mapping and the disconnected tone network predict zero
+    change across TONE. Their residual is exactly the planted step. At +6 dB
+    on both high bands the linear headline stays inside for all three steps."""
+    offset_db = request.param
+    column = dict.fromkeys(tk.CODES, 0.0)
+    column[tk.CODES[-1]] = offset_db
+    meas = {tk.ANCHOR_TONE: column}
+    monkeypatch.setattr(tk, "BALANCE_DB", np.array([6.0]))
+    monkeypatch.setattr(tk, "from_artifact", lambda: meas)
+    return meas, offset_db
+
+
+def test_alternative_fails_only_when_the_planted_step_is_outside(flat_alternative_case):
+    meas, offset_db = flat_alternative_case
+    prop = tk._alternative_fails("no-tone-network", meas, tk.config())
+    assert prop["value"] == round(offset_db, 3)
+    assert prop["ok"] is (offset_db > tk.BOUND_DB)
+
+
+def test_verdict_classifies_the_alternative_and_mapping_by_membership(flat_alternative_case):
+    _, offset_db = flat_alternative_case
+    inside = offset_db <= tk.BOUND_DB
+    v = tk.verdict()
+    assert v["headline"]["n_inside_bound"] == 1
+    assert v["alternatives"]["no-tone-network"]["n_inside_bound"] == int(inside)
+    assert v["mapping_sweep"]["fixed"]["n_inside_bound"] == int(inside)
+    decision = "not_resolved" if inside else "resolved"
+    position = "INSIDE" if inside else "outside"
+    assert any("'no-tone-network'" in s and f"({position} the bound)" in s
+               for s in v[decision]), v[decision]
+    [mappings] = [s for s in v["not_resolved"] if "candidate mappings" in s]
+    assert ("fixed " in mappings) is inside
+    admitted = sum(f["n_inside_bound"] > 0 for f in v["mapping_sweep"].values())
+    assert f"{admitted} of {len(v['mapping_sweep'])} candidate mappings" in mappings
+
+
+def test_cli_labels_the_alternative_even_when_both_sides_print_3db(
+        flat_alternative_case, monkeypatch, tmp_path, capsys):
+    _, offset_db = flat_alternative_case
+    # The controls require the normal artifact and grid. Exercise the ordinary
+    # summary with the planted measurement after that independent gate.
+    monkeypatch.setattr(tk, "check", lambda **kwargs: (True, []))
+    assert tk.main(["--refs", str(tmp_path)]) == 0
+    [row] = [s for s in capsys.readouterr().out.splitlines()
+             if s.lstrip().startswith("no-tone-network ")]
+    assert "3.00 dB" in row
+    expected = ("FAILS the bound (so it is excluded)" if offset_db > tk.BOUND_DB
+                else "inside the bound (NOT excluded by this measurement)")
+    assert expected in row
 
 
 def test_the_family_CAN_reach_a_flat_curve_and_a_straight_ramp():
@@ -439,7 +518,7 @@ def test_the_linear_law_fits_and_the_three_alternatives_do_not():
     for name in ("inverted", "no-tone-network", "low-on-top-rail"):
         assert alts[name]["worst_db"] > 4.0, (name, alts[name]["worst_db"])
     # and the one that is NOT excluded, stated rather than omitted
-    assert alts["ht2-ht3-swapped"]["worst_db"] < tk.BOUND_DB
+    assert alts["ht2-ht3-swapped"]["n_inside_bound"] > 0
 
 
 def test_the_linear_mapping_is_the_best_of_the_candidates_swept():
@@ -506,7 +585,7 @@ def test_the_law_holds_in_the_two_windows_the_artifact_does_not_carry(measured):
     g = tk.gain_table(mapping="linear")
     for w in ("strike", "tail"):
         f = tk.fit_balance(g, measured["hml"][w])
-        assert f["worst_db"] <= tk.BOUND_DB, (w, f["worst_db"])
+        assert f["n_inside_bound"] > 0, (w, f)
 
 
 def test_the_corpus_gated_controls_fire(measured):
