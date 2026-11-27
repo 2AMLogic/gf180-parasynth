@@ -395,6 +395,53 @@ def test_a_control_cannot_adopt_the_shared_wav_directory_as_its_results(
 
 
 @pytest.mark.parametrize("case_id,wav,key", WRITERS)
+def test_injected_wav_alias_refused_before_overwriting_the_clean_recording(
+        board, capsys, case_id, wav, key):
+    trial = board["base"] / "trial"  # same filesystem as the published WAV for hardlink_to()
+    trial.mkdir()
+    trial_record = trial / f"{case_id}.json"
+    board_record = board["board"] / trial_record.name
+    if case_id == "E1A":
+        anchor = (rc.ROOT / "docs/scorecard/results/E1A.json").read_bytes()
+        assert json.loads(anchor)["engine"] == "integrated-rtl"
+        board_record.parent.mkdir()
+        board_record.write_bytes(anchor)
+        trial_record.write_bytes(anchor)
+        model_record = board_record.parent / "model-twin" / board_record.name
+    else:
+        model_record = board_record
+
+    _cli(board, case_id)
+    clean_record = model_record.read_bytes()
+    clean = json.loads(clean_record)
+    assert _measured(clean)
+    published = _resolved(clean["provenance"]["artefacts"][key])
+    assert published == board["shared"] / wav
+    np.testing.assert_array_equal(_pcm(published), _rendered(case_id, FIRST))
+    clean_wav = published.read_bytes()
+
+    if case_id == "E1A":
+        (trial / "model-twin").symlink_to(board["shared"], target_is_directory=True)
+        candidate = trial / "model-twin" / wav
+    else:
+        candidate = trial / wav
+        candidate.hardlink_to(published)
+    assert candidate.samefile(published)
+    board["renders"].hz = SECOND
+
+    capsys.readouterr()
+    status = _cli(board, case_id, "--inject", "REF_F0_20PCT", "--results", str(trial))
+    assert published.read_bytes() == clean_wav, "the injected render overwrote the clean WAV"
+    assert status == 2
+    err = capsys.readouterr().err
+    assert "--inject" in err and rc.stated_path(published) in err and rc.stated_path(candidate) in err
+    assert model_record.read_bytes() == clean_record
+    assert not (candidate.parent / trial_record.name).exists()
+    if case_id == "E1A":
+        assert board_record.read_bytes() == trial_record.read_bytes() == anchor
+
+
+@pytest.mark.parametrize("case_id,wav,key", WRITERS)
 def test_no_audio_still_writes_no_wav(board, tmp_path, case_id, wav, key):
     """`--no-audio` is preserved: no WAV, anywhere, and the record says so."""
     _cli(board, case_id)
