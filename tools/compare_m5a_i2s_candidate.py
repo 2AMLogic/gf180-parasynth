@@ -88,9 +88,17 @@ def _event_errors(event: dict, label: str) -> dict[str, dict[str, float]]:
     """Extract independently thresholdable values for one note/wave event."""
     identity = f"{label}:{event.get('wave')}/{event.get('midi')}"
     try:
+        recorded_excess = event["foldback_db"]["excess_over_reference_db"]
+        excess = float(recorded_excess)
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise m5a.Refused(f"{identity} lacks a numeric foldback excess") from exc
+    if isinstance(recorded_excess, bool) or not 0 <= excess < math.inf:
+        raise m5a.Refused(f"{identity} foldback excess must be finite and nonnegative")
+
+    try:
         errors = {
             "Pitch": abs(float(event["pitch_cents_from_midi"]["model_minus_reference"])),
-            "Foldback energy": max(0.0, float(event["foldback_db"]["excess_over_reference_db"])),
+            "Foldback energy": excess,
             "Envelope attack": abs(float(event["envelope_ms"]["attack_model"]
                                           - event["envelope_ms"]["attack_reference"])),
             "Envelope release": abs(float(event["envelope_ms"]["release_model"]
