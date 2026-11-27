@@ -27,8 +27,9 @@ Covered (each a statement that editing it changes what the V3 suite MEANS):
 
 Outcomes, per the exit contract: PASS 0 (every hash held), FAIL 1 (a file's
 hash moved or a covered file is missing -- the freeze is broken, and the
-offending path is named), REFUSED 2 (the freeze manifest is missing or
-malformed, so nothing could be checked).
+offending path is named), REFUSED 2 (the freeze manifest is missing, malformed
+or empty, so nothing could be checked -- a zero-entry manifest over an empty
+tree is not a freeze that holds, it is no freeze at all).
 
 A mutation of one frozen file is a committed control for this tool:
 `tools/test_reference_freeze.py` copies the tree, edits one byte, and requires
@@ -117,6 +118,9 @@ def manifest_entries(path: pathlib.Path) -> list[tuple[str, str, str]]:
         if len(parts) != 3 or parts[0] not in ("file", "canon"):
             raise Refused(f"freeze manifest line {n} is malformed: {line!r}")
         entries.append((parts[0], parts[1], parts[2]))
+    if not entries:
+        raise Refused(f"freeze manifest is empty: {path} -- it covers nothing, "
+                      f"so there is no freeze to check")
     return entries
 
 

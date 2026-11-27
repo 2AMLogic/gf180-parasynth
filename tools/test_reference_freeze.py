@@ -116,6 +116,32 @@ def test_a_malformed_freeze_manifest_is_refused(frozen_scope_copy):
     assert cf.check(frozen_scope_copy, p) == cf.REFUSED
 
 
+def test_an_empty_freeze_manifest_over_an_empty_tree_is_refused(tmp_path, capsys):
+    # The census false pass (#1466 / #1469): a zero-byte manifest over an
+    # empty directory enumerated nothing, compared nothing, found nothing
+    # grown, and printed `PASS  0 frozen entries hold`. Nothing was checked,
+    # so no verdict exists -- the same REFUSED as a missing manifest.
+    empty_root = tmp_path / "root"
+    empty_root.mkdir()
+    empty_manifest = tmp_path / "empty.sha256"
+    empty_manifest.write_bytes(b"")
+    assert cf.check(empty_root, empty_manifest) == cf.REFUSED
+    code = cf.main(["--root", str(empty_root),
+                    "--freeze-manifest", str(empty_manifest)])
+    out = capsys.readouterr().out
+    assert code == cf.REFUSED
+    assert out.startswith("REFUSED")
+    assert "empty" in out
+    assert "PASS" not in out
+
+
+def test_a_whitespace_only_freeze_manifest_is_refused(frozen_scope_copy):
+    # Same empty record, reached by a blank line instead of zero bytes.
+    p = frozen_scope_copy / MANIFEST.name
+    p.write_text("\n")
+    assert cf.check(frozen_scope_copy, p) == cf.REFUSED
+
+
 def test_the_canonical_v3_suite_declaration_is_frozen_not_the_whole_corpus():
     # The V4 entry next to it must stay editable (renders will land), so the
     # canon hash covers ONLY the frozen suite's own declaration.
