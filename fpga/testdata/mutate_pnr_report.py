@@ -6,11 +6,10 @@ and prints KILLED / SURVIVED / REFUSED per mutant. Usage:
     python fpga/testdata/mutate_pnr_report.py [--python PY]
 
 The baseline and mutants use PY, defaulting to this script's interpreter.
-"J-" names are the Judge's mutants from PR #594. The current suite is
-expected to miss "J-equivalent: disable rc is None". A diagnosed no-fit log
-with a missing return code distinguishes this mutant from the original
-(#1474). A green suite counts as EXPECTED SURVIVOR under #1401. A red is
-REFUSED because the record has no assertion to attribute it to.
+"J-" names are the Judge's mutants from PR #594. For the historically named
+"J-equivalent: disable rc is None", the headroom CLI accepts a diagnosed fit
+error with return code 255 and must refuse the same log with no return code
+(#1474).
 
 A red is a kill only if it is the recorded tests' red (issue #1401,
 docs/verification-rules.md 5). Until then this record read ANY nonzero pytest
@@ -23,29 +22,30 @@ with this suite and `EXPECTED`, the test and assertion that caught it:
   * KILLED    pytest exited 1 and a recorded assertion failed, in a test that
               passed on the baseline. The matching test ID is printed.
   * SURVIVED  pytest stayed green with the mutation in place: a hole in the
-              suite. The missing-return-code mutant is the EXPECTED SURVIVOR.
+              suite.
   * REFUSED   anything else, with no kill credit: a collection error, an
               ERROR-only run, a red outside the recorded tests or at another
               assertion, a recorded check that did not pass in both runs, a
               search text that no longer matches exactly once.
 
-Exit 0 when every other mutant was killed and the expected one survived; 1
-when any other mutant survived (a mix with refusals included, both named); 2
-when nothing survived but something refused, and for a red baseline
-(issue #1130), before any mutant runs.
+Exit 0 when every mutant was killed. A survivor gives exit 1, including a
+mix with refusals. Refusals alone or alongside kills give exit 2, as does a
+red baseline (issue #1130) before any mutant runs.
 
-Recorded result, 2026-11-27 (`267955a3` plus this change, Python 3.12.3,
-pytest 9.2.0, 44 tests, `make` present so the fake-executable rig ran):
+Recorded result, 2026-11-27 (`64777b53` plus #1474, Python 3.12.3,
+pytest 9.2.0, 46 tests, `make` present so the fake-executable rig ran):
 
-    13 mutant(s) killed, 1 expected survivor (J-equivalent: disable rc is None)
+    14 mutant(s) killed.
 
 Each kill named the tests `EXPECTED` records for it (supersets are printed as
-information only). Both unlink mutants and the disabled bitstream check are
+information only). With the reporter suite from `64777b53`, only the
+missing-return-code mutant survived and the updated runner exited 1.
+Both unlink mutants and the disabled bitstream check are
 caught by `test_make_silent_packer_beside_stale_bitstream_fails`, the
 stale-artefact control. Measured with no `make` on PATH (the rig fixture then
 skips): the same run exits 2, REFUSING the five mutants whose recorded checks
 were skipped -- a skipped control establishes neither a kill nor a survivor --
-and still names the eight kills that never needed the rig.
+and still names the nine kills that never needed the rig.
 """
 from __future__ import annotations
 
@@ -66,13 +66,12 @@ UNLINK = '''    for name in (*TARGETS[a.target]["stale"], log_p.name, st_p.name,
         (build / name).unlink(missing_ok=True)
     log_p.write_text("")
 '''
-EXPECTED_SURVIVOR = "J-equivalent: disable rc is None"
 M = {
  "J-survivor: remove unlink loop + log truncation": [(UNLINK, "")],
  "remove unlink loop only (keep truncation)": [(UNLINK, '    log_p.write_text("")\n')],
  "J-survivor: disable evaluate bitstream check": [("if not (bit_p.is_file() and bit_p.stat().st_size > 0):", "if False:")],
  "J-survivor: disable util[0] > r order check": [("if util and util[0] > r:", "if False:")],
- EXPECTED_SURVIVOR: [('if rc is None:\n', 'if False:\n')],
+ "J-equivalent: disable rc is None": [('if rc is None:\n', 'if False:\n')],
  "always write --out": [("if v.state == ROUTED or (v.state == NOFIT and a.allow_no_fit):\n        Path(a.out)", "if True:\n        Path(a.out)")],
  "ignore error lines at rc 0": [("    if errors:\n        return Verdict(REFUSED", "    if False:\n        return Verdict(REFUSED")],
  "missing status treated as OK": [("    if status is None:\n        return", "    if status is None:\n        status = {'nextpnr': {'returncode': 0}, 'after': []}\n    if False:\n        return")],
@@ -85,8 +84,8 @@ M = {
 }
 
 # The test and the failed assertion that caught each mutant on the real suite,
-# read from pytest's own report on 2026-11-27 (`267955a3`, Python 3.12.3,
-# pytest 9.2.0, 44 tests). Parameter IDs are kept where the case is the point.
+# read from pytest's own report on 2026-11-27 (see recorded run above).
+# Parameter IDs are kept where the case is the point.
 # Overlap is enough: a superset still fires and its extras are printed as
 # information, while a renamed-away record refuses rather than passing.
 _STALE = "test_make_silent_packer_beside_stale_bitstream_fails"
@@ -111,7 +110,10 @@ EXPECTED = {
     "J-survivor: disable util[0] > r order check": {
         "test_utilisation_only_after_route_marker_is_refused_for_order": _REFUSED,
     },
-    EXPECTED_SURVIVOR: {},
+    "J-equivalent: disable rc is None": {
+        "test_headroom_report_fit_error_requires_recorded_returncode[missing-returncode]":
+            hic.Site("assert result.returncode == expected_exit"),
+    },
     "always write --out": {
         "test_make_ecp5_failed_packer_fails_and_keeps_report": hic.Site(_KEPT),
         "test_make_ecp5_missing_tool_fails_and_keeps_report": hic.Site(_KEPT),
@@ -198,7 +200,7 @@ def main() -> int:
         print(base.tail.rstrip())
         return 2
 
-    survivors, refused, expected = [], 0, []
+    survivors, refused = [], 0
     for name, subs in M.items():
         try:
             TARGET.write_bytes(_mutated(text, subs).encode())
@@ -212,12 +214,8 @@ def main() -> int:
             if res.failed:
                 print(f"    (failed, no credit: {', '.join(res.failed)})")
         elif res.outcome == hic.NO_FIRE:
-            if name == EXPECTED_SURVIVOR:
-                expected.append(name)
-                print(f"{'EXPECTED SURVIVOR':17s}  {name}")
-            else:
-                survivors.append(name)
-                print(f"{'SURVIVED':17s}  {name} -- {res.reason}")
+            survivors.append(name)
+            print(f"{'SURVIVED':17s}  {name} -- {res.reason}")
         else:
             print(f"{'KILLED':17s}  {name} -- {len(res.failed)} test(s) caught it")
             for test in res.failed:
@@ -236,9 +234,7 @@ def main() -> int:
         print(f"\n{refused} mutant(s) REFUSED -- the reasons are above; nothing was "
               "measured for them, and no kill is claimed.")
         return 2
-    print(f"\n{len(M) - len(expected)} mutant(s) killed"
-          + (f", {len(expected)} expected survivor ({expected[0]})" if expected else "")
-          + ".")
+    print(f"\n{len(M)} mutant(s) killed.")
     return 0
 
 

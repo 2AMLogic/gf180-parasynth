@@ -7,6 +7,8 @@ silently overwrite: the engine guard in `run_case.run_filter_case`, the
 disagreement report, and the refusal to let a control land on the board.
 """
 import json
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -19,6 +21,7 @@ class _StubPath:
     """Enough of `SelectedFilterPath`'s interface to reach the engine guard."""
     render_label = "a stub"
     path_version = "stub-v0"
+    engine = None            # a substitute that never declared an identity
 
     def __init__(self):
         self.probe_profile = {"name": "selected"}
@@ -36,20 +39,79 @@ def _case():
     return next(c for c in rc.load_cases() if c["case_id"] == "F1A")
 
 
-def test_a_substituted_path_must_name_its_engine():
+@pytest.mark.parametrize("attributes", [
+    {}, {"engine": None}, {"engine": ""}, {"engine": "   "},
+    {"engine": ["integrated-rtl"]}, {"engine": rc.ENGINE}, {"engine": " fixed-model "},
+], ids=["missing", "none", "empty", "blank", "non-string", "reserved", "padded-reserved"])
+def test_a_substituted_path_must_name_its_engine(attributes):
     """Refused before any reference is loaded or any RTL runs: a twenty-minute
     simulation labelled `fixed-model` would be worse than no measurement."""
-    with pytest.raises(rc.Refused, match="must name its engine"):
-        rc.run_filter_case(_case(), "", False, engine_path=_StubPath())
-    with pytest.raises(rc.Refused, match="must name its engine"):
-        rc.run_filter_case(_case(), "", False, engine_path=_StubPath(),
-                           engine=rc.ENGINE)
+    with patch.object(rc, "load_filter_reference",
+                      side_effect=AssertionError("reached reference I/O")):
+        with pytest.raises(rc.Refused, match="must name its engine"):
+            rc.run_filter_case(_case(), "", False, engine_path=SimpleNamespace(**attributes))
 
 
 def test_a_substituted_path_cannot_be_combined_with_a_reference_injection():
+    class _Named(_StubPath):
+        engine = "integrated-rtl"
     with pytest.raises(rc.Refused, match="cannot be combined"):
-        rc.run_filter_case(_case(), "REF_CORNER_2X", False, engine_path=_StubPath(),
-                           engine="integrated-rtl")
+        rc.run_filter_case(_case(), "REF_CORNER_2X", False, engine_path=_Named())
+
+
+def test_the_engine_label_is_not_independently_selectable():
+    """#1492 control: the old call shape `engine="integrated-rtl"` with no path
+    must not be accepted, and must never reach reference I/O."""
+    with patch.object(rc, "load_filter_reference",
+                      side_effect=AssertionError("reached reference I/O")):
+        with pytest.raises(TypeError):
+            rc.run_filter_case(_case(), "", False, engine="integrated-rtl")
+
+
+def test_each_path_declares_the_identity_its_records_carry():
+    import f1_filter_path as fp
+    assert fp.SelectedFilterPath.engine == rc.ENGINE == "fixed-model"
+    assert rtlpath.RtlFilterChainPath.engine == rtlpath.ENGINE == "integrated-rtl"
+
+
+@pytest.mark.parametrize("use_default, engine", [(True, "default-probe"), (False, "integrated-rtl")])
+def test_record_curve_file_and_provenance_carry_the_path_engine(use_default, engine, tmp_path):
+    """Both supported paths through the real scorer, synthetic curves: all three
+    output labels (record, curve file, provenance) follow the path."""
+    import numpy as np
+
+    class _Path(_StubPath):
+        probe_profile = {"name": "selected"}
+        regs = {"gain": 1, "ogain": 1}
+
+        def curve(self, freqs, cut_hz, res, amp):
+            return np.zeros(len(freqs)), {"regs": self.regs}
+
+        def record(self):
+            return {"path": "stub"}
+    path = _Path()
+    path.engine = engine
+    freqs = np.geomspace(100.0, 8000.0, 24)
+    meta = {"sha256": "0" * 64, "file": "stub.wav", "rig": None, "commanded": {"cut_hz": 1000.0},
+            "cutoff_readback_hz": 1000.0}
+    with patch.object(rc, "load_filter_reference",
+                      return_value=(freqs, np.zeros(len(freqs)), meta)), \
+         patch.object(rc, "dut_probe_grid", return_value=freqs), \
+         patch.object(rc, "_legacy_reads", return_value={}), \
+         patch.object(rc.rp, "load_profile",
+                      return_value={"rigs": {None: {"plugin": {}}},
+                                    "built": {"worktree": {"commit": "x"}}}):
+        dest = tmp_path / "curve.json"
+        if use_default:
+            import f1_filter_path as fp
+            with patch.object(fp, "SelectedFilterPath", return_value=path):
+                rec = rc.run_filter_case(_case(), "", True, response_dest=dest)
+        else:
+            rec = rc.run_filter_case(_case(), "", True, response_dest=dest,
+                                     engine_path=path)
+    assert rec["engine"] == engine
+    assert rec["provenance"]["engine"] == engine
+    assert json.loads(dest.read_text())["engine"] == engine
 
 
 def _metric(value, reference, error, units="Hz", tol=11.76):

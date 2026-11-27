@@ -382,7 +382,9 @@ def choose(band, cfg, *, anchor=ANCHOR) -> dict:
     if best is None:
         raise Refused(f"{band}: no enumerated realisation at all ({rejected} rejected)")
     got = best[1]
-    if got["worst_db"] > SHAPE_BOUND_DB:
+    # best[0][0] is the full-precision `worst > SHAPE_BOUND_DB` verdict; the
+    # recorded worst_db is rounded to 3 dp and would accept 3.0004 as 3.0.
+    if best[0][0]:
         raise Refused(f"{band}: the best realisation the bank can hold is "
                       f"{got['worst_db']:.2f} dB, outside the {SHAPE_BOUND_DB} dB bound")
     return got

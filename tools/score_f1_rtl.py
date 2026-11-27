@@ -19,6 +19,12 @@ took a suffix and chose the directory itself, so an injected control's curve
 replaced the clean board curve whatever `--results` said, and both records
 named the same file.
 
+A CLEAN run is the one those refusals cannot cover (#1430): with nothing
+injected, `--results build/scorecard` -- or any alias of it, or of the board's
+own curve -- would put this run's curve on the published path. That
+destination is refused before anything runs, with the case, the destination
+and the published curve on stderr.
+
 WHY THIS EXISTS. #94 asked for four `integrated-rtl` anchors -- one drum, one
 mono, one filter, one ensemble -- because every scorecard case said
 `fixed-model`, so nothing on the board had been measured on the instrument that
@@ -123,7 +129,8 @@ def main(argv=None) -> int:
                          "directory the board's response curves live in.")
     ap.add_argument("--results", default=None,
                     help=f"where the record goes (default {rc.stated_path(rc.RESULTS)}); "
-                         "off the board, the response curve goes beside it")
+                         "off the board, the response curve goes beside it. A directory "
+                         "whose curve would be the board's own is refused")
     ap.add_argument("--no-audio", action="store_true",
                     help="do not write the response-curve artefact")
     ap.add_argument("--allow-stale", action="store_true",
@@ -147,6 +154,17 @@ def main(argv=None) -> int:
               f"{rc.stated_path(rc.AUDIO_OUT)}, where the board's response curves "
               "live; pass another --results", file=sys.stderr)
         return 2
+    # The clean run is the one those refusals cannot cover (#1430): with
+    # nothing injected, a --results that resolves to the board's own curve for
+    # this case -- `build/scorecard`, an alias of it, a link to the curve --
+    # would put this run's curve on the published path. Asked before the run,
+    # so the twenty minutes of iverilog are not spent first.
+    if not a.no_audio:
+        try:
+            rc.response_destination(outdir, a.case, "-rtl")
+        except rc.Refused as exc:
+            print(f"score_f1_rtl: REFUSED -- {exc}", file=sys.stderr)
+            return 2
 
     # The premise of the run, asserted before any of it runs (run_case.base_check).
     try:
@@ -176,13 +194,17 @@ def main(argv=None) -> int:
                   file=sys.stderr)
             return 2
 
-    response_dest = rc.response_destination(outdir, a.case, "-rtl")
     try:
+        # Asked only of a run that will write the curve: with --no-audio the
+        # published directory is an ordinary off-board one (#1430). A refusal
+        # from here on is a clean exit 2 and never a traceback.
+        response_dest = (None if a.no_audio
+                         else rc.response_destination(outdir, a.case, "-rtl"))
         path = rtlpath.RtlFilterChainPath(inject=a.inject, timeout_s=a.timeout_s)
         print(f"score_f1_rtl: {a.case} on {rtlpath.ENGINE} "
               f"({path.tools['iverilog']}); this runs two RTL curves")
         record = rc.run_filter_case(case, "", keep_audio=not a.no_audio,
-                                    engine_path=path, engine=rtlpath.ENGINE,
+                                    engine_path=path,
                                     response_dest=response_dest)
     except (rtlpath.Refused, rc.Refused) as exc:
         print(f"score_f1_rtl: REFUSED -- {exc}", file=sys.stderr)

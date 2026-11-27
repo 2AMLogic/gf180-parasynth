@@ -14,7 +14,7 @@ def _inputs():
 
 
 def test_promoted_record_is_the_selected_candidate():
-    assert sel.check(*_inputs()) == []
+    assert sel.main([]) == 0
 
 
 def test_controls_turn_it_red():

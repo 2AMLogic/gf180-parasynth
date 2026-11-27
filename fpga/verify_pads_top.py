@@ -76,6 +76,10 @@ for _p in ("fpga", "rtl-sketch", "model"):
 import pads_rom as pr                               # noqa: E402
 import uart_host as uh                              # noqa: E402
 import synth_top_model as stm                       # noqa: E402
+_REFUSAL_TOOLS = str(ROOT / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+from exit_contract import FAIL, PASS, REFUSED  # noqa: E402
 
 BENCH = ROOT / "rtl-sketch/tb_pads_top.v"
 WRAPPER = ROOT / "fpga/rtl/arty_a7_pads_top.v"
@@ -85,6 +89,8 @@ STUB = ROOT / "fpga/stubs/arty_a7_pads_stub.v"
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
 CPF = pr.CYC_PER_FRAME
 GUARD_CYCLES = pr.GUARD_BITS * pr.DIV
+EXIT_CODE = {"PASS": PASS, "FAIL": FAIL, "REFUSED": REFUSED, "NO VERDICT": REFUSED}
+VERDICTS = ("PASS", "FAIL")
 
 INJECTS = ("PADS_DEBOUNCE_DOUBLE", "PADS_TRIG_STUCK", "PADS_SRC_STUCK", "PADS_KIT_HASH")
 INJECT_SCENARIO = {"PADS_DEBOUNCE_DOUBLE": "phases", "PADS_TRIG_STUCK": "phases",
@@ -559,7 +565,8 @@ def record_for(run, comp, ok, state=None):
     for path in build_arty.roms():
         hashed[str(path.relative_to(ROOT))] = _sha(path)
     transcript = Path(run["outdir"]) / "transcript.txt"
-    return {"state": state or ("PASS" if ok else "FAIL"), "exit_code": 0 if ok else 1,
+    resolved = state or ("PASS" if ok else "FAIL")
+    return {"state": resolved, "exit_code": EXIT_CODE[resolved],
             "inject": run["inject"], "scenario": run["scenario"], "configuration": CONFIG,
             "scope": ("Arty pads wrapper (#449) digital check: buttons and switches at the "
                       "pins, the internal UART sender into the unmodified bridge, the kit "
@@ -580,6 +587,7 @@ def kit_hash_gate(rom: Path) -> tuple:
 
 def run_one(scenario, inject, outdir, *, wrapper=WRAPPER):
     outdir = Path(outdir)
+    (outdir / "verification.json").unlink(missing_ok=True)
     rom = ROM
     if inject == "PADS_KIT_HASH":
         outdir.mkdir(parents=True, exist_ok=True)
@@ -680,11 +688,12 @@ def main(argv=None) -> int:
     with ThreadPoolExecutor(max_workers=a.jobs) as pool:
         results = list(pool.map(lambda sc: (sc, *run_one(sc, None, outdir / sc)), scenarios))
     summary = {sc: (rec or {}).get("state", "NO VERDICT") for sc, rec, _ok, _c in results}
-    good = all(v == "PASS" for v in summary.values())
-    (outdir / "controls.json").write_text(json.dumps(
-        {"state": "PASS" if good else "FAIL", "runs": summary}, indent=2) + "\n")
-    print(json.dumps({"state": "PASS" if good else "FAIL", "runs": summary}))
-    return 0 if good else 1
+    state = ("REFUSED" if any(s not in VERDICTS for s in summary.values())
+             else "FAIL" if any(s != "PASS" for s in summary.values()) else "PASS")
+    result = {"state": state, "runs": summary}
+    (outdir / "controls.json").write_text(json.dumps(result, indent=2) + "\n")
+    print(json.dumps(result))
+    return EXIT_CODE[state]
 
 
 if __name__ == "__main__":

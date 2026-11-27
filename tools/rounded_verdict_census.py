@@ -61,8 +61,12 @@ compared against a threshold is counted as a field comparison.  It pairs only
 with a same-named rounded store in another module, so it usually inflates the
 `ordered-field-compares` total and adds no block.
 
-Scanned: Python under `tools/` and `model/`, recursively, with test modules
-(`test_*.py`, `*_test.py` -- the pytest.ini patterns) left out.
+The census walks `tools/` and `model/` recursively. It skips symlinked
+subdirectories encountered beneath either scan root. Within the directories
+it visits, it scans .py files except those whose basenames match `test_*.py`
+or `*_test.py`. A module such as `tools/probes/excitation_energy.py` is
+scanned even though pytest also collects it. An export of the two scan roots
+is sufficient.
 
 SEARCH BOUNDARY -- what a clean run does NOT say.  Each item below is asserted
 blind by `tools/test_rounded_verdict_census.py`, so widening the detector turns
@@ -84,16 +88,14 @@ that test red until this list is rewritten to match:
     outside `tools/` and `model/` (`fpga/`, `pnr/`, `rtl-sketch/`, `spec/`).
 
 PRECONDITIONS, ASSERTED AT THE POINT OF USE.  REFUSED (exit 2) WHEN UNMET.
-A census is a statement about a whole tree, so a partial one must not read as
-a clean one:
+A successful report covers the files in the scan scope defined above.
 
   * the root exists and is a directory;
-  * it holds BOTH `tools/` and `model/`.  A pair needs a producer and a
-    consumer, and half a tree cannot hold one;
-  * at least one non-test Python file was scanned.  An empty report looks
+  * it holds both scan roots, `tools/` and `model/`;
+  * at least one Python file in scope was scanned.  An empty report looks
     exactly like a clean one;
-  * every directory in scope can be listed and every scanned file parses.
-    A traversal or read error names the path and withholds the report.
+  * every directory visited can be listed and every file in scope can be
+    read and parsed. A failure names the path and withholds the report.
 
 An unexpected exception is an execution error (exit 1, traceback), never a
 refusal.
@@ -284,7 +286,8 @@ def _refuse_walk_error(exc: OSError) -> None:
 
 def census(root: pathlib.Path | str) -> dict:
     """Stores, ordered field comparisons and their cross-module name matches
-    under `root`.  REFUSES rather than returning a partial census."""
+    within the documented scan scope under `root`. Raises Refused if a scan
+    precondition fails."""
     root = pathlib.Path(root)
     try:
         if not root.exists():

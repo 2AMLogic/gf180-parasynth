@@ -16,6 +16,7 @@ import measure_mono_m1a_reference as reference
 import attack_fit_v3
 
 ROOT, SR = lead.ROOT, lead.SR
+ATTACK_TOLERANCE_MS = 5.0
 MANIFEST = ROOT / "docs/scorecard/mono-m1a-miniv3/manifest.json"
 #: Where a clean run's model WAV goes when its record lands on the board, and
 #: so the file `results/M1A.json` names in `provenance.artefacts.ours`: beside
@@ -214,6 +215,14 @@ def invalid(reason, units="ms"):
     return {"valid": False, "state": "no verdict", "why": reason, "units": units}
 
 
+def _envelope_metric(name, value, ref, units, tolerance, basis):
+    """Keep the signed attack error and normalized envelope distance at fit precision."""
+    if not (math.isfinite(value) and math.isfinite(ref)):
+        raise Refused(f"{name} is not finite")
+    return {"value": value, "reference": ref, "error": value - ref, "units": units,
+            "tolerance": tolerance, "valid": True, "tolerance_basis": basis}
+
+
 def compare_audio(ours, ref, *, attack_domain_rule=True):
     """`attack_domain_rule=False` exists ONLY for the control that shows the
     pre-rule scorer would have graded an out-of-domain attack."""
@@ -255,6 +264,7 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
         attacks = [attack_fit_v3.attack_fit_v3(x, SR, p.value, on, off)
                    for x, p in zip((ours, ref), pitches)]
         values["Envelope attack"].append(tuple(a["attack_10_90_ms"] for a in attacks))
+        attack_error = attacks[0]["attack_10_90_ms"] - attacks[1]["attack_10_90_ms"]
         attack_domain = {side: attack_fit_qualified(a, domain) for side, a in zip(("model", "reference"), attacks)}
         rows.append({**event, "pitch_error_cents": pitch_error,
                      "harmonics_db": dict(zip(("model", "reference"), spectra)),
@@ -269,8 +279,7 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
                                     for side, a in zip(("model", "reference"), attacks)},
                      "attack_out_of_domain": attack_domain,
                      "attack_state": ("unqualified" if any(attack_domain.values()) else
-                                      "pass" if abs(attacks[0]["attack_10_90_ms"]
-                                                    - attacks[1]["attack_10_90_ms"]) <= 5.0
+                                      "pass" if abs(attack_error) <= ATTACK_TOLERANCE_MS
                                       else "fail")})
     properties = {}
     for name, pairs in values.items():
@@ -285,12 +294,15 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
         if name == "Envelope release":
             tolerance, basis = 20., "ms; fixed bass screening limit, above known-signal release error (<10 ms)"
         if name == "Envelope attack":
-            tolerance, basis = 5.0, ("ms, applied to the 10-90% attack time (not the fit's "
-                                     "total ramp); the M5A screening limit for the same "
-                                     "measurement. Graded only inside attack_fit_v3's "
-                                     "qualified domain, whose known-answer error bound is "
-                                     "under 1 ms (docs/scorecard/mono-m1a-miniv3/attack-qualification)")
-        properties[name] = lead._metric(name, ours_value, reference_value, units, tolerance, basis)
+            tolerance = ATTACK_TOLERANCE_MS
+            basis = ("ms, applied to the 10-90% attack time (not the fit's "
+                     "total ramp); the M5A screening limit for the same "
+                     "measurement. Graded only inside attack_fit_v3's "
+                     "qualified domain, whose known-answer error bound is "
+                     "under 1 ms (docs/scorecard/mono-m1a-miniv3/attack-qualification)")
+            properties[name] = _envelope_metric(name, ours_value, reference_value, units, tolerance, basis)
+        else:
+            properties[name] = lead._metric(name, ours_value, reference_value, units, tolerance, basis)
     unqualified = [f"MIDI {r['note']} @{r['on_s']:g}s {side}: {why}" for r in rows
                    for side, why in r["attack_out_of_domain"].items() if why]
     if attack_domain_rule and unqualified:
@@ -324,7 +336,7 @@ def required_metrics(measured):
                            "tolerance": 1.}
     else:
         envelope = max(abs(props[n]["error"]) / props[n]["tolerance"] for n in parts)
-        envelope_metric = lead._metric("envelope", envelope, 0., "normalized maximum", 1.,
+        envelope_metric = _envelope_metric("envelope", envelope, 0., "normalized maximum", 1.,
             "maximum of envelope attack / 5 ms (10-90%, attack_fit_v3, qualified) and "
             "envelope release / 20 ms (40 ms RMS window); no averaging")
     return {"Fundamental/harmonics": lead._metric("Fundamental/harmonics", distance, 0., "normalized maximum", 1.,
