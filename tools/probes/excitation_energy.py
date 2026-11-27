@@ -307,7 +307,11 @@ def voice_map(voice, refs, laws, refdir, arm="ours", n_win=N_WIN,
     """The 52 x 8 map for one voice, ours minus machine, with a floor per cell.
 
     Uses the HELD-OUT settings when the voice has a knob, exactly as
-    `discrimination_trajectory.compare` does, so the two are comparable.
+    `discrimination_trajectory.compare` does, so the two are comparable:
+    selection goes through `td.report_clips`, which gives an adjustable
+    voice its held-out recordings, a fixed voice its single recording
+    (descriptive), and a named refusal when an adjustable voice's corpus
+    holds fit settings only (#1362).
 
     THE FLOOR IS THREE THINGS AND LEAKAGE IS NOT ONE OF THEM. A cell is
     refused when (F3) its band holds no analysis bin, when (F4) the machine's
@@ -318,10 +322,10 @@ def voice_map(voice, refs, laws, refdir, arm="ours", n_win=N_WIN,
     ATTRIBUTED to that band, not that there is no difference: both sides read
     the same 33 Hz bin, so the difference of the readings is real whatever
     else is in it. It is reported per row, never folded into the floor."""
-    use = [c for c in refs if c.voice == voice and c.is_test]
-    held_out = bool(use)
-    if not use:
-        use = [c for c in refs if c.voice == voice]
+    use, held_out, refusal = td.report_clips(voice, refs)
+    if refusal:
+        print(f"{voice}  {refusal}")
+        return None
     if not use:
         return None
     cond = (lambda x, sr: (td.condition(x, sr, True), 0)) if study_conditioning else condition_causal
@@ -1036,7 +1040,12 @@ def report_bands(refdir, voices=None):
            ">5k m", ">5k o", "dB(o/m)", "no-coef 0.7-5k", "dB")
     print("    " + " ".join(f"{h:>10s}" for h in hdr))
     for v in vs:
-        use = [c for c in refs if c.voice == v and c.is_test] or [c for c in refs if c.voice == v]
+        use, _, refusal = td.report_clips(v, refs)
+        if refusal:
+            print(f"    {v:>10s}  {refusal}")
+            continue
+        if not use:
+            continue
         A, B, C, floors = [], [], [], []
         for c in use:
             xr, sr = td.read_wav(c.path)
@@ -1253,8 +1262,12 @@ def report_shared(refdir, voices=None):
           f"{'before #154':>12s} {'dB(o/m)':>8s} {'sweep made':>11s}")
     orig = dx.tom_pitch_drop_writes
     for v in (voices or SHARED):
-        use = [c for c in refs if c.voice == v and c.is_test] or \
-              [c for c in refs if c.voice == v]
+        use, _, refusal = td.report_clips(v, refs)
+        if refusal:
+            print(f"    {v:6s}  {refusal}")
+            continue
+        if not use:
+            continue
         M, H, B = [], [], []
         for c in use:
             xr, sr = td.read_wav(c.path)

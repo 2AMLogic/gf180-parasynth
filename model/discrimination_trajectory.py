@@ -121,13 +121,16 @@ def decay_rate_db_per_100ms(row: np.ndarray, ms: np.ndarray):
 
 def compare(voice: str, refs, laws, arm: str = "ours", n_win: int = N_WIN):
     """Mean signed difference, ours minus the machine, over the HELD-OUT
-    settings of one voice. Falls back to every setting when the voice has no
-    knob -- and says so, because that is sound-matching territory, not
-    emulation, and must never be read as a generalisation result."""
-    use = [c for c in refs if c.voice == voice and c.is_test]
-    held_out = bool(use)
-    if not use:
-        use = [c for c in refs if c.voice == voice]
+    settings of one voice, selected through `td.report_clips`. A voice with
+    no knob has nothing to hold out, so its single recording is compared and
+    the row says NOT held out -- that is sound-matching territory, not
+    emulation, and must never be read as a generalisation result. An
+    adjustable voice whose corpus holds fit settings only is refused by name
+    here, before any map is calculated (#1362)."""
+    use, held_out, refusal = td.report_clips(voice, refs)
+    if refusal:
+        print(f"{voice}  {refusal}")
+        return None
     if not use:
         return None
     A, B = [], []

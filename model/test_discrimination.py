@@ -261,6 +261,39 @@ def ref_clips(refdir: str, voices=None, include_unmodelled: bool = False) -> lis
     return out
 
 
+def report_clips(voice: str, refs) -> tuple:
+    """The recordings a report may compare ours against, and on what terms
+    (#1362). The trajectory report and the excitation reconciliation both
+    select through here, so they cannot drift apart again.
+
+    Two shapes are legitimate. An adjustable voice is compared on its
+    HELD-OUT settings (`Clip.is_test`) -- the only comparison that can say
+    anything about generalisation. A fixed voice (`NO_KNOB`) is compared on
+    its one recording, which is descriptive: there is no knob to hold out.
+    The third shape is a REFUSAL, not a comparison: an adjustable voice
+    whose corpus holds the settings its knob law was fitted on and none of
+    the held-out ones. A map over fit clips is indistinguishable in form
+    from a generalisation result and carries none of its content, and the
+    fallback it replaced labelled it 'no knob to hold out' -- which the
+    voice plainly has.
+
+    Returns `(clips, held_out, refusal)`: `clips` is empty for a voice with
+    no recording at all (nothing to report) and for a refusal; `refusal` is
+    a non-empty string exactly when the voice must be refused, so the
+    caller can emit it before calculating anything."""
+    clips = [c for c in refs if c.voice == voice]
+    if not clips:
+        return [], False, None
+    if voice in NO_KNOB:
+        return clips, False, None
+    held = [c for c in clips if c.is_test]
+    if held:
+        return held, True, None
+    return [], False, (f"REFUSED (fit-only corpus: {len(clips)} recording(s), all at "
+                       f"fit settings, no held-out recording -- the settings the knob "
+                       f"law was fitted on cannot measure how it generalises)")
+
+
 def read_wav(path: str) -> tuple:
     """16-bit PCM WAV to float full scale, `(x, sr)`; REFUSES any other
     sample width (#817): `/32768` is only the 16-bit divisor, and a 24-bit
@@ -2175,6 +2208,26 @@ def test_a_sound_with_no_knob_can_produce_no_knob_equivalent():
         assert KNOB_NAMES[v] == (), v
         assert not Clip(v, (), "real").is_test
         assert math.isnan(knob_equivalent_distance(1.0, {}))
+
+
+def test_report_clips_refuses_an_adjustable_voice_with_fit_settings_only():
+    """#1362, the selector both trajectory reports select through. A corpus
+    holding an adjustable voice's fit settings but none of its held-out ones
+    is a REFUSAL and not a comparison: the fallback it replaced re-measured
+    the settings the knob law was fitted on, and a map over those is
+    indistinguishable in form from a generalisation result."""
+    held = [Clip("LT", (2.5,), "real"), Clip("LT", (7.5,), "real")]
+    fit = [Clip("LT", (k,), "real") for k in (0.0, 5.0, 10.0)]
+    clips, ho, refuse = report_clips("LT", held + fit)
+    assert ho and clips == held and not refuse
+    clips, ho, refuse = report_clips("LT", fit)
+    assert not clips and not ho
+    assert "REFUSED" in refuse and "no held-out recording" in refuse
+    one = [Clip("CP", (), "real")]
+    clips, ho, refuse = report_clips("CP", one)
+    assert clips == one and not ho and not refuse
+    clips, ho, refuse = report_clips("LT", [])
+    assert not clips and not refuse
 
 
 def test_the_sixteen_sound_split_holds_out_the_same_settings_as_the_eight():
