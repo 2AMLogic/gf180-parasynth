@@ -184,7 +184,9 @@ class TargetCalls:
         self.completed = 0
 
     def pytest_runtest_logreport(self, report):
-        if report.when == "call" and not report.skipped:
+        # pytest reports an expected assertion failure as a skipped call with
+        # wasxfail set. A skip mark or xfail(run=False) stops during setup.
+        if report.when == "call" and (not report.skipped or hasattr(report, "wasxfail")):
             self.completed += 1
 
     def pytest_sessionfinish(self, session, exitstatus):

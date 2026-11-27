@@ -394,7 +394,7 @@ class _Plugin:
         with no adapters keeps `self.qualification = None`: NOT MEASURED, which
         is not the same as qualified. The battery drives the patch away from
         its measurement state, so `setup()` is re-run afterwards."""
-        self._qualify_pins()
+        pins = self._qualify_pins()
         if not self.has_causality_adapters():
             return
         try:
@@ -405,10 +405,7 @@ class _Plugin:
                 steady=self.steady, cutoff_knobs=self.CUTOFF_KNOBS)
         finally:
             self.setup()
-        checks = [rq.Check("pins", rq.PASS, "pinned settings held",
-                           {"n_pins": len(self.PINS)})]
-        checks.extend(battery.checks)
-        self.qualification = rq.Qualification(self.name, self.host, tuple(checks))
+        self.qualification = rq.Qualification(self.name, self.host, (pins, *battery.checks))
         self.qualification.require()
 
     def _qualify_pins(self):
@@ -430,11 +427,10 @@ class _Plugin:
             self.pb.set_data(np.zeros((2, int(0.05 * SR)), dtype=np.float32))
         self.p.clear_midi()
         self.eng.render(0.05)
-        if not self.PINS:
-            raise RuntimeError(f"{self.name}: no pinned settings to qualify")
-        bad = self.check_pins()
-        if bad:
-            raise RuntimeError(f"{self.name}: pinned settings did not hold: {bad}")
+        pins = self._pins_check()
+        if pins.outcome != rq.PASS:
+            raise RuntimeError(f"{self.name}: {pins.why}")
+        return pins
 
     # -- helpers -------------------------------------------------------------
     def set(self, idx, v):
@@ -469,11 +465,18 @@ class _Plugin:
         return {f"{i}:{self.p.get_parameter_name(i)}": self.text(i)
                 for i, _v, _n, _w in self.PINS}
 
+    def _pin_expectations(self):
+        return [(idx, name, want) for idx, _val, name, want in self.PINS
+                if name is not None or want is not None]
+
+    def _pins_check(self):
+        return rq.check_pins(self.check_pins, n_pins=len(self._pin_expectations()))
+
     def check_pins(self) -> list:
         """Every pinned index must still carry the name it was pinned by, and
         read back what it was set to. Call this AFTER a render."""
         bad = []
-        for idx, _val, name, want in self.PINS:
+        for idx, name, want in self._pin_expectations():
             got_name = self.p.get_parameter_name(idx)
             if name is not None and got_name != name:
                 bad.append((idx, "NAME", name, got_name))
@@ -1863,8 +1866,7 @@ class _PedalboardPlugin(_Plugin):
         qualified is a finding with numbers in it. `RigRefusal` carries the same
         record."""
         self.silence_state(0.05)
-        checks = [rq.check_pins(self.check_pins, n_pins=len(self.PINS)),
-                  self.written_pins_check()]
+        checks = [self._pins_check(), self.written_pins_check()]
         checks.extend(self.patch_checks())
         battery = rq.qualify_voice(
             rig=self.name, host=self.host, render_note=self.render_note,

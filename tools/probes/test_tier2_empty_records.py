@@ -1,6 +1,6 @@
 """Offline fixture replays for the disposition table in docs/tier2-empty-records.md.
 
-Run with python -m pytest -qs tools/probes/tier2_empty_records.py. These exercise
+Run with python -m pytest -qs tools/probes/test_tier2_empty_records.py. These exercise
 the consumers of audio, build reports and tool responses without running EDA or
 loading a licensed plugin.
 """

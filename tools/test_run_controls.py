@@ -132,6 +132,35 @@ def test_plain_commands_behave_as_run_all(tmp_path):
     assert rc == 1 and [r["state"] for r in rep] == ["PASS", "FAIL"]
 
 
+@pytest.mark.parametrize("cmd", ["\\\n# disabled", "CONTROL_CASE=",
+                                 "A='value with spaces'; B=x # no control", "> /dev/null"])
+@pytest.mark.parametrize("role", ["plain", "baseline", "mutant"])
+def test_shell_syntax_without_a_command_is_refused(tmp_path, capsys, cmd, role):
+    commands = {"plain": [cmd], "baseline": [f"@baseline=a {cmd}", "@after=a true"],
+                "mutant": ["@baseline=a exit 0", f"@after=a {cmd}"]}
+    rc, report = run(tmp_path, commands[role])
+    assert rc == 2 and report is None
+    assert f"empty command for {role}" in capsys.readouterr().out
+
+
+def test_shell_assignment_and_continuation_can_prefix_a_real_command(tmp_path):
+    cmd = "# comment ending in a backslash \\\nCONTROL_CASE='a # b' \\\nsh -c 'test \"$CONTROL_CASE\" = \"a # b\"'"
+    rc, report = run(tmp_path, [cmd])
+    assert rc == 0 and report[0]["state"] == "PASS"
+
+
+@pytest.mark.parametrize("cmd", ["# disabled", "@bogus=x true"])
+def test_a_refusal_invalidates_an_existing_report(tmp_path, cmd):
+    assert run(tmp_path, ["true"])[1][0]["state"] == "PASS"
+    rc, report = run(tmp_path, [cmd])
+    assert rc == 2 and report is None
+
+
+def test_no_control_arguments_invalidate_an_existing_report(tmp_path):
+    assert run(tmp_path, ["true"])[1][0]["state"] == "PASS"
+    assert run(tmp_path, []) == (2, None)
+
+
 @pytest.mark.parametrize("cmds", [
     [f"@after=x {sh(0)}"],                                              # no baseline
     [f"@baseline=x {sh(0)}"],                                           # nothing depends on it

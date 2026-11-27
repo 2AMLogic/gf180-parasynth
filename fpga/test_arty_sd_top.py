@@ -50,9 +50,8 @@ def test_prepared_script_reads_both_constraint_files_in_order(tmp_path):
     assert "SIM_NO_MMCM=0" in text
 
 
-@pytest.mark.parametrize("empty", [{}, {"unrelated": {"pass": True}},
-                                   {case: {} for case in vsd.BOUNDS}])
-def test_empty_clean_dac_measurements_cannot_prepare_an_image(tmp_path, monkeypatch, capsys, empty):
+@pytest.fixture
+def sd_receipt(tmp_path, monkeypatch):
     # Isolate the no-DAC receipt. The independent UART verification has its own gate.
     monkeypatch.setattr(build, "validate_verification", lambda *args: {"periods": 1})
     path = tmp_path / "verification.json"
@@ -61,6 +60,13 @@ def test_empty_clean_dac_measurements_cannot_prepare_an_image(tmp_path, monkeypa
               "source_sha256": {str(p.relative_to(ROOT)): build.sha(p) for p in vsd.SOURCES},
               "clean": {name: {"snr_db": 100, "noise_dbfs": -120,
                                "exact_zero_error": False, "pass": True} for name in vsd.BOUNDS}}
+    return path, args, record
+
+
+@pytest.mark.parametrize("empty", [{}, {"unrelated": {"pass": True}},
+                                   {case: {} for case in vsd.BOUNDS}])
+def test_empty_clean_dac_measurements_cannot_prepare_an_image(sd_receipt, capsys, empty):
+    path, args, record = sd_receipt
     path.write_text(json.dumps(record))
     assert sd.main(args) == 0
     capsys.readouterr()
@@ -68,6 +74,41 @@ def test_empty_clean_dac_measurements_cannot_prepare_an_image(tmp_path, monkeypa
     path.write_text(json.dumps(record))
     assert sd.main(args) == 2
     assert "clean comparison" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("case,fields", [
+    ("silence", {"noise_dbfs": None, "exact_zero_error": "false"}),
+    ("silence", {"noise_dbfs": None, "exact_zero_error": 1}),
+    ("silence", {"noise_dbfs": float("-inf")}),
+    ("silence", {"noise_dbfs": -1, "exact_zero_error": True}),
+    ("sine-6", {"snr_db": float("inf")}),
+    ("held", {"snr_db": float("nan")}),
+    ("square", {"snr_db": "100"}),
+])
+def test_prepare_only_requires_measured_dac_bounds(sd_receipt, capsys, case, fields):
+    path, args, record = sd_receipt
+    record["clean"][case].update(fields)
+    path.write_text(json.dumps(record))
+    assert sd.main(args) == 2
+    assert f"clean comparison for {case}" in capsys.readouterr().out
+
+
+def test_prepare_only_accepts_the_producers_exact_zero_silence(sd_receipt):
+    path, args, record = sd_receipt
+    zeros = np.zeros(1024 * vsd.OSR, dtype=np.int64)
+    row = vsd.compare(zeros, zeros)
+    assert row["noise_dbfs"] is None and row["exact_zero_error"] is True
+    record["clean"]["silence"] = {**row, "pass": True}
+    path.write_text(json.dumps(record))
+    assert sd.main(args) == 0
+
+
+def test_prepare_only_requires_boolean_control_catches(sd_receipt, capsys):
+    path, args, record = sd_receipt
+    next(iter(record["controls"].values()))["caught"] = "false"
+    path.write_text(json.dumps(record))
+    assert sd.main(args) == 2
+    assert "did not catch every control" in capsys.readouterr().out
 
 
 def test_sd_xdc_dispositions_exactly_the_pdm_ports():

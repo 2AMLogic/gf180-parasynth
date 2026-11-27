@@ -130,6 +130,30 @@ def test_device():
     assert summary["crash_rate"] is None
 
 
+def test_an_expected_failure_counts_only_if_the_test_body_ran(tmp_path):
+    marker = tmp_path / "entered"
+    target = _write(tmp_path, "test_expected.py", f"""
+import pathlib
+import pytest
+@pytest.mark.xfail(strict=True)
+def test_executed():
+    pathlib.Path({str(marker)!r}).touch()
+    assert False
+
+@pytest.mark.xfail(run=False)
+def test_disabled():
+    pathlib.Path({str(marker)!r}).touch()
+""")
+    out = tmp_path / "report.json"
+    for test, expected_rc, ran in [("test_disabled", 2, False), ("test_executed", 0, True)]:
+        rc = cr.main(["--target", f"{target}::{test}", "--runs", "1", "--json", str(out)])
+        assert marker.exists() is ran
+        assert rc == expected_rc
+        summary = json.loads(out.read_text())["summary"]
+        assert summary["runs_that_exercised_the_target"] == int(ran)
+        assert summary["crash_rate"] == (0 if ran else None)
+
+
 def test_a_failing_test_is_a_result_not_a_crash(tmp_path):
     target = _write(tmp_path, "test_red.py", """
 def test_red():

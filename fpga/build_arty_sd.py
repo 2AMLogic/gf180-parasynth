@@ -72,8 +72,9 @@ def validate_sd_verification(path: Path) -> dict:
         raise ValueError("missing or unreadable no-DAC verification: " + str(path)) from exc
     if record.get("state") != "PASS":
         raise ValueError("no-DAC verification is not a PASS")
-    if not all(c.get("caught") for c in record.get("controls", {}).values()) \
-            or set(record.get("controls", {})) != set(vsd.CONTROLS):
+    controls = record.get("controls")
+    if (not isinstance(controls, dict) or controls.keys() != vsd.CONTROLS.keys()
+            or not all(isinstance(c, dict) and c.get("caught") is True for c in controls.values())):
         raise ValueError("no-DAC verification did not catch every control")
     for p in vsd.SOURCES:
         key = str(p.relative_to(ROOT))

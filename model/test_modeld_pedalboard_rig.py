@@ -390,6 +390,14 @@ def test_uncorrectable_clipping_refuses_and_the_sweep_is_the_evidence(
     assert all(r["outcome"] == rq.FAIL for r in trim.detail["sweep"])
 
 
+def test_written_pins_alone_cannot_pass_the_name_and_text_check(monkeypatch, tmp_path):
+    rig = install(monkeypatch, tmp_path)
+    rig.PINS = tuple((i, value, None, None) for i, value, _name, _text in rig.PINS)
+    with pytest.raises(rq.RigRefusal) as exc:
+        rig()
+    assert by_name(exc.value.qualification)["pins"].outcome == rq.REFUSED
+
+
 def test_a_refusal_still_measures_everything_it_can(monkeypatch, tmp_path):
     """A refusal is a record, not an early exit. Even with the octave
     uncorrectable, the battery must have run and the checks that CAN answer

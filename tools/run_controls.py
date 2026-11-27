@@ -29,7 +29,8 @@ WHAT YOU GET, in the report (--json, same entry shape as run_all plus `role`,
     PASS from a previous invocation cannot survive a run that fails or is
     killed.
 
-REFUSED (exit 2, nothing run): a malformed prefix, an `@after` naming no
+REFUSED (exit 2, nothing run, prior report removed): an empty command,
+a malformed prefix, an `@after` naming no
 baseline, a baseline nothing depends on, a duplicate baseline id, a baseline
 whose own command carries an injection / expect-failure flag (a baseline that
 is itself a mutant proves nothing -- the input that defeats this guard), or a
@@ -40,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures as cf
+from pathlib import Path
 import re
 import shlex
 import sys
@@ -58,6 +60,23 @@ MUTANT_FLAGS = ("--inject", "--inject-clamp", "--expect-fail", "--expect-mismatc
                 "--f1cal-fault", "--rtl", "--compare-only")
 _DEFINE_INJECT = re.compile(r"(?:^|\s)(?:--define\s+|-D)INJECT_BUG")
 _PREFIX = re.compile(r"^@(baseline|after)=([A-Za-z0-9_.-]+)\s+(.*)$", re.S)
+
+# Recognise the parts of a shell command list that can stand alone without a
+# command name. Consume whole quoted or escaped words in assignments and
+# redirections: a space or '#' inside the value does not start a new token.
+_WORD_PART = r"""(?:[^ \t\n;&|()<>'"\\]|\\[\s\S]|'[^']*'|"(?:[^"\\]|\\[\s\S])*")"""
+_COMMAND_PREFIX = re.compile(rf"""
+      [\t \n;&|()]+ | \\\n | \#[^\n]*
+    | [a-zA-Z_](?:[a-zA-Z_0-9]|\\\n)*={_WORD_PART}*
+    | [0-9]*(?:>>|<>|>&|<&|>\||[<>])[\t ]*{_WORD_PART}+
+""", re.VERBOSE)
+
+
+def _has_command(cmd: str) -> bool:
+    pos = 0
+    while prefix := _COMMAND_PREFIX.match(cmd, pos):
+        pos = prefix.end()
+    return pos < len(cmd)
 
 
 class Refused(refusal.Refused, Exception):
@@ -94,10 +113,11 @@ def _outdir(cmd: str):
 
 
 def validate(specs: list[dict]) -> None:
+    if not specs:
+        raise Refused("no control commands supplied")
     baselines: dict[str, dict] = {}
     for s in specs:
-        if not any(line.strip() and not line.lstrip().startswith("#")
-                   for line in s["cmd"].split("\n")):
+        if not _has_command(s["cmd"]):
             raise Refused(f"empty command for {s['role']} control")
         if s["role"] == "baseline":
             if s["group"] in baselines:
@@ -197,7 +217,7 @@ def run_specs(specs: list[dict], *, timeout=None, jobs=None, serial=False,
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmds", nargs="+")
+    ap.add_argument("cmds", nargs="*")
     ap.add_argument("--serial", action="store_true")
     ap.add_argument("--jobs", type=int, default=None)
     ap.add_argument("--timeout", type=float, default=None)
@@ -207,7 +227,9 @@ def main(argv=None) -> int:
     try:
         specs = parse(a.cmds)
         validate(specs)
-    except Refused as exc:
+    except (Refused, ValueError) as exc:
+        if a.json:
+            Path(a.json).unlink(missing_ok=True)
         print(f"REFUSED: {exc}")
         return REFUSED
 
