@@ -43,7 +43,7 @@ def test_a_changed_identity_a_changed_summary_and_a_lost_row_are_all_reported():
     b["rows"][0]["case"] = dict(a["rows"][0]["case"], E=0.06)
     num, structural, _ = dr.classify(a, b)
     assert not num and len(structural) == 1
-    assert structural[0].startswith("rows[0]/case: ") and "E': 0.06" in structural[0]
+    assert structural[0] == "rows[0]/case/E: 0.0 -> 0.06"
     b = _rec(n_ok=0)                      # a summary counter moved; no row did
     num, structural, summary = dr.classify(a, b)
     assert not num and structural == [] and summary == ["n_ok"]
@@ -64,3 +64,38 @@ def test_cli_reports_both_kinds_and_always_exits_zero(tmp_path, capsys):
     assert "E: 1 rows" in out and "rows[0]/ok: True -> False" in out
     assert "summary fields that differ: n_ok" in out
     assert dr.main([str(a)]) == 2      # one path is not a comparison
+
+
+def test_report_preserves_missing_null_and_nested_type_changes():
+    a, b = _rec(), _rec()
+    a["rows"][0]["reason"] = None
+    b["rows"][0]["case"]["E"] = False
+    b["n_ok"] = 1.0
+    b["extra"] = None
+    text = dr.report(a, b)
+    assert "rows[0]/reason: present in old only" in text
+    assert "rows[0]/case/E: 0.0 -> False" in text
+    assert "summary fields that differ: extra, n_ok" in text
+
+
+def test_missing_case_drop_does_not_hide_a_changed_frequency():
+    a, b = _rec(), _rec(f=91.0)
+    del a["rows"][0]["case"]["E"]
+    text = dr.report(a, b)
+    assert "f_inf: 1 rows; class NO-DROP; case E {unknown}; max |change| 1" in text
+    assert "rows[0]/case/E: present in new only" in text
+
+
+def test_a_numeric_type_change_is_visible_even_when_the_value_compares_equal():
+    a, b = _rec(), _rec()
+    b["rows"][0]["f_inf"] = 90
+    assert "rows[0]/f_inf: 90.0 -> 90" in dr.report(a, b)
+
+
+@pytest.mark.parametrize(("old", "new", "expected"), [
+    ({}, {"rows": None}, "/rows: present in new only"),
+    ({"rows": [None]}, {"rows": [{}]}, "rows[0]: None -> {}"),
+    ({}, {}, "structural differences: none"),
+])
+def test_rows_container_differences_follow_the_comparator(old, new, expected):
+    assert expected in dr.report(old, new)

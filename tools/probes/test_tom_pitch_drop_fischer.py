@@ -433,10 +433,11 @@ def test_the_archived_passing_record_is_the_whole_declared_grid():
     inside its bounds, covering the declared grid exactly. A grid change fails
     this, and the archive must be re-run before it is the passing case again."""
     rec = _archived_ka()
-    assert rec["n"] == rec["n_ok"] == len(rec["rows"]) == len(tp.KA_GRID) > 0
+    assert rec["n"] == rec["n_ok"] == len(rec["rows"]) == 195
     assert all(r["ok"] is True for r in rec["rows"])
-    assert (Counter(tp.ka_identity(r["case"]) for r in rec["rows"])
-            == Counter(tp.ka_identity(c) for c in tp.KA_GRID))
+    archived = Counter(tp.ka_identity(r["case"]) for r in rec["rows"])
+    assert len(archived) == 195
+    assert archived == Counter(tp.ka_identity(c) for c in tp.ka_cases(full=True))
     assert tp.verification_failures("knownanswer", rec) == []
 
 
@@ -447,7 +448,33 @@ def test_cli_knownanswer_refuses_an_empty_generator(tmp_path, monkeypatch, capsy
     status, rec = _cli_knownanswer(tmp_path, monkeypatch, cases=[])
     assert status == 1
     assert rec["rows"] == [] and rec["n"] == rec["n_ok"] == 0     # the record that used to pass
-    assert f"FAILED: known answers: 0 / {len(tp.KA_GRID)} declared cases present" in capsys.readouterr().out
+    assert "FAILED: known answers: 0 / 195 declared cases present" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("copies", [1, 2], ids=["truncated", "repeated"])
+def test_cli_rejects_a_generator_broken_before_module_initialization(tmp_path, capsys, copies):
+    # Install the defect at definition time, so even import-time calls see it.
+    path = pathlib.Path(tp.__file__)
+    definition = "def ka_cases("
+    source = path.read_text()
+    assert source.count(definition) == 1
+    source = source.replace(definition, "@shorten\n" + definition)
+    probe = {"__file__": str(path), "__name__": "shortened_probe",
+             "shorten": lambda generate: lambda full: generate(full)[:1] * copies}
+    exec(compile(source, str(path), "exec"), probe)
+    probe["provenance"] = lambda refs: {}
+    probe["close_provenance"] = lambda prov: prov
+
+    out = tmp_path / "shortened.json"
+    status = probe["main"](["knownanswer", "--out", str(out)])
+    rows = json.loads(out.read_text())["rows"]
+    assert len(rows) == copies and all(row["ok"] is True for row in rows)
+    assert len({tp.ka_identity(row["case"]) for row in rows}) == 1
+    assert status == 1
+    diagnostic = capsys.readouterr().out
+    assert "FAILED: known answers: 1 / 195 declared cases present" in diagnostic
+    if copies == 2:
+        assert "repeated in place of a declared case" in diagnostic
 
 
 def test_cli_knownanswer_refuses_success_counters_with_no_rows(tmp_path, monkeypatch, capsys):
@@ -500,7 +527,7 @@ def test_knownanswer_verdict_reads_each_row_as_the_record_serialises_it():
     `True_` (which `is True` would reject) and an archived JSON `true` read
     the same. A malformed row or record is a failure to REPORT, not an
     exception out of the verdict."""
-    whole = [{"case": c, "ok": np.True_} for c in tp.KA_GRID]
+    whole = [{"case": c, "ok": np.True_} for c in tp.ka_cases(full=True)]
     assert tp.verification_failures("knownanswer", {"n": 195, "n_ok": 195, "rows": whole}) == []
     no_id = _archived_ka()
     no_id["rows"][7] = {"ok": True}
@@ -509,10 +536,19 @@ def test_knownanswer_verdict_reads_each_row_as_the_record_serialises_it():
         assert tp.verification_failures("knownanswer", bare) == ["known answers: the record carries no row list"]
 
 
-def test_knownanswer_verdict_refuses_an_empty_declared_grid(monkeypatch):
-    """Nothing declared and nothing run is not "0 / 0 within the bounds"."""
-    monkeypatch.setattr(tp, "KA_GRID", ())
-    assert tp.verification_failures("knownanswer", {"n": 0, "n_ok": 0, "rows": []})
+@pytest.mark.parametrize("available", [False, True], ids=["missing", "truncated"])
+def test_cli_refuses_an_unavailable_or_changed_reference(tmp_path, monkeypatch, capsys, available):
+    archive = tmp_path / "archive.json"
+    if available:
+        archive.write_text(json.dumps({"rows": _archived_ka()["rows"][:1]}))
+    monkeypatch.setattr(tp, "KA_ARCHIVE", archive)
+    monkeypatch.setattr(tp, "knownanswer", lambda full: {"rows": []})
+    monkeypatch.setattr(tp, "provenance", lambda refs: {})
+    monkeypatch.setattr(tp, "close_provenance", lambda prov: prov)
+    out = tmp_path / "result.json"
+    assert tp.main(["knownanswer", "--out", str(out)]) == 2
+    assert "REFUSED: knownanswer-archive" in capsys.readouterr().out
+    assert not out.exists()
 
 
 def test_cli_controls_red_on_non_caught_variants_and_dirty_clean():

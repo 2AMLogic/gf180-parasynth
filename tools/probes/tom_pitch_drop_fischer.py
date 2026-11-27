@@ -33,7 +33,7 @@ Commands
   knownanswer  analytic decaying tones (closed-form phase, NO DrumsFx):
                every f/phase/decay/drop cell against the frozen bounds. The
                verdict reads the record's ROWS against the declared grid
-               (KA_GRID), never the summary counters (#1451).
+               in the frozen 8fedbf4 archive (#1451).
   controls     the stub and the injected defects, MOVED/BLIND per property.
   measure      the Fischer takes of one pre-registered split, and the shipped
                engine (and the production host's staircase) at each take's
@@ -76,6 +76,8 @@ if _REFUSAL_TOOLS not in sys.path:
 import refusal  # noqa: E402
 
 PREREG = ROOT / "docs" / "scorecard" / "tom-pitch-drop-592" / "prereg.json"
+KA_ARCHIVE = PREREG.parent / "rerun-8fedbf4" / "knownanswer.json"
+KA_ARCHIVE_SHA256 = "3f2f1b44779c9cc3b8651b9a021f0fabd29c9658db6f6b6b82305d1e304f9dc4"
 TOMS = ("LT", "MT", "HT")
 
 
@@ -555,13 +557,6 @@ def ka_cases(full=True):
                 cases.append(dict(family="lti", name=name, numer=num, numer_name=nm, f_inf=f, E=0.0,
                                   tau=None, tau_a=ta, phi0=None, sr=48000))
     return cases
-
-
-#: the grid the CLI's `knownanswer` promises to run, bound at import from the
-#: frozen constants above. The verdict measures a record's rows against THIS
-#: and never re-consults the generator, so a generator that yields nothing or
-#: drops a case cannot shrink the grid it is measured against (#1451).
-KA_GRID = tuple(ka_cases(full=True))
 
 
 def ka_signal(c):
@@ -1311,6 +1306,17 @@ def ka_identity(case: dict) -> str:
     return json.dumps(_json({k: v for k, v in case.items() if k != "numer"}), sort_keys=True)
 
 
+def archived_ka_identities() -> Counter:
+    """Read the promised case identities independently of the live generator."""
+    try:
+        data = KA_ARCHIVE.read_bytes()
+    except OSError as exc:
+        raise Refused("knownanswer-archive", str(exc)) from exc
+    if hashlib.sha256(data).hexdigest() != KA_ARCHIVE_SHA256:
+        raise Refused("knownanswer-archive", f"{KA_ARCHIVE} differs from the frozen 8fedbf4 record")
+    return Counter(ka_identity(row["case"]) for row in json.loads(data)["rows"])
+
+
 def _listed(c: Counter, show: int = 3) -> str:
     ids = [k + (f" x{v}" if v > 1 else "") for k, v in sorted(c.items())]
     return "; ".join(ids[:show]) + (f"; and {len(ids) - show} more" if len(ids) > show else "")
@@ -1330,7 +1336,7 @@ def ka_evidence_failures(rows) -> list:
     the estimator at a commit is what `provenance` is for."""
     if not isinstance(rows, list):
         return ["known answers: the record carries no row list"]
-    want = Counter(ka_identity(c) for c in KA_GRID)
+    want = archived_ka_identities()
     got, why = Counter(), []
     for i, r in enumerate(rows):
         if not isinstance(r, dict) or not isinstance(r.get("case"), dict):
@@ -1339,8 +1345,6 @@ def ka_evidence_failures(rows) -> list:
         got[ka_identity(r["case"])] += 1
         if _json(r.get("ok")) is not True:
             why.append(f"known answers: {ka_identity(r['case'])} ran outside its frozen bounds: {r.get('why')}")
-    if not want:
-        why.append("known answers: the declared grid is empty; nothing was promised, so nothing is shown")
     missing, extra = want - got, got - want
     if missing:
         why.append(f"known answers: {sum((want & got).values())} / {sum(want.values())} declared cases present; "
@@ -1415,12 +1419,12 @@ def main(argv=None) -> int:
             print(json.dumps(_json(res["judgement"]), indent=1))
         res["inject"] = sorted(INJECT)
         res["provenance"] = close_provenance(prov)
+        failures = verification_failures(a.cmd, res)
     except Refused as e:
         print("REFUSED:", e)
         return 2
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(_json(res), indent=1) + "\n")
-    failures = verification_failures(a.cmd, res)
     for w in failures:
         print("FAILED:", w)
     return 1 if failures else 0

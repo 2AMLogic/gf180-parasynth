@@ -18,16 +18,23 @@ import math
 import sys
 
 
+def field_diff(a, b, key, path=""):
+    """Compare one record field, including its presence on either side."""
+    field = f"{path}/{key}"
+    if key in a and key in b:
+        return diff(a[key], b[key], field)
+    if key in a or key in b:
+        return [f"{field}: present in {'old' if key in a else 'new'} only"]
+    return []
+
+
 def diff(a, b, path="", out=None):
     out = [] if out is None else out
     if isinstance(a, dict) and isinstance(b, dict):
         for k in sorted(set(a) | set(b)):
             if path == "" and k == "provenance":
                 continue
-            if k not in a or k not in b:
-                out.append(f"{path}/{k}: present in {'old' if k in a else 'new'} only")
-            else:
-                diff(a[k], b[k], f"{path}/{k}", out)
+            out.extend(field_diff(a, b, k, path))
     elif isinstance(a, list) and isinstance(b, list):
         if len(a) != len(b):
             out.append(f"{path}: length {len(a)} -> {len(b)}")
