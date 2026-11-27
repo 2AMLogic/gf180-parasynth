@@ -23,6 +23,10 @@ WHAT THIS GUARANTEES, AND WHAT IT DOES NOT
     runner must not paper over it by scraping output.
   - A timeout is **NO-VERDICT**, distinct from PASS and from FAIL. A timed-out
     job reported as either is how a green run hides a hung one.
+  - A job with no command is **LAUNCH-ERROR**, never PASS. `sh -c ""` runs
+    nothing and exits 0, so a recipe line that expands to nothing -- an empty
+    `$(shell ...)` entry, a comment in a generated list -- would otherwise be
+    a passing job that never existed.
   - Each child's own exit status is preserved in the summary and the JSON
     report. Verifiers here distinguish 1 (mismatch) from the declared refusal
     statuses 2, 3 and 126 (tools/exit_contract.py) and the runner must not
@@ -65,6 +69,25 @@ PASS, FAIL, NO_VERDICT, LAUNCH_ERROR = "PASS", "FAIL", "NO-VERDICT", "LAUNCH-ERR
 from exit_contract import NO_EVIDENCE
 
 
+def is_blank_or_comment_only(cmd: str) -> bool:
+    """True when `sh -c cmd` has no command to run.
+
+    That is every line being empty, shell blanks (space and tab only), or a
+    full-line `#` comment with optional indentation. The line and blank rules
+    are the shell's, not Python's: sh ends a line only at a newline, so a
+    carriage return is an ordinary character and `"# c\\rprintf x"` is one
+    comment, while `" \\r "` is a command named CR.
+
+    False means only "hand it to the shell", never "it does useful work": a
+    lone backslash-newline, for instance, is not blank and still runs nothing.
+    """
+    for line in cmd.split("\n"):
+        stripped = line.strip(" \t")
+        if stripped and not stripped.startswith("#"):
+            return False
+    return True
+
+
 def run_one(cmd: str, timeout: float | None = None, env: dict | None = None,
             verifier: bool = True, cwd: str | None = None, on_spawn=None) -> dict:
     """Run one command. Never infers status from output.
@@ -74,12 +97,20 @@ def run_one(cmd: str, timeout: float | None = None, env: dict | None = None,
     are reported NO-VERDICT rather than FAIL. Pass False for a command that
     uses one of those statuses to mean an ordinary error.
 
+    A command that is blank or comment-only (`is_blank_or_comment_only`) is
+    LAUNCH-ERROR with `rc=None` before any shell starts: `sh -c ""` runs
+    nothing and exits 0, and a job that never existed must not be a PASS.
+
     `on_spawn(popen)` is called once the child exists. The child leads its own
     process group, so a supervisor that is itself cancelled (tools/trial.py)
     needs the handle to kill that group -- a signal to the supervisor alone
     would leave the simulation running with nobody to record its outcome.
     """
     t0 = time.time()
+    if isinstance(cmd, str) and is_blank_or_comment_only(cmd):
+        return {"cmd": cmd, "state": LAUNCH_ERROR, "rc": None,
+                "out": "command is blank or comment-only: there is nothing to "
+                       "run, so no shell was started", "secs": 0.0}
     try:
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True,

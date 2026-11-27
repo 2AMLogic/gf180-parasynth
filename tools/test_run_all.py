@@ -108,6 +108,115 @@ def test_a_refusal_from_the_alternate_family_still_fails_the_overall_run():
     assert ra.main([f'{PY} -c "pass"', f'{PY} -c "raise SystemExit(3)"']) == 1
 
 
+# --- a job with no command (#1476) --------------------------------------------
+# `sh -c ""` runs nothing and exits 0, so a recipe line that expands to nothing
+# -- an empty `$(shell ...)` entry, a comment in a generated list -- was recorded
+# PASS: a passing job that never existed. These are the inputs reproduced on
+# main before the fix (each one `state="PASS", rc=0`). Each must be refused
+# before any shell starts.
+
+BLANK_OR_COMMENT_ONLY = [
+    pytest.param("", id="empty"),
+    pytest.param("   ", id="spaces"),
+    pytest.param("\t\n  \n", id="tabs-and-newlines"),
+    pytest.param("# just a comment", id="comment"),
+    pytest.param("  # indented\n\t# twice", id="indented-comments"),
+]
+
+
+@pytest.mark.parametrize("cmd", BLANK_OR_COMMENT_ONLY)
+def test_a_blank_or_comment_only_job_is_a_launch_error_before_any_shell_starts(
+        cmd, monkeypatch):
+    real_popen, started = ra.subprocess.Popen, []
+
+    def spy(*args, **kwargs):
+        started.append(args)
+        return real_popen(*args, **kwargs)
+
+    monkeypatch.setattr(ra.subprocess, "Popen", spy)
+    r = ra.run_one(cmd, on_spawn=started.append)
+    assert r["state"] == ra.LAUNCH_ERROR
+    assert r["rc"] is None
+    assert r["cmd"] == cmd, "the original command must be preserved verbatim"
+    assert "blank or comment-only" in r["out"]
+    assert started == [], "a shell was started for a job that has nothing to run"
+
+
+@pytest.mark.parametrize("cmd", BLANK_OR_COMMENT_ONLY)
+def test_a_lone_blank_or_comment_only_job_fails_the_cli(cmd, capsys):
+    assert ra.main([cmd]) == 1
+    assert "0/1 passed" in capsys.readouterr().out
+
+
+def test_the_cli_refuses_a_blank_job_passed_as_an_argument(tmp_path):
+    """The issue's reproduction, as the process a Makefile would invoke."""
+    out = tmp_path / "r.json"
+    p = subprocess.run([PY, ra.__file__, "", "--json", str(out)],
+                       capture_output=True, text=True)
+    assert p.returncode == 1, p.stdout
+    assert "0/1 passed" in p.stdout
+    got = json.loads(out.read_text())
+    assert got[0]["state"] == ra.LAUNCH_ERROR and got[0]["rc"] is None
+
+
+def test_a_blank_job_beside_a_real_one_fails_the_run_and_the_real_one_still_runs(
+        tmp_path, capsys):
+    """The control for the guard itself: a sibling that merely STARTS with a
+    comment must run, or the fix has turned a false pass into a false refusal
+    of real work."""
+    real = "# leading comment\nprintf '%s' '# played'"
+    out = tmp_path / "r.json"
+    assert ra.main(["", real, "--json", str(out)]) == 1
+    assert "1/2 passed" in capsys.readouterr().out
+    got = json.loads(out.read_text())
+    assert [g["cmd"] for g in got] == ["", real], "input order, commands verbatim"
+    assert (got[0]["state"], got[0]["rc"]) == (ra.LAUNCH_ERROR, None)
+    assert "blank or comment-only" in got[0]["out"]
+    assert (got[1]["state"], got[1]["rc"], got[1]["out"]) == (ra.PASS, 0, "# played")
+
+
+@pytest.mark.parametrize("cmd, out", [
+    pytest.param("# leading comment\nprintf '%s' '# played'", "# played",
+                 id="command-after-a-comment"),
+    pytest.param("echo a#b", "a#b\n", id="embedded-hash"),
+    pytest.param("echo '# quoted'", "# quoted\n", id="quoted-hash"),
+    pytest.param("echo hi # trailing comment", "hi\n", id="trailing-comment"),
+    pytest.param(":", "", id="silent-builtin"),
+    pytest.param("   \techo blanks-around   ", "blanks-around\n", id="blanks-around"),
+    pytest.param("\n\n  printf ran\n", "ran", id="blank-lines-then-command"),
+])
+def test_a_real_command_still_runs_verbatim(cmd, out):
+    r = ra.run_one(cmd)
+    assert r["state"] == ra.PASS and r["rc"] == 0
+    assert r["out"] == out
+
+
+def test_a_carriage_return_does_not_hide_a_command_from_the_guard():
+    """sh ends a line only at a newline, so this is ONE comment: nothing runs,
+    and it must not pass on the strength of a splitter that treats CR as a line
+    end and so "sees" a command."""
+    r = ra.run_one("# comment\rprintf played")
+    assert r["state"] == ra.LAUNCH_ERROR and r["rc"] is None
+
+
+def test_a_carriage_return_is_not_a_shell_blank_so_it_still_runs_and_fails():
+    """The opposite error: a CR is an ordinary character to sh, so this is a
+    command named CR. It must reach the shell and be reported with the shell's
+    own 127, not refused as blank."""
+    r = ra.run_one(" \r ")
+    assert r["state"] == ra.FAIL and r["rc"] == 127
+
+
+@pytest.mark.parametrize("cmd, nothing", [
+    ("", True), (" \t", True), ("# c", True), ("  # c\n\t# d\n", True),
+    ("# c\rprintf x", True),
+    (" \r ", False), ("\x0b", False), ("\\\n", False),
+    ("# c\nprintf x", False), ("echo '#'", False), (":", False), (";", False),
+])
+def test_blank_or_comment_only_follows_the_shell_not_python_whitespace(cmd, nothing):
+    assert ra.is_blank_or_comment_only(cmd) is nothing
+
+
 # --- the exit-code bound -----------------------------------------------------
 
 def test_exit_code_is_bounded_and_cannot_wrap_to_zero():
