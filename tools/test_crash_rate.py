@@ -27,27 +27,28 @@ import crash_rate as cr
 
 # ---- the classifier reads status, never text -------------------------------
 def test_signalled_run_is_a_crash():
-    verdict, code, sig = cr.classify(signal.SIGSEGV)     # WIFSIGNALED, no core bit
+    verdict, code, sig = cr.classify(signal.SIGSEGV, ["started"])     # WIFSIGNALED, no core bit
     assert (verdict, code, sig) == (cr.CRASH, None, int(signal.SIGSEGV))
 
 
 def test_signalled_with_core_dump_is_still_a_crash():
-    verdict, _, sig = cr.classify(signal.SIGSEGV | 0x80)  # the 139 case
+    verdict, _, sig = cr.classify(signal.SIGSEGV | 0x80, ["started"])  # the 139 case
     assert verdict == cr.CRASH and sig == int(signal.SIGSEGV)
 
 
 def test_sigterm_is_not_a_crash_but_is_not_a_pass_either():
     """A harness timeout kill must never be laundered into the crash count --
     that would manufacture a rate out of our own impatience."""
-    verdict, _, _ = cr.classify(int(signal.SIGTERM))
+    verdict, _, _ = cr.classify(int(signal.SIGTERM), ["started"])
     assert verdict == cr.ERROR
 
 
 def test_exit_codes_are_bucketed_apart():
-    assert cr.classify(0 << 8)[0] == cr.PASS
-    assert cr.classify(1 << 8)[0] == cr.TESTFAIL     # ran, disagreed
-    assert cr.classify(2 << 8)[0] == cr.ERROR        # pytest interrupted
-    assert cr.classify(5 << 8)[0] == cr.ERROR        # no tests collected
+    completed = ["started", "completed"]
+    assert cr.classify(0 << 8, completed)[0] == cr.PASS
+    assert cr.classify(1 << 8, completed)[0] == cr.TESTFAIL     # ran, disagreed
+    assert cr.classify(2 << 8, completed)[0] == cr.ERROR        # pytest interrupted
+    assert cr.classify(5 << 8, completed)[0] == cr.ERROR        # no tests collected
 
 
 # ---- end to end, against injected defects ---------------------------------
@@ -130,6 +131,83 @@ def test_device():
     summary = json.loads(out.read_text())["summary"]
     assert summary["runs_that_exercised_the_target"] == 0
     assert summary["crash_rate"] is None
+
+
+def test_safe_path_runs_the_requested_test(tmp_path):
+    marker = tmp_path / "entered"
+    target = _write(tmp_path, "test_safe.py", f"""
+from pathlib import Path
+def test_target():
+    Path({str(marker)!r}).touch()
+""")
+    out = tmp_path / "report.json"
+    rc = cr.main(["--target", target, "--runs", "1", "--json", str(out),
+                  "--env", "PYTHONSAFEPATH=1", "--env", "PYTHONPATH="])
+    assert marker.exists()
+    assert rc == 0
+    summary = json.loads(out.read_text())["summary"]
+    assert summary["counts"][cr.PASS] == summary["runs_that_exercised_the_target"] == 1
+
+
+@pytest.mark.parametrize("startup", ["missing_plugin", "exit_zero", "segfault"])
+def test_child_startup_cannot_supply_a_crash_rate(tmp_path, startup):
+    marker = tmp_path / "entered"
+    target = _write(tmp_path, "test_target.py", f"""
+from pathlib import Path
+def test_target():
+    Path({str(marker)!r}).touch()
+""")
+    args = []
+    if startup == "missing_plugin":
+        args = ["--env", "PYTEST_ADDOPTS=-p no_such_pytest_plugin_1506"]
+    else:
+        code = ("import os\nos._exit(0)" if startup == "exit_zero"
+                else "import faulthandler\nfaulthandler._sigsegv()")
+        (tmp_path / "conftest.py").write_text(code)
+    out = tmp_path / "report.json"
+    rc = cr.main(["--target", target, "--runs", "1", "--json", str(out), *args])
+    assert not marker.exists()
+    report = json.loads(out.read_text())
+    run, = report["runs"]
+    if startup == "missing_plugin":
+        assert run["exit"] == 1 and "no_such_pytest_plugin_1506" in run["tail"]
+    elif startup == "exit_zero":
+        assert run["exit"] == 0
+    else:
+        assert run["signal"] == signal.SIGSEGV
+    assert rc == 2
+    assert run["verdict"] == cr.ERROR
+    assert report["summary"]["runs_that_exercised_the_target"] == 0
+    assert report["summary"]["crash_rate"] is None
+
+
+def test_an_extra_pytest_target_cannot_supply_the_denominator(tmp_path):
+    wanted_marker, other_marker = tmp_path / "wanted", tmp_path / "other"
+    wanted = _write(tmp_path, "test_wanted.py", f"""
+from pathlib import Path
+import pytest
+@pytest.mark.skip(reason="no device attached")
+def test_wanted():
+    Path({str(wanted_marker)!r}).touch()
+""")
+    other = _write(tmp_path, "test_other.py", f"""
+from pathlib import Path
+def test_other():
+    Path({str(other_marker)!r}).touch()
+""")
+    out = tmp_path / "report.json"
+    args = ["--runs", "1", "--json", str(out)]
+    assert cr.main([*args, "--target", other]) == 0
+    assert other_marker.is_file()
+    other_marker.unlink()
+    rc = cr.main([*args, "--target", wanted, "--env", f"PYTEST_ADDOPTS={other}"])
+    assert not wanted_marker.exists()
+    assert rc == 2
+    assert not other_marker.exists()
+    report = json.loads(out.read_text())
+    assert "additional pytest targets" in report["runs"][0]["tail"]
+    assert report["summary"]["runs_that_exercised_the_target"] == 0
+    assert report["summary"]["crash_rate"] is None
 
 
 def test_an_expected_failure_counts_only_if_the_test_body_ran(tmp_path):
