@@ -16,7 +16,7 @@ This is that increment. It contains one repair, one negative, and one blocker lo
 |---|---|
 | **A repair, found on the way in** | Revision 3's **low-band** tone realisation is **4.06–4.72 dB** off the nodal solution that replaced Figure 9, at every TONE position, against the **3.0 dB** bound revision 3 itself declared. Repaired with one discrete section — the network's own 4219 Hz pole — at **0.56–0.88 dB**. |
 | **The question, answered negatively** | The rendered anchored H − L moves **+1.13 dB** across the whole knob where the machine moves **+7.3 dB**. Monotone, right sign, inside the pre-render bracket — and pinned to the bracket's decay-dominated **lower edge** at every position. |
-| **The sharper half, in a decay** | H's own EDT10 moves **2.9 %** across the knob where the machine's moves a factor of **1.4–2.4**. No inter-band balance can manufacture a decay, so this is the statement that does not depend on #396's open half. |
+| **The sharper half, in a decay** | H's own EDT10 moves **2.9 %** across the knob where the machine's moves a factor of **1.4–2.4**. No inter-band balance can manufacture a decay, so this is the statement that does not depend on the inter-band balance — #396's half, closed REFUSED five hours before this step landed (2026-09-28, #414, on the swing VCAs' then-unestablished drive levels; the later read, `../vca-drive/README.md`, put Q16 and Q17 on one drive node and the missing factor outside the VCA section). |
 | **The mechanism, measured not guessed** | Inside H the short band sits **10.59 dB below** the decay band, and the **low band leaks into H 6.02 dB above the short band**. TONE's 51 dB of authority is on a band holding 6 % of H. |
 | **The one-number requirement, REFUSED** | "Raise the short band by X dB" is **not computable** from separate band renders: linear superposition misses the render's own curve by **1.26 dB** against a 0.5 dB bound, and overpredicts the knob's swing by **2.3×** at TONE 100. The swing VCAs clip, so the bands are not independent. |
 | **Preservation** | **Passes completely.** 0 registers outside the cymbal's own change at any TONE position; all 16 other sounds bit-identical at the anchor; **OH and CH bit-identical at every one of the five TONE positions**. |
@@ -107,8 +107,10 @@ margin is exactly zero, and `test_revision_4_never_writes_the_reset_address` ass
 ## 2. The prediction, written into the model before the render
 
 `model/cymbal_candidate.py`'s revision-4 docstring was committed before `cymbal_tone_render.py` was run. Because the
-inter-band balance is #396's open half, the prediction is a **bracket** rather than a curve: L follows the low band,
-and H lies between the decay band's shift and the short band's, so the anchored H − L must fall inside
+inter-band balance was refused rather than known — #396 had closed REFUSED that morning (2026-09-28, #414, five
+hours before this step landed) on the three swing VCAs' drive levels, not established then, so the levels stay on
+the shipped-kit rule — the prediction is a **bracket** rather than a curve: L follows the low band, and H lies
+between the decay band's shift and the short band's, so the anchored H − L must fall inside
 
 | TONE | 0 | 25 | 50 | 75 | 100 |
 |---|---|---|---|---|---|
@@ -122,6 +124,12 @@ not, the circuit's per-band levels would already be refuted and no render would 
 
 And the prediction says **where a miss would point**: a miss at TONE 0 or 100, where the bracket is 49 and 9 dB
 wide, is a *balance* result; a miss in the middle is a *TONE-law* result.
+
+(The balance's later disposition, and it separates what was unknown at #396's close from what the later read
+established: what the close lacked was the swing VCA drive levels. Step 11's read of the VCA section,
+`../vca-drive/README.md`, found the three swing VCA stages component-identical, with Q16 and Q17 on one drive node
+— IC3 pin 7 — so there are not three drive levels to read; and the missing factor is not in the cymbal's VCA
+section. The refusal record itself is `../balance/README.md`.)
 
 ## 3. The render
 

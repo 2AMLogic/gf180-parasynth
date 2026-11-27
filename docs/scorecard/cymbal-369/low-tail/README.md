@@ -266,9 +266,15 @@ below its energy in Ln:
 | short | −16.23 dB | −16.26 dB | −0.03 dB | −36.33 dB |
 
 **A mix cannot beat the best of its parts.** For positive weights, `(Σ a·X)/(Σ a·R) ≤ maxᵦ(Xᵦ/Rᵦ)` — a weighted
-mediant never exceeds the largest ratio it mixes. So **no** inter-band balance, including the one §10 leaves
-unresolved (TONE_K1's `peak_db`, 9–18 dB uncertain, #396), can put the documented chain's M above **−13.10 dB re Ln**
-or its Mn above **−30.30 dB**. The lemma is checked against a brute-force sweep of the balance, and against 200
+mediant never exceeds the largest ratio it mixes. So **no** inter-band balance — including the one §10 left
+unresolved when this step was written (TONE_K1's `peak_db`, then quoted as "9–18 dB uncertain, #396") — can put
+the documented chain's M above **−13.10 dB re Ln** or its Mn above **−30.30 dB**: the bound holds for every
+positive mixture whatever the absolute levels, so the balance's own state cannot touch it. That state is now a
+refusal, not an open question: #396 closed REFUSED on 2026-09-28 (#414) with the swing VCAs' drive levels not
+established then, retiring the 9–18 dB figure as the earlier Figure 9 read at a shared 7.1 kHz — each band's level
+is set at its own centre (`../balance/README.md` carries the refusal and the re-derived numbers) — and the later
+schematic read (`../vca-drive/README.md`) put Q16 and Q17 on one drive node, with the missing factor outside the
+cymbal's VCA section. The lemma is checked against a brute-force sweep of the balance, and against 200
 random cases whose answer is known by hand.
 
 Against the machine, over the first second, same instrument:

@@ -241,9 +241,13 @@ rho, not 9.4 dB — small enough that the next candidates are things previously 
 1. **Hh1's realisation.** The shipped kit omits Hh1 entirely (`../README.md` §3) and candidate 3 moved M 3.6 dB the
    wrong way. The locus above is for the *documented* chain; our own realisation is a different locus and the
    comparison between them has not been made with this instrument.
-2. **The tone stage's unresolved inter-band balance** (§18, TONE_K1's `peak_db`, 9–18 dB uncertain, #396). The
-   balance sweep here spans it, but the tone stage's *shape* for Ht1 and Ht2 is extrapolated outside Figure 9's
-   plotted range, and the locus's position depends on it.
+2. **The tone stage's inter-band balance, unresolved when this step was written** (§18, TONE_K1's `peak_db`, then
+   quoted as "9–18 dB uncertain, #396"). It did not stay open: #396 closed REFUSED on 2026-09-28 (#414) with the
+   swing VCAs' drive levels not established then, retiring the 9–18 dB as the earlier Figure 9 read at a shared
+   7.1 kHz — each band's level is set at its own centre (`../balance/README.md`). The later schematic read
+   (`../vca-drive/README.md`) put Q16 and Q17 on one drive node and the missing factor outside the cymbal's VCA
+   section. The balance sweep here spans it, but the tone stage's *shape* for Ht1 and Ht2 is extrapolated outside
+   Figure 9's plotted range, and the locus's position depends on it.
 3. **The band-pass Q.** §10 infers Q ≈ 6 for both bridged-T filters from the schematic values; the reference marks it
    inferred. A lower Q widens the skirt into M and lengthens nothing, which is the right direction for the energy and
    the wrong one for rho — i.e. it moves along the locus rather than off it, and that is a prediction this
