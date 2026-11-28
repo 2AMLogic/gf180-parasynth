@@ -947,3 +947,77 @@ def test_ordinary_audio_and_silence_are_unaffected_by_the_finite_check(profile):
     with pytest.raises(rp.Refused) as e:
         rp.load_clip("fake/clip")
     assert "silent" in str(e.value), "silence must still refuse AS silence"
+
+
+# ===========================================================================
+# plugin_identity hashes the binary THIS platform loads (#1980)
+# ===========================================================================
+_VST3_PLIST = (b'<?xml version="1.0"?><!DOCTYPE plist><plist version="1.0"><dict>'
+               b'<key>CFBundleShortVersionString</key><string>1.2.3</string>'
+               b'<key>CFBundleIdentifier</key><string>com.moog.modeld</string>'
+               b'</dict></plist>')
+_NOT_A_BINARY = b"not a real binary"
+_HASH_OF_IT = hashlib.sha256(_NOT_A_BINARY).hexdigest()
+
+
+def _vst3(root, binary_dir):
+    """A `.vst3` bundle whose only binary, if any, is `Contents/<binary_dir>/Model D`."""
+    b = root / "Model D.vst3"
+    (b / "Contents").mkdir(parents=True)
+    (b / "Contents" / "Info.plist").write_bytes(_VST3_PLIST)
+    if binary_dir is not None:
+        (b / "Contents" / binary_dir).mkdir()
+        (b / "Contents" / binary_dir / "Model D").write_bytes(_NOT_A_BINARY)
+    return b
+
+
+@pytest.mark.parametrize("platform, binary_dir", [
+    ("linux", "x86_64-linux"),
+    ("win32", "x86_64-win"),
+    ("darwin", "MacOS"),
+], ids=["linux", "windows", "macos"])
+def test_plugin_identity_hashes_the_platforms_own_binary(tmp_path, monkeypatch,
+                                                         platform, binary_dir):
+    """Red before #1980 on the first two rows: `plugin_identity` looked only
+    under `Contents/MacOS`, so a native Linux or Windows build -- two of the
+    three layouts the VST3 spec defines and `rr.VST3_BINARY_DIR` records --
+    had "no binary", and the #123 tuple refused a bundle its host had just
+    loaded. The directories are the spec's, hardcoded here, and the production
+    table is checked against them rather than read as the fixture."""
+    import reference_rigs as rr
+    assert rr.VST3_BINARY_DIR[platform] == f"Contents/{binary_dir}"
+    monkeypatch.setattr(sys, "platform", platform)
+    ident = rp.plugin_identity(str(_vst3(tmp_path, binary_dir)))
+    assert ident["binary_sha256"] == _HASH_OF_IT
+    assert ident["binary"] == "Model D" and ident["bundle_version"] == "1.2.3"
+
+
+def test_plugin_identity_prefers_the_platforms_binary_to_a_bundled_mac_one(
+        tmp_path, monkeypatch):
+    """A universal bundle carries several binaries; the one that produced
+    the audio on this host is the one this host loaded."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    b = _vst3(tmp_path, "x86_64-linux")
+    (b / "Contents" / "MacOS").mkdir()
+    (b / "Contents" / "MacOS" / "Model D").write_bytes(b"a mac binary" * 100)
+    assert rp.plugin_identity(str(b))["binary_sha256"] == _HASH_OF_IT
+
+
+def test_plugin_identity_still_finds_a_macos_bundle_wherever_it_runs(
+        tmp_path, monkeypatch):
+    """Unchanged behaviour, and what every existing caller and the fake-host
+    suites rely on: a bundle with only `Contents/MacOS` is hashed on any
+    platform. (On a real non-mac host such a bundle never gets past the load,
+    so this path makes no record there.)"""
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert rp.plugin_identity(str(_vst3(tmp_path, "MacOS")))["binary_sha256"] == _HASH_OF_IT
+
+
+def test_plugin_identity_of_a_bundle_with_no_binary_carries_no_hash(
+        tmp_path, monkeypatch):
+    """The input to `environment_tuple`'s "no binary hash" refusal: present,
+    versioned, and nothing hashed -- never a hash of something invented."""
+    monkeypatch.setattr(sys, "platform", "linux")
+    ident = rp.plugin_identity(str(_vst3(tmp_path, None)))
+    assert ident["present"] is True and ident["bundle_version"] == "1.2.3"
+    assert "binary_sha256" not in ident and "binary" not in ident

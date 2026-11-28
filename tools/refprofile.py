@@ -868,12 +868,29 @@ def file_sha256(path) -> str:
     return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 
 
+def _binary_dirs() -> tuple[str, ...]:
+    """Where a `.vst3` bundle may keep its binary, this platform's own layout
+    first. `reference_rigs.VST3_BINARY_DIR` is the one table of the layouts the
+    VST3 spec defines (imported here, lazily, because it is a heavy module and
+    reading the profile should not be). The macOS layout stays as the fallback:
+    it is where every record before #1980 was hashed from, and on a platform
+    that cannot load such a binary the load refuses long before this matters."""
+    import reference_rigs as rr
+    own, mac = rr.VST3_BINARY_DIR.get(sys.platform), "Contents/MacOS"
+    return (own, mac) if own and own != mac else (mac,)
+
+
 def plugin_identity(vst3_path: str) -> dict:
     """What produced the audio, in enough detail that a plugin update is a
     visible change rather than a silent one. The version string is what the
     bundle claims; the binary hash is what it actually is, and they answer
     different questions -- a vendor who ships a fix without bumping the version
-    moves only the second."""
+    moves only the second.
+
+    The binary hashed is the one THIS platform loads (#1980). Only
+    `Contents/MacOS` was read before, so a native Linux or Windows build --
+    two of the three layouts the spec defines -- had no binary here, and
+    `environment_tuple` then refused a bundle its host had just loaded."""
     p = pathlib.Path(vst3_path)
     out = {"path": str(p), "present": p.exists()}
     if not p.exists():
@@ -886,7 +903,11 @@ def plugin_identity(vst3_path: str) -> dict:
             out["bundle_id"] = d.get("CFBundleIdentifier")
         except Exception as e:                                   # pragma: no cover
             out["bundle_version_error"] = f"{type(e).__name__}: {e}"
-    binaries = sorted((p / "Contents" / "MacOS").glob("*")) if (p / "Contents" / "MacOS").exists() else []
+    binaries: list = []
+    for rel in _binary_dirs():
+        binaries = sorted((p / rel).glob("*")) if (p / rel).is_dir() else []
+        if binaries:
+            break
     if binaries:
         out["binary"] = binaries[0].name
         out["binary_sha256"] = file_sha256(binaries[0])

@@ -16,7 +16,9 @@ THREE OUTCOMES, the same convention `tools/refprofile.py` uses
     exit 2  REFUSED  a precondition of the apparatus is unmet, so nothing was
                      attempted: no `pedalboard`, no Model D bundle, a bundle
                      that exists but will not load, or a check that could not
-                     answer at all
+                     answer at all. Also a rig that QUALIFIED whose #123
+                     environment tuple cannot be written: a qualification
+                     nobody can attribute to a binary is not handed on (#1980)
 
 **On most hosts in this fleet this exits 2, and that is the correct answer.** A
 REFUSED here is a stated no-verdict, not a hole in the instrument, and it is why
@@ -84,6 +86,20 @@ measurement was attempted, so issue #122's re-specification question is NOT
 reopened by this run and `RIG_VERDICTS['modeld-pedalboard']` stays
 `qualified: None`. Run this on a host with pedalboard and the Model D bundle to
 get a verdict either way.
+""".strip()
+
+#: A rig that QUALIFIED whose #123 tuple could not be written (#1980). Neither
+#: note above fits: the plugin WAS measured and did fine, so #122 does not
+#: reopen, and it is not "no apparatus" either. What is refused is the RECORD.
+#: A qualification nobody can attribute to a binary is not one this tool hands
+#: on, so it states no verdict rather than a qualified one it cannot back.
+RECORD_REFUSED = """
+The rig QUALIFIED, but its #123 environment tuple could not be written (the
+REFUSED line above says why), so this run states NO-VERDICT rather than hand on
+a qualification it cannot attribute to a binary. Nothing follows from it about
+the plugin either way: issue #122 is NOT reopened, `RIG_VERDICTS['modeld-pedalboard']`
+stays `qualified: None`, and the sweep table above is kept only as evidence of
+the attempt. Correct what the refusal names, then run this again.
 """.strip()
 
 
@@ -168,6 +184,7 @@ def main(argv=None) -> int:
 
     import rig_qualification as rq
     dev, qual, rec = None, None, None
+    record_refused = False
     try:
         dev = build()
         qual = dev.qualification
@@ -185,9 +202,20 @@ def main(argv=None) -> int:
         code = FAIL if (qual is not None and qual.verdict == rq.FAIL) else REFUSED
     else:
         print(qual.table())
-        rec = report(dev, qual)
-        code = OK if qual.qualified else (
-            FAIL if qual.verdict == rq.FAIL else REFUSED)
+        # Guarded on its own: the try above covers its body, not this else
+        # clause, and `report` refuses through `rp.environment_tuple` for a
+        # bundle `plugin_identity` cannot hash (#1980). Until it was, that
+        # refusal left main() uncaught -- a traceback, no record, after the
+        # rig had qualified.
+        try:
+            rec = report(dev, qual)
+        except rp.Refused as why:
+            print(f"REFUSED  {why}")
+            rec, code = report(refusal=str(why)), REFUSED
+            record_refused = True
+        else:
+            code = OK if qual.qualified else (
+                FAIL if qual.verdict == rq.FAIL else REFUSED)
 
     if code == OK and dev is not None:
         print("\nthe clip that qualified:")
@@ -203,14 +231,19 @@ def main(argv=None) -> int:
               "ModelDPedalboardRig.PINS from `pinned_readback` above, update "
               "docs/pedalboard-rig.md, and only then extend to the 8 Mono anchors.")
     elif a.wav:
-        print("\nNOT writing --wav: the rig did not qualify, so its audio is not "
-              "evidence.")
+        print("\nNOT writing --wav: " + (
+            "the rig qualified but its record was refused, so the clip cannot "
+            "be attributed to a binary." if record_refused else
+            "the rig did not qualify, so its audio is not evidence."))
 
     # The #122 note belongs ONLY to a run that measured the plugin and found it
     # uncorrectable. A host with no pedalboard has measured nothing, and saying
-    # otherwise would be the tool answering a question it could not ask.
+    # otherwise would be the tool answering a question it could not ask. A rig
+    # that qualified but could not be recorded measured the plugin and found it
+    # FINE, which the same note would contradict (#1980).
     if code != OK:
-        print("\n" + (REOPEN_122 if qual is not None else NO_APPARATUS))
+        print("\n" + (RECORD_REFUSED if record_refused
+                      else REOPEN_122 if qual is not None else NO_APPARATUS))
 
     if a.json:
         p = pathlib.Path(a.json)
