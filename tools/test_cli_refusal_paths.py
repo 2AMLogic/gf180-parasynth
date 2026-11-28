@@ -49,10 +49,12 @@ def test_check_m1a_selection_a_patch_for_reference_refusal_exits_refused_2(monke
 
 
 def test_check_m1a_selection_control_an_unrelated_error_still_propagates(monkeypatch, capsys):
+    # RuntimeError, not ValueError: main's handler catches ValueError (as a
+    # refused record), so it would no longer propagate.
     def broken(*a, **k):
-        raise ValueError(REASON)
+        raise RuntimeError(REASON)
     monkeypatch.setattr(sel.bass, "patch_for_reference", broken)
-    with pytest.raises(ValueError, match=REASON):
+    with pytest.raises(RuntimeError, match=REASON):
         sel.main([])
     assert "REFUSED" not in capsys.readouterr().out
 
