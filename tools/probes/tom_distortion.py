@@ -52,6 +52,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 PREREG = ROOT / "docs" / "scorecard" / "tom-distortion-593" / "prereg.json"
 
@@ -1628,6 +1629,28 @@ def mechanism(refs: pathlib.Path, prereg: dict) -> dict:
             "mechanism": mechanism_verdict(trajs, eff, n_unqualified=n_unq)}
 
 
+def load_record(path: pathlib.Path, what: str) -> dict:
+    """A record the OPERATOR names on the command line (`judge <record>`). One that
+    cannot be READ is a refusal naming the path, never a traceback (#1774): the bare
+    `json.loads(path.read_text())` turned a missing file, a truncated JSON or bytes
+    that are not UTF-8 into exit 1 by traceback, which reads as this tool's "completed
+    and negative" (module docstring) where its declared refusal is exit 2 and nothing
+    was judged. The parse half is `manifest.load_json_refused` re-typed as THIS
+    module's `Refused`, the class `main()` catches: `manifest.Refused` is another
+    class and would escape it as a traceback (the shape `refprofile._load_json_refused`
+    gives it, #882). The other half is `OSError`: a missing file, a directory, an
+    unreadable one. Only those two are caught -- an implementation error is still a
+    traceback, never a refusal."""
+    try:
+        return mf.load_json_refused(path, what)
+    except mf.Refused as e:
+        raise Refused(str(e)) from e
+    except OSError as e:
+        raise Refused(f"{what} at {path} cannot be read ({e.strerror or e}) -- nothing was judged; "
+                      f"produce it with the command that writes it, or restore a tracked copy with "
+                      f"`git checkout -- {path}`") from e
+
+
 def main(argv=None) -> int:
     import argparse
     import json
@@ -1650,7 +1673,7 @@ def main(argv=None) -> int:
         elif a.cmd == "controls":
             res = controls_matrix()
         elif a.cmd == "judge":
-            res = judge(json.loads(a.record.read_text()), load_prereg())
+            res = judge(load_record(a.record, "the judge record"), load_prereg())
         else:
             pr = load_prereg()
             if not a.refs.is_dir():

@@ -76,6 +76,38 @@ all-finite float32 file is the committed adversary (verification-rules rule 8):
 it must exit 2 through the WIDTH guard, with no non-finite diagnosis. With the
 two guards swapped the NaN/Inf tests go red and that control stays green (run
 by hand before committing, then reverted).
+
+#1751, THE RENDER SIDE OF THE SAME PROBE (red-first on main @ 45774600,
+2026-11-28): given a USABLE reference and a digitally silent RS render,
+`rs_mode_drive.py distort` printed its table header and exited 1 with
+`audio_measure.InsufficientEvidence: harmonic_powers: silent` on stderr.
+`harmonic_powers` refuses silence by raising `InsufficientEvidence` -- an
+AssertionError subclass, not a `Refused` of any module -- so the base-class
+widening above could not see it: the estimator's own refusal, rendered as
+FAIL. The dispatch handler now names that class beside the base. What the
+two controls at the foot of this file pin:
+
+  silent render     exit `exit_contract.REFUSED` (2); the whole line
+                    `REFUSED  harmonic_powers: silent` on stdout; no
+                    traceback; the table header printed and immediately
+                    followed by REFUSED, so the refusal came from inside the
+                    first row (not from the reference load the
+                    silent-reference controls cover) and that row printed
+                    no number
+  plain Assertion   the SAME render call raising an ordinary AssertionError
+                    is still exit 1, with the fault named in its traceback and
+                    no REFUSED line: the handler did not widen to every
+                    AssertionError. Green before the fix and must stay so.
+
+WRONG-THEN-RIGHT for #1751 (1, in the apparatus, caught because the
+red-first run was red for the WRONG reason): the first seam passed the
+probe's path to the child as argv[1] after `-c` and handed it to
+`runpy.run_path` from there, expecting the probe to then see `distort` at
+its own argv[1]. `run_path` REPLACES argv[0] in place instead of shifting,
+so the probe saw its own path at argv[1], fell into its `except KeyError`
+usage branch and exited 64 -- not the exit-1 traceback this issue
+describes. The seam now gives the child `['-c', cmd]`; `run_path` then puts
+the probe's path at argv[0], which is what a direct invocation leaves there.
 """
 from __future__ import annotations
 
@@ -253,14 +285,24 @@ def test_finite_float32_reference_refuses_on_width_not_finiteness(tmp_path, cmd)
 # traceback on this exact fixture; derive and sweep, which never read the
 # corpus, exited 0 then and must still)
 # ---------------------------------------------------------------------------
-def _mode_drive(cmd: str, refs: pathlib.Path) -> subprocess.CompletedProcess:
+def _mode_drive(cmd: str, refs: pathlib.Path,
+                bootstrap: str | None = None) -> subprocess.CompletedProcess:
+    """`rs_mode_drive.py <cmd>` against a corpus root, with `_probe`'s
+    environment hygiene. `bootstrap`, when given, is Python source the child
+    runs INSTEAD of the probe, with `sys.argv == ['-c', cmd]`: the seam
+    through which #1751 injects a render fault before the probe's own
+    `__main__` dispatch runs. The bootstrap hands off with
+    `runpy.run_path(..., run_name='__main__')`, which puts the probe's path
+    at argv[0] -- the argv a direct invocation gives it."""
     drop = (_rc_env.REFS_ENV, _rc_env.REFS_ALIAS_ENV)
     env = {k: v for k, v in os.environ.items() if k not in drop}
     env[_rc_env.REFS_ENV] = str(refs)
     env[_rc_env.REFS_ALIAS_ENV] = str(refs)
+    script = str(ROOT / "tools" / "probes" / "rs_mode_drive.py")
+    argv = ([sys.executable, script, cmd] if bootstrap is None else
+            [sys.executable, "-c", bootstrap, cmd])
     return subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "probes" / "rs_mode_drive.py"), cmd],
-        capture_output=True, text=True, timeout=300, env=env, cwd=str(ROOT))
+        argv, capture_output=True, text=True, timeout=300, env=env, cwd=str(ROOT))
 
 
 def test_mode_drive_confirm_silent_reference_exits_refused_2(tmp_path):
@@ -290,3 +332,79 @@ def test_mode_drive_absent_corpus_still_refuses_with_local_reason(tmp_path):
     p = _mode_drive("confirm", tmp_path / "no-such-refs")
     assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
     assert "reference corpus not at" in p.stdout, p.stdout[-400:]
+
+
+# ---------------------------------------------------------------------------
+# rs_mode_drive distort, the RENDER side (#1751): the estimator's OWN refusal
+# ---------------------------------------------------------------------------
+def _tonal_corpus(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A USABLE reference: 0.5 s of mono PCM16 at 44.1 kHz, two exponentially
+    decaying partials (455 Hz and 1786 Hz, tau 30 ms, 6000 peak each). Not
+    silent, so `reference()` loads it and `distort` gets as far as its first
+    render -- the path the silent-reference fixture never reaches, because
+    that one is refused while the reference is still loading."""
+    d = tmp_path / "refs"
+    (d / "rs8").mkdir(parents=True)
+    t = np.arange(int(0.5 * SR)) / SR
+    y = 6000 * np.exp(-t / 0.03) * (np.sin(2 * np.pi * 455 * t) + np.sin(2 * np.pi * 1786 * t))
+    wavfile.write(str(d / "rs8" / "RS.WAV"), SR, np.round(y).astype("<i2"))
+    return d
+
+
+#: what the estimator says of a silent record, as the dispatch prints it
+REFUSED_LINE = "REFUSED  harmonic_powers: silent"
+#: the message of the plain AssertionError the control injects
+RENDER_FAULT = "unrelated render fault"
+
+
+def _injected_render(play_body: str) -> str:
+    """Child-interpreter source: replace `DrumsFx.play` -- the one render
+    call `_raw_render` makes for both arms of every dHARM row -- with
+    `play_body`, then hand off to the probe's own `__main__` dispatch."""
+    return (f"import sys\n"
+            f"sys.path.insert(0, {str(ROOT / 'model')!r})\n"
+            f"import numpy as np\n"
+            f"import drums_fx as dx\n"
+            f"def _play(self, writes, n):\n"
+            f"{play_body}"
+            f"dx.DrumsFx.play = _play\n"
+            f"import runpy\n"
+            f"runpy.run_path({str(ROOT / 'tools' / 'probes' / 'rs_mode_drive.py')!r}, "
+            f"run_name='__main__')\n")
+
+
+#: an exactly-zero RS render: what a dead voice, a muted output path or a
+#: render that never fired looks like at the estimator
+SILENT_RS_RENDER = _injected_render("    return np.zeros(n), None\n")
+#: the control against catching too broadly: an ordinary AssertionError at the
+#: same call, which is an execution error and must stay one
+FAULTING_RS_RENDER = _injected_render(f"    raise AssertionError({RENDER_FAULT!r})\n")
+
+
+def test_mode_drive_distort_silent_render_exits_refused_2(tmp_path):
+    """Given a usable reference and a silent RS render, `distort` reports the
+    estimator's own refusal as REFUSED, exit 2, with no traceback and no
+    numeric result for the row that could not be measured (#1751)."""
+    p = _mode_drive("distort", _tonal_corpus(tmp_path), bootstrap=SILENT_RS_RENDER)
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
+    lines = p.stdout.splitlines()
+    assert REFUSED_LINE in lines, p.stdout[-400:]
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-400:]
+    # The refusal came from INSIDE the first row, not from the reference load
+    # the silent-reference controls above already cover, and that row printed
+    # no result: the table header is the last thing before REFUSED.
+    at = lines.index(REFUSED_LINE)
+    assert at == len(lines) - 1, "nothing may follow the refusal: " + p.stdout[-400:]
+    assert lines[at - 1].lstrip().startswith("setting"), "a data row precedes the refusal: " + p.stdout[-400:]
+
+
+def test_mode_drive_distort_unrelated_assertion_is_an_execution_error(tmp_path):
+    """A plain AssertionError from the same render path still exits 1, names
+    the injected fault in its traceback and prints no REFUSED line: adding
+    `InsufficientEvidence` to the handler must not widen it to every
+    AssertionError (tools/refusal.py's "inverse defect")."""
+    p = _mode_drive("distort", _tonal_corpus(tmp_path), bootstrap=FAULTING_RS_RENDER)
+    assert p.returncode == 1, (p.returncode, p.stdout[-200:], p.stderr[-400:])
+    assert "Traceback" in p.stderr, p.stderr[-400:]
+    assert f"AssertionError: {RENDER_FAULT}" in p.stderr, p.stderr[-400:]
+    assert "REFUSED" not in p.stdout, "an AssertionError must not be relabelled a refusal"
