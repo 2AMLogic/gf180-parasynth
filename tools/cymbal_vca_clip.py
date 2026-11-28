@@ -230,7 +230,26 @@ restated: a band more than 22 dB below Ln is outside the range the shared
 instrument was qualified on, and rho there is division by almost nothing
 (m_origin's wrong-then-right 2). The clipper REFUSES a drive at which the output
 is more than `MAX_THD_DB` of harmonic distortion, because past that the "swing
-VCA" is a square-wave generator and no longer anything §10 describes.
+VCA" is a square-wave generator and no longer anything §10 describes. `--asym`
+is REFUSED up front, before the control report, where the clipper's
+normalisation `1 - tanh(asym)^2` is not a positive number: a non-finite bias,
+or a finite one whose `tanh` has rounded to +-1.0 in float64 (|asym| from
+19.07), where `clip()` would divide by exactly zero and return NaN at every
+sample (#1991). That guard is about FINITENESS. Near the edge the clipper is
+finite and no longer accurate -- by 1e-5 of full scale at 14 and 2e-4 at 15 --
+which `tools/test_cymbal_vca_clip_refusal.py` measures and this module reports
+rather than refuses.
+
+EXIT (`tools/exit_contract.py`). A refusal that reaches the command line --
+`targets()` disagreeing with the committed artifacts, an `--asym` outside the
+clipper's domain, a silent or non-finite render -- exits `exit_contract.REFUSED`
+(2) with its reason as the last line on stdout, `REFUSED: <reason>`, and
+nothing printed above it is a finding. `main()` catches `refusal.Refused`, the
+base every module's `Refused` shares, so `run_case.Refused` and this module's
+own land alike (#1991); an implementation error is not a refusal and still
+leaves as a traceback and exit 1. The sweep's own indented `REFUSED: no single
+(position, drive) ...` line exits 0: it is this instrument's answer, not a
+precondition that failed.
 """
 from __future__ import annotations
 
@@ -251,6 +270,8 @@ import modal_fixed as mf                   # noqa: E402
 import cymbal_candidate as cc              # noqa: E402
 import cymbal_low_tail as lt               # noqa: E402
 import cymbal_m_origin as mo               # noqa: E402
+import exit_contract                       # noqa: E402
+import refusal                             # noqa: E402
 import cymbal_tone_realisation as tr       # noqa: E402
 
 SR = lt.SR
@@ -455,6 +476,16 @@ def clip_a2(drive, asym=ASYM, *, defect=None):
     return -math.tanh(b) * g
 
 
+def bias_norm(b) -> float:
+    """The clipper's normalisation, `1 - tanh(b)^2`: the factor its output is
+    divided by so that the LINEAR term is the identity at every bias. It is
+    exactly 0 once `tanh(b)` rounds to +-1.0 in float64, which a finite `b`
+    reaches (|b| from 19.07 with glibc's tanh), and NaN for a non-finite one.
+    Both `clip()` and `check_asym()` read it here, so the guard cannot drift
+    from the expression it guards."""
+    return 1.0 - math.tanh(b) ** 2
+
+
 def clip(x, drive, asym=ASYM, *, defect=None, rms=None):
     """§10's "asymmetric clipping", as a biased tanh normalised so that its
     linear term is the identity. `drive` is in dB relative to the signal's own
@@ -463,11 +494,38 @@ def clip(x, drive, asym=ASYM, *, defect=None, rms=None):
     if drive is None or defect == "NO_NONLINEARITY":
         return np.asarray(x, dtype=np.float64)
     r = float(rms if rms is not None else np.sqrt(np.mean(np.asarray(x) ** 2)))
-    if r <= 0:
-        raise Refused("the signal at the clipper is silent")
+    if not (math.isfinite(r) and r > 0):
+        raise Refused(f"the signal at the clipper is silent or not finite (rms {r!r})")
     b = 0.0 if defect == "SYMMETRIC_NL" else asym
     g = 10.0 ** (drive / 20.0) / r
-    return (np.tanh(g * np.asarray(x, dtype=np.float64) + b) - math.tanh(b)) / (g * (1 - math.tanh(b) ** 2))
+    return (np.tanh(g * np.asarray(x, dtype=np.float64) + b) - math.tanh(b)) / (g * bias_norm(b))
+
+
+def check_asym(asym) -> float:
+    """REFUSE a clipper bias the clipper cannot realise; return it otherwise.
+
+    The domain is read off the clipper's own arithmetic rather than quoted as
+    a number: wherever `bias_norm` is not a positive number, `clip()` divides
+    by zero (or by NaN) and returns NaN at every sample. That is a non-finite
+    bias, and a finite one from |b| = 19.07, where `tanh(b)` is exactly 1.0 in
+    float64. The test is written `not (norm > 0)` because `nan > 0` is False:
+    a one-sided `asym >= bound` would let `nan` and `-inf` through (#134).
+
+    This is a guard about FINITENESS, not accuracy: inside the domain the
+    clipper loses digits as the bias grows, because it subtracts two numbers
+    that both approach 1. Its error against its own formula in decimal
+    arithmetic is 3e-13 of full scale at 5, 3e-7 at 12, 1e-5 at 14, 2e-4 at
+    15 and 43 % at 19. The documented values, 0.15 to 0.8, are exact to 7e-16.
+    """
+    b = float(asym)
+    norm = bias_norm(b)
+    if not (norm > 0.0):
+        raise Refused(
+            f"--asym {b!r} is outside the clipper's finite domain: clip() normalises by "
+            f"1 - tanh(b)^2, which is {norm!r} there, so its output would be NaN at every "
+            f"sample; a bias is inside only while |tanh(b)| stays below 1.0 in float64 "
+            f"(|b| below about 19.07)")
+    return b
 
 
 def thd_db(drive, asym=ASYM, *, f0=1000.0, n=1 << 15, sr=SR):
@@ -514,8 +572,8 @@ def render(*, position="post_vca", drive=0.0, asym=ASYM, kind="staircase", taus=
     if position == "sum":
         summed = clip(summed, d, asym, defect=defect)
     peak = float(np.max(np.abs(summed)))
-    if peak <= 0:
-        raise Refused("the render is silent")
+    if not (math.isfinite(peak) and peak > 0):
+        raise Refused(f"the render is silent or not finite (peak {peak!r})")
     y = post_gain * (2.0 if defect == "POST_GAIN_2X" else 1.0) * summed / peak
     return rc.prepare(np.concatenate([np.zeros(sr // 20), y]), sr,
                       side=f"cy-vca {position} {drive:+.0f} dB {kind}"), sr
@@ -687,8 +745,8 @@ def band_records(*, kind="white", taus=None, dur=3.6, seed=3, sr=SR, defect=None
 def _combine(recs, levels, sr=SR):
     y = sum(10.0 ** (levels[b] / 20.0) * recs[b] for b in recs)
     peak = float(np.max(np.abs(y)))
-    if peak <= 0:
-        raise Refused("the mix is silent")
+    if not (math.isfinite(peak) and peak > 0):
+        raise Refused(f"the mix is silent or not finite (peak {peak!r})")
     return rc.prepare(np.concatenate([np.zeros(sr // 20), y / peak]), sr, side="cy-vca mix"), sr
 
 
@@ -1017,15 +1075,22 @@ def targets(low_tail=None, m_origin=None) -> dict:
 def sweep(*, positions=POSITIONS, drives=DRIVE_DB, asym=ASYM, kind="staircase",
           trim_s=lt.TRIM_S, taus=None) -> list[dict]:
     """rho and M re Ln at every (position, drive), with the clipper's own THD
-    reported beside each so a reading taken past `MAX_THD_DB` is visible."""
+    reported beside each so a reading taken past `MAX_THD_DB` is visible. A THD
+    that is not a finite number refuses the drive as well, which is why the
+    guard is written `not (thd <= MAX_THD_DB)`: `nan > MAX_THD_DB` is False, so
+    the obvious form let a NaN THD through as a drive in good standing."""
     rows = []
     for pos in positions:
         for d in (drives if pos != "none" else (None,)):
             row = {"position": pos, "drive_db": d, "asym": asym, "source": kind}
-            row["thd_db"] = (None if d is None else round(thd_db(d, asym), 2))
-            if row["thd_db"] is not None and row["thd_db"] > MAX_THD_DB:
-                row["refused_drive"] = (f"THD {row['thd_db']:.1f} dB exceeds {MAX_THD_DB:.0f} dB: "
-                                        f"the block is a square-wave generator, not a swing VCA")
+            thd = None if d is None else round(thd_db(d, asym), 2)
+            row["thd_db"] = thd
+            if thd is not None and not (thd <= MAX_THD_DB):
+                row["refused_drive"] = (
+                    (f"THD {thd:.1f} dB exceeds {MAX_THD_DB:.0f} dB: the block is a "
+                     f"square-wave generator, not a swing VCA") if math.isfinite(thd) else
+                    (f"THD reads {thd!r}, which is not a finite number: the drive cannot be "
+                     f"characterised, so the row is not a measurement"))
             y, sr = render(position=pos, drive=(0.0 if d is None else d), asym=asym,
                            kind=kind, taus=taus)
             row.update(read(y, sr, trim_s=trim_s))
@@ -1088,26 +1153,74 @@ def verdict(rows, *, targets_=None) -> dict:
             return dr / max(rho_hi - rho_lo, 1e-9) + de / max(e_hi - e_lo, 1e-9)
         near = min(got, key=miss) if got else None
         out["closest_row"] = near
+        closest = ("" if near is None else
+                   "; the closest is " + ("the linear chain" if near["drive_db"] is None
+                                          else f"{near['position']} at {near['drive_db']:+.0f} dB")
+                   + f", rho_M {near['rho_M_-10']}, M re Ln {near[f'M_re_{REF}']} dB")
         out["refused"] = (
             f"no single (position, drive) in the swept range lands inside BOTH the 808's "
             f"measured rho_M(-10) range [{rho_lo}, {rho_hi}] and its measured M re Ln range "
-            f"[{e_lo}, {e_hi}] dB at the same time"
-            + (f"; the closest is {near['position']} at {near['drive_db']:+.0f} dB, "
-               f"rho_M {near['rho_M_-10']}, M re Ln {near[f'M_re_{REF}']} dB" if near else ""))
+            f"[{e_lo}, {e_hi}] dB at the same time" + closest)
+    return out
+
+
+def _asym_explicit(argv) -> list:
+    """The command line with `--asym`'s value joined to its flag whenever that
+    value parses as a float: `--asym -inf` becomes `--asym=-inf`.
+
+    argparse hands a token that starts with `-` and is not a plain negative
+    number to its option parser, which takes it for a flag: `--asym -inf` and
+    `--asym -1e-9` were usage errors -- exit 2, which is also this tool's
+    REFUSED, with a usage line on stderr and nothing on stdout. In the `=` form
+    argparse takes the value as written. A token that is not a float is left
+    alone for argparse to reject in its own words."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    out = []
+    while args:
+        tok = args.pop(0)
+        if tok == "--asym" and args:
+            try:
+                float(args[0])
+            except ValueError:
+                pass
+            else:
+                tok = f"--asym={args.pop(0)}"
+        out.append(tok)
     return out
 
 
 def main(argv=None) -> int:
+    """`_run`, with this tool's refusals rendered as its exit contract: any
+    module's `Refused` that reaches the command line prints its reason as the
+    last line and exits `exit_contract.REFUSED`, instead of leaving as a
+    traceback and exit 1 (#1991). The handler is the base class, so
+    `run_case.Refused` and this module's own land alike, and it is nothing
+    wider: an implementation error is still a traceback."""
+    try:
+        return _run(argv)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return exit_contract.REFUSED
+
+
+def _run(argv=None) -> int:
+    """The control matrix, the corrections and the sweep, from argv to a
+    printed report. `main()` owns the exit contract."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", type=pathlib.Path, default=None)
-    ap.add_argument("--asym", type=float, default=ASYM)
+    ap.add_argument("--asym", type=float, default=ASYM,
+                    help="the clipper's bias in units of its own knee. REFUSED unless "
+                         "1 - tanh(asym)^2 is a positive number: not nan or +-inf, and "
+                         "|asym| below about 19.07")
     ap.add_argument("--asym-sweep", action="store_true",
                     help="repeat the sweep at every ASYM_SWEEP value (the reference does "
                          "not resolve the asymmetry, so its effect is shown, not chosen)")
     ap.add_argument("--source", default="staircase", choices=("staircase", "white"))
     ap.add_argument("--skip-controls", action="store_true",
                     help=argparse.SUPPRESS)      # for the unit tests only
-    a = ap.parse_args(argv)
+    a = ap.parse_args(_asym_explicit(argv))
+    for asym in (a.asym, *(ASYM_SWEEP if a.asym_sweep else ())):
+        check_asym(asym)
 
     if not a.skip_controls:
         ok, lines = check()
