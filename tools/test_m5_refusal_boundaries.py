@@ -243,6 +243,24 @@ def test_a_development_note_that_cannot_be_scaled_exits_refused(module, base, ca
     assert not out.exists()
 
 
+def test_a_note_that_falls_silent_at_the_refined_volume_exits_refused(monkeypatch, tmp_path, capsys):
+    """The second render `calibrate` makes, at the first estimate's volume:
+    audible at the preset volume and silent at six times it -- a host that
+    mutes an out-of-range volume. Reproduced: ZeroDivisionError."""
+    ol = importlib.import_module("measure_m5_operating_level")
+
+    def held_rms(engine, drive, vol, note=84, wave="saw"):
+        return 0.3 if drive == BASELINE else (0.05 if vol == VOL0 else 0.0)
+
+    monkeypatch.setattr(ol, "held_rms", held_rms)
+    out = tmp_path / "result"
+    assert ol.main(["--drives", str(CANDIDATE), "--out", str(out)]) == 2
+    assert capsys.readouterr().out.splitlines() == [
+        f"REFUSED: drive {CANDIDATE}: the held saw's RMS must be finite and above zero to "
+        f"calibrate a volume (drive {CANDIDATE} at vol {VOL0 * 6:.4f}: 0.0)"]
+    assert not out.exists()
+
+
 @pytest.mark.parametrize(("option", "reason"), [
     ("--recompare-report", "recomparison requires an m5a-filter-headroom-v1 report"),
     ("--reuse-offline-report", "reuse report schema, reference, or pulse set does not match"),

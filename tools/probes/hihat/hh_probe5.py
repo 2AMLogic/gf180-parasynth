@@ -91,6 +91,15 @@ proposes and the exact rule accepts; that is necessary and it is not sufficient,
 because the rule accepts a COMPARISON and the surrogate was picking both sides
 of it. Whatever proposes candidates must not be the only thing that proposes the
 baseline.
+
+EXIT STATUS follows `tools/exit_contract.py` (#1936). The sweep's handler
+records a (Q, gain) point `cy_kit` refuses and goes on. An arm for which it
+refused EVERY point is named, recorded under `refused_arms`, and the run exits
+2 (REFUSED, one `REFUSED:` line on stdout, after hh5.json is written) -- and
+when that arm is the 2-pole, the baseline every later section is relative to,
+the run stops after the sweep. A run in which every arm answered at least one
+point exits 0. This is the record's own verdict: an uncaught precondition
+refusal elsewhere in `main` is still an exception (#1640).
 """
 from __future__ import annotations
 
@@ -118,6 +127,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[3] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+from exit_contract import PASS, REFUSED  # noqa: E402
 
 # The five-band split every earlier probe in this directory reports, kept so
 # this one is readable beside them. A SURROGATE here, never a verdict.
@@ -631,6 +641,37 @@ def props_line(ev: dict) -> str:
         f"   [{ev['why']}]" if ev.get("why") else "")
 
 
+def deaf_arms(sweep: dict) -> list:
+    """The arms of a finished sweep for which `cy_kit` refused every (Q, gain)
+    point: each row carries `refused` and none a `cost`. In sweep order, so
+    the verdict names them as the sweep ran."""
+    return [arm for arm, rows in sweep.items() if rows and all("refused" in r for r in rows)]
+
+
+def arms_exit(deaf) -> int:
+    """The run's exit status (`tools/exit_contract.py`).
+
+    PASS when every arm answered at least one point. REFUSED when one did not
+    (#1936): the rows are already under `surrogate_sweep` in hh5.json, so the
+    record exists, but the comparison this probe exists for did not happen
+    for that structure, and a status of 0 would read as a RESULT. A partly
+    refused SWEEP -- points refused inside an arm that answered others -- is a
+    result and stays 0: the handler records those beside the measured ones,
+    as it always has.
+    """
+    if not deaf:
+        return PASS
+    say(f"REFUSED: every (Q, gain) point refused for arm(s) {', '.join(deaf)}; "
+        f"their rows are under surrogate_sweep in hh5.json")
+    return REFUSED
+
+
+def write_record(out: dict, outdir: pathlib.Path) -> None:
+    path = outdir / "hh5.json"
+    path.write_text(json.dumps(out, indent=2, default=float))
+    say(f"\n(written {path})")
+
+
 # ---------------------------------------------------------------------- main
 def main(argv=None) -> int:
     import run_case as rc
@@ -758,6 +799,24 @@ def main(argv=None) -> int:
         sweep[arm] = rows
     say(f"  machine    {fmt(HW_CY)}")
     out["surrogate_sweep"] = sweep
+
+    # ---- what refused, said here and decided here ------------------------
+    # An arm whose every point refused is not a shortlist shorter by one. The
+    # handler above records each refused point and goes on; the shortlist then
+    # dropped the arm without a word, and nothing asked whether any arm had
+    # answered (#1936). Reproduced: one arm deaf exited 0 with it gone from
+    # hh5.json; the 2-pole deaf, or every arm, was a KeyError downstream.
+    deaf = deaf_arms(sweep)
+    out["refused_arms"] = {arm: sorted({r["refused"] for r in sweep[arm]}) for arm in deaf}
+    for arm in deaf:
+        say(f"  {arm:<10s} REFUSED at every (Q, gain) point ({len(sweep[arm])} of "
+            f"{len(sweep[arm])}): {out['refused_arms'][arm][0]}")
+    if "2pole" in deaf:
+        # The shipped 2-pole is the baseline the fit, the holdout and DR 0015's
+        # rule are all relative to. None of them is defined without it, so the
+        # record is written here and the run refuses.
+        write_record(out, outdir)
+        return arms_exit(deaf)
 
     # The candidates each structure proposes. TOP THREE by the surrogate, PLUS
     # the shipped (Q, gain) unconditionally.
@@ -914,8 +973,7 @@ def main(argv=None) -> int:
     out["acceptance"] = acc
     out["acceptance_indicative"] = ind
 
-    (outdir / "hh5.json").write_text(json.dumps(out, indent=2, default=float))
-    say(f"\n(written {outdir / 'hh5.json'})")
+    write_record(out, outdir)
 
     if a.write_d14b:
         # `tools/scorecard.py`: results are "written by whatever produced the
@@ -934,7 +992,7 @@ def main(argv=None) -> int:
                          "tools/probes/hihat/hh_probe5.py and DR 0022."))
         p.write_text(json.dumps(rec, indent=2, default=float) + "\n")
         say(f"(written {p})")
-    return 0
+    return arms_exit(deaf)
 
 
 if __name__ == "__main__":

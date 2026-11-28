@@ -572,8 +572,9 @@ def _deaf_row(device="ours-1tanh"):
 
 
 def _named(out, device, label):
-    """The report lines that are device `device`'s and carry `label`."""
-    return [ln for ln in out if ln.strip().startswith(device) and label in ln]
+    """The report lines whose first token is exactly `device` and that carry
+    `label`. A prefix would confuse `ours` with `ours-1tanh`."""
+    return [ln for ln in out if ln.split()[:1] == [device] and label in ln]
 
 
 def _assert_not_answerable(tmp_path, device, keys):
@@ -653,13 +654,16 @@ def test_a_measured_file_of_a_device_whose_name_carries_a_hyphen_counts(tmp_path
 def test_the_control_an_all_answered_directory_names_no_device_as_unanswered(monkeypatch, tmp_path, capsys):
     """THE CONTROL for the report: over a directory in which every row
     answered, no device is named as unanswered. Widening the rule to "name any
-    device that has a file" turns this red."""
+    device that has a file" turns this red. (The legend explains both labels,
+    so the lines checked are the devices' own.)"""
     rc, _ = _main(monkeypatch, tmp_path, capsys, ["--stage", "selfosc", "--devices", "ours,ours-1tanh"],
                   {"ours": _Ringing, "ours-1tanh": _Ringing})
     assert rc == PASS
     rc, out = _report(tmp_path, capsys)
     assert rc == PASS, (rc, out)
-    assert not any("NOT ANSWERABLE" in ln or "NO ROW ANSWERED" in ln for ln in out), out
+    assert not [ln for d in rcmp.ORDER for ln in out
+                if ln.strip().startswith(d) and ("NOT ANSWERABLE" in ln or "NO ROW ANSWERED" in ln)], out
+    assert len(_named(out, "ours", "-14.0")) == 1 and len(_named(out, "ours-1tanh", "-14.0")) == 1, out
 
 
 # -- a run: the three places outside `guard`
