@@ -28,9 +28,17 @@ result is a FAIL, a partial file never survives, and a size that disagrees with
 the index is a FAIL -- the file on disk must be the file the index describes.
 """
 from __future__ import annotations
-import json, os, pathlib, shlex, subprocess, sys
-import refusal
+
+import json
+import os
+import pathlib
+import shlex
+import shutil
+import subprocess
+import sys
+
 import refaudio_local as rl
+import refusal
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 REFAUDIO = REPO / "refaudio"
@@ -56,6 +64,8 @@ def preconditions(archive: str, members: list[str]) -> tuple[str, str]:
     if not ssh or not root:
         raise Refused("REFAUDIO_SSH / REFAUDIO_ROOT are not set: this host has no route to the "
                       "reference-audio storage. Open a `reference-audio` issue instead.")
+    if shutil.which("ssh") is None:
+        raise Refused("`ssh` executable not found on PATH")
     if archive not in known_archives():
         raise Refused(f"{archive!r} is not an archive in refaudio/catalog.json")
     if not members:
