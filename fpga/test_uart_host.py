@@ -285,6 +285,32 @@ def test_note_writes_on_comes_from_the_model_host():
     assert writes[-1] == (0, 0, stm.A_GATE_ON, 0)     # the gate lands last
 
 
+def test_note_writes_has_no_held_parameter():
+    # the host is stateless; a `held` dial advertised a contract it never kept
+    import inspect
+    assert "held" not in inspect.signature(uh.note_writes).parameters
+
+
+def test_note_writes_on_is_three_jumping_incs_track_and_one_gate_on():
+    import synth_top_model as stm
+    writes = uh.note_writes(45, True)
+    assert [w[0] for w in writes[:3]] == [1, 1, 1]
+    assert [w[2] for w in writes[:3]] == [stm.A_INC + k for k in range(3)]
+    assert writes[3][2] == stm.A_TRACK
+    assert [w[2] for w in writes].count(stm.A_GATE_ON) == 1
+    assert stm.A_GATE_OFF not in [w[2] for w in writes]
+    assert len(writes) == 5
+
+
+def test_note_writes_rejects_an_unhandled_keyhost_op(monkeypatch):
+    # a dropped op is a silently shortened command stream
+    import voice_fx as vf
+    monkeypatch.setattr(vf.KeyHost, "writes",
+                        lambda self, *a, **k: [(0, "TRIG")])
+    with pytest.raises(ValueError, match="unexpected KeyHost op"):
+        uh.note_writes(45, True)
+
+
 def test_scan_packets_consumes_complete_packets_only():
     reply = bytes([uh.RSP_STATUS, 0x12, 0x34, 8, 0, 1, 0, 0]) \
         + bytes([uh.RSP_ACK, 0x2A])
