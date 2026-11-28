@@ -16,6 +16,7 @@ The first test is the gate itself: the committed tree passes.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import shutil
 import subprocess
@@ -127,3 +128,61 @@ def test_the_canonical_v3_suite_declaration_is_frozen_not_the_whole_corpus():
     corpus = json.loads((ROOT / cf.CORPUS_MANIFEST).read_text())
     v4 = corpus["plugin_reference_suites"]["suites"]["miniv4"]
     assert v4["required_version"] == rs.V4_REQUIRED_VERSION
+
+
+# ---- a corpus manifest that cannot be read is REFUSED, not a traceback and
+# not a broken freeze (#1604). The tool's own contract: "REFUSED 2 (... missing
+# or malformed, so nothing could be checked)". Each case mutates the copy the
+# fixture already proved passes, then runs main().
+def _run(frozen_scope_copy, capsys):
+    code = cf.main(["--root", str(frozen_scope_copy),
+                    "--freeze-manifest", str(frozen_scope_copy / MANIFEST.name)])
+    return code, capsys.readouterr().out
+
+
+def _without(frozen_scope_copy, *path):
+    """Rewrite the copy's corpus manifest with the key at `path` deleted."""
+    p = frozen_scope_copy / cf.CORPUS_MANIFEST
+    corpus = json.loads(p.read_text())
+    parent = corpus
+    for part in path[:-1]:
+        parent = parent[part]
+    del parent[path[-1]]
+    p.write_text(json.dumps(corpus))
+
+
+@pytest.mark.parametrize("path", [
+    ("plugin_reference_suites",),
+    ("plugin_reference_suites", "suites"),
+    ("plugin_reference_suites", "suites", "miniv3-frozen"),
+], ids=lambda path: ".".join(path))
+def test_a_corpus_manifest_missing_a_frozen_key_is_refused(frozen_scope_copy, capsys, path):
+    # one control per key of the frozen declaration's dotted path
+    _without(frozen_scope_copy, *path)
+    code, out = _run(frozen_scope_copy, capsys)
+    assert code == cf.REFUSED
+    assert out.startswith("REFUSED") and f"'{path[-1]}'" in out
+    assert "FAIL" not in out and "PASS" not in out
+
+
+@pytest.mark.parametrize("payload, named", [
+    (b"null", "is null, not a JSON object"),
+    (b"[]", "is a JSON list, not a JSON object"),
+    (b'{"plugin_reference_suites": null}',
+     "carries null for required key(s) 'plugin_reference_suites'"),
+    (b"", "is not valid JSON"),
+    (b'{"plugin_reference_suites": ', "is not valid JSON"),
+], ids=["null", "array", "null-key", "empty", "truncated"])
+def test_an_unreadable_corpus_manifest_is_refused(frozen_scope_copy, capsys, payload, named):
+    (frozen_scope_copy / cf.CORPUS_MANIFEST).write_bytes(payload)
+    code, out = _run(frozen_scope_copy, capsys)
+    assert code == cf.REFUSED
+    assert out.startswith("REFUSED") and named in out
+    assert "FAIL" not in out and "PASS" not in out
+
+
+def test_a_missing_corpus_manifest_is_refused(frozen_scope_copy, capsys):
+    (frozen_scope_copy / cf.CORPUS_MANIFEST).unlink()
+    code, out = _run(frozen_scope_copy, capsys)
+    assert code == cf.REFUSED
+    assert out.startswith("REFUSED") and "corpus manifest missing" in out
