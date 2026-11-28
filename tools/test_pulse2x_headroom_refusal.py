@@ -252,6 +252,60 @@ structural controls carry the claim -- the serial chain, the one mixed source,
 the integer render -- and they assert on the model as it is; a noise source or
 a per-oscillator gain in the pulse patch would leave a silent tap beside a
 live output and redden them before any CLI run.
+
+#2042, THE FOURTH DEFECT, AS MEASURED ON main @ 616b8d63 (2026-11-28): the
+boundary caught refusals, but a number argparse accepts and the engine cannot
+represent was never refused, because `q15` and `LadderFx.regs_unclamped` are
+conversion helpers, not validators. `--gains nan|inf` exited 1 with
+`ValueError` / `OverflowError` from `q15`; `--gains 1e15` exited 1 with numpy's
+`OverflowError` inside `_render_2x`, in `mix` and `phrases` after the baseline
+had scored; `--gains 1e14` was worse -- its Q15 word fits int64, `_render_2x`
+wrapped silently, and every mode exited 0 with a report; `probe --gains 0.80
+nan` measured all 32 points (it reads `gains[0]` alone); and `phrases --gains
+0.85 --pulse-drive-comp <bad>` scored both baselines and exited 0 with the
+multiplier never applied (0.85 is BASE_Q15, so there is no candidate). `main()`
+now calls `_refuse_unrepresentable` before the dispatch.
+
+THE KNOWN ANSWERS, from IEEE arithmetic and the model's own taps:
+
+  not a float64   `g * 32768` is inf for the finite 1e308, before `round`:
+                  a `math.isfinite(g)` guard alone is defeated by it.
+  the int64 bound after `hi * gain >> 15` (|hi| <= 2**15) a sample is at most
+                  |gain|, and the 31-tap convolve sums to `sum(|taps|)` =
+                  53980 times that: |gain| <= (2**63 - 1) // 53980 =
+                  170,866,469,745,364. Tight: 5.214e9 passes, 5.3e9 wraps.
+                  1e14's word, 3.2768e18, is under 2**63 and over the bound:
+                  an int64-fit guard alone is defeated by it, silently.
+  the drive bound `int(round(drive * 0.13 / 0.05 * 65536))` overflows float64
+                  above drive 1.055e303; the preset's 0.75 scales the flag.
+
+WHAT THESE CONTROLS ASSERT, each pinning the message and `BASELINE_LINE not in
+stdout`: 30 non-finite-gain rows and 20 int64 rows across all five modes; 5
+`--pulse-drive-comp` rows at `--gains 0.85`; two rule-8 controls proving, in
+process, that each obvious guard is defeated (the real `_render_2x` returns a
+rail-pinned render for 1e14; the real `regs_unclamped` raises on the preset's
+drive x 1e308); the premise the drive guard rests on (the preset's drive is
+within its reference of 1.0, read from the real preset); and the stays-green
+side -- the gains and multipliers the trace measured pass the guard, and
+through the real `main()` they reach every mode's entry function as parsed.
+
+RED FIRST, on 616b8d63 with the tool unmodified: 56 of the 64 controls fail.
+30 non-finite rows: 29 at exit 1 with the `q15` traceback, `probe --gains 0.80
+nan` at exit 0 (which `main()` reaches only after writing the report). 10
+`1e15` rows: exit 1, in `mix` / `phrases` after "mix gain None:" / the M5A
+baseline line had printed. 10 `1e14` rows: exit 0. 5 drive rows: exit 0.
+`documented_accepted_numbers`: AttributeError, no guard yet. The other 8 pass,
+as they must on any tree (the two rule-8 controls, the premise, and the five
+valid-numbers rows). The ten `1e15` rows were re-pinned after the red run (the
+value's repr); pre-fix they fail at the exit-code assertion, before the
+message is read.
+
+WRONG THEN RIGHT, three times, all in this file's own constants and all caught
+by its controls before the fix was relied on: `q15(1e14)` was written
+3276800000000000 for 3276800000000000000 and the rail-pinned render bounded
+`<= 32767` where `sat16` reaches -32768 (both by the rule-8 control, run green
+on the pre-fix tree), and `repr(1e15)` was written `1e+15` for
+`1000000000000000.0` (by the message pin).
 """
 from __future__ import annotations
 
@@ -761,3 +815,179 @@ def test_1908_smallest_non_zero_gain_is_refused_by_the_pitch_estimator(tmp_path)
     p = _cli("phrases", "--gains", SMALLEST_NONZERO_GAIN, "--out", str(out))
     _assert_refused(p, NO_FUNDAMENTAL_REASON, out)
     assert BASELINE_LINE in p.stdout and "wrote" not in p.stdout, p.stdout[-200:]
+
+
+# ---------------------------------------------------------------------------
+# #2042: a number argparse accepts but the engine cannot represent is REFUSED
+# at the CLI boundary, before any mode renders
+# ---------------------------------------------------------------------------
+ALL_MODES = ("decimator", "fine", "mix", "phrases", "probe")
+NON_FINITE_GAIN = "not a finite Q1.15 substep gain"
+#: `--gains` values whose `g * 32768` is not a float64: the IEEE specials
+#: argparse's `type=float` reads, and the finite 1e308 whose product overflows
+#: BEFORE `round` -- the rule-8 input for a `math.isfinite(g)` guard. `-inf`
+#: reaches `main()` only in `=` syntax (two tokens: argparse reads a flag).
+NON_FINITE_GAINS = [
+    (["--gains", "nan"], "--gains[0] nan"),
+    (["--gains", "inf"], "--gains[0] inf"),
+    (["--gains=-inf"], "--gains[0] -inf"),
+    (["--gains", "1e308"], "--gains[0] 1e+308"),
+    (["--gains=-1e308"], "--gains[0] -1e+308"),
+    (["--gains", "0.80", "nan"], "--gains[1] nan"),     # trailing: `probe` reads gains[0] alone
+]
+#: `--gains` values with a finite Q15 word beyond the decimator's int64 range.
+#: 1e15's word leaves int64 outright (numpy raises); 1e14's word FITS int64 and
+#: wraps silently inside `_render_2x` -- the rule-8 input for an int64-fit guard.
+WRAPPING_GAINS = [
+    (["--gains", "1e15"], "--gains[0] 1000000000000000.0", 32768000000000000000),
+    (["--gains=-1e15"], "--gains[0] -1000000000000000.0", -32768000000000000000),
+    (["--gains", "1e14"], "--gains[0] 100000000000000.0", 3276800000000000000),
+    (["--gains=-1e14"], "--gains[0] -100000000000000.0", -3276800000000000000),
+]
+NOT_FINITE_DRIVE = "not a finite ladder-drive multiplier"
+OVERFLOWING_DRIVE = "the ladder's drive-to-gain conversion overflows float64"
+#: `--pulse-drive-comp` values the ladder cannot convert: the IEEE specials,
+#: and the finite 1e308 whose `drive * vpu / VT2 * 65536` overflows float64
+#: before `int(round(.))` -- the rule-8 input for a `math.isfinite(d)` guard.
+BAD_DRIVE_COMP = [
+    (["--pulse-drive-comp", "nan"], f"--pulse-drive-comp nan: {NOT_FINITE_DRIVE}"),
+    (["--pulse-drive-comp", "inf"], f"--pulse-drive-comp inf: {NOT_FINITE_DRIVE}"),
+    (["--pulse-drive-comp=-inf"], f"--pulse-drive-comp -inf: {NOT_FINITE_DRIVE}"),
+    (["--pulse-drive-comp", "1e308"], f"--pulse-drive-comp 1e+308: {OVERFLOWING_DRIVE}"),
+    (["--pulse-drive-comp=-1e308"], f"--pulse-drive-comp -1e+308: {OVERFLOWING_DRIVE}"),
+]
+ACCEPTED_GAINS = [-1.0, -0.85, 0.0, 2e-5, 0.80, 0.84, 0.85, 2.0, 100.0]
+ACCEPTED_DRIVE_COMP = [-1.0, 0.0, 1e-9, 1e6]
+
+
+def _token(argv: list[str]) -> str:
+    """The number a one-flag argv tail carries, whichever syntax it used."""
+    return argv[-1].split("=", 1)[-1]
+
+
+def _decimator_limit() -> int:
+    """The largest |Q15 substep gain| `voice_fx._render_2x` applies without
+    wrapping signed int64, from the model's taps and none of the guard's text:
+    after `hi * gain >> 15` (|hi| <= 2**15) a sample is at most |gain|, and the
+    31-tap `np.convolve` sums to `sum(|taps|)` times that."""
+    import measure_pulse2x_headroom                     # noqa: F401  puts model/ on sys.path
+    import voice_fx as vf
+
+    return ((1 << 63) - 1) // int(np.abs(vf._DECIM2_TAPS).sum())
+
+
+@pytest.mark.parametrize("mode", ALL_MODES)
+@pytest.mark.parametrize("argv, named", NON_FINITE_GAINS, ids=[named for _, named in NON_FINITE_GAINS])
+def test_non_finite_gain_exits_refused_2_before_any_mode_renders(tmp_path, mode, argv, named):
+    out = tmp_path / "out.json"
+    p = _cli(mode, *argv, "--out", str(out))
+    _assert_refused(p, f"{named}: {NON_FINITE_GAIN}", out)
+    assert BASELINE_LINE not in p.stdout, "the guard sits before the dispatch, not inside a mode"
+
+
+@pytest.mark.parametrize("mode", ALL_MODES)
+@pytest.mark.parametrize("argv, shown, word", WRAPPING_GAINS, ids=[_token(a) for a, _, _ in WRAPPING_GAINS])
+def test_int64_wrapping_gain_exits_refused_2_before_any_mode_renders(tmp_path, mode, argv, shown, word):
+    limit = _decimator_limit()
+    assert abs(word) > limit, "not an adversary: this word is inside the no-wrap range"
+    out = tmp_path / "out.json"
+    p = _cli(mode, *argv, "--out", str(out))
+    _assert_refused(p, f"{shown}: Q15 {word} is beyond the decimator's int64 range (+/-{limit})", out)
+    assert BASELINE_LINE not in p.stdout, "the guard sits before the dispatch, not inside a mode"
+
+
+def test_each_obvious_gain_guard_is_defeated_by_a_committed_adversary():
+    """Rule 8, in-process. `math.isfinite(g)` alone lets 1e308 through: it is
+    finite, and `g * 32768` is inf before `round` sees it. An int64-fit check
+    alone lets 1e14 through: its word is below 2**63, and the real `_render_2x`
+    then returns a Q1.15 render from WRAPPED arithmetic -- no exception, a
+    number where nothing was measured. Both words are inside the committed
+    bound; 1e15's is the one numpy itself refuses."""
+    import measure_pulse2x_headroom as mph
+    import voice_fx as vf
+
+    assert math.isfinite(1e308) and not math.isfinite(1e308 * 32768)
+    assert mph.q15(1e15) == 32768000000000000000 >= (1 << 63)
+    limit = _decimator_limit()
+    assert mph.q15(1e14) == 3276800000000000000 < (1 << 63)
+    assert mph.q15(1e14) > limit > mph.q15(5.214e9), (limit, "tight: the next gain wraps")
+    o = vf.OscFx("square")
+    with mph._gain("square", mph.q15(1e14)):
+        y, _, _ = vf._render_2x(o, 64, vf.phase_inc(vf.note_hz(84.0)), np.zeros(30, dtype=np.int64), 0)
+    assert len(y) == 64 and np.max(np.abs(y)) == 32768, "it rendered: the wrap is silent"
+
+
+@pytest.mark.parametrize("argv, reason", BAD_DRIVE_COMP, ids=[_token(a) for a, _ in BAD_DRIVE_COMP])
+def test_unconvertible_pulse_drive_comp_exits_refused_2_before_any_render(tmp_path, argv, reason):
+    """`--gains 0.85` is BASE_Q15, so `phrases` keeps no candidate and never
+    enters `pulse_drive`: on the pre-fix tree these rows scored both baseline
+    phrases and exited 0, the multiplier never applied."""
+    out = tmp_path / "phrases.json"
+    p = _cli("phrases", "--gains", "0.85", *argv, "--out", str(out))
+    _assert_refused(p, reason, out)
+    assert BASELINE_LINE not in p.stdout, "the guard sits before the dispatch, not inside a mode"
+
+
+def test_the_finite_drive_adversary_overflows_inside_the_real_ladder_conversion():
+    """Rule 8 for `--pulse-drive-comp`: `math.isfinite(1e308)` is True, yet the
+    real `LadderFx.regs_unclamped` overflows float64 on it -- along the path
+    the phrases run takes, the preset's own drive scaled by the multiplier --
+    while the overdrive the trace measured (1e6) converts."""
+    import measure_pulse2x_headroom as mph
+    import mono_m5a_score as score
+    import voice_fx as vf
+
+    assert math.isfinite(1e308)
+    preset = score._voice_patch(score.load_reference("M5A").manifest)["drive"]
+    lad = vf.LadderFx(**vf.LADDER_CFG)
+    for drive in (1e308, preset * 1e308):
+        with pytest.raises(OverflowError):
+            lad.regs_unclamped(0.0, drive)
+    with pytest.raises(ValueError):
+        lad.regs_unclamped(0.0, math.nan)
+    assert mph.q15(0.85) == mph.BASE_Q15, "`phrases --gains 0.85` keeps no candidate"
+
+
+def test_phrases_preset_drive_is_within_the_guard_s_reference():
+    """The guard converts `--pulse-drive-comp` as if it were the drive itself.
+    `phrases` scales the preset's drive by the multiplier, so a preset drive
+    above the reference (1.0) would open a gap above ~1e303 -- narrow, and no
+    physical multiplier, but a premise the guard rests on: read from the real
+    preset, not assumed."""
+    import mono_m5a_score as score
+
+    drive = score._voice_patch(score.load_reference("M5A").manifest)["drive"]
+    assert 0.0 <= drive <= 1.0, (drive, "raise the guard's reference drive with the preset")
+
+
+def test_documented_accepted_numbers_pass_the_cli_guard():
+    """The gains the trace measured on main (ordinary, overdriven, inverted)
+    and every `--pulse-drive-comp` it measured pass the guard, together and
+    each alone -- including the two that must still REACH a downstream
+    refusal (`0.0` silences, `2e-5` is one Q15 step) rather than stop here."""
+    import measure_pulse2x_headroom as mph
+
+    for d in (None, *ACCEPTED_DRIVE_COMP):
+        mph._refuse_unrepresentable(ACCEPTED_GAINS, d)
+        for g in ACCEPTED_GAINS:
+            mph._refuse_unrepresentable([g], d)
+
+
+@pytest.mark.parametrize("mode", ALL_MODES)
+def test_valid_numbers_reach_every_mode_unchanged(tmp_path, mode):
+    """Through the real `main()`, with only the mode's entry function replaced
+    by a recorder: the accepted gains pass the guard and arrive as parsed --
+    not clamped, dropped or reordered -- and `phrases` receives its drive
+    multiplier as parsed. (0.85 is BASE_Q15; `mix` and `phrases` filter it on
+    their own, as before the guard.)"""
+    out = tmp_path / "out.json"
+    parsed = [-1.0, -0.85, 0.80, 0.85, 0.84, 2.0, 100.0]
+    entry = MODE_ENTRY.get(mode, "phrases")
+    p = _run_patched([mode, "--gains", *map(str, parsed), "--pulse-drive-comp", "1e6", "--out", str(out)],
+                     f"mph.{entry} = lambda *a, **kw: {{'args': [list(x) if isinstance(x, list) else x for x in a]}}")
+    assert p.returncode == exit_contract.PASS, (p.returncode, p.stdout[-300:], p.stderr[-400:])
+    assert not _refused_lines(p.stdout) and "Traceback" not in p.stderr, (p.stdout[-300:], p.stderr[-400:])
+    kept = [-1.0, -0.85, 0.80, 0.84, 2.0, 100.0]
+    assert json.loads(out.read_text())["results"]["args"] == {
+        "decimator": [parsed], "fine": [parsed], "probe": [-1.0],
+        "mix": [kept, "rect"], "phrases": [kept, "rect", 1e6]}[mode]

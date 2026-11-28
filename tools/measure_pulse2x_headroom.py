@@ -51,6 +51,15 @@ def q15(g: float) -> int:
     return int(round(g * 32768))
 
 
+def _q15_limit() -> int:
+    """The largest |Q15 substep gain| `voice_fx._render_2x` applies without
+    wrapping signed int64. There `hi * gain` has |hi| <= 2**15, and after the
+    >> 15 the 31-tap `np.convolve` sums to at most `sum(|taps|)` times the
+    largest |sample|, so |gain| * sum(|taps|) is what must fit. Read from the
+    model's taps at the call: a retuned decimator moves the bound with it."""
+    return ((1 << 63) - 1) // int(np.abs(vf._DECIM2_TAPS).sum())
+
+
 @contextlib.contextmanager
 def candidate(gain_q15: int | None, scope: str):
     """Apply a substep gain inside _render_2x for rectangles ('rect') or every
@@ -335,6 +344,42 @@ def phrases(gains, scope="rect", drive_comp=None) -> dict:
     return res
 
 
+def _refuse_unrepresentable(gains, drive_comp) -> None:
+    """Refuse a number argparse accepted and the engine cannot represent
+    (#2042), before any mode dispatches. `q15` and `LadderFx.regs_unclamped`
+    are conversion helpers shared with Python callers and stay as they are;
+    the flags are read in `main()`, so the check belongs here.
+
+    `--gains[i]`: `g * 32768` must be finite (nan, +-inf, and the finite 1e308,
+    whose product overflows float64 before `round` sees it) and the Q15 word
+    within `_q15_limit()` (1e15's word leaves int64, numpy raises; 1e14's fits
+    int64 and wraps silently inside `_render_2x`). Every element is checked:
+    `probe` reads `gains[0]` alone.
+
+    `--pulse-drive-comp`: finite, and convertible by the ladder as a drive --
+    `int(round(drive * vpu / VT2 * 65536))` overflows float64 above ~1e303.
+    The multiplier is converted as if it were the drive itself; `phrases`
+    scales the preset's drive (0.75, mono_m5a_score._voice_patch) by it, so
+    the guard is conservative by that factor, and the band it refuses that the
+    preset would have converted, (1.06e303, 1.41e303], is no physical
+    multiplier."""
+    limit = _q15_limit()
+    for i, g in enumerate(gains):
+        if not math.isfinite(g * 32768):
+            raise Refused(f"--gains[{i}] {g!r}: not a finite Q1.15 substep gain")
+        gq = q15(g)
+        if abs(gq) > limit:
+            raise Refused(f"--gains[{i}] {g!r}: Q15 {gq} is beyond the decimator's int64 range (+/-{limit})")
+    if drive_comp is not None:
+        if not math.isfinite(drive_comp):
+            raise Refused(f"--pulse-drive-comp {drive_comp!r}: not a finite ladder-drive multiplier")
+        try:
+            vf.LadderFx(**vf.LADDER_CFG).regs_unclamped(0.0, drive_comp)
+        except OverflowError as why:
+            raise Refused(f"--pulse-drive-comp {drive_comp!r}: the ladder's drive-to-gain conversion "
+                          f"overflows float64") from why
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("mode", choices=("decimator", "fine", "mix", "phrases", "probe"))
@@ -345,6 +390,7 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     try:
+        _refuse_unrepresentable(a.gains, a.pulse_drive_comp)
         if a.mode == "decimator":
             res = decimator_sweep(a.gains)
         elif a.mode == "probe":
