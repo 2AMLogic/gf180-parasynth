@@ -23,6 +23,14 @@ It also records `runner_name`, which is what actually settled #264: every
 cancellation sat on a GitHub-hosted runner and none on a Blacksmith one. That
 column is not visible anywhere in `gh run list` output.
 
+EVERY ATTEMPT IS A JOB. `/actions/runs/<id>/jobs` answers with a run's latest
+attempt only, so a rerun hides the attempt it replaced -- including one
+cancelled at the cap. #1587 was exactly that: a push run cancelled at 40
+minutes, rerun on the same SHA, after which the latest-attempt read said
+`cancelled jobs: 0` for the window holding it. Each attempt is read from
+`/actions/runs/<id>/attempts/<n>/jobs` and counted as a job of its own. A
+rerun that is still in flight contributes its finished attempts only.
+
 REFUSED IS AN OUTCOME. This queries a live API, so it can fail to answer. It
 distinguishes three exits, because a check that cannot run must never look
 like a check that passed:
@@ -110,14 +118,29 @@ class JobRecord:
     queue_s: float | None
     job_minutes: float | None
     steps: dict[str, float] = field(default_factory=dict)
+    attempt: int = 1
 
     @property
     def runner_bucket(self) -> str:
         return runner_class(self.runner_name)
 
 
-def parse_jobs(run_meta: dict, jobs_payload: dict, job_name: str) -> list[JobRecord]:
-    """Turn one run's `/jobs` payload into `JobRecord`s for the named job.
+def finished_attempts(run: dict) -> list[int]:
+    """Attempt numbers of `run` that can hold a finished job, oldest first.
+
+    A completed run has finished all of its attempts. A rerun still in flight
+    has finished every attempt but its latest: the latest is the rerun, and
+    the ones below it are the attempts it replaced, so those are read and the
+    rerun is not.
+    """
+    latest = run.get("attempt") or 1
+    last = latest if run.get("status") == "completed" else latest - 1
+    return list(range(1, last + 1))
+
+
+def parse_jobs(run_meta: dict, jobs_payload: dict, job_name: str,
+               attempt: int | None = None) -> list[JobRecord]:
+    """Turn one attempt's `/jobs` payload into `JobRecord`s for the named job.
 
     Pure: no network, no clock. A step with a missing timestamp (it never
     started, or is still running) is omitted from `steps` rather than recorded
@@ -145,6 +168,7 @@ def parse_jobs(run_meta: dict, jobs_payload: dict, job_name: str) -> list[JobRec
             queue_s=_span_seconds(job.get("created_at"), job.get("started_at")),
             job_minutes=(job_s / 60.0) if job_s is not None else None,
             steps=steps,
+            attempt=attempt or job.get("run_attempt") or 1,
         ))
     return out
 
@@ -212,16 +236,17 @@ def _gh(args: list[str], cwd: pathlib.Path) -> str:
 
 def collect(repo: str, workflow: str, job_name: str, limit: int,
             cwd: pathlib.Path) -> list[JobRecord]:
-    fields = "databaseId,event,conclusion,status,headSha,headBranch,createdAt"
+    fields = ("databaseId,event,conclusion,status,headSha,headBranch,createdAt,"
+              "attempt")
     runs = json.loads(_gh(["run", "list", f"--workflow={workflow}",
                            "--limit", str(limit), "--json", fields], cwd))
     records: list[JobRecord] = []
     for run in runs:
-        if run.get("status") != "completed":
-            continue                                       # still in flight
-        payload = json.loads(
-            _gh(["api", f"repos/{repo}/actions/runs/{run['databaseId']}/jobs"], cwd))
-        records.extend(parse_jobs(run, payload, job_name))
+        for attempt in finished_attempts(run):
+            payload = json.loads(_gh(
+                ["api", f"repos/{repo}/actions/runs/{run['databaseId']}"
+                       f"/attempts/{attempt}/jobs"], cwd))
+            records.extend(parse_jobs(run, payload, job_name, attempt))
     if not records:
         raise Refusal(f"no completed `{job_name}` jobs found in the last "
                       f"{limit} runs of {workflow}")
@@ -233,7 +258,7 @@ def collect(repo: str, workflow: str, job_name: str, limit: int,
 # --------------------------------------------------------------------------
 
 def render(records: list[JobRecord], summary: dict) -> str:
-    lines = [f"{summary['total']} `{DEFAULT_JOB}` job(s) measured "
+    lines = [f"{summary['total']} `{DEFAULT_JOB}` job attempt(s) measured "
              f"({records[-1].created_at} -> {records[0].created_at})", ""]
     for name, s in summary["by_runner"].items():
         lines.append(f"{name}: n={s['n']}  cancelled={s['cancelled']} "
@@ -252,7 +277,8 @@ def render(records: list[JobRecord], summary: dict) -> str:
     cancelled = [r for r in records if r.conclusion == "cancelled"]
     lines.append(f"cancelled jobs: {len(cancelled)}")
     for r in cancelled:
-        lines.append(f"  {r.run_id} {r.event:<13} {r.runner:<14} {r.created_at} {r.branch}")
+        lines.append(f"  {r.run_id} attempt {r.attempt}  {r.event:<13} "
+                     f"{r.runner:<14} {r.created_at} {r.branch}")
     return "\n".join(lines)
 
 
@@ -265,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, default=60,
                     help="how many recent runs to pull (default 60)")
     ap.add_argument("--window", type=int, default=40,
-                    help="how many recent jobs --require-clean inspects "
+                    help="how many recent job attempts --require-clean inspects "
                          "(default 40, i.e. ~20 push+pull_request pairs)")
     ap.add_argument("--require-clean", action="store_true",
                     help="exit 1 if the window contains a timeout cancellation")

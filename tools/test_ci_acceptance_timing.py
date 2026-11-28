@@ -22,8 +22,8 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ci_acceptance_timing import (                                # noqa: E402
-    JobRecord, Refusal, main, parse_jobs, runner_class, summarise,
-    timeout_cancellations,
+    JobRecord, Refusal, finished_attempts, main, parse_jobs, runner_class,
+    summarise, timeout_cancellations,
 )
 
 
@@ -213,3 +213,116 @@ def test_refusal_is_raised_when_gh_is_missing(monkeypatch):
     monkeypatch.setattr(mod.subprocess, "run", _boom)
     with pytest.raises(Refusal):
         mod._gh(["run", "list"], mod.pathlib.Path("."))
+
+
+# -- a rerun must not hide the attempt it replaced (#1587) -------------------
+
+def _rerun(conclusion: str, attempt: int, *, rest_s: int) -> dict:
+    payload = _jobs(conclusion, "GitHub Actions 1", rest_s=rest_s)
+    payload["jobs"][0]["run_attempt"] = attempt
+    return payload
+
+
+def _fake_gh(runs: list[dict], served: dict[str, dict]):
+    """Answer `_gh` from canned payloads, keyed by the API path after
+    `actions/`. `/runs/<id>/jobs` and `/runs/<id>/attempts/<n>/jobs` are
+    separate keys, as they are on the real API."""
+    def _gh(args: list[str], cwd) -> str:
+        if args[0] == "run":
+            return json.dumps(runs)
+        return json.dumps(served[args[-1].split("actions/")[-1]])
+    return _gh
+
+
+@pytest.mark.parametrize("status,expected", [
+    ("completed", [(1, "cancelled"), (2, "success")]),
+    ("in_progress", [(1, "cancelled")]),
+])
+def test_a_rerun_does_not_hide_the_attempt_it_replaced(
+        monkeypatch, tmp_path, capsys, status, expected):
+    """The #1587 shape. Push run 46082819608 was cancelled at the 40-minute
+    cap, was rerun on the same SHA, and passed. `/runs/<id>/jobs` answers
+    with the latest attempt only, so reading it reported `cancelled jobs: 0`
+    and PASS for a window holding a confirmed timeout. The replaced attempt
+    is an event a rerun does not undo; it is read and it fails the gate,
+    whether or not the rerun has finished."""
+    import ci_acceptance_timing as mod
+
+    runs = [{"databaseId": 46082819608, "event": "push", "headBranch": "feature/x",
+             "headSha": "0123456789abcdef", "createdAt": "2026-11-27T23:30:01Z",
+             "status": status, "conclusion": None, "attempt": 2}]
+    served = {"runs/46082819608/jobs": _rerun("success", 2, rest_s=1057),
+              "runs/46082819608/attempts/1/jobs":
+                  _rerun("cancelled", 1, rest_s=1595),
+              "runs/46082819608/attempts/2/jobs":
+                  _rerun("success", 2, rest_s=1057)}
+    monkeypatch.setattr(mod, "_gh", _fake_gh(runs, served))
+
+    recs = mod.collect("o/r", "moog-acceptance.yml", "acceptance", limit=60,
+                       cwd=mod.pathlib.Path("."))
+    snap = _snapshot(tmp_path, recs)
+    assert main(["--offline", str(snap), "--require-clean", "--window", "1"]) == 1
+    assert "cancelled jobs: 1" in capsys.readouterr().out
+    assert [(r.attempt, r.conclusion) for r in recs] == expected
+
+
+@pytest.mark.parametrize("run,expected", [
+    ({"status": "completed", "attempt": 1}, [1]),
+    ({"status": "completed"}, [1]),
+    ({"status": "completed", "attempt": 3}, [1, 2, 3]),
+    ({"status": "in_progress", "attempt": 2}, [1]),
+    ({"status": "in_progress", "attempt": 1}, []),
+    ({"status": "in_progress"}, []),
+])
+def test_finished_attempts_reads_every_attempt_but_an_unfinished_one(run, expected):
+    assert finished_attempts(run) == expected
+
+
+def test_an_in_flight_first_attempt_still_supplies_nothing(monkeypatch):
+    """Nothing has finished, so there is no duration to report. That is an
+    absence, not a clean window."""
+    import ci_acceptance_timing as mod
+
+    runs = [{"databaseId": 1, "event": "push", "headBranch": "main",
+             "headSha": "0123456789abcdef", "createdAt": _iso(0),
+             "status": "in_progress", "conclusion": None, "attempt": 1}]
+    monkeypatch.setattr(mod, "_gh", _fake_gh(runs, {}))
+    with pytest.raises(Refusal):
+        mod.collect("o/r", "moog-acceptance.yml", "acceptance", limit=60,
+                    cwd=mod.pathlib.Path("."))
+
+
+@pytest.mark.parametrize("kwarg,field,expected", [
+    (1, None, 1), (2, None, 2), (None, 2, 2), (None, None, 1),
+])
+def test_parse_jobs_keeps_the_attempt_number(kwarg, field, expected):
+    payload = _jobs("success", "GitHub Actions 1", rest_s=300)
+    payload["jobs"][0]["run_attempt"] = field
+    (rec,) = parse_jobs(_run(1), payload, "acceptance", attempt=kwarg)
+    assert rec.attempt == expected
+
+
+def test_the_replaced_attempts_truncated_step_stays_out_of_the_timing():
+    """It is counted as a cancellation and still excluded from the step
+    statistics: its last step was cut at the cap, so its length is a lower
+    bound, not a sample."""
+    cancelled = parse_jobs(_run(46082819608), _rerun("cancelled", 1, rest_s=1595),
+                           "acceptance", attempt=1)
+    rerun = parse_jobs(_run(46082819608), _rerun("success", 2, rest_s=1057),
+                       "acceptance", attempt=2)
+    s = summarise(cancelled + rerun)["by_runner"]["github-hosted"]
+    assert s["cancelled"] == 1
+    assert s["steps"]["the rest of the model suite"] == {
+        "n": 1, "min": 1057.0, "max": 1057.0, "median": 1057.0}
+
+
+def test_a_snapshot_written_before_attempts_were_recorded_still_loads(
+        tmp_path, capsys):
+    recs = _records([("success", "GitHub Actions 1", 440)] * 2)
+    rows = [asdict(r) for r in recs]
+    for row in rows:
+        del row["attempt"]
+    snap = tmp_path / "old.json"
+    snap.write_text(json.dumps(rows))
+    assert main(["--offline", str(snap), "--require-clean", "--window", "2"]) == 0
+    assert "PASS" in capsys.readouterr().out

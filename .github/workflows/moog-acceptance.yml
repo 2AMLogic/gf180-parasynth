@@ -93,6 +93,28 @@ jobs:
     # -- so a hosted run is not cancelled for being on a slower machine.
     # Re-measure with tools/ci_acceptance_timing.py once hosted runs
     # accumulate.
+    #
+    # Re-measured 2026-11-28, the 60 most recent runs (created 2026-11-27
+    # 09:02Z to 2026-11-28 01:09Z), all GitHub-hosted, 61 job attempts with
+    # one in flight (#1587):
+    #
+    #   59 not cancelled       15.5 / 22.2 / 31.5 min (min/median/max);
+    #                          56 passed, 3 failed tests
+    #    1 cancelled at cap    push run 46082819608, attempt 1, 40m14s
+    #    1 rerun of it         attempt 2, same SHA, passed in 29m51s
+    #
+    # Sorted by the properties step, the 57 passes sit in two bands: 34 at
+    # 124-197 s (job 15.5-24.4 min) and 20 at 238-260 s (job 27.9-31.5 min),
+    # with three between. Every step is longer in the upper band, so the
+    # margin the cap has is that band's -- 40 against 31.5 is 1.27x, not the
+    # 1.6x above. The cancelled attempt is the only one in the window, and a
+    # slow machine does not describe it: against attempt 2 on the same SHA its
+    # properties and TR-808 steps ran 1.15x and 1.11x longer, and its last
+    # step took 2.2-2.4x the time to reach each of 15, 22 and 30%. The cause
+    # is not established, so the cap is unchanged -- one unexplained sample
+    # does not size a budget, and a rerun is the recovery. `--require-clean`
+    # reads every attempt since #1587; before that a rerun hid the
+    # cancellation it replaced.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
