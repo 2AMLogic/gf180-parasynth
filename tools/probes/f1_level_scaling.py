@@ -419,8 +419,8 @@ def main(argv=None) -> int:
                          if x not in ("--expect-refused", a.expect_refused)])
         out = buf.getvalue()
         print(out, end="")
-        refusal = [ln for ln in out.splitlines() if ln.startswith("REFUSED")]
-        if code == 2 and refusal and a.expect_refused in refusal[-1]:
+        refused_lines = [ln for ln in out.splitlines() if ln.startswith("REFUSED")]
+        if code == 2 and refused_lines and a.expect_refused in refused_lines[-1]:
             print(f"CONTROL OK  refused for the stated reason: {a.expect_refused!r}")
             return 0
         print(f"CONTROL FAILED  exit {code}; wanted a refusal containing {a.expect_refused!r}")
@@ -455,7 +455,7 @@ def main(argv=None) -> int:
         jobs_in = [(n, s, amp, a.inject) for n, s in CANDIDATES.items() for amp in AMPS]
         with cf.ProcessPoolExecutor(max_workers=a.workers) as ex:
             jobs = list(ex.map(run_job, jobs_in))
-    except (Refused, cap.Refused, f1.Refused, rc.Refused) as e:
+    except refusal.Refused as e:
         print(f"REFUSED  {e}")
         return 2
 

@@ -4,7 +4,9 @@ an engine substitution from being recorded under the wrong label.
 The simulation itself is not exercised here (two curves of iverilog is about
 twenty minutes). What is exercised is everything that could silently mislabel or
 silently overwrite: the engine guard in `run_case.run_filter_case`, the
-disagreement report, and the refusal to let a control land on the board.
+disagreement report, the refusal to let a control land on the board, and the
+CLI handler's exit contract -- a refusal from any module the run reaches is
+REFUSED (2), never a traceback (#1643).
 """
 import json
 from types import SimpleNamespace
@@ -12,7 +14,10 @@ from unittest.mock import patch
 
 import pytest
 
+import exit_contract
 import f1_rtl_filter_path as rtlpath
+import refusal
+import refprofile as rp
 import run_case as rc
 import score_f1_rtl as score
 
@@ -187,3 +192,192 @@ def test_the_injection_names_match_the_rtl_paths_own_list():
     assert set(rtlpath.INJECTS_NOT_EXERCISED) <= set(rtlpath.INJECTS)
     assert set(rtlpath.INJECTS_EXERCISED) | set(rtlpath.INJECTS_NOT_EXERCISED) \
         == set(rtlpath.INJECTS)
+
+
+# --- the CLI handler: a cross-module refusal must exit REFUSED (#1643) --------
+# `main` guarded `rc.run_filter_case` with `except (rtlpath.Refused, rc.Refused)`.
+# The callee reads the frozen reference through
+# `run_case.load_filter_reference` -> `refprofile.load_clip`, which raises
+# `refprofile.Refused` for an absent, short, mis-hashed or silent clip: a
+# SIBLING of both classes the tuple named. On a host without the frozen audio
+# cache the refusal left `main` as a traceback (exit 1) -- a refusal rendered
+# as FAIL, where the exit contract owes REFUSED (2).
+#
+# MEASURED, the seven controls against six handler variants (2026-11-28, main @
+# a9fe1c53), as failed / passed:
+#   the old two-class tuple               3 / 4   absent cache (both flag paths) and
+#                                                  mono_m5a_score, the RTL path's
+#                                                  model side: each escaped `main`
+#   `except Exception`                    2 / 5   ValueError and UnboundLocalError:
+#                                                  "DID NOT RAISE"
+#   the tuple with `rp.Refused` appended  1 / 6   mono_m5a_score: that repair fixes
+#                                                  one sibling, not the family
+#   `(rtlpath.Refused, rp.Refused)`       2 / 5   run_case and mono_m5a_score escape
+#   the shipped handler, with a LOCAL     7 / 0   the #1624 shape: a local named
+#   named `refusal` in `main`                     `refusal` turns every exception
+#                                                  leaving the try into an
+#                                                  UnboundLocalError; the first
+#                                                  control names the local
+#   the shipped repair                    0 / 7
+#
+# WHAT IS STOOD IN, AND WHAT THAT IS BLIND TO. Every control drives the real
+# `main` and the real `run_case.run_filter_case`, and the frozen-clip refusal is
+# the real `refprofile.load_clip` raise, reached with `refprofile.PROFILE_DIR`
+# pointed at an empty directory: the committed profile still names the clip, so
+# only its audio is gone -- a host's state before `tools/refprofile_restore.py`.
+# Held fixed because they are properties of the HOST, not of the handler:
+# `base_check` (this checkout's staleness, which has its own handler earlier in
+# `main`) and, in five controls, the RTL path's constructor. That constructor
+# needs iverilog/vvp on PATH and builds a model voice first, while `main` reads
+# only its `engine` and its iverilog version before the refusal fires; the
+# control whose refusal arises INSIDE it runs the real one. Its own refusal
+# (`rtlpath.Refused`, exit 2) is controlled in
+# tools/test_f1_response_destination.py. Blind to: a constructor that comes to
+# refuse for its own reasons before the frozen clip is read. Measured as a real
+# process on this host with nothing stood in (Icarus Verilog 13.0, no cache):
+# before the repair the CLI exited 1 with a 16-line traceback, after it exit 2
+# with the one REFUSED line.
+
+REFUSED_PREFIX = "score_f1_rtl: REFUSED -- "
+
+
+class _RtlPathStandIn:
+    """What `main` reads off the RTL path before `run_filter_case` refuses at
+    the frozen clip: its engine (the guard in `run_filter_case`) and its
+    iverilog version (the banner). No RTL is simulated."""
+
+    engine = rtlpath.ENGINE
+    tools = {"iverilog": "stand-in: no RTL is simulated in these controls"}
+
+
+def _stale_base_fixed(monkeypatch):
+    """`base_check`'s answer is a property of the host's checkout, and it has
+    its own handler, before the one under test."""
+    monkeypatch.setattr(rc, "BASE_STATE", rc.BASE_STATE)    # `main` rebinds it
+    monkeypatch.setattr(rc, "base_check", lambda allow_stale=False: {})
+
+
+def _rtl_path_stood_in(monkeypatch):
+    """Replace the RTL path's constructor, which needs iverilog/vvp on PATH."""
+    monkeypatch.setattr(rtlpath, "RtlFilterChainPath", lambda **kw: _RtlPathStandIn())
+
+
+def _run(tmp_path, *flags):
+    results = tmp_path / "results"
+    code = score.main(["--case", "F1A", "--results", str(results), *flags])
+    return code, results
+
+
+def _refused_line(out):
+    lines = out.err.splitlines()
+    assert len(lines) == 1 and lines[0].startswith(REFUSED_PREFIX), lines
+    return lines[0]
+
+
+def _nothing_written(results):
+    assert not results.exists() or not any(results.iterdir()), \
+        "neither a record nor a curve may be written"
+
+
+def _frozen_clip():
+    return rc.filter_spec(_case()["case_id"])["ref_clip"]
+
+
+def test_the_refusal_families_the_handler_must_catch_share_only_the_base():
+    """The relation the base-class handler rests on: the frozen cache's
+    refusal is neither class the tuple named, none is a subclass of another,
+    and all three are `refusal.Refused`."""
+    assert not issubclass(rp.Refused, (rtlpath.Refused, rc.Refused))
+    assert not issubclass(rc.Refused, rtlpath.Refused)
+    assert not issubclass(rtlpath.Refused, rc.Refused)
+    for klass in (rtlpath.Refused, rc.Refused, rp.Refused):
+        assert issubclass(klass, refusal.Refused), klass
+    # `except refusal.Refused` reads the MODULE only while no local of `main`
+    # is named `refusal`: in f1_level_scaling one was, and the same repair
+    # raised UnboundLocalError for every exception leaving the try (#1624).
+    assert "refusal" not in score.main.__code__.co_varnames
+
+
+@pytest.mark.parametrize("flags", [(), ("--no-audio",)],
+                         ids=["curve-written", "no-audio"])
+def test_absent_frozen_cache_exits_refused_2_and_names_the_clip(tmp_path, monkeypatch,
+                                                                capsys, flags):
+    """The real raise site. `refprofile.PROFILE_DIR` is pointed at an empty
+    directory: the committed profile still names the clip, so only its audio
+    is gone -- a host's state before `tools/refprofile_restore.py`."""
+    empty = tmp_path / "frozen-cache"
+    empty.mkdir()
+    monkeypatch.setattr(rp, "PROFILE_DIR", empty)
+    _stale_base_fixed(monkeypatch)
+    _rtl_path_stood_in(monkeypatch)
+    code, results = _run(tmp_path, *flags)
+    out = capsys.readouterr()
+    assert code == exit_contract.REFUSED, (code, out.out[-400:], out.err[-400:])
+    assert "this runs two RTL curves" in out.out, out.out[-400:]
+    assert _refused_line(out).startswith(
+        f"{REFUSED_PREFIX}the frozen reference audio for {_frozen_clip()!r} "
+        "is not in the cache (")
+    assert "REFUSED" not in out.out
+    _nothing_written(results)
+
+
+def test_a_run_case_refusal_at_the_same_boundary_still_exits_refused_2(
+        tmp_path, monkeypatch, capsys):
+    """The sibling the tuple already caught. A repair that swaps the tuple for
+    `rp.Refused` fixes the reported escape and drops this one."""
+    def not_projectable(clip_id, inject=""):
+        raise rc.Refused(f"the frozen clip {clip_id} could not be projected: <control>")
+    monkeypatch.setattr(rc, "load_filter_reference", not_projectable)
+    _stale_base_fixed(monkeypatch)
+    _rtl_path_stood_in(monkeypatch)
+    code, results = _run(tmp_path, "--no-audio")
+    out = capsys.readouterr()
+    assert code == exit_contract.REFUSED, (code, out.err[-400:])
+    assert _refused_line(out) == (
+        f"{REFUSED_PREFIX}the frozen clip {_frozen_clip()} could not be projected: "
+        "<control>")
+    _nothing_written(results)
+
+
+def test_a_mono_m5a_score_refusal_from_the_rtl_path_model_side_exits_refused_2(
+        tmp_path, monkeypatch, capsys):
+    """The input that defeats the repair the issue rejected -- appending
+    `rp.Refused` to the tuple. The REAL constructor builds the model side
+    first (`f1_filter_path.SelectedFilterPath`), which asks
+    `mono_m5a_score.engine_configuration` for the profile: a third sibling, at
+    another line of the same try. It fires only for a profile name missing
+    from `ENGINE_PROFILES`, a programming error rather than a host state."""
+    import f1_filter_path as fp
+    import mono_m5a_score as m5
+    monkeypatch.delitem(m5.ENGINE_PROFILES, fp.ENGINE_PROFILE)
+    _stale_base_fixed(monkeypatch)
+    code, results = _run(tmp_path, "--no-audio")
+    out = capsys.readouterr()
+    assert code == exit_contract.REFUSED, (code, out.out[-400:], out.err[-400:])
+    assert _refused_line(out) == (
+        f"{REFUSED_PREFIX}unsupported Mono engine configuration {fp.ENGINE_PROFILE!r}")
+    assert "this runs two RTL curves" not in out.out
+    _nothing_written(results)
+
+
+@pytest.mark.parametrize("error", [ValueError, UnboundLocalError])
+def test_an_unrelated_error_at_the_same_boundary_is_an_execution_error(
+        tmp_path, monkeypatch, capsys, error):
+    """The input that defeats the wrong repair (verification-rules rule 8):
+    `except Exception` relabels every traceback REFUSED, and these are the
+    controls that go red when it is swapped in. `UnboundLocalError` is what the
+    #1624 site's first repair turned every refusal into."""
+    def not_a_refusal(clip_id, inject=""):
+        raise error("<control> the probe grid is not a number")
+    monkeypatch.setattr(rc, "load_filter_reference", not_a_refusal)
+    _stale_base_fixed(monkeypatch)
+    _rtl_path_stood_in(monkeypatch)
+    results = tmp_path / "results"
+    with pytest.raises(error, match="the probe grid is not a number") as err:
+        score.main(["--case", "F1A", "--results", str(results), "--no-audio"])
+    assert "run_filter_case" in [fr.name for fr in err.traceback], \
+        "the control must fire at the frozen-clip boundary"
+    out = capsys.readouterr()
+    assert "REFUSED" not in out.err, \
+        "an execution error must not be relabelled a refusal"
+    _nothing_written(results)
