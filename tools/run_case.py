@@ -670,7 +670,7 @@ def _effective_span_s(p, sr: int, *, centroid_s: float | None = None) -> float:
     return length_s * u * (1.0 - math.exp(-1.0 / u))
 
 
-def band_pair_decay_bias_db(x, sr: int, band_a, band_b) -> float:
+def band_pair_decay_bias_db(x, sr: int, band_a, band_b) -> float | None:
     """How much of a fixed-window `band_pair_db` is the DECAY rather than the
     balance, estimated from the record itself.
 
@@ -685,6 +685,15 @@ def band_pair_decay_bias_db(x, sr: int, band_a, band_b) -> float:
     from sample zero: a record that arrives with the pre-onset lead
     `band_energy` requires would otherwise charge that lead to both bands and
     pull every span towards the record length.
+
+    Returns None when the bias is UNDEFINED, rather than 0 (#1743): a band
+    with no energy after the onset -- `_effective_span_s` reads that as the
+    stationary case, the record length, so two silent bands read a span ratio
+    of 1 -- or a span of exactly 0 on either side, a record more impulsive
+    than the filter's own ring, where two zeros have no ratio. Until #1743 the
+    last line divided `max(span, 1e-300)` by `max(span, 1e-300)` and both read
+    0.0 dB. The early `return 0.0` guards are the document's own
+    no-correction case for a record too short to estimate on, not silence.
 
     Validated against known tau pairs in `tools/probes/estimator_domains.py` 2."""
     from scipy.signal import sosfiltfilt
@@ -701,9 +710,13 @@ def band_pair_decay_bias_db(x, sr: int, band_a, band_b) -> float:
         if len(seg) <= _sosfiltfilt_padlen(sos):
             return 0.0
         p = sosfiltfilt(sos, seg) ** 2
+        if not (np.isfinite(p).all() and float(p.sum()) > 0.0):
+            return None
         c = _centroid_s(p, sr) - _band_ring_centroid_s(sr, band, len(seg))
         spans.append(_effective_span_s(p, sr, centroid_s=max(c, 0.0)))
-    return 10.0 * math.log10(max(spans[0], 1e-300) / max(spans[1], 1e-300))
+    if spans[0] <= 0.0 or spans[1] <= 0.0:
+        return None
+    return 10.0 * math.log10(spans[0] / spans[1])
 
 
 def _line_edge_margin(x, sr: int, band) -> tuple:
@@ -782,6 +795,9 @@ def band_pair_db(x, sr: int, band_a, band_b, *, floor_db: float = -80.0,
                     **detail)
     if min_decay_bias_db is not None:
         bias = band_pair_decay_bias_db(x, sr, band_a, band_b)
+        if bias is None:
+            return am.Estimate(None, False, "the decay bias is undefined: a band holds no energy "
+                               "after the onset, or has a zero effective span", detail, BAND_PAIR_DOMAIN)
         detail["decay_bias_db"] = bias
         if abs(bias) > min_decay_bias_db:
             return BAND_PAIR_DOMAIN.refuse(
