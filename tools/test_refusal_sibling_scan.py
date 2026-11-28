@@ -158,6 +158,38 @@ def go(p):
         print("REFUSED", e)
 '''
 
+CALLER_RERAISE_TRANSLATE = '''
+import mod_a
+
+def go(p):
+    try:
+        mod_a.load(p)
+    except mod_a.Refused as e:
+        raise SystemExit(str(e))
+'''
+
+CALLER_RERAISE_BARE = '''
+import mod_a
+
+def go(p):
+    try:
+        mod_a.load(p)
+    except mod_a.Refused:
+        raise
+'''
+
+CALLER_RERAISE_MIXED = '''
+import mod_a
+
+def go(p):
+    try:
+        mod_a.load(p)
+    except mod_a.Refused:
+        raise
+    except mod_a.Refused as e:
+        print("REFUSED", e)
+'''
+
 CALLER_CLI_BASE_GUARD = '''
 import sys
 import refusal
@@ -363,6 +395,9 @@ def _tree(tmp_path: pathlib.Path) -> list[pathlib.Path]:
                        ("caller_localvar", CALLER_LOCAL_VAR_FALSE_POSITIVE),
                        ("caller_broad", CALLER_BROAD_GUARD),
                        ("caller_exact", CALLER_EXACT_MODULE_GUARD),
+                       ("caller_reraise_translate", CALLER_RERAISE_TRANSLATE),
+                       ("caller_reraise_bare", CALLER_RERAISE_BARE),
+                       ("caller_reraise_mixed", CALLER_RERAISE_MIXED),
                        ("caller_cli_base", CALLER_CLI_BASE_GUARD),
                        ("caller_except_clause", CALLER_EXCEPT_CLAUSE),
                        ("caller_else_clause", CALLER_ELSE_CLAUSE),
@@ -404,6 +439,26 @@ def test_sibling_guarded_call_is_a_candidate_escape(tmp_path):
     s = _scan(tmp_path)[("caller_sibling.py", "mod_a.load")]
     assert s["classification"] == "candidate-escape"
     assert s["uncovered"] == ["mod_a"], s
+
+
+def test_raise_only_crediting_handler_is_annotated_not_reclassified(tmp_path):
+    """#2007: `covered` names the catching clause, not where a re-raise lands.
+    The kind rides in `guard`; `classification` stays `covered(exact)`."""
+    sites = _scan(tmp_path)
+    t = sites[("caller_reraise_translate.py", "mod_a.load")]
+    b = sites[("caller_reraise_bare.py", "mod_a.load")]
+    assert t["guard"] == "exact>reraise-translate", t
+    assert b["guard"] == "exact>reraise-bare", b
+    assert t["classification"] == b["classification"] == "covered(exact)"
+
+
+def test_handler_doing_real_work_is_not_annotated(tmp_path):
+    sites = _scan(tmp_path)
+    for key in (("caller_exact.py", "mod_a.load"), ("caller_base.py", "mod_a.load")):
+        assert "reraise" not in sites[key]["guard"], sites[key]
+    # mixed: one raise-only and one real handler credit the call -> no annotation
+    m = sites[("caller_reraise_mixed.py", "mod_a.load")]
+    assert m["guard"] == "exact,exact", m
 
 
 def test_base_guard_is_covered(tmp_path):
