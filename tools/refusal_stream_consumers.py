@@ -10,10 +10,11 @@ figure in the issue's closing comment comes from it, and because the next
 person who asks the same question should not have to re-derive the reading
 below.
 
-WHAT IT FOUND on origin/main @ dd0449e0, 2026-11-28 (volatile: re-run it).
+WHAT IT FOUND on origin/main @ 616b8d63, 2026-11-28 (volatile: re-run it).
 
-  * 532 refusal lines in 242 non-test Python files; 13 files print them on
-    BOTH streams, and one more does under the looser rule.
+  * 534 refusal lines in 244 non-test Python files, one line and one file of
+    which are this census's own; 13 files print them on BOTH streams, and
+    one more does under the looser rule.
   * WRONG BEFORE IT WAS RIGHT -- the premise.  #1988's table said eleven
     files split, measured with
 
@@ -83,7 +84,9 @@ and a verdict:
 A launch whose first argument is `git` (or another DATA_PROGRAM) and that
 names the tool reads its source, not its output: a `data` row.  An import
 that calls no function reaching a refusal line is an `import` row.  A line
-that names the tool in a comment or docstring is a `mention` row.
+that names the tool in a comment or docstring is a `mention` row.  This
+file is not a reader of anything: it names the eleven to re-run #1988's
+grep on their source, so it is left out of its own census.
 
 WHAT IT CANNOT SEE.  A message assembled before the print
 (`print("\\n".join(lines))`) is not a site; a refusal passed to a helper in
@@ -117,6 +120,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 MIN_PY_FILES = 300
 RUNNER = "tools/run_all.py"
 MAKEFILE = "Makefile"
+SELF = "tools/refusal_stream_consumers.py"
 READER_SUFFIXES = (".py", ".yml", ".yaml", ".sh", ".txt", ".mk", ".toml", "")
 
 ISSUE_1988_FILES = (
@@ -1001,7 +1005,7 @@ def census(root: pathlib.Path | None = None, files: list[str] | None = None) -> 
         site_funcs = reaching_functions(_parse(root, tool), {s.func for s in loose[tool]})
         streams = {s.stream for s in loose[tool]}
         for rel in readers:
-            if rel == tool:
+            if rel == tool or rel == SELF:
                 continue
             try:
                 if rel.endswith(".py"):
