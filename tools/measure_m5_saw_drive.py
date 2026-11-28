@@ -25,6 +25,11 @@ A candidate that does not improve on the baseline is not a winner.
 Confirmation: M5B (its MIDI 72 saw was not used to select) and probe points at
 untouched notes (36, 48, 60, 72, 108, 120): relative unwanted energy not worse
 by > 1 dB, no output rail samples.
+
+Exit status follows `tools/exit_contract.py`: 0 when at least one drive was
+measured, 2 (REFUSED, one `REFUSED:` line on stdout, the report still
+written) when every drive refused, and 2 with no report for a drive
+outside the budget.
 """
 from __future__ import annotations
 
@@ -209,7 +214,7 @@ def _run(argv) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1) + "\n")
     print(f"wrote {a.out}")
-    return 0
+    return ol.drives_exit(rows)
 
 
 def main(argv=None) -> int:

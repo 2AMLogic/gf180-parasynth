@@ -44,10 +44,18 @@ below is what the short notes still support.
   segments come from fresh plugin instances and were joined afterwards
   with inserted silence. The two MIDI-84 estimates therefore describe a
   pitch difference between independent captures (#1433).
+
+EXIT STATUS follows `tools/exit_contract.py` (#1857): 0 when at least one Mini
+V3 window answered, 2 (REFUSED, one `REFUSED:` line on stdout, the last line)
+when every window refused. The table above it is still printed in full and
+`--json` is still written, so the record of each refusal exists. A window
+answered when its verdict is not REFUSED, whatever the refusal's code. Surge
+XT and Diva are refused on every host and are not counted.
 """
 from __future__ import annotations
 
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -57,11 +65,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "model"))
 sys.path.insert(0, os.path.join(ROOT, "audition"))
+sys.path.insert(0, HERE)
 
 import numpy as np                                                   # noqa: E402
 
 import osc_drift_probe as odp                                        # noqa: E402
 from dsp import note_hz                                              # noqa: E402
+from exit_contract import PASS, REFUSED                              # noqa: E402
 
 SCOREBOARD = os.path.join(ROOT, "docs", "scorecard")
 TAIL_S = 1.2        # how far past GATE OFF to look for usable held tone. A
@@ -356,6 +366,31 @@ def refused_references() -> list:
     ]
 
 
+def windows_exit(reports) -> int:
+    """The run's exit status (`tools/exit_contract.py`), from the Mini V3
+    window reports.
+
+    A window answered when its report's verdict is not REFUSED, whatever a
+    refusal's code: audio the host cannot reach (CLIP_ABSENT, CLIP_HASH) and
+    a window the probe cannot read (TOO_FEW_PERIODS) both left no drift
+    estimate. PASS if any window answered -- the refusals stay on record
+    beside the measurements. REFUSED when none did (#1857). An across-note
+    pair cannot answer where its windows did not (`odp.across_note_drift`
+    refuses unless every window carries a reported verdict), so the windows
+    alone decide. Surge XT and Diva are refused by construction
+    (`refused_references`) and are not counted either way."""
+    codes = collections.Counter(r.get("refusal", "UNCODED") for r in reports
+                                if r["verdict"] == odp.REFUSED)
+    if sum(codes.values()) < len(reports):
+        return PASS
+    tally = ", ".join(f"{code} x{n}" for code, n in sorted(codes.items())) \
+        or "no window was requested"
+    print(f"REFUSED: Mini V3 drift measured nothing: 0 of {len(reports)} window(s) answered; "
+          f"{tally}. Surge XT and Diva are refused by construction and are not counted",
+          flush=True)
+    return REFUSED
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--json", default=None)
@@ -400,7 +435,7 @@ def main(argv=None) -> int:
         with open(a.json, "w") as fh:
             json.dump(out, fh, indent=1, sort_keys=True, default=float)
         print(f"-- wrote {a.json}")
-    return 0
+    return windows_exit(mv["reports"])
 
 
 if __name__ == "__main__":

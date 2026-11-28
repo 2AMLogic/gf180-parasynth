@@ -23,6 +23,10 @@ here cannot drift from the ones D10A/D13A are scored at.
     python tools/measure_partial_balance.py validate    # start red, then the known cases
     python tools/measure_partial_balance.py measure     # the recordings, floor-gated
 
+`measure` exits 0 when at least one balance cell cleared the floor margin and
+2 (REFUSED, `tools/exit_contract.py`) when none did: a table that is REFUSED
+in every cell has measured nothing, whatever its status.
+
 Needs the Fischer corpus (tidalcycles/sounds-tr808-fischer) at $GF180_TR808_REFS (alias
 $TR808_REFS), else /tmp/tr808-ref. REFUSES rather than reports when it is absent.
 """
@@ -35,6 +39,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import partial_trajectory as PT                 # noqa: E402
 import preparation_contract as pc               # noqa: E402
 import run_case as rc                           # noqa: E402
+from exit_contract import PASS, REFUSED         # noqa: E402
 
 REFDIR = rc.configured_refs()
 
@@ -187,6 +192,7 @@ def cmd_measure():
           f"real TR-808 s/n 103852)")
     print(f"    run_at                      {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%dT%H:%M:%SZ}")
 
+    answered, cells = 0, 0
     for voice in ("RS", "CB"):
         op = OP[voice]
         print(f"\n{'='*94}\n{voice}   (estimator error +-{op['err_db']:.1f} dB, "
@@ -222,10 +228,17 @@ def cmd_measure():
                 ok = hl > FLOOR_MARGIN_DB and hh > FLOOR_MARGIN_DB
                 cell[side] = (20 * math.log10(d["ah"][j] / d["al"][i]) if ok else None, hh, hl)
             vr, rh, rl = cell["reference"]; vo, oh, ol = cell["ours"]
+            cells += 2
+            answered += sum(v is not None for v in (vr, vo))
             f = lambda v: f"{v:11.2f}" if v is not None else f"{'REFUSED':>11s}"
             e = f"{vo-vr:9.2f}" if (vr is not None and vo is not None) else f"{'-':>9s}"
             print(f"  {t*1e3:8.1f} {f(vr)} {f(vo)} {e}   ref {rh:5.1f}/{rl:5.1f}  ours {oh:5.1f}/{ol:5.1f}")
-    return 0
+    if not answered:
+        print(f"\nREFUSED: measured nothing: 0 of {cells} cell(s) answered; every partial of RS and "
+              f"CB, reference and ours, is within {FLOOR_MARGIN_DB:.0f} dB of its record's floor at "
+              f"every time point")
+        return REFUSED
+    return PASS
 
 
 # The CLI, as data: `tools/test_measure_partial_balance.py` checks the usage

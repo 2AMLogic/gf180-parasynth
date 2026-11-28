@@ -49,6 +49,15 @@ Method, and why each choice:
     quoted, and three deliberately-broken ladders are carried through the
     same measurements so the comparison is known to have power.
 
+EXIT STATUS follows `tools/exit_contract.py` (#1857). A run exits 0 when at
+least one requested stage of one device answered, and 2 (REFUSED, one
+`REFUSED:` line on stdout, after every file is written) when every stage was
+`not_answerable` -- and for `--stage validate`, which is offered here and
+dispatched by no stage, and for `--devices ""`. `--report` exits 2 when no
+stage file under `--out` holds a row that answered. A stage whose rig
+RENDERED and whose estimator then refused every row counts as answered;
+that boundary is the estimator-refusal shape, out of scope on purpose.
+
 The structural fingerprint, and the one thing to understand about it: h5
 relative to h3 at self-oscillation. h2 is useless because `tanh` is odd, so
 both candidate structures have none. But h5 - h3 is NOT settings-independent
@@ -70,11 +79,13 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "audition"))
+sys.path.append(os.path.join(HERE, "..", "tools"))
 
 import audio_measure as am                                          # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
 import ring_estimator                                               # noqa: E402
 import voice_fx as vf                                               # noqa: E402
+from exit_contract import PASS, REFUSED                             # noqa: E402
 
 SR = rr.SR
 
@@ -376,6 +387,24 @@ def _load(out, stage, dev):
         return json.load(f)
 
 
+def _answered(rows) -> bool:
+    """Whether a stage's rows hold anything `guard` did not write as
+    `not_answerable`. The same predicate serves a run (its stages) and
+    `--report` (one stage file at a time)."""
+    return any("not_answerable" not in r for r in rows)
+
+
+def _stage_files(out) -> list:
+    """[(stage, device)] for every `<stage>-<device>.json` under `out`.
+    `report()` prints from five of the seven stages `main` writes; the
+    status keys on what the directory HOLDS, not on what it shows."""
+    if not os.path.isdir(out):
+        return []
+    split = (fname[:-5].rpartition("-") for fname in sorted(os.listdir(out))
+             if fname.endswith(".json"))
+    return [(stage, device) for stage, _, device in split if device in KIND]
+
+
 def _f(v, n=1, w=8):
     return (" " * (w - 3) + "---") if v is None or (isinstance(v, float) and not np.isfinite(v)) \
         else f"{v:{w}.{n}f}"
@@ -394,6 +423,11 @@ def ideal_4pole_slope(band, fp):
 
 
 def report(out):                                                  # noqa: C901
+    files = _stage_files(out)
+    if not any(_answered(_load(out, stage, device) or []) for stage, device in files):
+        print(f"REFUSED: --report measured nothing: 0 of {len(files)} stage file(s) under {out} "
+              f"hold a row that answered", flush=True)
+        return REFUSED
     print("=" * 96)
     print("OUR LADDER AGAINST THREE SOFTWARE MINIMOOG-LINEAGE FILTERS")
     print("48 kHz throughout (our own SR; nothing resampled). Every number below is a RATIO,")
@@ -592,6 +626,24 @@ def cut_setting_for(dev, name, hz, cache):
     raise KeyError(name)
 
 
+def stages_exit(asked, stage) -> int:
+    """The run's exit status (`tools/exit_contract.py`).
+
+    `asked` is [(device, stage, rows)] for every stage the run asked of every
+    device. PASS if any stage answered: a partly refused sweep is a result,
+    its `not_answerable` records written beside the measurements. REFUSED when
+    none did (#1857). The files have been written by then, but they hold no
+    measurement, and a status of 0 would read as a RESULT. `--stage validate`
+    and `--devices ""` ask nothing of anyone and arrive with no stages."""
+    deaf = [f"{device}/{key}" for device, key, rows in asked if not _answered(rows)]
+    if len(deaf) < len(asked):
+        return PASS
+    tail = f"; not answerable: {', '.join(deaf)}" if deaf else "; nothing was asked of any device"
+    print(f"REFUSED: --stage {stage} measured nothing: 0 of {len(asked)} requested stage(s) "
+          f"answered{tail}", flush=True)
+    return REFUSED
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -614,6 +666,7 @@ def main(argv=None) -> int:
         with open(cache_path) as f:
             cache = json.load(f)
 
+    asked = []
     for name in devices:
         print(f"\n===== {name} =====", flush=True)
         dev = build(name)
@@ -674,13 +727,14 @@ def main(argv=None) -> int:
                                                    [-48, -36, -24, -18, -12, -6, -3, 0]))
         finally:
             del dev
+        asked.extend((name, k, v) for k, v in out.items())
         for k, v in out.items():
             with open(os.path.join(a.out, f"{k}-{name}.json"), "w") as f:
                 json.dump(v, f, indent=1, default=str)
         with open(cache_path, "w") as f:
             json.dump(cache, f, indent=1)
     print(f"\nwritten to {a.out}", flush=True)
-    return 0
+    return stages_exit(asked, a.stage)
 
 
 if __name__ == "__main__":

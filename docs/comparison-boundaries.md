@@ -180,6 +180,13 @@ and the oscillator-2 MIDI-48 pair reports `STABLE` with a span of about
 0.01018 cents.
 <!-- claim: test=tools/test_measure_osc_drift_reference.py::test_m1a_pairs_keep_their_own_outcomes -->
 
+A run in which every Mini V3 window refused exits 2 (REFUSED) rather than
+0: the per-window and pair refusals above are printed in full, and the
+process says it measured nothing (#1857). A run in which some window
+answered still exits 0, with its refusals printed beside the measurements.
+<!-- claim: test=tools/test_measure_osc_drift_reference.py::test_no_frozen_audio_at_all_is_refused_not_a_pass -->
+<!-- claim: test=tools/test_measure_osc_drift_reference.py::test_the_control_a_partly_refused_run_with_a_real_measurement_still_passes -->
+
 The selectors also receive each refused window's label and note. Flipping one
 bit in the oscillator-2 WAV makes all three windows report `CLIP_HASH`. The
 MIDI-48 pair still identifies `n0-midi48` and `n2-midi48` and returns
