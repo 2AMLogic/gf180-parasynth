@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import measure_m5a_signal_path as probe
+import refusal
 
 
 def test_q15_trace_conversion_uses_one_full_scale_for_every_stage():
@@ -23,6 +24,36 @@ def test_stage_probe_constructs_the_selected_production_filter_path():
     assert voice.ladder_cfg["oversample"] == 2
     assert voice.preserve_filter_headroom
     assert voice.causal_filter
+    # #1570: this copy omitted the flag score_m5a_i2s._candidate_factory sets.
+    assert voice.pulse479_filter_candidate
+
+
+def test_selected_voice_matches_the_i2s_candidate_factory():
+    import score_m5a_i2s
+
+    flags = ("blep", "oversample_2x", "oversample_pulse_2x", "rate_converted_ladder",
+             "preserve_filter_headroom", "causal_filter", "pulse479_filter_candidate")
+    ours, theirs = probe._selected_candidate_voice(), score_m5a_i2s._candidate_factory()
+    assert {flag: getattr(ours, flag) for flag in flags} == \
+        {flag: getattr(theirs, flag) for flag in flags}
+    assert ours.ladder_cfg == theirs.ladder_cfg
+    assert probe._selected_candidate_voice(blep=False).blep is False
+
+
+@pytest.mark.parametrize("partials", [1, 0])
+def test_signal_path_refuses_fewer_than_two_comparable_partials(monkeypatch, partials):
+    # #1570: the inline stage loop had no guard -- one partial was reported as
+    # a max error, none crashed in max(). The real render is kept; only the
+    # signatures are made sparse.
+    sparse = {"h2": -40.0} if partials else {}
+    monkeypatch.setattr(probe.am, "harmonic_signature", lambda *args, **kwargs: dict(sparse))
+    with pytest.raises(refusal.Refused, match="fewer than two comparable partials"):
+        probe.measure([14073], [0.75])
+
+
+def test_cli_argument_error_is_not_masked_as_a_refusal():
+    with pytest.raises(ValueError, match="cutoff 999999 outside"):
+        probe.main(["--cutoff", "999999", "--drive", "0.75", "--out", "build/never-written.json"])
 
 
 def test_polyblep_off_is_an_executed_distinct_oscillator_challenger():
