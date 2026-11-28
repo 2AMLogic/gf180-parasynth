@@ -1,6 +1,10 @@
 """Independent controls for causal rate-converter measurement instrumentation,
 and for the record gate in front of the two paths that read its saved rows
-back from JSON (#1687)."""
+back from JSON (#1687).
+
+Every recompare case takes the shipped report, changes one value, and runs
+the shipped `main` in-process against that copy inside a throwaway
+repository, so the real report is never rewritten."""
 
 import copy
 import json
@@ -17,10 +21,6 @@ from exit_contract import REFUSED
 CHECKOUT = pathlib.Path(__file__).resolve().parents[1]
 SHIPPED = CHECKOUT / "docs/scorecard/mono-m5a-miniv3/filter-headroom-v1.json"
 
-#: What `abs(float(...))` mishandles. The first two raise out of it -- a
-#: traceback, exit 1 -- and the rest are accepted: `true` as 1.0, a numeric
-#: string as its number, and a non-finite number as one that compares unequal
-#: to itself, so its delta lands in neither component list.
 _UNREADABLE = [pytest.param(10**400, id="beyond-float"),
                pytest.param(None, id="null"),
                pytest.param(True, id="true"),
@@ -143,29 +143,63 @@ def test_the_shipped_report_recompares_to_the_decisions_it_shipped_with(repo, co
     ("pulse29", "headroom", "Pitch"), ("pulse479", "causal_headroom", "Gain")])
 def test_recompare_refuses_a_metric_error_that_is_not_a_finite_json_number(
         repo, comparisons, capsys, value, pulse, mode, metric):
-    """#1687 item 1. `null` and an integer beyond float range raised out of
-    `_error_magnitude`'s bare `float()` -- exit 1, which is FAIL -- for a
-    record the tool should decline; the rest were compared as numbers."""
+    """#1687 item 1. `abs(float(...))` raises on `null` and on an integer beyond
+    float range -- out of `_error_magnitude`, exit 1, which is FAIL, for a
+    record the tool should decline -- and accepts every other value here as a
+    number."""
     report = copy.deepcopy(_shipped())
     _set_metric(report, pulse, mode, metric, value)
     path = _saved(repo, report)
     before = path.read_bytes()
     rc, out = _recompare(capsys, path)
     assert rc == REFUSED
-    assert out.splitlines()[0].startswith(f"REFUSED: {pulse}/{mode} metrics.{metric}.error must be ")
+    assert out.splitlines()[0].startswith(
+        f"REFUSED: {pulse}/{mode} metrics.{metric}.error must be ")
     assert path.read_bytes() == before
     assert comparisons == []
 
 
-def test_recompare_refuses_a_metric_that_is_not_an_object(repo, capsys):
+def _headroom_row(report):
+    return report["configurations"]["pulse29"]["headroom"]
+
+
+@pytest.mark.parametrize("damage, refusal", [
+    (lambda row, report: report["configurations"]["pulse29"].__setitem__("headroom", 7),
+     "pulse29/headroom is not an object"),
+    (lambda row, report: row.pop("metrics"),
+     "pulse29/headroom metrics is missing or not an object"),
+    (lambda row, report: row.__setitem__("metrics", []),
+     "pulse29/headroom metrics is missing or not an object"),
+    (lambda row, report: row["metrics"].__setitem__("Pitch", -0.14812),
+     "pulse29/headroom metrics.Pitch is not an object"),
+    (lambda row, report: row.pop("event_diagnostics"),
+     "pulse29/headroom event_diagnostics is missing or not a list"),
+    (lambda row, report: row.__setitem__("event_diagnostics", dict.fromkeys("0123")),
+     "pulse29/headroom event_diagnostics is missing or not a list"),
+    (lambda row, report: row["event_diagnostics"].__setitem__(0, "saw"),
+     "pulse29/headroom event 0 is not an object"),
+    (lambda row, report: row["event_diagnostics"][0].pop("harmonic_error_db_model_minus_reference"),
+     "pulse29/headroom event 0 harmonic partial evidence is missing or not an object"),
+    (lambda row, report: row["event_diagnostics"][0].__setitem__(
+        "harmonic_error_db_model_minus_reference",
+        list(row["event_diagnostics"][0]["harmonic_error_db_model_minus_reference"])),
+     "pulse29/headroom event 0 harmonic partial evidence is missing or not an object"),
+], ids=["row", "metrics-absent", "metrics-list", "metric", "events-absent", "events-object",
+        "event", "partials-absent", "partials-list"])
+def test_recompare_refuses_a_row_whose_evidence_is_not_shaped_to_be_read(
+        repo, comparisons, capsys, damage, refusal):
+    """The gate cannot read numbers out of evidence that is not made of
+    objects, and the comparator cannot either: five of these shapes were
+    tracebacks here, and the other four its refusals in other words."""
     report = copy.deepcopy(_shipped())
-    report["configurations"]["pulse29"]["headroom"]["metrics"]["Pitch"] = -0.14812
+    damage(_headroom_row(report), report)
     path = _saved(repo, report)
     before = path.read_bytes()
     rc, out = _recompare(capsys, path)
     assert rc == REFUSED
-    assert out.splitlines() == ["REFUSED: pulse29/headroom metrics.Pitch is not an object"]
+    assert out.splitlines() == [f"REFUSED: {refusal}"]
     assert path.read_bytes() == before
+    assert comparisons == []
 
 
 @pytest.mark.parametrize("value", _UNREADABLE)
@@ -223,7 +257,7 @@ def test_a_report_path_outside_the_repository_is_refused_before_any_comparison(
     rc, out = _recompare(capsys, outside)
     assert rc == REFUSED
     assert out.splitlines()[0].startswith(
-        "REFUSED: --recompare-report must name a path inside the repository, not ")
+        "REFUSED: --recompare-report output must remain inside the repository, not ")
     assert outside.read_bytes() == before
     assert comparisons == []
 
@@ -234,7 +268,7 @@ def test_an_out_path_outside_the_repository_is_refused_before_any_render(repo, r
     escape = repo.parent / "escape.json"
     assert headroom.main(["--out", str(escape)]) == REFUSED
     assert capsys.readouterr().out.splitlines()[0].startswith(
-        "REFUSED: --out must name a path inside the repository, not ")
+        "REFUSED: --out output must remain inside the repository, not ")
     assert renderer == []
     assert not escape.exists()
 
@@ -249,7 +283,8 @@ def test_a_report_the_summary_cannot_read_is_refused_and_left_unwritten(repo, ca
     before = path.read_bytes()
     rc, out = _recompare(capsys, path)
     assert rc == REFUSED
-    assert out.splitlines() == ["REFUSED: report lacks causal_converter, so there is nothing to summarise"]
+    assert out.splitlines() == [
+        "REFUSED: report lacks causal_converter, so there is nothing to summarise"]
     assert path.read_bytes() == before
 
 
@@ -263,7 +298,8 @@ def test_an_intact_shipped_report_is_reused_and_only_the_missing_rows_are_render
                                 ("pulse479", "reconstructed_2x_causal_headroom")]
     report = json.loads((repo / "build/report.json").read_text())
     assert report["comparisons"] == _shipped()["comparisons"]
-    assert report["reused_measurements"]["clamped+headroom"]["reused_rows"] == ["clamped", "headroom"]
+    reused = report["reused_measurements"]["clamped+headroom"]
+    assert reused["reused_rows"] == ["clamped", "headroom"]
 
 
 @pytest.mark.parametrize("option, pulse, mode", [
