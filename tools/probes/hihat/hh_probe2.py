@@ -8,11 +8,8 @@ _ROOT = __import__("pathlib").Path(__file__).resolve().parents[3]
 import json, math, os, sys, time
 
 WT = str(_ROOT)
-SCRATCH = ("/private/tmp/claude-501/-Users-joseph-dev-2amlogic/"
-           "b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad")
 sys.path.insert(0, os.path.join(WT, "model"))
 sys.path.insert(0, os.path.join(WT, "audition"))
-sys.path.insert(0, SCRATCH)
 
 import numpy as np
 from scipy.signal import lfilter
@@ -24,7 +21,7 @@ from modal_fixed import RAW, BP, HP, pole_regs
 from hh_probe import (say, provenance, sallen_key_hp, render, biquad, response,
                       unity_amp, fast_band_energy, fmt, dfmt, cost, chain, gate,
                       CY_BANDS, HAT_BANDS, HW_CY, REC_CY, HW_CH, HW_OH,
-                      REC_CH, REC_OH, capture_cy, PRE)
+                      REC_CH, REC_OH, capture_cy, PRE, out_dir)
 
 OUT: dict = {}
 
@@ -160,7 +157,7 @@ def main():
                                     shipped_cost=cost(true_sh, ref),
                                     shipped=list(true_sh))
 
-    json.dump(OUT, open(os.path.join(SCRATCH, "hh_part2.json"), "w"), indent=2, default=float)
+    json.dump(OUT, open(out_dir() / "hh_part2.json", "w"), indent=2, default=float)
     say("\n(written hh_part2.json)")
 
 if __name__ == "__main__":
