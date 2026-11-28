@@ -62,15 +62,54 @@ each control's own precondition check. Were the frozen record absent or
 altered in the tree, the silenced-pulse run would refuse EARLIER, with the
 hash-mismatch reason, and this file would turn red instead of passing for the
 wrong reason.
+
+#1693, THE SECOND DEFECT, AS MEASURED ON main @ 3e2534c7 (2026-11-28): the
+boundary above was right, but three of the tool's own entry functions did not
+raise a refusal at a stated precondition. `decimator --gains 0.0` and `fine
+--gains 0.0` raised `RuntimeError("... silent decimator output")` from
+`decimator_run`: exit 1 with a traceback, a precondition rendered as FAIL. `mix
+--gains 0.0` completed with exit 0 and a report whose ten `0.000/three-rect/*`
+rows read `output_rms_dbfs: -240.0` -- a 1e-12 floor printing digital silence
+as a measurement; under `--scope rect` the default preset's two saws are
+untouched, so nothing stopped the run.
+
+THE KNOWN ANSWERS for those, independent of anything this repository models:
+
+  zero gain       a substep gain of exactly 0 is digital silence at the
+                  decimator and at the mixer output. `decimator` refuses at its
+                  first shape and note, `fine` at its first reachable shape and
+                  grid point, `mix` at its first rectangle row -- after the
+                  baseline rows and the candidate's saw rows, which measure:
+                  the partial-output hazard again, so no report may remain.
+  a square wave   +/-1 LSB has an RMS of exactly 1 LSB, -90.31 dBFS, below
+                  mono_artifact_probe's -90.0 activity floor; +/-2 LSB is
+                  -84.29 dBFS, above it. The floor is read from the probe's
+                  module at the call, so moving that attribute moves the tool's.
+  NaN             every IEEE comparison with NaN is False (#134), so a guard
+                  written `level < floor` lets a NaN level through: the rule-8
+                  adversary for the new floor, committed as a control.
+  quiet, not      a Q15 gain of 28 puts the three-rectangle mix at MIDI 60 at
+  silent          -74.7 dBFS on that tree, 58 dB under its baseline and 15 dB
+                  above the floor: it must still measure.
+  --scope all     applies the gain to the saws too, so the default preset is
+                  silent as well: the floor applies to every preset's rows and
+                  the refusal names that preset.
+
+The pre-saturation `RuntimeError` in `decimator_run` ("recorded pre-saturation
+samples do not produce the output") is an execution error, not a precondition,
+and has a stays-green control here like the ValueError one: exit 1 with its
+traceback.
 """
 from __future__ import annotations
 
 import json
+import math
 import pathlib
 import shutil
 import subprocess
 import sys
 
+import numpy as np
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -200,4 +239,94 @@ def test_execution_error_at_the_same_boundary_still_exits_1(tmp_path):
     assert p.returncode == exit_contract.FAIL, (p.returncode, p.stdout[-200:], p.stderr[-400:])
     assert "Traceback" in p.stderr and "ValueError: injected execution error" in p.stderr, p.stderr[-400:]
     assert "REFUSED" not in p.stdout, "a ValueError must not be relabelled a refusal"
+    assert not out.exists()
+
+
+# ---------------------------------------------------------------------------
+# #1693: the tool's own preconditions must REFUSE, not traceback or floor
+# ---------------------------------------------------------------------------
+DECIMATOR_REASON = "pulse479 MIDI 0 gain Q15 0: silent decimator output"    # first shape, first note
+FINE_REASON = "square MIDI 90.0 gain Q15 0: silent decimator output"        # first reachable shape, first grid point
+MIX_REASON = ("mix preset three-rect MIDI 24 gain 0.000: silent: -inf dBFS "
+              "< activity floor -90.0 dBFS")
+DEFAULT_PRESET_REASON = ("mix preset default MIDI 60 gain 0.000: silent: -inf dBFS "
+                         "< activity floor -90.0 dBFS")
+QUIET_Q15 = 28         # three-rect MIDI 60 at -74.7 dBFS on main @ 3e2534c7: 15 dB above the floor
+
+
+def _square(amp: int, n: int = 24_000) -> np.ndarray:
+    """A +/- amp LSB square: RMS exactly amp LSB by definition, so its level
+    is known from arithmetic alone."""
+    return np.where(np.arange(n) % 2, -amp, amp).astype(np.int64)
+
+
+@pytest.mark.parametrize("mode, reason", [("decimator", DECIMATOR_REASON), ("fine", FINE_REASON)])
+def test_zero_gain_decimator_or_fine_sweep_exits_refused_2(tmp_path, mode, reason):
+    out = tmp_path / f"{mode}.json"
+    p = _cli(mode, "--gains", SILENT_GAIN, "--out", str(out))
+    _assert_refused(p, reason, out)
+
+
+def test_zero_gain_mix_exits_refused_2_without_partial_report(tmp_path):
+    out = tmp_path / "mix.json"
+    p = _cli("mix", "--gains", SILENT_GAIN, "--out", str(out))
+    _assert_refused(p, MIX_REASON, out)
+    assert "mix gain None:" in p.stdout, (
+        "the baseline is rendered and summarised before the candidate; a run "
+        "that refused earlier did not reach the rectangle rows")
+    assert "mix gain 0.0:" not in p.stdout, "the candidate's summary prints only after its last row"
+
+
+def test_mix_floor_is_the_probe_activity_floor_on_a_known_level(monkeypatch):
+    import measure_pulse2x_headroom as mph
+    import mono_artifact_probe as mp
+
+    one_lsb = 20 * math.log10(1 / 32768)      # -90.31 dBFS
+    two_lsb = 20 * math.log10(2 / 32768)      # -84.29 dBFS
+    assert one_lsb < mp.SILENT_DBFS < two_lsb, "the known levels must straddle the probe's floor"
+    assert mph.output_dbfs(_square(2), "known level") == pytest.approx(two_lsb, rel=1e-12)
+    floor = f"{mp.SILENT_DBFS:.1f}"
+    for what, out, level in (("silence", np.zeros(24_000, dtype=np.int64), "-inf"),
+                             ("one LSB", _square(1), f"{one_lsb:.1f}")):
+        with pytest.raises(refusal.Refused) as e:
+            mph.output_dbfs(out, f"mix preset {what} MIDI 0 gain x")
+        assert str(e.value) == (f"mix preset {what} MIDI 0 gain x: silent: {level} dBFS "
+                                f"< activity floor {floor} dBFS")
+    with pytest.raises(refusal.Refused):      # NaN: `level < floor` is False for it (#134)
+        mph.output_dbfs(np.full(24_000, np.nan), "known level")
+    monkeypatch.setattr(mp, "SILENT_DBFS", one_lsb - 1.0)
+    assert mph.output_dbfs(_square(1), "known level") == pytest.approx(one_lsb, rel=1e-12), (
+        "the floor is the probe's attribute, read at the call: a constant retyped "
+        "in the tool would not move with it")
+
+
+def test_mix_output_above_the_floor_still_measures():
+    import measure_pulse2x_headroom as mph
+    import mono_artifact_probe as mp
+
+    gain = QUIET_Q15 / 32768
+    assert mph.q15(gain) == QUIET_Q15
+    res = mph.mix_check([gain], notes=(60,))
+    level = res[f"{gain:.3f}/three-rect/60"]["output_rms_dbfs"]
+    assert mp.SILENT_DBFS <= level < mp.SILENT_DBFS + 20, (level, "quiet, and above the floor")
+    assert level < res["base/three-rect/60"]["output_rms_dbfs"] - 30, "far under the baseline"
+
+
+def test_mix_scope_all_zero_gain_refuses_on_the_default_preset():
+    import measure_pulse2x_headroom as mph
+
+    with pytest.raises(refusal.Refused) as e:
+        mph.mix_check([0.0], scope="all", notes=(60,))
+    assert str(e.value) == DEFAULT_PRESET_REASON
+
+
+def test_presaturation_mismatch_stays_an_execution_error_exit_1(tmp_path):
+    out = tmp_path / "decimator.json"
+    p = _run_patched(["decimator", "--gains", "0.84", "--out", str(out)],
+                     "import voice_fx as vf\n"
+                     "_orig = vf.sat16\n"
+                     "vf.sat16 = lambda v: _orig(v) + 1\n")
+    assert p.returncode == exit_contract.FAIL, (p.returncode, p.stdout[-200:], p.stderr[-400:])
+    assert "RuntimeError: recorded pre-saturation samples do not produce the output" in p.stderr
+    assert "Traceback" in p.stderr and not _refused_lines(p.stdout), (p.stdout[-200:], p.stderr[-400:])
     assert not out.exists()
