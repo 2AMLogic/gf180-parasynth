@@ -332,3 +332,122 @@ A tampered input is always a fresh clone of the traced revision under the
 scratch directory, never the working tree. The whole plan is about an hour of
 single-process time; split into six `--only` groups and run five at a time
 through `tools/run_all.py`, it takes seventeen minutes.
+
+## Follow-up #1964: the five files with no `except` clause
+
+#1878's closing class search ran the scanner and found 68 `candidate-escape`
+rows in 37 files; five of those files have no `except` clause anywhere, which
+is #1878's file-level shape with other callees. The issue said none of the
+seven rows had been traced. **Four of the five files had been** -- by this
+document: `glide_boundary.py:242`, `selected_preset.py:26`, `:28` and
+`bd_pedestal.py:483` are four of the eighteen rows in "No refusing input on the
+entry point's input space" above, in `refusal-candidate-trace.json` at
+`c9584c65`. The search read the census and the issue titles, not this record.
+Three rows had never been traced: `tools/clap_burst_timing_qual.py:132` and
+`tools/f1_filter_path.py:95`, `:98`.
+
+`tools/refusal_candidate_traces_noexcept.py` re-runs the four #1576 rows
+unchanged, by id from that plan, and adds the three. Its record is
+`refusal-candidate-trace-noexcept.json`, taken on a clean tree at `8feeff61`
+in 2 min 43 s. **Of the seven rows, none is a confirmed escape and none needs
+a repair.** Every working run reaches its own site, the call there comes back,
+and the process exits 0 with no traceback; no row has a refusing run, because
+no input on its entry point's input space reaches the callee's refusing arm.
+<!-- claim: test=tools/test_refusal_candidate_traces_noexcept.py::test_the_committed_record_names_what_it_traced -->
+
+| row | entry point and working input | the boundary run drove out | what excludes it |
+|---|---|---|---|
+| `fpga/release/glide_boundary.py:242` | `--case accept-default --level wrapper` (64 s, the UART bridge PASS) | `uart_host.Refused`: hold 0, two markers, a marker with no gate-on write, a write after the marker | `wrapper_capture` builds no `gate-off` marker command and passes no `hold_frames`; every refusing arm of `plan_show` needs one of the two |
+| `fpga/selected_preset.py:26` | `m5a-saw`, `m5a-pulse` | `mono_m5a_score.Refused` for `'no-such-engine'` | the argument is the literal `'selected'`, a key of `ENGINE_PROFILES` |
+| `fpga/selected_preset.py:28` | same two runs | same class for `'triangle'`, `'pulse999'` | the wave is `'pulse'` or `'saw'` by an argparse choice; the pulse shape is the module default |
+| `model/bd_pedestal.py:483` | `--out <tmp>` (53 s) | `bd_excitation_probe.Refused`: "calibration render is silent" at `probe_amp=0.0` | `main` passes the literals `calibrate_amp(mf.BP, 1.0, 0)`; that render is not silent (0.0516) |
+| `tools/clap_burst_timing_qual.py:132` | the default `--n 24` (1296 calls at the site, all returned) | `preparation_contract.Refused`: cut to the onset, and one NaN sample | every signal `detect` hands `prepare` is `synth(...)`'s, which begins with 50 ms of exact digital silence and is finite by construction; `--n` and `--out` do not touch the signal |
+| `tools/f1_filter_path.py:95`, `:98` | two caller CLIs: `tools/probes/holdout_f1d_preconditions.py` (builds the path with every default) and `tools/f1_rtl_filter_path.py` (the smoke run, 21 s, RTL vs model BIT-EXACT) | `mono_m5a_score.Refused`, raised AT the site by a path built with `profile='no-such-engine'` / `substitute_profile='no-such-engine'` | `profile` is never a CLI argument: every production construction leaves the default `'selected'` or passes `substitute_profile` as `None` or the literal `'legacy'`, both keys |
+
+The three new invariants are checked against the tree rather than carried, and
+each check ships with the input that defeats it. The clap lead: every signal
+the CLI hands `prepare`, at every condition, sample rate and carrier, is
+finite and begins with exactly 50 ms of zeros, and `prepare` returns for it;
+<!-- claim: test=tools/test_refusal_candidate_traces_noexcept.py::test_every_signal_the_cli_hands_prepare_starts_with_exact_silence -->
+
+the same signal cut to its onset, or with one NaN sample, is REFUSED.
+<!-- claim: test=tools/test_refusal_candidate_traces_noexcept.py::test_the_two_arms_are_live_on_the_shapes_that_do_reach_them -->
+
+The F1 profile: no production code names a profile `ENGINE_PROFILES` lacks --
+the four construction sites and both `__init__` defaults are read off the
+tracked tree, and a new caller turns the check red until it has been read.
+<!-- claim: test=tools/test_refusal_candidate_traces_noexcept.py::test_no_production_code_names_a_profile_the_engine_lacks -->
+
+A profile read off an argparse value, positional or keyword, through an
+aliased import, and a substitute handed to `RtlFilterChainPath` are each
+reported, by keyword and line.
+<!-- claim: test=tools/test_refusal_candidate_traces_noexcept.py::test_the_ast_check_reports_the_constructions_that_would_defeat_it -->
+
+The four older rows' invariants hold on this tree too (`selected_preset`'s
+two rows in one test):
+<!-- claim: test=tools/test_refusal_candidate_traces_noexcept.py::test_selected_preset_passes_only_names_the_callee_accepts -->
+<!-- claim: test=tools/test_refusal_candidate_traces_noexcept.py::test_the_bd_calibration_render_is_not_silent -->
+<!-- claim: test=tools/test_refusal_candidate_traces_noexcept.py::test_wrapper_capture_never_plans_a_gate_off_marker -->
+
+**What the two library rows' boundary run says, and does not.** For
+`f1_filter_path.py:95`, `:98` the boundary script builds the path with the
+refusing name, so the tracer records the refusal raised AT the site and reads
+the row `HANDLED` -- by the script's own `except Exception`, never by a
+production frame; the record names the handler's file and the test pins it.
+It shows the arm is live at the exact call a repair would guard. It is not a
+refusing input for any CLI, and no CLI's boundary was observed catching
+anything. The same script shows `substitute_profile='legacy'` -- the one
+substitute `run_case.py:2665` ever passes -- is accepted by `engine_configuration`
+and then refused by `f1_filter_path`'s OWN class at `:102` ("ladder is
+LadderFx, not RateConvertedLadder"), which `run_case.py:2670` catches: a
+designed control, not this row.
+
+**Not run, stated.** `tools/run_case.py`'s F1 caller (`:2664`, the whole F1
+train) and `tools/score_f1_rtl.py` were not traced. The first passes
+`substitute_profile` only and the second builds the same path through
+`RtlFilterChainPath.__init__` with the same defaults as the smoke run; the AST
+check reads both off the tree. A change to WHAT `detect` hands `prepare` is
+seen by re-running the trace, not by the lead test.
+
+**#1674 and #1833 are other rows.** #1674 is `selected_preset.definition()`'s
+own `ValueError` at `:25` (the reference-audio hash mismatch), the site's own
+class and not a cross-module refusal; #1833 is PR #1756's blanket
+`except ValueError`, which is not on `main`. Neither is `:26` or `:28`, so
+there was nothing to drop and nothing to duplicate. PR #1678 adds
+`except Refused` to that file; it will not cover `mono_m5a_score.Refused`, and
+these two rows stay as recorded.
+
+**The census is unchanged, because nothing was repaired.** The scanner reports
+71 `candidate-escape` rows in 38 files at `e2d1bae7` (`origin/main` when this
+began, 0 behind) and the same 71 in 38 at `8feeff61`: this PR adds no
+production code, and the plan file it adds is scanned and holds no site. The
+issue's 68 in 37 was `8f3d8ed2` plus #1878's fix, which is PR #1968, still
+open; the three rows and one file between the two counts are
+`tools/cymbal_m_origin.py`'s (`:178`, `:296`, `:336`). The seven rows stay
+`candidate-escape` in the census by design: the scanner reads the AST and does
+not model an argument's value. They now carry a traced verdict.
+
+**The other 32 files** with `except` clauses are out of this issue: a handler
+exists in each, and whether it covers every origin is the per-origin census
+#1183 started, not a file-level question. No trace here bears on them.
+
+**Two fixture mistakes before the record was clean**, each read off the record
+rather than spotted in the plan, which is the wrong-then-right rate for this
+document's newest rows: the first run gave two different runs one shared name
+(`f1-callers`), and the tracer wrote both `UNRESOLVED` -- its own guard against
+a name that stands for two runs; the second pointed the smoke run's `--json`
+at a directory that did not exist, and the run exited 1 on a
+`FileNotFoundError` traceback at `f1_rtl_filter_path.py:439` after the call at
+`:95` had returned and the comparison had printed BIT-EXACT. The row read
+`RETURNED` both times, correctly; the run was not clean, and a record of
+non-escapes that carries a traceback of its own making is not one to commit.
+
+```
+python tools/refusal_candidate_trace.py run --spec tools/refusal_candidate_traces_noexcept.py \
+    --out build/refusal-candidate-trace-noexcept.json
+python tools/refusal_candidate_trace.py report build/refusal-candidate-trace-noexcept.json
+```
+
+The plan needs the restored frozen reference audio for its two F1 caller CLIs
+(`python tools/refprofile_restore.py`) and iverilog on `PATH` for the glide and
+F1 RTL runs; each is refused as an `unresolved` row rather than skipped.

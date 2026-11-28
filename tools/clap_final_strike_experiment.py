@@ -48,6 +48,15 @@ FROZEN BEFORE RENDERING (2026-09-26, commit that adds this file):
                detector is unqualified there, a selected level is at most
                "model improvement; promotion incomplete". Programmed strike
                times are reported from envelope state as the separate quantity.
+
+EXIT (`tools/exit_contract.py`). A refusal that reaches the command line --
+the corpus pin, the renderer precondition, a reference `run_case` will not
+bind -- exits `exit_contract.REFUSED` (2) with its reason as the last line
+on stdout, `REFUSED: <reason>`, and nothing printed above it is a finding.
+`main()` catches `refusal.Refused`, the base every module's `Refused` shares,
+so `run_case.Refused` and this module's own land alike (#2046); an
+implementation error is not a refusal and still leaves as a traceback and
+exit 1.
 """
 from __future__ import annotations
 
@@ -66,6 +75,8 @@ sys.path.insert(0, str(ROOT / "model"))
 import numpy as np  # noqa: E402
 
 import clap_d12a_probe as probe  # noqa: E402
+import exit_contract  # noqa: E402
+import refusal  # noqa: E402
 import run_case as rc  # noqa: E402
 import run_all  # noqa: E402
 
@@ -250,18 +261,30 @@ def run_set(names, offsets, ref, jobs):
 
 
 def main(argv=None) -> int:
+    """`_run`, with this experiment's refusals rendered as its exit contract:
+    any module's `Refused` that reaches the command line prints its reason as
+    the last line and exits `exit_contract.REFUSED`, instead of leaving as a
+    traceback and exit 1 (#2046). The handler is the base class, so
+    `run_case.Refused` and this experiment's own land alike, and it is
+    nothing wider: an implementation error is still a traceback."""
+    try:
+        return _run(argv)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return exit_contract.REFUSED
+
+
+def _run(argv=None) -> int:
+    """The experiment, from argv to a printed table. `main()` owns the exit
+    contract."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", default=str(ROOT / "docs/scorecard/clap-d12a/final-strike.json"))
     ap.add_argument("--jobs", type=int, default=min(6, os.cpu_count() or 1))
     a = ap.parse_args(argv)
     refdir = pathlib.Path(a.refs)
-    try:
-        basis = probe.basis(refdir, probe.MANIFEST_DEFAULT if probe.MANIFEST_DEFAULT.exists()
-                            else refdir.parent / "tr808-fischer-85fbecf.sha256")
-    except probe.Refused as e:
-        print(f"REFUSED: {e}")
-        return 2
+    basis = probe.basis(refdir, probe.MANIFEST_DEFAULT if probe.MANIFEST_DEFAULT.exists()
+                        else refdir.parent / "tr808-fischer-85fbecf.sha256")
     import hashlib
     # precondition: the subclass with no final strike is bit-identical to the shipped envelope
     x0, _, s0, _ = render({}, 1.0, 0)
