@@ -17,9 +17,11 @@ or the oscillator comparison has no power.
 import ast
 import contextlib
 import io
+import json
 import math
 import os
 import sys
+import types
 
 import numpy as np
 import pytest
@@ -30,6 +32,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
 import reference_voice as rv                                        # noqa: E402
+import rig_qualification as rq                                      # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 
 SR = 48000
@@ -891,3 +894,162 @@ def test_no_statement_in_reference_voice_sits_after_a_return():
                 dead.append((stmt.lineno, body[i + 1].lineno))
     assert not dead, (f"unreachable statements in {src}, as "
                       f"(return at line, dead code at line): {dead}")
+
+
+# ===========================================================================
+# 10. THE ENTRY POINT REFUSES (exit 2) INSTEAD OF CRASHING (exit 1)
+#
+# Issue #1783. `main` handed the stage straight to its function with nothing
+# around it, so on a host without the plugin host every `--stage` died in
+# `reference_rigs._Plugin.__init__` with a raw ModuleNotFoundError and exit 1.
+# `tools/run_all.py` renders 1 as FAIL -- a RESULT -- where the truth is that
+# nothing was measured; `tools/exit_contract.py` names that outcome REFUSED, 2.
+# A rig's own `RigRefusal`, and a render that is not audio (`NonFiniteAudio`),
+# escaped the same way.
+#
+# Every refusal goes through the real stage and, where the repository has the
+# raise site, through the real raise site -- never a stage stub raising what
+# the test expects. The controls are the exceptions that must keep crashing.
+# ===========================================================================
+STAGES = ("osc", "noise", "shape", "controls")
+REFUSED = 2          # tools/exit_contract.py, retyped so the oracle is not read off its subject
+
+
+def _run(argv, tmp_path, capsys):
+    """(status, the non-empty stderr lines) of one `rv.main` into tmp_path."""
+    rc = rv.main([*argv, "--out", str(tmp_path)])
+    return rc, [ln for ln in capsys.readouterr().err.splitlines() if ln.strip()]
+
+
+def _nothing_written(tmp_path):
+    assert not any(tmp_path.iterdir()), [p.name for p in tmp_path.iterdir()]
+
+
+class _RigThatRaises:
+    """Stands in for `rr.SurgeRig`, the first rig every stage builds."""
+
+    def __init__(self, exc):
+        self.exc = exc
+
+    def __call__(self, *a, **k):
+        raise self.exc
+
+
+class _NaNRig:
+    """A rig whose host returns NaN for every render. Each render goes through
+    the REAL `reference_rigs.render_midi_note`, so the NonFiniteAudio is raised
+    by its own `require_finite` -- the site issue #1783 named and could not
+    reach on a plugin-less host -- and not by a stand-in `raise`."""
+
+    WAVES = {"saw": ("Classic", 0.5, 0.5)}      # what stage_osc's plan reads first
+
+    def __init__(self, *a, **k):
+        pass
+
+    def _render(self, *a, **k):
+        engine = types.SimpleNamespace(render=lambda seconds: None,
+                                       get_audio=lambda: np.full((2, 16), np.nan))
+        processor = types.SimpleNamespace(clear_midi=lambda: None,
+                                          add_midi_note=lambda *a: None,
+                                          get_latency_samples=lambda: 0)
+        return rv.rr.render_midi_note(processor, engine, "nan-rig", 48, 100, 0.0, 0.5, 0.5)
+
+    osc_tone = osc_level_ref = _render
+
+    def osc_raw(self, *a, **k):
+        return self._render(*a, **k), ("", "")
+
+
+@pytest.mark.parametrize("stage", STAGES)
+def test_a_missing_plugin_host_is_refused_not_a_crash(tmp_path, capsys, monkeypatch, stage):
+    """The issue's own reproduction, made host-independent: `None` in
+    sys.modules makes `import dawdreamer` raise ModuleNotFoundError with
+    name="dawdreamer" whether or not the package is installed, so this means
+    the same on a host that has the plugins as on one that does not."""
+    monkeypatch.setitem(sys.modules, "dawdreamer", None)
+    rc, err = _run(["--stage", stage], tmp_path, capsys)
+    assert rc == REFUSED, (rc, err)
+    assert len(err) == 1 and err[0].startswith("REFUSED: ") and "dawdreamer" in err[0], err
+    _nothing_written(tmp_path)
+
+
+@pytest.mark.parametrize("missing, refused", [
+    ("dawdreamer", True),            # the plugin host
+    ("dawdreamer._ext", False),      # the host imported, then broke inside itself: a bug
+    ("numpy_typo", False),           # an unrelated broken import: a bug, not a precondition
+], ids=["host", "host-submodule", "unrelated"])
+def test_only_the_plugin_hosts_own_import_failure_is_a_refusal(tmp_path, capsys, monkeypatch,
+                                                               missing, refused):
+    """The boundary of that predicate. The unrelated one is the control: a
+    handler catching every ImportError turns it red."""
+    exc = ModuleNotFoundError(f"No module named '{missing}'", name=missing)
+    monkeypatch.setattr(rv.rr, "SurgeRig", _RigThatRaises(exc))
+    if refused:
+        rc, err = _run(["--stage", "osc"], tmp_path, capsys)
+        assert rc == REFUSED and len(err) == 1, (rc, err)
+        assert err[0].startswith("REFUSED: ") and missing in err[0], err
+    else:
+        with pytest.raises(ModuleNotFoundError) as got:
+            rv.main(["--stage", "osc", "--out", str(tmp_path)])
+        assert got.value is exc
+        assert capsys.readouterr().err == ""
+    _nothing_written(tmp_path)
+
+
+@pytest.mark.parametrize("stage", STAGES)
+def test_a_rig_refusal_comes_out_as_refused_with_its_message(tmp_path, capsys, monkeypatch, stage):
+    why = "Model D pedalboard rig: no plugin bundle at /nonexistent/Model D.vst3"
+    monkeypatch.setattr(rv.rr, "SurgeRig", _RigThatRaises(rq.RigRefusal(why)))
+    rc, err = _run(["--stage", stage], tmp_path, capsys)
+    assert rc == REFUSED, (rc, err)
+    assert err == [f"REFUSED: {why}"], err
+    _nothing_written(tmp_path)
+
+
+def test_a_multiline_refusal_reason_stays_on_one_stderr_line(tmp_path, capsys, monkeypatch):
+    """The control: printing the reason raw yields two stderr lines."""
+    monkeypatch.setattr(rv.rr, "SurgeRig",
+                        _RigThatRaises(rq.RigRefusal("bundle load failed\nmissing library")))
+    rc, err = _run(["--stage", "osc"], tmp_path, capsys)
+    assert rc == REFUSED, (rc, err)
+    assert err == ["REFUSED: bundle load failed missing library"], err
+    _nothing_written(tmp_path)
+
+
+@pytest.mark.parametrize("stage", STAGES)
+def test_a_render_that_is_not_audio_is_refused(tmp_path, capsys, monkeypatch, stage):
+    # One pitch: stage_osc measures the ideal and ours rows before the first
+    # plugin render, and those rows are not what this test is about.
+    monkeypatch.setattr(rv, "NOTES", [45])
+    monkeypatch.setattr(rv.rr, "SurgeRig", _NaNRig)
+    monkeypatch.setattr(rv.rr, "MiniV3Rig", _NaNRig)
+    rc, err = _run(["--stage", stage], tmp_path, capsys)
+    assert rc == REFUSED, (rc, err)
+    assert len(err) == 1 and err[0].startswith("REFUSED: ") and "this is not audio" in err[0], err
+    _nothing_written(tmp_path)
+
+
+def test_a_bug_is_not_a_refusal_it_still_crashes(tmp_path, capsys, monkeypatch):
+    """The control for a bare `except Exception`. Its text names the plugin
+    host on purpose, so a handler that matched on the message rather than on
+    the exception would swallow it too."""
+    exc = RuntimeError("dawdreamer: pinned settings did not hold: [259]")
+    monkeypatch.setattr(rv.rr, "SurgeRig", _RigThatRaises(exc))
+    with pytest.raises(RuntimeError) as got:
+        rv.main(["--stage", "osc", "--out", str(tmp_path)])
+    assert got.value is exc
+    assert capsys.readouterr().err == ""
+    _nothing_written(tmp_path)
+
+
+def test_a_stage_that_runs_returns_0_and_keeps_its_report(tmp_path, capsys, monkeypatch):
+    """The other side of the same dispatch: the handlers must not turn a stage
+    that ran into a refusal, nor skip its report."""
+    def stage_osc(out):
+        with open(os.path.join(out, "osc.json"), "w") as f:
+            json.dump([], f)
+        return []
+    monkeypatch.setattr(rv, "stage_osc", stage_osc)
+    rc, err = _run(["--stage", "osc"], tmp_path, capsys)
+    assert rc == 0 and err == [], (rc, err)
+    assert [p.name for p in tmp_path.iterdir()] == ["osc.json"]

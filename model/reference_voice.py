@@ -3,6 +3,10 @@
 
     .venv/bin/python model/reference_voice.py --stage osc --out /tmp/refvoice
 
+Exit status follows `tools/exit_contract.py`: 0 when the stage ran, 2 (REFUSED,
+one `REFUSED:` line on stderr) when a precondition was not met and nothing was
+measured -- no plugin host, a rig that refuses, a render that is not audio.
+
 `docs/discrimination.md` section 8 measured the FILTER against three
 references and found two real defects. The oscillators, envelopes, glide and
 noise had never been compared to anything. This is the oscillator half.
@@ -46,6 +50,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import rig_qualification as rq                                      # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 
 SR = rr.SR
@@ -654,10 +659,32 @@ def main(argv=None) -> int:
                     choices=["osc", "noise", "shape", "controls"])
     ap.add_argument("--out", default="/tmp/refvoice")
     a = ap.parse_args(argv)
+    stage = {"osc": stage_osc, "noise": stage_noise,
+             "shape": stage_shape, "controls": stage_controls}[a.stage]
     os.makedirs(a.out, exist_ok=True)
-    {"osc": stage_osc, "noise": stage_noise,
-     "shape": stage_shape, "controls": stage_controls}[a.stage](a.out)
-    return 0
+    sys.path.insert(0, os.path.join(HERE, "..", "tools"))
+    from exit_contract import REFUSED as EXIT_REFUSED
+    try:
+        stage(a.out)
+    except ImportError as exc:
+        # The plugin host and nothing else: any other module that fails to
+        # import is a bug here, and a bug must crash rather than be reported
+        # as a precondition that happened to be unmet.
+        # Exact name, not the package prefix: `dawdreamer.<anything>` failing
+        # means the host imported and then broke inside itself, a bug.
+        if exc.name != "dawdreamer":
+            raise
+        reason = f"the plugin host is not importable ({exc})"
+    except rq.RigRefusal as exc:
+        reason = str(exc)
+    except am.InsufficientEvidence as exc:
+        reason = str(exc)
+    else:
+        return 0
+    # One line on stderr is the contract: a multi-line reason is joined, not cut.
+    reason = " ".join(part.strip() for part in str(reason).splitlines() if part.strip())
+    print(f"REFUSED: {reason}", file=sys.stderr)
+    return EXIT_REFUSED
 
 
 if __name__ == "__main__":
