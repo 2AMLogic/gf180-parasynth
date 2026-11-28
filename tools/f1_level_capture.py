@@ -66,6 +66,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import refprofile as rp        # noqa: E402
 import refusal
+import audio_measure as AM     # noqa: E402
 
 OK, FAIL, REFUSED = 0, 1, 2
 OUT_DIR = ROOT / "docs" / "scorecard" / "f1-level" / "captures"
@@ -409,7 +410,7 @@ def main(argv=None) -> int:
                 print(f"take-to-take {k}: bit_identical={v['bit_identical']} "
                       f"max_abs_diff={v['max_abs_diff']}")
             return OK
-    except (Refused, rp.Refused) as e:
+    except (Refused, rp.Refused, AM.InsufficientEvidence, AM.NonFiniteAudio) as e:
         print(f"REFUSED  {e}")
         return REFUSED
     return verify()
