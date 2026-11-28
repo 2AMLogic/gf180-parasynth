@@ -92,6 +92,147 @@ def test_the_committed_capture_carries_the_key_the_analysis_reads():
     assert json.loads((a.CAPTURE / "capture.json").read_text())["takes"] is not None
 
 
+def _capture_copy(tmp_path):
+    """The committed capture under `tmp_path`: its record and every WAV it
+    names, copied rather than linked so that one can be damaged in place."""
+    import shutil
+    record = json.loads((a.CAPTURE / "capture.json").read_text())
+    for take in record["takes"].values():
+        for row in take["conditions"].values():
+            shutil.copy(a.CAPTURE / row["file"], tmp_path / row["file"])
+    return record
+
+
+def _cut_data_chunk(path, keep, rewritten):
+    """Cut a WAV's `data` chunk to `keep` of its samples; returns the samples
+    left. Rewritten, it is a well-formed shorter WAV that no reader can tell
+    from a complete one; not, the file simply ends early while its header
+    still claims the whole take."""
+    from scipy.io import wavfile
+    rate, x = wavfile.read(path)
+    left = round(len(x) * keep)
+    if rewritten:
+        wavfile.write(path, rate, x[:left])
+        return left
+    raw = path.read_bytes()
+    at = 12
+    while raw[at:at + 4] != b"data":
+        at += 8 + int.from_bytes(raw[at + 4:at + 8], "little")
+    wide = int.from_bytes(raw[at + 4:at + 8], "little") // len(x)
+    path.write_bytes(raw[:at + 8 + wide * left])
+    return left
+
+
+def _load(monkeypatch, tmp_path, record):
+    """`load_capture()` over a record written under a scratch CAPTURE."""
+    (tmp_path / "capture.json").write_text(json.dumps(record))
+    monkeypatch.setattr(a, "CAPTURE", tmp_path)
+    return a.load_capture()
+
+
+def test_the_committed_capture_is_as_long_as_its_record_describes():
+    _, takes = a.load_capture()
+    for take, audio in takes.values():
+        for cond, x in audio.items():
+            row = take["conditions"][cond]
+            assert len(x) == round(take["seconds"] * a.SR) - row["apparatus"]["latency_removed"], row["file"]
+    assert len(takes["A"][1]["full"]) == 628756
+    assert len(takes["B"][1]["full"]) == 719956
+
+
+@pytest.mark.filterwarnings("ignore::scipy.io.wavfile.WavFileWarning")
+@pytest.mark.parametrize("rewritten", [False, True], ids=["cut", "rewritten"])
+@pytest.mark.parametrize("keep", [.99, .95, .40, 0.])
+def test_a_take_shorter_than_its_record_with_its_hash_rewritten_is_refused(monkeypatch, tmp_path, capsys, keep, rewritten):
+    """#1931: the hash binds a file to the record and says nothing about
+    whether the record describes the audio. A `data` chunk cut short parses
+    as fewer samples, so with the hash rewritten every other precondition
+    held and `main()` answered from a truncated take. scipy's own
+    `WavFileWarning` is ignored: the length refuses the take, not the reader."""
+    record = _capture_copy(tmp_path)
+    take, row = record["takes"]["A"], record["takes"]["A"]["conditions"]["full"]
+    left = _cut_data_chunk(tmp_path / row["file"], keep, rewritten)
+    full = round(take["seconds"] * a.SR) - row["apparatus"]["latency_removed"]
+    row["sha256"] = a.bass.sha(tmp_path / row["file"])
+    code, out = _analyse(monkeypatch, tmp_path, capsys, record)
+    assert code == 2 and "REFUSED" in out, out
+    assert row["file"] in out and f"{left} samples" in out and f"describes {full}" in out, out
+    assert json.loads((tmp_path / "analysis-refused.json").read_text())["state"] == "REFUSED"
+    assert not (tmp_path / "report.json").exists()
+
+
+def test_a_full_length_take_whose_hash_was_not_rewritten_still_refuses_on_the_hash(monkeypatch, tmp_path, capsys):
+    from scipy.io import wavfile
+    record = _capture_copy(tmp_path)
+    row = record["takes"]["A"]["conditions"]["full"]
+    path = tmp_path / row["file"]
+    rate, x = wavfile.read(path)
+    x[len(x) // 2] = -x[len(x) // 2]
+    wavfile.write(path, rate, x)
+    assert a.bass.sha(path) != row["sha256"]
+    code, out = _analyse(monkeypatch, tmp_path, capsys, record)
+    assert code == 2 and "REFUSED" in out, out
+    assert "hash differs" in out and row["file"] in out, out
+
+
+def _damaged(tmp_path, damage):
+    """A committed-capture copy whose take A has `damage(take, full_row)`."""
+    record = _capture_copy(tmp_path)
+    take = record["takes"]["A"]
+    damage(take, take["conditions"]["full"])
+    return record
+
+
+_LENGTH_DAMAGE = [
+    pytest.param(lambda take, row: take.pop("seconds"), "'seconds'", id="seconds-missing"),
+    pytest.param(lambda take, row: take.update(seconds=None), "'seconds'", id="seconds-null"),
+    pytest.param(lambda take, row: take.update(seconds="13.1"), "seconds is '13.1'", id="seconds-text"),
+    pytest.param(lambda take, row: take.update(seconds=float("nan")), "seconds is nan", id="seconds-nan"),
+    pytest.param(lambda take, row: take.update(seconds=float("inf")), "seconds is inf", id="seconds-inf"),
+    pytest.param(lambda take, row: take.update(seconds=True), "seconds is True", id="seconds-flag"),
+    pytest.param(lambda take, row: row.pop("apparatus"), "'apparatus'", id="apparatus-missing"),
+    pytest.param(lambda take, row: row.update(apparatus=None), "'apparatus'", id="apparatus-null"),
+    pytest.param(lambda take, row: row.update(apparatus=44), "is a JSON int, not a JSON object", id="apparatus-not-an-object"),
+    pytest.param(lambda take, row: row["apparatus"].pop("latency_removed"), "'latency_removed'", id="latency-missing"),
+    pytest.param(lambda take, row: row["apparatus"].update(latency_removed=None), "'latency_removed'", id="latency-null"),
+    pytest.param(lambda take, row: row["apparatus"].update(latency_removed="44"), "latency_removed is '44'", id="latency-text"),
+    pytest.param(lambda take, row: row["apparatus"].update(latency_removed=float("nan")), "latency_removed is nan", id="latency-nan"),
+    pytest.param(lambda take, row: row["apparatus"].update(latency_removed=True), "latency_removed is True", id="latency-flag"),
+]
+
+
+@pytest.mark.parametrize("damage, needle", _LENGTH_DAMAGE)
+def test_a_record_that_does_not_say_how_long_the_take_is_refused(monkeypatch, tmp_path, damage, needle):
+    with pytest.raises(a.Refused, match=needle):
+        _load(monkeypatch, tmp_path, _damaged(tmp_path, damage))
+
+
+def test_a_record_without_the_take_length_reaches_the_cli_as_refused(monkeypatch, tmp_path, capsys):
+    record = _damaged(tmp_path, lambda take, row: take.pop("seconds"))
+    code, out = _analyse(monkeypatch, tmp_path, capsys, record)
+    assert code == 2 and "REFUSED" in out and "'seconds'" in out, out
+    assert json.loads((tmp_path / "analysis-refused.json").read_text())["state"] == "REFUSED"
+    assert not (tmp_path / "report.json").exists()
+
+
+def test_the_length_guard_does_not_see_a_take_cut_and_padded_back_to_length(monkeypatch, tmp_path):
+    """Pins the limit #1931's guard discloses: it counts samples in the
+    array, not signal. The hash was rewritten, so nothing binds the padded
+    tail to the capture. Closing that is a deliberate change that turns this
+    red."""
+    from scipy.io import wavfile
+    record = _capture_copy(tmp_path)
+    row = record["takes"]["A"]["conditions"]["full"]
+    path = tmp_path / row["file"]
+    rate, x = wavfile.read(path)
+    left = _cut_data_chunk(path, .95, True)
+    rate, short = wavfile.read(path)
+    wavfile.write(path, rate, np.concatenate([short, np.zeros(len(x) - left, dtype=short.dtype)]))
+    row["sha256"] = a.bass.sha(path)
+    _, takes = _load(monkeypatch, tmp_path, record)
+    assert len(takes["A"][1]["full"]) == len(x)
+
+
 def test_a_capture_record_without_takes_is_refused(monkeypatch, tmp_path, capsys):
     # #1604's own input: `KeyError: 'takes'`, exit 1, before the repair
     code, out = _analyse(monkeypatch, tmp_path, capsys, {"state": "CAPTURED"})
