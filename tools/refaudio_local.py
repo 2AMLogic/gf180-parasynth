@@ -108,6 +108,31 @@ def locate(archive: str) -> pathlib.Path:
     return z
 
 
+def refuse_part_collisions(members: list[str]) -> None:
+    """REFUSE a request in which one member's destination is another member's
+    temporary path (#1697); the three routes' one check for it.
+
+    A member is written to `<its path>.part` and renamed into place, so a
+    member named `a/b.part` beside `a/b` makes the second one's temporary file
+    the first one's finished file: asked `a/b.part` first, it is reported
+    FETCHED, then truncated, renamed away, and the second is FETCHED too --
+    exit 0, `2 fetched`, a file missing. The whole set is refused before
+    anything is written, in either order, naming the pair.
+
+    Paths are compared as the filesystem spells them, so `./a/b`, `a//b` and
+    `a/b/` are `a/b`; a string compare lets each of those through. Call after
+    the per-member path check: the empty path has no name to compare. BLIND to
+    a case-insensitive or Unicode-normalising cache filesystem, where
+    `a/B.part` and `a/b.part` are one file."""
+    landed = {pathlib.PurePosixPath(m): m for m in members}
+    for m in members:
+        p = pathlib.PurePosixPath(m)
+        part = p.with_name(p.name + ".part")
+        if part in landed:
+            raise Refused(f"member {landed[part]!r} is the temporary path of member {m!r}: "
+                          "one request for both can report a file FETCHED and then remove it")
+
+
 def preconditions(archive: str, members: list[str]) -> tuple[pathlib.Path, dict]:
     rec = pack_record(archive)
     z = locate(archive)
@@ -126,6 +151,7 @@ def preconditions(archive: str, members: list[str]) -> tuple[pathlib.Path, dict]
         parts = pathlib.PurePosixPath(m).parts
         if m.startswith("/") or ".." in parts or not parts:
             raise Refused(f"member path must be a relative path inside the archive: {m!r}")
+    refuse_part_collisions(members)
     return z, rec
 
 

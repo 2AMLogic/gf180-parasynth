@@ -67,6 +67,10 @@ def preconditions(archive: str, members: list[str]) -> tuple[str, str]:
         parts = pathlib.PurePosixPath(m).parts
         if m.startswith("/") or ".." in parts or not parts:
             raise Refused(f"member path must be a relative path inside the archive: {m!r}")
+    try:
+        rl.refuse_part_collisions(members)
+    except rl.Refused as why:
+        raise Refused(str(why)) from why
     return ssh, root
 
 
