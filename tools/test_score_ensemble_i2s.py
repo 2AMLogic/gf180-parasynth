@@ -683,6 +683,43 @@ def test_a_committed_control_report_stays_reusable(tmp_path, monkeypatch, caller
     assert reused["caught"] if caller == "mix" else reused["measured"]
 
 
+@pytest.mark.parametrize("caller, name, schedule", [
+    ("mix", "E1A-control-DRUM_BUS_STALE.txt", "mix-schedule.json"),
+    ("stop:BD", "E1A-control-DRUM_BUS_STALE-stop-BD.txt", "stop-BD-schedule.json")])
+def test_control_reuse_reruns_when_a_committed_control_omits_the_backend(
+        tmp_path, monkeypatch, caller, name, schedule):
+    """START RED (#1659). Delete the `simulator backend` line from a committed
+    E1A control transcript while keeping both sidecar digests bound. The count
+    ceiling from #1580 refuses > 1 but places no floor, so zero backend
+    declarations used to pass `_reusable_control_run` on both callers even
+    though `validate_clean_pass` refuses an unnamed apparatus."""
+    committed = (_COMMITTED / name).read_text()
+    assert score.i2s_transcript.record_counts(committed) == SINGLE_CAUGHT
+    stripped = "\n".join(line for line in committed.splitlines()
+                         if "simulator backend" not in line) + "\n"
+    assert stripped != committed
+    assert score.i2s_transcript.record_counts(stripped) == {
+        **SINGLE_CAUGHT, "simulator backend declaration": 0}
+
+    folder, part = _CALLERS[caller]
+    (tmp_path / folder).mkdir()
+    paths = score.part_paths(tmp_path / folder, part)
+    sidecar = (_COMMITTED / schedule).read_bytes()
+    assert f"ensemble schedule sha256 {hashlib.sha256(sidecar).hexdigest()}" in stripped
+    paths["schedule"].write_bytes(sidecar)
+    wav_sha = _write_wav(paths["wav"], -np.ones(CASE_FRAMES, dtype=np.int64))
+    rebound, n_wav = re.subn(r"(verify_synth_top: decoded I2S WAV sha256 )[0-9a-f]{64}",
+                             rf"\g<1>{wav_sha}", stripped)
+    assert n_wav == 1
+    paths["report"].write_text(rebound)
+    assert score._binding_problem(part, rebound, paths["wav"], paths["schedule"])[2] is None
+
+    assert not score._reusable_control_run(paths, "E1A", part)
+    monkeypatch.setattr(score, "run_part", _intercept_rerun)
+    with pytest.raises(_RerunRequested):
+        _reuse_control(caller, tmp_path)
+
+
 # --------------------------------------------------------------------------- #
 # one capture in the report, not two (#1562)
 # --------------------------------------------------------------------------- #
