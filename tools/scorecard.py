@@ -32,7 +32,9 @@ RULES THIS ENFORCES, because each of them is a way a scorecard starts lying:
     Without that a stale result is indistinguishable from a current one -- and
     many worktrees are live on this repository at once, so an earlier green run
     does not cover a later change to a dependency it does not own. A result
-    without provenance gets NO VERDICT: it is a number nobody can re-derive.
+    without provenance -- or with provenance that cannot be read, `worktree`,
+    `inputs` and `config` being objects -- gets NO VERDICT: it is a number
+    nobody can re-derive.
 """
 from __future__ import annotations
 import argparse, csv, json, math, pathlib, subprocess, sys
@@ -166,6 +168,20 @@ def evaluate(case: dict, res: dict | None) -> dict:
     # What was this measured against? A result that cannot answer is not
     # evidence; it is a number. It counts against coverage, never towards it.
     prov = res.get("provenance") or {}
+
+    # Presence is not readability: these three are read as objects
+    # (`measurement_basis` iterates the last two), and a truthy non-object
+    # passed the check below as provenance -- `["x"]` scored as a pass
+    # (#2089). Typed BEFORE any `or {}` default, so a supplied empty list is
+    # still distinguishable from an omitted `config`. `null` is what an absent
+    # field gives through `.get`, so it reads as omitted: valid for the
+    # optional `config`, and "missing" below for the two required fields.
+    unreadable = [f"provenance.{k} is {type(v).__name__}, not an object"
+                  for k in ("worktree", "inputs", "config")
+                  if (v := prov.get(k)) is not None and not isinstance(v, dict)]
+    if unreadable:
+        return {"state": NO_VERDICT, "worst": None, "engine": engine,
+                "why": "; ".join(unreadable)}
     missing_prov = [k for k in ("worktree", "command", "inputs") if not prov.get(k)]
     if missing_prov:
         return {"state": NO_VERDICT, "worst": None, "engine": engine,
