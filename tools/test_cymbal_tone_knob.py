@@ -364,6 +364,18 @@ def test_a_defect_that_turns_one_property_red_and_makes_another_REFUSE_is_still_
     assert ok is True, "\n".join(lines)
 
 
+def test_the_check_command_exits_1_when_a_defect_is_caught_only_by_a_refusal(
+        monkeypatch, tmp_path, capsys):
+    """The same control through the entry point that ships: CI runs `--check`
+    (`.github/workflows/rungs.yml`) and reads its exit status, which is `ok`.
+    At `origin/main` 03148399 this returned 0."""
+    sole = tk.PROPERTIES[0]
+    _stand_in_properties(monkeypatch, passing=[sole], under={"EDT_BAND_SWAP": {sole: None}})
+    assert tk.main(["--check", "--refs", str(tmp_path)]) == 1
+    [row] = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("EDT_BAND_SWAP")]
+    assert "NO VERDICT" in row and "REFUSED under defect" in row, row
+
+
 SYNTH_SR = 48000
 
 
