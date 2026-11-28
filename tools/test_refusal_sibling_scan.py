@@ -21,6 +21,11 @@ section pins the blind spots that issue listed: a family class borrowed inside
 a function (raise, handler, the `scan` pre-filter, and the shadow that keeps it
 out of the rest of the module), the two roots outside `SCAN_ROOTS`, source
 order inside a function scope, and the one site the new roots add to the
+census, accepted with the runtime evidence for its acceptance. The #1702
+section plants each scope boundary a try can be credited across, RUNS the
+planted caller against a refusing callee, and holds the census row to the
+interpreter's verdict -- a rule about when Python runs a call is answered
+by Python, not by the rule's own docstring.
 census, accepted with the runtime evidence for its acceptance. The #1641
 section pins the CLI boundary reached through a `_cli()` wrapper the
 dispatch calls -- the placement hh_probe5's first repair used, which the
@@ -38,6 +43,7 @@ import importlib.util
 import json
 import pathlib
 import sys
+import textwrap
 import types
 
 import pytest
@@ -1761,6 +1767,77 @@ def test_locally_imported_sibling_is_not_a_base_guard(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# #1702 controls: a try is credited only within the call's own scope
+# ---------------------------------------------------------------------------
+# The walk up from a call credited EVERY try whose body contains it
+# lexically, so a def, a lambda or a generator expression WRITTEN inside a
+# try lent that try's handler to a call that runs somewhere else: a false
+# COVERED, the optimistic direction. The real tree held 0 such rows at
+# 73ff5717, so every control here PLANTS its shape; and because the rule is
+# a claim about when Python runs a call, each one RUNS the planted caller
+# first -- imported from the file the census then reads -- and holds the
+# census row to the interpreter's verdict.
+
+def _python_verdict(monkeypatch, path: pathlib.Path, mod: str = "mod_a",
+                    fn: str = "load") -> str:
+    """What the INTERPRETER does with a planted caller, imported as a real
+    module from the very file the census reads, against a callee that
+    always refuses with a class of its own in the family: 'caught' when the
+    module runs to completion after the callee raised, 'escaped' when the
+    refusal leaves the module, 'not-run' when the callee was never reached
+    (the planting does not exercise the body it defers -- a defect in the
+    control, not a verdict)."""
+    import refusal
+    calls: list = []
+    m = types.ModuleType(mod)
+    m.Refused = type("Refused", (refusal.Refused, Exception), {})
+
+    def refuse(*args, **kw):
+        calls.append((args, kw))
+        raise m.Refused("stubbed refusal")
+
+    setattr(m, fn, refuse)
+    monkeypatch.setitem(sys.modules, mod, m)
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, path.stem, module)
+    try:
+        spec.loader.exec_module(module)
+    except m.Refused:
+        return "escaped" if calls else "not-run"
+    return "caught" if calls else "not-run"
+
+
+def _scope_try(body: str, trigger: str = "", imports: str = "mod_a") -> str:
+    """A module-level `try` with an exact handler (`except mod_a.Refused`,
+    the callee's own class) around `body`, then `trigger` after it: the
+    same try, handler and refusing call around every boundary in turn, so
+    the boundary is all a control varies. Without a trigger the try is all
+    there is, and its own body makes the call -- or does not."""
+    indented = textwrap.indent(textwrap.dedent(body).strip("\n"), "    ")
+    return (f"import {imports}\n\ntry:\n{indented}\n"
+            "except mod_a.Refused:\n    pass\n" + (f"\n{trigger}\n" if trigger else ""))
+
+
+def _plant(tmp_path, monkeypatch, name: str, src: str, python,
+           mod: str = "mod_a") -> dict:
+    """The control both ways, on ONE file: the planted caller is written,
+    RUNS to the verdict the control names -- so a 'caught' is never the
+    callee simply not raising and an 'escaped' never a planting that never
+    called -- and the same file is then read by the census, its one row
+    returned for the reading."""
+    want = (python,) if isinstance(python, str) else tuple(python)
+    path = tmp_path / f"{name}.py"
+    path.write_text(src)
+    assert _python_verdict(monkeypatch, path, mod=mod) in want, src
+    files, idx = _local_tree(tmp_path, {name: src})
+    got = _sites_for(files, idx, name)
+    assert len(got) == 1, got
+    return got[0]
+
+
+# ---------------------------------------------------------------------------
 # #1718 controls: an `async def` callee is in the census
 # ---------------------------------------------------------------------------
 # `ModInfo.funcs` registered `ast.FunctionDef` alone, so `raise_origins` found
@@ -2218,6 +2295,443 @@ def _wrapper_scan(tmp_path, wrapper: str, dispatch: str) -> dict:
     got = [s for s in _sites_for(files, idx, "caller_wrapped") if s["callee"] == "mod_a.load"]
     assert len(got) == 1, got
     return got[0]
+
+
+def _reads(s: dict, classification: str) -> None:
+    """The whole row, not just its class: an escape has no guard credited
+    and leaves the callee's one origin uncovered; a cover here is the
+    planted exact handler and leaves nothing."""
+    row = (s["classification"], s["guard"], s["uncovered"])
+    if classification == "candidate-escape":
+        assert row == (classification, "none", ["mod_a"]), s
+    else:
+        assert row == (classification, "exact", []), s
+
+
+SCOPE_DEF = _scope_try('''
+    def later(**kw):
+        return mod_a.load(**kw)
+''', 'later(path="x")')
+
+SCOPE_LAMBDA = _scope_try('''
+    later = lambda **kw: mod_a.load(**kw)
+''', 'later(path="x")')
+
+SCOPE_GENEXP = _scope_try('''
+    rows = (mod_a.load(path=p) for p in ["x"])
+''', "list(rows)")
+
+
+def test_call_in_a_def_written_inside_the_try_escapes_it(tmp_path, monkeypatch):
+    """Python: the `def` statement runs inside the try and only BINDS
+    `later`; the call runs at `later(...)`, after the try. The census
+    credited the try to the call -- the shape #1702 was filed on."""
+    s = _plant(tmp_path, monkeypatch, "scope_def", SCOPE_DEF, "escaped")
+    _reads(s, "candidate-escape")
+
+
+def test_call_in_a_lambda_written_inside_the_try_escapes_it(tmp_path, monkeypatch):
+    """Python: the lambda is CREATED inside the try and called after it."""
+    s = _plant(tmp_path, monkeypatch, "scope_lambda", SCOPE_LAMBDA, "escaped")
+    _reads(s, "candidate-escape")
+
+
+def test_call_in_a_generator_expression_inside_the_try_escapes_it(tmp_path, monkeypatch):
+    """Python: a generator expression is only CREATED where it is written;
+    its element runs when something consumes it, here after the try."""
+    s = _plant(tmp_path, monkeypatch, "scope_genexp", SCOPE_GENEXP, "escaped")
+    _reads(s, "candidate-escape")
+
+
+@pytest.mark.parametrize("comp", [
+    "rows = [mod_a.load(path=p) for p in ['x']]",
+    "rows = {mod_a.load(path=p) for p in ['x']}",
+    "rows = {p: mod_a.load(path=p) for p in ['x']}",
+], ids=["list", "set", "dict"])
+def test_call_in_a_comprehension_inside_the_try_stays_covered(tmp_path, monkeypatch, comp):
+    """Python: a comprehension runs to completion where it is written -- the
+    generator expression is the lazy member of the family -- so the refusal
+    is raised inside the try. The boundary is the generator expression, not
+    the comprehension node kind it shares a scope with."""
+    s = _plant(tmp_path, monkeypatch, "scope_comp", _scope_try(comp), "caught")
+    _reads(s, "covered(exact)")
+
+
+SCOPE_AMBIG_PLAY = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def load(x):
+    raise Refused("no records")
+'''
+
+SCOPE_AMBIG_DEF = '''
+import refusal
+from play import load
+
+try:
+    def later(**kw):
+        return load(**kw)
+except refusal.Refused:
+    pass
+
+later(path="x")
+'''
+
+SCOPE_AMBIG_COMP = '''
+import refusal
+from play import load
+
+try:
+    rows = [load(path=p) for p in ["x"]]
+except refusal.Refused:
+    pass
+'''
+
+
+def _plant_collision(tmp_path, monkeypatch, name: str, src: str, python: str) -> dict:
+    """As `_plant`, on a two-way same-stem collision with a BASE handler: the
+    branch that reads tries to decide `covered(base)` or `ambiguous-callee`."""
+    path = tmp_path / f"{name}.py"
+    path.write_text(src)
+    assert _python_verdict(monkeypatch, path, mod="play") == python, src
+    files = _collision_tree(tmp_path, SCOPE_AMBIG_PLAY, PLAY_BETA, name, src)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, name)
+    assert len(got) == 1, got
+    return got[0]
+
+
+def test_a_def_inside_the_try_does_not_settle_a_stem_collision(tmp_path, monkeypatch):
+    """The collision branch read tries the same lexical way. A base guard
+    reached only through a def's body settles nothing, so the row falls
+    back to `ambiguous-callee` exactly as an unguarded collision does."""
+    s = _plant_collision(tmp_path, monkeypatch, "scope_amb_def", SCOPE_AMBIG_DEF,
+                         "escaped")
+    assert (s["classification"], s["guard"]) == ("ambiguous-callee", "none"), s
+
+
+def test_a_comprehension_inside_the_try_still_settles_a_stem_collision(tmp_path, monkeypatch):
+    """The other side of the same decision: a base guard the comprehension
+    does run under still settles the collision."""
+    s = _plant_collision(tmp_path, monkeypatch, "scope_amb_comp", SCOPE_AMBIG_COMP,
+                         "caught")
+    assert (s["classification"], s["guard"]) == ("covered(base)", "base"), s
+
+
+# --- the four shapes the issue asks a decision for, each with its reason ---
+
+SCOPE_DECORATOR = _scope_try('''
+    @mod_a.load(path="x")
+    def decorated():
+        return 1
+''')
+
+
+def test_a_decorator_call_runs_at_def_time_inside_the_try(tmp_path, monkeypatch):
+    """Decorator: NOT excluded here, for a reason that differs from the
+    body. Python evaluates the decorator expression as the `def` statement
+    runs -- inside the try -- and calls it with the function, so the
+    refusal is raised under the try. The walk passes THROUGH a def it was
+    entered by a decorator, and stops only for the body."""
+    s = _plant(tmp_path, monkeypatch, "scope_decorator", SCOPE_DECORATOR, "caught")
+    _reads(s, "covered(exact)")
+
+
+SCOPE_ASYNC_DEF = _scope_try('''
+    async def later(**kw):
+        return mod_a.load(**kw)
+''', 'asyncio.run(later(path="x"))', imports="asyncio\nimport mod_a")
+
+
+def test_call_in_an_async_def_written_inside_the_try_escapes_it(tmp_path, monkeypatch):
+    """`async def`: the same boundary as a def, because its body runs when
+    the coroutine is awaited, not where it is defined."""
+    s = _plant(tmp_path, monkeypatch, "scope_async", SCOPE_ASYNC_DEF, "escaped")
+    _reads(s, "candidate-escape")
+
+
+SCOPE_YIELD = '''
+import mod_a
+
+def rows():
+    try:
+        yield mod_a.load(path="x")
+    except mod_a.Refused:
+        yield "caught"
+
+list(rows())
+'''
+
+
+def test_a_call_yielded_under_the_generators_own_try_stays_covered(tmp_path, monkeypatch):
+    """`yield`: no exclusion is needed for the site's own scope. Python runs
+    the call on `next()`, while the generator's frame is inside its own
+    try, so that try's handler takes it. #1600's helper credit keeps a
+    yield out because THERE the try belongs to another def; here it is the
+    call's own. A walk that made a boundary of any def containing a yield
+    would lose this row."""
+    s = _plant(tmp_path, monkeypatch, "scope_yield", SCOPE_YIELD, "caught")
+    _reads(s, "covered(exact)")
+
+
+SCOPE_CLASS_BODY = _scope_try('''
+    class Holder:
+        row = mod_a.load(path="x")
+''')
+
+SCOPE_CLASS_METHOD = _scope_try('''
+    class Holder:
+        def row(self, **kw):
+            return mod_a.load(**kw)
+''', 'Holder().row(path="x")')
+
+
+def test_a_call_in_a_class_body_runs_where_the_class_statement_is(tmp_path, monkeypatch):
+    """Class body: NOT a boundary, though the issue lists one. Python
+    executes a class body where the `class` statement is -- like a
+    comprehension, unlike a def -- so a try around the class covers the
+    call. Stopping the walk at the class statement would have manufactured
+    a false escape; the verdict asserted above is the interpreter's, not a
+    reading of the reference manual."""
+    s = _plant(tmp_path, monkeypatch, "scope_class_body", SCOPE_CLASS_BODY, "caught")
+    _reads(s, "covered(exact)")
+
+
+def test_a_call_in_a_method_written_inside_the_try_escapes_it(tmp_path, monkeypatch):
+    """The control that keeps the class-body decision honest: a method is a
+    def, its body runs at the call, and the try around the class statement
+    is not on its path."""
+    s = _plant(tmp_path, monkeypatch, "scope_class_method", SCOPE_CLASS_METHOD,
+               "escaped")
+    _reads(s, "candidate-escape")
+
+
+SCOPE_LAMBDA_IN_COMP = _scope_try(
+    "later = [(lambda **kw: mod_a.load(**kw)) for _ in range(1)]", 'later[0](path="x")')
+
+
+def test_a_lambda_created_by_a_comprehension_still_escapes_the_try(tmp_path, monkeypatch):
+    """A comprehension creates its lambda on the spot, inside the try, but
+    creating a lambda is not calling it: the call runs at `later[0](...)`.
+    A boundary stays crossed above an eager node, or this row is lost."""
+    s = _plant(tmp_path, monkeypatch, "scope_lambda_in_comp", SCOPE_LAMBDA_IN_COMP,
+               "escaped")
+    _reads(s, "candidate-escape")
+
+
+@pytest.mark.parametrize("body", [
+    'row = (lambda **kw: mod_a.load(**kw))(path="x")',
+    '@lambda f: mod_a.load(path="x")\ndef decorated():\n    return 1',
+], ids=["called-on-the-spot", "as-a-decorator"])
+def test_a_lambda_invoked_where_written_runs_inside_the_try(tmp_path, monkeypatch, body):
+    """The two places the AST itself says a lambda is invoked on the spot:
+    as the callee of a call, and as a decorator (called with the def). Its
+    body runs there, under the try, and the walk must not stop at it."""
+    s = _plant(tmp_path, monkeypatch, "scope_lambda_invoked", _scope_try(body), "caught")
+    _reads(s, "covered(exact)")
+
+
+@pytest.mark.parametrize("body", [
+    'rows = (lambda: (yield mod_a.load("x")))()',
+    'rows = (lambda: (yield from mod_a.load("x")))()',
+    '@lambda f: (yield mod_a.load("x"))\ndef decorated():\n    return 1\nrows = decorated',
+], ids=["yield", "yield-from", "as-a-decorator"])
+def test_a_generator_lambda_invoked_in_place_defers_its_body(tmp_path, monkeypatch, body):
+    """Calling a generator lambda only creates the generator; the call runs at
+    `next()`, after the try (#1702 review)."""
+    s = _plant(tmp_path, monkeypatch, "scope_lambda_gen",
+               _scope_try(body, "next(rows)"), "escaped")
+    _reads(s, "candidate-escape")
+
+
+def test_a_yield_in_a_nested_lambda_leaves_the_outer_lambda_eager(tmp_path, monkeypatch):
+    """The yield belongs to the inner lambda, which is never called: the outer
+    lambda is not a generator and its body runs under the try."""
+    body = 'row = (lambda: (lambda: (yield 1)) and mod_a.load("x"))()'
+    s = _plant(tmp_path, monkeypatch, "scope_lambda_nested_yield", _scope_try(body), "caught")
+    _reads(s, "covered(exact)")
+
+
+def test_a_generator_lambda_default_is_still_eager(tmp_path, monkeypatch):
+    """A default value is evaluated as the lambda is created, generator or not."""
+    body = 'rows = (lambda a=mod_a.load("x"): (yield a))()'
+    s = _plant(tmp_path, monkeypatch, "scope_lambda_gen_default", _scope_try(body), "caught")
+    _reads(s, "covered(exact)")
+
+
+_ANN_CLASS = 'class C:\n    x: mod_a.load("x")'
+_ANN_MODULE = 'x: mod_a.load("x")'
+
+
+def _with_future(src: str, trigger: str) -> str:
+    return ("from __future__ import annotations\nimport typing, sys\n"
+            + _scope_try(src, trigger))
+
+
+@pytest.mark.parametrize("body,trigger", [
+    (_ANN_CLASS, "typing.get_type_hints(C)"),
+    (_ANN_MODULE, "typing.get_type_hints(sys.modules[__name__])"),
+], ids=["class", "module"])
+def test_a_postponed_variable_annotation_escapes_the_try(tmp_path, monkeypatch, body, trigger):
+    """With `from __future__ import annotations` the annotation is a string
+    until `get_type_hints`, after the try (#1702 review)."""
+    s = _plant(tmp_path, monkeypatch, "scope_ann_postponed",
+               _with_future(body, trigger), "escaped")
+    _reads(s, "candidate-escape")
+
+
+@pytest.mark.parametrize("body", [_ANN_CLASS, _ANN_MODULE], ids=["class", "module"])
+def test_an_ordinary_variable_annotation_runs_inside_the_try(tmp_path, monkeypatch, body):
+    """Control: without the future import (3.12) the annotation runs where it
+    is written, so the try covers it -- the distinction is preserved."""
+    s = _plant(tmp_path, monkeypatch, "scope_ann_eager",
+               "import typing, sys\n" + _scope_try(body), "caught")
+    _reads(s, "covered(exact)")
+
+
+def test_a_postponed_annotated_assignments_value_stays_eager(tmp_path, monkeypatch):
+    """Only the annotation waits; the assigned value runs under the try."""
+    body = 'x: int = mod_a.load("x")'
+    s = _plant(tmp_path, monkeypatch, "scope_ann_value",
+               _with_future(body, ""), "caught")
+    _reads(s, "covered(exact)")
+
+
+SCOPE_DEF_IN_A_DEF = '''
+import mod_a
+
+def go(p):
+    try:
+        def later(**kw):
+            return mod_a.load(**kw)
+    except mod_a.Refused:
+        return None
+    return later(path=p)
+
+go("x")
+'''
+
+SCOPE_NESTED_OWN_TRY = '''
+import mod_a
+
+def go(p):
+    try:
+        def inner(**kw):
+            try:
+                return mod_a.load(**kw)
+            except mod_a.Refused:
+                return None
+    except mod_a.Refused:
+        return None
+    return inner(path=p)
+
+go("x")
+'''
+
+
+def test_a_try_in_an_enclosing_def_is_not_lent_to_a_nested_defs_call(tmp_path, monkeypatch):
+    """The issue's shape one level down: the try belongs to `go`, the call
+    to `later`, and `go` calling `later` after its try is where the refusal
+    escapes. A boundary is a boundary at any depth, not only at module
+    level."""
+    s = _plant(tmp_path, monkeypatch, "scope_def_in_def", SCOPE_DEF_IN_A_DEF,
+               "escaped")
+    _reads(s, "candidate-escape")
+
+
+def test_a_nested_defs_own_try_still_covers_its_call(tmp_path, monkeypatch):
+    """The control that bounds the fix: only tries OUTSIDE the def are
+    withheld. Against the unfixed scanner this row read
+    `covered(exact+exact)`: `go`'s try was credited next to the call's
+    own, though the call never runs under it -- the same defect on the
+    side where it does no harm. After it, only the try `inner` writes is
+    left; a walk that credited nothing once a def was anywhere on the
+    path would lose this row."""
+    s = _plant(tmp_path, monkeypatch, "scope_own_try", SCOPE_NESTED_OWN_TRY, "caught")
+    _reads(s, "covered(exact)")
+
+
+# --- what defeats a scope rule built from the boundaries the issue names ---
+
+SCOPE_TYPE_ALIAS = _scope_try('type Row = mod_a.load(path="x")', "Row.__value__")
+
+
+def test_call_in_a_type_alias_statement_inside_the_try_escapes_it(tmp_path, monkeypatch):
+    """The input that defeats a rule built from the issue's four boundaries
+    (verification-rules rule 8): a `type` alias statement evaluates its
+    value on first use, not where it is written (PEP 695), so the refusal
+    leaves the try at `Row.__value__`. No def, lambda, class or generator
+    expression sits between, and without the alias among the boundaries
+    this row reads `covered(exact)` -- the optimistic direction again. The
+    tree held no such statement at 73ff5717."""
+    s = _plant(tmp_path, monkeypatch, "scope_alias", SCOPE_TYPE_ALIAS, "escaped")
+    _reads(s, "candidate-escape")
+
+
+SCOPE_DEFAULT = _scope_try('''
+    def needs(row=mod_a.load(path="x")):
+        return row
+''')
+
+SCOPE_GENEXP_FIRST_ITERABLE = _scope_try('rows = ("ok" for p in mod_a.load(path="x"))')
+
+
+def test_a_call_in_a_default_value_runs_at_def_time_inside_the_try(tmp_path, monkeypatch):
+    """A default value is evaluated as the `def` statement runs, like a
+    decorator, so it runs under the try around the def."""
+    s = _plant(tmp_path, monkeypatch, "scope_default", SCOPE_DEFAULT, "caught")
+    _reads(s, "covered(exact)")
+
+
+def test_a_generator_expressions_first_iterable_runs_where_written(tmp_path, monkeypatch):
+    """PEP 289 evaluates a generator expression's FIRST iterable on the
+    spot and defers the rest; a rule that stopped at the generator
+    expression without reading which part the call is in would lose this
+    row."""
+    s = _plant(tmp_path, monkeypatch, "scope_genexp_iter",
+               SCOPE_GENEXP_FIRST_ITERABLE, "caught")
+    _reads(s, "covered(exact)")
+
+
+SCOPE_USED_ON_THE_SPOT = [
+    _scope_try("rows = list(mod_a.load(path=p) for p in ['x'])"),
+    _scope_try("rows = sorted(['x'], key=lambda p: mod_a.load(path=p))"),
+    _scope_try("def needs(row: mod_a.load(path='x')):\n    return row"),
+]
+
+
+@pytest.mark.parametrize("src", SCOPE_USED_ON_THE_SPOT, ids=[
+    "generator-expression-drained-by-list", "lambda-passed-as-a-key",
+    "call-in-an-annotation"])
+def test_a_deferred_call_the_same_try_uses_on_the_spot_reads_candidate_escape(
+        tmp_path, monkeypatch, src):
+    """The cost of the scope rule, pinned so it is a reading and not a
+    rumour. Python catches the first two inside the try and, on 3.12
+    without `from __future__ import annotations`, evaluates the third
+    there too (with the import it never runs it): none escapes. But WHICH
+    calls consume their argument, and whether an annotation is evaluated
+    at all, is the callee's and the module's business, not the AST's, so
+    the walk takes the pessimistic side. A false escape is a row to
+    triage; a false covered is the defect this issue exists to remove."""
+    s = _plant(tmp_path, monkeypatch, "scope_on_the_spot", src, ("caught", "not-run"))
+    _reads(s, "candidate-escape")
+
+
+SCOPE_CLASS_TYPE_PARAM = _scope_try('''
+    class C[T: mod_a.load(path="x")]:
+        pass
+''', "C.__type_params__[0].__bound__")
+
+
+def test_call_in_a_class_type_param_bound_inside_the_try_escapes_it(tmp_path, monkeypatch):
+    """Python: a PEP 695 bound is evaluated lazily, on `__bound__` access,
+    after the try. ClassDef is transparent, so before TypeVar was a
+    boundary this read `covered(exact)` -- the optimistic direction."""
+    s = _plant(tmp_path, monkeypatch, "scope_class_tp", SCOPE_CLASS_TYPE_PARAM, "escaped")
+    _reads(s, "candidate-escape")
 
 
 def test_base_guard_in_a_wrapper_the_dispatch_calls_is_cli_base(tmp_path):

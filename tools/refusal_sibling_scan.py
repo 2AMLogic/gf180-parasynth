@@ -34,6 +34,16 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     the body it guards, not the same statement's except/else/finally
     clauses, where the raised refusal propagates past it (#1188
     "try-handler credit", fixed);
+  * and only when the call RUNS in that body (#1702): a def, a lambda, a
+    generator expression or a `type` alias WRITTEN inside a try is created
+    there and runs elsewhere, so the walk up from the call stops crediting
+    at the body of such a node. Where the boundary sits follows the
+    interpreter, not the node's kind: a decorator, a default value and a
+    generator's first iterable are evaluated as the creating statement
+    runs, and a class body runs with its `class` statement, like a
+    comprehension. No census row moved when this landed (388 at
+    `73ff5717`); every rule of it is held by a planted shape the test
+    RUNS before reading the census;
   * every tracked file is indexed by its own path -- two same-stem files
     (audition/play.py and fpga/play.py in this tree) are both scanned with
     their own trees, and a callee imported through a colliding stem is
@@ -143,6 +153,19 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     `rtl-sketch` and `audition` since #1577 -- the last two were outside it
     at #1573, which put the site above in no census; `audition/` has none.
     Every other tracked file is indexed as a CALLEE only.
+  * the scope rule is conservative where only the callee could tell: a
+    lambda or generator expression the same try consumes on the spot
+    (`sorted(xs, key=lambda p: rc.render(p))`, `list(rc.render(p) for p in
+    ps)`) and a call written in an annotation all read `candidate-escape`,
+    though Python runs the first two inside the try, and the third at def
+    time on 3.12 without `from __future__ import annotations`. Which calls
+    consume their argument, and whether an annotation is evaluated at all,
+    is not in the AST. The price is a row to triage, never a false
+    covered (#1702);
+  * PEP 695 type parameters are boundaries: a bound or constraint on a
+    class, def or `type` alias (`class C[T: mod.load()]`) is evaluated
+    lazily, on `C.__type_params__[0].__bound__`, so a try around the
+    `class` does not cover it (#1702);
 
 Four further gaps were filed against this list -- try-handler credit,
 stem collision and alias loss in #1188, the borrowed family in #1193 --
@@ -438,19 +461,104 @@ def raise_origins(mod: ModInfo, fname: str,
 # ---------------------------------------------------------------------------
 # per-call-site analysis
 # ---------------------------------------------------------------------------
-def enclosing_try_parents(tree: ast.AST, call: ast.AST) -> list[ast.Try]:
+# a node whose body runs somewhere else than where the node is written: a
+# def, a lambda or a generator expression is only CREATED where it stands,
+# and a `type` alias (PEP 695) evaluates its value on first use. So do the
+# PEP 695 type parameters: a bound or constraint (`class C[T: f()]`) is
+# evaluated lazily, on `__bound__` access, not where the `class` statement
+# runs -- and a ClassDef is transparent, so without these a refusal raised
+# at the access reads `covered(exact)` (the optimistic, false-covered read)
+DEFERRED_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
+                  ast.GeneratorExp, ast.TypeAlias,
+                  ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple)
+
+
+def _within(node: ast.AST, part: ast.AST) -> bool:
+    return any(n is node for n in ast.walk(part))
+
+
+def _eager_parts(node: ast.AST) -> list[ast.AST]:
+    """The parts of a deferred node the interpreter evaluates WHERE the node
+    is written, as the statement creating it runs: a def's decorators and
+    default values, a lambda's defaults, a generator expression's first
+    iterable (PEP 289). Everything else of these nodes waits -- the body,
+    a generator's element, an alias's value."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        parts: list[ast.AST] = list(node.decorator_list)
+    elif isinstance(node, ast.Lambda):
+        parts = []
+    elif isinstance(node, ast.GeneratorExp):
+        return [node.generators[0].iter]
+    else:
+        return []
+    return [*parts, *node.args.defaults,
+            *(d for d in node.args.kw_defaults if d is not None)]
+
+
+def _invoked_in_place(mod: ModInfo, node: ast.Lambda) -> bool:
+    """Whether a lambda is called exactly where it is written -- as the
+    callee of a call, or as a decorator, which is called with the def it
+    decorates -- so that its body runs there and not elsewhere."""
+    p = mod.parents.get(node)
+    return (not _lambda_yields(node)
+            and ((isinstance(p, ast.Call) and p.func is node)
+                 or (isinstance(p, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                     and node in p.decorator_list)))
+
+
+def _lambda_yields(node: ast.Lambda) -> bool:
+    """Whether the lambda is a generator: a `yield` / `yield from` in its OWN
+    body. Calling it only creates the generator; the body runs at `next()`,
+    which may be after the try. A yield inside a NESTED lambda belongs to
+    that lambda and leaves this one's timing alone (#1702)."""
+    stack = [node.body]
+    while stack:
+        n = stack.pop()
+        if isinstance(n, (ast.Yield, ast.YieldFrom)):
+            return True
+        if not isinstance(n, ast.Lambda):
+            stack.extend(ast.iter_child_nodes(n))
+    return False
+
+
+def _postponed_annotations(mod: ModInfo) -> bool:
+    """`from __future__ import annotations` in this module: a variable
+    annotation is then stored as a string and evaluated only if something
+    calls `get_type_hints`, which may be after the try. Without it (3.12) a
+    class- or module-level annotation runs where it is written. Python 3.14
+    defers them regardless; the scanner targets the 3.12 CI."""
+    return any(isinstance(n, ast.ImportFrom) and n.module == "__future__"
+               and any(a.name == "annotations" for a in n.names)
+               for n in mod.tree.body)
+
+
+def scope_try_parents(mod: ModInfo, call: ast.AST) -> list[ast.Try]:
     """The try statements whose handlers can actually catch `call`'s
-    exceptions: only tries whose BODY contains the call. A try's handlers
-    cover the body they guard -- NOT the same statement's except/else/
-    finally clauses, where an exception propagates past them."""
-    parents: dict[ast.AST, ast.AST] = {}
-    for node in ast.walk(tree):
-        for ch in ast.iter_child_nodes(node):
-            parents[ch] = node
-    out, cur = [], call
-    while cur in parents:
-        prev, cur = cur, parents[cur]
-        if isinstance(cur, ast.Try) and prev in cur.body:
+    exceptions, innermost first: those whose BODY contains the call -- a
+    handler covers the body it guards, not the same statement's except/
+    else/finally clauses (#1188) -- AND whose body the call RUNS in
+    (#1702). The walk up from the call stops crediting once it crosses the
+    BODY of a def, a lambda, a generator expression or a `type` alias: such
+    a node written inside a try is only created there, and its call runs
+    when the function is called, the generator consumed or the alias read,
+    which may be after the try. Where the boundary sits is read from the
+    interpreter's timing rather than from the node's kind alone: a
+    decorator, a default value and a generator's first iterable are
+    evaluated as the creating statement runs, a lambda invoked on the spot
+    runs there, and a class body is no boundary at all -- it executes
+    where the `class` statement is, like a comprehension. Once crossed, a
+    boundary stays crossed: a comprehension may create a lambda inside the
+    try, and the call still waits for the lambda to be called."""
+    out, cur, deferred = [], call, False
+    while cur in mod.parents:
+        prev, cur = cur, mod.parents[cur]
+        if not deferred and isinstance(cur, DEFERRED_NODES):
+            in_place = isinstance(cur, ast.Lambda) and _invoked_in_place(mod, cur)
+            deferred = not (in_place or any(_within(call, p) for p in _eager_parts(cur)))
+        elif (not deferred and isinstance(cur, ast.AnnAssign)
+              and prev is cur.annotation and _postponed_annotations(mod)):
+            deferred = True      # the value expression stays eager: only the annotation waits
+        if not deferred and isinstance(cur, ast.Try) and prev in cur.body:
             out.append(cur)
     return out
 
@@ -646,7 +754,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                            for c in cands):
                     continue
                 ashapes = []
-                for tr in (enclosing_try_parents(mod.tree, node) if runs_here else []):
+                for tr in (scope_try_parents(mod, node) if runs_here else []):
                     for h in tr.handlers:
                         _, shape = handler_origins(mod, by_stem, h)
                         if shape in ("base", "broad"):
@@ -669,7 +777,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
             if not origins:
                 continue                      # this function raises no refusal
             covered, shapes = set(), []
-            for tr in (enclosing_try_parents(mod.tree, node) if runs_here else []):
+            for tr in (scope_try_parents(mod, node) if runs_here else []):
                 for h in tr.handlers:
                     ho, shape = handler_origins(mod, by_stem, h)
                     if shape in ("base", "broad"):
