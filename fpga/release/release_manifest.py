@@ -536,7 +536,9 @@ def check(manifest_path: Path = MANIFEST) -> tuple:
     """(verdict, detail)."""
     try:
         fresh = json.loads(json.dumps(build()))
-    except Refused as exc:
+    except refusal.Refused as exc:      # any module's refusal, by class (#1681):
+        # rm.presets() is called outside the capture loop's handler, and a
+        # sibling it raises is not this module's Refused
         return "REFUSED", str(exc)
     if not Path(manifest_path).exists():
         return "REFUSED", f"no manifest at {manifest_path}"
@@ -564,7 +566,7 @@ def main(argv=None) -> int:
     if a.write:
         try:
             m = build()
-        except Refused as exc:
+        except refusal.Refused as exc:  # any module's refusal, by class (#1681), as check()
             print(f"release_manifest: REFUSED -- {exc}")
             return 2
         a.manifest.write_text(json.dumps(m, indent=2, sort_keys=False) + "\n")
