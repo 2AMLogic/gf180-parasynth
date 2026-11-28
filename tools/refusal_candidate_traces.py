@@ -452,8 +452,9 @@ TRACES += [
          working=lambda ws: ({"unresolved": "the frozen reference audio is not restored in this tree "
                                            "(python tools/refprofile_restore.py)"}
                              if not (ROOT / "refprofile/cache").is_dir() else
-                             run("tools/f1_rtl_filter_path.py", ["--json", str(ws / "curve.json")],
-                                 note="--frames below the first analysis window is itself refused, after :449 ran")),
+                             run("tools/f1_rtl_filter_path.py", ["--frames", "0", "--json", str(ws / "curve.json")],
+                                 timeout=2400, note="the whole F1 train: the tool's own default, --frames 20000, is "
+                                                    "shorter than its first analysis window and is refused after :449 ran")),
          refusing=[lambda ws: needs(tree(ws), lambda root: run(
              "tools/f1_rtl_filter_path.py", ["--json", str(ws / "curve.json")], root=root,
              expect="escape: a fresh checkout has no frozen reference audio, and refprofile.Refused is "

@@ -628,6 +628,7 @@ def view(rec: dict, site: str, callee: str) -> dict:
     out["follows"] = [f for f in rec["follows"] if _mine({"callee": f.get("callee"), "caller": f["stack"][0]},
                                                        site, callee)]
     out["site_executed"] = [site] if out["calls"] else []
+    cap_calls(out)
     if out["follows"]:
         out["verdict"] = classify({**rec, "follows": out["follows"]})
     elif out["calls"]:
@@ -635,6 +636,21 @@ def view(rec: dict, site: str, callee: str) -> dict:
     else:
         out["verdict"] = NOT_REACHED         # this run never got to the site
     return out
+
+
+#: how many of a run's calls at one site a record keeps; a loop that calls the
+#: callee 64 times is one fact, `calls_total`, not 64 briefs
+KEPT_CALLS = 12
+
+
+def cap_calls(rec: dict) -> None:
+    """Keep the first KEPT_CALLS calls a site's view lists; `calls_total` keeps
+    the count. In place, so a record merged from an earlier run can be trimmed
+    to the same shape."""
+    calls = rec.get("calls") or []
+    if "calls_total" not in rec:
+        rec["calls_total"] = len(calls)
+    rec["calls"] = calls[:KEPT_CALLS]
 
 
 def trace_all(traces: list[dict], workroot: pathlib.Path, roles: tuple[str, ...],
