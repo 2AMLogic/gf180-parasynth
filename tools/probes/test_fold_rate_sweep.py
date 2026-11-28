@@ -24,6 +24,7 @@ than reports when its precondition fails.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -269,4 +270,25 @@ def test_a_write_failure_after_the_sweep_is_refused_with_the_report_printed(tmp_
     out = capsys.readouterr().out
     assert "fold_rate_sweep -- #767" in out, "the report must still be printed"
     assert "REFUSED" in out and str(target) in out, out
+
+
+def test_a_read_only_parent_passes_the_pre_flight_and_its_write_is_refused(tmp_path, capsys):
+    """The edge the pre-flight does not claim: a parent that EXISTS but cannot
+    be written to is made nothing of by `mkdir(exist_ok=True)`, so it is found
+    at the write, after the sweep -- REFUSED, 2, report printed, no file. Root
+    writes through the mode, so the control cannot run there."""
+    if os.geteuid() == 0:
+        pytest.skip("root ignores the directory mode")
+    target = tmp_path / "read-only" / "sweep.txt"
+    target.parent.mkdir()
+    target.parent.chmod(0o500)
+    try:
+        code = S.main(["--taps", str(D.FOLD_SINC_TAPS), "--f0", "300", "-o", str(target)])
+    finally:
+        target.parent.chmod(0o700)
+    out = capsys.readouterr().out
+    assert code == 2, out[-400:]
+    assert "fold_rate_sweep -- #767" in out, "the report must still be printed"
+    assert f"REFUSED: -o {target} was not written" in out, out[-400:]
+    assert not target.exists()
 

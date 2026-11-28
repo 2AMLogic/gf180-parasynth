@@ -592,10 +592,13 @@ def test_control_a_word_match_flags_the_unprefixed_string(probe):
 # `--json no/such/dir/a.json` on the synthetic corpus exited 1 on
 # `FileNotFoundError` after all nine experiments; `--json <a directory>` and
 # `--json <a file>/a.json`, with no corpus, exited 2 for the CORPUS's own
-# refusal -- E0 had already run, and the destination was never consulted. The
-# 34 controls of this slice (seven probes) failed together in 110.77 s, 33 of
-# them again in 5.32 s without the full run below. WHAT IS UNDER TEST: the
-# destination, before anything loads, and the write itself.
+# refusal -- E0 had already run, and the destination was never consulted.
+# The 34 controls of this slice (seven probes) failed together in 110.77 s;
+# with the probes reverted and the committed tests kept, 33 failed again in
+# 6.04 s (the full run deselected). Read by failure REASON, not by count: the
+# first draft of four cymbal controls was red on a helper-name collision, a
+# test bug, which the count alone could not tell from the defect.
+# WHAT IS UNDER TEST: the destination, before anything loads, the write.
 #
 #   --json a directory, or under a file     the real process. The refusal is
 #                                            at argument parsing, so no
