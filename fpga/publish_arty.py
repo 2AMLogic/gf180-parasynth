@@ -352,10 +352,11 @@ def publish(artifact, output):
         if drift:
             raise ValueError("external-I/O constraint drift: " + "; ".join(drift))
         # #315: present in the text is not bound in the design. The build's own
-        # query counts must show every object query bound exactly its objects
-        bound = xb.check_report((artifact / xb.REPORT).read_text(), xdc_snap.read_text())
-        bound += xb.check_route((artifact / xb.REPORT).read_text(),
-                                (artifact / xb.EXCEPTIONS).read_text(), xdc_snap.read_text())
+        # query counts must show every object query bound exactly its objects.
+        # An XDC the checks cannot read raises xb.Refused: a refusal, which is
+        # never a "did not bind" (#1922)
+        bound = xb.check_build((artifact / xb.REPORT).read_text(),
+                               (artifact / xb.EXCEPTIONS).read_text(), xdc_snap.read_text())
         if bound:
             raise ValueError("XDC constraints did not bind: " + "; ".join(bound))
     remaining = ["physical programming, control and audio capture"]
@@ -504,4 +505,10 @@ if __name__ == "__main__":
     elif args.out is None:
         parser.error("--out is required to publish")
     else:
-        print(json.dumps(publish(args.artifact, args.out), indent=2))
+        try:
+            print(json.dumps(publish(args.artifact, args.out), indent=2))
+        except xb.Refused as exc:
+            # a stated missing precondition (tools/refusal.py), exit 2 -- not
+            # the exit 1 and traceback of an implementation error (#1922)
+            print(f"publish_arty: REFUSED -- {exc}")
+            raise SystemExit(2)

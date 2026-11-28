@@ -80,7 +80,7 @@ def _records(tmp_path, paths):
         comp.update(periods=100, periods_required=100, writes_seen=10, presses=2)
         rec = {"state": "PASS", "exit_code": 0, "inject": None, "scenario": sc,
                "configuration": bp.CONFIG, "comparison": comp,
-               "source_sha256": {str(p): _sha(p) for p in paths},
+               "source_sha256": {bp._key(p): _sha(p) for p in paths},
                "transcript_sha256": _sha(d / "transcript.txt")}
         (d / "verification.json").write_text(json.dumps(rec))
 
@@ -153,3 +153,73 @@ def test_tampered_kit_rom_refuses_the_build_before_vivado(tmp_path, monkeypatch)
     rep = json.loads((out / "report.json").read_text())
     assert rc == 2 and rep["state"] == "REFUSED" and "kit-hash" in rep["reason"]
     assert not (out / "build.tcl").exists()
+
+
+# ---- #1922: the post-route constraint check refusing is REFUSED, not FAIL ---------
+OUTPUTS = ("arty_pads.bit", "utilization.rpt", "timing.rpt", "clocks.rpt", "drc.rpt",
+           "routed.dcp", xb.REPORT, xb.EXCEPTIONS, bp.PADS_REPORT)
+PADS_FIXTURE = ROOT / "fpga/reports/arty/pads-demo-2025.1"
+
+
+@pytest.fixture
+def fake_vivado(monkeypatch):
+    """A Vivado that accepts the script and writes whatever the test put in the
+    dict it returns, under the build directory. main() then reaches its own
+    post-route checks -- the code under test. Nothing here says the Tcl runs or
+    that the image closes timing; that stays the build box's run."""
+    written = {}
+
+    def popen(argv, **kwargs):
+        class Process:
+            pid = 4242
+
+            def wait(self, timeout=None):
+                directory = Path(argv[argv.index("-log") + 1]).parent
+                for name, text in written.items():
+                    (directory / name).write_text(text)
+                return 0
+        return Process()
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/fake/vivado")
+    monkeypatch.setattr(subprocess, "check_output", lambda *a, **k: "Vivado v2025.1 (fake)\n")
+    monkeypatch.setattr(subprocess, "Popen", popen)
+    return written
+
+
+def _run_to_the_checks(tmp_path, written):
+    for name in OUTPUTS:
+        written.setdefault(name, "not read\n")
+    _records(tmp_path, bp.sources() + bp.roms())
+    out = tmp_path / "out"
+    rc = bp.main(["--out", str(out), "--verification", str(tmp_path), "--vivado", "/fake/vivado"])
+    return rc, json.loads((out / "report.json").read_text())
+
+
+def test_a_refused_constraint_check_ends_the_build_refused_not_a_traceback(tmp_path, monkeypatch,
+                                                                          fake_vivado):
+    """A Refused raised at the post-route check has no handler of its own:
+    check_report used to fold it into the FAIL list instead. The build must end
+    REFUSED -- its state for every other precondition it could not check -- with
+    the reason, exit 2. (The live XDC cannot reach this line today, because the
+    same refusal stops tcl_script during prepare; the handler is for the check,
+    not for today's XDC.)"""
+    def refused(report, xdc):
+        raise xb.Refused("planted: the XDC cannot be read")
+    monkeypatch.setattr(xb, "check_report", refused)
+    rc, rep = _run_to_the_checks(tmp_path, fake_vivado)
+    assert rc == 2 and rep["state"] == "REFUSED", rep
+    assert rep["reason"] == "planted: the XDC cannot be read"
+
+
+def test_control_a_constraint_that_bound_nothing_still_fails_the_build(tmp_path, fake_vivado):
+    """The same run with a report Vivado could have written when the UART lines
+    matched nothing (R1's defect, #315): a measurement, so FAIL, exit 1."""
+    fake_vivado[xb.REPORT] = "".join(
+        f"MATCH\t{n}\t{kind}\t0\t{exp}\t0\t{xb.query_id(rx)}\n"
+        for n, kind, rx, exp, _a in xb.object_queries(bp.XDC.read_text())) + "END\t6\n"
+    fake_vivado[bp.PADS_REPORT] = (PADS_FIXTURE / bp.PADS_REPORT).read_text()
+    fake_vivado["timing.rpt"] = (PADS_FIXTURE / "timing.rpt").read_text()
+    rc, rep = _run_to_the_checks(tmp_path, fake_vivado)
+    assert rc == 1 and rep["state"] == "FAIL", rep
+    assert any("matched 0" in p for p in rep["problems"]), rep["problems"]
+    assert all("planted" not in p for p in rep["problems"]), rep["problems"]

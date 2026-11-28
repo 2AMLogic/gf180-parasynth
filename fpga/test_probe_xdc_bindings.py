@@ -57,3 +57,45 @@ def test_the_digest_guard_refuses_a_present_but_unnamed_checkpoint(tmp_path, mon
                  "--out", str(tmp_path / "out"), "--vivado", "/nonexistent-vivado"])
     assert rc == 2
     assert not (tmp_path / "out" / "probe.json").exists()
+
+
+def test_a_check_that_cannot_read_its_xdc_ends_the_probe_refused(tmp_path, monkeypatch, capsys):
+    """#1922. The tree's XDC gains an exception kind expected_exceptions() does
+    not model: tcl_assertions still emits, Vivado still runs -- three times, on
+    the build box -- and check_route refuses on the way back. The probe must say
+    REFUSED (exit 2) and name the reason: not fold the refusal into a problems
+    list and print FAIL, and not leave a verdict-shaped probe.json behind."""
+    sys.path.insert(0, str(ROOT / "fpga"))
+    import xdc_bindings as xb
+    clean = xb.XDC.read_text()
+    m = _probe_module(monkeypatch)
+    xdc = tmp_path / "arty-a7-100.xdc"
+    xdc.write_text(clean + "\nset_max_delay 5.0 -from [get_ports x] -to [get_ports y]\n")
+    monkeypatch.setattr(xb, "XDC", xdc)
+    # what a Vivado run on a netlist that bound every query would leave behind
+    report = "".join(f"MATCH\t{n}\t{kind}\t{exp}\t{exp}\t{exp if a else '-'}\t{xb.query_id(rx)}\n"
+                     for n, kind, rx, exp, a in xb.object_queries(clean)) + "END\t0\n" \
+        + "".join(f"CHECK\t{c}\t1\tfixture\n" for c in xb.ROUTE_CHECKS) + "ROUTE_END\t0\n"
+    table = "\n".join(["Exceptions Report", "", "--------  ----  -------  --  -----  ----  ------"]
+                      + [f"{i}  {f}  *  {t}  false  false"
+                         for i, (f, t) in enumerate(xb.expected_exceptions(clean), 2)]) + "\n"
+    real_run = subprocess.run
+
+    def vivado(argv, **kwargs):
+        if argv[0] == "git":                      # R1's XDC still comes from the repository
+            return real_run(argv, **kwargs)
+        d = Path(argv[argv.index("-source") + 1]).parent
+        (d / xb.REPORT).write_text(report)
+        (d / xb.EXCEPTIONS).write_text(table)
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", vivado)
+    dcp = tmp_path / "r1-routed.dcp"
+    dcp.write_bytes(b"the checkpoint, bound by digest")
+    rc = m.main(["--dcp", str(dcp), "--dcp-sha256", m.sha(dcp), "--out", str(tmp_path / "out"),
+                 "--vivado", "/nonexistent-vivado"])
+    out = capsys.readouterr().out
+    assert rc == 2, out
+    assert "probe_xdc_bindings: REFUSED --" in out and "does not model" in out, out
+    assert "FAIL" not in out and "PASS" not in out, out
+    assert not (tmp_path / "out" / "probe.json").exists()

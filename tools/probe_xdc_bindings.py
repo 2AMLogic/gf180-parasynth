@@ -14,7 +14,8 @@ checked against the netlist the R1 image was actually built from:
             REFUSE (exit 3), naming XDC lines 42 and 46
 
 The checkpoint digest is asserted before Vivado opens it and after it exits.
-Exit 0 when both behave as stated, 1 otherwise, 2 when the apparatus cannot run.
+Exit 0 when both behave as stated, 1 otherwise, 2 when the apparatus cannot run
+or a check could not read the XDC it was given (REFUSED, by reason #1922).
 """
 from __future__ import annotations
 
@@ -55,10 +56,22 @@ def run(vivado, dcp, xdc_text, d: Path, apply: str = "") -> dict:
     refused = [ln for ln in r.stdout.splitlines() if ln.startswith("CONSTRAINT_")]
     out = {"rc": r.returncode, "refused": refused,
            "report": rpt.read_text() if rpt.exists() else None,
-           "check_report": xb.check_report(rpt.read_text(), xdc_text) if rpt.exists() else None,
+           "check_report": None, "check_route": None, "check_refused": {},
            "exceptions": exc.read_text() if exc.exists() else None}
-    out["check_route"] = (xb.check_route(rpt.read_text(), exc.read_text(), xb.XDC.read_text())
-                          if rpt.exists() and exc.exists() else None)
+
+    def checked(key, check):
+        # #1922: a check that could not read its XDC is recorded as refused, by
+        # its reason -- never appended to a problems list, which reads as FAIL
+        try:
+            out[key] = check()
+        except xb.Refused as exc:
+            out["check_refused"][key] = str(exc)
+
+    if rpt.exists():
+        checked("check_report", lambda: xb.check_report(rpt.read_text(), xdc_text))
+    if rpt.exists() and exc.exists():
+        checked("check_route", lambda: xb.check_route(rpt.read_text(), exc.read_text(),
+                                                      xb.XDC.read_text()))
     return out
 
 
@@ -87,6 +100,16 @@ def main(argv=None) -> int:
     asbuilt = run(vivado, a.dcp.resolve(), xb.XDC.read_text(), a.out / "control-r1-as-built")
     if sha(a.dcp) != a.dcp_sha256:
         print("probe_xdc_bindings: REFUSED -- the checkpoint changed during the probe")
+        return 2
+    # #1922: a check that could not read its XDC has no verdict, so there is
+    # none to print -- not PASS, not FAIL, and no verdict-shaped probe.json.
+    # Each run's own reports stay under --out for the build box to read.
+    refusals = [f"{label} {key}: {reason}" for label, run in
+                (("fixed", fixed), ("control R1 XDC", control),
+                 ("control R1 as built", asbuilt))
+                for key, reason in run["check_refused"].items()]
+    if refusals:
+        print("probe_xdc_bindings: REFUSED -- " + "; ".join(refusals))
         return 2
     ok_fixed = (fixed["rc"] == 0 and fixed["check_report"] == [] and not fixed["refused"]
                 and fixed["check_route"] == [])

@@ -295,7 +295,14 @@ def main(argv=None):
                       "(exit 3 = a constraint or pads-input check refused; see runner.log)")
         save()
         return 1
-    problems = xb.check_report((directory / xb.REPORT).read_text(), XDC.read_text())
+    try:
+        problems = xb.check_report((directory / xb.REPORT).read_text(), XDC.read_text())
+    except xb.Refused as exc:
+        # the build's state for every other precondition it could not check
+        # (#1922); a measured mismatch below is still FAIL
+        report.update(state="REFUSED", reason=str(exc))
+        save()
+        return 2
     problems += pads_inputs_report((directory / PADS_REPORT).read_text())
     try:
         metrics = timing_summary((directory / "timing.rpt").read_text())

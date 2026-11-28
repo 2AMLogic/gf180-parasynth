@@ -101,3 +101,56 @@ def test_r2_does_not_write_r1_or_r0_records():
     src = (HERE / "r2_release.py").read_text()
     for name in ("r1-2025.1.json", "r1-candidate.json", "baseline-2025.1.json"):
         assert f'{name}").write' not in src
+
+
+# ---- #1922: a refused XDC is REFUSED for its reason, never "did not bind" --------
+UNCOUNTED = "\nset_property ASYNC_REG TRUE [get_cells -hier -regexp {.*u_new/q_reg}]\n"
+UNMODELLED = "\nset_max_delay 5.0 -from [get_ports x] -to [get_ports y]\n"
+
+
+def _image_reports(tmp_path, counts=None):
+    """The image's two #315 reports, and the publication record that binds them
+    by digest. The XDC comes from git at R2_FROZEN_AT, which the test plants."""
+    import publish_binding_cases as cases
+    import xdc_bindings as xb
+    cases.write_constraint_report(tmp_path, counts=counts)
+    return {"published_sha256": {name: r2r.sha(tmp_path / name)
+                                 for name in (xb.REPORT, xb.EXCEPTIONS)}}
+
+
+def _frozen_xdc(monkeypatch, plant):
+    import xdc_bindings as xb
+    monkeypatch.setattr(r2r, "_blob", lambda commit, rel: (xb.XDC.read_text() + plant).encode())
+
+
+@pytest.mark.parametrize("plant,why", [(UNCOUNTED, "no required match count"),
+                                       (UNMODELLED, "does not model")])
+def test_a_refused_xdc_is_refused_for_its_reason_not_as_did_not_bind(tmp_path, monkeypatch,
+                                                                    plant, why):
+    """#1922: constraint_binding raised Refused('the #315 constraints did not
+    bind on this image: [<refusal>]') -- the right exit (2) carrying a false
+    reason: nothing established that the constraints did not bind."""
+    pub = _image_reports(tmp_path)
+    _frozen_xdc(monkeypatch, plant)
+    with pytest.raises(r2r.Refused, match=why) as caught:
+        r2r.constraint_binding(tmp_path, pub)
+    assert "did not bind" not in str(caught.value)
+
+
+def test_control_an_image_constraint_that_bound_nothing_still_says_did_not_bind(tmp_path,
+                                                                               monkeypatch):
+    """The measured problem outranks the refusal beside it, and the refusal is
+    kept out of the reason."""
+    import xdc_bindings as xb
+    uart = [n for n, _k, rx, _e, _a in xb.object_queries(xb.XDC.read_text()) if "u_uart" in rx]
+    pub = _image_reports(tmp_path, counts={n: 0 for n in uart})
+    _frozen_xdc(monkeypatch, UNMODELLED)
+    with pytest.raises(r2r.Refused, match="did not bind") as caught:
+        r2r.constraint_binding(tmp_path, pub)
+    assert "does not model" not in str(caught.value)
+
+
+def test_control_a_planted_no_op_xdc_still_binds_the_image(tmp_path, monkeypatch):
+    pub = _image_reports(tmp_path)
+    _frozen_xdc(monkeypatch, "\n# a planted comment\n")
+    assert r2r.constraint_binding(tmp_path, pub)["verdict"].startswith("every XDC object query bound")
