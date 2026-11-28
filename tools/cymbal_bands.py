@@ -218,8 +218,26 @@ def fischer(refs: pathlib.Path) -> dict:
 
 
 def _load(p):
+    """The raw record: (x, sr), int16 PCM as float64 in [-1, 1), stereo
+    averaged to mono. `run_case.prepare` trims it; nothing here does.
+
+    REFUSES, before scipy can raise (#1793): a path that is not there, and a
+    file scipy cannot read as RIFF/RIFX/RF64 -- a git-lfs pointer standing in
+    for the recording, an empty file, a directory. scipy raised
+    FileNotFoundError / ValueError for those, which no caller's
+    `except refusal.Refused` catches, so every cymbal_* CLI that reached this
+    died with a traceback and exit 1: a refusal rendered as FAIL. Anything
+    else is left to be a traceback."""
     from scipy.io import wavfile
-    sr, x = wavfile.read(str(p))
+    p = pathlib.Path(p)
+    if not p.exists():
+        raise Refused(f"reference recording missing: {p} -- clone "
+                      f"tidalcycles/sounds-tr808-fischer or set {rc.REFS_ENV}")
+    try:
+        sr, x = wavfile.read(str(p))
+    except (ValueError, OSError) as e:
+        raise Refused(f"reference recording {p} is not a readable WAV file "
+                      f"({type(e).__name__}: {e})") from e
     rc.require_int16_pcm(x, p, Refused)
     x = np.asarray(x, dtype=np.float64)
     if x.ndim > 1:

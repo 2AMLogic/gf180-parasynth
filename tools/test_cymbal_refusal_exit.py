@@ -61,13 +61,16 @@ NOT EXERCISED, RECORDED PER THE ISSUE'S THIRD CRITERION:
   cymbal_vca_clip reaches cymbal_bands transitively (`lt.cb._bp`, non-raising)
   but calls rc.prepare under a local-only handler -- the shape outside this
   issue's importer list, filed with the repo-wide census as #1162.
-  A corpus file that is merely ABSENT still escapes `cb._load` as
-  FileNotFoundError (exit 1) -- #1117/#1144's layer, recorded not repaired.
+  A corpus file that was merely ABSENT, or not a RIFF file (a git-lfs
+  pointer), used to escape `cb._load` as FileNotFoundError / ValueError
+  (exit 1) -- recorded not repaired by #1164; repaired in `cb._load` itself
+  by #1793, whose controls are the file-level section at the end of this file.
 """
 from __future__ import annotations
 
 import json
 import pathlib
+import struct
 import subprocess
 import sys
 
@@ -262,3 +265,287 @@ def test_a_non_refusal_error_is_not_relabelled_refused(modname, first_called, tm
         ValueError("an implementation error, not a precondition")))
     with pytest.raises(ValueError, match="an implementation error"):
         mod.main(argv)
+
+
+# ===========================================================================
+# #1793: the file-level trigger. `cb._load` called scipy before anything of
+# its own could refuse, so an ABSENT corpus file (scipy's FileNotFoundError)
+# or one scipy cannot read as RIFF -- a git-lfs pointer standing in for the
+# recording (ValueError: File format b'vers' not understood) -- escaped every
+# `except refusal.Refused` in this family and the CLI died with a traceback:
+# exit 1, which tools/run_all.py renders FAIL. #1164 repaired the refusals
+# `_load` and `rc.prepare` raise THEMSELVES; these two were raised by scipy
+# before either ran.
+#
+# MEASURED RED FIRST (2026-11-28, origin/main @ 03148399, a host with no
+# Fischer corpus -- /tmp/tr808-ref absent, GF180_TR808_REFS unset -- each real
+# CLI driven through its interpreter): every drive below exited 1 with the
+# exception its docstring names, and no --out was written.
+#
+# WHAT EACH DRIVE'S EXIT STATUS IS, and why they are not all 2:
+#   cymbal_bands, cymbal_mid, make_cymbal_pack, cymbal_candidate_eval
+#                     the handler returns REFUSED: exit 2, REFUSED: on stderr
+#   cymbal_tone_knob  the module's own degradation: the windowed measurement
+#                     is NO VERDICT, the corpus-free gate still answers, exit 0
+#   cymbal_low_tail   a refusing record is RECORDED in band and --out is
+#                     written (this module's designed degradation, above).
+#                     Whether THAT run then exits 0 or 2 is #1765's question,
+#                     in flight as PR #1798 and filed out of #1793's scope;
+#                     what #1793 owes is that the drive is never exit 1.
+# ===========================================================================
+LFS_POINTER = ("version https://git-lfs.github.com/spec/v1\n"
+               "oid sha256:" + "0" * 64 + "\n"
+               "size 123456\n")
+
+
+def _write_lfs_pointer(path: pathlib.Path) -> None:
+    """What an un-pulled git-lfs checkout leaves on disk in place of the
+    recording: text. scipy reads its first four bytes, b'vers', and raises
+    ValueError("File format b'vers' not understood. ...")."""
+    path.write_text(LFS_POINTER)
+
+
+def _refs_root_without_cy8(tmp_path: pathlib.Path) -> pathlib.Path:
+    """The issue's own drive: a --refs directory with no cy8/ at all."""
+    d = tmp_path / "refs"
+    d.mkdir()
+    return d
+
+
+def _corpus_hint() -> str:
+    """What `run_case.load_reference` tells an operator whose corpus is not
+    there, read from the owner rather than retyped: #1793's refusal must point
+    where the owner's does, and this file may not name the variable or the
+    corpus path outside an f-string (tools/test_corpus_path_single_source.py)."""
+    import run_case as rc
+
+    with pytest.raises(rc.Refused) as owner:
+        rc.load_reference("RS", pathlib.Path("/nonexistent-refs-root"))
+    return str(owner.value).split(" -- ", 1)[1]
+
+
+# ---------------------------------------------------------------------------
+# cymbal_bands._load itself: the two refusals, the input that would defeat
+# the guard, and the good path pinned unchanged
+# ---------------------------------------------------------------------------
+def test_load_refuses_an_absent_file_naming_the_path_and_the_corpus(tmp_path):
+    import cymbal_bands as cb
+
+    p = tmp_path / "refs" / "cy8" / "CY5025.WAV"
+    with pytest.raises(cb.Refused) as why:
+        cb._load(p)
+    msg = str(why.value)
+    assert str(p) in msg and "missing" in msg, msg
+    assert msg.endswith(_corpus_hint()), msg
+
+
+@pytest.mark.parametrize("label", ["lfs-pointer", "empty", "directory", "riff-but-not-wave"])
+def test_load_refuses_a_file_scipy_cannot_read_naming_the_path(tmp_path, label):
+    """Each escaped `_load` pre-fix as the exception scipy raises (ValueError,
+    or IsADirectoryError for the directory). The refusal keeps scipy's reason
+    as its cause, so an operator still sees b'vers' and not only a refusal."""
+    import cymbal_bands as cb
+
+    p = tmp_path / "refs" / "cy8" / "CY5025.WAV"
+    p.parent.mkdir(parents=True)
+    if label == "lfs-pointer":
+        _write_lfs_pointer(p)
+    elif label == "empty":
+        p.write_bytes(b"")
+    elif label == "directory":
+        p.mkdir()
+    else:
+        p.write_bytes(b"RIFF" + struct.pack("<I", 36) + b"LIST" + b"\x00" * 36)
+    with pytest.raises(cb.Refused) as why:
+        cb._load(p)
+    msg = str(why.value)
+    assert str(p) in msg and "not a readable WAV file" in msg, msg
+    assert isinstance(why.value.__cause__, (ValueError, OSError)), why.value.__cause__
+
+
+@pytest.mark.parametrize("error", [TypeError, KeyError, RuntimeError])
+def test_load_does_not_relabel_an_implementation_error_as_a_refusal(tmp_path, monkeypatch, error):
+    """The input that would defeat the guard: `except (ValueError, OSError)`
+    is scoped to the one scipy call, and anything else is an execution error,
+    never a refusal (tools/refusal.py)."""
+    import cymbal_bands as cb
+
+    p = tmp_path / "CY5025.WAV"
+    _write_silent(p)
+
+    def _bug(*a, **k):
+        raise error("an implementation error, not a precondition")
+
+    monkeypatch.setattr(wavfile, "read", _bug)
+    with pytest.raises(error, match="an implementation error"):
+        cb._load(p)
+
+
+def test_load_good_path_is_unchanged_bit_exact(tmp_path):
+    """The known answer is independent of this repository: a 1 kHz sine at
+    0.5 full scale written as 16-bit PCM comes back as those samples over
+    32768 (the answer tools/test_wav_reader_refusal.py pins), and a stereo
+    pair is still averaged channel-wise."""
+    import cymbal_bands as cb
+
+    t = np.arange(SR // 4) / SR
+    sig = np.round(0.5 * np.sin(2 * np.pi * 1000.0 * t) * 32767).astype("<i2")
+    mono = tmp_path / "mono.wav"
+    wavfile.write(str(mono), SR, sig)
+    x, sr = cb._load(mono)
+    assert sr == SR
+    assert np.array_equal(x, sig.astype(np.float64) / 32768.0)
+    assert abs(float(np.abs(x).max()) - 0.5) < 1e-3
+    st = tmp_path / "stereo.wav"
+    wavfile.write(str(st), SR, np.column_stack([sig, sig]))
+    y, _ = cb._load(st)
+    assert y.ndim == 1 and np.array_equal(y, sig.astype(np.float64) / 32768.0)
+
+
+# ---------------------------------------------------------------------------
+# the CLIs, each through its real main
+# ---------------------------------------------------------------------------
+def test_cymbal_bands_cli_absent_corpus_is_refused_2_not_a_traceback(tmp_path, capsys):
+    """Pre-fix: exit 1, FileNotFoundError: .../cy8/CY0000.WAV."""
+    import cymbal_bands as cb
+
+    refs = _refs_root_without_cy8(tmp_path)
+    out = tmp_path / "o.json"
+    rc_ = cb.main(["--refs", str(refs), "--out", str(out)])
+    assert rc_ == exit_contract.REFUSED, rc_
+    err = capsys.readouterr().err
+    assert "REFUSED:" in err and str(refs / "cy8" / "CY0000.WAV") in err, err
+    assert _corpus_hint() in err, err
+    assert not out.exists()
+
+
+def test_cymbal_bands_cli_lfs_pointer_is_refused_2_not_a_traceback(tmp_path, capsys):
+    """Pre-fix: exit 1, ValueError: File format b'vers' not understood."""
+    import cymbal_bands as cb
+
+    refs = _refs_dir(tmp_path, _write_lfs_pointer, "CY0000.WAV")
+    out = tmp_path / "o.json"
+    rc_ = cb.main(["--refs", str(refs), "--out", str(out)])
+    assert rc_ == exit_contract.REFUSED, rc_
+    err = capsys.readouterr().err
+    assert "REFUSED:" in err and "CY0000.WAV" in err and "b'vers'" in err, err
+    assert not out.exists()
+
+
+def test_cymbal_mid_cli_absent_corpus_is_refused_2_not_a_traceback(tmp_path, capsys):
+    """Pre-fix: exit 1, FileNotFoundError -- fischer() has no per-record
+    handler and main's catches the base, which scipy's error is not."""
+    import cymbal_mid as cm
+
+    refs = _refs_root_without_cy8(tmp_path)
+    out = tmp_path / "o.json"
+    rc_ = cm.main(["--refs", str(refs), "--fischer", "--out", str(out)])
+    assert rc_ == exit_contract.REFUSED, rc_
+    err = capsys.readouterr().err
+    assert "REFUSED:" in err and "CY0000.WAV" in err, err
+    assert not out.exists()
+
+
+def test_cymbal_tone_knob_cli_absent_file_is_no_verdict_not_a_traceback(tmp_path, capsys):
+    """cy8/ present and empty, so the directory guard measure_windows already
+    has does not fire and the file is what refuses. Pre-fix: exit 1,
+    FileNotFoundError out of measured_or_refused's `except refusal.Refused`."""
+    import cymbal_tone_knob as ctk
+
+    refs = tmp_path / "refs"
+    (refs / "cy8").mkdir(parents=True)
+    rc_ = ctk.main(["--refs", str(refs), "--check"])
+    assert rc_ == 0, "corpus-gated controls are NO VERDICT without --require-corpus"
+    printed = capsys.readouterr().out
+    assert "the windowed measurement REFUSED:" in printed, printed[-600:]
+    assert "CY0000.WAV" in printed and _corpus_hint() in printed, printed[-600:]
+
+
+def _calibrate_bomb():
+    raise AssertionError("calibrate ran: the corpus precondition was not asserted first")
+
+
+def test_make_cymbal_pack_cli_absent_corpus_is_refused_2_before_calibrating(
+        tmp_path, capsys, monkeypatch):
+    """Pre-fix: exit 1, FileNotFoundError -- the handler at the load catches
+    refusal.Refused only. calibrate is bombed, as the silent-corpus control
+    above bombs it, so the precondition is proved asserted BEFORE it."""
+    import make_cymbal_pack as mp
+
+    monkeypatch.setattr(mp.ev, "calibrate", _calibrate_bomb)
+    refs = _refs_root_without_cy8(tmp_path)
+    pack = tmp_path / "pack"
+    rc_ = mp.main(["--refs", str(refs), "--out", str(pack)])
+    assert rc_ == exit_contract.REFUSED, rc_
+    err = capsys.readouterr().err
+    assert "REFUSED:" in err and "CY5025.WAV" in err, err
+    assert not pack.exists()
+
+
+def test_cymbal_candidate_eval_cli_absent_corpus_is_refused_2_before_calibrating(
+        tmp_path, capsys, monkeypatch):
+    """The call site #1793's curation read by line number and did not trace:
+    _main_body loads CY5025 first and main wraps the body in
+    `except refusal.Refused`. Pre-fix: exit 1, FileNotFoundError."""
+    import cymbal_candidate_eval as ce
+
+    monkeypatch.setattr(ce, "calibrate", _calibrate_bomb)
+    refs = _refs_root_without_cy8(tmp_path)
+    out = tmp_path / "o.json"
+    rc_ = ce.main(["--refs", str(refs), "--out", str(out)])
+    assert rc_ == exit_contract.REFUSED, rc_
+    err = capsys.readouterr().err
+    assert "REFUSED:" in err and "CY5025.WAV" in err, err
+    assert not out.exists()
+
+
+@pytest.fixture(scope="module")
+def shipped_cy_render():
+    """The shipped kit's CY render, made once. `render_drum_solo` is 10.3 s a
+    call and a cymbal_low_tail run makes four, none on the path a corpus
+    refusal can come from; it is deterministic (two calls compared
+    bit-exact), so a copy per call is what the real call returns."""
+    import cymbal_low_tail as clt
+    return clt.rc.render_drum_solo("CY")
+
+
+@pytest.fixture
+def low_tail_main(monkeypatch, shipped_cy_render):
+    """The real cymbal_low_tail.main with that ONE substitution. `fischer`,
+    `noise_floor_control`, `cb._load`, `check`, every synthetic control, the
+    printer, `--out` and the return value are the module's own."""
+    import cymbal_low_tail as clt
+    x, sr = shipped_cy_render
+    monkeypatch.setattr(clt.rc, "render_drum_solo", lambda sound, *a, **k: (x.copy(), sr))
+    return clt.main
+
+
+@pytest.mark.parametrize("kind", ["absent", "lfs-pointer"])
+def test_cymbal_low_tail_cli_carries_a_corpus_it_cannot_load_into_its_report(
+        low_tail_main, tmp_path, capsys, kind):
+    """Pre-fix: exit 1 with FileNotFoundError (absent) or `ValueError: File
+    format b'vers' not understood` (lfs pointer), --out not written.
+
+    The run's exit status is asserted only as "never FAIL": on this tree
+    `main` records the refusing row and returns 0, the #1765 exit-0 shape
+    that issue is filed for (its fix, PR #1798, returns REFUSED for this
+    drive and still writes --out). What #1793 owes is that the refusal is
+    CARRIED -- into the printed table and into --out, naming the file --
+    instead of escaping as a traceback."""
+    refs = (_refs_root_without_cy8(tmp_path) if kind == "absent"
+            else _refs_dir(tmp_path, _write_lfs_pointer, "CY5025.WAV"))
+    out = tmp_path / "o.json"
+    rc_ = low_tail_main(["--refs", str(refs), "--out", str(out)])
+    printed = capsys.readouterr()
+    assert rc_ in (exit_contract.PASS, exit_contract.REFUSED), (rc_, printed.err[-600:])
+    assert "Traceback" not in printed.err, printed.err[-600:]
+    res = json.loads(out.read_text())
+    for w in ("1.5s", "2.0s", "3.5s"):
+        refused = res["windows"][w]["fischer"]["CY5025"]
+        assert str(refs / "cy8" / "CY5025.WAV") in refused["refused"], refused
+        assert res["windows"][w]["shipped"]["rho"]["M"]["-10"] is not None, w
+    row = next(ln for ln in printed.out.splitlines() if ln.startswith("808 CY5025"))
+    assert "REFUSED:" in row and str(refs / "cy8" / "CY5025.WAV") in row, row
+    assert "refused" in res["noise_floor_control"], res["noise_floor_control"]
+    why = res["windows"]["1.5s"]["fischer"]["CY5025"]["refused"]
+    assert why.endswith(_corpus_hint()) if kind == "absent" else ("b'vers'" in why), why
