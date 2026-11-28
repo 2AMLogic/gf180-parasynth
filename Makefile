@@ -184,6 +184,7 @@ verify:
 	  "$(PY) tools/probes/verify_109_claims.py" \
 	  "$(PY) tools/sensitivity.py check" \
 	  "$(PY) tools/refusal_exit_census.py --check" \
+	  "$(PY) tools/refusal_exit_shape_scan.py --check" \
 	  "$(PY) tools/check_iverilog_generate_case_string.py"
 
 ## Fast sound-development checks, separate from the broad repository suite.

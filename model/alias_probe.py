@@ -59,10 +59,14 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audition"))
+# tools/exit_contract.py (#1807). Appended, not inserted, so it can shadow
+# nothing model/ or audition/ imports.
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools"))
 import dsp                                                          # noqa: E402
 import fixed                                                        # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 import audio_measure as am                                          # noqa: E402
+import exit_contract                                                # noqa: E402
 
 SR = dsp.SR                       # 48 000, the OUTPUT rate
 PHASE_BITS = 24
@@ -803,9 +807,12 @@ def main(argv=None):
 
     vrows = validate_estimator()
     if not report_validation(vrows):
+        # a precondition, not a result: the estimator failed its own
+        # known-answer check, so nothing below is a measurement.  Was 1,
+        # which tools/run_all.py renders as a RESULT (#1807).
         print("REFUSED: the estimator did not reproduce a known alias content. "
               "No measurement below is quoted.")
-        return 1
+        return exit_contract.REFUSED
 
     arows = [chain_a(n, a.shape, a.os_) for n in NOTES]
     report_chain_a(arows, a.os_)
