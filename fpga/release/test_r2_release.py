@@ -12,6 +12,8 @@ import pytest
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import r2_release as r2r                                   # noqa: E402
+import release_manifest as rm                              # noqa: E402
+import uart_host as uh                                     # noqa: E402
 
 
 def test_the_committed_r2_manifest_is_bound():
@@ -40,6 +42,39 @@ def test_stale_control_is_caught_at_exactly_its_fields(tmp_path, case):
         rc = r2r.stale_control(case, tmp_path)
     assert rc == 1, out.getvalue()
     assert "stale_control: STALE" in out.getvalue()
+
+
+def test_stale_control_host_reports_refused_when_the_cli_refuses(tmp_path, monkeypatch,
+                                                                  capsys):
+    """#784's confirmed site, in the R2 copy: release_manifest._capture
+    refuses (a uart_host that exits non-zero on `run --fixture demo --image
+    release`), and that refusal must reach stale_control's designed REFUSED
+    verdict (exit 2), not escape as a traceback past the handler -- a sibling
+    RuntimeError subclass does not match `except Refused`. The CLI's own
+    reason is asserted too: any OTHER refusal (a missing manifest, a copy
+    that is not BOUND) exits 2 with the same verdict line."""
+    def refused(argv):
+        print("uart_host: unsupported command", file=sys.stderr)
+        return 1
+
+    monkeypatch.setattr(uh, "main", refused)
+    assert r2r.stale_control("host", tmp_path) == 2
+    out = capsys.readouterr().out
+    assert "stale_control: REFUSED" in out
+    assert "uart_host: unsupported command" in out
+
+
+def test_a_non_refusal_error_from_the_capture_still_propagates(tmp_path, monkeypatch):
+    """The control for the test above: the handler catches refusals by class
+    and nothing wider (tools/refusal.py). An implementation error at the same
+    call site is an EXECUTION ERROR; it must leave stale_control untouched,
+    never become `stale_control: REFUSED`."""
+    def broke(argv, outdir):
+        raise ValueError("not a refusal: the capture broke")
+
+    monkeypatch.setattr(rm, "_capture", broke)
+    with pytest.raises(ValueError, match="the capture broke"):
+        r2r.stale_control("host", tmp_path)
 
 
 def test_an_unbound_rollback_refuses(monkeypatch):
