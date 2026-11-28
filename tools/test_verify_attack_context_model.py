@@ -3,6 +3,7 @@ import ast
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -157,6 +158,46 @@ def test_guard_defeated_goes_red(tmp_path, monkeypatch):
     monkeypatch.setattr(verifier, "require_reachable", lambda *a, **k: None)
     with pytest.raises(subprocess.CalledProcessError):
         verifier.verify(_with_commit(tmp_path, "1" * 40))
+
+
+@pytest.mark.parametrize("commit", ["abc", "not-a-commit", "1" * 41, "--output=x", "A" * 40])
+def test_malformed_source_commit_refuses_before_git(monkeypatch, commit):
+    """A value that is not a full 40-hex id is a malformed report, not a rebase:
+    refused by shape with no git run, since `cat-file -e` exits 128 alike for an
+    absent object and for a name it cannot parse."""
+    calls = []
+    real_run = verifier.subprocess.run
+
+    def spy(*args, **kwargs):
+        calls.append(args)
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(verifier.subprocess, "run", spy)
+    with pytest.raises(verifier.Refused, match="not a full 40-hex commit id") as caught:
+        verifier.require_reachable(commit, verifier.producer.ROOT)
+    assert calls == []
+    assert isinstance(caught.value, AssertionError)
+
+
+def test_malformed_source_commit_invokes_no_git(tmp_path, monkeypatch):
+    """Through verify(): the refusal fires before any git runs, so a `--`-leading
+    value never reaches `git show <commit>:<path>`, where git would read it as an option."""
+    def forbidden(entry):
+        def fail(*args, **kwargs):
+            pytest.fail(f"{entry} reached with a malformed source_commit: {args}")
+        return fail
+    monkeypatch.setattr(verifier.subprocess, "run", forbidden("subprocess.run"))
+    monkeypatch.setattr(verifier.subprocess, "check_output", forbidden("subprocess.check_output"))
+    with pytest.raises(verifier.Refused, match="not a full 40-hex commit id"):
+        verifier.verify(_with_commit(tmp_path, "--output=x"))
+
+
+def test_shape_gate_defeated_misdiagnoses_a_rebase(monkeypatch):
+    """Injected-bug control: with only the shape gate disabled, git runs on a value
+    that is not a commit id and its 128 is read as 'rebased away' again."""
+    monkeypatch.setattr(verifier, "FULL_COMMIT_ID", re.compile(r".*", re.DOTALL))
+    with pytest.raises(verifier.Refused, match="rebased away"):
+        verifier.require_reachable("not-a-commit", verifier.producer.ROOT)
 
 
 def test_refused_is_an_assertion_error():

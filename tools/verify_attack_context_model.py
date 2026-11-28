@@ -7,6 +7,7 @@ import ast
 import json
 import math
 import hashlib
+import re
 import subprocess
 from pathlib import Path
 
@@ -49,8 +50,11 @@ class Refused(refusal.Refused, AssertionError):
     """The evidence cannot be checked in this state; distinct from a measured mismatch."""
 
 
+FULL_COMMIT_ID = re.compile(r"[0-9a-f]{40}")
+
+
 def require_reachable(commit: str, root: Path) -> None:
-    """Refuse unless `commit` is an ancestor of HEAD (#215).
+    """Refuse unless `commit` is a full 40-hex id that is an ancestor of HEAD (#215, #2133).
 
     A rebase (e.g. the conflict-only bot's `git rebase` + force-push) mints new
     commit objects, so a recorded SHA can vanish while the report content is
@@ -58,10 +62,17 @@ def require_reachable(commit: str, root: Path) -> None:
     commit still holds it as a dangling object, so the check passes there and
     fails in a fresh CI checkout. Reachable-from-HEAD is what a fresh checkout
     of this branch will have.
+
+    Shape comes first, before any git runs: `cat-file -e` exits 128 alike for an
+    absent object and for a name it cannot parse, so only a validated id lets
+    that exit mean "absent" rather than "malformed report".
     """
     fix = "regenerate the report with tools/compare_mono_attack_context.py on the rebased branch"
     if not isinstance(commit, str) or not commit:
         raise Refused(f"source_commit is missing from the report; {fix}")
+    if not FULL_COMMIT_ID.fullmatch(commit):
+        raise Refused(f"source_commit {commit!r} is not a full 40-hex commit id (truncated or malformed report); "
+                      "regenerate the report with tools/compare_mono_attack_context.py")
     exists = subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], cwd=root, capture_output=True)
     if exists.returncode != 0:
         raise Refused(f"source_commit {commit} not reachable: no such commit in this checkout "
