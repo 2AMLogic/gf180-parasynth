@@ -31,6 +31,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import mono_m1a_score as bass                                        # noqa: E402
 import manifest as mf                                                # noqa: E402
 import measure_m1a_volume_mapping as volume                           # noqa: E402
+from finite_number import is_finite_number  # noqa: E402
 
 RECORD = ROOT / "docs/scorecard/results/M1A.json"
 CANDIDATE = volume.OUT / "volume-minus4db.json"
@@ -77,6 +78,20 @@ def _skipped(record):
         else V2_EVENT_FIELDS
 
 
+def _unreadable_numbers(tree, where):
+    """`"{path} = {value!r}"` for every numeric leaf of `tree` that is not a
+    finite number, each path written below `where`."""
+    if isinstance(tree, bool) or tree is None:
+        return []
+    if isinstance(tree, (int, float)):
+        return [] if is_finite_number(tree) else [f"{where} = {tree!r}"]
+    if isinstance(tree, dict):
+        return [bad for k, v in tree.items() for bad in _unreadable_numbers(v, f"{where}.{k}")]
+    if isinstance(tree, (list, tuple)):
+        return [bad for i, v in enumerate(tree) for bad in _unreadable_numbers(v, f"{where}[{i}]")]
+    return []
+
+
 def candidate_event_deviation(record, candidate):
     """event_deviation, ignoring the fields the later scorers add or re-measure."""
     skip = _skipped(record)
@@ -102,16 +117,40 @@ def print_properties(measured):
         print(f"  {name:<18} {value:<24} {state}")
 
 
+def refuse_unreadable_baseline(baseline: dict) -> None:
+    """REFUSE (`mf.Refused`) a pre-selection baseline whose `measurements`
+    carry a number that is not finite, naming the record and every such leaf.
+
+    The preservation policy in `check` reads that record through `_passes`
+    and `volume.passed_partials`, both `abs(x) <= tol`, and asks only what
+    the candidate LOST: `passes(baseline) - passes(candidate)`. A NaN on the
+    baseline side is "not passed" there, so it is in neither set and cannot
+    be lost -- one unreadable leaf made the check strictly weaker, and a
+    candidate that had lost that pass printed MATCH, exit 0 (#2122; the
+    #134 shape). Reads the whole `measurements`, not only what the policy
+    compares. `None` is not refused: in `harmonic_error_db_model_minus_reference`
+    it is the records' own "not measured", which `passed_partials` already
+    reads so."""
+    bad = _unreadable_numbers(baseline["measurements"], "measurements")
+    if bad:
+        raise mf.Refused("the pre-selection baseline record carries a value that is not "
+                         "a finite number: " + ", ".join(bad))
+
+
 def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list[str]:
     """Every reason the record is not the selected candidate; [] when it is.
 
     REFUSES (`mf.Refused`) a record that lacks a key this function reads with
-    `[]` (#1604): that is a partial record, not a mismatch."""
+    `[]` (#1604): that is a partial record, not a mismatch. And REFUSES a
+    pre-selection baseline whose `measurements` carry a number that is not
+    finite (`refuse_unreadable_baseline`, #2122), before the preservation
+    policy reads it."""
     for rec, keys, what in ((record, ("diagnostics", "audio", "metrics"), "the M1A board record"),
                             (candidate, ("patch", "sha256", "measurements", "metrics"),
                              "the -4 dB candidate record"),
                             (baseline, ("measurements",), "the pre-selection baseline record")):
         mf.require_keys(rec, keys, what, refused=mf.Refused)
+    refuse_unreadable_baseline(baseline)
     problems = []
     config = record["diagnostics"]["configuration"]
     selected = _norm(bass.patch_for_reference(manifest, bass.SELECTED_PATCH))
