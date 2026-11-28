@@ -27,6 +27,7 @@ false green in the place where a result belongs.
 from __future__ import annotations
 
 import argparse
+import os
 import pathlib
 import re
 import shutil
@@ -43,22 +44,31 @@ SECTION = "# --- #1656 controls"
 MUTANTS = [
     ("SOME-PATH",
      "a handler on SOME path to a def credits it: union over callers, least fixed point",
-     [("            new = EVERYTHING\n", "            new = NOTHING\n"),
-      ("                    new = meet(new, join(guarantee[c], cgt))\n",
-       "                    new = join(new, join(guarantee[c], cgt))\n")]),
+     [("        return weakest, sorted(wheres",
+       "        weakest = max((k for k, _ in ends), key=rank.__getitem__, default=\"none\")\n"
+       "        return weakest, sorted(wheres")]),
     ("ANY-TRY-IN-THE-CALLER",
      "every try written anywhere in the calling def guards the call -- a sibling's too",
-     [("    out, cur = [], call\n    while cur is not frame:\n"
-       "        prev, cur = cur, mod.parents[cur]\n"
+     [("    out, cur, prev, prev2 = [], call, None, None\n    while cur is not frame:\n"
+       "        prev2, prev, cur = prev, cur, mod.parents[cur]\n"
+       "        if (isinstance(cur, ast.GeneratorExp)\n"
+       "                and not (prev is cur.generators[0] and prev2 is prev.iter)):\n"
+       "            return out\n"
        "        if isinstance(cur, ast.Try) and prev in cur.body:\n"
        "            out.extend(cur.handlers)\n    return out\n",
        "    return [h for t in ast.walk(frame) if isinstance(t, ast.Try)"
        " for h in t.handlers]\n")]),
     ("EDGE-FROM-ANY-CLAUSE",
      "on the path, a call in a try's except, else or finally clause is guarded by it",
-     [("        prev, cur = cur, mod.parents[cur]\n"
+     [("        prev2, prev, cur = prev, cur, mod.parents[cur]\n"
+       "        if (isinstance(cur, ast.GeneratorExp)\n"
+       "                and not (prev is cur.generators[0] and prev2 is prev.iter)):\n"
+       "            return out\n"
        "        if isinstance(cur, ast.Try) and prev in cur.body:\n",
-       "        prev, cur = cur, mod.parents[cur]\n"
+       "        prev2, prev, cur = prev, cur, mod.parents[cur]\n"
+       "        if (isinstance(cur, ast.GeneratorExp)\n"
+       "                and not (prev is cur.generators[0] and prev2 is prev.iter)):\n"
+       "            return out\n"
        "        if isinstance(cur, ast.Try):\n")]),
     ("ANY-TRY-IN-THE-SITES-DEF",
      "every try written in the site's own def guards the site, wherever it starts",
@@ -75,11 +85,38 @@ MUTANTS = [
        "        if isinstance(cur, ast.Try):\n")]),
     ("EXACT-CATCHES-EVERYTHING",
      "an exact or local handler is read as catching every family",
-     [("                frozenset(origins) if kinds & {\"exact\", \"local\"} else frozenset(),\n",
-       "                every if kinds & {\"exact\", \"local\"} else frozenset(),\n")]),
-    ("BASE-CARRIES-NO-ORIGINS",
-     "a base handler is carried as catching no origin (the first #1656 lattice)",
-     [("            return (True, every, True)\n", "            return (True, frozenset(), True)\n")]),
+     [("        if kinds & {\"exact\", \"local\"} and origin in origins:\n",
+       "        if kinds & {\"exact\", \"local\"}:\n")]),
+    ("BEST-HANDLER-NOT-FIRST",
+     "the best handler anywhere on the path decides, not the first that matches",
+     [("                    first = next(((k, where(h)) for h in held if (k := match(h, origin))), None)\n",
+       "                    ms = [(k, where(h)) for h in held if (k := match(h, origin))]\n"
+       "                    first = max(ms, key=lambda m: rank[m[0]]) if ms else None\n"),
+      ("    by_origin: dict[str, dict[ast.AST, set[tuple[str, str | None]]]] = {}\n",
+       "    rank = {\"none\": 0, \"broad\": 1, \"exact\": 2, \"base\": 3}\n"
+       "    by_origin: dict[str, dict[ast.AST, set[tuple[str, str | None]]]] = {}\n")]),
+    ("OUTER-HANDLER-ALWAYS-CONTINUES",
+     "a handler that catches the refusal still lets the outer handlers claim it",
+     [("                    new |= {first} if first else out[c]\n",
+       "                    new |= ({first} | out[c]) if first else out[c]\n")]),
+    ("DEF-DEFAULT-READ-INSIDE",
+     "a def's default is read inside the def, as its own parameter",
+     [("                    or (isinstance(cur, (ast.Lambda, *FUNCTION_NODES)) and prev is cur.args)\n",
+       "                    or (isinstance(cur, ast.Lambda) and prev is cur.args)\n")]),
+    ("GENERATOR-CREATION-GUARDED",
+     "a try around creating a generator or coroutine guards its body",
+     [("                if (gen or isinstance(callee, ast.AsyncFunctionDef)) and not (\n",
+       "                if False and (gen or isinstance(callee, ast.AsyncFunctionDef)) and not (\n")]),
+    ("GENEXP-BODY-GUARDED",
+     "a try around a generator expression guards calls in its body",
+     [("                and not (prev is cur.generators[0] and prev2 is prev.iter)):\n            return out\n"
+       "        if isinstance(cur, ast.Try) and prev in cur.body:\n",
+       "                and False):\n            return out\n"
+       "        if isinstance(cur, ast.Try) and prev in cur.body:\n")]),
+    ("AWAIT-NEVER-EAGER",
+     "an awaited coroutine is deferred past its try like an unawaited one",
+     [("                        not gen and isinstance(mod.parents.get(node), ast.Await)):\n",
+       "                        False):\n")]),
     ("VALUE-RULE-OFF",
      "a function read as a value keeps the credit of its guarded bare-name call",
      [("                    and self._names_function(n)):\n", "                    and False):\n")]),
@@ -115,18 +152,54 @@ MUTANTS = [
 ]
 
 
-def _run(scratch: pathlib.Path) -> tuple[set[str], set[str], int, str]:
-    """(failed, errored, passed, tail) of one pytest run in `scratch`."""
-    r = subprocess.run([sys.executable, "-m", "pytest", TESTS, "-q", "-p", "no:cacheprovider",
-                        "--tb=no", "-rfE"], cwd=scratch, capture_output=True, text=True,
-                       timeout=900)
-    out = r.stdout + r.stderr
-    failed = set(re.findall(r"^FAILED " + re.escape(TESTS) + r"::(\w+)", out, re.M))
-    errored = set(re.findall(r"^ERROR " + re.escape(TESTS) + r"::(\w+)", out, re.M))
+class Apparatus(Exception):
+    """The pytest run itself is not a trustworthy observation: a verdict read
+    from it would be a measurement of the harness, not the scanner."""
+
+
+def read_run(returncode: int, out: str, tests: str = TESTS
+             ) -> tuple[set[str], set[str], set[str], int, str]:
+    """(failed, crashed, errored, passed, tail) of one pytest run, from its
+    exit status AND its output; raises `Apparatus` when the two disagree or
+    the run is not one that observed the tests (#1688 review).
+
+      failed   an ASSERTION failed: a control saw the loosening
+      crashed  a test body raised something else: the scanner (or the test)
+               broke, which is not the control's own assertion
+      errored  a fixture, setup or collection error: no assertion ran
+
+    The status used to be dropped and the verdict read off the parsed sets
+    alone, so a fixture error that stopped one control reading the tree
+    counted as that control "seeing" the mutant, and printed OK."""
+    fail = re.findall(r"^FAILED " + re.escape(tests) + r"::(\w+)(?: - (\S+))?", out, re.M)
+    # pytest prints a bare `assert a == b` as its rewritten text and anything
+    # else raised as `<Class>: <message>`, so a crash is a line that names a
+    # non-assertion exception class; a missing message reads as a crash too
+    crash = re.compile(r"^(?!AssertionError\b)[\w.]*(Error|Exception|Exit|Interrupt)\b")
+    failed = {n for n, msg in fail if msg and not crash.match(msg)}
+    crashed = {n for n, msg in fail if not msg or crash.match(msg)}
+    errored = set(re.findall(r"^ERROR " + re.escape(tests) + r"::(\w+)", out, re.M))
     m = re.search(r"^(\d+) passed", out, re.M)
-    tail = next((l for l in out.splitlines()
+    passed = int(m.group(1)) if m else 0
+    tail = next((l for l in reversed(out.splitlines())
                  if " passed" in l or " failed" in l or " error" in l), "")
-    return failed, errored, int(m.group(1)) if m else 0, tail
+    if returncode not in (0, 1):
+        raise Apparatus(f"pytest exited {returncode}, not 0 or 1 ({tail.strip() or 'no summary'})")
+    if re.search(r"^ERROR (?!" + re.escape(tests) + r"::)", out, re.M):
+        raise Apparatus(f"pytest could not collect {tests} ({tail.strip()})")
+    if returncode == 0 and (failed or crashed or errored or not passed):
+        raise Apparatus(f"pytest exited 0 but the output disagrees ({tail.strip()})")
+    if returncode == 1 and not (failed or crashed or errored):
+        raise Apparatus(f"pytest exited 1 but no failing test could be read ({tail.strip()})")
+    return failed, crashed, errored, passed, tail
+
+
+def _run(scratch: pathlib.Path, tests: str = TESTS
+         ) -> tuple[set[str], set[str], set[str], int, str]:
+    r = subprocess.run([sys.executable, "-m", "pytest", tests, "-q", "-p", "no:cacheprovider",
+                        "--tb=no", "-rfE"], cwd=scratch, capture_output=True, text=True,
+                       timeout=900, env={**os.environ, "COLUMNS": "400"})
+    return read_run(r.returncode, r.stdout + r.stderr, tests)
 
 
 def main(argv=None) -> int:
@@ -163,7 +236,7 @@ def main(argv=None) -> int:
             src = src.replace(old, new)
         if ok:
             built[name] = src
-    results: dict[str, tuple[set[str], set[str], int, str]] = {}
+    results: dict[str, tuple[set[str], set[str], set[str], int, str]] = {}
     for name, src in list(columns) + list(built.items()):
         scratch = pathlib.Path(tempfile.mkdtemp(prefix="rss-mutants-"))
         try:
@@ -176,6 +249,19 @@ def main(argv=None) -> int:
             except subprocess.TimeoutExpired:
                 print(f"NO VERDICT: {name} timed out")
                 return 2
+            except Apparatus as e:
+                print(f"NO VERDICT: {name}: {e}")
+                return 2
+            # A mutant is caught by a control's ASSERTION only. A crash or a
+            # fixture error is the harness or the loosened scanner breaking,
+            # not a control seeing it (the reverted scanner may legitimately
+            # crash a test that uses what it lacks, so it is exempt).
+            f, c, e, _, tail = results[name]
+            if name in dict(built.items()) and (c or e):
+                print(f"NO VERDICT: {name}: {len(c)} test(s) crashed and {len(e)} errored "
+                      f"instead of failing an assertion ({tail.strip()}): "
+                      f"{', '.join(sorted(c | e))}")
+                return 2
         except (subprocess.CalledProcessError, OSError) as e:
             print(f"NO VERDICT: {name}: {e}")
             return 2
@@ -186,8 +272,8 @@ def main(argv=None) -> int:
         for p in problems:
             print("   ", p)
         return 2
-    failed, errored, passed, tail = results["shipped"]
-    if failed or errored:
+    failed, crashed, errored, passed, tail = results["shipped"]
+    if failed or crashed or errored or not passed:
         print(f"NO VERDICT: the shipped scanner is not green ({tail})")
         return 2
 
@@ -205,17 +291,18 @@ def main(argv=None) -> int:
     for t in sorted(new_controls):
         cells = []
         for header, key, _, _ in cols:
-            f, e, _, _ = results[key]
-            cells.append(f"{'MOVED' if t in f or t in e else 'blind':>5s}")
+            f, c, _, _, _ = results[key]
+            cells.append(f"{'MOVED' if t in f or t in c else 'blind':>5s}")
         print(f"{t[:width]:<{width}s}  " + "  ".join(cells))
     print()
     for header, key, means, is_mutant in cols:
-        f, e, _, tail = results[key]
-        seen = len((f | e) & new_controls)
-        earlier = len((f | e) - new_controls)
+        f, c, _, _, tail = results[key]
+        f = f | c
+        seen = len(f & new_controls)
+        earlier = len(f - new_controls)
         print(f"{header} {means}\n    {seen} of {len(new_controls)} #1656 controls MOVED"
               + (f", {earlier} earlier controls" if earlier else "") + f"   [{tail.strip()}]")
-        if is_mutant and not (f | e):
+        if is_mutant and not f:
             gap = True
             print("    GAP: no control sees it")
     print("\nGAP: a mutant no control sees" if gap

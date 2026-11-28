@@ -2526,6 +2526,258 @@ def test_a_guard_reached_through_a_def_of_the_dispatch_is_followed(tmp_path):
     assert len(s["via"]) == 1 and s["via"][0].startswith("_cli:"), s
 
 
+# #1688 review round 3: first-match handlers, defaults, deferred bodies.
+# Each shape below was reproduced against a7865f72 first (red there), then the
+# scanner changed. The positive twins pin that the fix did not simply stop
+# crediting (rule 8: what satisfies the check while violating its intent).
+
+def _load_sites(got: dict, callee: str = "mod_a.load") -> list[dict]:
+    return [r for rows in got.values() for r in rows if r["callee"] == callee]
+
+
+PATH_VIA_WRONG_HANDLER = '''
+def helper(p):
+    return mod_a.load(p)
+
+def _run(p):
+    try:
+        return helper(p)
+    except mod_b.Refused as exc:        # a DIFFERENT family: not this refusal
+        return 3
+
+def main(argv=None):
+    try:
+        return _run("x")
+    except refusal.Refused as exc:      # the handler that actually catches it
+        return 2
+'''
+
+
+def test_via_names_the_handler_that_catches_not_one_that_does_not(tmp_path):
+    """The M5 saw-drive shape: the nearest try on the path catches ANOTHER
+    family's `Refused` (mod_b's), the base handler two frames out catches
+    this one. `via` used to stop at the nearest try that caught anything and
+    named it; the label rests on the base handler."""
+    got, text = _path_scan(tmp_path, PATH_VIA_WRONG_HANDLER, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "covered(cli-base)", s
+    assert [v.split(":")[0] for v in s["via"]] == ["main"], s
+    _try_lines(text, "main", s["via"])
+
+
+PATH_INNER_BROAD_SHADOWS_OUTER_BASE = '''
+def helper(p):
+    return mod_a.load(p)
+
+def mid(p):
+    try:
+        return helper(p)
+    except Exception as exc:            # catches the refusal FIRST
+        print("marker")
+        return 1
+
+def main(argv=None):
+    try:
+        return mid("x")
+    except refusal.Refused as exc:      # never sees it
+        return 2
+'''
+
+
+def test_an_inner_broad_handler_shadows_the_outer_base_one(tmp_path):
+    """Python runs the first handler that matches, walking out. `mid`'s
+    `except Exception` swallows the refusal and returns 1, so the CLI never
+    exits through the refusal path; reading `main`'s base handler as the
+    cover read it as `covered(cli-base)`."""
+    got, text = _path_scan(tmp_path, PATH_INNER_BROAD_SHADOWS_OUTER_BASE, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "relabelled(cli-total)", s
+    assert [v.split(":")[0] for v in s["via"]] == ["mid"], s
+    _try_lines(text, "mid", s["via"])
+
+
+def test_an_inner_handler_for_another_family_does_not_shadow(tmp_path):
+    """Rule 8, the other direction: the inner handler is exact for mod_b, so
+    the base handler outside still decides (PATH_VIA_WRONG_HANDLER pins this
+    too; here the callee is mod_b's own refusal, which the inner one DOES
+    catch and so is `covered(cli-exact)`, not base)."""
+    got, _ = _path_scan(tmp_path, PATH_VIA_WRONG_HANDLER.replace("mod_a.load", "mod_b.measure"),
+                        PATH_ENTER_MAIN)
+    (s,) = _load_sites(got, "mod_b.measure")
+    assert s["classification"] == "covered(cli-exact)", s
+
+
+def _default_case(kw: str, tmp_path) -> dict:
+    body = f'''
+def helper(p):
+    return mod_a.load(p)
+
+{kw} use(helper=helper):
+    return helper("callback")           # `helper` here is the PARAMETER
+
+def main(argv=None):
+    try:
+        helper("guarded")
+    except refusal.Refused:
+        return 2
+    return use()                        # outside the try: the default runs helper
+'''
+    got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    return s
+
+
+def test_a_def_default_reads_the_outer_name(tmp_path):
+    """`def use(helper=helper)` evaluates the default where `use` is defined,
+    so `helper` is read as a value (a callback path the graph cannot see) and
+    its guarded bare-name call in `main` cannot carry it. Ran for real: exits
+    1 with `mod_a.Refused: unusable: callback`."""
+    assert _default_case("def", tmp_path)["classification"] == "candidate-escape"
+
+
+def test_an_async_def_default_reads_the_outer_name(tmp_path):
+    assert _default_case("async def", tmp_path)["classification"] == "candidate-escape"
+
+
+def test_a_decorator_parameter_of_the_same_name_is_not_the_def(tmp_path):
+    """The decorator of a def runs in the enclosing scope too: the same class
+    as a default (found by searching the class, not the cited line)."""
+    body = '''
+def helper(p):
+    return mod_a.load(p)
+
+def use(helper):
+    @helper
+    def inner():
+        pass
+    return inner
+
+def main(argv=None):
+    try:
+        helper("guarded")
+    except refusal.Refused:
+        return 2
+    return 0
+'''
+    got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "covered(cli-base)", s     # `helper` here is the param
+
+
+def test_a_default_that_names_a_local_is_still_read_through_the_local(tmp_path):
+    """Rule 8: the fix must not make EVERY default a value read. A default
+    naming a variable of the enclosing def reads that variable."""
+    body = '''
+def helper(p):
+    return mod_a.load(p)
+
+def main(argv=None):
+    helper = len
+    def use(f=helper):
+        return f("x")
+    try:
+        return use()
+    except refusal.Refused:
+        return 2
+
+def other():
+    try:
+        return helper("guarded")
+    except refusal.Refused:
+        return 2
+'''
+    got, _ = _path_scan(tmp_path, body + "\n", PATH_ENTER_MAIN + "    other()\n")
+    (s,) = _load_sites(got)
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def _deferred(tmp_path, helper: str, main_body: str) -> dict:
+    body = f"import asyncio\n{helper}\ndef main(argv=None):\n{main_body}"
+    got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    return s
+
+
+def test_a_try_around_creating_a_generator_guards_nothing(tmp_path):
+    """Ran for real: exits 1 with `mod_a.Refused: unusable: next`."""
+    s = _deferred(tmp_path, "def helper(p):\n    yield mod_a.load(p)\n", '''
+    try:
+        g = helper("next")
+    except refusal.Refused:
+        return 2
+    return next(g)                      # the body runs HERE, outside the try
+''')
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_try_around_creating_a_generator_expression_guards_nothing(tmp_path):
+    s = _deferred(tmp_path, "def helper(p):\n    return mod_a.load(p)\n", '''
+    try:
+        g = (helper(p) for p in ["x"])
+    except refusal.Refused:
+        return 2
+    return next(g)
+''')
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_try_around_creating_a_coroutine_guards_nothing(tmp_path):
+    s = _deferred(tmp_path, "async def helper(p):\n    return mod_a.load(p)\n", '''
+    try:
+        c = helper("x")
+    except refusal.Refused:
+        return 2
+    return asyncio.run(c)               # awaited outside the try
+''')
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_coroutine_awaited_inside_the_try_is_guarded(tmp_path):
+    """Rule 8: not every async def is deferred past the try -- `await` in it
+    runs the body there."""
+    body = '''
+import asyncio
+
+async def helper(p):
+    return mod_a.load(p)
+
+async def amain():
+    try:
+        return await helper("x")
+    except refusal.Refused:
+        return 2
+
+def main(argv=None):
+    return asyncio.run(amain())
+'''
+    got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def test_the_first_iterable_of_a_generator_expression_runs_at_once(tmp_path):
+    """Rule 8: `(x for x in helper(p))` evaluates `helper(p)` where the
+    expression is written, so a try around it does guard that call."""
+    s = _deferred(tmp_path, "def helper(p):\n    return [mod_a.load(p)]\n", '''
+    try:
+        g = (x for x in helper("x"))
+    except refusal.Refused:
+        return 2
+    return list(g)
+''')
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def test_a_list_comprehension_in_the_try_is_guarded(tmp_path):
+    s = _deferred(tmp_path, "def helper(p):\n    return mod_a.load(p)\n", '''
+    try:
+        return [helper(p) for p in ["x"]]
+    except refusal.Refused:
+        return 2
+''')
+    assert s["classification"] == "covered(cli-base)", s
+
+
 def test_a_function_passed_as_a_value_has_a_path_no_call_shows(tmp_path):
     """Rule 8: `helper` is called by name under a try AND handed to `apply`
     as an argument. The bare-name edge is guarded; the callback's path is not

@@ -489,7 +489,15 @@ class ModInfo:
                 outside = (
                     (isinstance(cur, COMP_NODES) and prev is cur.generators[0]
                      and prev2 is prev.iter)               # first iterable
-                    or (isinstance(cur, ast.Lambda) and prev is cur.args))  # defaults
+                    # a lambda's or def's DEFAULTS (and a def's annotations and
+                    # decorators) are evaluated where the def is written, not in
+                    # it: `def use(helper=helper)` reads the OUTER `helper`
+                    or (isinstance(cur, (ast.Lambda, *FUNCTION_NODES)) and prev is cur.args)
+                    or (isinstance(cur, FUNCTION_NODES)
+                        and (prev is cur.returns or prev in cur.decorator_list))
+                    or (isinstance(cur, ast.ClassDef)
+                        and (prev in cur.bases or prev in cur.keywords
+                             or prev in cur.decorator_list)))
                 if not outside:
                     if not (isinstance(cur, ast.ClassDef) and not innermost):
                         if name in self.local_names[cur]:
@@ -741,45 +749,68 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
 
 def _handlers_within(mod: ModInfo, frame: ast.AST, call: ast.AST) -> list[ast.ExceptHandler]:
     """The handlers of the tries, written in `frame`'s own body, whose BODY
-    holds `call`. The walk stops at `frame`: a try further out, around the
-    nested def the call sits in, guards the DEFINITION, not this call."""
-    out, cur = [], call
+    holds `call` -- innermost try first, a try's handlers in source order, so
+    the first that matches is the one Python runs. The walk stops at `frame`:
+    a try further out, around the nested def the call sits in, guards the
+    DEFINITION, not this call. It stops at a generator expression too, unless
+    the call is in its first iterable (evaluated at once): the rest of its
+    body runs when something iterates it, which may be after the try has
+    exited, so a try around its CREATION guards nothing (#1688 review)."""
+    out, cur, prev, prev2 = [], call, None, None
     while cur is not frame:
-        prev, cur = cur, mod.parents[cur]
+        prev2, prev, cur = prev, cur, mod.parents[cur]
+        if (isinstance(cur, ast.GeneratorExp)
+                and not (prev is cur.generators[0] and prev2 is prev.iter)):
+            return out
         if isinstance(cur, ast.Try) and prev in cur.body:
             out.extend(cur.handlers)
     return out
 
 
-def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]
-                ) -> dict[ast.AST, tuple[bool, frozenset[str], bool, list[str]]]:
-    """Per frame, what EVERY path from the module's entry to that frame
-    catches (#1656): frame -> (a base handler, the origins an exact or local
-    handler catches, a broad handler, and `via`), where `via` names the
-    handlers nearest that frame on each path to it, as `<def>:<try line>` (a
-    hop with no handler is followed to its own callers). A frame nothing
-    reaches is absent, and is credited nothing.
+def _is_generator(fn: ast.AST) -> bool:
+    """A `yield` in `fn`'s own body (not a nested scope's)."""
+    todo = list(fn.body)
+    while todo:
+        n = todo.pop()
+        if isinstance(n, (ast.Yield, ast.YieldFrom)):
+            return True
+        if not isinstance(n, SCOPE_NODES + (ast.Lambda,)):
+            todo.extend(ast.iter_child_nodes(n))
+    return False
+
+
+def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]):
+    """Returns `lookup(frame, origins) -> (kind, via)` (#1656): the WEAKEST
+    outcome, over every path from the module's entry to `frame` and every
+    origin, of a refusal raised there -- "base", "exact", "broad" or "none"
+    -- and `via`, the handlers those outcomes rest on as `<def>:<try line>`.
+    A frame nothing reaches is credited nothing.
 
     The path is a call graph over bare-name calls and sealed dispatch tables
     (`resolve_call`), rooted at the module's top level -- the `__main__`
-    dispatch included. An edge
-    carries what the tries whose body holds its call site catch. What a
-    frame is guaranteed is the INTERSECTION over its in-edges of (the
-    caller's guarantee + what the edge catches), the greatest fixed point of
-    that equation: a cycle converges, and a handler on SOME path is never
-    credited for one on EVERY path. It is what is caught that is
-    intersected, not which handler catches it -- capability_pack's `gate()`
-    is guarded by a different try in each of its two callers, and is covered
-    all the same. One edge is added that no call site writes: from the entry,
-    catching nothing, to each function whose name is read as a value
+    dispatch included. An edge carries the handlers of the tries whose body
+    holds its call site, innermost first. A refusal walking OUT from a frame
+    is decided by the FIRST handler that catches it: an inner `except
+    Exception` shadows an outer `except refusal.Refused` (the CLI then
+    prints the inner handler's marker, not a refusal), so the outcome is the
+    innermost match, not the best one anywhere on the path, and `via` names
+    that handler, not another. Each path ends in its own outcome and the
+    frame is credited the weakest -- a handler on SOME path is never credited
+    for EVERY path. One edge is added that no call site writes: from the
+    entry, catching nothing, to each function whose name is read as a value
     somewhere (a callback has a path the graph cannot see). A call
     written in a frame the entry cannot reach (a lambda, a method) is an
-    unguarded entry edge to its callee, so it cannot be dropped from the
-    intersection. Anything else the graph cannot resolve is not an edge: it
-    loses credit only for a callee with no resolvable in-edge. The invariant
-    is PER MODULE: a caller in another scanned module is not seen (the
-    blind-spot list says so). `try*` (TryStar) is not an `ast.Try`, so a
-    `try*` body contributes no handlers: credit lost, never granted."""
+    unguarded entry edge to its callee, so it cannot be dropped. A call that
+    only CREATES a generator or coroutine carries no handlers (its body runs
+    when something iterates or awaits it, perhaps after the try exited),
+    unless a coroutine is awaited on the spot; the same holds for a call in
+    a generator expression's body. Anything else the graph cannot resolve is
+    not an edge: it loses credit only for a callee with no resolvable
+    in-edge. The invariant is PER MODULE: a caller in another scanned module
+    is not seen (the blind-spot list says so). `try*` (TryStar) is not an
+    `ast.Try`, so a `try*` body contributes no handlers: credit lost, never
+    granted. A handler whose class the scanner cannot resolve is read as not
+    catching, as before."""
     top = mod.tree
     ins: dict[ast.AST, list[tuple[ast.AST, list[ast.ExceptHandler]]]] = {}
     outs: dict[ast.AST, list[ast.AST]] = {}
@@ -792,7 +823,14 @@ def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]
         if isinstance(node, ast.Call):
             caller = mod.caller_of(node)
             for callee in mod.resolve_call(node):
-                edge(caller, callee, _handlers_within(mod, caller, node))
+                held = _handlers_within(mod, caller, node)
+                # a call that only creates a generator or coroutine runs its
+                # body later -- unless it is awaited on the spot (#1688 review)
+                gen = _is_generator(callee)
+                if (gen or isinstance(callee, ast.AsyncFunctionDef)) and not (
+                        not gen and isinstance(mod.parents.get(node), ast.Await)):
+                    held = []
+                edge(caller, callee, held)
     for own in mod.direct_defs.values():
         for name, defs in own.items():
             if name in mod.value_names:
@@ -813,69 +851,72 @@ def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]
         if callee in reach and any(c not in reach for c, _ in edges):
             edge(top, callee, [])
 
-    # (base, origins, broad): what is caught, a lattice under componentwise
-    # or/union (join) and and/intersection (meet); a base handler catches
-    # every family, so it is `every` in the origins component too.
-    every = frozenset(s for s, mods in by_stem.items() if mods[0].refused_names)
-    NOTHING, EVERYTHING = (False, frozenset(), False), (True, every, True)
+    handler_kinds: dict[ast.ExceptHandler, tuple[frozenset[str], set[str]]] = {}
 
-    def caught(h: ast.ExceptHandler) -> tuple[bool, frozenset[str], bool]:
-        origins, shape = handler_origins(mod, by_stem, h)
-        kinds = set(shape.split("+"))
+    def match(h: ast.ExceptHandler, origin: str) -> str | None:
+        """What Python does with a refusal of `origin` at handler `h`:
+        "base" (`except refusal.Refused`), "exact" (the origin's own class, or
+        the module's local one), "broad" (`Exception`), or None when `h` does
+        not catch it and the next handler out is tried."""
+        if h not in handler_kinds:
+            origins, shape = handler_origins(mod, by_stem, h)
+            handler_kinds[h] = (frozenset(origins), set(shape.split("+")))
+        origins, kinds = handler_kinds[h]
         if "base" in kinds:
-            return (True, every, True)
-        return (False,
-                frozenset(origins) if kinds & {"exact", "local"} else frozenset(),
-                "broad" in kinds)
-
-    def join(a, b):
-        return (a[0] or b[0], a[1] | b[1], a[2] or b[2])
-
-    def meet(a, b):
-        return (a[0] and b[0], a[1] & b[1], a[2] and b[2])
-
-    def caught_on_edge(held: list[ast.ExceptHandler]):
-        out = NOTHING
-        for h in held:
-            out = join(out, caught(h))
-        return out
+            return "base"
+        if kinds & {"exact", "local"} and origin in origins:
+            return "exact"
+        return "broad" if "broad" in kinds else None
 
     def where(h: ast.ExceptHandler) -> str:
         tr = mod.parents[h]
         w = mod.caller_of(tr)
         return f"{w.name if isinstance(w, FUNCTION_NODES) else '<module>'}:{tr.lineno}"
 
-    terms = {n: [(c, caught_on_edge(held), held) for c, held in edges]
-             for n, edges in ins.items()}
-    guarantee = {n: EVERYTHING for n in reach}
-    guarantee[top] = NOTHING
-    changed = True
-    while changed:
-        changed = False
-        for n in reach:
-            if n is top:
-                continue
-            new = EVERYTHING
-            for c, cgt, _ in terms.get(n, []):
-                if c in reach:
-                    new = meet(new, join(guarantee[c], cgt))
-            if new != guarantee[n]:
-                guarantee[n], changed = new, True
+    by_origin: dict[str, dict[ast.AST, set[tuple[str, str | None]]]] = {}
 
-    def via(n: ast.AST, seen: frozenset = frozenset()) -> set[str]:
-        out = set()
-        for c, cgt, held in terms.get(n, []):
-            if c not in reach:
-                continue
-            if cgt != NOTHING:
-                out.update(where(h) for h in held if caught(h) != NOTHING)
-            elif c is not top and c not in seen:
-                out.update(via(c, seen | {n}))
+    def outcomes(origin: str) -> dict[ast.AST, set[tuple[str, str | None]]]:
+        """Per frame, the set of (kind, handler) a refusal of `origin` raised
+        in it ends in, one per path to it: walking OUT from the frame, the
+        FIRST handler that catches it decides (an inner `except Exception`
+        shadows an outer `except refusal.Refused`), and a path no handler
+        catches ends in ("none", None). The least fixed point, so a cycle
+        converges and adds nothing."""
+        if origin in by_origin:
+            return by_origin[origin]
+        out: dict[ast.AST, set[tuple[str, str | None]]] = {n: set() for n in reach}
+        out[top] = {("none", None)}
+        changed = True
+        while changed:
+            changed = False
+            for n in reach:
+                if n is top:
+                    continue
+                new: set[tuple[str, str | None]] = set()
+                for c, held in ins.get(n, []):
+                    if c not in reach:
+                        continue
+                    first = next(((k, where(h)) for h in held if (k := match(h, origin))), None)
+                    new |= {first} if first else out[c]
+                if new != out[n]:
+                    out[n], changed = new, True
+        by_origin[origin] = out
         return out
 
-    return {n: (*guarantee[n],
-                sorted(via(n), key=lambda w: (int(w.rsplit(":", 1)[1]), w)))
-            for n in reach}
+    rank = {"none": 0, "broad": 1, "exact": 2, "base": 3}
+
+    def lookup(frame: ast.AST, origins: set[str]) -> tuple[str, list[str]]:
+        """(the WEAKEST outcome over every path and every origin, the handlers
+        those outcomes rest on as `<def>:<try line>`). A frame the entry does
+        not reach is credited nothing."""
+        if frame not in reach or not origins:
+            return "none", []
+        ends = [e for o in origins for e in outcomes(o)[frame]]
+        weakest = min((k for k, _ in ends), key=rank.__getitem__, default="none")
+        wheres = {w for k, w in ends if w}
+        return weakest, sorted(wheres, key=lambda w: (int(w.rsplit(":", 1)[1]), w))
+
+    return lookup
 
 
 def _rel_label(path: pathlib.Path) -> str:
@@ -963,14 +1004,13 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
             uncovered = origins - covered
             # the CLI credit is BY PATH (#1656): only what every path from
             # the entry to THIS site's own def catches
-            base, borigins, broad, via = guards.get(
-                mod.caller_of(node), (False, frozenset(), False, []))
-            if uncovered and base:
-                # a base guard on every path catches it on the way out
+            kind, via = guards(mod.caller_of(node), set(uncovered))
+            if uncovered and kind == "base":
+                # a base guard is the first handler on every path
                 classification, uncovered = "covered(cli-base)", []
-            elif uncovered and uncovered <= borigins:
+            elif uncovered and kind == "exact":
                 classification, uncovered = "covered(cli-exact)", []
-            elif uncovered and broad:
+            elif uncovered and kind == "broad":
                 classification = "relabelled(cli-total)"
             else:
                 classification = ("candidate-escape" if uncovered
