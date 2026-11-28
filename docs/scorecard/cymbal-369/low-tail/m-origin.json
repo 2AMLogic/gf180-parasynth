@@ -240,6 +240,26 @@
   "reaches_target_at_db": null,
   "refused": "no swept DECAY level in -12..+30 dB reaches rho_M(-10) 1.048; the highest reached is 0.9717"
  },
+ "source_provenance": {
+  "status": "unresolved",
+  "recorded": "2026-11-28",
+  "issue": 1940,
+  "recorded_commit": "2d4abdb11d92414fd8f702b453161d1e0eb2ae41",
+  "lookup": {
+   "date": "2026-11-28",
+   "method": "git merge-base --is-ancestor <commit> origin/main in a full-history clone, then GET api.github.com/repos/2AMLogic/gf180-parasynth/commits/<commit>",
+   "main_at": "e2d1bae75198e3aa8b31fe21d31c00daba53b5e9",
+   "is_ancestor": false,
+   "object_in_clone": false,
+   "github_http_status": 422,
+   "github_message": "No commit found for SHA: 2d4abdb11d92414fd8f702b453161d1e0eb2ae41"
+  },
+  "landed_by": "1c8a941a9accea99ca05c264c30450dad0525877",
+  "landed_in": "8fc1c6de0e47cfacf9d0c290ee941309ba28b989 (merge of PR #418, feature/issue-369-low-tail)",
+  "cause": "Not established. This file reached main through a two-parent merge commit whose branch commits are on main (see landed_in), so a squash merge did not discard the commit named above. That commit was never part of the pushed branch as pushed: amended, rebased away, or made in a worktree that was never pushed -- the repository does not say which.",
+  "meaning": "`sources_dirty: false` says model/ and tools/ were unmodified relative to that HEAD when the record was written. It does not make the HEAD recoverable: the lookup recorded here found no such commit, so the figures in this file cannot be reproduced from a known tree. This annotation records a failed lookup. It is not a verified source.",
+  "note": "Landed in the same commit as low-tail.json, which cites a different commit. So at least one of the two was produced on a checkout other than the one that committed it."
+ },
  "commit": "2d4abdb11d92414fd8f702b453161d1e0eb2ae41",
  "sources_dirty": false
 }

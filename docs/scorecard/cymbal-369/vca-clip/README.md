@@ -11,9 +11,19 @@ This is that question, asked and answered. **No kit, RTL or scorer change. R1 is
 promoted.** Nothing already committed under `docs/scorecard/cymbal-369/` moves.
 
 Instrument: `tools/cymbal_vca_clip.py` (+ `tools/test_cymbal_vca_clip.py`, 39 tests). Result:
-`vca-clip.json`, carrying the commit it was produced at and a `sources_dirty` flag, clean.
+`vca-clip.json`, carrying the commit it was produced at and a `sources_dirty` flag, clean — but that commit is not on
+origin (#1940, first paragraph below).
 
 ---
+
+**The commit this record names is not on origin (#1940).** `vca-clip.json` says `commit: ac9bf865…`,
+`sources_dirty: false`. On 2026-11-28 that SHA was not an ancestor of `origin/main` in a full-history clone, and the
+GitHub commits endpoint answered 422 (`No commit found for SHA`). The flag says `model/` and `tools/` were unmodified
+relative to that HEAD; it does not make the HEAD recoverable, so **the figures in `vca-clip.json` cannot be reproduced
+from a known tree.** The file's `source_provenance` key records the lookup and its date, and
+`tools/check_cymbal_source_provenance.py` reports it as a historical unknown, never as a verified source. It landed in
+`cfc38fdd`, the branch tip of the two-parent merge of PR #423, so the branch's commits are on main and a squash merge
+did not discard this one; it was never part of the branch as pushed, and how it left is not recorded.
 
 ## 1. Headline
 
