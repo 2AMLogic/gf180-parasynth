@@ -382,7 +382,9 @@ def repo_out():
     import shutil
     import tempfile
 
-    d = pathlib.Path(tempfile.mkdtemp(prefix="test-1901-", dir=headroom.ROOT / "build"))
+    base = headroom.ROOT / "build"
+    base.mkdir(exist_ok=True)
+    d = pathlib.Path(tempfile.mkdtemp(prefix="test-1901-", dir=base))
     try:
         yield d / "refused.json"
     finally:
