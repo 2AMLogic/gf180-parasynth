@@ -159,6 +159,10 @@ Recorded because each wrong result looked like an answer.
 7. **My own display dropped a hit.** An `awk 'NR>2'` over the scan's table
    ate its first data row and `measure_harness.py:391` seemed to vanish
    between runs. The scanner was re-run three times: deterministic.
+8. **A count was repeated, not counted.** #1841 was filed with "23 sites in
+   11 files"; the scanner's own list is 23 sites in **10** files. Caught
+   while checking the PR body's numbers against the scanner, corrected in
+   a comment on #1841, and the per-file count is in that comment.
 
 ## The same-class search
 
