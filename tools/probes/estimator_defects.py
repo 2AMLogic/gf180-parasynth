@@ -886,9 +886,9 @@ def main() -> int:
     # `rc.prepare`, whose `preparation_contract.Refused` is a class this probe
     # never names (it has no local one) -- a silent corpus WAV escaped as an
     # exit-1 traceback, which `verdict_exit_code` renders exactly like a
-    # failed invariant (#1183, `run_case.*` family). The boundary catches only
-    # `refusal.Refused` and maps it to the probe's own refused exit (2); a
-    # scipy ValueError on an unreadable corpus file still exits 1.
+    # failed invariant (#1183, `run_case.*` family). The boundary maps a
+    # refusal to the probe's own refused exit (2); a scipy ValueError on an
+    # unreadable corpus file still exits 1.
     try:
         defect_1(voices)
         defect_2()
@@ -896,7 +896,21 @@ def main() -> int:
         defect_4()
         defect_5()
         defect_6()
-    except refusal.Refused as e:
+    # The estimator's own refusal is listed BY CLASS beside the base (#1912,
+    # the #1782 census row for this module; the shape of #1751 / #1763):
+    # `audio_measure` raises `InsufficientEvidence`, and its subclass
+    # `NonFiniteAudio`, where an estimator can only hand back a number. Four
+    # paths here reached one with no handler naming it -- `corner_shipped` ->
+    # `corner_from_curve` -> `plateau_db` on an empty reference band; the
+    # shipped `prepare_shipped`'s `am.is_silent` on a NaN render; defect 5's
+    # two direct corpus reads -- each an exit-1 traceback: a REFUSED rendered
+    # like a failed invariant. Not AssertionError, not Exception:
+    # `InsufficientEvidence` IS an AssertionError and a plain one is a real
+    # bug, which still exits 1. What the clause cannot tell apart: a probe
+    # BUG that hands an estimator a NaN now reads as this refusal instead of
+    # a crash -- both mean no comparison was made, and the reason names the
+    # input.
+    except (refusal.Refused, am.InsufficientEvidence) as e:
         print(f"REFUSED  {e}")
         return 2
     print("\n" + "=" * 78)

@@ -36,8 +36,13 @@ that has never seen the defect it exists to catch is not a control):
    red-first against that defeat, the nan-encoded one is a regression
    pin, and the real-estimator run is the boundary that stops the guard
    widening into refusing everything).
+ 5. `main()` names the estimator's OWN refusals (#1912): an
+    `audio_measure.InsufficientEvidence` raised inside a defect section
+    exits 2 as REFUSED, while a plain `AssertionError` -- its base class,
+    and a real bug -- still leaves `main()` uncaught.
 """
 from __future__ import annotations
+
 
 import ast
 import math
@@ -46,6 +51,7 @@ import sys
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "model"))
@@ -54,6 +60,7 @@ sys.path.insert(0, str(ROOT / "tools" / "probes"))
 
 import audio_measure as am                                          # noqa: E402
 import estimator_defects as ed                                      # noqa: E402
+import refusal                                                      # noqa: E402
 import run_case as rc                                               # noqa: E402
 
 SR = 48000
@@ -653,3 +660,200 @@ def test_defect6_runs_green_on_the_real_estimators(_reset_verdict_lists,
     assert out.count("REFUSED") == 0
     assert "TWO READINGS, RECONCILED" in out
     assert out.count("on a constant ratio") == 3
+
+
+# ---------------------------------------------------------------------------
+# 7. the `main()` boundary names the estimator's own refusals (#1912)
+# ---------------------------------------------------------------------------
+# The #1782 census read this module's `__main__` off the AST: every handler
+# it defines names a `Refused` class and none names `InsufficientEvidence`, so
+# an estimator that RAISES -- rather than returning a refused `Estimate` --
+# would pass them all. Whether any input gets one to raise is not something
+# the AST can say. Traced by running, red first, on main @ ff1532c5
+# (2026-11-28), one rig per census site:
+#
+#   :105  unreachable  its argument is the synthetic strike of :121-124
+#   :176  stopped      run_case.load_reference's `except am.NonFiniteAudio`
+#   :183  shadowed     the same NaN render raises at :181 first -- see below
+#   :417  stopped      the same gate as :176, on the cowbell
+#   :420  stopped      run_case.prepare's `except am.NonFiniteAudio`
+#   :715  ESCAPED      audio_measure.InsufficientEvidence, exit 1
+#
+# and the same shape three more times where no census row looks: the shipped
+# copy `prepare_shipped`'s `am.is_silent` at :79 (what shadows :183 -- it
+# tests the identical predicate one line earlier), and defect 5's two direct
+# `wavfile.read` loops at :666 and :683. All four escapes are red runs behind
+# `main()`'s widened boundary; :683 is also pinned at process level in
+# tools/test_estimator_defects_refusal.py.
+LOADED_VOICES = ("LC", "HC", "MC", "CB")      # what defect_1 and defect_4 load
+
+
+def _strike():
+    """A decaying 220 Hz strike as int16 PCM with a pre-onset lead: enough
+    for `rc.load_reference` (not silent, 16-bit) and `rc.prepare` (an onset
+    after index 0) to both accept it."""
+    rng = np.random.default_rng(0)
+    t = np.arange(int(0.3 * SR)) / SR
+    x = np.exp(-t / 0.05) * np.sin(2 * math.pi * 220 * t) + 0.01 * rng.normal(size=len(t))
+    x[:240] = 0.0
+    return np.round(x / np.abs(x).max() * 20000).astype("<i2")
+
+
+def _synthetic_corpus(root, nan=()):
+    """A file per loaded voice under the relative path `run_case.REF_MAIN`
+    names; the voices in `nan` are float32 and all NaN -- the one encoding of
+    a corpus file that reaches `audio_measure.require_finite`, since an int16
+    file cannot hold one."""
+    for v in LOADED_VOICES:
+        p = root / rc.REF_MAIN[v][0]
+        p.parent.mkdir(parents=True, exist_ok=True)
+        content = (np.full(int(0.3 * SR), np.nan, dtype=np.float32) if v in nan
+                   else _strike())
+        wavfile.write(str(p), SR, content)
+    return root
+
+
+def _finite_render(sound, *a, **k):
+    """A STAND-IN for `rc.render_drum_solo`, which costs about 10 s a voice.
+    Speed only: no assertion in this section reads a number computed from
+    it. With the real render the same rigs raise the same exceptions."""
+    t = np.arange(int(0.3 * SR)) / SR
+    return np.exp(-t / 0.05) * np.sin(2 * math.pi * 220 * t), SR
+
+
+@pytest.fixture()
+def _main_on(tmp_path, monkeypatch, _reset_verdict_lists):
+    """`ed.main()` over a synthetic corpus, argv set, the render standing in
+    for speed. Whatever a test rigs on top is undone with the fixture's."""
+    monkeypatch.setattr(ed, "REFS", _synthetic_corpus(tmp_path / "refs"))
+    monkeypatch.setattr(rc, "render_drum_solo", _finite_render)
+    monkeypatch.setattr(sys, "argv", ["estimator_defects.py"])
+    return ed.main
+
+
+def test_main_names_the_corner_estimators_evidence_refusal_refused_2(
+        _main_on, monkeypatch, capsys):
+    """SITE :715, the census row this issue is titled for. RED FIRST on main @
+    ff1532c5: `defect_6` -> `corner_shipped` -> `am.corner_from_curve` ->
+    `am.plateau_db` raised `InsufficientEvidence: plateau_db: no measured
+    points in the reference band` straight out of `main()` -- an exit-1
+    traceback, which `verdict_exit_code` renders exactly like a failed
+    invariant. Unreachable on the section's own constants (`_ref_band` pins
+    the band's lower edge at `freqs[0]`), so the empty band is injected: off
+    every grid the section reads. Nothing between `corner_shipped` and
+    `main()` names the class, and the section's `_bad_corner` guard runs only
+    once `shipped()` has RETURNED. Premise: the class is no
+    `refusal.Refused`, so the #1183 boundary could not have caught it."""
+    assert not issubclass(am.InsufficientEvidence, refusal.Refused)
+    monkeypatch.setattr(rc, "_ref_band", lambda freqs, cut_hz: (1e6, 2e6))
+    assert _main_on() == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out
+    assert "no measured points in the reference band" in out
+    assert "check(s) FAILED" not in out, "a refused run prints no fail summary"
+    assert ed.fails == []
+
+
+def test_main_names_a_non_finite_render_refused_2(_main_on, monkeypatch, capsys):
+    """The `NonFiniteAudio` leg, and census site :183's record. That site
+    (`rc.prepare` -> `require_finite`) is SHADOWED, not gated: the reference
+    side is finite by the time it gets there (`load_reference` asserted it at
+    :176), and the same NaN render raises one line earlier, at :181, through
+    the shipped copy `prepare_shipped`'s `am.is_silent` (:79) -- on the
+    identical predicate, so `rc.prepare` never sees a non-finite record.
+    That earlier raise is itself uncaught: RED FIRST on main @ ff1532c5 with
+    exit 1, an `audio_measure.NonFiniteAudio` traceback."""
+    monkeypatch.setattr(rc, "render_drum_solo",
+                        lambda sound, *a, **k: (np.full(480, np.nan), SR))
+    assert _main_on() == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out
+    assert "non-finite samples" in out
+    assert "check(s) FAILED" not in out
+    assert ed.fails == []
+
+
+def test_plain_assertion_error_through_main_is_not_a_refusal(
+        _main_on, monkeypatch, capsys):
+    """RULE 8's input, the one that defeats the WIDER guard.
+    `am.InsufficientEvidence` IS an `AssertionError`, so a handler written
+    against the base class -- or `except Exception` -- would relabel a real
+    bug as a refused precondition. A plain `AssertionError` from a section
+    must leave `main()` uncaught, which `sys.exit(main())` renders as exit 1:
+    no REFUSED line, nothing recorded."""
+    assert issubclass(am.InsufficientEvidence, AssertionError), \
+        "the premise of this control: the handler's class is an AssertionError"
+
+    def section(voices):
+        raise AssertionError("injected: a plain AssertionError, not an evidence refusal")
+    monkeypatch.setattr(ed, "defect_1", section)
+    with pytest.raises(AssertionError) as info:
+        _main_on()
+    assert not isinstance(info.value, am.InsufficientEvidence)
+    out = capsys.readouterr().out
+    assert "REFUSED" not in out
+    assert "check(s)" not in out, "no summary: the run did not end, it crashed"
+    assert ed.refusals == []
+    assert ed.fails == []
+
+
+@pytest.mark.parametrize("site, call", [
+    (":176-and-:417-load_reference",
+     lambda root: rc.load_reference("LC", _synthetic_corpus(root, nan=("LC",)))),
+    (":420-prepare",
+     lambda root: rc.prepare(np.full(480, np.nan), SR)),
+])
+def test_run_case_gates_turn_a_non_finite_record_into_a_refused(
+        tmp_path, site, call):
+    """The census sites that STOPPED, each at its own gate: the estimator
+    does raise at `audio_measure.require_finite`, and the `except
+    am.NonFiniteAudio` two lines below it turns the raise into
+    `run_case.Refused` -- a `refusal.Refused`, which the #1183 boundary
+    already maps to 2. Red-first run on main @ ff1532c5: `REFUSED ... non-
+    finite samples`, return 2, for each site's rig. They exited 2 before this
+    issue's change and need none of it; this pins the gate that does it, so
+    the boundary never silently becomes the only thing standing there."""
+    with pytest.raises(rc.Refused) as info:
+        call(tmp_path / "refs")
+    assert isinstance(info.value, refusal.Refused)
+    assert not isinstance(info.value, am.InsufficientEvidence)
+    assert isinstance(info.value.__cause__, am.NonFiniteAudio), site
+
+
+def test_prepend_silence_never_hands_prepare_a_non_finite_record(
+        _reset_verdict_lists, monkeypatch):
+    """SITE :105, UNREACHABLE, and why: its argument is the synthetic strike
+    of :121-124 -- zeros, `np.exp`, `np.sin` -- so no input this module
+    accepts makes `rc.prepare`'s `require_finite` refuse there. Pinned with a
+    spy on `require_finite` under the real helper: every call finite, and
+    `rc.prepare`'s own `side` among them, so the gate was reached."""
+    seen = []
+    real = am.require_finite
+
+    def spy(x, what="the signal"):
+        seen.append((what, bool(np.isfinite(np.asarray(x, dtype=np.float64)).all())))
+        return real(x, what)
+    monkeypatch.setattr(am, "require_finite", spy)
+    ed._prepend_silence_invariance()
+    assert seen, "the spy saw nothing, so it is not on the path and proves nothing"
+    assert all(finite for _what, finite in seen)
+    assert "the recording" in [what for what, _finite in seen], "`rc.prepare` was reached"
+
+
+def test_a_refusal_after_a_failed_check_keeps_the_fail_line_and_exits_2(
+        _main_on, monkeypatch, capsys):
+    """The issue's test-plan edge: a refusal BESIDE a failed check. `check()`
+    prints its FAIL line where the check ran, so an earlier failure stays on
+    stdout ahead of the REFUSED line and the exit is 2, never 1 --
+    `verdict_exit_code`'s order (REFUSED outranks FAILED), held at the
+    boundary too. The summary does not print: a boundary refusal ends the
+    run, exactly as #1183's does."""
+    def section():
+        ed.check(False, "injected: a failed invariant ahead of the refusal")
+    monkeypatch.setattr(ed, "defect_3", section)
+    monkeypatch.setattr(rc, "_ref_band", lambda freqs, cut_hz: (1e6, 2e6))
+    assert _main_on() == 2
+    out = capsys.readouterr().out
+    assert out.index("FAIL  injected: a failed invariant") < out.index("REFUSED")
+    assert ed.fails == ["injected: a failed invariant ahead of the refusal"]
+    assert "check(s) FAILED" not in out
