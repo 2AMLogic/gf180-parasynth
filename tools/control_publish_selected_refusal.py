@@ -140,8 +140,10 @@ CONTROLS = {
          "def simulation_evidence():\n"
          "    try:\n"
          "        return _simulation_evidence_body()\n"
-         "    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError, AttributeError) as exc:\n"
-         "        raise RuntimeError(f'stored record unreadable ({type(exc).__name__}: {exc})') from None\n"
+         "    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, "
+         "TypeError, AttributeError) as exc:\n"
+         "        raise RuntimeError("
+         "f'stored record unreadable ({type(exc).__name__}: {exc})') from None\n"
          "\n\n"
          "def _simulation_evidence_body():"),
         f"{NOT_MASKED_AFTER_THE_READ}[hash-comparison]",
