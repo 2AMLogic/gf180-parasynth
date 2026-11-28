@@ -1,0 +1,16 @@
+........................................................................ [ 58%]
+....................................................                     [100%]
+============================= slowest 12 durations =============================
+55.73s call     tools/test_r0_capture.py::test_t_physical_on_a_synthetic_bundle_is_no_verdict_with_its_control_caught
+9.29s call     tools/test_r0_capture.py::test_a_session_analysed_with_the_tabulated_kernel_is_the_same_measurement
+9.14s call     tools/test_r0_capture.py::test_a_real_sound_defect_is_still_a_measured_fail_at_both_entry_points
+4.85s call     tools/test_r1_capture.py::test_t_physical_r1_given_an_r0_bundle_is_no_verdict
+4.72s call     tools/test_r1_capture.py::test_a_session_bound_to_its_own_image_passes_the_r1_procedure
+4.23s call     tools/test_r0_capture.py::test_a_retry_keeps_the_failed_attempt_in_the_record
+4.16s call     tools/test_r0_capture.py::test_session_properties_say_where_they_were_not_evaluated
+4.15s call     tools/test_r0_capture.py::test_clean_audio_with_live_cli_host_logs_is_analysed_not_refused
+4.07s call     tools/test_r0_capture.py::test_a_good_transcript_on_real_looking_metadata_is_accepted
+3.97s call     tools/test_r0_capture.py::test_clean_synthetic_session_passes_with_its_known_answers
+2.67s call     tools/test_r0_capture.py::test_start_red_the_stub_analyser_catches_nothing
+2.11s call     tools/test_r0_capture.py::test_a_missing_timing_field_is_no_verdict_at_both_entry_points
+124 passed in 128.85s (0:02:08)

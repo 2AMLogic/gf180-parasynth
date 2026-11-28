@@ -76,9 +76,9 @@ def test_the_tabulated_kernel_is_the_formula_over_the_whole_fractional_part(half
     """The weights depend on the fractional part alone, so one scan of [0, 1]
     characterises the error for every input there is: per tap and in sum
     (what one output can be off by, at full scale), 2e-13 against a peak of 1.
-    Measured 1.4e-13 at 33 taps and 3.7e-14 at 64; a table a quarter as fine
-    reads 5.5e-13 here (tools/test_r0_controls_profile.py times it). The takes
-    are 24-bit (LSB 1.2e-7) and the reference 16-bit (3.0e-5)."""
+    Measured 1.4e-13 at the peak searches' 32 taps and 3.6e-14 at 64; a table
+    half as fine reads 5.5e-13 here. The takes are 24-bit (LSB 1.2e-7) and the
+    reference 16-bit (3.0e-5)."""
     frac = np.linspace(0.0, 1.0, 200_001)
     t = frac[:, None] - np.arange(-half + 1, half + 1)[None, :]
     err = np.abs(rc._kernel_weights(half, frac) - np.sinc(t) * rc._kaiser(t, half))
@@ -148,10 +148,10 @@ def test_a_session_analysed_with_the_tabulated_kernel_is_the_same_measurement(
         tmp_path, monkeypatch):
     """Through the whole analysis, on a session that exercises calibration,
     the repeat-take comparison and both warps of a take: verdict, failures and
-    scope identical, every metric the formula's to 1e-6. (Not to 1e-13: the
-    golden-section peak searches move the ninth digit of the clock estimate
-    under a 1e-13 perturbation, measured 2e-8 ppm at a table a quarter as fine
-    as the shipped one.)"""
+    scope identical, every metric the formula's to 1e-6. Not to 1e-13: the
+    golden-section peak searches move the last digits of the calibration under
+    a perturbation far below that (2e-8 ppm was measured at a table half as
+    fine as the shipped one)."""
     monkeypatch.setattr(rc, "REQUIRED_COMMANDS", ("demo",))
     d = rc.synth_session(tmp_path / "s", takes=(("silence-1", "silence"), ("demo-1", "demo"),
                                                 ("demo-2", "demo")))

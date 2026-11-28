@@ -1,0 +1,119 @@
+r0_controls_profile: OK
+  3.12.16, numpy 2.5.5, scipy 1.18.1, AMD EPYC 7763 64-Core Processor x 4, source node/D-drums-bitexact-4024-g83c917d2
+  T-PHYSICAL, phase by phase
+    setup    synth_session, the test's own bundle        7.79 s
+    trial    run_trial, wall                         388.41 s
+      r0-capture           exit 2  NO VERDICT         1.7 s   (start and imports 1.7, main 0.0)
+      synthetic-defects    exit 0  caught           387.4 s   (start and imports 1.6, main 385.8)
+      cross-image-refusal  exit 0  caught             3.1 s   (start and imports 1.2, main 1.9)
+    receipt  check_receipt                            0.00 s
+    total                                          396.21 s
+  synthetic-defects, session by session
+    session          synth     analyse      total   verdict   outcome
+    clean               7.64      23.03      30.67   PASS     True
+    delay-slip          8.66      22.75      31.41   FAIL     caught
+    gain                7.19      22.62      29.82   FAIL     caught
+    clock-drift         7.18      22.42      29.61   FAIL     caught
+    noise               7.26      22.54      29.80   FAIL     caught
+    dropout             7.17      22.84      30.01   FAIL     caught
+    clipping            7.14      22.43      29.57   FAIL     caught
+    stuck               7.20      22.51      29.70   FAIL     caught
+    pitch               7.23      21.60      28.83   FAIL     caught
+    one-channel         7.21      22.79      30.00   FAIL     caught
+    inverted            7.21      22.63      29.83   FAIL     caught
+    wrong-input         7.22      19.30      26.51   FAIL     caught
+    swap                7.27      22.69      29.97   PASS     BLIND as declared
+    13 sessions       95.58     290.15     385.73
+  r0-capture: functions by self seconds (self, inclusive, calls)
+    main                            0.00       0.00         1
+    _write_atomic                   0.00       0.00         2
+    load_manifest                   0.00       0.00         1
+    sha256_file                     0.00       0.00         2
+    default_bundle                  0.00       0.00         1
+    resolve_image                   0.00       0.00         1
+  synthetic-defects: functions by self seconds (self, inclusive, calls)
+    interp                        356.86     356.86    304427
+    tone_f0                         8.23       8.23        52
+    correlate                       7.61       7.61      7201
+    band                            2.81       2.81       650
+    envelope                        2.62       2.62       624
+    ncc_lag                         1.52      33.80      7201
+    _refine_peak                    1.25      24.13      7201
+    synth_take                      1.18      93.76       117
+    write_capture_wav               0.81       0.81       117
+    read_capture                    0.77       0.77       117
+    sha256_file                     0.25       0.49       962
+    _run                            0.25     290.15        13
+    analyse_take                    0.25     223.35       117
+    rms                             0.22       0.22      7892
+    load_reference                  0.18       1.62       208
+    first_strong_lag                0.16       9.71       429
+    _hpf                            0.12       0.12       117
+    warp_reference                  0.11     295.07       322
+    _coarse                         0.11      16.51       429
+    block_rms                       0.10       0.10       679
+    _local_lags                     0.07      19.40       115
+    clip_runs                       0.06       0.06       234
+    synth_session                   0.05      95.58        13
+    main                            0.04     385.77         1
+    command_identity                0.03       0.03       104
+  cross-image-refusal: functions by self seconds (self, inclusive, calls)
+    interp                          1.75       1.75         3
+    synth_take                      0.05       1.80         6
+    write_capture_wav               0.03       0.03         6
+    band                            0.01       0.01         3
+    synth_session                   0.01       1.86         3
+    envelope                        0.01       0.01         3
+    relabel_reference_set           0.01       0.01         1
+    _hpf                            0.01       0.01         6
+    cross_image_controls            0.00       1.88         1
+    load_reference                  0.00       0.02         6
+    sha256_file                     0.00       0.00        23
+    main                            0.00       1.88         1
+    load_manifest                   0.00       0.00         8
+    warp_reference                  0.00       1.75         3
+    reference_problems              0.00       0.00         8
+    check_session                   0.00       0.00         3
+    _have_set                       0.00       0.00         7
+    read_wav_int16                  0.00       0.00         3
+    silence_problems                0.00       0.00         1
+    command_blocks                  0.00       0.00         7
+    transcript_problems             0.00       0.00         3
+    detect_problems                 0.00       0.00         3
+    identity_problems               0.00       0.00         7
+    planned_hold                    0.00       0.00         3
+    _case                           0.00       0.00         3
+  r0_capture controls: properties x defects (MOVED = the property failed)
+    defect         routing  silence clipping    pitch    clock   timing     gain    noise  dropout    stuck residual   repeat channel-   outcome
+    delay-slip           .        .        .        .    MOVED    MOVED        .        .        .        .    MOVED    MOVED        .   caught (intended timing)
+    gain                 .        .        .        .        .        .    MOVED        .        .        .    MOVED    MOVED        .   caught (intended gain)
+    clock-drift          .        .        .        .    MOVED    MOVED    MOVED        .        .        .    MOVED    MOVED        .   caught (intended clock)
+    noise            MOVED    MOVED        .        .        .        .        .    MOVED    MOVED        .    MOVED    MOVED        .   caught (intended noise)
+    dropout              .        .        .        .        .        .        .        .    MOVED        .    MOVED        .        .   caught (intended dropout)
+    clipping             .        .    MOVED        .        .    MOVED    MOVED        .        .    MOVED    MOVED        .        .   caught (intended clipping)
+    stuck                .        .        .        .        .        .    MOVED        .        .    MOVED    MOVED    MOVED        .   caught (intended stuck)
+    pitch            MOVED        .        .    MOVED        .        .        .        .        .        .        .        .        .   caught (intended pitch)
+    one-channel      MOVED    MOVED        .        .        .        .        .        .        .        .        .        .        .   caught (intended routing)
+    inverted         MOVED        .        .        .        .        .        .        .        .        .        .        .        .   caught (intended routing)
+    wrong-input      MOVED    MOVED        .        .        .        .        .        .        .        .        .        .        .   caught (intended routing)
+    swap                 .        .        .        .        .        .        .        .        .        .        .        .        .   BLIND as declared (intended None)
+    clean: PASS known answers {'ppm': [35.0, 34.94256273], 'gain_db': [-10.457574905606752, -10.465504174]}
+  kernel, demo.wav warped (315260 positions): s per million samples, max abs diff against direct, one-position call, kernel error
+    shipped                4.756   0.0e+00     60.3 us
+    direct                 4.764   0.0e+00     60.5 us
+    lean                   3.820   0.0e+00     54.7 us
+    table-cubic-1024       0.982   7.4e-13     51.9 us   2.2e-12
+    table-cubic-4096       1.006   4.7e-14     52.7 us   1.4e-13
+    table-linear-16384     0.471   3.2e-10     45.3 us   1.5e-09
+  components: ms per call, calls in the 13 sessions, s per session here, profiled self s per session
+    load_reference('demo')      14.416       208     0.231     0.014
+    band(310k)                   6.368       650     0.318     0.216
+    envelope(310k)               5.237       624     0.251     0.202
+    read_capture(demo-1)        10.853       117     0.098     0.060
+    sha256_file(demo-1)          2.597       962     0.192     0.019
+    write_capture_wav(demo-1)    12.199       117     0.110     0.062
+    ncc_lag, whole capture      19.240      7201               0.117
+    ncc_lag, one window          4.075      7201               0.117
+    _refine_peak                 3.503      7201     1.940     0.097
+    tone_f0(51k)               160.093        52     0.640     0.633
+    rng.normal(310k x 4)        21.043         0          

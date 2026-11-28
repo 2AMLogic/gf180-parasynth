@@ -539,6 +539,11 @@ Relaxing a tolerance to make a candidate pass is an operator decision
   in closed form (`tools/test_r0_capture.py`): fractional delay, band-limited
   interpolation, clock and gain recovery, f0 of a sine and of a band-limited
   saw, clipping runs, and noise RMS.
+- **The interpolation kernel is a table** (#1944). `interp` reads sinc x Kaiser
+  off a table instead of evaluating it for every tap of every sample; the tests
+  hold it to the formula over the whole fractional part, on a reference, and
+  through a whole session analysed both ways. The cost, before and after, is
+  recorded in `docs/t-physical-cost-2026-11-28.md`.
 - **Synthetic sessions.** These are built from the R0 reference through a known
   analog path: injected per-take delays, gain 0.30, +35 ppm clock, −100 dBFS
   noise and a 5 Hz AC-coupling high-pass.

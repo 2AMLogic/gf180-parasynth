@@ -222,8 +222,8 @@ def interp(x: np.ndarray, pos: np.ndarray, half: int = 32) -> np.ndarray:
     x is left at zero without one. Evaluated per sample, the kernel was 92 % of
     the synthetic-defect control (#1944; tools/r0_controls_profile.py). The
     table's error is bounded over the whole of [0, 1] -- 1.4e-13 per tap and in
-    sum at 33 taps, 3.7e-14 at 64, against a peak of 1 -- where the takes are
-    24-bit (LSB 1.2e-7) and the reference 16-bit (3.0e-5)."""
+    sum at the peak searches' 32 taps, 3.6e-14 at 64, against a peak of 1 --
+    where the takes are 24-bit (LSB 1.2e-7) and the reference 16-bit (3.0e-5)."""
     x = np.asarray(x, dtype=np.float64)
     pos = np.asarray(pos, dtype=np.float64)
     out = np.zeros(pos.shape)

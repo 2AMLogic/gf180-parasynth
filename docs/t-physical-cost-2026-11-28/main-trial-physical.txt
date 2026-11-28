@@ -1,0 +1,12 @@
+trials.yml on main, job trial-physical, before this change: the step `capture analysis tests,
+and T-PHYSICAL end to end without a capture` (python -m pytest tools/test_r0_capture.py
+tools/test_r1_capture.py -q). GitHub Actions API through gh, read 2026-11-28 between
+15:10 and 15:20 UTC; the job's own id was not captured.
+
+run head conclusion created job_s step_s
+46154246660 8ebfe4cd success 2026-11-28T14:21:31Z 756 726
+46152109289 e2d1bae7 success 2026-11-28T13:56:38Z 773 741
+46150101274 dd0449e0 success 2026-11-28T13:32:15Z 762 735
+46147611182 8f3d8ed2 success 2026-11-28T13:02:30Z 419 400
+46146778263 560a1580 success 2026-11-28T12:52:10Z 912 885
+46146061236 ff1532c5 success 2026-11-28T12:43:17Z 469 446
