@@ -109,6 +109,7 @@ CORPUS_ENV_TEST_FILES = {
     pathlib.PurePosixPath("tools/test_balance_line_shape_refusal.py"): frozenset({"_probe"}),
     pathlib.PurePosixPath("tools/test_estimator_defects_refusal.py"): frozenset({"_probe"}),
     pathlib.PurePosixPath("tools/test_probe_tom_numerator_refusal.py"): frozenset({"_probe"}),
+    pathlib.PurePosixPath("tools/test_audio_distance_floor_refusal.py"): frozenset({"_corpus_env"}),
 }
 SELF = pathlib.PurePosixPath("tools/test_corpus_path_single_source.py")
 ENV_NAMES = {"GF180_TR808_REFS", "TR808_REFS", "GF180_TR808_REFS_DEFAULT"}   # env-var keys
