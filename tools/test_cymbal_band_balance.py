@@ -577,9 +577,35 @@ def test_the_ablation_refuses_a_target_it_cannot_reach(figs):
         bb.ENV_PEAK_MAX = saved
 
 
+def test_the_ablation_refuses_a_non_finite_level_or_gap_before_min_drops_it(figs, monkeypatch):
+    """#2014. `k = min(ceiling[b] / want[b] for b in BANDS)` is the anchor every
+    band is scaled by, and min() drops a NaN that is not its first argument: a
+    non-finite `want` in DECAY or SHORT used to leave the anchor to the other
+    two bands, and the band then passed both ceiling checks (False for a NaN)
+    and came back as NaN. `calibrate()` cannot emit one -- its render is the
+    fixed-point model's int16 clip cast to float -- but `rebalance` takes
+    `cal` as a dict and `gap_db()` as it comes, and nothing said so. The
+    refusal names the band and the field."""
+    fig9, corner = figs
+    clean = bb.rebalance(_fake_cal(), fig9, corner)      # the anchor's own arithmetic
+    cal = _fake_cal()
+    cal["per_band"]["short"]["shipped_abs"] = math.nan
+    with pytest.raises(bb.Refused) as exc:
+        bb.rebalance(cal, fig9, corner)
+    assert "short band shipped_abs" in str(exc.value)
+
+    real = bb.gap_db
+    monkeypatch.setattr(bb, "gap_db", lambda f, c, **kw: {
+        **real(f, c, **kw), "decay": {**real(f, c, **kw)["decay"], "gap_db": math.inf}})
+    with pytest.raises(bb.Refused) as exc:
+        bb.rebalance(_fake_cal(), fig9, corner)
+    assert "decay band gap_db" in str(exc.value)
+    # and every band still lands inside its registers on the clean tree
+    for v in clean["per_band"].values():
+        assert math.isfinite(v["amp"]) and math.isfinite(v["env_gain"])
+
+
 # ---- the committed ablation record binds to this tool --------------------
-
-
 @pytest.mark.skipif(not ABLATION.exists(), reason="ablation record not present")
 def test_the_committed_ablation_used_the_gaps_this_tool_computes(figs):
     fig9, corner = figs

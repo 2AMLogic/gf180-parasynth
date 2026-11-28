@@ -78,6 +78,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -118,6 +119,14 @@ print(json.dumps(out))
 
 
 def _run_tree(tree_dir: str, probes: dict[str, str], timeout: int) -> dict:
+    """One tree's probe answers, read back from its own driver.
+
+    A probe that answered a non-finite number comes back as `None` with the
+    reason attached (#1929). It used to come back as the number: the caller
+    marks a move with `abs(v - prev) > 1e-6`, which is False on BOTH sides of
+    a NaN, so a NaN in the middle of a history hid the move into it and the
+    move out of it.
+    """
     drv = os.path.join(tree_dir, "model", "_drift_driver.py")
     with open(drv, "w") as fh:
         fh.write(DRIVER)
@@ -136,7 +145,12 @@ def _run_tree(tree_dir: str, probes: dict[str, str], timeout: int) -> dict:
     if not line:
         tail = (p.stderr or p.stdout).strip().splitlines()[-1:] or ["no output"]
         return {"_import": f"exit {p.returncode}: {tail[0]}"}
-    return json.loads(line)
+    out = json.loads(line)
+    for name, value in list(out.items()):
+        if isinstance(value, float) and not math.isfinite(value):
+            out[name] = None
+            out[name + "!why"] = f"non-finite answer: {value!r}"
+    return out
 
 
 def measure_commit(commit: str, probes: dict[str, str], timeout: int) -> dict:

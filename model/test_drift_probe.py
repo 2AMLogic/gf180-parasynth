@@ -25,9 +25,12 @@ available to the probe.
 """
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -85,3 +88,48 @@ def test_the_walk_lists_the_commits_it_says_it_walks():
     rows = dp.commits_in(f"{BASE}~1..{BASE}", [])
     assert len(rows) == 1, rows
     assert rows[0][0].startswith(BASE[:7]), rows
+
+
+def test_a_non_finite_probe_value_is_n_a_not_a_number(tmp_path, monkeypatch):
+    """#1929. `_run_tree` json.loads the tree's own stdout, and the driver
+    prints json.dumps(float(v)), which writes a bare NaN. Measured on the tree
+    before the fix: NaN and inf came back as floats to be compared. They now
+    come back as `n/a` with the reason, like any probe that could not answer."""
+    (tmp_path / "model").mkdir()
+    monkeypatch.setattr(dp, "DRIVER",
+                        "import json\n"
+                        "print(json.dumps({'a': float('nan'), 'b': float('inf'), "
+                        "'c': 2.5, 'd': None}))\n")
+    got = dp._run_tree(str(tmp_path), {"a": "x", "b": "x", "c": "x", "d": "x"}, 60)
+    assert got["a"] is None and got["a!why"] == "non-finite answer: nan"
+    assert got["b"] is None and got["b!why"] == "non-finite answer: inf"
+    assert got["c"] == 2.5 and "c!why" not in got
+    assert got["d"] is None and "d!why" not in got
+
+
+def test_a_move_across_a_commit_that_answered_nan_is_marked_moved(monkeypatch, capsys):
+    """CONTROL, through `main` and the real `_run_tree`. Three commits measure
+    2.0, NaN, 2.5. On the tree before the fix the NaN was a float, and
+    `abs(v - prev) > 1e-6` is False on both sides of one, so the 2.0 -> 2.5
+    move printed no MOVED line at all: it was hidden by the commit in between.
+    Needs no history: each commit's "tree" is an empty directory whose driver
+    prints a canned answer."""
+    answers = {"c1": 2.0, "c2": float("nan"), "c3": 2.5}
+
+    def measure(commit, probes, timeout):
+        tmp = tempfile.mkdtemp(prefix="drift-probe-test-")
+        os.mkdir(os.path.join(tmp, "model"))
+        monkeypatch.setattr(dp, "DRIVER", "import json\nprint(%r)\n"
+                            % json.dumps({"p": answers[commit]}))
+        try:
+            return dp._run_tree(tmp, probes, timeout)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    monkeypatch.setattr(dp, "PROBES", {"p": "x"})
+    monkeypatch.setattr(dp, "commits_in", lambda rng, paths: [(h, h) for h in answers])
+    monkeypatch.setattr(dp, "measure_commit", measure)
+    assert dp.main(["--range", "c1..c3", "--jobs", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "c2 " in out and "n/a" in out
+    assert "** MOVED: p 2.0000 -> 2.5000" in out

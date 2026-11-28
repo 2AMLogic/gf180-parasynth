@@ -343,6 +343,43 @@ def test_balance_targets_accepts_the_committed_record():
     assert t["gap_db"]["decay"] == pytest.approx(10.13, abs=0.005)
 
 
+@pytest.mark.parametrize("band", ["decay", "short"])
+@pytest.mark.parametrize("bad", [float("nan"), "nan", float("inf"), float("-inf")])
+def test_balance_targets_refuses_a_non_finite_gap(tmp_path, band, bad):
+    """#1929. The drift guard is `abs(got - want) > 0.005`, which is False for a
+    NaN. Measured on the tree before the fix: a NaN gap -- a JSON NaN or the
+    string "nan" -- passed it in either band and was returned as a gap. The
+    refusal names the band's field. +-inf are named too, rather than left to
+    the drift guard, which happened to catch them."""
+    rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
+    rec["gap_db"][band]["gap_db"] = bad
+    p = tmp_path / "balance.json"
+    p.write_text(json.dumps(rec))
+    with pytest.raises(vd.Refused) as exc:
+        vd.balance_targets(p)
+    assert "non-finite" in str(exc.value)
+    assert f"gap_db.{band}.gap_db" in str(exc.value)
+    assert "drifted" not in str(exc.value)
+
+
+def test_a_non_finite_gap_exits_refused_through_the_command_line(tmp_path, capsys,
+                                                                 monkeypatch):
+    """The same refusal by the route that ships: `main()` catches it, exits
+    REFUSED and names the field, and nothing renders. The scan is patched for
+    the reason `test_a_refused_balance_record_exits_refused_not_fail` gives."""
+    rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
+    rec["gap_db"]["short"]["gap_db"] = float("nan")
+    p = tmp_path / "balance.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(vd, "verify_source", _verified_source)
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    rc = vd.main(["--check", "--require-source", str(tmp_path / "sn.pdf")])
+    out = capsys.readouterr().out
+    assert rc == REFUSED
+    assert "non-finite" in out and "gap_db.short.gap_db" in out
+    assert "GATE:" not in out
+
+
 def test_the_pinned_scan_is_the_one_the_vr4_read_used():
     """Two modules reading the same page of the same document must not be able
     to drift onto different printings of it."""
