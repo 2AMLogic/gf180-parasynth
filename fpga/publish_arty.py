@@ -401,6 +401,55 @@ def publish(artifact, output):
     return summary
 
 
+# check_timing's three sentences for output ports that have no output delay
+_NO_OUTPUT_DELAY_MARKERS = {
+    "unconstrained": "with no output delay specified",
+    "false_path": "with no output delay but user has a false path constraint",
+    "forwarded_clock": "with no output delay but with a timing clock defined on it",
+}
+
+
+def parse_no_output_delay(timing, *, require_listed=("forwarded_clock",)):
+    """The check_timing census of output ports that have no output delay.
+
+    Returns (missing, counts, ports) from a routed timing report: the
+    `checking no_output_delay (N)` total, the three class counts, and -- for
+    each class named in require_listed -- the ports listed under it, in report
+    order. The sentences must be present, must sum to the total, and a
+    required class must list exactly the ports it counts; anything else
+    refuses. The publisher requires only the class it records as data;
+    fpga/build_arty_sd.py's gate requires all three.
+    """
+    unknown = [key for key in require_listed if key not in _NO_OUTPUT_DELAY_MARKERS]
+    if unknown:
+        raise ValueError("unknown no_output_delay class: " + ", ".join(unknown))
+    # check_timing prints the total twice (summary and verbose census); every
+    # occurrence must agree with the class sum, not only the first
+    totals = [int(n) for n in re.findall(r"checking no_output_delay \((\d+)\)", timing)]
+    if not totals:
+        raise ValueError("report does not count no_output_delay ports")
+    counts = {}
+    for key, marker in _NO_OUTPUT_DELAY_MARKERS.items():
+        match = re.search(r"There (?:are|is) (\d+) ports? " + re.escape(marker), timing)
+        if match is None:
+            raise ValueError("report does not classify no_output_delay ports: " + marker)
+        counts[key] = int(match[1])
+    if any(sum(counts.values()) != n for n in totals):
+        raise ValueError("no_output_delay classes do not sum to the count")
+    ports = {}
+    for key in require_listed:
+        # the class's section: after its sentence, up to the next sentence or
+        # the next check heading. Read even for a zero count, so a port listed
+        # under a class that counts none refuses
+        section = re.search(re.escape(_NO_OUTPUT_DELAY_MARKERS[key]) + r"[^\n]*\n(.*?)"
+                            r"(?=^ There |^\d+\. checking |\Z)", timing, re.DOTALL | re.MULTILINE)
+        listed = section[1].split() if section else []
+        if len(listed) != counts[key]:
+            raise ValueError("no_output_delay ports are not listed for class " + key)
+        ports[key] = listed
+    return totals[0], counts, ports
+
+
 def inspect_reports(directory, design="arty_a7_top"):
     try:
         texts = {name: (directory / name).read_text() for name in
@@ -424,31 +473,14 @@ def inspect_reports(directory, design="arty_a7_top"):
             counts = re.findall(r"checking " + kind + r" \((\d+)\)", timing)
             if not counts or any(int(n) for n in counts):
                 raise ValueError("internal timing is incomplete: " + kind)
-        missing = int(re.search(r"checking no_output_delay \((\d+)\)", timing)[1])
         # The check_timing verbose block classifies the unconstrained output
         # ports: unconstrained (HIGH), excused by false paths, and ports that
         # carry a timing clock -- the forwarded-clock class. Only that last
-        # class is a justified exception; the sentences must be present and
-        # are refused if the tool stops reporting them.
-        def no_output_delay_sentence(marker):
-            match = re.search(r"There (?:are|is) (\d+) ports? " + marker, timing)
-            if match is None:
-                raise ValueError("report does not classify no_output_delay ports: " + marker)
-            return int(match[1])
-        unconstrained = no_output_delay_sentence("with no output delay specified")
-        false_pathed = no_output_delay_sentence(
-            "with no output delay but user has a false path constraint")
-        clock_carriers = no_output_delay_sentence(
-            "with no output delay but with a timing clock defined on it")
-        if unconstrained + false_pathed + clock_carriers != missing:
-            raise ValueError("no_output_delay classes do not sum to the count")
-        exceptions = []
-        if clock_carriers:
-            listed = re.search(r"with no output delay but with a timing clock defined on it"
-                               r"[^\n]*\n\n(.*?\n)\n", timing, re.DOTALL)
-            if listed is None or len(listed[1].split()) != clock_carriers:
-                raise ValueError("forwarded-clock exception ports are not listed")
-            exceptions = listed[1].split()
+        # class is a justified exception, so only its ports are read here.
+        missing, census, ports = parse_no_output_delay(timing)
+        unconstrained, false_pathed, clock_carriers = (
+            census[key] for key in ("unconstrained", "false_path", "forwarded_clock"))
+        exceptions = ports["forwarded_clock"]
         match = re.search(r"^hardware_clock\.clock_raw\s+([\d.]+)\s+.*P,G,A\s+"
                           r"\{hardware_clock\.mmcm/CLKOUT0\}", texts["clocks.rpt"], re.MULTILINE)
         period = float(match[1])

@@ -99,6 +99,10 @@ def _no_output_delay(tmp_path, unconstrained, false_path=0, timing_clock=0):
     text, n = re.subn(r"checking no_output_delay \(\d+\)",
                       f"checking no_output_delay ({unconstrained + false_path + timing_clock})", text)
     assert n >= 1
+    if not timing_clock:
+        # a class counting none lists none (the parser refuses otherwise)
+        text, n = re.subn(r"(with a timing clock defined on it[^\n]*\n\n)i2s_bclk\n", r"\1", text)
+        assert n == 1, "fixture no longer lists i2s_bclk under the forwarded-clock class"
     p.write_text(text)
     return publish.inspect_reports(tmp_path)
 
@@ -132,6 +136,71 @@ def test_external_io_timing_flag_is_false_while_outputs_remain_unconstrained(tmp
     r = _no_output_delay(tmp_path, unconstrained=1)
     assert r["missing_output_delays"] == 1
     assert r["external_io_timing_qualified"] is False
+
+
+def test_no_output_delay_census_must_sum_to_its_count(tmp_path):
+    # #1590: the three class sentences are checked against the census total.
+    # A class shifted into another can keep its own list consistent; the
+    # total is what it cannot satisfy.
+    for p in FIXTURE.glob("*.rpt"):
+        shutil.copyfile(p, tmp_path / p.name)
+    p = tmp_path / "timing.rpt"
+    text, n = re.subn(r"checking no_output_delay \(1\)", "checking no_output_delay (2)", p.read_text())
+    assert n >= 1
+    p.write_text(text)
+    with pytest.raises(ValueError, match="do not sum"):
+        publish.inspect_reports(tmp_path)
+
+
+SD_DEMO = publish.ROOT / "fpga/reports/arty/sd-demo-2025.1"
+
+
+def test_no_output_delay_parser_names_every_class_and_its_ports():
+    # known answer, read from the routed sd-demo report itself: three ports
+    # without an output delay -- the two PDM pads excused by false paths, and
+    # the forwarded clock
+    missing, counts, ports = publish.parse_no_output_delay(
+        (SD_DEMO / "timing.rpt").read_text(),
+        require_listed=("unconstrained", "false_path", "forwarded_clock"))
+    assert (missing, counts) == (3, {"unconstrained": 0, "false_path": 2, "forwarded_clock": 1})
+    assert ports == {"unconstrained": [], "false_path": ["sd_left", "sd_right"],
+                     "forwarded_clock": ["i2s_bclk"]}
+
+
+def test_no_output_delay_parser_lists_only_the_classes_asked_for():
+    # the publisher's default: every count, ports only for the class it records
+    missing, counts, ports = publish.parse_no_output_delay((SD_DEMO / "timing.rpt").read_text())
+    assert missing == 3 and counts["false_path"] == 2
+    assert ports == {"forwarded_clock": ["i2s_bclk"]}
+
+
+def test_no_output_delay_parser_refuses_a_count_its_list_does_not_back(tmp_path):
+    # Vivado stops naming the ports: the census still sums, the list does not
+    for p in SD_DEMO.glob("*.rpt"):
+        shutil.copyfile(p, tmp_path / p.name)
+    text, n = re.subn(r"There are 2 ports with no output delay but user has a false path constraint",
+                      "There is 1 port with no output delay but user has a false path constraint",
+                      (SD_DEMO / "timing.rpt").read_text())
+    assert n == 1
+    (tmp_path / "timing.rpt").write_text(text.replace("checking no_output_delay (3)",
+                                                      "checking no_output_delay (2)"))
+    with pytest.raises(ValueError, match="not listed"):
+        publish.parse_no_output_delay((tmp_path / "timing.rpt").read_text(),
+                                      require_listed=("unconstrained", "false_path", "forwarded_clock"))
+
+
+def test_no_output_delay_parser_refuses_an_unknown_class():
+    # the typo that would otherwise skip the listing check silently
+    with pytest.raises(ValueError, match="unknown no_output_delay class"):
+        publish.parse_no_output_delay((SD_DEMO / "timing.rpt").read_text(),
+                                      require_listed=("fowarded_clock",))
+
+
+def test_no_output_delay_parser_refuses_a_report_without_the_census_line():
+    bare, n = re.subn(r"checking no_output_delay \(\d+\)", "", (SD_DEMO / "timing.rpt").read_text())
+    assert n >= 1
+    with pytest.raises(ValueError, match="does not count"):
+        publish.parse_no_output_delay(bare)
 
 
 def test_published_flag_cannot_disagree_with_the_routed_report():

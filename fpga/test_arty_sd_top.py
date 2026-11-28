@@ -50,17 +50,92 @@ def test_prepared_script_reads_both_constraint_files_in_order(tmp_path):
     assert "SIM_NO_MMCM=0" in text
 
 
+def _sd_record():
+    # a PASS of fpga/verify_sd_dac.py's exact shape, for the live sources
+    return {"state": "PASS", "controls": {name: {"caught": True} for name in vsd.CONTROLS},
+            "source_sha256": {str(p.relative_to(ROOT)): build.sha(p) for p in vsd.SOURCES},
+            "clean": {name: {"snr_db": 100, "noise_dbfs": -120,
+                             "exact_zero_error": False, "pass": True} for name in vsd.BOUNDS}}
+
+
 @pytest.fixture
 def sd_receipt(tmp_path, monkeypatch):
     # Isolate the no-DAC receipt. The independent UART verification has its own gate.
     monkeypatch.setattr(build, "validate_verification", lambda *args: {"periods": 1})
     path = tmp_path / "verification.json"
     args = ["--sd-verification", str(path), "--prepare-only", "--out", str(tmp_path / "build")]
-    record = {"state": "PASS", "controls": {name: {"caught": True} for name in vsd.CONTROLS},
-              "source_sha256": {str(p.relative_to(ROOT)): build.sha(p) for p in vsd.SOURCES},
-              "clean": {name: {"snr_db": 100, "noise_dbfs": -120,
-                               "exact_zero_error": False, "pass": True} for name in vsd.BOUNDS}}
-    return path, args, record
+    return path, args, _sd_record()
+
+
+def test_the_core_proof_the_publisher_binds_is_the_tree_images_run():
+    # what the consolidation rests on (#1590): the SD builder defaults its core
+    # proof to build.IMAGE_VERIFICATION[image], so for the tree's image that
+    # must be the very run publish_arty binds to the wrapper the SD top
+    # instantiates -- not a second, independently-chosen record
+    assert publish.VERIFICATION_BY_WRAPPER["arty_a7_top"] == build.IMAGE_VERIFICATION[build.TREE_IMAGE]
+
+
+def test_prepare_binds_the_live_trees_own_proof_and_builds_its_configuration(tmp_path):
+    # #1590: validate_verification is NOT patched here. The core proof is the
+    # live default, and it must validate against the live sources as
+    # build_arty.py validates it -- the tree is R2, so the proof is R2's and
+    # the image built must carry R2's configuration, in the record and in the
+    # script Vivado actually reads.
+    path = tmp_path / "verification.json"
+    path.write_text(json.dumps(_sd_record()))
+    out = tmp_path / "build"
+    assert sd.main(["--sd-verification", str(path), "--prepare-only", "--out", str(out)]) == 0
+    report = json.loads((out / "report.json").read_text())
+    assert report["configuration"] == build.IMAGE_CONFIGS[build.TREE_IMAGE]
+    assert report["image"] == build.TREE_IMAGE
+    assert report["verification"]["record_sha256"] == build.sha(
+        publish.VERIFICATION_BY_WRAPPER["arty_a7_top"])
+    script = (out / "build.tcl").read_text()
+    assert "-verilog_define VOICE_PULSE_2X" in script
+    # compiled: the SD wrapper's files, then the core's -- ROMs copied, not read
+    listed = re.findall(r"\{([^}]+)\}", re.search(r"^read_verilog \[list(.*)\]$", script, re.M)[1])
+    assert listed == [str(out.resolve() / "inputs" / p.relative_to(ROOT)) for p in sd.sources()]
+
+
+def test_another_images_proof_cannot_prepare_this_tree(tmp_path, capsys):
+    # defeating input for the test above: R1's proof is a clean PASS of R1's
+    # configuration, but its sources are frozen and are not this tree's, so
+    # --image r1 must refuse at the source digests rather than relabel R2's
+    # RTL with R1's configuration
+    path = tmp_path / "verification.json"
+    path.write_text(json.dumps(_sd_record()))
+    out = tmp_path / "build"
+    assert sd.main(["--image", "r1", "--sd-verification", str(path),
+                    "--prepare-only", "--out", str(out)]) == 2
+    assert "source differs" in capsys.readouterr().out
+    assert not (out / "build.tcl").exists()
+
+
+def test_the_other_images_proof_is_refused_for_the_tree(tmp_path, capsys):
+    # the issue's reproduction: R1's proof named explicitly against the tree's
+    # R2 configuration refuses on the configuration, before any source is read
+    path = tmp_path / "verification.json"
+    path.write_text(json.dumps(_sd_record()))
+    out = tmp_path / "build"
+    r1 = ROOT / "fpga/reports/arty/rev14-clean/verification.json"
+    assert sd.main(["--verification", str(r1), "--sd-verification", str(path),
+                    "--prepare-only", "--out", str(out)]) == 2
+    assert "clean pass of the selected configuration" in capsys.readouterr().out
+    assert not (out / "build.tcl").exists()
+
+
+def test_image_selects_the_configuration_in_the_record_and_the_script(sd_receipt):
+    # what the pre-fix builder emitted by DEFAULT against an R2 proof is now
+    # reached only by asking for R1, and --image must drive both halves: the
+    # record's configuration and the define Vivado compiles with
+    path, args, record = sd_receipt
+    path.write_text(json.dumps(record))
+    assert sd.main(["--image", "r1"] + args) == 0
+    out = Path(args[args.index("--out") + 1])
+    report = json.loads((out / "report.json").read_text())
+    assert report["configuration"] == build.CONFIG == build.IMAGE_CONFIGS["r1"]
+    assert report["image"] == "r1"
+    assert "-verilog_define VOICE_PULSE_2X" not in (out / "build.tcl").read_text()
 
 
 @pytest.mark.parametrize("empty", [{}, {"unrelated": {"pass": True}},
@@ -205,12 +280,82 @@ def test_output_disposition_reads_a_real_published_report():
         "unconstrained": [], "false_path": [], "forwarded_clock": ["i2s_bclk"]}
 
 
+def test_output_disposition_reads_the_demo_builds_own_report():
+    # the report the gate actually reads: every class but one is empty, and
+    # the populated ones come back by port name
+    timing = (ROOT / "fpga/reports/arty/sd-demo-2025.1/timing.rpt").read_text()
+    assert sd.output_disposition(timing) == {
+        "unconstrained": [], "false_path": ["sd_left", "sd_right"], "forwarded_clock": ["i2s_bclk"]}
+
+
 def test_output_disposition_refuses_a_report_that_does_not_list_the_ports():
+    # the census is moved with the lie, so the refusal is the missing list
+    # and not the sum (#1590): the bare lie now stops one check earlier
     timing = (ROOT / "fpga/reports/arty/r1-player-preview-2025.1/timing.rpt").read_text()
     lying = timing.replace("There are 0 ports with no output delay but user has a false path",
                            "There are 2 ports with no output delay but user has a false path")
+    lying = lying.replace("checking no_output_delay (1)", "checking no_output_delay (3)")
     with pytest.raises(ValueError, match="not listed"):
         sd.output_disposition(lying)
+
+
+def test_output_disposition_refuses_classes_that_do_not_sum_to_the_count():
+    # #1590: the census total checks the three class sentences. With it
+    # unread, a report whose classes sum to 3 while claiming 99 passed as a
+    # clean disposition.
+    timing = (ROOT / "fpga/reports/arty/sd-demo-2025.1/timing.rpt").read_text()
+    lying, n = re.subn(r"checking no_output_delay \(3\)", "checking no_output_delay (99)", timing)
+    assert n >= 1, "fixture no longer counts no_output_delay"
+    with pytest.raises(ValueError, match="do not sum"):
+        sd.output_disposition(lying)
+
+
+def test_output_disposition_refuses_a_lie_in_the_verbose_census_only():
+    # review of #1593: the total is printed twice (summary, verbose census).
+    # Changing only the second leaves the first-match read clean; every
+    # occurrence must agree with the class sum.
+    timing = (ROOT / "fpga/reports/arty/sd-demo-2025.1/timing.rpt").read_text()
+    head, sep, tail = timing.rpartition("checking no_output_delay (3)")
+    assert sep and head.count("checking no_output_delay (3)") == 1, "fixture lost its two totals"
+    lying = head + "checking no_output_delay (99)" + tail
+    assert re.search(r"checking no_output_delay \((\d+)\)", lying)[1] == "3"  # first match still clean
+    with pytest.raises(ValueError, match="do not sum"):
+        sd.output_disposition(lying)
+
+
+def test_output_disposition_refuses_a_port_listed_under_a_zero_count_class():
+    # review of #1593: a required class counting 0 must list nothing; a port
+    # beneath it used to be skipped, so the disposition read as clean.
+    timing = (ROOT / "fpga/reports/arty/sd-demo-2025.1/timing.rpt").read_text()
+    sentence = " There are 0 ports with no output delay specified.\n"
+    assert sentence in timing, "fixture no longer has an empty unconstrained class"
+    lying = timing.replace(sentence, sentence + "\ni2s_sdata\n")
+    with pytest.raises(ValueError, match="not listed"):
+        sd.output_disposition(lying)
+
+
+def test_the_shipped_parser_accepted_the_report_the_sum_check_refuses(monkeypatch):
+    # injected-bug control (docs/verification-rules.md rule 5): the pre-#1590
+    # parser -- the three sentences and their lists, read without the census
+    # total -- reinstated as it shipped. On the report above it returns a
+    # clean disposition: that is the bug, and it is what the fixed parser's
+    # refusal is standing against.
+    def prefix_parser(timing, *, require_listed=("forwarded_clock",)):
+        counts, ports = {}, {}
+        for key, marker in (("unconstrained", "with no output delay specified"),
+                            ("false_path", "with no output delay but user has a false path constraint"),
+                            ("forwarded_clock", "with no output delay but with a timing clock defined on it")):
+            counts[key] = int(re.search(r"There (?:are|is) (\d+) ports? " + re.escape(marker), timing)[1])
+            m = re.search(re.escape(marker) + r"[^\n]*\n\n(.*?\n)\n", timing, re.DOTALL) if counts[key] else None
+            if counts[key] and (m is None or len(m[1].split()) != counts[key]):
+                raise ValueError("ports are not listed under: " + marker)
+            ports[key] = m[1].split() if m else []
+        return sum(counts.values()), counts, ports
+    monkeypatch.setattr(publish, "parse_no_output_delay", prefix_parser)
+    timing = (ROOT / "fpga/reports/arty/sd-demo-2025.1/timing.rpt").read_text()
+    lying, _ = re.subn(r"checking no_output_delay \(3\)", "checking no_output_delay (99)", timing)
+    assert sd.output_disposition(lying) == {
+        "unconstrained": [], "false_path": ["sd_left", "sd_right"], "forwarded_clock": ["i2s_bclk"]}
 
 
 def test_estimator_known_answers_hold():

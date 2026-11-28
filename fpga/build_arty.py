@@ -129,6 +129,68 @@ def validate_verification(path, paths, config=CONFIG):
             "periods": comparison["periods"], "scope": record.get("scope")}
 
 
+VIVADO_TIMEOUT_S = 7200
+
+
+def snapshot_inputs(directory, paths, expected_sha):
+    """Copy each input to directory/inputs/<its repository path>, in order.
+
+    Every copy must hash to expected_sha's digest for it (by repository
+    path); one that does not changed after it was hashed and refuses the
+    build. Returns the copies.
+    """
+    snapshots = []
+    for path in paths:
+        dest = directory / "inputs" / path.relative_to(ROOT)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest)
+        if sha(dest) != expected_sha.get(str(path.relative_to(ROOT))):
+            raise ValueError("source changed during snapshot: " + str(path))
+        snapshots.append(dest)
+    return snapshots
+
+
+def find_vivado(name, report):
+    """The `name` executable on PATH, its version banner recorded in report."""
+    executable = shutil.which(name)
+    if executable is None:
+        raise ValueError("Vivado executable unavailable; no fit/timing/bitstream result")
+    report["vivado_version"] = subprocess.check_output([executable, "-version"], text=True)
+    return executable
+
+
+def run_vivado(directory, script, executable, outputs, report, save):
+    """Run Vivado batch on script, recording in report what it left.
+
+    Vivado runs in directory/inputs/rtl-sketch as its own session, so a run
+    past VIVADO_TIMEOUT_S is killed with its whole process group instead of
+    being left to finish unwatched. Stale outputs are removed first, so
+    nothing of an earlier build can read as this run's. Returns Vivado's
+    exit code; None after a timeout, with report already REFUSED and saved.
+    """
+    for path in outputs:
+        path.unlink(missing_ok=True)
+    started = time.monotonic()
+    command = [executable, "-mode", "batch", "-source", str(script),
+               "-log", str(directory / "vivado.log"), "-journal", str(directory / "vivado.jou")]
+    report["command"] = command
+    with (directory / "runner.log").open("w") as log:
+        process = subprocess.Popen(command, cwd=directory / "inputs/rtl-sketch",
+                                   stdout=log, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
+        try:
+            rc = process.wait(timeout=VIVADO_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+            report.update(reason="Vivado exceeded 2 hours", state="REFUSED")
+            save()
+            return None
+    report.update(exit_code=rc, seconds=round(time.monotonic() - started, 3))
+    report["artifact_sha256"] = {p.name: sha(p) for p in outputs if p.is_file()}
+    return rc
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=ROOT / "build/arty")
@@ -143,7 +205,8 @@ def main(argv=None):
     config = IMAGE_CONFIGS[args.image]
     directory = args.out.resolve()
     directory.mkdir(parents=True, exist_ok=True)
-    files = sources() + roms()
+    verilog = sources()
+    files = verilog + roms()
     report = {"state": "REFUSED", "part": PART, "configuration": config, "image": args.image,
               "hardware_playback_tested": False, "external_io_timing_qualified": False,
               "source_sha256": {str(p.relative_to(ROOT)): sha(p) for p in files + [XDC]}}
@@ -155,32 +218,17 @@ def main(argv=None):
 
     try:
         report["verification"] = validate_verification(args.verification, files, config)
-        snapshots = []
-        for path in sources() + [XDC]:
-            dest = directory / "inputs" / path.relative_to(ROOT)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(path, dest)
-            snapshots.append(dest)
-        for path in roms():
-            dest = directory / "inputs" / path.relative_to(ROOT)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(path, dest)
-            if sha(dest) != report["source_sha256"][str(path.relative_to(ROOT))]:
-                raise ValueError("ROM changed during snapshot")
-        for original, copied in zip(sources() + [XDC], snapshots):
-            if sha(copied) != report["source_sha256"][str(original.relative_to(ROOT))]:
-                raise ValueError("source changed during snapshot: " + str(original))
+        # ROMs are copied beside the sources, for Vivado to resolve from its
+        # working directory; they are not read_verilog inputs
+        snapshots = snapshot_inputs(directory, files + [XDC], report["source_sha256"])
         script = directory / "build.tcl"
-        script.write_text(tcl_script(directory, snapshots[:-1], snapshots[-1], config))
+        script.write_text(tcl_script(directory, snapshots[:len(verilog)], snapshots[-1], config))
         report["script_sha256"] = sha(script)
         if args.prepare_only:
             report["state"] = "PREPARED"
             save()
             return 0
-        executable = shutil.which(args.vivado)
-        if executable is None:
-            raise ValueError("Vivado executable unavailable; no fit/timing/bitstream result")
-        report["vivado_version"] = subprocess.check_output([executable, "-version"], text=True)
+        executable = find_vivado(args.vivado, report)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         report["reason"] = str(exc)
         save()
@@ -188,28 +236,11 @@ def main(argv=None):
     outputs = [directory / name for name in
                ("arty.bit", "utilization.rpt", "timing.rpt", "clocks.rpt", "drc.rpt", "routed.dcp",
                 xb.REPORT, xb.EXCEPTIONS)]
-    for path in outputs:
-        path.unlink(missing_ok=True)
-    started = time.monotonic()
-    command = [executable, "-mode", "batch", "-source", str(script),
-               "-log", str(directory / "vivado.log"), "-journal", str(directory / "vivado.jou")]
-    report["command"] = command
-    with (directory / "runner.log").open("w") as log:
-        process = subprocess.Popen(command, cwd=directory / "inputs/rtl-sketch",
-                                   stdout=log, stderr=subprocess.STDOUT,
-                                   start_new_session=True)
-        try:
-            rc = process.wait(timeout=7200)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
-            report.update(reason="Vivado exceeded 2 hours", state="REFUSED")
-            save()
-            return 2
-    report.update(exit_code=rc, seconds=round(time.monotonic() - started, 3))
+    rc = run_vivado(directory, script, executable, outputs, report, save)
+    if rc is None:
+        return 2
     complete = rc == 0 and all(p.is_file() and p.stat().st_size > 0 for p in outputs)
     report["state"] = "BUILT_REQUIRES_TIMING_REVIEW" if complete else "FAIL"
-    report["artifact_sha256"] = {p.name: sha(p) for p in outputs if p.is_file()}
     save()
     return 0 if complete else 1
 

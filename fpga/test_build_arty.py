@@ -1,10 +1,121 @@
 import hashlib
 import json
+import os
 from pathlib import Path
+import signal
+import sys
+import time
 
 import pytest
 
 import build_arty as build
+
+
+def _fake_vivado(tmp_path, body):
+    # a stand-in `vivado`: a Python script taking Vivado's argv, with
+    # `directory` bound to the build directory (-journal names a file in it)
+    exe = tmp_path / "fakebin" / "vivado"
+    exe.parent.mkdir(exist_ok=True)
+    exe.write_text(f"#!{sys.executable}\nimport os, subprocess, sys, time\nfrom pathlib import Path\n"
+                   "directory = Path(sys.argv[sys.argv.index('-journal') + 1]).parent "
+                   "if '-journal' in sys.argv else None\n" + body)
+    exe.chmod(0o755)
+    return exe
+
+
+def _dead(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return False          # no /proc: alive until init reaps it
+    return stat.rsplit(")", 1)[1].split()[0] == "Z"     # killed, awaiting its parent
+
+
+def test_snapshot_refuses_a_copy_that_is_not_the_digest_recorded_for_it(tmp_path):
+    source = build.ROOT / "rtl-sketch/uart_bridge.v"
+    key = str(source.relative_to(build.ROOT))
+    assert build.snapshot_inputs(tmp_path, [source], {key: build.sha(source)}) == [tmp_path / "inputs" / key]
+    assert build.sha(tmp_path / "inputs" / key) == build.sha(source)
+    for expected in ({key: "0" * 64}, {}):     # changed since it was hashed; never hashed at all
+        with pytest.raises(ValueError, match="source changed during snapshot"):
+            build.snapshot_inputs(tmp_path, [source], expected)
+
+
+def test_find_vivado_refuses_an_absent_executable_and_records_the_version_banner(tmp_path):
+    with pytest.raises(ValueError, match="Vivado executable unavailable"):
+        build.find_vivado("no-such-vivado-1590", {})
+    exe = _fake_vivado(tmp_path, "print('Vivado v2025.1 (fake)')\n")
+    report = {}
+    assert build.find_vivado(str(exe), report) == str(exe)
+    assert report["vivado_version"] == "Vivado v2025.1 (fake)\n"
+
+
+def test_run_vivado_records_vivados_exit_and_the_artifacts_it_left(tmp_path, monkeypatch):
+    exe = _fake_vivado(tmp_path, "for name in os.environ['FAKE_OUTPUTS'].split(','):\n"
+                                 "    (directory / name).write_text('routed ' + name)\n")
+    (tmp_path / "inputs/rtl-sketch").mkdir(parents=True)
+    monkeypatch.setenv("FAKE_OUTPUTS", "arty.bit,timing.rpt")
+    outputs = [tmp_path / name for name in ("arty.bit", "timing.rpt")]
+    outputs[1].write_text("an earlier build's report")
+    report = {}
+    rc = build.run_vivado(tmp_path, tmp_path / "build.tcl", str(exe), outputs, report, lambda: None)
+    assert rc == 0 and report["exit_code"] == 0 and report["seconds"] >= 0
+    assert outputs[1].read_text() == "routed timing.rpt"     # the earlier report did not survive
+    assert report["artifact_sha256"] == {p.name: build.sha(p) for p in outputs}
+    assert report["command"] == [str(exe), "-mode", "batch", "-source", str(tmp_path / "build.tcl"),
+                                 "-log", str(tmp_path / "vivado.log"),
+                                 "-journal", str(tmp_path / "vivado.jou")]
+    assert (tmp_path / "runner.log").is_file()
+
+
+def test_run_vivado_leaves_no_stale_artifact_when_vivado_fails(tmp_path):
+    # Vivado fails before writing anything: the previous build's report must
+    # be gone and hashed as nothing, or it would read as this run's
+    exe = _fake_vivado(tmp_path, "sys.exit(3)\n")
+    (tmp_path / "inputs/rtl-sketch").mkdir(parents=True)
+    outputs = [tmp_path / "timing.rpt"]
+    outputs[0].write_text("an earlier build's report")
+    report = {}
+    rc = build.run_vivado(tmp_path, tmp_path / "build.tcl", str(exe), outputs, report, lambda: None)
+    assert rc == 3 and report["exit_code"] == 3 and report["artifact_sha256"] == {}
+    assert not outputs[0].exists()
+
+
+def test_run_vivado_kills_the_whole_process_group_and_refuses_after_the_timeout(tmp_path, monkeypatch):
+    # Vivado's own children are why the runner starts a session and kills the
+    # GROUP: a plain process.kill() would leave them running. The fake spawns
+    # one, in its group; both must be gone when the runner returns, and the
+    # refusal must be on disk, not merely returned.
+    exe = _fake_vivado(tmp_path,
+                       "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+                       "(directory / 'pids').write_text(f'{os.getpid()} {child.pid}')\n"
+                       "time.sleep(60)\n")
+    (tmp_path / "inputs/rtl-sketch").mkdir(parents=True)
+    monkeypatch.setattr(build, "VIVADO_TIMEOUT_S", 2.0)
+    report, saved, pids = {}, [], []
+    try:
+        assert build.run_vivado(tmp_path, tmp_path / "build.tcl", str(exe), [], report,
+                                lambda: saved.append(dict(report))) is None
+        assert (tmp_path / "pids").exists(), "the fake Vivado did not start inside the timeout"
+        pids = [int(p) for p in (tmp_path / "pids").read_text().split()]
+        assert len(pids) == 2
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not all(_dead(pid) for pid in pids):
+            time.sleep(0.1)
+        assert all(_dead(pid) for pid in pids), "Vivado's process group outlived the timeout"
+        assert report["state"] == "REFUSED" and report["reason"] == "Vivado exceeded 2 hours"
+        assert "exit_code" not in report and "artifact_sha256" not in report
+        assert saved and saved[-1]["state"] == "REFUSED"
+    finally:
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 def test_freezes_selected_baseline_and_full_core_sources():
@@ -137,6 +248,21 @@ endmodule
                     str(bench), str(build.ROOT / "fpga/rtl/arty_a7_top.v")], check=True)
     result = subprocess.run(["vvp", str(executable)], text=True, capture_output=True, check=True)
     assert "RESET PASS" in result.stdout
+
+
+def test_prepared_script_reads_exactly_the_sources_then_the_one_xdc(tmp_path):
+    # the snapshot also holds the ROMs, but read_verilog takes the sources
+    # only (a .hex read as Verilog stops the build), and then the one XDC
+    import re
+    import publish_arty as publish
+    proof = publish.VERIFICATION_BY_WRAPPER["arty_a7_top"]
+    assert build.main(["--prepare-only", "--out", str(tmp_path),
+                       "--verification", str(proof)]) == 0
+    text = (tmp_path / "build.tcl").read_text()
+    inputs = tmp_path.resolve() / "inputs"
+    listed = re.findall(r"\{([^}]+)\}", re.search(r"^read_verilog \[list(.*)\]$", text, re.M)[1])
+    assert listed == [str(inputs / p.relative_to(build.ROOT)) for p in build.sources()]
+    assert re.search(r"^read_xdc \{([^}]+)\}", text, re.M)[1] == str(inputs / build.XDC.relative_to(build.ROOT))
 
 
 def test_prepared_build_resolves_the_actual_hdl_rom_filenames(tmp_path):

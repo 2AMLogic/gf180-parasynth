@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the Arty no-DAC demo image (fpga/rtl/arty_a7_sd_top.v, #406).
 
-    python3 fpga/build_arty_sd.py [--out build/arty-sd] [--prepare-only]
+    python3 fpga/build_arty_sd.py [--image r1|r2] [--out build/arty-sd] [--prepare-only]
 
 A DEMO IMAGE, NEVER PUBLISHED. publish_arty.VERIFICATION_BY_WRAPPER has no
 entry for arty_a7_sd_top, so the release publisher refuses it; this script is
@@ -16,9 +16,11 @@ confirm every port sits on the pin that layout needs.
 Before Vivado runs, two digital proofs must bind to the live tree, or the
 build is REFUSED:
 
-  * the core wrapper's proof -- publish_arty.VERIFICATION_BY_WRAPPER
-    ["arty_a7_top"], validated exactly as build_arty.py validates it (the SD
-    wrapper instantiates arty_a7_top unchanged);
+  * the core wrapper's proof -- the run bound to the selected image (--image,
+    the tree's by default; publish_arty.VERIFICATION_BY_WRAPPER["arty_a7_top"]
+    for the tree's image), validated exactly as build_arty.py validates it,
+    against that image's configuration (the SD wrapper instantiates
+    arty_a7_top unchanged);
   * the no-DAC path's proof -- a PASS from fpga/verify_sd_dac.py whose
     source hashes match the live i2s_rx.v, sd_dac.v, bench and i2s_tx.v.
 
@@ -34,13 +36,9 @@ build_arty.py. The .bit goes to the machine the board is on:
 from __future__ import annotations
 import argparse
 import json
-import os
 from pathlib import Path
 import re
-import shutil
-import signal
 import subprocess
-import time
 
 import build_arty as build
 import publish_arty as publish
@@ -93,29 +91,14 @@ def validate_sd_verification(path: Path) -> dict:
             "snr_db": {case: clean[case].get("snr_db") for case in vsd.BOUNDS}}
 
 
-def _listed_ports(timing: str, marker: str, count: int) -> list:
-    if not count:
-        return []
-    listed = re.search(re.escape(marker) + r"[^\n]*\n\n(.*?\n)\n", timing, re.DOTALL)
-    if listed is None or len(listed[1].split()) != count:
-        raise ValueError("ports are not listed under: " + marker)
-    return sorted(listed[1].split())
-
-
 def output_disposition(timing: str) -> dict:
-    """The routed report's no_output_delay classes, by port name. Refuses a
-    report that does not classify them (the tool changed its wording)."""
-    def count(marker):
-        m = re.search(r"There (?:are|is) (\d+) ports? " + re.escape(marker), timing)
-        if m is None:
-            raise ValueError("report does not classify no_output_delay ports: " + marker)
-        return int(m[1])
-    classes = {}
-    for key, marker in (("unconstrained", "with no output delay specified"),
-                        ("false_path", "with no output delay but user has a false path constraint"),
-                        ("forwarded_clock", "with no output delay but with a timing clock defined on it")):
-        classes[key] = _listed_ports(timing, marker, count(marker))
-    return classes
+    """The routed report's no_output_delay classes, by port name, every class
+    required to list exactly the ports it counts. Refuses a report that does
+    not classify them (the tool changed its wording) or whose classes do not
+    sum to its census."""
+    ports = publish.parse_no_output_delay(
+        timing, require_listed=("unconstrained", "false_path", "forwarded_clock"))[2]
+    return {key: sorted(names) for key, names in ports.items()}
 
 
 def constant_port_evidence(log_text: str, port: str) -> bool:
@@ -207,19 +190,26 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--out", type=Path, default=ROOT / "build/arty-sd")
     parser.add_argument("--verification", type=Path,
-                        default=publish.VERIFICATION_BY_WRAPPER["arty_a7_top"])
+                        help="the core wrapper's proof (default: the run bound to --image)")
     parser.add_argument("--sd-verification", type=Path,
                         default=ROOT / "build/sd-dac/verification.json")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--vivado", default="vivado")
+    parser.add_argument("--image", choices=sorted(build.IMAGE_CONFIGS), default=build.TREE_IMAGE,
+                        help=f"which image's configuration to build (default {build.TREE_IMAGE}, "
+                             "the tree's image)")
     args = parser.parse_args(argv)
+    config = build.IMAGE_CONFIGS[args.image]
+    verification = args.verification or build.IMAGE_VERIFICATION[args.image]
     directory = args.out.resolve()
     directory.mkdir(parents=True, exist_ok=True)
     constraints = [build.XDC, SD_XDC]
-    report = {"state": "REFUSED", "top": TOP, "part": build.PART,
-              "configuration": build.CONFIG, "published": False,
+    verilog, roms = sources(), build.roms()
+    files = verilog + roms
+    report = {"state": "REFUSED", "top": TOP, "part": build.PART, "image": args.image,
+              "configuration": config, "published": False,
               "source_sha256": {str(p.relative_to(ROOT)): build.sha(p)
-                                for p in sources() + build.roms() + constraints}}
+                                for p in files + constraints}}
     report_path = directory / "report.json"
 
     def save():
@@ -227,24 +217,18 @@ def main(argv=None):
         print(report["state"], report.get("reason", report_path), flush=True)
 
     try:
+        # the core proof covers the core wrapper alone: build_arty's source
+        # set, not the SD wrapper's own files
         report["verification"] = build.validate_verification(
-            args.verification, build.sources() + build.roms())
+            verification, build.sources() + roms, config)
         report["sd_verification"] = validate_sd_verification(args.sd_verification)
-        snapshots = []
-        for path in sources() + build.roms() + constraints:
-            dest = directory / "inputs" / path.relative_to(ROOT)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(path, dest)
-            if build.sha(dest) != report["source_sha256"][str(path.relative_to(ROOT))]:
-                raise ValueError("source changed during snapshot: " + str(path))
-            snapshots.append(dest)
-        n = len(sources())
-        verilog, xdcs = snapshots[:n], snapshots[-len(constraints):]
+        snapshots = build.snapshot_inputs(directory, files + constraints, report["source_sha256"])
         script = directory / "build.tcl"
+        xdcs = snapshots[-len(constraints):]
         # the pins the ROUTED design actually used, for the direct-plug check
         effective_pins([x.read_text() for x in xdcs])     # refuses an unsafe order
-        text = build.tcl_script(directory, verilog, xdcs[0], top=TOP,
-                                extra_constraints=xdcs[1:])
+        text = build.tcl_script(directory, snapshots[:len(verilog)], xdcs[0], config,
+                                top=TOP, extra_constraints=xdcs[1:])
         text = text.replace("write_bitstream", "report_io -file "
                             + build.tcl_word(directory / IO_REPORT) + "\nwrite_bitstream", 1)
         script.write_text(text)
@@ -253,10 +237,7 @@ def main(argv=None):
             report["state"] = "PREPARED"
             save()
             return 0
-        executable = shutil.which(args.vivado)
-        if executable is None:
-            raise ValueError("Vivado executable unavailable; no fit/timing/bitstream result")
-        report["vivado_version"] = subprocess.check_output([executable, "-version"], text=True)
+        executable = build.find_vivado(args.vivado, report)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         report["reason"] = str(exc)
         save()
@@ -264,25 +245,9 @@ def main(argv=None):
     outputs = [directory / name for name in
                ("arty.bit", "utilization.rpt", "timing.rpt", "clocks.rpt", "drc.rpt",
                 "routed.dcp", xb.REPORT, xb.EXCEPTIONS, IO_REPORT)]
-    for path in outputs:
-        path.unlink(missing_ok=True)
-    started = time.monotonic()
-    command = [executable, "-mode", "batch", "-source", str(script),
-               "-log", str(directory / "vivado.log"), "-journal", str(directory / "vivado.jou")]
-    report["command"] = command
-    with (directory / "runner.log").open("w") as log:
-        process = subprocess.Popen(command, cwd=directory / "inputs/rtl-sketch",
-                                   stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-        try:
-            rc = process.wait(timeout=7200)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
-            report.update(reason="Vivado exceeded 2 hours", state="REFUSED")
-            save()
-            return 2
-    report.update(exit_code=rc, seconds=round(time.monotonic() - started, 3))
-    report["artifact_sha256"] = {p.name: build.sha(p) for p in outputs if p.is_file()}
+    rc = build.run_vivado(directory, script, executable, outputs, report, save)
+    if rc is None:
+        return 2
     if rc != 0 or not all(p.is_file() and p.stat().st_size > 0 for p in outputs):
         report.update(state="FAIL", reason=f"Vivado exit {rc} or an output is missing")
         save()
