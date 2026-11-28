@@ -576,6 +576,7 @@ verify-full:
 controls:
 	@$(PY) tools/run_controls.py --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
+	  "$(PY) tools/control_publish_selected_refusal.py" \
 	  "$(PY) tools/control_dag_issue_only.py" \
 	  "$(PY) tools/control_dag_verdictless_evidence.py" \
 	  "$(PY) tools/control_dag_churn.py" \
