@@ -343,6 +343,96 @@ def test_make_ecp5_success_writes_report(rig):
     assert "bitstream: ecp5.bit 16 bytes" in (reports / "ecp5_25f.txt").read_text()
 
 
+# ------------------------------------------- the report's destination (#2096)
+# THE DEFECT, red-first on main @ 8eb04e5b (2026-11-28): `run --out
+# NEWDIR/ecp5_25f.txt` ran nextpnr to completion, printed the report, and then
+# died at `Path(a.out).write_text(text)` on a FileNotFoundError -- a traceback
+# and exit 1, DOES-NOT-FIT's code, for a run that routed.
+#
+# THE CONTRACT, the #2040 pattern: --out is checked BEFORE nextpnr runs (a
+# directory given as the file, or a parent that cannot be made, is REFUSED, 2,
+# with the previous build's artefacts untouched); a missing parent is created;
+# and an OSError at the write is REFUSED (2) with the report still printed.
+#
+# WHAT RUNS FOR REAL: `main`, `cmd_run`, `_exec`, `classify`, `render` and the
+# write. A real child process stands in for nextpnr: it writes a complete
+# SYNTHETIC log and a bitstream into the build dir, touches a sentinel (whose
+# absence therefore means nextpnr never ran) and, on request, removes or makes
+# read-only the report's directory after the pre-flight has made it.
+def _run(out, tmp_path, *, build=None, lose_out_dir=None):
+    ran = tmp_path / "nextpnr.ran"
+    child = ("import pathlib, sys; pathlib.Path('ecp5_pnr.log').write_text(sys.argv[1]); "
+             "pathlib.Path('ecp5.bit').write_text('cfg'); pathlib.Path(sys.argv[2]).touch()")
+    if lose_out_dir == "removed":
+        child += f"; import shutil; shutil.rmtree({str(out.parent)!r}, ignore_errors=True)"
+    elif lose_out_dir == "read-only":
+        child += (f"; import os; pathlib.Path({str(out.parent)!r}).mkdir(parents=True, exist_ok=True); "
+                  f"os.chmod({str(out.parent)!r}, 0o500)")
+    argv = ["run", "ecp5", "--build", str(build or tmp_path / "build"), "--out", str(out), "--",
+            sys.executable, "-c", child, synth_log(), str(ran)]
+    return pr.main(argv), ran
+
+
+READ_ONLY = pytest.param("read-only", marks=pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root writes into a read-only directory, so nothing refuses"))
+
+
+def _an_unwritable_out(tmp_path, how):
+    if how == "directory":
+        return tmp_path
+    if how == "file-in-the-way":
+        (tmp_path / "file").write_text("not a directory")
+        return tmp_path / "file" / "ecp5_25f.txt"
+    (tmp_path / "read-only").mkdir()
+    (tmp_path / "read-only").chmod(0o500)
+    return tmp_path / "read-only" / "new" / "ecp5_25f.txt"
+
+
+def test_run_writes_the_report_under_a_missing_directory(tmp_path, capsys):
+    out = tmp_path / "reports" / "new" / "ecp5_25f.txt"
+    code, ran = _run(out, tmp_path)
+    captured = capsys.readouterr()
+    assert code == 0 and ran.exists(), captured.err
+    assert "RESULT: routed." in captured.out
+    assert out.read_text() == captured.out
+
+
+@pytest.mark.parametrize("how", ["directory", "file-in-the-way", READ_ONLY],
+                         ids=["directory-given-as-the-file", "parent-uncreatable", "parent-read-only"])
+def test_an_unwritable_out_is_refused_before_nextpnr_runs(tmp_path, capsys, how):
+    out = _an_unwritable_out(tmp_path, how)
+    build = tmp_path / "build"
+    build.mkdir()
+    (build / "ecp5_pnr.log").write_text("the previous run's log")
+    try:
+        code, ran = _run(out, tmp_path, build=build)
+        captured = capsys.readouterr()
+    finally:
+        if how == "read-only":
+            (tmp_path / "read-only").chmod(0o700)
+    assert code == 2, captured
+    assert "pnr_report: REFUSED" in captured.err, captured
+    assert not ran.exists()
+    assert (build / "ecp5_pnr.log").read_text() == "the previous run's log"
+
+
+@pytest.mark.parametrize("how", ["removed", READ_ONLY], ids=["directory-removed", "parent-read-only"])
+def test_a_run_whose_out_cannot_be_written_is_refused_with_the_report_printed(tmp_path, capsys, how):
+    """nextpnr itself loses the report's directory after the pre-flight made
+    it: the real `write_text` then raises OSError, which must be REFUSED (2)."""
+    out = tmp_path / "reports" / "ecp5_25f.txt"
+    try:
+        code, _ = _run(out, tmp_path, lose_out_dir=how)
+        captured = capsys.readouterr()
+    finally:
+        if how == "read-only":
+            out.parent.chmod(0o700)
+    assert code == 2
+    assert "RESULT: routed." in captured.out
+    assert "pnr_report: REFUSED" in captured.err and str(out) in captured.err
+
+
 @pytest.mark.parametrize("mode", ["kill", "exit1", "empty", "trunc", "fit"])
 def test_make_ecp5_fails_visibly_despite_stale_success(rig, mode):
     run, seed, build, reports = rig

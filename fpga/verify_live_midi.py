@@ -1154,12 +1154,25 @@ def _run(a) -> int:
         a.outdir = a.outdir / a.image              # never over the release target's record
     a.outdir.mkdir(parents=True, exist_ok=True)
     if a.control:
+        if a.json is not None:
+            if a.json.is_dir():
+                print(f"live-midi: REFUSED -- --json {a.json} names a directory")
+                return 2
+            try:
+                a.json.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                print(f"live-midi: REFUSED -- --json {a.json}: its directory cannot be created: {exc}")
+                return 2
         c = run_control(a.control)
         rec = {"tool": "fpga/verify_live_midi.py", "trial": "T-LIVE-MIDI",
                "criterion_version": C.CRITERION_VERSION, "control": c,
                "verdict": c["verdict"]}
-        (a.json or a.outdir / "verification.json").write_text(
-            json.dumps(_clean(rec), indent=1, default=str) + "\n")
+        try:
+            (a.json or a.outdir / "verification.json").write_text(
+                json.dumps(_clean(rec), indent=1, default=str) + "\n")
+        except OSError as exc:
+            print(f"live-midi: REFUSED -- the control record was not written: {exc}")
+            return 2
         cols = " ".join(f"{p}={'M' if v == 'MOVED' else '.'}" for p, v in c["matrix"].items())
         print(f"live-midi control {a.control}: {'CAUGHT' if c['caught'] else 'MISSED'} "
               f"(must move {c['must_move']}) -- {cols}")

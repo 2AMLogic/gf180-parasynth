@@ -468,12 +468,25 @@ def main(argv=None) -> int:
               f"{' '.join(argv_)}: {len(setup)} setup writes" + "".join(f"\n  {p}" for p in probs))
         return 0 if not probs else 1
     if a.write:
+        if a.record.is_dir():
+            print(f"r1_candidate: REFUSED -- --record {_rel(a.record)} names a directory")
+            return 2
+        try:
+            a.record.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            print(f"r1_candidate: REFUSED -- --record {_rel(a.record)}: its directory "
+                  f"cannot be created: {exc}")
+            return 2
         try:
             m = build()
         except Refused as exc:
             print(f"r1_candidate: REFUSED -- {exc}")
             return 2
-        a.record.write_text(json.dumps(m, indent=2) + "\n")
+        try:
+            a.record.write_text(json.dumps(m, indent=2) + "\n")
+        except OSError as exc:
+            print(f"r1_candidate: REFUSED -- {_rel(a.record)} was not written: {exc}")
+            return 2
         print(f"r1_candidate: wrote {_rel(a.record)}")
     verdict, detail = check(a.record)
     print(f"r1_candidate: {verdict} -- {detail}")

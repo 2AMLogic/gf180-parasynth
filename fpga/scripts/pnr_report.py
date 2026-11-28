@@ -18,16 +18,19 @@ Verdicts (a first-class outcome each, never inferred from silence):
   REFUSED       everything else, with the reason named: missing tool or log,
                 empty log, no recorded exit status, killed by signal,
                 non-zero exit without a diagnosed fit error, a missing or
-                mis-ordered marker, a failed pack stage.
+                mis-ordered marker, a failed pack stage, an --out that names a
+                directory or cannot be made (refused before nextpnr runs), or
+                a report that could not be written.
 
 Exit codes: 0 ROUTED (and DOES-NOT-FIT when --allow-no-fit, the headroom
 probe); 1 DOES-NOT-FIT; 2 REFUSED.
 
 Subcommands:
-  run     delete this invocation's stale artefacts, run nextpnr (+ --after
-          stages) with a fresh log, record every exit status, print the report.
-          The report file --out is written only for ROUTED (or a permitted
-          no-fit): a refused or failed run never replaces a committed report.
+  run     check --out, delete this invocation's stale artefacts, run nextpnr
+          (+ --after stages) with a fresh log, record every exit status, print
+          the report. The report file --out is written only for ROUTED (or a
+          permitted no-fit): a refused or failed run never replaces a
+          committed report.
   report  re-derive the report from the files `run` left in the build dir
           (what report.sh used to do). No recorded status means REFUSED.
           It TRUSTS the status.json/log of the last `run`, which need not be
@@ -295,6 +298,15 @@ def _exit_code(v, allow_no_fit):
 
 
 def cmd_run(a):
+    if Path(a.out).is_dir():
+        print(f"pnr_report: REFUSED: --out {a.out} names a directory", file=sys.stderr)
+        return 2
+    try:
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"pnr_report: REFUSED: --out {a.out}: its directory cannot be created: {exc}",
+              file=sys.stderr)
+        return 2
     build = Path(a.build)
     build.mkdir(parents=True, exist_ok=True)
     log_p, _, bit_p, st_p = _paths(a.target, build)
@@ -316,7 +328,12 @@ def cmd_run(a):
     v, text = evaluate(a.target, a.top, build)
     sys.stdout.write(text)
     if v.state == ROUTED or (v.state == NOFIT and a.allow_no_fit):
-        Path(a.out).write_text(text)
+        try:
+            Path(a.out).write_text(text)
+        except OSError as exc:
+            print(f"pnr_report: REFUSED: {a.out} was not written, so the report above is not "
+                  f"recorded: {exc}", file=sys.stderr)
+            return 2
     else:
         # The committed report stays. The attempt is kept beside the build.
         name = f"{a.target}_{'nofit' if v.state == NOFIT else 'refused'}.txt"

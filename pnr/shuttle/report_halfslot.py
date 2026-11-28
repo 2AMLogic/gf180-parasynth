@@ -13,14 +13,18 @@ printed in the table so a reader can go and look.
 ``--check`` regenerates into memory and exits non-zero if the document on disk
 disagrees, so a stale document is a failure and not a surprise.
 
-REFUSED (exit 3) if the run has not produced the metric a section needs.  A
-section that silently renders empty reads as "no violations".
+REFUSED (exit 3) if the run has not produced the metric a section needs, or
+if a destination cannot be written: ``--doc`` must be an existing document (it
+is the template being spliced) and ``--verdict-json`` a path whose directory
+can be made; both are checked before the run is read.  A section that
+silently renders empty reads as "no violations".
 """
 
 import argparse
 import os
 import re
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_route as cr      # noqa: E402
@@ -733,6 +737,21 @@ def main(argv=None) -> int:
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if the document on disk differs from the generated one")
     a = ap.parse_args(argv)
+    problems = []
+    if not Path(a.doc).is_file():
+        problems.append(f"--doc {a.doc} is not an existing document to splice")
+    if not problems and not a.check:
+        if Path(a.verdict_json).is_dir():
+            problems.append(f"--verdict-json {a.verdict_json} names a directory")
+        else:
+            try:
+                Path(a.verdict_json).parent.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                problems.append(f"--verdict-json {a.verdict_json}: its directory cannot be created: {e}")
+    if problems:
+        for problem in problems:
+            print(f"REFUSED: {problem}", file=sys.stderr)
+        return REFUSED
     try:
         import json
         step, metrics = cr.read_metrics(a.run_dir)
@@ -763,14 +782,22 @@ def main(argv=None) -> int:
             return 1
         print(f"{a.doc} is up to date with {a.run_dir} (step {step})")
         return 0
-    with open(a.doc, "w", encoding="utf-8") as f:
-        f.write(doc)
+    try:
+        with open(a.doc, "w", encoding="utf-8") as f:
+            f.write(doc)
+    except OSError as e:
+        print(f"REFUSED: {a.doc} was not written: {e}", file=sys.stderr)
+        return REFUSED
     print(f"wrote {a.doc} from {a.run_dir} step {step}")
     v = verdict_json(a.run_dir, step, metrics, post, src, census)
-    with open(a.verdict_json, "w", encoding="utf-8") as f:
-        import json as _json
-        _json.dump(v, f, indent=2, sort_keys=True)
-        f.write("\n")
+    try:
+        with open(a.verdict_json, "w", encoding="utf-8") as f:
+            import json as _json
+            _json.dump(v, f, indent=2, sort_keys=True)
+            f.write("\n")
+    except OSError as e:
+        print(f"REFUSED: {a.verdict_json} was not written ({a.doc} was): {e}", file=sys.stderr)
+        return REFUSED
     print(f"wrote {a.verdict_json}: passed={v['passed']} "
           f"router_clean={v['router_clean']}")
     return 0

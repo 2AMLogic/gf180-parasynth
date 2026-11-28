@@ -585,14 +585,18 @@ jobs:
       - name: every tools/ test, by directory
         run: python -m pytest tools/ -q
 
-  # The 16 fpga/ test files no other CI job runs (#853) -- the fpga half of the
+  # The fpga/ test files no other CI job runs (#853) -- the fpga half of the
   # #404 shape (tools/ above is the same repair; pnr/ is #851). Measured on a
   # hosted-runner equivalent, 2026-11-16: all 16 pass under
   # spec/trial-environment.json -- 320 tests in ~57 s; none needs Vivado, a
   # flashed Arty or the TR808 corpus at runtime (the "hardware" strings in
   # these files are paths and manifest keys -- measured, not device access).
   #
-  # The pins are the point, not a nicety: three of the 16 (the release-bound
+  # Eighteen since #2096 (2026-11-28): fpga/test_pads_rom.py and
+  # fpga/test_verify_live_midi_output_path.py were in no CI job either; both
+  # pass under the spec on a non-root Linux worker (32 tests, zero skips).
+  #
+  # The pins are the point, not a nicety: three of the 18 (the release-bound
   # trials) preflight the spec and return NO VERDICT on drift, and the pty
   # harness refuses without pyserial -- so the unpinned
   # `pip install numpy scipy pytest pyyaml` the other jobs use reads here as
@@ -601,7 +605,7 @@ jobs:
   # simulator (their trial manifests preflight no tools).
   #
   # No ignores and no deselects (the tools-job rule); there is nothing to
-  # deselect: all 16 measured runnable, zero skips. The floor step is the
+  # deselect: all 18 measured runnable, zero skips. The floor step is the
   # exclusion control: collection must stay at or above the FLOOR= below, so
   # an `--ignore`, a moved file or a deleted test cannot achieve an exclusion
   # silently -- and tools/test_fpga_uncovered_workflow.py (run by the tools
@@ -627,6 +631,8 @@ jobs:
         fpga/test_uart_host_pty.py
         fpga/test_verify_flash.py
         fpga/test_verify_live_midi_unwrap.py
+        fpga/test_verify_live_midi_output_path.py
+        fpga/test_pads_rom.py
     steps:
       - uses: actions/checkout@v4
         with:
@@ -640,11 +646,11 @@ jobs:
       # rule costs nothing and keeps every suite job shaped the same.
       - name: install the spec, not guesses (idempotent; refuses on drift)
         run: python tools/trial_env.py bootstrap --no-toolchain
-      - name: the 16 fpga/ files no other CI job runs
+      - name: the 18 fpga/ files no other CI job runs
         run: python -m pytest $FPGA_UNCOVERED_PATHS -q
       - name: collection floor -- an exclusion cannot be silent
         run: |
-          FLOOR=342
+          FLOOR=386
           st=0
           out=$(python -m pytest $FPGA_UNCOVERED_PATHS --collect-only -q 2>&1) || st=$?
           n=$(printf '%s\n' "$out" | sed -n 's/^\([0-9][0-9]*\) tests\? collected.*/\1/p' | tail -n 1)
