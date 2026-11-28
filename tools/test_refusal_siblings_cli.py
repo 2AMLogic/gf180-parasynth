@@ -50,12 +50,13 @@ re-executes the module with ONE handler put back to the exact class it named
 before #1681 and nothing else, and the same injection must then leave that CLI
 as the sibling.
 Each asserts that the escape ran through the named site
-(`release_manifest.presets`, `sweep_m1a_attack.render_point`), so a refusal
-arriving by another path cannot satisfy it; and each refuses when the source
-holds no such handler, so a repair reverted entirely turns both its tests red.
+(`release_manifest.presets`, `sweep_m1a_attack.render_point`,
+`MidiSession.__init__`), so a refusal arriving by another path cannot satisfy
+it; and each refuses when the source holds no such handler, so a repair
+reverted entirely turns both its tests red.
 
-THE READ-NOT-TRACED SITES, each traced to a verdict and pinned where a pin
-holds:
+THE READ-NOT-TRACED SITES, each traced to a verdict -- repaired, or pinned
+where a pin holds:
 
   * `fpga/verify_rolling_playback.py:92` runs under `main`'s
     `except (r1c.Refused, ValueError)`, but only ever as
@@ -68,18 +69,24 @@ holds:
     which the issue's table lists beside the two it repairs. `init-check`
     loads no named preset for any fixture, so it never reaches
     `selected_preset.definition`. NOT AN INSTANCE, pinned; left on its own class.
-  * `fpga/midi_session.py:339` runs under NEITHER of `main`'s two
-    `except uh.Refused`: `MidiSession(...)` is constructed at `:1166`, outside
-    every `try`. The sibling escapes there with NO handler in its path -- the
-    unguarded constructor #1614 repairs, not this issue's
-    handler-names-a-sibling shape. Recorded on #1614 and in #1681's PR; not
-    repaired or pinned here.
+  * `fpga/midi_session.py:339` runs under `main`'s constructor guard, which
+    #1614 (PR #1649, merged at `69ce038d`) added AFTER this issue was filed:
+    `except (uh.Refused, dx.KitRefused)`. Two readings, each true at its
+    commit. At `a3186508`, before that merge, `MidiSession(...)` sat outside
+    every `try` and the sibling escaped with NO handler in its path -- not
+    this issue's shape. At `69ce038d` it runs under a handler that names its
+    own module's class and not the sibling: this issue's shape, traced
+    (`main > __init__:339`, `mono_m5a_score.Refused` escaping), and REPAIRED
+    here. `fpga/verify_live_midi.py:693` constructs its session with no
+    `preset`, so the harness entry point cannot reach `:339`.
 """
 from __future__ import annotations
 
 import ast
 import inspect
+import os
 import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -91,8 +98,10 @@ for _p in ("tools", "fpga/release", "fpga", "model", "audition", "rtl-sketch"):
         sys.path.insert(0, str(ROOT / _p))
 
 import attack_fit_v3                           # noqa: E402
+import drums_fx as dx                           # noqa: E402
 import exit_contract                           # noqa: E402
 import measure_mono_m5a_reference               # noqa: E402
+import midi_session as ms                       # noqa: E402
 import mono_m5a_score                           # noqa: E402
 import r1_candidate as r1c                      # noqa: E402
 import r1_release as r1r                        # noqa: E402
@@ -100,6 +109,7 @@ import refusal                                  # noqa: E402
 import release_manifest as rm                   # noqa: E402
 import selected_preset                          # noqa: E402
 import sweep_m1a_attack as sweep                # noqa: E402
+import uart_device_sim as dev                   # noqa: E402
 import uart_host as uh                          # noqa: E402
 
 BASS = sweep.bass                               # mono_m1a_score: what the sweep names
@@ -116,6 +126,8 @@ CLI_IDS = [mod.__name__ for mod, _ in CLIS]
 HANDLERS = [(mod, func, "Refused") for mod, _ in CLIS for func in ("check", "main")]
 HANDLER_IDS = [f"{mod.__name__}.{func}" for mod, func, _ in HANDLERS]
 SWEEP_HANDLER = (sweep, "main", "bass.Refused")   # it never had a `Refused` of its own
+MIDI_HANDLER = (ms, "main", "uh.Refused")         # the first elt of #1614's tuple
+MIDI_ARGV = ["--port", "sim", "--midi-in", "scripted:coverage", "--preset", "m5a-saw"]
 
 
 class _Globals:
@@ -134,25 +146,39 @@ class _Globals:
             monkeypatch.setattr(self.ns, name, value)
 
 
+def _base_element(handler: ast.ExceptHandler) -> list[ast.AST]:
+    """The `refusal.Refused` element(s) of a handler's `except` type: the type
+    itself, or the one elt of its tuple that is the base."""
+    t = handler.type
+    return [e for e in (t.elts if isinstance(t, ast.Tuple) else [t])
+            if isinstance(e, ast.Attribute) and e.attr == "Refused"
+            and isinstance(e.value, ast.Name) and e.value.id == "refusal"]
+
+
 def _reverted(module, func: str, own: str) -> dict:
     """A copy of `module`'s globals, re-executed from its own source with the
-    ONE `except refusal.Refused` of function `func` put back to `own` -- the
-    class that handler named before #1681 -- and nothing else. `own` is stated
-    per site, not derived: it must be the EXACT shipped handler, and the
-    first draft of this control wrote `Refused` into every module, which in
-    `sweep_m1a_attack` (whose handler was `bass.Refused`) is a NameError --
-    a different defect, raised instead of the escape being controlled for.
-    Built from the source, it cannot drift from the shipped code. It refuses
-    when the source holds no such handler, or more than one."""
+    ONE `except refusal.Refused` of function `func` -- the whole type, or its
+    elt of a tuple -- put back to `own`, the class that handler named before
+    #1681, and nothing else. `own` is stated per site, not derived: it must be
+    the EXACT shipped handler, and the first draft of this control wrote
+    `Refused` into every module, which in `sweep_m1a_attack` (whose handler
+    was `bass.Refused`) is a NameError -- a different defect, raised instead
+    of the escape being controlled for. Built from the source, it cannot drift
+    from the shipped code. It refuses when the source holds no such handler,
+    or more than one."""
     tree = ast.parse(inspect.getsource(module), module.__file__)
     body = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == func)
-    hit = [h for h in ast.walk(body) if isinstance(h, ast.ExceptHandler)
-           and isinstance(h.type, ast.Attribute) and h.type.attr == "Refused"
-           and isinstance(h.type.value, ast.Name) and h.type.value.id == "refusal"]
-    assert len(hit) == 1, (f"{module.__name__}.{func}: expected exactly one "
-                           f"`except refusal.Refused`, found {len(hit)}: the repair "
-                           "is missing, or its shape changed")
-    hit[0].type = ast.parse(own, mode="eval").body
+    hit = [(h, elts) for h in ast.walk(body) if isinstance(h, ast.ExceptHandler)
+           and (elts := _base_element(h))]
+    assert len(hit) == 1 and len(hit[0][1]) == 1, (
+        f"{module.__name__}.{func}: expected exactly one `except refusal.Refused`, "
+        f"found {sum(len(e) for _, e in hit)}: the repair is missing, or its shape changed")
+    handler, elts = hit[0]
+    replacement = ast.parse(own, mode="eval").body
+    if isinstance(handler.type, ast.Tuple):
+        handler.type.elts[handler.type.elts.index(elts[0])] = replacement
+    else:
+        handler.type = replacement
     ns = dict(vars(module))
     exec(compile(ast.fix_missing_locations(tree), module.__file__, "exec"), ns)
     return ns
@@ -175,10 +201,11 @@ def test_the_two_siblings_are_refusal_refused_and_nothing_a_handler_named():
     assert issubclass(PRESET_SIBLING, refusal.Refused)
     for mod in (uh, rm, r1r, r1c):
         assert not issubclass(PRESET_SIBLING, mod.Refused), mod.__name__
+    assert not issubclass(PRESET_SIBLING, dx.KitRefused)
     # `except refusal.Refused` reads the MODULE only while no local of the
     # function is named `refusal` (#1624: a local turned every exception
     # leaving the try into an UnboundLocalError)
-    for mod, func, _ in HANDLERS + [SWEEP_HANDLER]:
+    for mod, func, _ in HANDLERS + [SWEEP_HANDLER, MIDI_HANDLER]:
         assert "refusal" not in getattr(mod, func).__code__.co_varnames, \
             f"{mod.__name__}.{func}"
 
@@ -343,6 +370,80 @@ def test_a_non_refusal_error_from_presets_still_propagates(mod, flag, tmp_path, 
     with pytest.raises(KeyError, match="engine profile"):
         _drive(g, flag, "write", out)
     assert not out.exists()
+
+
+# ---- the session CLI: the same sibling under #1614's constructor guard -----------
+def _poison_definition(log: list):
+    def definition(name):
+        log.append(name)
+        raise PRESET_SIBLING(INJECTED)
+    return definition
+
+
+def _session_cli(g: _Globals, monkeypatch) -> int:
+    """`midi_session.main` for a named preset on the simulated port, on `g`,
+    with everything BEFORE the session's construction stood in so the real
+    `MidiSession.__init__` runs: the quiet-host pin `fpga/conftest.py` gives
+    tests under fpga/ (this file is under tools/), the image and the MIDI
+    input, the pty-backed device simulator, pyserial's presence check and the
+    `serial` module itself (not installed in CI)."""
+    class _FakeSim:
+        port = "fake"
+        errors, drops, writes, evq_peak = [], 0, [], 0
+
+        def start(self):
+            return self
+
+        def stop(self):
+            pass
+
+    fake_serial = types.ModuleType("serial")
+    fake_serial.Serial = lambda *_a, **_k: object()
+    fake_serial.SerialException = type("SerialException", (OSError,), {})
+    monkeypatch.setitem(sys.modules, "serial", fake_serial)
+    monkeypatch.setattr(os, "getloadavg", lambda: (0.0, 0.0, 0.0))
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    g.patch(monkeypatch, "resolve_image", lambda *_a, **_k: "tree")
+    g.patch(monkeypatch, "open_midi_input", lambda _spec: (object(), None, "fake"))
+    monkeypatch.setattr(dev, "UartDeviceSim", lambda *_a, **_k: _FakeSim())
+    monkeypatch.setattr(uh, "_require_serial", lambda: None)
+    return g.get("main")(MIDI_ARGV)
+
+
+def test_a_named_preset_refusal_at_the_session_constructor_is_refused_with_exit_2(
+        monkeypatch, capsys):
+    """`midi_session --preset m5a-saw`: `MidiSession.__init__` reads
+    `selected_preset.definition`, whose `mono_m5a_score.Refused` is neither
+    class #1614's constructor guard names. It used to leave the CLI as exit 1
+    by traceback under that guard."""
+    fired = []
+    monkeypatch.setattr(selected_preset, "definition", _poison_definition(fired))
+    rc = _session_cli(_Globals(ms), monkeypatch)
+    err = capsys.readouterr().err
+    assert rc == exit_contract.REFUSED, err
+    assert f"midi_session: REFUSED -- {INJECTED}" in err
+    assert fired == ["m5a-saw"]
+
+
+def test_control_the_reverted_session_handler_lets_the_sibling_escape(monkeypatch):
+    """With ONLY the constructor guard's base element put back to `uh.Refused`
+    -- #1614's `except (uh.Refused, dx.KitRefused)` -- the same preset leaves
+    the CLI as the sibling, through `MidiSession.__init__`, the site it names."""
+    monkeypatch.setattr(selected_preset, "definition", _poison_definition([]))
+    with pytest.raises(PRESET_SIBLING, match=INJECTED) as ei:
+        _session_cli(_Globals(_reverted(*MIDI_HANDLER)), monkeypatch)
+    assert _ran_through(ei, ms, "__init__")
+
+
+def test_a_non_refusal_error_at_the_session_constructor_still_propagates(monkeypatch):
+    """As #1614's own controls require: an implementation error at the same
+    read is an EXECUTION ERROR, exit 1, never relabelled a refusal."""
+    def broke(name):
+        raise KeyError("engine profile")
+
+    monkeypatch.setattr(selected_preset, "definition", broke)
+    with pytest.raises(KeyError, match="engine profile"):
+        _session_cli(_Globals(ms), monkeypatch)
 
 
 # ---- the read-not-traced sites: each verdict, pinned ----------------------------------
