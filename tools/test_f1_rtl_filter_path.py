@@ -290,7 +290,7 @@ EVIDENCE_LOST = "REFUSED -- comparison verdict printed above; record not written
 @pytest.mark.parametrize("target, reason", [
     ("{tmp}", "names an existing directory"),
     ("{tmp}/a-file/curve.json", "no record can be written there: [Errno 17] File exists"),
-    ("nul\x00dir/curve.json", "no record can be written there: embedded null byte"),
+    ("nul\x00dir/curve.json", "no record can be written there: the path contains a NUL character"),
 ], ids=["a-directory", "parent-is-a-file", "parent-has-a-nul-byte"])
 def test_an_unwritable_json_destination_is_refused_before_anything_runs(smoke, tmp_path, tail,
                                                                         target, reason):

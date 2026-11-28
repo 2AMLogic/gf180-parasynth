@@ -84,6 +84,8 @@ import re
 import subprocess
 import sys
 
+import refusal
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TEST_NAME = re.compile(r"(^|/)(test_[^/]*|[^/]*_test|conftest)\.py$")
 MIN_TRACKED_FILES = 300
@@ -131,7 +133,7 @@ record(a.json)
 """
 
 
-class Refused(RuntimeError):
+class Refused(refusal.Refused, RuntimeError):
     """A precondition of the census was not met; nothing was counted."""
 
 

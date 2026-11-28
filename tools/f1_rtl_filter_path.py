@@ -427,7 +427,13 @@ def _record_path(name: str | None) -> None:
         is_dir = out.is_dir()
         if not is_dir:
             out.parent.mkdir(parents=True, exist_ok=True)
-    except (OSError, ValueError) as exc:
+    except ValueError as exc:
+        # The wording of CPython's NUL-byte error differs by patch release
+        # ("embedded null byte" vs "mkdir: embedded null character in path"),
+        # so the reason is this module's own, not the interpreter's.
+        raise Refused(f"--json {name!r}: no record can be written there: "
+                      "the path contains a NUL character") from exc
+    except OSError as exc:
         raise Refused(f"--json {name!r}: no record can be written there: {exc}") from exc
     if is_dir:
         raise Refused(f"--json {name!r} names an existing directory; name the record file")
