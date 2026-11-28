@@ -6,8 +6,278 @@ Recorded forge events; merge or closure alone does not establish sound qualifica
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-28
+
+- **Issue #1796** (closed): mono_artifact_probe sweep: a row whose stages all refused is written with no numbers and the sweep still exits 0 (found by #1770)
+- **PR #1829**: fix: mono_artifact_probe sweep exits REFUSED when any row holds no output number
+- **Issue #1921** (closed): Untraced #1782 candidate: `tools/score_f1_rtl.py` under Refused-only handlers (run_case.run_filter_case)
+- **Issue #1886** (closed): Untraced #1782 candidate: `tools/clap_d12a_probe.py` under Refused-only handlers (NonFiniteAudio via run_case)
+- **Issue #1889** (closed): Untraced #1782 candidate: `tools/cymbal_candidate_eval.py` under Refused-only handlers (NonFiniteAudio via run_case)
+- **Issue #1885** (closed): Untraced #1782 candidate: `tools/clap_burst_timing_qual.py` under Refused-only handlers (NonFiniteAudio via run_case)
+- **Issue #1916** (closed): Untraced #1782 candidate: `tools/probes/perturbation_ladder.py` under Refused-only handlers (NonFiniteAudio via run_case)
+- **Issue #1896** (closed): Untraced #1782 candidate: `tools/diagnose_tom_body.py` under Refused-only handlers (NonFiniteAudio via run_case)
+- **Issue #1915** (closed): Untraced #1782 candidate: `tools/probes/hihat/hh_probe5.py` under Refused-only handlers (NonFiniteAudio via run_case)
+- **Issue #1806** (closed): cymbal_m_origin: "REFUSED: ... controls do not pass" is returned on exit 1 (sibling of #1786)
+- **Issue #1789** (closed): cymbal_m_origin: "REFUSED: the shared instrument's own controls do not pass" is printed on exit 1 (same shape as #1769)
+- **PR #1817**: fix: cymbal_m_origin and cymbal_vca_drive refuse with exit 2, not exit 1
+- **Issue #1631** (closed): publish_selected: a refused stored simulation escapes as a traceback (exit 1); the stale M5A simulation record is not checked on main
+- **PR #1661**: fix: publish a refused stored simulation as NO-VERDICT, not a traceback
+- **Issue #1855** (closed): audit_tracked_json_writers credits an inline site for 'await <sync>.write_text(json.dumps(...))', which raises and never writes (pre-existing)
+- **Issue #1794** (closed): cymbal_low_tail (#1765): confirm exit 0 on the real Fischer corpus, default and --all-settings, and exit 2 on one damaged record
+- **Issue #1684** (closed): refaudio: a member name that is also a directory prefix kills the extraction loop with an uncaught FileExistsError instead of that member's FAIL
+- **PR #1703**: fix: return a refaudio member's landing OSError as its FAIL reason
+- **Issue #1699** (closed): audio_distance_floor: decide the full-run exit code when an experiment refuses (exit 0 vs 2)
+- **PR #1773**: fix: audio_distance_floor exits 2 when any experiment refused
+- **Issue #1718** (closed): refusal_sibling_scan: an async def callee is invisible to the census (ModInfo.funcs registers only ast.FunctionDef)
+- **PR #1723**: fix: refusal_sibling_scan sees an async def callee and credits it only where awaited
+- **Issue #1693** (closed): measure_pulse2x_headroom.py decimator/fine --gains 0.0 raise RuntimeError (exit 1); mix --gains 0.0 writes -240.0 dBFS rows (exit 0)
+- **PR #1715**: fix: exit REFUSED on silent output in measure_pulse2x_headroom
+- **Issue #1669** (closed): Same-shape leftovers beside #1636: two scorecard CLI tracebacks, a null result read as not run, an OverflowError in the m5a comparator
+- **PR #1682**: fix: scorecard no-verdicts malformed records; m5a refuses overflow
+- **Issue #1728** (closed): fpga/sweep_live_midi.py: a tampered r1-kit.json escapes main() as drums_fx.KitRefused (traceback at exit 1), a class the escape census cannot see
+- **PR #1735**: fix: sweep_live_midi REFUSES a tampered R1 kit, not a traceback
+- **Issue #1690** (closed): fpga/: a child-process failure or timeout escapes main() as a traceback in four tools (verify_late_events, build_selected, publish_selected, bringup_arty)
+- **PR #1719**: fix: refuse a failed or hung child at exit 2 in four fpga tools
+- **Issue #1705** (closed): loom tool finding: worktree.sh leases an untargeted claim with a renewal loop watching a transient tool-call shell, so the lease expires mid-task and the pre-push fence aborts (exit 3)
+- **PR #1716**: docs: record worktree.sh $PPID lease-watch finding in tool-findings
+- **Issue #1752** (closed): Census after #1742: 157 git-subprocess sites in 101 tools are unguarded against a missing git; 4 reproduced at exit 1
+- **Issue #1692** (closed): Five measure_point readers index a row's stages without checking the row (same class as #1628; latent, no input reaches a silent row)
+- **PR #1710**: fix: refuse an unmeasured measure_point row in five stage-indexing readers
+- **Issue #1664** (closed): Pre-transfer rjwalters/loom references outside the five install-time .loom files: the live file-upstream instruction and Loom marker blocks in CLAUDE.md, and the scaffolded issue templates
+- **PR #1673**: docs: name 2AMLogic/loom in the live Loom references outside .loom/
+- **Issue #1604** (closed): tier-3 record readers: a required key read with [] exits 1 by traceback on a partial record (class sweep from #1597)
+- **PR #1619**: fix: refuse records lacking a required key instead of a traceback
+- **Issue #1652** (closed): r1_candidate.py: a presets-only drift of r1-kit.json refuses live_midi_init's MidiSession outside the Refused handler (exit 1 by traceback)
+- **PR #1666**: fix: refuse a presets-only kit drift at r1_candidate's live_midi_init
+- **Issue #1680** (closed): compare_m5a_i2s_candidate still exits 1 on 10**400 in a harmonic partial: _compare_incremental's float() is unguarded
+- **PR #1689**: fix: refuse unreadable harmonic partials in _compare_incremental
+- **Issue #1694** (closed): measure_m5_operating_level.py and measure_m5_saw_drive.py: --drives outside the frozen budget exits 1 with REFUSED text (SystemExit), not 2
+- **PR #1704**: fix: raise the M5 --drives budget fence as a module Refused
+- **Issue #1726** (closed): refusal_candidate_trace: a stop inside an except* clause is not read as an except handler (ast.TryStar is not ast.Try)
+- **Issue #1697** (closed): refaudio: a member named like another member's .part file is reported FETCHED, then deleted by that member's cleanup (exit 0)
+- **PR #1713**: fix: refuse refaudio members named like another member's .part file
+- **Issue #1595** (closed): Consolidate M5A SPI-to-I2S transcript checks in run_case, verify_mono_case, and build_selected onto i2s_transcript
+- **PR #1633**: fix: route M5A SPI-to-I2S transcript checks through i2s_transcript
+- **Issue #1628** (closed): measure_pulse2x_headroom.py probe: a gain that silences the rectangles dies with KeyError instead of REFUSED
+- **PR #1696**: fix: pulse2x probe refuses an unmeasured row instead of KeyError
+- **Issue #1724** (closed): refaudio: cross-request .part collision overwrites a previously cached *.part member
+- **Issue #1576** (closed): refusal_sibling_scan: trace the candidate-escape inventory #1573 surfaced (23 new in tools/model/pnr, 14 in fpga/)
+- **PR #1635**: feat: trace every candidate-escape row through its entry point and record where its refusal goes
+- **Issue #1641** (closed): refusal_sibling_scan.py does not credit a CLI boundary guard that lives in a wrapper function
+- **PR #1660**: fix: credit a refusal guard in a wrapper the CLI dispatch calls
+- **Issue #1610** (closed): audio_distance_floor.py: a malformed reference refuses at run_case.prepare as an exit-1 traceback (4 sites)
+- **PR #1646**: fix: catch refusal.Refused from prepare in audio_distance_floor
+- **Issue #1580** (closed): Ensemble control reuse credits a two-run negative-control report even when the latest run escaped
+- **PR #1608**: fix: refuse a multi-run capture when reusing an ensemble control run
+- **Issue #1643** (closed): score_f1_rtl: refprofile.Refused escapes the CLI handler (same shape as #1612, #1624)
+- **PR #1672**: fix: catch refusal.Refused in the F1 RTL scorer's CLI handler
+- **Issue #1640** (closed): hh_probe5.Refused's SystemExit base makes an uncaught local refusal exit 0 silently; the #815 pin test's 'message to stderr' claim is false
+- **PR #1651**: fix: drop SystemExit base from hh_probe5.Refused so refusals exit 1
+- **Issue #1617** (closed): f1_rtl_filter_path.py: its default --frames 20000 is below the first analysis window, so the default invocation always REFUSES
+- **PR #1637**: fix: raise the F1 RTL filter-path CLI's default --frames to 30000
+- **Issue #1614** (closed): midi_session.py: a drifted R1 sound table refuses MidiSession.__init__ outside the guarded region (exit 1 by traceback)
+- **PR #1649**: fix: report a drifted R1 kit as REFUSED at the MIDI session entry points
+- **Issue #1698** (closed): fix: --out outside the repository writes the report and then exits 1 in three M5A measure tools
+- **Issue #1624** (closed): f1_level_scaling: refprofile.Refused escapes the CLI handler (same shape as #1612)
+- **PR #1648**: fix: catch refusal.Refused in the F1 level-scaling CLI handler
+- **Issue #1613** (closed): measure_pulse2x_headroom.py phrases: every refusal from mono_m5a_score.measure is an exit-1 traceback
+- **PR #1630**: fix: catch refusal.Refused at measure_pulse2x_headroom's CLI boundary
+- **Issue #1577** (closed): refusal_sibling_scan: remaining import-scope blind spots (function-local family borrow; rtl-sketch/ and audition/ outside SCAN_ROOTS)
+- **PR #1598**: fix: refusal_sibling_scan sees Refused borrowed in a def; 2 new roots
+- **Issue #1657** (closed): CI flake in spi-i2s dependency install when a pip download ends early
+- **Issue #1634** (closed): M5A recorded simulation is stale against current RTL; no routine check reports it
+- **Issue #1597** (closed): clap_d12a_probe: a partial committed D12A record exits 1 (FAIL) by traceback, not 2 (REFUSED)
+- **PR #1605**: fix: refuse a partial committed D12A record before it is scored
+- **Issue #1626** (closed): tool finding: Loom config-resolver dies with 'jq: Argument list too long' (defaults tier 208,882 B over the 128 KiB argument cap)
+- **Issue #1609** (closed): parse_no_output_delay does not count ports placed on the sentence line itself
+- **Issue #1569** (closed): Consolidate r2_release check, stale_control, and main onto r1_release and catch refusal.Refused
+- **PR #1574**: fix: catch refusal.Refused in the R1 and R2 stale-control handlers
+- **Issue #1570** (closed): Consolidate M5A frozen-reference loading, partial comparison, and selected-voice construction onto mono_m5a_score
+- **PR #1586**: fix: route three M5A tools through the shared frozen-reference gate
+- **Issue #1562** (closed): SPI-I2S transcript gate accepts a two-run capture; score_m5a_i2s pairs the first run's controls with the second run's WAV
+- **PR #1581**: fix: refuse multi-run captures in the SPI-I2S transcript gate
+- **Issue #1599** (closed): create-pr.sh exits 126 on this host: config-resolver.sh passes a 208 KB defaults.json as one jq --argjson (same root cause as #1331)
+- **Issue #1596** (closed): loom create-pr.sh exits 126 (config-resolver.sh: jq: Argument list too long) once defaults.json exceeds 128 KiB
+- **Issue #1573** (closed): refusal_sibling_scan cannot see the fpga/ release checkers: SCAN_ROOTS and function-local imports
+- **PR #1579**: fix: refusal_sibling_scan binds function-local imports per scope and scans fpga/
+- **Issue #1582** (closed): trial_env bootstrap reads system package versions for a symlinked target venv
+- **PR #1585**: fix: query the named interpreter for package versions in trial_env
+- **Issue #1568** (closed): Consolidate measure_partial_balance reference loading and solo rendering onto run_case
+- **PR #1575**: refactor: load partial-balance references and solos through run_case
+
+### 2026-11-27
+
+- **Issue #1578** (closed): docs: record the unfiled Loom finding from #1573 (config-resolver passes each config tier as one jq argument)
+- **Issue #1556** (closed): Consolidate the three drifted SPI-I2S transcript validators in score_m5a_i2s, score_drum_i2s, and score_ensemble_i2s
+- **PR #1563**: fix: refuse non-clean SPI-I2S transcripts in all three RTL scorers
+- **Issue #1557** (closed): Consolidate drifted DPREG-4 DRC parser in tools/dsp_dpreg_extract.py onto dsp_dpreg_analyse.parse_drc_targets
+- **PR #1559**: fix: delegate dsp_dpreg_extract DRC parsing to the analyser
+- **Issue #1551** (closed): Consolidate the two drifted indexed_sizes TSV parsers in refaudio_fetch and tom_drop_compare onto refaudio_local
+- **PR #1558**: refactor: read the refaudio index sizes through one shared reader
+- **Issue #1552** (closed): Retained-evidence 16-bit WAV encoders disagree: run_case truncates where manifest rounds, and the component writer discards the clip count
+- **PR #1561**: fix(measure_mono_case): REFUSE over-range audio before writing WAVs
+- **Issue #1554** (closed): spi_host.MusicHost.keys() silently drops an unrecognised KeyHost op (last instance of the #1546 class)
+- **PR #1555**: fix(spi_host): reject unhandled KeyHost ops in MusicHost.keys
+- **Issue #1553** (closed): config-resolver.sh exceeds MAX_ARG_STRLEN: a 208 KB defaults.json breaks create-issue.sh and create-pr.sh (file upstream to rjwalters/loom)
+- **Issue #1468** (closed): Empty-record audit, tier 2: 21 gated non-probe verdict tools (from #1466)
+- **PR #1506**: fix: refuse empty evidence in sound and player verification
+- **Issue #1540** (closed): Physical capture interpreter accepts repeated demo takes with no fixture declaration
+- **PR #1542**: fix: require declared diagnostic commands for physical capture PASS
+- **Issue #1535** (closed): Use one pairing rule for the mono pulse summary and R2 comparator
+- **PR #1536**: fix: pair pulse reports by scheduled drive and expose missing baselines
+- **Issue #1537** (closed): interpret_live_midi_record treats a missing fixtures declaration as zero required replays
+- **PR #1541**: fix: require replay fixtures for live MIDI RTL verdicts
+- **Issue #1532** (closed): Retire the private aliasing estimator in the oscillator width sweep
+- **PR #1534**: fix: report refused oscillator alias measurements in the width sweep
+- **Issue #1528** (closed): Require replay fixtures for T-LIVE-MIDI RTL receipts
+- **PR #1530**: fix: require replay fixtures for live MIDI RTL receipts
+- **Issue #1538** (closed): Tool defect (forward upstream): config-resolver.sh jq --argjson breaks at the 128 KiB argv cap; create-issue.sh exits 126
+- **Issue #1527** (closed): Share the ladder noise-response calculation and refuse a silent wide-open reference
+- **PR #1529**: fix: refuse silent wide-open ladder references
+- **Issue #1503** (closed): Sound mutation suite credits test IDs from whole output, not each mutant's own group
+- **PR #1531**: test: attribute sound mutant credits to each mutant's output group
+- **Issue #1511** (closed): Report observed axis and inventory rows in estimator ground-truth summaries
+- **PR #1516**: fix: count observed axis and inventory rows in ground-truth check
+- **Issue #1507** (closed): rounded_verdict_census: a skipped symlinked subdirectory is documented but invisible in the report
+- **PR #1524**: feat: report skipped directory links in the rounded-verdict census
+- **Issue #1441** (closed): Read the rounded-verdict census: 30 candidate fields on main as of 70d5449e, none read
+- **PR #1500**: docs: audit rounded verdicts in cymbal and M1A measurements
+- **Issue #1519** (closed): Restore exact README.md and docs/milestones.md bytes after check_doc_claims_789_marker_controls.py injects claims
+- **PR #1521**: fix: restore exact target bytes in doc-claims marker-controls probe
+- **Issue #1477** (closed): crash_rate.py --runs 0 (or a negative count) dies with IndexError instead of its REFUSED exit 2
+- **PR #1481**: fix: refuse --runs below 1 in crash_rate.py before the empty batch reaches the summary
+- **Issue #1479** (closed): Refuse empty playback receipts, rig pin checks, sound reports and ladder flow verdicts
+- **PR #1508**: fix: refuse empty rolling receipts, rig pins, reports and ladder steps
+- **Issue #1505** (closed): Use the full-precision balance verdict in cymbal_tone_knob
+- **PR #1510**: fix: use admitted balances for 808 cymbal tone-law verdicts
+- **Issue #1518** (closed): Restore exact README bytes after the document-scope probe injects a claim
+- **PR #1520**: fix: restore exact target bytes in doc-claims scope probe
+- **Issue #1463** (closed): bd_pitch_predeclaration_mutants credits any focused exit 1 as RED without attributing it to the intended control
+- **PR #1471**: fix: credit a bd-pitch mutant red only at its recorded assertion
+- **Issue #1473** (closed): Frozen oscillator-drift report accepts altered audio when its WAV digest is null or empty
+- **PR #1475**: fix: require a matching WAV digest for oscillator drift measurements
+- **Issue #1488** (closed): Check credited test IDs under each FPGA mutant’s own output header
+- **PR #1498**: test: attribute FPGA mutant credits to each mutant's own output group
+- **Issue #1513** (closed): Cymbal TONE revision 3 control and report lose an out-of-bound result to rounding
+- **PR #1515**: fix: evaluate cymbal TONE rev3 bound checks on unrounded errors
+- **Issue #1514** (closed): Trial registry loader returns FAIL exit code on truncated JSON or a missing trials key
+- **PR #1517**: fix: refuse invalid trial registry JSON and missing trials key
+- **Issue #1523** (closed): File upstream (rjwalters/loom): config-resolver.sh passes config tiers as jq argv, so a >128 KiB defaults tier breaks create-issue.sh
+- **Issue #1482** (closed): Refuse mismatched write counts and truncated I2S captures in fpga/verify_fixture.py
+- **PR #1489**: fix: refuse mismatched write counts and truncated I2S captures in verify_fixture
+- **Issue #1474** (closed): Exercise the FPGA missing-returncode guard on a diagnosed no-fit log
+- **PR #1496**: test: catch a missing nextpnr return code in the headroom reporter
+- **Issue #1491** (closed): rounded_verdict_census: documented search boundary differs from the actual one (pytest.ini patterns; symlinked subdirectory)
+- **PR #1501**: docs: pin the rounded-verdict census scan boundaries
+- **Issue #1499** (closed): cymbal_tone_nodal.choose re-decides the shape bound from a rounded worst_db
+- **PR #1502**: fix: refuse cymbal TONE realisations at full precision, not rounded worst_db
+- **Issue #1470** (closed): Published-WAV-path guards now enumerate records by hand; a new audio-bearing row goes unchecked
+- **PR #1497**: test: check every live scorecard model WAV against its runner
+- **Issue #1509** (closed): Preserve full-precision M1A attack failures in property selection
+- **PR #1512**: fix: preserve M1A attack precision through scorecard grading
+- **Issue #1480** (closed): An interrupted mutation can truncate model/sound_report.py in the checkout
+- **PR #1483**: fix: restore the sound probe's target from its entry bytes
+- **Issue #1460** (closed): Simplify Arty verifier summaries onto three-state exit_contract so REFUSED runs exit 2 instead of FAIL
+- **PR #1472**: fix: make Arty verifier suites exit 2, not FAIL, on refused runs
+- **Issue #1492** (closed): Derive the F1 engine label from the filter path
+- **PR #1494**: fix: derive the F1 engine label from the filter path
+- **Issue #1430** (closed): Clean drum, ensemble and filter runs given --results build/scorecard still write the published artefact; the --expect baseline writes the published M5 WAV
+- **PR #1462**: fix: refuse a clean run whose artefact would be the published one, and let --no-audio reach the M5 writer
+- **Issue #1484** (closed): Keep inventory-generator diagnostics off stdout
+- **PR #1493**: fix: keep reference inventory diagnostics off stdout
+- **Issue #1478** (closed): trial.py run <unknown trial id> exits 1 with a RegistryError traceback, this tool's FAIL code
+- **PR #1490**: fix: return exit 2 for trial registry errors
+- **Issue #1451** (closed): Remove the fabricated passing record from the tom pitch-drop known-answer check
+- **PR #1456**: fix: read the known-answer verdict off the rows, not n_ok == n
+- **Issue #1504** (closed): Upstream (rjwalters/loom): config-resolver.sh passes config tiers in argv — a >128 KiB defaults tier bricks every Loom script
+- **Issue #1457** (closed): tools/test_mono_m5a_score.py rewrites build/scorecard/M5A-model.wav, which the archived M5A model row names
+- **PR #1465**: test: keep M5A cutoff-override renders off the archived model WAV
+- **Issue #1434** (closed): Commit the rounded-verdict cross-reference census as a tool with its validation case (from PR #1421)
+- **PR #1443**: feat: add rounded-verdict census tool and validation tests
+- **Issue #1401** (closed): fpga mutation record credits any nonzero pytest exit as KILLED (14 collection errors read as 14 kills)
+- **PR #1464**: fix: credit an FPGA mutation record's kill only at a recorded assertion
+- **Issue #1422** (closed): Mono runners write a clean off-board run's WAV to the published path instead of beside its record
+- **PR #1431**: fix: write a clean mono run's model WAV beside its record and refuse the published path
+- **Issue #1427** (closed): Two more readers refuse only when empty: From Mars takes in tom_drop_measure and loops in measure_repeatability
+- **PR #1437**: fix: refuse an incomplete From Mars cache in the tom and loop readers
+- **Issue #1485** (closed): run_klt.verdict_exit_code([]) returns EXIT_OK: an empty step list reads as success (latent, unreachable from main today)
+- **Issue #1454** (closed): verify_109_claims exits 0 when no check was executed (prints 0 of 0)
+- **PR #1461**: fix: verify_109_claims exits 2 when no check was executed
+- **Issue #1448** (closed): Remove the second foldback floor that gives damaged M5A note evidence a passing score
+- **PR #1449**: fix: refuse invalid per-note foldback in M5A comparisons
+- **Issue #1433** (closed): The frozen M5A MIDI-84 pair compares independent renders but is reported as a long-term drift bound
+- **PR #1442**: fix: refuse the M5A saw/pulse drift pair and withdraw its 13.6 s bound
+- **Issue #1450** (closed): An off-board filter run splits its response curve from its record when the results directory holds an RTL anchor
+- **PR #1452**: fix: write the fixed-model filter curve beside its redirected model record
+- **Issue #1415** (closed): run_case.py states an absolute curve path for a relative --results, score_f1_rtl.py states a relative one
+- **PR #1418**: fix: resolve a relative --results against the cwd in run_case.py
+- **Issue #1455** (closed): Loom config-resolver fails on this worker: defaults.json (209 KB) exceeds the 128 KiB per-argument cap
+- **Issue #1400** (closed): Reuse the holdout verdict in the sound probe so collection errors cannot count as mutant kills
+- **PR #1402**: fix: sound probe reuses holdout verdict; a pytest refusal is no kill
+- **Issue #1444** (closed): measure_repeatability: audit and cross_session still take a file count for the whole 6x6 grid
+- **PR #1447**: fix: check indexed bass-drum recordings before repeatability measurements
+- **Issue #1426** (closed): Run the before/after report comparison on the Fischer corpus for the reference-inventory change
+- **Issue #1453** (closed): create-pr.sh exits 126: loom_resolve_config hands a 138 KB config tier to jq as one argument
+- **Issue #1436** (closed): measure_repeatability --measure: knob_travel aggregates whatever the 6x6 grid folder holds, with no completeness check
+- **PR #1446**: fix: refuse an incomplete Digital grid before measuring knob travel
+- **Issue #1414** (closed): Write drum and ensemble WAVs beside their off-board scorecard results
+- **PR #1424**: fix: write drum and ensemble WAVs beside their own results instead of the shared path
+- **Issue #1435** (closed): run_case.py records an unresolved curve symlink for an absolute --results
+- **PR #1440**: fix: name an F1 curve record by the file its write landed in
+- **Issue #1423** (closed): Stop M1A v3 scoring from running and embedding the retired v2 attack qualification
+- **PR #1438**: fix: drop the retired v2 attack qualification from M1A v3 scoring
+- **Issue #1420** (closed): model: three reference-set reads built by glob refuse only when empty (#1309/#1334 shape)
+- **PR #1428**: fix: refuse an incomplete BD/SD reference set instead of shrinking it
+- **Issue #1419** (closed): Preserve the captured M5A inter-segment audio in the scored I2S WAV
+- **PR #1429**: fix: write the captured I2S phrase as the scored listening WAV, gap included
+
+### 2026-11-26
+
+- **Issue #1425** (closed): Clarify how the frozen MIDI-84 oscillator drift pair is selected
+- **PR #1432**: docs: say the MIDI-84 drift pair is selected by note, not by prefix
+- **Issue #1334** (closed): measure_conga_body_spread: descent_test still globs the Fischer set it compares against
+- **PR #1421**: fix: conga descent reads named takes, keeps the harness verdict
+- **Issue #1407** (closed): Refuse across-note drift comparisons with different nominal pitches or sample rates
+- **PR #1410**: fix: refuse across-note drift on mismatched declared pitch or rate
+- **Issue #1309** (closed): Refuse incomplete Fischer reference sets in the conga body-spread report
+- **PR #1322**: fix: refuse an incomplete Fischer conga set instead of shrinking the spread
+- **Issue #1412** (closed): Remove the shared F1 response destination from off-board RTL runs
+- **PR #1413**: fix: write each F1 response curve beside its own results instead of one shared path
+- **Issue #1405** (closed): Remove the partial-window fallback from across_note_drift
+- **PR #1408**: fix: refuse across-note drift when any requested window is unusable
+- **Issue #1403** (closed): Reuse the reference rig’s MIDI dispatch so Mini V4 calibration can play its first note
+- **PR #1404**: fix: route Mini V4 calibration note through shared DawDreamer MIDI helper
+- **Issue #1396** (closed): main is red: nine tools/test_check_workflows.py failures from stale open_issue exemptions for the closed #1222
+- **Issue #1314** (closed): measure_mac_midi_latency.py REFUSED exits need NumPy, so they report FAIL instead (adjacent to #1297)
+- **PR #1344**: fix: defer the MIDI verifier import until the latency report is written
+- **Issue #1330** (closed): gate_between/tom_conga_gate print a literal (None) for a zero worst ratio at three more sites
+- **PR #1343**: fix: omit absent worst-feature labels in 808 gate reports
+- **Issue #1339** (closed): D10A/D13A line-shape probe computes the floorless fit in both comparison columns
+- **PR #1340**: fix: distinguish pedestal and floorless fits in the partial-balance probe
+- **Issue #310** (closed): Sweep hygiene: a killed sweep leaves its nohup'd heavy job running, and nothing reaps or surfaces it
+- **Issue #1316** (closed): worst_column_move's nonfinite guard is defeated by a length mismatch or an empty row
+- **PR #1341**: fix: refuse empty or unequal band-share rows in the bass-drum probe
+
 ### 2026-11-25
 
+- **Issue #1317** (closed): gate_calibrate: the stated `missing` residual reaches CALIBRATED (9/9), not just a shifted k
+- **PR #1326**: probe: random take loss reaches CALIBRATED in 66/5000 seeded trials
+- **Issue #1222** (closed): nightly.yml: the verify_ctl and verify_synth_top mutant steps have no clean run anywhere in the workflow
+- **PR #1227**: fix(nightly): gate the ctl and synth_top mutant steps on a clean run
+- **Issue #1302** (closed): Honor --image in fpga/play_song.py render instead of silently rendering R1 for --image r2
+- **Issue #1329** (closed): gate_calibrate/gate_between: a REFUSED decision still exits 0, next to the branch that now exits 2
+- **Issue #1319** (closed): gate_between table labels a perfect render with worst ratio 0 as “no render”
+- **Issue #1289** (closed): max() accumulators elsewhere drop a NaN the same way #1284's separator did
+- **Issue #1338** (closed): gate_calibrate: evidence_refusal's new 'rows' guard arm cannot fire through calibrate() (regroup dereferences rows first)
+- **Issue #1306** (closed): gate_calibrate: a non-UTF-8 index or a table without `missing` raises out of calibrate() instead of refusing
+- **Issue #1331** (closed): Upstream (rjwalters/loom): config-resolver.sh jq --argjson exceeds MAX_ARG_STRLEN, breaking create-issue.sh on this host
+- **Issue #1325** (closed): create-issue.sh is broken on this host: config-resolver.sh exceeds jq's per-argument limit (upstream, needs operator to forward)
+- **Issue #1323** (closed): record_refusal: a 1-row-per-sound record still calibrates (the blind spot #1298 discloses)
+- **Issue #1297** (closed): fpga/measure_mac_midi_latency.py --help needs NumPy it never uses (same class as #1282)
+- **Issue #1301** (closed): A complete sound set with empty per-sound tables still calibrates on one sound's evidence (rule-8 sibling of #1296)
+- **Issue #1315** (closed): create-issue.sh is dead on hosts whose defaults.json exceeds 128 KiB (config-resolver passes tiers as argv) — forward to rjwalters/loom
+- **Issue #1221** (closed): rungs.yml rtl job: the default-config verify_synth_top mutants (VOICE_MASTER_PRESHIFT, I2S_SHIFT) have no config-matched clean twin
+- **Issue #1263** (closed): Remove the missing-neighbour fallback from 808 gate calibration
 - **Issue #1302 (closed)**: Honor --image in fpga/play_song.py render instead of silently rendering R1 for --image r2
 - **PR #1310**: fix: honor --image in play_song render (r2 uses pulse_2x)
 - **Issue #1329 (closed)**: gate_calibrate/gate_between: a REFUSED decision still exits 0, next to the branch that now exits 2
@@ -855,205 +1125,4 @@ Closure events below record forge state, not a verified fix or a new sound resul
 - **Issue #116** (closed): Seal the scorecard's holdout cases before they're read (F1D/F2D/F3D/F5D) — items 1-2 of this issue already landed via #141
 - **PR #462**: [#116] seal the scorecard's holdout cases before they are read (F1D sealed; F2D/F3D/F5D re-justified)
 - **PR #456**: Install rjwalters/repo skills (repo-remote.sh et al.)
-
-### 2026-09-28
-
-- **Issue #117** (closed): Root cause: reasoning substituted for execution, when execution was available and cheaper
-- **Issue #443** (closed): Deadline evidence: the -l2 capture binds to stimulus bytes, not to the schedule-relevant projection, so it goes stale on value-only changes
-- **PR #451**: Deadline evidence: bind the -l2 capture to the schedule-relevant projection of its stimulus
-- **Issue #431** (closed): cymbal_band_balance: the balance's preconditions gate on a file existing and never read it, so any file lifts the refusal
-- **PR #448**: cymbal_band_balance: filter-figure and vca-drive preconditions now read their content
-- **Issue #436** (closed): No bench record hashes the XDC, so check_arty_evidence_binding --scope publication can only REFUSE
-- **PR #450**: constraint-binding evidence for the Arty XDC, so publication scope can answer
-- **Issue #435** (closed): check_doc_claims scans only docs/*.md, so a claim marker anywhere else is a check that never runs
-- **PR #447**: check_doc_claims: widen the default document set to an explicit include list, and refuse on markers outside it
-- **PR #446**: ci: move short and scheduled jobs off Blacksmith to GitHub-hosted
-- **Issue #429** (closed): cymbal #369 step 10 follow-up: the tone-render record is dirty-tree, and three named-property figures disagree with the tool that computes them
-- **PR #445**: fix: regenerate the dirty-tree tone-render record and stop the serialiser coercing flags
-- **PR #444**: Deadline evidence: re-capture the -l2 stress-saw traces against this tree's stimulus
-- **Issue #441** (closed): Dead code: reference_voice's shark-tooth TARGET report is unreachable after _floor_fmt's returns
-- **PR #442**: fix: re-attach the shark-tooth TARGET section to report_osc
-- **Issue #425** (closed): cymbal tone term: the resolved bound excludes component tolerance, and says so — decide whether to carry one
-- **PR #440**: feat: publish tone-stage component sensitivity and its cited tolerance term
-- **Issue #422** (closed): CI: 'python' job segfaults (exit 139) in model/drums_fx.py during model/test_drum_fit.py — non-deterministic, same commit passes on the other trigger
-- **PR #439**: #422: the CI segfault measured rather than re-run — 0/120, a pinned arm the first pass assumed, and the gate that cannot fail (#438)
-- **Issue #421** (closed): check_arty_evidence_binding's live gate has no constraint-drift coverage: drift() and historical() exclude build.XDC
-- **PR #437**: [#421] check_arty_evidence_binding: a publication scope that sees the XDC
-- **Issue #411** (closed): Cymbal candidate 4: the mid band's LEVEL, not another filter — candidate 3 overcorrects Hh1 by ~4 dB
-- **PR #434**: cymbal (#369) step 11: Hh1's own gain, restored to its circuit value — REFUSED
-- **Issue #420** (closed): cymbal balance: re-derive the tone term from #390's nodal solution, which resolved a precondition #396 could only bound
-- **PR #430**: fix: re-derive the cymbal tone term from #390's nodal solution
-- **PR #428**: cymbal #369 step 10: the TONE knob on a rendered candidate — the law is not the blocker, the balance is
-- **PR #424**: Cymbal (#369) step 9: the TONE knob is VR4's wiper — a law from the circuit, and the corpus gate it claimed but could not run
-- **PR #423**: cymbal (#369) step 8: §10's asymmetric clipping eliminated, and step 7's 9.4 dB gap corrected to 1.3
-- **Issue #396** (closed): Cymbal candidate 3: apply the tone stage's measured tilt only, levels unchanged
-- **PR #414**: cymbal (#396): the inter-band balance REFUSED, with the blocking factor measured — it is the VCA drives, not Figure 9's window
-- **Issue #401** (closed): pytest tools/ is red on main: the R0 evidence-binding gate's historical list is stale after 383f10b changed arty-a7-100.xdc
-- **PR #419**: [#401] R0's binding gate: name the publication-vs-verification scope gap
-- **Issue #416** (closed): test_r0_published_image_is_bound_to_its_historical_source_set is red on main
-- **Issue #390** (closed): Cymbal tone stage: read W14b Figure 9's three fifth-order families, the last unmodelled block of reference §10
-- **PR #417**: feat: resolve the cymbal tone-stage inter-band balance from SN p.13
-- **PR #418**: cymbal (#369) step 7: the 808's 1-2.5 kHz outlasts its low band at all 25 settings, ours dies first, and no documented filter can do it
-- **PR #410**: cymbal (#369) step 6: the 1-2.5 kHz decay qualified — and §6's decay reading refuted; the defect is a level, not a decay
-- **Issue #388** (closed): D10A rimshot: our high bridged-T mode is 18.7 dB too weak relative to the low mode (broad shelf where the machine has a resonance)
-- **PR #412**: fix: correct the rimshot's two bridged-T modes' relative drive (contract revision 15)
-- **Issue #415** (closed): PR #195: attack-context evidence bound to an unpushed commit; analysis source has since drifted
-- **Issue #393** (closed): gitignore: add .claude/skills/repo/logs/ so guard-hook logs don't block fleet resync (2am#1184)
-- **PR #407**: gitignore: add .claude/skills/repo/logs/ so guard-hook logs don't block fleet resync
-- **Issue #389** (closed): balance_trajectory_db reports a balance on pure white noise instead of refusing (D10A/D13A floor gate compares a biased pick against an unbiased floor)
-- **PR #405**: fix: REFUSE a partial balance when the found line is not a resolved mode (#389)
-
-### 2026-09-27
-
-- **PR #402**: cymbal (#369) step 5: the tone stage's tilt applied — strike solved (worst 15.4 → 5.7 dB), and the 1–2.5 kHz tail is not a filter
-- **Issue #385** (closed): The kit's inline MEASURED literals have no name, so they cannot carry provenance
-- **PR #399**: Name kit_808's five inline MEASURED literals so PROVENANCE can see them
-- **Issue #386** (closed): TOM_DROP_RATIO's comment calls a fitted value measured
-- **PR #398**: fix: correct TOM_DROP_RATIO comments to say fitted, not measured
-- **PR #397**: cymbal (#369) step 4: the tone stage is the missing tilt (W14b Fig. 9 digitised)
-- **Issue #239** (closed): Rungs 2-4: a candidate-ladder comparison harness, and DR 0001's reversal condition
-- **PR #262**: docs: re-derive discrimination.md 8.4/8.6 ours rows against the shipped filter
-- **PR #384**: #379 perceptual gate: proof, 16-sound ranking, and why the same-unit bar cannot pass anything
-- **PR #391**: #369 cymbal step 3: Hh2, Hh3 and the level stage read off W14b Figs 4/10 (§18 closed); candidate 2 measured and negative
-- **Issue #298** (closed): Live MIDI: expose the full 16-sound kit (congas, rimshot, maracas) and test exclusive-pair switching
-- **PR #392**: Live MIDI: all 16 808 sounds, exclusive-pair switching with tail cut (#298)
-- **Issue #380** (closed): D10A rimshot Partial balance is no-verdict for our own model: mid-band (900-1100 Hz) content swamps the high partial's floor margin
-- **PR #394**: fix: D10A's lower RS guard was reading the strike, not the floor
-- **Issue #114** (closed): Constants should carry provenance as data, so "what does this failure rest on" is a query
-- **PR #387**: Constants carry their provenance as data, so "what does this rest on" is a query
-- **PR #364**: R2: ladder (x*gain)>>11 in 26 bits -- the first wrong operation behind #354
-- **Issue #376** (closed): Cymbal crosstalk control cannot fail: use the 808's Q6 skirt and a paired negative
-- **PR #383**: cymbal: the crosstalk control can now fail (Q6 skirt + paired negative, #376)
-- **Issue #109** (closed): The scorecard collapses time-varying quantities into single windows, and one metric charges decay twice
-- **PR #381**: D10A/D13A partial balance: a floor-gated trajectory, not one averaged window (#109)
-- **PR #374**: #369 cymbal step 2: §10 candidate overcorrects at CY5025 (negative); ablation localizes the differentiator and Hh2's corner
-- **Issue #368** (closed): Fix stale, self-contradicting header comment in rtl-sketch/modal_dp_rom.v
-- **PR #378**: docs: correct modal_dp_rom.v's stale header to describe the ROM design
-- **PR #351**: #334 tom/conga body spectrum: shared cause localized; numerator fix blocked by the modal deadband (#350)
-- **PR #375**: docs: follow-up wording on #366/#370 (gain sign flip; M5B foldback cells)
-- **PR #371**: #369 cymbal step 1: qualified band measurement; shipped cymbal's defect localized (Hh1 missing, top octave short)
-- **PR #366**: #347 pulse-cutoff sweep: negative (brightness only by trading aliasing)
-- **PR #370**: R2 pulse bounded repair (rectangle level into the ladder): NOT ACCEPTED
-- **PR #344**: skip2xwin re-checked on current sources, with its negative control (#333)
-- **Issue #313** (closed): RTL evidence reuse: record the simulator version in the run identity, and per-child reuse in the receipt
-- **PR #346**: Reuse identity: the simulator version in the RTL run identity; per-child reuse in receipts (#313)
-- **Issue #323** (closed): Named R1 host selection: an explicit frozen R1 profile bound to #317's release, without changing defaults
-- **PR #365**: Named, frozen R1 selection --image r1; image-aware R1 host binding (#323)
-- **PR #343**: M5A/M5B artifacts: reproduce on R1, localize by stage, confirm pulse2x (#333)
-- **Issue #316** (closed): dsp_dpreg_extract.py cannot run on the build box itself (ssh/scp to self)
-- **PR #363**: dsp_dpreg_extract: --box local runs on the Vivado host without ssh to self (#316)
-- **PR #362**: AGENTS.md/CLAUDE.md: the current milestone's sound goal outranks the canary goal
-- **PR #357**: #354: the verify_voice full-set failure is outside R1's qualified domain (carried state from the all-max image)
-- **Issue #315** (closed): Arty XDC: the UART-RX synchroniser constraints match no objects (dead in R0 and R1)
-- **PR #358**: XDC: UART-RX sync constraints bind g_uart.u_uart; build asserts binding and effect; publisher checks reports (#315)
-- **PR #348**: Shuttle half slot: the route's last mile, its instrument, and a tool finding withdrawn
-- **PR #359**: r1_release: pin the ext-I/O instrument by version (git), not the working tree
-- **Issue #322** (closed): Live MIDI on macOS: a tested CoreMIDI input path for a physical controller (Launchkey 37)
-- **PR #330**: Live MIDI on macOS: CoreMIDI input adapter, tests, smoke procedure, host latency (#322)
-- **Issue #104** (closed): Agent deliverables must be reusable instruments, not scratchpad probes
-- **PR #360**: Extract shared measurement-validation harness (model/measure_harness.py)
-- **PR #356**: Release: R1 binds its RTL from git at the freeze, not the working tree (unblocks a second image)
-- **Issue #340** (closed): r0_capture analyse: an I/O error at the final record write exits 1 (FAIL code) instead of 3 (ERROR)
-- **PR #352**: r0_capture analyse: an I/O error writing the record exits 3 (ERROR), not 1 (FAIL)
-- **Issue #319** (closed): r1_release: re-derive the ext-I/O record from its raw paths; three small R1 doc/scorecard accuracy fixes (from #317 review)
-- **PR #332**: r1_release: re-derive the ext-I/O record from raw paths; evidence-derived scorecard flags; R1 doc fixes (#319)
-- **Issue #342** (closed): Five LibreLane/OpenROAD findings from the half-slot route are unfiled, and the agents that found them have no upstream access
-- **PR #349**: File the half-slot tool findings upstream and record each outcome (#342)
-- **Issue #102** (closed): The cymbal's Hh3 is third-order in the reference and a single 2-pole in the model
-- **PR #345**: [cy] The cymbal's Hh3 stays a two-pole: a third pole built, priced, measured and rejected on a holdout (#102)
-- **Issue #329** (closed): uart_device_sim: a late event waits a full counter revolution and blocks the event FIFO
-- **PR #341**: Late events: the real UART RTL vs a pre-stated policy; repair the device model's revolution stall (#329)
-- **Issue #94** (closed): Every scorecard case says fixed-model: nothing has been measured on the instrument
-- **PR #299**: E0: R0 capture procedure, R0 reference audio, capture analysis, T-PHYSICAL
-- **Issue #250** (closed): Decision-record numbering can silently collide across concurrent PRs (0017 allocated twice; 0017 collides again on PR #244)
-- **PR #328**: [dr] give every decision record its own number, and check it
-- **Issue #301** (closed): NUMERIC-CONTRACT: revision 9 has no section-18 entry, though the contract cites "revision 9's pins"
-- **PR #326**: spec: write the missing section-18 Rev 9 entry, and empty KNOWN_MISSING
-- **PR #327**: docs: diagnose the uid-blind orphan reap and add a probe for unsignalable worktree processes
-- **Issue #307** (closed): the CI-wiring guards pass on a step gated by `if: false` or `continue-on-error: true`
-- **PR #320**: Guard CI-wiring tests against a step that would never actually block
-- **Issue #280** (closed): R1 player preview: build, bind and publish the Arty image
-- **PR #317**: R1 player preview: build, bind and publish the Arty A7-100T image (#280)
-- **Issue #292** (closed): Anchor one ensemble case on integrated-rtl (#94 remaining scope: Ensemble)
-- **PR #309**: E1A on the integrated RTL: the first Ensemble row measured on the chip
-- **Issue #318** (closed): Rebase can orphan a scorecard result's source_commit (seen on E1A, PR #309)
-- **PR #312**: Shuttle half slot: the LibreLane run, and the two questions it has not answered yet
-- **Issue #291** (closed): Anchor one filter case on integrated-rtl (#94 remaining scope: Filters)
-- **PR #311**: feat: anchor F1A on integrated-rtl (#291)
-
-### 2026-09-26
-
-- **Issue #290** (closed): Anchor one drum case on integrated-rtl (#94 remaining scope: Drums)
-- **PR #308**: D02A on the integrated RTL: the first Drums row measured on the chip
-- **Issue #279** (closed): R1 player preview: freeze and qualify the complete digital candidate (OSC2X=1 FILTER2X=1 PULSE2X=0 + L2)
-- **PR #300**: R1 player preview: freeze and qualify the rev-14 digital candidate (#279)
-- **Issue #271** (closed): reference_rigs.py oscillator-1 comment table disagrees with docs/surge-waveform-mapping.txt, and cites a sweep file that never existed
-- **PR #304**: reference_rigs: the oscillator-1 Shape/Width table is now a checked transcription of the sweep
-- **Issue #61** (closed): Our oscillators alias 19-32 dB more than both references, and it worsens with pitch
-- **PR #305**: Issue #61: the saw's aliasing after the 2x decimator — closed against Mini V3, narrowed against Surge
-- **Issue #264** (closed): moog-acceptance.yml intermittently times out at the 20-minute job cap under concurrent CI load
-- **PR #303**: ci: refute the #264 contention theory with per-step timing, keep both triggers
-- **Issue #293** (closed): NUMERIC-CONTRACT: revision 12 is assigned to both drift (DR 0019) and polyBLAMP (DR 0017) on main
-- **PR #302**: test(spec): guard NUMERIC-CONTRACT revision numbers against collision
-- **Issue #95** (closed): All three toms fail the same pitch-drop check — and the spec's magnitude is inferred, not measured
-- **PR #295**: Toms' pitch drop: the reference documents still said x1.7, and nothing was checking (#95)
-- **Issue #296** (closed): trial-release-bound is red on main since #244: the release manifest's verification record no longer binds
-- **PR #273**: Clap L2 in production: ENV_FRATE final strike (contract rev 14), model = RTL = I2S, D12A rescored (timing UNQUALIFIED)
-- **Issue #276** (closed): reference_integrity.transient_report: hp_hz is a dead parameter
-- **PR #294**: reference_integrity: remove the dead hp_hz parameter from transient_report
-- **Issue #297** (closed): release_manifest.check() REFUSED on main: uart-clean verification.json does not hash to publication.json's recorded value
-- **Issue #48** (closed): Oscillators: the shark-tooth needs BLAMP as well as BLEP, and noise needs a spectrum
-- **PR #244**: The shark-tooth's corner: polyBLAMP as well as PolyBLEP, model and RTL (DR 0017)
-- **Issue #100** (closed): Fitting policy: CMA-ES on a float surrogate, never gradient descent on the shipping model
-- **Issue #99** (closed): Two definitions of "closer to the machine" disagree — which one is the judge?
-- **Issue #85** (closed): The plan, as five steps — and what is actually running against each
-- **Issue #79** (closed): The execution DAG: what can run in parallel right now, and what is genuinely blocked
-- **Issue #77** (closed): Reference-rig qualification must be an automated preflight, not a one-time investigation
-- **Issue #71** (closed): Agents run for two hours because they are briefed with workstreams, not deliverables
-- **Issue #278** (closed): R1 release trials: stale-manifest control for T-RELEASE-BOUND, make it blocking, T-PLAY-DIGITAL on the landed integration
-- **PR #289**: R1 release trials: stale-manifest/binding controls for T-RELEASE-BOUND, gate it, T-PLAY-DIGITAL on landed main (#278)
-- **Issue #281** (closed): Live MIDI host session (simulator half): T-LIVE-MIDI
-- **PR #286**: Live MIDI host session, simulator half: T-LIVE-MIDI (#281)
-- **PR #261**: D12A plan081 B/C: burst timing unqualified; explicit final strike (L2) confirmed on fresh offsets -- model improvement, promotion incomplete
-- **PR #255**: Release: Arty A7-100T baseline 2025.1 r1 manifest (OSC2X=1 FILTER2X=1 PULSE2X=0), with enforced supported domain
-- **PR #284**: CLAUDE.md: headless sessions must not end the turn on background work
-- **PR #274**: Trials pilot: make trial T=<id> for T-RELEASE-BOUND, T-DEADLINE, T-PLAY-DIGITAL
-- **Issue #225** (closed): reference_integrity.transient_report: 5 ms default blocks falsely flag clicks on low held notes (MIDI 36)
-- **PR #277**: transient_report: scale blocks to the note period when f0 is known (#225)
-- **Issue #68** (closed): Version rendering and analysis separately — we cannot currently answer "did the sound change, or only the measurement?"
-- **Issue #259** (closed): Wire render/analyse/accept manifest artifacts into CI (upload-artifact + retention) and one real scorecard case
-- **PR #275**: Version rendering and analysis separately: render / analyse / accept on a real case, with the retained audio
-- **Issue #245** (closed): Two shipped build-tool bugs are still not injections: an X netlist with an area, and a die area recovered from its own utilization input
-- **PR #272**: Two shipped build-tool bugs become injections: an X netlist gets no area, a die from its own utilisation target gets no ratio
-- **Issue #254** (closed): verify_ctl: the blindness matrix's two refusal paths can report a run that was never measured
-- **PR #268**: verify_ctl: stop the blindness matrix's refusal paths from reporting an unmeasured run
-- **PR #266**: docs/trials.md: root-cause analysis of the back-and-forth, and trials as the unit of work
-- **Issue #263** (closed): Remove duplicate oscillator-1 comment block in reference_rigs.py
-- **PR #267**: docs: remove superseded duplicate of Surge oscillator-1 comment
-- **PR #186**: .github/workflows: Migrate workflows to Blacksmith runners
-- **Issue #265** (closed): acceptance CI workflow is creeping toward, and now past, its 20-minute timeout
-- **PR #260**: feat: add render/analyse/accept manifest scheme with retroactive reanalysis
-- **PR #253**: D12A clap burst/tail: reproduction and diagnosis (late envelope; stopped at burst-timing qualification)
-- **PR #256**: CLAUDE.md/AGENTS.md: run heavy work on the build box, not the laptop
-- **Issue #237** (closed): The cutoff knob means a different thing at each resonance: 105 cents of travel
-- **PR #258**: Ladder cutoff offset: retain the res=1.05 operating point, prove a single constant can't close the resonance-dependent travel, add the missing injected control
-- **Issue #56** (closed): Oscillator drift: three stable oscillators do not sound like three analog ones
-- **PR #252**: Oscillator drift: the references bound it, so the amount is a choice (contract 6.11, DR 0019)
-- **Issue #52** (closed): Testing policy: every bug becomes a permanent injection, and every suite reports what it is blind to
-- **PR #251**: test: every shipped measurement bug becomes a permanent injection, and a second suite reports its blindness
-- **Issue #47** (closed): Gain structure is part of the sound model, not a volume control
-- **PR #238**: Gain structure as tested nodes: combined drums+bass headroom, H(0)=1/(1+k), and a two-score bass-compensation pair
-- **PR #248**: T1: the three-saw production deadline — baseline fits (observed min slack 6, stress 14); PULSE2X=1 excluded; component bench launches at the chip's cycle
-- **Issue #46** (closed): The filter ladder: four rungs, compared in software before anything ships
-- **PR #249**: measure: rungs 2-4 compared, and the candidate that wins on sound and cannot be afforded
-- **Issue #53** (closed): Movement: nothing tests what the filter does while the cutoff is moving
-- **PR #246**: Movement, part two: the resonance moving, and filter modulation at audio rate
-- **Issue #141** (closed): The cowbell's 11.34 is a metric direction error: we have 34 dB LESS of the component, not more
-- **PR #241**: Cowbell #141: the difference tone is a defect ceiling — a rubric change, not a sound change
-- **PR #235**: F1: selectable calibration surge-type2-clean-v1; official F1A–F1C on the selected filter path (3 passes)
-- **PR #240**: measure: what is left in the shipped ladder, and the tuning offset nothing was watching
-- **Issue #233** (closed): refprofile.render records pins_held_after_render: true without checking; Surge XT renames params 259/260/264/265 after the first render
-- **PR #234**: refprofile: check pins after every clip render; derive pins_held_after_render (#233)
-- **Issue #49** (closed): Playing behaviour: choose our rules deliberately, then test them
-- **PR #236**: docs: decide the external feedback loop's tap, gain, delay and saturation
 
