@@ -104,10 +104,13 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     was wrong in both directions (#1656's table). The `via` field names the
     handlers a row's credit rests on, as `<def>:<try line>`;
   * the path credit can only LOSE credit, never grant it, by not knowing
-    the code: it follows bare-name calls resolved by lexical scope and
+    the code (within one module; see the cross-module caveat below): it follows bare-name calls resolved by lexical scope and
     sealed dispatch tables, nothing else. Not followed, so never credited:
     a method reached through an instance, a call written in a lambda, a
-    call from another module, `getattr`. A function whose name is read as a
+    call from another module, `getattr`. Where such a call reaches a def the
+    graph DOES reach by another path, it counts as an unguarded path to it
+    (credit is withheld); a cross-module caller of a credited def is NOT
+    seen, so the credit is per module. `try*` grants nothing. A function whose name is read as a
     VALUE anywhere in the module (`apply(helper, x)`, `pool.map(worker, ..)`)
     has a path no call site shows, so it is credited nowhere even where a
     bare-name call to it is guarded; a LOCAL of the same name reads nothing
@@ -732,9 +735,14 @@ def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]
     is guarded by a different try in each of its two callers, and is covered
     all the same. One edge is added that no call site writes: from the entry,
     catching nothing, to each function whose name is read as a value
-    somewhere (a callback has a path the graph cannot see). Anything the
-    graph cannot resolve is simply not an edge, which leaves the callee
-    unreached and uncredited: the direction that can only lose credit."""
+    somewhere (a callback has a path the graph cannot see). A call
+    written in a frame the entry cannot reach (a lambda, a method) is an
+    unguarded entry edge to its callee, so it cannot be dropped from the
+    intersection. Anything else the graph cannot resolve is not an edge: it
+    loses credit only for a callee with no resolvable in-edge. The invariant
+    is PER MODULE: a caller in another scanned module is not seen (the
+    blind-spot list says so). `try*` (TryStar) is not an `ast.Try`, so a
+    `try*` body contributes no handlers: credit lost, never granted."""
     top = mod.tree
     ins: dict[ast.AST, list[tuple[ast.AST, list[ast.ExceptHandler]]]] = {}
     outs: dict[ast.AST, list[ast.AST]] = {}
@@ -760,6 +768,13 @@ def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]
             if callee not in reach:
                 reach.add(callee)
                 todo.append(callee)
+    # A caller frame outside `reach` (a lambda or a method: no edge enters it)
+    # still calls its callee, so that callee has a path the graph cannot see.
+    # Dropping the edge would let a guarded sibling caller alone carry the
+    # intersection; make it an unguarded entry edge instead (#1688 review).
+    for callee, edges in list(ins.items()):
+        if callee in reach and any(c not in reach for c, _ in edges):
+            edge(top, callee, [])
 
     # (base, origins, broad): what is caught, a lattice under componentwise
     # or/union (join) and and/intersection (meet); a base handler catches

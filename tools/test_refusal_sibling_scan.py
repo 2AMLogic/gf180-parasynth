@@ -2045,6 +2045,44 @@ def main(argv=None):
         return 2
 '''
 
+PATH_MIXED_LAMBDA = '''
+def helper(p):
+    return mod_a.load(p)
+
+def a():
+    try:
+        return helper("x")
+    except refusal.Refused as exc:
+        return 2
+
+def b():
+    f = lambda: helper("y")             # a real path, no handler on it
+    return f()
+
+def main(argv=None):
+    a()
+    return b()
+'''
+
+PATH_MIXED_METHOD = '''
+def helper(p):
+    return mod_a.load(p)
+
+def a():
+    try:
+        return helper("x")
+    except refusal.Refused as exc:
+        return 2
+
+class Driver:
+    def go(self):
+        return helper("y")              # a real path, no handler on it
+
+def main(argv=None):
+    a()
+    return Driver().go()
+'''
+
 PATH_UNCALLED_FUNCTION = '''
 def helper(p):
     return mod_a.load(p)                # nothing at module level calls it
@@ -2452,6 +2490,16 @@ def test_a_call_from_a_lambda_is_not_followed(tmp_path):
     got, _ = _path_scan(tmp_path, PATH_LAMBDA_CALL, PATH_ENTER_MAIN)
     s = _one(got, "helper", "mod_a.load")
     assert s["classification"] == "candidate-escape", s
+
+
+def test_an_unresolvable_caller_beside_a_guarded_one_is_an_unguarded_path(tmp_path):
+    """#1688 review: a lambda or method caller has no edge into it, and
+    dropping it let the guarded sibling alone carry the intersection. Mixed
+    case, red against a scanner that drops the edge."""
+    for body in (PATH_MIXED_LAMBDA, PATH_MIXED_METHOD):
+        got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+        s = _one(got, "helper", "mod_a.load")
+        assert s["classification"] == "candidate-escape", (body, s)
 
 
 def test_a_function_the_entry_never_reaches_is_credited_nothing(tmp_path):
