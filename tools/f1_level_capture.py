@@ -46,8 +46,9 @@ pitch/range setting is in the path; the held MIDI note only opens the gate.
 Exit: 0 verified, 1 a clip is present and is not what the manifest says,
 2 refused (nothing was compared: a clip the manifest does not name, one the
 archive cannot deliver, an archive that cannot be opened, a manifest that
-names no clip). A run with both 1 and 2 is 1 -- a measured disagreement
-outranks a refusal.
+cannot be read as `<clips: {<condition>/a<amp>/take<n>: {sha256: <str>}}>`,
+a manifest that names no clip). A run with both 1 and 2 is 1 -- a measured
+disagreement outranks a refusal.
 """
 from __future__ import annotations
 
@@ -117,6 +118,12 @@ class Differs(Refused):
 #: In each case the bytes were not handed over, so no hash was compared.
 ARCHIVE_ERRORS = (zipfile.BadZipFile, OSError, zlib.error)
 
+#: What reading the manifest raises when the file is not a JSON document: it
+#: is not JSON (`JSONDecodeError`), its bytes are not text (`UnicodeDecodeError`,
+#: before the parser sees them) or it is not a file this process can read
+#: (`OSError`). In each case no document arrived, so nothing was compared.
+MANIFEST_ERRORS = (json.JSONDecodeError, UnicodeDecodeError, OSError)
+
 
 def amp_tag(amp: float) -> str:
     return f"a{amp:.4f}"
@@ -124,6 +131,14 @@ def amp_tag(amp: float) -> str:
 
 def clip_key(cond: str, amp: float, take: int) -> str:
     return f"{cond}/{amp_tag(amp)}/take{take}"
+
+
+def parse_clip_key(key: str) -> tuple[str, float, int]:
+    """The inverse reads: `<condition>/a<amp>/take<n>` as (condition, amp,
+    take). `ValueError` when `key` is not that shape, which is why
+    `load_manifest` refuses such a key before any reader reaches it."""
+    cond, tag, take = key.split("/")
+    return cond, float(tag[1:]), int(take[4:])
 
 
 def _sha(b: bytes) -> str:
@@ -359,11 +374,26 @@ def _shown(p: pathlib.Path) -> str:
 def load_manifest() -> dict:
     if not MANIFEST.exists() or not ARCHIVE.exists():
         raise Refused(f"no level captures at {_shown(MANIFEST)}")
-    m = json.loads(MANIFEST.read_text())
+    try:
+        m = json.loads(MANIFEST.read_text())
+    except MANIFEST_ERRORS as e:
+        raise Refused(f"{_shown(MANIFEST)} is not a JSON manifest: {type(e).__name__}: {e}")
+    if not isinstance(m, dict):
+        raise Refused(f"{_shown(MANIFEST)} is a JSON {type(m).__name__}, not an object: "
+                      f"nothing was compared")
     clips = m.get("clips")
     if not isinstance(clips, dict) or not clips:
         raise Refused(f"the manifest at {_shown(MANIFEST)} names no clip: "
                       f"nothing was compared")
+    for key, meta in m["clips"].items():
+        try:
+            parse_clip_key(key)
+        except ValueError as e:
+            raise Refused(f"clip key {key!r} in {_shown(MANIFEST)} is not "
+                          f"<condition>/a<amp>/take<n>: {e}")
+        if not isinstance(meta, dict) or not isinstance(meta.get("sha256"), str):
+            raise Refused(f"clip {key!r} in {_shown(MANIFEST)} has no sha256 string: "
+                          f"nothing was compared")
     return m
 
 
@@ -420,9 +450,9 @@ def verify() -> int:
         return REFUSED
     bad = refused = 0
     for key, meta in sorted(m["clips"].items()):
-        cond, tag, take = key.split("/")
+        cond, amp, take = parse_clip_key(key)
         try:
-            load_capture(cond, float(tag[1:]), int(take[4:]), m)
+            load_capture(cond, amp, take, m)
             print(f"ok       {key}  {meta['sha256'][:12]}")
         except Unbindable as e:
             refused += 1

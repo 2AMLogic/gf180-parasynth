@@ -697,6 +697,341 @@ def test_control_each_wrong_archive_repair_reddens_the_control_that_owns_it(site
             control(mod, tmp_path / name, monkeypatch)
 
 
+# --- issue #1955: a manifest of the wrong shape is a precondition, not an error
+# Four inputs left `verify()` without its three outcomes, provoked in-process on
+# the tree after #1843's repair (`7706465d`, 2026-11-28, Python 3.12.3):
+#   not JSON (`{not json`)         `json.JSONDecodeError` escaped `load_manifest`
+#   a JSON list (`[1, 2]`)         `AttributeError: 'list' object has no attribute
+#                                  'get'`, from `load_manifest`'s own `m.get("clips")`
+#   a clip key `a/b/c`             `ValueError: could not convert string to float: ''`,
+#                                  from `verify()`'s own `float(tag[1:])`
+#   a clip whose sha256 is an int  `TypeError: 'int' object is not subscriptable`,
+#                                  from `verify()`'s own `meta['sha256'][:12]`
+# `tools/probes/f1_level_scaling.py` reads the same file through the same
+# `load_manifest`; its handler catches `refusal.Refused` only.
+#
+# The repair is at the raise site, as #1822's and #1843's were, and ONCE:
+# `load_manifest` refuses a file it cannot read as JSON, a document that is not
+# an object, a clip key that is not `<condition>/a<amp>/take<n>`, and a clip
+# that is not an object carrying a sha256 string. `verify()`, the CLI and the
+# probe inherit it; no handler is widened. The three reads `verify()` made of a
+# clip key are now one function, `parse_clip_key`, which the guard calls too,
+# so the guard cannot drift from the reader it guards.
+#
+# RED FIRST, this file against the module before the repair (`7706465d`,
+# 2026-11-28): 32 failed, 64 passed. The twelve malformed-manifest controls and
+# the four probe controls, each on its own assertion (`load_manifest escaped:
+# JSONDecodeError(...)`, `load_manifest returned {...}`, `main escaped:
+# KeyError('cut250/a0.2500/take1')`, exit 1 where 2 is owed). Nine mutant rows
+# had nothing to mutate until the repair exists; seven pre-existing probe rows
+# failed because they now also run the four new controls, red before the repair
+# where the rows declare them green -- 62 of the 69 pre-existing tests passed.
+# The unrelated-error control passed, before and after by design.
+#
+# Each control first asks the reader that was there before the guard -- raw
+# `json`, and the three key reads -- for the failure its input claims: an
+# input that does not produce that failure is not evidence about the guard.
+#
+# MEASURED, the thirteen controls against seven wrong repairs (2026-11-28).
+# `key x4`: amplitude not a number, two parts, four parts, take not a number;
+# `record x3`: sha256 an int, sha256 absent, the record a list.
+#                                      json utf8 dir  object null  key x4  record x3  unrelated
+#   the tree before the repair          RED  RED   RED  RED    RED  RED     RED        green
+#   that, and `main` catches everything RED  RED   RED  RED    RED  RED     RED        RED
+#   only the parse is guarded          green green green RED    RED  RED     RED        green
+#   clip keys not checked              green green green green green RED     green      green
+#   clip records not checked           green green green green green green   RED        green
+#   object checked after `m.get`       green green green RED    RED  green   green      green
+#   malformed typed a disagreement     RED  RED   RED  RED    RED  RED     RED        green
+# The second row is the repair the issue rejects. MEASURED under it
+# (2026-11-28): `main` exits 2 for each input, printing the exception's own
+# text as its REFUSED line (`REFUSED  could not convert string to float: ''`),
+# and for the sha256 input only after `verify()` had printed `ok` for every
+# clip sorted before it -- compared clips, then a refusal. The controls tell it
+# apart by WHERE the refusal is raised (`load_manifest` itself does not refuse)
+# and by the unrelated error.
+# No control is blind to every repair and no repair is caught by none.
+#
+# WRONG-THEN-RIGHT (3, each caught by running this file, 2026-11-28): the three
+# clip-record controls first went red on `TypeError: 'tuple' object is not
+# callable` -- a `pytest.param` that packed `(corrupt, claim)` as one value.
+# The shape loop first read the `clips` local #1843's population guard assigns,
+# so under #1843's own "names-no-clip check absent" mutant a WELL-FORMED
+# manifest raised `NameError` and #1843's archive controls escaped instead of
+# going red; the loop reads `m["clips"]` itself, each guard meaningful without
+# the other. And the unrelated-error control first used `pytest.raises`, whose
+# DID-NOT-RAISE is a `Failed`, not the `AssertionError` the mutant rows demand.
+#
+# NOT CLAIMED (each provoked on the repaired module, 2026-11-28; stated rather
+# than caught -- verification-rules 8): a clip record that passes the guard but
+# lacks `archive_member` or `frames` escapes `verify()` as `KeyError`; a sha256
+# that is a string but not a digest reads FAIL (`hashes`), a comparison that
+# could not have agreed; and a manifest without a clip the probe names by name
+# (`open20k/a0.2500/take1`) escapes the probe as `KeyError`. An `archive_member`
+# that is not a string is refused (`is absent from the archive`); `frames` that
+# is a string reads FAIL. Those are a schema, which #1955 does not propose: the
+# guard covers the shape `verify()` iterates and nothing more.
+def _raw_manifest_read(arc):
+    """What `load_manifest` did before the guard: read the file, parse it, no
+    handler in between."""
+    return json.loads(arc.manifest.read_text())
+
+
+def _reads_like_verify(key):
+    """The three reads `verify()` made of every clip key before the guard."""
+    cond, tag, take = key.split("/")
+    return cond, float(tag[1:]), int(take[4:])
+
+
+def _write_manifest(arc):
+    arc.manifest.write_text(json.dumps({"schema": "f1-level-captures/1", "clips": arc.clips}))
+
+
+def _not_json(arc):
+    arc.manifest.write_text("{not json")
+
+
+def _not_utf8(arc):
+    arc.manifest.write_bytes(b'{"clips": "\xff\xfe"}')
+
+
+def _a_manifest_directory(arc):
+    arc.manifest.unlink()
+    arc.manifest.mkdir()
+
+
+def _unreadable(corrupt, raises):
+    """A manifest file no reader can parse; the raw read raises `raises`."""
+    def claim(arc):
+        with pytest.raises(raises):
+            _raw_manifest_read(arc)
+    return corrupt, claim
+
+
+def _document(text, kind):
+    """A manifest file holding `text`, which parses to a `kind`."""
+    def corrupt(arc):
+        arc.manifest.write_text(text)
+
+    def claim(arc):
+        assert type(_raw_manifest_read(arc)) is kind, "the document is not what it claims to be"
+    return corrupt, claim
+
+
+def _key_is(key):
+    """`KEPT`'s record under another key; the record itself is untouched."""
+    def corrupt(arc):
+        arc.clips[key] = arc.clips.pop(KEPT)
+        _write_manifest(arc)
+
+    def claim(arc):
+        with pytest.raises(ValueError):          # a read `verify()` makes of the key fails
+            _reads_like_verify(key)
+    return corrupt, claim
+
+
+def _no_sha256_string(arc):
+    rec = arc.clips[KEPT]
+    assert not isinstance(rec, dict) or not isinstance(rec.get("sha256"), str), \
+        "the clip still carries a sha256 string"
+
+
+def _record_is(change):
+    """`KEPT`'s record with `change` written over it."""
+    def corrupt(arc):
+        arc.clips[KEPT] = change(arc.clips[KEPT])
+        _write_manifest(arc)
+    return corrupt, _no_sha256_string
+
+
+#: (the corruption, the claim it makes about its own input, what the refusal names)
+_MALFORMED = [
+    pytest.param(*_unreadable(_not_json, json.JSONDecodeError),
+                 "is not a JSON manifest", id="not-json"),
+    pytest.param(*_unreadable(_not_utf8, UnicodeDecodeError),
+                 "is not a JSON manifest", id="not-utf8"),
+    pytest.param(*_unreadable(_a_manifest_directory, OSError),
+                 "is not a JSON manifest", id="directory"),
+    pytest.param(*_document("[1, 2]", list), "not an object", id="not-an-object"),
+    pytest.param(*_document("null", type(None)), "not an object", id="null-document"),
+    pytest.param(*_key_is("a/b/c"), "is not <condition>/a<amp>/take<n>",
+                 id="key-amplitude-not-a-number"),
+    pytest.param(*_key_is("cut250/a0.2500"), "is not <condition>/a<amp>/take<n>",
+                 id="key-two-parts"),
+    pytest.param(*_key_is("cut250/a0.2500/take1/extra"), "is not <condition>/a<amp>/take<n>",
+                 id="key-four-parts"),
+    pytest.param(*_key_is("cut250/a0.2500/takex"), "is not <condition>/a<amp>/take<n>",
+                 id="key-take-not-a-number"),
+    pytest.param(*_record_is(lambda c: {**c, "sha256": 5}),
+                 "has no sha256 string", id="record-sha256-int"),
+    pytest.param(*_record_is(lambda c: {k: v for k, v in c.items() if k != "sha256"}),
+                 "has no sha256 string", id="record-sha256-absent"),
+    pytest.param(*_record_is(lambda c: [c["sha256"]]),
+                 "has no sha256 string", id="record-not-an-object"),
+]
+_MALFORMED_IDS = [p.id for p in _MALFORMED]
+_KEY_IDS = [i for i in _MALFORMED_IDS if i.startswith("key-")]
+_RECORD_IDS = [i for i in _MALFORMED_IDS if i.startswith("record-")]
+
+
+def _malformed_manifest_is_refused(mod, root, monkeypatch, corrupt, claim, needle):
+    """A manifest of the wrong shape is a precondition of every clip at once:
+    `load_manifest` raises its plain `Refused` naming the defect, so neither
+    `verify()` nor the CLI compares anything -- one REFUSED line, no summary,
+    exit 2. An escape is the defect under test and fails its own assertion."""
+    arc = _Archive(root, monkeypatch, mod)
+    corrupt(arc)
+    claim(arc)                                   # the input is what it claims to be
+    _m, e = _ran(mod.load_manifest)
+    assert e is not None, f"load_manifest returned {_m!r}: the manifest was accepted"
+    assert isinstance(e, refusal.Refused), f"load_manifest escaped: {e!r}"
+    assert type(e) is mod.Refused, (type(e), e)     # of the manifest, not of one clip
+    assert needle in str(e), str(e)
+    code, lines = _verify_now(mod)
+    assert code == exit_contract.REFUSED, (code, lines)
+    assert len(lines) == 1 and lines[0].startswith("REFUSED"), lines   # nothing was counted
+    assert needle in lines[0], lines
+    out = io.StringIO()
+
+    def cli():
+        with contextlib.redirect_stdout(out):
+            return mod.main([])
+
+    code, escaped = _ran(cli)
+    assert escaped is None, f"main escaped: {escaped!r}"
+    assert code == exit_contract.REFUSED, (code, out.getvalue().splitlines()[-3:])
+    assert needle in out.getvalue(), out.getvalue().splitlines()[-3:]
+
+
+def _unrelated_error_stays_an_execution_error(mod, root, monkeypatch):
+    """The input that defeats the wrong repair (verification-rules rule 8):
+    catching everything in `main` relabels each of the four inputs REFUSED
+    too, and relabels this with them. A fault that is not a `Refused`, under a
+    WELL-FORMED manifest, escapes `verify()` and `main` as itself; nothing
+    prints REFUSED."""
+    _Archive(root, monkeypatch, mod)
+
+    def broken(cond, amp, take, manifest=None, inject=""):
+        raise ValueError("<control> the archive reader is broken")
+    monkeypatch.setattr(mod, "load_capture", broken)
+    out = io.StringIO()
+
+    def cli():
+        with contextlib.redirect_stdout(out):
+            return mod.main([])
+
+    code, escaped = _ran(cli)
+    assert isinstance(escaped, ValueError) and "the archive reader is broken" in str(escaped), \
+        f"the execution error did not escape main: exit {code}"
+    assert "REFUSED" not in out.getvalue(), "an execution error must not be relabelled a refusal"
+
+
+CONTROLS_1955 = {
+    **{p.id: (lambda mod, root, mp, c=p.values[0], k=p.values[1], n=p.values[2]:
+             _malformed_manifest_is_refused(mod, root, mp, c, k, n)) for p in _MALFORMED},
+    "unrelated-error": _unrelated_error_stays_an_execution_error,
+}
+
+
+@pytest.mark.parametrize("corrupt, claim, needle", _MALFORMED)
+def test_a_manifest_of_the_wrong_shape_is_refused_not_an_execution_error(
+        tmp_path, monkeypatch, corrupt, claim, needle):
+    _malformed_manifest_is_refused(cap, tmp_path, monkeypatch, corrupt, claim, needle)
+
+
+def test_an_unrelated_error_under_a_well_formed_manifest_stays_an_execution_error(
+        tmp_path, monkeypatch):
+    _unrelated_error_stays_an_execution_error(cap, tmp_path, monkeypatch)
+
+
+_PARSE_GUARDED = (
+    '    try:\n'
+    '        m = json.loads(MANIFEST.read_text())\n'
+    '    except MANIFEST_ERRORS as e:\n'
+    '        raise Refused(f"{_shown(MANIFEST)} is not a JSON manifest: '
+    '{type(e).__name__}: {e}")\n')
+_PARSE_BARE = '    m = json.loads(MANIFEST.read_text())\n'
+_OBJECT_GUARD = (
+    '    if not isinstance(m, dict):\n'
+    '        raise Refused(f"{_shown(MANIFEST)} is a JSON {type(m).__name__}, not an object: "\n'
+    '                      f"nothing was compared")\n')
+_CLIPS_READ = '    clips = m.get("clips")\n'
+_LOOP_HEAD = '    for key, meta in m["clips"].items():\n'
+_KEY_GUARD = (
+    '        try:\n'
+    '            parse_clip_key(key)\n'
+    '        except ValueError as e:\n'
+    '            raise Refused(f"clip key {key!r} in {_shown(MANIFEST)} is not "\n'
+    '                          f"<condition>/a<amp>/take<n>: {e}")\n')
+_CLIP_GUARD = (
+    '        if not isinstance(meta, dict) or not isinstance(meta.get("sha256"), str):\n'
+    '            raise Refused(f"clip {key!r} in {_shown(MANIFEST)} has no sha256 string: "\n'
+    '                          f"nothing was compared")\n')
+_SHAPE_LOOP = _LOOP_HEAD + _KEY_GUARD + _CLIP_GUARD
+#: The module as it was before #1955's repair, as text substitutions.
+_GUARD_1955 = [(_PARSE_GUARDED, _PARSE_BARE), (_OBJECT_GUARD, ""), (_SHAPE_LOOP, "")]
+_TYPED_DIFFERS_1955 = [
+    ('raise Refused(f"{_shown(MANIFEST)} is not a JSON manifest',
+     'raise Differs(f"{_shown(MANIFEST)} is not a JSON manifest'),
+    ('raise Refused(f"{_shown(MANIFEST)} is a JSON ',
+     'raise Differs(f"{_shown(MANIFEST)} is a JSON '),
+    ('raise Refused(f"clip key {key!r} in', 'raise Differs(f"clip key {key!r} in'),
+    ('raise Refused(f"clip {key!r} in', 'raise Differs(f"clip {key!r} in'),
+]
+_MAIN_HANDLER = (
+    '    except (Refused, rp.Refused) as e:\n'
+    '        print(f"REFUSED  {e}")\n'
+    '        return REFUSED\n'
+    '    return verify()\n')
+_MAIN_CATCHES_EVERYTHING = (
+    '    except Exception as e:\n'
+    '        print(f"REFUSED  {e}")\n'
+    '        return REFUSED\n'
+    '    try:\n'
+    '        return verify()\n'
+    '    except Exception as e:\n'
+    '        print(f"REFUSED  {e}")\n'
+    '        return REFUSED\n')
+_UNREADABLE = ("not-json", "not-utf8", "directory")
+_NOT_AN_OBJECT = ("not-an-object", "null-document")
+
+#: (the wrong repair, as text substitutions; the controls it must redden). A
+#: control the row leaves green must stay green, or the row is not the repair
+#: it claims.
+_MANIFEST_MUTANTS = [
+    pytest.param(_GUARD_1955, _MALFORMED_IDS, id="the-tree-before-the-repair"),
+    pytest.param(_GUARD_1955 + [(_MAIN_HANDLER, _MAIN_CATCHES_EVERYTHING)],
+                 _MALFORMED_IDS + ["unrelated-error"], id="catch-everything-in-main"),
+    pytest.param(_GUARD_1955[1:], [i for i in _MALFORMED_IDS if i not in _UNREADABLE],
+                 id="only-the-parse-is-guarded"),
+    pytest.param([(_KEY_GUARD, "")], _KEY_IDS, id="clip-keys-not-checked"),
+    pytest.param([(_CLIP_GUARD, "")], _RECORD_IDS, id="clip-records-not-checked"),
+    pytest.param([(_OBJECT_GUARD + _CLIPS_READ, _CLIPS_READ + _OBJECT_GUARD)],
+                 list(_NOT_AN_OBJECT), id="object-checked-after-the-read"),
+    pytest.param(_TYPED_DIFFERS_1955, _MALFORMED_IDS,
+                 id="malformed-manifest-typed-a-disagreement"),
+]
+
+
+@pytest.mark.parametrize("sites, red", _MANIFEST_MUTANTS)
+def test_control_each_wrong_manifest_repair_reddens_the_control_that_owns_it(
+        sites, red, tmp_path, monkeypatch):
+    mod = _mutant(sites)
+    for name, control in CONTROLS_1955.items():
+        if name in red:
+            with pytest.raises(AssertionError):
+                control(mod, tmp_path / name, monkeypatch)
+        else:
+            control(mod, tmp_path / name, monkeypatch)
+
+
+def test_no_manifest_control_is_blind_to_every_wrong_repair():
+    """Rule 4: a control red under no mutant proves nothing, and a mutant that
+    reddens nothing is not a repair anyone could make."""
+    seen = {name for p in _MANIFEST_MUTANTS for name in p.values[1]}
+    assert seen == set(CONTROLS_1955), set(CONTROLS_1955) - seen
+
+
 # --- the rule itself, on synthetic tables ------------------------------------
 def _fake_table(corner_err, spread=0.0, base_words=(1, 2), cand_words=(3, 4)):
     def lv(err, words, extra=0.0):
@@ -920,6 +1255,21 @@ def test_expect_refused_control_mode_sees_the_frozen_cache_refusal(tmp_path, mon
 #   [capture] no-clip typed a disagreement  green green green  green  RED     green
 # The last two are written into the capture reader, which `main` then reads.
 # The test holds every cell.
+#
+# MEASURED (#1955, 2026-11-28), the four malformed-manifest controls added to
+# `PROBE_CONTROLS` -- not_json, not_an_object, clip_key, sha256_not_a_string --
+# against the eight rows above and the two added with them. Green under the
+# first five and the last two of the eight; RED elsewhere:
+#                                            not_json not_an_object clip_key sha256
+#   a precondition returns failure           RED     RED          RED     RED
+#   [capture] the tree before #1955          RED     RED          RED     RED
+#   [capture] malformed typed a disagreement RED     RED          RED     RED
+# The six earlier controls are green under both #1955 rows. Before the repair
+# the four were red under the eight rows as well: `main escaped:
+# JSONDecodeError(...)`, `main escaped: AttributeError("'list' object has no
+# attribute 'get'")`, `main escaped: KeyError('cut250/a0.2500/take1')`, and for
+# the sha256 control exit 1 -- `FAIL     Surge takes differ for cut250 at 0.25`
+# -- where 2 is owed.
 COMMITTED = {"MANIFEST": cap.MANIFEST, "ARCHIVE": cap.ARCHIVE}     # at import, before any redirect
 PROBE_KEY, PROBE_TAKE2 = "cut250/a0.2500/take1", "cut250/a0.2500/take2"
 
@@ -1038,10 +1388,61 @@ def _probe_wrong_ladder_path(mod, capmod, work, mp, _m, _t):
     assert not report.exists(), "a refused run must not write a report"
 
 
+def _raw_manifest(work, text):
+    """A manifest file holding `text` exactly as written: not JSON, or JSON of
+    the wrong shape."""
+    work.mkdir(parents=True, exist_ok=True)
+    p = work / "manifest.json"
+    p.write_text(text)
+    return p
+
+
+def _probe_refused_by_the_manifest(mod, capmod, work, mp, redirect, needle):
+    """The probe reads the level-capture manifest before it builds a voice
+    (`base_vpu_asserted`, then `load_manifest`), so a manifest of the wrong
+    shape ends the run as the reader's own refusal: exit 2, one REFUSED line
+    naming the defect, nothing built and no report (#1955)."""
+    code, lines, report = _probe(mod, capmod, work, mp, redirect)
+    _verdict_line(code, lines, "REFUSED", needle)
+    assert not any(ln.startswith("identity") for ln in lines), \
+        "a voice was built before the manifest refused: the refusal did not come from the reader"
+    assert not report.exists(), "a refused run must not write a report"
+
+
+def _probe_not_json(mod, capmod, work, mp, _m, _t):
+    _probe_refused_by_the_manifest(mod, capmod, work, mp,
+                                   {"MANIFEST": _raw_manifest(work, "{not json")},
+                                   "is not a JSON manifest")
+
+
+def _probe_not_an_object(mod, capmod, work, mp, _m, _t):
+    _probe_refused_by_the_manifest(mod, capmod, work, mp,
+                                   {"MANIFEST": _raw_manifest(work, "[1, 2]")}, "not an object")
+
+
+def _probe_clip_key(mod, capmod, work, mp, m, _t):
+    m = copy.deepcopy(m)
+    m["clips"]["a/b/c"] = m["clips"].pop(PROBE_KEY)
+    _probe_refused_by_the_manifest(mod, capmod, work, mp,
+                                   {"MANIFEST": _manifest_file(work, m)}, "'a/b/c' in")
+
+
+def _probe_sha256_not_a_string(mod, capmod, work, mp, m, _t):
+    m = copy.deepcopy(m)
+    m["clips"][PROBE_KEY]["sha256"] = 5
+    _probe_refused_by_the_manifest(mod, capmod, work, mp,
+                                   {"MANIFEST": _manifest_file(work, m)},
+                                   f"clip {PROBE_KEY!r} in")
+
+
+_PROBE_MALFORMED = {"not_json": _probe_not_json, "not_an_object": _probe_not_an_object,
+                    "clip_key": _probe_clip_key, "sha256_not_a_string": _probe_sha256_not_a_string}
+
 PROBE_CONTROLS = {"hash_mismatch": _probe_hash_mismatch, "takes_differ": _probe_takes_differ,
                   "absent_member": _probe_absent_member,
                   "unopenable_archive": _probe_unopenable_archive,
-                  "names_no_clip": _probe_names_no_clip, "wrong_ladder_path": _probe_wrong_ladder_path}
+                  "names_no_clip": _probe_names_no_clip, "wrong_ladder_path": _probe_wrong_ladder_path,
+                  **_PROBE_MALFORMED}
 
 
 @pytest.mark.parametrize("name", list(PROBE_CONTROLS))
@@ -1088,6 +1489,17 @@ def _probe_raise_sites_are_typed_by_what_ran(mod, capmod, root, mp):
     mp.setattr(capmod, "MANIFEST", root / "absent.json")
     e = raised(capmod.load_manifest)
     assert type(e) is capmod.Refused and "no level captures" in str(e), str(e)
+    # ...and of its shape (#1955): each of the four raise sites, still the plain `Refused`
+    k1 = capmod.clip_key("cut250", 0.25, 1)
+    for text, needle in (("{not json", "is not a JSON manifest"), ("[1, 2]", "not an object"),
+                         (json.dumps({"clips": {"a/b/c": {"sha256": "0" * 64}}}),
+                          "is not <condition>/a<amp>/take<n>"),
+                         (json.dumps({"clips": {k1: {"sha256": 5}}}), "has no sha256 string")):
+        shaped = root / "shaped.json"
+        shaped.write_text(text)
+        mp.setattr(capmod, "MANIFEST", shaped)
+        e = raised(capmod.load_manifest)
+        assert type(e) is capmod.Refused and needle in str(e), str(e)
     # the probe's own raises, in `main` and in the pool
     cfg = vf.LADDER_CFG
     mp.setattr(vf, "LADDER_CFG", {**cfg, "volts_per_unit": 0.1})
@@ -1146,12 +1558,17 @@ _PROBE_MUTANTS = [
     pytest.param("probe", [(_DIFFERS_CLAUSE, _DIFFERS_CLAUSE.replace("return 1", "return 2"))],
                  ["hash_mismatch", "takes_differ"], id="a-disagreement-returns-refused"),
     pytest.param("probe", [(_BASE_CLAUSE, _BASE_CLAUSE.replace("return 2", "return 1"))],
-                 ["absent_member", "unopenable_archive", "names_no_clip", "wrong_ladder_path"],
+                 ["absent_member", "unopenable_archive", "names_no_clip", "wrong_ladder_path",
+                  *_PROBE_MALFORMED],
                  id="a-precondition-returns-failure"),
     pytest.param("capture", [('raise Differs(f"{key} hashes', 'raise Refused(f"{key} hashes')],
                  ["hash_mismatch"], id="hash-disagreement-typed-a-precondition"),
     pytest.param("capture", [('raise Refused(f"the manifest at', 'raise Differs(f"the manifest at')],
                  ["names_no_clip"], id="names-no-clip-typed-a-disagreement"),
+    pytest.param("capture", _GUARD_1955, list(_PROBE_MALFORMED),
+                 id="the-tree-before-the-1955-repair"),
+    pytest.param("capture", _TYPED_DIFFERS_1955, list(_PROBE_MALFORMED),
+                 id="malformed-manifest-typed-a-disagreement"),
 ]
 
 
