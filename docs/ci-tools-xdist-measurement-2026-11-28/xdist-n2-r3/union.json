@@ -1,0 +1,25 @@
+{
+ "verdict": "PASS",
+ "reason": "",
+ "property": "",
+ "expected": 6678,
+ "missing": [],
+ "extra": [],
+ "duplicate": [],
+ "outcome_diffs": [],
+ "counts": {
+  "PASSED": 6649,
+  "SKIPPED": 27,
+  "XFAILED": 2
+ },
+ "baseline_counts": {
+  "PASSED": 6649,
+  "SKIPPED": 27,
+  "XFAILED": 2
+ },
+ "summary": {
+  "passed": 6649,
+  "skipped": 27,
+  "xfailed": 2
+ }
+}
