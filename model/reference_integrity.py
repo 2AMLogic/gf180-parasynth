@@ -4,6 +4,10 @@
     .venv/bin/python model/reference_integrity.py --stage demo
     .venv/bin/python model/reference_integrity.py --stage variance
 
+Exit status follows `tools/exit_contract.py`: 0 when the stage ran, 2 (REFUSED,
+one `REFUSED:` line on stderr) when a precondition was not met and nothing was
+measured -- no plugin host, a rig that refuses, a render with too little in it.
+
 Two questions that have to be settled before any number measured against a
 commercial plugin means anything, and neither had been asked.
 
@@ -44,6 +48,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import rig_qualification as rq                                      # noqa: E402
 import ring_estimator                                               # noqa: E402
 
 SR = rr.SR
@@ -367,15 +372,32 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     os.makedirs(a.out, exist_ok=True)
     devs = [d for d in a.devices.split(",") if d]
-    if a.stage == "demo":
-        if a.block <= 0:
-            ap.error("--block must be positive")
-        r = stage_demo(devs, a.seconds, a.out, a.source, block=a.block)
+    if a.stage == "demo" and a.block <= 0:
+        ap.error("--block must be positive")
+    sys.path.insert(0, os.path.join(HERE, "..", "tools"))
+    from exit_contract import REFUSED as EXIT_REFUSED
+    try:
+        if a.stage == "demo":
+            r = stage_demo(devs, a.seconds, a.out, a.source, block=a.block)
+        else:
+            r = stage_variance(devs, a.repeats)
+    except ImportError as exc:
+        # The plugin host and nothing else: any other module that fails to
+        # import is a bug here, and a bug must crash rather than be reported
+        # as a precondition that happened to be unmet.
+        if (exc.name or "").partition(".")[0] != "dawdreamer":
+            raise
+        reason = f"the plugin host is not importable ({exc})"
+    except rq.RigRefusal as exc:
+        reason = str(exc)
+    except am.InsufficientEvidence as exc:
+        reason = str(exc)
     else:
-        r = stage_variance(devs, a.repeats)
-    json.dump(r, open(os.path.join(a.out, f"{a.stage}-{a.source}.json"), "w"),
-              indent=1, default=str)
-    return 0
+        json.dump(r, open(os.path.join(a.out, f"{a.stage}-{a.source}.json"), "w"),
+                  indent=1, default=str)
+        return 0
+    print(f"REFUSED: {reason}", file=sys.stderr)
+    return EXIT_REFUSED
 
 
 if __name__ == "__main__":
