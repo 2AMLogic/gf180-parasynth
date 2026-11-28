@@ -31,6 +31,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import compare_drum_i2s_candidate as drum_mod                  # noqa: E402
 import compare_ensemble_candidate as ensemble_mod              # noqa: E402
 import compare_m5a_i2s_candidate as m5a_mod                    # noqa: E402
+import delta_report                                          # noqa: E402
 
 
 DRUM_SOURCES = {"tools/compare_drum_i2s_candidate.py", "tools/score_drum_i2s.py",
@@ -211,3 +212,63 @@ def test_main_writes_the_report_inside_the_repository_and_prints_its_summary(
     summary = json.loads(printed[printed.index("{"):])
     assert set(summary) == summary_keys
     assert summary["report"] == "out/delta.json"
+
+
+# --------------------------------------------------------------------------- #
+# a report that is not JSON (issue #1636)
+#
+# `json.dumps` writes NaN and Infinity as bare tokens by default, and Python
+# is the only thing that reads them back. Every guard that stops a non-finite
+# number reaching `write_report` is one edit away from not stopping it, so the
+# write itself refuses -- and each `main` must render that as REFUSED rather
+# than let the ValueError escape as a traceback.
+# --------------------------------------------------------------------------- #
+
+def _reject(token: str):
+    raise AssertionError(f"a bare {token} token in a written record")
+
+
+@pytest.mark.parametrize("number", [float("inf"), float("-inf"), float("nan")],
+                         ids=["inf", "-inf", "nan"])
+def test_write_report_refuses_a_non_finite_number_and_leaves_no_file(tmp_path, number):
+    with pytest.raises(ValueError, match="not JSON"):
+        delta_report.write_report({"worst": number}, "out/delta.json", "tool", root=tmp_path)
+    assert not (tmp_path / "out" / "delta.json").exists()
+
+
+def test_a_refused_report_leaves_the_record_already_at_the_output_path_as_it_was(
+        tmp_path):
+    out = tmp_path / "delta.json"
+    out.write_text('{"old": true}\n')
+    with pytest.raises(ValueError, match="not JSON"):
+        delta_report.write_report({"worst": float("inf")}, "delta.json", "tool", root=tmp_path)
+    assert out.read_text() == '{"old": true}\n'
+
+
+def test_a_finite_report_is_still_written_and_is_strict_json(tmp_path):
+    """The clean half of the control: the largest float and a long integer are
+    numbers, not tokens, and must still be written."""
+    report = {"worst": 1.7976931348623157e308, "n": 10**400}
+    out = delta_report.write_report(report, "out/delta.json", "tool", root=tmp_path)
+    assert json.loads(out.read_text(), parse_constant=_reject) == report
+
+
+@pytest.mark.parametrize("compare,tool,sources,report,summary_keys", CASES,
+                         ids=["drum", "ensemble", "m5a"])
+def test_main_refuses_a_report_that_is_not_json_and_writes_nothing(
+        compare, tool, sources, report, summary_keys, tmp_path, monkeypatch, capsys):
+    """A non-finite number that got past every guard above the write."""
+    monkeypatch.setattr(compare, "ROOT", tmp_path)
+    unserialisable = {**copy.deepcopy(report), "worst": float("inf")}
+    monkeypatch.setattr(compare, "compare_files", lambda b, c: unserialisable)
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("{}\n")
+    candidate = tmp_path / "candidate.json"
+    candidate.write_text("{}\n")
+    rc = compare.main([str(baseline), str(candidate), "--out", "out/delta.json"])
+    assert rc == 2
+    printed = capsys.readouterr().out
+    assert f"{tool}: REFUSED" in printed
+    # the non-finite refusal, not the out-of-tree one that also prints REFUSED
+    assert "not JSON" in printed
+    assert not (tmp_path / "out" / "delta.json").exists()

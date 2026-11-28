@@ -162,3 +162,40 @@ def test_identical_samples_that_produce_different_numbers_indict_the_estimator()
     candidate["metrics"]["attack"].update(value=5.23, error=0.90)
     report = compare.compare_records(baseline, candidate, CASE)
     assert report["attribution"]["attributable_to"] == "the estimator"
+
+
+# ---- finite numbers whose difference is not (#1636) ------------------------
+#
+# `_metrics` checks every number in both records for finiteness and the board
+# refuses a distance that overflows. Neither looks at this comparator's own
+# subtraction, and it overflows on two finite values.
+
+
+def test_refuses_a_board_distance_that_overflows_however_finite_the_record():
+    """`error 1e300` over `tolerance 1e-300`: every number is finite, the
+    board has no distance for it, and so there is no verdict to compare. The
+    report used to carry `worst.candidate: Infinity`."""
+    baseline, candidate = _pair()
+    for record in (baseline, candidate):
+        record["metrics"]["attack"].update(error=1e300, tolerance=1e-300)
+    compare._metrics(baseline, "baseline")        # finite: no earlier gate fires
+    compare._metrics(candidate, "candidate")
+    with pytest.raises(compare.Refused, match="no pass/fail verdict on the board"):
+        compare.compare_records(baseline, candidate, CASE)
+
+
+@pytest.mark.parametrize("baseline_value,candidate_value,tolerance", [
+    (-1e308, 1e308, 2.1655),           # the subtraction overflows
+    (0.0, 1e300, 1e-300),              # the subtraction is finite; the division is not
+], ids=["subtraction", "division"])
+def test_refuses_a_property_difference_that_is_not_finite(
+        baseline_value, candidate_value, tolerance):
+    """The issue's own reproduction: two finite values on the two sides, a
+    bare `Infinity` in the report although nothing in either record is."""
+    baseline, candidate = _pair()
+    baseline["metrics"]["attack"].update(value=baseline_value, tolerance=tolerance)
+    candidate["metrics"]["attack"].update(value=candidate_value, tolerance=tolerance)
+    compare._metrics(baseline, "baseline")
+    compare._metrics(candidate, "candidate")
+    with pytest.raises(compare.Refused, match="property attack difference is not finite"):
+        compare.compare_records(baseline, candidate, CASE)
