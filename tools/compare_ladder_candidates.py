@@ -646,6 +646,20 @@ def _say_sings(measured) -> str:
     return "REFUSED" if measured is None else str(measured)
 
 
+def _start_red_state(v: dict) -> str:
+    """`REFUSED` only when the stage refused: a reason string, or a nonzero count.
+
+    `refused` is a reason (bass), a per-point count (linear, movement,
+    resonance) or absent. A count of 0 means every point was evaluated and the
+    null core was condemned by measurement, so it must print `scored`; key
+    *membership* misreported that as REFUSED (and would keep doing so whatever
+    the stage did).
+    """
+    r = v.get("refused")
+    return "REFUSED" if (isinstance(r, str) and r) or (
+        not isinstance(r, str) and bool(r)) else "scored"
+
+
 def _print(rep: dict) -> None:
     print("Rungs 2-4: candidate ladders against the shipped one (issue #46)\n")
     print(f"  apparatus: rung-4 reference within "
@@ -678,7 +692,7 @@ def _print(rep: dict) -> None:
     red = rep["controls"]["start_red"]
     print("\n  START RED -- the null core, which has no behaviour:")
     for k_, v in red.items():
-        state = "REFUSED" if "refused" in v else "scored"
+        state = _start_red_state(v)
         print(f"    {k_:14s} {state}")
     print("\n  INJECTED DEFECTS -- each must move its own dimension:")
     for k_, v in rep["controls"]["injected"].items():

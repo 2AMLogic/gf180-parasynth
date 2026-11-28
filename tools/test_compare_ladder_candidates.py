@@ -270,3 +270,13 @@ def test_the_table_prints_a_refusal_as_REFUSED_and_a_measurement_as_true_or_fals
     cc._print(rep)
     base = _row(capsys.readouterr().out, BASE)
     assert "False" in base and "REFUSED" not in base, base
+
+
+@pytest.mark.parametrize("entry,state", [
+    ({"refused": 0, "sings_everywhere": False}, "scored"),   # evaluated, condemned
+    ({"refused": 4}, "REFUSED"),                              # per-point count
+    ({"refused": "null bass 55.7 Hz: insufficient"}, "REFUSED"),  # stage reason
+    ({"sings_everywhere": False}, "scored"),                  # key absent
+])
+def test_start_red_state_is_decided_by_what_refused_not_by_key_presence(entry, state):
+    assert cc._start_red_state(entry) == state
