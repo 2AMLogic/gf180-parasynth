@@ -1883,6 +1883,13 @@ if __name__ == "__main__":
     sys.exit(asyncio.run(main("x")))
 '''
 
+# The same boundary, but the dispatch does NOT call `main` by bare name, so the
+# #1641 wrapper branch of `in_boundary` cannot credit it: only the `main`
+# branch can. After #1641 landed, ASYNC_MAIN_BOUNDARY alone no longer isolates
+# that branch (main is a bare-name dispatch callee there, hence a wrapper too).
+ASYNC_MAIN_BOUNDARY_NOT_BARE = ASYNC_MAIN_BOUNDARY.replace(
+    'asyncio.run(main("x"))', 'asyncio.run(globals()["main"]("x"))')
+
 ASYNC_MAIN_STORED_THEN_AWAITED_AFTER = '''
 import asyncio
 import sys
@@ -2130,9 +2137,12 @@ def test_with_the_main_match_reverted_an_async_main_is_no_boundary(tmp_path):
     a candidate escape -- the control above red under this revert."""
     mut = _scanner_with('if isinstance(cur, FUNCTION_NODES) and cur.name == "main":',
                         'if isinstance(cur, ast.FunctionDef) and cur.name == "main":')
-    files = _async_files(tmp_path, {"caller_async": ASYNC_MAIN_BOUNDARY})
+    files = _async_files(tmp_path, {"caller_async": ASYNC_MAIN_BOUNDARY_NOT_BARE})
     idx = mut.build_index(files)
     caller = idx[str(tmp_path / "caller_async.py")]
+    # the shipped scanner credits it: the revert below is what removes that
+    ship = rss.build_index(files)
+    assert rss.cli_boundary_guards(ship[str(tmp_path / "caller_async.py")], rss.stem_map(ship)) != []
     assert mut.cli_boundary_guards(caller, mut.stem_map(idx)) == []
     got = [s for s in mut.scan(files, idx) if "caller_async.py" in s["site"]]
     assert [(s["classification"], s["guard"]) for s in got] == [("candidate-escape", "none")], got
