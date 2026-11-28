@@ -203,7 +203,8 @@ def main(argv=None) -> int:
         p = subprocess.run([sys.executable, "-c", PRELUDE + "".join(seams) + entry], cwd=ROOT, env=env,
                            capture_output=True, text=True, timeout=900)
         if "SEAM FAILED" in p.stdout + p.stderr:
-            rows.append((cid, path, f"SEAM FAILED: {_line(p.stdout + p.stderr, 'AssertionError')[:70]}", known))
+            seam = next((l for l in (p.stdout + "\n" + p.stderr).splitlines() if "SEAM FAILED" in l), "")
+            rows.append((cid, path, f"SEAM FAILED: {seam.split('SEAM FAILED:', 1)[-1].strip()[:70]}", known))
             refused = True
             continue
         ok, got = check(p, n_controls)
