@@ -79,7 +79,11 @@ ISSUE_564_MODULES = {
     #       share of the clip at any rate; the same tone at two rates
     #       differences to zero; DC and Nyquist weighted once; the floor
     #       clamps at a true -75 dB; the one-sample window)
-    "model/discrimination_trajectory.py": 11,
+    #   +4  #1565, this branch: the decay-fit controls (windows clamped to the
+    #       floor are excluded; two sounding windows near the floor are refused;
+    #       the post-peak minimum survives pre-peak windows; an averaged cell
+    #       can still carry the floor)
+    "model/discrimination_trajectory.py": 15,
 }
 
 
