@@ -2382,9 +2382,9 @@ STAR_DISPATCH = {
     "body": "    try:\n        sys.exit(_cli())\n    except{kw} OSError:\n        pass\n",
     "orelse": "    try:\n        pass\n    except{kw} OSError:\n        pass\n"
               "    else:\n        sys.exit(_cli())\n",
-    "handler": "    try:\n        sys.exit(go())\n    except{kw} OSError:\n"
+    "handler": "    try:\n        sys.exit(go(None))\n    except{kw} OSError:\n"
                "        sys.exit(_cli())\n",
-    "finalbody": "    try:\n        sys.exit(go())\n    except{kw} OSError:\n        pass\n"
+    "finalbody": "    try:\n        sys.exit(go(None))\n    except{kw} OSError:\n        pass\n"
                  "    finally:\n        _cli()\n",
 }
 
@@ -2509,6 +2509,7 @@ def test_the_interpreter_agrees_with_the_census(tmp_path, keyword, shape, want, 
     assert s["classification"] == want, s
     if escapes:
         assert "Traceback (most recent call last)" in r.stderr and r.returncode == 1, r
+        assert "Refused" in r.stderr, r          # the refusal escaped, not an unrelated crash
     else:
         assert "Traceback" not in r.stderr and r.returncode == 2, r
         assert "REFUSED" in r.stdout, r          # through the handler, not around it
