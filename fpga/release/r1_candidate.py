@@ -426,7 +426,9 @@ _diff = rc.diff
 def check(record: Path = RECORD) -> tuple:
     try:
         fresh = json.loads(json.dumps(build()))
-    except Refused as exc:
+    except refusal.Refused as exc:      # any module's refusal, by class (#1681):
+        # build() calls rm.presets() directly; a sibling it raises is not
+        # this module's Refused
         return "REFUSED", str(exc)
     if not Path(record).exists():
         return "REFUSED", f"no candidate record at {_rel(record)}"
@@ -470,7 +472,7 @@ def main(argv=None) -> int:
     if a.write:
         try:
             m = build()
-        except Refused as exc:
+        except refusal.Refused as exc:  # any module's refusal, by class (#1681), as check()
             print(f"r1_candidate: REFUSED -- {exc}")
             return 2
         a.record.write_text(json.dumps(m, indent=2) + "\n")

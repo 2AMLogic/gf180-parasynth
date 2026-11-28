@@ -98,6 +98,7 @@ for _p in (HERE, os.path.join(HERE, "release"), os.path.join(ROOT, "model"),
 import coremidi_input as cmi                             # noqa: E402
 import live_midi_contract as C                           # noqa: E402
 import uart_host as uh                                   # noqa: E402
+import refusal                                           # noqa: E402
 
 SR = C.SR
 BYTE_S = uh.BITS_PER_BYTE / uh.DEFAULT_BAUD
@@ -1166,9 +1167,10 @@ def main(argv=None, *, _inject=None) -> int:
     # Deferred, like qualified_domain above: drums_fx pulls in NumPy, which must
     # not gate --help / --list-midi-ports (#1282)
     import drums_fx as dx
+    # Any module's refusal, by class (#1681); dx.KitRefused stays named, as #1614 decided
     try:
         session = MidiSession(ser, preset=a.preset, image=image, out=sys.stdout)
-    except (uh.Refused, dx.KitRefused) as exc:
+    except (refusal.Refused, dx.KitRefused) as exc:
         print(f"midi_session: REFUSED -- {exc}", file=sys.stderr)
         return 2
     try:

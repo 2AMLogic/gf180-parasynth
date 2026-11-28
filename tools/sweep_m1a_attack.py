@@ -35,6 +35,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import mono_m1a_score as bass                                        # noqa: E402
 import measure_m1a_volume_mapping as volume                           # noqa: E402
+import refusal                                                       # noqa: E402
 
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/attack-sweep"
 GRID = OUT / "grid.json"
@@ -241,7 +242,9 @@ def main(argv=None):
     try:
         render_point(a.ms) if a.cmd == "point" else summarize()
         return 0
-    except bass.Refused as exc:
+    except refusal.Refused as exc:      # any module's refusal, by class (#1681):
+        # compare_audio reaches attack_fit_v3, whose Refused is
+        # measure_mono_m5a_reference's -- a sibling of bass.Refused
         print(f"REFUSED: {exc}")
         return 2
 
