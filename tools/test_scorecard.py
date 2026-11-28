@@ -1,6 +1,7 @@
-"""Three ways `tools/scorecard.py` misreported a record it could not score
-(issue #1669, items 1-3), each kept as the control its repair must stay green
-against (`docs/verification-rules.md` rule 8).
+"""Four ways `tools/scorecard.py` misreported a record it could not score,
+each kept as the control its repair must stay green against
+(`docs/verification-rules.md` rule 8). Items 1-3 are issue #1669; item 4 is
+#2089.
 
 1. An `engine` that is not a string. `evaluate` answered `no verdict` and
    carried the value into the row; `main()` then sorted it against string
@@ -14,6 +15,11 @@ against (`docs/verification-rules.md` rule 8).
    `evaluate` reads as "there is no file" -- so a case that ran and wrote
    `null` was reported as never attempted rather than as a record the board
    cannot score.
+4. A nested provenance field that is not an object. `evaluate` tested
+   `worktree`, `inputs` and `config` only for presence, so `["x"]` under any
+   of them passed -- and the record was scored as a pass on provenance nobody
+   could read. `measurement_basis` then raised on `inputs.items()`, and
+   `compare` read the `worktree` case as REJECT: the device did not improve.
 
 Every record here is the committed `docs/scorecard/results/D02A.json` changed
 in one field, so no test can pass against a fixture shape nothing writes; the
@@ -224,3 +230,138 @@ def test_load_result_tells_an_absent_file_from_a_null_one(monkeypatch, tmp_path)
     committed = _committed()
     (tmp_path / "D02A.json").write_text(json.dumps(committed))
     assert sc.load_result("D02A") == committed                  # an object loads as itself
+
+
+# ---- item 4 (#2089): a nested provenance field that is not an object -------
+
+# `evaluate` reads these three as objects -- `measurement_basis` iterates
+# `inputs.items()` and `config.items()` -- and tested them only for presence.
+NESTED = ["provenance.worktree", "provenance.inputs", "provenance.config"]
+
+# Truthy non-objects: a presence check is satisfied outright.
+TRUTHY = [("list", ["x"]), ("string", "x"), ("number", 5)]
+# Falsy non-objects: the input that defeats a repair written as
+# `prov.get(key) or {}` and then type-tested. The default has already turned
+# the value into a valid empty object by the time the test sees it. For the two
+# required fields the presence check already refuses them; `config` is the
+# optional one it let through.
+FALSY = [("empty-list", []), ("false", False), ("zero", 0), ("empty-string", "")]
+
+OMITTED = object()
+
+
+def _cells(paths, values):
+    """(path, value) pairs as parameters, id'd `<path>-<kind>`."""
+    return [pytest.param(path, value, id=f"{path}-{kind}")
+            for path in paths for kind, value in values]
+
+
+MALFORMED = _cells(NESTED, TRUTHY) + _cells(["provenance.config"], FALSY)
+
+
+def _nested(case_id, path, value):
+    """A committed record with the field at the dotted `path` replaced by
+    `value`. Nothing else is touched, so the required metrics are intact and
+    only `path` can account for the verdict."""
+    head, last = path.split(".")
+    record = _committed(case_id)
+    record[head][last] = value
+    return record
+
+
+def _worst_cell(row):
+    """The distance column of a verbose row: `--` when the row has none."""
+    return re.search(r"(?:pass|fail|no verdict)\s+(--|[\d.]+)\s{2}", row).group(1)
+
+
+def test_the_committed_record_keeps_its_score():
+    """The control for everything below: D02A's distance under the policy as
+    it stands is 1.9536 dB of body/noise balance error against a 3 dB
+    tolerance. A repair that refused the record or moved this number would be
+    caught here and nowhere else -- `test_the_committed_record_still_passes`
+    checks the tally, not the distance."""
+    verdict = sc.evaluate(CASES["D02A"], _committed())
+    assert verdict["state"] == sc.PASS, verdict
+    assert verdict["worst"] == pytest.approx(0.6512, abs=1e-4), verdict
+
+
+@pytest.mark.parametrize("path, value", MALFORMED)
+def test_a_nested_provenance_field_that_is_not_an_object_is_no_verdict(path, value):
+    """The metrics are the committed ones, which pass. The only thing wrong
+    with the record is `path`, and that alone must withhold the verdict -- and
+    name the field, so the reader knows which part of the file to open."""
+    verdict = sc.evaluate(CASES["D02A"], _nested("D02A", path, value))
+    assert verdict["state"] == sc.NO_VERDICT and verdict["worst"] is None, verdict
+    assert path in verdict["why"], verdict
+
+
+GONE = [pytest.param(OMITTED, id="omitted"), pytest.param(None, id="null"),
+        pytest.param({}, id="empty-object")]
+
+
+@pytest.mark.parametrize("gone", GONE)
+@pytest.mark.parametrize("field", ["worktree", "inputs"])
+def test_a_missing_required_nested_field_is_still_refused_by_name(field, gone):
+    """The presence check, unchanged: absent, null and empty all leave the
+    reader without the field, and the reason still names it."""
+    record = _committed()
+    if gone is OMITTED:
+        del record["provenance"][field]
+    else:
+        record["provenance"][field] = gone
+    verdict = sc.evaluate(CASES["D02A"], record)
+    assert verdict["state"] == sc.NO_VERDICT and verdict["worst"] is None, verdict
+    assert field in verdict["why"], verdict
+
+
+@pytest.mark.parametrize("config", GONE)
+def test_an_optional_config_that_is_omitted_null_or_empty_is_still_valid(config):
+    """`config` is optional, so "none" is an answer in every form a writer
+    uses for it. JSON `null` is the one non-object that reads as omitted
+    rather than as a shape error: it is what an absent field already gives
+    through `.get`, and `measurement_basis` has always read it as no config.
+    The required fields refuse it as missing (the test above)."""
+    record = _committed()
+    if config is not OMITTED:
+        record["provenance"]["config"] = config
+    verdict = sc.evaluate(CASES["D02A"], record)
+    assert verdict["state"] == sc.PASS, verdict
+    assert verdict["worst"] == pytest.approx(0.6512, abs=1e-4), verdict
+
+
+@pytest.mark.parametrize("path, value", MALFORMED)
+def test_the_board_renders_a_malformed_nested_field_and_keeps_its_neighbour(
+        monkeypatch, tmp_path, capsys, path, value):
+    """Through `main()` with `--verbose --markdown --check`: the malformed row
+    is rendered with its reason and no distance, counted once under `no
+    verdict`, and the board exits 0. The well-formed row beside it keeps the
+    verdict and distance it has on a board of its own."""
+    # `_render` builds its repo under `tmp_path` and will not build it twice,
+    # so the control gets a directory of its own.
+    control = tmp_path / "control"
+    _, alone = _render(monkeypatch, control, capsys,
+                       {"D09A": _committed("D09A")}, "--verbose")
+    neighbour = _line(_board(control), "| `D09A` |")
+    rc, out = _render(monkeypatch, tmp_path, capsys,
+                      {"D02A": _nested("D02A", path, value),
+                       "D09A": _committed("D09A")}, "--verbose", "--check")
+    assert rc == 0, out
+    assert _tally(out) == (2, 1, 1, 0, 1, 0), out
+    row = _line(out, "D02A")
+    assert "no verdict" in row and path in row and _worst_cell(row) == "--", row
+    assert _line(out, "D09A") == _line(alone, "D09A")
+    malformed = _line(_board(tmp_path), "| `D02A` |")
+    assert "| ⚠️ no verdict |  |" in malformed and path in malformed, malformed
+    assert _line(_board(tmp_path), "| `D09A` |") == neighbour
+
+
+@pytest.mark.parametrize("path, value", MALFORMED)
+def test_an_evaluated_malformed_row_is_incomparable_with_a_clean_one(path, value):
+    """`compare` takes what `evaluate` returned. Before the repair that was a
+    PASS row carrying a list where the provenance should be: for `worktree`
+    `compare` answered REJECT -- no required property improved -- and for the
+    other two it raised. A record that cannot be scored cannot be compared."""
+    clean = sc.evaluate(CASES["D02A"], _committed())
+    malformed = sc.evaluate(CASES["D02A"], _nested("D02A", path, value))
+    assert sc.compare(malformed, clean)["verdict"] == sc.INCOMPARABLE
+    assert sc.compare(clean, malformed)["verdict"] == sc.INCOMPARABLE
