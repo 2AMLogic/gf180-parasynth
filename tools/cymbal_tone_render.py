@@ -277,7 +277,14 @@ def preservation(anchor_level: dict) -> dict:
 # 5. the measurement
 # ---------------------------------------------------------------------------
 def fischer_curves(path: pathlib.Path | None = None) -> dict:
-    """The 808's anchored curves, per DECAY column, off the committed record."""
+    """The 808's anchored curves, per DECAY column, off the committed record.
+
+    REFUSES, naming the setting and the field, when a number it returns is not
+    a finite number (#2014). `verdict()` takes max() over each column's
+    differences from these, and max() drops a NaN that is not its first
+    argument: one non-finite cell turned its TONE position's difference into a
+    NaN that vanished, and the column passed on the worst of the rest.
+    """
     p = path or (ROOT / "docs" / "scorecard" / "cymbal-369" / "fischer.json")
     if not p.exists():
         raise Refused(f"{p} is absent; run tools/cymbal_bands.py --out {p}")
@@ -293,6 +300,15 @@ def fischer_curves(path: pathlib.Path | None = None) -> dict:
         hml = {t: rows[t]["H_minus_L_db"] for t in CODES}
         hed = {t: rows[t]["H"]["edt10_ms"] for t in CODES}
         lned = {t: rows[t]["Ln"]["edt10_ms"] for t in CODES}
+        bad = [f"CY{t}{dec}.{field} = {value!r}"
+               for field, d in (("H_minus_L_db", hml), ("H.edt10_ms", hed),
+                                ("Ln.edt10_ms", lned))
+               for t, value in d.items() if not _finite(value)]
+        if bad:
+            raise Refused(f"{p} carries a value that is not a finite number: "
+                          + ", ".join(bad)
+                          + "; an anchored curve is a number of dB or ms or it is "
+                          "not a measurement")
         out[dec] = {
             "settings": {t: f"CY{t}{dec}" for t in CODES},
             "h_minus_l_db": hml,

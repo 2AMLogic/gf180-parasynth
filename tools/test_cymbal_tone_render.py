@@ -220,7 +220,44 @@ def test_a_tone_dependent_low_band_decay_is_caught():
     assert not v["properties"]["ln-edt-tone-invariant"]["ok"]
 
 
-def test_the_verdict_reports_every_one_of_the_25_settings():
+def test_a_non_finite_difference_vanishes_from_the_verdicts_worst_case():
+    """#2014's shape, measured on `verdict()` itself: max() drops a NaN that is
+    not its first argument, so a reference cell that is not a number removes
+    its TONE position from `h_minus_l_worst_db` and the column passes on the
+    worst of the rest. `fischer_curves()` is what must refuse it first (next
+    test); this is the false pass that refusal exists to prevent."""
+    col = tre.fischer_curves()["50"]
+    ours = _synthetic(col["h_minus_l_anchored_db"], col["h_edt10_ratio"])
+    poisoned = {**col, "h_minus_l_anchored_db": {**col["h_minus_l_anchored_db"],
+                                                 "75": float("nan")}}
+    v = tre.verdict(ours, {"50": poisoned})
+    assert math.isnan(v["columns"]["50"]["h_minus_l_anchored_delta_db"]["75"])
+    assert v["properties"]["h-minus-l-tracks-808"]["ok"]
+    assert v["properties"]["h-minus-l-tracks-808"]["worst_db"] == 0.0
+
+
+@pytest.mark.parametrize("value, literal, field", [
+    (float("nan"), "NaN", ("H_minus_L_db",)),
+    (float("inf"), "Infinity", ("H", "edt10_ms")),
+    (float("-inf"), "-Infinity", ("Ln", "edt10_ms"))])
+def test_the_record_reader_refuses_a_non_finite_cell_naming_the_setting_and_field(
+        tmp_path, value, literal, field):
+    """CONTROL (#2014). json.loads admits a NaN or Infinity literal, and nothing
+    between it and `verdict()`'s max() asserted finiteness. The refusal names
+    the setting and the field; a neighbouring setting is left alone."""
+    import json
+    blob = json.loads((tre.ROOT / "docs" / "scorecard" / "cymbal-369" / "fischer.json").read_text())
+    cell = blob["CY7550"]
+    for name in field[:-1]:
+        cell = cell[name]
+    cell[field[-1]] = value
+    bad = tmp_path / "fischer.json"
+    bad.write_text(json.dumps(blob))
+    assert f'"{field[-1]}": {literal}' in bad.read_text()   # the literal is what a reader meets
+    with pytest.raises(tre.Refused) as exc:
+        tre.fischer_curves(bad)
+    assert "CY7550." + ".".join(field) in str(exc.value)
+    assert "CY5050." not in str(exc.value)
     """Acceptance 3 says report every setting, and says which are development."""
     ref = tre.fischer_curves()
     col = ref["50"]

@@ -86,6 +86,7 @@ import cymbal_tone_realisation as ct        # noqa: E402
 import tone_stage_schematic as ts           # noqa: E402
 import werner_fig4 as wf                    # noqa: E402
 import werner_fig9 as w9                    # noqa: E402
+from finite_number import is_finite_number  # noqa: E402
 
 Refused = ct.Refused
 BANDS = ct.BANDS
@@ -744,9 +745,27 @@ def rebalance(cal: dict, fig9, corner_hz) -> dict:
 
     The anchor is the largest common scale that keeps every band inside its
     registers -- the ratios are the claim, the absolute level is not.
+
+    REFUSES, naming the band and the field, when a level the anchor is taken
+    over is not a finite number (#2014). `min()` drops a NaN that is not its
+    first argument, so a non-finite DECAY or SHORT level used to leave the
+    anchor to the other two bands, and the band then passed both ceiling
+    checks below (False for a NaN) and was returned as NaN. `calibrate()`
+    cannot emit one -- its render is the fixed-point model's int16 clip cast
+    to float -- but this function takes `cal` as a dict and `gap_db()` as it
+    comes.
     """
     gaps = gap_db(fig9, corner_hz)
     per = cal["per_band"]
+    bad = [f"{b} band {field} = {value!r}" for b in BANDS
+           for field, value in (("shipped_abs", per[b]["shipped_abs"]),
+                                ("unit_abs", per[b]["unit_abs"]),
+                                ("gap_db", gaps[b]["gap_db"]))
+           if not is_finite_number(value)]
+    if bad:
+        raise Refused("the ablation cannot take its anchor over a level that is not a "
+                      "finite number: " + ", ".join(bad)
+                      + "; a level is a number or it is not a measurement")
     want, ceiling = {}, {}
     for b in BANDS:
         base_gain = math.sqrt(per[b]["shipped_abs"] / per[b]["unit_abs"])
