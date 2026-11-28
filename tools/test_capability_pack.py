@@ -440,9 +440,17 @@ def _rig_for(mode):
     same damage as `_patches`, but supplied at the plugin boundary so nothing
     in `capability_pack` itself is replaced."""
     if mode == "plain-assertion":
+        # The AssertionError must surface INSIDE `measure()` (the handler under
+        # test), not in `render()`: osc_tone returns cleanly, and the record
+        # raises when `measure_oscillator` converts it with np.asarray.
+        class _BadRecord:
+            def __array__(self, dtype=None, copy=None):
+                raise AssertionError("a bug in the pack, not a refusal")
+
         class _Buggy(_Rig):
             def osc_tone(self, wave, note, seconds=0.5):
-                raise AssertionError("a bug in the pack, not a refusal")
+                self.filter_step = False
+                return _BadRecord()
         return _Buggy()
     if mode.startswith("short-"):
         _, note, periods = mode.split("-")
