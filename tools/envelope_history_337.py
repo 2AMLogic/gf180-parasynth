@@ -7,7 +7,9 @@ any number here existed. Reads only frozen, hash-bound reference audio; renders
 nothing; changes no engine, patch, scorer or tolerance.
 
 Verdicts: VIABLE / REFUTED / REFUSED. REFUSED is not REFUTED: an instrument that
-cannot stand behind a number withholds it.
+cannot stand behind a number withholds it. A report that cannot be read -- not
+a JSON object, or without `renders` -- is REFUSED (exit 2), where it was a
+`KeyError` traceback and exit 1 (#1604, #1623).
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 import audio_measure as am  # noqa: E402
 import refusal
+import manifest as mf
 
 SRC = ROOT / "docs/scorecard/mono-attack-context"
 HISTORY = ("repeat84_gap3p4", "from72_gap3p4", "repeat84_gap5")
@@ -123,8 +126,14 @@ def verdict(per_wave):
     return "VIABLE" if all(v["viable"] for v in per_wave.values()) else "REFUTED"
 
 
-def measure(src: Path = SRC):
+def measure(src: Path | None = None):
+    """Rows for every render the report lists. `src` defaults to the module's
+    SRC, read at call time so a control can point the CLI's own `main()` at a
+    scratch copy of the report."""
+    src = SRC if src is None else src
     rep = json.loads((src / "report.json").read_text())
+    mf.require_keys(rep, "renders", f"the attack-context report at {src / 'report.json'}",
+                    refused=Refused)
     rows = []
     for row in rep["renders"]:
         path = src / row["wav"]

@@ -65,6 +65,10 @@ RULE v2.
              REFUSED leaves the control unrun, so the decision is REFUSED).
              Separately, a bar that did not come from the selection (WEAK) is
              never counted as validated: that is the WEAK rule above, not Q6.
+
+`table <record.json>` REFUSES (exit 2) a record that cannot be read -- not a
+JSON object, or without `calibration` -- where it exited 1 by traceback
+(#1604, #1623).
 """
 from __future__ import annotations
 
@@ -77,7 +81,9 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import gate_calibrate as gc  # noqa: E402
+import manifest as mf  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
+import refusal  # noqa: E402
 
 P_GRID = (0.05, 0.10, 0.15, 0.20, 0.30, 0.50)
 #: Reported, never selected from: p values beyond the selectable grid, so the
@@ -88,6 +94,10 @@ SPLIT_SEED = 379
 COVERAGE = 0.80
 MIN_KEYS = 8
 MARS_WEAK_KEYS = 2
+
+
+class Refused(refusal.Refused, Exception):
+    """A record that cannot be read is not a table (#1604, #1623)."""
 
 
 def reps(rows: list) -> list:
@@ -255,8 +265,14 @@ def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
     if argv and argv[0] == "table":
-        res = json.loads(pathlib.Path(argv[1]).read_text())
-        print(render_table(rank_rows(res["calibration"]["old_bar_context"])))
+        path = pathlib.Path(argv[1])
+        try:
+            res = json.loads(path.read_text())
+            mf.require_keys(res, "calibration", f"the gate record at {path}", refused=Refused)
+            print(render_table(rank_rows(res["calibration"]["old_bar_context"])))
+        except Refused as exc:
+            print(f"REFUSED: {exc}")
+            return 2
         return 0
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", type=pathlib.Path, required=True)

@@ -28,6 +28,48 @@ def test_repaired_row_pairs_by_schedule():
     assert counts == {"measured": 1, "refused": 0, "not_run": 0}
 
 
+# ---- a sweep record missing the key _load() reads with [] is REFUSED, not a
+# traceback (#1604, #1623), through the tool's own main(). The record is the
+# archived probe sweep the decision above was made on.
+def _archived(tmp_path, part, edit=None):
+    archive = probe.ROOT / "docs/scorecard/m5-artifacts-333"
+    rec = json.loads(gzip.decompress((archive / f"r2-compare/s074-{part}.json.gz").read_bytes()))
+    assert isinstance(rec["rows"], list) and rec["rows"]      # the key the reader needs
+    if edit:
+        edit(rec)
+    path = tmp_path / f"{part}.json"
+    path.write_text(json.dumps(rec))
+    return str(path)
+
+
+def test_a_sweep_record_missing_rows_is_refused(tmp_path, capsys):
+    paths = [_archived(tmp_path, 0, lambda rec: rec.pop("rows")), _archived(tmp_path, 1)]
+    comparison = tmp_path / "comparison.json"
+    assert c.main([*paths, "--out", str(comparison)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "'rows'" in out
+    assert not comparison.exists()                 # no comparison over a partial record
+
+
+def test_a_sweep_record_with_null_rows_is_refused(tmp_path, capsys):
+    paths = [_archived(tmp_path, 0, lambda rec: rec.__setitem__("rows", None)), _archived(tmp_path, 1)]
+    comparison = tmp_path / "comparison.json"
+    assert c.main([*paths, "--out", str(comparison)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "'rows'" in out
+
+
+@pytest.mark.parametrize("record, why", [({}, "'rows'"), ([], "not a JSON object"), (None, "not a JSON object")])
+def test_a_sweep_record_that_is_not_an_object_is_refused(tmp_path, capsys, record, why):
+    path = tmp_path / "0.json"
+    path.write_text(json.dumps(record))
+    comparison = tmp_path / "comparison.json"
+    assert c.main([str(path), _archived(tmp_path, 1), "--out", str(comparison)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and why in out
+    assert not comparison.exists()
+
+
 def test_unpaired_rows_are_not_run_and_block_acceptance():
     recs, counts = c.compare([_row("r1", 0.75), _row("pulse2x", 1.0136)])
     assert counts["not_run"] == 1 and counts["measured"] == 0
