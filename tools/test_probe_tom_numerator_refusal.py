@@ -138,10 +138,7 @@ def _probe(refs: pathlib.Path, tmp_path: pathlib.Path) -> subprocess.CompletedPr
     """The real interpreter and the real environment a batch runner sees
     (GF180_TR808_REFS / TR808_REFS agree, per the test plan's 'unset or
     equal'), with --refs naming the fixture corpus and --out under tmp."""
-    drop = (_rc_env.REFS_ENV, _rc_env.REFS_ALIAS_ENV)
-    env = {k: v for k, v in os.environ.items() if k not in drop}
-    env[_rc_env.REFS_ENV] = str(refs)
-    env[_rc_env.REFS_ALIAS_ENV] = str(refs)
+    env = _child_env(refs)
     out = tmp_path / "report.json"
     return subprocess.run(
         [sys.executable, str(ROOT / "tools" / "probe_tom_numerator.py"),
