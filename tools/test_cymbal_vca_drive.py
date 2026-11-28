@@ -307,10 +307,9 @@ def test_balance_targets_accepts_the_committed_record():
 # ONE key from the committed record and runs the tool's own main().
 #
 # The exit status here is 1, not 2, on purpose: main()'s handler for
-# balance_targets() is one of the two exit-1 refusal sites
-# tools/refusal_exit_census.py pins for this file (#804 scoped them out rather
-# than change a documented contract), so this control asserts the pinned
-# status and the named key.
+# A PARTIAL balance artifact exits 2 (exit_contract.REFUSED, in NO_EVIDENCE) so
+# a batch caller reads NO-VERDICT; an absent or drifted one keeps the legacy
+# exit 1 that tools/refusal_exit_census.py pins (#804).
 @pytest.mark.parametrize("key", ["gap_db", "centre_hz"])
 def test_a_balance_artifact_missing_a_key_is_refused_by_name(tmp_path, monkeypatch, capsys, key):
     rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
@@ -318,7 +317,7 @@ def test_a_balance_artifact_missing_a_key_is_refused_by_name(tmp_path, monkeypat
     p = tmp_path / "balance.json"
     p.write_text(json.dumps(rec))
     monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
-    assert vd.main([]) == 1
+    assert vd.main([]) == 2
     out = capsys.readouterr().out
     assert "REFUSED" in out and f"'{key}'" in out
 
@@ -330,7 +329,7 @@ def test_a_balance_artifact_with_null_for_a_key_is_refused_by_name(tmp_path, mon
     p = tmp_path / "balance.json"
     p.write_text(json.dumps(rec))
     monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
-    assert vd.main([]) == 1
+    assert vd.main([]) == 2
     out = capsys.readouterr().out
     assert "REFUSED" in out and f"'{key}'" in out
 
@@ -339,7 +338,7 @@ def test_an_empty_balance_artifact_is_refused_by_name(tmp_path, monkeypatch, cap
     p = tmp_path / "balance.json"
     p.write_text("{}")
     monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
-    assert vd.main([]) == 1
+    assert vd.main([]) == 2
     out = capsys.readouterr().out
     assert "REFUSED" in out and "'gap_db'" in out and "'centre_hz'" in out
 
@@ -758,3 +757,20 @@ def test_the_supply_record_round_trips(tmp_path):
     assert peaks["short"]["collector_peak_v"] == pytest.approx(12.79, abs=0.05)
     assert peaks["low"]["collector_peak_v"] == pytest.approx(4.94, abs=0.10)
     assert peaks["decay"]["collector_peak_v"] == pytest.approx(3.97, abs=0.10)
+
+
+def test_a_partial_balance_artifact_exit_is_declared_no_evidence(tmp_path, monkeypatch, capsys):
+    import exit_contract
+    p = tmp_path / "balance.json"
+    p.write_text("{}")
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main(["--check"]) in exit_contract.NO_EVIDENCE
+
+
+def test_a_drifted_balance_artifact_keeps_the_legacy_exit_1(tmp_path, monkeypatch, capsys):
+    rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
+    rec["gap_db"]["decay"]["gap_db"] += 1.0
+    p = tmp_path / "balance.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main([]) == 1

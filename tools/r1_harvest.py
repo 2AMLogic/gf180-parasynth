@@ -38,7 +38,6 @@ sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "fpga" / "release"), str(ROOT / 
                 str(ROOT / "model")]
 import trial                                              # noqa: E402
 import r1_candidate as r1c                                # noqa: E402
-import manifest as mf                                     # noqa: E402
 import refusal                                            # noqa: E402
 
 
@@ -135,7 +134,7 @@ def harvest(runs: Path, to: Path) -> dict:
     heads = set()
     for rp in receipts:
         rec = json.loads(rp.read_text())
-        mf.require_keys(rec, ("trial", "identities", "verdict", "verdict_reasons", "execution",
+        refusal.require_keys(rec, ("trial", "identities", "verdict", "verdict_reasons", "execution",
                               "children", "controls"), f"the trial receipt at {rp}", refused=Refused)
         chk = subprocess.run([sys.executable, str(ROOT / "tools/trial.py"), "check-receipt",
                               str(rp)], cwd=ROOT, capture_output=True, text=True)

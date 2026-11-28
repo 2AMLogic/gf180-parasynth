@@ -48,7 +48,6 @@ TRACES = os.path.join(ROOT, "docs", "deadline", "traces")
 WORK = os.path.join(ROOT, "build", "dl")
 
 sys.path.insert(0, os.path.join(ROOT, "tools"))
-import manifest as mf  # noqa: E402
 import refusal  # noqa: E402
 
 
@@ -89,6 +88,18 @@ def _run(argv=None) -> int:
               f"(tools/run_all.py exit {rc}); nothing archived, see {log}")
         return rc
 
+    # Preflight BOTH records before the first write under RUNS/TRACES: retained
+    # evidence is replaced only once every capture is known readable, so a
+    # damaged second capture cannot leave the first one's replacement behind.
+    records = {}
+    for name, _ in CAPTURES:
+        wpath = os.path.join(WORK, name + ".json")
+        with open(wpath) as f:
+            rec = json.load(f)
+        refusal.require_keys(rec, ("status", "facts", "schedule"),
+                             f"the capture record at {wpath}", refused=Refused)
+        records[name] = rec
+
     shutil.copyfile(batch, os.path.join(RUNS, "run_all-l2.json"))
     for name, _ in CAPTURES:
         shutil.copyfile(os.path.join(WORK, name + ".json"), os.path.join(RUNS, name + ".json"))
@@ -100,10 +111,7 @@ def _run(argv=None) -> int:
             with open(os.path.join(src, n), "rb") as f, \
                     gzip.GzipFile(os.path.join(dst, n + ".gz"), "wb", mtime=0) as gz:
                 shutil.copyfileobj(f, gz)
-        path = os.path.join(RUNS, name + ".json")
-        rec = json.load(open(path))
-        mf.require_keys(rec, ("status", "facts", "schedule"), f"the capture record at {path}",
-                        refused=Refused)
+        rec = records[name]
         print(f"deadline_recapture_l2: {name} {rec['status']} "
               f"({rec['facts']['periods']}/{rec['facts']['periods_required']} periods, "
               f"{rec['facts']['writes_seen']}/{rec['facts']['writes_sent']} writes, "

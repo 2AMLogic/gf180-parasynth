@@ -42,7 +42,6 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import manifest as mf  # noqa: E402
 import refusal  # noqa: E402
 
 
@@ -100,7 +99,7 @@ def check(tree: pathlib.Path, py: str, receipt: str | None) -> dict:
     r = subprocess.run([py, str(tree / "tools/trial.py"), "check-receipt", receipt],
                        cwd=tree, capture_output=True, text=True)
     rec = json.loads(pathlib.Path(receipt).read_text())
-    mf.require_keys(rec, ("verdict", "execution", "verdict_reasons", "controls", "identities"),
+    refusal.require_keys(rec, ("verdict", "execution", "verdict_reasons", "controls", "identities"),
                     f"the trial receipt at {receipt}", refused=Refused)
     return {"valid": r.returncode == 0, "check": r.stdout.strip().splitlines()[-3:],
             "verdict": rec["verdict"], "execution": rec["execution"]["status"],

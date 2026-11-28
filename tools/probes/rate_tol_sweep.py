@@ -152,9 +152,9 @@ def load_plan(allow_dirty: bool = False, path: Path | None = None) -> dict:
     if not path.exists():
         raise Refused(f"no plan at {_rel(path)}; state the grid first")
     plan = json.loads(path.read_text())
+    mf.require_keys(plan, "grid", f"the sweep plan at {path}", refused=Refused)
     if plan.get("schema") != "sensitivity-plan-v1":
         raise Refused(f"{path.name}: schema is {plan.get('schema')!r}")
-    mf.require_keys(plan, "grid", f"the sweep plan at {path}", refused=Refused)
     grid = [float(v) for v in plan["grid"]]
     if sorted(grid) != grid or len(set(grid)) != len(grid):
         raise Refused(f"{path.name}: grid {grid} is not strictly increasing")

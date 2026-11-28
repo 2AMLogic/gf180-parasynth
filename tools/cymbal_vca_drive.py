@@ -159,8 +159,8 @@ if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
 import cymbal_candidate as cc  # noqa: E402
+import exit_contract  # noqa: E402
 import refusal
-import manifest as mf  # noqa: E402
 
 SCORECARD = ROOT / "docs" / "scorecard" / "cymbal-369"
 BALANCE_ARTIFACT = SCORECARD / "balance" / "balance.json"
@@ -212,6 +212,13 @@ SN_CROPS = {
 
 class Refused(refusal.Refused, Exception):
     """A precondition failed. REFUSED is a verdict, distinct from a value."""
+
+
+class PartialRecord(Refused):
+    """The balance artifact parses but cannot be read: not a JSON object, or a
+    required key absent or null (#1623). Exits 2 (`exit_contract.REFUSED`, in
+    NO_EVIDENCE), so a batch caller reads NO-VERDICT rather than a failed
+    comparison. A drifted or absent artifact keeps its legacy exit 1."""
 
 
 class SourceUnavailable(Refused):
@@ -1090,7 +1097,8 @@ def balance_targets(path=None) -> dict:
         raise Refused(f"{path} is absent; the gap this module is judged "
                       "against is #396's, not one chosen here")
     rec = json.loads(path.read_text())
-    mf.require_keys(rec, ("gap_db", "centre_hz"), f"the balance artifact at {path}", refused=Refused)
+    refusal.require_keys(rec, ("gap_db", "centre_hz"), f"the balance artifact at {path}",
+                         refused=PartialRecord)
     want = {"decay": 10.13, "short": 39.79}
     got = {b: float(rec["gap_db"][b]["gap_db"]) for b in want}
     drift = {b: round(got[b] - want[b], 3) for b in want if abs(got[b] - want[b]) > 0.005}
@@ -1530,6 +1538,9 @@ def main(argv=None) -> int:
 
     try:
         targets = balance_targets()
+    except PartialRecord as exc:
+        print(f"REFUSED: {exc}")
+        return exit_contract.REFUSED
     except Refused as exc:
         print(f"REFUSED: {exc}")
         return 1

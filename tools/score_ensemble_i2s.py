@@ -228,6 +228,7 @@ def validate_part(case_id: str, part: str, report_text: str, wav_path: pathlib.P
         schedule = json.loads(schedule_path.read_text())
     except json.JSONDecodeError as exc:
         raise Refused(f"{part}: the schedule is not readable: {exc}") from exc
+    mf.require_keys(schedule, "case_frames", f"{part}: the schedule at {schedule_path}", refused=Refused)
     if schedule.get("case_id") != case_id or schedule.get("part") != part:
         raise Refused(f"{part}: the schedule names a different case or part")
     if schedule.get("i2s_delay_periods") != 1 or schedule.get("sample_rate_hz") != SR:
@@ -239,7 +240,6 @@ def validate_part(case_id: str, part: str, report_text: str, wav_path: pathlib.P
     if len(samples) != int(periods.group(1)):
         raise Refused(f"{part}: the WAV holds {len(samples)} samples, the report decoded "
                       f"{periods.group(1)} periods")
-    mf.require_keys(schedule, "case_frames", f"{part}: the schedule at {schedule_path}", refused=Refused)
     case_frames = int(schedule["case_frames"])
     if case_frames <= 0:
         raise Refused(f"{part}: no case frames to score (case_frames={case_frames})")

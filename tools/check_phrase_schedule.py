@@ -22,7 +22,6 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import manifest as mf  # noqa: E402
 import refusal  # noqa: E402
 
 A_GATE_ON, A_GATE_OFF = 0x20, 0x21
@@ -47,7 +46,7 @@ def applied(outdir: pathlib.Path):
 
 def intended(manifest: pathlib.Path):
     m = json.loads(manifest.read_text())
-    mf.require_keys(m, "timeline", f"the phrase manifest at {manifest}", refused=Refused)
+    refusal.require_keys(m, "timeline", f"the phrase manifest at {manifest}", refused=Refused)
     cursor, on, off = 0.0, [], []
     for seg in m["timeline"]["segments"]:
         for ev in seg["midi_events"]:

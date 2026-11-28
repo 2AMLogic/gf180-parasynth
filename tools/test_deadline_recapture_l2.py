@@ -12,8 +12,8 @@ The records and the reader are real: the two capture records are the committed
 `docs/deadline/runs/*-l2.json`. The simulator batch (`tools/run_all.py`) is
 stubbed; its output directory is a scratch copy of what it writes.
 """
+import hashlib
 import json
-import os
 import pathlib
 import sys
 from types import SimpleNamespace
@@ -85,3 +85,28 @@ def test_a_capture_record_that_is_not_an_object_is_refused(recapture, capsys, re
     records[dl.CAPTURES[0][0]] = record
     rc, out, _, _ = _main(recapture, capsys, records)
     assert rc == 2 and "REFUSED" in out and why in out
+
+
+def _hashes(*roots):
+    return {str(f): hashlib.sha256(f.read_bytes()).hexdigest()
+            for r in roots for f in sorted(pathlib.Path(r).rglob("*")) if f.is_file()}
+
+
+@pytest.mark.parametrize("damaged", range(len(dl.CAPTURES)))
+def test_a_damaged_capture_leaves_every_retained_file_untouched(recapture, capsys, damaged):
+    """Control for the preflight: seed the destination with prior evidence, damage
+    ONE capture (either), and require refusal AND byte-identical retained files.
+    Before the preflight a damaged second capture exited 2 after replacing 10 of
+    11 retained files, including the refused receipt itself."""
+    work, runs, traces = recapture
+    records = {n: json.loads(p.read_text()) for n, p in SHIPPED.items()}
+    _main(recapture, capsys, records)                      # seed with a good archive
+    for name in records:                                   # new captures differ from the seed
+        for n in dl.ARCHIVED:
+            (work / name / n).write_bytes(b"replacement")
+    del records[dl.CAPTURES[damaged][0]]["schedule"]
+    before = _hashes(runs, traces)
+    assert before
+    rc, out, _, _ = _main(recapture, capsys, records)
+    assert rc == 2 and "REFUSED" in out
+    assert _hashes(runs, traces) == before

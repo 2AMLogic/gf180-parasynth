@@ -45,7 +45,6 @@ TRACES = os.path.join(ROOT, "docs", "deadline", "traces")
 CAPT = os.path.join(ROOT, "rtl-sketch", "build", "deadline")
 
 sys.path.insert(0, os.path.join(ROOT, "tools"))
-import manifest as mf  # noqa: E402
 import refusal  # noqa: E402
 
 
@@ -74,7 +73,7 @@ def _run() -> int:
         if name.startswith("run_all"):
             continue
         rec = json.load(open(f))
-        mf.require_keys(rec, ("scenario", "configuration", "schedule", "status"),
+        refusal.require_keys(rec, ("scenario", "configuration", "schedule", "status"),
                         f"the deadline run record at {f}", refused=Refused)
         d = os.path.join(CAPT, tag_of(rec))
         if not os.path.isdir(d):
@@ -97,12 +96,12 @@ def _run() -> int:
         if not p.get("capture"):
             continue
         orig = json.load(open(os.path.join(RUNS, p["record"] + ".json")))
-        mf.require_keys(orig, ("schedule", "status"),
+        refusal.require_keys(orig, ("schedule", "status"),
                         f"the deadline run record at {os.path.join(RUNS, p['record'] + '.json')}",
                         refused=Refused)
         try:
             new = json.load(open(os.path.join(ROOT, p["reanalysis"])))
-            mf.require_keys(new, ("schedule", "status"),
+            refusal.require_keys(new, ("schedule", "status"),
                             f"the re-analysis record at {os.path.join(ROOT, p['reanalysis'])}",
                             refused=Refused)
         except (OSError, ValueError):

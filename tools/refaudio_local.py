@@ -28,7 +28,6 @@ Audio lands in refaudio/cache/ (gitignored), same as the ssh tool.
 from __future__ import annotations
 import argparse, csv, hashlib, json, os, pathlib, sys, zipfile
 import refusal
-import manifest as mf
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 REFAUDIO = REPO / "refaudio"
@@ -42,7 +41,7 @@ class Refused(refusal.Refused, Exception):
 def pack_record(archive: str) -> dict:
     path = REFAUDIO / "catalog.json"
     cat = json.loads(path.read_text(encoding="utf-8"))
-    mf.require_keys(cat, "packs", f"the reference-audio catalog at {path}", refused=Refused)
+    refusal.require_keys(cat, "packs", f"the reference-audio catalog at {path}", refused=Refused)
     for p in cat["packs"]:
         if p["archive"] == archive:
             return p

@@ -776,3 +776,14 @@ def test_measurement_sources_hash_the_transcript_gate():
     root = pathlib.Path(score.ROOT)
     missing = [rel for rel in score.MEASUREMENT_SOURCES if not (root / rel).is_file()]
     assert missing == []
+
+
+def test_a_bound_schedule_that_is_a_json_list_is_refused_not_an_attribute_error(tmp_path):
+    """A list parses; `.get()` on it was an AttributeError before the guard moved
+    ahead of the first read (#1623 review)."""
+    paths, _, wav_sha, _ = _part_files(tmp_path, "mix")
+    paths["schedule"].write_text(json.dumps([1, 2, 3]))
+    schedule_sha = hashlib.sha256(paths["schedule"].read_bytes()).hexdigest()
+    report = _report(part="mix", wav_sha=wav_sha, schedule_sha=schedule_sha, periods=CASE_FRAMES)
+    with pytest.raises(score.Refused, match="not a JSON object"):
+        score.validate_part("E1A", "mix", report, paths["wav"], paths["schedule"])

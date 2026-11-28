@@ -361,3 +361,8 @@ def test_a_plan_with_null_grid_is_refused(tmp_path, monkeypatch, capsys):
     rc, err = _main_over(tmp_path, monkeypatch, capsys,
                          {"schema": "sensitivity-plan-v1", "grid": None})
     assert rc == 2 and "REFUSED" in err and "'grid'" in err
+
+
+def test_a_plan_that_is_a_json_list_is_refused_not_an_attribute_error(tmp_path, monkeypatch, capsys):
+    rc, err = _main_over(tmp_path, monkeypatch, capsys, [1, 2, 3])
+    assert rc == 2 and "REFUSED" in err and "not a JSON object" in err
