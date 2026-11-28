@@ -1,7 +1,36 @@
-"""Ground truth and refusal controls for measure_mono_case."""
+"""Ground truth and refusal controls for `measure_mono_case`.
+
+THE `_apparatus` HANDLER (#1777), at the end of this file. It wrapped the
+rig's construction and the reference render in `except Exception` and raised
+whatever it caught as this module's `Refused` -- so a bug in the rig, in the
+causality battery or in an estimator was reported as `REFUSED ... qualified
+Surge apparatus refused`, exit 2: an execution error filed as a missing
+precondition, the #1771 shape. The handler now catches the callee's refusal
+vocabulary and nothing wider (see the comment at the site).
+RED FIRST against the unfixed handler (2026-11-28, origin/main @ 1c56aaf6):
+the five execution-error controls failed with `DID NOT RAISE`. Seen directly
+too, outside pytest: `run()` with an injected `KeyError` in the estimator
+returned exit 2 and a report reading `REFUSED -- qualified Surge apparatus
+refused: 'injected bug in the estimator'`. With the fix: 11 passed.
+The positive controls are green before AND after the fix by design, so their
+teeth were checked by mutation instead: with the handler narrowed to
+`refusal.Refused` alone (the literal reading of "catch the callee's
+refusal"), 5 of the 6 go red -- every class `reference_rigs` actually
+refuses in; without `AssertionError`, the `RigRefusal`, `InsufficientEvidence`
+and `NonFiniteAudio` controls go red.
+
+WHAT THE CONTROLS DO NOT CLAIM. No plugin ran: a stand-in rig raises the
+injected exception where the real one would raise its own, so this exercises
+the handler's class boundary and not a production path. And the bound the
+site states is real: a bug that raises `RuntimeError` or `AssertionError` is
+still filed as REFUSED here, because that is how this callee refuses.
+"""
 from __future__ import annotations
 
 import json
+import pathlib
+import sys
+import types
 import wave
 
 import numpy as np
@@ -11,6 +40,8 @@ import measure_mono_case as m
 import voice_fx as vf
 import audio_measure as am
 import oversampled_osc as os2
+import refusal
+import rig_qualification as rq
 
 
 def test_measure_accepts_a_known_saw():
@@ -173,3 +204,85 @@ def test_without_the_full_scale_guard_an_over_range_run_is_a_control_that_stays_
     assert (code, rep["status"]) == (0, "VALID")
     words = _read_words(tmp_path / "out" / rep["audio"][name])
     assert np.count_nonzero(words == 32767) >= np.count_nonzero(over > 1.0)
+
+
+# ---------------------------------------------------------------------------
+# #1777: `_apparatus`'s handler. The rig's own refusals stay REFUSED; a bug
+# does not.
+# ---------------------------------------------------------------------------
+def _rig_whose_tone_raises(exc):
+    class _Rig:
+        def __init__(self, *_a, **_k):
+            pass
+
+        def osc_tone(self, *_a, **_k):
+            raise exc
+    return _Rig
+
+
+def _arm(monkeypatch, exc):
+    """dawdreamer importable, Surge's bundle present, and a rig whose tone
+    raises `exc`: `_apparatus` then runs its own shipped code up to the rig."""
+    monkeypatch.setitem(sys.modules, "dawdreamer", types.ModuleType("dawdreamer"))
+    monkeypatch.setattr(m.rr, "PATH_SURGE", pathlib.Path(__file__))
+    monkeypatch.setattr(m.rr, "SurgeRig", _rig_whose_tone_raises(exc))
+
+
+def _apparatus_with(monkeypatch, exc):
+    _arm(monkeypatch, exc)
+    return m._apparatus()
+
+
+APPARATUS_REFUSALS = [
+    pytest.param(RuntimeError("surge-type2: oscillator 1 reads 'Audio In', wanted 'Classic'"),
+                 id="readback-mismatch-RuntimeError"),
+    pytest.param(rq.RigRefusal("surge-type2 under dawdreamer: REFUSED -- pins: ..."),
+                 id="battery-RigRefusal"),
+    pytest.param(am.InsufficientEvidence("spectral_centroid: silent"),
+                 id="estimator-InsufficientEvidence"),
+    pytest.param(am.NonFiniteAudio("the render held NaN"), id="render-NonFiniteAudio"),
+    pytest.param(refusal.Refused("injected"), id="another-modules-Refused"),
+]
+
+
+@pytest.mark.parametrize("exc", APPARATUS_REFUSALS)
+def test_apparatus_still_refuses_on_the_rigs_own_refusals(monkeypatch, exc):
+    """The positive control. `reference_rigs` refuses in its own vocabulary --
+    `RuntimeError` for a pin or readback that does not hold, `RigRefusal` from
+    the causality battery, `InsufficientEvidence`/`NonFiniteAudio` from the
+    estimators (#1751, #1763) -- and each of those is still this module's
+    `Refused`, with the cause chained."""
+    with pytest.raises(m.Refused, match=r"^qualified Surge apparatus refused: ") as e:
+        _apparatus_with(monkeypatch, exc)
+    assert e.value.__cause__ is exc
+
+
+@pytest.mark.parametrize("bug", [
+    TypeError("injected bug"), KeyError("injected bug"), ValueError("injected bug"),
+    IndexError("injected bug"), AttributeError("injected bug")],
+    ids=["TypeError", "KeyError", "ValueError", "IndexError", "AttributeError"])
+def test_apparatus_lets_a_bug_escape_as_an_execution_error(monkeypatch, tmp_path, bug):
+    """#1777's injected-bug control, through `run` -- the entry point that
+    ships. The handler was `except Exception`, so a `TypeError` in the rig, in
+    the battery or in an estimator was reported as `REFUSED ... qualified Surge
+    apparatus refused`, exit 2: a bug filed as a missing precondition. It must
+    propagate, and no report may be written for it. `RuntimeError` is not among
+    the injected types because it IS how this callee refuses (`select_osc`
+    raises it on a readback mismatch)."""
+    _arm(monkeypatch, bug)
+    with pytest.raises(type(bug), match="injected bug") as e:
+        m.run(tmp_path / "out")
+    assert not isinstance(e.value, m.Refused)
+    assert not (tmp_path / "out").exists()
+
+
+def test_run_still_reports_the_rigs_own_refusal_as_refused(monkeypatch, tmp_path):
+    """The positive control through `run`: exit 2 and a report whose status is
+    REFUSED, as the module docstring promises for an apparatus that is not
+    available."""
+    exc = RuntimeError("surge-type2: oscillator 1 reads 'Audio In', wanted 'Classic'")
+    _arm(monkeypatch, exc)
+    code, rep = m.run(tmp_path / "out")
+    assert (code, rep["status"]) == (m.REFUSED, "REFUSED")
+    assert rep["reason"] == f"qualified Surge apparatus refused: {exc}"
+    assert not list((tmp_path / "out").glob("*.wav"))
