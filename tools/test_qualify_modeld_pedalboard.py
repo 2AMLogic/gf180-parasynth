@@ -469,3 +469,76 @@ def test_the_preset_identity_hashes_state_where_the_host_exposes_it():
     got = rp.preset_identity(_WithPreset(), source="s")
     assert len(got["preset_data_sha256"]) == 64 and got["preset_data_bytes"] == 120
     assert "not exposed by this host" in rp.preset_identity(_Without(), source="s")["preset_data"]
+
+
+# ===========================================================================
+# #1685: three places a refusal left `main` uncaught. `report(dev, qual)` in
+# the try's `else` clause calls `rp.environment_tuple`, which refuses rather
+# than report an unstated field; `report()` inside the handlers can refuse
+# through the record's own provenance; and `rp.write_clip` is called after the
+# try. Each is run with only that callee stubbed, and the printed reason must
+# be the stub's own.
+# ===========================================================================
+def _absent_bundle(monkeypatch, tmp_path):
+    mod = types.ModuleType("pedalboard")
+    mod.__version__ = "0.9.25"
+    mod.load_plugin = lambda *a, **kw: pytest.fail("must not be reached")
+    monkeypatch.setitem(sys.modules, "pedalboard", mod)
+    monkeypatch.setattr(rr, "PATH_MODELD", str(tmp_path / "absent.vst3"))
+
+
+def test_a_refusal_from_the_environment_tuple_exits_REFUSED_not_a_traceback(
+        monkeypatch, capsys, bundle, tmp_path):
+    with_host(monkeypatch, bundle)
+
+    def refusing(**kw):
+        raise rp.Refused("<control> the environment tuple refused")
+    monkeypatch.setattr(rp, "environment_tuple", refusing)
+    out = tmp_path / "rec.json"
+    assert qmp.main(["--json", str(out)]) == rp.REFUSED
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "<control> the environment tuple refused" in text, text[-400:]
+    assert json.loads(out.read_text())["outcome"] == "REFUSED"
+
+
+def test_a_refusal_while_building_the_record_inside_a_handler_is_caught(
+        monkeypatch, capsys, tmp_path):
+    _absent_bundle(monkeypatch, tmp_path)
+
+    def refusing():
+        raise rp.Refused("<control> the record's own provenance refused")
+    monkeypatch.setattr(rp, "worktree_state", refusing)
+    out = tmp_path / "rec.json"
+    assert qmp.main(["--json", str(out)]) == rp.REFUSED
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "<control> the record's own provenance refused" in text, text[-400:]
+    assert json.loads(out.read_text())["outcome"] == "REFUSED"
+
+
+def test_a_refusal_from_write_clip_exits_REFUSED_not_a_traceback(
+        monkeypatch, capsys, bundle, tmp_path):
+    with_host(monkeypatch, bundle)
+
+    def refusing(*a, **k):
+        raise rp.Refused("<control> the clip could not be written as stated")
+    monkeypatch.setattr(rp, "write_clip", refusing)
+    wav = tmp_path / "clip.wav"
+    assert qmp.main(["--wav", str(wav)]) == rp.REFUSED
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "<control> the clip could not be written as stated" in text, text[-400:]
+    assert not wav.exists(), "a clip that was refused is not evidence"
+
+
+@pytest.mark.parametrize("callee", ["environment_tuple", "write_clip"])
+def test_control_an_unrelated_error_from_these_callees_still_propagates(
+        monkeypatch, capsys, bundle, tmp_path, callee):
+    """The input that defeats the wrong repair: `except Exception` relabels an
+    implementation error REFUSED, and this is the control that goes red."""
+    with_host(monkeypatch, bundle)
+
+    def broken(*a, **k):
+        raise ValueError("<control> a block size that is not a number")
+    monkeypatch.setattr(rp, callee, broken)
+    with pytest.raises(ValueError, match="not a number"):
+        qmp.main(["--wav", str(tmp_path / "clip.wav")])
+    assert "REFUSED" not in capsys.readouterr().out

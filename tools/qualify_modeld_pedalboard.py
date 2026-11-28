@@ -167,13 +167,22 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     import rig_qualification as rq
+
+    def recorded(**kw) -> dict:
+        try:
+            return report(**kw)
+        except rp.Refused as why:
+            print(f"REFUSED  {why}")
+            return {"rig": RIG, "host": HOST, "outcome": "REFUSED", "why": str(why),
+                    "note": "the full record could not be built, so this one is short"}
+
     dev, qual, rec = None, None, None
     try:
         dev = build()
         qual = dev.qualification
     except rp.Refused as why:
         print(f"REFUSED  {why}")
-        rec, code = report(refusal=str(why)), REFUSED
+        rec, code = recorded(refusal=str(why)), REFUSED
     except rq.RigRefusal as why:
         # The rig refused to be built. Its record is attached to the exception,
         # which is the whole reason `RigRefusal` carries one.
@@ -181,13 +190,18 @@ def main(argv=None) -> int:
         print(f"the rig REFUSED to be built: {why}\n")
         if qual is not None:
             print(qual.table())
-        rec = report(qual=qual, refusal=None if qual is not None else str(why))
+        rec = recorded(qual=qual, refusal=None if qual is not None else str(why))
         code = FAIL if (qual is not None and qual.verdict == rq.FAIL) else REFUSED
     else:
         print(qual.table())
-        rec = report(dev, qual)
-        code = OK if qual.qualified else (
-            FAIL if qual.verdict == rq.FAIL else REFUSED)
+        try:
+            rec = report(dev, qual)
+        except rp.Refused as why:
+            print(f"REFUSED  {why}")
+            rec, code = recorded(refusal=str(why)), REFUSED
+        else:
+            code = OK if qual.qualified else (
+                FAIL if qual.verdict == rq.FAIL else REFUSED)
 
     if code == OK and dev is not None:
         print("\nthe clip that qualified:")
@@ -195,7 +209,11 @@ def main(argv=None) -> int:
         print(f"  {len(y)} frames  peak {float(np.abs(y).max()):.6f}  "
               f"note {dev.note}  block {dev.block}  sr {dev.sr}")
         if a.wav:
-            rp.write_clip(pathlib.Path(a.wav), y, dev.sr)
+            try:
+                rp.write_clip(pathlib.Path(a.wav), y, dev.sr)
+            except rp.Refused as why:
+                print(f"REFUSED  {why}")
+                return REFUSED
             print(f"  wrote {a.wav}")
         print("\nNEXT: record the verdict in tools/refprofile.py "
               "RIG_VERDICTS['modeld-pedalboard'] (qualified=True, with this run's "
