@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 import capture_m1a_phase_cycle as c
+import refusal
 
 SR = c.ref.SR
 ON = .1
@@ -115,20 +116,30 @@ def test_slow_psi_cycle_swell_is_not_a_click_but_clicks_on_it_are():
 
 
 # ---- a frozen manifest that cannot be read is REFUSED, not a traceback (#1604)
-def _capture(monkeypatch, tmp_path, capsys, manifest):
-    """`main()` over a frozen manifest under a scratch FROZEN dir.
+def _scratch(monkeypatch, tmp_path, manifest=None, text=None):
+    """A scratch FROZEN holding `manifest` -- or the raw `text` (#1985: a file
+    that is not JSON at all) -- and a scratch OUT, both bound to the module.
 
-    The clean-tree precondition is answered, not exercised. The manifest and
-    the reader are real; the plugin is never reached, because the key check
-    refuses before anything is rendered."""
+    The clean-tree precondition is answered, not exercised. Returns the two
+    directories so a test can plant a damaged file before `main()` runs."""
     frozen, out = tmp_path / "frozen", tmp_path / "out"
     frozen.mkdir()
-    (frozen / "manifest.json").write_text(json.dumps(manifest))
+    (frozen / "manifest.json").write_text(text if text is not None else json.dumps(manifest))
     monkeypatch.setattr(c, "FROZEN", frozen)
     monkeypatch.setattr(c, "OUT", out)
     monkeypatch.setattr(c, "_git", lambda *args: "")
+    return frozen, out
+
+
+def _capture(monkeypatch, tmp_path, capsys, manifest):
+    """`main()` over a frozen manifest under a scratch FROZEN dir.
+
+    The manifest and the reader are real. The #1604 controls pass a manifest
+    the key check refuses, so nothing is rendered; the #1985 controls answer
+    the identity check and stub the render, so the plugin is never loaded."""
+    _scratch(monkeypatch, tmp_path, manifest)
     code = c.main()
-    return code, capsys.readouterr().out, out
+    return code, capsys.readouterr().out, tmp_path / "out"
 
 
 def _committed_manifest():
@@ -157,3 +168,132 @@ def test_an_empty_frozen_manifest_is_refused_naming_every_key(monkeypatch, tmp_p
 def test_a_frozen_manifest_with_a_null_identity_is_refused(monkeypatch, tmp_path, capsys):
     code, out, _ = _capture(monkeypatch, tmp_path, capsys, {**_committed_manifest(), "identity": None})
     assert code == 2 and "'identity'" in out
+
+
+# ---- #1985: an execution error is not a refusal ----------------------------
+# main()'s handler was typed (ref.Refused, OSError, ValueError, RuntimeError)
+# over the WHOLE capture and wrote every one of them to refused.json as
+# state "REFUSED". ref.Refused IS a RuntimeError (measure_mono_m5a_reference
+# subclasses it), so that last name bought only the NON-refusal RuntimeErrors,
+# and a ValueError from a bug in the capture was filed as a precondition that
+# did not hold -- a record, which outlives the run. tools/refusal.py: an
+# unexpected exception is an EXECUTION ERROR, never a refusal. RED FIRST
+# against the shipped handler (2026-11-28): the three propagate controls over
+# ValueError and RuntimeError failed with DID NOT RAISE (the KeyError and
+# TypeError cells passed: the shipped tuple never held them), the base-class
+# refusal control ESCAPED it -- it was typed with the LOCAL ref.Refused --
+# and the rig, not-JSON and not-a-WAV controls were refused with the raw
+# exception text instead of a stated reason. With the tuple narrowed and
+# nothing else, the propagate controls passed and those three went red: each
+# conversion below exists because of that run. The positive controls' teeth
+# were checked by mutation: with the handler on this module's LOCAL Refused
+# the base-class, render-module and not-JSON controls go red; without OSError
+# the missing-manifest control does; with _render re-wrapping, or not
+# converting, the render-module and rig controls do.
+# NOT CLAIMED: dawdreamer is not installed on the host these were written on,
+# so the rig's RuntimeError refusal is read from model/reference_rigs.py, not
+# produced by a real MiniV3Rig, and the controls exercise main()'s class
+# boundary with the render stubbed -- not a production path.
+
+def _raise(exc, message):
+    def f(*_args, **_kwargs):
+        raise exc(message)
+    return f
+
+
+def _identity_matches(monkeypatch):
+    # answer precondition 1 so the run reaches the first render, where the
+    # controls inject; the plugin is never loaded
+    monkeypatch.setattr(c.ref, "_plugin_metadata", lambda: dict(_committed_manifest()["identity"]))
+
+
+@pytest.mark.parametrize(("target", "name", "exc"), [
+    (c, "reproduce_frozen", ValueError),
+    (c, "reproduce_frozen", RuntimeError),
+    (c, "reproduce_frozen", KeyError),
+    (c, "reproduce_frozen", TypeError),
+    (c.m1a, "render", ValueError),
+], ids=["capture ValueError", "capture RuntimeError", "capture KeyError",
+        "capture TypeError", "render ValueError"])
+def test_a_bug_in_the_capture_is_an_execution_error(monkeypatch, tmp_path, capsys, target, name, exc):
+    _identity_matches(monkeypatch)
+    monkeypatch.setattr(target, name, _raise(exc, "injected: a bug"))
+    with pytest.raises(exc, match="injected"):
+        _capture(monkeypatch, tmp_path, capsys, _committed_manifest())
+    assert "REFUSED" not in capsys.readouterr().out
+    assert not (tmp_path / "out" / "refused.json").exists()
+
+
+def test_the_rig_construction_refusal_is_still_refused(monkeypatch, tmp_path, capsys):
+    # The one RuntimeError on this path that is a refusal: MiniV3Rig's
+    # construction refuses a changed plugin with RuntimeError
+    # (model/reference_rigs.py: _qualify_pins, "unchanged contract: RuntimeError
+    # on mismatch", and check_names, "parameter indices moved"), and m1a.render
+    # builds the rig directly, without _render_segment's except Exception ->
+    # Refused. Converted where it is expected (_render), so main's handler
+    # needs no RuntimeError.
+    _identity_matches(monkeypatch)
+    monkeypatch.setattr(c.m1a, "render",
+                        _raise(RuntimeError, "injected: miniv3: pinned settings did not hold"))
+    code, out, refused = _capture(monkeypatch, tmp_path, capsys, _committed_manifest())
+    assert code == 2 and "REFUSED: Mini V3 apparatus refused: injected" in out, out
+    record = json.loads((refused / "refused.json").read_text())
+    assert record["state"] == "REFUSED" and "injected" in record["reason"]
+
+
+@pytest.mark.parametrize("exc", [refusal.Refused, c.ref.Refused],
+                         ids=["base-class Refused", "render module's Refused"])
+def test_a_refusal_from_the_render_is_still_refused_unchanged(monkeypatch, tmp_path, capsys, exc):
+    # The paired positive control. refusal.Refused is the BASE class: a
+    # cross-module refusal that is neither this module's nor the render
+    # module's, so a handler narrowed to a LOCAL class lets it out. The render
+    # module's own Refused is also a RuntimeError and must cross _render under
+    # its own text, not re-wrapped.
+    _identity_matches(monkeypatch)
+    monkeypatch.setattr(c.m1a, "render", _raise(exc, "injected: a refusal"))
+    code, out, refused = _capture(monkeypatch, tmp_path, capsys, _committed_manifest())
+    assert code == 2 and "REFUSED: injected: a refusal" in out.splitlines(), out
+    assert json.loads((refused / "refused.json").read_text()) == {"state": "REFUSED",
+                                                                 "reason": "injected: a refusal"}
+
+
+def test_a_frozen_manifest_that_is_not_json_is_refused(monkeypatch, tmp_path, capsys):
+    # REFUSED before #1985 too, but only because JSONDecodeError is a
+    # ValueError the tuple caught. #1604's contract for this tool is that a
+    # frozen manifest it cannot read is REFUSED, so the read now refuses in its
+    # own right and names the file; red with the tuple narrowed and the read
+    # left as json.loads (run that way, 2026-11-28).
+    frozen, out = _scratch(monkeypatch, tmp_path, text="{")
+    assert c.main() == 2
+    assert "REFUSED: " in capsys.readouterr().out
+    record = json.loads((out / "refused.json").read_text())
+    assert record["state"] == "REFUSED"
+    assert "is not valid JSON" in record["reason"] and str(frozen / "manifest.json") in record["reason"]
+
+
+def test_a_frozen_reference_that_is_not_a_wav_is_refused(monkeypatch, tmp_path, capsys):
+    # REFUSED before #1985 too, but only because scipy's "File format not
+    # understood" is a ValueError the tuple caught. A damaged tracked record is
+    # an unmet precondition (tools/exit_contract.py: exit 2), not a FAIL; red
+    # with the tuple narrowed and the read left as wavfile.read (run that
+    # way, 2026-11-28).
+    manifest = _committed_manifest()
+    _identity_matches(monkeypatch)
+    monkeypatch.setattr(c.m1a, "render", lambda *a, **k: (np.zeros(16, dtype=np.float32), {}))
+    frozen, out = _scratch(monkeypatch, tmp_path, manifest)
+    (frozen / manifest["renders"][0]["file"]).write_text("not a wav")
+    assert c.main() == 2
+    assert "REFUSED: " in capsys.readouterr().out
+    record = json.loads((out / "refused.json").read_text())
+    assert record["state"] == "REFUSED" and manifest["renders"][0]["file"] in record["reason"]
+
+
+def test_a_missing_frozen_manifest_is_refused(monkeypatch, tmp_path, capsys):
+    # the reason OSError stays in the handler: the frozen record is read by
+    # path, and a missing one is a missing precondition
+    frozen, out = _scratch(monkeypatch, tmp_path, {})
+    (frozen / "manifest.json").unlink()
+    assert c.main() == 2
+    assert "REFUSED: " in capsys.readouterr().out
+    record = json.loads((out / "refused.json").read_text())
+    assert record["state"] == "REFUSED" and "No such file" in record["reason"]

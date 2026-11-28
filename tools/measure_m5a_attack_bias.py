@@ -122,8 +122,10 @@ def _measure_known_condition(f0: float, wave: str, phases: int) -> dict:
 
 def measure_attack_bias(manifest_path: pathlib.Path | str = MANIFEST, *, phases: int = 8) -> dict:
     if not 1 <= int(phases) <= 32:
-        raise ValueError("phase count must be in 1..32")
+        raise Refused("phase count must be in 1..32")
     manifest_path = pathlib.Path(manifest_path).resolve()
+    if not manifest_path.is_relative_to(ROOT):
+        raise Refused(f"manifest must sit inside the repository: {manifest_path}")
     apparatus, audio_path, audio_sha, manifest_sha = _reference_preconditions(manifest_path)
     conditions = [_measure_known_condition(f0, wave, int(phases))
                   for f0 in MIDI_HZ.values() for wave in ("saw", "pulse479")]
@@ -172,7 +174,17 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     try:
         report = measure_attack_bias(args.manifest, phases=args.phases)
-    except (OSError, ValueError, KeyError, TypeError, refusal.Refused) as exc:
+    except (refusal.Refused, OSError) as exc:
+        # refusal.Refused is the base class: a refusal raised by any module on
+        # this path -- this file's, mono_m5a_score's, reference_suites' -- is
+        # caught here. OSError is kept for one reason: the manifest named on
+        # the command line is read by path inside the guarded call, and one
+        # that passed is_file() but cannot be read is a missing input.
+        # Nothing else is caught (#1985): a malformed manifest (bad JSON, a
+        # missing key -- a KeyError or TypeError) is an execution error by
+        # mono_m5a_score.load_reference's own stated decision, and so is a bug
+        # in the meter. Residual: a missing `git` or instrument file also
+        # arrives here as an OSError.
         print(f"measure_m5a_attack_bias: REFUSED -- {exc}")
         return 2
     out = pathlib.Path(args.out)
