@@ -443,3 +443,12 @@ def test_go_sh_exports_the_fischer_root_not_its_parent():
     txt = (ROOT / "fpga/reports/r2/settled/go.sh").read_text()
     line = [l for l in txt.splitlines() if l.startswith("export GF180_TR808_REFS=")][0]
     assert line.rstrip().endswith("/sounds-tr808-fischer"), line
+
+
+def test_refs_child_env_resolves_through_configured_refs(monkeypatch):
+    """The child overlay must round-trip through the resolver, and an inherited
+    disagreeing alias must not make the child REFUSE."""
+    monkeypatch.setenv(rc.REFS_ALIAS_ENV, "/somewhere/else")
+    for k, v in rc.refs_child_env("/x/corpus").items():
+        monkeypatch.setenv(k, v)
+    assert rc.configured_refs() == pathlib.Path("/x/corpus")

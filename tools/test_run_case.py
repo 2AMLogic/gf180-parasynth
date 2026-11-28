@@ -26,11 +26,13 @@ runner thinks it said:
 """
 from __future__ import annotations
 
+import hashlib
 import inspect
 import json
 import math
 import os
 import pathlib
+import subprocess
 import sys
 
 import numpy as np
@@ -2661,3 +2663,152 @@ def test_control_outcome_refuses_a_non_numeric_worst(bad):
         out = rc.control_outcome("changed", "REF_CORNER_2X", ["F1A"],
                                  {"F1A": "filter"}, c, i)
         assert out[0] == "refused", (bad, out)
+
+
+# ===========================================================================
+# The M5A SPI-to-I2S smoke, read through the one transcript gate (#1595)
+# ===========================================================================
+# `run_case` runs the bench itself (`verify_synth_top.py --m5a-smoke --wav-out`)
+# and decides whether what it printed is evidence. It used to ask two
+# substrings -- `PASS --` and the first three words of the M5A verified line --
+# so a control run, a run that also said `FAIL --`, a run from an unnamed
+# simulator and a transcript printed beside some other WAV were all recorded as
+# M5A's SPI-to-I2S evidence. The gate is `tools/i2s_transcript.validate_clean_pass`
+# (#1556). These tests drive `run_case` with the model render and the bench
+# faked, and ask the board what it sees.
+
+M5A_VERIFIED = "M5A path verified from SPI pins through the production voice and I2S pins"
+SMOKE_WAV = b"RIFF the bytes the fake bench writes as m5a-i2s.wav WAVE"
+
+
+def _smoke_report(wav_sha, *, defines="VOICE_OSC_2X, VOICE_FILTER_2X", simulator="verilator",
+                  verdict=True, verified=M5A_VERIFIED):
+    """One `--m5a-smoke` transcript, record for record as the bench prints it
+    (`docs/scorecard/mono-pulse-2x/rtl/smoke.txt`), each record mutable."""
+    lines = ["verify_synth_top: M5A stimulus has 4 note events, smoke: envelope completion not claimed",
+             "verify_synth_top: selected 2x saw + causal 2x filter candidate; "
+             f"compile defines: {defines}"]
+    if simulator is not None:
+        lines.append(f"verify_synth_top: simulator backend {simulator}")
+    lines += ["verify_synth_top: built from f694882, outdir /tmp/pulse-smoke; every source from rtl-sketch/",
+              "verify_synth_top: decoded I2S WAV written to build/scorecard/M5A-spi-i2s/m5a-i2s.wav",
+              f"verify_synth_top: decoded I2S WAV sha256 {wav_sha}"]
+    if verdict:
+        lines.append("verify_synth_top: PASS -- 4837 I2S periods decoded from the wire, every one "
+                     "identical to the model; both channels agree; every slot 32 BCLK; the core's "
+                     "own stream matches too")
+    if verified is not None:
+        lines.append(f"verify_synth_top: {verified}")
+    return "\n".join(lines) + "\n"
+
+
+def _rendered():
+    """What `mono_m5a.measure` hands the runner: every required metric inside tolerance."""
+    case = next(c for c in rc.load_cases() if c["case_id"] == "M5A")
+    return {"audio": "model-twin/M5A.wav", "reference_sha256": "a" * 64, "manifest_sha256": "b" * 64,
+            "analysis_version": "fixture", "note": "",
+            "metrics": {m: {"valid": True, "error": 0.0, "tolerance": 1.0} for m in
+                        (x.strip() for x in case["required_measurements"].split(";")) if m},
+            "cutoff_calibration": {}, "model_segments": [], "event_diagnostics": [],
+            "wrong_then_right": [], "duration_s": 6.2,
+            "model_configuration": {
+                "name": "selected", "oscillator_oversample_2x": True, "filter_rate_converted": True,
+                "filter_preserve_headroom": True, "filter_causal": True, "pulse479_filter_candidate": True,
+                "pulse_control_label": "pulse29", "pulse_effective_waveform": "pulse479",
+                "pulse_effective_duty_percent": 47.9, "saw_cutoff_override_hz": 20000,
+                "saw_volume_correction_db": -0.45428, "envelope_calibration_source": "fixture"}}
+
+
+def _m5a_run(monkeypatch, tmp_path, report, *, wav=SMOKE_WAV, returncode=0):
+    """M5A through `run_case`, with the model render and the bench faked.
+
+    `report` is the transcript, or a function of the WAV's digest, so a test
+    binds its transcript to the WAV the fake bench wrote or to another. The
+    fake bench does what the real one does with `--wav-out`: it writes the WAV
+    named on its command line, then prints the transcript. A bench that wrote no
+    WAV (`wav=None`) still prints a digest, of the WAV it should have written.
+    Everything else on the record is the runner's own, on a scratch ROOT, so the
+    shared `build/scorecard/M5A-spi-i2s/` a committed record names is never
+    touched; the two provenance helpers that hash files under ROOT are given
+    their answering shapes."""
+    root = tmp_path / "root"
+    real_run = subprocess.run
+    written = SMOKE_WAV if wav is None else wav
+
+    def bench(command, *args, **kwargs):
+        if "--m5a-smoke" not in command:
+            return real_run(command, *args, **kwargs)
+        text = report(hashlib.sha256(written).hexdigest()) if callable(report) else report
+        out = pathlib.Path(command[command.index("--wav-out") + 1])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if wav is not None:
+            out.write_bytes(wav)
+        return subprocess.CompletedProcess(command, returncode, stdout=text, stderr="")
+
+    case = next(c for c in rc.load_cases() if c["case_id"] == "M5A")
+    monkeypatch.setattr(rc, "ROOT", root)
+    monkeypatch.setattr(rc, "model_input_hashes", lambda extra=None: dict(extra or {}))
+    monkeypatch.setattr(rc, "analysis_run", lambda: "fixture")
+    monkeypatch.setattr(rc.mono_m5a, "measure", lambda **kwargs: _rendered())
+    monkeypatch.setattr(rc.subprocess, "run", bench)
+    return rc.run_case(case, tmp_path / "refs", keep_audio=False)
+
+
+def _board(res):
+    case = next(c for c in rc.load_cases() if c["case_id"] == "M5A")
+    return sb.evaluate(case, res)["state"]
+
+
+def test_a_clean_smoke_bound_to_its_wav_is_recorded_as_the_m5a_evidence(tmp_path, monkeypatch):
+    """The precondition of every refusal below: a transcript the gate accepts,
+    whose digest is the WAV the bench wrote beside it, is a measured M5A -- and
+    the record binds the report by its own hash, as it always has."""
+    res = _m5a_run(monkeypatch, tmp_path, _smoke_report)
+    assert _board(res) == sb.PASS, res["note"]
+    artefact = res["provenance"]["artefacts"]["spi_i2s"]
+    assert artefact == "build/scorecard/M5A-spi-i2s/verification.txt"
+    assert res["diagnostics"]["spi_i2s_report_sha256"] == hashlib.sha256(
+        (rc.ROOT / artefact).read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("report,why", [
+    pytest.param(lambda sha: _smoke_report(sha, defines="VOICE_OSC_2X, INJECT_BUG_SPI_ADDR7"),
+                 "mutation runs", id="injected-control"),
+    pytest.param(lambda sha: _smoke_report(sha) + "verify_synth_top: FAIL -- 68 writes reached "
+                 "the register port, 67 were sent\n", "it contains FAIL --", id="pass-beside-fail"),
+    pytest.param(lambda sha: _smoke_report(sha) + "verify_synth_top: REFUSED -- partial run\n",
+                 "it contains REFUSED", id="pass-beside-refused"),
+    pytest.param(lambda sha: _smoke_report(sha) + "run_all: NO-VERDICT (timeout)\n",
+                 "it contains NO-VERDICT", id="pass-beside-no-verdict"),
+    pytest.param(lambda sha: _smoke_report(sha, simulator=None),
+                 "omits the simulator backend", id="no-simulator"),
+    pytest.param(lambda sha: _smoke_report("0" * 64), "does not bind", id="another-wavs-digest"),
+    pytest.param(lambda sha: _smoke_report(sha, verified="M5A path verified from the register "
+                 "write port to the I2S pins"), "did not verify", id="truncated-verified-line"),
+])
+def test_a_smoke_transcript_that_is_not_one_clean_pass_refuses_the_case(tmp_path, monkeypatch, report, why):
+    """START RED (#1595). Each of these used to be recorded as a PASS with the
+    report bound into `spi_i2s`: the runner matched `PASS --` and the first
+    three words of the verified line. #1376's shape is the second -- the bench
+    states a defect with `FAIL --` and, the wire matching, still ends in
+    `PASS --` -- and the last is the register-port bench this repository
+    believed was its SPI path."""
+    res = _m5a_run(monkeypatch, tmp_path, report)
+    assert _board(res) == sb.NO_VERDICT
+    assert res["note"].startswith("REFUSED:") and why in res["note"], res["note"]
+    assert "spi_i2s" not in res["provenance"]["artefacts"]
+
+
+def test_a_smoke_that_wrote_no_wav_is_refused(tmp_path, monkeypatch):
+    """START RED. The digest on the transcript was never checked against
+    anything, so a bench that decoded no WAV at all was evidence."""
+    res = _m5a_run(monkeypatch, tmp_path, _smoke_report, wav=None)
+    assert _board(res) == sb.NO_VERDICT
+    assert "no decoded WAV" in res["note"], res["note"]
+
+
+def test_a_bench_that_exited_nonzero_is_refused_whatever_it_printed(tmp_path, monkeypatch):
+    """Kept from before the consolidation: the exit status is asked first."""
+    res = _m5a_run(monkeypatch, tmp_path, _smoke_report, returncode=1)
+    assert _board(res) == sb.NO_VERDICT
+    assert "did not pass" in res["note"], res["note"]
