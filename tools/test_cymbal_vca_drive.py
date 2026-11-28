@@ -38,6 +38,7 @@ for p in (ROOT / "tools", ROOT / "model"):
 
 import cymbal_candidate as cc          # noqa: E402
 import cymbal_vca_drive as vd          # noqa: E402
+import exit_contract                   # noqa: E402
 import tone_stage_schematic as ts      # noqa: E402
 import werner_fig4 as wf               # noqa: E402
 from exit_contract import PASS, REFUSED  # noqa: E402
@@ -240,8 +241,132 @@ def test_an_unknown_defect_refuses():
 
 
 def test_the_gate_is_green_on_the_committed_read():
-    ok, lines = vd.check()
-    assert ok, "\n".join(lines)
+    ok, lines, refused = vd.check()
+    assert ok and not refused, "\n".join(lines)
+    assert not any("REFUSED" in ln for ln in lines), "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# 3b. A control that REFUSES is neither PASS nor FAIL (#1819)
+#
+# `check()`'s injected-defect loop used to fold a refusal into its list of red
+# properties -- `red = ["REFUSED: ..."]` -- so a defect whose evaluation could
+# not run was printed `PASS  <defect>: turns red ['REFUSED: ...']` and counted
+# toward a green gate. The control "each injected defect must turn a property
+# red" then passed having exercised one control fewer: the #1769 shape, a
+# REFUSED that is printed but counted as a measurement.
+#
+# Only defects OUTSIDE `BLIND` are made to refuse here. The blindness loop
+# calls `properties` again for its own defects and does not catch `Refused`,
+# which #1819 scopes out; a BLIND defect made to refuse escapes `check()` as
+# a traceback, and that is a different defect.
+# ---------------------------------------------------------------------------
+
+_NOT_BLIND = tuple(d for d in vd.DEFECTS if d not in vd.BLIND)
+_REFUSING = _NOT_BLIND[0]
+_WHY = f"apparatus off for {_REFUSING}: nothing was measured"
+
+
+def _properties_that_refuse(refused_defects, *, turn_nothing_red=()):
+    """`vd.properties` with the named defects REFUSING, the named others
+    measuring an instrument that turns nothing red, and the rest real."""
+    real = vd.properties
+
+    def properties(cfg=None, targets=None):
+        d = (cfg or {}).get("defect")
+        if d in refused_defects:
+            raise vd.Refused(f"apparatus off for {d}: nothing was measured")
+        if d in turn_nothing_red:
+            return real(vd.config(), targets)
+        return real(cfg, targets)
+
+    return properties
+
+
+def test_a_control_that_refuses_is_printed_refused_and_not_counted_as_red(monkeypatch):
+    """RED on the pre-#1819 tree, where the line this asserts on read
+    `PASS  EQUAL_COLLECTOR_LOADS: turns red ['REFUSED: apparatus off ...']`.
+
+    The line is asserted FIRST, so that red is the behaviour and not the
+    two-element tuple `check()` returned there.
+    """
+    assert _REFUSING not in vd.BLIND and len(_NOT_BLIND) >= 2
+    monkeypatch.setattr(vd, "properties", _properties_that_refuse({_REFUSING}))
+
+    res = vd.check()
+    line = next(ln for ln in res[1] if _REFUSING in ln)
+    assert line == f"  REFUSED  {_REFUSING}: {_WHY}", line
+
+    ok, refused = res[0], res[2]
+    # `ok` is the MEASURED verdict. The refusal is not a pass, so it must not
+    # be what makes this True, and it is not a failure either.
+    assert ok is True
+    assert refused == [f"{_REFUSING}: {_WHY}"]
+
+
+def test_the_clean_run_prints_no_refusal_and_exits_zero(capsys):
+    """The paired positive: on the committed read no control refuses, the
+    gate says green and the CLI exits PASS."""
+    assert vd.main(["--check"]) == exit_contract.PASS == 0
+    out = capsys.readouterr().out
+    assert "GATE: green" in out
+    assert "REFUSED" not in out
+
+
+def test_main_dash_check_exits_no_evidence_when_a_control_refuses(monkeypatch, capsys):
+    """The CLI CI runs (`.github/workflows/rungs.yml`): a refusal is NO
+    EVIDENCE, declared in tools/exit_contract.py, never a green gate."""
+    monkeypatch.setattr(vd, "properties", _properties_that_refuse({_REFUSING}))
+
+    rc = vd.main(["--check"])
+
+    assert rc == exit_contract.REFUSED_ALTERNATE == 3
+    assert rc in exit_contract.NO_EVIDENCE
+    out = capsys.readouterr().out
+    assert "GATE: REFUSED" in out
+    assert "GATE: green" not in out
+
+
+def test_a_measured_failure_outranks_a_refusal_at_the_exit_status(monkeypatch, capsys):
+    """One control refuses while another turns nothing red: the exit is FAIL,
+    a result, and the refusal is still reported as one alongside it."""
+    other = _NOT_BLIND[1]
+    monkeypatch.setattr(vd, "properties", _properties_that_refuse(
+        {_REFUSING}, turn_nothing_red={other}))
+
+    assert vd.main(["--check"]) == exit_contract.FAIL == 1
+    out = capsys.readouterr().out
+    assert f"  REFUSED  {_REFUSING}: {_WHY}" in out
+    assert f"  FAIL  {other}: turns red NOTHING" in out
+    assert "GATE: RED" in out
+
+
+def test_every_control_the_defect_loop_can_refuse_refusing_is_no_evidence(monkeypatch, capsys):
+    """The edge where every control the defect loop catches a refusal for
+    refuses: still NO EVIDENCE (3), not a green gate over six controls fewer
+    and not a FAIL. (The BLIND defects in that loop still run for real.)"""
+    monkeypatch.setattr(vd, "properties", _properties_that_refuse(set(_NOT_BLIND)))
+
+    assert vd.main(["--check"]) == exit_contract.REFUSED_ALTERNATE
+    out = capsys.readouterr().out
+    assert out.count("  REFUSED  ") == len(_NOT_BLIND)
+    for d in _NOT_BLIND:
+        assert f"  PASS  {d}:" not in out and f"  FAIL  {d}:" not in out, d
+    assert "GATE: green" not in out
+
+
+def test_the_record_does_not_call_a_gate_with_a_refused_control_ok(monkeypatch):
+    """`record()` writes the gate into `vca-drive.json`. A reader of that
+    file who looks only at `gate.ok` must not find `true` beside a control
+    that never ran, so the refusal is folded into the recorded verdict and
+    named beside it."""
+    monkeypatch.setattr(vd, "check", lambda **kw: (True, ["  REFUSED  X: why"], ["X: why"]))
+    monkeypatch.setattr(vd, "envelope_record", lambda cfg=None: {})
+
+    rec = vd.record()
+
+    assert rec["gate"] == {"ok": False, "refused": ["X: why"],
+                           "lines": ["  REFUSED  X: why"]}
 
 
 # ---------------------------------------------------------------------------

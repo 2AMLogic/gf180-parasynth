@@ -161,6 +161,7 @@ if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
 import cymbal_candidate as cc  # noqa: E402
+import exit_contract
 import refusal
 from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
@@ -1316,9 +1317,24 @@ def targets_gap_short(cfg=None) -> float:
     return float(balance_targets()["gap_db"]["short"])
 
 
-def check(cfg_defect=None, *, targets=None) -> tuple[bool, list[str]]:
-    """Run every property, then every injected defect. Green needs both."""
-    lines, ok = [], True
+def check(cfg_defect=None, *, targets=None) -> tuple[bool, list[str], list[str]]:
+    """Run every property, then every injected defect. Returns `(ok, lines,
+    refused)`.
+
+    `ok` is the MEASURED verdict: False as soon as one property fails, one
+    injected defect turns nothing red, or one asserted-blind property moves.
+    A defect whose evaluation REFUSES is none of those -- nothing was measured
+    for it -- so it does not touch `ok`. It is printed `REFUSED  <defect>:
+    <reason>` and returned in `refused`. The gate is green only when `ok` AND
+    `refused` is empty: `ok` alone says "nothing failed", never "every control
+    ran" (#1819 -- folded into `red`, a refusal printed PASS and made the gate
+    green over a control that had not run).
+
+    `refused` covers the injected-defect loop only. The blindness loop below
+    calls `properties` with no handler, so a `Refused` from one of ITS defects
+    leaves this function as a traceback.
+    """
+    lines, ok, refused = [], True, []
     targets = targets if targets is not None else balance_targets()
 
     base = properties(config(), targets)
@@ -1331,8 +1347,10 @@ def check(cfg_defect=None, *, targets=None) -> tuple[bool, list[str]]:
         try:
             got = properties(config(d), targets)
             red = sorted(n for n, p in got.items() if not p["ok"])
-        except Refused as exc:                            # pragma: no cover
-            red = [f"REFUSED: {exc}"]
+        except Refused as exc:
+            refused.append(f"{d}: {exc}")
+            lines.append(f"  REFUSED  {d}: {exc}")
+            continue
         lines.append(f"  {'PASS' if red else 'FAIL'}  {d}: turns red {red or 'NOTHING'}")
         ok = ok and bool(red)
 
@@ -1344,7 +1362,7 @@ def check(cfg_defect=None, *, targets=None) -> tuple[bool, list[str]]:
                      + (f" -- but moved {moved}" if moved else ""))
         ok = ok and not moved
 
-    return ok, lines
+    return ok, lines, refused
 
 
 # Properties that MUST NOT move under a given defect. A property that moves
@@ -1390,7 +1408,7 @@ BLIND = {
 def record(cfg=None) -> dict:
     cfg = cfg if cfg is not None else config()
     targets = balance_targets()
-    ok, lines = check(targets=targets)
+    ok, lines, refused = check(targets=targets)
     peaks = {w: dict(zip(("f_hz", "gain_db"), bandpass_peak(w, cfg))) for w in ("low", "high")}
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
                             capture_output=True, text=True).stdout.strip() or None
@@ -1417,7 +1435,7 @@ def record(cfg=None) -> dict:
         "properties": properties(cfg, targets),
         "defects": list(DEFECTS),
         "envelope": envelope_record(cfg),
-        "gate": {"ok": ok, "lines": lines},
+        "gate": {"ok": ok and not refused, "refused": refused, "lines": lines},
     }
 
 
@@ -1589,10 +1607,18 @@ def main(argv=None) -> int:
 
     rc = 0
     if args.check:
-        ok, lines = check(targets=targets)
+        ok, lines, refused = check(targets=targets)
         print("\n".join(lines))
-        print("GATE: " + ("green" if ok else "RED"))
-        rc = 0 if ok else 1
+        if not ok:
+            rc, verdict = exit_contract.FAIL, "RED"
+        elif refused:
+            rc = exit_contract.REFUSED_ALTERNATE
+            verdict = (f"REFUSED -- {len(refused)} injected-defect control(s) refused, "
+                       f"so nothing was measured for them and this is not a green "
+                       f"gate (exit {rc})")
+        else:
+            rc, verdict = exit_contract.PASS, "green"
+        print(f"GATE: {verdict}")
 
     if args.json is not None:
         args.json.parent.mkdir(parents=True, exist_ok=True)
