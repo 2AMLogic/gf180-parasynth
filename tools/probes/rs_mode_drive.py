@@ -567,7 +567,14 @@ if __name__ == "__main__":
     # distort as an exit-1 traceback, a refusal rendered as FAIL. The same
     # widening as rs_guard_band.py, same corpus input. Unrelated exceptions
     # still escape as execution errors.
-    except refusal.Refused as e:
+    # AM.InsufficientEvidence is the estimator's own refusal and is listed BY
+    # CLASS for the same reason (#1751): it subclasses AssertionError, not
+    # refusal.Refused, so the base-class widening could not see it and a
+    # silent RS render escaped distort as an exit-1 traceback the same way.
+    # It is not converted at the estimator, so Python callers of `_harm_db`
+    # still get the class audio_measure raises. A plain AssertionError is not
+    # in this tuple and stays an execution error.
+    except (refusal.Refused, AM.InsufficientEvidence) as e:
         print(f"REFUSED  {e}")
         sys.exit(2)
     except KeyError:
