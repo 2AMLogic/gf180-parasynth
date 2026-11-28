@@ -63,11 +63,11 @@ SCHEMA = "r0-controls-profile/1"
 TEST = ("tools/test_r0_capture.py::"
         "test_t_physical_on_a_synthetic_bundle_is_no_verdict_with_its_control_caught")
 TRIAL = "T-PHYSICAL"
-SKIP = ("analyse", "stub_analyse", "_kaiser")
+SKIP = ("analyse", "stub_analyse", "_kaiser", "_kernel_table", "_kernel_weights")
 # analyse: run_controls hands `_run` this very object and `_run` passes
 #          allow_synthetic only when `analyser is analyse`; a wrapper in its
 #          place would refuse all thirteen sessions as synthetic, and time that
-# _kaiser:  internal to interp, so its cost reads as interp's own
+# the kernel helpers: internal to interp, so their cost reads as interp's own
 SESSION_FUNCTIONS = ("synth_session", "_run")
 SMOKE_DEFECTS = ("gain", "swap")
 ACCOUNTED_MIN = 0.8        # the sessions' seconds, as a share of the child's own
@@ -419,10 +419,27 @@ def table(x, pos, half=32, n=1024, order=3):
 
 
 KERNELS = (("shipped", rc.interp), ("direct", direct), ("lean", lean),
-           ("table-cubic-1024", lambda x, p, half=32: table(x, p, half, 1024, 3)),
-           ("table-cubic-4096", lambda x, p, half=32: table(x, p, half, 4096, 3)),
+           ("table-cubic-8192", lambda x, p, half=32: table(x, p, half, 8192, 3)),
            ("table-linear-16384", lambda x, p, half=32: table(x, p, half, 16384, 1)))
-TABLES_CHECKED = ((3, 1024), (3, 4096), (1, 16384))
+TABLES_CHECKED = ((3, 4096), (3, 8192), (1, 16384))
+
+
+def _kernel_errors() -> dict:
+    """Each table, at both tap counts the analyser uses, against the formula
+    over a dense scan of [0, 1]: the largest error of one tap, and the largest
+    sum of them (what one output can be off by, at full scale)."""
+    f = np.linspace(0.0, 1.0, 200_001)
+    out = {}
+    for order, samples in TABLES_CHECKED:
+        row = {}
+        for half in (32, 16):
+            tt = f[:, None] - np.arange(-half + 1, half + 1)
+            err = np.abs(table_weights(kernel_table(half, samples, order), f, samples, order)
+                         - np.sinc(tt) * rc._kaiser(tt, half))
+            row[f"{2 * half}_taps"] = {"max_abs": float(err.max()),
+                                       "max_sum_abs": float(err.sum(axis=1).max())}
+        out[f"{'cubic' if order == 3 else 'linear'}-{samples}"] = row
+    return out
 
 
 def _best(fn, repeat=3) -> float:
@@ -455,13 +472,7 @@ def bench(out: pathlib.Path, bundle: pathlib.Path, functions: dict) -> dict:
             "bit_identical_to_direct": bool(np.array_equal(got, want)),
             "one_position_call_us": _best(lambda: [fn(want[:5000], np.array([q]), half=16)
                                                    for q in pts]) / pts.size * 1e6}
-    f = np.linspace(0.0, 1.0, 200_001)
-    tt = f[:, None] - np.arange(-31, 33)
-    exact = np.sinc(tt) * rc._kaiser(tt, 32)
-    for order, samples in TABLES_CHECKED:
-        err = float(np.max(np.abs(table_weights(kernel_table(32, samples, order), f, samples, order)
-                                  - exact)))
-        kern[f"table-{'cubic' if order == 3 else 'linear'}-{samples}"]["kernel_max_abs_error"] = err
+    kern["kernel_error"] = _kernel_errors()
     cap_path = bundle / "takes" / "demo-1.wav"
     cap = rc.read_capture(cap_path)[1]
     a = rc.band(cap[:, 2])
@@ -550,11 +561,16 @@ def summarise(report: dict, top: int) -> str:
     if report.get("bench"):
         b = report["bench"]
         L.append(f"  kernel, demo.wav warped ({b['samples']} positions): s per million samples, "
-                 "max abs diff against direct, one-position call, kernel error")
+                 "max abs diff against direct, one-position call")
         for name, k in b["kernel"].items():
-            L.append(f"    {name:<20} {k['s_per_million_samples']:7.3f}   "
-                     f"{k['max_abs_diff_vs_direct']:.1e}   {k['one_position_call_us']:6.1f} us"
-                     + (f"   {k['kernel_max_abs_error']:.1e}" if "kernel_max_abs_error" in k else ""))
+            if name != "kernel_error":
+                L.append(f"    {name:<20} {k['s_per_million_samples']:7.3f}   "
+                         f"{k['max_abs_diff_vs_direct']:.1e}   {k['one_position_call_us']:6.1f} us")
+        L.append("  kernel tables against the formula over [0, 1]: max abs error of one tap, "
+                 "max abs error of their sum, per tap count")
+        for name, row in b["kernel"]["kernel_error"].items():
+            L.append(f"    {name:<20} " + "   ".join(f"{t}: {v['max_abs']:.1e} {v['max_sum_abs']:.1e}"
+                                                     for t, v in row.items()))
         L.append("  components: ms per call, calls in the 13 sessions, s per session here, "
                  "profiled self s per session")
         for c in b["components"]:

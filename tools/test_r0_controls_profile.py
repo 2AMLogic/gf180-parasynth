@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import pathlib
 import sys
+import time
 
 import numpy as np
 import pytest
@@ -145,6 +146,7 @@ def test_the_profiler_does_not_rebind_the_analyser_the_control_dispatches_on(tmp
     analyse, synth_session = rc.analyse, rc.synth_session
     monkeypatch.setattr(rc, "REQUIRED_COMMANDS", ("demo",))      # so a 3-take session analyses
     takes = (("silence-1", "silence"), ("demo-1", "demo"), ("demo-2", "demo"))
+    t0 = time.perf_counter()
     with prof.Profiler(rc) as p:
         assert rc.analyse is analyse
         d = rc.synth_session(tmp_path / "s", takes=takes)
@@ -152,6 +154,7 @@ def test_the_profiler_does_not_rebind_the_analyser_the_control_dispatches_on(tmp
         f = p.stats
         assert [s[0] for s in p.sessions] == ["synth_session", "_run"]
         assert p.sessions[0][2] > 0 and p.sessions[1][2] > 0
+    wall = time.perf_counter() - t0
     assert rc.synth_session is synth_session and rc.analyse is analyse
     assert "synthetic" not in " ".join(rec["reasons"]), rec["reasons"]   # allow_synthetic passed
     assert rec["verdict"] == rc.PASS, rec["reasons"]                  # and it analysed
@@ -159,12 +162,12 @@ def test_the_profiler_does_not_rebind_the_analyser_the_control_dispatches_on(tmp
     assert f["analyse_take"][0] == 3 and f["calibrate"][0] == 1
     assert f["unwarp_capture"][0] == 2 and "analyse" not in f
     assert f["interp"][0] > 10 and "tone_f0" not in f
-    # inclusive time is self plus the wrapped functions called inside
+    # every function's self time lies inside its inclusive time, and the two
+    # top-level calls lie inside the block's wall time: nothing is counted twice
+    assert all(0 <= v[2] <= v[1] for v in f.values())
     assert f["analyse_take"][1] < f["_run"][1]
-    assert 0 < f["_run"][2] < f["_run"][1]
-    # interp runs inside both the synthesis and the analysis: its inclusive time
-    # is bounded by their sum, and it is not bounded by either alone
-    assert f["_run"][1] < f["interp"][1] < f["synth_session"][1] + f["_run"][1]
+    assert f["synth_session"][1] + f["_run"][1] <= wall
+    assert f["_run"][2] < f["_run"][1]
 
 
 def test_smoke_mode_exercises_every_child_and_says_it_is_not_a_measurement(tmp_path, capsys,

@@ -182,25 +182,65 @@ def _kaiser(t, half, beta=9.0):
     return i0(beta * np.sqrt(u)) / i0(beta)
 
 
+KERNEL_SAMPLES = 8192
+_KERNEL_TABLES = {}
+
+
+def _kernel_table(half: int) -> tuple:
+    """The interpolation kernel sinc(t) x Kaiser(t), t = frac - k, at
+    frac = j / KERNEL_SAMPLES for j = -1 .. KERNEL_SAMPLES + 2 (one row of
+    2*half taps per j), as the four rows that make the cubic through rows
+    j-1 .. j+2 a polynomial in the offset a inside row j:
+    w(frac) = c0 + a (c1 + a (c2 + a c3))."""
+    if half not in _KERNEL_TABLES:
+        k = np.arange(-half + 1, half + 1)
+        t = np.arange(-1, KERNEL_SAMPLES + 3)[:, None] / KERNEL_SAMPLES - k[None, :]
+        T = np.sinc(t) * _kaiser(t, half)
+        ym, y0, y1, y2 = T[:-3], T[1:-2], T[2:-1], T[3:]
+        _KERNEL_TABLES[half] = (y0, -ym / 3 - y0 / 2 + y1 - y2 / 6,
+                                ym / 2 - y0 + y1 / 2, (-ym + 3 * y0 - 3 * y1 + y2) / 6)
+    return _KERNEL_TABLES[half]
+
+
+def _kernel_weights(half: int, frac: np.ndarray) -> np.ndarray:
+    """(positions, 2*half taps): the kernel at each fractional part in [0, 1]."""
+    c0, c1, c2, c3 = _kernel_table(half)
+    u = frac * KERNEL_SAMPLES
+    j = u.astype(np.int64)                  # the floor: u is never negative
+    a = (u - j)[:, None]
+    return c0[j] + a * (c1[j] + a * (c2[j] + a * c3[j]))
+
+
 def interp(x: np.ndarray, pos: np.ndarray, half: int = 32) -> np.ndarray:
     """Band-limited (Kaiser-windowed sinc, 2*half taps) value of x at
     fractional positions `pos`; outside x is zero. Used both to warp the
-    reference onto a capture's timeline and a capture onto the reference's."""
+    reference onto a capture's timeline and a capture onto the reference's.
+
+    The kernel depends on the fractional part of a position alone, so it is
+    tabulated once per tap count (_kernel_table) and read off with the cubic
+    through the four neighbouring rows; a position whose taps all fall outside
+    x is left at zero without one. Evaluated per sample, the kernel was 92 % of
+    the synthetic-defect control (#1944; tools/r0_controls_profile.py). The
+    table's error is bounded over the whole of [0, 1] -- 1.4e-13 per tap and in
+    sum at 33 taps, 3.7e-14 at 64, against a peak of 1 -- where the takes are
+    24-bit (LSB 1.2e-7) and the reference 16-bit (3.0e-5)."""
     x = np.asarray(x, dtype=np.float64)
     pos = np.asarray(pos, dtype=np.float64)
     out = np.zeros(pos.shape)
-    pad = np.concatenate([np.zeros(half + 1), x, np.zeros(half + 1)])
+    if x.size == 0:
+        return out
     k = np.arange(-half + 1, half + 1)
     for s in range(0, pos.size, 8192):
         p = pos[s:s + 8192]
         i0 = np.floor(p).astype(np.int64)
-        frac = p - i0
-        idx = i0[:, None] + k[None, :] + half + 1
-        valid = (idx >= 0) & (idx < pad.size)
-        t = frac[:, None] - k[None, :]
-        w = np.sinc(t) * _kaiser(t, half)
-        vals = np.where(valid, pad[np.clip(idx, 0, pad.size - 1)], 0.0)
-        out[s:s + 8192] = np.sum(vals * w, axis=1)
+        near = np.flatnonzero((i0 >= -half) & (i0 < x.size + half - 1))
+        if not near.size:
+            continue
+        i0 = i0[near]
+        j = i0[:, None] + k[None, :]
+        vals = x[np.clip(j, 0, x.size - 1)]
+        vals[(j < 0) | (j >= x.size)] = 0.0
+        out[s + near] = np.sum(vals * _kernel_weights(half, p[near] - i0), axis=1)
     return out
 
 
