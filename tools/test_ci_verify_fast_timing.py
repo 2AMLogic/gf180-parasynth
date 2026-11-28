@@ -232,10 +232,36 @@ def test_offline_cancelled_job_in_window_exits_one(tmp_path):
     assert rc == 1
 
 
+def test_offline_unreadable_log_in_window_is_refused_not_clean(tmp_path, capsys):
+    """#1779. Ten executions, one whose log `gh run view` could not serve. That
+    record keeps its real conclusion but carries no table and no units, so
+    `unclean()` finds no NO-VERDICT in it: its verdict is unknown, not clean.
+    The gate must REFUSE and name the run, never PASS over a window it could
+    not fully read. The exit code is the part a CI step branches on."""
+    records = [_job(i, 1, f"{i:08x}", parse_job_log(PASS_TABLE)) for i in range(1, 11)]
+    records[4] = _job(5, 1, "00000005", [], error="`gh run view` exited 1: HTTP 500")
+    rc = main(["--offline", str(_snapshot(tmp_path, records)), "--require-clean", "--window", "10"])
+    assert rc == REFUSED
+    err = capsys.readouterr().err
+    assert "unreadable" in err and "run 5 attempt 1" in err
+
+
+@pytest.mark.parametrize("slot,expected", [(1, REFUSED), (2, 0)])
+def test_the_unreadable_log_guard_scores_exactly_the_window(tmp_path, slot, expected):
+    """Rule-8 control for the refusal above. The guard reads `records[:window]`
+    and nothing else, so the same unreadable record must refuse the gate one
+    slot inside the window's edge and leave the verdict alone one slot outside
+    it. The two cases differ only in which slot the record occupies."""
+    records = [PASS_A, RERUN_B, _job(8, 1, "08080808", parse_job_log(PASS_TABLE))]
+    records[slot] = ERRORED_E
+    rc = main(["--offline", str(_snapshot(tmp_path, records)), "--require-clean", "--window", "2"])
+    assert rc == expected
+
+
 def test_offline_empty_snapshot_is_refused_not_clean(tmp_path, capsys):
     rc = main(["--offline", str(_snapshot(tmp_path, [])), "--require-clean", "--window", "1"])
     assert rc == REFUSED
-    assert "REFUSED" in capsys.readouterr().err
+    assert "REFUSED: no records" in capsys.readouterr().err
 
 
 def test_offline_window_larger_than_the_records_is_refused(tmp_path):
