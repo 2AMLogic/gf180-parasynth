@@ -660,6 +660,107 @@ def test_the_committed_result_file_is_summarisable_and_says_what_the_scorecard_s
     assert s["windows"]["2.0s"]["rows"]["Mn-10"]["n_808_above_baseline_max"] == 8
 
 
+# ---- a non-finite rho in the result file is REFUSED before sorted(), median(),
+# min() and max() aggregate it (#2081). `summarise` keeps a setting's rho when
+# it `is not None`, which a NaN is; a NaN compares with nothing, so a NaN that
+# is not the first setting is dropped: `argmin` / `argmax` named another 808,
+# `n_808_above_baseline_max` lost one, and the row still printed, exit 0.
+# `None` keeps its meaning -- that 808 refused the depth and is left out.
+RHO_SITES = [  # (window, 808 setting, band, depth) in the committed result file
+    pytest.param("2.0s", "CY0025", "M", "-10", id="first"),
+    pytest.param("2.0s", "CY1025", "M", "-10", id="non-first-argmax"),
+    pytest.param("2.0s", "CY2550", "M", "-10", id="non-first-argmin"),
+    pytest.param("1.5s", "CY1000", "Mn", "-5", id="other-window-band-depth"),
+]
+
+
+def _result_with(wname, setting, band, depth, value):
+    """The committed result file with ONE rho replaced."""
+    res = json.loads(RESULT.read_text())
+    res["windows"][wname]["fischer"][setting]["rho"][band][depth] = value
+    return res
+
+
+def _row(summary, wname, band, depth):
+    return summary["windows"][wname]["rows"][f"{band}{depth}"]
+
+
+def _moved(row):
+    """What a dropped NaN moves, in the order the row prints it."""
+    return (row["argmin"], row["min"], row["argmax"], row["max"], row["median"],
+            row["n_808_above_baseline_max"])
+
+
+def _summary(res):
+    """`summarise`'s answer: (summary, None), or (None, the `Refused` message)."""
+    try:
+        return lt.summarise(res), None
+    except lt.Refused as exc:
+        return None, str(exc)
+
+
+def test_the_committed_row_names_the_808s_the_controls_below_move():
+    """The control for everything below, green before and after the repair:
+    the 2.0 s window's M(-10) row off the committed file. Ten settings answer;
+    the least is CY2550 and the greatest CY1025; all ten clear the baseline."""
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    s, why = _summary(json.loads(RESULT.read_text()))
+    assert why is None, why
+    row = _row(s, "2.0s", "M", "-10")
+    assert (row["n_808"], row["argmin"], row["argmax"]) == (10, "CY2550", "CY1025"), row
+    assert (row["min"], row["max"], row["n_808_above_baseline_max"]) == (1.0476, 1.1392, 10), row
+
+
+@pytest.mark.parametrize("wname, setting, band, depth", RHO_SITES)
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")], ids=["nan", "inf", "-inf"])
+def test_a_non_finite_rho_is_refused_naming_where_it_sits(wname, setting, band, depth, bad):
+    """NaN, +inf and -inf in ONE rho of the committed file: REFUSED, naming
+    the window, the 808, the band and the depth, at every position -- the
+    builtins keep a FIRST NaN and drop any other, and both must refuse. Red
+    before the repair: `_summary` returned a row whose argmin or argmax was
+    another 808, and `--report` printed it with exit 0."""
+    s, why = _summary(_result_with(wname, setting, band, depth, bad))
+    assert why == (f"window {wname}: 808 {setting}'s rho_{band}({depth}) is {bad!r}, which is not a "
+                   "finite number; the file may not be summarised"), s and _moved(_row(s, wname, band,
+                                                                                       depth))
+
+
+@pytest.mark.parametrize("value", [True, "1.1"], ids=["bool", "string"])
+def test_a_rho_that_is_not_a_number_at_all_is_refused(value):
+    """A flag and a numeric string are not readings either (`is_finite_number`,
+    #718). The old code took the flag as 1.0 and named that 808 the LEAST of
+    the ten; the string was a traceback."""
+    s, why = _summary(_result_with("2.0s", "CY1025", "M", "-10", value))
+    assert why == (f"window 2.0s: 808 CY1025's rho_M(-10) is {value!r}, which is not a finite number; "
+                   "the file may not be summarised"), s and _moved(_row(s, "2.0s", "M", "-10"))
+
+
+def test_a_refused_depth_still_leaves_the_808_out_of_the_row_instead_of_refusing():
+    """`None` is "this 808 refused the depth", not a bad reading: the setting
+    is left out and the row is one shorter, as before the repair."""
+    s, why = _summary(_result_with("2.0s", "CY1025", "M", "-10", None))
+    assert why is None, why
+    row = _row(s, "2.0s", "M", "-10")
+    assert (row["n_808"], row["argmax"], row["max"]) == (9, "CY5025", 1.1202), row
+
+
+def test_report_refuses_a_result_file_whose_rho_is_nan(tmp_path, capsys):
+    """Through the tool's own reader: `json.dumps` writes a bare NaN, the
+    `--report` reader loads it back, and the answer is REFUSED (2) with no
+    row printed. Before the repair it printed the summary and exited 0."""
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    path = tmp_path / "low-tail.json"
+    path.write_text(json.dumps(_result_with("2.0s", "CY1025", "M", "-10", float("nan"))))
+    assert "NaN" in path.read_text()
+    code = lt.main(["--report", str(path)])
+    out = capsys.readouterr().out
+    assert code == lt.REFUSED, out
+    assert out.splitlines() == ["REFUSED: window 2.0s: 808 CY1025's rho_M(-10) is nan, which is not "
+                                "a finite number; the file may not be summarised"], out
+
+
 def test_the_three_frozen_windows_cover_every_setting_and_no_two_of_them_do():
     """#369 acceptance 3 is "report every setting", and for a decay quantity that
     is a claim about WINDOWS, not about loading 25 files. Asserted both ways: the

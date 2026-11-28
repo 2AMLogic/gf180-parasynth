@@ -231,6 +231,7 @@ import run_case as rc  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
 from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 import refusal
+from finite_number import is_finite_number  # noqa: E402
 
 # FROZEN before this module was used to judge anything (#400 acceptance 1).
 LOW_BANDS = {"M": (891.0, 2828.0), "Mn": (891.0, 1782.0)}
@@ -898,7 +899,13 @@ def summarise(res: dict) -> dict:
     REFUSES a JSON whose `controls_pass` is not true. The tool that wrote the
     file already refuses in that case, so this is the second gate on the same
     precondition -- deliberately, because the JSON is what a reader picks up
-    later, by which time the console output is gone."""
+    later, by which time the console output is gone.
+
+    REFUSES also a rho that is not a finite number (#2081). `min()` and
+    `max()` drop a NaN that is not the first setting and keep one that is, so
+    `argmin` / `argmax` would name another 808 and the median would come back
+    NaN, in a row that still prints. `None` is not that: it is a depth the 808
+    refused, and the setting stays out of the row."""
     if not res.get("controls_pass"):
         raise Refused("this result file's own controls did not pass; it may not be summarised")
     sb = res["skirt_baseline"]
@@ -908,8 +915,15 @@ def summarise(res: dict) -> dict:
         rows = {}
         for band in ("M", "Mn"):
             for depth in ("-5", "-10"):
-                v = {k: m["rho"][band][depth] for k, m in answered.items()
-                     if m["rho"][band][depth] is not None}
+                v = {}
+                for k, m in answered.items():
+                    x = m["rho"][band][depth]
+                    if x is None:
+                        continue
+                    if not is_finite_number(x):
+                        raise Refused(f"window {wname}: 808 {k}'s rho_{band}({depth}) is {x!r}, "
+                                      "which is not a finite number; the file may not be summarised")
+                    v[k] = x
                 if not v:
                     continue
                 b = sb[f"{band}_{depth}"]
