@@ -2,7 +2,7 @@
 
 Figure 9 has **no external known answer** -- W14b prints no component values
 for the tone network and no other source states its response -- so these tests
-carry more of the weight than Figure 4's do. They do three things:
+carry more of the weight than Figure 4's do. They do four things:
 
   * plant structures with known parameters and require the readers to recover
     them (the chaining, the k = 1.0 marker rule, the extrapolation bound);
@@ -10,11 +10,19 @@ carry more of the weight than Figure 4's do. They do three things:
     silently: what Ht3 is, and that Ht1 and Ht2 are NOT plotted in the
     cymbal's own band;
   * break the evidence six ways and require the gate to go red for each. A
-    known-answer test nobody has seen fail is not a control.
+    known-answer test nobody has seen fail is not a control;
+  * drive the public entry point with a precondition missing and require
+    REFUSED and exit 3, never FAIL (#1788). Measured on main @ 03148399,
+    red-first: an absent Figure 4 artifact printed its reason on a bare line
+    and then `FAIL shared` under `GATE: FAIL`, exit 1; an Ht3 curve too short
+    to fit printed `FAIL extrap ... only 31 points lie within 3.0 dB of the
+    peak` under `GATE: FAIL`, exit 1. Both are the verdict of a measured
+    error over tolerance, and neither measured anything.
 """
 
 from __future__ import annotations
 
+import json
 import math
 import pathlib
 import sys
@@ -23,6 +31,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import werner_fig4 as wf  # noqa: E402
 import werner_fig9 as w9  # noqa: E402
 
@@ -208,8 +217,8 @@ def evidence():
 
 def test_the_committed_evidence_passes_the_gate(evidence):
     data, meta, _ = evidence
-    ok, lines = w9.check(data, meta)
-    assert ok, "\n".join(lines)
+    verdict, lines = w9.check(data, meta)
+    assert verdict == exit_contract.PASS, "\n".join(lines)
 
 
 def test_the_evidence_names_the_paper_and_its_hash(evidence):
@@ -291,10 +300,17 @@ def _bend(data, name, fn):
     return out
 
 
+def _gate(data, meta):
+    """`check()` on broken evidence, required to have MEASURED the break:
+    FAIL, never REFUSED. A control that made the gate refuse would show the
+    gate choking on the defect, not detecting it."""
+    verdict, lines = w9.check(data, meta)
+    assert verdict == exit_contract.FAIL, "\n".join(lines)
+
+
 def test_control_a_fifteen_db_level_error_fails_the_passivity_gate(evidence):
     data, meta, _ = evidence
-    ok, lines = w9.check(_bend(data, "Ht2", lambda h, d: (h, d + 15.0)), meta)
-    assert not ok, "\n".join(lines)
+    _gate(_bend(data, "Ht2", lambda h, d: (h, d + 15.0)), meta)
 
 
 def test_control_one_subplots_x_axis_off_by_five_percent_fails_the_gate(evidence):
@@ -304,23 +320,19 @@ def test_control_one_subplots_x_axis_off_by_five_percent_fails_the_gate(evidence
     data, meta, _ = evidence
     bent = {k: dict(v) for k, v in data.items()}
     bent["Ht1"]["axes_hz"] = [v * 1.05 for v in bent["Ht1"]["axes_hz"]]
-    ok, lines = w9.check(bent, meta)
-    assert not ok, "\n".join(lines)
+    _gate(bent, meta)
 
 
 def test_control_swapping_ht1_and_ht3_fails_the_prose_gate(evidence):
     data, meta, _ = evidence
     bent = {k: dict(v) for k, v in data.items()}
     bent["Ht1"], bent["Ht3"] = bent["Ht3"], bent["Ht1"]
-    ok, lines = w9.check(bent, meta)
-    assert not ok, "\n".join(lines)
+    _gate(bent, meta)
 
 
 def test_control_a_disagreeing_marker_offset_fails_the_gate(evidence):
     data, meta, _ = evidence
-    ok, lines = w9.check(data, {**meta,
-                                "marker_agreement_pt": w9.MARKER_AGREE_PT + 1})
-    assert not ok, "\n".join(lines)
+    _gate(data, {**meta, "marker_agreement_pt": w9.MARKER_AGREE_PT + 1})
 
 
 def test_control_an_ht3_that_is_not_a_bp2_fails_the_extrapolation_gate(evidence):
@@ -330,8 +342,7 @@ def test_control_an_ht3_that_is_not_a_bp2_fails_the_extrapolation_gate(evidence)
     data, meta, _ = evidence
     def spoil(h, d):
         return (h, w9._extra_section_db(h, -22.0, 783.0, 0.41, 2500.0, "pole"))
-    ok, lines = w9.check(_bend(data, "Ht3", spoil), meta)
-    assert not ok, "\n".join(lines)
+    _gate(_bend(data, "Ht3", spoil), meta)
 
 
 def test_control_a_figure_with_the_wrong_asterisk_count_is_refused():
@@ -352,3 +363,233 @@ def test_control_two_axes_boxes_where_three_are_needed_is_refused():
              ((10.0, 50.0), (90.0, 80.0))]
     with pytest.raises(w9.Refused):
         w9._plot_boxes(rects)
+
+
+# ---------------------------------------------------------------------------
+# A refusal is a third outcome: REFUSED and exit 3, never FAIL
+# ---------------------------------------------------------------------------
+
+
+PASS, FAIL, REFUSED = (exit_contract.PASS, exit_contract.FAIL,
+                       exit_contract.REFUSED_ALTERNATE)
+
+
+def _run(capsys, argv):
+    rc = w9.main(argv)
+    caught = capsys.readouterr()
+    return rc, caught.out, caught.err
+
+
+def _row(text, name):
+    """The gate's one line for check `name`: `<outcome> <name> ...`."""
+    hits = [ln for ln in text.splitlines() if ln.split()[1:2] == [name]]
+    assert len(hits) == 1, f"expected one {name!r} row in:\n{text}"
+    return hits[0]
+
+
+def _labelled(text, label):
+    """Every gate row whose outcome is `label`."""
+    return [ln for ln in text.splitlines() if ln.strip().startswith(label + " ")]
+
+
+def _evidence(tmp_path, *bends):
+    """A copy of the committed Figure 9 evidence with each `bend(blob)`
+    applied, at a path the CLI can be pointed at."""
+    blob = json.loads(w9.ARTIFACT.read_text())
+    for bend in bends:
+        bend(blob)
+    path = tmp_path / "fig9.json"
+    path.write_text(json.dumps(blob))
+    return path
+
+
+def _loud_ht2(blob):
+    """The +15 dB Ht2 level error of the passivity control, as a file: a
+    MEASURED mismatch, which must read FAIL whatever else the gate does."""
+    for c in blob["bands"]["Ht2"]["curves"]:
+        c["db"] = [d + 15.0 for d in c["db"]]
+
+
+def _short_ht3(blob):
+    """Ht3's k = 1.0 curve cut to its first 49 points: too few in its top 3 dB
+    to fit, so the extrapolation control cannot run."""
+    band = blob["bands"]["Ht3"]
+    c = band["curves"][band["k1_index"]]
+    c["hz"], c["db"] = c["hz"][:49], c["db"][:49]
+
+
+def _absent_fig4(monkeypatch, tmp_path):
+    """ONLY `wf.from_artifact()` is redirected, to its own loader with an
+    absent path: Figure 4's evidence is missing, so the shared-machinery check
+    cannot run, and everything else is the committed evidence."""
+    absent = tmp_path / "no-fig4.json"
+    load = w9.wf.from_artifact
+    monkeypatch.setattr(w9.wf, "from_artifact", lambda: load(absent))
+    return absent
+
+
+@pytest.mark.parametrize("argv", ([], ["--check"]))
+def test_the_cli_passes_the_committed_evidence(capsys, argv):
+    rc, out, err = _run(capsys, argv)
+    assert (rc, err) == (PASS, ""), (rc, out, err)
+    assert "GATE: PASS" in out, out
+    assert not _labelled(out, "FAIL") and not _labelled(out, "REFUSED"), out
+
+
+def test_the_cli_refuses_rather_than_fails_on_an_absent_figure4(capsys, monkeypatch, tmp_path):
+    """The issue's first reproduction. On main @ 03148399 the reason printed
+    on a bare line of its own, then `FAIL shared` under `GATE: FAIL`, exit 1:
+    nothing was measured, and the reader was told something was."""
+    absent = _absent_fig4(monkeypatch, tmp_path)
+    rc, out, _ = _run(capsys, ["--check"])
+    row = _row(out, "shared")
+    assert row.startswith("REFUSED shared"), row
+    assert f"{absent} is absent" in row, row
+    assert not _labelled(out, "FAIL"), out
+    for name in ("passive", "one-x", "marker", "prose", "extrap"):
+        assert _row(out, name).startswith("PASS "), out
+    assert "GATE: REFUSED" in out, out
+    assert rc == REFUSED, rc
+
+
+@pytest.mark.parametrize("argv", ([], ["--check"]))
+def test_the_default_invocation_gives_the_check_verdict(capsys, monkeypatch, tmp_path, argv):
+    """CI runs `--check`; a person runs the tool bare. The two must not
+    disagree about a refusal."""
+    _absent_fig4(monkeypatch, tmp_path)
+    rc, out, _ = _run(capsys, argv)
+    assert _row(out, "shared").startswith("REFUSED "), out
+    assert "GATE: REFUSED" in out, out
+    assert rc == REFUSED, rc
+
+
+def test_the_cli_refuses_rather_than_fails_on_an_ht3_too_short_to_fit(capsys, tmp_path):
+    """The issue's second reproduction. On main @ 03148399: `FAIL extrap ...
+    only 31 points lie within 3.0 dB of the peak` under `GATE: FAIL`, exit 1.
+    The row must carry the control's own reason, verbatim."""
+    path = _evidence(tmp_path, _short_ht3)
+    data, _meta, _ = w9.from_artifact(path)
+    hz, db = data["Ht3"]["curves"][data["Ht3"]["k1_index"]]
+    assert len(hz) == 49
+    with pytest.raises(w9.Refused) as raised:
+        w9.truncation_control(hz, db)
+    rc, out, _ = _run(capsys, ["--check", "--artifact", str(path)])
+    row = _row(out, "extrap")
+    assert row.startswith("REFUSED extrap"), row
+    assert str(raised.value) in row, row
+    assert not _labelled(out, "FAIL"), out
+    for name in ("shared", "passive", "one-x", "marker", "prose"):
+        assert _row(out, name).startswith("PASS "), out
+    assert "GATE: REFUSED" in out, out
+    assert rc == REFUSED, rc
+
+
+def test_the_cli_still_fails_a_measured_mismatch(capsys, tmp_path):
+    rc, out, _ = _run(capsys, ["--check", "--artifact",
+                               str(_evidence(tmp_path, _loud_ht2))])
+    assert _row(out, "passive").startswith("FAIL passive"), out
+    assert not _labelled(out, "REFUSED"), out
+    assert "GATE: FAIL" in out, out
+    assert rc == FAIL, rc
+
+
+def test_a_measured_failure_outranks_a_shared_refusal_beside_it(capsys, monkeypatch, tmp_path):
+    """The refusal sits in the FIRST row. It must not hide the later measured
+    failure, and the summary must not call a result a refusal."""
+    absent = _absent_fig4(monkeypatch, tmp_path)
+    rc, out, _ = _run(capsys, ["--check", "--artifact",
+                               str(_evidence(tmp_path, _loud_ht2))])
+    row = _row(out, "shared")
+    assert row.startswith("REFUSED ") and f"{absent} is absent" in row, row
+    assert _row(out, "passive").startswith("FAIL passive"), out
+    assert "GATE: FAIL" in out and "GATE: REFUSED" not in out, out
+    assert rc == FAIL, rc
+
+
+def test_a_measured_failure_outranks_an_extrap_refusal_beside_it(capsys, tmp_path):
+    rc, out, _ = _run(capsys, ["--check", "--artifact",
+                               str(_evidence(tmp_path, _short_ht3, _loud_ht2))])
+    assert _row(out, "passive").startswith("FAIL passive"), out
+    assert _row(out, "extrap").startswith("REFUSED extrap"), out
+    assert "GATE: FAIL" in out, out
+    assert rc == FAIL, rc
+
+
+# ---------------------------------------------------------------------------
+# The --from-pdf --json writer: both gate guards must PASS before a write
+# ---------------------------------------------------------------------------
+
+
+def _dense(data):
+    """A stand-in for the full-resolution curves: each committed curve
+    interpolated onto a grid DECIMATE times denser that holds the curve's own
+    points at every DECIMATEth index, so `to_artifact`'s decimation returns
+    the committed evidence."""
+    def up(h, d):
+        t = np.linspace(0, len(h) - 1, w9.DECIMATE * (len(h) - 1) + 1)
+        return (np.exp(np.interp(t, np.arange(len(h)), np.log(h))),
+                np.interp(t, np.arange(len(h)), d))
+    return {n: {**v, "curves": [up(h, d) for h, d in v["curves"]]}
+            for n, v in data.items()}
+
+
+def _writer(monkeypatch, data, meta, out):
+    """`--from-pdf --json` without the paper, which is not redistributable
+    and which CI cannot fetch: the digitiser is replaced by evidence shaped
+    exactly like its own output, so both guards run on real `check()` calls
+    and only the PDF reader is absent."""
+    monkeypatch.setattr(w9.wf, "load_pdf", lambda path, download: b"")
+    monkeypatch.setattr(w9, "read_figure", lambda pdf: (data, meta))
+    return ["--from-pdf", "--json", str(out)]
+
+
+def test_the_writer_writes_evidence_that_passes_both_guards(capsys, monkeypatch, tmp_path):
+    data, meta, _ = w9.from_artifact()
+    out = tmp_path / "out.json"
+    rc, stdout, err = _run(capsys, _writer(monkeypatch, _dense(data), meta, out))
+    assert (rc, err) == (PASS, ""), (rc, stdout, err)
+    assert out.exists() and f"wrote {out}" in stdout, stdout
+
+
+def test_the_writer_withholds_when_the_full_resolution_gate_refuses(capsys, monkeypatch, tmp_path):
+    data, meta, _ = w9.from_artifact()
+    absent = _absent_fig4(monkeypatch, tmp_path)
+    out = tmp_path / "out.json"
+    rc, _, err = _run(capsys, _writer(monkeypatch, _dense(data), meta, out))
+    assert not out.exists()
+    assert rc == REFUSED, err
+    assert err.startswith("REFUSED:"), err
+    assert "REFUSED shared" in err and f"{absent} is absent" in err, err
+    assert not _labelled(err, "FAIL"), err
+
+
+def test_the_writer_withholds_when_the_decimated_gate_refuses(capsys, monkeypatch, tmp_path):
+    """The committed evidence passes on its own curves and refuses once
+    decimated again: Ht3's k = 1.0 curve keeps 11 of its 62 top-3 dB points,
+    under the 50 the control needs. The first guard passes; the second must
+    withhold, and say which stage refused."""
+    data, meta, _ = w9.from_artifact()
+    assert w9.check(data, meta)[0] == PASS, "precondition: the committed evidence passes"
+    out = tmp_path / "out.json"
+    rc, _, err = _run(capsys, _writer(monkeypatch, data, meta, out))
+    assert not out.exists()
+    assert rc == REFUSED, err
+    assert err.startswith("REFUSED:"), err
+    assert "REFUSED extrap" in err and "too few to run the truncation control" in err, err
+    assert "decimated (every 6th point)" in err and "full resolution" not in err, err
+
+
+def test_the_writer_withholds_on_a_measured_failure_and_calls_it_fail(
+        capsys, monkeypatch, tmp_path):
+    """Withheld is not the same as refused. A measured failure is a result
+    and keeps FAIL's word and code, so it is never hidden in the family that
+    means `nothing was measured`."""
+    data, meta, _ = w9.from_artifact()
+    loud = _bend(data, "Ht2", lambda h, d: (h, d + 15.0))
+    out = tmp_path / "out.json"
+    rc, _, err = _run(capsys, _writer(monkeypatch, _dense(loud), meta, out))
+    assert not out.exists()
+    assert rc == FAIL, err
+    assert err.startswith("FAIL:"), err
+    assert "FAIL passive" in err, err
+    assert not _labelled(err, "REFUSED") and not err.startswith("REFUSED:"), err

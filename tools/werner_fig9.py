@@ -66,6 +66,17 @@ labels are unreliable. Naming is therefore done by rule 5, cross-checked
 against whichever legend labels are unambiguous, and the discrepancy is
 reported rather than silently patched.
 
+WHAT THE GATE ANSWERS, IN THREE WORDS AND NOT TWO. A check that could not
+run is neither a pass nor a fail, and `--check` says which it was: `PASS`
+(exit 0) every check measured and agreed; `FAIL` (exit 1) something MEASURED
+wrong -- a result, which outranks everything else so that a missing
+precondition can never hide it; `REFUSED` (exit 3, `exit_contract`'s
+REFUSED_ALTERNATE, which both of this tool's refusal paths already exited)
+nothing measured wrong but a check refused, its reason on its own row. Every
+row is still evaluated on every run. Before #1788 a refusal printed as `FAIL`
+under `GATE: FAIL`, so a missing Figure 4 calibration read exactly like a
+measured error over tolerance.
+
 Usage:
     python3 tools/werner_fig9.py --check          # the gate, from the evidence
     python3 tools/werner_fig9.py --fit            # the three transfer functions
@@ -84,9 +95,14 @@ import sys
 import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import werner_fig4 as wf  # noqa: E402
 
 Refused = wf.Refused
+
+PASS, FAIL, REFUSED = (exit_contract.PASS, exit_contract.FAIL,
+                       exit_contract.REFUSED_ALTERNATE)
+_OUTCOME = {PASS: "PASS", FAIL: "FAIL", REFUSED: "REFUSED"}
 
 # W14b §10, quoted in full in the module docstring. The two thresholds turn
 # "a lot" and "a little" into numbers; the measured spread is 29 dB for the
@@ -567,27 +583,47 @@ def read_figure(pdf: bytes):
 # ---------------------------------------------------------------------------
 
 
-def check(data, meta) -> tuple[bool, list[str]]:
+def _worst(*outcomes: int) -> int:
+    """The outcome a set of checks adds up to: FAIL, else REFUSED, else PASS.
+    Something measured wrong is a result, so a refusal elsewhere in the gate
+    must not hide it, and a refusal is not a pass. (`max` would rank REFUSED,
+    exit 3, above FAIL.)"""
+    if FAIL in outcomes:
+        return FAIL
+    return REFUSED if REFUSED in outcomes else PASS
+
+
+def check(data, meta) -> tuple[int, list[str]]:
+    """The gate: its outcome and one line per check.
+
+    The outcome is an `exit_contract` status, not a bool, because a check
+    that could not run is neither True nor False. PASS: every check measured
+    and agreed. FAIL: something measured wrong. REFUSED: nothing did, but a
+    check refused, and its row carries the reason. Every row is still
+    evaluated on every run, so a refusal in the first check cannot hide a
+    measured failure in a later one.
+    """
     lines = []
-    ok = True
+    outcomes = []
 
     # 1. shared machinery -- Figure 4's external known-answer gate
     try:
         fig4, _ = wf.from_artifact()
         ok4, _ = wf.check(fig4)
+        verdict, why = (PASS if ok4 else FAIL), ""
     except Refused as exc:
-        ok4 = False
-        lines.append(f"       ({exc})")
-    ok = ok and ok4
+        verdict, why = REFUSED, f": {exc}"
+    outcomes.append(verdict)
     lines.append(
-        f"{'PASS' if ok4 else 'FAIL'} shared    werner_fig4.calibrate() still "
+        f"{_OUTCOME[verdict]} shared    werner_fig4.calibrate() still "
         "reproduces Figure 4's three schematic-derived filters "
-        "(EXTERNAL, but it gates the axis code, not this figure's curves)")
+        "(EXTERNAL, but it gates the axis code, not this figure's curves)"
+        + why)
 
     # 2. passivity
     worst = max(float(np.max(d)) for v in data.values() for _, d in v["curves"])
     good = worst <= 0.0
-    ok = ok and good
+    outcomes.append(PASS if good else FAIL)
     lines.append(
         f"{'PASS' if good else 'FAIL'} passive   loudest plotted point "
         f"{worst:+.2f} dB <= 0 dB, as a passive RC network must be "
@@ -597,14 +633,14 @@ def check(data, meta) -> tuple[bool, list[str]]:
     lo = [v["axes_hz"][0] for v in data.values()]
     hi = [v["axes_hz"][1] for v in data.values()]
     good = (max(lo) - min(lo)) / max(lo) < 1e-3 and (max(hi) - min(hi)) / max(hi) < 1e-3
-    ok = ok and good
+    outcomes.append(PASS if good else FAIL)
     lines.append(
         f"{'PASS' if good else 'FAIL'} one-x     the three sub-plots' "
         f"independently derived x axes agree: {min(lo):.1f}-{max(hi):.1f} Hz")
 
     # 4. the marker is one glyph
     good = meta["marker_agreement_pt"] <= MARKER_AGREE_PT
-    ok = ok and good
+    outcomes.append(PASS if good else FAIL)
     lines.append(
         f"{'PASS' if good else 'FAIL'} marker    one glyph offset "
         f"({meta['marker_offset_pt'][0]:+.2f}, {meta['marker_offset_pt'][1]:+.2f}) pt "
@@ -622,7 +658,7 @@ def check(data, meta) -> tuple[bool, list[str]]:
     sp = {k: data[k]["peak_spread_db"] for k in ("Ht1", "Ht2", "Ht3")}
     good = (sp["Ht3"] >= K_SPREAD_BIG_DB
             and max(sp["Ht1"], sp["Ht2"]) <= K_SPREAD_SMALL_DB)
-    ok = ok and good
+    outcomes.append(PASS if good else FAIL)
     lines.append(
         f"{'PASS' if good else 'FAIL'} prose     the tone control moves the "
         f"third band {sp['Ht3']:.1f} dB and the first two "
@@ -634,19 +670,20 @@ def check(data, meta) -> tuple[bool, list[str]]:
     hz, db = data["Ht3"]["curves"][data["Ht3"]["k1_index"]]
     try:
         tc = truncation_control(hz, db)
-        good = tc["worst_error_db"] <= TRUNCATION_TOL_DB
+        verdict = PASS if tc["worst_error_db"] <= TRUNCATION_TOL_DB else FAIL
         detail = (f"worst error {tc['worst_error_db']:.2f} dB at "
-                  f"{max(tc['points'], key=lambda r: abs(r['error_db']))['hz']:.0f} Hz")
+                  f"{max(tc['points'], key=lambda r: abs(r['error_db']))['hz']:.0f} Hz"
+                  f" (<= {TRUNCATION_TOL_DB} dB)")
     except Refused as exc:
-        good, detail = False, str(exc)
-    ok = ok and good
+        verdict, detail = REFUSED, str(exc)
+    outcomes.append(verdict)
     lines.append(
-        f"{'PASS' if good else 'FAIL'} extrap    fitting only Ht3's top 3 dB "
+        f"{_OUTCOME[verdict]} extrap    fitting only Ht3's top 3 dB "
         f"(the view Figure 9 gives of Ht1/Ht2) and extrapolating to 20 kHz: "
-        f"{detail} (<= {TRUNCATION_TOL_DB} dB)")
+        + detail)
     for note in meta["legend_notes"]:
         lines.append(f"NOTE   {note}")
-    return ok, lines
+    return _worst(*outcomes), lines
 
 
 # ---------------------------------------------------------------------------
@@ -813,17 +850,19 @@ def main(argv=None) -> int:
             print(f"from {a.artifact}")
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
-        return 3
+        return REFUSED
 
-    rc = 0
+    rc = PASS
+    full = None
     if a.check or not (a.fit or a.json):
-        ok, lines = check(data, meta)
+        full = check(data, meta)
+        verdict, lines = full
         for line in lines:
             print(line)
-        print("GATE:", "PASS" if ok else "FAIL",
+        print("GATE:", _OUTCOME[verdict],
               "(no external known answer exists for this figure -- see the "
               "module docstring)")
-        rc = 0 if ok else 1
+        rc = verdict
 
     if a.fit:
         print()
@@ -834,18 +873,25 @@ def main(argv=None) -> int:
         if not a.pdf_required:
             print("REFUSED: --json re-derives the evidence and needs --from-pdf",
                   file=sys.stderr)
-            return 3
+            return REFUSED
         art = to_artifact(data, meta)
         thin = {name: {**v, "curves": [(np.array(c["hz"]), np.array(c["db"]))
                                        for c in v["curves"]]}
                 for name, v in art["bands"].items()}
-        ok_full, _ = check(data, meta)
-        ok_thin, lines = check(thin, meta)
-        if not (ok_full and ok_thin):
-            print("REFUSED: decimation moved the gate", file=sys.stderr)
-            for line in lines:
-                print("  " + line, file=sys.stderr)
-            return 3
+        if full is None:
+            full = check(data, meta)
+        stages = (("full resolution", full),
+                  (f"decimated (every {DECIMATE}th point)", check(thin, meta)))
+        held = [(name, result) for name, result in stages if result[0] != PASS]
+        if held:
+            worst = _worst(*(result[0] for _name, result in held))
+            print(f"{_OUTCOME[worst]}: the gate did not pass, so nothing was "
+                  f"written to {a.json}", file=sys.stderr)
+            for name, (_, stage_lines) in held:
+                print(f"  {name}:", file=sys.stderr)
+                for line in stage_lines:
+                    print("    " + line, file=sys.stderr)
+            return worst
         pathlib.Path(a.json).write_text(json.dumps(art, indent=1))
         print(f"wrote {a.json}")
     return rc
