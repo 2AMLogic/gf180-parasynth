@@ -152,6 +152,10 @@ def _binding_files() -> tuple[list[str], list[str]]:
     # ROOT/tools append, verify_synth_top's conditional insert, and a tools/
     # script's own directory.
     files.add("tools/refusal.py")
+    # fpga/build_selected.py imports tools/i2s_transcript.py at module scope
+    # (same ROOT/tools append), so the copy must carry it too or the checker
+    # dies with ModuleNotFoundError before it can report a verdict.
+    files.add("tools/i2s_transcript.py")
     files |= {rel(p) for p in (ROOT / "fpga").glob("*.py")}
     files |= {rel(p) for p in build_arty.sources() + build_arty.roms()}
     # the constraint file: outside the checker's default (verification) scope,
