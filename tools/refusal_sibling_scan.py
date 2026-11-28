@@ -149,6 +149,30 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     acceptance is observed, not read -- `tools/test_refusal_sibling_scan.py`
     runs the shipped function with a refusing callee (caught, returned in the
     report's `refused` list) and with a sibling class (escapes);
+  * a handler is credited by its CLAUSE, never by its body (#1946,
+    documented, not changed): `handler_origins` reads the
+    except-expression alone and no caller consults the handler's
+    statements, so one whose body lets the refusal CONTINUE -- a bare
+    `raise`, or `raise <other Refused>(...) from exc` -- reads as a catch
+    exactly like one that returns or prints. `covered(*)` therefore means
+    a refusal-catching clause stands there, not that the refusal is
+    handled there. Two forms. At the BOUNDARY the refusal still leaves
+    `main()`, the exit-1 traceback this census exists to find; that form
+    credited no `covered(cli-*)` row when #1946 was measured, and the one
+    bare same-exception re-raise in the tree
+    (`tools/measure_mono_m5a_reference.py`: `except Refused: raise` beside
+    `except Exception as exc: raise Refused(...)`) sits in
+    `_render_segment`, not at a boundary. The TRANSLATING form is live
+    and quieter -- the repository's own `except <callee>.Refused as exc:
+    raise Refused(str(exc)) from exc`, where `Refused` is the module's,
+    own or borrowed (now and then a plain `ValueError`/`SystemExit`): it
+    credits the call by its clause alone, so a site with no other guard
+    reads `covered(...)`: right that the CALLEE's refusal stops there,
+    silent that another exception continues, caught -- if at all --
+    further out, which the row does not say (the boundary is read only
+    for a site no enclosing try covered). `tools/test_refusal_sibling_scan.py`
+    pins both forms against the interpreter's own verdict, so a body-aware
+    reading must move this bullet and that control together;
   * that await rule is conservative where only the await could tell: a bare
     call to an `async def` whose coroutine is awaited INSIDE the try that
     created it reads `candidate-escape`, though Python catches it there,
