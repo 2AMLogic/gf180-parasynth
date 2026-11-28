@@ -155,7 +155,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     try:
         res = run(a.refs, a.second, a.out)
-    except (Refused, pt.Refused) as e:
+    except refusal.Refused as e:
         print(f"REFUSED: {e}")
         return 2
     for k, r in res["rows"].items():

@@ -698,3 +698,35 @@ def test_a_fit_record_without_rows_is_refused(monkeypatch, tmp_path, capsys):
 def test_a_fit_record_with_null_rows_is_refused(monkeypatch, tmp_path, capsys):
     code, out, written = _fit(monkeypatch, tmp_path, capsys, {"rows": None})
     assert code == 2 and "'rows'" in out and not written.exists()
+
+
+# ---- #1860: a take that reaches the reader unreadable ends the run at exit 2 --
+LFS_POINTER = ("version https://git-lfs.github.com/spec/v1\n"
+               "oid sha256:" + "0" * 64 + "\nsize 12345\n")
+
+
+def test_measure_exits_2_when_a_take_reaches_the_reader_unreadable(tmp_path, monkeypatch, capsys):
+    """#1860. `load_take` hashes each take BEFORE reading it, so in a normal run
+    a corrupted take is refused as `wrong-hash` -- THIS module's class, which
+    `measure_rows` records per row as a scientific REFUSED and the run exits 0.
+    That is not the path under test. With `--inject no-hash-check` the pointer
+    reaches `pg.load_wav`, whose `Refused` is a SIBLING: the per-row handler
+    must not file it as a measurement that happened to be refused (an
+    unreadable apparatus is not a scientific outcome), and `main`'s handler
+    must exit 2. START RED on main: scipy's ValueError escaped both."""
+    monkeypatch.setattr(tp, "provenance", lambda refs: {"commit": "x"})
+    monkeypatch.setattr(tp, "close_provenance", lambda prov: prov)
+    monkeypatch.setattr(tp, "assert_unity_is_shipped", lambda *a, **k: None)
+    for cond, split in tp.load_prereg()["split_of"].items():
+        if split == "development":
+            p = tmp_path / tp.take_rel(cond)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(LFS_POINTER)
+    out = tmp_path / "measure.json"
+    code = tp.main(["measure", "--refs", str(tmp_path), "--split", "development",
+                    "--out", str(out), "--inject", "no-hash-check"])
+    captured = capsys.readouterr()
+    assert code == 2, captured.out[-600:]
+    assert "REFUSED" in captured.out and "unreadable WAV" in captured.out, captured.out[-600:]
+    assert str(tmp_path) in captured.out, captured.out[-600:]
+    assert not out.exists()

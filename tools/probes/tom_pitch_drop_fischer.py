@@ -1422,7 +1422,7 @@ def main(argv=None) -> int:
         res["inject"] = sorted(INJECT)
         res["provenance"] = close_provenance(prov)
         failures = verification_failures(a.cmd, res)
-    except Refused as e:
+    except refusal.Refused as e:
         print("REFUSED:", e)
         return 2
     a.out.parent.mkdir(parents=True, exist_ok=True)

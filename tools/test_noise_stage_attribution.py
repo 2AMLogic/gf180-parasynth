@@ -103,3 +103,35 @@ def test_ma_attribution_sees_nonlinearity_and_not_an_inert_register():
     assert not r["stages"]["inert_control"]["flatness_attributed"]
     assert r["stages"]["gate_nonlinearity"]["centroid"] > 20 * r["stages"]["inert_control"]["centroid"] \
         or r["stages"]["inert_control"]["centroid"] < 1e-3
+
+
+# --- #1860: the gate's reader raises a SIBLING Refused; it must exit 2 -------
+LFS_POINTER = ("version https://git-lfs.github.com/spec/v1\n"
+               "oid sha256:" + "0" * 64 + "\nsize 12345\n")
+
+
+@pytest.mark.parametrize("trigger", ["git-lfs-pointer", "sibling-refusal"])
+def test_the_gates_refusal_on_the_fischer_take_exits_2(tmp_path, monkeypatch, capsys, trigger):
+    """#1860. `attribute_vs_reference` reads the Fischer take through
+    `pg.load_wav`, whose `Refused` is a sibling of this module's class; `main`
+    caught only its own, so the refusal escaped as a traceback (exit 1).
+    START RED on main for both triggers. The attribution itself is stubbed: it
+    renders the kit (~10 s) and is not what is under test."""
+    import drum_verify as dv
+    from scipy.io import wavfile
+    (tmp_path / "manifest.json").write_text("{}")
+    p = tmp_path / dv.REF_MAIN["MA"][0]
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if trigger == "git-lfs-pointer":
+        p.write_text(LFS_POINTER)
+    else:
+        wavfile.write(p, 44100, (8000 * np.sin(2 * np.pi * 90 * np.arange(44100) / 44100)).astype(np.int16))
+
+        def refuse(path):
+            raise pg.Refused(f"{path}: raised by perceptual_gate, a sibling module")
+        monkeypatch.setattr(pg, "load_wav", refuse)
+    monkeypatch.setattr(n, "attribute", lambda sound, renderer, stages=None, shifts=n.REPEAT_SHIFTS: {})
+    monkeypatch.setattr(n, "prediction_check", lambda result: {})
+    assert n.main(["MA", "--refs", str(tmp_path)]) == 2
+    text = capsys.readouterr().out
+    assert text.startswith("REFUSED:") and str(p) in text, text[-400:]

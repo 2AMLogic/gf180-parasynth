@@ -2812,3 +2812,67 @@ def test_a_bench_that_exited_nonzero_is_refused_whatever_it_printed(tmp_path, mo
     res = _m5a_run(monkeypatch, tmp_path, _smoke_report, returncode=1)
     assert _board(res) == sb.NO_VERDICT
     assert "did not pass" in res["note"], res["note"]
+
+
+# ===========================================================================
+# #1860: `load_reference` refuses what `wavfile.read` raises. Its `exists()`
+# guards already refused an absent path; the RIFF header was unguarded, so an
+# unpulled git-lfs pointer or a 0-byte file escaped as scipy's ValueError.
+# `run_case`'s `except Exception` guard turned that into a no-verdict record
+# that carried a traceback, named no file, and printed "unexpected internal
+# error" -- an execution error filed where a refusal belongs. START RED: the
+# red run is recorded in the PR.
+# ===========================================================================
+LFS_POINTER = ("version https://git-lfs.github.com/spec/v1\n"
+               "oid sha256:" + "0" * 64 + "\nsize 12345\n")
+
+
+def _unreadable_reference(tmp_path, voice, kind="git-lfs-pointer"):
+    """Put `kind` of file where `voice`'s Fischer recording belongs."""
+    rel, _ = rc.REF_MAIN[voice]
+    p = tmp_path / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "git-lfs-pointer":
+        p.write_text(LFS_POINTER)
+    elif kind == "empty":
+        p.write_bytes(b"")
+    elif kind == "directory":
+        p.mkdir()
+    return p
+
+
+@pytest.mark.parametrize("kind", ["git-lfs-pointer", "empty", "directory"])
+def test_load_reference_refuses_what_wavfile_read_raises_naming_the_file(kind, tmp_path):
+    p = _unreadable_reference(tmp_path, "RS", kind)
+    with pytest.raises(rc.Refused) as why:
+        rc.load_reference("RS", tmp_path)
+    assert str(p) in str(why.value) and "unreadable" in str(why.value), str(why.value)
+
+
+def test_an_unreadable_reference_is_a_no_verdict_naming_the_file_with_no_traceback(tmp_path):
+    """Through the runner, where the record is written: the refusal must
+    arrive as a `Refused` the drum path already handles, not through the
+    `except Exception` guard that files it as an internal error."""
+    cid = "D09A"
+    p = _unreadable_reference(tmp_path, rc.DRUM_CASE_VOICE[cid])
+    res = rc.run_case(_cases_row(cid), tmp_path, "", keep_audio=False)
+    assert sb.evaluate(_cases_row(cid), res)["state"] == sb.NO_VERDICT
+    assert "traceback" not in res, res.get("traceback")
+    assert res["note"].startswith("REFUSED:") and str(p) in res["note"], res["note"]
+
+
+def test_main_exits_2_on_an_unreadable_reference_without_calling_it_an_internal_error(
+        tmp_path, monkeypatch, capsys):
+    """The exit status was already 2 on main -- the `except Exception` guard
+    files the case as no-verdict -- so the status is not what this control is
+    about. What was wrong is the line on stderr that calls a missing
+    precondition an internal error."""
+    cid = "D09A"
+    _unreadable_reference(tmp_path, rc.DRUM_CASE_VOICE[cid])
+    monkeypatch.setattr(rc, "base_check", lambda allow_stale: {"checked": False, "why": "test"})
+    code = rc.main([cid, "--refs", str(tmp_path), "--results", str(tmp_path / "results"),
+                    "--dry-run", "--no-audio"])
+    captured = capsys.readouterr()
+    assert code == 2, captured.out[-800:]
+    assert f"{cid:<7}no verdict" in captured.out and "exit 2" in captured.out, captured.out[-800:]
+    assert "unexpected internal error" not in captured.err, captured.err[-800:]

@@ -78,6 +78,8 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
+import exit_contract  # noqa: E402
+import refusal  # noqa: E402
 
 P_GRID = (0.05, 0.10, 0.15, 0.20, 0.30, 0.50)
 #: Reported, never selected from: p values beyond the selectable grid, so the
@@ -268,35 +270,39 @@ def main(argv=None) -> int:
     ap.add_argument("--force-p", type=float, default=None)
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
-    tabs = json.loads(a.tables.read_text())["tables"]
-    cal = calibrate(tabs, a.force_p)
-    ours = {}
-    if a.ours:
-        for s in pg.SOUNDS16:
-            f = a.ours / f"{s}.wav"
-            if f.exists():
-                ours[s] = pg.load_wav(f)
-    inj = None
-    if a.corrupt_tables:
-        ci = calibrate(json.loads(a.corrupt_tables.read_text())["tables"], a.force_p)
-        qi = gc.qualify(ci, a.refs, ours) if ci.get("p") else None
-        inj, inj_dec = gc.injected_outcome(qi)
-        cal["injected_control"] = {"corrupt": json.loads(a.corrupt_tables.read_text())["corrupt"],
-                                   "calibration_status": ci["status"], "qualified": inj,
-                                   "decision": inj_dec}
-    q = gc.qualify(cal, a.refs, ours) if cal.get("p") else None
-    if q and a.fixtures and (a.fixtures / "CY5025-candidate.wav").exists() and "CY" in cal["sounds"]:
-        T = pg.Target(*pg.load_wav(a.refs / pg.target_rel("CY")), "CY", pg.target_rel("CY"))
-        try:
-            q["known_bad"][CANDIDATE] = pg.verdict(
-                T.distance(*pg.load_wav(a.fixtures / "CY5025-candidate.wav"), "374"), cal["sounds"]["CY"]["bar"])
-        except pg.Refused as e:
-            q["known_bad"][CANDIDATE] = {"verdict": "REFUSED", "why": str(e)}
-    dec = decide(q, inj) if q else {"status": "REFUSED", "why": cal["status"]}
-    if q and cal.get("diagnostic"):
-        dec["status"] = f"DIAGNOSTIC (not authority): {dec['status']}"
-    cal["old_bar_context"] = gc.old_bar_context(gc.regroup(tabs), a.refs, ours)
-    res = {"calibration": cal, "qualification": q, "decision": dec, "provenance": pg.provenance(a)}
+    try:
+        tabs = json.loads(a.tables.read_text())["tables"]
+        cal = calibrate(tabs, a.force_p)
+        ours = {}
+        if a.ours:
+            for s in pg.SOUNDS16:
+                f = a.ours / f"{s}.wav"
+                if f.exists():
+                    ours[s] = pg.load_wav(f)
+        inj = None
+        if a.corrupt_tables:
+            ci = calibrate(json.loads(a.corrupt_tables.read_text())["tables"], a.force_p)
+            qi = gc.qualify(ci, a.refs, ours) if ci.get("p") else None
+            inj, inj_dec = gc.injected_outcome(qi)
+            cal["injected_control"] = {"corrupt": json.loads(a.corrupt_tables.read_text())["corrupt"],
+                                       "calibration_status": ci["status"], "qualified": inj,
+                                       "decision": inj_dec}
+        q = gc.qualify(cal, a.refs, ours) if cal.get("p") else None
+        if q and a.fixtures and (a.fixtures / "CY5025-candidate.wav").exists() and "CY" in cal["sounds"]:
+            T = pg.Target(*pg.load_wav(a.refs / pg.target_rel("CY")), "CY", pg.target_rel("CY"))
+            try:
+                q["known_bad"][CANDIDATE] = pg.verdict(
+                    T.distance(*pg.load_wav(a.fixtures / "CY5025-candidate.wav"), "374"), cal["sounds"]["CY"]["bar"])
+            except pg.Refused as e:
+                q["known_bad"][CANDIDATE] = {"verdict": "REFUSED", "why": str(e)}
+        dec = decide(q, inj) if q else {"status": "REFUSED", "why": cal["status"]}
+        if q and cal.get("diagnostic"):
+            dec["status"] = f"DIAGNOSTIC (not authority): {dec['status']}"
+        cal["old_bar_context"] = gc.old_bar_context(gc.regroup(tabs), a.refs, ours)
+        res = {"calibration": cal, "qualification": q, "decision": dec, "provenance": pg.provenance(a)}
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return exit_contract.REFUSED
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
     print(json.dumps(dec, indent=1))
