@@ -241,13 +241,13 @@ def required_gate(shipped, required=None):
 
     Only `REQUIRED_KEYS` block. A refused control or probe is announced and
     carried -- `announce_refusals` -- because a refusal in a device no table
-    quotes is information, not a reason to withhold the tables. (In practice
-    `reference_compare.py`'s own `report()` is not stub-tolerant for any device
-    in its `ORDER`, so a non-required stub still ends this script in REFUSED,
-    via a non-zero `--report` exit rather than via this gate. That fails in the
-    safe direction; the distinction this function draws is still the one that
-    matters, because it is the one that decides whether a *report* is printed
-    at all.)"""
+    quotes is information, not a reason to withhold the tables. (Until
+    #1936, `reference_compare.py`'s own `report()` crashed on a stub in any
+    device of its `ORDER`, so a non-required stub still ended this script in
+    REFUSED through a non-zero `--report` exit -- after this gate had passed.
+    `report()` now names the device as NOT ANSWERABLE and goes on, so the run
+    proceeds as designed: announced here, carried into the output file, and
+    visible in the report.)"""
     required = REQUIRED_KEYS if required is None else required
     missing = [k for k in required if k not in shipped]
     if missing:

@@ -41,13 +41,12 @@ ROOT = rg.ROOT
 COMMITTED_SHIPPED = os.path.join(ROOT, "docs",
                                  "reference-compare-results-shipped.json")
 GUARD_STUB_KEY = "response-ours"          # in `required`
-# A probe, not in `required`. `selfosc` rather than `response` deliberately:
-# report() filters selfosc rows on `ok` and prints `---` for a stub, whereas it
-# raises `TypeError: unsupported format string passed to NoneType` on a
-# `response` stub (reference_compare.py:465). Observed while writing this test,
-# not fixed here -- it is a fragility in report()'s formatting, and its effect
-# on this script is still a REFUSED (the `--report` subprocess exits non-zero),
-# so it fails in the safe direction. Worth its own issue, not this PR's scope.
+# A probe, not in `required`. Until #1936, report() crashed on a `guard()`
+# stub in every printed section (`max()` over an empty `live` in section 1, a
+# None cut_hz through a float format in section 3), so this case ended the
+# script REFUSED through a non-zero `--report` exit, and the test below pinned
+# that as observed behaviour. report() now names the device and goes on, and
+# the case runs as the gate was designed: announced, carried, not escalated.
 NON_REQUIRED_KEY = "selfosc-ours-huovtune"
 
 
@@ -156,14 +155,15 @@ def test_a_non_required_refusal_is_announced_and_does_not_trip_the_gate(
         tmp_path, monkeypatch, capsys):
     """A probe with nothing to say is a fact about the run, not a blocker.
 
-    Two halves, and the second is the one that documents reality rather than
-    the intent: the *gate* does not escalate a non-required refusal (and the
-    script says so, tagged `not required for 8.4/8.6`, because a
-    silently-dropped refusal is how a control stops being carried) -- but
-    `reference_compare.py`'s `report()` is not stub-tolerant for any device in
-    its `ORDER` (`max(live, ...)` over an empty list, line 416), so the run
-    still ends REFUSED via a non-zero `--report` exit. That fails in the safe
-    direction and is asserted here as the observed behaviour, not glossed.
+    The *gate* does not escalate a non-required refusal, and the script says
+    so, tagged `not required for 8.4/8.6`, because a silently-dropped refusal
+    is how a control stops being carried. Until #1936 the run still ended
+    REFUSED: `reference_compare.py`'s `report()` crashed on the stub
+    (`max(live, ...)` over an empty list) and the non-zero `--report` exit
+    stopped the script after the gate had passed. This test asserted that as
+    observed behaviour. With report() naming the device instead, the run
+    proceeds as the gate was designed: the refusal is announced, carried into
+    the output file and named in the report, and the report is written.
     """
     payload = copy.deepcopy(_committed_payload())
     assert NON_REQUIRED_KEY in payload
@@ -177,15 +177,18 @@ def test_a_non_required_refusal_is_announced_and_does_not_trip_the_gate(
     assert found.get(NON_REQUIRED_KEY), "the refusal must be announced"
     assert "not required for 8.4/8.6" in capsys.readouterr().out
 
-    # End to end: REFUSED, but from report() rather than from the gate.
+    # End to end: past the gate AND past report(), with the refusal carried.
     rc, shipped_path = _run(tmp_path, monkeypatch, payload)
-    assert rc == 2
     out = capsys.readouterr().out
-    assert "--report exited" in out, \
-        "the gate must not be what stopped this; report()'s intolerance is"
+    assert rc == 0, out
+    assert f"refused (not required for 8.4/8.6): {NON_REQUIRED_KEY}" in out
     assert "a measurement the 8.4/8.6 tables are built from REFUSED" not in out
-    assert not os.path.exists(shipped_path), \
-        "no artefact from a run that did not produce a report"
+    assert "--report exited" not in out
+    with open(shipped_path) as f:
+        assert json.load(f)[NON_REQUIRED_KEY] == stub, "carried into the output file, not dropped"
+    with open(os.path.join(tmp_path, "out", "report-shipped.txt")) as f:
+        named = [ln for ln in f if ln.startswith("ours-huovtune") and "NOT ANSWERABLE" in ln]
+    assert len(named) == 1 and "no onset: probe declined" in named[0], named
 
 
 def test_a_required_refusal_refuses_instead_of_reporting(
