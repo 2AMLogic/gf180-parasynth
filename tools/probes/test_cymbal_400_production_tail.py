@@ -14,6 +14,7 @@ import inspect
 import json
 import math
 import pathlib
+import subprocess
 import sys
 
 import numpy as np
@@ -646,3 +647,110 @@ def test_frozen_record_declares_the_pre_measurement_commitments():
     assert not set(f["development_settings"]) & set(f["confirmation_settings"])
     assert all(p["status"] in ("measured", "inferred", "unverified") for p in f["stage_isolation"]["predictions"])
     json.dumps(f)
+
+
+# ---------------------------------------------------------------- #1774: a --frozen record that cannot be READ
+# `measure --frozen` reads a record the OPERATOR names. A MISSING one was already this
+# command's own refusal (it says to run `freeze` first), but one that could not be READ
+# -- truncated JSON, bytes that are not UTF-8 -- was `json.loads(path.read_text())`: exit
+# 1 by traceback, where this tool's declared refusal is exit 2 and nothing was measured.
+# The refusal tests run the real CLI as a subprocess, nothing stubbed, and need neither
+# the corpus nor a clean tree: each refusal comes before either is consulted. The
+# injected-bug control drives `main()` in process, because a monkeypatch cannot reach a
+# subprocess, and the last control calls the loader itself.
+RAW_READ_RAISES = {"truncated": json.JSONDecodeError,
+                   "not-utf8": (UnicodeDecodeError, json.JSONDecodeError),  # locale-dependent: Latin-1 decodes ff fe, then JSON fails
+                   "empty": json.JSONDecodeError,
+                   "directory": IsADirectoryError}
+
+
+def _unreadable_frozen(tmp_path, kind) -> pathlib.Path:
+    """A path that cannot be read, for `kind`: #1774's own bytes for the two it names,
+    plus its test plan's two edge cases (an empty file; a directory where a file was
+    named). The path carries the kind, so a failure prints which one it was."""
+    p = tmp_path / kind / "frozen.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "truncated":
+        p.write_text('{"rows": [1, 2')
+    elif kind == "not-utf8":
+        p.write_bytes(b"\xff\xfe" + bytes(range(256)) * 4)
+    elif kind == "empty":
+        p.write_text("")
+    elif kind == "directory":
+        p.mkdir(exist_ok=True)
+    return p
+
+
+def _measure_cli(frozen: pathlib.Path, tmp_path) -> subprocess.CompletedProcess:
+    """The real CLI as an operator runs it: a fresh interpreter, the file on disk."""
+    return subprocess.run([sys.executable, str(HERE / "cymbal_400_production_tail.py"), *_cli(tmp_path, frozen)],
+                          cwd=HERE.parents[1], capture_output=True, text=True, errors="replace")
+
+
+@pytest.mark.parametrize("kind", list(RAW_READ_RAISES))
+def test_measure_refuses_a_frozen_record_that_cannot_be_read(tmp_path, kind):
+    frozen = _unreadable_frozen(tmp_path, kind)
+    r = _measure_cli(frozen, tmp_path)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "REFUSED" in r.stdout and str(frozen) in r.stdout, r.stdout
+    assert "Traceback" not in r.stderr, r.stderr
+    assert not (tmp_path / "result.json").exists()
+
+
+def test_measure_still_refuses_a_missing_frozen_record_in_its_own_words(tmp_path):
+    """#1774 AC 3: the missing-file case stays as is. It was right before #1774 -- its
+    refusal names the remedy -- so the reader that now handles the unreadable cases must
+    leave it alone: same exit, same line."""
+    frozen = tmp_path / "missing" / "frozen.json"
+    frozen.parent.mkdir()
+    r = _measure_cli(frozen, tmp_path)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert r.stdout.strip() == f"REFUSED: no frozen record at {frozen}; run `freeze` BEFORE measuring"
+    assert "Traceback" not in r.stderr and not (tmp_path / "result.json").exists()
+
+
+def test_measure_passes_a_frozen_record_that_can_be_read_to_the_contract_guard(tmp_path):
+    """The guard's other side (verification rule 8): a file that CAN be read is not
+    refused by the reader. `{}` parses, so the read succeeds and the NEXT guard refuses,
+    in its own words. A reader that refused everything, or raised a class `main()` does
+    not catch -- or a `main()` that caught `Exception` -- would print "not valid JSON",
+    "cannot be read" or a traceback here instead. That a well-formed frozen record still
+    measures to exit 0 is test_result_records_the_frozen_record_hash_not_just_its_path,
+    through this same reader."""
+    frozen = tmp_path / "readable" / "frozen.json"
+    frozen.parent.mkdir()
+    frozen.write_text("{}")
+    r = _measure_cli(frozen, tmp_path)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "REFUSED" in r.stdout and "measurement contract does not match" in r.stdout, r.stdout
+    assert "valid JSON" not in r.stdout and "cannot be read" not in r.stdout, r.stdout
+    assert "Traceback" not in r.stderr and not (tmp_path / "result.json").exists()
+
+
+@pytest.mark.parametrize("kind", list(RAW_READ_RAISES))
+def test_without_the_loader_measure_is_the_shipped_defect(tmp_path, monkeypatch, kind):
+    """Injected-bug control (#1774 AC 6), committed rather than described: the fix is
+    `load_frozen`, so reverted to the bare read it replaces, each input above is exit 1
+    by traceback again -- the exception escapes `main()`. Not `missing`: that case was
+    refused before the loader existed and is `cmd_measure`'s own."""
+    monkeypatch.setattr(pt, "load_frozen", lambda path: json.loads(path.read_text()))
+    with pytest.raises(RAW_READ_RAISES[kind]):
+        pt.main(_cli(tmp_path, _unreadable_frozen(tmp_path, kind)))
+    assert not (tmp_path / "result.json").exists()
+
+
+def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch):
+    """#1774 AC 7: the catch is `manifest.Refused` and `OSError`, never `Exception`. An
+    exception that is neither -- an implementation error inside the reader -- is an
+    execution error: it leaves `load_frozen` as itself rather than being relabelled a
+    refusal, which is the inverse defect (test_main_lets_a_non_refusal_escape_as_a_traceback
+    holds `main()` to the same rule). Called on the loader directly, so it fails only for
+    that reason; whether `measure` reads THROUGH the loader is the refusal tests' to assert."""
+    frozen = tmp_path / "frozen.json"
+    frozen.write_text("{}")
+
+    def boom(path, what):
+        raise TypeError("an implementation error inside the reader, not a refusal")
+    monkeypatch.setattr(pt.mf, "load_json_refused", boom)
+    with pytest.raises(TypeError, match="not a refusal"):
+        pt.load_frozen(frozen)
