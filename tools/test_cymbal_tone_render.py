@@ -258,6 +258,9 @@ def test_the_record_reader_refuses_a_non_finite_cell_naming_the_setting_and_fiel
         tre.fischer_curves(bad)
     assert "CY7550." + ".".join(field) in str(exc.value)
     assert "CY5050." not in str(exc.value)
+
+
+def test_the_verdict_reports_every_one_of_the_25_settings():
     """Acceptance 3 says report every setting, and says which are development."""
     ref = tre.fischer_curves()
     col = ref["50"]
