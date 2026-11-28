@@ -515,10 +515,14 @@ def test_an_m1a_clip_cut_after_its_last_window_still_measures_pinning_the_limit(
 
 # ---- envelope_history_337 ---------------------------------------------------
 def _last_gate_frames(row: dict, sr: int = SR) -> int:
-    """Where the render's last note ends, by the index rule every window in
-    envelope_history_337 is cut by: `int(round(t * sr))`."""
+    """The frames a render needs: where its last note's gate ends
+    (`int(round(t * sr))`) plus the 5 ms `rms_envelope` centred-window
+    lookahead, `(k - 1) // 2` = 119 at 48 kHz, which `held_rms` and
+    `attack_ms` read past the gate end. Written out here, not imported, so
+    the control does not share the tool's arithmetic."""
     t = row["events"][-1]
-    return int(round((t["on_s"] + t["gate_s"]) * sr))
+    k = int(round(5.0e-3 * sr))
+    return int(round((t["on_s"] + t["gate_s"]) * sr)) + (k - 1) // 2
 
 
 def _committed_row(name: str) -> dict:
@@ -600,8 +604,8 @@ def test_a_render_cut_inside_its_last_gate_refuses(tmp_path, committed_rows, nam
 @pytest.mark.parametrize("short_by", [0, 1], ids=["exactly-as-long", "one-frame-short"])
 def test_a_render_is_refused_by_its_last_frame_not_by_a_margin(tmp_path, committed_rows, short_by):
     """The boundary. A render that ends exactly where its last note's gate
-    ends holds every sample a window reads, and measures what the whole render
-    measures; one frame fewer does not."""
+    plus the envelope lookahead ends holds every sample a window reads, and
+    measures what the whole render measures; one frame fewer does not."""
     need = _last_gate_frames(_committed_row(GAP5))
     _cut_attack_render(tmp_path, GAP5, need - short_by)
     outcome = _measured(tmp_path)
@@ -651,3 +655,53 @@ def test_a_render_cut_after_its_last_gate_still_measures_pinning_the_limit(tmp_p
     _cut_attack_render(tmp_path, GAP5, kept)
     got = _numbers(eh.measure(tmp_path)[0])
     assert got == _numbers(_committed_full(GAP5, committed_rows)), (got, _numbers(_committed_full(GAP5, committed_rows)))
+
+
+@pytest.fixture
+def synthetic_nonfloor(tmp_path):
+    """A render whose pre-onset audio is NOT exactly zero, so `residual_db`
+    divides by the held level instead of returning the floor, and whose
+    amplitude decays through the gate and then bursts for 300 frames right
+    after it, inside the 119-frame lookahead, so the last held-window
+    envelope values move from the lowest to the highest ranks and the median
+    with them. The committed GAP5 render is floor-limited, so
+    its boundary test cannot see `held_rms` move (review of #2123)."""
+    sr, on, gate = SR, 0.1, 0.6
+    n = int(round((on + gate) * sr)) + 5000
+    t = np.arange(n) / sr
+    x = 1e-3 * np.sin(2 * np.pi * 220 * t)
+    m = (t >= on) & (t < on + gate)
+    x[m] += 0.5 * (1 - 0.9 * (t[m] - on) / gate) * np.sin(2 * np.pi * 440 * t[m])
+    g = int(round((on + gate) * sr))
+    x[g:g + 300] += 0.5 * np.sin(2 * np.pi * 440 * t[g:g + 300])
+    pcm = np.round(x * 32767).astype(np.int16)
+    row = {"wav": "syn.wav", "wave": "syn", "condition": "c", "repeat": 0,
+           "events": [{"on_s": on, "gate_s": gate}]}
+
+    def write(frames):
+        wavfile.write(tmp_path / "syn.wav", sr, pcm[:frames])
+        (tmp_path / "report.json").write_text(json.dumps(
+            {"renders": [dict(row, sha256=_sha256(tmp_path / "syn.wav"))]}))
+        return tmp_path
+
+    return write, _last_gate_frames(row), int(round((on + gate) * sr)), pcm
+
+
+def test_the_lookahead_matters_on_a_render_that_is_not_floor_limited(synthetic_nonfloor):
+    """Control with the input that defeats the GAP5 boundary test: cutting at
+    the gate end alone is refused, cutting at gate end + lookahead measures
+    identically to the whole render, and the gate-end cut WOULD have moved the
+    number (so the refusal is not cosmetic)."""
+    write, need, gate_end, pcm = synthetic_nonfloor
+    whole = _numbers(eh.measure(write(need + 5000))[0])
+    assert not whole["floor_limited"], "the control must exercise the divide, not the floor"
+    outcome = _measured(write(gate_end))
+    assert outcome.startswith("REFUSED "), outcome
+    assert f"syn.wav: {gate_end} frames, needs {need}" in outcome, outcome
+    assert _measured(write(need - 1)).startswith("REFUSED ")
+    assert _numbers(eh.measure(write(need))[0]) == whole
+    # Falsification: skip the guard and the gate-end cut does move a number.
+    cut = pcm[:gate_end].astype(np.float64) / 32768.0
+    full = pcm.astype(np.float64) / 32768.0
+    assert eh.held_rms(cut, SR, 0.1, 0.7) != eh.held_rms(full, SR, 0.1, 0.7)
+    assert eh.residual_db(cut, SR, 0.1, 0.7)[0] != eh.residual_db(full, SR, 0.1, 0.7)[0]
