@@ -1,0 +1,60 @@
+{
+ "verdict": "PASS",
+ "tolerance_frames": 0,
+ "wire_delay_periods": 1,
+ "events": 4,
+ "target_on_frames": [
+  239,
+  959,
+  2639,
+  3359
+ ],
+ "target_off_frames": [
+  719,
+  1439,
+  3119,
+  3839
+ ],
+ "applied_on_frames": [
+  239,
+  959,
+  2639,
+  3359
+ ],
+ "applied_off_frames": [
+  719,
+  1439,
+  3119,
+  3839
+ ],
+ "gate_on_offset_frames": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "gate_off_offset_frames": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "lead_in_frames": 0,
+ "gate_on_drift_frames": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "gate_length_error_frames": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "worst_early_frames": 0,
+ "worst_late_frames": 0,
+ "violations": [],
+ "targets_from": "the stimulus's own smoke map (no reference)",
+ "schedule": "absolute"
+}
