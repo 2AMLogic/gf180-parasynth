@@ -23,6 +23,11 @@ against a digitised figure, and it is why the render still has to be run.
                matrix over six injected controls (verification rule 4)
   --json PATH  write the evidence record
 
+The gate has three answers, and they are three exit statuses: PASS (0); FAIL
+(1), a control was evaluated and moved nothing; NO VERDICT (2), a control
+REFUSED and nothing else failed. A control that cannot be evaluated is in
+neither denominator (#1853; verification rule 5's three conditions).
+
 REFUSES rather than answering when a coefficient will not fit its register,
 when an artifact is absent, or when a band's realisation exceeds SHAPE_BOUND_DB.
 """
@@ -168,6 +173,22 @@ def section_db(a1, a2, code, hz):
     return _db(numerator(code, hz) / (1 - a1 * z - a2 * z * z))
 
 
+def _pole_regs(hz):
+    """`cc.real_pole_regs`, with a coefficient the bank cannot hold reported
+    as this module's refusal.
+
+    An unrealisable control is NO VERDICT for that control, never the FAIL of
+    one that was evaluated and moved nothing (#1853). Both call sites pass one
+    or two poles, so the `ValueError` here is the register and never the
+    pole-count error; any other `ValueError` raised while a control is being
+    evaluated is an execution error and propagates as one.
+    """
+    try:
+        return cc.real_pole_regs(hz)
+    except ValueError as exc:
+        raise Refused(f"{exc} (poles {[round(float(f), 1) for f in hz]} Hz)") from exc
+
+
 def realisation(band, poles, *, defect=None) -> dict:
     """What revision 3 hands the bank for (tone x LEVEL), band by band.
 
@@ -190,7 +211,7 @@ def realisation(band, poles, *, defect=None) -> dict:
     if extra is None:
         a1, a2 = 0, 0
     else:
-        a1, a2 = cc.real_pole_regs([extra])
+        a1, a2 = _pole_regs([extra])
     if defect == "SIGN_A1":
         a1 = -a1
     return {"extra_pole_hz": extra, "dc_zeros": zeros, "a1": a1, "a2": a2,
@@ -218,7 +239,7 @@ def section_regs(band, poles, *, defect=None):
     if r["extra_pole_hz"] is None:
         return None
     hz = [cc.HH3_P1_HZ, r["extra_pole_hz"]]
-    a1, a2 = cc.real_pole_regs(hz)
+    a1, a2 = _pole_regs(hz)
     if defect == "SIGN_A1":
         a1 = -a1
     return a1, a2, cc.TONE_REALISATION[band]["num"], hz
@@ -329,6 +350,9 @@ DEFECTS = ("SIGN_A1", "SWAP_BANDS", "NO_LEVEL_STAGE", "CAND2_LEVEL_ONLY",
 # requirement rather than as an excuse).
 BLIND_BY_CONSTRUCTION = ("UNIFORM_6DB",)
 
+VERDICT_NAME = {True: "PASS", False: "FAIL", None: "NO VERDICT"}
+EXIT_STATUS = {"PASS": 0, "FAIL": 1, "NO VERDICT": 2}
+
 
 def properties(poles, corner_hz, fig9, *, defect=None) -> dict:
     """Each named property's verdict, as (ok, detail). All five run always."""
@@ -427,7 +451,15 @@ def _image_bind(poles, *, defect=None):
                  f"Hh3 1-pole pair {got} = poles {[round(f, 1) for f in hz]} Hz")
 
 
-def check(poles, corner_hz, fig9) -> tuple[bool, list[str]]:
+def check(poles, corner_hz, fig9) -> tuple[bool | None, list[str]]:
+    """The gate: (verdict, lines), the verdict being True, False or None.
+
+    None is NO VERDICT: a control REFUSED, so it was not evaluated, and
+    nothing else failed. Such a control keeps its row and reason, is in
+    neither denominator, and is not the False of a control that was evaluated
+    and moved nothing (#1853; verification rule 5's three conditions). A
+    measured failure anywhere still gives False, whatever else refused.
+    """
     lines = []
     clean = properties(poles, corner_hz, fig9)
     ok = all(v[0] for v in clean.values())
@@ -439,14 +471,14 @@ def check(poles, corner_hz, fig9) -> tuple[bool, list[str]]:
         return False, lines
     lines.append("")
     lines.append(f"  {'defect':20s} " + " ".join(f"{p:>11s}" for p in PROPERTIES))
-    caught, blind_ok = [], []
+    caught, blind_ok, refused = [], [], []
     for d in DEFECTS + BLIND_BY_CONSTRUCTION:
         try:
             got = properties(poles, corner_hz, fig9, defect=d)
             cells = ["MOVED" if got[p][0] is False else "BLIND" for p in PROPERTIES]
-        except (Refused, ValueError) as exc:               # a control may be unrealisable
+        except Refused as exc:                           # a control may be unrealisable
             lines.append(f"  {d:20s} REFUSED: {exc}")
-            caught.append(False)
+            refused.append(d)
             continue
         if d in BLIND_BY_CONSTRUCTION:
             blind_ok.append("MOVED" not in cells)
@@ -456,9 +488,12 @@ def check(poles, corner_hz, fig9) -> tuple[bool, list[str]]:
             caught.append("MOVED" in cells)
             lines.append(f"  {d:20s} " + " ".join(f"{c:>11s}" for c in cells))
     lines.append("")
-    lines.append(f"  {sum(caught)}/{len(DEFECTS)} controls turned at least one property red; "
-                 f"{sum(blind_ok)}/{len(BLIND_BY_CONSTRUCTION)} blind-by-construction controls stayed blind")
-    return all(caught) and all(blind_ok), lines
+    lines.append(f"  {sum(caught)}/{len(caught)} controls turned at least one property red; "
+                 f"{sum(blind_ok)}/{len(blind_ok)} blind-by-construction controls stayed blind"
+                 + (f"; {len(refused)} NO VERDICT" if refused else ""))
+    if not all(caught) or not all(blind_ok):
+        return False, lines
+    return None if refused else True, lines
 
 
 # ---------------------------------------------------------------------------
@@ -489,7 +524,7 @@ def report(poles, corner_hz) -> list[str]:
 
 
 def record(poles, corner_hz, fig9) -> dict:
-    ok, lines = check(poles, corner_hz, fig9)
+    verdict, lines = check(poles, corner_hz, fig9)
     return {
         "tool": "tools/cymbal_tone_realisation.py",
         "sources": {"tone": str(w9.ARTIFACT.relative_to(ROOT)),
@@ -504,7 +539,7 @@ def record(poles, corner_hz, fig9) -> dict:
                       "revision2_shape_max_db":
                           shape_error(b, poles, corner_hz, defect="CAND2_LEVEL_ONLY")["shape_max_db"]}
               for b in BANDS},
-        "gate": {"pass": bool(ok), "lines": lines},
+        "gate": {"pass": verdict is True, "verdict": VERDICT_NAME[verdict], "lines": lines},
     }
 
 
@@ -526,16 +561,16 @@ def main(argv=None) -> int:
     if a.report:
         print("\n".join(report(poles, corner)))
     if a.check:
-        ok, lines = check(poles, corner, fig9)
+        verdict, lines = check(poles, corner, fig9)
         print("\n".join(lines))
-        print("gate:", "PASS" if ok else "FAIL")
-        rc = 0 if ok else 1
+        print("gate:", VERDICT_NAME[verdict])
+        rc = EXIT_STATUS[VERDICT_NAME[verdict]]
     if a.json:
         a.json.parent.mkdir(parents=True, exist_ok=True)
         rec = record(poles, corner, fig9)
         a.json.write_text(json.dumps(rec, indent=1, default=float) + "\n")
         print(f"wrote {a.json}")
-        rc = rc or (0 if rec["gate"]["pass"] else 1)
+        rc = rc or EXIT_STATUS[rec["gate"]["verdict"]]
     return rc
 
 
