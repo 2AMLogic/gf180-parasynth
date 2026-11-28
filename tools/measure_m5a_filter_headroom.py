@@ -17,6 +17,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m5a_score as m5a
+import audio_measure as am
 import refusal
 from exit_contract import REFUSED
 import voice_fx as vf
@@ -345,7 +346,13 @@ def main(argv=None) -> int:
             report = run(ROOT / "build/scorecard/m5a-filter-headroom-audio",
                          args.reuse_offline_report, args.reuse_causal_report)
         summary = _summary(report, out)
-    except refusal.Refused as exc:
+    except (refusal.Refused, am.InsufficientEvidence) as exc:
+        # `am.InsufficientEvidence` is the estimator's own refusal, listed BY
+        # CLASS beside the base (#1751, #1901): it subclasses AssertionError, so
+        # `except refusal.Refused` could not see it, and a broken stage tap --
+        # `trace["ladder"]` silent under a valid output -- left through
+        # `_stage_diagnostics` as an exit-1 traceback. Not AssertionError, not
+        # Exception: an unrelated fault stays an execution error.
         print(f"REFUSED: {exc}")
         return REFUSED
     out.parent.mkdir(parents=True, exist_ok=True)
