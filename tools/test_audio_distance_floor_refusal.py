@@ -116,6 +116,34 @@ This probe does not read through scipy: `load_ref` calls `soundfile.read`,
 which raises `LibsndfileError` (a RuntimeError subclass) on a non-WAV. The
 control pins what the tree actually raises.
 
+THE E5 HANDLER (#1771), a second defect in this file and the one site #1646
+did not touch: `e5_tom` wrapped the per-property estimator
+(`rc._pitch_drop("LT")`) in `except Exception` and filed whatever it raised as
+a `refused:` row -- the inverse defect, an execution error relabelled as a
+refusal. On main @ 02394528 that row sits in a run that exits 0; #1699 (PR
+#1773, open on 2026-11-28) would make the run exit 2, where 1 and a traceback
+are right either way.
+The two controls at the end of this file pair as the ones above do: an
+injected `ValueError` must propagate out of `e5_tom`, and a refusal the
+estimator raises must still be a `refused:` row for every ratio. RED FIRST
+against the unfixed handler (2026-11-28): 1 failed, 1 passed in 13.0 s -- the
+`ValueError` control with `DID NOT RAISE ValueError`. The positive control is
+green before AND after the fix by design, so its teeth were checked by
+mutation instead: with the handler narrowed to the probe's LOCAL `Refused`
+(#1646's shape) the injected cross-module refusal escapes as
+`preparation_contract.Refused` and that control fails. With the fix: 19
+passed (31.7 s and 36.9 s over two runs).
+
+WHAT THE POSITIVE CONTROL DOES NOT CLAIM: the real estimator cannot raise a
+`Refused` of any module, so no input is known that reaches the repaired
+handler in production and the control exercises the handler's class boundary,
+not a production path. `run_case.pitch_drop_hz` refuses IN BAND -- an
+`am.Estimate` with `ok` False, which `e5_tom` records as `None` -- and the
+only exceptions on its path are execution errors: `audio_measure` defines
+`InsufficientEvidence(AssertionError)` and `NonFiniteAudio`, imports no
+`refusal`, and its one `raise Refused("silent")` sits inside a docstring
+(read on origin/main @ 02394528, 2026-11-28).
+
 WHAT IS NOT CLAIMED: the six other `rc.prepare` calls in this file (:441,
 :446, :467, :489, :490, :540) are not guarded, here or by this fix.
 `tools/refusal_sibling_scan.py` read them `candidate-escape` before it and
@@ -332,3 +360,49 @@ def test_control_catches_a_handler_widened_to_except_exception(probe, monkeypatc
     relabelled = mutant.e7_ceiling()
     assert len(relabelled) == 3, relabelled
     assert all(str(v).startswith("refused: injected") for v in relabelled.values()), relabelled
+
+
+#: `e5_tom` renders LT five times through the real integer model: 3.8 s a
+#: render at its default 1.2 s, 35 s for the call. The handler under test does
+#: not depend on how long the render is, and the real estimator reads the same
+#: drop at 0.2 s as at 1.2 s (36.6 / 10.7 / 6.1 / 2.6 / -1.0 Hz, 2026-11-28),
+#: so the E5 controls render 0.2 s: about 7 s each, not 35.
+E5_SECONDS = 0.2
+E5_RATIOS = {"1.70 shipped", "1.24 more-accent", "1.14 accent", "1.06 unaccented",
+             "1.00 no drop"}
+
+
+def _raise_refused(sound: str):
+    """An estimator that raises `run_case.Refused` when called on a render -- a
+    CROSS-MODULE sibling of the probe's own `Refused`, so a handler narrowed
+    to the local class lets it escape."""
+    def f(_y, _sr):
+        raise rc.Refused("injected: a cross-module refusal from the estimator")
+    return f
+
+
+def test_e5_tom_estimator_execution_error_propagates(probe, monkeypatch):
+    """#1771's injected-bug control. `e5_tom`'s handler around the per-property
+    estimator was `except Exception`, which filed a `ValueError` from inside
+    the estimator as a `refused:` row: an execution error relabelled as a
+    refusal (tools/refusal.py's "inverse defect"). A run carrying that row
+    exits 0 today and would exit 2 once #1699 lands; 1 and a traceback are
+    right either way."""
+    monkeypatch.setattr(rc, "_pitch_drop", _raise_value_error)
+    with pytest.raises(ValueError, match="injected"):
+        probe.e5_tom(seconds_full=E5_SECONDS)
+
+
+def test_e5_tom_estimator_refusal_is_still_a_row(probe, monkeypatch):
+    """Its paired positive control: a refusal the estimator raises still lands
+    as a `refused:` row for every ratio, and the rest of E5 still runs. The
+    refusal is a cross-module sibling on purpose: a handler narrowed to the
+    probe's LOCAL `Refused` (#1646's shape) lets it escape and fails this."""
+    monkeypatch.setattr(rc, "_pitch_drop", _raise_refused)
+    out = probe.e5_tom(seconds_full=E5_SECONDS)
+    rows = out["per_property_pitch_drop_hz"]
+    assert set(rows) == E5_RATIOS, rows
+    assert all(isinstance(v, str) and v.startswith("refused: injected")
+               for v in rows.values()), rows
+    assert set(DISTANCE_KEYS) <= set(out["floor_same_patch_twice"]), out
+    assert out["alignment_on_this_signal"], out
