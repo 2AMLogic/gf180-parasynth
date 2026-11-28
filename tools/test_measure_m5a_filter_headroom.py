@@ -329,3 +329,24 @@ def test_reuse_refuses_an_unreadable_row_before_anything_is_rendered(
     assert comparisons == []
     assert path.read_bytes() == before
     assert not (repo / "build/report.json").exists()
+
+
+@pytest.mark.parametrize("value", [10**400, None, "not-a-number"],
+                         ids=["beyond-float", "null", "non-numeric-string"])
+def test_recompare_report_refuses_a_partial_that_float_cannot_read(repo, capsys, value):
+    """#1680, the second shipped path: `--recompare-report` hands JSON-loaded
+    rows straight to `_compare_incremental`, with no record gate in front, so
+    its unguarded `float()` left as a traceback -- exit 1 -- here too. The
+    reason is asserted because any refusal would give the exit code."""
+    report = _shipped()
+    row = report["configurations"]["pulse29"]["headroom"]
+    row["event_diagnostics"][0]["harmonic_error_db_model_minus_reference"]["h2"] = value
+    path = _saved(repo, report)  # inside the repo: #1687 confinement refuses outside paths first
+
+    assert headroom.main(["--recompare-report", str(path)]) == 2
+
+    # #1687's record gate now refuses these before any comparison runs, naming the
+    # row and field; the reason is still asserted, not just the exit code.
+    assert ("REFUSED: pulse29/headroom event 0 saw/84 harmonic partial h2 must be"
+            in capsys.readouterr().out)
+    assert path.read_text() == json.dumps(report)
