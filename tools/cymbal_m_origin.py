@@ -399,8 +399,29 @@ def main(argv=None) -> int:
         print("REFUSED: the shared instrument's own controls do not pass")
         return REFUSED            # was 1: a refusal, not a mismatch -- no result exists (#1789)
 
-    e = band_energies()
-    res = {"taus": taus or TAU_S, "energies": e, "bound": bound(e), "controls_pass": ok}
+    # Everything that can REFUSE runs before the first line of the report is
+    # printed, and one handler catches all of it (#1891). `--taus nan,0.5,0.1`
+    # parses; `exp(-t/nan)` is NaN, so `mixture()`'s `peak <= 0` silent-check is
+    # False and `run_case.prepare` refuses the mix as non-finite audio -- a
+    # `preparation_contract.Refused`, a SIBLING of this module's `Refused`
+    # (#1162's shape). It left as an exit-1 traceback AFTER "the chain is SHORT
+    # by 9.36 dB" had printed: a refusal rendered as FAIL with a verdict on top,
+    # which is why the sweep is computed up here rather than where it prints.
+    # The base class is caught, not `Exception`: an execution error at the same
+    # boundary (`--taus 1,2` is a KeyError inside `mixture`) must still exit 1.
+    try:
+        e = band_energies()
+        res = {"taus": taus or TAU_S, "energies": e, "bound": bound(e), "controls_pass": ok}
+        if not a.no_grid:
+            res["bound_grid"] = bound_grid(e)
+        if a.result.is_file():
+            res["gap"] = gap(json.loads(a.result.read_text()))
+        res["sweep"] = sweep(which="ref", taus=taus)
+        res["verdict"] = verdict(res["sweep"])
+    except refusal.Refused as why:
+        print(f"REFUSED: {why}")
+        return REFUSED
+
     print("each band's documented cascade, dB relative to its OWN energy in Ln:")
     print(f"  {'band':7s} {'M (808)':>9s} {'M (cand3)':>10s} {'tone moves M':>13s}   {'Mn (808)':>9s}")
     for band, w in e.items():
@@ -413,12 +434,10 @@ def main(argv=None) -> int:
         print(f"  no mix of the three can beat {name} re {REF} = {b['bound_db']:+.2f} dB "
               f"(the {b['argmax_band']} band's own ratio)")
     if not a.no_grid:
-        res["bound_grid"] = bound_grid(e)
         for name, g in res["bound_grid"].items():
             print(f"    brute force over the balance agrees for {name}: {g['best_db']:+.2f} dB")
 
     if a.result.is_file():
-        res["gap"] = gap(json.loads(a.result.read_text()))
         print(f"\nagainst the machine ({res['gap']['n_808']} Fischer settings, "
               f"{res['gap']['window']} window):")
         for name, g in res["gap"]["bands"].items():
@@ -432,8 +451,6 @@ def main(argv=None) -> int:
     else:
         print(f"\n(no measurement at {a.result}; the energy gap is not reported)")
 
-    res["sweep"] = sweep(which="ref", taus=taus)
-    res["verdict"] = verdict(res["sweep"])
     print("\nand the decay: rho of a LINEAR mix vs the DECAY band's level re the low band")
     for r in res["sweep"]:
         s = "; ".join(f"{k}: {v}" for k, v in r["refused"].items())
