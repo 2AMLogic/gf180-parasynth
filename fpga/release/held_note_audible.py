@@ -35,7 +35,8 @@ M5A phrase, the CLI's own bytes (#255 recorded that phrase's RTL evidence as
 bench-built from the same function, not a capture of the CLI's bytes; this
 is the capture).
 
-Exit: 0 pass, 1 ran and failed, 2 did not run (REFUSED/no simulator).
+Exit: 0 pass, 1 ran and failed, 2 did not run (REFUSED/no simulator). A
+capture plan that cannot be read is REFUSED naming the key (#1620).
 """
 from __future__ import annotations
 
@@ -52,8 +53,15 @@ sys.path[:0] = [os.path.join(ROOT, "fpga"), os.path.join(ROOT, "model"),
                 os.path.join(ROOT, "audition"), os.path.join(ROOT, "tools"),
                 os.path.join(ROOT, "rtl-sketch")]
 
+import manifest as mf                                                 # noqa: E402
+import refusal                                                        # noqa: E402
+
 MIN_PEAK = 1024        # LSB of 16-bit; the old release-tail bound, now as a FLOOR
 NOTES = {"default": 45, "m5a-saw": 72, "m5a-pulse": 72}
+
+
+class Refused(refusal.Refused, RuntimeError):
+    """A record the tool reads cannot be read: a partial capture plan."""
 
 
 def capture(preset, note, prefix, legacy=False, image="release", fixture="none"):
@@ -75,6 +83,15 @@ def capture(preset, note, prefix, legacy=False, image="release", fixture="none")
             return uh.main(argv)
     finally:
         uh.voice_mixer_writes = saved
+
+
+def _plan_setup(plan_path: str) -> list:
+    """The plan's static writes as (flag, sec, addr, data), or Refused: the
+    plan the CLI wrote cannot be read (#1620)."""
+    plan = json.load(open(plan_path))
+    mf.require_keys(plan, "rows", f"the CLI's capture plan at {plan_path}", refused=Refused)
+    return [(r["expect"]["flag"], r["expect"]["sec"], r["expect"]["addr"],
+             r["expect"]["data"]) for r in plan["rows"] if r["kind"] == "write"]
 
 
 def main(argv=None) -> int:
@@ -102,9 +119,11 @@ def main(argv=None) -> int:
     init_problems = []
     if a.image in ("tree", "r1", "r2"):
         import r1_candidate as r1c
-        plan = json.load(open(prefix + ".plan.json"))
-        setup = [(r["expect"]["flag"], r["expect"]["sec"], r["expect"]["addr"],
-                  r["expect"]["data"]) for r in plan["rows"] if r["kind"] == "write"]
+        try:
+            setup = _plan_setup(prefix + ".plan.json")
+        except Refused as exc:
+            print(f"held_note_audible: REFUSED -- {exc}")
+            return 2
         init_problems = r1c.check_init(setup, kit_expected=False)
     import verify_uart_bridge as vub
     # the replay's RTL defines and model are the IMAGE's configuration: r2 is
