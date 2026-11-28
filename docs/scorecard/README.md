@@ -350,7 +350,8 @@ and many worktrees are live at once. Every result now carries:
 "provenance": {
   "engine": "fixed-model",
   "worktree": {"commit": "0d8a763", "branch": "tools/case-runner",
-               "dirty": true, "uncommitted_sha256": "…", "untracked_files": 3},
+               "dirty": true, "on_origin_main": false,
+               "uncommitted_sha256": "…", "untracked_files": 3},
   "command": "tools/run_case.py --batch First 32",
   "config": {"voice": "BD", "refs": "/tmp/tr808-ref", "bus_gain": 0.45},
   "inputs": {"model/drums_fx.py": "sha256:…", "reference:bd8/BD5050.WAV": "sha256:…"},
@@ -364,6 +365,24 @@ was in the working tree" is worse than no SHA, so the uncommitted diff and
 every untracked file are hashed alongside it. **`tools/scorecard.py` gives no
 verdict to a result without a provenance block** — it counts against coverage,
 never towards it.
+
+**A commit nobody else can check out is not evidence either (#2043).** The
+block records `on_origin_main` — is this commit an ancestor of `origin/main` —
+and `dirty` is true unless the answer is true, so a record written on a local
+branch or an unpushed worktree never reads clean. **`tools/scorecard.py`
+refuses a record whose commit is not on `origin/main`**: `no verdict`, with a
+reason that says `REFUSED` and names the commit, whatever its metrics read.
+The board asks when it *reads* a record, not when one is written, so a record
+is refused on its branch and scored once its merge has landed and the reader
+has fetched. The condition is that the branch merges *as written*: rebased or
+amended after the record is written, it lands under new SHAs and the cited one
+is gone. At `60bb3756` (2026-11-28) 14 of the 26 committed records were in
+that state; 9 of them read pass or fail before this rule and read `REFUSED`
+under it. They were not regenerated — a record is re-derived by re-running it
+at a commit that has landed, never by editing it.
+<!-- claim: test=tools/test_scorecard.py::test_the_refusal_lifts_once_a_merge_commit_puts_the_commit_on_origin_main -->
+<!-- claim: test=tools/test_provenance_git_failure.py::test_a_branch_rebased_after_the_record_is_written_leaves_its_commit_behind -->
+<!-- claim: test=tools/test_scorecard.py::test_a_record_at_a_commit_that_is_only_on_a_branch_is_refused -->
 
 ## What a result file looks like
 

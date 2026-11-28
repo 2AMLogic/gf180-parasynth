@@ -59,3 +59,67 @@ def test_the_committed_view_is_current_and_claims_from_a_bound_manifest():
     e = r1s.release_evidence()
     assert e["verdict"] == "BOUND", e["detail"]
     assert r1s.main(["--check"]) == 0
+
+
+# ---- #2043: a record whose commit is not on origin/main ---------------------
+
+def _committed():
+    return json.loads((ROOT / "docs" / "scorecard" / "results" / "D02A.json").read_text())
+
+
+def _citing(commit):
+    """The committed D02A, citing `commit` instead of the one it was
+    written at -- the only change."""
+    record = _committed()
+    record["source_commit"] = commit
+    record["provenance"]["worktree"]["commit"] = commit
+    return record
+
+
+def _only_record(monkeypatch, record):
+    monkeypatch.setattr(r1s.sc, "load_cases", lambda: [{"case_id": "D02A", "subject": "D02A"}])
+    monkeypatch.setattr(r1s.sc, "load_result", lambda case_id: record)
+
+
+def test_the_sound_rows_still_score_the_committed_record_whose_commit_is_on_main():
+    row = next(r for r in r1s.sound_rows() if r["case"] == "D02A")
+    assert row["state"] == r1s.sc.PASS
+
+
+def test_a_sound_row_whose_commit_no_checkout_has_is_refused(monkeypatch):
+    """git's null id is in no object store, so this holds in any clone. The
+    row is no verdict with no properties -- not a pass, and not a fail."""
+    _only_record(monkeypatch, _citing("0" * 40))
+    row, = r1s.sound_rows()
+    assert row["state"] == r1s.sc.NO_VERDICT and row["props"] == {}
+    assert row["why"] == f"REFUSED: {'0' * 12} is not on origin/main (answer: None)"
+    assert row["commit"] == "00000000"
+
+
+def test_a_sound_row_citing_a_moving_name_as_its_commit_is_refused(monkeypatch):
+    """`origin/main` is an ancestor of itself in every clone, which is why
+    the board may not simply ask git about the string a record holds."""
+    _only_record(monkeypatch, _citing("origin/main"))
+    row, = r1s.sound_rows()
+    assert row["state"] == r1s.sc.NO_VERDICT
+    assert row["why"] == "REFUSED: origin/main is not on origin/main (answer: None)"
+
+
+def _rendered():
+    return r1s.render(json.loads(r1s.CANDIDATE.read_text()),
+                      json.loads(r1s.SUMMARY.read_text()), release=ev())
+
+
+def test_the_rendered_view_says_a_row_is_refused_and_how_many(monkeypatch):
+    _only_record(monkeypatch, _citing("0" * 40))
+    text = _rendered()
+    row = next(line for line in text.splitlines() if "| `00000000` |" in line)
+    assert " | no verdict | REFUSED: 000000000000 is not on origin/main" in row
+    assert "1 no verdict, 0 not run of 1" in text
+    assert (f"**1 of these rows is refused:** {r1s.sc.REFUSED_MEANS}.") in text
+
+
+def test_the_rendered_view_says_nothing_about_refusal_when_nothing_is_refused(monkeypatch):
+    _only_record(monkeypatch, _committed())
+    text = _rendered()
+    assert "refused:**" not in text and "REFUSED: " not in text

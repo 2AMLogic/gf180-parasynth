@@ -33,9 +33,18 @@ RULES THIS ENFORCES, because each of them is a way a scorecard starts lying:
     many worktrees are live on this repository at once, so an earlier green run
     does not cover a later change to a dependency it does not own. A result
     without provenance gets NO VERDICT: it is a number nobody can re-derive.
+  * **A record whose commit is not on `origin/main` is REFUSED**, whatever its
+    metrics say. A commit that exists only on a local branch or an unpushed
+    worktree is one nobody else can check out, so the number cannot be
+    re-derived and is not evidence yet. It is `no verdict` with a reason that
+    says REFUSED and names the commit, and it stops being refused by itself
+    once its commit is on main -- which a merge commit does for a branch that
+    merges as written (#2043). See `board_verdict`.
 """
 from __future__ import annotations
 import argparse, csv, json, math, pathlib, subprocess, sys
+
+import provenance
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CASES = ROOT / "docs" / "scorecard" / "cases.csv"
@@ -45,6 +54,21 @@ RESULTS = ROOT / "docs" / "scorecard" / "results"
 ENGINES = ["float-model", "fixed-model", "integrated-rtl", "board-digital", "board-analog"]
 
 NOT_RUN, PASS, FAIL, NO_VERDICT = "not run", "pass", "fail", "no verdict"
+
+# How a row the board refused for its commit says so (#2043). `why` starting
+# with this is what tells a refusal from a measurement the board declined for
+# its own reasons, and every renderer leans on it -- see `board_verdict`.
+REFUSED = "REFUSED: "
+
+# Said once; the console, the markdown board, the README summary and the R1
+# view each prefix it with their own count (`refusal_note`).
+REFUSED_MEANS = ("their commit is not on origin/main, so nobody can re-derive them; "
+                 "they carry no verdict -- neither a pass nor a fail")
+
+
+def refusal_note(n: int, what: str) -> str:
+    return f"**{n} of these {what} {'are' if n != 1 else 'is'} refused:** {REFUSED_MEANS}."
+
 
 # WHAT A METRIC'S ERROR MEANS -- its declared purpose (plan075 section 6, #141).
 #
@@ -216,6 +240,76 @@ def evaluate(case: dict, res: dict | None) -> dict:
                             for name, metric in metrics.items()},
             },
             "why": "" if worst <= 1.0 else f"worst: {worst_name}", "engine": engine}
+
+
+def not_on_origin_main(res: dict) -> str | None:
+    """Why the board refuses to score `res` -- its commit is not on
+    `origin/main` -- or None when it is.
+
+    THE REFUSAL IS THE BOARD'S, AND IT IS ASKED WHEN THE RECORD IS READ.
+    `worktree_state()` records `on_origin_main` as a record is written, and a
+    record is written on a branch: the committed D02A says `branch:
+    feature/issue-290`. Its commit, `99637db`, is on main today only because
+    that branch landed as written. Had the board trusted the answer recorded
+    at write time it would have refused D02A on its branch for good -- and
+    every other record a pull request produced with it -- and a gate nothing
+    can satisfy is worse than none. So the board asks
+    `provenance.commit_on_origin_main` again, here: the reader's `origin/main`
+    is the only main it can show anybody. A record is refused on its branch
+    and scored once its merge has landed and the reader has fetched. Which
+    also covers every record written before the field existed.
+
+    The commit is the id under `provenance.worktree.commit`, or a record's
+    `source_commit` where it has only that. Only an id is accepted: asked of
+    the string `origin/main`, git answers that it is its own ancestor, in
+    every clone, forever.
+
+    WHAT THIS DOES NOT SEE. A commit that IS on origin/main, measured with a
+    dirty tree. D02A is that as well -- `dirty: true`, six untracked files --
+    and it is scored: reachability says anybody can check out the commit, not
+    that the commit is what was measured. The diff's hash is on the record;
+    the diff is not anywhere. That is a gap in the provenance block itself,
+    not one this refusal closes.
+    """
+    prov = res.get("provenance")
+    wt = prov.get("worktree") if isinstance(prov, dict) else None
+    commit = str(wt.get("commit") or "") if isinstance(wt, dict) else ""
+    if not commit or commit == "?":
+        commit = str(res.get("source_commit") or "")
+    on = provenance.commit_on_origin_main(commit, ROOT)
+    if on is True:
+        return None
+    if not commit or commit == "?":
+        return f"{REFUSED}no commit recorded (answer: {on})"
+    # 12 characters of the id, and nothing before it that a table would keep
+    # in its place: the console and the markdown board cut `why` at 44 and 60,
+    # and a full 40-character id took "is not on origin/main" with it.
+    return f"{REFUSED}{commit[:12]} is not on origin/main (answer: {on})"
+
+
+def board_verdict(case: dict, res: dict | None) -> dict:
+    """What the BOARD says about one case: `evaluate`'s verdict, unless the
+    record cites a commit that is not on `origin/main` -- then refused.
+
+    Asked here and not inside `evaluate`, because a dozen writers and
+    verifiers call `evaluate` on a record they have just made, on a branch,
+    before any merge -- `run_case.py` writes `provenance.outcome_code` from
+    it. With the refusal inside `evaluate`, every record a pull request
+    produced would carry outcome_code 2 for good, and read inconsistent on
+    the day its commit reached main. The board is the published view; it asks
+    the published question.
+
+    Asked only of a record the board would otherwise score. One it already
+    declines -- `invalid: decay`, `no provenance` -- keeps that reason, which
+    is the one its reader can act on.
+    """
+    verdict = evaluate(case, res)
+    if verdict["state"] not in (PASS, FAIL):
+        return verdict
+    why = not_on_origin_main(res)
+    if why is None:
+        return verdict
+    return {"state": NO_VERDICT, "worst": None, "engine": verdict["engine"], "why": why}
 
 
 # The measuring apparatus, by path. NOT the device under test: model/drums_fx.py
@@ -404,7 +498,8 @@ def main() -> int:
         if val:
             cases = [c for c in cases if c.get(key) == val]
 
-    rows = [(c, evaluate(c, load_result(c["case_id"]))) for c in cases]
+    rows = [(c, board_verdict(c, load_result(c["case_id"]))) for c in cases]
+    refused = [c["case_id"] for c, r in rows if r["why"].startswith(REFUSED)]
 
     if a.verbose:
         print(f"{'case':<7}{'family':<10}{'split':<13}{'engine':<16}{'state':<11}worst  why")
@@ -449,6 +544,8 @@ def main() -> int:
         print(f"Missing verification: {st[NO_VERDICT]} no-verdict, "
               f"{st[NOT_RUN]} not run. These are NOT evidence the instrument is "
               f"wrong -- they are evidence we have not checked.")
+    if refused:
+        print(f"Refused ({len(refused)}): {REFUSED_MEANS}. {', '.join(refused)}")
 
     engines = sorted({r["engine"] for _, r in rows if r["engine"]})
     if engines:
@@ -483,6 +580,8 @@ def main() -> int:
         if "integrated-rtl" not in engines:
             bits += ["> **No case has been measured on the integrated RTL yet**, so these "
                      "describe a model rather than the instrument.", ""]
+        if refused:
+            bits += [refusal_note(len(refused), "records"), ""]
         bits += ["| | cases | valid | pass | fail | no verdict | not run |",
                  "|---|---:|---:|---:|---:|---:|---:|"]
         for fam in ["Drums", "Mono", "Filters", "Ensemble"]:
@@ -526,6 +625,8 @@ def main() -> int:
                      f"{fst[NO_VERDICT]} | {fst[NOT_RUN]} |")
         L += [f"| **total** | {n} | {valid} | {st[PASS]} | {st[FAIL]} | "
               f"{st[NO_VERDICT]} | {st[NOT_RUN]} |", ""]
+        if refused:
+            L += [refusal_note(len(refused), "records"), ""]
         # Engines PER FAMILY. One integrated-rtl case anywhere on the board
         # silences the whole-board warning above, and a reader of the Drums
         # rows would then have no way to see that every Drums row is still a

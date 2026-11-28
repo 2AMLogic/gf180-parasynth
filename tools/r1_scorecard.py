@@ -17,7 +17,8 @@ Gate verdicts are derived here from those rows, not typed:
   implementation  the digital production-path rows (play, deadline, domain)
   playability     the live-MIDI rows; plus what is not yet exposed (#298)
   sound           a PROPERTY VECTOR per board case with its evidence level --
-                  no pass fraction is presented as quality
+                  no pass fraction is presented as quality; a record whose
+                  commit is not on origin/main is REFUSED, not scored (#2043)
   physical        BLOCKED: the R1 image is published (fpga/release/r1-2025.1.json,
                   #280) but not programmed; no capture (#208)
 A gate with any row that is not PASS is not PASS. A gate with NO rows is NO
@@ -73,12 +74,21 @@ def trust_rows(summary: dict) -> list:
 
 
 def sound_rows() -> list:
+    """One row per case that has a record, judged as the board judges it
+    (`scorecard.board_verdict`, not `evaluate`): a record whose commit is not
+    on origin/main is refused -- `no verdict`, no properties, a reason that
+    says REFUSED -- whatever its metrics say (#2043). The commit is judged
+    against the reader's own `origin/main`, so this view is exact once that
+    ref is current. A checkout that has not fetched since a record's merge
+    reads it refused here and `--check` calls the committed view stale -- a
+    false stale, which a fetch clears; `checkout_staleness` covers a tree
+    behind `origin/main`, not an `origin/main` nobody fetched."""
     rows = []
     for case in sc.load_cases():
         res = sc.load_result(case["case_id"])
         if res is None:
             continue
-        ev = sc.evaluate(case, res)
+        ev = sc.board_verdict(case, res)
         props = ev.get("properties") or {}
         rows.append({"case": case["case_id"], "subject": case["subject"],
                      "state": ev["state"], "engine": ev.get("engine") or "",
@@ -192,6 +202,9 @@ def render(cand: dict, summary: dict, release: dict | None = None) -> str:
     L.append("None of these was measured on the R1 production path. Each row names its engine "
              "and the commit it was measured at; a fixed-point-model result supports R1 "
              "development and certifies neither R0 nor R1 playback.\n")
+    refused = sum(1 for r in snd if r["why"].startswith(sc.REFUSED))
+    if refused:
+        L.append(sc.refusal_note(refused, "rows") + "\n")
     L.append("| case | subject | state | properties | evidence level | measured at |")
     L.append("|---|---|---|---|---|---|")
     for r in snd:
