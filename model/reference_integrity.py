@@ -194,15 +194,17 @@ def _mono(x):
 
 
 def inject_clicks(x, sr: int = SR, every_s: float = 7.0, amp_rel: float = 0.25,
-                  n_samples: int = 12, seed: int = 4) -> np.ndarray:
-    """A click train of a stated size, for checking the detector finds one."""
+                  n_samples: int = 12, seed: int = 4, *,
+                  return_count: bool = False) -> np.ndarray | tuple[np.ndarray, int]:
+    """Add a click train and optionally return the number of scheduled clicks."""
     rng = np.random.default_rng(seed)
     y = np.array(_mono(x), dtype=np.float64)
     a = amp_rel * float(np.abs(y).max() or 1.0)
-    for t in np.arange(every_s, len(y) / sr, every_s):
+    schedule = np.arange(every_s, len(y) / sr, every_s)
+    for t in schedule:
         i = int(t * sr)
         y[i:i + n_samples] += a * rng.standard_normal(min(n_samples, len(y) - i))
-    return y
+    return (y, len(schedule)) if return_count else y
 
 
 # ===========================================================================
@@ -281,11 +283,19 @@ def stage_demo(devices, seconds, out, source="smooth", block=rr.BLOCK):
         if r["n_events"]:
             print(f"   at {r['event_times_s'][:12]} s", flush=True)
         # the detector's own control, on this very render
-        c = transient_report(inject_clicks(y, amp_rel=0.25))
+        clicked, expected = inject_clicks(y, amp_rel=0.25, return_count=True)
+        c = transient_report(clicked)
+        if expected == 0:
+            verdict = "REFUSED"
+        elif c["n_events"] < expected:
+            verdict = "FAILED"
+        else:
+            verdict = "WORKS"
+        c.update(expected_clicks=expected, control_verdict=verdict)
         rows[f"{name}-{source}+injected"] = c
         print(f"   CONTROL, same render with a click every 7 s at 0.25 x peak: "
-              f"{c['n_events']} events ({c['peak_over_median_db']:+.1f} dB) "
-              f"-- detector {'WORKS' if c['n_events'] >= int(seconds // 7) else 'FAILED'}",
+              f"{c['n_events']} detected, {expected} scheduled ({c['peak_over_median_db']:+.1f} dB) "
+              f"-- detector {verdict}",
               flush=True)
         np.save(os.path.join(out, f"steady-{name}-{source}.npy"), y.astype(np.float32))
     return rows
