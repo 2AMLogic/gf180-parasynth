@@ -798,7 +798,12 @@ jobs:
         run: python rtl-sketch/verify_modal.py
       - name: I2 -- the control link carries every register write
         run: python rtl-sketch/verify_ctl.py
+      # Step cap (#2111): this step stalled >= 24 min once and the job-level
+      # cancel left no log. Measured 8-15 s across the 55 most recent rtl runs
+      # (2026-11-28), so 5 min is 20x the slowest; a step timeout fails here
+      # with the step's log.
       - name: I4 -- selected 2x path at the pins, SPI in to I2S out
+        timeout-minutes: 5
         run: python rtl-sketch/verify_synth_top.py --osc2x
       - name: I4b -- reconstructed filter candidate through SPI to I2S
         run: python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --outdir build/top-m5a-filter2x
