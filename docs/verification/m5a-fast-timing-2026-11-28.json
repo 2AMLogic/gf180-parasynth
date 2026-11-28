@@ -1,0 +1,9141 @@
+[
+ {
+  "run_id": 46120492535,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1616",
+  "sha": "aaaf1d40",
+  "created_at": "2026-11-28T07:17:09Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671967",
+  "started_at": "2026-11-28T07:17:24Z",
+  "completed_at": "2026-11-28T07:25:19Z",
+  "gate_secs": 450.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 275.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 449.5,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 73.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 26,
+  "error": null,
+  "job_id": 140903751747
+ },
+ {
+  "run_id": 46120325938,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "d0550fc4",
+  "created_at": "2026-11-28T07:15:04Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671917",
+  "started_at": "2026-11-28T07:15:18Z",
+  "completed_at": "2026-11-28T07:25:25Z",
+  "gate_secs": 581.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 362.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 581.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 92.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.1,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 68.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 86.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 27,
+  "error": null,
+  "job_id": 140903252822
+ },
+ {
+  "run_id": 46119792436,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1671",
+  "sha": "29905da9",
+  "created_at": "2026-11-28T07:08:12Z",
+  "conclusion": "failure",
+  "runner_name": "GitHub Actions 1000671804",
+  "started_at": "2026-11-28T07:08:28Z",
+  "completed_at": "2026-11-28T07:18:57Z",
+  "gate_secs": 600.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 364.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "NO-VERDICT",
+    "rc": null,
+    "secs": 600.0,
+    "censored": true,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 98.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 68.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 95.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.9,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 29,
+  "error": null,
+  "job_id": 140901610556
+ },
+ {
+  "run_id": 46119792436,
+  "attempt": 2,
+  "event": "pull_request",
+  "branch": "feature/issue-1671",
+  "sha": "29905da9",
+  "created_at": "2026-11-28T07:08:12Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000672608",
+  "started_at": "2026-11-28T07:57:21Z",
+  "completed_at": "2026-11-28T08:05:17Z",
+  "gate_secs": 445.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 278.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 445.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 69.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 52.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 63.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.9,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 5,
+  "error": null,
+  "job_id": 140913011272
+ },
+ {
+  "run_id": 46119540016,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1671",
+  "sha": "953bec94",
+  "created_at": "2026-11-28T07:05:00Z",
+  "conclusion": "failure",
+  "runner_name": "GitHub Actions 1000671691",
+  "started_at": "2026-11-28T07:05:14Z",
+  "completed_at": "2026-11-28T07:15:25Z",
+  "gate_secs": 585.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 366.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 584.6,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 94.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 87.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.2,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 28,
+  "error": null,
+  "job_id": 140900834006
+ },
+ {
+  "run_id": 46119448273,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1692",
+  "sha": "4da21a55",
+  "created_at": "2026-11-28T07:03:47Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671649",
+  "started_at": "2026-11-28T07:03:59Z",
+  "completed_at": "2026-11-28T07:14:17Z",
+  "gate_secs": 587.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 372.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 586.5,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 93.5,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 87.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.4,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 27,
+  "error": null,
+  "job_id": 140900533729
+ },
+ {
+  "run_id": 46119180892,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1656",
+  "sha": "7865f72d",
+  "created_at": "2026-11-28T07:00:30Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671605",
+  "started_at": "2026-11-28T07:00:42Z",
+  "completed_at": "2026-11-28T07:07:12Z",
+  "gate_secs": 360.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 242.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 359.6,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.9,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.8,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 38.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 60.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.5,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 27,
+  "error": null,
+  "job_id": 140899725262
+ },
+ {
+  "run_id": 46118783322,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1702",
+  "sha": "18b8d88b",
+  "created_at": "2026-11-28T06:54:52Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671519",
+  "started_at": "2026-11-28T06:55:06Z",
+  "completed_at": "2026-11-28T07:05:25Z",
+  "gate_secs": 588.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 363.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 588.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 93.2,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.6,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 93.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 11.1,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 29,
+  "error": null,
+  "job_id": 140898477795
+ },
+ {
+  "run_id": 46118699560,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1690",
+  "sha": "e20acefc",
+  "created_at": "2026-11-28T06:53:43Z",
+  "conclusion": "failure",
+  "runner_name": "GitHub Actions 1000671499",
+  "started_at": "2026-11-28T06:53:58Z",
+  "completed_at": "2026-11-28T07:01:42Z",
+  "gate_secs": 441.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 273.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 441.2,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.1,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 52.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 27,
+  "error": null,
+  "job_id": 140898221594
+ },
+ {
+  "run_id": 46118333966,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1601",
+  "sha": "8e4bf798",
+  "created_at": "2026-11-28T06:48:47Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671389",
+  "started_at": "2026-11-28T06:49:01Z",
+  "completed_at": "2026-11-28T06:59:51Z",
+  "gate_secs": 596.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 360.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 595.7,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 93.2,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 93.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 27,
+  "error": null,
+  "job_id": 140897094650
+ },
+ {
+  "run_id": 46118061739,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1677",
+  "sha": "c38077e4",
+  "created_at": "2026-11-28T06:45:11Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671322",
+  "started_at": "2026-11-28T06:45:30Z",
+  "completed_at": "2026-11-28T06:52:42Z",
+  "gate_secs": 405.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 335.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 405.4,
+    "censored": false,
+    "n_files": 45
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 85.8,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.5,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 62.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 87.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.2,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 26,
+  "error": null,
+  "job_id": 140896278384
+ },
+ {
+  "run_id": 46117988012,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1705",
+  "sha": "1aa1f893",
+  "created_at": "2026-11-28T06:44:17Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671289",
+  "started_at": "2026-11-28T06:44:30Z",
+  "completed_at": "2026-11-28T06:54:31Z",
+  "gate_secs": 577.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 359.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 576.6,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 87.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 69.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 79.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 27,
+  "error": null,
+  "job_id": 140896031442
+ },
+ {
+  "run_id": 46117802254,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1693",
+  "sha": "8c63be6b",
+  "created_at": "2026-11-28T06:41:51Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671238",
+  "started_at": "2026-11-28T06:42:05Z",
+  "completed_at": "2026-11-28T06:49:53Z",
+  "gate_secs": 443.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 275.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 442.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.1,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.3,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 50.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 64.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.1,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 27,
+  "error": null,
+  "job_id": 140895461311
+ },
+ {
+  "run_id": 46117505770,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1693",
+  "sha": "6dd3fbec",
+  "created_at": "2026-11-28T06:38:01Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671122",
+  "started_at": "2026-11-28T06:38:13Z",
+  "completed_at": "2026-11-28T06:47:52Z",
+  "gate_secs": 552.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 343.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 551.7,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 88.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 78.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.2,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 26,
+  "error": null,
+  "job_id": 140894550517
+ },
+ {
+  "run_id": 46117492065,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "c712d72a",
+  "created_at": "2026-11-28T06:37:49Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671112",
+  "started_at": "2026-11-28T06:38:06Z",
+  "completed_at": "2026-11-28T06:48:06Z",
+  "gate_secs": 575.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 359.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 574.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 86.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.1,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 73.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 91.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.2,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 26,
+  "error": null,
+  "job_id": 140894522575
+ },
+ {
+  "run_id": 46117176403,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1697",
+  "sha": "2ae72796",
+  "created_at": "2026-11-28T06:33:41Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671025",
+  "started_at": "2026-11-28T06:34:04Z",
+  "completed_at": "2026-11-28T06:42:11Z",
+  "gate_secs": 464.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 281.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 463.3,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.1,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.6,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 56.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 74.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 25,
+  "error": null,
+  "job_id": 140893552506
+ },
+ {
+  "run_id": 46117173292,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "a4985b8d",
+  "created_at": "2026-11-28T06:33:39Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000671035",
+  "started_at": "2026-11-28T06:34:16Z",
+  "completed_at": "2026-11-28T06:44:27Z",
+  "gate_secs": 579.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 357.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 578.2,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 89.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.1,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 95.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 26,
+  "error": null,
+  "job_id": 140893577217
+ },
+ {
+  "run_id": 46117117337,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1652",
+  "sha": "b053cbd5",
+  "created_at": "2026-11-28T06:32:59Z",
+  "conclusion": "failure",
+  "runner_name": "GitHub Actions 1000671006",
+  "started_at": "2026-11-28T06:33:45Z",
+  "completed_at": "2026-11-28T06:40:19Z",
+  "gate_secs": 372.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 242.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 372.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 53.9,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 39.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 52.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 24,
+  "error": null,
+  "job_id": 140893438147
+ },
+ {
+  "run_id": 46117073196,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1685",
+  "sha": "f97faf75",
+  "created_at": "2026-11-28T06:32:24Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670947",
+  "started_at": "2026-11-28T06:32:37Z",
+  "completed_at": "2026-11-28T06:42:50Z",
+  "gate_secs": 587.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 361.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 586.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 93.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.8,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 83.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.5,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 26,
+  "error": null,
+  "job_id": 140893214003
+ },
+ {
+  "run_id": 46116872678,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1667",
+  "sha": "0a2e28dc",
+  "created_at": "2026-11-28T06:30:00Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670912",
+  "started_at": "2026-11-28T06:31:19Z",
+  "completed_at": "2026-11-28T06:39:18Z",
+  "gate_secs": 440.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 271.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 440.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 52.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.2,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 26,
+  "error": null,
+  "job_id": 140892688952
+ },
+ {
+  "run_id": 46116814656,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1692",
+  "sha": "2b044d5e",
+  "created_at": "2026-11-28T06:29:14Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670880",
+  "started_at": "2026-11-28T06:30:17Z",
+  "completed_at": "2026-11-28T06:39:40Z",
+  "gate_secs": 533.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 322.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 533.2,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 82.5,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.6,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 65.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 78.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.4,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 26,
+  "error": null,
+  "job_id": 140892636313
+ },
+ {
+  "run_id": 46116671395,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1681",
+  "sha": "761f6fe8",
+  "created_at": "2026-11-28T06:27:18Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670793",
+  "started_at": "2026-11-28T06:27:50Z",
+  "completed_at": "2026-11-28T06:38:02Z",
+  "gate_secs": 584.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 357.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 584.3,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 90.8,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.3,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 74.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 81.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.5,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 28,
+  "error": null,
+  "job_id": 140891993235
+ },
+ {
+  "run_id": 46116238065,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "73ff5717",
+  "created_at": "2026-11-28T06:21:38Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670638",
+  "started_at": "2026-11-28T06:21:50Z",
+  "completed_at": "2026-11-28T06:29:38Z",
+  "gate_secs": 440.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 271.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 440.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 69.1,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 68.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 22,
+  "error": null,
+  "job_id": 140890637979
+ },
+ {
+  "run_id": 46116231401,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1684",
+  "sha": "b568cd34",
+  "created_at": "2026-11-28T06:21:34Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670630",
+  "started_at": "2026-11-28T06:21:48Z",
+  "completed_at": "2026-11-28T06:27:59Z",
+  "gate_secs": 350.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 229.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 350.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 62.9,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.8,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 37.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 21,
+  "error": null,
+  "job_id": 140890629078
+ },
+ {
+  "run_id": 46116153498,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1691",
+  "sha": "f3056efc",
+  "created_at": "2026-11-28T06:20:36Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670595",
+  "started_at": "2026-11-28T06:20:50Z",
+  "completed_at": "2026-11-28T06:27:18Z",
+  "gate_secs": 366.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 244.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 366.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 68.1,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 42.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 58.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.1,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 21,
+  "error": null,
+  "job_id": 140890396274
+ },
+ {
+  "run_id": 46115882536,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1694",
+  "sha": "273e5191",
+  "created_at": "2026-11-28T06:17:06Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670507",
+  "started_at": "2026-11-28T06:17:20Z",
+  "completed_at": "2026-11-28T06:25:04Z",
+  "gate_secs": 440.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 271.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 439.7,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 66.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 49.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 63.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 21,
+  "error": null,
+  "job_id": 140889542601
+ },
+ {
+  "run_id": 46115805810,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "69ce038d",
+  "created_at": "2026-11-28T06:16:02Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670473",
+  "started_at": "2026-11-28T06:16:16Z",
+  "completed_at": "2026-11-28T06:24:09Z",
+  "gate_secs": 445.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 275.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 445.2,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.8,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.5,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 49.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 63.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.9,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 21,
+  "error": null,
+  "job_id": 140889295663
+ },
+ {
+  "run_id": 46115720979,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1684",
+  "sha": "7d03288a",
+  "created_at": "2026-11-28T06:15:03Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670433",
+  "started_at": "2026-11-28T06:15:17Z",
+  "completed_at": "2026-11-28T06:21:25Z",
+  "gate_secs": 343.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 234.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 342.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.3,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 35.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 57.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.1,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 19,
+  "error": null,
+  "job_id": 140889048166
+ },
+ {
+  "run_id": 46115516090,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1687",
+  "sha": "83680d60",
+  "created_at": "2026-11-28T06:12:15Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670372",
+  "started_at": "2026-11-28T06:12:27Z",
+  "completed_at": "2026-11-28T06:20:09Z",
+  "gate_secs": 440.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 276.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 439.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 19,
+  "error": null,
+  "job_id": 140888382192
+ },
+ {
+  "run_id": 46114943646,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1656",
+  "sha": "f7c94ce7",
+  "created_at": "2026-11-28T06:04:47Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000670129",
+  "started_at": "2026-11-28T06:04:58Z",
+  "completed_at": "2026-11-28T06:15:14Z",
+  "gate_secs": 582.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 357.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 581.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 88.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.3,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 80.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.7,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 18,
+  "error": null,
+  "job_id": 140886581727
+ },
+ {
+  "run_id": 46114703686,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1628",
+  "sha": "246979a6",
+  "created_at": "2026-11-28T06:01:35Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669984",
+  "started_at": "2026-11-28T06:01:46Z",
+  "completed_at": "2026-11-28T06:11:57Z",
+  "gate_secs": 583.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 360.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 583.1,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 91.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.0,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 69.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 101.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.1,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 16,
+  "error": null,
+  "job_id": 140885824732
+ },
+ {
+  "run_id": 46114595094,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1662",
+  "sha": "3af905bb",
+  "created_at": "2026-11-28T06:00:19Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669841",
+  "started_at": "2026-11-28T06:00:30Z",
+  "completed_at": "2026-11-28T06:08:22Z",
+  "gate_secs": 446.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 276.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 445.5,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 78.8,
+    "censored": false,
+    "n_files": 28
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.6,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.9,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 16,
+  "error": null,
+  "job_id": 140885504381
+ },
+ {
+  "run_id": 46114340146,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "be426416",
+  "created_at": "2026-11-28T05:56:36Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669773",
+  "started_at": "2026-11-28T05:56:49Z",
+  "completed_at": "2026-11-28T06:04:42Z",
+  "gate_secs": 443.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 276.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 443.7,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.5,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.8,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 49.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.0,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 16,
+  "error": null,
+  "job_id": 140884695675
+ },
+ {
+  "run_id": 46114218432,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "loom/resync-main",
+  "sha": "7964cfaa",
+  "created_at": "2026-11-28T05:54:54Z",
+  "conclusion": "skipped",
+  "runner_name": "",
+  "started_at": "2026-11-28T05:55:06Z",
+  "completed_at": "2026-11-28T05:55:06Z",
+  "gate_secs": null,
+  "units": [],
+  "table": false,
+  "overlap_runs": 14,
+  "error": null,
+  "job_id": 140884320357
+ },
+ {
+  "run_id": 46113750383,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1680",
+  "sha": "91dfb0ae",
+  "created_at": "2026-11-28T05:48:24Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669551",
+  "started_at": "2026-11-28T05:48:37Z",
+  "completed_at": "2026-11-28T05:57:41Z",
+  "gate_secs": 500.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 307.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 500.3,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 89.1,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.2,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 58.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 76.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 16,
+  "error": null,
+  "job_id": 140882855220
+ },
+ {
+  "run_id": 46113630357,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1656",
+  "sha": "8fb87ff9",
+  "created_at": "2026-11-28T05:46:45Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669432",
+  "started_at": "2026-11-28T05:46:59Z",
+  "completed_at": "2026-11-28T05:53:01Z",
+  "gate_secs": 341.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 234.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 341.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 62.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.3,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 38.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 52.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.1,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 16,
+  "error": null,
+  "job_id": 140882487331
+ },
+ {
+  "run_id": 46113597227,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1601",
+  "sha": "9bff417c",
+  "created_at": "2026-11-28T05:46:19Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669403",
+  "started_at": "2026-11-28T05:46:32Z",
+  "completed_at": "2026-11-28T05:54:24Z",
+  "gate_secs": 447.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 274.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 446.9,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 76.8,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 52.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.0,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 16,
+  "error": null,
+  "job_id": 140882383343
+ },
+ {
+  "run_id": 46113592887,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1677",
+  "sha": "933cb995",
+  "created_at": "2026-11-28T05:46:16Z",
+  "conclusion": "failure",
+  "runner_name": "GitHub Actions 1000669396",
+  "started_at": "2026-11-28T05:46:29Z",
+  "completed_at": "2026-11-28T05:57:00Z",
+  "gate_secs": 600.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 360.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "NO-VERDICT",
+    "rc": null,
+    "secs": 600.0,
+    "censored": true,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 88.5,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.8,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 84.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 18,
+  "error": null,
+  "job_id": 140882369892
+ },
+ {
+  "run_id": 46112758401,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1595",
+  "sha": "a664ceb4",
+  "created_at": "2026-11-28T05:35:00Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669290",
+  "started_at": "2026-11-28T05:35:13Z",
+  "completed_at": "2026-11-28T05:43:00Z",
+  "gate_secs": 441.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 274.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 441.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.1,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.2,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 49.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 73.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.9,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 17,
+  "error": null,
+  "job_id": 140879788173
+ },
+ {
+  "run_id": 46112603880,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "a3186508",
+  "created_at": "2026-11-28T05:32:55Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669249",
+  "started_at": "2026-11-28T05:33:07Z",
+  "completed_at": "2026-11-28T05:39:01Z",
+  "gate_secs": 334.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 227.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 333.7,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 58.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.1,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 38.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 17,
+  "error": null,
+  "job_id": 140879297600
+ },
+ {
+  "run_id": 46112454235,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1616",
+  "sha": "7ee2441c",
+  "created_at": "2026-11-28T05:31:00Z",
+  "conclusion": "failure",
+  "runner_name": "GitHub Actions 1000669207",
+  "started_at": "2026-11-28T05:31:16Z",
+  "completed_at": "2026-11-28T05:40:26Z",
+  "gate_secs": 524.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 317.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 524.5,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 76.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.0,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 65.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 74.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 18,
+  "error": null,
+  "job_id": 140878862053
+ },
+ {
+  "run_id": 46112179003,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1671",
+  "sha": "2d709248",
+  "created_at": "2026-11-28T05:27:17Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669175",
+  "started_at": "2026-11-28T05:27:28Z",
+  "completed_at": "2026-11-28T05:35:27Z",
+  "gate_secs": 450.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 275.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 450.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 77.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.2,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.4,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 19,
+  "error": null,
+  "job_id": 140877964803
+ },
+ {
+  "run_id": 46112046507,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1669",
+  "sha": "94278101",
+  "created_at": "2026-11-28T05:25:30Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669163",
+  "started_at": "2026-11-28T05:25:43Z",
+  "completed_at": "2026-11-28T05:33:33Z",
+  "gate_secs": 441.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 280.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 441.5,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.5,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 52.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 68.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 18,
+  "error": null,
+  "job_id": 140877555101
+ },
+ {
+  "run_id": 46111727153,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1641",
+  "sha": "dd7e566e",
+  "created_at": "2026-11-28T05:21:20Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669091",
+  "started_at": "2026-11-28T05:21:35Z",
+  "completed_at": "2026-11-28T05:31:43Z",
+  "gate_secs": 579.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 358.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 579.1,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 90.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 88.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.2,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 18,
+  "error": null,
+  "job_id": 140876576642
+ },
+ {
+  "run_id": 46111589760,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1576",
+  "sha": "568fc0b2",
+  "created_at": "2026-11-28T05:19:38Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669045",
+  "started_at": "2026-11-28T05:19:51Z",
+  "completed_at": "2026-11-28T05:27:35Z",
+  "gate_secs": 441.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 274.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 440.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.1,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 48.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 60.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 19,
+  "error": null,
+  "job_id": 140876150235
+ },
+ {
+  "run_id": 46111411536,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1674",
+  "sha": "ec8b9ffb",
+  "created_at": "2026-11-28T05:17:15Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000669010",
+  "started_at": "2026-11-28T05:17:26Z",
+  "completed_at": "2026-11-28T05:27:44Z",
+  "gate_secs": 593.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 355.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 592.2,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 89.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.2,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 88.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 19,
+  "error": null,
+  "job_id": 140875585588
+ },
+ {
+  "run_id": 46110506228,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1663",
+  "sha": "63d68cd8",
+  "created_at": "2026-11-28T05:05:32Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668850",
+  "started_at": "2026-11-28T05:05:48Z",
+  "completed_at": "2026-11-28T05:12:17Z",
+  "gate_secs": 352.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 237.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 351.9,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 73.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 36.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 62.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 10.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 17,
+  "error": null,
+  "job_id": 140872796350
+ },
+ {
+  "run_id": 46109732071,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "43808e54",
+  "created_at": "2026-11-28T04:55:15Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668700",
+  "started_at": "2026-11-28T04:55:28Z",
+  "completed_at": "2026-11-28T05:03:30Z",
+  "gate_secs": 459.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 280.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 459.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 68.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.0,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 53.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 22,
+  "error": null,
+  "job_id": 140870402968
+ },
+ {
+  "run_id": 46109714689,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1664",
+  "sha": "41d38852",
+  "created_at": "2026-11-28T04:55:02Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668677",
+  "started_at": "2026-11-28T04:55:15Z",
+  "completed_at": "2026-11-28T05:02:56Z",
+  "gate_secs": 437.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 275.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 436.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.3,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 52.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.9,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 22,
+  "error": null,
+  "job_id": 140870351616
+ },
+ {
+  "run_id": 46109573943,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1643",
+  "sha": "914d90d8",
+  "created_at": "2026-11-28T04:53:05Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668640",
+  "started_at": "2026-11-28T04:53:19Z",
+  "completed_at": "2026-11-28T05:01:08Z",
+  "gate_secs": 448.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 272.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 447.5,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 50.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 73.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 22,
+  "error": null,
+  "job_id": 140869914621
+ },
+ {
+  "run_id": 46109324321,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1636",
+  "sha": "f9118f06",
+  "created_at": "2026-11-28T04:49:42Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668597",
+  "started_at": "2026-11-28T04:49:58Z",
+  "completed_at": "2026-11-28T05:00:21Z",
+  "gate_secs": 590.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 354.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 590.1,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 88.6,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.8,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 87.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.0,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 23,
+  "error": null,
+  "job_id": 140869149492
+ },
+ {
+  "run_id": 46108849514,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1652",
+  "sha": "a9388cf3",
+  "created_at": "2026-11-28T04:43:20Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668536",
+  "started_at": "2026-11-28T04:43:32Z",
+  "completed_at": "2026-11-28T04:51:28Z",
+  "gate_secs": 446.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 279.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 445.5,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 77.1,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 48.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 69.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 22,
+  "error": null,
+  "job_id": 140867664879
+ },
+ {
+  "run_id": 46108566888,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1653",
+  "sha": "98e4e999",
+  "created_at": "2026-11-28T04:39:35Z",
+  "conclusion": "skipped",
+  "runner_name": "",
+  "started_at": "2026-11-28T04:39:49Z",
+  "completed_at": "2026-11-28T04:39:49Z",
+  "gate_secs": null,
+  "units": [],
+  "table": false,
+  "overlap_runs": 22,
+  "error": null,
+  "job_id": 140866804470
+ },
+ {
+  "run_id": 46108092514,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1631",
+  "sha": "f89ce63e",
+  "created_at": "2026-11-28T04:33:21Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668414",
+  "started_at": "2026-11-28T04:33:34Z",
+  "completed_at": "2026-11-28T04:39:15Z",
+  "gate_secs": 321.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 215.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 320.3,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 55.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.0,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 33.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 55.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 22,
+  "error": null,
+  "job_id": 140865318553
+ },
+ {
+  "run_id": 46108084110,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1641",
+  "sha": "0c422cef",
+  "created_at": "2026-11-28T04:33:15Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668403",
+  "started_at": "2026-11-28T04:33:27Z",
+  "completed_at": "2026-11-28T04:42:54Z",
+  "gate_secs": 538.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 326.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 538.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 80.8,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.6,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 81.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 23,
+  "error": null,
+  "job_id": 140865282951
+ },
+ {
+  "run_id": 46107993134,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1623",
+  "sha": "19236dac",
+  "created_at": "2026-11-28T04:32:06Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668374",
+  "started_at": "2026-11-28T04:32:18Z",
+  "completed_at": "2026-11-28T04:42:36Z",
+  "gate_secs": 585.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 362.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 585.3,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 89.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 84.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.5,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 24,
+  "error": null,
+  "job_id": 140864996345
+ },
+ {
+  "run_id": 46107381448,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1645",
+  "sha": "b6583de5",
+  "created_at": "2026-11-28T04:24:23Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668275",
+  "started_at": "2026-11-28T04:24:36Z",
+  "completed_at": "2026-11-28T04:34:45Z",
+  "gate_secs": 577.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 365.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 576.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 92.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.1,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 75.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 89.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.4,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 25,
+  "error": null,
+  "job_id": 140863097837
+ },
+ {
+  "run_id": 46107228331,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1640",
+  "sha": "ed57b5ac",
+  "created_at": "2026-11-28T04:22:24Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668246",
+  "started_at": "2026-11-28T04:22:37Z",
+  "completed_at": "2026-11-28T04:28:39Z",
+  "gate_secs": 340.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 238.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 340.3,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 62.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.6,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 35.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 60.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 23,
+  "error": null,
+  "job_id": 140862623279
+ },
+ {
+  "run_id": 46107106366,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1644",
+  "sha": "7852470b",
+  "created_at": "2026-11-28T04:20:49Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668196",
+  "started_at": "2026-11-28T04:21:02Z",
+  "completed_at": "2026-11-28T04:31:16Z",
+  "gate_secs": 580.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 355.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 579.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 93.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 71.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 88.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 23,
+  "error": null,
+  "job_id": 140862243245
+ },
+ {
+  "run_id": 46106549305,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1614",
+  "sha": "8aa64df5",
+  "created_at": "2026-11-28T04:13:46Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000668068",
+  "started_at": "2026-11-28T04:14:01Z",
+  "completed_at": "2026-11-28T04:24:23Z",
+  "gate_secs": 588.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 356.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 587.9,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 93.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 90.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.4,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 23,
+  "error": null,
+  "job_id": 140860539721
+ },
+ {
+  "run_id": 46106078855,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1624",
+  "sha": "94037968",
+  "created_at": "2026-11-28T04:07:45Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667896",
+  "started_at": "2026-11-28T04:07:59Z",
+  "completed_at": "2026-11-28T04:17:07Z",
+  "gate_secs": 524.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 312.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 523.5,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.1,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 63.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 80.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.4,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 21,
+  "error": null,
+  "job_id": 140859055399
+ },
+ {
+  "run_id": 46105958062,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "loom/resync-main",
+  "sha": "0abd5624",
+  "created_at": "2026-11-28T04:06:10Z",
+  "conclusion": "skipped",
+  "runner_name": "",
+  "started_at": "2026-11-28T04:06:22Z",
+  "completed_at": "2026-11-28T04:06:22Z",
+  "gate_secs": null,
+  "units": [],
+  "table": false,
+  "overlap_runs": 19,
+  "error": null,
+  "job_id": 140858670444
+ },
+ {
+  "run_id": 46105857809,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1469",
+  "sha": "07f11e48",
+  "created_at": "2026-11-28T04:04:57Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667820",
+  "started_at": "2026-11-28T04:05:10Z",
+  "completed_at": "2026-11-28T04:15:36Z",
+  "gate_secs": 596.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 367.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 596.1,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 97.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 69.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 94.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 10.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 22,
+  "error": null,
+  "job_id": 140858365161
+ },
+ {
+  "run_id": 46105797008,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1610",
+  "sha": "1cff84d1",
+  "created_at": "2026-11-28T04:04:10Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667786",
+  "started_at": "2026-11-28T04:04:24Z",
+  "completed_at": "2026-11-28T04:14:03Z",
+  "gate_secs": 551.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 328.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 550.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 83.8,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 68.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 82.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 22,
+  "error": null,
+  "job_id": 140858178262
+ },
+ {
+  "run_id": 46105726510,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1611",
+  "sha": "dfd3e0c2",
+  "created_at": "2026-11-28T04:03:17Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667767",
+  "started_at": "2026-11-28T04:03:30Z",
+  "completed_at": "2026-11-28T04:10:09Z",
+  "gate_secs": 369.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 235.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 369.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.6,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.2,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 43.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.2,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 21,
+  "error": null,
+  "job_id": 140857951577
+ },
+ {
+  "run_id": 46105519356,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1601",
+  "sha": "56d0577c",
+  "created_at": "2026-11-28T04:00:47Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667717",
+  "started_at": "2026-11-28T04:01:06Z",
+  "completed_at": "2026-11-28T04:11:14Z",
+  "gate_secs": 582.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 366.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 582.3,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 94.6,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 90.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.5,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 21,
+  "error": null,
+  "job_id": 140857344807
+ },
+ {
+  "run_id": 46105268904,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1617",
+  "sha": "5fa942f8",
+  "created_at": "2026-11-28T03:57:26Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667631",
+  "started_at": "2026-11-28T03:57:39Z",
+  "completed_at": "2026-11-28T04:05:26Z",
+  "gate_secs": 444.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 274.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 443.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 68.6,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.5,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 53.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 56.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.5,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 19,
+  "error": null,
+  "job_id": 140856529538
+ },
+ {
+  "run_id": 46105240165,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1576",
+  "sha": "f6fad91f",
+  "created_at": "2026-11-28T03:57:01Z",
+  "conclusion": "failure",
+  "runner_name": "GitHub Actions 1000667608",
+  "started_at": "2026-11-28T03:57:15Z",
+  "completed_at": "2026-11-28T04:03:05Z",
+  "gate_secs": 331.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 221.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 331.5,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 53.1,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 36.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.2,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 16,
+  "error": null,
+  "job_id": 140856442234
+ },
+ {
+  "run_id": 46105193431,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1576",
+  "sha": "7218a511",
+  "created_at": "2026-11-28T03:56:23Z",
+  "conclusion": "failure",
+  "runner_name": "GitHub Actions 1000667567",
+  "started_at": "2026-11-28T03:56:39Z",
+  "completed_at": "2026-11-28T04:04:41Z",
+  "gate_secs": 455.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 273.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "FAIL",
+    "rc": "1",
+    "secs": 454.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 74.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 51.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.1,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 18,
+  "error": null,
+  "job_id": 140856306387
+ },
+ {
+  "run_id": 46105028911,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1595",
+  "sha": "50b21209",
+  "created_at": "2026-11-28T03:54:10Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667489",
+  "started_at": "2026-11-28T03:54:26Z",
+  "completed_at": "2026-11-28T04:02:13Z",
+  "gate_secs": 443.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 272.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 442.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.4,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.5,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 50.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 64.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.4,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 16,
+  "error": null,
+  "job_id": 140855794305
+ },
+ {
+  "run_id": 46104963348,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1616",
+  "sha": "85b56492",
+  "created_at": "2026-11-28T03:53:16Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667462",
+  "started_at": "2026-11-28T03:53:31Z",
+  "completed_at": "2026-11-28T04:03:54Z",
+  "gate_secs": 594.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 361.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 594.1,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 90.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.0,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 74.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 86.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 10.2,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 17,
+  "error": null,
+  "job_id": 140855583373
+ },
+ {
+  "run_id": 46104809179,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1613",
+  "sha": "8b961d37",
+  "created_at": "2026-11-28T03:51:14Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667426",
+  "started_at": "2026-11-28T03:51:27Z",
+  "completed_at": "2026-11-28T04:01:03Z",
+  "gate_secs": 548.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 326.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 548.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 78.8,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 85.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 16,
+  "error": null,
+  "job_id": 140855097925
+ },
+ {
+  "run_id": 46104775446,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1615",
+  "sha": "dcff05a1",
+  "created_at": "2026-11-28T03:50:48Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667395",
+  "started_at": "2026-11-28T03:51:02Z",
+  "completed_at": "2026-11-28T03:58:45Z",
+  "gate_secs": 440.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 273.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 439.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.6,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 52.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 66.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.9,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 15,
+  "error": null,
+  "job_id": 140854998499
+ },
+ {
+  "run_id": 46104471713,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "cdc41eb8",
+  "created_at": "2026-11-28T03:46:52Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667303",
+  "started_at": "2026-11-28T03:47:03Z",
+  "completed_at": "2026-11-28T03:56:46Z",
+  "gate_secs": 546.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 331.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 546.2,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 82.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.5,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 77.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 13,
+  "error": null,
+  "job_id": 140854045133
+ },
+ {
+  "run_id": 46104112837,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1612",
+  "sha": "604dc754",
+  "created_at": "2026-11-28T03:42:12Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667208",
+  "started_at": "2026-11-28T03:42:30Z",
+  "completed_at": "2026-11-28T03:52:44Z",
+  "gate_secs": 584.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 357.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 583.9,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 93.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.2,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 73.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 90.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.8,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 10,
+  "error": null,
+  "job_id": 140852957245
+ },
+ {
+  "run_id": 46103982503,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1602",
+  "sha": "25a48c72",
+  "created_at": "2026-11-28T03:40:33Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667149",
+  "started_at": "2026-11-28T03:40:45Z",
+  "completed_at": "2026-11-28T03:50:47Z",
+  "gate_secs": 576.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 359.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 575.6,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 90.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.7,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 91.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 10.1,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 8,
+  "error": null,
+  "job_id": 140852530919
+ },
+ {
+  "run_id": 46103341667,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1604",
+  "sha": "45bb9ae5",
+  "created_at": "2026-11-28T03:32:26Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667081",
+  "started_at": "2026-11-28T03:32:40Z",
+  "completed_at": "2026-11-28T03:41:44Z",
+  "gate_secs": 518.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 320.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 518.0,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 75.8,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.5,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 66.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 81.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 6,
+  "error": null,
+  "job_id": 140850544376
+ },
+ {
+  "run_id": 46103332893,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1577",
+  "sha": "fed93231",
+  "created_at": "2026-11-28T03:32:20Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000667067",
+  "started_at": "2026-11-28T03:32:34Z",
+  "completed_at": "2026-11-28T03:39:02Z",
+  "gate_secs": 369.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 237.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 368.4,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 53.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 40.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 59.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.3,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 5,
+  "error": null,
+  "job_id": 140850522049
+ },
+ {
+  "run_id": 46102701332,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1584",
+  "sha": "d6f458b7",
+  "created_at": "2026-11-28T03:24:29Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000666930",
+  "started_at": "2026-11-28T03:24:40Z",
+  "completed_at": "2026-11-28T03:32:30Z",
+  "gate_secs": 442.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 274.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 441.6,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 70.3,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 3.9,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 50.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 68.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.9,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 5,
+  "error": null,
+  "job_id": 140848549135
+ },
+ {
+  "run_id": 46102250673,
+  "attempt": 1,
+  "event": "push",
+  "branch": "main",
+  "sha": "0a6b0861",
+  "created_at": "2026-11-28T03:18:53Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000666874",
+  "started_at": "2026-11-28T03:19:08Z",
+  "completed_at": "2026-11-28T03:29:15Z",
+  "gate_secs": 578.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 359.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 578.7,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 88.7,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 5.5,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 69.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 83.8,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 2.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 9.6,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 3,
+  "error": null,
+  "job_id": 140847130825
+ },
+ {
+  "run_id": 46102212067,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1580",
+  "sha": "979d7aa1",
+  "created_at": "2026-11-28T03:18:26Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000666860",
+  "started_at": "2026-11-28T03:18:39Z",
+  "completed_at": "2026-11-28T03:27:50Z",
+  "gate_secs": 525.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 323.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 524.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 79.0,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 6.2,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.0,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 64.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 80.7,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.1,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 8.7,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 3,
+  "error": null,
+  "job_id": 140847005437
+ },
+ {
+  "run_id": 46101308449,
+  "attempt": 1,
+  "event": "pull_request",
+  "branch": "feature/issue-1603",
+  "sha": "927e6c9d",
+  "created_at": "2026-11-28T03:07:14Z",
+  "conclusion": "success",
+  "runner_name": "GitHub Actions 1000666792",
+  "started_at": "2026-11-28T03:07:26Z",
+  "completed_at": "2026-11-28T03:15:50Z",
+  "gate_secs": 478.0,
+  "units": [
+   {
+    "slug": "test_run_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 274.9,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_filter_rate_chain",
+    "state": "PASS",
+    "rc": null,
+    "secs": 477.8,
+    "censored": false,
+    "n_files": 46
+   },
+   {
+    "slug": "test_selected_preset",
+    "state": "PASS",
+    "rc": null,
+    "secs": 72.6,
+    "censored": false,
+    "n_files": 27
+   },
+   {
+    "slug": "verify_live_midi",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "test_pulse_oversample",
+    "state": "PASS",
+    "rc": null,
+    "secs": 4.4,
+    "censored": false,
+    "n_files": 3
+   },
+   {
+    "slug": "test_audio_measure",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.6,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "measure_m5a_signal_path",
+    "state": "PASS",
+    "rc": null,
+    "secs": 50.5,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "verify_mono_case",
+    "state": "PASS",
+    "rc": null,
+    "secs": 67.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_workflows",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.3,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "check_attested_hashes",
+    "state": "PASS",
+    "rc": null,
+    "secs": 0.0,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "sound_report",
+    "state": "PASS",
+    "rc": null,
+    "secs": 1.4,
+    "censored": false,
+    "n_files": 1
+   },
+   {
+    "slug": "inject_manifest_defects",
+    "state": "PASS",
+    "rc": null,
+    "secs": 7.9,
+    "censored": false,
+    "n_files": 1
+   }
+  ],
+  "table": true,
+  "overlap_runs": 0,
+  "error": null,
+  "job_id": 140844180051
+ }
+]
