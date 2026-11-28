@@ -138,3 +138,13 @@ def _first_control() -> str:
     section = tests.split(mut.SECTION, 1)[1].split("\n# --- ", 1)[0]
     import re
     return re.findall(r"^def (test_\w+)", section, re.M)[0]
+
+
+def test_a_parametrized_assertion_failure_is_still_an_assertion(tmp_path):
+    """`FAILED t.py::test_a[case] - assert ...`: the id sits between the name
+    and the message. Read as no message it counted as a crash, and the matrix
+    refused every mutant that reddened a parametrized control."""
+    body = ("import pytest\n\n@pytest.mark.parametrize('x', ['else', 'a:b'])\n"
+            "def test_a(x):\n    assert x == 'nope'\n")
+    failed, crashed, errored, _, _ = _run(tmp_path, body)
+    assert (failed, crashed, errored) == ({"test_a"}, set(), set())

@@ -2596,6 +2596,33 @@ def test_an_inner_broad_handler_shadows_the_outer_base_one(tmp_path):
     _try_lines(text, "mid", s["via"])
 
 
+PATH_NESTED_TRIES_ONE_DEF = '''
+def helper(p):
+    return mod_a.load(p)
+
+def main(argv=None):
+    try:
+        try:
+            return helper("x")
+        except Exception:               # innermost: runs first
+            return 1
+    except refusal.Refused:
+        return 2
+'''
+
+
+def test_nested_tries_in_one_def_the_innermost_match_decides(tmp_path):
+    """Both handlers sit on ONE edge (main -> helper); the broad one is the
+    inner try. Found by the injected-defect matrix: the loosening "the best
+    handler on the edge wins" was seen by no control."""
+    got, text = _path_scan(tmp_path, PATH_NESTED_TRIES_ONE_DEF, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "relabelled(cli-total)", s
+    assert len(s["via"]) == 1, s
+    assert text.splitlines()[int(s["via"][0].split(":")[1]) - 1 + 2].strip().startswith(
+        "except Exception"), s
+
+
 def test_an_inner_handler_for_another_family_does_not_shadow(tmp_path):
     """Rule 8, the other direction: the inner handler is exact for mod_b, so
     the base handler outside still decides (PATH_VIA_WRONG_HANDLER pins this

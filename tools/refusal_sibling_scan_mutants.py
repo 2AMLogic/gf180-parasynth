@@ -171,7 +171,8 @@ def read_run(returncode: int, out: str, tests: str = TESTS
     The status used to be dropped and the verdict read off the parsed sets
     alone, so a fixture error that stopped one control reading the tree
     counted as that control "seeing" the mutant, and printed OK."""
-    fail = re.findall(r"^FAILED " + re.escape(tests) + r"::(\w+)(?: - (\S+))?", out, re.M)
+    fail = re.findall(r"^FAILED " + re.escape(tests)
+                      + r"::(\w+)(?:\[[^\n]*?\])?(?: - (\S+))?", out, re.M)
     # pytest prints a bare `assert a == b` as its rewritten text and anything
     # else raised as `<Class>: <message>`, so a crash is a line that names a
     # non-assertion exception class; a missing message reads as a crash too
