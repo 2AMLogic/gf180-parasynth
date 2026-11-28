@@ -45,6 +45,7 @@ def _record(**over):
             ]}},
         "engine_comparison": {"rtl_vs_model_metrics": {
             "twin_present": True, "twin_engine": "fixed-model", "agrees": True,
+            "twin_source_commit": "e356498", "twin_analysis_run": "run_case@dead",
             "metrics_that_moved": [], "metrics": {"Corner frequency": {"same": True}}}},
     }
     record.update(over)
@@ -131,6 +132,50 @@ def test_rejects_a_record_that_drops_the_twin_comparison():
     del record["engine_comparison"]
     with pytest.raises(gate.Rejected, match="no engine_comparison"):
         gate.check_record(record)
+
+
+def test_rejects_a_twin_that_names_another_engine():
+    """The published F1A row claimed a fixed-model comparison whose twin was the
+    previous RTL run (#1390): whatever occupied the board slot was read as the
+    twin. A cross-engine comparison cannot be established by another reading
+    of the same engine, so the gate rejects the claim."""
+    record = _record()
+    record["engine_comparison"]["rtl_vs_model_metrics"]["twin_engine"] = "integrated-rtl"
+    with pytest.raises(gate.Rejected, match="twin names engine"):
+        gate.check_record(record)
+
+
+def test_rejects_metric_agreement_claimed_with_no_twin():
+    """`agrees` with `twin_present` false is a claim of agreement about a
+    comparison the record does not contain: the missing twin must be stated,
+    not assumed to agree or disagree."""
+    record = _record()
+    metrics = record["engine_comparison"]["rtl_vs_model_metrics"]
+    metrics["twin_present"] = False
+    metrics["agrees"] = True
+    with pytest.raises(gate.Rejected, match="claims agreement with no twin"):
+        gate.check_record(record)
+
+
+def test_a_stated_missing_twin_is_accepted_without_agreement():
+    """A record whose comparison is explicitly missing is legitimate evidence
+    for the RTL stream and no claim about the fixed model's metrics."""
+    record = _record()
+    metrics = record["engine_comparison"]["rtl_vs_model_metrics"]
+    metrics.clear()
+    metrics.update({"twin_present": False,
+                    "why": "the board slot holds an integrated-rtl anchor and no "
+                           "fixed-model result is parked beside it"})
+    summary = gate.check_record(record)
+    assert summary["twin_engine"] is None and summary["twin_agrees"] is None
+    assert "integrated-rtl anchor" in summary["twin_missing_why"]
+
+
+def test_the_summary_reports_the_twins_provenance():
+    summary = gate.check_record(_record())
+    assert summary["twin_engine"] == "fixed-model"
+    assert summary["twin_source_commit"] == "e356498"
+    assert summary["twin_analysis_run"] == "run_case@dead"
 
 
 def test_a_mismatching_record_is_accepted_but_says_so():
