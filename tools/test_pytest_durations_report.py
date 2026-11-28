@@ -136,6 +136,13 @@ def test_group_totals_and_a_group_file_with_no_durations_is_visible():
     assert g["g3"]["files_with_no_durations"] == ["tools/test_missing.py"]
 
 
+def test_a_block_whose_every_duration_rounds_to_zero_is_refused():
+    """Added after its guard was disabled and nothing went red (rule 4)."""
+    block = HEADER + "    0.00s call     tools/test_a.py::test_z\n" + TRAILER + "\n" + SUMMARY
+    with pytest.raises(drep.Refused, match="rounds to 0.00s"):
+        drep.build_report(block)
+
+
 def test_no_block_is_refused():
     with pytest.raises(drep.Refused, match="no --durations block"):
         drep.build_report(".....   [100%]\n" + SUMMARY)

@@ -260,7 +260,7 @@ shard.
 
 ## What the instrument is blind to
 
-`tools/pytest_durations_report.py` refuses (exit 2) rather than reports on a malformed or truncated line inside the block, a second block, a duration line after the block ended, and an empty block, and each refusal has a control that goes red when its guard is disabled. Given `--junit`, it also refuses when a test with real time in the junit file has no line in the block, which is the only way a dropped line is visible at all.
+`tools/pytest_durations_report.py` refuses (exit 2) rather than reports on a malformed or truncated line inside the block, a second block, a duration line after the block ended, an empty block, and a block whose every duration rounds to 0.00 s. Each refusal has a control that goes red when its guard is disabled; the last of those had none until its guard was disabled and nothing went red, which is how it got one. Given `--junit`, it also refuses when a test with real time in the junit file has no line in the block, which is the only way a dropped line is visible at all.
 <!-- claim: test=tools/test_pytest_durations_report.py::test_a_slow_test_missing_from_the_block_is_refused_by_name -->
 
 Stated, because nothing checks them:
