@@ -353,6 +353,25 @@ class Other(Exception):
         d = {v: callee.maybe(v) for v in (1, 2)}
     print("carried on after the with")
 '''),
+    # the same swallow where the statement the frame carries on at ITSELF
+    # holds a comprehension, so the resumption lands inside one's line span
+    # without being its cleanup (#2060 review: three shapes, measured)
+    "inlined_swallow_then_comprehension": "import contextlib\n" + HEAD + _tail('''\
+    with contextlib.suppress(callee.Refused):
+        d = {v: callee.maybe(v) for v in (1, 2)}
+    e = [n * 2 for n in (1, 2)]
+    print("carried on after the with")
+'''),
+    "inlined_swallow_then_return_comprehension": "import contextlib\n" + HEAD + _tail('''\
+    with contextlib.suppress(callee.Refused):
+        d = {v: callee.maybe(v) for v in (1, 2)}
+    return len([n for n in (1, 2)])
+'''),
+    "inlined_swallow_then_comprehension_last": "import contextlib\n" + HEAD + _tail('''\
+    with contextlib.suppress(callee.Refused):
+        d = {v: callee.maybe(v) for v in (1, 2)}
+    e = [n * 2 for n in (1, 2)]
+'''),
 }
 
 
@@ -648,9 +667,9 @@ def test_a_swallow_around_a_comprehension_is_recorded_where_the_frame_carried_on
     """The repair reads a resumption inside a comprehension as unwinding. The
     input that would defeat it: a context manager that swallows the refusal,
     so the frame does carry on. It must still read as one handler with no
-    clause, on the statement the frame carried on at -- which is never the
-    comprehension's line, because the statement after a `with` starts a line
-    of its own."""
+    clause, on the statement the frame carried on at. That statement is not
+    the comprehension's line here; the next test is the one where it lies
+    inside a comprehension's span."""
     _needs_inlined_comprehensions()
     rec, path = _trace_inlined(tmp_path, "inlined_swallow")
     truth = _ran(path)
@@ -661,6 +680,30 @@ def test_a_swallow_around_a_comprehension_is_recorded_where_the_frame_carried_on
     assert (handler["fn"], handler["clause"]) == ("main", None)
     assert handler["line"] == _line_of(path, 'print("carried on after the with")')
     assert [w["line"] for w in follow["with_unwind"]] == [_line_of(path, "with contextlib.suppress(")]
+
+
+@pytest.mark.parametrize("name,carry_on", [
+    ("inlined_swallow_then_comprehension", "e = [n * 2 for n in (1, 2)]"),
+    ("inlined_swallow_then_return_comprehension", "return len([n for n in (1, 2)])"),
+    ("inlined_swallow_then_comprehension_last", "e = [n * 2 for n in (1, 2)]"),
+])
+def test_a_swallow_whose_carry_on_holds_a_comprehension_is_still_recorded(tmp_path, name, carry_on):
+    """The premise "the statement after a `with` starts a line of its own, so
+    it is never inside a comprehension's span" is false when that statement
+    holds a comprehension. A line-span rule read the carry-on as the cleanup
+    and lost the handler (and in the entry frame moved the verdict to
+    UNRESOLVED); the cleanup is told from a carry-on by its opcode."""
+    _needs_inlined_comprehensions()
+    rec, path = _trace_inlined(tmp_path, name)
+    assert _ran(path).returncode in (0, 2)        # exit 2 only from `len(...)`, not a refusal
+    assert "Refused" not in _ran(path).stderr     # nothing escaped: a swallow
+    assert rec["verdict"] == rct.HANDLED, rec["verdict"]
+    follow = rec["follows"][0]
+    [handler] = follow["handlers"]
+    assert (handler["fn"], handler["clause"]) == ("main", None)
+    assert handler["line"] == _line_of(path, carry_on)
+    assert not follow["left_entry"]
+    assert "main" not in [s["fn"] for s in follow["propagated_out"]]
 
 
 # ---------------------------------------------------------------------------

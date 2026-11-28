@@ -250,9 +250,10 @@ def _line_role(frame) -> dict:
 
     def own_comprehension(node) -> bool:
         # an inlined list, set or dict comprehension of this function spanning
-        # the line. The cleanup the frame resumes on sits on the comprehension's
-        # FIRST line (measured on CPython 3.12.3 and 3.13.18); the rule is the
-        # whole span, which is the language's -- a comprehension owns no clause
+        # the line. The span only says the resumption is INSIDE one: a frame
+        # that carried on after a swallow lands on the next statement, which
+        # lies in a span whenever that statement holds a comprehension. What
+        # separates the cleanup from a carry-on is the opcode (`local()`)
         return isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp)) \
             and node.lineno <= line <= node.end_lineno and mine(node)
 
@@ -382,16 +383,21 @@ def _follow(exc: BaseException, caller, inject: frozenset, callee: str) -> None:
                         tested(fid)
                         pending[fid] = {**_where(fr), "clause": role["clause"],
                                         "handler": header, "one_line": header == first}
-                elif role.get("comprehension") and "COMPREHENSION_IS_HANDLER" not in inject:
+                elif role.get("comprehension") and _opcode_at(fr) == "SWAP" \
+                        and "COMPREHENSION_IS_HANDLER" not in inject:
                     # an inlined comprehension's own cleanup (measured on
-                    # CPython 3.12.3 and 3.13.18: the frame resumes on the
-                    # comprehension's line, at SWAP, to drop the half-built
-                    # container, then re-raises): the frame is still unwinding,
-                    # and the clause that takes the exception is still to come.
-                    # A comprehension owns no clause, so no other line event an
-                    # unwinding frame emits falls inside one: a frame that
-                    # carried on after a swallow resumes on the statement
-                    # AFTER the `with`, which starts a line of its own
+                    # CPython 3.12.3: the frame resumes on the comprehension's
+                    # line AT `SWAP`, to drop the half-built container, then
+                    # re-raises): the frame is still unwinding, and the clause
+                    # that takes the exception is still to come. The line alone
+                    # does not say so -- a frame that carried on after a swallow
+                    # resumes on the statement AFTER the `with`, and that
+                    # statement is inside a comprehension's span when it holds
+                    # one (a carry-on of `e = [n for n in xs]` starts on
+                    # LOAD_CONST, not SWAP). Like the `with` branch above this
+                    # leans on one opcode; an interpreter that begins the
+                    # cleanup differently reads the cleanup as a carry-on
+                    # (the pre-repair reading), which the paired test turns red
                     tested(fid)
                 else:
                     # the frame carried on with no clause of its own: either
@@ -403,7 +409,6 @@ def _follow(exc: BaseException, caller, inject: frozenset, callee: str) -> None:
                     else:
                         tested(fid)
                         entered(fr, {**_where(fr), "clause": None})
-            return local
             return local
         elif event == "return" and fid in receiving:
             clause = pending.get(fid)
