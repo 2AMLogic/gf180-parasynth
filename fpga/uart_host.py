@@ -1931,12 +1931,18 @@ def main(argv=None, *, bridge_factory=None) -> int:
         # every time, so the advertised first playback failed by construction.
         # The first phrase is `--fixture m5a` (bench-proven), never a default.
         fixture = a.fixture or "none"
-        if fixture == "m5a":
-            fx_events, _end = phrase_events(fixture, a.image)
-        elif fixture != "none":
-            # the fixture's own structure: its load() image as live setup,
-            # everything after it as scheduled events
-            fx_static, fx_events, _end = phrase_static_and_events(fixture, a.image)
+        if fixture != "none":
+            import drums_fx as dx
+            try:
+                if fixture == "m5a":
+                    fx_events, _end = phrase_events(fixture, a.image)
+                else:
+                    # the fixture's own structure: its load() image as live setup,
+                    # everything after it as scheduled events
+                    fx_static, fx_events, _end = phrase_static_and_events(fixture, a.image)
+            except (Refused, dx.KitRefused) as exc:
+                print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
+                return 2
     fixture_image = a.cmd in ("play", "run") and (a.fixture or "none") != "none"
     if fixture_image and a.preset and not a.engineering:
         # the fixture programs its own patch over the preset: the player
