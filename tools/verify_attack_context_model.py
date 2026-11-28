@@ -27,13 +27,14 @@ import refusal
 # test_rms_envelope_dependencies_are_pinned asserts the set stays closed.
 AUDIO_MEASURE = "model/audio_measure.py"
 AUDIO_MEASURE_BASIS = ("rms_envelope", "_as_float", "require_finite", "NonFiniteAudio", "InsufficientEvidence", "nonfinite_report", "SR_DEFAULT")
+DEF_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
 
 def audio_measure_basis(source: str) -> dict:
     """AST dump of each definition in AUDIO_MEASURE_BASIS; absent -> None."""
     found = dict.fromkeys(AUDIO_MEASURE_BASIS)
     for node in ast.parse(source).body:
-        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+        if isinstance(node, DEF_NODES):
             names = [node.name]
         elif isinstance(node, ast.Assign):
             names = [t.id for t in node.targets if isinstance(t, ast.Name)]
@@ -43,6 +44,26 @@ def audio_measure_basis(source: str) -> dict:
             if name in found:
                 found[name] = ast.dump(node)
     return found
+
+
+def unpinned_basis_dependencies(source: str) -> dict:
+    """Pinned basis name -> module-level names it reaches outside AUDIO_MEASURE_BASIS.
+
+    A definition outside the set is invisible to the pin, so editing it changes
+    rms_envelope without refusing. An async def binds a name exactly as a def does.
+    """
+    tree = ast.parse(source)
+    defs = {n.name: n for n in tree.body if isinstance(n, DEF_NODES)}
+    module_names = set(defs) | {t.id for n in tree.body if isinstance(n, ast.Assign)
+                                for t in n.targets if isinstance(t, ast.Name)}
+    outside = {}
+    for name in AUDIO_MEASURE_BASIS:
+        if name in defs:
+            used = {n.id for n in ast.walk(defs[name]) if isinstance(n, ast.Name)} & module_names
+            unpinned = used - set(AUDIO_MEASURE_BASIS) - {name}
+            if unpinned:
+                outside[name] = unpinned
+    return outside
 
 
 class Refused(refusal.Refused, AssertionError):

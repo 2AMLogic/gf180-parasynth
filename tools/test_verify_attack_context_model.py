@@ -103,16 +103,55 @@ def test_unrelated_estimator_edit_does_not_refuse(monkeypatch):
     assert verifier.AUDIO_MEASURE in result["current_source_differences"]
 
 
+def _audio_measure_source():
+    return (verifier.producer.ROOT / verifier.AUDIO_MEASURE).read_text()
+
+
+def _reaching_unpinned_scale(keyword, source=None):
+    """`source` with a module-level `keyword _unpinned_scale` that rms_envelope calls."""
+    source = (source if source is not None else _audio_measure_source())
+    source += f"\n\n{keyword} _unpinned_scale():\n    return 1.4\n"
+    return _mutate("return e * math.sqrt(2.0)", "return e * _unpinned_scale()")(source)
+
+
 def test_rms_envelope_dependencies_are_pinned():
     """The pinned basis is closed: nothing in it reaches a module-level name outside it."""
-    tree = ast.parse((verifier.producer.ROOT / verifier.AUDIO_MEASURE).read_text())
-    defs = {n.name: n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
-    module_names = set(defs) | {t.id for n in tree.body if isinstance(n, ast.Assign)
-                                for t in n.targets if isinstance(t, ast.Name)}
-    for name in verifier.AUDIO_MEASURE_BASIS:
-        if name in defs:
-            used = {n.id for n in ast.walk(defs[name]) if isinstance(n, ast.Name)} & module_names
-            assert used <= set(verifier.AUDIO_MEASURE_BASIS) | {name}, (name, used - set(verifier.AUDIO_MEASURE_BASIS))
+    assert verifier.unpinned_basis_dependencies(_audio_measure_source()) == {}
+
+
+@pytest.mark.parametrize("keyword", ["def", "async def"])
+def test_unpinned_dependency_of_rms_envelope_is_reported(keyword):
+    """Rule 8: an async def binds a module-level name exactly as a def does, so an
+    unpinned async helper reached from rms_envelope must not pass the closure check."""
+    assert verifier.unpinned_basis_dependencies(_reaching_unpinned_scale(keyword)) == {
+        "rms_envelope": {"_unpinned_scale"}}
+
+
+@pytest.mark.parametrize("keyword", ["def", "async def"])
+def test_unreferenced_module_definition_is_not_a_dependency(keyword):
+    source = _audio_measure_source() + f"\n\n{keyword} _unrelated():\n    return 1\n"
+    assert verifier.unpinned_basis_dependencies(source) == {}
+
+
+@pytest.mark.parametrize("keyword", ["def", "async def"])
+def test_basis_member_is_pinned_whether_def_or_async_def(keyword):
+    """An async def member of AUDIO_MEASURE_BASIS is pinned by its AST, not read as absent."""
+    source = f"{keyword} require_finite(x):\n    return x\n"
+    assert verifier.audio_measure_basis(source)["require_finite"] == ast.dump(ast.parse(source).body[0])
+
+
+def test_def_to_async_def_conversion_changes_the_basis():
+    sync = "def require_finite(x):\n    return x\n"
+    converted = sync.replace("def ", "async def ", 1)
+    assert verifier.audio_measure_basis(sync) != verifier.audio_measure_basis(converted)
+
+
+def test_reverted_widening_goes_red(monkeypatch):
+    """Injected-revert control: with DEF_NODES back to FunctionDef-only, an async def
+    basis member reads as absent and an unpinned async dependency is invisible again."""
+    monkeypatch.setattr(verifier, "DEF_NODES", (ast.FunctionDef, ast.ClassDef))
+    assert verifier.audio_measure_basis("async def require_finite(x):\n    return x\n")["require_finite"] is None
+    assert verifier.unpinned_basis_dependencies(_reaching_unpinned_scale("async def")) == {}
 
 
 # --- #215: an unreachable source_commit must REFUSE, not surface git's exit 128 ---
