@@ -109,6 +109,7 @@ CORPUS_ENV_TEST_FILES = {
     pathlib.PurePosixPath("tools/test_balance_line_shape_refusal.py"): frozenset({"_probe"}),
     pathlib.PurePosixPath("tools/test_estimator_defects_refusal.py"): frozenset({"_probe"}),
     pathlib.PurePosixPath("tools/test_probe_tom_numerator_refusal.py"): frozenset({"_probe"}),
+    pathlib.PurePosixPath("tools/test_audio_distance_floor_refusal.py"): frozenset({"_corpus_env"}),
 }
 SELF = pathlib.PurePosixPath("tools/test_corpus_path_single_source.py")
 ENV_NAMES = {"GF180_TR808_REFS", "TR808_REFS", "GF180_TR808_REFS_DEFAULT"}   # env-var keys
@@ -442,3 +443,12 @@ def test_go_sh_exports_the_fischer_root_not_its_parent():
     txt = (ROOT / "fpga/reports/r2/settled/go.sh").read_text()
     line = [l for l in txt.splitlines() if l.startswith("export GF180_TR808_REFS=")][0]
     assert line.rstrip().endswith("/sounds-tr808-fischer"), line
+
+
+def test_refs_child_env_resolves_through_configured_refs(monkeypatch):
+    """The child overlay must round-trip through the resolver, and an inherited
+    disagreeing alias must not make the child REFUSE."""
+    monkeypatch.setenv(rc.REFS_ALIAS_ENV, "/somewhere/else")
+    for k, v in rc.refs_child_env("/x/corpus").items():
+        monkeypatch.setenv(k, v)
+    assert rc.configured_refs() == pathlib.Path("/x/corpus")

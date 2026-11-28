@@ -97,19 +97,28 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     an import in a class body, and a name used in a decorator (evaluated in
     the enclosing scope) -- each contrived or a runtime error;
   * handlers are found around the CALL SITE, plus ONE level above: the
-    module's CLI boundary (`main()` / the `__main__` dispatch), which is
-    where #1160/#1162's repairs live. Guards in intermediate library
-    frames are not modelled, and neither is a guard in the def that CALLS a
-    local helper -- a call written inside a nested def is lexically outside
-    its caller's try -- so `candidate-escape` means "unguarded here and no
-    base guard at the boundary", never "escapes at the exit". That last
-    shape is the one site `rtl-sketch/` adds to the census, and it is
-    ACCEPTED rather than repaired (#1577): `verify_synth_top.drum_solo_report`
-    calls its nested `_render` inside a try whose handler is
-    `except rc.Refused`, the callee's own class. The acceptance is observed,
-    not read -- `tools/test_refusal_sibling_scan.py` runs the shipped
-    function with a refusing callee (caught, returned in the report's
-    `refused` list) and with a sibling class (escapes);
+    module's CLI boundary -- `main()`, the `__main__` dispatch, and (from
+    #1641) a module-level function the DISPATCH calls by bare name, the
+    `_cli()` wrapper hh_probe5's repair #1611 first wrote and this census
+    read as no guard at all. That is where #1160/#1162's repairs live. The
+    wrapper is followed ONE level, on the way in only: a call from the
+    wrapper itself, from a def nested in the dispatch, or from an except
+    handler or finally clause reaches nothing. A function `main()` calls is
+    not followed -- main fans out to siblings, and a sibling's try guards
+    its own branch alone. The credit is by PRESENCE, not by path: a handler
+    anywhere in a boundary frame covers every uncovered site in the module,
+    whether or not the site's own path runs through it (#1656). Guards in
+    intermediate library frames are not modelled, and neither is a guard in
+    the def that CALLS a local helper -- a call written inside a nested def
+    is lexically outside its caller's try -- so `candidate-escape` means
+    "unguarded here and no base guard at the boundary", never "escapes at the
+    exit". That last shape is the one site `rtl-sketch/` adds to the census,
+    and it is ACCEPTED rather than repaired (#1577):
+    `verify_synth_top.drum_solo_report` calls its nested `_render` inside a
+    try whose handler is `except rc.Refused`, the callee's own class. The
+    acceptance is observed, not read -- `tools/test_refusal_sibling_scan.py`
+    runs the shipped function with a refusing callee (caught, returned in the
+    report's `refused` list) and with a sibling class (escapes);
   * test files are excluded: they are not CLI callers and their
     `pytest.raises` sites are deliberate;
   * only `SCAN_ROOTS` is scanned: `tools`, `model`, `pnr`, `fpga`,
@@ -481,25 +490,64 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
     return origins, shape
 
 
+def _is_main_guard(node: ast.AST) -> bool:
+    """`if __name__ == ...`: the `__main__` dispatch block."""
+    return (isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
+            and getattr(node.test.left, "id", "") == "__name__")
+
+
+def _entry_calls(guard: ast.If) -> set[str]:
+    """The names the `__main__` dispatch calls by bare name on its way into
+    the program. Its statements and conditions are read; NOT a def of its own
+    (runs only if something calls IT: one level only), an except handler or
+    a finally clause (cleanup after the work, not entry into it)."""
+    own_frames = SCOPE_NODES + (ast.Lambda,)
+    out: set[str] = set()
+    todo: list[ast.AST] = [guard.test, *guard.body, *guard.orelse]
+    while todo:
+        n = todo.pop()
+        if isinstance(n, own_frames):
+            continue
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+            out.add(n.func.id)
+        if isinstance(n, ast.Try):
+            todo.extend(n.body)
+            todo.extend(n.orelse)
+        else:
+            todo.extend(ast.iter_child_nodes(n))
+    return out
+
+
 def cli_boundary_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]) -> list[tuple[set[str], str]]:
     """The refusal handlers at the module's CLI boundary -- try statements
     that sit directly in a `main()` def or in the `if __name__ == "__main__"`
-    dispatch, where #1160/#1162's repairs live. Returns (origins, shape) per
+    dispatch, where #1160/#1162's repairs live, or directly in a module-level
+    function the DISPATCH calls by bare name: the `_cli()` wrapper hh_probe5's
+    repair first used and this census read as no guard at all (#1641). One
+    level only, and from the dispatch only -- a function `main()` calls is a
+    sibling of main's other callees, and its try guards its own branch alone
+    (#1656 has the tree that showed it). Returns (origins, shape) per
     handler: `except refusal.Refused` covers every origin; an exact/alias
-    handler covers only its own origin (measure_partial_balance's
-    `except Refused` with `Refused = pc.Refused` is exact, not local-only)."""
+    handler covers only its own origin (measure_partial_balance's `except
+    Refused` with `Refused = pc.Refused` is exact, not local-only)."""
     parents: dict[ast.AST, ast.AST] = {}
     for node in ast.walk(mod.tree):
         for ch in ast.iter_child_nodes(node):
             parents[ch] = node
+    wrappers: set[str] = set()
+    for node in ast.walk(mod.tree):
+        if _is_main_guard(node):
+            wrappers |= _entry_calls(node)
 
     def in_boundary(tr: ast.Try) -> bool:
         cur = parents.get(tr)
         if isinstance(cur, ast.FunctionDef) and cur.name == "main":
             return True
-        while cur is not None:                # the __main__ dispatch block
-            if (isinstance(cur, ast.If) and isinstance(cur.test, ast.Compare)
-                    and getattr(cur.test.left, "id", "") == "__name__"):
+        if (isinstance(cur, FUNCTION_NODES) and cur.name in wrappers
+                and parents.get(cur) is mod.tree):
+            return True                   # a `_cli()` wrapper, called by name
+        while cur is not None:            # the __main__ dispatch block
+            if _is_main_guard(cur):
                 return True
             cur = parents.get(cur)
         return False

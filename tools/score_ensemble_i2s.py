@@ -353,10 +353,20 @@ def _reusable_control_run(paths: dict, case_id: str, part: str) -> bool:
     mutation, that turned the bench red, and whose report binds the exact WAV
     and schedule beside it. A control whose report does not say all of that is
     re-run: reuse must never be able to launder a stale or foreign result --
-    or a swapped sidecar the report never digested -- into a fired control."""
+    or a swapped sidecar the report never digested -- into a fired control.
+
+    A report holding MORE THAN ONE run is not reused either, whatever it says.
+    This predicate reads by substring, so a caught run followed by an escaped
+    one -- whose `PASS --`, WAV and schedule sit beside it -- reads as caught,
+    with the earlier run's numbers (#1580). One run prints each of its
+    once-per-run records once, and a caught run prints no PASS verdict, so
+    any repeated record is a second capture. It is re-run: the answer this
+    gives a report it cannot bind."""
     if not paths["report"].is_file():
         return False
     text = paths["report"].read_text()
+    if any(count > 1 for count in i2s_transcript.record_counts(text).values()):
+        return False
     return (f"ENSEMBLE {case_id} part {part}:" in text
             and f"INJECT_BUG_{CONTROL_INJECT}" in text
             and f"negative control {CONTROL_INJECT} CAUGHT" in text
