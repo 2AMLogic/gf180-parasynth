@@ -494,7 +494,7 @@ def main(argv=None):
         (a.out / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")
         print("M1A reference captured; scorecard coverage unchanged")
         return 0
-    except (ref.Refused, OSError, ValueError, RuntimeError) as exc:
+    except (ref.Refused, ref.am.InsufficientEvidence, OSError, ValueError, RuntimeError) as exc:
         (a.out / "refused.json").write_text(json.dumps({"state": "REFUSED", "reason": str(exc)}, indent=2))
         print(f"REFUSED: {exc}"); return 2
 
