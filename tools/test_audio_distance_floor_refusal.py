@@ -610,13 +610,15 @@ def test_control_a_word_match_flags_the_unprefixed_string(probe):
 #                                            controls above): the directory
 #                                            is made, exit 0, the record
 #                                            parses.
-#   the write failing after the run          in-process `main`, E1-E9 doubled
-#                                            (below): what is asserted is
-#                                            `main`'s handling of `OSError`
-#                                            at the write, and a second full
-#                                            run would repeat 81 % of its
+#   the write failing after the run          in-process `main`, E1-E9 and the
+#                                            corpus reader doubled (below): what
+#                                            is asserted is `main`'s handling
+#                                            of `OSError` at the write, a second
+#                                            full run would repeat 81 % of its
 #                                            time on experiments that are not
-#                                            under test.
+#                                            under test, and without the corpus
+#                                            reader the control runs where CI
+#                                            runs, which has no soundfile.
 #
 # A write that fails is REFUSED, exit 2, with the report still printed: the
 # rows measured and are evidence (the #1699 ruling, which writes the report
@@ -658,12 +660,14 @@ def test_full_run_with_json_under_a_missing_directory_writes_it_and_exits_0(tmp_
 
 
 def _stub_experiments(probe, monkeypatch) -> None:
-    """E1-E9 as stand-ins shaped for `report()`: rows of zeros, nothing
-    refused. E0, `load_ref`, `prepare`, the T20, `_refusals`, `report` and
-    the write are the probe's own."""
+    """E1-E9 and the corpus reader as stand-ins, so these two controls run
+    where CI runs -- no soundfile, no 60 s run. E0, `prepare`, the T20,
+    `_refusals`, `report` and the write are the probe's own; the reference is
+    this file's synthetic strike, whose T20 `prepare` and the estimator accept."""
     def zero():
         return dict.fromkeys(DISTANCE_KEYS, 0.0)
 
+    monkeypatch.setattr(probe, "load_ref", lambda name: (_strike(), SR))
     monkeypatch.setattr(probe, "e1_determinism", lambda: zero() | {"bit_identical": True})
     monkeypatch.setattr(probe, "e2_e3_alignment", lambda x, sr: {"1 samples (0.023 ms)": zero()})
     monkeypatch.setattr(probe, "e4_sweeps", lambda x, sr: {"decay_pct": {"0": zero()},
@@ -684,11 +688,10 @@ def _stub_experiments(probe, monkeypatch) -> None:
     monkeypatch.setattr(probe, "e9_noise_floor", lambda: {})
 
 
-def test_a_write_failure_after_the_run_is_refused_with_the_report_printed(probe, monkeypatch, tmp_path, sf, capsys):
+def test_a_write_failure_after_the_run_is_refused_with_the_report_printed(probe, monkeypatch, tmp_path, capsys):
     """The pre-flight passed and the destination became a directory before the
     write -- what a disk filling or a permission changing mid-run looks like
     from the write's side: an `OSError`, after everything has measured."""
-    monkeypatch.setattr(probe, "REFDIR", _corpus(sf, tmp_path))
     _stub_experiments(probe, monkeypatch)
     target = tmp_path / "record.json"
 
@@ -705,11 +708,10 @@ def test_a_write_failure_after_the_run_is_refused_with_the_report_printed(probe,
     assert "wrote" not in out, out[-600:]
 
 
-def test_the_stubs_alone_write_a_record_and_exit_0(probe, monkeypatch, tmp_path, sf, capsys):
+def test_the_stubs_alone_write_a_record_and_exit_0(probe, monkeypatch, tmp_path, capsys):
     """The control for the test above, on the same stubs: without the fault
     the same run writes the record and passes, so its REFUSED is the write's
     and not the stand-ins'."""
-    monkeypatch.setattr(probe, "REFDIR", _corpus(sf, tmp_path))
     _stub_experiments(probe, monkeypatch)
     target = tmp_path / "no" / "such" / "dir" / "record.json"
     code = probe.main(["--json", str(target)])
