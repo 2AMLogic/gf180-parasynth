@@ -375,7 +375,12 @@ def old_bar_context(tabs: dict, refs: pathlib.Path, ours: dict | None) -> dict:
     out = {}
     for s, t in tabs.items():
         T = pg.Target(*pg.load_wav(refs / t["target"]), s, t["target"])
-        b = pg.bar_for(s, refs, T)
+        try:
+            b = pg.bar_for(s, refs, T)
+        except pg.Refused as e:
+            # A refusal is a row, not a crash: the other sounds still report.
+            out[s] = {"old_bar": "REFUSED", "why": str(e)}
+            continue
         vs = [(pg.verdict(r["d"], b["bar"]), r["rel"]) for r in t["rows"]]
         best = min(vs, key=lambda v: v[0]["worst_ratio"])
         row = {"old_bar": b["kind"], "n_takes": len(vs), "mars_takes_passing_old_bar": sum(v[0]["verdict"] == "PASS" for v in vs),
@@ -563,6 +568,11 @@ def main(argv=None) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
     print(json.dumps(dec, indent=1))
+    refused = sorted(s for s, r in cal["old_bar_context"].items() if r.get("old_bar") == "REFUSED")
+    if refused:
+        print(f"REFUSED: old bar could not be built for {', '.join(refused)}; see old_bar_context in {a.out}",
+              file=sys.stderr)
+        return exit_contract.REFUSED
     return decision_exit(dec)
 
 

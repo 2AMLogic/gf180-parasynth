@@ -1,4 +1,4 @@
-"""Known answers for tools/gate_calibrate.py (#379). Fast: no audio is read."""
+"""Known answers for tools/gate_calibrate.py (#379). Uses synthetic audio for the old-bar CLI controls."""
 import copy
 import csv
 import json
@@ -9,6 +9,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 from probes import gate_calibrate_missing_random as probe  # noqa: E402
@@ -322,6 +323,91 @@ def test_decide_does_not_count_an_unrun_control_as_a_pass():
     assert gc.decide(q, False)["status"] == "NOT QUALIFIED"       # a bar that misses seeds is not authority
 
 
+# ---------------------------------------------------------------------------
+# #1307: a missing neighbour WAV must REFUSE (exit 2, a row), never traceback.
+# ---------------------------------------------------------------------------
+def _old_bar_fixture(tmp_path, drop_neighbour):
+    """One BD take, all its expected reference WAVs, and a longer-decay render."""
+    import numpy as np
+    from scipy.io import wavfile
+
+    rel = pg.target_rel("BD")
+    nbs = pg.neighbours("BD", rel)
+    assert nbs, "BD must be a multi-take sound for this control to mean anything"
+    noise = np.random.default_rng(0).standard_normal(9600)
+    samples = np.arange(len(noise))
+
+    def write_hit(path, decay):
+        sig = np.concatenate([np.zeros(2400), noise * np.exp(-samples / decay)])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        wavfile.write(path, 48000, (sig / np.abs(sig).max() * 30000).astype(np.int16))
+
+    write_hit(tmp_path / rel, 1500)
+    for nb in nbs:
+        write_hit(tmp_path / nb, 1800)
+    write_hit(tmp_path / "ours" / "BD.wav", 3000)
+    if drop_neighbour:
+        (tmp_path / nbs[0]).unlink()
+    tabs = {"BD": {"target": rel, "rows": [{"rel": "x/take.wav", "d": _d(0.5)}]}}
+    return tabs, nbs[0]
+
+
+def _run_old_bar_cli(tmp_path, monkeypatch, cli, selection, *subcommand, drop_neighbour):
+    tabs, gone = _old_bar_fixture(tmp_path, drop_neighbour)
+    tpath = tmp_path / "tables.json"
+    tpath.write_text(json.dumps({"tables": tabs}))
+    # Hold the independent qualification decision fixed while exercising the real
+    # WAV lookup, bar, render comparison, JSON writer and exit path in each CLI.
+    monkeypatch.setattr(cli, "calibrate", lambda tabs, override: {"status": "CALIBRATED", **selection})
+    monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: {"sounds_with_bar": ["BD"]})
+    monkeypatch.setattr(cli, "decide", lambda q, injected: {"status": "QUALIFIED"})
+    out = tmp_path / "out.json"
+    rc = cli.main([*subcommand, "--refs", str(tmp_path), "--tables", str(tpath),
+                   "--ours", str(tmp_path / "ours"), "--out", str(out)])
+    return rc, out, gone
+
+
+def test_old_bar_context_records_refused_row_naming_the_missing_wav(tmp_path):
+    tabs, gone = _old_bar_fixture(tmp_path, drop_neighbour=True)
+    out = gc.old_bar_context(tabs, tmp_path, None)
+    assert out["BD"]["old_bar"] == "REFUSED"
+    assert gone in out["BD"]["why"]  # not a blanket swallow: names the defect
+
+
+def test_old_bar_context_refusal_does_not_hide_other_sounds(tmp_path, monkeypatch):
+    tabs, _ = _old_bar_fixture(tmp_path, drop_neighbour=True)
+    real = pg.bar_for
+
+    def bar_for(s, refs, T=None):
+        if s == "OK":
+            return {"kind": "stub", "bar": {}}
+        return real(s, refs, T)
+
+    monkeypatch.setattr(pg, "bar_for", bar_for)
+    monkeypatch.setattr(pg, "verdict", lambda d, b: {"verdict": "PASS", "worst_ratio": 0.0, "worst_feature": None, "failing": []})
+    tabs["OK"] = {"target": tabs["BD"]["target"], "rows": [{"rel": "r", "d": {}}]}
+    out = gc.old_bar_context(tabs, tmp_path, None)
+    assert out["BD"]["old_bar"] == "REFUSED" and out["OK"]["old_bar"] == "stub"
+
+
+def test_main_exits_refused_and_still_writes_out(tmp_path, monkeypatch):
+    rc, out, gone = _run_old_bar_cli(tmp_path, monkeypatch, gc, {"k": 1}, "calibrate", drop_neighbour=True)
+    report = json.loads(out.read_text())
+    assert report["decision"]["status"] == "QUALIFIED"
+    row = report["calibration"]["old_bar_context"]["BD"]
+    assert row["old_bar"] == "REFUSED" and gone in row["why"]
+    assert rc == exit_contract.REFUSED == 2
+
+
+def test_main_exits_zero_when_every_old_bar_builds(tmp_path, monkeypatch):
+    rc, out, _ = _run_old_bar_cli(tmp_path, monkeypatch, gc, {"k": 1}, "calibrate", drop_neighbour=False)
+    assert rc == 0
+    report = json.loads(out.read_text())
+    assert report["decision"]["status"] == "QUALIFIED"
+    ctx = report["calibration"]["old_bar_context"]
+    assert ctx["BD"]["old_bar"] == "808-neighbour" and ctx["BD"]["n_takes"] == 1   # the real function ran
+
+
 def test_random_missing_published_replay():
     record = json.loads(TABLES.with_name("missing-random-1317.json").read_text())
     hit = next(h for h in record["calibrated_hits"] if h["seed"] == 127)
@@ -432,9 +518,6 @@ def test_random_missing_requires_positive_trial_count(count, capsys):
 
 # --- #1329: a REFUSED decision must not exit 0 (tools/exit_contract.py) ---------
 
-import exit_contract  # noqa: E402
-
-
 def _run_calibrate_main(tmp_path, tables, extra=()):
     tp = tmp_path / "tables.json"
     tp.write_text(json.dumps({"tables": tables}))
@@ -460,9 +543,12 @@ def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
          "validation": {"sounds": 1, "best_passes": 1}}
     monkeypatch.setattr(gc, "calibrate", lambda tabs, force_k=None: {"k": 3, "status": "ok"})
     monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: q)
-    monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
-    rc, _ = _run_calibrate_main(tmp_path, {})
+    tabs, _ = _old_bar_fixture(tmp_path, drop_neighbour=False)
+    rc, out = _run_calibrate_main(tmp_path, tabs)
     assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    report = json.loads(out.read_text())
+    assert report["decision"]["status"] == "REFUSED"
+    assert report["calibration"]["old_bar_context"]["BD"]["old_bar"] == "808-neighbour"
     assert rc == exit_contract.REFUSED
 
 

@@ -76,6 +76,7 @@ import random
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 
@@ -204,6 +205,10 @@ def rank_rows(old_bar_context: dict) -> list:
     and no bar was calibrated, so nothing here is a verdict."""
     rows = []
     for s, r in old_bar_context.items():
+        if r.get("old_bar") == "REFUSED":
+            # The bar could not be built (#1307): say why, never "no render".
+            rows.append({"sound": s, "ours": None, "refused": r.get("why") or "old bar could not be built"})
+            continue
         o = r.get("ours")
         if not o:
             rows.append({"sound": s, "ours": None})
@@ -224,6 +229,10 @@ def render_table(rows: list) -> str:
     out = ["| rank | sound | ours / MARS best | ours (worst, vs old bar) | MARS best (worst) | MARS takes | bar |",
            "|---|---|---|---|---|---|---|"]
     for i, r in enumerate(rows, 1):
+        if r.get("refused"):
+            why = str(r["refused"]).replace("|", "/").replace("\n", " ")
+            out.append(f"| {i} | {r['sound']} | REFUSED: {why} | | | | |")
+            continue
         if r["ours"] is None:
             out.append(f"| {i} | {r['sound']} | no render | | | | |")
             continue
@@ -300,6 +309,11 @@ def main(argv=None) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
     print(json.dumps(dec, indent=1))
+    refused = sorted(s for s, r in cal["old_bar_context"].items() if r.get("old_bar") == "REFUSED")
+    if refused:
+        print(f"REFUSED: old bar could not be built for {', '.join(refused)}; see old_bar_context in {a.out}",
+              file=sys.stderr)
+        return exit_contract.REFUSED
     return gc.decision_exit(dec)
 
 
