@@ -597,7 +597,7 @@ for pts in ([(1.0, 0.0), (2.0, 1.0)], [(1.0, -1.0), (2.0, 1.0)]):
          boundary=[frozen_kit_arms],
          share={"working": "r1c-working"},
          shadowed_by="at every entry point a drifted kit is refused by an earlier uart_host.image_kit "
-                      "read (r1_candidate.kit_identity at :262, MidiSession.__init__ at :352) before "
+                      "read (r1_candidate.kit_identity at :257, MidiSession.__init__ at :352) before "
                       "frozen_kit() runs; and frozen_kit() catches dx.KitRefused itself at :139",
          note="the two refusing runs are the kit-drift input through each entry point that calls "
               "frozen_kit(): neither reaches :138 with it"),

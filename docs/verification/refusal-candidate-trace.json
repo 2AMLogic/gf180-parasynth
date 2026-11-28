@@ -2,8 +2,8 @@
  "tree_dirty": false,
  "dirty_paths": [],
  "scanner": {
-  "rev": "66994ea9\n",
-  "behind_origin_main": "1",
+  "rev": "8e2eb94e\n",
+  "behind_origin_main": "11",
   "roots": [
    "tools",
    "model",
@@ -1105,14 +1105,14 @@
    "relabelled(cli-total)": 4
   }
  },
- "revision": "ca91665a71039c1bd0ecb6f719eb21593be4a925",
+ "revision": "8e2eb94ef10df2abca010652325cfa4e893bc60b",
  "sessions": {
-  "adf": "66994ea9a165eb99002cd4b5e4a5d8e5f5901315\n",
-  "hh5": "66994ea9a165eb99002cd4b5e4a5d8e5f5901315\n",
-  "toms": "66994ea9a165eb99002cd4b5e4a5d8e5f5901315\n",
-  "headroom": "66994ea9a165eb99002cd4b5e4a5d8e5f5901315\n",
-  "heavy": "66994ea9a165eb99002cd4b5e4a5d8e5f5901315\n",
-  "fpga": "ca91665a71039c1bd0ecb6f719eb21593be4a925\n"
+  "adf": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
+  "hh5": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
+  "toms": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
+  "headroom": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
+  "heavy": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
+  "fpga": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n"
  },
  "traces": [
   {
@@ -1137,7 +1137,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 2.6,
+      "seconds": 2.5,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -1149,7 +1149,7 @@
        "midi_session: REFUSED sysex: system exclusive is not supported (further sysex refusals are counted, not printed)",
        "midi_session: REFUSED realtime: real-time 0xf8 (clock/transport/reset are not supported; the session has no sequencer) (further realtime refusals are counted, not printed)",
        "midi_session: REFUSED poly-aftertouch: polyphonic aftertouch is not supported (further poly-aftertouch refusals are counted, not printed)",
-       "midi_session: re-anchored: device -4 frames off the map",
+       "midi_session: re-anchored: device -20 frames off the map",
        "midi_session: closed (end of input): 210 event packets, 14 refused {'simultaneous': 1, 'sustain': 1, 'pitch-bend': 1, 'program-change': 1, 'mod-unrouted': 1, 'channel': 1, 'unmapped-drum': 1, 'domain': 2, 'cc-unsupported': 1, 'aftertouch': 1, 'sysex': 1, 'realtime': 1, 'poly-aftertouch': 1}, 114 knob values superseded; device queue 0, drops 0, errors 0",
        "midi_session: accepted events by kind {'hit': 14, 'knob': 19, 'note-off': 8, 'note-on': 13, 'panic': 3}",
        "midi_session: simulated device executed 210 scheduled writes, 193 live; errors [], drops 0, queue peak 17"
@@ -1561,9 +1561,9 @@
       "role": "refusing",
       "timeout_s": 1500,
       "tree": "/tmp/trace1576/final/trees/drop_kit_presets",
-      "expect": "escape from midi_session.py:355: the session under test reads the sound table before the oracle does",
+      "expect": "NOT-REACHED at :107; the run escapes from midi_session.py:355, where the session under test reads the same sound table first",
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -1734,7 +1734,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": "BOUND, exit 0",
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -1794,7 +1794,7 @@
       "tree": "/tmp/trace1576/final/trees/drop_kit_writes",
       "expect": "handled at the boundary: except (Refused, dx.KitRefused)",
       "note": null,
-      "seconds": 0.3,
+      "seconds": 0.2,
       "exit_status": 2,
       "traceback": false,
       "stdout_tail": [
@@ -1943,7 +1943,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": "baseline PUBLISHED, exit 0",
       "note": null,
-      "seconds": 0.4,
+      "seconds": 0.3,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -1994,7 +1994,7 @@
       "tree": "/tmp/trace1576/final/trees/append_xdc_unstated_query",
       "expect": "escape: run_case() calls the builder outside its try",
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -2207,7 +2207,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": "baseline PUBLISHED, exit 0",
       "note": null,
-      "seconds": 0.4,
+      "seconds": 0.3,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -2258,7 +2258,7 @@
       "tree": "/tmp/trace1576/final/trees/append_xdc_multicycle",
       "expect": "escape: run_case() calls the builder outside its try",
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -2475,7 +2475,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 112.0,
+      "seconds": 121.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -2511,9 +2511,9 @@
       "site_executed": [
        "fpga/release/glide_boundary.py:242"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 1
+      "share": null
      }
     ],
     "refusing": null,
@@ -2548,9 +2548,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -2719,7 +2719,7 @@
       "tree": "/tmp/trace1576/final/trees/drop_kit_writes",
       "expect": "NOT-REACHED, exit 2: kit_identity() refuses the drifted kit first",
       "note": null,
-      "seconds": 0.4,
+      "seconds": 0.3,
       "exit_status": 2,
       "traceback": false,
       "stdout_tail": [
@@ -2751,7 +2751,7 @@
       "role": "refusing",
       "timeout_s": 1500,
       "tree": "/tmp/trace1576/final/trees/drop_kit_writes",
-      "expect": "escape, but not from here: MidiSession.__init__ reads the kit first (midi_session.py:352)",
+      "expect": "NOT-REACHED at :138: MidiSession.__init__ reads the kit first (midi_session.py:352), and that escapes",
       "note": null,
       "seconds": 0.2,
       "exit_status": 1,
@@ -2806,7 +2806,7 @@
       "tree": "/tmp/trace1576/final/trees/drop_kit_writes",
       "expect": null,
       "note": "in a clone whose r1-kit.json has drifted",
-      "seconds": 0.3,
+      "seconds": 0.2,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -2901,7 +2901,7 @@
      }
     ]
    },
-   "shadowed_by": "at every entry point a drifted kit is refused by an earlier uart_host.image_kit read (r1_candidate.kit_identity at :262, MidiSession.__init__ at :352) before frozen_kit() runs; and frozen_kit() catches dx.KitRefused itself at :139"
+   "shadowed_by": "at every entry point a drifted kit is refused by an earlier uart_host.image_kit read (r1_candidate.kit_identity at :257, MidiSession.__init__ at :352) before frozen_kit() runs; and frozen_kit() catches dx.KitRefused itself at :139"
   },
   {
    "id": "fpga/release/r1_candidate.py:279",
@@ -3056,7 +3056,7 @@
       "tree": "/tmp/trace1576/final/trees/drop_kit_writes",
       "expect": "NOT-REACHED: kit_identity() refuses the drifted kit before commands() runs",
       "note": null,
-      "seconds": 0.4,
+      "seconds": 0.5,
       "exit_status": 2,
       "traceback": false,
       "stdout_tail": [
@@ -3087,7 +3087,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": "escape: release_manifest.Refused is a sibling of the except dx.KitRefused here and of check()'s except Refused",
       "note": "PR #1574's control shape: uart_host.main returns 1",
-      "seconds": 0.5,
+      "seconds": 0.4,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -3976,7 +3976,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -4026,7 +4026,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -4075,7 +4075,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -4124,7 +4124,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -4175,7 +4175,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -4225,7 +4225,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -4488,7 +4488,7 @@
       "role": "refusing",
       "timeout_s": 1500,
       "tree": "/tmp/trace1576/final/trees/drop_kit_writes",
-      "expect": "escape, but not from here: MidiSession.__init__ reads the kit first (midi_session.py:352)",
+      "expect": "NOT-REACHED at :138: MidiSession.__init__ reads the kit first (midi_session.py:352), and that escapes",
       "note": null,
       "seconds": 0.2,
       "exit_status": 1,
@@ -4558,7 +4558,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.9,
+      "seconds": 1.0,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -4795,9 +4795,9 @@
       "role": "refusing",
       "timeout_s": 1500,
       "tree": "/tmp/trace1576/final/trees/drop_kit_presets",
-      "expect": "escape from midi_session.py:355: the session under test reads the sound table before the oracle does",
+      "expect": "NOT-REACHED at :107; the run escapes from midi_session.py:355, where the session under test reads the same sound table first",
       "note": null,
-      "seconds": 0.2,
+      "seconds": 0.1,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -4863,7 +4863,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 104.2,
+      "seconds": 107.2,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [],
@@ -4897,9 +4897,9 @@
       "site_executed": [
        "model/bd_pedestal.py:483"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 1
+      "share": null
      }
     ],
     "refusing": null,
@@ -4912,7 +4912,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 10.3,
+      "seconds": 10.8,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -4930,9 +4930,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -4955,7 +4955,7 @@
       "tree": "/tmp/trace1576/final/trees/as-traced",
       "expect": null,
       "note": "in a clone: sweep writes docs/res-tuning/sweeps.*",
-      "seconds": 704.3,
+      "seconds": 739.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -5017,9 +5017,9 @@
       "site_executed": [
        "model/res_tuning.py:442"
       ],
+      "calls_total": 2,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 2
+      "share": null
      }
     ],
     "refusing": null,
@@ -5032,7 +5032,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.0,
+      "seconds": 0.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -5051,9 +5051,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -5079,7 +5079,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": "the whole F1 train: the tool's own default, --frames 20000, is shorter than its first analysis window and is refused after :449 ran",
-      "seconds": 500.4,
+      "seconds": 558.6,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -5115,9 +5115,9 @@
       "site_executed": [
        "tools/f1_rtl_filter_path.py:449"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 1
+      "share": null
      }
     ],
     "refusing": [
@@ -5132,7 +5132,7 @@
       "tree": "/tmp/trace1576/final/trees/as-traced",
       "expect": "escape: a fresh checkout has no frozen reference audio, and refprofile.Refused is a sibling of the local handler",
       "note": null,
-      "seconds": 1.3,
+      "seconds": 1.2,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -5279,9 +5279,9 @@
       "site_executed": [
        "tools/f1_rtl_filter_path.py:449"
       ],
+      "calls_total": 1,
       "verdict": "ESCAPED",
-      "share": null,
-      "calls_total": 1
+      "share": null
      }
     ],
     "boundary": null
@@ -5308,7 +5308,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 70.2,
+      "seconds": 65.9,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -5553,9 +5553,9 @@
       "site_executed": [
        "tools/measure_pulse2x_headroom.py:191"
       ],
+      "calls_total": 64,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 64
+      "share": null
      }
     ],
     "refusing": null,
@@ -5568,7 +5568,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 1.9,
+      "seconds": 2.0,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -5586,9 +5586,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -5615,7 +5615,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 67.7,
+      "seconds": 66.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -5713,9 +5713,9 @@
       "site_executed": [
        "tools/measure_pulse2x_headroom.py:264"
       ],
+      "calls_total": 4,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 4
+      "share": null
      }
     ],
     "refusing": [
@@ -5733,7 +5733,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": "? a zero candidate gain silences the pulse segments; whether the pitch estimator refuses them is what this run asks",
       "note": null,
-      "seconds": 63.2,
+      "seconds": 60.6,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [
@@ -5981,9 +5981,9 @@
       "site_executed": [
        "tools/measure_pulse2x_headroom.py:264"
       ],
+      "calls_total": 2,
       "verdict": "ESCAPED",
-      "share": null,
-      "calls_total": 2
+      "share": null
      },
      {
       "entry": "tools/measure_pulse2x_headroom.py",
@@ -5999,7 +5999,7 @@
       "tree": "/tmp/trace1576/final/trees/alter_m5a_audio",
       "expect": "escape: the frozen M5A reference audio no longer hashes, and this tool has no handler at all",
       "note": null,
-      "seconds": 1.1,
+      "seconds": 1.4,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -6218,9 +6218,9 @@
       "site_executed": [
        "tools/measure_pulse2x_headroom.py:264"
       ],
+      "calls_total": 1,
       "verdict": "ESCAPED",
-      "share": null,
-      "calls_total": 1
+      "share": null
      }
     ],
     "boundary": null
@@ -6248,7 +6248,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": "the shortest phrase that has notes: dense_drums has none, so model_render never makes a voice for it",
-      "seconds": 3.9,
+      "seconds": 12.0,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6347,9 +6347,9 @@
       "site_executed": [
        "tools/performance_suite.py:629"
       ],
+      "calls_total": 5,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 5
+      "share": null
      }
     ],
     "refusing": null,
@@ -6360,23 +6360,19 @@
        "--backend",
        "model",
        "--engine",
-       "r2"
+       "pulse2x"
       ],
       "role": "boundary",
       "timeout_s": 900,
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
-      "expect": "REFUSED, exit 2: --engine selects the synthtop backend only",
-      "note": null,
-      "seconds": 0.1,
+      "expect": null,
+      "note": "a VALID --engine choice with the model backend: the tool's own boundary, not argparse's (an invalid choice is rejected before main() runs)",
+      "seconds": 0.8,
       "exit_status": 2,
       "traceback": false,
       "stdout_tail": [],
       "stderr_tail": [
-       "usage: performance_suite.py [-h] [--backend {reference,model,synthtop}]",
-       "                            [--engine {r1,pulse2x,baseline}] [--inject INJECT]",
-       "                            [--expect-fail] [--phrase PHRASE] [--out OUT]",
-       "                            [--matrix]",
-       "performance_suite.py: error: argument --engine: invalid choice: 'r2' (choose from 'r1', 'pulse2x', 'baseline')"
+       "REFUSED: --engine selects the synthtop backend's chip build only"
       ],
       "harness_frame_in_traceback": false,
       "wrap_missing": [],
@@ -6386,9 +6382,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      },
      {
       "entry": "/tmp/trace1576/final/tools_performance_suite.py_629/1/make-voice-arms.py",
@@ -6398,7 +6394,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.9,
+      "seconds": 3.3,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6416,9 +6412,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -6442,7 +6438,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6488,9 +6484,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:441"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 1
+      "share": "adf-working"
      }
     ],
     "refusing": null,
@@ -6503,7 +6499,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.4,
+      "seconds": 8.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6523,9 +6519,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -6549,7 +6545,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6680,9 +6676,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:446"
       ],
+      "calls_total": 6,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 6
+      "share": "adf-working"
      }
     ],
     "refusing": null,
@@ -6695,7 +6691,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.3,
+      "seconds": 7.4,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6715,9 +6711,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -6741,7 +6737,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6855,9 +6851,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:467"
       ],
+      "calls_total": 5,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 5
+      "share": "adf-working"
      }
     ],
     "refusing": null,
@@ -6870,7 +6866,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.4,
+      "seconds": 8.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6890,9 +6886,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -6916,7 +6912,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6962,9 +6958,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:489"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 1
+      "share": "adf-working"
      }
     ],
     "refusing": null,
@@ -6977,7 +6973,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.4,
+      "seconds": 8.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -6997,9 +6993,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -7023,7 +7019,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -7069,9 +7065,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:490"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 1
+      "share": "adf-working"
      }
     ],
     "refusing": null,
@@ -7084,7 +7080,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.7,
+      "seconds": 7.9,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -7104,9 +7100,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -7130,7 +7126,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -7176,9 +7172,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:540"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 1
+      "share": "adf-working"
      }
     ],
     "refusing": null,
@@ -7191,7 +7187,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.7,
+      "seconds": 7.1,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -7211,9 +7207,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -7237,7 +7233,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -7317,9 +7313,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:611"
       ],
+      "calls_total": 3,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 3
+      "share": "adf-working"
      }
     ],
     "refusing": [
@@ -7334,7 +7330,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 105.9,
+      "seconds": 79.2,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -7469,9 +7465,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:611"
       ],
+      "calls_total": 1,
       "verdict": "ESCAPED",
-      "share": "adf-cut-bd5050",
-      "calls_total": 1
+      "share": "adf-cut-bd5050"
      }
     ],
     "boundary": null
@@ -7495,7 +7491,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -7575,9 +7571,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:612"
       ],
+      "calls_total": 3,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 3
+      "share": "adf-working"
      }
     ],
     "refusing": [
@@ -7592,7 +7588,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 80.3,
+      "seconds": 95.6,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -7727,9 +7723,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:612"
       ],
+      "calls_total": 1,
       "verdict": "ESCAPED",
-      "share": "adf-cut-sd5050",
-      "calls_total": 1
+      "share": "adf-cut-sd5050"
      }
     ],
     "boundary": null
@@ -7753,7 +7749,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -7799,9 +7795,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:640"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 1
+      "share": "adf-working"
      }
     ],
     "refusing": [
@@ -7816,7 +7812,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 105.9,
+      "seconds": 79.2,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -7855,9 +7851,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": "adf-cut-bd5050",
-      "calls_total": 0
+      "share": "adf-cut-bd5050"
      }
     ],
     "boundary": null
@@ -7882,7 +7878,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 95.9,
+      "seconds": 107.7,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -7928,9 +7924,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:687"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": "adf-working",
-      "calls_total": 1
+      "share": "adf-working"
      }
     ],
     "refusing": [
@@ -8064,9 +8060,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:687"
       ],
+      "calls_total": 1,
       "verdict": "ESCAPED",
-      "share": null,
-      "calls_total": 1
+      "share": null
      },
      {
       "entry": "tools/probes/audio_distance_floor.py",
@@ -8079,7 +8075,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.9,
+      "seconds": 1.0,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [],
@@ -8200,9 +8196,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:687"
       ],
+      "calls_total": 1,
       "verdict": "ESCAPED",
-      "share": null,
-      "calls_total": 1
+      "share": null
      }
     ],
     "boundary": null
@@ -8226,7 +8222,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 1.0,
+      "seconds": 1.1,
       "exit_status": 2,
       "traceback": false,
       "stdout_tail": [
@@ -8459,9 +8455,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:705"
       ],
+      "calls_total": 25,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 25
+      "share": null
      }
     ],
     "refusing": [
@@ -8598,9 +8594,9 @@
       "site_executed": [
        "tools/probes/audio_distance_floor.py:705"
       ],
+      "calls_total": 1,
       "verdict": "ESCAPED",
-      "share": "adf-t20-cut",
-      "calls_total": 1
+      "share": "adf-t20-cut"
      }
     ],
     "boundary": null
@@ -8627,7 +8623,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 119.9,
+      "seconds": 135.5,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -8770,9 +8766,9 @@
       "site_executed": [
        "tools/probes/hihat/hh_probe5.py:531"
       ],
+      "calls_total": 6,
       "verdict": "RETURNED",
-      "share": "hh5-working",
-      "calls_total": 6
+      "share": "hh5-working"
      }
     ],
     "refusing": [
@@ -8790,7 +8786,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 76.6,
+      "seconds": 55.7,
       "exit_status": 1,
       "traceback": true,
       "stdout_tail": [
@@ -8940,9 +8936,9 @@
       "site_executed": [
        "tools/probes/hihat/hh_probe5.py:531"
       ],
+      "calls_total": 1,
       "verdict": "ESCAPED",
-      "share": "hh5-cut-dev",
-      "calls_total": 1
+      "share": "hh5-cut-dev"
      }
     ],
     "boundary": null
@@ -8969,7 +8965,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 119.9,
+      "seconds": 135.5,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9112,9 +9108,9 @@
       "site_executed": [
        "tools/probes/hihat/hh_probe5.py:532"
       ],
+      "calls_total": 6,
       "verdict": "RETURNED",
-      "share": "hh5-working",
-      "calls_total": 6
+      "share": "hh5-working"
      }
     ],
     "refusing": null,
@@ -9127,7 +9123,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 8.4,
+      "seconds": 6.8,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9146,9 +9142,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -9179,7 +9175,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 55.2,
+      "seconds": 67.4,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9229,9 +9225,9 @@
       "site_executed": [
        "tools/probes/tom_conga_gate.py:446"
       ],
+      "calls_total": 2,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 2
+      "share": null
      }
     ],
     "refusing": null,
@@ -9244,7 +9240,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 8.6,
+      "seconds": 7.8,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9265,9 +9261,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -9294,123 +9290,25 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 84.4,
-      "exit_status": 0,
+      "seconds": 0.1,
+      "exit_status": 2,
       "traceback": false,
       "stdout_tail": [
-       "{}"
+       "REFUSED: uncommitted changes in model, tools, docs/scorecard/tom-distortion-593/prereg.json:",
+       "M tools/refusal_candidate_traces.py"
       ],
       "stderr_tail": [],
       "harness_frame_in_traceback": false,
       "wrap_missing": [],
-      "system_exit": 0,
+      "system_exit": 2,
       "uncaught": null,
       "all_raised": [],
-      "calls": [
-       {
-        "callee": "run_case.render_drum_solo",
-        "caller": {
-         "file": "tools/probes/tom_distortion.py",
-         "line": 1579,
-         "first": 1579,
-         "last": 1579,
-         "fn": "baseline"
-        },
-        "args": [
-         "LT"
-        ],
-        "kwargs": {},
-        "outcome": "returned",
-        "returned": "tuple(2)"
-       },
-       {
-        "callee": "run_case.render_drum_solo",
-        "caller": {
-         "file": "tools/probes/tom_distortion.py",
-         "line": 1579,
-         "first": 1579,
-         "last": 1579,
-         "fn": "baseline"
-        },
-        "args": [
-         "MT"
-        ],
-        "kwargs": {},
-        "outcome": "returned",
-        "returned": "tuple(2)"
-       },
-       {
-        "callee": "run_case.render_drum_solo",
-        "caller": {
-         "file": "tools/probes/tom_distortion.py",
-         "line": 1579,
-         "first": 1579,
-         "last": 1579,
-         "fn": "baseline"
-        },
-        "args": [
-         "HT"
-        ],
-        "kwargs": {},
-        "outcome": "returned",
-        "returned": "tuple(2)"
-       },
-       {
-        "callee": "run_case.render_drum_solo",
-        "caller": {
-         "file": "tools/probes/tom_distortion.py",
-         "line": 1579,
-         "first": 1579,
-         "last": 1579,
-         "fn": "baseline"
-        },
-        "args": [
-         "LC"
-        ],
-        "kwargs": {},
-        "outcome": "returned",
-        "returned": "tuple(2)"
-       },
-       {
-        "callee": "run_case.render_drum_solo",
-        "caller": {
-         "file": "tools/probes/tom_distortion.py",
-         "line": 1579,
-         "first": 1579,
-         "last": 1579,
-         "fn": "baseline"
-        },
-        "args": [
-         "MC"
-        ],
-        "kwargs": {},
-        "outcome": "returned",
-        "returned": "tuple(2)"
-       },
-       {
-        "callee": "run_case.render_drum_solo",
-        "caller": {
-         "file": "tools/probes/tom_distortion.py",
-         "line": 1579,
-         "first": 1579,
-         "last": 1579,
-         "fn": "baseline"
-        },
-        "args": [
-         "HC"
-        ],
-        "kwargs": {},
-        "outcome": "returned",
-        "returned": "tuple(2)"
-       }
-      ],
+      "calls": [],
       "follows": [],
-      "site_executed": [
-       "tools/probes/tom_distortion.py:1579"
-      ],
-      "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 6
+      "site_executed": [],
+      "calls_total": 0,
+      "verdict": "NOT-REACHED",
+      "share": null
      }
     ],
     "refusing": null,
@@ -9423,7 +9321,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.1,
+      "seconds": 7.5,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9444,9 +9342,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -9475,81 +9373,25 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 88.1,
-      "exit_status": 0,
+      "seconds": 0.9,
+      "exit_status": 2,
       "traceback": false,
       "stdout_tail": [
-       "LT25 [development] REFUSED 808-route-disagreement ",
-       "LT50 [development] MEASURED  808 E +0.0272 tau 54.7 ms | ours E +0.0764 tau 14.7 ms",
-       "LT75 [development] MEASURED  808 E +0.0472 tau 50.5 ms | ours E +0.0860 tau 15.3 ms",
-       "MT50 [development] MEASURED  808 E +0.0238 tau 33.8 ms | ours E +0.0696 tau 15.7 ms",
-       "HT25 [development] REFUSED no-tuning-reference ",
-       "HT50 [development] REFUSED no-tuning-reference ",
-       "HT75 [development] REFUSED no-tuning-reference"
+       "REFUSED: dirty-tree: uncommitted changes in model, tools, fpga, docs/scorecard/tom-pitch-drop-592/prereg.json:",
+       "M tools/refusal_candidate_traces.py"
       ],
       "stderr_tail": [],
       "harness_frame_in_traceback": false,
       "wrap_missing": [],
-      "system_exit": 0,
+      "system_exit": 2,
       "uncaught": null,
       "all_raised": [],
-      "calls": [
-       {
-        "callee": "run_case.render_drum_solo",
-        "caller": {
-         "file": "tools/probes/tom_pitch_drop_fischer.py",
-         "line": 771,
-         "first": 771,
-         "last": 771,
-         "fn": "assert_unity_is_shipped"
-        },
-        "args": [
-         "LT"
-        ],
-        "kwargs": {},
-        "outcome": "returned",
-        "returned": "tuple(2)"
-       },
-       {
-        "callee": "run_case.render_drum_solo",
-        "caller": {
-         "file": "tools/probes/tom_pitch_drop_fischer.py",
-         "line": 771,
-         "first": 771,
-         "last": 771,
-         "fn": "assert_unity_is_shipped"
-        },
-        "args": [
-         "MT"
-        ],
-        "kwargs": {},
-        "outcome": "returned",
-        "returned": "tuple(2)"
-       },
-       {
-        "callee": "run_case.render_drum_solo",
-        "caller": {
-         "file": "tools/probes/tom_pitch_drop_fischer.py",
-         "line": 771,
-         "first": 771,
-         "last": 771,
-         "fn": "assert_unity_is_shipped"
-        },
-        "args": [
-         "HT"
-        ],
-        "kwargs": {},
-        "outcome": "returned",
-        "returned": "tuple(2)"
-       }
-      ],
+      "calls": [],
       "follows": [],
-      "site_executed": [
-       "tools/probes/tom_pitch_drop_fischer.py:771"
-      ],
-      "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 3
+      "site_executed": [],
+      "calls_total": 0,
+      "verdict": "NOT-REACHED",
+      "share": null
      }
     ],
     "refusing": null,
@@ -9562,7 +9404,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.5,
+      "seconds": 7.6,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9583,9 +9425,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -9654,9 +9496,9 @@
       "site_executed": [
        "tools/verify_m5a_filter2x_i2s.py:50"
       ],
+      "calls_total": 1,
       "verdict": "RETURNED",
-      "share": null,
-      "calls_total": 1
+      "share": null
      }
     ],
     "refusing": null,
@@ -9691,9 +9533,9 @@
       "calls": [],
       "follows": [],
       "site_executed": [],
+      "calls_total": 0,
       "verdict": "NOT-REACHED",
-      "share": null,
-      "calls_total": 0
+      "share": null
      }
     ]
    },
@@ -9702,6 +9544,7 @@
  ],
  "production_revision": "ebba993d32eef6484b9f956b452ec263db87ff2f",
  "touched_only": [
+  "docs/verification/refusal-candidate-trace.json",
   "tools/refusal_candidate_trace.py",
   "tools/refusal_candidate_traces.py",
   "tools/test_refusal_candidate_trace.py"
