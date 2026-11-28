@@ -47,6 +47,7 @@ import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
+import exit_contract  # noqa: E402
 import voice_fx as vf  # noqa: E402
 import refusal
 
@@ -603,6 +604,18 @@ def _output_status(row):
     return row["verdict"]
 
 
+def _output_refusal(row):
+    """The output stage's refusal text on a row whose verdict is MEASURED, else None.
+
+    measure_point keeps the verdict on a row whose stage refused and writes
+    {"refused": "<text>"} in place of that stage's spectrum, so the verdict
+    alone cannot tell a reader that the row holds no number (#1770)."""
+    if row["verdict"] != "MEASURED":
+        return None
+    output = row["stages"].get("output")
+    return output["refused"] if isinstance(output, dict) and "refused" in output else None
+
+
 def _resolve_measurement(rows):
     """Count repeated evidence once. Disagreement withholds the measurement,
     including when one run measured and another refused. Group and nominal
@@ -724,6 +737,33 @@ def summarize(paths) -> dict:
                              "unavailable_pairs": unavailable}}
 
 
+def _refusal_lines(summary) -> list[str]:
+    """One REFUSED line per kind of result the summary gives no number to, else [].
+
+    `refused` holds the runs whose own output did not measure. A result can
+    also be withheld with every run measured -- duplicate runs of one point
+    that disagree, or a candidate with no R1 row -- which the summary records
+    in `confirmation.unavailable_pairs` and in a localization point's
+    `refused`, not in `refused` (#1770). Those are named only when no run
+    refused: a refused run already accounts for its own pair and point."""
+    runs = summary["refused"]
+    if runs:
+        named = "; ".join(f"{e['engine']} note {e['note']}: {e['reason']}" for e in runs)
+        count = "1 run holds" if len(runs) == 1 else f"{len(runs)} runs hold"
+        return [f"REFUSED: {count} no output number, so this summary is NO-VERDICT, not a pass: {named}"]
+    pairs = summary["confirmation"]["unavailable_pairs"]
+    points = [entry for entry in summary["localization"] if "refused" in entry]
+    if not pairs and not points:
+        return []
+    named = "; ".join(
+        [f"{x['wave']} note {x['note']} c{x['cutoff']} q{x['q']} d{x['drive']}: {x['verdict']}" for x in pairs]
+        + [f"{entry['engine']} {entry['wave']} note {entry['note']}: {entry['refused']}" for entry in points])
+    n = len(pairs) + len(points)
+    noun, verb = ("result", "holds") if n == 1 else ("results", "hold")
+    return [f"REFUSED: {n} {noun} {verb} no verdict although every run measured "
+            f"(duplicate runs that disagree, or no R1 row), so this summary is NO-VERDICT, not a pass: {named}"]
+
+
 def provenance() -> dict:
     srcs = ["tools/mono_artifact_probe.py", "model/voice_fx.py", "model/filter_rate_chain.py",
             "model/fixed.py"]
@@ -770,7 +810,10 @@ def main(argv=None) -> int:
             res = measure_point(a.engine, a.note, held_patch(
                 waves=(a.wave,) * 3, cutoff=(a.cutoff, a.cutoff), q=a.q, drive=a.drive),
                 inject=a.inject)
-            rc = 0 if res["verdict"] == "MEASURED" else 1
+            why = _output_refusal(res)
+            if why is not None:
+                print(f"REFUSED: {a.engine} note {a.note}: output stage refused: {why}")
+            rc = exit_contract.REFUSED if why is not None else (0 if res["verdict"] == "MEASURED" else 1)
         elif a.cmd == "controls":
             res = controls(a.engine, a.note, a.wave)
             for inj, ok in res["caught"].items():
@@ -779,7 +822,10 @@ def main(argv=None) -> int:
         elif a.cmd == "summarize":
             res = summarize(a.records)
             print(json.dumps(res["confirmation"], indent=1))
-            rc = 0
+            refusals = _refusal_lines(res)
+            for line in refusals:
+                print(line)
+            rc = exit_contract.REFUSED if refusals else 0
         elif a.cmd == "drive":
             res = drive_sweep()
             rc = 0
@@ -796,7 +842,7 @@ def main(argv=None) -> int:
             rc = 0
     except Refused as e:
         print(f"REFUSED: {e}")
-        return 2
+        return exit_contract.REFUSED
     res["provenance"] = provenance()
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1, default=float) + "\n")

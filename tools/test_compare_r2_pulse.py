@@ -9,6 +9,7 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import compare_r2_pulse as c  # noqa: E402
+import exit_contract  # noqa: E402
 import mono_artifact_probe as probe
 
 
@@ -144,7 +145,7 @@ def _reports_with_unavailable(tmp_path, rows):
     report = json.loads(comparison.read_text())
     assert report["accepted_under_declared_rule"] == "NO VERDICT"
     summary = tmp_path / "summary.json"
-    assert probe.main(["summarize", str(record), "--out", str(summary)]) == 0
+    assert probe.main(["summarize", str(record), "--out", str(summary)]) == exit_contract.REFUSED
     return json.loads(summary.read_text()), report
 
 

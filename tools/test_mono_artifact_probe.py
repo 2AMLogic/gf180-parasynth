@@ -7,6 +7,8 @@ exercise the voice only to show the controls turn the probe red.
 """
 from __future__ import annotations
 
+import gzip
+import json
 import math
 import pathlib
 import sys
@@ -15,6 +17,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import mono_artifact_probe as p  # noqa: E402
 
 SR = 48_000
@@ -172,3 +175,127 @@ def test_a_control_moved_the_wrong_way_is_not_caught():
     assert not p._moved_way("image_dbfs", -60.0, -60.5, +1)        # inside MOVE_DB
     assert p._moved_way("output_rail_samples", 0, 5, +1)
     assert not p._moved_way("output_rail_samples", 5, 0, +1)
+
+
+# ---- exit status: a row that holds no output number is no verdict (#1770) ----
+LOW_NOTE = 12                # 16.35 Hz is 12.3 bins of the window: under MIN_BINS_PER_F0, every stage refuses
+FIRST_RESOLVED_NOTE = 17     # 16.4 bins: the first note whose stages measure
+SAW = dict(waves=("saw",) * 3)
+ARCHIVED_SWEEPS = ("probe/sweep2", "probe-rect074/sweep", "pulse-level-repair/fresh",
+                   "pulse-level-repair/sdrv", "r2-compare/s074")
+
+
+def _record(tmp_path, name, *points):
+    """A sweep-shaped record built by the real measure_point: (engine, note[, inject[, patch overrides]])."""
+    rows = []
+    for point in points:
+        engine, note = point[:2]
+        inject = point[2] if len(point) > 2 else ""
+        over = point[3] if len(point) > 3 else {}
+        rows.append(p.measure_point(engine, note, p.held_patch(**{**SAW, **over}), inject=inject))
+    path = tmp_path / name
+    path.write_text(json.dumps({"rows": rows}, default=float))
+    return path, rows
+
+
+def _stdout(capsys):
+    """(the printed tally, the REFUSED lines, the last line) of a main() run."""
+    lines = capsys.readouterr().out.splitlines()
+    first = next(i for i, line in enumerate(lines) if line.startswith(("REFUSED:", "wrote ")))
+    return (json.loads("\n".join(lines[:first])), [line for line in lines if line.startswith("REFUSED:")],
+            lines[-1])
+
+
+def test_summarize_over_a_refused_row_exits_refused_and_keeps_the_measured_tally(tmp_path, capsys):
+    record, rows = _record(tmp_path, "mixed.json", ("r1", LOW_NOTE), ("r1", 24), ("pulse2x", 24))
+    low, = (r for r in rows if r["note"] == LOW_NOTE)
+    assert low["verdict"] == "MEASURED" and all("refused" in s for s in low["stages"].values())
+    out = tmp_path / "summary.json"
+    assert p.main(["summarize", str(record), "--out", str(out)]) == exit_contract.REFUSED
+    tally, refused, last = _stdout(capsys)
+    written = json.loads(out.read_text())
+    assert tally == written["confirmation"]
+    assert tally["untouched"]["points"] == 1                 # the pair that measured is still tallied
+    assert [(e["engine"], e["note"]) for e in written["refused"]] == [("r1", LOW_NOTE)]
+    assert refused == [f"REFUSED: 1 run holds no output number, so this summary is NO-VERDICT, not a pass: "
+                       f"r1 note 12: output REFUSED: {low['stages']['output']['refused']}"]
+    assert last == f"wrote {out} (exit {exit_contract.REFUSED})"
+
+
+WITHHELD = (" no verdict although every run measured (duplicate runs that disagree, or no R1 row), "
+            "so this summary is NO-VERDICT, not a pass: ")
+
+
+def test_summarize_over_disagreeing_duplicate_runs_exits_refused(tmp_path, capsys):
+    """Each run measured, so `refused` is empty; the pair and its preset point are withheld all the same."""
+    record, rows = _record(tmp_path, "dup.json", ("r1", 84), ("pulse2x", 84), ("r1", 84, "SPUR_M70"))
+    assert all(p._output_status(r) == "MEASURED" for r in rows)
+    out = tmp_path / "summary.json"
+    assert p.main(["summarize", str(record), "--out", str(out)]) == exit_contract.REFUSED
+    written = json.loads(out.read_text())
+    assert written["refused"] == []
+    pair, = written["confirmation"]["unavailable_pairs"]
+    point, = (entry for entry in written["localization"] if "refused" in entry)
+    assert "conflicting duplicate" in pair["verdict"] and "conflicting duplicate" in point["refused"]
+    assert _stdout(capsys)[1] == [
+        f"REFUSED: 2 results hold{WITHHELD}"
+        f"saw note 84 c20000 q0.0 d0.75: {pair['verdict']}; "
+        f"r1 saw note 84: {point['refused']}"]
+
+
+def test_summarize_over_a_candidate_without_its_r1_row_exits_refused(tmp_path, capsys):
+    record, rows = _record(tmp_path, "nor1.json", ("r1", 84), ("pulse2x", 84), ("pulse2x", 84, "", dict(drive=1.6)))
+    assert all(p._output_status(r) == "MEASURED" for r in rows)
+    out = tmp_path / "summary.json"
+    assert p.main(["summarize", str(record), "--out", str(out)]) == exit_contract.REFUSED
+    written = json.loads(out.read_text())
+    assert written["refused"] == []
+    assert [x["verdict"] for x in written["confirmation"]["unavailable_pairs"]] == [p.NO_R1_ROW]
+    assert _stdout(capsys)[1] == [f"REFUSED: 1 result holds{WITHHELD}"
+                                  f"saw note 84 c20000 q0.0 d1.6: {p.NO_R1_ROW}"]
+
+
+def test_summarize_over_a_clean_record_exits_zero_and_prints_no_refusal(tmp_path, capsys):
+    record, rows = _record(tmp_path, "clean.json", ("r1", FIRST_RESOLVED_NOTE), ("r1", 24), ("pulse2x", 24))
+    assert not any("refused" in s for r in rows for s in r["stages"].values())
+    out = tmp_path / "summary.json"
+    assert p.main(["summarize", str(record), "--out", str(out)]) == exit_contract.PASS
+    tally, refused, last = _stdout(capsys)
+    assert not refused and last == f"wrote {out} (exit 0)"
+    assert tally["untouched"]["points"] == 1
+    assert json.loads(out.read_text())["refused"] == []
+
+
+@pytest.mark.parametrize("rel", ARCHIVED_SWEEPS)
+def test_summarize_over_the_real_sweeps_exits_zero(tmp_path, capsys, rel):
+    """The gate is satisfiable: no archived sweep record holds a refused row."""
+    archive = p.ROOT / "docs/scorecard/m5-artifacts-333"
+    paths = []
+    for part in (0, 1):
+        plain = tmp_path / f"{part}.json"
+        plain.write_bytes(gzip.decompress((archive / f"{rel}-{part}.json.gz").read_bytes()))
+        paths.append(str(plain))
+    out = tmp_path / "summary.json"
+    assert p.main(["summarize", *paths, "--out", str(out)]) == exit_contract.PASS
+    assert json.loads(out.read_text())["refused"] == []
+    assert not _stdout(capsys)[1]
+
+
+def test_point_on_an_unresolvable_note_exits_refused_and_writes_the_row(tmp_path, capsys):
+    out = tmp_path / "point.json"
+    assert p.main(["point", "--note", str(LOW_NOTE), "--out", str(out)]) == exit_contract.REFUSED
+    lines = capsys.readouterr().out.splitlines()
+    row = json.loads(out.read_text())
+    assert row["verdict"] == "MEASURED" and all("refused" in s for s in row["stages"].values())
+    assert [line for line in lines if line.startswith("REFUSED:")] == [
+        f"REFUSED: r1 note {LOW_NOTE}: output stage refused: {row['stages']['output']['refused']}"]
+    assert lines[-1] == f"wrote {out} (exit {exit_contract.REFUSED})"
+
+
+def test_point_on_a_resolved_note_and_on_silence_keep_their_exit_status(tmp_path, capsys):
+    out = tmp_path / "point.json"
+    assert p.main(["point", "--note", str(FIRST_RESOLVED_NOTE), "--out", str(out)]) == exit_contract.PASS
+    assert not [line for line in capsys.readouterr().out.splitlines() if line.startswith("REFUSED:")]
+    # A silent output stays FAIL-ACTIVITY, exit 1: #1691 left that mapping unassessed and #1770 does not move it.
+    assert p.main(["point", "--note", "84", "--inject", "SILENCE", "--out", str(out)]) == exit_contract.FAIL
+    assert json.loads(out.read_text())["verdict"] == "FAIL-ACTIVITY"
