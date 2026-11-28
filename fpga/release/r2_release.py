@@ -49,6 +49,7 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "audition", ROOT / "rtl-s
         sys.path.insert(0, str(_p))
 
 import r1_release as r1r                                    # noqa: E402
+import refusal                                              # noqa: E402
 
 MANIFEST = HERE / "r2-2025.1.json"
 PUB_DIR = ROOT / "fpga/reports/arty/r2-2025.1"
@@ -392,7 +393,7 @@ def stale_control(case: str, out: Path) -> int:
         stale_path.write_text(json.dumps(stale, indent=2) + "\n")
         verdict, detail = check(stale_path, fresh)
         print(f"  | substituted:     {PREFIX}{verdict} -- {detail}")
-    except Refused as exc:
+    except refusal.Refused as exc:
         return say("REFUSED", str(exc))
     if verdict == "BOUND":
         return say("BOUND", f"r2_release ACCEPTED a manifest with {changed} substituted: "
