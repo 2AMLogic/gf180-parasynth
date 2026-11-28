@@ -12,14 +12,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import math
 import pathlib
 import subprocess
 from datetime import datetime, timezone
 
 import numpy as np
-from scipy.io import wavfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 import sys
@@ -27,6 +25,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am  # noqa: E402
 from measure_mono_m5a_reference import envelope_timing  # noqa: E402
+import mono_m5a_score as m5a  # noqa: E402
 import refusal
 import run_all  # noqa: E402
 
@@ -58,17 +57,10 @@ def _sha256(path: pathlib.Path) -> str:
 def _reference_preconditions(manifest_path: pathlib.Path) -> tuple[dict, pathlib.Path, str]:
     if not manifest_path.is_file():
         raise Refused(f"manifest is missing: {manifest_path}")
-    manifest_bytes = manifest_path.read_bytes()
-    manifest = json.loads(manifest_bytes)
-    audio_path = manifest_path.parent / manifest["audio"]["file"]
-    if not audio_path.is_file():
-        raise Refused(f"frozen reference audio is missing: {audio_path}")
-    audio_sha = _sha256(audio_path)
-    if audio_sha != manifest["audio"].get("sha256") or audio_sha != EXPECTED_AUDIO_SHA256:
+    reference = m5a.load_reference("M5A", manifest_path=manifest_path)
+    if reference.audio_sha256 != EXPECTED_AUDIO_SHA256:
         raise Refused("frozen reference audio hash does not match the pinned M5A artifact")
-    sample_rate, audio = wavfile.read(audio_path)
-    if sample_rate != SR or audio.ndim != 1 or len(audio) != int(manifest["audio"]["samples"]):
-        raise Refused("frozen reference audio has unexpected rate, channels, or length")
+    manifest = reference.manifest
     settings = manifest.get("patch", {}).get("settings", {})
     amp_attack = settings.get("amp_attack", {})
     if amp_attack.get("name") != "VCA Attack" or float(amp_attack.get("value", -1)) != 0.05:
@@ -88,7 +80,8 @@ def _reference_preconditions(manifest_path: pathlib.Path) -> tuple[dict, pathlib
                            "attack_10_90_ms": float(env["attack_10_90_ms"])})
     if len(events) != 4:
         raise Refused(f"expected four frozen note measurements, found {len(events)}")
-    return {"events": events, "amp_attack_readback": 0.05}, audio_path, audio_sha
+    return ({"events": events, "amp_attack_readback": 0.05},
+            reference.audio_path, reference.audio_sha256)
 
 
 def _known_carrier(f0: float, wave: str, phase: float, t: np.ndarray) -> np.ndarray:
@@ -179,7 +172,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     try:
         report = measure_attack_bias(args.manifest, phases=args.phases)
-    except (OSError, ValueError, KeyError, TypeError, Refused) as exc:
+    except (OSError, ValueError, KeyError, TypeError, refusal.Refused) as exc:
         print(f"measure_m5a_attack_bias: REFUSED -- {exc}")
         return 2
     out = pathlib.Path(args.out)

@@ -15,6 +15,7 @@ import json
 import math
 import pathlib
 import sys
+from typing import NamedTuple
 
 import numpy as np
 
@@ -96,10 +97,11 @@ def engine_configuration(name="selected"):
         raise Refused(f"unsupported Mono engine configuration {name!r}") from exc
 
 
-def _voice_for_engine(profile):
+def _voice_for_engine(profile, *, blep: bool = True):
     ladder_cfg = {**vf.LADDER_CFG,
                   "oversample": profile["ladder_coefficient_oversample"]}
     return vf.VoiceFx(
+        blep=blep,
         oversample_2x=profile["oscillator_oversample_2x"],
         ladder_cfg=ladder_cfg,
         rate_converted_ladder=profile["filter_rate_converted"],
@@ -143,6 +145,35 @@ def _harmonic_error(model: dict, reference: dict, k: int) -> tuple[float | None,
 def _excess_alias_db(model_db: float, reference_db: float) -> float:
     """Only alias energy above the reference is a regression."""
     return max(0.0, float(model_db) - float(reference_db))
+
+
+class HarmonicSummary(NamedTuple):
+    errors: dict
+    statuses: dict
+    max_abs_error: float
+
+
+def harmonic_summary(model, reference, f0_model, f0_reference, sr, *, context=""):
+    """Compare partials h2..h12 of `model` against `reference`, or refuse.
+
+    Fewer than two comparable partials below Nyquist is not a shape: it is
+    refused rather than reported as a one-number maximum or dropped by an
+    empty `max()` (#1570). Each partial's signed error is rounded to 4 dp for
+    the record; the maximum absolute error is not, because the scorecard
+    metric rounds it again to 5 dp.
+    """
+    comparisons = {f"h{k}": _harmonic_error(model, reference, k)
+                   for k in range(2, 13)
+                   if k * max(f0_model, f0_reference) < sr / 2}
+    measured = [abs(error) for error, _status in comparisons.values() if error is not None]
+    if len(measured) < 2:
+        raise Refused(f"{context} has fewer than two comparable partials" if context
+                      else "fewer than two comparable partials")
+    return HarmonicSummary(
+        {key: (round(float(value), 4) if value is not None else None)
+         for key, (value, _status) in comparisons.items()},
+        {key: status for key, (_value, status) in comparisons.items()},
+        max(measured))
 
 
 def _load_i2s_candidate(path, required_samples: int):
@@ -235,6 +266,63 @@ def _model_note(note: float, injection: str = "") -> float:
     return shifted
 
 
+class FrozenReference(NamedTuple):
+    manifest: dict
+    pcm: np.ndarray
+    audio_path: pathlib.Path
+    audio_sha256: str
+    manifest_path: pathlib.Path
+    manifest_sha256: str
+
+
+def load_reference(case_id="M5A", *, manifest_path=None,
+                   reference_override=None) -> FrozenReference:
+    """Bind a frozen Mini V3 record, or refuse before any sample is compared.
+
+    The one loader for the M5A/M5B scorer and for every sibling M5A tool
+    (#1570): the case id, the suite (#1050), the audio hash, the 48 kHz mono
+    float32 format, the sample count and finiteness (#133, #134) each fire
+    here, in that order. `scipy` and `reference_suites` are imported inside so
+    the player paths that import this module still run without them (#1268).
+    A malformed manifest (bad JSON, a missing key) is an execution error, not
+    a missing precondition, and is deliberately not swallowed.
+    """
+    if case_id not in MANIFESTS:
+        raise Refused(f"unsupported Mono scorecard case {case_id!r}")
+    if manifest_path is None:
+        manifest_path = MANIFESTS[case_id]
+        if case_id == "M5A" and MANIFEST != ROOT / "docs/scorecard/mono-m5a-miniv3/manifest.json":
+            # Preserve the test/CLI override used to exercise corrupt M5A references.
+            manifest_path = MANIFEST
+    manifest_path = pathlib.Path(manifest_path)
+    manifest = json.loads(manifest_path.read_text())
+    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    if manifest.get("case_id") != case_id:
+        raise Refused(f"frozen manifest identifies as {manifest.get('case_id')!r}, expected {case_id}")
+    import reference_suites
+    try:
+        reference_suites.require_suite(manifest, reference_suites.SUITE_V3_FROZEN)
+    except reference_suites.Refused as exc:
+        raise Refused(str(exc)) from exc
+    audio_meta = manifest["audio"]
+    ref_path = reference_override or (manifest_path.parent / audio_meta["file"])
+    try:
+        digest = hashlib.sha256(ref_path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise Refused(f"cannot read frozen {case_id} audio {ref_path.name}: {exc}") from exc
+    if digest != audio_meta["sha256"]:
+        raise Refused(f"frozen {case_id} Mini V3 audio hash mismatch")
+    from scipy.io import wavfile
+
+    sr, ref_pcm = wavfile.read(ref_path)
+    if sr != SR or ref_pcm.dtype != np.float32 or ref_pcm.ndim != 1:
+        raise Refused(f"{case_id} reference WAV is not mono float32 at 48 kHz")
+    ref_pcm = ref_pcm.astype(np.float64)
+    if len(ref_pcm) != audio_meta["samples"] or not np.isfinite(ref_pcm).all():
+        raise Refused("reference sample count or finite-sample precondition failed")
+    return FrozenReference(manifest, ref_pcm, ref_path, digest, manifest_path, manifest_digest)
+
+
 def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             model_label=None, engine="selected", output_path=None,
             candidate_wav=None, saw_cutoff_override=None,
@@ -260,33 +348,10 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
         reference_override = None
     if inject and inject not in MODEL_NOTE_MUTATIONS and inject != "REF_MISSING":
         raise Refused(f"unsupported Mono model injection {inject!r}")
-    manifest_path = MANIFESTS[case_id]
-    if case_id == "M5A" and MANIFEST != ROOT / "docs/scorecard/mono-m5a-miniv3/manifest.json":
-        # Preserve the test/CLI override used to exercise corrupt M5A references.
-        manifest_path = MANIFEST
-    manifest = json.loads(manifest_path.read_text())
-    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    if manifest.get("case_id") != case_id:
-        raise Refused(f"frozen manifest identifies as {manifest.get('case_id')!r}, expected {case_id}")
-    import reference_suites
-    try:
-        reference_suites.require_suite(manifest, reference_suites.SUITE_V3_FROZEN)
-    except reference_suites.Refused as exc:
-        raise Refused(str(exc)) from exc
-    audio_meta = manifest["audio"]
-    ref_path = reference_override or (manifest_path.parent / audio_meta["file"])
-    try:
-        digest = hashlib.sha256(ref_path.read_bytes()).hexdigest()
-    except OSError as exc:
-        raise Refused(f"cannot read frozen {case_id} audio {ref_path.name}: {exc}") from exc
-    if digest != audio_meta["sha256"]:
-        raise Refused(f"frozen {case_id} Mini V3 audio hash mismatch")
-    sr, ref_pcm = wavfile.read(ref_path)
-    if sr != SR or ref_pcm.dtype != np.float32 or ref_pcm.ndim != 1:
-        raise Refused(f"{case_id} reference WAV is not mono float32 at 48 kHz")
-    ref_pcm = ref_pcm.astype(np.float64)
-    if len(ref_pcm) != audio_meta["samples"] or not np.isfinite(ref_pcm).all():
-        raise Refused("reference sample count or finite-sample precondition failed")
+    reference = load_reference(case_id, reference_override=reference_override)
+    manifest, ref_pcm = reference.manifest, reference.pcm
+    manifest_digest = reference.manifest_sha256
+    digest = reference.audio_sha256
 
     candidate_pcm = None
     candidate_sha256 = None
@@ -392,20 +457,13 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             observed["Pitch"].append((model_cents - reference_cents, 0.0))
             so = am.harmonic_signature(xo, SR, f0=eo.value, kmax=12)
             sr_ = am.harmonic_signature(xr, SR, f0=er.value, kmax=12)
-            harmonic_results = {f"h{k}": _harmonic_error(so, sr_, k)
-                                for k in range(2, 13)
-                                if k * max(eo.value, er.value) < SR / 2}
-            diffs = [error for error, _status in harmonic_results.values()
-                     if error is not None]
-            if len(diffs) < 2:
-                raise Refused(f"{wave} MIDI {note} has fewer than two comparable partials")
-            harmonic_diffs = {key: round(float(error), 4)
-                              for key, (error, _status) in harmonic_results.items()
-                              if error is not None}
-            harmonic_status = {key: status for key, (_error, status)
-                               in harmonic_results.items()}
+            harmonic = harmonic_summary(so, sr_, eo.value, er.value, SR,
+                                        context=f"{wave} MIDI {note}")
+            harmonic_diffs = {key: value for key, value in harmonic.errors.items()
+                              if value is not None}
+            harmonic_status = harmonic.statuses
             # Store maximum absolute partial error as the case value/reference pair.
-            observed["Harmonic shape"].append((max(abs(x) for x in diffs), 0.0))
+            observed["Harmonic shape"].append((harmonic.max_abs_error, 0.0))
             fo, fr = am.foldback_alias_db(xo, eo.value, SR), am.foldback_alias_db(xr, er.value, SR)
             if not fo.ok or not fr.ok:
                 raise Refused(f"{wave} MIDI {note} foldback estimator refused")
