@@ -332,3 +332,29 @@ def test_presaturation_mismatch_stays_an_execution_error_exit_1(tmp_path):
     assert "RuntimeError: recorded pre-saturation samples do not produce the output" in p.stderr
     assert "Traceback" in p.stderr and not _refused_lines(p.stdout), (p.stdout[-200:], p.stderr[-400:])
     assert not out.exists()
+
+
+def test_unfloored_level_equals_the_retired_floored_expression_on_real_renders(monkeypatch):
+    """The committed form of #1693's before/after control. On real `mix_check`
+    renders at the built gain and a default candidate gain, `output_dbfs`
+    returns what the retired `20 * log10(max(rms, 1e-12))` returned, so
+    removing the floor moved no measured level, and every level sits far
+    above the activity floor (the lowest default-gain row was -23.4 dBFS on
+    main @ 3e2534c7)."""
+    import measure_pulse2x_headroom as mph
+    import mono_artifact_probe as mp
+
+    real = mph.output_dbfs
+    rows = []
+
+    def spy(out, what):
+        retired = 20 * math.log10(max(float(np.sqrt(np.mean(
+            (out[12000:].astype(float) / 32768) ** 2))), 1e-12))
+        level = real(out, what)
+        rows.append((what, round(level, 3), round(retired, 3)))
+        return level
+    monkeypatch.setattr(mph, "output_dbfs", spy)
+    mph.mix_check([0.84], notes=(24, 84, 127))
+    assert len(rows) == 12, "2 gains x 2 presets x 3 notes must each reach the level check"
+    assert all(new == old for _, new, old in rows), rows
+    assert min(old for _, _, old in rows) > mp.SILENT_DBFS + 30, rows
