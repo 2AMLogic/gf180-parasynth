@@ -31,6 +31,7 @@ import json
 import re
 import sys
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
 
 REFUSED = 2
@@ -58,8 +59,22 @@ class Refused(Exception):
     """The input cannot yield a trustworthy table; no number is reported."""
 
 
-def parse(text: str) -> tuple[list[tuple[float, str, str]], int | None, dict | None]:
-    """(rows, hidden, summary) for the single ``--durations`` block in ``text``."""
+@dataclass
+class Block:
+    """The one ``--durations`` block: its rows, what pytest said around them."""
+
+    rows: list[tuple[float, str, str]]
+    hidden: int | None
+    summary: dict | None
+    lines: list[str]
+
+    @property
+    def text(self) -> str:
+        """The block as pytest printed it, header through the summary line."""
+        return "\n".join(self.lines) + "\n"
+
+
+def parse(text: str) -> Block:
     lines = [LOG_PREFIX_RE.sub("", line) for line in text.splitlines()]
     headers = [i for i, line in enumerate(lines) if HEADER_RE.match(line)]
     if not headers:
@@ -93,14 +108,17 @@ def parse(text: str) -> tuple[list[tuple[float, str, str]], int | None, dict | N
             )
     hidden = None
     summary = None
-    for line in lines[i:]:
-        t = TRAILER_RE.match(line)
+    last = i - 1
+    for k in range(i, len(lines)):
+        t = TRAILER_RE.match(lines[k])
         if t and hidden is None:
             hidden = int(t.group(1))
-        if SUMMARY_RE.match(line):
-            summary = _summary(line)
+            last = k
+        if SUMMARY_RE.match(lines[k]):
+            summary = _summary(lines[k])
+            last = k
             break
-    return rows, hidden, summary
+    return Block(rows, hidden, summary, lines[headers[0] : last + 1])
 
 
 def _summary(line: str) -> dict:
@@ -144,7 +162,15 @@ def build_report(
     groups: dict[str, list[str]] | None = None,
     junit: ET.Element | None = None,
 ) -> dict:
-    rows, hidden, summary = parse(text)
+    return build_from_block(parse(text), groups=groups, junit=junit)
+
+
+def build_from_block(
+    block: Block,
+    groups: dict[str, list[str]] | None = None,
+    junit: ET.Element | None = None,
+) -> dict:
+    rows, hidden, summary = block.rows, block.hidden, block.summary
     per_test: dict[str, list[float]] = {}
     for secs, phase, nodeid in rows:
         per_test.setdefault(nodeid, [0.0, 0.0, 0.0])[PHASES.index(phase)] += secs
@@ -215,16 +241,44 @@ def build_report(
         "n_files": len(files),
         "tests": tests,
         "files": files,
+        "buckets": _buckets(tests, listed),
         "groups": out_groups,
         "concentration": concentration,
         "completeness": check_junit(junit, tests, summary) if junit is not None else None,
     }
 
 
+BUCKETS = (
+    (60.0, float("inf"), ">=60"),
+    (30.0, 60.0, "30-60"),
+    (10.0, 30.0, "10-30"),
+    (1.0, 10.0, "1-10"),
+    (0.0, 1.0, "<1"),
+)
+
+
+def _buckets(tests: list[dict], listed: float) -> list[dict]:
+    out = []
+    for lo, hi, label in BUCKETS:
+        sel = [t for t in tests if lo <= t["total_s"] < hi]
+        total = sum(t["total_s"] for t in sel)
+        out.append({"bucket": label, "n_tests": len(sel), "total_s": total, "share": total / listed})
+    return out
+
+
 def junit_key(nodeid: str) -> tuple[str, str]:
-    """The ``(classname, name)`` pytest writes for ``nodeid`` (xunit2 family)."""
-    names = nodeid.split("::")
+    """The ``(classname, name)`` pytest writes for ``nodeid`` (xunit2 family).
+
+    Mirrors ``_pytest.nodes.NodeId.parse``: partition at the FIRST ``::`` and
+    peel the params bracket before splitting names, so a parametrization that
+    itself carries a pytest nodeid (``test_x[model/a.py::thing]``) is one name.
+    """
+    path, _sep, tail = nodeid.partition("::")
+    name_part, bracket, param_part = tail.partition("[")
+    names = [path, *name_part.split("::")]
     names[0] = re.sub(r"\.py$", "", names[0].replace("\\", "/").replace("/", "."))
+    if bracket:
+        names[-1] += f"[{param_part}"
     return ".".join(names[:-1]), names[-1]
 
 
@@ -290,13 +344,14 @@ def check_junit(junit: ET.Element, tests: list[dict], summary: dict | None) -> d
 
 
 def group_from_grep(scan_dir: str, pattern: str) -> list[str]:
-    """Test files under ``scan_dir`` whose text matches ``pattern`` (per line)."""
+    """Test files under ``scan_dir`` (at any depth) whose text matches ``pattern``."""
     rx = re.compile(pattern, re.MULTILINE)
-    return sorted(
-        f"{scan_dir.rstrip('/')}/{p.name}"
-        for p in Path(scan_dir).glob("test_*.py")
-        if p.is_file() and rx.search(p.read_text(errors="replace"))
-    )
+    root = Path(scan_dir)
+    found = []
+    for p in sorted(root.rglob("test_*.py")):
+        if p.is_file() and rx.search(p.read_text(errors="replace")):
+            found.append(f"{scan_dir.rstrip('/')}/{p.relative_to(root).as_posix()}")
+    return found
 
 
 def _read_group_file(path: str) -> list[str]:
@@ -308,6 +363,11 @@ def _read_group_file(path: str) -> list[str]:
 
 def _fmt_pct(x: float) -> str:
     return f"{100 * x:.1f}%"
+
+
+def _cell(s: str) -> str:
+    """A code span for a Markdown table cell: a `|` in an id would end the row."""
+    return f"`{s.replace('|', chr(92) + '|')}`"
 
 
 def render(report: dict, top: int, top_files: int) -> str:
@@ -347,6 +407,27 @@ def render(report: dict, top: int, top_files: int) -> str:
         )
     out += [
         "",
+        "## Tests by duration bracket",
+        "",
+        "| bracket (s) | tests | of tests | s | share of listed |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    n_tests = report["n_tests"]
+    for b in report["buckets"]:
+        out.append(
+            f"| {b['bucket']} | {b['n_tests']} | {_fmt_pct(b['n_tests'] / n_tests)} | "
+            f"{b['total_s']:.1f} | {_fmt_pct(b['share'])} |"
+        )
+    heavy = report["buckets"][:3]
+    heavy_n = sum(b["n_tests"] for b in heavy)
+    heavy_share = sum(b["share"] for b in heavy)
+    out += [
+        "",
+        f"- tests at 10 s or more: {heavy_n} of {n_tests} ({_fmt_pct(heavy_n / n_tests)}) "
+        f"hold {_fmt_pct(heavy_share)} of listed time",
+    ]
+    out += [
+        "",
         f"## Top {min(top, report['n_tests'])} tests (share of listed time)",
         "",
         "| # | s | share | call s | nodeid |",
@@ -355,7 +436,7 @@ def render(report: dict, top: int, top_files: int) -> str:
     for k, t in enumerate(report["tests"][:top], 1):
         out.append(
             f"| {k} | {t['total_s']:.2f} | {_fmt_pct(t['share'])} | {t['call_s']:.2f} | "
-            f"`{t['nodeid']}` |"
+            f"{_cell(t['nodeid'])} |"
         )
     out += [
         "",
@@ -369,7 +450,7 @@ def render(report: dict, top: int, top_files: int) -> str:
         cum += f["share"]
         out.append(
             f"| {k} | {f['total_s']:.1f} | {_fmt_pct(f['share'])} | {_fmt_pct(cum)} | "
-            f"{f['n_tests']} | `{f['file']}` |"
+            f"{f['n_tests']} | {_cell(f['file'])} |"
         )
     if report["groups"]:
         out += [
@@ -381,7 +462,7 @@ def render(report: dict, top: int, top_files: int) -> str:
         ]
         for g in report["groups"]:
             note = (
-                ", ".join(f"`{f}`" for f in g["files_with_no_durations"])
+                ", ".join(_cell(f) for f in g["files_with_no_durations"])
                 if g["files_with_no_durations"]
                 else ""
             )
@@ -416,6 +497,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--durations", required=True, help="log or text holding the --durations=0 block ('-' for stdin)")
     ap.add_argument("--junit", help="the same run's --junitxml output; enables the completeness check")
+    ap.add_argument("--extract", help="write the block as pytest printed it (header through the summary line) here")
     ap.add_argument("--json", help="write the full report (every test and file) here")
     ap.add_argument("--group-file", action="append", default=[], metavar="NAME=PATH", help="files listed one per line")
     ap.add_argument("--group-grep", action="append", default=[], metavar="NAME=REGEX", help="test_*.py under --scan-dir whose text matches REGEX")
@@ -433,7 +515,10 @@ def main(argv: list[str] | None = None) -> int:
             name, pattern = _name_value(spec, "--group-grep")
             groups[name] = group_from_grep(args.scan_dir, pattern)
         junit = ET.parse(args.junit).getroot() if args.junit else None
-        report = build_report(text, groups=groups or None, junit=junit)
+        block = parse(text)
+        if args.extract:
+            Path(args.extract).write_text(block.text)
+        report = build_from_block(block, groups=groups or None, junit=junit)
     except Refused as e:
         print(f"REFUSED: {e}", file=sys.stderr)
         return REFUSED

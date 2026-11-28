@@ -98,6 +98,18 @@ def test_evenly_spread_time_needs_every_file():
     assert c["top5_files_share"] == pytest.approx(1.0)
 
 
+def test_duration_buckets_count_tests_and_time_per_bracket():
+    b = {x["bucket"]: x for x in drep.build_report(BLOCK)["buckets"]}
+    assert [x["bucket"] for x in b.values()] == [">=60", "30-60", "10-30", "1-10", "<1"]
+    assert (b[">=60"]["n_tests"], b[">=60"]["total_s"]) == (1, pytest.approx(60.6))
+    assert (b["30-60"]["n_tests"], b["10-30"]["n_tests"], b["<1"]["n_tests"]) == (0, 0, 0)
+    assert (b["1-10"]["n_tests"], b["1-10"]["total_s"]) == (3, pytest.approx(15.0))
+    assert sum(x["total_s"] for x in b.values()) == pytest.approx(LISTED)
+    assert sum(x["share"] for x in b.values()) == pytest.approx(1.0)
+    line = "tests at 10 s or more: 1 of 4 (25.0%) hold 80.2% of listed time"
+    assert line in drep.render(drep.build_report(BLOCK), 25, 40)
+
+
 def test_log_prefix_is_tolerated():
     prefix = "tools\tevery tools/ test\t2026-11-28T11:30:00.1234567Z "
     prefixed = "".join(prefix + line if line.strip() else line for line in BLOCK.splitlines(keepends=True))
@@ -169,6 +181,27 @@ def test_dropped_lines_are_invisible_without_an_oracle_and_the_report_says_so():
     assert report["completeness"] is None
 
 
+def test_extract_writes_exactly_the_block_with_log_prefixes_stripped(tmp_path):
+    prefix = "tools\tevery tools/ test\t2026-11-28T11:30:00.1234567Z "
+    prefixed = "".join(prefix + line if line.strip() else line for line in BLOCK.splitlines(keepends=True))
+    src = tmp_path / "run.log"
+    src.write_text("pip noise\nmore noise\n" + prefixed + "##[group]Run post step\n")
+    out = tmp_path / "block.txt"
+    assert drep.main(["--durations", str(src), "--extract", str(out)]) == 0
+    assert out.read_text() == BLOCK
+
+
+def test_a_pipe_in_a_nodeid_is_escaped_in_tables(tmp_path):
+    """Real shape: test_check_workflows.py has ids containing `... || true`."""
+    block = HEADER + "    5.00s call     tools/test_a.py::test_x[py a.py || true]\n" + TRAILER + "\n"
+    src = tmp_path / "d.txt"
+    src.write_text(block)
+    assert drep.main(["--durations", str(src), "--json", str(tmp_path / "r.json")]) == 0
+    row = [l for l in drep.render(drep.build_report(block), 25, 40).splitlines() if "test_x[" in l]
+    assert row == ["| 1 | 5.00 | 100.0% | 5.00 | `tools/test_a.py::test_x[py a.py \\|\\| true]` |"]
+    assert json.loads((tmp_path / "r.json").read_text())["tests"][0]["nodeid"] == "tools/test_a.py::test_x[py a.py || true]"
+
+
 def test_cli_report_exits_0_and_writes_json(tmp_path, capsys):
     src = tmp_path / "durations.txt"
     src.write_text(BLOCK)
@@ -195,6 +228,12 @@ def test_group_from_grep_reads_test_files_only_and_anchors_per_line(tmp_path):
     (scan / "test_a.py").write_text("import subprocess\n")
     (scan / "test_b.py").write_text("print('not an import: import subprocess')\n")
     (scan / "helper.py").write_text("import subprocess\n")
+    (scan / "nested").mkdir()
+    (scan / "nested" / "test_c.py").write_text("from subprocess import run\n")
+    assert drep.group_from_grep(str(scan), "^import subprocess|^from subprocess import") == [
+        f"{scan}/nested/test_c.py",
+        f"{scan}/test_a.py",
+    ]
     assert drep.group_from_grep(str(scan), "^import subprocess") == [f"{scan}/test_a.py"]
 
 
@@ -235,6 +274,18 @@ def test_junit_key_follows_pytests_address_mangling():
     assert drep.junit_key("tools/probes/test_p.py::test_x[a.b]") == (
         "tools.probes.test_p",
         "test_x[a.b]",
+    )
+
+
+def test_junit_key_does_not_split_on_a_double_colon_inside_the_brackets():
+    """The shape that made the real run REFUSE: a param carrying a pytest nodeid."""
+    nodeid = (
+        "tools/test_bd_pitch_predeclaration.py::"
+        "test_control_missing_probe_is_caught[model/bd_pedestal.py::tail_pedestal_GONE-defines no tail]"
+    )
+    assert drep.junit_key(nodeid) == (
+        "tools.test_bd_pitch_predeclaration",
+        "test_control_missing_probe_is_caught[model/bd_pedestal.py::tail_pedestal_GONE-defines no tail]",
     )
 
 
