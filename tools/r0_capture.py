@@ -411,9 +411,10 @@ def load_reference(refdir: pathlib.Path, command_id: str) -> dict:
     sr, x = rr.read_wav_int16(wav)
     if sr != SR:
         raise Refused(f"reference {wav} is {sr} Hz")
+    bad = rr.reference_take_problems(rec, wav, len(x))
+    if bad:
+        raise Refused("; ".join(bad))
     cal = rec.get("calibration") or {}
-    if cal.get("start") is None:
-        raise Refused(f"reference {command_id} declares no calibration window")
     plan = refdir / f"{command_id}.plan.json"
     pl = json.loads(plan.read_text()) if plan.is_file() else None
     xf = x[:, 0] / 32768.0
