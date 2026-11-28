@@ -1,0 +1,8 @@
+job id, conclusion, started, completed (GitHub Actions API, read 2026-11-28)
+before: run 46156529803 workflow t-physical-profile-once event push branch throwaway/t-physical-profile-1944 head 83c917d259867fed5aefeeee4a9897f11ffa2a22 created 2026-11-28T14:48:17Z
+  the test under pytest, un-instrumented: job 141014299476 success 2026-11-28T14:48:34Z -> 2026-11-28T14:55:39Z
+  the instrument: job 141014299701 success 2026-11-28T14:48:34Z -> 2026-11-28T14:55:55Z
+after: run 46158104276 workflow t-physical-profile-once event push branch throwaway/t-physical-profile-1944-after head d905ad24d877d2fa32934c57c0824dfcca138561 created 2026-11-28T15:06:34Z
+  both files, as trial-physical runs them: job 141019110303 success 2026-11-28T15:06:36Z -> 2026-11-28T15:09:01Z
+  the test under pytest, un-instrumented: job 141019110427 success 2026-11-28T15:06:37Z -> 2026-11-28T15:08:26Z
+  the instrument: job 141019110511 success 2026-11-28T15:06:36Z -> 2026-11-28T15:08:52Z

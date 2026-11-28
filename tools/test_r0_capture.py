@@ -50,6 +50,119 @@ def test_interp_is_band_limited_to_minus_80_db():
     assert np.max(np.abs(got - want)) < 1e-4
 
 
+def _interp_formula(x, pos, half=32):
+    """The estimator's kernel evaluated at every sample: sinc x Kaiser, 2*half
+    taps, zero outside x. interp() may tabulate it; this is what it computes."""
+    x = np.asarray(x, dtype=np.float64)
+    pos = np.asarray(pos, dtype=np.float64)
+    out = np.zeros(pos.shape)
+    pad = np.concatenate([np.zeros(half + 1), x, np.zeros(half + 1)])
+    k = np.arange(-half + 1, half + 1)
+    for s in range(0, pos.size, 8192):
+        p = pos[s:s + 8192]
+        i0 = np.floor(p).astype(np.int64)
+        frac = p - i0
+        idx = i0[:, None] + k[None, :] + half + 1
+        valid = (idx >= 0) & (idx < pad.size)
+        t = frac[:, None] - k[None, :]
+        w = np.sinc(t) * rc._kaiser(t, half)
+        vals = np.where(valid, pad[np.clip(idx, 0, pad.size - 1)], 0.0)
+        out[s:s + 8192] = np.sum(vals * w, axis=1)
+    return out
+
+
+@pytest.mark.parametrize("half", [32, 16])
+def test_the_tabulated_kernel_is_the_formula_over_the_whole_fractional_part(half):
+    """The weights depend on the fractional part alone, so one scan of [0, 1]
+    characterises the error for every input there is: per tap and in sum
+    (what one output can be off by, at full scale), 2e-13 against a peak of 1.
+    Measured 1.4e-13 at the peak searches' 32 taps and 3.6e-14 at 64; a table
+    half as fine reads 5.5e-13 here. The takes are 24-bit (LSB 1.2e-7) and the
+    reference 16-bit (3.0e-5)."""
+    frac = np.linspace(0.0, 1.0, 200_001)
+    t = frac[:, None] - np.arange(-half + 1, half + 1)[None, :]
+    err = np.abs(rc._kernel_weights(half, frac) - np.sinc(t) * rc._kaiser(t, half))
+    assert float(err.max()) <= 2e-13 and float(err.sum(axis=1).max()) <= 2e-13
+
+
+def test_interp_is_the_formula_on_a_reference_and_silence_outside_it():
+    """A real reference warped as the control warps it: the formula's to 1e-12
+    where it sounds, exactly zero before the delay, where no tap reaches it."""
+    ref = rc.load_reference(rc.REFERENCES, "held-m5a-saw")["x"]
+    pos = (np.arange(-200, ref.size + 70000) - 22222.75) * (1 + 35e-6)
+    got, want = rc.interp(ref, pos), _interp_formula(ref, pos)
+    assert np.max(np.abs(got - want)) <= 1e-12
+    assert np.count_nonzero(got[:22000]) == 0 and np.array_equal(got[:22000], want[:22000])
+    assert np.count_nonzero(got[22222 + ref.size + 232:]) == 0
+
+
+def test_interp_is_a_function_of_each_position_alone():
+    """Restricting the positions changes no value: the 8192-sample chunks and
+    the positions skipped as silence are invisible, at the chunk edges and at
+    a fractional part of exactly 1."""
+    rng = np.random.default_rng(7)
+    x = _bl_noise(300000, rng)
+    pos = np.concatenate([rng.uniform(-100.0, 300100.0, 20000),
+                          [1e9 + 0.3, -1e-17, 0.0, 1.0]])
+    full = rc.interp(x, pos)
+    for a, b in ((0, 1), (8191, 8193), (137, 9000), (20000, 20004)):
+        assert np.array_equal(full[a:b], rc.interp(x, pos[a:b])), (a, b)
+    assert rc.interp(x, pos[:0]).shape == (0,)
+    assert np.all(rc.interp(np.zeros(0), pos[:5]) == 0)
+
+
+def test_the_kernel_is_tabulated_not_evaluated_per_sample(monkeypatch):
+    """The cost #1944 measured: sinc and i0 for all 64 taps of every sample
+    were 92 % of the synthetic-defect control. The table is built once per tap
+    count, so a warp of 300,000 positions evaluates the formula no more often
+    than one of 3."""
+    calls = []
+    kaiser = rc._kaiser
+    monkeypatch.setattr(rc, "_kaiser", lambda *a, **k: calls.append(1) or kaiser(*a, **k))
+    rc.interp(np.ones(400000), np.arange(3) + 0.3)
+    del calls[:]
+    rc.interp(np.ones(400000), np.arange(300000) + 0.3)
+    assert len(calls) <= 1
+
+
+def _close(a, b, tol, where=""):
+    """Every number in two records agrees to `tol`, relative or absolute; every
+    verdict and reason is the same object."""
+    if isinstance(a, bool) or isinstance(b, bool) or a is None or b is None:
+        assert a == b, where
+    elif isinstance(a, (int, float)) and not isinstance(a, bool):
+        assert abs(a - b) <= tol * (1 + abs(b)), (where, a, b)
+    elif isinstance(a, dict):
+        assert a.keys() == b.keys(), where
+        for k in a:
+            _close(a[k], b[k], tol, f"{where}.{k}")
+    elif isinstance(a, (list, tuple)):
+        assert len(a) == len(b), where
+        for i, (u, v) in enumerate(zip(a, b)):
+            _close(u, v, tol, f"{where}[{i}]")
+    else:
+        assert a == b, (where, a, b)
+
+
+def test_a_session_analysed_with_the_tabulated_kernel_is_the_same_measurement(
+        tmp_path, monkeypatch):
+    """Through the whole analysis, on a session that exercises calibration,
+    the repeat-take comparison and both warps of a take: verdict, failures and
+    scope identical, every metric the formula's to 1e-6. Not to 1e-13: the
+    golden-section peak searches move the last digits of the calibration under
+    a perturbation far below that (2e-8 ppm was measured at a table half as
+    fine as the shipped one)."""
+    monkeypatch.setattr(rc, "REQUIRED_COMMANDS", ("demo",))
+    d = rc.synth_session(tmp_path / "s", takes=(("silence-1", "silence"), ("demo-1", "demo"),
+                                                ("demo-2", "demo")))
+    tabulated = rc.analyse(d, allow_synthetic=True)
+    monkeypatch.setattr(rc, "interp", _interp_formula)
+    formula = rc.analyse(d, allow_synthetic=True)
+    assert formula["verdict"] == rc.PASS, formula["reasons"]
+    assert tabulated["verdict"] == rc.PASS, tabulated["reasons"]
+    _close(tabulated, formula, 1e-6)
+
+
 def test_warp_then_unwarp_is_identity_inside_the_signal():
     rng = np.random.default_rng(3)
     x = _bl_noise(20000, rng, hi=0.35)

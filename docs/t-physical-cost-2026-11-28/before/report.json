@@ -1,0 +1,1070 @@
+{
+ "schema": "r0-controls-profile/1",
+ "test": "tools/test_r0_capture.py::test_t_physical_on_a_synthetic_bundle_is_no_verdict_with_its_control_caught",
+ "environment": {
+  "python": "3.12.16",
+  "numpy": "2.5.5",
+  "scipy": "1.18.1",
+  "platform": "Linux-7.0.0-1020-azure-x86_64-with-glibc2.39",
+  "cpu": "AMD EPYC 7763 64-Core Processor",
+  "cpu_count": 4,
+  "thread_env": {},
+  "source": {
+   "commit": "83c917d2",
+   "described": "node/D-drums-bitexact-4024-g83c917d2",
+   "branch": "throwaway/t-physical-profile-1944",
+   "dirty": true,
+   "uncommitted_sha256": "4cbc2034bb7bde61",
+   "untracked_files": 1
+  },
+  "started": "2026-11-28T14:48:52Z"
+ },
+ "smoke": false,
+ "phases": {
+  "setup_s": 7.794799607000002,
+  "trial_s": 388.405573634,
+  "receipt_s": 0.004853226000022914,
+  "total_s": 396.205226467
+ },
+ "children": {
+  "r0-capture": {
+   "secs": 1.7,
+   "rc": 2,
+   "state": "NO-VERDICT",
+   "verdict": "NO VERDICT",
+   "caught": null,
+   "main_s": 0.004507966999995006,
+   "functions": {
+    "default_bundle": [
+     1,
+     1.822400000150992e-05,
+     1.822400000150992e-05
+    ],
+    "_write_atomic": [
+     2,
+     0.0005264209999964464,
+     0.0005264209999964464
+    ],
+    "load_manifest": [
+     1,
+     0.00029868699999724413,
+     0.00029868699999724413
+    ],
+    "resolve_image": [
+     1,
+     0.00030497899999915035,
+     6.292000001906217e-06
+    ],
+    "sha256_file": [
+     2,
+     0.0002638420000025121,
+     0.00013460100000628472
+    ],
+    "main": [
+     1,
+     0.003791410999994582,
+     0.002807185999991191
+    ]
+   },
+   "sessions": []
+  },
+  "synthetic-defects": {
+   "secs": 387.4,
+   "rc": 0,
+   "state": "PASS",
+   "verdict": "FAIL",
+   "caught": true,
+   "main_s": 385.769894871,
+   "functions": {
+    "load_manifest": [
+     26,
+     0.005510062999881882,
+     0.005510062999881882
+    ],
+    "resolve_image": [
+     26,
+     0.005648910000239482,
+     0.00013884700035760034
+    ],
+    "load_reference": [
+     208,
+     1.622349281999817,
+     0.17955832500005187
+    ],
+    "_hpf": [
+     117,
+     0.1236388499995158,
+     0.1236388499995158
+    ],
+    "synth_take": [
+     117,
+     93.76080613900001,
+     1.1765249040004662
+    ],
+    "write_capture_wav": [
+     117,
+     0.8081200540000708,
+     0.8081200540000708
+    ],
+    "sha256_file": [
+     962,
+     0.4891127159999016,
+     0.25335924100018303
+    ],
+    "read_wav_int16": [
+     182,
+     0.01481964600009178,
+     0.01481964600009178
+    ],
+    "band": [
+     650,
+     2.810278161000383,
+     2.810278161000383
+    ],
+    "envelope": [
+     624,
+     2.6231368029998237,
+     2.6231368029998237
+    ],
+    "planned_hold": [
+     286,
+     0.009134905999978571,
+     0.009134905999978571
+    ],
+    "interp": [
+     304427,
+     356.8602495419926,
+     356.8602495419926
+    ],
+    "warp_reference": [
+     322,
+     295.07461636399995,
+     0.11308920200030315
+    ],
+    "synth_session": [
+     13,
+     95.578180582,
+     0.048641744999549985
+    ],
+    "command_blocks": [
+     39,
+     0.00035050199994657305,
+     0.00035050199994657305
+    ],
+    "transcript_problems": [
+     13,
+     0.0004285110000239456,
+     0.0002603080000014302
+    ],
+    "detect_problems": [
+     13,
+     0.00017615799991688164,
+     9.701099993719708e-05
+    ],
+    "check_session": [
+     13,
+     0.005163360999937083,
+     0.004558691999996256
+    ],
+    "programming_attempts": [
+     13,
+     0.00022571399998838615,
+     0.00012256200004401308
+    ],
+    "identity_label_problems": [
+     91,
+     0.00016859299999794075,
+     0.00016859299999794075
+    ],
+    "identity_problems": [
+     78,
+     0.00041340999993622063,
+     0.00041340999993622063
+    ],
+    "reference_problems": [
+     91,
+     0.025297190000266312,
+     0.008350103000431375
+    ],
+    "silence_problems": [
+     13,
+     0.0007686359999823367,
+     0.0007477669999929049
+    ],
+    "read_capture": [
+     117,
+     0.7736431599998141,
+     0.7736431599998141
+    ],
+    "host_log_problems": [
+     104,
+     0.018182841000182748,
+     0.018182841000182748
+    ],
+    "command_identity": [
+     104,
+     0.02507404800006441,
+     0.02507404800006441
+    ],
+    "clip_runs": [
+     234,
+     0.057394892000147024,
+     0.057394892000147024
+    ],
+    "rms": [
+     7892,
+     0.21776263600170864,
+     0.21776263600170864
+    ],
+    "dbfs": [
+     7753,
+     0.012443921999953034,
+     0.012443921999953034
+    ],
+    "analyse_take": [
+     117,
+     223.35413831399993,
+     0.24640369599937628
+    ],
+    "correlate": [
+     7201,
+     7.611115942000204,
+     7.611115942000204
+    ],
+    "_refine_peak": [
+     7201,
+     24.126338855000775,
+     1.2546417170097897
+    ],
+    "ncc_lag": [
+     7201,
+     33.8000663200017,
+     1.5174823979986343
+    ],
+    "first_strong_lag": [
+     429,
+     9.707507342999769,
+     0.15698540099937475
+    ],
+    "_coarse": [
+     429,
+     16.505170114000137,
+     0.11225021899991106
+    ],
+    "block_rms": [
+     679,
+     0.10056646499937472,
+     0.10056646499937472
+    ],
+    "sounding_extent": [
+     141,
+     0.0263908580000205,
+     0.003040748000188387
+    ],
+    "_local_lags": [
+     115,
+     19.397856214000285,
+     0.07051335099803424
+    ],
+    "calibrate": [
+     13,
+     24.343386304000006,
+     0.01131791999988252
+    ],
+    "_pitch": [
+     104,
+     8.23772672100008,
+     0.002114930999915998
+    ],
+    "tone_f0": [
+     52,
+     8.233935391000202,
+     8.23111350200027
+    ],
+    "unwarp_capture": [
+     52,
+     38.49565503300009,
+     0.01375891600027046
+    ],
+    "_run": [
+     13,
+     290.15142686999997,
+     0.2525357679993263
+    ],
+    "_pv": [
+     157,
+     8.168000002228837e-05,
+     8.168000002228837e-05
+    ],
+    "run_controls": [
+     1,
+     385.731311451,
+     0.0016180610000446904
+    ],
+    "print_matrix": [
+     1,
+     0.00011652800003503216,
+     0.00011652800003503216
+    ],
+    "main": [
+     1,
+     385.769324087,
+     0.03789610799992715
+    ]
+   },
+   "sessions": [
+    {
+     "name": "clean",
+     "synth_s": 7.641060702000004,
+     "analyse_s": 23.031680715
+    },
+    {
+     "name": "delay-slip",
+     "synth_s": 8.662259498999987,
+     "analyse_s": 22.746925906
+    },
+    {
+     "name": "gain",
+     "synth_s": 7.192470166999996,
+     "analyse_s": 22.624925336999993
+    },
+    {
+     "name": "clock-drift",
+     "synth_s": 7.184760005000015,
+     "analyse_s": 22.422158892
+    },
+    {
+     "name": "noise",
+     "synth_s": 7.261228886000026,
+     "analyse_s": 22.542170131999995
+    },
+    {
+     "name": "dropout",
+     "synth_s": 7.169037457000002,
+     "analyse_s": 22.83688982800001
+    },
+    {
+     "name": "clipping",
+     "synth_s": 7.139982551000003,
+     "analyse_s": 22.426938534000016
+    },
+    {
+     "name": "stuck",
+     "synth_s": 7.1994125140000165,
+     "analyse_s": 22.50555707799998
+    },
+    {
+     "name": "pitch",
+     "synth_s": 7.2254153469999665,
+     "analyse_s": 21.602696651999963
+    },
+    {
+     "name": "one-channel",
+     "synth_s": 7.205842361000009,
+     "analyse_s": 22.794673407999994
+    },
+    {
+     "name": "inverted",
+     "synth_s": 7.207576754999991,
+     "analyse_s": 22.625964727999985
+    },
+    {
+     "name": "wrong-input",
+     "synth_s": 7.2162026340000125,
+     "analyse_s": 19.297737756000004
+    },
+    {
+     "name": "swap",
+     "synth_s": 7.272931703999973,
+     "analyse_s": 22.693107903999987
+    }
+   ]
+  },
+  "cross-image-refusal": {
+   "secs": 3.1,
+   "rc": 0,
+   "state": "PASS",
+   "verdict": "FAIL",
+   "caught": true,
+   "main_s": 1.8790217009999992,
+   "functions": {
+    "load_manifest": [
+     8,
+     0.0015404029999857016,
+     0.0015404029999857016
+    ],
+    "_have_set": [
+     7,
+     0.00033811000000127933,
+     0.00033811000000127933
+    ],
+    "relabel_reference_set": [
+     1,
+     0.005290975999997727,
+     0.005290975999997727
+    ],
+    "resolve_image": [
+     6,
+     0.0011172629999975925,
+     2.777100000628252e-05
+    ],
+    "load_reference": [
+     6,
+     0.02153354600000057,
+     0.002294077999991373
+    ],
+    "_hpf": [
+     6,
+     0.005020909999991829,
+     0.005020909999991829
+    ],
+    "synth_take": [
+     6,
+     1.800740396000002,
+     0.04896014600001308
+    ],
+    "write_capture_wav": [
+     6,
+     0.033493889999995474,
+     0.033493889999995474
+    ],
+    "sha256_file": [
+     23,
+     0.0027226819999981444,
+     0.0021488100000013333
+    ],
+    "read_wav_int16": [
+     3,
+     0.0002764159999983917,
+     0.0002764159999983917
+    ],
+    "band": [
+     3,
+     0.01243993900000362,
+     0.01243993900000362
+    ],
+    "envelope": [
+     3,
+     0.006103961999997409,
+     0.006103961999997409
+    ],
+    "planned_hold": [
+     3,
+     3.4675000001982426e-05,
+     3.4675000001982426e-05
+    ],
+    "interp": [
+     3,
+     1.7454481850000008,
+     1.7454481850000008
+    ],
+    "warp_reference": [
+     3,
+     1.746759339999997,
+     0.0013111549999962335
+    ],
+    "synth_session": [
+     3,
+     1.862607288999996,
+     0.006327212000002191
+    ],
+    "command_blocks": [
+     7,
+     6.904800000739897e-05,
+     6.904800000739897e-05
+    ],
+    "transcript_problems": [
+     3,
+     0.00010851200000416839,
+     6.36890000009771e-05
+    ],
+    "detect_problems": [
+     3,
+     5.868900000649546e-05,
+     4.186800000383073e-05
+    ],
+    "check_session": [
+     3,
+     0.0008995860000027278,
+     0.000732384999992064
+    ],
+    "programming_attempts": [
+     1,
+     1.7292999999085623e-05,
+     9.888999997542669e-06
+    ],
+    "identity_label_problems": [
+     8,
+     1.9443999995871764e-05,
+     1.9443999995871764e-05
+    ],
+    "identity_problems": [
+     7,
+     4.1467999992050864e-05,
+     4.1467999992050864e-05
+    ],
+    "reference_problems": [
+     8,
+     0.002429020000001003,
+     0.0007765750000174876
+    ],
+    "_case": [
+     3,
+     2.8472000003887388e-05,
+     2.8472000003887388e-05
+    ],
+    "silence_problems": [
+     1,
+     7.123299999989285e-05,
+     6.951000000299246e-05
+    ],
+    "cross_image_controls": [
+     1,
+     1.8765151180000004,
+     0.003606132000001594
+    ],
+    "main": [
+     1,
+     1.8786297399999938,
+     0.00211462199999346
+    ]
+   },
+   "sessions": [
+    {
+     "name": "c2",
+     "synth_s": 0.6172828309999971,
+     "analyse_s": 0.0
+    },
+    {
+     "name": "c4",
+     "synth_s": 0.6132010580000014,
+     "analyse_s": 0.0
+    },
+    {
+     "name": "c5",
+     "synth_s": 0.6321233999999976,
+     "analyse_s": 0.0
+    }
+   ]
+  }
+ },
+ "ctl": {
+  "clean": {
+   "verdict": "PASS",
+   "reasons": [],
+   "known_answers": {
+    "ppm": [
+     35.0,
+     34.94256273
+    ],
+    "gain_db": [
+     -10.457574905606752,
+     -10.465504174
+    ]
+   },
+   "ok": true
+  },
+  "defects": {
+   "delay-slip": {
+    "intended": "timing",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "clock",
+     "repeat",
+     "residual",
+     "timing"
+    ],
+    "reasons": [
+     "demo-2: residual: -4.52 dB > -20.0 dB",
+     "demo-2: clock: this take's clock differs from the frozen calibration by 158.66 ppm",
+     "demo-2: timing: local lag moves up to 12.98 samples against the frozen delay in 91 of 94 windows (limit 0.5)",
+     "demo-2: repeat: differs from take demo-1 by -4.5 dB (limit -30.0 dB)"
+    ]
+   },
+   "gain": {
+    "intended": "gain",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "gain",
+     "repeat",
+     "residual"
+    ],
+    "reasons": [
+     "demo-2: residual: -7.65 dB > -20.0 dB",
+     "demo-2: gain: median local gain +3.00 dB against the frozen gain",
+     "demo-2: repeat: differs from take demo-1 by -7.7 dB (limit -30.0 dB)"
+    ]
+   },
+   "clock-drift": {
+    "intended": "clock",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "clock",
+     "gain",
+     "repeat",
+     "residual",
+     "timing"
+    ],
+    "reasons": [
+     "demo-2: residual: 0.87 dB > -20.0 dB",
+     "demo-2: clock: this take's clock differs from the frozen calibration by -300.22 ppm",
+     "demo-2: timing: median local lag -29.31 samples off the frozen delay",
+     "demo-2: gain: median local gain -8.18 dB against the frozen gain"
+    ]
+   },
+   "noise": {
+    "intended": "noise",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "dropout",
+     "noise",
+     "repeat",
+     "residual",
+     "routing",
+     "silence"
+    ],
+    "reasons": [
+     "silence-1: noise: floor -45.0 dBFS > -70.0 dBFS",
+     "demo-1: routing: DAC inputs [3, 4] disagree (correlation 0.958)",
+     "demo-1: residual: -12.76 dB > -20.0 dB",
+     "demo-1: dropout: 1 x 5 ms blocks 20 dB below prediction, first at 4.665 s"
+    ]
+   },
+   "dropout": {
+    "intended": "dropout",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "dropout",
+     "residual"
+    ],
+    "reasons": [
+     "drums-1: residual: -16.69 dB > -20.0 dB",
+     "drums-1: dropout: 1 x 5 ms blocks 20 dB below prediction, first at 4.749 s"
+    ]
+   },
+   "clipping": {
+    "intended": "clipping",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "clipping",
+     "gain",
+     "residual",
+     "stuck",
+     "timing"
+    ],
+    "reasons": [
+     "drums-1: clipping: [189, 189] runs of >= 3 samples at full scale",
+     "drums-1: residual: 19.51 dB > -20.0 dB",
+     "drums-1: timing: median local lag 0.55 samples off the frozen delay",
+     "drums-1: gain: median local gain +20.38 dB against the frozen gain"
+    ]
+   },
+   "stuck": {
+    "intended": "stuck",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "gain",
+     "repeat",
+     "residual",
+     "stuck"
+    ],
+    "reasons": [
+     "held-2: residual: 9.96 dB > -20.0 dB",
+     "held-2: gain: median local gain -0.89 dB against the frozen gain",
+     "held-2: stuck: 0.77 s of output where the reference is silent",
+     "held-2: repeat: differs from take held-1 by -1.5 dB (limit -30.0 dB)"
+    ]
+   },
+   "pitch": {
+    "intended": "pitch",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "pitch",
+     "routing"
+    ],
+    "reasons": [
+     "tone-1: routing: declared input 3 does not carry the reference (ncc 0.069); declared input 4 does not carry the reference (ncc 0.069)",
+     "tone-1: pitch: +20.00 cents against the frozen clock ratio"
+    ]
+   },
+   "one-channel": {
+    "intended": "routing",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "routing",
+     "silence"
+    ],
+    "reasons": [
+     "drums-1: routing: declared input 4 does not carry the reference (ncc 0.013); DAC inputs [3, 4] disagree (correlation 0.002)",
+     "drums-1: silence: input 4: -102.0 dBFS where -37.1 dBFS is predicted;"
+    ]
+   },
+   "inverted": {
+    "intended": "routing",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "routing"
+    ],
+    "reasons": [
+     "drums-1: routing: declared input 4 does not carry the reference (ncc -0.999); DAC inputs [3, 4] disagree (correlation -1.000: one is inverted)"
+    ]
+   },
+   "wrong-input": {
+    "intended": "routing",
+    "verdict": "FAIL",
+    "caught": true,
+    "outcome": "caught",
+    "failed": [
+     "routing",
+     "silence"
+    ],
+    "reasons": [
+     "drums-1: routing: declared input 3 does not carry the reference (ncc -0.02); declared input 4 does not carry the reference (ncc -0.014); the reference is on undeclared input 1 (ncc 0.999); the reference is on undeclared input 2 (ncc 0.999)",
+     "drums-1: silence: declared DAC input carries -102.0 dBFS and no reference"
+    ]
+   },
+   "swap": {
+    "intended": null,
+    "verdict": "PASS",
+    "caught": true,
+    "outcome": "BLIND as declared",
+    "failed": [],
+    "reasons": []
+   }
+  },
+  "matrix": {
+   "delay-slip": {
+    "routing": "BLIND",
+    "silence": "BLIND",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "MOVED",
+    "timing": "MOVED",
+    "gain": "BLIND",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "BLIND",
+    "residual": "MOVED",
+    "repeat": "MOVED",
+    "channel-identity": "BLIND"
+   },
+   "gain": {
+    "routing": "BLIND",
+    "silence": "BLIND",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "BLIND",
+    "timing": "BLIND",
+    "gain": "MOVED",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "BLIND",
+    "residual": "MOVED",
+    "repeat": "MOVED",
+    "channel-identity": "BLIND"
+   },
+   "clock-drift": {
+    "routing": "BLIND",
+    "silence": "BLIND",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "MOVED",
+    "timing": "MOVED",
+    "gain": "MOVED",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "BLIND",
+    "residual": "MOVED",
+    "repeat": "MOVED",
+    "channel-identity": "BLIND"
+   },
+   "noise": {
+    "routing": "MOVED",
+    "silence": "MOVED",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "BLIND",
+    "timing": "BLIND",
+    "gain": "BLIND",
+    "noise": "MOVED",
+    "dropout": "MOVED",
+    "stuck": "BLIND",
+    "residual": "MOVED",
+    "repeat": "MOVED",
+    "channel-identity": "BLIND"
+   },
+   "dropout": {
+    "routing": "BLIND",
+    "silence": "BLIND",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "BLIND",
+    "timing": "BLIND",
+    "gain": "BLIND",
+    "noise": "BLIND",
+    "dropout": "MOVED",
+    "stuck": "BLIND",
+    "residual": "MOVED",
+    "repeat": "BLIND",
+    "channel-identity": "BLIND"
+   },
+   "clipping": {
+    "routing": "BLIND",
+    "silence": "BLIND",
+    "clipping": "MOVED",
+    "pitch": "BLIND",
+    "clock": "BLIND",
+    "timing": "MOVED",
+    "gain": "MOVED",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "MOVED",
+    "residual": "MOVED",
+    "repeat": "BLIND",
+    "channel-identity": "BLIND"
+   },
+   "stuck": {
+    "routing": "BLIND",
+    "silence": "BLIND",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "BLIND",
+    "timing": "BLIND",
+    "gain": "MOVED",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "MOVED",
+    "residual": "MOVED",
+    "repeat": "MOVED",
+    "channel-identity": "BLIND"
+   },
+   "pitch": {
+    "routing": "MOVED",
+    "silence": "BLIND",
+    "clipping": "BLIND",
+    "pitch": "MOVED",
+    "clock": "BLIND",
+    "timing": "BLIND",
+    "gain": "BLIND",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "BLIND",
+    "residual": "BLIND",
+    "repeat": "BLIND",
+    "channel-identity": "BLIND"
+   },
+   "one-channel": {
+    "routing": "MOVED",
+    "silence": "MOVED",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "BLIND",
+    "timing": "BLIND",
+    "gain": "BLIND",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "BLIND",
+    "residual": "BLIND",
+    "repeat": "BLIND",
+    "channel-identity": "BLIND"
+   },
+   "inverted": {
+    "routing": "MOVED",
+    "silence": "BLIND",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "BLIND",
+    "timing": "BLIND",
+    "gain": "BLIND",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "BLIND",
+    "residual": "BLIND",
+    "repeat": "BLIND",
+    "channel-identity": "BLIND"
+   },
+   "wrong-input": {
+    "routing": "MOVED",
+    "silence": "MOVED",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "BLIND",
+    "timing": "BLIND",
+    "gain": "BLIND",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "BLIND",
+    "residual": "BLIND",
+    "repeat": "BLIND",
+    "channel-identity": "BLIND"
+   },
+   "swap": {
+    "routing": "BLIND",
+    "silence": "BLIND",
+    "clipping": "BLIND",
+    "pitch": "BLIND",
+    "clock": "BLIND",
+    "timing": "BLIND",
+    "gain": "BLIND",
+    "noise": "BLIND",
+    "dropout": "BLIND",
+    "stuck": "BLIND",
+    "residual": "BLIND",
+    "repeat": "BLIND",
+    "channel-identity": "BLIND"
+   }
+  },
+  "image": "r0",
+  "all_caught": true,
+  "analyser": "real"
+ },
+ "matrix": "r0_capture controls: properties x defects (MOVED = the property failed)\n  defect         routing  silence clipping    pitch    clock   timing     gain    noise  dropout    stuck residual   repeat channel-   outcome\n  delay-slip           .        .        .        .    MOVED    MOVED        .        .        .        .    MOVED    MOVED        .   caught (intended timing)\n  gain                 .        .        .        .        .        .    MOVED        .        .        .    MOVED    MOVED        .   caught (intended gain)\n  clock-drift          .        .        .        .    MOVED    MOVED    MOVED        .        .        .    MOVED    MOVED        .   caught (intended clock)\n  noise            MOVED    MOVED        .        .        .        .        .    MOVED    MOVED        .    MOVED    MOVED        .   caught (intended noise)\n  dropout              .        .        .        .        .        .        .        .    MOVED        .    MOVED        .        .   caught (intended dropout)\n  clipping             .        .    MOVED        .        .    MOVED    MOVED        .        .    MOVED    MOVED        .        .   caught (intended clipping)\n  stuck                .        .        .        .        .        .    MOVED        .        .    MOVED    MOVED    MOVED        .   caught (intended stuck)\n  pitch            MOVED        .        .    MOVED        .        .        .        .        .        .        .        .        .   caught (intended pitch)\n  one-channel      MOVED    MOVED        .        .        .        .        .        .        .        .        .        .        .   caught (intended routing)\n  inverted         MOVED        .        .        .        .        .        .        .        .        .        .        .        .   caught (intended routing)\n  wrong-input      MOVED    MOVED        .        .        .        .        .        .        .        .        .        .        .   caught (intended routing)\n  swap                 .        .        .        .        .        .        .        .        .        .        .        .        .   BLIND as declared (intended None)\n  clean: PASS known answers {'ppm': [35.0, 34.94256273], 'gain_db': [-10.457574905606752, -10.465504174]}\n",
+ "problems": {
+  "apparatus": [],
+  "control": []
+ },
+ "verdict": "OK",
+ "bench": {
+  "samples": 315260,
+  "kernel": {
+   "shipped": {
+    "s_per_million_samples": 4.756104669162041,
+    "max_abs_diff_vs_direct": 0.0,
+    "bit_identical_to_direct": true,
+    "one_position_call_us": 60.263535000046886
+   },
+   "direct": {
+    "s_per_million_samples": 4.764232284463545,
+    "max_abs_diff_vs_direct": 0.0,
+    "bit_identical_to_direct": true,
+    "one_position_call_us": 60.53144749998296
+   },
+   "lean": {
+    "s_per_million_samples": 3.819540154158465,
+    "max_abs_diff_vs_direct": 0.0,
+    "bit_identical_to_direct": true,
+    "one_position_call_us": 54.69233749991531
+   },
+   "table-cubic-1024": {
+    "s_per_million_samples": 0.981953609718933,
+    "max_abs_diff_vs_direct": 7.444045380111675e-13,
+    "bit_identical_to_direct": false,
+    "one_position_call_us": 51.91755499993178,
+    "kernel_max_abs_error": 2.21183136741043e-12
+   },
+   "table-cubic-4096": {
+    "s_per_million_samples": 1.0057680485947627,
+    "max_abs_diff_vs_direct": 4.718447854656915e-14,
+    "bit_identical_to_direct": false,
+    "one_position_call_us": 52.69894000008435,
+    "kernel_max_abs_error": 1.3824064391128143e-13
+   },
+   "table-linear-16384": {
+    "s_per_million_samples": 0.47113328681100064,
+    "max_abs_diff_vs_direct": 3.1724045612691043e-10,
+    "bit_identical_to_direct": false,
+    "one_position_call_us": 45.30831500005661,
+    "kernel_max_abs_error": 1.535818805464828e-09
+   }
+  },
+  "components": [
+   {
+    "call": "load_reference('demo')",
+    "ms": 14.415850999967006,
+    "calls": 208,
+    "s_per_session": 0.2306536159994721,
+    "profiled_self_s_per_session": 0.013812178846157836
+   },
+   {
+    "call": "band(310k)",
+    "ms": 6.3676419999865175,
+    "calls": 650,
+    "s_per_session": 0.3183820999993259,
+    "profiled_self_s_per_session": 0.21617524315387562
+   },
+   {
+    "call": "envelope(310k)",
+    "ms": 5.237131000001227,
+    "calls": 624,
+    "s_per_session": 0.2513822880000589,
+    "profiled_self_s_per_session": 0.2017797540769095
+   },
+   {
+    "call": "read_capture(demo-1)",
+    "ms": 10.852817999989384,
+    "calls": 117,
+    "s_per_session": 0.09767536199990445,
+    "profiled_self_s_per_session": 0.05951101230767801
+   },
+   {
+    "call": "sha256_file(demo-1)",
+    "ms": 2.5972199999841905,
+    "calls": 962,
+    "s_per_session": 0.1921942799988301,
+    "profiled_self_s_per_session": 0.019489172384629463
+   },
+   {
+    "call": "write_capture_wav(demo-1)",
+    "ms": 12.198581000006925,
+    "calls": 117,
+    "s_per_session": 0.10978722900006233,
+    "profiled_self_s_per_session": 0.06216308107692852
+   },
+   {
+    "call": "ncc_lag, whole capture",
+    "ms": 19.24015099996268,
+    "calls": 7201,
+    "s_per_session": null,
+    "profiled_self_s_per_session": 0.11672941523066417
+   },
+   {
+    "call": "ncc_lag, one window",
+    "ms": 4.07473000001346,
+    "calls": 7201,
+    "s_per_session": null,
+    "profiled_self_s_per_session": 0.11672941523066417
+   },
+   {
+    "call": "_refine_peak",
+    "ms": 3.5029719999783993,
+    "calls": 7201,
+    "s_per_session": 1.9403770286034197,
+    "profiled_self_s_per_session": 0.09651090130844536
+   },
+   {
+    "call": "tone_f0(51k)",
+    "ms": 160.0933839999925,
+    "calls": 52,
+    "s_per_session": 0.64037353599997,
+    "profiled_self_s_per_session": 0.6331625770769438
+   },
+   {
+    "call": "rng.normal(310k x 4)",
+    "ms": 21.04308499997387,
+    "calls": 0,
+    "s_per_session": null,
+    "profiled_self_s_per_session": null
+   }
+  ]
+ }
+}
