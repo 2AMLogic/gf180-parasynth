@@ -1,10 +1,10 @@
 # `pytest tools/` on more workers: eighteen hosted runs of one commit, and what each candidate costs
 
 Issue #1947. The `tools` job of `.github/workflows/rungs.yml` runs
-`python -m pytest tools/ -q` in one process. #1816 established where its
-42-84 minutes go -- real test work, spread over 41 files, no overhead to
-remove -- so the one lever left that touches no test is running the directory
-on more than one worker. The question was whether that cuts **whole-job wall
+`python -m pytest tools/ -q` in one process. #1816 (its record is PR #1954,
+open when this was written) established where its 42-84 minutes go -- real
+test work, spread over 41 files, no overhead to remove -- so the one lever
+left that touches no test is running the directory on more than one worker. The question was whether that cuts **whole-job wall
 time** on a hosted `ubuntu-24.04` runner with every test still collected
 exactly once and coming out the same.
 
