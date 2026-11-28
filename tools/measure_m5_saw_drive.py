@@ -50,6 +50,10 @@ UNTOUCHED = (36, 48, 60, 72, 108, 120)
 DEV = (84, 96)
 
 
+class Refused(refusal.Refused, RuntimeError):
+    """A requested saw drive is outside the frozen candidate budget."""
+
+
 @contextlib.contextmanager
 def saw_only(drive: float, vol_factor: float):
     orig = score._patch_for_wave
@@ -85,7 +89,9 @@ def probe(engine, drive, f):
         with ol.engine_ctx(engine):
             r = mp.measure_point(engine, nt, mp.held_patch(waves=("saw",) * 3, drive=drive,
                                                            vol=SAW_VOL * f))
-        o = r["stages"]["output"]
+        o = mp.require_measured(r, "output", ("unwanted_rel_db", "unwanted_dbfs", "upper_wanted_rel_db",
+                                              "intended_dbfs"),
+                                f"measure_m5_saw_drive.probe: engine {engine}, drive {drive}, note {nt}")
         out[str(nt)] = {"unwanted_rel_db": o["unwanted_rel_db"], "unwanted_dbfs": o["unwanted_dbfs"],
                         "upper_wanted_rel_db": o["upper_wanted_rel_db"], "intended_dbfs": o["intended_dbfs"],
                         "output_rail": r["clip"]["output_rail_samples"]}
@@ -179,7 +185,7 @@ def _run(argv) -> int:
     else:
         drives = a.drives or (BASE_DRIVE,) + CANDIDATES
         if any(d != BASE_DRIVE and d not in CANDIDATES for d in drives):
-            raise SystemExit("REFUSED: outside the frozen three-candidate budget")
+            raise Refused("outside the frozen three-candidate budget")
         rows = {}
         for d in drives:
             f = 1.0 if d == BASE_DRIVE else ol.calibrate(a.engine, d)
