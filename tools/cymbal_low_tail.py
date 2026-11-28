@@ -153,10 +153,14 @@ CONTROLS: `--check`
 Eight named properties over synthetic strikes with planted time constants, and a
 properties x defects matrix over six injected defects (each of which must turn
 at least one property red) plus one transformation asserted BLIND by
-construction and verified to stay blind. `--check` exits non-zero if any
-property fails on the clean measurement, if any defect is caught by nothing, or
-if the blind transformation moves anything. `main()` runs it BEFORE measuring
-any record and REFUSES to report a result if it does not pass.
+construction and verified to stay blind. A control whose evaluation REFUSES is
+a third outcome: printed `REFUSED` with its reason and counted neither as a
+detection nor as a failure (#1839). `--check` exits 1 if anything MEASURED
+fails (a property on the clean measurement, a defect caught by nothing, a blind
+transformation that moved something), exits REFUSED (2, in
+`exit_contract.NO_EVIDENCE`) if a control refused and nothing measured failed,
+and exits 0 only when the matrix is whole. `main()` runs it BEFORE measuring
+any record and REFUSES to report a result unless it is whole.
 
 Both DIRECTIONS are properties, which matters because the direction our own
 renders read is the downward one: `rho-tracks` is a planted SLOWER low component
@@ -564,9 +568,21 @@ def properties(*, defect=None) -> dict:
     return out
 
 
-def check() -> tuple[bool, list[str]]:
-    lines, ok = [], True
-    clean = properties()
+def control_matrix() -> tuple[bool, list[str], list[str]]:
+    """The properties x defects matrix as THREE outcomes. `ok` is the measured
+    verdict: every property that ran passed, every injected defect that ran
+    turned something red, and every transformation asserted blind that ran
+    moved nothing. `refused` names each control whose evaluation raised
+    `Refused`, as `"NAME: reason"`. A control that could not run was neither
+    caught nor uncaught, so it is in neither count and leaves `ok` alone: the
+    matrix used to read its `REFUSED` cell as a detection (#1839), and a blind
+    transformation that refused as having moved something. The gate is green
+    only when `ok` AND `refused` is empty, which is what `check()` answers."""
+    lines, ok, refused = [], True, []
+    try:
+        clean = properties()
+    except Refused as e:
+        return True, [f"  clean measurement REFUSED: {e}"], [f"clean measurement: {e}"]
     lines.append("  clean measurement")
     for p in PROPERTIES:
         passed, v = clean[p]
@@ -574,15 +590,17 @@ def check() -> tuple[bool, list[str]]:
         ok = ok and passed
     lines.append("")
     lines.append(f"  {'defect':18s} " + " ".join(f"{p:>17s}" for p in PROPERTIES))
-    caught = []
+    caught, verified_blind = [], 0
     for name in DEFECTS + BLIND_BY_CONSTRUCTION:
         try:
             got = properties(defect=name)
-            cells = ["MOVED" if got[p][0] is False else "blind" for p in PROPERTIES]
-        except Refused as e:                  # a defect that makes the tool refuse is caught
-            got, cells = None, ["REFUSED"] + [""] * (len(PROPERTIES) - 1)
+        except Refused as e:
+            refused.append(f"{name}: {e}")
+            lines.append(f"  {name:18s} REFUSED: {e}")
+            continue
+        cells = ["MOVED" if got[p][0] is False else "blind" for p in PROPERTIES]
         lines.append(f"  {name:18s} " + " ".join(f"{c:>17s}" for c in cells))
-        n = sum(1 for c in cells if c in ("MOVED", "REFUSED"))
+        n = sum(1 for c in cells if c == "MOVED")
         if name in DEFECTS:
             caught.append(n > 0)
             if n == 0:
@@ -591,10 +609,23 @@ def check() -> tuple[bool, list[str]]:
         elif n:
             ok = False
             lines.append(f"    ^ {name} is asserted BLIND by construction and moved something")
+        else:
+            verified_blind += 1
     lines.append("")
-    lines.append(f"  {sum(caught)}/{len(DEFECTS)} injected defects turned at least one property red; "
-                 f"{len(BLIND_BY_CONSTRUCTION)} asserted blind and verified blind")
-    return ok, lines
+    summary = (f"  {sum(caught)}/{len(caught)} injected defects turned at least one property red; "
+               f"{verified_blind} asserted blind and verified blind")
+    if refused:
+        summary += f"; {len(refused)} REFUSED, counted neither way: " + "; ".join(refused)
+    lines.append(summary)
+    return ok, lines, refused
+
+
+def check() -> tuple[bool, list[str]]:
+    """`control_matrix()` as a two-valued gate, for the callers that only ask
+    green or not (`tools/cymbal_m_origin.py`, the #400 probe, their tests):
+    green only when nothing measured failed AND no control refused."""
+    ok, lines, refused = control_matrix()
+    return ok and not refused, lines
 
 
 # --------------------------------------------------------------------------
@@ -964,19 +995,26 @@ def main(argv=None) -> int:
         return 0
 
     if a.check:
-        ok, lines = check()
+        ok, lines, refused = control_matrix()
         print("\n".join(lines))
         print("\n".join(f"  rejection {b}: " + " ".join(f"{k} Hz {v:+.1f} dB" for k, v in d.items())
                         for b, d in rejection_db().items()))
-        return 0 if ok else 1
+        if not ok:
+            return 1             # something MEASURED failed: a result, not a refusal
+        if refused:
+            print(f"REFUSED: {len(refused)} control(s) could not run, so no verdict exists; "
+                  "see the REFUSED rows above")
+            return REFUSED       # in exit_contract.NO_EVIDENCE: nothing was measured for them
+        return 0
 
     res = {"rejection_db": rejection_db(), "depths": list(DEPTHS), "trim_s": TRIM_S,
            "bands": {k: list(v) for k, v in BANDS.items()}}
-    ok, lines = check()
-    res["controls_pass"] = ok
+    ok, lines, refused = control_matrix()
+    res["controls_pass"] = ok and not refused
     print("\n".join(lines))
-    if not ok:
-        print("REFUSED: the measurement's own controls do not pass; no result is reported")
+    if not ok or refused:
+        print(f"REFUSED: the measurement's own controls {'do not pass' if not ok else 'could not all run'}; "
+              "no result is reported")
         return REFUSED            # was 1: a refusal, not a mismatch -- no result exists
 
     settings = None if a.all_settings else ["CY5025"]

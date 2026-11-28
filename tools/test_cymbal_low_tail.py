@@ -29,6 +29,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import cymbal_low_tail as lt  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
+import exit_contract  # noqa: E402
 
 SR = lt.SR
 
@@ -467,11 +468,15 @@ def test_the_downward_property_is_seen_by_a_defect_and_is_not_decoration():
 @pytest.mark.parametrize("defect", lt.DEFECTS)
 def test_each_injected_defect_turns_at_least_one_property_red(defect):
     """A control that cannot fail is worse than no control (#376). Each defect
-    must move something, and the matrix in `--check` records WHICH."""
+    must move something, and the matrix in `--check` records WHICH. A defect
+    that REFUSES is neither caught nor uncaught, so it is skipped here -- not
+    passed, which is what this control used to do with one (#1839). Which
+    defects refuse on the current tree is pinned by name in
+    `test_the_only_control_refusing_on_the_current_tree_is_FORWARD_INTEGRAL`."""
     try:
         got = lt.properties(defect=defect)
-    except lt.Refused:
-        return                      # a defect that makes the tool refuse is caught
+    except lt.Refused as e:
+        pytest.skip(f"REFUSED: {e}")
     red = [p for p in lt.PROPERTIES if got[p][0] is False]
     assert red, f"{defect} turned nothing red"
 
@@ -487,9 +492,180 @@ def test_the_transformation_asserted_blind_really_is_blind(blind):
     assert not moved, (blind, moved)
 
 
-def test_check_returns_ok_on_the_current_tree():
+# --------------------------------------------------------------------------
+# a control that REFUSES is a third outcome (#1839)
+#
+# These controls are about the defect LOOP's accounting, so `properties` is
+# replaced by a stand-in with a known matrix -- every property passes clean,
+# every injected defect turns exactly `rho-tracks` red, the transformation
+# asserted blind moves nothing -- and refusals are planted on top of it. A
+# stand-in rather than the real instrument because the real one refuses under
+# FORWARD_INTEGRAL today (#1869, pinned below): a refusal planted there would
+# be indistinguishable from the one already there, and these controls would
+# then pass or fail with the instrument instead of with the loop.
+# --------------------------------------------------------------------------
+PLANTED = "apparatus off (planted)"
+BLIND = lt.BLIND_BY_CONSTRUCTION[0]
+
+
+def _known_matrix(*, defect=None):
+    if defect in lt.DEFECTS:
+        return {p: (p != "rho-tracks", None) for p in lt.PROPERTIES}
+    return {p: (True, None) for p in lt.PROPERTIES}
+
+
+def _refusing(*names, failing=None):
+    """`properties` as the known matrix, except that each entry of `names`
+    REFUSES; `None` names the clean measurement. `failing` is a property made
+    to FAIL on the clean measurement."""
+    def properties(*, defect=None):
+        if defect in names:
+            raise lt.Refused(PLANTED)
+        got = _known_matrix(defect=defect)
+        if defect is None and failing:
+            got[failing] = (False, "planted")
+        return got
+    return properties
+
+
+def _summary(lines):
+    hits = [l for l in lines if "injected defects turned" in l]
+    assert len(hits) == 1, lines
+    return hits[0]
+
+
+def _one_record_corpus(tmp_path):
+    """A corpus of one CY record that `prepare` refuses -- its first sample is
+    its own peak -- so a full run that gets past the gate reads it, records
+    the refusal per file and moves on. No Fischer corpus is needed."""
+    from scipy.io import wavfile
+    d = tmp_path / "refs" / "cy8"
+    d.mkdir(parents=True)
+    sig = np.zeros(int(2.5 * SR))
+    sig[0] = 32767
+    wavfile.write(str(d / "CY5025.WAV"), SR, sig.astype("<i2"))
+    return tmp_path / "refs"
+
+
+def test_a_refusing_defect_is_reported_refused_and_counted_neither_way(monkeypatch):
+    """Before #1839 the refusal sat in the matrix as a detection: `6/6 turned
+    at least one property red`, gate green. It is now out of both counts."""
+    monkeypatch.setattr(lt, "properties", _refusing("WIDE_M"))
+    ok, lines = lt.check()
+    assert ok is False, "the gate is not green while a control could not run"
+    assert f"  {'WIDE_M':18s} REFUSED: {PLANTED}" in lines
+    assert _summary(lines) == (
+        "  5/5 injected defects turned at least one property red; 1 asserted blind and verified blind"
+        f"; 1 REFUSED, counted neither way: WIDE_M: {PLANTED}")
+
+
+def test_a_refusal_leaves_the_measured_verdict_alone(monkeypatch):
+    """The three outcomes, kept apart: a refusal is not a measured failure."""
+    monkeypatch.setattr(lt, "properties", _refusing("WIDE_M"))
+    ok, lines, refused = lt.control_matrix()
+    assert ok is True, "\n".join(lines)
+    assert refused == [f"WIDE_M: {PLANTED}"]
+    assert _summary(lines).startswith("  5/5 injected defects turned")
+
+
+def test_a_refusing_blind_transformation_is_refused_not_reported_as_moving_something(monkeypatch):
+    """The inverse of the one above, in the same loop: a blind transformation
+    that refused read `REFUSED` in a cell, the cell counted as a move, and the
+    line said `asserted BLIND by construction and moved something`."""
+    monkeypatch.setattr(lt, "properties", _refusing(BLIND))
+    ok, lines = lt.check()
+    assert ok is False
+    assert f"  {BLIND:18s} REFUSED: {PLANTED}" in lines
+    assert not [l for l in lines if "moved something" in l], lines
+    assert _summary(lines) == (
+        "  6/6 injected defects turned at least one property red; 0 asserted blind and verified blind"
+        f"; 1 REFUSED, counted neither way: {BLIND}: {PLANTED}")
+
+
+def test_a_refusing_clean_measurement_is_a_refusal_not_a_traceback(monkeypatch):
+    """The third place the loop calls `properties`: with nothing measured at
+    all the gate is still not green, and the refusal still has somewhere to
+    go. Before #1839 it escaped `check()` uncaught."""
+    monkeypatch.setattr(lt, "properties", _refusing(None))
+    assert lt.check() == (False, [f"  clean measurement REFUSED: {PLANTED}"])
+    assert lt.main(["--check"]) == exit_contract.REFUSED
+
+
+def test_dash_check_exits_no_evidence_when_a_control_refuses_and_nothing_measured_failed(monkeypatch, capsys):
+    """argparse's usage error also exits 2, so the status is pinned together
+    with the message that says why."""
+    monkeypatch.setattr(lt, "properties", _refusing("WIDE_M"))
+    rc = lt.main(["--check"])
+    out = capsys.readouterr().out
+    assert rc == exit_contract.REFUSED and rc in exit_contract.NO_EVIDENCE
+    assert "REFUSED:" in out and f"WIDE_M: {PLANTED}" in out, out[-600:]
+
+
+def test_a_refusing_blind_transformation_alone_exits_no_evidence(monkeypatch, capsys):
+    monkeypatch.setattr(lt, "properties", _refusing(BLIND))
+    rc = lt.main(["--check"])
+    assert rc == exit_contract.REFUSED and rc in exit_contract.NO_EVIDENCE
+    assert f"{BLIND}: {PLANTED}" in capsys.readouterr().out
+
+
+def test_a_measured_failure_outranks_a_refusal_at_the_exit_status(monkeypatch, capsys):
+    """Both at once: something MEASURED failed, so the status is a result."""
+    monkeypatch.setattr(lt, "properties", _refusing("WIDE_M", failing="edt-known"))
+    rc = lt.main(["--check"])
+    out = capsys.readouterr().out
+    assert rc == exit_contract.FAIL == 1
+    assert "FAIL" in out and f"WIDE_M: {PLANTED}" in out, out[-600:]
+
+
+def test_a_control_that_runs_and_turns_nothing_red_still_exits_one(monkeypatch, capsys):
+    """Unchanged by #1839, and pinned so the third outcome cannot absorb it: a
+    control that RAN and caught nothing is a measured failure."""
+    monkeypatch.setattr(lt, "properties", lambda *, defect=None: {p: (True, None) for p in lt.PROPERTIES})
+    rc = lt.main(["--check"])
+    assert rc == exit_contract.FAIL == 1
+    assert "CONTROL CANNOT FAIL" in capsys.readouterr().out
+
+
+def test_the_full_run_reports_no_result_while_a_control_refuses(monkeypatch, tmp_path, capsys):
+    """`main()` runs the gate before measuring any record. A result written
+    beside a control that never ran is the thing #1839 is about, whichever
+    way the CLI is entered."""
+    monkeypatch.setattr(lt, "properties", _refusing("WIDE_M"))
+    out = tmp_path / "r.json"
+    rc = lt.main(["--refs", str(_one_record_corpus(tmp_path)), "--out", str(out)])
+    assert rc == exit_contract.REFUSED
+    assert not out.exists()
+    assert "REFUSED:" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------
+# the current tree, unstubbed
+# --------------------------------------------------------------------------
+def test_the_measured_verdict_is_ok_on_the_current_tree():
+    """Nothing MEASURED fails: every property passes and every control that
+    ran did its job. That is not the same as a green gate; the two controls
+    below hold the difference."""
+    ok, lines, refused = lt.control_matrix()
+    assert ok, "\n".join(lines)
+
+
+def test_the_only_control_refusing_on_the_current_tree_is_FORWARD_INTEGRAL():
+    """The real instrument, and the reason `check()` cannot be asserted green
+    on this tree: FORWARD_INTEGRAL has refused since step 6 (#1869), so
+    `edt-known` has no live must-fail control. Pinned BY NAME so a second
+    refusal cannot hide behind this one. The repair of #1869 turns this red;
+    delete it then, with the xfail below."""
+    ok, lines, refused = lt.control_matrix()
+    assert ok, "\n".join(lines)
+    assert [r.split(": ", 1)[0] for r in refused] == ["FORWARD_INTEGRAL"], (refused, "\n".join(lines))
+
+
+@pytest.mark.xfail(strict=True, reason="FORWARD_INTEGRAL refuses on the current tree (#1869); once it is "
+                                      "repaired this XPASSes and the marker must be removed")
+def test_the_gate_is_green_on_the_current_tree():
     """Run the gate against the current state before relying on it -- an
-    unsatisfiable gate trains everyone to ignore gates."""
+    unsatisfiable gate trains everyone to ignore gates. It is NOT green
+    today; this says so, and refuses to be quietly satisfied."""
     ok, lines = lt.check()
     assert ok, "\n".join(lines)
 
