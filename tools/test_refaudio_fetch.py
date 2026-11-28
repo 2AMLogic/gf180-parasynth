@@ -9,7 +9,17 @@ No network and no storage: `ssh` is replaced on PATH by a stub whose behaviour
 the test sets, so what is tested is this tool's handling of each remote outcome.
 """
 from __future__ import annotations
-import json, os, pathlib, stat, sys, textwrap
+
+import errno
+import json
+import os
+import pathlib
+import shutil
+import stat
+import subprocess
+import sys
+import textwrap
+
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -64,6 +74,46 @@ def test_no_route_is_refused_not_failed(lib, monkeypatch, tmp_path, capsys):
     assert "REFUSED" in capsys.readouterr().out
     assert not (tmp_path / "ssh.log").exists(), "REFUSED must not have tried the network"
     assert cached(lib) == []
+
+
+@pytest.mark.parametrize(
+    "non_executable", [False, True], ids=["absent", "non-executable"]
+)
+def test_unavailable_ssh_refuses_the_whole_request(
+    lib, monkeypatch, tmp_path, capsys, non_executable
+):
+    bindir = tmp_path / "transport"
+    bindir.mkdir()
+    monkeypatch.setenv("PATH", str(bindir))
+    if non_executable:
+        ssh = bindir / "ssh"
+        ssh.touch()
+        ssh.chmod(0o644)
+    assert shutil.which("ssh") is None
+
+    assert rf.main([ARCHIVE, MEMBER, "second.wav"]) == 2
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    lines = captured.out.splitlines()
+    assert len(lines) == 1 and lines[0].startswith("REFUSED  ")
+    assert "ssh" in lines[0] and "PATH" in lines[0]
+    assert not (lib / "cache").exists()
+
+
+def test_ssh_discovery_accepts_an_executable_with_an_invalid_format(
+    lib, monkeypatch, tmp_path
+):
+    """The mode bits pass the guard even when the OS cannot launch the file."""
+    bindir = tmp_path / "bin"
+    ssh = bindir / "ssh"
+    ssh.write_bytes(b"invalid executable\n")
+    monkeypatch.setenv("PATH", str(bindir))
+    assert shutil.which("ssh") == str(ssh)
+
+    rf.preconditions(ARCHIVE, [MEMBER])
+    with pytest.raises(OSError) as error:
+        subprocess.run(["ssh"], check=True)
+    assert error.value.errno == errno.ENOEXEC
 
 
 @pytest.mark.parametrize("archive,member", [
