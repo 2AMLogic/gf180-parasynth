@@ -818,6 +818,38 @@ def test_the_conga_position_drops_far_less_than_the_tom_at_the_same_frequency():
         f"measures 0.061 against 0.0055")
 
 
+@pytest.mark.parametrize("coef_seq", [True, False], ids=["sequenced", "bare"])
+def test_hit_writes_preserves_pitch_sequences_for_one_shot_hits(coef_seq):
+    kit = dx.kit_808()
+    image = dict(kit)
+    hits = [(0, dx.LT, 1.5), (0, dx.BD, 1.0)]
+    expected = [(0, addr, value) for addr, value in kit]
+    if coef_seq:
+        # Contract 15.7.1: six 10 ms holds of the exponential's interval
+        # mean, then its endpoint at 60 ms. Use the kit's quantized tuning.
+        lt = dx.A_MODE + dx.M_LT * dx.MODE_STRIDE
+        hz, q = dx.poles_from_regs(image[lt], image[lt + 1])
+        excess = dx.tom_drop_excess(dx.M_LT, hz, 1.5)
+        for step in range(7):
+            shape = math.exp(-step / 2)
+            if step < 6:
+                shape *= 2 * (1 - math.exp(-0.5))
+            poles = dx.mode_writes(dx.M_LT, hz * (1 + excess * shape), q, 0.0)[:2]
+            expected.extend((step * 480, addr, value) for addr, value in poles)
+
+        # The kick follows the tom at onset and restores the loaded poles at 4 ms.
+        attack = dx.mode_writes(dx.M_BD, 130.0, 6.0, 0.0)[:2]
+        expected.extend((0, addr, value) for addr, value in attack)
+        expected.extend((192, addr, image[addr]) for addr, _ in attack)
+
+    expected.extend([(0, dx.A_ACCENT + dx.LT, 49152), (0, dx.A_ACCENT + dx.BD, 32768),
+                     (0, dx.A_STOPS, (1 << dx.LT) | (1 << dx.BD)), (1, dx.A_STOPS, 0)])
+    expected.sort(key=lambda write: write[0])
+    listed = dx.hit_writes(hits, kit, coef_seq=coef_seq)
+    assert listed == expected
+    assert dx.hit_writes(iter(hits), kit, coef_seq=coef_seq) == listed
+
+
 def test_a_write_past_the_end_is_dropped_and_a_negative_frame_is_not():
     """`play(writes, n)` must tolerate a write scheduled at or after frame n:
     the coefficient sequences of 15.7.1 run to 60 ms past a hit, so any caller
