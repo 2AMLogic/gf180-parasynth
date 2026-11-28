@@ -927,7 +927,8 @@ def test_tone_bound_does_not_pass_on_a_non_finite_width_from_another_source(figs
     assert "figure decay" in detail, detail
 
 
-def test_the_figure_route_refuses_to_apply_a_balance_bounded_by_a_non_finite_width(figs, monkeypatch):
+def test_the_figure_route_refuses_to_apply_a_balance_bounded_by_a_non_finite_width(
+        figs, monkeypatch):
     """`figure_route_gains` asked the same `w > BOUND`. With every figure width
     non-finite (the low band is the reference, so poisoning it poisons all
     three ratios) nothing was wider than the bound, and a balance known only
@@ -942,7 +943,8 @@ def test_the_figure_route_refuses_to_apply_a_balance_bounded_by_a_non_finite_wid
 
 
 @pytest.mark.parametrize("mode", ["--check", "--json"])
-def test_cli_refuses_a_non_finite_schematic_record(mode, schematic_record_bytes, tmp_path, capsys):
+def test_cli_refuses_a_non_finite_schematic_record(
+        mode, schematic_record_bytes, tmp_path, capsys):
     """What a CI step runs: exit 2 with `REFUSED:` naming the band and the
     field, and no evidence record written."""
     schematic_record_bytes("decay", "db", NAN)
