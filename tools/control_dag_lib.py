@@ -235,6 +235,11 @@ def main(description, controls, run_one, *, show, ok_message, argv=None,
             print()
         return 0
 
+    if not controls:
+        print("REFUSED: the controls table is empty -- no control was run, so "
+              "nothing was measured and the ok message was not earned.")
+        return 2
+
     if baseline is not None:
         rc, failed, tail = baseline()
         if rc != 0:

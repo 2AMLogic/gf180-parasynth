@@ -297,17 +297,20 @@ def test_argv_names_treats_the_path_as_a_literal_not_a_pattern():
     assert not probe._argv_names("/re.po/XwtX/worktrees+issue-7", w)
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux") or not Path("/proc/self/cmdline").exists(),
+                    reason="the empty-worktree observation requires Linux /proc")
 def test_main_exits_zero_when_repo_has_no_worktrees(tmp_path, capsys):
     assert probe.main(["--repo-root", str(tmp_path)]) == 0
     assert "no issue worktrees" in capsys.readouterr().out
 
 
-def test_main_refuses_rather_than_reporting_on_a_non_linux_host(monkeypatch, capsys):
+def test_main_refuses_rather_than_reporting_on_a_non_linux_host(monkeypatch, tmp_path, capsys):
     """REFUSED, not a comfortable zero, when the apparatus cannot answer."""
     monkeypatch.setattr(probe.sys, "platform", "darwin")
-    assert probe.main([]) == 3
+    assert probe.main(["--repo-root", str(tmp_path)]) == 3
     out = capsys.readouterr().out
     assert "REFUSED" in out
+    assert "needs a Linux /proc" in out
     assert "not a pass" in out
 
 

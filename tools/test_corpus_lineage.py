@@ -757,9 +757,45 @@ def test_invalid_json_is_refused_rather_than_skipped(tmp_path):
         cl.load(p)
 
 
+@pytest.mark.parametrize("payload", [b"null", b"\xff"])
+def test_unreadable_lineage_object_refuses_at_cli(tmp_path, monkeypatch, capsys, payload):
+    path = tmp_path / "corpus.json"
+    path.write_bytes(payload)
+    monkeypatch.setattr(cl, "MANIFEST", path)
+    assert cl.main(["check"]) == 3
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and path.name in out
+
+
 def test_a_manifest_missing_a_top_level_key_is_refused(tree):
     m = tree.load()
     del m["assignment_rule"]
+    tree.save(m)
+    with pytest.raises(cl.Refused):
+        tree.check()
+
+
+def test_an_empty_or_non_dict_pack_list_is_refused(tree, monkeypatch, capsys):
+    """#1469: `packs: []` with an empty `<!-- corpus-lineage:packs -->` region
+    ran the per-pack loop zero times, matched `[] == []` in R8 ('0 packs,
+    document and manifest agree'), and exited 0 ('every rule holds')."""
+    m = tree.load()
+    m["packs"] = []
+    tree.save(m)
+    doc_txt = tree.doc.read_text()
+    s, e = cl.PACK_REGION[0].search(doc_txt), cl.PACK_REGION[1].search(doc_txt)
+    tree.doc.write_text(doc_txt[:s.end()] + "\n" + doc_txt[e.start():])
+    with pytest.raises(cl.Refused, match="no packs"):
+        tree.check()
+    monkeypatch.setattr(cl, "MANIFEST", tree.manifest)
+    monkeypatch.setattr(cl, "DOC", tree.doc)
+    assert cl.main(["check"]) == 3
+    assert cl.main(["check", "--strict"]) == 3
+    assert "REFUSED" in capsys.readouterr().out
+
+    # Rule 8: a truthy non-dict entry `[None]` must also refuse cleanly rather
+    # than bypassing `not m['packs']` and crashing inside the loop.
+    m["packs"] = [None]
     tree.save(m)
     with pytest.raises(cl.Refused):
         tree.check()

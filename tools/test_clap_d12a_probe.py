@@ -65,6 +65,64 @@ def test_manifest_mismatch_refuses(tmp_path):
         cp.verify_manifest(tmp_path, m)
 
 
+def test_empty_manifest_refuses_instead_of_verifying_nothing(tmp_path):
+    """#1469: a zero-byte manifest gave `rows == []`, so `bad == []` and the
+    reference-hash precondition passed without hashing one file."""
+    (tmp_path / "cp8").mkdir()
+    (tmp_path / "cp8" / "CP.WAV").write_bytes(b"cp")
+    m = tmp_path / "m.sha256"
+    m.write_bytes(b"")
+    with pytest.raises(cp.Refused) as e:
+        cp.verify_manifest(tmp_path, m)
+    assert "empty" in str(e.value)
+
+
+def test_populated_manifest_passes_and_still_names_a_mismatch(tmp_path):
+    # the good case beside the refusal: cp8/CP.WAV covered by its true digest
+    import hashlib
+    (tmp_path / "cp8").mkdir()
+    (tmp_path / "cp8" / "CP.WAV").write_bytes(b"cp")
+    m = tmp_path / "m.sha256"
+    m.write_text(hashlib.sha256(b"cp").hexdigest() + "  ./cp8/CP.WAV\n")
+    got = cp.verify_manifest(tmp_path, m)
+    assert got["files_checked"] == 1 and got["files_mismatched"] == 0
+
+
+def test_manifest_not_covering_cp_wav_refuses(tmp_path):
+    # Rule 8 defeating input for `if not rows:`: a non-empty manifest that
+    # hashes only a bystander file leaves cp8/CP.WAV -- the file the probe
+    # actually measures -- unverified.
+    import hashlib
+    (tmp_path / "cp8").mkdir()
+    (tmp_path / "cp8" / "CP.WAV").write_bytes(b"unverified-cp")
+    (tmp_path / "other.txt").write_bytes(b"abc")
+    m = tmp_path / "m.sha256"
+    m.write_text(hashlib.sha256(b"abc").hexdigest() + "  ./other.txt\n")
+    with pytest.raises(cp.Refused, match="CP.WAV"):
+        cp.verify_manifest(tmp_path, m)
+
+
+def test_malformed_manifest_line_refuses(tmp_path):
+    (tmp_path / "cp8").mkdir()
+    (tmp_path / "cp8" / "CP.WAV").write_bytes(b"cp")
+    m = tmp_path / "m.sha256"
+    m.write_text("not-a-digest-and-path-line\n")
+    with pytest.raises(cp.Refused, match="malformed"):
+        cp.verify_manifest(tmp_path, m)
+
+
+@pytest.mark.parametrize("payload", [b"", b"null"])
+def test_unreadable_d12a_record_refuses_before_rendering(tmp_path, monkeypatch, capsys, payload):
+    path = tmp_path / "D12A.json"
+    path.write_bytes(payload)
+    monkeypatch.setattr(cp, "RECORD", path)
+    monkeypatch.setattr(cp, "basis", lambda *_: {})
+    monkeypatch.setattr(rc, "run_drum_case", lambda *a, **kw: pytest.fail("record accepted"))
+    assert cp.main([]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and str(path) in out
+
+
 @pytest.fixture
 def replay_d12a(tmp_path, monkeypatch):
     """Replay the reporting path with the committed record and fixture audio."""
@@ -97,6 +155,82 @@ def replay_d12a(tmp_path, monkeypatch):
         return cp.main(["--out", str(output)])
 
     return committed, scored, run, output, diagnoses
+
+
+@pytest.mark.parametrize("side", ["committed", "scorer"])
+@pytest.mark.parametrize("keep", [(), ("burst/tail ratio",)])
+def test_reproduction_refuses_incomplete_metric_inventory(replay_d12a, capsys, side, keep):
+    committed, scored, run, output, diagnoses = replay_d12a
+    scored["metrics"]["decay"]["error"] = 12345
+    record = committed if side == "committed" else scored
+    record["metrics"] = {name: record["metrics"][name] for name in keep}
+    assert run() == 2
+    message = capsys.readouterr().out
+    assert "REFUSED" in message and side in message and "decay" in message
+    assert not diagnoses and not output.exists()
+
+
+@pytest.mark.parametrize("name,row", [
+    ("decay", {}),
+    ("decay", {"valid": True}),
+    ("burst/tail ratio", {"valid": False, "why": "no ratio measured"}),
+])
+def test_reproduction_refuses_matching_incomplete_rows(replay_d12a, capsys, name, row):
+    committed, scored, run, output, diagnoses = replay_d12a
+    committed["metrics"][name] = row
+    scored["metrics"][name] = row
+    assert run() == 2
+    message = capsys.readouterr().out
+    assert "REFUSED" in message and name in message
+    assert not diagnoses and not output.exists()
+
+
+def test_reproduction_counts_metrics_from_the_plan(replay_d12a, monkeypatch):
+    committed, scored, run, output, _ = replay_d12a
+    name = "additional planned measurement"
+    plan = rc.DRUM_PLAN["CP"]
+    monkeypatch.setitem(rc.DRUM_PLAN, "CP", [*plan, (name, *plan[0][1:])])
+    for record in (committed, scored):
+        record["metrics"][name] = record["metrics"]["decay"].copy()
+    assert run() == 0
+    reproduction = json.loads(output.read_text())["reproduction"]
+    assert name in reproduction["metrics"]
+    assert "x 4 metrics" in reproduction["fields_compared"]
+
+
+def test_reproduction_refuses_wrong_metric_with_same_count(replay_d12a, capsys):
+    committed, scored, run, output, diagnoses = replay_d12a
+    for record in (committed, scored):
+        record["metrics"]["other"] = record["metrics"].pop("decay")
+    assert run() == 2
+    message = capsys.readouterr().out
+    assert "decay" in message and "other" in message
+    assert not diagnoses and not output.exists()
+
+
+@pytest.mark.parametrize("plan_defect", ["empty", "duplicate"])
+def test_reproduction_refuses_unusable_clap_plan(replay_d12a, monkeypatch, capsys, plan_defect):
+    _, _, run, output, diagnoses = replay_d12a
+    plan = rc.DRUM_PLAN["CP"]
+    monkeypatch.setitem(rc.DRUM_PLAN, "CP", [] if plan_defect == "empty" else [*plan, plan[0]])
+    assert run() == 2
+    assert "CP measurement plan" in capsys.readouterr().out
+    assert not diagnoses and not output.exists()
+
+
+@pytest.mark.parametrize("mismatch", [False, True])
+def test_reproduction_compares_all_planned_metrics(replay_d12a, capsys, mismatch):
+    committed, scored, run, output, diagnoses = replay_d12a
+    if mismatch:
+        scored["metrics"]["decay"]["error"] = 12345
+        assert run() == 2
+        assert "decay.error" in capsys.readouterr().out
+        assert not diagnoses and not output.exists()
+    else:
+        assert run() == 0
+        reproduced = json.loads(output.read_text())["reproduction"]
+        assert reproduced["metrics"] == committed["metrics"]
+        assert "x 3 metrics" in reproduced["fields_compared"]
 
 
 PARTIAL_RECORD_FIELDS = ("metrics", "windowing", "diagnostics", "source_commit", "analysis_run", "audio")

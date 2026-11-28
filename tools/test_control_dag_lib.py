@@ -234,3 +234,23 @@ def test_main_three_tuple_green_mutation_flips_to_not_held_and_exits_one(capsys)
     assert re.search(r"^DID NOT HOLD\s+M", out, re.M)
     assert "stayed GREEN" in out
     assert "did not hold" in out
+
+
+def test_main_with_an_empty_controls_table_refuses_instead_of_printing_ok(capsys):
+    """#1469's census shape: `controls={}` ran nothing, `bad` stayed empty and
+    the caller's ok_message printed with exit 0. Nothing was measured, so the
+    outcome is REFUSED (2), the same code the red-baseline refusal uses."""
+    calls = []
+    rc = cdl.main("doc", {}, lambda name: calls.append(name), show=str,
+                  ok_message="OK -- all held", argv=[])
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert calls == []
+    assert "OK -- all held" not in out
+    assert "REFUSED" in out and "no control" in out
+
+
+def test_list_with_an_empty_controls_table_stays_exit_zero():
+    # `--list` is an inventory, not a verdict: it must stay exit 0.
+    assert cdl.main("doc", {}, lambda name: None, show=str,
+                    ok_message="OK", argv=["--list"]) == 0

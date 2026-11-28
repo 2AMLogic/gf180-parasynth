@@ -163,12 +163,20 @@ def parse_cells(text):
     for line in text.splitlines():
         m = re.match(r"^==== CELL (\S+) ====$", line)
         if m:
-            cur = m.group(1)
-            if cur in cells:
-                raise Refused(f"duplicate cell header in dump: {cur}")
+            name = m.group(1)
+            if name in cells:
+                raise Refused(f"duplicate cell header in dump: {name}")
+            if cur is not None:
+                raise Refused(f"cell {cur}: missing END CELL before {name}")
+            cur = name
             cells[cur] = {"name": cur, "props": {}, "pins": [],
                           "fanout": [], "cone": []}
             section = "props"
+            continue
+        if line.startswith("==== END CELL"):
+            if cur is None or line != f"==== END CELL {cur} ====":
+                raise Refused(f"unexpected END CELL marker {line!r} with open cell {cur!r}")
+            cur = None
             continue
         if cur is None:
             continue
@@ -180,9 +188,6 @@ def parse_cells(text):
             continue
         if line.startswith("---- control cones"):
             section = "cone"
-            continue
-        if line.startswith("==== END CELL"):
-            cur = None
             continue
         if section == "props" and " = " in line:
             k, v = line.split(" = ", 1)
@@ -198,6 +203,8 @@ def parse_cells(text):
             cells[cur]["fanout"].append(line)
         elif section == "cone":
             cells[cur]["cone"].append(line)
+    if cur is not None:
+        raise Refused(f"cell {cur}: missing END CELL at end of dump")
     return cells
 
 
@@ -205,7 +212,9 @@ def pin_map(cell):
     """pin base name -> list of (index, net, driver)."""
     out = {}
     for p in cell["pins"]:
-        m = re.match(r"^([A-Za-z][A-Za-z0-9]*)(?:\[(\d+)\])?$", p["pin"])
+        m = re.fullmatch(r"([A-Za-z][A-Za-z0-9]*)(?:\[(\d+)\])?", p["pin"])
+        if m is None:
+            raise Refused(f"cell {cell['name']}: invalid pin name {p['pin']!r}")
         base, idx = m.group(1), m.group(2)
         out.setdefault(base, []).append(
             (int(idx) if idx is not None else None, p["net"], p["driver"]))
@@ -230,19 +239,26 @@ def validate_required_cell(name, cell):
         raise Refused(
             f"required cell {name}: no OPMODE pins in the extraction -- "
             f"a defect of the apparatus, not OPMODE 0000000")
-    idxs = sorted(i for i, _, _ in op)
+    idxs = [i for i, _, _ in op]
     if len(idxs) != len(set(idxs)):
         raise Refused(f"required cell {name}: duplicate OPMODE pin index")
     if set(idxs) != OPMODE_BITS:
         raise Refused(
             f"required cell {name}: OPMODE pins {idxs} != all seven bits "
             f"{sorted(OPMODE_BITS)}")
-    missing = [k for k in MANDATORY_PROPS
-               if not (cell["props"].get(k) or "").strip()]
+    for idx, net, driver in op:
+        if (net in ("", "-") or driver.strip() in ("", "-")
+                or driver.startswith("NO-DRIVER (") or driver.endswith(" (-)")):
+            raise Refused(f"required cell {name}: missing connectivity for OPMODE[{idx}] "
+                          f"(net={net!r}, driver={driver!r})")
+    missing = []
+    for k in MANDATORY_PROPS:
+        value = cell["props"].get(k, "").strip()
+        if not value or value.startswith("ERR:"):
+            missing.append(k)
     if missing:
         raise Refused(
-            f"required cell {name}: missing mandatory properties "
-            f"{missing}")
+            f"required cell {name}: missing mandatory properties or failed reads: {missing}")
 
 
 def analyse(name, cell):

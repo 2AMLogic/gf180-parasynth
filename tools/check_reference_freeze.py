@@ -27,10 +27,11 @@ Covered (each a statement that editing it changes what the V3 suite MEANS):
 
 Outcomes, per the exit contract: PASS 0 (every hash held), FAIL 1 (a file's
 hash moved or a covered file is missing -- the freeze is broken, and the
-offending path is named), REFUSED 2 (the freeze manifest is missing or
-malformed, or the corpus manifest a canonical entry is resolved from is
-missing, unreadable or lacks a key of that path, so nothing could be
-checked).
+offending path is named), REFUSED 2 (the freeze manifest is missing, malformed
+or empty, so nothing could be checked -- a zero-entry manifest over an empty
+tree is not a freeze that holds, it is no freeze at all; or the corpus manifest
+a canonical entry is resolved from is missing, unreadable or lacks a key of
+that path).
 
 A mutation of one frozen file is a committed control for this tool:
 `tools/test_reference_freeze.py` copies the tree, edits one byte, and requires
@@ -62,6 +63,11 @@ FREEZE_DOCS = (
     "docs/minimoog-reference.md",
     "docs/moog-recording-protocol.md",
 )
+
+# The record inventory at the freeze (43d81436), independent of the supplied
+# manifest and root. SHA-256 of the sorted git ls-tree -r --name-only paths
+# under the three SUITE_V3_FROZEN directories, joined with LF, no trailing LF.
+FROZEN_RECORD_PATHS_SHA256 = "2beb6985593a753a9681840b754361893f63422a3d874ed64c2716a026572a80"
 
 #: Canonical (sorted-keys JSON) hashes of objects inside files that must stay
 #: editable as a whole. Key is the dotted path from the JSON root.
@@ -130,6 +136,18 @@ def manifest_entries(path: pathlib.Path) -> list[tuple[str, str, str]]:
         if len(parts) != 3 or parts[0] not in ("file", "canon"):
             raise Refused(f"freeze manifest line {n} is malformed: {line!r}")
         entries.append((parts[0], parts[1], parts[2]))
+    if not entries:
+        raise Refused(f"freeze manifest is empty: {path} -- it covers nothing, "
+                      f"so there is no freeze to check")
+    file_subjects = {s for k, _d, s in entries if k == "file"}
+    canon_subjects = {s for k, _d, s in entries if k == "canon"}
+    record_paths = sorted(file_subjects.difference(FREEZE_DOCS))
+    inventory = hashlib.sha256("\n".join(record_paths).encode()).hexdigest()
+    if (inventory != FROZEN_RECORD_PATHS_SHA256 or not set(FREEZE_DOCS) <= file_subjects
+            or canon_subjects != set(FREEZE_CANON_KEYS)
+            or len(entries) != len(file_subjects) + len(canon_subjects)):
+        raise Refused(f"freeze manifest is incomplete or differs from the frozen inventory: "
+                      f"{path} ({len(record_paths)} record paths)")
     return entries
 
 

@@ -117,6 +117,77 @@ def test_a_malformed_freeze_manifest_is_refused(frozen_scope_copy):
     assert cf.check(frozen_scope_copy, p) == cf.REFUSED
 
 
+def test_an_empty_freeze_manifest_over_an_empty_tree_is_refused(tmp_path, capsys):
+    # The census false pass (#1466 / #1469): a zero-byte manifest over an
+    # empty directory enumerated nothing, compared nothing, found nothing
+    # grown, and printed `PASS  0 frozen entries hold`. Nothing was checked,
+    # so no verdict exists -- the same REFUSED as a missing manifest.
+    empty_root = tmp_path / "root"
+    empty_root.mkdir()
+    empty_manifest = tmp_path / "empty.sha256"
+    empty_manifest.write_bytes(b"")
+    assert cf.check(empty_root, empty_manifest) == cf.REFUSED
+    code = cf.main(["--root", str(empty_root),
+                    "--freeze-manifest", str(empty_manifest)])
+    out = capsys.readouterr().out
+    assert code == cf.REFUSED
+    assert out.startswith("REFUSED")
+    assert "empty" in out
+    assert "PASS" not in out
+
+
+def test_a_whitespace_only_freeze_manifest_is_refused(frozen_scope_copy):
+    # Same empty record, reached by a blank line instead of zero bytes.
+    p = frozen_scope_copy / MANIFEST.name
+    p.write_text("\n")
+    assert cf.check(frozen_scope_copy, p) == cf.REFUSED
+
+
+def test_a_manifest_omitting_frozen_files_or_canon_is_refused(tmp_path):
+    # Rule 8 defeating input for `if not entries:`: a manifest carrying ONLY
+    # the `canon` line over a tree with no frozen directories satisfied
+    # `if not entries:`, saw `grew == []` (missing dirs have no files), and
+    # printed `PASS  1 frozen entries hold (0 files, 1 canonical)` with 0
+    # frozen files checked. Likewise, dropping the canon key or any frozen
+    # suite directory / doc must refuse rather than certify a partial scope.
+    root = tmp_path / "canon-only-root"
+    (root / cf.CORPUS_MANIFEST).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / cf.CORPUS_MANIFEST, root / cf.CORPUS_MANIFEST)
+    canon_lines = [ln for ln in MANIFEST.read_text().splitlines()
+                   if ln.startswith("canon  ")]
+    assert len(canon_lines) == 1
+    canon_only = tmp_path / "canon-only.sha256"
+    canon_only.write_text(canon_lines[0] + "\n")
+    assert cf.check(root, canon_only) == cf.REFUSED
+
+    file_only_lines = [ln for ln in MANIFEST.read_text().splitlines()
+                       if ln.startswith("file  ")]
+    file_only = tmp_path / "file-only.sha256"
+    file_only.write_text("\n".join(file_only_lines) + "\n")
+    assert cf.check(ROOT, file_only) == cf.REFUSED
+
+    drop_m5b = [ln for ln in MANIFEST.read_text().splitlines()
+                if "docs/scorecard/mono-m5b-miniv3/" not in ln]
+    partial_dirs = tmp_path / "no-m5b.sha256"
+    partial_dirs.write_text("\n".join(drop_m5b) + "\n")
+    assert cf.check(ROOT, partial_dirs) == cf.REFUSED
+
+
+def test_documentation_only_tree_cannot_stand_in_for_frozen_records(tmp_path, capsys):
+    docs = set(cf.FREEZE_DOCS)
+    for directory in rs.SUITE_RECORDS[rs.SUITE_V3_FROZEN]:
+        docs.add(str(sorted((ROOT / directory).glob("*.md"))[0].relative_to(ROOT)))
+    for path in docs | {cf.CORPUS_MANIFEST}:
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / path, tmp_path / path)
+    lines = [line for line in MANIFEST.read_text().splitlines()
+             if line.startswith("canon  ") or line.split("  ")[2] in docs]
+    manifest = tmp_path / MANIFEST.name
+    manifest.write_text("\n".join(lines) + "\n")
+    assert cf.main(["--root", str(tmp_path), "--freeze-manifest", str(manifest)]) == cf.REFUSED
+    assert "incomplete" in capsys.readouterr().out
+
+
 def test_the_canonical_v3_suite_declaration_is_frozen_not_the_whole_corpus():
     # The V4 entry next to it must stay editable (renders will land), so the
     # canon hash covers ONLY the frozen suite's own declaration.

@@ -9,6 +9,7 @@ equal the baseline's.
 """
 from __future__ import annotations
 
+import itertools
 import math
 import pathlib
 import sys
@@ -211,6 +212,406 @@ def test_rule_rejects_an_insufficient_corner_gain():
     assert not ev["verdicts"]["half"]["checks"]["3_corner"] and ev["selection"] is None
 
 
+# --- f1_level_capture.verify() and the empty record (#1469) ----------------
+
+def test_verify_with_no_capture_in_the_manifest_refuses(monkeypatch, capsys):
+    """An empty `clips` dict ran the loop zero times, so `bad` stayed 0 and
+    verify() printed `0 verified, 0 failed` with OK."""
+    monkeypatch.setattr(cap, "load_manifest", lambda: {"clips": {}})
+    rc = cap.verify()
+    out = capsys.readouterr().out
+    assert rc == cap.REFUSED
+    assert "REFUSED" in out and "0 verified" not in out
+
+
+@pytest.mark.parametrize("payload", [b"", b"null", b"\xff"])
+def test_unreadable_capture_manifest_refuses(tmp_path, monkeypatch, capsys, payload):
+    path = tmp_path / "manifest.json"
+    path.write_bytes(payload)
+    monkeypatch.setattr(cap, "MANIFEST", path)
+    assert cap.main([]) == cap.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and str(path) in out and "verified" not in out
+
+
+def test_explicit_empty_manifest_cannot_fall_back_to_the_archive():
+    with pytest.raises(cap.Refused, match="not a capture"):
+        cap.load_capture("open20k", 0.25, 1, {})
+
+
+def test_verify_on_the_committed_captures_counts_what_it_verified(capsys):
+    n = len(cap.load_manifest()["clips"])
+    assert n > 0
+    rc = cap.verify()
+    assert rc == cap.OK
+    assert f"{n} verified, 0 failed" in capsys.readouterr().out
+
+
+def test_verify_with_a_partial_capture_manifest_refuses(monkeypatch, capsys):
+    # Rule 8 defeating input for `if not m.get("clips"):`: keeping one of the
+    # 24 declared (CONDITIONS x AMPS x TAKES) clips satisfied `bool(clips)` and
+    # certified `1 verified, 0 failed` while 23 captures were absent.
+    real = cap.load_manifest()
+    first_key = sorted(real["clips"])[0]
+    partial = {**real, "clips": {first_key: real["clips"][first_key]}}
+    monkeypatch.setattr(cap, "load_manifest", lambda: partial)
+    rc = cap.verify()
+    out = capsys.readouterr().out
+    assert rc == cap.REFUSED
+    assert "REFUSED" in out and "0 failed" not in out
+
+
+@pytest.mark.parametrize("field", ["clone", "condition", "cut_hz", "amp", "take"])
+def test_verify_binds_capture_metadata_to_each_key(monkeypatch, capsys, field):
+    manifest = cap.load_manifest()
+    clips = manifest["clips"]
+    entry = clips[cap.clip_key("open20k", 0.25, 1)]
+    if field == "clone":
+        manifest["clips"] = dict.fromkeys(clips, entry)
+    elif field in ("cut_hz", "amp"):
+        entry["commanded"][field] = 0
+    else:
+        entry[field] = None
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.verify() == cap.REFUSED
+    assert "identity" in capsys.readouterr().out
+
+
+def test_verify_with_a_corrupted_clip_fails(monkeypatch, capsys):
+    import copy
+    bad_m = copy.deepcopy(cap.load_manifest())
+    first_key = sorted(bad_m["clips"])[0]
+    sha = bad_m["clips"][first_key]["sha256"]
+    bad_m["clips"][first_key]["sha256"] = ("0" if sha[0] != "0" else "1") + sha[1:]
+    monkeypatch.setattr(cap, "load_manifest", lambda: bad_m)
+    rc = cap.verify()
+    out = capsys.readouterr().out
+    assert rc == cap.FAIL
+    assert "FAIL" in out and "1 failed" in out
+
+
+def _verify_with(monkeypatch, tmp_path, mutate_entry, rewrite_wav=None):
+    """verify() on a manifest copy whose archive may be swapped for one with
+    hash-correct, deliberately wrong audio (#1469 review: zero frames, or one
+    take's bytes under every key)."""
+    import copy
+    import hashlib
+    import io
+    import zipfile
+    m = copy.deepcopy(cap.load_manifest())
+    if rewrite_wav is not None:
+        zin = zipfile.ZipFile(cap.ARCHIVE)
+        out = tmp_path / "arch.zip"
+        with zipfile.ZipFile(out, "w") as z:
+            for n in zin.namelist():
+                z.writestr(n, rewrite_wav(n, zin.read(n)))
+        monkeypatch.setattr(cap, "ARCHIVE", out)
+        with zipfile.ZipFile(out) as z:
+            for meta in m["clips"].values():
+                meta["sha256"] = hashlib.sha256(z.read(meta["archive_member"])).hexdigest()
+    mutate_entry(m)
+    monkeypatch.setattr(cap, "load_manifest", lambda: m)
+    return cap.verify()
+
+
+def test_verify_refuses_hash_correct_zero_frame_audio(monkeypatch, tmp_path, capsys):
+    """A 48 kHz WAV with no frames, recorded frames=0, digests updated: the
+    frame check compared 0 == 0 and printed `24 verified`."""
+    import io
+    from scipy.io import wavfile
+
+    def empty(_n, _b):
+        buf = io.BytesIO()
+        wavfile.write(buf, cap.rp.SR, np.zeros(0, dtype=np.float32))
+        return buf.getvalue()
+
+    def zero_frames(m):
+        for meta in m["clips"].values():
+            meta["frames"] = 0
+
+    rc = _verify_with(monkeypatch, tmp_path, zero_frames, empty)
+    out = capsys.readouterr().out
+    assert rc == cap.FAIL and "verified, 24 failed" in out and "24 verified" not in out
+
+
+def test_verify_refuses_one_takes_bytes_filed_under_every_condition(monkeypatch, capsys):
+    """Copy only sha256 + archive_member of one clip to all 24 entries: hash and
+    frame count agree, but the decoded peak/rms are another condition's."""
+    manifest = cap.load_manifest()
+    src = manifest["clips"][cap.clip_key("open20k", 0.25, 1)]
+
+    def clone_bytes(m):
+        for meta in m["clips"].values():
+            meta["sha256"], meta["archive_member"] = src["sha256"], src["archive_member"]
+            meta["frames"] = src["frames"]
+
+    rc = _verify_with(monkeypatch, None, clone_bytes)
+    out = capsys.readouterr().out
+    assert rc == cap.FAIL and "disagrees with its capture evidence" in out
+    assert "24 verified" not in out
+
+
+def test_verify_still_accepts_legitimate_byte_sharing_between_repeated_takes(capsys):
+    """Control: the unmodified archive shares bytes between takes (the two
+    a0.2500 takes above carry the same digest) and must keep verifying 24/24."""
+    assert cap.verify() == cap.OK
+    assert "24 verified, 0 failed" in capsys.readouterr().out
+
+
+def _copy_capture_evidence(clips, source, destination):
+    # Leave the recipient's condition, take and commanded settings intact.
+    for field in ("sha256", "archive_member", "frames", "peak", "rms", "bytes", "parts", "freqs_hz"):
+        clips[destination][field] = clips[source][field]
+
+
+@pytest.mark.parametrize("replay", ["all", "same-cutoff", "same-amplitude",
+                                    "swap-second-takes", "one-bad-hash"])
+def test_verify_refuses_audio_shared_across_capture_cells(monkeypatch, capsys, replay):
+    manifest = cap.load_manifest()
+    clips = manifest["clips"]
+    source = cap.clip_key("open20k", 0.25, 1)
+    if replay in ("all", "one-bad-hash"):
+        for key in clips:
+            _copy_capture_evidence(clips, source, key)
+        if replay == "one-bad-hash":
+            clips[cap.clip_key("cut250", 0.125, 2)]["sha256"] = "0" * 64
+    elif replay == "swap-second-takes":
+        # All 12 original digests remain present, but two cells each borrow a take.
+        other = cap.clip_key("cut250", 0.125, 1)
+        _copy_capture_evidence(clips, source, cap.clip_key("cut250", 0.125, 2))
+        _copy_capture_evidence(clips, other, cap.clip_key("open20k", 0.25, 2))
+        assert len({meta["sha256"] for meta in clips.values()}) == 12
+    else:
+        cond, amp = ("open20k", 0.125) if replay == "same-cutoff" else ("cut250", 0.25)
+        for take in cap.TAKES:
+            _copy_capture_evidence(clips, source, cap.clip_key(cond, amp, take))
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.main([]) == cap.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "shared across capture cells" in out
+    assert " verified," not in out
+
+
+def test_surge_side_refuses_one_recording_for_all_levels():
+    manifest = cap.load_manifest()
+    clips = manifest["clips"]
+    for key in clips:
+        _copy_capture_evidence(clips, cap.clip_key("open20k", 0.25, 1), key)
+    with pytest.raises(cap.Refused, match="shared across capture cells"):
+        fls.surge_side(manifest)
+
+
+@pytest.mark.parametrize("defect", ["at-eof", "overrun", "negative-start", "zero-length",
+                                    "fractional-start", "one-sample", "missing-tone", "wrong-hz",
+                                    "repeated-window", "shifted-step", "includes-tail"])
+def test_verify_requires_usable_projection_windows(monkeypatch, capsys, defect):
+    manifest = cap.load_manifest()
+    key = cap.clip_key("open20k", 0.25, 1)
+    clip = manifest["clips"][key]
+    parts = clip["parts"]
+    last = parts[-1]
+    if defect == "at-eof":
+        for part in parts:
+            part[0] = clip["frames"]
+    elif defect == "overrun":
+        last[0] = clip["frames"] - last[1] + 1
+    elif defect == "negative-start":
+        last[0] = -1
+    elif defect == "zero-length":
+        last[1] = 0
+    elif defect == "fractional-start":
+        last[0] += 0.5
+    elif defect == "one-sample":
+        last[1] = 1
+    elif defect == "repeated-window":
+        for part in parts:
+            part[:2] = parts[0][:2]
+    elif defect == "shifted-step":
+        last[0] -= 1
+    elif defect == "includes-tail":
+        last[1] = clip["frames"] - last[0]
+    elif defect == "wrong-hz":
+        last[2] = clip["freqs_hz"][-1] = parts[0][2]
+    else:
+        parts.pop()
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.main([]) == cap.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and key in out and "projection" in out
+    assert "24 verified" not in out
+
+
+def test_capture_curve_accepts_a_window_ending_exactly_at_eof(tmp_path, monkeypatch):
+    import hashlib
+    import io
+    import zipfile
+    from scipy.io import wavfile
+
+    manifest = cap.load_manifest()
+    clip = manifest["clips"][cap.clip_key("open20k", 0.25, 1)]
+    _, original = cap.capture_curve("open20k", 0.25, 1, manifest)
+    with zipfile.ZipFile(cap.ARCHIVE) as archive:
+        sr, audio = wavfile.read(io.BytesIO(archive.read(clip["archive_member"])))
+    end = sum(clip["parts"][-1][:2])
+    assert 0 < end < len(audio)
+    trimmed = audio[:end]
+    wav = io.BytesIO()
+    wavfile.write(wav, sr, trimmed)
+    digest = hashlib.sha256(wav.getvalue()).hexdigest()
+    clip.update(frames=end, sha256=digest, archive_member=digest[:16] + ".wav",
+                bytes=len(wav.getvalue()),
+                peak=float(np.max(np.abs(trimmed))),
+                rms=float(np.sqrt(np.mean(np.square(trimmed.astype(np.float64))))))
+    path = tmp_path / "trimmed.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(clip["archive_member"], wav.getvalue())
+    monkeypatch.setattr(cap, "ARCHIVE", path)
+    _, gains = cap.capture_curve("open20k", 0.25, 1, manifest)
+    assert len(gains) == 32 and np.isfinite(gains).all()
+    np.testing.assert_array_equal(gains, original)
+
+
+def test_stereo_audio_with_mono_peak_and_rms_cannot_verify(monkeypatch, tmp_path, capsys):
+    import io
+    from scipy.io import wavfile
+
+    def stereo(_name, raw):
+        sr, y = wavfile.read(io.BytesIO(raw))
+        buf = io.BytesIO()
+        wavfile.write(buf, sr, np.column_stack((y, y)))
+        return buf.getvalue()
+
+    rc = _verify_with(monkeypatch, tmp_path, lambda m: None, stereo)
+    out = capsys.readouterr().out
+    assert rc == cap.FAIL and "expected mono audio" in out and "0 verified, 24 failed" in out
+
+
+_EVIDENCE_FIELDS = ("sha256", "archive_member", "frames", "peak", "rms", "bytes", "parts", "freqs_hz")
+
+
+def _swap_cells(manifest, first, second):
+    clips = manifest["clips"]
+    for take in cap.TAKES:
+        a, b = clips[cap.clip_key(*first, take)], clips[cap.clip_key(*second, take)]
+        for f in _EVIDENCE_FIELDS:
+            a[f], b[f] = b[f], a[f]
+
+
+def test_complete_level_swap_refuses_in_both_readers(monkeypatch, capsys):
+    """Both takes' whole evidence exchanged between two levels: every digest is
+    still distinct and each key keeps its own condition/settings/take, so only
+    the frozen-clip anchor can see it (the gain moved by 6.02 dB)."""
+    manifest = cap.load_manifest()
+    _swap_cells(manifest, ("cut250", 0.0625), ("cut250", 0.125))
+    assert len({m["sha256"] for m in manifest["clips"].values()}) == 12
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.main([]) == cap.REFUSED
+    out = capsys.readouterr().out
+    assert "not made at that level" in out and " verified," not in out
+    with pytest.raises(cap.LevelBindingError, match="not made at that level"):
+        fls.surge_side(manifest)
+
+
+@pytest.mark.parametrize("first,second,amp", [
+    ("cut250", "cut1000", 0.25),     # the swap that exchanged the F1A and F1B corners
+    ("cut4000", "open20k", 0.0625),  # the closest pair of frozen response curves
+])
+@pytest.mark.parametrize("reader", ["verify", "surge_side"])
+def test_complete_condition_swap_refuses(monkeypatch, capsys, first, second, amp, reader):
+    manifest = cap.load_manifest()
+    _swap_cells(manifest, (first, amp), (second, amp))
+    assert len({m["sha256"] for m in manifest["clips"].values()}) == 12
+    if reader == "verify":
+        monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+        assert cap.main([]) == cap.REFUSED
+        out = capsys.readouterr().out
+        assert "cutoff response" in out and " verified," not in out
+    else:
+        with pytest.raises(cap.CaptureIdentityError, match="cutoff response"):
+            fls.surge_side(manifest)
+
+
+def test_level_anchor_accepts_the_committed_captures():
+    """Measure the cutoff identity margin for all accepted levels and takes."""
+    def shape(gains):
+        return gains - np.median(gains[:4])
+
+    def rms(a, b):
+        return np.sqrt(np.mean((a - b) ** 2))
+
+    # Project the independent references through the scorecard's own loader.
+    frozen = {cond: shape(fls.rc.load_filter_reference(clip)[1])
+              for cond, (_, clip) in cap.CONDITIONS.items()}
+    closest_pair = min(rms(a, b) for a, b in itertools.combinations(frozen.values(), 2))
+    assert 2 * cap.CONDITION_ANCHOR_DB < closest_pair
+
+    manifest = cap.load_manifest()
+    matching, other = [], []
+    for cond, amp, take in itertools.product(frozen, cap.AMPS, cap.TAKES):
+        _, gains = cap.capture_curve(cond, amp, take, manifest)
+        captured = shape(gains)
+        matching.append(rms(captured, frozen[cond]))
+        other.extend(rms(captured, ref) for name, ref in frozen.items() if name != cond)
+    print(f"{len(matching)} matching curves: worst {max(matching):.8f} dB RMS; "
+          f"{len(other)} wrong cutoffs: closest {min(other):.5f} dB RMS")
+    assert max(matching) < cap.CONDITION_ANCHOR_DB < min(other)
+
+
+@pytest.mark.parametrize("field", ["amp", "parts"])
+def test_unusable_frozen_curve_refuses(monkeypatch, capsys, field):
+    load_clip = cap.rp.load_clip
+
+    def damaged(*args, **kwargs):
+        y, sr, meta = load_clip(*args, **kwargs)
+        # A truncated grid still carries all four low-band tones.
+        return y, sr, {**meta, field: 0 if field == "amp" else meta["parts"][:-1]}
+
+    cap._frozen_gain_db.cache_clear()
+    monkeypatch.setattr(cap.rp, "load_clip", damaged)
+    try:
+        assert cap.main([]) == cap.REFUSED
+    finally:
+        cap._frozen_gain_db.cache_clear()
+    reason = "expected frozen amplitude" if field == "amp" else "one projection window per tone"
+    assert reason in capsys.readouterr().out
+
+
+def test_surge_side_refuses_digest_only_second_takes():
+    manifest = cap.load_manifest()
+    clips = manifest["clips"]
+    for key in list(clips):
+        if key.endswith("/take2"):
+            clips[key] = {"sha256": clips[key]["sha256"]}
+    with pytest.raises(cap.Refused):
+        fls.surge_side(manifest)
+
+
+@pytest.mark.parametrize("field", ["sha256", "archive_member", "frames"])
+def test_missing_clip_field_refuses_instead_of_raising(monkeypatch, capsys, field):
+    manifest = cap.load_manifest()
+    del manifest["clips"][cap.clip_key("cut250", 0.125, 1)][field]
+    monkeypatch.setattr(cap, "load_manifest", lambda: manifest)
+    assert cap.main([]) == cap.REFUSED
+    assert "REFUSED" in capsys.readouterr().out
+    with pytest.raises(cap.Refused):
+        fls.surge_side(manifest)
+
+
+def test_absent_frozen_cache_refuses_through_main_instead_of_raising(monkeypatch, capsys):
+    """refprofile.Refused is a sibling of cap.Refused, so an absent frozen
+    cache used to escape verify()/main() as a traceback. Control: simulate the
+    absent cache (independent of the host's cache state)."""
+    def absent(*a, **k):
+        raise cap.rp.Refused("the frozen reference audio is not in the cache")
+    cap._frozen_gain_db.cache_clear()
+    monkeypatch.setattr(cap.rp, "load_clip", absent)
+    try:
+        assert cap.main([]) == cap.REFUSED
+    finally:
+        cap._frozen_gain_db.cache_clear()
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "not in the cache" in out
+
 # --- the CLI handler: a cross-module refusal must exit REFUSED (#1624) --------
 # `main`'s try reaches two families its handler did not list: `refprofile.
 # Refused` (through `surge_vs_frozen` -> `run_case.load_filter_reference`, for
@@ -256,6 +657,13 @@ def _known_answer_is_reachable() -> None:
         pytest.skip(f"REFUSED: {FIRST_FROZEN_CLIP!r} is not in the committed frozen profile")
 
 
+def _reach_surge_vs_frozen(monkeypatch) -> None:
+    """surge_side anchors each capture to the frozen cache (#1469) and refuses
+    first when it is absent. These controls target the later
+    `surge_vs_frozen` boundary, so skip the earlier, separately tested one."""
+    monkeypatch.setattr(fls, "surge_side", lambda manifest: {})
+
+
 def test_the_refusal_families_main_reaches_share_only_the_base():
     """The relation a base-class handler rests on: `refprofile.Refused` and
     `mono_m5a_score.Refused` are none of the four classes the handler used to
@@ -279,13 +687,16 @@ def test_absent_frozen_cache_exits_refused_2_and_names_the_clip(tmp_path, monkey
     assert code == exit_contract.REFUSED, (code, out.out[-400:])
     refused = [ln for ln in out.out.splitlines() if ln.startswith("REFUSED")]
     assert len(refused) == 1, out.out[-400:]
-    assert FIRST_FROZEN_CLIP in refused[0] and "is not in the cache" in refused[0], refused[0]
+    # surge_side now anchors every capture to the frozen cache (#1469), so the
+    # first absent clip named is the anchor's (open20k), not FIRST_FROZEN_CLIP.
+    assert "surge-type2/" in refused[0] and "is not in the cache" in refused[0], refused[0]
     assert not report.exists(), "a refused run must not write a report"
 
 
 def test_a_run_case_refusal_at_the_same_boundary_still_exits_refused_2(tmp_path, monkeypatch,
                                                                      capsys):
     _known_answer_is_reachable()
+    _reach_surge_vs_frozen(monkeypatch)
 
     def not_projectable(clip_id, inject=""):
         raise rc.Refused(f"the frozen clip {clip_id} could not be projected: <control>")
@@ -324,6 +735,7 @@ def test_an_unrelated_error_at_the_same_boundary_is_an_execution_error(tmp_path,
     control that goes red when it is swapped in. A refusal is asserted by the
     exception propagating out of `main`, never by a caught `Exception`."""
     _known_answer_is_reachable()
+    _reach_surge_vs_frozen(monkeypatch)
 
     def unreadable(clip_id, inject=""):
         raise ValueError("<control> the probe grid is not a number")

@@ -582,6 +582,14 @@ jobs:
       # exclusion would retire itself. main's re-capture (a224050, #443) made
       # them pass -- the guard step's own "now PASS" branch, run on this merge --
       # so the deselects and the guard go with the merge that brought it in.
+      # tools/test_f1_level_scaling.py drives the level anchor, which reads the
+      # frozen Surge clips (the level anchor's _frozen_low_db). Restore
+      # them as reference-controls does; without the cache the anchor correctly
+      # REFUSES and those tests cannot reach the refusals they pin.
+      - name: restore and verify the frozen Surge audio
+        run: |
+          python tools/refprofile_restore.py
+          python tools/refprofile.py
       - name: every tools/ test, by directory
         run: python -m pytest tools/ -q
 

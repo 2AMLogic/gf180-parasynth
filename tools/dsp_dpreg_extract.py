@@ -338,6 +338,26 @@ def recheck_script(dcp, dcp_sha256):
     )
 
 
+def dump_cell_problems(dump, cells):
+    """Require analysable properties and pins for every requested DSP cell."""
+    want = set(cells)
+    if not want:
+        return ["the DRC yielded no target cells, so nothing could be verified"]
+    try:
+        parsed = dsp_dpreg_analyse.parse_cells(dump)
+        missing = sorted(want - parsed.keys())
+        if missing:
+            return [f"{len(missing)} of {len(want)} cell sections absent, e.g. {missing[:3]}"]
+        extra = sorted(parsed.keys() - want)
+        if extra:
+            return [f"unrequested cell sections {extra[:3]}"]
+        for name, cell in parsed.items():
+            dsp_dpreg_analyse.validate_required_cell(name, cell)
+    except dsp_dpreg_analyse.Refused as e:
+        return [str(e)]
+    return []
+
+
 def verify_dcp_binding(evidence, dcp, dcp_sha256):
     """The pulled evidence names, by digest, the checkpoint asserted, and
     the dump opened that same path. Returns the digest; REFUSED otherwise."""
@@ -476,7 +496,7 @@ def main(argv=None):
     r = sh(on_box(a.box,
                   f"cd {a.remote_dir} && sha256sum {' '.join(MANIFEST_FILES)} "
                   "> MANIFEST.sha256 && cat MANIFEST.sha256 && "
-                  "grep -c '^ERROR' vivado_extract.log || true"))
+                  "(grep -c '^ERROR' vivado_extract.log || true)"))
     if r.returncode != 0:
         print("REFUSED: manifest failed")
         return 1
@@ -488,10 +508,25 @@ def main(argv=None):
             return 1
 
     # ---- phase 4: verify locally against the box manifest ----
+    manifest_lines = [ln for ln in (evidence / "MANIFEST.sha256").read_text().splitlines()
+                      if ln.strip()]
+    if not manifest_lines:
+        print("REFUSED: box manifest MANIFEST.sha256 is empty; no pulled file was verified")
+        return 2
+    members = []
+    for line in manifest_lines:
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            print(f"REFUSED: malformed MANIFEST.sha256 line: {line!r}")
+            return 2
+        digest, name = parts
+        members.append((digest, name.strip().removeprefix("*")))
+    names = sorted(name for _, name in members)
+    if names != sorted(MANIFEST_FILES):
+        print(f"REFUSED: box manifest covers {names}, expected {list(MANIFEST_FILES)}")
+        return 2
     bad = []
-    for line in (evidence / "MANIFEST.sha256").read_text().splitlines():
-        h, name = line.split(None, 1)
-        name = name.strip().lstrip("*")
+    for h, name in members:
         local = evidence / name
         got = hashlib.sha256(local.read_bytes()).hexdigest()
         status = "OK" if got == h else "MISMATCH"
@@ -514,7 +549,12 @@ def main(argv=None):
     print(f"routed.dcp bound  : {bound} {a.dcp}")
 
     dump = (evidence / "dsp_cells_dump.txt").read_text()
-    print(f"cells dumped      : {dump.count('==== CELL ')}")
+    problems = dump_cell_problems(dump, cells)
+    if problems:
+        print("REFUSED: dsp_cells_dump.txt does not cover the cells derived from "
+              "the DRC: " + "; ".join(problems))
+        return 2
+    print(f"cells dumped      : {len(set(cells))}")
     print(f"missing instances : {dump.count('MISSING ')}")
     print(f"extraction OK, evidence in {evidence}")
     return 0

@@ -37,7 +37,11 @@ def test_property_holds_on_the_real_estimator(name, prop):
 def test_every_injected_defect_turns_something_red():
     rows = R.controls_matrix()
     clean = rows.pop("(clean)")
+    # Pin the population (#1469): an empty clean row passes all() and an empty
+    # matrix passes the loop below, both without asserting anything.
+    assert clean, "controls_matrix() evaluated no property in the clean row"
     assert all(v == "ok" for v in clean.values()), clean
+    assert rows, "controls_matrix() returned no defect row: nothing to turn red"
     for defect, row in rows.items():
         assert "MOVED" in row.values(), f"{defect} is invisible to every property: {row}"
 
@@ -46,6 +50,7 @@ def test_each_property_catches_at_least_one_defect():
     """A property no defect moves is a property that tests nothing."""
     rows = R.controls_matrix()
     rows.pop("(clean)")
+    assert rows, "controls_matrix() returned no defect row: every property would read as dead"
     dead = [n for n, _ in R.PROPERTIES if all(r[n] != "MOVED" for r in rows.values())]
     # EXEMPT, stated: polarity and zero-mean are guarded by construction
     # (|X0|^2 is sign-blind; a zero-mean burst has nothing for a defect to
@@ -675,7 +680,9 @@ def test_floor_property_holds_on_the_real_probe(name, prop):
 def test_every_floor_mutant_turns_something_red():
     rows = R.floor_controls_matrix()
     clean = rows.pop("(clean)")
+    assert clean, "floor_controls_matrix() evaluated no property in the clean row"
     assert all(v == "ok" for v in clean.values()), clean
+    assert rows, "floor_controls_matrix() returned no defect row: nothing to turn red"
     for defect, row in rows.items():
         assert "MOVED" in row.values(), f"{defect} is invisible to every property: {row}"
 
@@ -688,6 +695,7 @@ def test_each_floor_property_moves_at_least_one_defect():
     holds it directly."""
     rows = R.floor_controls_matrix()
     rows.pop("(clean)")
+    assert rows, "floor_controls_matrix() returned no defect row: every property would read as dead"
     dead = [n for n, _ in R.FLOOR_PROPERTIES if all(r[n] != "MOVED" for r in rows.values())]
     assert set(dead) <= {"no-bias-possible"}, dead
 
@@ -737,12 +745,21 @@ def test_floor_and_round_match_hand_arithmetic_on_every_named_accumulator_class(
         assert R.REAL_FLOOR.exact(np.int64(acc)) == ex, (acc, "round")
 
 
+@pytest.mark.parametrize("operation", ["floor_out", "rint_out"])
+def test_oracle_comparison_rejects_empty_output(monkeypatch, operation):
+    monkeypatch.setattr(R, operation, lambda _: np.array([], dtype=np.int64))
+    with pytest.raises(AssertionError, match="4096 accumulators"):
+        test_floor_and_round_match_an_independent_reference_on_random_accumulators()
+
+
 def test_floor_and_round_match_an_independent_reference_on_random_accumulators():
     """The sweep the hand table cannot be: 4096 accumulators across the whole
     RTL tacc range, against divmod-floor and CPython Fraction rounding."""
     rng = np.random.default_rng(618)
     acc = rng.integers(-(1 << 38) + 1, 1 << 38, 4096, dtype=np.int64)
-    for a, f, x in zip(acc.tolist(), R.floor_out(acc).tolist(), R.rint_out(acc).tolist()):
+    floor, rounded = R.floor_out(acc), R.rint_out(acc)
+    assert floor.shape == rounded.shape == acc.shape == (4096,), "expected outputs for 4096 accumulators"
+    for a, f, x in zip(acc.tolist(), floor.tolist(), rounded.tolist(), strict=True):
         assert f == _ref_floor(a), a
         assert x == _ref_round(a), a
 
@@ -896,6 +913,7 @@ def test_the_committed_records_pass_the_arithmetic_gate():
     """Run the stricter gate against the current state before committing it:
     every committed OK row must reconcile, or the gate is unsatisfiable."""
     q = json.loads(QUAL.read_text())
+    assert q["records"], "qualification JSON holds no records"
     for r in q["records"]:
         assert R.floor_row_problems(r["rows"]) == [], r["condition"]
 
@@ -1104,7 +1122,7 @@ def test_floor_verdict_cli_produces_each_voices_ending(tmp_path, capsys):
     (lambda: [_frec("dev", []), _frec("confirm", [], commit="b" * 40)], "different commits"),
     (lambda: [_frec("dev", []), _frec("confirm", [], limits=dict(R._jsonable(R.declared_limits()), S_OFFSET_MIN=7.0))],
      "limits differ"),
-    (lambda: [_frec("dev", [_frow("CH")]), _frec("confirm", [])], "no row"),
+    (lambda: [_frec("dev", [_frow("CH")]), _frec("confirm", [_frow("RS")])], "no row"),
 ], ids=["same-condition-twice", "dirty", "mixed-commits", "revisited-limits", "confirm-missing"])
 def test_floor_verdict_refuses_or_hedges_records_it_cannot_combine(tmp_path, capsys, make, why):
     assert R.main(["--floor-verdict", *_write(tmp_path, *make())]) in (0, 2)
@@ -1144,3 +1162,82 @@ def test_an_all_refused_output_floor_exits_2_not_0(monkeypatch):
                         lambda v, c, probe=R.REAL_FLOOR: _frow(v) if v == "RS"
                         else dict(voice=v, status="REFUSED", reason="r"))
     assert R.main(["--output-floor", "--voices", "RS,HT"]) == 0
+
+
+# --- the matrix tests' population (#1469) ---------------------------------
+
+@pytest.mark.parametrize("population", ["mutants", "properties", "both"])
+def test_controls_cli_refuses_empty_population(monkeypatch, capsys, population):
+    if population in ("mutants", "both"):
+        monkeypatch.setattr(R, "MUTANTS", ())
+    if population in ("properties", "both"):
+        monkeypatch.setattr(R, "PROPERTIES", ())
+    assert R.main(["--controls"]) == 2
+    assert "REFUSED: residual DC controls" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("population", ["FLOOR_MUTANTS", "FLOOR_PROPERTIES"])
+def test_floor_report_refuses_empty_control_population(monkeypatch, tmp_path, capsys, population):
+    monkeypatch.setattr(R, population, ())
+    recs = json.loads(QUAL.read_text())["records"]
+    assert R.main(["--floor-verdict", *_write(tmp_path, *recs)]) == 2
+    assert "REFUSED: output-floor controls" in capsys.readouterr().out
+
+
+def test_matrix_tests_fail_on_an_empty_matrix(monkeypatch, tmp_path):
+    """Pin the assertion that rejected each empty clean row, mutant set or record list."""
+    monkeypatch.setattr(R, "controls_matrix", lambda: {"(clean)": {}})
+    with pytest.raises(AssertionError, match="evaluated no property"):
+        test_every_injected_defect_turns_something_red()
+    with pytest.raises(AssertionError, match="returned no defect row"):
+        test_each_property_catches_at_least_one_defect()
+
+    monkeypatch.setattr(R, "controls_matrix", lambda: {"(clean)": {"p": "ok"}})
+    with pytest.raises(AssertionError, match="returned no defect row"):
+        test_every_injected_defect_turns_something_red()
+
+    monkeypatch.setattr(R, "floor_controls_matrix", lambda: {"(clean)": {}})
+    with pytest.raises(AssertionError, match="evaluated no property"):
+        test_every_floor_mutant_turns_something_red()
+    with pytest.raises(AssertionError, match="returned no defect row"):
+        test_each_floor_property_moves_at_least_one_defect()
+
+    monkeypatch.setattr(R, "floor_controls_matrix", lambda: {"(clean)": {"p": "ok"}})
+    with pytest.raises(AssertionError, match="returned no defect row"):
+        test_every_floor_mutant_turns_something_red()
+
+    empty_qual = tmp_path / "empty-qual.json"
+    empty_qual.write_text('{"records": []}')
+    monkeypatch.setattr(sys.modules[__name__], "QUAL", empty_qual)
+    with pytest.raises(AssertionError, match="qualification JSON holds no records"):
+        test_the_committed_records_pass_the_arithmetic_gate()
+
+
+# --- two correctly named conditions with ZERO voice rows (#1469 review) -----
+
+def test_floor_verdicts_refuses_both_conditions_with_no_voice_rows():
+    recs = _qual_with(lambda r: r.update(rows=[]))["records"]
+    status, ends, why = R.floor_verdicts(recs)
+    assert status == "REFUSED" and ends == {} and any("empty" in w for w in why), why
+    with pytest.raises(R.Refused):
+        R.floor_summary(recs)
+
+
+def test_verdicts_refuses_both_conditions_with_no_voice_rows():
+    status, ends, why = R.verdicts([_rec("dev", []), _rec("confirm", [])])
+    assert status == "REFUSED" and ends == {} and any("empty" in w for w in why), why
+
+
+def test_refresh_endings_refuses_empty_records_and_leaves_the_report_alone(tmp_path, capsys):
+    q = _qual_with(lambda r: r.update(rows=[]))
+    p = tmp_path / "q.json"
+    p.write_text(json.dumps(q))
+    before = p.read_text()
+    assert R.main(["--refresh-endings", str(p)]) == 2
+    assert p.read_text() == before and "REFUSED" in capsys.readouterr().out
+
+
+def test_nonempty_committed_records_are_still_accepted():
+    # control against an unsatisfiable gate: the committed state must pass
+    q = json.loads(QUAL.read_text())
+    assert R.floor_verdicts(q["records"])[0] == "OK"

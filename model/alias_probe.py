@@ -499,6 +499,13 @@ def ladder_substeps(x_q15: np.ndarray, os_: int, cut=LAD_CUT, res=LAD_RES, drive
     point of use): the last sub-step of this must equal, bit for bit, what the
     real `LadderFx(oversample=os_)` returns. If it does not, this is not the
     thing that ships and the function REFUSES."""
+    if isinstance(os_, bool) or int(os_) < 1:
+        raise am.InsufficientEvidence(
+            f"REFUSED: ladder_substeps needs oversample >= 1, got {os_!r}")
+    if np.asarray(x_q15).size == 0:
+        raise am.InsufficientEvidence(
+            "REFUSED: ladder_substeps was handed no sample to compare -- the "
+            "sub-step tap is unchecked, not held")
     regs, g = _ladder_regs(res, drive, cut, os_)
     held = np.repeat(np.asarray(x_q15, dtype=np.int16), os_)
     cfg = dict(vf.LADDER_CFG); cfg["oversample"] = 1

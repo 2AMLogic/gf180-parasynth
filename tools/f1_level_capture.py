@@ -57,6 +57,7 @@ import pathlib
 import subprocess
 import sys
 import zipfile
+from functools import cache
 
 import numpy as np
 
@@ -86,10 +87,40 @@ CONDITIONS = {
 RES = 0.0
 READBACK_TOL = 0.005
 OPEN_GUARD_DB = 6.0
+#: How far a capture's low-band gain may sit from the FROZEN clip of the same
+#: condition. The frozen profile is committed independently of these captures
+#: and Surge is linear here, so a genuine capture agrees at every level; a
+#: recording filed under the wrong level is off by 20*log10(amp ratio), which
+#: is 6.02 dB for neighbouring levels. Half of that is the threshold.
+LEVEL_ANCHOR_DB = 3.0
+#: The closest two frozen shapes (cut4000 and open20k) are 11.44 dB RMS
+#: apart across the tone grid after removing low-band gain. A 5 dB radius
+#: keeps the four acceptance regions disjoint.
+CONDITION_ANCHOR_DB = 5.0
 
 
 class Refused(refusal.Refused, Exception):
     pass
+
+
+class CaptureIdentityError(Refused):
+    """The manifest cannot establish which capture the bytes belong to."""
+
+
+class LevelBindingError(CaptureIdentityError):
+    """A recording's level disagrees with the frozen clip for its condition."""
+
+
+class ConditionBindingError(CaptureIdentityError):
+    """The recording's response shape disagrees with its declared cutoff."""
+
+
+class FrozenReferenceUnavailable(Refused):
+    """The reference clip cannot supply a gain curve for this condition."""
+
+
+class ProjectionError(Refused):
+    """The capture cannot supply the stepped-tone response curve."""
 
 
 def amp_tag(amp: float) -> str:
@@ -100,8 +131,31 @@ def clip_key(cond: str, amp: float, take: int) -> str:
     return f"{cond}/{amp_tag(amp)}/take{take}"
 
 
+def require_distinct_capture_cells(clips: dict) -> None:
+    """A recording may repeat across takes of one condition and amplitude."""
+    cell_by_digest = {}
+    for key, meta in clips.items():
+        cell = key.rsplit("/", 1)[0]
+        digest = meta.get("sha256") if isinstance(meta, dict) else None
+        if not isinstance(digest, str):
+            raise CaptureIdentityError(f"{key}: capture record has no sha256 digest")
+        owner = cell_by_digest.setdefault(digest, cell)
+        if owner != cell:
+            raise CaptureIdentityError(f"{digest[:12]} shared across capture cells {owner} and {cell}")
+
+
 def _sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
+
+
+def _read_capture_record(path: pathlib.Path) -> dict:
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, ValueError) as e:
+        raise Refused(f"cannot read capture record {path}: {e}") from e
+    if not isinstance(record, dict):
+        raise Refused(f"expected a JSON object in capture record {path}")
+    return record
 
 
 def frozen_rig() -> dict:
@@ -239,7 +293,7 @@ def capture(work: pathlib.Path) -> dict:
                                 "--take", str(take), "--out", str(d)], cwd=str(ROOT))
             if r.returncode != 0:
                 raise Refused(f"take {take} at amp {amp} did not complete (exit {r.returncode})")
-            takes[(amp, take)] = json.loads((d / "take.json").read_text())
+            takes[(amp, take)] = _read_capture_record(d / "take.json")
 
     prof = rp.load_profile()
     clips, blobs = {}, {}
@@ -250,6 +304,7 @@ def capture(work: pathlib.Path) -> dict:
             blobs.setdefault(c["sha256"], b)
             clips[clip_key(cond, amp, take)] = {**c, "condition": cond, "take": take,
                                                 "archive_member": c["sha256"][:16] + ".wav"}
+    require_distinct_capture_cells(clips)
     # take-to-take
     t2t = {}
     for cond in CONDITIONS:
@@ -322,9 +377,9 @@ def capture(work: pathlib.Path) -> dict:
 # reading: no plugin; every read hash-checked
 # ---------------------------------------------------------------------------
 def load_manifest() -> dict:
-    if not MANIFEST.exists() or not ARCHIVE.exists():
-        raise Refused(f"no level captures at {MANIFEST.relative_to(ROOT)}")
-    return json.loads(MANIFEST.read_text())
+    if not ARCHIVE.is_file():
+        raise Refused(f"missing level capture archive {ARCHIVE}")
+    return _read_capture_record(MANIFEST)
 
 
 def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
@@ -332,11 +387,23 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
     """(audio, clip meta). REFUSES if the archived bytes do not hash to the
     manifest's sha256 (`inject='TAMPERED'` moves the expected hash, for the
     control)."""
-    m = manifest or load_manifest()
+    m = load_manifest() if manifest is None else manifest
     key = clip_key(cond, amp, take)
-    if key not in m["clips"]:
+    clips = m.get("clips") if isinstance(m, dict) else None
+    if not isinstance(clips, dict) or key not in clips:
         raise Refused(f"{key} is not a capture in the manifest")
-    meta = m["clips"][key]
+    meta = clips[key]
+    command = meta.get("commanded") if isinstance(meta, dict) else None
+    if (not isinstance(command, dict) or cond not in CONDITIONS
+            or meta.get("condition") != cond or meta.get("take") != take
+            or type(meta.get("take")) is not int
+            or command.get("cut_hz") != CONDITIONS[cond][0] or command.get("amp") != amp):
+        raise CaptureIdentityError(f"{key}: capture identity differs from its manifest key")
+    missing = [f for f in ("sha256", "archive_member", "frames") if f not in meta]
+    if missing:
+        raise CaptureIdentityError(f"{key}: capture record lacks {', '.join(missing)}")
+    if not isinstance(meta["sha256"], str) or not isinstance(meta["archive_member"], str):
+        raise CaptureIdentityError(f"{key}: sha256 and archive_member must be strings")
     want = meta["sha256"]
     if inject == "TAMPERED":
         want = ("0" if want[0] != "0" else "1") + want[1:]
@@ -351,16 +418,118 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
     sr, y = wavfile.read(io.BytesIO(b))
     if sr != rp.SR or len(y) != meta["frames"]:
         raise Refused(f"{key}: sr {sr} / {len(y)} frames, manifest says {rp.SR} / {meta['frames']}")
-    return np.asarray(y, dtype=np.float64), meta
+    y = np.asarray(y, dtype=np.float64)
+    problems = _evidence_problems(y, meta)
+    if problems:
+        raise Refused(f"{key}: decoded audio disagrees with its capture evidence: "
+                      + "; ".join(problems))
+    _validate_windows(meta, len(y), key)
+    return y, meta
+
+
+def _evidence_problems(y: np.ndarray, meta: dict) -> list[str]:
+    """Check the decoded samples against the peak and RMS recorded for this clip."""
+    out: list[str] = []
+    if type(meta.get("frames")) is not int or meta["frames"] <= 0 or len(y) <= 0:
+        return [f"no positive sample population ({len(y)} decoded, "
+                f"{meta.get('frames')!r} recorded)"]
+    if y.ndim != 1:
+        return ["expected mono audio for tone projection"]
+    if not np.all(np.isfinite(y)):
+        return ["non-finite samples"]
+    peak = float(np.abs(y).max())
+    rms = float(np.sqrt(np.mean(np.square(y))))
+    if peak <= 1e-9:
+        out.append("silent")
+    for name, got in (("peak", peak), ("rms", rms)):
+        want = meta.get(name)
+        if (type(want) not in (int, float) or not math.isfinite(want)
+                or abs(got - want) > 1e-4 * max(abs(want), 1e-9) + 1e-9):
+            out.append(f"{name} {got:.9g} vs recorded {want!r}")
+    return out
+
+
+@cache
+def _projection_schedule(grid: tuple[float, ...]) -> tuple:
+    """Use the capture rig's stimulus, keeping only its windows across takes."""
+    import reference_rigs as rr
+    _, parts = rr.tone_train(grid, 1.0, rr.SurgeRig.TONE_SETTLE_S, rr.SurgeRig.TONE_WINDOW_S)
+    return tuple(parts)
+
+
+def _validate_windows(meta: dict, frames: int, key: str) -> None:
+    parts, freqs = meta.get("parts"), meta.get("freqs_hz")
+    grid = rp._freqs()
+    if (not isinstance(parts, list) or not isinstance(freqs, list)
+            or len(parts) != len(grid) or len(freqs) != len(grid)):
+        raise ProjectionError(f"{key}: expected one projection window per tone "
+                              f"on the {len(grid)}-tone grid")
+    schedule = _projection_schedule(tuple(grid))
+    for i, (part, hz, step) in enumerate(zip(parts, freqs, schedule)):
+        start_want, length_want, expected = step
+        if not isinstance(part, list) or len(part) != 3:
+            raise ProjectionError(f"{key}: malformed projection window {i}")
+        start, length, freq = part
+        if (type(start) is not int or type(length) is not int
+                or start < 0 or length <= 0 or start + length > frames):
+            raise ProjectionError(f"{key}: projection window {i} has start {start!r} "
+                                  f"and length {length!r} for {frames} decoded frames")
+        if (type(freq) not in (int, float) or not 0 < freq < rp.SR / 2
+                or freq != hz or not math.isclose(freq, expected)):
+            raise ProjectionError(f"{key}: projection window {i} does not match "
+                                  f"the {expected:g} Hz tone")
+        if (start, length) != (start_want, length_want):
+            raise ProjectionError(f"{key}: projection window {i} for the {expected:g} Hz tone "
+                                  f"is {(start, length)}, stimulus requires {(start_want, length_want)}")
 
 
 def capture_curve(cond: str, amp: float, take: int, manifest=None, inject="") -> tuple:
     """(freqs, gain_db) of one capture, by the frozen reference's projection."""
+    import audio_measure as am
     import reference_rigs as rr
     y, meta = load_capture(cond, amp, take, manifest, inject)
-    parts = [(int(a), int(b), float(f)) for a, b, f in meta["parts"]]
-    g = rr.SurgeRig.tone_project(y, parts, amp, clip_key(cond, amp, take))
+    key = clip_key(cond, amp, take)
+    try:
+        g = rr.SurgeRig.tone_project(y, meta["parts"], amp, key)
+    except am.InsufficientEvidence as e:
+        raise ProjectionError(f"{key}: unusable projection window: {e}") from e
+    _bind_to_frozen_clip(cond, amp, key, g)
     return np.asarray(meta["freqs_hz"], dtype=np.float64), np.asarray(g, dtype=np.float64)
+
+
+@cache
+def _frozen_gain_db(cond: str) -> np.ndarray:
+    import audio_measure as am
+    import reference_rigs as rr
+    clip = CONDITIONS[cond][1]
+    try:
+        y, _, meta = rp.load_clip(clip)
+        _validate_windows(meta, len(y), clip)
+        if meta.get("amp") != rp.PROBE_AMP:
+            raise FrozenReferenceUnavailable(f"{clip}: expected frozen amplitude {rp.PROBE_AMP}")
+        return rr.SurgeRig.tone_project(y, meta["parts"], rp.PROBE_AMP, clip)
+    except (rp.Refused, am.InsufficientEvidence) as e:
+        raise FrozenReferenceUnavailable(f"cannot anchor {cond} to {clip}: {e}") from e
+
+
+def _bind_to_frozen_clip(cond: str, amp: float, key: str, g: np.ndarray) -> None:
+    """Check the commanded level and cutoff against an independently filed clip."""
+    frozen = _frozen_gain_db(cond)
+    low_db = float(np.median(g[:4]))
+    frozen_low_db = float(np.median(frozen[:4]))
+    level_error = low_db - frozen_low_db
+    if not math.isfinite(level_error) or abs(level_error) > LEVEL_ANCHOR_DB:
+        raise LevelBindingError(
+            f"{key}: low-band gain {low_db:.2f} dB re the commanded {amp:g} amplitude is "
+            f"{level_error:+.2f} dB from the frozen {CONDITIONS[cond][1]} ({frozen_low_db:.2f} dB); "
+            f"this recording was not made at that level")
+    # Removing each curve's low-band gain isolates the cutoff from input level.
+    shape_error = (g - low_db) - (frozen - frozen_low_db)
+    rms_db = float(np.sqrt(np.mean(shape_error ** 2)))
+    if not math.isfinite(rms_db) or rms_db > CONDITION_ANCHOR_DB:
+        raise ConditionBindingError(
+            f"{key}: cutoff response differs from frozen {CONDITIONS[cond][1]} by "
+            f"{rms_db:.2f} dB RMS over {len(g)} tones (limit {CONDITION_ANCHOR_DB:g} dB)")
 
 
 def verify() -> int:
@@ -369,16 +538,45 @@ def verify() -> int:
     except Refused as e:
         print(f"REFUSED  {e}")
         return REFUSED
-    bad = 0
-    for key, meta in sorted(m["clips"].items()):
+    expected = {clip_key(c, a, t) for c in CONDITIONS for a in AMPS for t in TAKES}
+    clips = m.get("clips")
+    if not isinstance(clips, dict) or not clips:
+        print(f"REFUSED  the capture manifest {MANIFEST} lists no "
+              "clip, so there is nothing to verify and no verdict")
+        return REFUSED
+    if set(clips) != expected:
+        missing = sorted(expected - set(clips))
+        extra = sorted(set(clips) - expected)
+        print(f"REFUSED  the capture manifest {MANIFEST} covers "
+              f"{len(clips)}/{len(expected)} expected clips (missing {missing[:4]}, "
+              f"unexpected {extra[:4]}), so the capture set is incomplete")
+        return REFUSED
+    verified, unanchored, verified_or_anchored = {}, [], {}
+    for key, meta in sorted(clips.items()):
         cond, tag, take = key.split("/")
         try:
-            load_capture(cond, float(tag[1:]), int(take[4:]), m)
-            print(f"ok       {key}  {meta['sha256'][:12]}")
+            capture_curve(cond, float(tag[1:]), int(take[4:]), m)
+            verified[key] = verified_or_anchored[key] = meta
+        except (LevelBindingError, ConditionBindingError) as e:
+            unanchored.append(e)
+            verified_or_anchored[key] = meta     # reported after the cell-sharing check, which names the cause
+        except (CaptureIdentityError, ProjectionError, FrozenReferenceUnavailable) as e:
+            print(f"REFUSED  {e}")
+            return REFUSED
         except Refused as e:
-            bad += 1
             print(f"FAIL     {e}")
-    print(f"{len(m['clips']) - bad} verified, {bad} failed")
+    try:
+        require_distinct_capture_cells(verified_or_anchored)
+    except CaptureIdentityError as e:
+        print(f"REFUSED  {e}")
+        return REFUSED
+    if unanchored:
+        print(f"REFUSED  {unanchored[0]}")
+        return REFUSED
+    for key, meta in verified.items():
+        print(f"ok       {key}  {meta['sha256'][:12]}")
+    bad = len(clips) - len(verified)
+    print(f"{len(verified)} verified, {bad} failed")
     return FAIL if bad else OK
 
 

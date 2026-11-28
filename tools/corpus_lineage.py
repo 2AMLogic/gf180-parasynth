@@ -354,11 +354,17 @@ def load(manifest: pathlib.Path = MANIFEST) -> dict:
         raise Refused(f"manifest missing: {manifest}")
     try:
         m = json.loads(manifest.read_text())
-    except json.JSONDecodeError as e:
-        raise Refused(f"{manifest.name} is not valid JSON: {e}") from e
+    except (OSError, ValueError) as e:
+        raise Refused(f"cannot read {manifest.name}: {e}") from e
+    if not isinstance(m, dict):
+        raise Refused(f"{manifest.name} must contain a JSON object")
     for key in ("schema", "groups", "assignment_rule", "targets", "packs", "unknown_marker"):
         if key not in m:
             raise Refused(f"{manifest.name} has no {key!r}")
+    if not isinstance(m["packs"], list) or not m["packs"] or not all(
+            isinstance(p, dict) for p in m["packs"]):
+        raise Refused(f"{manifest.name} lists no packs (or holds a non-object pack entry) -- "
+                      f"an empty pack list checks no lineage")
     return m
 
 
@@ -565,12 +571,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if a.cmd == "list":
-            m = load()
+            m = load(MANIFEST)
             for p in m["packs"]:
                 print(f"{p['id']:<26} {p['lineage_status']:<11} "
                       f"{', '.join(p.get('roles') or ['(no group)'])}")
             return 0
-        findings = check()
+        findings = check(MANIFEST, DOC, ROOT)
     except Refused as e:
         # 3, not 2: "the apparatus could not run" must be distinguishable from
         # "the corpus has gaps" by a caller that only sees the exit code.
