@@ -802,8 +802,15 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                     # (#1600) the same credit, for what it can settle here: a
                     # base or broad handler at EVERY call of the helper
                     every = {o for c in cands for o in raise_origins(c, fname or "", by_stem)}
-                    ashapes += [s for s in helper_call_credit(mod, by_stem, node, every)[1]
-                                if s in ("base", "broad")]
+                    # ... but only when EVERY origin any candidate raises is
+                    # caught at EVERY call. A shape is a property of one
+                    # call: a base handler at one call plus a partial exact
+                    # handler at another leaves `caught` non-empty yet short
+                    # of `every`, and that shape must not settle the row
+                    # (PR #1803 review: a false covered).
+                    h_caught, h_shapes = helper_call_credit(mod, by_stem, node, every)
+                    if every and h_caught >= every:
+                        ashapes += [s for s in h_shapes if s in ("base", "broad")]
                 sites.append(dict(
                     site=f"{label}:{node.lineno}",
                     callee=f"{callee_stem}.{fname}",

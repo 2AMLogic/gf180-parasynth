@@ -3032,3 +3032,66 @@ def test_an_ambiguous_callee_with_one_unguarded_call_stays_ambiguous(tmp_path):
     s, credit = _amb_helper(tmp_path, CALLER_AMBIG_HELPER_MIXED)
     assert credit == []
     assert (s["classification"], s["guard"]) == ("ambiguous-callee", "none"), s
+
+
+# PR #1803 review, rule 8: the input that defeats the branch's helper credit.
+# A base handler at ONE call and a partial exact handler at the other keeps
+# `caught` non-empty while leaving the `play` origin uncaught at the second.
+ALPHA_PLAY_OWN_ORIGIN = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def run(x):
+    raise Refused("own class -> origin play")
+'''
+
+BETA_PLAY_BORROWED_ORIGIN = '''
+import refusal
+import mod_a
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def run(x):
+    raise mod_a.Refused("borrowed class -> origin mod_a")
+'''
+
+CALLER_AMBIG_HELPER_BASE_THEN_PARTIAL = '''
+import refusal
+import mod_a
+import play
+
+def outer(p):
+    def helper(**kw):
+        return play.run(p)
+    try:
+        helper()
+    except refusal.Refused:             # base: holds for every candidate
+        pass
+    try:
+        helper()
+    except mod_a.Refused:               # exact: only the mod_a origin
+        pass
+'''
+
+
+def test_base_at_one_helper_call_and_a_partial_guard_at_another_stays_ambiguous(tmp_path):
+    """Started red: the row read covered(base) though the second call's
+    `except mod_a.Refused` lets the `play` origin out (the interpreter
+    escapes it, per the review's probe). The credit is asserted to be the
+    defeating one -- non-empty `caught`, short of `every`, a base shape."""
+    files = _collision_tree(tmp_path, ALPHA_PLAY_OWN_ORIGIN, BETA_PLAY_BORROWED_ORIGIN,
+                            "caller_amb_mixed", CALLER_AMBIG_HELPER_BASE_THEN_PARTIAL)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_amb_mixed")
+    assert len(got) == 1, got
+    by_stem = rss.stem_map(idx)
+    mod = idx[str(tmp_path / "caller_amb_mixed.py")]
+    site = next(n for n in ast.walk(mod.tree)
+                if isinstance(n, ast.Call) and ast.unparse(n.func) == "play.run")
+    every = {o for c in by_stem["play"] for o in rss.raise_origins(c, "run", by_stem)}
+    caught, shapes = rss.helper_call_credit(mod, by_stem, site, every)
+    assert caught and caught < every and "base" in shapes, (caught, every, shapes)
+    assert (got[0]["classification"], got[0]["guard"]) == ("ambiguous-callee", "none"), got[0]
