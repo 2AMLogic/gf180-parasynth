@@ -168,7 +168,7 @@ def _departures_db(e: np.ndarray, ef: np.ndarray) -> np.ndarray:
         raise rc.Refused("_departures_db: the fixed ring's block peaks are non-finite")
     if not ((ef > 0.0) & np.isfinite(ef)).all():
         raise rc.Refused(f"_departures_db: the float reference is silent or non-finite in "
-                         f"{int(~((ef > 0.0) & np.isfinite(ef)).sum())} of {len(ef)} blocks, "
+                         f"{int((~((ef > 0.0) & np.isfinite(ef))).sum())} of {len(ef)} blocks, "
                          f"so the fixed ring's departure is undefined")
     return np.where(e > 0.0, 20.0 * np.log10(np.where(e > 0.0, e, 1.0) / ef), -np.inf)
 

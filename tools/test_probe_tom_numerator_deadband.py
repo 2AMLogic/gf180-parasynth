@@ -61,8 +61,12 @@ def test_departure_ratio_refuses_a_block_whose_float_reference_is_zero():
     """CONTROL (#1743): red on the pre-fix tree, where the expression returned
     an array of 0.0 for this input."""
     z = np.zeros(50)
-    with pytest.raises(rc.Refused, match="silent"):
+    with pytest.raises(rc.Refused, match=r"silent or non-finite in 50 of 50 blocks"):
         ptn._departures_db(z, z)
+    # A partial case: the count must be the BAD blocks (3), not ~(good count).
+    ef = np.array([1.0] * 47 + [0.0, 0.0, 0.0])
+    with pytest.raises(rc.Refused, match=r"silent or non-finite in 3 of 50 blocks"):
+        ptn._departures_db(np.ones(50), ef)
 
 
 def test_departure_ratio_of_a_dead_fixed_ring_is_minus_inf_not_0_db():
