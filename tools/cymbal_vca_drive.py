@@ -1081,10 +1081,13 @@ def vca_term_db(cfg=None) -> dict:
 def balance_targets(path=None) -> dict:
     """The gap figures this module is judged against, re-read and pinned.
 
-    REFUSES if `../balance/balance.json` is absent or if its two gap figures
-    have moved from the committed record. The headline here is a comparison
-    against those numbers; quoting it against a number that has since drifted
-    is exactly the failure this repository keeps meeting.
+    REFUSES if `../balance/balance.json` is absent, if either of its two gap
+    figures is not a finite number (#1929) -- the drift comparison below is
+    False for a NaN, so one read as "has not drifted" and came back as a gap
+    -- or if the figures have moved from the committed record. The headline
+    here is a comparison against those numbers; quoting it against a number
+    that has since drifted is exactly the failure this repository keeps
+    meeting.
     """
     path = pathlib.Path(path) if path is not None else BALANCE_ARTIFACT
     if not path.is_file():
@@ -1093,6 +1096,12 @@ def balance_targets(path=None) -> dict:
     rec = json.loads(path.read_text())
     want = {"decay": 10.13, "short": 39.79}
     got = {b: float(rec["gap_db"][b]["gap_db"]) for b in want}
+    non_finite = [f"gap_db.{b}.gap_db = {got[b]!r}" for b in want
+                if not math.isfinite(got[b])]
+    if non_finite:
+        raise Refused(f"{path} carries a non-finite gap figure: "
+                      + ", ".join(non_finite)
+                      + "; a gap is a number of dB or it is not a measurement")
     drift = {b: round(got[b] - want[b], 3) for b in want if abs(got[b] - want[b]) > 0.005}
     if drift:
         raise Refused(
