@@ -247,15 +247,17 @@ def test_load_result_tells_an_absent_file_from_a_null_one(monkeypatch, tmp_path)
 NOBODY_HAS_IT = "0" * 40                       # git's null id: never an object
 
 
+GIT_ID = ("-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false")
+
+
 def _git(repo, *args):
-    return subprocess.run(["git", "-C", str(repo), *args], check=True,
+    return subprocess.run(["git", "-C", str(repo), *GIT_ID, *args], check=True,
                           capture_output=True, text=True).stdout.strip()
 
 
 def _commit(repo, message="c"):
     _git(repo, "add", "-A")
-    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false",
-         "commit", "-qm", message)
+    _git(repo, "commit", "-qm", message)
 
 
 def _history(tmp_path):

@@ -22,9 +22,10 @@ import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# A commit id as a record cites it: abbreviated or full hex, 4 to 64 characters
-# (7 or 40 under SHA-1, 64 under SHA-256). Nothing else is asked of git.
-COMMIT_ID = re.compile(r"[0-9a-f]{4,64}", re.IGNORECASE)
+# A commit id as a record cites it: abbreviated or full SHA-1 hex, 4 to 40
+# characters. Nothing else is asked of git (a 41-hex string is not a SHA-1 id,
+# though newer git builds resolve `<40-hex>0` to `<40-hex>`).
+COMMIT_ID = re.compile(r"[0-9a-f]{4,40}", re.IGNORECASE)
 
 
 def git(*args: str, root: pathlib.Path = ROOT) -> str:

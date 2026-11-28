@@ -20,15 +20,17 @@ import refprofile as rp                                               # noqa: E4
 EMPTY_TREE = hashlib.sha256(b"").hexdigest()[:16]          # the diff hash of no diff
 
 
+GIT_ID = ("-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false")
+
+
 def _git(path: pathlib.Path, *args, check=True):
-    return subprocess.run(["git", "-C", str(path), *args], check=check,
+    return subprocess.run(["git", "-C", str(path), *GIT_ID, *args], check=check,
                           capture_output=True, text=True)
 
 
 def _commit(path: pathlib.Path, message="c") -> None:
     _git(path, "add", "-A")
-    _git(path, "-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false",
-         "commit", "-qm", message)
+    _git(path, "commit", "-qm", message)
 
 
 def _repo(path: pathlib.Path) -> None:
@@ -288,7 +290,7 @@ def test_a_shallow_clone_is_not_read_clean_on_an_answer_it_cannot_prove(tmp_path
     assert provenance.commit_on_origin_main(tip, root=s) is True
 
 
-def test_anything_that_is_not_a_commit_id_is_none_even_where_git_resolves_it(tmp_path):
+def test_anything_that_is_not_a_commit_id_is_none_even_where_git_resolves_it(tmp_path, monkeypatch):
     """`HEAD` and `origin/main` answer 0 against origin/main every time, so a
     record citing a moving name would pass this check while citing nothing a
     later reader can check out. Only an abbreviated or full hex id is asked
@@ -297,11 +299,18 @@ def test_anything_that_is_not_a_commit_id_is_none_even_where_git_resolves_it(tmp
     sha = _upstream(up)
     w = tmp_path / "work"
     _clone(up, w)
-    for name in ("HEAD", "origin/main", "main", "--all", "-a", "", "?", sha + "0", "zzzzzzz",
-                 "HEAD~1", "refs/heads/main"):
+    bad = ("HEAD", "origin/main", "main", "--all", "-a", "", "?", sha[:3], sha + "0",
+           "zzzzzzz", "HEAD~1", "refs/heads/main")
+    for name in bad:
         assert provenance.commit_on_origin_main(name, root=w) is None, name
     for name in (sha, sha[:7], sha[:4], sha.upper()):
         assert provenance.commit_on_origin_main(name, root=w) is True, name
+    # Even a git build that answers 0 for `<40-hex>0` (observed on CI) cannot
+    # produce a false acceptance: nothing outside 4..40 hex reaches git.
+    yes = types.SimpleNamespace(run=lambda *a, **k: types.SimpleNamespace(returncode=0))
+    monkeypatch.setattr(provenance, "subprocess", yes)
+    for name in bad:
+        assert provenance.commit_on_origin_main(name, root=w) is None, name
 
 
 def test_the_helper_is_none_when_git_cannot_answer(tmp_path, monkeypatch):
