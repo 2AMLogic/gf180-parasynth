@@ -424,6 +424,97 @@ def test_require_corpus_on_a_silent_corpus_exits_1(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
+# the exit status must match the label (#1786): a refusal is 2, a measured
+# failure is 1. `check()` folds both into one bool; its caller must not.
+# ---------------------------------------------------------------------------
+CONTROLS_REFUSED = "REFUSED: this instrument's own controls do not pass"
+CONTROLS_FAIL = "FAIL: this instrument's own controls do not pass"
+
+
+def _planted_properties(monkeypatch, *, refuse=(), noop=()):
+    """Wrap `tk.properties` so each named defect either raises the module's
+    own `Refused` (its control row goes NO VERDICT) or evaluates CLEAN (its
+    control turns nothing red). Both are planted at the `properties` boundary
+    because neither is reachable from a file input; the `check()` code that
+    classifies them is the real one."""
+    real = tk.properties
+
+    def planted(*, refs=None, meas=None, defect=None):
+        if defect in refuse:
+            raise tk.Refused(f"planted refusal for {defect}")
+        return real(refs=refs, meas=meas, defect=None if defect in noop else defect)
+
+    monkeypatch.setattr(tk, "properties", planted)
+
+
+def _controls_verdict(capsys) -> str:
+    """The one line `main` prints when the controls do not pass, else ''."""
+    return next((ln.strip() for ln in capsys.readouterr().out.splitlines()
+                 if "controls do not pass" in ln), "")
+
+
+def test_a_refusal_only_run_exits_2_not_1_without_check(tmp_path, capsys):
+    """Red-first at origin/main 1c56aaf6: `--require-corpus` with no corpus,
+    WITHOUT `--check`, printed a REFUSED label and exited 1 -- the status
+    `tools/exit_contract.py` reserves for a measurement that disagreed, so
+    `run_all.py` rendered no evidence as a RESULT. Known answer: 2, because
+    only the two corpus-gated rows are undecided and every property decidable
+    without the WAVs still passes -- nothing was measured, nothing failed.
+    The `--check` twin of this run stays at 1 by recorded decision
+    (`test_require_corpus_is_reachable_from_the_command_line`)."""
+    argv = ["--require-corpus", "--refs", str(tmp_path / "no-corpus-here")]
+    assert tk.main(argv) == 2
+    out = capsys.readouterr().out.splitlines()
+    assert CONTROLS_REFUSED in [ln.strip() for ln in out], out[-3:]
+    assert CONTROLS_FAIL not in out
+    for d in tk.CORPUS_DEFECTS:
+        assert any(ln.startswith(d) and "NO VERDICT" in ln and "REFUSED" in ln
+                   for ln in out), (d, out)
+    assert not [ln for ln in out if ln.rstrip().endswith("FAIL")], out
+
+
+def test_an_injected_refusal_on_one_defect_exits_2_without_check(tmp_path, capsys, monkeypatch):
+    """The other refusal site in `check()`: `properties(defect=...)` raising
+    `Refused` prints NO VERDICT for that row and folded into the same bool.
+    Red-first at origin/main 1c56aaf6: exit 1 under the REFUSED label."""
+    d = tk.DEFECTS[0]
+    _planted_properties(monkeypatch, refuse=(d,))
+    assert tk.main(["--refs", str(tmp_path / "no-corpus-here")]) == 2
+    out = capsys.readouterr().out.splitlines()
+    assert CONTROLS_REFUSED in [ln.strip() for ln in out], out[-3:]
+    assert any(ln.startswith(d) and "NO VERDICT" in ln for ln in out), out
+
+
+def test_a_control_that_cannot_fail_exits_1_under_a_FAIL_label(tmp_path, capsys, monkeypatch):
+    """A defect that turns nothing red IS a measurement that disagreed: a
+    control that cannot fail. It keeps exit 1 and must not borrow the REFUSED
+    label -- red-first at origin/main 1c56aaf6 on the label, which read
+    REFUSED on a run that had measured something."""
+    d = tk.DEFECTS[0]
+    _planted_properties(monkeypatch, noop=(d,))
+    assert tk.main(["--refs", str(tmp_path / "no-corpus-here")]) == 1
+    out = capsys.readouterr().out.splitlines()
+    assert CONTROLS_FAIL in [ln.strip() for ln in out], out[-3:]
+    assert CONTROLS_REFUSED not in out
+    assert any(ln.startswith(d) and "NOTHING -- this control cannot fail" in ln
+               for ln in out), out
+
+
+def test_a_measured_failure_wins_over_a_refusal(tmp_path, capsys, monkeypatch):
+    """Both in one run: exit 1 and the FAIL label. A refusal alongside a
+    measured failure must not let the run be dismissed as no evidence."""
+    d_refuse, d_noop = tk.DEFECTS[0], tk.DEFECTS[1]
+    _planted_properties(monkeypatch, refuse=(d_refuse,), noop=(d_noop,))
+    assert tk.main(["--refs", str(tmp_path / "no-corpus-here")]) == 1
+    out = capsys.readouterr().out.splitlines()
+    assert CONTROLS_FAIL in [ln.strip() for ln in out], out[-3:]
+    assert CONTROLS_REFUSED not in out
+    assert any(ln.startswith(d_refuse) and "NO VERDICT" in ln for ln in out), out
+    assert any(ln.startswith(d_noop) and "NOTHING -- this control cannot fail" in ln
+               for ln in out), out
+
+
+# ---------------------------------------------------------------------------
 # (c) refusals -- a precondition that fails must not produce a number
 # ---------------------------------------------------------------------------
 def test_from_artifact_refuses_a_file_that_is_missing_a_setting(tmp_path):
