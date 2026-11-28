@@ -193,7 +193,7 @@ def _model_screen(configurations: dict) -> dict:
             "meaning": "screen only; passing justifies a separately verified RTL prototype, not release"}
 
 
-def _linear_response(mode: str, cutoff: int = 8_000) -> dict:
+def _linear_response(mode: str, cutoff: int = 8_000, amplitude: float = 0.02) -> dict:
     """Measure the fixed ladder's low-level sine response and its analytic poles."""
     factor = 2 if mode == "production_2x_sample_hold" else (2 if mode == "reconstructed_2x" else 4)
     cfg = {**vf.LADDER_CFG, "oversample": factor}
@@ -201,7 +201,7 @@ def _linear_response(mode: str, cutoff: int = 8_000) -> dict:
     krom = vf.make_k_rom(vf.KROM_BITS, vf.GROM_BITS, factor)
     n = 48_000
     start = 24_000
-    drive, res, amplitude = 0.5, 0.0, 0.02
+    drive, res = 0.5, 0.0
     reg_ladder = fixed.LadderFx(**cfg)
     k_reg, gain_reg, ogain_reg = reg_ladder.regs(res, drive)
     cut = np.full(n, cutoff, dtype=np.int64)
@@ -227,9 +227,19 @@ def _linear_response(mode: str, cutoff: int = 8_000) -> dict:
         phase = np.exp(-2j * np.pi * frequency * indices / vf.SR)
         out_amp = 2.0 * abs(np.dot(y[start:].astype(np.float64) / 32768.0, phase)) / (n - start)
         in_amp = 2.0 * abs(np.dot(x[start:].astype(np.float64) / 32768.0, phase)) / (n - start)
-        gains[str(frequency)] = round(20.0 * math.log10(max(out_amp / in_amp, 1e-15)), 5)
+        if in_amp == 0.0:
+            raise refusal.Refused(
+                f"{mode}: the {frequency} Hz input projection is exactly zero and cannot "
+                "be the denominator of an absolute gain")
+        gains[str(frequency)] = (None if out_amp == 0.0
+                                 else round(20.0 * math.log10(out_amp / in_amp), 5))
     passband = gains["150"]
-    observed = {key: round(value - passband, 5) for key, value in gains.items()}
+    if passband is None:
+        raise refusal.Refused(
+            f"{mode}: the projected output at 150 Hz is exactly zero, so the 150 Hz "
+            "reference cannot normalise the response")
+    observed = {key: None if value is None else round(value - passband, 5)
+                for key, value in gains.items()}
     g0 = int(vf.g_from_cut(np.array([cutoff]), grom, vf.GROM_BITS)[0]) / 65536.0
     analytic = {}
     for frequency in frequencies:
