@@ -296,6 +296,7 @@ def commands() -> dict:
 
 def live_midi_init() -> list:
     """The live session's known-state image for image tree, as the session builds it."""
+    import drums_fx as dx
     import midi_session as ms
 
     class _Nul:
@@ -303,7 +304,10 @@ def live_midi_init() -> list:
         def read(self, n=1): return b""
         def flush(self): pass
         timeout = 0
-    s = ms.MidiSession(_Nul(), image=HOST_IMAGE)
+    try:
+        s = ms.MidiSession(_Nul(), image=HOST_IMAGE)
+    except dx.KitRefused as exc:
+        raise Refused(f"the host refuses R1's kit: {exc}") from None
     ws = s.init_writes()
     probs = check_init(ws, kit_expected=True)
     if probs:
