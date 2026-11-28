@@ -44,8 +44,9 @@ red: proof this apparatus sees host lateness on the device's timeline at all.
 A stall it cannot see means the clean number is not evidence.
 
 Exit 0 PASS, 1 FAIL, 2 REFUSED (a precondition: not macOS for --source
-coremidi, the messages received are not the messages sent, the device reset,
-or the control could not be run).
+coremidi, the image's frozen kit or sound table has drifted (#1645), the
+messages received are not the messages sent, the device reset, or the
+control could not be run).
 """
 from __future__ import annotations
 
@@ -315,18 +316,35 @@ class Probe:
         return rec
 
 
+def image_refused(image: str, exc: Exception) -> str:
+    """The precondition `sim_reference` and `measure` report when
+    MidiSession refuses `image` before it starts (#1645): R1's frozen kit or
+    sound table has drifted (drums_fx.KitRefused), or the loaded kit puts a
+    circuit in neither of its sounds (uart_host.Refused). Both the session
+    and its reference read that kit, so nothing can be measured."""
+    return (f"the session refused image {image} before it started "
+            f"({type(exc).__name__}: {exc})")
+
+
 def sim_reference(seconds: float = 5.0, *, stall_ms: float = 0.0, inject=()) -> tuple:
     """The Probe on SIMULATED time, driven exactly as verify_live_midi.
     run_session drives the session: its endpoint distribution must equal
     check()'s, which pairs by the independent oracle (the apparatus's
     known-answer test, fpga/test_measure_mac_midi_latency.py)."""
+    import drums_fx as dx
     import midi_session as ms
+    import uart_host as uh
     import verify_live_midi as vlm
     events = vlm.sc_sustained(seconds)
     clock = dev.SimClock()
     sim = dev.UartDeviceSim(clock=clock)
     ser = dev.SimSerial(sim)
-    s = ms.MidiSession(ser, clock=clock, image=vlm.HARNESS_IMAGE, inject=set(inject))
+    try:
+        s = ms.MidiSession(ser, clock=clock, image=vlm.HARNESS_IMAGE, inject=set(inject))
+    except (uh.Refused, dx.KitRefused) as exc:
+        why = [image_refused(vlm.HARNESS_IMAGE, exc)]
+        return ({"preconditions": why, "props": {}},
+                {"verdict": "NO VERDICT", "reasons": why, "preconditions": why, "props": {}})
     s.start()
     probe = Probe(s, ser, sim, stall_ms=stall_ms, stall_at=clock.t + 2.0)
     t0 = clock.t + 0.020
@@ -342,7 +360,9 @@ def sim_reference(seconds: float = 5.0, *, stall_ms: float = 0.0, inject=()) -> 
 
 
 def measure(source: str, seconds: float, *, stall_ms: float = 0.0, stall_at_s: float = 3.0) -> dict:
+    import drums_fx as dx
     import midi_session as ms
+    import uart_host as uh
     import verify_live_midi as vlm
     events = vlm.sc_sustained(seconds)
     wire = [vlm.enc(e) for e in events]
@@ -364,7 +384,17 @@ def measure(source: str, seconds: float, *, stall_ms: float = 0.0, stall_at_s: f
     clock = WallClock()
     sim = dev.UartDeviceSim(clock=clock)
     ser = dev.SimSerial(sim)
-    s = ms.MidiSession(ser, clock=clock, image=vlm.HARNESS_IMAGE)
+    try:
+        s = ms.MidiSession(ser, clock=clock, image=vlm.HARNESS_IMAGE)
+    except (uh.Refused, dx.KitRefused) as exc:
+        inp.close()
+        if vsrc is not None:
+            vsrc.dispose()
+        if hasattr(backend, "close"):
+            backend.close()
+        return {"source": source, "seconds": seconds, "events": len(events), "why_closed": None,
+                "stall_ms": stall_ms, "stalled": False, "loadavg_before_after": None,
+                "preconditions": [image_refused(vlm.HARNESS_IMAGE, exc)]}
     load0 = os.getloadavg()
     s.start()
     probe = Probe(s, ser, sim, stall_ms=stall_ms, stall_at=time.monotonic() + 0.2 + stall_at_s)
