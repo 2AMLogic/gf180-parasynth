@@ -90,8 +90,17 @@ FROZEN = os.path.join(ROOT, "docs", "reference-compare-results.json")
 SHIPPED = os.path.join(ROOT, "docs", "reference-compare-results-shipped.json")
 
 sys.path.insert(0, MODEL)
+sys.path.insert(0, HERE)
 import reference_compare as rc                                      # noqa: E402
 import refusal
+from atomic_text import write_text_atomic                           # noqa: E402
+import run_all                                                      # noqa: E402
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#947): a kill mid-write leaves the previous record
+    standing, not a truncated one a later reader strands on."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 OURS_DEVICES = rc.OURS + rc.CONTROLS + rc.PROBES
 REF_DEVICES = rc.REFS
@@ -313,11 +322,10 @@ def main(argv=None) -> int:
             for dev in REF_DEVICES:
                 key = f"{stage}-{dev}"
                 if key in frozen:
-                    with open(os.path.join(merged, f"{key}.json"), "w") as f:
-                        json.dump(frozen[key], f, indent=1, default=str)
+                    write_json(os.path.join(merged, f"{key}.json"),
+                               frozen[key], default=str)
         for key, rows in shipped.items():
-            with open(os.path.join(merged, f"{key}.json"), "w") as f:
-                json.dump(rows, f, indent=1, default=str)
+            write_json(os.path.join(merged, f"{key}.json"), rows, default=str)
 
         report_path = os.path.join(a.out, "report-shipped.txt")
         r = subprocess.run([a.python, os.path.join(MODEL, "reference_compare.py"),
@@ -330,11 +338,9 @@ def main(argv=None) -> int:
         # produced: `docs/reference-compare-results-shipped.json` is the file
         # the docs cite, and a REFUSED run must leave no artefact a later
         # reader could mistake for the product of a complete one.
-        with open(SHIPPED, "w") as f:
-            json.dump(shipped, f, indent=1, default=str)
+        write_json(SHIPPED, shipped, default=str)
         print(f"wrote {SHIPPED} ({len(shipped)} keys)", flush=True)
-        with open(report_path, "w") as f:
-            f.write(r.stdout)
+        write_text_atomic(report_path, r.stdout)
         print(r.stdout)
         print(f"wrote {report_path}", flush=True)
         return 0

@@ -52,6 +52,14 @@ from scipy.io import wavfile
 
 import mono_m1a_score as bass
 import refusal
+import run_all                # noqa: E402
+
+
+def write_json(path, obj) -> None:
+    """Atomic replace (#947): a kill mid-write leaves the previous report
+    standing, not a truncated one a later reader strands on."""
+    run_all.write_json_atomic(str(path), obj)
+
 
 ROOT, SR = bass.ROOT, bass.SR
 lead, am = bass.lead, bass.lead.am
@@ -514,7 +522,7 @@ def _run() -> int:
     if "--reanalyse" in sys.argv:
         report = annotate(json.loads((OUT / "report.json").read_text()))
         report["reanalysis_source_sha256"] = bass.sha(ROOT / "tools/diagnose_m1a_harmonic_phase.py")
-        (OUT / "report.json").write_text(json.dumps(report, indent=1) + "\n")
+        write_json(OUT / "report.json", report)
         ok = all(v["ok"] for v in report["synthetic_control"].values())
         print(json.dumps({"classification": report["repeat_pair"]["classification"], "control_ok": ok}, indent=1))
         return 0 if ok else 1
@@ -665,7 +673,7 @@ def _run() -> int:
     }
     report = annotate(report)
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "report.json").write_text(json.dumps(report, indent=1) + "\n")
+    write_json(OUT / "report.json", report)
     print(json.dumps({"classification": classes, "control_ok": {k: v["ok"] for k, v in control.items()},
                       "free_running_error_deg": report["reference_phase"]["free_running_error_deg"],
                       "reset_error_deg": report["reference_phase"]["reset_error_deg"],

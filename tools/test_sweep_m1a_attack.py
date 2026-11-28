@@ -1,6 +1,9 @@
 """The sweep's gates must be able to fail (controls on the committed record)."""
 import copy
 import json
+import os
+import shutil
+from pathlib import Path
 
 import pytest
 import sweep_m1a_attack as sweep
@@ -77,3 +80,39 @@ def test_off_grid_value_refuses():
     with pytest.raises(sweep.bass.Refused, match="grid"):
         sweep.render_point(7.0)
     assert sweep.nominal_vca_10_90_ms(10.0) == pytest.approx(8.0)
+
+
+@pytest.mark.parametrize("interrupt", [True, False], ids=["interrupted", "successful"])
+def test_summarize_publishes_one_complete_report(tmp_path, monkeypatch, interrupt):
+    shutil.copytree(sweep.OUT, tmp_path, dirs_exist_ok=True)
+    monkeypatch.setattr(sweep, "OUT", tmp_path)
+    target = tmp_path / "report.json"
+    previous = target.read_bytes()
+    field = "reference_fits_in_qualified_domain"
+    replace = os.replace
+    publications = []
+
+    def replace_report(src, dst):
+        assert Path(dst) == target
+        staged = json.loads(Path(src).read_bytes())
+        # Allow any premature publication. Interrupt just before the complete
+        # report becomes visible, even if an earlier rename has succeeded.
+        if interrupt and field in staged:
+            raise OSError("injected interruption before publishing complete report")
+        replace(src, dst)
+        publications.append(staged)
+
+    monkeypatch.setattr(os, "replace", replace_report)
+    if interrupt:
+        with pytest.raises(OSError, match="injected interruption"):
+            sweep.summarize()
+        assert target.read_bytes() == previous
+        assert not publications
+    else:
+        sweep.summarize()
+        report = json.loads(target.read_bytes())
+        assert len(publications) == 1
+        assert publications[0] == report
+        expected = json.loads(previous)
+        assert report.keys() == expected.keys()
+        assert report[field] == expected[field]

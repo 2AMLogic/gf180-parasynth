@@ -51,6 +51,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(ROOT / "fpga"))
 
 
 #: (module, writer attribute) -- one entry per migrated write site; refprofile
@@ -73,6 +74,16 @@ WRITERS = [
     ("clap_d12a_probe", "write_json"),
     ("clap_burst_timing_qual", "write_json"),
     ("clap_final_strike_experiment", "write_json"),
+    # Nine tracked-record writers migrated in PR #954 (part of #947).
+    ("sweep_m1a_attack", "write_json"),
+    ("res_tuning", "write_json"),
+    ("regen_discrimination_ours", "write_json"),
+    ("measure_promoted_bands", "write_json"),
+    ("f1_level_capture", "write_json"),
+    ("diagnose_m1a_harmonic_phase", "write_json"),
+    ("capture_m1a_phase_cycle", "write_json"),
+    ("lead_drive_337", "write_json"),
+    ("sweep_live_midi", "write_json"),
 ]
 
 
@@ -97,6 +108,9 @@ STDOUT_DUMPS_ALLOWLIST = {
     "phase_aware_m1a": 1,
     "analyse_m1a_phase_cycle": 2,
     "measure_m5a_pulse_duty": 1,
+    # #947: summary printed to stdout beside the atomic report write
+    "diagnose_m1a_harmonic_phase": 2,
+    "lead_drive_337": 1,
 }
 
 #: a write/append/exclusive mode literal, either quote style, with optional
@@ -217,6 +231,31 @@ def test_a_kill_during_the_record_write_leaves_the_previous_record_intact(
     assert list(tmp_path.glob("*tmp*")) == [], (
         f"a tmp sibling survived the failed write in {modname}: "
         f"{list(tmp_path.glob('*tmp*'))}")
+
+
+def test_sweep_report_survives_an_interrupted_replacement(tmp_path, monkeypatch):
+    import res_tuning
+
+    records = ROOT / "docs" / "res-tuning"
+    sweep = json.loads((records / "sweeps.json").read_text())
+    expected = (records / "sweeps.txt").read_bytes()
+    target = tmp_path / "sweeps.txt"
+    target.write_bytes(b"previous report\n")
+
+    def interrupt(src, dst):
+        assert pathlib.Path(src).read_bytes() == expected
+        assert pathlib.Path(dst) == target
+        raise OSError("injected interruption before replace")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "replace", interrupt)
+        with pytest.raises(OSError, match="injected interruption before replace"):
+            res_tuning.write_sweep_artifact(sweep, str(target))
+    assert target.read_bytes() == b"previous report\n"
+    assert list(tmp_path.iterdir()) == [target]
+
+    res_tuning.write_sweep_artifact(sweep, str(target))
+    assert target.read_bytes() == expected
 
 
 @pytest.mark.parametrize("modname,fn", WRITERS)

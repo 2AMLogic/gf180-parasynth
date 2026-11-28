@@ -61,6 +61,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "audition"))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
 
 import audio_measure as am                                          # noqa: E402
 import ladder_headroom as lh                                        # noqa: E402
@@ -69,6 +70,14 @@ from ring_estimator import (MIN_CYCLES, AGREE_REL, SUSTAIN_FLOOR,   # noqa: E402
                             SUSTAIN_DROP_DB, Refused, _finite,
                             is_sustained, ring_frequency)
 import voice_fx as vf                                               # noqa: E402
+from atomic_text import write_text_atomic                           # noqa: E402
+import run_all                                                      # noqa: E402
+
+
+def write_json(path, obj, default=None) -> None:
+    """Atomic replace (#947): a kill mid-write leaves the previous record
+    under OUT_DIR standing, not a truncated record a later reader strands on."""
+    run_all.write_json_atomic(str(path), obj, default=default)
 
 SR = rr.SR
 PLAN = os.path.join(ROOT, "docs", "res-tuning", "plan.json")
@@ -466,8 +475,7 @@ def write_sweep_artifact(res: dict, path: str) -> None:
     lines.append("")
     lines.append(f"chosen by the pre-registered selection rules: LAW_DEGREE "
                  f"{res['chosen']['LAW_DEGREE']}, CORR_ENTRIES {res['chosen']['CORR_ENTRIES']}")
-    with open(path, "w") as fh:
-        fh.write("\n".join(lines) + "\n")
+    write_text_atomic(path, "\n".join(lines) + "\n")
 
 
 def run_validation(plan: dict, law_degree: int = LAW_DEGREE, entries: int = CORR_ENTRIES) -> dict:
@@ -520,8 +528,7 @@ def write_validation_artifact(rep: dict, plan: dict, path: str) -> None:
     for k, ok in rep["verdict"]["checks"].items():
         lines.append(f"{'PASS' if ok else 'FAIL'} {k}")
     lines.append(f"OVERALL {'PASS' if rep['verdict']['ok'] else 'FAIL'}")
-    with open(path, "w") as fh:
-        fh.write("\n".join(lines) + "\n")
+    write_text_atomic(path, "\n".join(lines) + "\n")
 
 
 # =============================================================================
@@ -661,21 +668,18 @@ def main(argv=None) -> int:
         plan = load_plan()
         if a.cmd == "controls":
             rep = run_controls(plan)
-            with open(os.path.join(OUT_DIR, "controls.json"), "w") as fh:
-                json.dump(rep, fh, indent=1)
+            write_json(os.path.join(OUT_DIR, "controls.json"), rep)
             print_controls(rep)
             return 0
         if a.cmd == "sweep":
             res = run_sweeps(plan)
             write_sweep_artifact(res, os.path.join(OUT_DIR, "sweeps.txt"))
-            with open(os.path.join(OUT_DIR, "sweeps.json"), "w") as fh:
-                json.dump(res, fh, indent=1, default=str)
+            write_json(os.path.join(OUT_DIR, "sweeps.json"), res, default=str)
             print(f"chosen: {res['chosen']}")
             return 0
         rep = run_validation(plan)
         write_validation_artifact(rep, plan, os.path.join(OUT_DIR, "validation.txt"))
-        with open(os.path.join(OUT_DIR, "validation.json"), "w") as fh:
-            json.dump(rep, fh, indent=1)
+        write_json(os.path.join(OUT_DIR, "validation.json"), rep)
         print(open(os.path.join(OUT_DIR, "validation.txt")).read())
         return 0 if rep["verdict"]["ok"] else 1
     except Refused as exc:
