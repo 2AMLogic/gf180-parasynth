@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Compare two complete, independently scored M5A SPI-to-I2S records."""
+"""Compare two complete, independently scored M5A or M5B SPI-to-I2S records.
+
+Both records must be the same case, and each is scored here by the board
+(`delta_report.evaluate_record`) rather than trusted for the verdict it
+stores about itself."""
 from __future__ import annotations
 
 import argparse
 import json
 import math
+import hashlib
 import pathlib
 import subprocess
 import sys
@@ -20,7 +25,7 @@ import delta_report  # noqa: E402
 #: comparison by (kept at module scope, as `compare_drum_i2s_candidate` does).
 SOURCES = ("tools/compare_m5a_i2s_candidate.py",
            "tools/measure_m5a_filter_oversample.py", "tools/mono_m5a_score.py",
-           "tools/delta_report.py")
+           "tools/scorecard.py", "tools/delta_report.py")
 
 
 class _NegativeUnderflow(float):
@@ -38,36 +43,30 @@ def _parse_score_float(token: str) -> float:
 
 
 def _row(record: dict, label: str) -> dict:
-    if record.get("engine") != "integrated-rtl" or record.get("case_id") != "M5A":
-        raise m5a.Refused(f"{label} must be an integrated-rtl M5A record")
-    if record.get("scorecard_state") not in ("pass", "fail"):
-        raise m5a.Refused(f"{label} has no valid scorecard verdict")
-    metrics = record.get("metrics")
-    if not isinstance(metrics, dict) or set(metrics) != set(m5a.TOLERANCES):
+    row = delta_report.evaluate_record(record, label, engines=("integrated-rtl",),
+                                       family="Mono", refused=m5a.Refused)
+    case_id, metrics = row["case_id"], row["metrics"]
+    if case_id not in m5a.MANIFESTS:
+        raise m5a.Refused(f"{label} must be an M5A or M5B record, not {case_id!r}")
+    if set(metrics) != set(m5a.TOLERANCES):
         raise m5a.Refused(f"{label} does not contain all seven M5A properties")
     policy = record.get("tolerance_policy")
     if not isinstance(policy, dict) or set(policy) != set(m5a.TOLERANCES):
         raise m5a.Refused(f"{label} omits the complete fixed tolerance policy")
     for name, (limit, basis) in m5a.TOLERANCES.items():
         metric = metrics[name]
-        if not isinstance(metric, dict) or metric.get("valid") is not True:
-            raise m5a.Refused(f"{label} property {name} is invalid")
-        try:
-            error = float(metric["error"])
-            tolerance = float(metric["tolerance"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise m5a.Refused(f"{label} property {name} lacks a numeric error or tolerance") from exc
-        if not math.isfinite(error) or not math.isfinite(tolerance):
-            raise m5a.Refused(f"{label} property {name} has a non-finite measurement")
+        tolerance = delta_report.require_json_number(
+            metric["tolerance"], f"{label} property {name} tolerance", refused=m5a.Refused)
         if (metric.get("units") != _expected_units(name)
                 or tolerance != float(limit)
                 or metric.get("tolerance_basis") != basis):
             raise m5a.Refused(f"{label} property {name} uses a different measurement contract")
         try:
             policy_limit, policy_basis = policy[name]
-            policy_limit = float(policy_limit)
         except (TypeError, ValueError) as exc:
             raise m5a.Refused(f"{label} tolerance policy for {name} is malformed") from exc
+        policy_limit = delta_report.require_json_number(
+            policy_limit, f"{label} tolerance policy for {name}", refused=m5a.Refused)
         if policy_limit != float(limit) or policy_basis != basis:
             raise m5a.Refused(f"{label} tolerance policy for {name} is not the frozen contract")
     diagnostics = record.get("diagnostics", {})
@@ -83,13 +82,23 @@ def _row(record: dict, label: str) -> dict:
         raise m5a.Refused(f"{label} event identities are missing or duplicated")
     if not diagnostics.get("reference_sha256") or not diagnostics.get("reference_manifest_sha256"):
         raise m5a.Refused(f"{label} lacks frozen reference identity")
+    # The header names the case; the evidence must agree. A record relabelled
+    # M5A -> M5B changes only the header, and the manifest it was scored
+    # against is still the other case's.
+    expected_manifest = hashlib.sha256(m5a.MANIFESTS[case_id].read_bytes()).hexdigest()
+    if diagnostics["reference_manifest_sha256"] != expected_manifest:
+        raise m5a.Refused(f"{label} says it is {case_id} but was scored against a different "
+                          f"frozen manifest than the {case_id} manifest")
     analysis_version = record.get("analysis_version")
     if not isinstance(analysis_version, str) or not analysis_version:
         raise m5a.Refused(f"{label} omits its analysis-version identifier")
+    if analysis_version != m5a.ANALYSIS_VERSIONS[case_id]:
+        raise m5a.Refused(f"{label} says it is {case_id} but was scored by "
+                          f"{analysis_version!r}, not {m5a.ANALYSIS_VERSIONS[case_id]!r}")
     if not isinstance(record.get("reference_profile"), str) or not record["reference_profile"]:
         raise m5a.Refused(f"{label} omits its reference profile")
-    return {"metrics": metrics, "event_diagnostics": events,
-            "analysis_version": analysis_version}
+    return {"case_id": case_id, "state": row["verdict"]["state"], "metrics": metrics,
+            "event_diagnostics": events, "analysis_version": analysis_version}
 
 
 def _expected_units(name: str) -> str:
@@ -111,20 +120,29 @@ def _event_errors(event: dict, label: str) -> dict[str, dict[str, float]]:
     if isinstance(recorded_excess, _NegativeUnderflow) or not 0 <= excess < math.inf:
         raise m5a.Refused(f"{identity} foldback excess must be finite and nonnegative")
 
+    def number(value, field: str) -> float:
+        return delta_report.require_json_number(value, f"{identity} {field}",
+                                                refused=m5a.Refused)
+
     try:
+        pitch, envelope, gain = (event["pitch_cents_from_midi"], event["envelope_ms"],
+                                 event["gain_dbfs"])
         errors = {
-            "Pitch": abs(float(event["pitch_cents_from_midi"]["model_minus_reference"])),
+            "Pitch": abs(number(pitch["model_minus_reference"],
+                                "pitch_cents_from_midi.model_minus_reference")),
             "Foldback energy": excess,
-            "Envelope attack": abs(float(event["envelope_ms"]["attack_model"]
-                                          - event["envelope_ms"]["attack_reference"])),
-            "Envelope release": abs(float(event["envelope_ms"]["release_model"]
-                                           - event["envelope_ms"]["release_reference"])),
-            "Gain": abs(float(event["gain_dbfs"]["model"] - event["gain_dbfs"]["reference"])),
+            "Envelope attack": abs(number(envelope["attack_model"], "attack_model")
+                                   - number(envelope["attack_reference"], "attack_reference")),
+            "Envelope release": abs(number(envelope["release_model"], "release_model")
+                                    - number(envelope["release_reference"], "release_reference")),
+            "Gain": abs(number(gain["model"], "gain_dbfs.model")
+                        - number(gain["reference"], "gain_dbfs.reference")),
         }
         partials = event["harmonic_error_db_model_minus_reference"]
         if not isinstance(partials, dict) or not partials:
             raise ValueError("no measured harmonics")
-        errors.update({f"Harmonic shape/{partial}": abs(float(value))
+        errors.update({f"Harmonic shape/{partial}":
+                       abs(number(value, f"harmonic_error_db_model_minus_reference[{partial!r}]"))
                        for partial, value in partials.items()})
     except (KeyError, TypeError, ValueError) as exc:
         raise m5a.Refused(f"{identity} lacks complete per-note property evidence") from exc
@@ -148,6 +166,9 @@ def _provenance_config(record: dict, identity: str) -> dict:
 
 def compare_records(baseline: dict, candidate: dict) -> dict:
     base_row, candidate_row = _row(baseline, "baseline"), _row(candidate, "candidate")
+    if base_row["case_id"] != candidate_row["case_id"]:
+        raise m5a.Refused(f"baseline is {base_row['case_id']} and candidate is "
+                          f"{candidate_row['case_id']}")
     if base_row["analysis_version"] != candidate_row["analysis_version"]:
         raise m5a.Refused("baseline and candidate analysis-version identifiers differ")
     if baseline.get("reference_profile") != candidate.get("reference_profile"):
@@ -164,17 +185,21 @@ def compare_records(baseline: dict, candidate: dict) -> dict:
     candidate_filter = candidate_config.get("filter_config")
     if not base_filter or base_filter != candidate_filter:
         raise m5a.Refused("baseline and candidate filter configurations differ or are missing")
-    comparison = filter_gate._compare_incremental(base_row, candidate_row)
     base_events, candidate_events = base_row["event_diagnostics"], candidate_row["event_diagnostics"]
     if len(base_events) != len(candidate_events):
         raise m5a.Refused("baseline and candidate event evidence differs")
+    # Validate every per-note number BEFORE the incremental comparison, which
+    # reads the harmonic partials with a raw float() (null -> TypeError,
+    # 10**400 -> OverflowError, both exit 1).
+    base_checked = [_event_errors(event, "baseline") for event in base_events]
+    candidate_checked = [_event_errors(event, "candidate") for event in candidate_events]
+    comparison = filter_gate._compare_incremental(base_row, candidate_row)
     preserved_passes, lost_passes, degraded_within_limit = [], [], []
-    for before, after in zip(base_events, candidate_events):
+    for before, after, before_errors, after_errors in zip(
+            base_events, candidate_events, base_checked, candidate_checked):
         identity = (before.get("wave"), before.get("midi"))
         if identity != (after.get("wave"), after.get("midi")):
             raise m5a.Refused("baseline and candidate event order differs")
-        before_errors = _event_errors(before, "baseline")
-        after_errors = _event_errors(after, "candidate")
         if set(before_errors) != set(after_errors):
             raise m5a.Refused("baseline and candidate per-note properties differ")
         for prop, base_value in before_errors.items():
@@ -200,16 +225,17 @@ def compare_records(baseline: dict, candidate: dict) -> dict:
         comparison["accepts_incremental_improvement"] and not lost_passes)
     return {
         "schema": "m5a-integrated-rtl-delta-v1", "valid": True,
+        "case_id": candidate_row["case_id"],
         "reference_sha256": base_diag["reference_sha256"],
         "manifest_sha256": base_diag["reference_manifest_sha256"],
         "filter_config": base_filter,
         "analysis_version": base_row["analysis_version"],
         "baseline": {"source_commit": baseline.get("source_commit"),
-                     "scorecard_state": baseline["scorecard_state"],
+                     "scorecard_state": base_row["state"],
                      "decoded_i2s_sha256": base_diag["decoded_i2s_sha256"],
                      "metrics": baseline["metrics"]},
         "candidate": {"source_commit": candidate.get("source_commit"),
-                      "scorecard_state": candidate["scorecard_state"],
+                      "scorecard_state": candidate_row["state"],
                       "decoded_i2s_sha256": candidate_diag["decoded_i2s_sha256"],
                       "controls": candidate_config,
                       "metrics": candidate["metrics"]},
@@ -231,8 +257,8 @@ def compare_files(baseline_path: pathlib.Path, candidate_path: pathlib.Path) -> 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("baseline", help="valid prior integrated M5A score JSON")
-    parser.add_argument("candidate", help="valid candidate integrated M5A score JSON")
+    parser.add_argument("baseline", help="valid prior integrated M5A or M5B score JSON")
+    parser.add_argument("candidate", help="valid candidate integrated M5A or M5B score JSON")
     parser.add_argument("--out", default="build/scorecard/m5a-integrated-delta.json")
     args = parser.parse_args(argv)
     baseline = delta_report.repo_path(args.baseline, root=ROOT)

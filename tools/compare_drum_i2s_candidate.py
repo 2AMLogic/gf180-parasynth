@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import pathlib
 import subprocess
 import sys
@@ -45,8 +44,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
-import run_case  # noqa: E402
-import scorecard  # noqa: E402
 import refusal
 import delta_report  # noqa: E402
 
@@ -60,54 +57,16 @@ class Refused(refusal.Refused, Exception):
     """The two records cannot be compared, so there is no comparison."""
 
 
-def _metrics(record: dict, label: str) -> dict:
-    metrics = record.get("metrics")
-    if not isinstance(metrics, dict) or not metrics:
-        raise Refused(f"{label} carries no metrics")
-    for name, metric in metrics.items():
-        if not isinstance(metric, dict):
-            raise Refused(f"{label} property {name} is malformed")
-        if metric.get("valid") is not True:
-            raise Refused(f"{label} property {name} is invalid, so it has no distance")
-        try:
-            error = float(metric["error"])
-            tolerance = float(metric["tolerance"])
-            value = float(metric["value"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise Refused(f"{label} property {name} lacks a numeric value, error or "
-                          f"tolerance") from exc
-        if not all(math.isfinite(v) for v in (error, tolerance, value)) or tolerance <= 0.0:
-            raise Refused(f"{label} property {name} has a non-finite or zero-tolerance "
-                          f"measurement")
-    return metrics
-
-
-def _row(record: dict, label: str, engine: str, case: dict) -> dict:
-    """One record's metrics and the verdict THE BOARD would give it.
-
-    The verdict is recomputed with `scorecard.evaluate` rather than read out of
-    the record: `run_case` does not store one, and a stored one that disagrees
-    with the board is the bug this would otherwise hide."""
-    if not isinstance(record, dict):
-        raise Refused(f"{label} is not a record")
-    if record.get("engine") != engine:
-        raise Refused(f"{label} must name engine {engine!r} (saw {record.get('engine')!r})")
-    provenance_engine = (record.get("provenance") or {}).get("engine")
-    if provenance_engine is not None and provenance_engine != engine:
-        raise Refused(f"{label} record and provenance disagree about the engine "
-                      f"({engine!r} vs {provenance_engine!r})")
-    if not record.get("case_id"):
-        raise Refused(f"{label} does not name its case")
+def _row(record: dict, label: str, engine: str, case: dict | None) -> dict:
+    """One record's metrics and the verdict THE BOARD gives it, recomputed by
+    `delta_report.evaluate_record` rather than read out of the record:
+    `run_case` does not store one, and a stored one that disagrees with the
+    board is the bug the shared gate exists to refuse."""
+    row = delta_report.evaluate_record(record, label, engines=(engine,), family="Drums",
+                                       case=case, refused=Refused)
     if not record.get("reference_profile"):
         raise Refused(f"{label} does not name its reference profile")
-    verdict = scorecard.evaluate(case, record)
-    if verdict["state"] not in (scorecard.PASS, scorecard.FAIL):
-        raise Refused(f"{label} has no pass/fail verdict on the board: {verdict['why']}")
-    stored = record.get("scorecard_state")
-    if stored is not None and stored != verdict["state"]:
-        raise Refused(f"{label} stores state {stored!r} but the board evaluates it as "
-                      f"{verdict['state']!r}")
-    return {"metrics": _metrics(record, label), "verdict": verdict}
+    return {"metrics": row["metrics"], "verdict": row["verdict"], "case_id": row["case_id"]}
 
 
 def _integration(candidate: dict) -> dict:
@@ -161,22 +120,11 @@ def _attribution(integration: dict, differing: list) -> dict:
 
 
 def compare_records(baseline: dict, candidate: dict, case: dict | None = None) -> dict:
-    if not isinstance(candidate, dict) or candidate.get("engine") != CANDIDATE_ENGINE:
-        raise Refused(f"candidate must name engine {CANDIDATE_ENGINE!r} "
-                      f"(saw {(candidate or {}).get('engine')!r})")
-    if baseline.get("case_id") != candidate.get("case_id"):
-        raise Refused(f"baseline is {baseline.get('case_id')} and candidate is "
-                      f"{candidate.get('case_id')}")
-    if case is None:
-        case = next((c for c in run_case.load_cases()
-                     if c["case_id"] == candidate.get("case_id")), None)
-        if case is None:
-            raise Refused(f"{candidate.get('case_id')} is not a case in "
-                          f"docs/scorecard/cases.csv")
-    if case.get("family") != "Drums":
-        raise Refused(f"{case['case_id']} is a {case.get('family')} case, not a Drums case")
-    base_row = _row(baseline, "baseline", BASELINE_ENGINE, case)
     cand_row = _row(candidate, "candidate", CANDIDATE_ENGINE, case)
+    base_row = _row(baseline, "baseline", BASELINE_ENGINE, case)
+    if base_row["case_id"] != cand_row["case_id"]:
+        raise Refused(f"baseline is {base_row['case_id']} and candidate is "
+                      f"{cand_row['case_id']}")
     if baseline["reference_profile"] != candidate["reference_profile"]:
         raise Refused("baseline and candidate were measured against different references")
     if baseline.get("tolerance_policy") != candidate.get("tolerance_policy"):
@@ -191,17 +139,22 @@ def compare_records(baseline: dict, candidate: dict, case: dict | None = None) -
         b, c = base_metrics[name], cand_metrics[name]
         if b.get("units") != c.get("units") or b.get("tolerance_basis") != c.get("tolerance_basis"):
             raise Refused(f"property {name} uses a different measurement contract")
-        if float(b["tolerance"]) != float(c["tolerance"]):
+        if b["tolerance"] != c["tolerance"]:
             raise Refused(f"property {name} is scored against a different tolerance")
         tolerance = float(b["tolerance"])
         # the distance the BOARD gives each property, not a second definition of it
         base_worst = base_row["verdict"]["properties"][name]
         cand_worst = cand_row["verdict"]["properties"][name]
         base_pass, cand_pass = base_worst <= 1.0, cand_worst <= 1.0
+        # the board scores `value` as optional; this table publishes it
+        base_value = delta_report.require_json_number(
+            b.get("value"), f"baseline property {name} value", refused=Refused)
+        cand_value = delta_report.require_json_number(
+            c.get("value"), f"candidate property {name} value", refused=Refused)
         row = {"property": name, "units": b.get("units"), "tolerance": tolerance,
-               "baseline_value": float(b["value"]), "candidate_value": float(c["value"]),
-               "difference": float(c["value"]) - float(b["value"]),
-               "difference_in_tolerances": (float(c["value"]) - float(b["value"])) / tolerance,
+               "baseline_value": base_value, "candidate_value": cand_value,
+               "difference": cand_value - base_value,
+               "difference_in_tolerances": (cand_value - base_value) / tolerance,
                "baseline_worst": base_worst, "candidate_worst": cand_worst,
                "baseline_within_tolerance": base_pass,
                "candidate_within_tolerance": cand_pass,

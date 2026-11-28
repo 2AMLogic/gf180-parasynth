@@ -16,6 +16,13 @@ commit and a clean tree (#1187's trap; `provenance.git()`'s empty-string
 contract is the shape this must NOT drift into). `run_at_utc` is pinned to
 the isoformat-with-offset shape the committed delta records under
 docs/scorecard/ carry, which is not `provenance.now()`'s shape.
+
+The head the three scripts share (`delta_report.evaluate_record`, issue
+#1601) is tested where each comparator's own gate is, in the three
+`test_compare_*_candidate.py` files. Its CLI boundary is tested here, because
+it is the same boundary as the tail's: a JSON file that is not an object must
+come back from all three `main`s as REFUSED (exit 2), and an unexpected
+exception inside the comparison must not come back as a verdict at all.
 """
 import copy
 import hashlib
@@ -31,6 +38,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import compare_drum_i2s_candidate as drum_mod                  # noqa: E402
 import compare_ensemble_candidate as ensemble_mod              # noqa: E402
 import compare_m5a_i2s_candidate as m5a_mod                    # noqa: E402
+import test_compare_drum_i2s_candidate as drum_tests           # noqa: E402
+import test_compare_ensemble_candidate as ensemble_tests       # noqa: E402
+import test_compare_m5a_i2s_candidate as m5a_tests             # noqa: E402
 
 
 DRUM_SOURCES = {"tools/compare_drum_i2s_candidate.py", "tools/score_drum_i2s.py",
@@ -39,7 +49,7 @@ ENSEMBLE_SOURCES = {"tools/compare_ensemble_candidate.py", "tools/score_ensemble
                     "tools/run_case.py", "tools/scorecard.py", "tools/delta_report.py"}
 M5A_SOURCES = {"tools/compare_m5a_i2s_candidate.py",
                "tools/measure_m5a_filter_oversample.py", "tools/mono_m5a_score.py",
-               "tools/delta_report.py"}
+               "tools/scorecard.py", "tools/delta_report.py"}
 
 #: Minimal reports carrying exactly the keys each script's `main` summary
 #: print reads -- enough for the tail to run end to end without re-deriving
@@ -211,3 +221,60 @@ def test_main_writes_the_report_inside_the_repository_and_prints_its_summary(
     summary = json.loads(printed[printed.index("{"):])
     assert set(summary) == summary_keys
     assert summary["report"] == "out/delta.json"
+
+
+def _valid_pair(compare):
+    """A baseline/candidate pair each comparator accepts, from the fixtures
+    its own test file already keeps -- so the refusing side of the tests below
+    is the damaged one, never the healthy one."""
+    if compare is drum_mod:
+        return (drum_tests._record(drum_tests.compare.BASELINE_ENGINE),
+                drum_tests._record(drum_tests.compare.CANDIDATE_ENGINE))
+    if compare is ensemble_mod:
+        return ensemble_tests._record(), ensemble_tests._record()
+    return m5a_tests._record(), m5a_tests._record()
+
+
+@pytest.mark.parametrize("compare,tool,sources,report,summary_keys", CASES,
+                         ids=["drum", "ensemble", "m5a"])
+@pytest.mark.parametrize("side", ["baseline", "candidate"])
+def test_main_refuses_a_valid_json_file_that_is_not_a_record(
+        compare, tool, sources, report, summary_keys, side, tmp_path, capsys):
+    """Issue #1601: `[]` is valid JSON, so it loads; it is not a record. As the
+    baseline all three scripts called `.get` on it and died with AttributeError
+    -- exit 1 and a traceback, where the contract is `<tool>: REFUSED -- ...`,
+    exit 2, and nothing written. As the candidate two of them did, and the
+    drum script refused it for having no engine rather than for not being a
+    record."""
+    pair = dict(zip(("baseline", "candidate"), _valid_pair(compare)))
+    pair[side] = []
+    paths = {}
+    for name, record in pair.items():
+        paths[name] = tmp_path / f"{name}.json"
+        paths[name].write_text(json.dumps(record) + "\n")
+    out = tmp_path / "out" / "delta.json"
+    rc = compare.main([str(paths["baseline"]), str(paths["candidate"]), "--out", str(out)])
+    assert rc == 2
+    assert f"{tool}: REFUSED -- {side} is not a record\n" in capsys.readouterr().out
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("compare,tool,sources,report,summary_keys", CASES,
+                         ids=["drum", "ensemble", "m5a"])
+def test_an_internal_bug_is_not_relabelled_as_a_refusal(
+        compare, tool, sources, report, summary_keys, tmp_path, monkeypatch):
+    """The inverse control for every refusal test in this file: a bug inside
+    the comparison is an EXECUTION ERROR and must surface as one (a traceback,
+    exit 1), never be swallowed into `REFUSED`. `RuntimeError` is the class to
+    use because `mono_m5a_score.Refused` is itself a RuntimeError -- a plain
+    one is what separates "the record is unusable" from "the tool is"."""
+    def bug(baseline, candidate):
+        raise RuntimeError("internal bug")
+    monkeypatch.setattr(compare, "compare_records", bug)
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text('{"engine": "baseline"}\n')
+    candidate = tmp_path / "candidate.json"
+    candidate.write_text('{"engine": "candidate"}\n')
+    with pytest.raises(RuntimeError, match="internal bug"):
+        compare.main([str(baseline), str(candidate), "--out", str(tmp_path / "out" / "delta.json")])
+    assert not (tmp_path / "out" / "delta.json").exists()

@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import pathlib
 import subprocess
 import sys
@@ -63,50 +62,27 @@ SOURCES = ("tools/compare_ensemble_candidate.py", "tools/score_ensemble_i2s.py",
            "tools/run_case.py", "tools/scorecard.py", "tools/delta_report.py")
 
 
-def _case(case_id: str) -> dict:
-    case = next((c for c in rc.load_cases() if c["case_id"] == case_id), None)
-    if case is None:
-        raise Refused(f"{case_id} is not a case in docs/scorecard/cases.csv")
-    if case["family"] != "Ensemble":
-        raise Refused(f"{case_id} is a {case['family']} case, not an Ensemble case")
-    return case
-
-
-def _row(record: dict, label: str, *, require_rtl: bool) -> dict:
-    """One side of the comparison, with its preconditions asserted here."""
-    engine = record.get("engine")
-    if require_rtl and engine != "integrated-rtl":
-        raise Refused(f"{label} must be an integrated-rtl record, not {engine!r}")
-    if engine not in ENSEMBLE_ENGINES:
-        raise Refused(f"{label} names engine {engine!r}, which is not one this "
-                      f"comparison knows ({', '.join(ENSEMBLE_ENGINES)})")
-    case_id = record.get("case_id")
-    if not case_id:
-        raise Refused(f"{label} does not name its case")
-    metrics = record.get("metrics")
-    if not isinstance(metrics, dict) or set(metrics) != set(CONTRACT):
+def _row(record: dict, label: str, *, engines: tuple) -> dict:
+    """One side of the comparison: the board's verdict on it, which
+    `delta_report.evaluate_record` recomputes, and then this comparison's
+    own measurement contract."""
+    row = delta_report.evaluate_record(record, label, engines=engines, family="Ensemble",
+                                       refused=Refused)
+    engine, case_id, metrics = row["engine"], row["case_id"], row["metrics"]
+    if set(metrics) != set(CONTRACT):
         raise Refused(f"{label} does not contain exactly the three Ensemble properties")
     policy = record.get("tolerance_policy")
     if not isinstance(policy, dict):
         raise Refused(f"{label} omits its tolerance policy")
     for name, (units, limit, basis) in CONTRACT.items():
         metric = metrics[name]
-        if not isinstance(metric, dict) or metric.get("valid") is not True:
-            raise Refused(f"{label} property {name} is invalid: no distance to compare")
-        try:
-            error = float(metric["error"])
-            tolerance = float(metric["tolerance"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise Refused(f"{label} property {name} lacks a numeric error or tolerance") from exc
-        if not math.isfinite(error) or not math.isfinite(tolerance):
-            raise Refused(f"{label} property {name} has a non-finite measurement")
+        tolerance = delta_report.require_json_number(
+            metric["tolerance"], f"{label} property {name} tolerance", refused=Refused)
         if metric.get("units") != units or tolerance != limit \
                 or metric.get("tolerance_basis") != basis:
             raise Refused(f"{label} property {name} uses a different measurement contract")
         if policy.get(basis) != rc.TOLERANCE_POLICY[basis]:
             raise Refused(f"{label} tolerance policy for {basis} is not the frozen contract")
-    if not isinstance(record.get("provenance"), dict) or not record["provenance"].get("inputs"):
-        raise Refused(f"{label} carries no provenance inputs: it cannot be re-derived")
     if engine == "integrated-rtl":
         diagnostics = record.get("diagnostics") or {}
         decoded = diagnostics.get("decoded_i2s_sha256")
@@ -115,9 +91,7 @@ def _row(record: dict, label: str, *, require_rtl: bool) -> dict:
         per_stop = diagnostics.get("per_stop_event_timing")
         if not isinstance(per_stop, dict) or not per_stop:
             raise Refused(f"{label} is integrated-rtl but names no per-stop event timing")
-    verdict = scorecard.evaluate(_case(case_id), record)
-    if verdict["state"] not in (scorecard.PASS, scorecard.FAIL):
-        raise Refused(f"{label} has no valid board verdict: {verdict['why']}")
+    verdict = row["verdict"]
     return {"engine": engine, "case_id": case_id, "metrics": metrics,
             "state": verdict["state"], "worst": verdict["worst"],
             "source_commit": record.get("source_commit"),
@@ -127,8 +101,8 @@ def _row(record: dict, label: str, *, require_rtl: bool) -> dict:
 
 def compare_records(baseline: dict, candidate: dict) -> dict:
     """The candidate must be integrated-rtl; the baseline may be either engine."""
-    candidate_row = _row(candidate, "candidate", require_rtl=True)
-    baseline_row = _row(baseline, "baseline", require_rtl=False)
+    candidate_row = _row(candidate, "candidate", engines=("integrated-rtl",))
+    baseline_row = _row(baseline, "baseline", engines=ENSEMBLE_ENGINES)
     if baseline_row["case_id"] != candidate_row["case_id"]:
         raise Refused("baseline and candidate are different cases")
     mode = ("cross-engine" if baseline_row["engine"] != candidate_row["engine"]
