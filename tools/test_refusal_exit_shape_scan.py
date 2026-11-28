@@ -774,8 +774,7 @@ class TestTheRealSitesBehindThoseShapes:
     def test_preparation_contract__a_missing_corpus_exits_2(self, tmp_path, monkeypatch, capsys):
         m = _load("_shape_scan_preparation_contract_current_state",
                   "tools/probes/preparation_contract_current_state.py")
-        monkeypatch.setenv("GF180_TR808_REFS", str(tmp_path / "no-corpus-here"))
-        monkeypatch.delenv("TR808_REFS", raising=False)
+        monkeypatch.setattr(m.rc, "configured_refs", lambda: tmp_path / "no-corpus-here")
         assert m.main() == exit_contract.REFUSED
         out = capsys.readouterr().out
         assert f"REFUSED: reference corpus not at {tmp_path / 'no-corpus-here'}" in out

@@ -112,6 +112,9 @@ import pathlib
 import subprocess
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import refusal                                                   # noqa: E402
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CONTRACT = pathlib.Path("tools") / "exit_contract.py"
 MIN_PY_FILES = 300
@@ -151,7 +154,7 @@ def main(ok):
 '''
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of this scan was not met; it cannot answer."""
 
 
