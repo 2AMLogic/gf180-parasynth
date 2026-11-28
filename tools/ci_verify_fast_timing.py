@@ -44,7 +44,7 @@ REFUSED IS AN OUTCOME. This queries a live API, so it can fail to answer:
     1  measured, and the window contains a NO-VERDICT unit or a capped job
     2  REFUSED -- could not measure (no `gh`, API error, empty or short
        window, a focus slug that appears in no record, too many unreadable
-       logs)
+       logs to collect, or any unreadable log in a --require-clean window)
 
 Network-dependent, so it is NOT part of `make verify`; its tests
 (`tools/test_ci_verify_fast_timing.py`) are offline and parse fixture logs.
@@ -479,6 +479,17 @@ def unclean(records: list[JobTiming]) -> list[str]:
     return out
 
 
+def unreadable(records: list[JobTiming]) -> list[str]:
+    """Every execution in `records` whose log could not be read.
+
+    Such a record has no table and no units, so `unclean` cannot see inside
+    it: its verdict is unknown, which is neither clean nor a lost verdict.
+    `--require-clean` refuses on these rather than passing over them -- an
+    unknown is never reported as a pass.
+    """
+    return [f"run {r.run_id} attempt {r.attempt}: {r.error}" for r in records if r.error]
+
+
 def render(records: list[JobTiming], summary: dict, *, list_records: bool = False) -> str:
     focus, reference = summary["focus"], summary["reference"]
     L = [f"{summary['total']} `{DEFAULT_JOB}` execution(s): {summary['measured']} with a run_all.py table, "
@@ -569,7 +580,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--window", type=int, default=40,
                     help="how many most-recent executions --require-clean inspects")
     ap.add_argument("--require-clean", action="store_true",
-                    help="exit 1 if the window contains a NO-VERDICT unit or a capped job")
+                    help="exit 1 if the window contains a NO-VERDICT unit or a capped job; "
+                         "refuse (exit 2) if any log in it is unreadable")
     ap.add_argument("--max-error-frac", type=float, default=0.2,
                     help="refuse the window if more than this share of logs is unreadable")
     ap.add_argument("--snapshot", type=pathlib.Path, help="also write the collected records here")
@@ -595,6 +607,11 @@ def main(argv: list[str] | None = None) -> int:
         if a.require_clean and len(records) < a.window:
             raise Refusal(f"asked for a clean window of {a.window} executions but only {len(records)} "
                           f"are available -- raise --limit. A short window is not a clean window.")
+        if a.require_clean:
+            errs = unreadable(records[:a.window])
+            if errs:
+                raise Refusal(f"{len(errs)} of the last {a.window} executions have an unreadable log -- their "
+                              f"units are unknown, not clean: " + "; ".join(errs))
     except Refusal as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return REFUSED
