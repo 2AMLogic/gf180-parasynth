@@ -1434,10 +1434,17 @@ def test_collision_where_the_raising_candidates_family_is_function_local_is_a_si
 #     cross-module refusal site between them was in no census.
 
 ROOT_PROBE = '''
+import refusal
 import mod_a
 
+class Refused(refusal.Refused, Exception):   # the caller's OWN class: a sibling
+    pass
+
 def go(p):
-    return mod_a.load(p)            # unguarded: must reach the census from EVERY root
+    try:
+        mod_a.load(p)               # guarded by a SIBLING: the defect shape
+    except Refused as e:
+        print("REFUSED", e)
 '''
 
 # one fixture per root, written out: the control must name the roots it
@@ -1447,12 +1454,14 @@ SCAN_ROOT_FIXTURES = ("tools", "model", "pnr", "fpga", "rtl-sketch", "audition")
 
 def test_every_scan_root_reaches_the_census_through_main(tmp_path, monkeypatch, capsys):
     """The root filter lives in `main()`, not in `scan()`, so the control
-    drives `main()`: one unguarded caller under EVERY root, all with the same
-    known answer. Dropping a root from `SCAN_ROOTS` (the #1573 state for
-    `rtl-sketch` and `audition`) removes its fixture from the census; the
-    caller under no root (`scratch/`) must stay out, so the control also pins
-    that the roots are still a filter. A root added without a fixture here
-    fails the tuple assertion, so the demand travels with the tuple."""
+    drives `main()`: one caller under EVERY root, all planting the defect
+    shape the census exists for -- a call to another module's raising code
+    under `except Refused` with `Refused` the caller's own class. Dropping a
+    root from `SCAN_ROOTS` (the #1573 state for `rtl-sketch` and
+    `audition`) removes its fixture from the census; the caller under no root
+    (`scratch/`) must stay out, so the control also pins that the roots are
+    still a filter. A root added without a fixture here fails the tuple
+    assertion, so the demand travels with the tuple."""
     monkeypatch.setattr(rss, "ROOT", tmp_path)
     files = [tmp_path / "mod_a.py"]
     files[0].write_text(MOD_A)
@@ -1467,8 +1476,10 @@ def test_every_scan_root_reaches_the_census_through_main(tmp_path, monkeypatch, 
     out = json.loads(capsys.readouterr().out)
     assert list(rss.SCAN_ROOTS) == list(SCAN_ROOT_FIXTURES), rss.SCAN_ROOTS
     assert out["files_scanned"] == len(SCAN_ROOT_FIXTURES), out["files_scanned"]
+    assert all(s["classification"] == "candidate-escape" and s["guard"] == "local"
+               and s["uncovered"] == ["mod_a"] for s in out["sites"]), out["sites"]
     got = sorted(s["site"] for s in out["sites"])
-    assert got == sorted(f"{root}/probe.py:5" for root in SCAN_ROOT_FIXTURES), got
+    assert got == sorted(f"{root}/probe.py:10" for root in SCAN_ROOT_FIXTURES), got
 
 
 # (3) Inside a function scope the binding that won was `ast.walk`'s breadth-
