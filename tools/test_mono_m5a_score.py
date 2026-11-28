@@ -48,6 +48,36 @@ def test_m5b_missing_reference_injection_refuses_with_the_mutation_name():
         score.measure(case_id="M5B", inject="REF_MISSING")
 
 
+def test_frozen_manifest_that_cannot_be_read_refuses_naming_it(tmp_path, monkeypatch):
+    """#1939 row 3: `read_bytes()` on the frozen manifest was outside every
+    try, so an absent one left `measure` as a bare FileNotFoundError -- a
+    traceback at lead_drive_337 (exit 1), an execution-error record with a
+    `traceback` field at run_case (origin/main @ e2d1bae7). The audio read
+    two lines below already refused; the manifest read now does the same."""
+    absent = tmp_path / "absent.json"
+    monkeypatch.setattr(score, "MANIFEST", absent)
+    with pytest.raises(score.Refused, match=r"frozen M5A manifest .*absent\.json"):
+        score.measure()
+
+
+def test_model_wav_destination_that_cannot_be_written_refuses_naming_it(tmp_path):
+    """#1939 row 3: the WAV write at the end of `measure` was outside every
+    try. Pass the committed M5B WAV as `candidate_wav` so the test reaches
+    the same `keep_audio` write block without a second full M5B synthesis
+    render in the `verify-fast` batch (#1730): a destination that cannot be
+    created is stated as `Refused` naming the path, not left as the bare
+    FileExistsError it was on origin/main @ e2d1bae7."""
+    legacy = json.loads(
+        (score.ROOT / "docs/scorecard/mono-m5b-miniv3/legacy-score-v1.json").read_text())
+    blocker = tmp_path / "blocker"
+    blocker.write_text("a regular file where a directory is needed")
+    with pytest.raises(score.Refused,
+                       match=r"cannot write the M5B model WAV .*blocker[/\\]x\.wav") as raised:
+        score.measure(case_id="M5B", candidate_wav=score.ROOT / legacy["audio"],
+                      output_path=blocker / "x.wav")
+    assert isinstance(raised.value.__cause__, FileExistsError)
+
+
 def test_pitch_deviation_uses_cents_not_semitone_percent():
     assert score._cents_error(2.0, 1.0) == pytest.approx(1200.0)
     assert score._cents_error(440.0 * 2 ** (1 / 12), 440.0) == pytest.approx(100.0)

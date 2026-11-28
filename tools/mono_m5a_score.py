@@ -287,7 +287,9 @@ def load_reference(case_id="M5A", *, manifest_path=None,
     here, in that order. `scipy` and `reference_suites` are imported inside so
     the player paths that import this module still run without them (#1268).
     A malformed manifest (bad JSON, a missing key) is an execution error, not
-    a missing precondition, and is deliberately not swallowed.
+    a missing precondition, and is deliberately not swallowed. A manifest file
+    that is absent or cannot be read IS a missing precondition, and is refused
+    (#1939).
     """
     if case_id not in MANIFESTS:
         raise Refused(f"unsupported Mono scorecard case {case_id!r}")
@@ -299,7 +301,11 @@ def load_reference(case_id="M5A", *, manifest_path=None,
     manifest_path = pathlib.Path(manifest_path)
     # One read: the parsed manifest and its reported digest are the same bytes
     # (a file replaced between two reads must not pair content with a digest).
-    manifest_bytes = manifest_path.read_bytes()
+    try:
+        manifest_bytes = manifest_path.read_bytes()
+    except OSError as exc:
+        raise Refused(
+            f"cannot read the frozen {case_id} manifest {manifest_path}: {exc}") from exc
     manifest = json.loads(manifest_bytes)
     manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
     if manifest.get("case_id") != case_id:
@@ -540,9 +546,12 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     if keep_audio:
         out = (ROOT / f"build/scorecard/{case_id}-model.wav"
                if output_path is None else pathlib.Path(output_path))
-        out.parent.mkdir(parents=True, exist_ok=True)
         pcm_out = np.clip(combined * 32768.0, -32768, 32767).astype("<i2")
-        wavfile.write(out, SR, pcm_out)
+        try:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            wavfile.write(out, SR, pcm_out)
+        except OSError as exc:
+            raise Refused(f"cannot write the {case_id} model WAV {out}: {exc}") from exc
         try:
             audio_path = str(out.relative_to(ROOT))
         except ValueError:

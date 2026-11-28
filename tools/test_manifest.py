@@ -1029,6 +1029,51 @@ def test_load_json_refused_refuses_latin1_bytes_whatever_the_host_locale(tmp_pat
 
 
 # =============================================================================
+# load_json_refused: a record that is ABSENT or UNREADABLE is REFUSED too, not
+# a bare OSError (#1939 row 1)
+# =============================================================================
+def unreadable_record(path, how):
+    """A present path `read_text()` cannot read: mode 000, or a directory
+    where the record should be (the test's `absent` case calls nothing and
+    leaves no file). The 000 case asserts its own precondition: a root runner
+    reads the file anyway, and a verdict from that run is about the runner,
+    not the reader -- the directory case covers the class there."""
+    if how == "directory":
+        path.mkdir()
+        return
+    path.write_text("{}")
+    path.chmod(0o000)
+    try:
+        path.read_text()
+    except OSError:
+        return
+    pytest.skip(f"{path.name} is still readable after chmod 000 (running as root?)")
+
+
+@pytest.mark.parametrize("how, reason", [
+    ("absent", "No such file or directory"),
+    ("unreadable", "Permission denied"),
+    ("directory", "Is a directory"),
+])
+def test_load_json_refused_refuses_a_record_it_cannot_read_naming_the_path(tmp_path, how, reason):
+    """`read_text()` raises FileNotFoundError, PermissionError or
+    IsADirectoryError before json.loads is reached, and none is a
+    JSONDecodeError or UnicodeDecodeError, so the #881/#909 clauses let it
+    out: a bare OSError at every caller that handles `Refused` only --
+    refprofile.load_profile(), check_reference_freeze and stage_case, each
+    measured on origin/main @ e2d1bae7. It is the #842 shape and gets the
+    same refusal as a torn record: the path, the reason, the restore step."""
+    p = tmp_path / "ledger.json"
+    if how != "absent":
+        unreadable_record(p, how)
+    with pytest.raises(mf.Refused,
+                       match=rf"ledger\.json.*could not be read \({reason}\)"
+                             r".*git checkout") as raised:
+        mf.load_json_refused(p, "bound ledger")
+    assert isinstance(raised.value.__cause__, OSError)
+
+
+# =============================================================================
 # require_keys: a record that PARSES but cannot be READ is REFUSED, in the
 # caller's own Refused class (#1604)
 # =============================================================================

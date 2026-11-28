@@ -156,7 +156,9 @@ def load_json_refused(path, what: str) -> dict:
     JSONDecodeError escape (#881). A truncated record is the #842 shape: the
     reader strands until a human restores the file, so the refusal must name
     the file and say how it is restored rather than look like a bug in the
-    reader."""
+    reader. A record that is absent or cannot be read is the same shape and
+    gets the same refusal (#1939): `read_text()` raises it before json.loads
+    is reached, and a caller that handles `Refused` alone met a bare OSError."""
     try:
         # Decode as UTF-8 explicitly: a bare `read_text()` lets the host locale
         # choose, so a Latin-1 locale ACCEPTED non-UTF-8 bytes (#1774 review) and
@@ -178,6 +180,11 @@ def load_json_refused(path, what: str) -> dict:
             f"{e.start}) -- a partial write; restore a tracked file with "
             f"`git checkout -- {path}`, delete a scratch one so the next run "
             f"re-seeds it") from e
+    except OSError as e:
+        raise Refused(
+            f"{what} at {path} could not be read ({e.strerror or e}) -- absent "
+            f"or unreadable; restore a tracked file with `git checkout -- "
+            f"{path}`, delete a scratch one so the next run re-seeds it") from e
 
 
 def require_keys(record, required, what: str, *, refused: Callable[[str], Exception]) -> None:
