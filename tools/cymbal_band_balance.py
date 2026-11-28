@@ -322,12 +322,40 @@ def figure_tone_term(band, fig9, *, at_hz=None, defect=None):
     }
 
 
+def _non_finite(values: dict) -> list[str]:
+    """`"<field> = <value>"` for every value that is not a finite number.
+
+    IEEE comparisons with NaN are always False (#134), so a NaN passes the
+    guards written to catch bad values: `abs(x - want) > tol` is False, and so
+    is `width > bound`. The record readers below assert finiteness BEFORE
+    anything compares a value and name every offending field -- +-inf with
+    the NaNs, which `isnan` alone would let through.
+    """
+    nums = {k: float(v) for k, v in values.items()}
+    return [f"{k} = {v!r}" for k, v in nums.items() if not math.isfinite(v)]
+
+
+def _outside_bound(width_db) -> bool:
+    """Is `width_db` too wide for a balance to be applied within
+    `BALANCE_BOUND_DB`?
+
+    Written `width_db > BALANCE_BOUND_DB` this is False for a NaN, so a
+    non-finite width read as INSIDE the bound. `not (w <= bound)` is True for
+    one: a width that is not a finite number is not known to be within any
+    tolerance, which is the refusing direction.
+    """
+    return not (width_db <= BALANCE_BOUND_DB)
+
+
 # ---------------------------------------------------------------------------
 # The RESOLVED tone term: SN p.13's VR4 network, solved (#390/#417, applied
 # here by #420). Read from the committed `sn-p13-vr4.json` record, not
 # recomputed on the fly, so the precondition below is load-bearing at the point
 # of use rather than a token the tool checks and then ignores.
 # ---------------------------------------------------------------------------
+
+SCHEMATIC_TERM_FIELDS = ("hz", "db", "lo_db", "hi_db", "bound_db",
+                         "residual_db", "alpha_db")
 
 _SCHEMATIC_CACHE: dict = {}
 
@@ -359,9 +387,12 @@ def schematic_tone_term(band, *, at_hz=None, defect=None, path=None):
     network is solved at whatever frequency it is asked about.
 
     REFUSES for a frequency the record does not carry rather than interpolating
-    one, and REFUSES if the record's frequency for this band is no longer the
+    one, REFUSES if the record's frequency for this band is no longer the
     frequency the band's level is set at -- a record that quietly answered for
-    the wrong third would look exactly like a record that answered.
+    the wrong third would look exactly like a record that answered -- and
+    REFUSES, naming the band and the field, when any value it reads off the
+    entry is not a finite number (#1870): a NaN walks through the frequency
+    comparison below, and every value would be returned as if it were a level.
     """
     f = float(at_hz if at_hz is not None else CENTRE_HZ[band])
     if defect == "TONE_AT_7100_FOR_ALL":
@@ -378,6 +409,11 @@ def schematic_tone_term(band, *, at_hz=None, defect=None, path=None):
             f"{SCHEMATIC_ARTIFACT.name} solves the {band} band at "
             f"{', '.join(have) or 'no frequency'} Hz, not at {f:.1f} Hz; "
             "re-emit it with tools/tone_stage_schematic.py --emit") from None
+    bad = _non_finite({k: entry[k] for k in SCHEMATIC_TERM_FIELDS})
+    if bad:
+        raise Refused(f"{SCHEMATIC_ARTIFACT.name}: bands.{band}.at_hz[{f:.1f}] "
+                      "carries a non-finite value: " + ", ".join(bad)
+                      + "; re-emit it with tools/tone_stage_schematic.py --emit")
     if at_hz is None and defect != "TONE_AT_7100_FOR_ALL" \
             and abs(entry["hz"] - CENTRE_HZ[band]) > 1e-6:
         raise Refused(f"{SCHEMATIC_ARTIFACT.name} records the {band} band at "
@@ -585,8 +621,10 @@ _VCA_CACHE: dict = {}
 def vca_drive_record(path: pathlib.Path | None = None) -> dict:
     """`vca-drive.json`'s per-band VCA term (`vca_term_db.chain_db` /
     `.bound_db`, the shape `tools/cymbal_vca_drive.py` emits), read and
-    schema-validated -- or a REFUSAL naming why. Read, not applied: see the
-    section comment above for why `balance_gains` does not fold this in yet.
+    schema-validated -- or a REFUSAL naming why: the file is absent or
+    unreadable, or a term is not a finite number (#1870), which is named by
+    band and field and never cached. Read, not applied: see the section
+    comment above for why `balance_gains` does not fold this in yet.
     """
     p = path or VCA_ARTIFACT
     key = str(p)
@@ -607,6 +645,13 @@ def vca_drive_record(path: pathlib.Path | None = None) -> dict:
             raise Refused(
                 f"{p} carries no readable vca_term_db.chain_db/bound_db per "
                 f"band ({type(exc).__name__}: {exc})") from None
+        bad = ([f"chain_db.{s}" for s in _non_finite(chain_db)]
+               + [f"bound_db.{s}" for s in _non_finite(bound_db)])
+        if bad:
+            raise Refused(f"{p}: vca_term_db carries a non-finite value: "
+                          + ", ".join(bad)
+                          + "; a VCA drive term is a number of dB or it is "
+                          "not a measurement")
         _VCA_CACHE[key] = {"chain_db": chain_db, "bound_db": bound_db}
     return _VCA_CACHE[key]
 
@@ -702,15 +747,21 @@ def figure_route_gains(fig9, corner_hz, *, defect=None) -> dict:
 
     It lives here so the exclusion is a measurement rather than a decree. The
     bound is `relative_db`'s propagated extrapolation spread, and it is wider
-    than `BALANCE_BOUND_DB` in more than one band, so this refuses.
+    than `BALANCE_BOUND_DB` in more than one band, so this refuses. A width
+    that is not a finite number refuses as well (#1870): `w > bound` is False
+    for a NaN, which used to let a balance bounded by one through.
     """
     rel = relative_db(fig9, corner_hz, defect=defect, route=ROUTE_FIGURE)
-    wide = {b: v["width_db"] for b, v in rel.items() if v["width_db"] > BALANCE_BOUND_DB}
+    wide = {b: v["width_db"] for b, v in rel.items()
+            if _outside_bound(v["width_db"])}
     if wide:
+        unbounded = sorted(b for b, v in wide.items() if not math.isfinite(v))
         raise Refused(
             "the figure route gives the balance only to "
             + ", ".join(f"{b} +-{v / 2:.1f} dB" for b, v in sorted(wide.items()))
-            + f", outside the {BALANCE_BOUND_DB} dB bound")
+            + f", outside the {BALANCE_BOUND_DB} dB bound"
+            + (f"; a non-finite width bounds nothing ({', '.join(unbounded)})"
+               if unbounded else ""))
     return {b: v["db"] for b, v in rel.items()}
 
 
@@ -838,15 +889,19 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
     #    alone would now be satisfied by a tone term that had resolved nothing.
     figrel = relative_db(fig9, corner_hz, defect=defect, route=ROUTE_FIGURE)
     rel = relative_db(fig9, corner_hz, defect=defect, route=ROUTE_SCHEMATIC)
-    wide = [b for b in BANDS if figrel[b]["width_db"] > BALANCE_BOUND_DB]
-    loose = [b for b in BANDS if rel[b]["width_db"] > BALANCE_BOUND_DB]
+    wide = [b for b in BANDS if _outside_bound(figrel[b]["width_db"])]
+    loose = [b for b in BANDS if _outside_bound(rel[b]["width_db"])]
+    unbounded = [f"{route} {b}"
+                 for route, r in ((ROUTE_FIGURE, figrel), (ROUTE_SCHEMATIC, rel))
+                 for b in BANDS if not math.isfinite(r[b]["width_db"])]
     out["tone-bound"] = (
-        bool(wide) and not loose,
+        bool(wide) and not loose and not unbounded,
         "figure route "
         + "  ".join(f"{b} +-{figrel[b]['width_db'] / 2:.1f}" for b in BANDS)
         + f" dB re low ({len(wide)} outside {BALANCE_BOUND_DB} dB); schematic route "
         + "  ".join(f"{b} {rel[b]['db']:+.1f} +-{rel[b]['width_db'] / 2:.3f}" for b in BANDS)
-        + f" dB re low ({len(loose)} outside)")
+        + f" dB re low ({len(loose)} outside)"
+        + (f"; NON-FINITE width: {', '.join(unbounded)}" if unbounded else ""))
 
     # 3. centre-bound-tighter: #396's own arithmetic error, kept as a live
     #    assertion because it is what sent the chain after the wrong factor. At
