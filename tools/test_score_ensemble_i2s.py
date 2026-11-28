@@ -622,6 +622,36 @@ def test_control_reuse_reruns_when_a_bound_file_is_missing(tmp_path, monkeypatch
         _reuse_control("mix", tmp_path)
 
 
+@pytest.mark.parametrize("foreign", ["case", "part", "inject"])
+def test_control_reuse_reruns_a_control_that_is_not_this_one(tmp_path, monkeypatch, foreign):
+    """The other half of "the correct case, part and injection": a caught,
+    bound control of another case, of another part, or one without the
+    mutation is not this control, whatever it has cached. Each is placed
+    where the mix caller looks, sidecars and all."""
+    folder, part = _CALLERS["mix"]
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    extra = _CONTROL_EXTRA
+    if foreign == "inject":
+        extra = "\n".join(line for line in extra.splitlines() if "INJECT_BUG_" not in line) + "\n"
+        assert "INJECT_BUG_" not in extra
+    paths, text, *_ = _part_files(
+        scratch, "voice" if foreign == "part" else part,
+        case_id="E1B" if foreign == "case" else "E1A",
+        samples=-np.ones(CASE_FRAMES, dtype=np.int64),
+        pass_line=False, verified=False, extra=extra)
+    assert f"negative control {score.CONTROL_INJECT} CAUGHT" in text
+    (tmp_path / folder).mkdir()
+    placed = score.part_paths(tmp_path / folder, part)
+    for kind in ("report", "wav", "schedule"):
+        placed[kind].write_bytes(paths[kind].read_bytes())
+    assert not score._reusable_control_run(placed, "E1A", part)
+
+    monkeypatch.setattr(score, "run_part", _intercept_rerun)
+    with pytest.raises(_RerunRequested):
+        _reuse_control("mix", tmp_path)
+
+
 @pytest.mark.parametrize("caller, name, schedule", [
     ("mix", "E1A-control-DRUM_BUS_STALE.txt", "mix-schedule.json"),
     ("stop:BD", "E1A-control-DRUM_BUS_STALE-stop-BD.txt", "stop-BD-schedule.json")])
