@@ -11,7 +11,7 @@ Evidence produced at `14e12bc02808, ccf7ed49515b` (origin/main `86838760ccce`) o
 | trust | are the results trustworthy? | **PASS** | receipts re-checked; every declared control caught |
 | implementation | does this implementation work? | **PASS** | RTL simulation of the Arty wrapper at its pins (digital production path); routed image `544499e2c970`: WNS +15.445 / WHS +0.036 ns, external I/O qualified, DSP review complete (`fpga/release/r1-2025.1.json`, BOUND, T-RELEASE-BOUND-R1) |
 | playability | is it an instrument? | **PASS** (digital, 11 of 16 sounds mapped) | live-MIDI session against the device contract and the RTL; no hardware latency |
-| sound properties | does it meet its references? | **property vector** (below): 9 pass, 10 fail, 7 no verdict, 74 not run of 100 | mostly fixed-point model |
+| sound properties | does it meet its references? | **property vector** (below): 6 pass, 4 fail, 16 no verdict, 74 not run of 100 | mostly fixed-point model |
 | physical | did the device produce it? | **BLOCKED** | R1 image `544499e2c970` published, not yet programmed on a board, no capture (#208); simulation cannot satisfy this gate |
 
 ## Implementation
@@ -48,32 +48,34 @@ The live player maps **11 of the 16** 808 sounds: BD, SD, LT, MT, HT, CH, OH, CP
 
 None of these was measured on the R1 production path. Each row names its engine and the commit it was measured at; a fixed-point-model result supports R1 development and certifies neither R0 nor R1 playback.
 
+**9 of these rows are refused:** their commit is not on origin/main, so nobody can re-derive them; they carry no verdict -- neither a pass nor a fail.
+
 | case | subject | state | properties | evidence level | measured at |
 |---|---|---|---|---|---|
 | D01A | Bass drum / anchor | no verdict | Pitch trajectory 0.15; early/body energy 0.07 | fixed-point model | `4b560cb` |
 | D02A | Snare / anchor | pass | Body/noise balance 0.65; attack 0.02; noise decay 0.04 | integrated RTL (component bench) | `99637db` |
-| D03A | Low tom / anchor | fail | Pitch drop 0.06; body spectrum 6.04; decay 0.04 | fixed-point model | `7dd6337` |
+| D03A | Low tom / anchor | no verdict | REFUSED: 7dd6337 is not on origin/main (answer: None) | fixed-point model | `7dd6337` |
 | D04A | Low conga / anchor | no verdict | Pitch 0.77; body spectrum 4.14 | fixed-point model | `7dd6337` |
-| D05A | Mid tom / anchor | fail | Pitch drop 0.14; body spectrum 5.46; decay 0.04 | fixed-point model | `7dd6337` |
-| D06A | Mid conga / anchor | fail | Pitch 0.04; body spectrum 3.99; decay 0.0 | fixed-point model | `7dd6337` |
-| D07A | High tom / anchor | fail | Pitch drop 0.14; body spectrum 4.51; decay 0.04 | fixed-point model | `7dd6337` |
-| D08A | High conga / anchor | fail | Pitch 0.3; body spectrum 3.64; decay 0.01 | fixed-point model | `7dd6337` |
-| D09A | Claves / anchor | pass | Pitch 0.32; attack duration 0.14; tail decay 0.61 | fixed-point model | `7dd6337` |
+| D05A | Mid tom / anchor | no verdict | REFUSED: 7dd6337 is not on origin/main (answer: None) | fixed-point model | `7dd6337` |
+| D06A | Mid conga / anchor | no verdict | REFUSED: 7dd6337 is not on origin/main (answer: None) | fixed-point model | `7dd6337` |
+| D07A | High tom / anchor | no verdict | REFUSED: 7dd6337 is not on origin/main (answer: None) | fixed-point model | `7dd6337` |
+| D08A | High conga / anchor | no verdict | REFUSED: 7dd6337 is not on origin/main (answer: None) | fixed-point model | `7dd6337` |
+| D09A | Claves / anchor | no verdict | REFUSED: 7dd6337 is not on origin/main (answer: None) | fixed-point model | `7dd6337` |
 | D10A | Rimshot / anchor | fail | Partial balance 2.85; attack 0.39; tail decay 0.17 | fixed-point model | `811acdf` |
-| D11A | Maracas / anchor | fail | Rise time 1.68; band energy 1.43; decay 5.42 | fixed-point model | `7dd6337` |
+| D11A | Maracas / anchor | no verdict | REFUSED: 7dd6337 is not on origin/main (answer: None) | fixed-point model | `7dd6337` |
 | D12A | Clap / anchor | no verdict | burst/tail ratio 0.28; decay 0.88 | fixed-point model | `d42ac140` |
 | D13A | Cowbell / anchor | fail | Partial balance 2.02; unwanted difference tone 0.0; decay 0.23 | fixed-point model | `be9b0c9` |
 | D14A | Cymbal / anchor | no verdict | Band energy 0.5; band decay 0.25 | fixed-point model | `32e824d` |
 | D14B | Cymbal / variation | no verdict | Band energy 3.57 | fixed-point model | `32e824dc` |
 | D15A | Open hat / anchor | no verdict | Band energy 0.81; attack 1.6 | fixed-point model | `7dd6337` |
-| D16A | Closed hat / anchor | pass | Band energy 0.96; attack 0.57; decay 0.73 | fixed-point model | `7dd6337` |
+| D16A | Closed hat / anchor | no verdict | REFUSED: 7dd6337 is not on origin/main (answer: None) | fixed-point model | `7dd6337` |
 | M1A | Round bass / anchor | no verdict | Fundamental/harmonics 19.82; bass level 0.35 | fixed-point model | `cea5525` |
 | M5A | Bright high lead / anchor | fail | Pitch 0.15; Harmonic shape 7.56; Foldback energy 3.42; Envelope attack 1.07; Envelope release 0.06; Gain 0.47; Clipping 0.0 | integrated RTL (component bench) | `746b2605` |
 | M5B | Bright high lead / lower / darker | fail | Pitch 0.15; Harmonic shape 5.96; Foldback energy 2.95; Envelope attack 1.21; Envelope release 0.24; Gain 0.9; Clipping 0.0 | fixed-point model | `746b260` |
 | F1A | Cutoff response / low | pass | Corner frequency 0.76; low-band gain 0.0; rolloff 0.6 | integrated RTL (component bench) | `25d7efe1` |
 | F1B | Cutoff response / mid | pass | Corner frequency 0.42; low-band gain 0.04; rolloff 0.02 | fixed-point model | `e356498` |
 | F1C | Cutoff response / high | pass | Corner frequency 0.36; low-band gain 0.03; rolloff 0.09 | fixed-point model | `e356498` |
-| E1A | Bass and kit / sparse | pass | Event timing 0.2; bus balance 0.0; output artifacts 0.0 | integrated RTL (component bench) | `af8f8ef` |
+| E1A | Bass and kit / sparse | no verdict | REFUSED: af8f8ef is not on origin/main (answer: None) | integrated RTL (component bench) | `af8f8ef` |
 | E1B | Bass and kit / dense | pass | Event timing 0.2; bus balance 0.0; output artifacts 0.0 | fixed-point model | `d42ac140` |
 | E2A | Lead and kit / sparse | pass | Event timing 0.2; bus balance 0.0; output artifacts 0.0 | fixed-point model | `d42ac140` |
 
